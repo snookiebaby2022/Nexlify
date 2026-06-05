@@ -26,6 +26,11 @@ enum VodMode {
   CATCHUP
 }
 
+enum LineAuthMode {
+  USERNAME_PASSWORD
+  ACTIVE_CODE
+}
+
 enum LineStatus {
   ACTIVE
   DISABLED
@@ -358,6 +363,8 @@ model Line {
   id              String     @id @default(cuid())
   username        String     @unique
   password        String
+  authMode          LineAuthMode @default(USERNAME_PASSWORD)
+  activeCode        String?      @unique
   status          LineStatus @default(ACTIVE)
   maxConnections  Int        @default(1)
   expiresAt       DateTime
