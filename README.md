@@ -1,4 +1,5 @@
 # Nexlify
+<<<<<<< HEAD
 
 IPTV / OTT management panel inspired by **XUI.one** and **1-stream**: admin UI, resellers, lines, bouquets, Xtream API, MAG/Stalker portal, EPG, line management, and WHMCS-style billing webhooks.
 
@@ -238,3 +239,6 @@ Or run `./scripts/deploy-vps.sh` (same steps).
 ## Legal
 
 Use only for content you have rights to distribute.
+=======
+Software to stream &amp; manage your own content
+>>>>>>> 43d8a8fbb21d88568c0c69f2f33a9f4034b58e8c
