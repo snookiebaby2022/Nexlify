@@ -1,0 +1,12 @@
+{
+  "host": "YOUR_SERVER_IP",
+  "port": 22,
+  "username": "root",
+  "remotePath": "/home/nexlify-panel",
+  "privateKey": "C:/Users/YOUR_USER/Documents/.ssh/nexlify.ppk",
+  "password": "",
+  "winscpPath": "",
+  "plinkPath": "",
+  "acceptHostKey": true,
+  "syncOnly": false
+}

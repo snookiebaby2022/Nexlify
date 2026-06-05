@@ -1,0 +1,711 @@
+// After changing models, run on VPS: npx prisma db push
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PanelRole {
+  ADMIN
+  RESELLER
+  SUB_RESELLER
+}
+
+enum StreamType {
+  LIVE
+  MOVIE
+  SERIES
+}
+
+enum VodMode {
+  LIVE
+  ON_DEMAND
+  CATCHUP
+}
+
+enum LineStatus {
+  ACTIVE
+  DISABLED
+  BANNED
+  EXPIRED
+}
+
+enum WatchFolderType {
+  MOVIE
+  SERIES
+  M3U
+  MIXED
+}
+
+enum ImportKind {
+  M3U
+  FOLDER
+  WATCH_SCAN
+}
+
+enum ProxyType {
+  HTTP
+  HTTPS
+  SOCKS5
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model PanelUser {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  displayName  String?
+  email        String?
+  avatarUrl    String?
+  avatarConfig Json?
+  totpSecret   String?
+  totpEnabled  Boolean   @default(false)
+  role         PanelRole @default(RESELLER)
+  credits      Int       @default(0)
+  apiKey       String?   @unique
+  accessCode   String?
+  parentId     String?
+  parent       PanelUser?  @relation("ResellerTree", fields: [parentId], references: [id])
+  children     PanelUser[] @relation("ResellerTree")
+  maxLines     Int       @default(500)
+  isActive     Boolean   @default(true)
+  defaultLanguage String @default("en")
+  resellerDns  String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  lines              Line[]
+  creditTransactions CreditTransaction[]
+  resellerBouquets   ResellerBouquet[]
+  activityLogs       ActivityLog[]
+  ticketsCreated     Ticket[] @relation("TicketCreator")
+  ticketsAssigned    Ticket[] @relation("TicketAssignee")
+  ticketMessages     TicketMessage[]
+  chatMessages       PanelChatMessage[]
+  groupId            String?
+  group              UserGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+}
+
+model CreditTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Int
+  balanceAfter Int
+  note        String?
+  createdAt   DateTime @default(now())
+}
+
+model StreamProxy {
+  id        String    @id @default(cuid())
+  name      String
+  host      String
+  port      Int
+  type      ProxyType @default(HTTP)
+  username  String?
+  password  String?
+  isActive   Boolean   @default(true)
+  isFreeTier Boolean   @default(false)
+  country    String?
+  createdAt  DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  servers StreamServer[]
+}
+
+model StreamServer {
+  id            String    @id @default(cuid())
+  name          String
+  host          String
+  port          Int       @default(8080)
+  protocol      String    @default("http")
+  proxyId       String?
+  proxy         StreamProxy? @relation(fields: [proxyId], references: [id])
+  isActive      Boolean   @default(true)
+  maxClients    Int       @default(1000)
+  sortOrder     Int       @default(0)
+  description   String?
+  privateIp     String?
+  domain        String?
+  panelPort     Int       @default(3000)
+  timeshiftOnly Boolean   @default(false)
+  region        String?
+  rtmpPort      Int?
+  bandwidthMbps Int?
+  healthStatus  String    @default("unknown")
+  healthMessage String?
+  lastHealthAt  DateTime?
+  dnsRotator    Json?
+  agentToken    String?   @unique
+  agentLastSeen DateTime?
+  agentVersion  String?
+  configRevision Int      @default(0)
+  agentSshHost  String?
+  agentSshPort  Int       @default(22)
+  agentSshUser  String?
+  agentUseSsh   Boolean   @default(false)
+  httpsPort     Int       @default(443)
+  geoLbCountries Json?
+  geoLbIsps     Json?
+  panelSettings Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  streams        Stream[]
+  forcedLines    Line[]           @relation("LineForcedServer")
+  processes      StreamProcess[]
+  commands       AgentCommand[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String
+  sortOrder Int      @default(0)
+  parentId  String?
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryTree")
+  streams   Stream[]
+  createdAt DateTime @default(now())
+}
+
+model Stream {
+  id                 String     @id @default(cuid())
+  name               String
+  streamIcon         String?
+  streamUrl          String
+  type               StreamType @default(LIVE)
+  serverId           String?
+  server             StreamServer? @relation(fields: [serverId], references: [id])
+  categoryId         String?
+  category           Category?  @relation(fields: [categoryId], references: [id])
+  epgChannelId       String?
+  channelId          String?
+  minSpeedKbps       Int?
+  maxSpeedKbps       Int?
+  seriesName         String?
+  seasonNum          Int?
+  episodeNum         Int?
+  containerExtension String?    @default("mp4")
+  isOnDemand         Boolean    @default(false)
+  vodMode            VodMode    @default(LIVE)
+  archiveDays        Int?
+  playlistUrl        String?
+  providerId         String?
+  provider           StreamProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  providerPath       String?
+  hostedExternally   Boolean    @default(false)
+  isActive           Boolean    @default(true)
+  sortOrder          Int        @default(0)
+  timeshiftSeconds   Int?
+  isShifted          Boolean    @default(false)
+  parentStreamId     String?
+  parentStream       Stream?    @relation("StreamVariants", fields: [parentStreamId], references: [id], onDelete: SetNull)
+  childStreams       Stream[]   @relation("StreamVariants")
+  dnsRotator         Json?
+  bitrates           Json?
+  autoRestart        Boolean    @default(true)
+  isCreatedChannel   Boolean    @default(false)
+  isRadio            Boolean    @default(false)
+  agentStartCmd      String?
+  agentPid           Int?
+  lastProbeAt        DateTime?
+  lastProbeOk        Boolean?
+  lastProbeError     String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  bouquets          BouquetStream[]
+  liveConnections   LiveConnection[]
+  lastWatchedByLines Line[] @relation("LineLastWatched")
+  channelWatches    LineChannelWatch[]
+  processes         StreamProcess[]
+}
+
+model WatchFolder {
+  id            String          @id @default(cuid())
+  name          String
+  path          String
+  type          WatchFolderType @default(MIXED)
+  categoryId    String?
+  serverId      String?
+  isActive      Boolean         @default(true)
+  autoScanMins  Int             @default(0)
+  lastScan      DateTime?
+  importedCount Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model ImportJob {
+  id            String     @id @default(cuid())
+  kind          ImportKind
+  source        String
+  streamType    StreamType @default(MOVIE)
+  status        String     @default("queued")
+  imported      Int        @default(0)
+  skipped       Int        @default(0)
+  message       String?
+  watchFolderId String?
+  categoryId    String?
+  serverId      String?
+  createdAt     DateTime   @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  @@index([status, createdAt])
+}
+
+model StreamProcess {
+  id           String       @id @default(cuid())
+  serverId     String
+  server       StreamServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  streamId     String?
+  stream       Stream?      @relation(fields: [streamId], references: [id], onDelete: SetNull)
+  pid          Int?
+  name         String?
+  status       String       @default("unknown")
+  cpuPercent   Float?
+  memoryMb     Float?
+  bitrateKbps  Int?
+  autoRestart  Boolean      @default(true)
+  errorMessage String?
+  lastSeenAt   DateTime     @default(now())
+  startedAt    DateTime?
+
+  @@unique([serverId, streamId])
+  @@index([serverId, status])
+}
+
+model AgentCommand {
+  id          String       @id @default(cuid())
+  serverId    String
+  server      StreamServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  action      String
+  payload     Json?
+  status      String       @default("pending")
+  result      String?
+  createdAt   DateTime     @default(now())
+  completedAt DateTime?
+
+  @@index([serverId, status])
+}
+
+model LiveConnection {
+  id         String   @id @default(cuid())
+  lineId     String
+  line       Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  streamId   String?
+  stream     Stream?  @relation(fields: [streamId], references: [id], onDelete: SetNull)
+  ip         String?
+  userAgent  String?
+  startedAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  @@index([lineId])
+  @@index([lastSeenAt])
+}
+
+model Bouquet {
+  id        String   @id @default(cuid())
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  streams          BouquetStream[]
+  lines            LineBouquet[]
+  resellerBouquets ResellerBouquet[]
+}
+
+model BouquetStream {
+  bouquetId String
+  streamId  String
+  sortOrder Int     @default(0)
+  bouquet   Bouquet @relation(fields: [bouquetId], references: [id], onDelete: Cascade)
+  stream    Stream  @relation(fields: [streamId], references: [id], onDelete: Cascade)
+
+  @@id([bouquetId, streamId])
+}
+
+model ResellerBouquet {
+  userId    String
+  bouquetId String
+  user      PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bouquet   Bouquet   @relation(fields: [bouquetId], references: [id], onDelete: Cascade)
+
+  @@id([userId, bouquetId])
+}
+
+model Line {
+  id              String     @id @default(cuid())
+  username        String     @unique
+  password        String
+  status          LineStatus @default(ACTIVE)
+  maxConnections  Int        @default(1)
+  expiresAt       DateTime
+  ownerId         String?
+  owner           PanelUser? @relation(fields: [ownerId], references: [id])
+  externalId      String?    @unique
+  notes           String?
+  allowedOutput   String     @default("ts,hls,m3u8")
+  lockToIp        Boolean    @default(false)
+  allowedIps      String?
+  /// Comma-separated ISO country codes (e.g. US,GB). Empty = no restriction.
+  allowedCountries String?
+  blockedCountries String?
+  forcedServerId   String?
+  forcedServer     StreamServer? @relation("LineForcedServer", fields: [forcedServerId], references: [id], onDelete: SetNull)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  bouquets         LineBouquet[]
+  magDevices       MagDevice[]
+  enigmaDevices    EnigmaDevice[]
+  activityLogs     ActivityLog[]
+  billingEvents    BillingEvent[]
+  liveConnections  LiveConnection[]
+  tickets          Ticket[]
+  lastWatchedAt    DateTime?
+  lastWatchedStreamId String?
+  lastWatchedStream Stream? @relation("LineLastWatched", fields: [lastWatchedStreamId], references: [id], onDelete: SetNull)
+  channelWatches   LineChannelWatch[]
+}
+
+model LineChannelWatch {
+  id            String   @id @default(cuid())
+  lineId        String
+  line          Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  streamId      String
+  stream        Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  watchCount    Int      @default(1)
+  lastWatchedAt DateTime @default(now())
+
+  @@unique([lineId, streamId])
+  @@index([lineId])
+}
+
+model MagDevice {
+  id        String   @id @default(cuid())
+  mac       String   @unique
+  lineId    String
+  line      Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  model     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EnigmaDevice {
+  id        String   @id @default(cuid())
+  mac       String   @unique
+  lineId    String
+  line      Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  model     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EpgSource {
+  id              String    @id @default(cuid())
+  name            String
+  url             String
+  country         String?
+  lastSync        DateTime?
+  syncEveryHours  Int       @default(24)
+  lastSyncError   String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  programs        EpgProgram[]
+}
+
+model StbEvent {
+  id         String   @id @default(cuid())
+  deviceType String
+  mac        String?
+  lineId     String?
+  event      String
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([lineId, createdAt])
+  @@index([mac, createdAt])
+}
+
+model EpgProgram {
+  id          String    @id @default(cuid())
+  sourceId    String
+  source      EpgSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  channelId   String
+  title       String
+  description String?
+  start       DateTime
+  stop        DateTime
+
+  @@index([channelId, start])
+  @@index([sourceId])
+}
+
+model BillingEvent {
+  id        String   @id @default(cuid())
+  provider  String   @default("whmcs")
+  action    String
+  payload   Json
+  lineId    String?
+  line      Line?    @relation(fields: [lineId], references: [id])
+  status    String
+  message   String?
+  createdAt DateTime @default(now())
+}
+
+model LineBouquet {
+  lineId    String
+  bouquetId String
+  line      Line    @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  bouquet   Bouquet @relation(fields: [bouquetId], references: [id], onDelete: Cascade)
+
+  @@id([lineId, bouquetId])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String?
+  entityId  String?
+  userId    String?
+  user      PanelUser? @relation(fields: [userId], references: [id])
+  lineId    String?
+  line      Line?    @relation(fields: [lineId], references: [id])
+  meta      Json?
+  createdAt DateTime @default(now())
+}
+
+model PanelSetting {
+  key   String @id
+  value String
+}
+
+model BandwidthSnapshot {
+  id          String   @id @default(cuid())
+  bytesIn     BigInt   @default(0)
+  bytesOut    BigInt   @default(0)
+  connections Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model CronRunLog {
+  id        String   @id @default(cuid())
+  job       String
+  status    String
+  message   String?
+  durationMs Int?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Ticket {
+  id           String         @id @default(cuid())
+  subject      String
+  body         String
+  status       TicketStatus   @default(OPEN)
+  priority     TicketPriority @default(NORMAL)
+  createdById  String
+  createdBy    PanelUser      @relation("TicketCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  assignedToId String?
+  assignedTo   PanelUser?     @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  lineId       String?
+  line         Line?          @relation(fields: [lineId], references: [id], onDelete: SetNull)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  messages     TicketMessage[]
+
+  @@index([status])
+  @@index([createdById])
+}
+
+model TicketMessage {
+  id        String    @id @default(cuid())
+  ticketId  String
+  ticket    Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    PanelUser @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime  @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model PanelChatMessage {
+  id        String    @id @default(cuid())
+  userId    String
+  user      PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime  @default(now())
+
+  @@index([createdAt])
+}
+
+model UserGroup {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String?  @default("#e85d4c")
+  parentId    String?
+  parent      UserGroup?  @relation("GroupTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    UserGroup[] @relation("GroupTree")
+  sortOrder   Int      @default(0)
+  isReseller  Boolean  @default(false)
+  isBanned    Boolean  @default(false)
+  config      Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users PanelUser[]
+}
+
+model Package {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  creditCost  Int      @default(0)
+  maxLines    Int      @default(1)
+  days        Int      @default(30)
+  bouquetIds  String[] @default([])
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model StreamProvider {
+  id            String    @id @default(cuid())
+  name          String
+  baseUrl       String
+  apiKey        String?
+  /// file_host | xtream_vod | generic_url | live_upstream
+  providerType  String?
+  description   String?
+  contactEmail  String?
+  region        String?
+  maxStreams    Int?
+  notes         String?
+  status        String    @default("unknown")
+  statusMessage String?
+  lastCheckAt   DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  streams Stream[]
+}
+
+model BlockedAsn {
+  id        String   @id @default(cuid())
+  asn       String   @unique
+  label     String?
+  reason    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model BlockedIp {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  label     String?
+  reason    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model BlockedIsp {
+  id        String   @id @default(cuid())
+  name      String
+  reason    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model BlockedUserAgent {
+  id        String   @id @default(cuid())
+  pattern   String
+  reason    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model RtmpEndpoint {
+  id        String   @id @default(cuid())
+  name      String
+  host      String
+  port      Int      @default(1935)
+  appName   String?  @default("live")
+  isActive  Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AccessCode {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  packageId       String?
+  bouquetIds      String[]  @default([])
+  days            Int       @default(30)
+  maxConnections  Int       @default(1)
+  maxUses         Int       @default(1)
+  uses            Int       @default(0)
+  expiresAt       DateTime?
+  isActive        Boolean   @default(true)
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model MediaIntegration {
+  id        String   @id @default(cuid())
+  type      String
+  name      String
+  config    Json     @default("{}")
+  isActive  Boolean  @default(true)
+  lastSync  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, isActive])
+}
+
+/** API / subscription keys for music addons (Spotify, Apple Music, etc.). */
+model AddonLicense {
+  id         String    @id @default(cuid())
+  service    String
+  label      String
+  licenseKey String?
+  expiresAt  DateTime?
+  notes      String?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([service, isActive])
+}
