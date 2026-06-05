@@ -48,6 +48,7 @@ export async function fetchNexlifyReleasesFeed(
   const res = await fetch(url, {
     headers: { Accept: "application/json", "User-Agent": "nexlify-panel" },
     next: { revalidate: 300 },
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`Releases feed ${res.status}`);
   const data = (await res.json()) as NexlifyReleasesFeed;

@@ -52,7 +52,7 @@ export function PanelUpdateBanner() {
         <Link
           href="/admin/settings/updates"
           className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-md transition-opacity hover:opacity-90"
-          style={{ background: "linear-gradient(135deg, #f97316, #ea580c)" }}
+          style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)" }}
         >
           <span aria-hidden>☁</span> Update
         </Link>

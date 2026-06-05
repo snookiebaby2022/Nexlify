@@ -23,18 +23,32 @@ export type PanelVersionInfo = {
   updateAvailable: boolean;
 };
 
+const GIT_TIMEOUT_MS = 8000;
+
 function runGit(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn("git", args, { cwd, windowsHide: true });
+    const child = spawn("git", args, {
+      cwd,
+      windowsHide: true,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    });
     let out = "";
     let err = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(`git ${args.join(" ")} timed out`));
+    }, GIT_TIMEOUT_MS);
     child.stdout.on("data", (d) => (out += d.toString()));
     child.stderr.on("data", (d) => (err += d.toString()));
     child.on("close", (code) => {
+      clearTimeout(timer);
       if (code === 0) resolve(out.trim());
       else reject(new Error(err.trim() || `git exit ${code}`));
     });
-    child.on("error", reject);
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
   });
 }
 
@@ -71,8 +85,12 @@ export async function getPanelVersionInfo(repoPath: string): Promise<PanelVersio
       remoteVersion = tag || null;
     } catch {
       try {
-        await runGit(repoPath, ["fetch", "--tags", "--quiet"]);
-        const remote = await runGit(repoPath, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+        const remote = await runGit(repoPath, [
+          "rev-parse",
+          "--abbrev-ref",
+          "--symbolic-full-name",
+          "@{u}",
+        ]);
         const branch = remote.split("/").pop() || "main";
         const hash = await runGit(repoPath, ["rev-parse", "--short", `origin/${branch}`]);
         remoteVersion = `origin/${branch}@${hash}`;
@@ -123,6 +141,7 @@ export async function fetchLatestRelease(url: string): Promise<RemoteReleaseInfo
   const res = await fetch(apiUrl, {
     headers: { Accept: "application/vnd.github+json", "User-Agent": "nexlify-panel" },
     next: { revalidate: 300 },
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`Release API ${res.status}`);
   const data = (await res.json()) as {

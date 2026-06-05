@@ -93,7 +93,7 @@ function ReleaseTimeline({
             disabled={busy}
             onClick={onUpdate}
             className="mt-4 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white cursor-pointer disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg, #f97316, #ea580c)" }}
+            style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)" }}
           >
             {busy ? "Updating…" : "Update"}
           </button>
@@ -163,18 +163,33 @@ function ReleaseTimeline({
 
 export default function PanelUpdatesPage() {
   const [data, setData] = useState<PanelUpdatePayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [autoDownload, setAutoDownload] = useState(false);
 
   const load = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
     fetch("/api/admin/panel-update")
-      .then((r) => r.json())
-      .then((d: PanelUpdatePayload) => setData(d));
+      .then(async (r) => {
+        const d = (await r.json()) as PanelUpdatePayload & { error?: string };
+        if (!r.ok || !d.version) {
+          throw new Error(d.error ?? `Failed to load updates (${r.status})`);
+        }
+        setData(d);
+      })
+      .catch((e: unknown) => {
+        setData(null);
+        setLoadError(e instanceof Error ? e.message : "Failed to load updates");
+      })
+      .finally(() => setLoading(false));
     fetch("/api/admin/settings?group=server")
       .then((r) => r.json())
-      .then((d) => setAutoDownload(Boolean(d.settings?.panelUpdateAutoDownload)));
+      .then((d) => setAutoDownload(Boolean(d.settings?.panelUpdateAutoDownload)))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -224,8 +239,29 @@ export default function PanelUpdatesPage() {
     });
   }
 
-  if (!data) {
+  if (loading) {
     return <p className="text-sm" style={{ color: "var(--muted)" }}>Loading updates…</p>;
+  }
+
+  if (loadError || !data) {
+    return (
+      <div className="space-y-4 max-w-2xl">
+        <h1 className="text-2xl font-semibold" style={{ color: "#00c0ef" }}>
+          Updates
+        </h1>
+        <p className="text-sm rounded-lg border px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--danger)" }}>
+          {loadError ?? "Could not load update information."}
+        </p>
+        <button
+          type="button"
+          onClick={load}
+          className="rounded-lg border px-4 py-2 text-sm cursor-pointer"
+          style={{ borderColor: "var(--border)" }}
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   const installed = data.version.installedVersion;
@@ -242,11 +278,6 @@ export default function PanelUpdatesPage() {
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
             Installed <strong>v{installed}</strong>
-            {data.version.gitCommit && (
-              <span className="font-mono text-xs ml-2">
-                {data.version.gitBranch}@{data.version.gitCommit}
-              </span>
-            )}
           </p>
         </div>
         <button
@@ -278,7 +309,7 @@ export default function PanelUpdatesPage() {
             disabled={busy || !data.canAutoUpdate}
             onClick={() => setConfirmOpen(true)}
             className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white cursor-pointer disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg, #f97316, #ea580c)" }}
+            style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)" }}
           >
             ☁ Update now
           </button>

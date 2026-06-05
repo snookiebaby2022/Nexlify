@@ -12,57 +12,63 @@ import { panelUpdateManualSteps, runPanelRollback, runPanelUpdate } from "@/lib/
 import { PanelRole } from "@prisma/client";
 
 export async function GET() {
-  const session = await requireSession([PanelRole.ADMIN]);
-  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-  const server = await getPanelServerSettings();
-  const repoPath = getResolvedRepoPath(server);
-  const version = await getPanelVersionInfoWithRelease(repoPath, server.updateCheckUrl || undefined);
-  const manualSteps = panelUpdateManualSteps(repoPath);
-  const canAutoUpdate = process.platform === "linux" && version.isGitRepo && !version.gitDirty;
-
-  const feedUrl =
-    process.env.NEXLIFY_RELEASES_URL?.trim() ||
-    (server.updateCheckUrl?.includes("panel-releases") ? server.updateCheckUrl : "") ||
-    DEFAULT_RELEASES_FEED_URL;
-
-  let releasesFeed = null;
-  let releasesFeedError: string | null = null;
   try {
-    releasesFeed = await fetchNexlifyReleasesFeed(feedUrl);
+    const session = await requireSession([PanelRole.ADMIN]);
+    if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const server = await getPanelServerSettings();
+    const repoPath = getResolvedRepoPath(server);
+    const version = await getPanelVersionInfoWithRelease(repoPath, server.updateCheckUrl || undefined);
+    const manualSteps = panelUpdateManualSteps(repoPath);
+    const canAutoUpdate = process.platform === "linux" && version.isGitRepo && !version.gitDirty;
+
+    const feedUrl =
+      process.env.NEXLIFY_RELEASES_URL?.trim() ||
+      (server.updateCheckUrl?.includes("panel-releases") ? server.updateCheckUrl : "") ||
+      DEFAULT_RELEASES_FEED_URL;
+
+    let releasesFeed = null;
+    let releasesFeedError: string | null = null;
+    try {
+      releasesFeed = await fetchNexlifyReleasesFeed(feedUrl);
+    } catch (e) {
+      releasesFeedError = e instanceof Error ? e.message : "Feed unavailable";
+    }
+
+    const feedUpdateAvailable =
+      releasesFeed?.latestVersion != null &&
+      isVersionNewer(releasesFeed.latestVersion, version.installedVersion);
+
+    const versionOut = {
+      installedVersion: version.installedVersion,
+      gitBranch: version.gitBranch,
+      gitCommit: version.gitCommit,
+      gitDirty: version.gitDirty,
+      updateAvailable: version.updateAvailable || feedUpdateAvailable,
+      isGitRepo: version.isGitRepo,
+      remoteError: version.remoteError,
+      releasesFeed: releasesFeed
+        ? { latestVersion: releasesFeed.latestVersion }
+        : null,
+    };
+
+    return NextResponse.json({
+      version: versionOut,
+      releasesFeed,
+      releasesFeedError,
+      server,
+      repoPath,
+      platform: process.platform,
+      canAutoUpdate,
+      canRollback: Boolean(server.rollbackGitRef) && canAutoUpdate,
+      manualSteps,
+      updateHistory: server.updateHistory,
+    });
   } catch (e) {
-    releasesFeedError = e instanceof Error ? e.message : "Feed unavailable";
+    const message = e instanceof Error ? e.message : "Panel update check failed";
+    console.error("[panel-update] GET failed:", e);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const feedUpdateAvailable =
-    releasesFeed?.latestVersion != null &&
-    isVersionNewer(releasesFeed.latestVersion, version.installedVersion);
-
-  const versionOut = {
-    installedVersion: version.installedVersion,
-    gitBranch: version.gitBranch,
-    gitCommit: version.gitCommit,
-    gitDirty: version.gitDirty,
-    updateAvailable: version.updateAvailable || feedUpdateAvailable,
-    isGitRepo: version.isGitRepo,
-    remoteError: version.remoteError,
-    releasesFeed: releasesFeed
-      ? { latestVersion: releasesFeed.latestVersion }
-      : null,
-  };
-
-  return NextResponse.json({
-    version: versionOut,
-    releasesFeed,
-    releasesFeedError,
-    server,
-    repoPath,
-    platform: process.platform,
-    canAutoUpdate,
-    canRollback: Boolean(server.rollbackGitRef) && canAutoUpdate,
-    manualSteps,
-    updateHistory: server.updateHistory,
-  });
 }
 
 export async function POST(req: NextRequest) {

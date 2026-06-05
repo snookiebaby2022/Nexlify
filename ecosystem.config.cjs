@@ -55,6 +55,7 @@ module.exports = {
       min_uptime: "10s",
       env: {
         NODE_ENV: "production",
+        DATABASE_URL: fileEnv.DATABASE_URL || "",
         PORT: panelPort,
         PANEL_PORT: panelPort,
         WEBSITE_PORT: websitePort,
@@ -75,6 +76,7 @@ module.exports = {
       min_uptime: "10s",
       env: {
         NODE_ENV: "production",
+        DATABASE_URL: fileEnv.DATABASE_URL || "",
       },
     },
     {

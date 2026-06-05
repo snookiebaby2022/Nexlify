@@ -61,7 +61,7 @@ export function PanelUpdateConfirmModal({
             disabled={busy}
             onClick={onConfirm}
             className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white cursor-pointer disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg, #f97316, #ea580c)" }}
+            style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)" }}
           >
             {busy ? "Updating…" : "Confirm update"}
           </button>
