@@ -1,0 +1,70 @@
+{
+  "name": "nexlify",
+  "version": "0.1.1",
+  "private": true,
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "scripts": {
+    "dev": "node scripts/run-next.mjs dev",
+    "prebuild": "node scripts/check-package.mjs && node scripts/check-schema.mjs",
+    "build": "next build",
+    "start": "node scripts/run-next.mjs start",
+    "pm2:start": "bash scripts/pm2-start.sh",
+    "pm2:boot": "bash scripts/pm2-boot-enable.sh",
+    "lint": "next lint",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "tsx prisma/seed.ts",
+    "cron": "tsx scripts/run-cron.ts",
+    "cron:daemon": "tsx scripts/cron-daemon.ts",
+    "sync-panel-port": "node scripts/sync-panel-port.mjs",
+    "fix:nginx-3000": "bash scripts/vps-fix-400-port-3000.sh",
+    "fix:panel-500": "bash scripts/vps-fix-500-panel.sh",
+    "fix:both-sites": "bash scripts/vps-fix-both-sites.sh",
+    "fix:sh": "node scripts/fix-sh-lf.mjs",
+    "package:whmcs": "node scripts/build-whmcs-zip.mjs",
+    "license:setup": "node scripts/license-setup.mjs",
+    "license:sync-public-key": "node scripts/sync-license-public-key.mjs",
+    "license:derive-public": "node scripts/derive-license-public.mjs",
+    "license:issue": "node scripts/issue-license.mjs",
+    "license:server": "node license-server/server.mjs",
+    "postinstall": "prisma generate && node scripts/check-schema.mjs",
+    "reinstall": "node scripts/check-package.mjs && echo Run: rm -rf node_modules package-lock.json && npm install"
+  },
+  "dependencies": {
+    "@prisma/client": "6.9.0",
+    "bcryptjs": "3.0.2",
+    "jose": "6.0.11",
+    "lucide-react": "0.513.0",
+    "next": "15.5.19",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "zod": "3.25.56",
+    "ioredis": "5.6.1",
+    "pg": "8.16.0",
+    "mmdb-lib": "2.2.0"
+  },
+  "optionalDependencies": {
+    "@next/swc-linux-x64-gnu": "15.5.19"
+  },
+  "overrides": {
+    "postcss": "8.5.15"
+  },
+  "devDependencies": {
+    "@types/pg": "8.15.2",
+    "@types/bcryptjs": "2.4.6",
+    "@types/node": "18.19.68",
+    "@types/react": "19.1.6",
+    "@types/react-dom": "19.1.5",
+    "autoprefixer": "10.4.21",
+    "postcss": "8.5.15",
+    "prisma": "6.9.0",
+    "tailwindcss": "3.4.17",
+    "tsx": "4.19.4",
+    "typescript": "5.8.3",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "15.5.19"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "status": "idle",
+  "progress": 0,
+  "currentStep": null,
+  "steps": [],
+  "startedAt": null,
+  "finishedAt": null,
+  "message": null,
+  "fromVersion": null,
+  "toVersion": null
+}

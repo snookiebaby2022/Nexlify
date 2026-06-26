@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum LicenseStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  SUSPENDED
+  UNUSED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_CUSTOMER
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  passwordHash   String
+  name           String?
+  role           Role            @default(USER)
+  trialBypass    Boolean         @default(false)
+  utmSource      String?
+  utmMedium      String?
+  utmCampaign    String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  orders         Order[]
+  licenses           License[]
+  addonEntitlements  AddonEntitlement[]
+  tickets            Ticket[]
+  ticketMessages     TicketMessage[]
+}
+
+model Ticket {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id])
+  subject   String
+  status    TicketStatus   @default(OPEN)
+  priority  TicketPriority @default(NORMAL)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  messages  TicketMessage[]
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  body      String
+  isStaff   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Plan {
+  id              String    @id @default(cuid())
+  name            String
+  slug            String    @unique
+  description     String
+  priceCents      Int
+  durationDays    Int
+  maxLines        Int       @default(100)
+  maxServers      Int       @default(1)
+  stripePriceId   String?
+  stripeProductId String?
+  whmcsProductId  Int?
+  badge           String?
+  featuresJson    String?
+  active          Boolean   @default(true)
+  sortOrder       Int       @default(0)
+  createdAt       DateTime  @default(now())
+  orders          Order[]
+  licenses        License[]
+}
+
+model Order {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  planId          String
+  plan            Plan        @relation(fields: [planId], references: [id])
+  stripeSessionId String?     @unique
+  stripePaymentId String?
+  amountCents          Int
+  couponCode           String?
+  licenseDurationDays  Int?
+  utmSource            String?
+  utmMedium            String?
+  utmCampaign          String?
+  status               OrderStatus @default(PENDING)
+  createdAt       DateTime    @default(now())
+  license         License?
+}
+
+model License {
+  id              String        @id @default(cuid())
+  key             String        @unique
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  planId          String
+  plan            Plan          @relation(fields: [planId], references: [id])
+  orderId         String?       @unique
+  order           Order?        @relation(fields: [orderId], references: [id])
+  whmcsServiceId  String?       @unique
+  status          LicenseStatus @default(UNUSED)
+  expiresAt       DateTime?
+  activatedAt     DateTime?
+  machineId       String?
+  panelUrl        String?
+  pendingSyncAction String?
+  pendingSyncKey    String?
+  lastSyncAt      DateTime?
+  lastSyncError   String?
+  maxLines        Int
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  addonEntitlements AddonEntitlement[]
+}
+
+/** WHMCS product → panel plugin service (Plex, Emby, etc.). */
+model AddonProduct {
+  id             String   @id @default(cuid())
+  name           String
+  service        String   @unique
+  whmcsProductId Int      @unique
+  active         Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+/** Plugin entitlement purchased via WHMCS addon product. */
+model AddonEntitlement {
+  id               String        @id @default(cuid())
+  whmcsServiceId   String        @unique
+  service          String
+  email            String
+  userId           String?
+  user             User?         @relation(fields: [userId], references: [id])
+  panelLicenseId   String?
+  panelLicense     License?      @relation(fields: [panelLicenseId], references: [id])
+  status           LicenseStatus @default(ACTIVE)
+  expiresAt        DateTime?
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([email, service])
+  @@index([panelLicenseId, service])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([email])
+}

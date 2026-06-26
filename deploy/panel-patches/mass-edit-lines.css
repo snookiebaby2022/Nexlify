@@ -1,0 +1,149 @@
+/* Mass Edit Lines — table + sidebar form */
+.xui-mass-edit-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .xui-mass-edit-layout {
+    grid-template-columns: minmax(0, 1fr) 17.5rem;
+  }
+}
+
+.xui-mass-edit-table-wrap {
+  min-width: 0;
+  border-right: 1px solid var(--border);
+}
+
+.xui-mass-selected-count {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.xui-lines-search {
+  min-width: 10rem;
+  font-size: 0.8125rem;
+  border-radius: 0.25rem;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #111;
+  padding: 0.35rem 0.65rem;
+}
+
+[data-theme="dark"] .xui-lines-search {
+  background: #0f172a;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.xui-mass-edit-form {
+  padding: 0.85rem 1rem 1.25rem;
+  background: #2f3640;
+  color: #e2e8f0;
+  max-height: calc(100vh - 12rem);
+  overflow-y: auto;
+}
+
+[data-theme="light"] .xui-mass-edit-form {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.xui-mass-edit-form-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="light"] .xui-mass-edit-form-title {
+  border-bottom-color: #cbd5e1;
+}
+
+.xui-mass-field {
+  margin-bottom: 1rem;
+  border: none;
+  padding: 0;
+}
+
+.xui-mass-field-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.45rem;
+  color: #cbd5e1;
+}
+
+[data-theme="light"] .xui-mass-field-label {
+  color: #475569;
+}
+
+.xui-mass-checkbox,
+.xui-mass-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+  margin-bottom: 0.35rem;
+  color: #94a3b8;
+}
+
+[data-theme="light"] .xui-mass-checkbox,
+[data-theme="light"] .xui-mass-radio {
+  color: #64748b;
+}
+
+.xui-mass-checkbox input,
+.xui-mass-radio input {
+  accent-color: #38bdf8;
+}
+
+.xui-mass-tristate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.xui-mass-input {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.78rem;
+  border-radius: 0.25rem;
+  border: 1px solid #475569;
+  background: #1e293b;
+  color: #f1f5f9;
+  resize: vertical;
+}
+
+[data-theme="light"] .xui-mass-input {
+  background: #fff;
+  border-color: #cbd5e1;
+  color: #111;
+}
+
+.xui-mass-msg {
+  font-size: 0.78rem;
+  margin: 0.5rem 0;
+}
+
+.xui-mass-apply-btn {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border: none;
+  border-radius: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+
+.xui-mass-apply-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

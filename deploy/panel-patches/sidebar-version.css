@@ -1,0 +1,43 @@
+.panel-sidebar-version {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  padding: 0.75rem 1rem 1rem;
+  border-top: 1px solid rgba(34, 211, 238, 0.12);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.panel-sidebar-version-label {
+  color: rgba(148, 163, 184, 0.85);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.panel-sidebar-version-num {
+  color: rgba(226, 232, 240, 0.95);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+
+.settings-sidebar-version {
+  flex-shrink: 0;
+  padding: 0.65rem 1rem 0.85rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.settings-sidebar-version .panel-sidebar-version-label {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.settings-sidebar-version .panel-sidebar-version-num {
+  color: var(--fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}

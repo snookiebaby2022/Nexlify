@@ -1,0 +1,10 @@
+node_modules
+.next
+.env
+.env.local
+windows/deploy.config.json
+backups/
+.license-keys/
+license-server/activations.json
+*.db
+.DS_Store

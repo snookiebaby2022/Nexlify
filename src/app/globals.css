@@ -1,0 +1,207 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-deep: #07060f;
+  --bg-card: #12101f;
+  --fg: #f4f2ff;
+  --muted: #9b94b8;
+  --accent: #a855f7;
+  --accent-2: #f59e0b;
+  --glow: rgba(168, 85, 247, 0.35);
+}
+
+body {
+  background: var(--bg-deep);
+  color: var(--fg);
+  font-family: var(--font-dm-sans), system-ui, sans-serif;
+}
+
+.font-display {
+  font-family: var(--font-sora), system-ui, sans-serif;
+}
+
+.mesh-bg {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, var(--glow), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(245, 158, 11, 0.12), transparent),
+    radial-gradient(ellipse 50% 30% at 0% 50%, rgba(99, 102, 241, 0.15), transparent),
+    var(--bg-deep);
+}
+
+.grid-pattern {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.glass {
+  background: rgba(18, 16, 31, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #e9d5ff 0%, #a855f7 45%, #f59e0b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Composited slide transition — transform + opacity only */
+@keyframes fadeSlide {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-fade-slide {
+  animation: fadeSlide 0.5s ease-out both;
+  will-change: transform, opacity;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -8px, 0);
+  }
+}
+
+/* Float on a GPU layer — do not combine with filter/blur on the same element */
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Static blur orbs — filter + animation cannot composite together */
+.hero-orb {
+  transform: translateZ(0);
+  contain: paint;
+}
+
+@keyframes composited-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-composited-pulse {
+  animation: composited-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity;
+}
+
+/* Skeleton placeholders — no pulse animation to avoid main-thread work on load */
+.skeleton-block {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Avatar icon animations — transform + opacity only for compositing */
+@keyframes avatar-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, -8px, 0) rotate(2deg);
+  }
+}
+
+@keyframes avatar-float-slow {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  33% {
+    transform: translate3d(5px, -12px, 0);
+  }
+  66% {
+    transform: translate3d(-5px, -5px, 0);
+  }
+}
+
+@keyframes avatar-wobble {
+  0%,
+  100% {
+    transform: rotate(-4deg) scale(1);
+  }
+  50% {
+    transform: rotate(4deg) scale(1.06);
+  }
+}
+
+@keyframes avatar-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.88;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes avatar-ring {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.08;
+  }
+}
+
+.animate-avatar-float {
+  animation: avatar-float 4.5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-avatar-float-slow {
+  animation: avatar-float-slow 7s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-avatar-wobble {
+  animation: avatar-wobble 5s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-avatar-pulse {
+  animation: avatar-pulse 3s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.animate-avatar-ring {
+  animation: avatar-ring 2.8s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-fade-slide,
+  .animate-composited-pulse,
+  .animate-avatar-float,
+  .animate-avatar-float-slow,
+  .animate-avatar-wobble,
+  .animate-avatar-pulse,
+  .animate-avatar-ring {
+    animation: none;
+    will-change: auto;
+  }
+}

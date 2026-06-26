@@ -1,0 +1,128 @@
+.xui-lines-action-wrap {
+  position: relative;
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.xui-lines-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.375rem;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(14, 165, 233, 0.1);
+  cursor: pointer;
+  color: #38bdf8;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.xui-lines-action-btn:hover,
+.xui-lines-action-btn--open {
+  background: rgba(14, 165, 233, 0.2);
+  border-color: rgba(56, 189, 248, 0.55);
+}
+
+.xui-lines-action-chevron {
+  transition: transform 0.15s ease;
+  opacity: 0.9;
+}
+
+.xui-lines-action-btn--open .xui-lines-action-chevron {
+  transform: rotate(180deg);
+}
+
+.xui-lines-action-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  border: none;
+  background: rgba(0, 0, 0, 0.25);
+  cursor: default;
+}
+
+.xui-lines-action-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 60;
+  min-width: 13.5rem;
+  margin-top: 0.35rem;
+  padding: 0.35rem 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.xui-lines-action-menu--portal {
+  position: fixed;
+  z-index: 300;
+  right: auto;
+  top: auto;
+  width: 14rem;
+  max-width: min(92vw, 16rem);
+  max-height: min(70vh, 22rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin-top: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.xui-lines-action-menu-head {
+  padding: 0.5rem 0.85rem 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 0.25rem;
+}
+
+[data-theme="dark"] .xui-lines-action-menu {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="dark"] .xui-lines-action-menu-head {
+  color: #94a3b8;
+  border-bottom-color: #334155;
+}
+
+.xui-lines-action-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.8125rem;
+  text-align: left;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+}
+
+.xui-lines-action-menu-icon {
+  display: inline-flex;
+  width: 1.1rem;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.xui-lines-action-menu-item:hover {
+  background: #f1f5f9;
+}
+
+[data-theme="dark"] .xui-lines-action-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.xui-lines-action-menu-item--danger {
+  color: #dc2626;
+}

@@ -1,0 +1,65 @@
+/* avatar-studio animations */
+@keyframes avatar-studio-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes avatar-studio-breathe {
+  0%,
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+  33% {
+    transform: scale(1.04) rotate(-1.5deg);
+  }
+  66% {
+    transform: scale(1.02) rotate(1.5deg);
+  }
+}
+
+@keyframes avatar-studio-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 14px rgba(34, 197, 94, 0.25));
+    box-shadow:
+      0 16px 40px rgba(0, 0, 0, 0.3),
+      0 0 0 1px rgba(255, 255, 255, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 0 20px rgba(34, 197, 94, 0.15);
+  }
+  50% {
+    filter: drop-shadow(0 0 28px rgba(34, 197, 94, 0.45));
+    box-shadow:
+      0 20px 48px rgba(0, 0, 0, 0.35),
+      0 0 0 1px rgba(255, 255, 255, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15),
+      0 0 36px rgba(34, 197, 94, 0.35);
+  }
+}
+
+.avatar-studio-card {
+  animation: avatar-studio-glow 4s ease-in-out infinite;
+}
+
+.avatar-studio-preview {
+  animation: avatar-studio-float 3s ease-in-out infinite;
+}
+
+.avatar-studio-character {
+  animation: avatar-studio-breathe 3.5s ease-in-out infinite;
+  transform-origin: center bottom;
+  display: inline-flex;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .avatar-studio-card,
+  .avatar-studio-preview,
+  .avatar-studio-character {
+    animation: none;
+  }
+}
