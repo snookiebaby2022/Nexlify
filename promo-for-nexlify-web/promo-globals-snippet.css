@@ -1,0 +1,49 @@
+/* Append to nexlify-web app/globals.css — Nexlify promo brand tokens */
+
+:root {
+  --promo-bg: #080d18;
+  --promo-bg-gradient-from: #060b14;
+  --promo-bg-gradient-to: #0f172a;
+  --promo-card: #121a2e;
+  --promo-border: #243352;
+  --promo-accent: #22d3ee;
+  --promo-accent-glow: rgba(34, 211, 238, 0.35);
+  --promo-cta: #f97316;
+  --promo-cta-hover: #ea580c;
+  --promo-text: #eef4fc;
+  --promo-muted: #8ba3c7;
+}
+
+.promo-page-bg {
+  background: linear-gradient(165deg, var(--promo-bg-gradient-from) 0%, var(--promo-bg) 45%, var(--promo-bg-gradient-to) 100%);
+  color: var(--promo-text);
+  min-height: 100vh;
+}
+
+.promo-glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--promo-accent-glow) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.promo-cta-primary {
+  background: linear-gradient(135deg, var(--promo-cta) 0%, var(--promo-cta-hover) 50%, #fb923c 100%);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 9999px;
+  box-shadow: 0 4px 24px rgba(249, 115, 22, 0.35);
+}
+
+.promo-cta-secondary {
+  background: transparent;
+  color: var(--promo-accent);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  border-radius: 9999px;
+}
+
+.promo-benefit-card {
+  background: var(--promo-card);
+  border: 1px solid var(--promo-border);
+  border-radius: 12px;
+}

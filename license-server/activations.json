@@ -1,0 +1,20 @@
+{
+  "byKeyHash": {},
+  "issued": [
+    {
+      "lid": "NX-mqyi0u16",
+      "email": "kingscrtv@gmail.com",
+      "term": "1m",
+      "issuedAt": "2026-06-29T00:47:52.859Z",
+      "exp": "2026-07-29T00:47:52.000Z"
+    },
+    {
+      "lid": "NX-mqyi13c4",
+      "email": "kingscrtv@gmail.com",
+      "term": "1m",
+      "issuedAt": "2026-06-29T00:48:04.903Z",
+      "exp": "2026-07-29T00:48:04.000Z"
+    }
+  ],
+  "adminStatus": {}
+}

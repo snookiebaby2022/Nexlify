@@ -1,0 +1,1395 @@
+// After changing models, run on VPS: npx prisma db push
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PanelRole {
+  ADMIN
+  RESELLER
+  SUB_RESELLER
+}
+
+enum StreamType {
+  LIVE
+  MOVIE
+  SERIES
+}
+
+enum CategoryType {
+  LIVE
+  MOVIE
+  SERIES
+  RADIO
+}
+
+enum VodMode {
+  LIVE
+  ON_DEMAND
+  CATCHUP
+}
+
+enum LineAuthMode {
+  USERNAME_PASSWORD
+  ACTIVE_CODE
+}
+
+enum LineStatus {
+  ACTIVE
+  DISABLED
+  BANNED
+  EXPIRED
+}
+
+enum WatchFolderType {
+  MOVIE
+  SERIES
+  M3U
+  MIXED
+}
+
+enum ImportKind {
+  M3U
+  FOLDER
+  WATCH_SCAN
+}
+
+enum ProxyType {
+  HTTP
+  HTTPS
+  SOCKS5
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum TicketCategory {
+  SUPPORT
+  SUGGESTION
+  REPORT
+  BUG
+  BILLING
+  GENERAL
+}
+
+enum PanelNotificationKind {
+  UPDATE
+  MESSAGE
+  ALERT
+}
+
+enum PanelNotificationPriority {
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum PanelNotificationTarget {
+  ALL_RESELLERS
+  SPECIFIC_USER
+}
+
+enum DeviceBindingStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum FingerprintType {
+  INVISIBLE_WATERMARK
+  TOKEN_SIGNATURE
+  SESSION_HASH
+}
+
+enum StreamHealthStatus {
+  UP
+  DOWN
+  DEGRADED
+  UNKNOWN
+}
+
+enum AutoActionType {
+  BAN_LINE
+  DISABLE_LINE
+  NOTIFY_ADMIN
+  NOTIFY_RESELLER
+  LOG_ONLY
+}
+
+enum MassEditEntity {
+  LINES
+  STREAMS
+  CHANNELS
+  MOVIES
+  SERIES
+  BOUQUETS
+  RESellers
+  MAG_DEVICES
+  ENIGMA_DEVICES
+}
+
+enum MassEditStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum MigrationSource {
+  XTREAM_UI
+  XUI
+  NXT
+  XCIPTV
+  WHMCS
+  CUSTOM
+}
+
+enum MigrationStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum BackupType {
+  FULL_PANEL
+  DATABASE_ONLY
+  CONFIG_ONLY
+  STREAMS_ONLY
+  LINES_ONLY
+}
+
+enum BackupStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  ENCRYPTING
+  UPLOADING
+}
+
+enum CleanerTaskType {
+  ORPHANED_STREAMS
+  EXPIRED_LINES
+  OLD_LOGS
+  TEMP_FILES
+  DATABASE_VACUUM
+  ORPHANED_EPG
+  UNUSED_CATEGORIES
+  BROKEN_STREAMS
+}
+
+enum CleanerTaskStatus {
+  SCHEDULED
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+model PanelUser {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  displayName  String?
+  email        String?
+  avatarUrl    String?
+  avatarConfig Json?
+  totpSecret   String?
+  totpEnabled  Boolean   @default(false)
+  role         PanelRole @default(ADMIN)
+  credits      Int       @default(0)
+  apiKey       String?   @unique
+  accessCode   String?
+  parentId     String?
+  parent       PanelUser?  @relation("ResellerTree", fields: [parentId], references: [id])
+  children     PanelUser[] @relation("ResellerTree")
+  maxLines     Int       @default(500)
+  isActive     Boolean   @default(true)
+  defaultLanguage String @default("en")
+  resellerDns  String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  lines              Line[]
+  creditTransactions CreditTransaction[]
+  resellerBouquets   ResellerBouquet[]
+  activityLogs       ActivityLog[]
+  ticketsCreated     Ticket[] @relation("TicketCreator")
+  ticketsAssigned    Ticket[] @relation("TicketAssignee")
+  ticketMessages     TicketMessage[]
+  chatMessages       PanelChatMessage[]
+  notificationsCreated  PanelNotification[] @relation("NotificationCreator")
+  notificationsReceived PanelNotification[] @relation("NotificationRecipient")
+  notificationReads     PanelNotificationRead[]
+  groupId            String?
+  group              UserGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  massEditJobs        MassEditJob[]
+  migrationJobs       MigrationJob[]
+  xdriveBackups       XdriveBackup[]
+  serverCleanerTasks  ServerCleanerTask[]
+  resellerApiKeys     ResellerApiKey[]
+}
+
+model CreditTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount      Int
+  balanceAfter Int
+  note        String?
+  createdAt   DateTime @default(now())
+}
+
+model StreamProxy {
+  id        String    @id @default(cuid())
+  name      String
+  host      String
+  port      Int
+  type      ProxyType @default(HTTP)
+  username  String?
+  password  String?
+  isActive   Boolean   @default(true)
+  isFreeTier Boolean   @default(false)
+  country    String?
+  createdAt  DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  servers StreamServer[]
+}
+
+model StreamServer {
+  id            String    @id @default(cuid())
+  name          String
+  host          String
+  port          Int       @default(8080)
+  protocol      String    @default("http")
+  proxyId       String?
+  proxy         StreamProxy? @relation(fields: [proxyId], references: [id])
+  isActive      Boolean   @default(true)
+  maxClients    Int       @default(1000)
+  sortOrder     Int       @default(0)
+  description   String?
+  privateIp     String?
+  domain        String?
+  panelPort     Int       @default(3000)
+  timeshiftOnly Boolean   @default(false)
+  region        String?
+  rtmpPort      Int?
+  bandwidthMbps Int?
+  healthStatus  String    @default("unknown")
+  healthMessage String?
+  lastHealthAt  DateTime?
+  dnsRotator    Json?
+  agentToken    String?   @unique
+  agentLastSeen DateTime?
+  agentVersion  String?
+  configRevision Int      @default(0)
+  agentSshHost  String?
+  agentSshPort  Int       @default(22)
+  agentSshUser  String?
+  agentUseSsh   Boolean   @default(false)
+  httpsPort     Int       @default(443)
+  geoLbCountries Json?
+  geoLbIsps     Json?
+  panelSettings Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  streams        Stream[]
+  forcedLines    Line[]           @relation("LineForcedServer")
+  processes      StreamProcess[]
+  commands       AgentCommand[]
+
+  lbSessions          LoadBalancerSession[] @relation(name: "LbSessionServer")
+  healthChecks        StreamHealthCheck[]
+  streamIssues        StreamIssue[]
+  sourceMonitorAlerts SourceMonitorAlert[]
+}
+
+model Category {
+  id           String       @id @default(cuid())
+  name         String
+  categoryType CategoryType @default(LIVE)
+  isAdult      Boolean      @default(false)
+  sortOrder    Int          @default(0)
+  parentId     String?
+  parent       Category?    @relation("CategoryTree", fields: [parentId], references: [id])
+  children     Category[]   @relation("CategoryTree")
+  streams      Stream[]
+  createdAt    DateTime     @default(now())
+}
+
+model Stream {
+  id                 String     @id @default(cuid())
+  name               String
+  streamIcon         String?
+  streamUrl          String
+  backupUrl          String?
+  type               StreamType @default(LIVE)
+  serverId           String?
+  server             StreamServer? @relation(fields: [serverId], references: [id])
+  categoryId         String?
+  category           Category?  @relation(fields: [categoryId], references: [id])
+  epgChannelId       String?
+  channelId          String?
+  minSpeedKbps       Int?
+  maxSpeedKbps       Int?
+  seriesName         String?
+  seasonNum          Int?
+  episodeNum         Int?
+  containerExtension String?    @default("mp4")
+  isOnDemand         Boolean    @default(false)
+  vodMode            VodMode    @default(LIVE)
+  archiveDays        Int?
+  playlistUrl        String?
+  providerId         String?
+  provider           StreamProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  providerPath       String?
+  hostedExternally   Boolean    @default(false)
+  isActive           Boolean    @default(true)
+  sortOrder          Int        @default(0)
+  timeshiftSeconds   Int?
+  isShifted          Boolean    @default(false)
+  parentStreamId     String?
+  parentStream       Stream?    @relation("StreamVariants", fields: [parentStreamId], references: [id], onDelete: SetNull)
+  childStreams       Stream[]   @relation("StreamVariants")
+  dnsRotator         Json?
+  bitrates           Json?
+  autoRestart        Boolean    @default(true)
+  isCreatedChannel   Boolean    @default(false)
+  isRadio            Boolean    @default(false)
+  isAdult            Boolean    @default(false)
+  agentStartCmd      String?
+  agentPid           Int?
+  lastProbeAt        DateTime?
+  lastProbeOk        Boolean?
+  lastProbeError     String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  bouquets          BouquetStream[]
+  liveConnections   LiveConnection[]
+  lastWatchedByLines Line[] @relation("LineLastWatched")
+  channelWatches    LineChannelWatch[]
+  processes         StreamProcess[]
+  streamFingerprints  StreamFingerprint[]
+  tmdbSyncJobs        TmdbSyncJob[]
+  healthChecks        StreamHealthCheck[]
+  streamIssues        StreamIssue[]
+  sourceMonitorAlerts SourceMonitorAlert[]
+  epgAutoAssignments  EpgAutoAssignment[]
+  connectionGeographies ConnectionGeography[]
+  lbSessions          LoadBalancerSession[] @relation(name: "LbSessionStream")
+}
+
+model WatchFolder {
+  id            String          @id @default(cuid())
+  name          String
+  path          String
+  type          WatchFolderType @default(MIXED)
+  categoryId    String?
+  serverId      String?
+  isActive      Boolean         @default(true)
+  autoScanMins  Int             @default(0)
+  lastScan      DateTime?
+  importedCount Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model ImportJob {
+  id            String     @id @default(cuid())
+  kind          ImportKind
+  source        String
+  streamType    StreamType @default(MOVIE)
+  status        String     @default("queued")
+  imported      Int        @default(0)
+  skipped       Int        @default(0)
+  message       String?
+  watchFolderId String?
+  categoryId    String?
+  serverId      String?
+  createdAt     DateTime   @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  @@index([status, createdAt])
+}
+
+model StreamProcess {
+  id           String       @id @default(cuid())
+  serverId     String
+  server       StreamServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  streamId     String?
+  stream       Stream?      @relation(fields: [streamId], references: [id], onDelete: SetNull)
+  pid          Int?
+  name         String?
+  status       String       @default("unknown")
+  cpuPercent   Float?
+  memoryMb     Float?
+  bitrateKbps  Int?
+  autoRestart  Boolean      @default(true)
+  errorMessage String?
+  lastSeenAt   DateTime     @default(now())
+  startedAt    DateTime?
+
+  @@unique([serverId, streamId])
+  @@index([serverId, status])
+}
+
+model AgentCommand {
+  id          String       @id @default(cuid())
+  serverId    String
+  server      StreamServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  action      String
+  payload     Json?
+  status      String       @default("pending")
+  result      String?
+  createdAt   DateTime     @default(now())
+  completedAt DateTime?
+
+  @@index([serverId, status])
+}
+
+model LiveConnection {
+  id         String   @id @default(cuid())
+  lineId     String
+  line       Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  streamId   String?
+  stream     Stream?  @relation(fields: [streamId], references: [id], onDelete: SetNull)
+  ip         String?
+  userAgent  String?
+  startedAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  @@index([lineId])
+  @@index([lastSeenAt])
+}
+
+model Bouquet {
+  id        String   @id @default(cuid())
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  streams          BouquetStream[]
+  lines            LineBouquet[]
+  resellerBouquets ResellerBouquet[]
+}
+
+model BouquetStream {
+  bouquetId String
+  streamId  String
+  sortOrder Int     @default(0)
+  bouquet   Bouquet @relation(fields: [bouquetId], references: [id], onDelete: Cascade)
+  stream    Stream  @relation(fields: [streamId], references: [id], onDelete: Cascade)
+
+  @@id([bouquetId, streamId])
+}
+
+model ResellerBouquet {
+  userId    String
+  bouquetId String
+  user      PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bouquet   Bouquet   @relation(fields: [bouquetId], references: [id], onDelete: Cascade)
+
+  @@id([userId, bouquetId])
+}
+
+model Line {
+  id              String     @id @default(cuid())
+  username        String     @unique
+  password        String
+  authMode          LineAuthMode @default(USERNAME_PASSWORD)
+  activeCode        String?      @unique
+  status          LineStatus @default(ACTIVE)
+  maxConnections  Int        @default(1)
+  expiresAt       DateTime
+  ownerId         String?
+  owner           PanelUser? @relation(fields: [ownerId], references: [id])
+  externalId      String?    @unique
+  notes           String?
+  allowedOutput   String     @default("ts,hls,m3u8")
+  lockToIp        Boolean    @default(false)
+  allowedIps      String?
+  /// Comma-separated ISO country codes (e.g. US,GB). Empty = no restriction.
+  allowedCountries String?
+  blockedCountries String?
+  /// Comma-separated User-Agent substrings. Empty = no allow-list restriction.
+  allowedUserAgents String?
+  /// Comma-separated User-Agent substrings to block.
+  disallowedUserAgents String?
+  /// When false, adult-tagged streams are blocked for this line.
+  canWatchAdult    Boolean    @default(true)
+  isRestreamer     Boolean    @default(false)
+  isTrial          Boolean    @default(false)
+  forcedServerId   String?
+  forcedServer     StreamServer? @relation("LineForcedServer", fields: [forcedServerId], references: [id], onDelete: SetNull)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  bouquets         LineBouquet[]
+  magDevices       MagDevice[]
+  enigmaDevices    EnigmaDevice[]
+  activityLogs     ActivityLog[]
+  billingEvents    BillingEvent[]
+  liveConnections  LiveConnection[]
+  tickets          Ticket[]
+  lastWatchedAt    DateTime?
+  lastWatchedStreamId String?
+  lastWatchedIp    String?
+  lastWatchedStream Stream? @relation("LineLastWatched", fields: [lastWatchedStreamId], references: [id], onDelete: SetNull)
+  channelWatches   LineChannelWatch[]
+  deviceBindings     DeviceBinding[]
+  streamFingerprints StreamFingerprint[]
+  sameIpDetections   SameIpDetection[]
+  lbSessions         LoadBalancerSession[]
+  connectionGeographies ConnectionGeography[]
+  appsLocks          LineAppsLock[]
+}
+
+model LineChannelWatch {
+  id            String   @id @default(cuid())
+  lineId        String
+  line          Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  streamId      String
+  stream        Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  watchCount    Int      @default(1)
+  lastWatchedAt DateTime @default(now())
+
+  @@unique([lineId, streamId])
+  @@index([lineId])
+}
+
+model MagDevice {
+  id        String   @id @default(cuid())
+  mac       String   @unique
+  lineId    String
+  line      Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  model     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EnigmaDevice {
+  id        String   @id @default(cuid())
+  mac       String   @unique
+  lineId    String
+  line      Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  model     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EpgSource {
+  id              String    @id @default(cuid())
+  name            String
+  url             String
+  /// xmltv | schedules_direct | webgrab_plus
+  sourceType      String    @default("xmltv")
+  config          Json?
+  country         String?
+  lastSync        DateTime?
+  syncEveryHours  Int       @default(24)
+  lastSyncError   String?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  programs        EpgProgram[]
+  epgAutoAssignments EpgAutoAssignment[]
+}
+
+model StbEvent {
+  id         String   @id @default(cuid())
+  deviceType String
+  mac        String?
+  lineId     String?
+  event      String
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([lineId, createdAt])
+  @@index([mac, createdAt])
+}
+
+model EpgProgram {
+  id          String    @id @default(cuid())
+  sourceId    String
+  source      EpgSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  channelId   String
+  title       String
+  description String?
+  start       DateTime
+  stop        DateTime
+
+  @@index([channelId, start])
+  @@index([sourceId])
+}
+
+model BillingEvent {
+  id        String   @id @default(cuid())
+  provider  String   @default("whmcs")
+  action    String
+  payload   Json
+  lineId    String?
+  line      Line?    @relation(fields: [lineId], references: [id])
+  status    String
+  message   String?
+  createdAt DateTime @default(now())
+}
+
+model LineBouquet {
+  lineId    String
+  bouquetId String
+  line      Line    @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  bouquet   Bouquet @relation(fields: [bouquetId], references: [id], onDelete: Cascade)
+
+  @@id([lineId, bouquetId])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String?
+  entityId  String?
+  userId    String?
+  user      PanelUser? @relation(fields: [userId], references: [id])
+  lineId    String?
+  line      Line?    @relation(fields: [lineId], references: [id])
+  meta      Json?
+  createdAt DateTime @default(now())
+}
+
+model PanelSetting {
+  key   String @id
+  value String
+}
+
+model BandwidthSnapshot {
+  id          String   @id @default(cuid())
+  bytesIn     BigInt   @default(0)
+  bytesOut    BigInt   @default(0)
+  connections Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model CronRunLog {
+  id        String   @id @default(cuid())
+  job       String
+  status    String
+  message   String?
+  durationMs Int?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Ticket {
+  id           String         @id @default(cuid())
+  subject      String
+  body         String
+  status       TicketStatus   @default(OPEN)
+  priority     TicketPriority @default(NORMAL)
+  category     TicketCategory @default(SUPPORT)
+  createdById  String
+  createdBy    PanelUser      @relation("TicketCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  assignedToId String?
+  assignedTo   PanelUser?     @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  lineId       String?
+  line         Line?          @relation(fields: [lineId], references: [id], onDelete: SetNull)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  messages     TicketMessage[]
+
+  @@index([status])
+  @@index([category])
+  @@index([createdById])
+}
+
+model TicketMessage {
+  id        String    @id @default(cuid())
+  ticketId  String
+  ticket    Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    PanelUser @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime  @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+model PanelChatMessage {
+  id        String    @id @default(cuid())
+  userId    String
+  user      PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime  @default(now())
+
+  @@index([createdAt])
+}
+
+model PanelNotification {
+  id           String                    @id @default(cuid())
+  title        String
+  body         String                    @db.Text
+  kind         PanelNotificationKind
+  priority     PanelNotificationPriority @default(NORMAL)
+  target       PanelNotificationTarget
+  recipientId  String?
+  recipient    PanelUser?                @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
+  createdById  String
+  createdBy    PanelUser                 @relation("NotificationCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  isPinned     Boolean                   @default(false)
+  isActive     Boolean                   @default(true)
+  expiresAt    DateTime?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  reads        PanelNotificationRead[]
+
+  @@index([isActive, createdAt])
+  @@index([target, recipientId])
+}
+
+model PanelNotificationRead {
+  id             String            @id @default(cuid())
+  notificationId String
+  notification   PanelNotification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           PanelUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime          @default(now())
+
+  @@unique([notificationId, userId])
+  @@index([userId])
+}
+
+model UserGroup {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String?  @default("#e85d4c")
+  parentId    String?
+  parent      UserGroup?  @relation("GroupTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    UserGroup[] @relation("GroupTree")
+  sortOrder   Int      @default(0)
+  isReseller  Boolean  @default(false)
+  isBanned    Boolean  @default(false)
+  config      Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users PanelUser[]
+}
+
+model Package {
+  id               String   @id @default(cuid())
+  name             String
+  description      String?
+  creditCost       Int      @default(0)
+  maxLines         Int      @default(1)
+  extraDeviceSlots Int      @default(0)
+  days             Int      @default(30)
+  bouquetIds  String[] @default([])
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model StreamProvider {
+  id            String    @id @default(cuid())
+  name          String
+  baseUrl       String
+  apiKey        String?
+  /// file_host | xtream_vod | generic_url | live_upstream
+  providerType  String?
+  description   String?
+  contactEmail  String?
+  region        String?
+  maxStreams    Int?
+  notes         String?
+  status        String    @default("unknown")
+  statusMessage String?
+  lastCheckAt   DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  streams Stream[]
+  m3uSyncJobs M3uSyncJob[]
+}
+
+model BlockedAsn {
+  id        String   @id @default(cuid())
+  asn       String   @unique
+  label     String?
+  reason    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model BlockedIp {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  label     String?
+  reason    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model BlockedIsp {
+  id        String   @id @default(cuid())
+  name      String
+  reason    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model BlockedUserAgent {
+  id        String   @id @default(cuid())
+  pattern   String
+  reason    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model RtmpEndpoint {
+  id        String   @id @default(cuid())
+  name      String
+  host      String
+  port      Int      @default(1935)
+  appName   String?  @default("live")
+  isActive  Boolean  @default(true)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AccessCode {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  packageId       String?
+  bouquetIds      String[]  @default([])
+  days            Int       @default(30)
+  maxConnections  Int       @default(1)
+  maxUses         Int       @default(1)
+  uses            Int       @default(0)
+  expiresAt       DateTime?
+  isActive        Boolean   @default(true)
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model MediaIntegration {
+  id        String   @id @default(cuid())
+  type      String
+  name      String
+  config    Json     @default("{}")
+  isActive  Boolean  @default(true)
+  lastSync  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, isActive])
+}
+
+/** API / subscription keys for music addons (Spotify, Apple Music, etc.). */
+model AddonLicense {
+  id         String    @id @default(cuid())
+  service    String
+  label      String
+  licenseKey String?
+  expiresAt  DateTime?
+  notes      String?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([service, isActive])
+}
+
+model Coupon {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  label         String?
+  discountType  String    @default("percent")
+  discountValue Float
+  maxUses       Int       @default(0)
+  uses          Int       @default(0)
+  minDays         Int?
+  discountMonths  Int?
+  expiresAt       DateTime?
+  isActive      Boolean   @default(true)
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([isActive, code])
+}
+
+model LeakAuditLog {
+  id         String   @id @default(cuid())
+  lineId     String?
+  streamId   String?
+  ip         String?
+  userAgent  String?
+  fingerprint String?
+  action     String
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([lineId, createdAt])
+  @@index([streamId, createdAt])
+}
+
+model AppBuild {
+  id          String   @id @default(cuid())
+  appName     String
+  packageName String
+  logoUrl     String?
+  primaryColor String   @default("#00c0ef")
+  serverUrl   String?
+  status      String   @default("QUEUED")
+  downloadUrl String?
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completedAt DateTime?
+
+  @@index([status, createdAt])
+  @@index([createdBy])
+}
+
+// === v1.6.0: Anti-Sharing & Device Binding ===
+
+model DeviceBinding {
+  id            String             @id @default(cuid())
+  lineId        String
+  line          Line               @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  deviceId      String
+  deviceName    String?
+  deviceType    String?            // ios, android, web, mag, enigma, smarttv
+  deviceModel   String?
+  appVersion    String?
+  appPackage    String?            // com.nexlify.app, etc.
+  ip            String?
+  userAgent     String?
+  fingerprint   String?            // device fingerprint hash
+  status        DeviceBindingStatus @default(PENDING)
+  lastSeenAt    DateTime           @default(now())
+  boundAt       DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+  createdAt     DateTime           @default(now())
+
+  @@unique([lineId, deviceId])
+  @@index([lineId, status])
+  @@index([deviceId, status])
+  @@index([boundAt])
+}
+
+model StreamFingerprint {
+  id          String          @id @default(cuid())
+  streamId    String
+  stream      Stream          @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  lineId      String
+  line        Line            @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  type        FingerprintType @default(INVISIBLE_WATERMARK)
+  token       String          @unique
+  payload     Json?            // position, interval, opacity, etc.
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  expiresAt   DateTime?
+
+  @@index([streamId, isActive])
+  @@index([lineId, createdAt])
+  @@index([token])
+}
+
+model SameIpDetection {
+  id           String   @id @default(cuid())
+  lineId       String
+  line         Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  ip           String
+  concurrentLines Int   @default(1)
+  detectedAt   DateTime @default(now())
+  resolvedAt   DateTime?
+  autoAction   String?  // BAN_LINE, DISABLE_LINE, NOTIFY_ADMIN, etc.
+  actionTaken  Boolean  @default(false)
+  notes        String?
+
+  @@index([ip, detectedAt])
+  @@index([lineId, detectedAt])
+  @@index([actionTaken, detectedAt])
+}
+
+// === v1.6.0: Load Balancer Shared State ===
+
+model LoadBalancerSession {
+  id          String   @id @default(cuid())
+  sessionKey  String   @unique
+  lineId      String
+  line        Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  streamId    String?
+  stream      Stream?  @relation(name: "LbSessionStream", fields: [streamId], references: [id], onDelete: SetNull)
+  serverId    String?
+  server      StreamServer? @relation(name: "LbSessionServer", fields: [serverId], references: [id], onDelete: SetNull)
+  deviceId    String?
+  ip          String?
+  startedAt   DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  bytesIn     BigInt   @default(0)
+  bytesOut    BigInt   @default(0)
+  isActive    Boolean  @default(true)
+
+  @@index([lineId, isActive])
+  @@index([sessionKey])
+  @@index([lastSeenAt])
+  @@index([serverId, isActive])
+}
+
+// === v1.6.0: TMDB Auto-Sync ===
+
+model TmdbSyncJob {
+  id            String     @id @default(cuid())
+  type          String     // movie | series | episode | bulk
+  tmdbId        Int?
+  imdbId        String?
+  title         String?
+  streamId      String?
+  stream        Stream?    @relation(fields: [streamId], references: [id], onDelete: SetNull)
+  status        String     @default("queued")
+  metadata      Json?       // fetched TMDB data
+  posterUrl     String?
+  backdropUrl   String?
+  genres        String[]   @default([])
+  overview      String?     @db.Text
+  rating        Float?
+  releaseDate   DateTime?
+  runtime       Int?
+  seasons       Json?       // for series
+  episodes      Json?       // for series
+  error         String?
+  createdAt     DateTime   @default(now())
+  completedAt   DateTime?
+
+  @@index([status, createdAt])
+  @@index([streamId])
+  @@index([tmdbId])
+  @@index([imdbId])
+}
+
+// === v1.6.0: Auto M3U Sync ===
+
+model M3uSyncJob {
+  id            String    @id @default(cuid())
+  name          String
+  url           String
+  providerId    String?
+  provider      StreamProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  categoryMap   Json?     // auto-mapping rules
+  autoAssignEpg Boolean   @default(true)
+  lastSyncAt    DateTime?
+  nextSyncAt    DateTime?
+  syncIntervalMins Int    @default(60)
+  status        String    @default("active")
+  lastResult    Json?     // counts, errors
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status, nextSyncAt])
+  @@index([providerId])
+}
+
+// === v1.6.0: Stream Health & Auto Fix ===
+
+model StreamHealthCheck {
+  id           String             @id @default(cuid())
+  streamId     String
+  stream       Stream             @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  serverId     String?
+  server       StreamServer?      @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  status       StreamHealthStatus  @default(UNKNOWN)
+  responseTimeMs Int?
+  bitrateKbps  Int?
+  audioTracks  Int?
+  videoTracks  Int?
+  hasAudioLoss Boolean             @default(false)
+  hasLoop      Boolean             @default(false)
+  hasFreeze    Boolean             @default(false)
+  errorMessage String?
+  checkedAt    DateTime           @default(now())
+
+  @@index([streamId, checkedAt])
+  @@index([status, checkedAt])
+  @@index([serverId, checkedAt])
+}
+
+model StreamIssue {
+  id           String   @id @default(cuid())
+  streamId     String
+  stream       Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  issueType    String   // audio_loss, loop, freeze, source_down, bitrate_drop
+  severity     String   @default("warning") // warning, critical, info
+  detectedAt   DateTime @default(now())
+  resolvedAt   DateTime?
+  autoFixed    Boolean  @default(false)
+  fixAction    String?  // source_swap, restart_stream, notify_admin
+  fixResult    String?
+  serverId     String?
+  server       StreamServer? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+
+  @@index([streamId, resolvedAt])
+  @@index([issueType, detectedAt])
+  @@index([autoFixed, detectedAt])
+}
+
+// === v1.6.0: Mass Edit / Bulk Operations ===
+
+model MassEditJob {
+  id           String          @id @default(cuid())
+  entity       MassEditEntity
+  action       String          // update, delete, enable, disable, assign_bouquet, change_package, etc.
+  filter       Json?           // filter criteria
+  changes      Json            // field changes to apply
+  affectedIds  String[]        @default([])
+  totalCount   Int             @default(0)
+  successCount Int             @default(0)
+  failCount    Int             @default(0)
+  errors       Json?           // per-item errors
+  status       MassEditStatus  @default(QUEUED)
+  createdById  String?
+  createdBy    PanelUser?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime        @default(now())
+  startedAt    DateTime?
+  completedAt  DateTime?
+
+  @@index([status, createdAt])
+  @@index([entity, status])
+  @@index([createdById])
+}
+
+// === v1.6.0: Migration Tools ===
+
+model MigrationJob {
+  id            String           @id @default(cuid())
+  source        MigrationSource
+  sourceUrl     String?
+  sourceApiKey  String?
+  status        MigrationStatus  @default(QUEUED)
+  options       Json?            // what to migrate: lines, streams, categories, etc.
+  stats         Json?            // counts of migrated items
+  errors        Json?            // error log
+  createdById   String?
+  createdBy     PanelUser?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime         @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  @@index([status, createdAt])
+  @@index([source, status])
+  @@index([createdById])
+}
+
+// === v1.6.0: xDrive Encrypted Cloud Backup ===
+
+model XdriveBackup {
+  id            String        @id @default(cuid())
+  type          BackupType
+  status        BackupStatus  @default(QUEUED)
+  filePath      String?       // local path before upload
+  fileSizeBytes BigInt?
+  encrypted     Boolean       @default(true)
+  encryptionKey String?       // encrypted key, actual key stored separately
+  uploadUrl     String?       // S3/xDrive URL
+  uploadProvider String?      // s3, gcs, azure, xdrive
+  retentionDays Int           @default(30)
+  expiresAt     DateTime?
+  error         String?
+  createdById   String?
+  createdBy     PanelUser?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime      @default(now())
+  completedAt   DateTime?
+
+  @@index([status, createdAt])
+  @@index([type, status])
+  @@index([createdById])
+}
+
+// === v1.6.0: Server Cleaner ===
+
+model ServerCleanerTask {
+  id          String          @id @default(cuid())
+  taskType    CleanerTaskType
+  status      CleanerTaskStatus @default(SCHEDULED)
+  schedule    String?         // cron expression
+  lastRunAt   DateTime?
+  nextRunAt   DateTime?
+  result      Json?           // items cleaned, space freed
+  error       String?
+  isAuto      Boolean         @default(false)
+  createdById String?
+  createdBy   PanelUser?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now())
+
+  @@index([status, nextRunAt])
+  @@index([taskType, status])
+  @@index([isAuto, nextRunAt])
+}
+
+// === v1.6.0: Custom Expiry Videos ===
+
+model ExpiryVideo {
+  id          String   @id @default(cuid())
+  name        String
+  videoUrl    String
+  type        String   @default("generic") // generic, expired, suspended, low_credits, trial_ended
+  isDefault   Boolean  @default(false)
+  language    String   @default("en")
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type, isActive])
+  @@index([isDefault, language])
+}
+
+// === v1.6.0: Reseller API Keys ===
+
+model ResellerApiKey {
+  id          String   @id @default(cuid())
+  userId      String
+  user        PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key         String   @unique
+  label       String?
+  permissions String[] @default([]) // lines:read, lines:write, streams:read, etc.
+  allowedIps  String[] @default([])
+  lastUsedAt  DateTime?
+  usageCount  Int      @default(0)
+  isActive    Boolean  @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, isActive])
+  @@index([key])
+}
+
+// === v1.6.0: EPG Auto-Assignment ===
+
+model EpgAutoAssignment {
+  id          String   @id @default(cuid())
+  sourceId    String
+  source      EpgSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  streamId    String?
+  stream      Stream?   @relation(fields: [streamId], references: [id], onDelete: SetNull)
+  matchedChannelId String? // EPG channel ID matched
+  matchScore  Float?    // confidence score 0-1
+  matchMethod String?   // exact_name, fuzzy_name, tmdb_id, manual
+  isConfirmed Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([sourceId, isConfirmed])
+  @@index([streamId, matchScore])
+  @@index([matchMethod])
+}
+
+// === v1.6.0: Apps Lock ===
+
+model AppsLockPolicy {
+  id          String   @id @default(cuid())
+  name        String
+  allowedApps String[] @default([]) // package names of allowed apps
+  blockedApps String[] @default([]) // package names of blocked apps
+  allowedAppTypes String[] @default([]) // ios, android, web, mag, enigma, smarttv, kodi
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, isDefault])
+
+  lineAppsLocks LineAppsLock[]
+}
+
+model LineAppsLock {
+  lineId     String
+  line       Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  policyId   String
+  policy     AppsLockPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  override   Json?    // line-specific overrides
+
+  @@id([lineId, policyId])
+}
+
+// === v1.6.0: Down Source Monitor Alert ===
+
+model SourceMonitorAlert {
+  id          String   @id @default(cuid())
+  streamId    String
+  stream      Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  serverId    String?
+  server      StreamServer? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  alertType   String   // source_down, bitrate_drop, high_error_rate, loop_detected
+  severity    String   @default("warning")
+  message     String
+  isResolved  Boolean  @default(false)
+  resolvedAt  DateTime?
+  notifiedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([streamId, isResolved])
+  @@index([createdAt])
+  @@index([severity, isResolved])
+}
+
+// === v1.6.0: World Map / Geography Monitoring ===
+
+model ConnectionGeography {
+  id          String   @id @default(cuid())
+  lineId      String?
+  line        Line?    @relation(fields: [lineId], references: [id], onDelete: SetNull)
+  streamId    String?
+  stream      Stream?  @relation(fields: [streamId], references: [id], onDelete: SetNull)
+  country     String
+  countryCode String
+  region      String?
+  city        String?
+  lat         Float?
+  lng         Float?
+  connectionCount Int @default(1)
+  bandwidthBytes BigInt @default(0)
+  lastSeenAt  DateTime @default(now())
+
+  @@index([country, lastSeenAt])
+  @@index([lineId, lastSeenAt])
+  @@index([streamId, lastSeenAt])
+}

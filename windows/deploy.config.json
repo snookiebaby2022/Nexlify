@@ -1,0 +1,11 @@
+{
+  "host": "85.17.162.54",
+  "port": 22,
+  "username": "root",
+  "remotePath": "/home/nexlify-panel",
+  "password": "4SSJvVBp6M9vH9JV",
+  "winscpPath": "C:/Program Files (x86)/WinSCP/WinSCP.com",
+  "plinkPath": "C:/Program Files/PuTTY/plink.exe",
+  "acceptHostKey": true,
+  "syncOnly": false
+}

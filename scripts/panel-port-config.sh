@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Panel listen ports — source from install / fix scripts after DOMAIN is set.
+# IP installs: panel on :80 (browser URL = http://IP/…, no nginx, no :3000).
+# Domain installs: nginx :80/:443 → 127.0.0.1:13000.
+
+is_ip_panel_host() {
+  [[ "${1:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
+# Internal upstream (localhost only — never put in browser URLs).
+NEXLIFY_UPSTREAM_PORT="${NEXLIFY_UPSTREAM_PORT:-13000}"
+NEXLIFY_WEBSITE_UPSTREAM_PORT="${NEXLIFY_WEBSITE_UPSTREAM_PORT:-13001}"
+
+if is_ip_panel_host "${DOMAIN:-}"; then
+  NEXLIFY_PANEL_LISTEN_PORT=80
+  NEXLIFY_PANEL_BIND_HOST="0.0.0.0"
+  NEXLIFY_PANEL_BEHIND_NGINX=0
+  NEXLIFY_PANEL_PUBLIC_PORT=80
+  NEXLIFY_USE_NGINX=0
+else
+  NEXLIFY_PANEL_LISTEN_PORT="$NEXLIFY_UPSTREAM_PORT"
+  NEXLIFY_PANEL_BIND_HOST="127.0.0.1"
+  NEXLIFY_PANEL_BEHIND_NGINX=1
+  NEXLIFY_PANEL_PUBLIC_PORT=80
+  NEXLIFY_USE_NGINX=1
+fi
+
+export NEXLIFY_PANEL_LISTEN_PORT NEXLIFY_PANEL_BIND_HOST NEXLIFY_PANEL_BEHIND_NGINX
+export NEXLIFY_PANEL_PUBLIC_PORT NEXLIFY_USE_NGINX NEXLIFY_UPSTREAM_PORT NEXLIFY_WEBSITE_UPSTREAM_PORT

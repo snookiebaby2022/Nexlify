@@ -1,0 +1,1513 @@
+{
+  "version": 2,
+  "createdAt": "2026-06-30T03:00:26.853Z",
+  "panelSettings": [
+    {
+      "key": "login_flood:88.97.218.45:29682024",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:185.174.208.143:29702974",
+      "value": "2"
+    },
+    {
+      "key": "license.trial_started",
+      "value": "2026-06-03T17:09:50.912Z"
+    },
+    {
+      "key": "login_flood:195.23.59.26:29686121",
+      "value": "1"
+    },
+    {
+      "key": "settings.domains",
+      "value": "{\"primaryDomain\":\"nexlify.live\",\"extraDomains\":[],\"sslEnabled\":true,\"forceHttps\":true,\"certbotEmail\":\"sno@gmail.com\",\"certFullChainPath\":\"\",\"certKeyPath\":\"\",\"lastCertbotRun\":{\"at\":\"2026-06-03T18:25:51.977Z\",\"ok\":false,\"message\":\"Certbot not found or not executable at /home/xui/bin/certbot/bin/certbot. Set the path under Settings → Server binaries.\",\"domains\":[\"nexlify.live\"]}}"
+    },
+    {
+      "key": "license.instance_id",
+      "value": "15ae7b84-b00e-4e68-88b7-7fb31d7d6c06"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29704797",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:86.148.24.56:29689502",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29703947",
+      "value": "6"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29704757",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:172.216.250.20:29696845",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:217.65.126.172:29694870",
+      "value": "1"
+    },
+    {
+      "key": "panel_health_restart_at",
+      "value": "2026-06-28T21:18:14.211Z"
+    },
+    {
+      "key": "settings.general",
+      "value": "{\"panelName\":\"Nexlify\",\"panelUrl\":\"https://nexlify.live\",\"timezone\":\"Europe/London\",\"defaultLanguage\":\"en\",\"maintenanceMode\":false,\"disableTrial\":false}"
+    },
+    {
+      "key": "login_flood:41.142.224.149:29691302",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29684712",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:217.43.245.32:29682450",
+      "value": "2"
+    },
+    {
+      "key": "login_flood:92.24.235.241:29684826",
+      "value": "1"
+    },
+    {
+      "key": "cron_last_run",
+      "value": "2026-06-30T03:00:26.800Z"
+    },
+    {
+      "key": "login_flood:177.22.87.91:29685546",
+      "value": "2"
+    },
+    {
+      "key": "login_flood:185.209.196.251:29686552",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:169.150.198.76:29690198",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29687629",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:37.19.211.103:29694519",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:89.242.170.246:29691173",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:82.167.7.78:29687890",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29689278",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:37.161.233.104:29685528",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:41.62.181.188:29685532",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:86.145.171.21:29689272",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:41.62.181.188:29685533",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29698987",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:148.252.144.60:29685582",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:86.145.171.21:29689239",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:95.168.120.11:29686398",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:127.0.0.1:29704275",
+      "value": "1"
+    },
+    {
+      "key": "settings.transcoding-pack",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "settings.lb-pro",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "settings.archive-pack",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29686828",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:168.205.36.103:29685538",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:188.80.74.195:29685543",
+      "value": "1"
+    },
+    {
+      "key": "settings:transcoding-pack",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29682022",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:107.181.63.6:29685553",
+      "value": "1"
+    },
+    {
+      "key": "settings:lb-pro",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29704228",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:185.19.76.4:29685598",
+      "value": "2"
+    },
+    {
+      "key": "login_flood:92.211.30.27:29686333",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:148.252.165.26:29685599",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29682243",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:74.244.145.42:29685530",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29686865",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29703950",
+      "value": "3"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29704229",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:2.82.104.152:29685539",
+      "value": "1"
+    },
+    {
+      "key": "panel_name",
+      "value": "Nexlify"
+    },
+    {
+      "key": "login_flood:169.150.198.76:29690200",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:74.244.145.239:29700894",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:86.148.24.56:29689511",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:96.244.16.116:29685559",
+      "value": "1"
+    },
+    {
+      "key": "settings:archive-pack",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29703948",
+      "value": "3"
+    },
+    {
+      "key": "settings:security-shield",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "login_flood:51.159.220.254:29685794",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:128.65.111.106:29686040",
+      "value": "1"
+    },
+    {
+      "key": "settings:analytics-ai",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "settings:dvr-pack",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "login_flood:37.161.233.104:29685530",
+      "value": "2"
+    },
+    {
+      "key": "settings.security-shield",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "login_flood:127.0.0.1:29704225",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29686799",
+      "value": "1"
+    },
+    {
+      "key": "settings.analytics-ai",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "settings.dvr-pack",
+      "value": "{\"enabled\":true}"
+    },
+    {
+      "key": "login_flood:127.0.0.1:29704226",
+      "value": "2"
+    },
+    {
+      "key": "login_flood:102.105.253.198:29688275",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:104.28.154.49:29689404",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:37.19.211.103:29694517",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:104.28.154.49:29689411",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:127.0.0.1:29704237",
+      "value": "3"
+    },
+    {
+      "key": "login_flood:127.0.0.1:29704232",
+      "value": "1"
+    },
+    {
+      "key": "login_flood:88.97.218.45:29703951",
+      "value": "2"
+    },
+    {
+      "key": "login_flood:127.0.0.1:29704227",
+      "value": "2"
+    },
+    {
+      "key": "login_flood:127.0.0.1:29704276",
+      "value": "1"
+    },
+    {
+      "key": "network_bytes_in_total",
+      "value": "2185155042"
+    },
+    {
+      "key": "network_bytes_out_total",
+      "value": "471715786"
+    },
+    {
+      "key": "backup_last_run",
+      "value": "2026-06-29T03:00:47.510Z"
+    },
+    {
+      "key": "settings.server",
+      "value": "{\"serverUrl\":\"\",\"magServerUrl\":\"\",\"enigmaServerUrl\":\"\",\"panelPort\":3000,\"panelSslPort\":443,\"streamHttpPort\":3001,\"streamHttpsPort\":443,\"repoPath\":\"\",\"lastPanelUpdate\":{\"at\":\"2026-06-29T20:03:01.540Z\",\"ok\":true,\"message\":\"Update finished (still v1.8.1, patch mode). PM2 restart completed.\",\"fromVersion\":\"1.8.1\",\"toVersion\":\"1.8.1\"},\"updateHistory\":[{\"at\":\"2026-06-29T20:03:01.540Z\",\"ok\":true,\"message\":\"Update finished (still v1.8.1, patch mode). PM2 restart completed.\",\"fromVersion\":\"1.8.1\",\"toVersion\":\"1.8.1\",\"action\":\"update\",\"steps\":[{\"name\":\"check disk space\",\"ok\":true,\"output\":\"59GB free\"},{\"name\":\"bootstrap update scripts\",\"ok\":true,\"output\":\"OK: scripts/apply-panel-fast-update.sh\\nOK: scripts/panel-restart-safe.sh\\nOK: scripts/panel-update-recover.sh\\nOK: scripts/has-valid-next-build.sh\\nBootstrap complete (vendor=https://nexlify.live/install cache=v181)\"},{\"name\":\"sync panel files\",\"ok\":true,\"output\":\"Bootstrapped apply-panel-fast-update.sh\\nBootstrapped panel-restart-safe.sh\\nBootstrapped panel-update-recover.sh\\nBootstrapped has-valid-next-build.sh\\nDownloading https://nexlify.live/downloads/nexlify-panel.tar.gz?v166 ...\\nPanel files synced from vendor tarball (v1.8.1).\"},{\"name\":\"npm install\",\"ok\":true,\"output\":\"Lockfile changed — running npm ci ...\\nnpm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.\\nnpm warn deprecated @humanwhocodes/config-array@0.13.0: Use @eslint/config-array instead\\nnpm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported\\nnpm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me\\nnpm warn deprecated @humanwhocodes/object-schema@2.0.3: Use @eslint/object-schema instead\\nnpm warn deprecated eslint@8.57.1: This version is no longer supported. Please see https://eslint.org/version-support for other options.\\n\\n> nexlify@1.8.1 postinstall\\n> prisma generate && node scripts/check-schema.mjs\\n\\nEnvironment variables loaded from .env\\nPrisma schema loaded from prisma/schema.prisma\\n\\n✔ Generated Prisma Client (v6.9.0) to ./node_modules/@prisma/client in 653ms\\n\\nStart by importing your Prisma Client (See: https://pris.ly/d/importing-client)\\n\\nTip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate\\n\\nprisma/schema.prisma OK\\n\\nadded 416 packages, and audited 417 packages in 17s\\n\\n149 packages are looking for funding\\n  run `npm fund` for details\\n\\n1 high severity vulnerability\\n\\nTo address all issues (including breaking changes), run:\\n  npm audit fix --force\\n\\nRun `npm audit` for details.\"},{\"name\":\"prisma db push\",\"ok\":true,\"output\":\"Schema changed — prisma db push + generate ...\\nEnvironment variables loaded from .env\\nPrisma schema loaded from prisma/schema.prisma\\nDatasource \\\"db\\\": PostgreSQL database \\\"nexlify\\\", schema \\\"public\\\" at \\\"85.17.162.54:5432\\\"\\n\\n🚀  Your database is now in sync with your Prisma schema. Done in 299ms\\n\\nEnvironment variables loaded from .env\\nPrisma schema loaded from prisma/schema.prisma\\n\\n✔ Generated Prisma Client (v6.9.0) to ./node_modules/@prisma/client in 634ms\\n\\nStart by importing your Prisma Client (See: https://pris.ly/d/importing-client)\\n\\nTip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate\"},{\"name\":\"prepare build\",\"ok\":true,\"output\":\"Backing up current production build to .next.backup ...\\nBackup OK\\nBuilding into .next.staging — panel stays online on current .next until swap + restart.\"},{\"name\":\"npm run build\",\"ok\":true,\"output\":\"ƒ /reseller/content/vod                            187 B         115 kB\\n├ ƒ /reseller/created_channels                       803 B         103 kB\\n├ ƒ /reseller/credits                              1.58 kB         107 kB\\n├ ƒ /reseller/dashboard                              378 B         122 kB\\n├ ƒ /reseller/edit_profile                           941 B         103 kB\\n├ ƒ /reseller/enigma                                 941 B         103 kB\\n├ ƒ /reseller/enigmas                              2.17 kB         108 kB\\n├ ƒ /reseller/enigmas/add                          2.73 kB         108 kB\\n├ ƒ /reseller/epg_view                             1.81 kB         104 kB\\n├ ƒ /reseller/episodes                               803 B         103 kB\\n├ ƒ /reseller/index                                  941 B         103 kB\\n├ ƒ /reseller/line                                   941 B         103 kB\\n├ ƒ /reseller/line_activity                        3.54 kB         109 kB\\n├ ƒ /reseller/lines                                  716 B         123 kB\\n├ ƒ /reseller/lines/add                              438 B         113 kB\\n├ ƒ /reseller/lines/mass-edit                        133 B         111 kB\\n├ ƒ /reseller/live_connections                       171 B         110 kB\\n├ ƒ /reseller/mag                                    941 B         103 kB\\n├ ƒ /reseller/mag_events                           2.01 kB         104 kB\\n├ ƒ /reseller/mags                                 2.34 kB         108 kB\\n├ ƒ /reseller/mags/add                             2.75 kB         108 kB\\n├ ƒ /reseller/mags/bulk                            1.51 kB         107 kB\\n├ ƒ /reseller/mags/convert-to-line                  2.4 kB         108 kB\\n├ ƒ /reseller/modules                                941 B         103 kB\\n├ ƒ /reseller/movies                                 803 B         103 kB\\n├ ƒ /reseller/notifications                          533 B         110 kB\\n├ ƒ /reseller/profile                              2.54 kB         116 kB\\n├ ƒ /reseller/radios                                 803 B         103 kB\\n├ ƒ /reseller/resize                                 941 B         103 kB\\n├ ƒ /reseller/session                              1.48 kB         107 kB\\n├ ƒ /reseller/streams                                803 B         103 kB\\n├ ƒ /reseller/ticket                                 941 B         103 kB\\n├ ƒ /reseller/ticket_view                            941 B         103 kB\\n├ ƒ /reseller/tickets                              3.31 kB         109 kB\\n├ ƒ /reseller/tickets/[id]                           325 B         110 kB\\n├ ƒ /reseller/tickets/new                          1.51 kB         107 kB\\n├ ƒ /reseller/user                                   941 B         103 kB\\n├ ƒ /reseller/user_logs                            2.35 kB         105 kB\\n├ ƒ /reseller/users                                  483 B         112 kB\\n├ ƒ /reseller/users/add                             3.5 kB         109 kB\\n├ ƒ /reseller/users/credits                        1.69 kB         107 kB\\n├ ƒ /reseller/users/sub                            1.68 kB         107 kB\\n├ ○ /robots.txt                                      941 B         103 kB\\n├ ƒ /scripts/nexlify-server-install.sh               941 B         103 kB\\n├ ƒ /stalker_portal/server/load.php                  941 B         103 kB\\n├ ○ /webplayer                                     3.73 kB         106 kB\\n├ ƒ /webrtc/live/[username]/[password]/[streamId]  2.51 kB         105 kB\\n└ ƒ /xmltv.php                                       941 B         103 kB\\n+ First Load JS shared by all                       102 kB\\n  ├ chunks/31255-a5e2329efa4925e2.js                 46 kB\\n  ├ chunks/4bd1b696-bad92808725a934a.js            54.2 kB\\n  └ other shared chunks (total)                    1.98 kB\\n\\n\\nƒ Middleware                                       64.3 kB\\n\\n○  (Static)   prerendered as static content\\n●  (SSG)      prerendered as static HTML (uses generateStaticParams)\\nƒ  (Dynamic)  server-rendered on demand\"},{\"name\":\"prepare standalone\",\"ok\":true,\"output\":\"prepare-standalone: OK (.next.staging/static + public copied)\\nverify-standalone: OK (40 chunk files)\\nSwapping .next.staging → .next (brief restart follows) ...\\nBuild OK (1 CSS bundle(s))\"},{\"name\":\"pm2 restart nexlify\",\"ok\":true,\"output\":\"[2026-06-29T20:02:52+00:00] panel-restart-safe (nexlify-only) from /home/nexlify-panel\\nPanel env: HTTPS domain=panel.nexlify.live (nginx → 127.0.0.1:13000)\\n[2026-06-29T20:02:52+00:00] Restarting nexlify only (preserving nexlify-cron) ...\\n[2026-06-29T20:03:01+00:00] nexlify-only restart OK\"}]},{\"at\":\"2026-06-24T23:02:54.203Z\",\"ok\":false,\"message\":\"Update failed at step: npm run build\",\"fromVersion\":\"1.4.0\",\"toVersion\":\"1.4.0\",\"action\":\"update\",\"steps\":[{\"name\":\"sync panel files\",\"ok\":true,\"output\":\"==> sync panel files\"},{\"name\":\"npm install\",\"ok\":true,\"output\":\"==> npm ci\\nnpm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.\\nnpm warn deprecated @humanwhocodes/config-array@0.13.0: Use @eslint/config-array instead\\nnpm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported\\nnpm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me\\nnpm warn deprecated @humanwhocodes/object-schema@2.0.3: Use @eslint/object-schema instead\\nnpm warn deprecated eslint@8.57.1: This version is no longer supported. Please see https://eslint.org/version-support for other options.\\n\\n> nexlify@1.4.0 postinstall\\n> prisma generate && node scripts/check-schema.mjs\\n\\nEnvironment variables loaded from .env\\nPrisma schema loaded from prisma/schema.prisma\\n\\n✔ Generated Prisma Client (v6.9.0) to ./node_modules/@prisma/client in 495ms\\n\\nStart by importing your Prisma Client (See: https://pris.ly/d/importing-client)\\n\\nTip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate\\n\\nprisma/schema.prisma OK\\n\\nadded 416 packages in 15s\"},{\"name\":\"prisma db push\",\"ok\":true,\"output\":\"==> prisma db push\\nEnvironment variables loaded from .env\\nPrisma schema loaded from prisma/schema.prisma\\nDatasource \\\"db\\\": PostgreSQL database \\\"nexlify\\\", schema \\\"public\\\" at \\\"127.0.0.1:5432\\\"\\n\\nThe database is already in sync with the Prisma schema.\\n\\n==> prisma generate\\nEnvironment variables loaded from .env\\nPrisma schema loaded from prisma/schema.prisma\\n\\n✔ Generated Prisma Client (v6.9.0) to ./node_modules/@prisma/client in 434ms\\n\\nStart by importing your Prisma Client (See: https://pris.ly/d/importing-client)\\n\\nTip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate\"},{\"name\":\"npm run build\",\"ok\":false,\"output\":\"==> npm run build\\n\\n> nexlify@1.4.0 prebuild\\n> node scripts/check-package.mjs && node scripts/check-schema.mjs\\n\\npackage.json OK — next is 15.5.19 (no next override)\\nprisma/schema.prisma OK\\n\\n> nexlify@1.4.0 build\\n> next build\\n\\n   ▲ Next.js 15.5.19\\n   - Environments: .env\\n   - Experiments (use with caution):\\n     · serverActions\\n\\n   Creating an optimized production build ...\\n ✓ Compiled successfully in 55s\\n   Linting and checking validity of types ...\\n\\n./src/app/admin/reports/commission/page.tsx\\n61:6  Warning: React Hook useEffect has a missing dependency: 'load'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\\n\\n./src/app/api/reseller/users/credits/route.ts\\n41:11  Warning: 'freshChild' is assigned a value but never used.  @typescript-eslint/no-unused-vars\\n75:13  Warning: 'e' is defined but never used.  @typescript-eslint/no-unused-vars\\n\\n./src/components/activity-logs-page.tsx\\n43:6  Warning: React Hook useEffect has a missing dependency: 'load'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\\n\\n./src/components/admin-archive-page.tsx\\n6:10  Warning: 'formatDateTime' is defined but never used.  @typescript-eslint/no-unused-vars\\n\\n./src/components/admin-videolog-page.tsx\\n31:6  Warning: React Hook useEffect has a missing dependency: 'load'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\\n\\n./src/components/radio-probe-player.tsx\\n49:14  Warning: 'e' is defined but never used.  @typescript-eslint/no-unused-vars\\n132:18  Warning: The ref value 'mediaRef.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'mediaRef.current' to a variable inside the effect, and use that variable in the cleanup function.  react-hooks/exhaustive-deps\\n135:6  Warning: React Hook useEffect has a missing dependency: 'resolveUrl'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps\\n\\n./src/lib/domains.ts\\n128:9  Warning: 'schemeSsl' is assigned a value but never used.  @typescript-eslint/no-unused-vars\\n\\n./src/lib/license/state.ts\\n3:32  Warning: 'isPanelLicenseExemptEnv' is defined but never used.  @typescript-eslint/no-unused-vars\\n\\n./src/lib/line-restrictions.ts\\n1:15  Warning: 'Line' is defined but never used.  @typescript-eslint/no-unused-vars\\n\\n./src/lib/media-integrations.ts\\n5:3  Warning: 'resolvePlexProfile' is defined but never used.  @typescript-eslint/no-unused-vars\\n\\n./src/lib/panel-demo-host.ts\\n15:41  Warning: '_host' is defined but never used.  @typescript-eslint/no-unused-vars\\n\\ninfo  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules\\nFailed to compile.\\n\\n./src/app/admin/settings/billing/page.tsx:6:7\\nType error: Type '\\\"billing\\\"' is not assignable to type '\\\"streams\\\" | \\\"server\\\" | \\\"fingerprint\\\" | \\\"general\\\" | \\\"community\\\" | \\\"cache\\\" | \\\"backup\\\" | \\\"tmdb\\\" | \\\"notifications\\\" | \\\"security\\\" | \\\"binaries\\\" | \\\"domains\\\" | \\\"geo\\\" | \\\"theft\\\" | \\\"integrations\\\" | \\\"player\\\"'.\\n\\n\\u001b[0m \\u001b[90m 4 |\\u001b[39m   \\u001b[36mreturn\\u001b[39m (\\n \\u001b[90m 5 |\\u001b[39m     \\u001b[33m<\\u001b[39m\\u001b[33mSettingsPanelForm\\u001b[39m\\n\\u001b[31m\\u001b[1m>\\u001b[22m\\u001b[39m\\u001b[90m 6 |\\u001b[39m       group\\u001b[33m=\\u001b[39m\\u001b[32m\\\"billing\\\"\\u001b[39m\\n \\u001b[90m   |\\u001b[39m       \\u001b[31m\\u001b[1m^\\u001b[22m\\u001b[39m\\n \\u001b[90m 7 |\\u001b[39m       title\\u001b[33m=\\u001b[39m\\u001b[32m\\\"Billing & checkout\\\"\\u001b[39m\\n \\u001b[90m 8 |\\u001b[39m       description\\u001b[33m=\\u001b[39m\\u001b[32m\\\"PayPal placeholder for website billing and coupon checkout hooks.\\\"\\u001b[39m\\n \\u001b[90m 9 |\\u001b[39m       sections\\u001b[33m=\\u001b[39m{[\\u001b[0m\\nNext.js build worker exited with code: 1 and signal: null\"}]},{\"at\":\"2026-06-24T22:09:55.243Z\",\"ok\":false,\"message\":\"Update failed at step: npm run build\",\"fromVersion\":\"1.5.3\",\"toVersion\":\"1.5.3\",\"action\":\"update\",\"steps\":[{\"name\":\"sync panel files\",\"ok\":true,\"output\":\"==> sync panel files\"},{\"name\":\"npm install\",\"ok\":true,\"output\":\"==> npm ci\\nnpm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.\\nnpm warn deprecated @humanwhocodes/config-array@0.13.0: Use @eslint/config-array instead\\nnpm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported\\nnpm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me\\nnpm warn deprecated @humanwhocodes/object-schema@2.0.3: Use @eslint/object-schema instead\\nnpm warn deprecated eslint@8.57.1: This version is no longer supported. Please see https://eslint.org/version-support for other options.\\n\\n> nexlify@1.4.0 postinstall\\n> prisma generate && node scripts/check-schema.mjs\\n\\nEnvironment variables loaded from .env\\nPrisma schema loaded from prisma/schema.prisma\\n\\n✔ Generated Prisma Client (v6.9.0) to ./node_modules/@prisma/client in 482ms\\n\\nStart by importing your Prisma Client (See: https://pris.ly/d/importing-client)\\n\\nTip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate\\n\\nprisma/schema.prisma OK\\n\\nadded 416 packages in 16s\"},{\"name\":\"prisma db push\",\"ok\":true,\"output\":\"==> prisma db push\\nEnvironment variables loaded from .env\\nPrisma schema loaded from prisma/schema.prisma\\nDatasource \\\"db\\\": PostgreSQL database \\\"nexlify\\\", schema \\\"public\\\" at \\\"127.0.0.1:5432\\\"\\n\\nThe database is already in sync with the Prisma schema.\\n\\n==> prisma generate\\nEnvironment variables loaded from .env\\nPrisma schema loaded from prisma/schema.prisma\\n\\n✔ Generated Prisma Client (v6.9.0) to ./node_modules/@prisma/client in 452ms\\n\\nStart by importing your Prisma Client (See: https://pris.ly/d/importing-client)\\n\\nTip: Need your database queries to be 1000x faster? Accelerate offers you that and more: https://pris.ly/tip-2-accelerate\"},{\"name\":\"npm run build\",\"ok\":false,\"output\":\"==> npm run build\\n\\n> nexlify@1.4.0 prebuild\\n> node scripts/check-package.mjs && node scripts/check-schema.mjs\\n\\npackage.json OK — next is 15.5.19 (no next override)\\nprisma/schema.prisma OK\\n\\n> nexlify@1.4.0 build\\n> next build\\n\\n   ▲ Next.js 15.5.19\\n   - Environments: .env\\n   - Experiments (use with caution):\\n     · serverActions\\n\\n   Creating an optimized production build ...\\nNext.js build worker exited with code: null and signal: SIGKILL\"}]}],\"rollbackGitRef\":null,\"updateCheckUrl\":\"\",\"panelUpdateAutoDownload\":true,\"streamAgentUpgradeNotes\":\"Upgrade stream agents: Admin → Servers → action menu → Reinstall agent, or SSH to the node and re-run the install command from the server wizard. Match agent version to panel release shown on Updates.\"}"
+    }
+  ],
+  "bouquets": [
+    {
+      "id": "cmpz8ptif0004wwmzo6696v21",
+      "name": "demo",
+      "sortOrder": 0,
+      "isActive": true,
+      "createdAt": "2026-06-04T08:35:26.247Z",
+      "updatedAt": "2026-06-04T08:35:26.247Z",
+      "streams": []
+    }
+  ],
+  "categories": [
+    {
+      "id": "cmpzblwhv0000ww31s0mbljb2",
+      "name": "Panel :3000",
+      "categoryType": "LIVE",
+      "isAdult": false,
+      "sortOrder": 0,
+      "parentId": null,
+      "createdAt": "2026-06-04T09:56:22.339Z"
+    },
+    {
+      "id": "cmqvcpxtb0000wwk0ajb32jtc",
+      "name": "Panel",
+      "categoryType": "LIVE",
+      "isAdult": false,
+      "sortOrder": 0,
+      "parentId": null,
+      "createdAt": "2026-06-26T19:56:07.919Z"
+    }
+  ],
+  "streams": [
+    {
+      "id": "cmpzd7eam0001wwq97z24oq5w",
+      "name": "SomaFM Groove Salad",
+      "streamIcon": null,
+      "streamUrl": "file:///media/https:/ice2.somafm.com/groovesalad-128-mp3",
+      "backupUrl": null,
+      "type": "LIVE",
+      "serverId": "seed-server-main",
+      "categoryId": null,
+      "epgChannelId": null,
+      "channelId": null,
+      "minSpeedKbps": null,
+      "maxSpeedKbps": null,
+      "seriesName": null,
+      "seasonNum": null,
+      "episodeNum": null,
+      "containerExtension": "",
+      "isOnDemand": false,
+      "vodMode": "LIVE",
+      "archiveDays": null,
+      "playlistUrl": null,
+      "providerId": null,
+      "providerPath": null,
+      "hostedExternally": false,
+      "isActive": true,
+      "sortOrder": 0,
+      "timeshiftSeconds": null,
+      "isShifted": false,
+      "parentStreamId": null,
+      "dnsRotator": null,
+      "bitrates": null,
+      "autoRestart": true,
+      "isCreatedChannel": false,
+      "isRadio": true,
+      "isAdult": false,
+      "agentStartCmd": null,
+      "agentPid": null,
+      "lastProbeAt": "2026-06-30T03:00:19.136Z",
+      "lastProbeOk": false,
+      "lastProbeError": "Network unreachable",
+      "createdAt": "2026-06-04T10:41:04.798Z",
+      "updatedAt": "2026-06-30T03:00:19.136Z"
+    }
+  ],
+  "lines": [
+    {
+      "id": "cmqwf5whg0000wwj8033yy9xm",
+      "username": "_smoke_test",
+      "password": "[redacted-export]",
+      "authMode": "USERNAME_PASSWORD",
+      "activeCode": null,
+      "status": "ACTIVE",
+      "maxConnections": 2,
+      "expiresAt": "2026-09-25T14:04:13.124Z",
+      "ownerId": null,
+      "externalId": null,
+      "notes": null,
+      "allowedOutput": "ts,hls,m3u8",
+      "lockToIp": false,
+      "allowedIps": null,
+      "allowedCountries": null,
+      "blockedCountries": null,
+      "allowedUserAgents": null,
+      "disallowedUserAgents": null,
+      "canWatchAdult": true,
+      "isRestreamer": false,
+      "isTrial": false,
+      "forcedServerId": null,
+      "createdAt": "2026-06-27T13:52:18.100Z",
+      "updatedAt": "2026-06-27T14:04:13.219Z",
+      "lastWatchedAt": null,
+      "lastWatchedStreamId": null,
+      "lastWatchedIp": null,
+      "bouquets": [
+        {
+          "lineId": "cmqwf5whg0000wwj8033yy9xm",
+          "bouquetId": "cmpz8ptif0004wwmzo6696v21"
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "cmpxwy26m0002wwq7zoe058f0",
+      "username": "reseller",
+      "role": "RESELLER",
+      "credits": 80,
+      "email": null,
+      "displayName": null,
+      "isActive": true,
+      "maxLines": 200,
+      "groupId": null,
+      "parentId": "cmpxwy26c0000wwq7l74hljzq",
+      "resellerDns": null,
+      "defaultLanguage": "en"
+    },
+    {
+      "id": "cmpzvhboh0001ww1sb5u3d007",
+      "username": "sgfsg",
+      "role": "SUB_RESELLER",
+      "credits": 10,
+      "email": null,
+      "displayName": null,
+      "isActive": true,
+      "maxLines": 500,
+      "groupId": null,
+      "parentId": "cmpxwy26m0002wwq7zoe058f0",
+      "resellerDns": null,
+      "defaultLanguage": "en"
+    },
+    {
+      "id": "cmpxwy26c0000wwq7l74hljzq",
+      "username": "admin",
+      "role": "ADMIN",
+      "credits": 999999,
+      "email": "snookiebaby2022@gmail.com",
+      "displayName": "Matt",
+      "isActive": true,
+      "maxLines": 500,
+      "groupId": null,
+      "parentId": null,
+      "resellerDns": null,
+      "defaultLanguage": "en"
+    }
+  ],
+  "packages": [
+    {
+      "id": "cmq0zghix0000ww6mae3kube4",
+      "name": "24 Hours",
+      "description": "Auto: 0 credits",
+      "creditCost": 0,
+      "maxLines": 1,
+      "extraDeviceSlots": 0,
+      "days": 1,
+      "bouquetIds": [],
+      "sortOrder": 1,
+      "isActive": true,
+      "createdAt": "2026-06-05T13:51:46.618Z",
+      "updatedAt": "2026-06-05T13:51:46.618Z"
+    },
+    {
+      "id": "cmq0zghj30001ww6mk6uzko3p",
+      "name": "48 Hours",
+      "description": "Auto: 0 credits",
+      "creditCost": 0,
+      "maxLines": 1,
+      "extraDeviceSlots": 0,
+      "days": 2,
+      "bouquetIds": [],
+      "sortOrder": 2,
+      "isActive": true,
+      "createdAt": "2026-06-05T13:51:46.624Z",
+      "updatedAt": "2026-06-05T13:51:46.624Z"
+    },
+    {
+      "id": "cmq0zghj70002ww6mel1haydo",
+      "name": "1 Week",
+      "description": "Auto: 0 credits",
+      "creditCost": 0,
+      "maxLines": 1,
+      "extraDeviceSlots": 0,
+      "days": 7,
+      "bouquetIds": [],
+      "sortOrder": 7,
+      "isActive": true,
+      "createdAt": "2026-06-05T13:51:46.627Z",
+      "updatedAt": "2026-06-05T13:51:46.627Z"
+    },
+    {
+      "id": "cmq0zghja0003ww6mja71x9sk",
+      "name": "1 Month",
+      "description": "Auto: 1 credit",
+      "creditCost": 1,
+      "maxLines": 1,
+      "extraDeviceSlots": 0,
+      "days": 30,
+      "bouquetIds": [],
+      "sortOrder": 30,
+      "isActive": true,
+      "createdAt": "2026-06-05T13:51:46.631Z",
+      "updatedAt": "2026-06-05T13:51:46.631Z"
+    },
+    {
+      "id": "cmq0zghje0004ww6mkfqwxdk2",
+      "name": "3 Months",
+      "description": "Auto: 2 credits",
+      "creditCost": 2,
+      "maxLines": 1,
+      "extraDeviceSlots": 0,
+      "days": 90,
+      "bouquetIds": [],
+      "sortOrder": 90,
+      "isActive": true,
+      "createdAt": "2026-06-05T13:51:46.634Z",
+      "updatedAt": "2026-06-05T13:51:46.634Z"
+    },
+    {
+      "id": "cmq0zghjh0005ww6mhpwiqu44",
+      "name": "6 Months",
+      "description": "Auto: 3 credits",
+      "creditCost": 3,
+      "maxLines": 1,
+      "extraDeviceSlots": 0,
+      "days": 180,
+      "bouquetIds": [],
+      "sortOrder": 180,
+      "isActive": true,
+      "createdAt": "2026-06-05T13:51:46.637Z",
+      "updatedAt": "2026-06-05T13:51:46.637Z"
+    },
+    {
+      "id": "cmq0zghjj0006ww6moukdhypg",
+      "name": "12 Months",
+      "description": "Auto: 4 credits",
+      "creditCost": 4,
+      "maxLines": 1,
+      "extraDeviceSlots": 0,
+      "days": 365,
+      "bouquetIds": [],
+      "sortOrder": 365,
+      "isActive": true,
+      "createdAt": "2026-06-05T13:51:46.640Z",
+      "updatedAt": "2026-06-05T13:51:46.640Z"
+    },
+    {
+      "id": "cmq0zghjm0007ww6mdnphbcuz",
+      "name": "24 Months",
+      "description": "Auto: 6 credits",
+      "creditCost": 6,
+      "maxLines": 1,
+      "extraDeviceSlots": 0,
+      "days": 730,
+      "bouquetIds": [],
+      "sortOrder": 730,
+      "isActive": true,
+      "createdAt": "2026-06-05T13:51:46.643Z",
+      "updatedAt": "2026-06-05T13:51:46.643Z"
+    }
+  ],
+  "coupons": [
+    {
+      "id": "cmq9zzcz60007wwr2ztpbp55p",
+      "code": "NEXLIFY50",
+      "label": "Launch 50% off first 3 months",
+      "discountType": "percent",
+      "discountValue": 50,
+      "maxUses": 30,
+      "uses": 0,
+      "minDays": null,
+      "discountMonths": 3,
+      "expiresAt": null,
+      "isActive": true,
+      "notes": "Marketing popup coupon — 30 redemptions max",
+      "createdAt": "2026-06-11T21:16:22.770Z",
+      "updatedAt": "2026-06-11T21:39:03.890Z"
+    }
+  ],
+  "epgSources": [
+    {
+      "id": "epg-country-br",
+      "name": "Brazil EPG",
+      "url": "https://iptv-org.github.io/epg/guides/br.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "br",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.175Z"
+    },
+    {
+      "id": "epg-country-hr",
+      "name": "Croatia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/hr.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "hr",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.201Z"
+    },
+    {
+      "id": "epg-country-be",
+      "name": "Belgium EPG",
+      "url": "https://iptv-org.github.io/epg/guides/be.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "be",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.206Z"
+    },
+    {
+      "id": "epg-country-ch",
+      "name": "Switzerland EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ch.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ch",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.207Z"
+    },
+    {
+      "id": "epg-country-my",
+      "name": "Malaysia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/my.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "my",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.234Z"
+    },
+    {
+      "id": "epg-country-hk",
+      "name": "Hong Kong EPG",
+      "url": "https://iptv-org.github.io/epg/guides/hk.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "hk",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.225Z"
+    },
+    {
+      "id": "epg-country-nz",
+      "name": "New Zealand EPG",
+      "url": "https://iptv-org.github.io/epg/guides/nz.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "nz",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.211Z"
+    },
+    {
+      "id": "epg-country-za",
+      "name": "South Africa EPG",
+      "url": "https://iptv-org.github.io/epg/guides/za.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "za",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.213Z"
+    },
+    {
+      "id": "epg-country-il",
+      "name": "Israel EPG",
+      "url": "https://iptv-org.github.io/epg/guides/il.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "il",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.217Z"
+    },
+    {
+      "id": "epg-country-kr",
+      "name": "South Korea EPG",
+      "url": "https://iptv-org.github.io/epg/guides/kr.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "kr",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.220Z"
+    },
+    {
+      "id": "epg-country-ph",
+      "name": "Philippines EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ph.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ph",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.231Z"
+    },
+    {
+      "id": "epg-country-ba",
+      "name": "Bosnia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ba.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ba",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.237Z"
+    },
+    {
+      "id": "epg-country-ua",
+      "name": "Ukraine EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ua.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ua",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.184Z"
+    },
+    {
+      "id": "epg-country-hu",
+      "name": "Hungary EPG",
+      "url": "https://iptv-org.github.io/epg/guides/hu.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "hu",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.198Z"
+    },
+    {
+      "id": "epg-country-si",
+      "name": "Slovenia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/si.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "si",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.239Z"
+    },
+    {
+      "id": "epg-country-co",
+      "name": "Colombia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/co.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "co",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.244Z"
+    },
+    {
+      "id": "epg-country-sg",
+      "name": "Singapore EPG",
+      "url": "https://iptv-org.github.io/epg/guides/sg.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "sg",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.226Z"
+    },
+    {
+      "id": "epg-country-ru",
+      "name": "Russia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ru.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ru",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.183Z"
+    },
+    {
+      "id": "epg-country-ee",
+      "name": "Estonia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ee.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ee",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.243Z"
+    },
+    {
+      "id": "epg-country-cn",
+      "name": "China EPG",
+      "url": "https://iptv-org.github.io/epg/guides/cn.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "cn",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.222Z"
+    },
+    {
+      "id": "epg-country-us",
+      "name": "United States EPG",
+      "url": "https://iptv-org.github.io/epg/guides/us.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "us",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.162Z"
+    },
+    {
+      "id": "epg-country-fr",
+      "name": "France EPG",
+      "url": "https://iptv-org.github.io/epg/guides/fr.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "fr",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.166Z"
+    },
+    {
+      "id": "epg-country-de",
+      "name": "Germany EPG",
+      "url": "https://iptv-org.github.io/epg/guides/de.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "de",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.164Z"
+    },
+    {
+      "id": "epg-country-ca",
+      "name": "Canada EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ca.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ca",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.179Z"
+    },
+    {
+      "id": "epg-country-in",
+      "name": "India EPG",
+      "url": "https://iptv-org.github.io/epg/guides/in.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "in",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.181Z"
+    },
+    {
+      "id": "epg-country-ke",
+      "name": "Kenya EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ke.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ke",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.252Z"
+    },
+    {
+      "id": "epg-country-dk",
+      "name": "Denmark EPG",
+      "url": "https://iptv-org.github.io/epg/guides/dk.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "dk",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.191Z"
+    },
+    {
+      "id": "epg-country-ve",
+      "name": "Venezuela EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ve.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ve",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.247Z"
+    },
+    {
+      "id": "epg-country-th",
+      "name": "Thailand EPG",
+      "url": "https://iptv-org.github.io/epg/guides/th.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "th",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.228Z"
+    },
+    {
+      "id": "epg-country-pl",
+      "name": "Poland EPG",
+      "url": "https://iptv-org.github.io/epg/guides/pl.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "pl",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.173Z"
+    },
+    {
+      "id": "epg-country-cz",
+      "name": "Czech Republic EPG",
+      "url": "https://iptv-org.github.io/epg/guides/cz.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "cz",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.194Z"
+    },
+    {
+      "id": "epg-country-mx",
+      "name": "Mexico EPG",
+      "url": "https://iptv-org.github.io/epg/guides/mx.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "mx",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.177Z"
+    },
+    {
+      "id": "epg-country-pt",
+      "name": "Portugal EPG",
+      "url": "https://iptv-org.github.io/epg/guides/pt.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "pt",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.174Z"
+    },
+    {
+      "id": "epg-country-mk",
+      "name": "North Macedonia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/mk.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "mk",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.238Z"
+    },
+    {
+      "id": "epg-country-ar",
+      "name": "Argentina EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ar.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ar",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.176Z"
+    },
+    {
+      "id": "epg-country-it",
+      "name": "Italy EPG",
+      "url": "https://iptv-org.github.io/epg/guides/it.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "it",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.170Z"
+    },
+    {
+      "id": "epg-country-jp",
+      "name": "Japan EPG",
+      "url": "https://iptv-org.github.io/epg/guides/jp.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "jp",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.219Z"
+    },
+    {
+      "id": "epg-country-ww",
+      "name": "Worldwide (combined) EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ww.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ww",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.159Z"
+    },
+    {
+      "id": "epg-country-ng",
+      "name": "Nigeria EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ng.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ng",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.251Z"
+    },
+    {
+      "id": "epg-country-fi",
+      "name": "Finland EPG",
+      "url": "https://iptv-org.github.io/epg/guides/fi.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "fi",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.192Z"
+    },
+    {
+      "id": "epg-country-id",
+      "name": "Indonesia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/id.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "id",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.233Z"
+    },
+    {
+      "id": "epg-country-eg",
+      "name": "Egypt EPG",
+      "url": "https://iptv-org.github.io/epg/guides/eg.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "eg",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.248Z"
+    },
+    {
+      "id": "epg-country-rs",
+      "name": "Serbia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/rs.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "rs",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.203Z"
+    },
+    {
+      "id": "epg-country-pe",
+      "name": "Peru EPG",
+      "url": "https://iptv-org.github.io/epg/guides/pe.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "pe",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.246Z"
+    },
+    {
+      "id": "epg-country-vn",
+      "name": "Vietnam EPG",
+      "url": "https://iptv-org.github.io/epg/guides/vn.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "vn",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.230Z"
+    },
+    {
+      "id": "epg-country-sk",
+      "name": "Slovakia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/sk.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "sk",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.204Z"
+    },
+    {
+      "id": "epg-country-uk",
+      "name": "United Kingdom EPG",
+      "url": "https://iptv-org.github.io/epg/guides/uk.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "uk",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.163Z"
+    },
+    {
+      "id": "epg-country-lv",
+      "name": "Latvia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/lv.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "lv",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.241Z"
+    },
+    {
+      "id": "epg-country-no",
+      "name": "Norway EPG",
+      "url": "https://iptv-org.github.io/epg/guides/no.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "no",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.188Z"
+    },
+    {
+      "id": "epg-country-cl",
+      "name": "Chile EPG",
+      "url": "https://iptv-org.github.io/epg/guides/cl.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "cl",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.245Z"
+    },
+    {
+      "id": "epg-country-ae",
+      "name": "United Arab Emirates EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ae.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ae",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.214Z"
+    },
+    {
+      "id": "epg-country-lt",
+      "name": "Lithuania EPG",
+      "url": "https://iptv-org.github.io/epg/guides/lt.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "lt",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.240Z"
+    },
+    {
+      "id": "epg-country-es",
+      "name": "Spain EPG",
+      "url": "https://iptv-org.github.io/epg/guides/es.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "es",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.168Z"
+    },
+    {
+      "id": "epg-country-ro",
+      "name": "Romania EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ro.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ro",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.196Z"
+    },
+    {
+      "id": "epg-country-gr",
+      "name": "Greece EPG",
+      "url": "https://iptv-org.github.io/epg/guides/gr.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "gr",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.186Z"
+    },
+    {
+      "id": "epg-country-au",
+      "name": "Australia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/au.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "au",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.180Z"
+    },
+    {
+      "id": "epg-country-bg",
+      "name": "Bulgaria EPG",
+      "url": "https://iptv-org.github.io/epg/guides/bg.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "bg",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.200Z"
+    },
+    {
+      "id": "epg-country-ie",
+      "name": "Ireland EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ie.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ie",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.210Z"
+    },
+    {
+      "id": "epg-country-ma",
+      "name": "Morocco EPG",
+      "url": "https://iptv-org.github.io/epg/guides/ma.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "ma",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.250Z"
+    },
+    {
+      "id": "epg-country-sa",
+      "name": "Saudi Arabia EPG",
+      "url": "https://iptv-org.github.io/epg/guides/sa.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "sa",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.216Z"
+    },
+    {
+      "id": "epg-country-nl",
+      "name": "Netherlands EPG",
+      "url": "https://iptv-org.github.io/epg/guides/nl.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "nl",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.172Z"
+    },
+    {
+      "id": "epg-country-al",
+      "name": "Albania EPG",
+      "url": "https://iptv-org.github.io/epg/guides/al.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "al",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.236Z"
+    },
+    {
+      "id": "epg-country-at",
+      "name": "Austria EPG",
+      "url": "https://iptv-org.github.io/epg/guides/at.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "at",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.208Z"
+    },
+    {
+      "id": "epg-country-se",
+      "name": "Sweden EPG",
+      "url": "https://iptv-org.github.io/epg/guides/se.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "se",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.187Z"
+    },
+    {
+      "id": "epg-country-tr",
+      "name": "Turkey EPG",
+      "url": "https://iptv-org.github.io/epg/guides/tr.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "tr",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.182Z"
+    },
+    {
+      "id": "epg-country-tw",
+      "name": "Taiwan EPG",
+      "url": "https://iptv-org.github.io/epg/guides/tw.xml",
+      "sourceType": "xmltv",
+      "config": null,
+      "country": "tw",
+      "lastSync": null,
+      "syncEveryHours": 24,
+      "lastSyncError": "Error: EPG fetch failed: HTTP 404 — URL not found (the EPG guide may have moved; try a different URL or .xml.gz extension)",
+      "isActive": true,
+      "createdAt": "2026-06-04T10:28:56.223Z"
+    }
+  ],
+  "counts": {
+    "streams": 1,
+    "lines": 1,
+    "users": 3,
+    "bouquets": 1
+  }
+}
