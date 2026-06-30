@@ -7,7 +7,7 @@ set -euo pipefail
 
 APP_DIR="${APP_DIR:-/var/www/nexlify}"
 PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
-PANEL_PORT="${PANEL_PORT:-3000}"
+PANEL_PORT="${PANEL_PORT:-13000}"
 REBUILD="${REBUILD:-0}"
 
 if [ -f "$APP_DIR/.env" ]; then

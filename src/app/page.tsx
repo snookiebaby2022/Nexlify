@@ -2,6 +2,7 @@ import { ComplianceSection } from "@/components/ComplianceSection";
 import { DemoBanner } from "@/components/DemoBanner";
 import { DemoScreenshots } from "@/components/DemoScreenshots";
 import { Features } from "@/components/Features";
+import { TechStackSection } from "@/components/TechStackSection";
 import { Hero } from "@/components/Hero";
 import { HomeFaqJsonLd } from "@/components/HomeFaqJsonLd";
 import { HomeNewsletterSignup, HomePricingSections } from "@/components/HomeBelowFold";
@@ -43,6 +44,7 @@ export default async function HomePage() {
         whmcsCartBaseUrl={whmcsCartBaseUrl}
       />
       <MigrationCtaSection />
+      <TechStackSection />
       <Features />
       <DemoBanner />
       <HomeSeoContent />

@@ -8,14 +8,14 @@ export const LEGACY_BLOG_POST: BlogPostMeta = {
   path: "/blog/migrate-from-xui-or-1-stream",
   slug: "migrate-from-xui-or-1-stream",
   tag: "Migration",
-  listTitle: "Migrate from XUI.one or 1-stream",
-  h1: "How to migrate from XUI.one or 1-stream to Nexlify",
+  listTitle: "Migrate from XUI.one",
+  h1: "How to migrate from XUI.one to Nexlify",
   eyebrow: "Migration guide · 2026",
   excerpt: "Step-by-step checklist — preview import, WHMCS, DNS cutover, and testing.",
-  seoTitle: "Migrate XUI.one / 1-stream → IPTV Reseller Panel",
+  seoTitle: "Migrate XUI.one → IPTV Reseller Panel",
   seoDescription:
-    "Step-by-step migration from XUI.one or 1-stream to Nexlify IPTV reseller panel. WHMCS IPTV module setup, preview import, and IPTV management software.",
-  keywords: ["XUI migration", "1-stream migration"],
+    "Step-by-step migration from XUI.one to Nexlify IPTV reseller panel. WHMCS IPTV module setup, preview import, and IPTV management software.",
+  keywords: ["XUI migration"],
   datePublished: "2026-05-28",
   sitemapPriority: 0.75,
 };
@@ -134,22 +134,6 @@ export const BLOG_POSTS: BlogPostMeta[] = [
     sitemapPriority: 0.76,
   },
   {
-    path: "/blog/1-stream-migration-checklist",
-    slug: "1-stream-migration-checklist",
-    tag: "Migration",
-    listTitle: "1-stream migration checklist",
-    h1: "1-stream migration checklist — move to Nexlify without downtime",
-    eyebrow: "1-stream · Migration",
-    excerpt:
-      "Fork-specific tips for exporting 1-stream data, preview import, reseller mapping, and WHMCS reconnect.",
-    seoTitle: "1-stream Migration Checklist to Nexlify | Nexlify",
-    seoDescription:
-      "Migrate from 1-stream to Nexlify IPTV reseller panel. WHMCS IPTV module, preview import, and IPTV management software cutover checklist.",
-    keywords: ["1-stream migration", "1-stream alternative"],
-    datePublished: "2026-06-20",
-    sitemapPriority: 0.76,
-  },
-  {
     path: "/blog/xtream-panel-vs-modern-iptv-stack",
     slug: "xtream-panel-vs-modern-iptv-stack",
     tag: "Comparison",
@@ -179,22 +163,6 @@ export const BLOG_POSTS: BlogPostMeta[] = [
       "XUI.one vs Nexlify IPTV reseller panel — WHMCS IPTV module, Anti-Freeze, security, migration, pricing, and IPTV management software compared.",
     keywords: ["XUI.one vs Nexlify", "XUI alternative"],
     datePublished: "2026-06-25",
-    sitemapPriority: 0.82,
-  },
-  {
-    path: "/blog/1-stream-vs-nexlify-full-comparison",
-    slug: "1-stream-vs-nexlify-full-comparison",
-    tag: "Comparison",
-    listTitle: "1-stream vs Nexlify — full comparison",
-    h1: "1-stream vs Nexlify: full comparison (features, pricing, migration)",
-    eyebrow: "Comparison · 1-stream alternative",
-    excerpt:
-      "Direct comparison: WHMCS integration, built-in migration, security, Anti-Freeze, support, and pricing vs 1-stream forks.",
-    seoTitle: "1-stream vs Nexlify: Full Comparison 2026 | Nexlify",
-    seoDescription:
-      "1-stream vs Nexlify IPTV reseller panel — WHMCS IPTV module, built-in migration preview, Anti-Freeze, security, pricing, and IPTV management software compared.",
-    keywords: ["1-stream vs Nexlify", "1-stream alternative", "IPTV panel comparison"],
-    datePublished: "2026-06-26",
     sitemapPriority: 0.82,
   },
   {

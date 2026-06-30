@@ -1,26 +1,33 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requirePanelApiKey } from "@/lib/auth";
 import { validateLicenseKey } from "@/lib/licensing";
 
-const schema = z.object({
-  key: z.string().min(10),
-  machineId: z.string().optional(),
+const bodySchema = z.object({
+  key: z.string().min(8).optional(),
+  licenseKey: z.string().min(8).optional(),
 });
 
+/** Panel / WHMCS validate a license key against the marketing database. */
 export async function POST(request: Request) {
-  if (!requirePanelApiKey(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
-    const body = schema.parse(await request.json());
-    const result = await validateLicenseKey(body.key, body.machineId);
-    return NextResponse.json(result);
+    const body = bodySchema.parse(await request.json());
+    const key = body.key ?? body.licenseKey ?? "";
+    const result = await validateLicenseKey(key);
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, error: result.error }, { status: 404 });
+    }
+    const { license } = result;
+    return NextResponse.json({
+      ok: true,
+      status: license.status,
+      maxLines: license.maxLines,
+      expiresAt: license.expiresAt?.toISOString() ?? null,
+      plan: license.plan.name,
+    });
   } catch (e) {
     if (e instanceof z.ZodError) {
-      return NextResponse.json({ error: e.message }, { status: 400 });
+      return NextResponse.json({ ok: false, error: e.message }, { status: 400 });
     }
-    return NextResponse.json({ error: "Validation failed" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "Validation failed" }, { status: 500 });
   }
 }

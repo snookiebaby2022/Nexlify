@@ -45,22 +45,43 @@ nexlify_only_restart() {
     log "ERROR: pm2 not in PATH"
     return 1
   fi
-  if [ ! -d .next ]; then
-    log "ERROR: missing .next — run npm run build first"
+  if ! bash scripts/has-valid-next-build.sh 2>/dev/null; then
+    log "Missing valid .next — running panel-update-recover.sh"
+    if [ -x scripts/panel-update-recover.sh ]; then
+      if bash scripts/panel-update-recover.sh --quick >>"$LOG_FILE" 2>&1; then
+        log "Recovered via backup"
+        return 0
+      fi
+      if bash scripts/panel-update-recover.sh >>"$LOG_FILE" 2>&1; then
+        log "Recovered via rebuild"
+        return 0
+      fi
+    fi
+    log "ERROR: missing .next — run: bash scripts/panel-update-recover.sh"
     return 1
   fi
 
   log "Restarting nexlify only (preserving nexlify-cron) ..."
-  if pm2 describe nexlify >/dev/null 2>&1; then
-    if ! pm2 restart nexlify --update-env >>"$LOG_FILE" 2>&1; then
-      log "pm2 restart nexlify failed — re-registering ..."
+  if command -v pm2 >/dev/null 2>&1; then
+    for _ in 1 2 3 4 5 6; do
+      remaining="$(pm2 jlist 2>/dev/null | node -e "
+        const list = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+        process.stdout.write(String(list.filter((p) => p.name === 'nexlify').length));
+      " 2>/dev/null || echo 0)"
+      [ "$remaining" = "0" ] && break
+      pm2 jlist 2>/dev/null | node -e "
+        const { execSync } = require('child_process');
+        const list = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+        for (const x of list.filter((p) => p.name === 'nexlify')) {
+          try { execSync('pm2 delete ' + x.pm_id, { stdio: 'ignore' }); } catch {}
+        }
+      " 2>/dev/null || true
       pm2 delete nexlify 2>/dev/null || true
-      pm2 start ecosystem.config.cjs --only nexlify --update-env >>"$LOG_FILE" 2>&1
-    fi
-  else
-    log "nexlify not registered — starting ..."
-    pm2 start ecosystem.config.cjs --only nexlify --update-env >>"$LOG_FILE" 2>&1
+      sleep 1
+    done
   fi
+  pm2 delete nexlify 2>/dev/null || true
+  pm2 start ecosystem.config.cjs --only nexlify --update-env >>"$LOG_FILE" 2>&1
   pm2 save >>"$LOG_FILE" 2>&1 || true
 
   if verify_panel; then

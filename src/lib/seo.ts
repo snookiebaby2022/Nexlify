@@ -145,7 +145,6 @@ export const SITEMAP_PATHS: {
   { path: "/compare/xtream-panel", priority: 0.75, changeFrequency: "monthly" },
   { path: "/compare/whmcs-iptv-module", priority: 0.75, changeFrequency: "monthly" },
   { path: "/vs/xui-one", priority: 0.7, changeFrequency: "monthly" },
-  { path: "/vs/1-stream", priority: 0.7, changeFrequency: "monthly" },
   { path: "/lp/reseller-panel", priority: 0.7, changeFrequency: "monthly" },
   { path: "/lp/reseller-panel-uk", priority: 0.65, changeFrequency: "monthly" },
   { path: "/lp/whmcs-iptv", priority: 0.65, changeFrequency: "monthly" },

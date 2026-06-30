@@ -32,6 +32,24 @@ const ROWS: FeatureRow[] = [
 
   { category: "User & Subscription", feature: "Automated email + in-panel notifications", nexlify: "included", typical: "partial" },
 
+  { category: "Content & Streaming", feature: "Deep transcoding / stream processing", nexlify: "included", typical: "partial" },
+
+  { category: "Content & Streaming", feature: "Advanced load balancing", nexlify: "included", typical: "partial" },
+
+  { category: "Content & Streaming", feature: "Built-in web player", nexlify: "included", typical: "missing" },
+
+  { category: "Content & Streaming", feature: "MAG devices (full native support)", nexlify: "included", typical: "partial" },
+
+  { category: "Content & Streaming", feature: "Enigma2 bouquet tools", nexlify: "included", typical: "partial" },
+
+  { category: "Content & Streaming", feature: "All-in-one streaming engine", nexlify: "included", typical: "partial" },
+
+  { category: "Content & Streaming", feature: "Granular stream input management", nexlify: "included", typical: "partial" },
+
+  { category: "Content & Streaming", feature: "Legacy Xtream features", nexlify: "included", typical: "partial" },
+
+  { category: "Content & Streaming", feature: "Multi-server + backup source URLs", nexlify: "included", typical: "missing" },
+
   { category: "Content & Streaming", feature: "Catch-up / DVR archive presets (24-72h)", nexlify: "included", typical: "partial" },
 
   { category: "Content & Streaming", feature: "SchedulesDirect & WebGrab+Plus EPG", nexlify: "included", typical: "missing" },
@@ -238,8 +256,7 @@ export default function FeaturesPage() {
               stream health alerts
             </li>
             <li className="rounded-lg border p-4" style={{ borderColor: "#1e3a5f" }}>
-              <strong className="text-cyan-300">Migration</strong> — preview import from XUI.one, 1-stream,
-              Xtream UI
+              <strong className="text-cyan-300">Migration</strong> — preview import from XUI.one and Xtream UI
             </li>
           </ul>
 

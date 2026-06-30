@@ -110,17 +110,94 @@ function genId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function buildXtreamUrl(base: string, action: string, u: string, p: string) {
-  const b = base.replace(/\/$/, "");
-  return `${b}/player_api.php?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}&action=${action}`;
+function buildXtreamProxyUrl(base: string, action: string, u: string, p: string, extra?: Record<string, string>) {
+  const params = new URLSearchParams({
+    server: normalizeServerUrl(base),
+    username: u,
+    password: p,
+    action,
+  });
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) {
+      params.set(key, value);
+    }
+  }
+  return `/api/webplayer/xtream?${params.toString()}`;
 }
 
-function buildStreamUrl(base: string, type: "live" | "movie" | "series", id: number, ext?: string, u?: string, pw?: string) {
+function buildStreamUrl(
+  base: string,
+  type: "live" | "movie" | "series",
+  id: number,
+  ext?: string,
+  u?: string,
+  pw?: string
+) {
   const b = base.replace(/\/$/, "");
   if (u && pw) {
-    return `${b}/${type}/${u}/${pw}/${id}.${ext || "ts"}`;
+    // Browsers need HLS manifests; IPTV apps use .ts — panel serves both from the same route.
+    const liveExt = type === "live" ? "m3u8" : ext || "mp4";
+    return `${b}/${type}/${u}/${pw}/${id}.${liveExt}`;
   }
   return `${b}/${type}/${id}.${ext || "ts"}`;
+}
+
+function normalizeServerUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  try {
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const url = new URL(withProto);
+    const host = url.hostname.toLowerCase();
+    if (host === "nexlify.live" || host === "www.nexlify.live") {
+      throw new Error("marketing-host");
+    }
+    return url.origin;
+  } catch (e) {
+    if (e instanceof Error && e.message === "marketing-host") {
+      throw e;
+    }
+    return trimmed.replace(/\/$/, "");
+  }
+}
+
+/** Prompt user to include http:// for non-standard ports so HTTPS is not forced. */
+function hasNonStandardPort(raw: string): boolean {
+  try {
+    const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+    return u.port !== "" && u.port !== "80" && u.port !== "443";
+  } catch {
+    return false;
+  }
+}
+
+async function fetchXtreamJson(url: string): Promise<unknown> {
+  const res = await fetch(url);
+  const raw = await res.text();
+  let data: Record<string, unknown> | unknown[] | null = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    const trimmed = raw.trimStart().slice(0, 80).toLowerCase();
+    if (trimmed.startsWith("<!doctype") || trimmed.startsWith("<html")) {
+      throw new Error(
+        "Panel returned a web page instead of API data. Use your IPTV panel URL (e.g. https://panel.nexlify.live)."
+      );
+    }
+    throw new Error(`Panel returned invalid JSON (HTTP ${res.status}). Check your panel server URL.`);
+  }
+  if (!res.ok) {
+    const obj = data && !Array.isArray(data) ? (data as Record<string, unknown>) : null;
+    const userInfo = obj?.user_info as { message?: string; auth?: number } | undefined;
+    throw new Error(String(userInfo?.message || obj?.error || `HTTP ${res.status}`));
+  }
+  if (data && !Array.isArray(data) && (data as Record<string, unknown>).user_info) {
+    const userInfo = (data as Record<string, unknown>).user_info as { auth?: number; message?: string };
+    if (userInfo.auth === 0) {
+      throw new Error(userInfo.message || "Invalid username or password");
+    }
+  }
+  return data;
 }
 
 /* ─── M3U Parser ─── */
@@ -197,12 +274,12 @@ export default function WebPlayerPage() {
   const [search, setSearch] = useState("");
   const [activeCat, setActiveCat] = useState("");
   const [activeTab, setActiveTab] = useState<"live" | "movies" | "series" | "favs">("live");
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  useEffect(() => {
     if (typeof window !== "undefined") {
-      return window.innerWidth >= 768; // open on md+ (tablet/desktop), closed on mobile
+      setSidebarOpen(window.innerWidth >= 768);
     }
-    return true;
-  });
+  }, []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -229,7 +306,7 @@ export default function WebPlayerPage() {
     setFavs(loadFavs());
   }, []);
 
-  /* HLS Player */
+  /* HLS / progressive player */
   useEffect(() => {
     if (!playingUrl || !videoRef.current) return;
     if (hlsRef.current) {
@@ -237,7 +314,10 @@ export default function WebPlayerPage() {
       hlsRef.current = null;
     }
     const video = videoRef.current;
-    if (Hls.isSupported()) {
+    const lower = playingUrl.toLowerCase();
+    const isHls = lower.includes(".m3u8") || lower.includes("application/vnd.apple.mpegurl");
+
+    if (isHls && Hls.isSupported()) {
       const hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60 });
       hls.loadSource(playingUrl);
       hls.attachMedia(video);
@@ -245,7 +325,10 @@ export default function WebPlayerPage() {
         video.play().catch(() => {});
       });
       hlsRef.current = hls;
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    } else if (isHls && video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = playingUrl;
+      video.play().catch(() => {});
+    } else {
       video.src = playingUrl;
       video.play().catch(() => {});
     }
@@ -282,13 +365,14 @@ export default function WebPlayerPage() {
       setLoading(true);
       setError("");
       try {
+        const server = normalizeServerUrl(profile.server);
         const [liveC, liveS, vodC, vodS, serC, serL] = await Promise.all([
-          fetch(buildXtreamUrl(profile.server, "get_live_categories", profile.username, profile.password)).then((r) => r.json()),
-          fetch(buildXtreamUrl(profile.server, "get_live_streams", profile.username, profile.password)).then((r) => r.json()),
-          fetch(buildXtreamUrl(profile.server, "get_vod_categories", profile.username, profile.password)).then((r) => r.json()),
-          fetch(buildXtreamUrl(profile.server, "get_vod_streams", profile.username, profile.password)).then((r) => r.json()),
-          fetch(buildXtreamUrl(profile.server, "get_series_categories", profile.username, profile.password)).then((r) => r.json()),
-          fetch(buildXtreamUrl(profile.server, "get_series", profile.username, profile.password)).then((r) => r.json()),
+          fetchXtreamJson(buildXtreamProxyUrl(server, "get_live_categories", profile.username, profile.password)),
+          fetchXtreamJson(buildXtreamProxyUrl(server, "get_live_streams", profile.username, profile.password)),
+          fetchXtreamJson(buildXtreamProxyUrl(server, "get_vod_categories", profile.username, profile.password)),
+          fetchXtreamJson(buildXtreamProxyUrl(server, "get_vod_streams", profile.username, profile.password)),
+          fetchXtreamJson(buildXtreamProxyUrl(server, "get_series_categories", profile.username, profile.password)),
+          fetchXtreamJson(buildXtreamProxyUrl(server, "get_series", profile.username, profile.password)),
         ]);
         setLiveCats(Array.isArray(liveC) ? liveC : []);
         setLiveStreams(Array.isArray(liveS) ? liveS : []);
@@ -297,7 +381,14 @@ export default function WebPlayerPage() {
         setSeriesCats(Array.isArray(serC) ? serC : []);
         setSeriesList(Array.isArray(serL) ? serL : []);
       } catch (e) {
-        setError("Failed to load playlist data. Check your server URL and credentials.");
+        const msg = e instanceof Error ? e.message : "";
+        if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+          setError(
+            "Could not reach your IPTV panel. Enter your panel server URL (e.g. https://panel.nexlify.live), not this webplayer page URL."
+          );
+        } else {
+          setError(msg || "Failed to load playlist data. Check your panel server URL and credentials.");
+        }
       } finally {
         setLoading(false);
       }
@@ -311,9 +402,9 @@ export default function WebPlayerPage() {
     setLoading(true);
     setError("");
     try {
-      const headers: Record<string, string> = {};
-      if (profile.userAgent) headers["User-Agent"] = profile.userAgent;
-      const res = await fetch(profile.m3uUrl, { headers });
+      const params = new URLSearchParams({ url: profile.m3uUrl });
+      if (profile.userAgent) params.set("userAgent", profile.userAgent);
+      const res = await fetch(`/api/webplayer/fetch?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to fetch M3U");
       const text = await res.text();
       const channels = parseM3u(text);
@@ -395,9 +486,13 @@ export default function WebPlayerPage() {
     async (streamId: number, epgId?: string) => {
       if (!activeProfile || activeProfile.type !== "xtream" || !epgId) return;
       try {
-        const url = `${activeProfile.server?.replace(/\/$/, "")}/player_api.php?username=${encodeURIComponent(
-          activeProfile.username!
-        )}&password=${encodeURIComponent(activeProfile.password!)}&action=get_short_epg&stream_id=${streamId}&limit=5`;
+        const url = buildXtreamProxyUrl(
+          activeProfile.server!,
+          "get_short_epg",
+          activeProfile.username!,
+          activeProfile.password!,
+          { stream_id: String(streamId), limit: "5" }
+        );
         const res = await fetch(url);
         const data = await res.json();
         if (data && data.epg_listings) {
@@ -427,7 +522,18 @@ export default function WebPlayerPage() {
         setError("Please fill in all fields.");
         return;
       }
-      profile = { id: genId(), name, type: "xtream", server: svr, username: usr, password: pwd };
+      let server: string;
+      try {
+        server = normalizeServerUrl(svr);
+      } catch {
+        setError("Use your IPTV panel URL (e.g. https://panel.nexlify.live), not nexlify.live.");
+        return;
+      }
+      if (!svr.startsWith("http://") && !svr.startsWith("https://") && hasNonStandardPort(svr)) {
+        setError("Please include the protocol (http:// or https://) for panel URLs with a custom port.");
+        return;
+      }
+      profile = { id: genId(), name, type: "xtream", server, username: usr, password: pwd };
     } else {
       if (!m3uUrl) {
         setError("Please enter an M3U URL.");
@@ -533,11 +639,14 @@ export default function WebPlayerPage() {
                     <label className="text-xs text-neutral-400 uppercase tracking-wider font-semibold">Server URL</label>
                     <input
                       type="url"
-                      placeholder="http://example.com:8080"
+                      placeholder="https://panel.nexlify.live"
                       className="mt-1 w-full bg-[#0a0a0a] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-white/20"
                       value={svr}
                       onChange={(e) => setSvr(e.target.value)}
                     />
+                    <p className="mt-1 text-xs text-neutral-500">
+                      Your IPTV panel server (e.g. https://panel.nexlify.live). This webplayer runs on nexlify.live — use your panel URL here.
+                    </p>
                   </div>
                   <div>
                     <label className="text-xs text-neutral-400 uppercase tracking-wider font-semibold">Username</label>

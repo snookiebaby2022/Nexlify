@@ -133,7 +133,6 @@ export function Footer() {
             <ul className="mt-4 space-y-2 text-sm text-[var(--muted)]">
               <li><Link href="/blog/migrate-from-xui-or-1-stream" className="hover:text-white transition-colors">Migration checklist</Link></li>
               <li><Link href="/vs/xui-one" className="hover:text-white transition-colors">Nexlify vs XUI.one</Link></li>
-              <li><Link href="/vs/1-stream" className="hover:text-white transition-colors">Nexlify vs 1-stream</Link></li>
               <li><Link href="/best-iptv-reseller-panel" className="hover:text-white transition-colors">Panel comparison</Link></li>
               <li><Link href="/blog" className="hover:text-white transition-colors">Reseller blog</Link></li>
               <li><Link href="/install" className="hover:text-white transition-colors">Panel installer</Link></li>

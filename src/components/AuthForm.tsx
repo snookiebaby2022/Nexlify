@@ -34,36 +34,47 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       if (utmCampaign) payload.utmCampaign = utmCampaign;
     }
 
-    const res = await fetch(`/api/auth/${mode}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    setLoading(false);
+    try {
+      const res = await fetch(`/api/auth/${mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      let data: { error?: string; user?: { role?: string }; trial?: boolean } = {};
+      try {
+        data = await res.json();
+      } catch {
+        setError(res.ok ? "Invalid server response" : `Sign in failed (${res.status})`);
+        return;
+      }
 
-    if (!res.ok) {
-      setError(data.error ?? "Something went wrong");
-      return;
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong");
+        return;
+      }
+
+      const dest =
+        data.user?.role === "ADMIN"
+          ? next && next.startsWith("/")
+            ? next
+            : "/admin"
+          : next && next.startsWith("/")
+            ? next
+            : trial && mode === "login"
+              ? "/pricing?trial=1"
+              : data.trial || trial
+                ? "/dashboard"
+                : plan && mode === "register"
+                  ? `/pricing?checkout=${plan}`
+                  : "/dashboard";
+
+      router.push(dest);
+      router.refresh();
+    } catch {
+      setError("Could not reach the server. Try again in a moment.");
+    } finally {
+      setLoading(false);
     }
-
-    const dest =
-      data.user?.role === "ADMIN"
-        ? next && next.startsWith("/")
-          ? next
-          : "/admin"
-        : next && next.startsWith("/")
-          ? next
-          : trial && mode === "login"
-            ? "/pricing?trial=1"
-          : data.trial || trial
-            ? "/dashboard"
-            : plan && mode === "register"
-              ? `/pricing?checkout=${plan}`
-              : "/dashboard";
-
-    router.push(dest);
-    router.refresh();
   }
 
   return (

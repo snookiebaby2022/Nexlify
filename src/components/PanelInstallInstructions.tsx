@@ -98,10 +98,18 @@ export function PanelInstallInstructions() {
             DigitalOcean, Vultr, and others all work.
           </p>
           <p>
-            Open port <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">22</code>{" "}
-            (SSH) and <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">80</code>{" "}
-            (panel). Port <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">443</code>{" "}
-            only if you use HTTPS on a domain.
+            Open ports{" "}
+            <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">22</code>{" "}
+            (SSH),{" "}
+            <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">80</code>,{" "}
+            <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">443</code>,{" "}
+            <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">8080</code>{" "}
+            (IPTV stream edge on domain installs),{" "}
+            <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">1935</code>{" "}
+            (RTMP), and{" "}
+            <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">554</code>{" "}
+            (RTSP). The installer opens these in UFW automatically. IP-only installs use port{" "}
+            <code className="text-violet-300">80</code> for both panel and IPTV.
           </p>
         </Step>
 
@@ -222,6 +230,30 @@ export function PanelInstallInstructions() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-5">
+        <div className="flex items-start gap-3">
+          <Globe className="h-5 w-5 text-sky-400 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-semibold text-sky-100">IPTV Smarters / Xtream login</h4>
+            <p className="text-sm text-sky-200/70 mt-1 space-y-2">
+              <span className="block">
+                <strong className="text-sky-100">Domain + SSL (recommended):</strong> server{" "}
+                <code className="rounded bg-sky-500/10 px-1.5 py-0.5 text-xs font-mono">panel.yourdomain.com</code>,
+                port <code className="text-sky-200">443</code>, HTTPS on. Do not use{" "}
+                <code className="text-sky-200">:8080</code> with a Cloudflare domain — use your server IP for port 8080
+                only.
+              </span>
+              <span className="block">
+                <strong className="text-sky-100">IP install:</strong> server{" "}
+                <code className="rounded bg-sky-500/10 px-1.5 py-0.5 text-xs font-mono">YOUR_IP</code>, port{" "}
+                <code className="text-sky-200">80</code>, HTTP. Empty LIVE TV usually means the line has no bouquet or no
+                live streams assigned.
+              </span>
+            </p>
+          </div>
         </div>
       </div>
 

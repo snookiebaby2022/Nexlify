@@ -1,161 +1,92 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireWhmcsApiKey } from "@/lib/whmcs-auth";
-import {
-  licensePayload,
-  whmcsProvision,
-  whmcsSuspend,
-  whmcsTerminate,
-  whmcsUnsuspend,
-} from "@/lib/whmcs";
-import { isAddonProductId, isAddonWhmcsService } from "@/lib/addon-entitlements";
-import {
-  addonEntitlementPayload,
-  whmcsAddonProvision,
-  whmcsAddonSuspend,
-  whmcsAddonTerminate,
-  whmcsAddonUnsuspend,
-} from "@/lib/whmcs-addons";
+import { prisma } from "@/lib/prisma";
+import { issueLicenseForOrder, planLimitsFromPlan, validateLicenseKey } from "@/lib/licensing";
 
-const schema = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("create"),
-    serviceId: z.string().min(1),
-    productId: z.coerce.number().int().positive(),
-    email: z.string().email(),
-    clientName: z.string().optional(),
-    billingCycle: z.string().optional(),
-  }),
-  z.object({
-    action: z.literal("renew"),
-    serviceId: z.string().min(1),
-    productId: z.coerce.number().int().positive(),
-    email: z.string().email(),
-    billingCycle: z.string().optional(),
-  }),
-  z.object({
-    action: z.literal("suspend"),
-    serviceId: z.string().min(1),
-    productId: z.coerce.number().int().positive().optional(),
-  }),
-  z.object({
-    action: z.literal("unsuspend"),
-    serviceId: z.string().min(1),
-    productId: z.coerce.number().int().positive().optional(),
-  }),
-  z.object({
-    action: z.literal("terminate"),
-    serviceId: z.string().min(1),
-    productId: z.coerce.number().int().positive().optional(),
-  }),
-]);
-
-async function isAddonAction(productId?: number, serviceId?: string): Promise<boolean> {
-  if (productId && (await isAddonProductId(productId))) return true;
-  if (serviceId && (await isAddonWhmcsService(serviceId))) return true;
-  return false;
+function requireWhmcsKey(request: Request): boolean {
+  const expected = process.env.WHMCS_API_SECRET?.trim();
+  if (!expected) return false;
+  const got = request.headers.get("x-whmcs-api-key")?.trim();
+  return got === expected;
 }
 
+const actionSchema = z.object({
+  action: z.string(),
+  serviceid: z.union([z.string(), z.number()]).optional(),
+  pid: z.union([z.string(), z.number()]).optional(),
+  email: z.string().email().optional(),
+  key: z.string().optional(),
+});
+
+/** WHMCS module callback — create/suspend/validate licenses. */
 export async function POST(request: Request) {
-  if (!requireWhmcsApiKey(request)) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  if (!requireWhmcsKey(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let body: z.infer<typeof actionSchema>;
   try {
-    const body = schema.parse(await request.json());
-    const addon =
-      "productId" in body
-        ? await isAddonAction(body.productId, body.serviceId)
-        : await isAddonAction(undefined, body.serviceId);
+    body = actionSchema.parse(await request.json());
+  } catch {
+    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  }
 
-    if (body.action === "create" || body.action === "renew") {
-      if (addon) {
-        const result = await whmcsAddonProvision({
-          serviceId: body.serviceId,
-          productId: body.productId,
-          email: body.email,
-          billingCycle: body.billingCycle,
-        });
-        if ("entitlements" in result) {
-          const first = result.entitlements[0];
-          return NextResponse.json({
-            success: true,
-            action: result.action,
-            ...addonEntitlementPayload(first, result.product, {
-              bundleServices: result.bundleServices,
-            }),
-          });
-        }
-        return NextResponse.json({
-          success: true,
-          action: result.action,
-          ...addonEntitlementPayload(result.entitlement, result.product),
-        });
+  switch (body.action) {
+    case "validate": {
+      const key = body.key?.trim() ?? "";
+      const result = await validateLicenseKey(key);
+      if (!result.ok) {
+        return NextResponse.json({ ok: false, error: result.error }, { status: 404 });
       }
-
-      const result = await whmcsProvision({
-        serviceId: body.serviceId,
-        productId: body.productId,
-        email: body.email,
-        clientName: "clientName" in body ? body.clientName : undefined,
-        billingCycle: body.billingCycle,
-      });
       return NextResponse.json({
-        success: true,
-        action: result.action,
-        type: "panel",
-        ...licensePayload(result.license),
+        ok: true,
+        limits: planLimitsFromPlan(result.license.plan),
+        maxLines: result.license.maxLines,
+        expiresAt: result.license.expiresAt?.toISOString() ?? null,
       });
     }
+    case "CreateAccount": {
+      const email = body.email?.trim();
+      const pid = Number(body.pid);
+      if (!email || !Number.isFinite(pid)) {
+        return NextResponse.json({ error: "email and pid required" }, { status: 400 });
+      }
+      const plan = await prisma.plan.findFirst({ where: { whmcsProductId: pid, active: true } });
+      if (!plan) return NextResponse.json({ error: "Unknown WHMCS product" }, { status: 404 });
 
-    if (addon) {
-      if (body.action === "suspend") {
-        const row = await whmcsAddonSuspend(body.serviceId);
-        const product = await import("@/lib/prisma").then((m) =>
-          m.prisma.addonProduct.findFirst({ where: { service: row.service } })
+      let user = await prisma.user.findUnique({ where: { email } });
+      if (!user) {
+        return NextResponse.json(
+          { error: "Customer must register at nexlify.live first" },
+          { status: 400 }
         );
-        return NextResponse.json({
-          success: true,
-          ...addonEntitlementPayload(row, product ?? { name: row.service, service: row.service }),
+      }
+
+      const order = await prisma.order.create({
+        data: {
+          userId: user.id,
+          planId: plan.id,
+          amountCents: plan.priceCents,
+          status: "COMPLETED",
+        },
+      });
+      const license = await issueLicenseForOrder(order.id);
+      if (!license) return NextResponse.json({ error: "Could not issue license" }, { status: 500 });
+
+      if (body.serviceid != null) {
+        await prisma.license.update({
+          where: { id: license.id },
+          data: { whmcsServiceId: String(body.serviceid) },
         });
       }
-      if (body.action === "unsuspend") {
-        const row = await whmcsAddonUnsuspend(body.serviceId);
-        const product = await import("@/lib/prisma").then((m) =>
-          m.prisma.addonProduct.findFirst({ where: { service: row.service } })
-        );
-        return NextResponse.json({
-          success: true,
-          ...addonEntitlementPayload(row, product ?? { name: row.service, service: row.service }),
-        });
-      }
-      const row = await whmcsAddonTerminate(body.serviceId);
-      const product = await import("@/lib/prisma").then((m) =>
-        m.prisma.addonProduct.findFirst({ where: { service: row.service } })
-      );
+
       return NextResponse.json({
-        success: true,
-        ...addonEntitlementPayload(row, product ?? { name: row.service, service: row.service }),
+        ok: true,
+        licenseKey: license.key,
+        limits: planLimitsFromPlan(plan),
       });
     }
-
-    if (body.action === "suspend") {
-      const license = await whmcsSuspend(body.serviceId);
-      return NextResponse.json({ success: true, type: "panel", ...licensePayload(license) });
-    }
-
-    if (body.action === "unsuspend") {
-      const license = await whmcsUnsuspend(body.serviceId);
-      return NextResponse.json({ success: true, type: "panel", ...licensePayload(license) });
-    }
-
-    const license = await whmcsTerminate(body.serviceId);
-    return NextResponse.json({ success: true, type: "panel", ...licensePayload(license) });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "WHMCS action failed";
-    if (e instanceof z.ZodError) {
-      return NextResponse.json({ success: false, error: e.message }, { status: 400 });
-    }
-    return NextResponse.json({ success: false, error: message }, { status: 400 });
+    default:
+      return NextResponse.json({ ok: true, message: `Action ${body.action} acknowledged` });
   }
 }

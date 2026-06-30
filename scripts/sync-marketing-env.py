@@ -10,6 +10,7 @@ LOCAL_LICENSE_API_URL = "http://127.0.0.1:8787"
 PANEL_ENV = Path("/home/nexlify-panel/.env")
 MARKETING_ENV = Path("/var/www/nexlify/.env")
 KEYS = (
+    "JWT_SECRET",
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
     "STRIPE_PUBLISHABLE_KEY",

@@ -2,7 +2,9 @@
 # Fast panel patch update — used by Admin → Updates and hourly auto-update cron.
 # Downloads the latest tarball from nexlify.live and rebuilds (preserves .env + data/).
 #
-# Usage: bash scripts/apply-panel-fast-update.sh [sync|deps|prisma|build|restart]
+# Safe update: backs up .next before build; on failure restores backup and restarts panel.
+#
+# Usage: bash scripts/apply-panel-fast-update.sh [sync|deps|prisma|build|build-prep|build-compile|build-standalone|restart|recover|all]
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -11,15 +13,81 @@ cd "$ROOT"
 PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz}"
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v160}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v166}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
+BACKUP_DIR="$ROOT/.next.backup"
+STAGING_DIR="$ROOT/.next.staging"
+
+BUILD_SUCCEEDED=0
+UPDATE_TRAP_ACTIVE=0
 
 normalize_scripts() {
   sed -i 's/\r$//' "$ROOT"/scripts/*.sh 2>/dev/null || true
   chmod +x "$ROOT"/scripts/*.sh 2>/dev/null || true
 }
 
-# Pull latest patch scripts from vendor before sync (fixes chicken-and-egg on old panels).
+has_valid_next() {
+  bash "$ROOT/scripts/has-valid-next-build.sh" 2>/dev/null
+}
+
+backup_next_if_valid() {
+  if has_valid_next; then
+    echo "Backing up current production build to .next.backup ..."
+    rm -rf "$BACKUP_DIR"
+    cp -a .next "$BACKUP_DIR"
+    echo "Backup OK"
+  else
+    echo "No complete .next to backup (first install or prior failed build)"
+  fi
+}
+
+restore_next_backup() {
+  if [ -d "$BACKUP_DIR" ] && bash -c '[ -f .next.backup/BUILD_ID ] || [ -f .next.backup/standalone/server.js ]' 2>/dev/null; then
+    echo "Restoring previous production build from .next.backup ..."
+    rm -rf .next
+    mv "$BACKUP_DIR" .next
+    return 0
+  fi
+  return 1
+}
+
+ensure_panel_running_after_update() {
+  if has_valid_next; then
+    cmd_restart || true
+    return 0
+  fi
+  if restore_next_backup; then
+    cmd_restart || true
+    return 0
+  fi
+  if [ -x "$ROOT/scripts/panel-update-recover.sh" ]; then
+    bash "$ROOT/scripts/panel-update-recover.sh" || true
+  fi
+}
+
+update_trap_exit() {
+  local ec=$?
+  if [ "$UPDATE_TRAP_ACTIVE" != "1" ]; then
+    return "$ec"
+  fi
+  UPDATE_TRAP_ACTIVE=0
+  trap - EXIT
+  if [ "$ec" -ne 0 ]; then
+    rm -rf "$STAGING_DIR" 2>/dev/null || true
+    if [ "$BUILD_SUCCEEDED" != "1" ]; then
+      echo "Update failed — rolling back if needed ..."
+      if ! has_valid_next; then
+        restore_next_backup || true
+      fi
+    else
+      echo "Update build OK but a later step failed — restarting panel ..."
+    fi
+    ensure_panel_running_after_update || true
+  fi
+  rm -f "$ROOT/.update-in-progress"
+  return "$ec"
+}
+
 bootstrap_patch_scripts() {
   local cache="${PANEL_CACHE_BUST}" fetched=0
   local base="${PANEL_INSTALL_BASE}"
@@ -36,6 +104,8 @@ bootstrap_patch_scripts() {
   }
   fetch_one "${base}/apply-panel-fast-update.sh?${cache}" "$ROOT/scripts/apply-panel-fast-update.sh"
   fetch_one "${base}/scripts/panel-restart-safe.sh?${cache}" "$ROOT/scripts/panel-restart-safe.sh"
+  fetch_one "${base}/scripts/panel-update-recover.sh?${cache}" "$ROOT/scripts/panel-update-recover.sh"
+  fetch_one "${base}/scripts/has-valid-next-build.sh?${cache}" "$ROOT/scripts/has-valid-next-build.sh"
   normalize_scripts
   if [ "$fetched" -eq 0 ]; then
     echo "Bootstrap: vendor scripts unchanged or unreachable (continuing with local copies)"
@@ -127,14 +197,14 @@ cmd_sync() {
     rsync -a --delete \
       --exclude='.env' --exclude='.env.*' \
       --exclude='data/' --exclude='node_modules/' \
-      --exclude='.next/' --exclude='.panel-update-cache.json' \
+      --exclude='.next/' --exclude='.next.backup/' --exclude='.next.staging/' \
+      --exclude='.panel-update-cache.json' \
       "$src/" "$ROOT/"
   else
-    find "$src" -mindepth 1 -maxdepth 1 ! -name '.env' ! -name 'data' ! -name 'node_modules' ! -name '.next' \
+    find "$src" -mindepth 1 -maxdepth 1 ! -name '.env' ! -name 'data' ! -name 'node_modules' ! -name '.next' ! -name '.next.backup' ! -name '.next.staging' \
       -exec cp -a {} "$ROOT/" \;
   fi
-  sed -i 's/\r$//' "$ROOT"/scripts/*.sh 2>/dev/null || true
-  chmod +x "$ROOT"/scripts/*.sh 2>/dev/null || true
+  normalize_scripts
   rm -rf "$tmp"
   local synced_ver
   synced_ver="$(node -e "try{process.stdout.write(require('./package.json').version||'')}catch{}" 2>/dev/null || true)"
@@ -163,33 +233,73 @@ cmd_prisma() {
   fi
 }
 
-cmd_build() {
-  # Pre-build disk space check — need at least 2GB free
+cmd_build_prep() {
   local free_gb
   free_gb=$(df -BG . | awk 'NR==2{print $4}' | tr -d 'G')
   if [ -n "$free_gb" ] && [ "$free_gb" -lt 2 ]; then
     echo "ERROR: insufficient disk space (${free_gb}GB free, need 2GB+) — aborting build" >&2
     exit 1
   fi
-  echo "Building panel ..."
-  if pm2 describe nexlify >/dev/null 2>&1; then
-    echo "Stopping nexlify during build (avoids .next file races with live workers) ..."
-    pm2 stop nexlify 2>/dev/null || true
-    sleep 2
-  fi
-  rm -rf .next
+  backup_next_if_valid
+  rm -rf "$STAGING_DIR"
+  echo "Building into .next.staging — panel stays online on current .next until swap + restart."
+}
+
+cmd_build_compile() {
+  echo "Building panel (staging) ..."
   export NEXT_PRIVATE_WORKER_THREADS=false
+  export NEXLIFY_DIST_DIR=".next.staging"
   npm run build
-  write_cache
-  css_count="$(find .next/static/css -name '*.css' 2>/dev/null | wc -l | tr -d ' ')"
-  if [ -z "$css_count" ] || [ "$css_count" -lt 1 ]; then
-    echo "ERROR: build finished but no CSS in .next/static/css — aborting" >&2
-    exit 1
+}
+
+swap_staging_build() {
+  if ! bash "$ROOT/scripts/has-valid-next-build.sh" ".next.staging"; then
+    echo "ERROR: staging build invalid — keeping current .next online" >&2
+    return 1
   fi
+  export NEXLIFY_DIST_DIR=".next.staging"
+  bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
+  bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
+  css_count="$(find .next.staging/static/css -name '*.css' 2>/dev/null | wc -l | tr -d ' ')"
+  if [ -z "$css_count" ] || [ "$css_count" -lt 1 ]; then
+    echo "ERROR: staging build has no CSS — aborting swap" >&2
+    return 1
+  fi
+  echo "Swapping .next.staging → .next (brief restart follows) ..."
+  rm -rf "$ROOT/.next.old"
+  if [ -d "$ROOT/.next" ]; then
+    mv "$ROOT/.next" "$ROOT/.next.old"
+  fi
+  mv "$STAGING_DIR" "$ROOT/.next"
+  write_cache
+  rm -rf "$BACKUP_DIR" "$ROOT/.next.old"
   echo "Build OK ($css_count CSS bundle(s))"
 }
 
+cmd_build_standalone() {
+  if ! swap_staging_build; then
+    rm -rf "$STAGING_DIR"
+    return 1
+  fi
+  BUILD_SUCCEEDED=1
+}
+
+cmd_build() {
+  UPDATE_TRAP_ACTIVE=1
+  trap 'update_trap_exit $?' EXIT
+  touch "$ROOT/.update-in-progress"
+  cmd_build_prep
+  cmd_build_compile
+  cmd_build_standalone
+  UPDATE_TRAP_ACTIVE=0
+  trap - EXIT
+}
+
 cmd_restart() {
+  if ! has_valid_next; then
+    echo "WARN: restart skipped — no valid .next (run recover)" >&2
+    return 1
+  fi
   if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
     bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only
   elif [ -x "$ROOT/scripts/pm2-start.sh" ]; then
@@ -201,23 +311,46 @@ cmd_restart() {
   echo "PM2 restart complete."
 }
 
+cmd_recover() {
+  bash "$ROOT/scripts/panel-update-recover.sh" "${1:-}"
+}
+
+cmd_all() {
+  UPDATE_TRAP_ACTIVE=1
+  trap 'update_trap_exit $?' EXIT
+  touch "$ROOT/.update-in-progress"
+  cmd_sync
+  cmd_deps
+  cmd_prisma
+  cmd_build_prep
+  cmd_build_compile
+  cmd_build_standalone
+  BUILD_SUCCEEDED=1
+  cmd_restart
+  if [ -x "$ROOT/scripts/installer-finalize-ports.sh" ]; then
+    bash "$ROOT/scripts/installer-finalize-ports.sh" || echo "WARN: port finalize failed (run: sudo bash scripts/sync-panel-ports.sh)" >&2
+  fi
+  UPDATE_TRAP_ACTIVE=0
+  trap - EXIT
+  rm -f "$ROOT/.update-in-progress"
+}
+
 STEP="${1:-all}"
+shift || true
 case "$STEP" in
   bootstrap) cmd_bootstrap ;;
   sync) cmd_sync ;;
   deps) cmd_deps ;;
   prisma) cmd_prisma ;;
+  build-prep) cmd_build_prep ;;
+  build-compile) cmd_build_compile ;;
+  build-standalone) cmd_build_standalone ;;
   build) cmd_build ;;
   restart) cmd_restart ;;
-  all)
-    cmd_sync
-    cmd_deps
-    cmd_prisma
-    cmd_build
-    cmd_restart
-    ;;
+  recover) cmd_recover "$@" ;;
+  all) cmd_all ;;
   *)
-    echo "Unknown step: $STEP (use sync|deps|prisma|build|restart|all)" >&2
+    echo "Unknown step: $STEP (use sync|deps|prisma|build|recover|restart|all)" >&2
     exit 1
     ;;
 esac

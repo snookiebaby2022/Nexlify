@@ -85,7 +85,7 @@ async function main() {
   console.log(`\nDone: ${started} started, ${skipped} skipped, ${failed} failed`);
   if (failed > 0) {
     console.log(
-      "\nBootstrap failed panels once:\n  curl -fsSL 'https://nexlify.live/install/fix-panel-auto-update.sh?v=169' | sudo bash"
+      "\nBootstrap failed panels once:\n  curl -fsSL 'https://nexlify.live/install/fix-panel-repair.sh' | sudo bash"
     );
   }
 }

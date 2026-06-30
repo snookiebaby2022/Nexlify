@@ -3,7 +3,7 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/var/www/nexlify}"
-PANEL_PORT="${PANEL_PORT:-3000}"
+PANEL_PORT="${PANEL_PORT:-13000}"
 LOG="${PANEL_WATCHDOG_LOG:-/var/log/nexlify-panel-watchdog.log}"
 URL="http://127.0.0.1:${PANEL_PORT}/api/health"
 

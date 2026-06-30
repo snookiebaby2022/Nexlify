@@ -35,10 +35,10 @@ export const SEO_PAGES = {
     keywords: withCoreKeywords(["IPTV panel demo", "Xtream panel", "global IPTV panel"]),
   },
   "/pricing": {
-    title: "Nexlify vs XUI.one & 1-stream — IPTV Reseller Panel Pricing",
+    title: "Nexlify IPTV Reseller Panel Pricing — vs XUI.one",
     description:
-      "Compare Nexlify IPTV reseller panel pricing vs XUI.one & 1-stream. WHMCS IPTV module included. IPTV management software from £50/mo with 7-day trial.",
-    keywords: withCoreKeywords(["IPTV panel pricing", "XUI.one alternative", "1-stream alternative"]),
+      "Compare Nexlify IPTV reseller panel pricing vs legacy XUI.one forks. WHMCS IPTV module included. IPTV management software from £50/mo with 7-day trial.",
+    keywords: withCoreKeywords(["IPTV panel pricing", "XUI.one alternative"]),
   },
   "/features": {
     title: "IPTV Reseller Panel Features — WHMCS IPTV Module & Tools",
@@ -106,17 +106,11 @@ export const SEO_PAGES = {
       "Nexlify vs XUI.one: IPTV reseller panel with migration tools, WHMCS IPTV module, and IPTV management software. Telegram alerts and modern UX.",
     keywords: withCoreKeywords(["XUI alternative", "best reseller panel"]),
   },
-  "/vs/1-stream": {
-    title: "1-stream Alternative — IPTV Reseller Panel & WHMCS",
-    description:
-      "Nexlify vs 1-stream: IPTV reseller panel with preview import, WHMCS IPTV module, and IPTV management software. Migrate from XUI or 1-stream.",
-    keywords: withCoreKeywords(["1-stream alternative", "IPTV panel migration"]),
-  },
   "/blog/migrate-from-xui-or-1-stream": {
-    title: "Migrate XUI.one / 1-stream → IPTV Reseller Panel",
+    title: "Migrate XUI.one → IPTV Reseller Panel",
     description:
-      "Step-by-step migration from XUI.one or 1-stream to Nexlify IPTV reseller panel. WHMCS IPTV module setup, preview import, and IPTV management software.",
-    keywords: withCoreKeywords(["XUI migration", "1-stream migration"]),
+      "Step-by-step migration from XUI.one to Nexlify IPTV reseller panel. WHMCS IPTV module setup, preview import, and IPTV management software.",
+    keywords: withCoreKeywords(["XUI migration"]),
   },
   "/lp/reseller-panel": {
     title: "IPTV Reseller Panel — WHMCS IPTV Module & Trial",

@@ -11,12 +11,11 @@ export function MigrationCtaSection() {
           Panel migration
         </p>
         <h2 className="font-display mt-2 text-2xl font-bold text-white md:text-3xl">
-          Import from XUI.one or 1-stream — preview before you switch
+          Import from XUI.one — preview before you switch
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-[var(--muted)] md:text-base">
-          Nexlify includes a built-in migration wizard for XUI, 1-stream, Xtream UI, and Midnight
-          Streamers. Run a preview on your trial panel, then cut over on your own schedule — no
-          manual database surgery.
+          Nexlify includes a built-in migration wizard for XUI, Xtream UI, and Midnight Streamers. Run a
+          preview on your trial panel, then cut over on your own schedule — no manual database surgery.
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center">
           <Link
@@ -47,10 +46,6 @@ export function MigrationCtaSection() {
         <p className="mt-6 text-xs text-[var(--muted)]">
           <Link href="/vs/xui-one" className="text-violet-400 hover:text-violet-300 underline">
             Nexlify vs XUI.one
-          </Link>
-          {" · "}
-          <Link href="/vs/1-stream" className="text-violet-400 hover:text-violet-300 underline">
-            Nexlify vs 1-stream
           </Link>
           {" · "}
           <Link href="/best-iptv-reseller-panel" className="text-violet-400 hover:text-violet-300 underline">

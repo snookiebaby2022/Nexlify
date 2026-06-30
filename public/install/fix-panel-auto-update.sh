@@ -1,12 +1,21 @@
 #!/usr/bin/env bash
 # One-shot upgrade: enable automatic tarball updates on existing Nexlify panels.
-#   curl -fsSL 'https://nexlify.live/install/fix-panel-auto-update.sh?v=171' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/fix-panel-auto-update.sh?v=160' | sudo bash
 set -euo pipefail
 PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
 VENDOR_URL="${VENDOR_URL:-https://nexlify.live}"
-TARBALL="${VENDOR_URL}/downloads/nexlify-panel.tar.gz?v=171"
+TARBALL="${VENDOR_URL}/downloads/nexlify-panel.tar.gz?v=164"
 
 [ -d "$PANEL_DIR" ] || { echo "ERROR: panel not found at $PANEL_DIR" >&2; exit 1; }
+
+# Bootstrap latest patch script first (works even when local copy is outdated).
+mkdir -p "$PANEL_DIR/scripts"
+curl -fsSL "${VENDOR_URL}/install/apply-panel-fast-update.sh?v=164" -o "$PANEL_DIR/scripts/apply-panel-fast-update.sh.new" || true
+if [ -f "$PANEL_DIR/scripts/apply-panel-fast-update.sh.new" ]; then
+  sed -i 's/\r$//' "$PANEL_DIR/scripts/apply-panel-fast-update.sh.new"
+  chmod +x "$PANEL_DIR/scripts/apply-panel-fast-update.sh.new"
+  mv "$PANEL_DIR/scripts/apply-panel-fast-update.sh.new" "$PANEL_DIR/scripts/apply-panel-fast-update.sh"
+fi
 
 tmp="$(mktemp -d /tmp/nexlify-fix-XXXXXX)"
 curl -fsSL "$TARBALL" -o "$tmp/panel.tar.gz"

@@ -20,9 +20,9 @@ const RELATED_RESOURCES = [
 
   {
 
-    title: "Nexlify vs 1-stream",
+    title: "Nexlify vs XUI.one",
 
-    href: "/vs/1-stream",
+    href: "/vs/xui-one",
 
     excerpt: "Built-in migration, WHMCS automation, and modern reseller tooling compared.",
 
@@ -32,13 +32,13 @@ const RELATED_RESOURCES = [
 
   {
 
-    title: "Nexlify vs XUI.one",
+    title: "Best IPTV reseller panel 2026",
 
-    href: "/vs/xui-one",
+    href: "/best-iptv-reseller-panel",
 
     excerpt: "Why operators switch from XUI-style panels to Nexlify management software.",
 
-    tag: "Comparison",
+    tag: "Guide",
 
   },
 

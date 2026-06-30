@@ -1,3 +1,7 @@
+.vercel
+.env*
+.env.local
 .next
 node_modules
-.env
+src/generated
+data

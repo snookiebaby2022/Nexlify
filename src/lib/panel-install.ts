@@ -3,7 +3,7 @@
 export const PANEL_INSTALL_DIR = "/opt/nexlify-panel";
 export const CREDENTIALS_ROOT_DIR = "/root/nexlify";
 export const CREDENTIALS_FILE = `${CREDENTIALS_ROOT_DIR}/install-credentials`;
-export const INSTALLER_VERSION = "v168";
+export const INSTALLER_VERSION = "v179";
 
 export const cleanReinstallCommand = `sudo rm -rf ${PANEL_INSTALL_DIR}`;
 
@@ -34,6 +34,8 @@ export const credentialsHelp = {
   viewCommand: `cat ${CREDENTIALS_FILE}`,
   fields: [
     { key: "login_url", label: "Open in browser — no port number needed (http://YOUR_IP/login)" },
+    { key: "iptv_url", label: "IPTV / Smarters HTTP edge (line username + password)" },
+    { key: "stream_http_port", label: "Stream edge port (8080 domain install, 80 for IP-only)" },
     { key: "admin_user / admin_password", label: "Sign in — then add license in the panel" },
     { key: "domain", label: "Your domain or server IP" },
     { key: "postgres_user / postgres_password", label: "PostgreSQL (database)" },

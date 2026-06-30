@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=169' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
 #
 # Then open the login URL, sign in with the admin password shown at the end,
 # and paste your license key under Admin → License.
@@ -11,7 +11,7 @@ set -euo pipefail
 
 PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
 PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz}"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v170}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v180}"
 CREDS_ROOT="/root/nexlify"
 DOMAIN=""
 EMAIL=""
@@ -20,13 +20,14 @@ SKIP_NGINX=0
 SKIP_SSL=0
 SKIP_FIREWALL=0
 FORCE_FRESH=0
+MONOLITHIC=0
 
 usage() {
   cat <<'EOF'
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=169' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
 
 Options:
   --domain HOST          Server IP or domain (required)
@@ -36,11 +37,12 @@ Options:
   --skip-nginx           Do not configure nginx
   --skip-ssl             HTTP only (no certbot)
   --skip-firewall        Do not open ufw ports
+  --monolithic           Panel + stream engine on this host (main server + local agent)
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=169' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=167' | sudo bash -s -- --domain panel.example.com --email you@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain panel.example.com --email you@example.com
 EOF
 }
 
@@ -55,6 +57,7 @@ while [ $# -gt 0 ]; do
     --skip-ssl) SKIP_SSL=1; shift ;;
     --skip-firewall) SKIP_FIREWALL=1; shift ;;
     --fresh) FORCE_FRESH=1; shift ;;
+    --monolithic) MONOLITHIC=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
@@ -312,14 +315,23 @@ resolve_panel_urls() {
 
 write_credentials_kv() {
   resolve_panel_urls
+  local stream_port iptv_url
+  stream_port="$(grep '^STREAM_HTTP_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo 8080)"
+  [ -z "$stream_port" ] && stream_port=8080
+  if [ "$stream_port" = "80" ]; then
+    iptv_url="${PANEL_BASE_URL}"
+  else
+    iptv_url="http://${DOMAIN}:${stream_port}"
+  fi
   cat <<CREDS
 domain=$DOMAIN
 panel_url=$PANEL_BASE_URL
 login_url=$LOGIN_URL
+iptv_url=$iptv_url
+stream_http_port=$stream_port
 panel_dir=$PANEL_DIR
 panel_port=${NEXLIFY_PANEL_LISTEN_PORT:-13000}
 website_port=${NEXLIFY_WEBSITE_UPSTREAM_PORT:-13001}
-stream_http_port=8080
 nginx_http_port=80
 nginx_https_port=443
 panel_public_port=$PANEL_PUBLIC_PORT
@@ -339,6 +351,16 @@ CREDS
 
 print_install_complete() {
   resolve_panel_urls
+  local stream_port iptv_hint
+  stream_port="$(grep '^STREAM_HTTP_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo 8080)"
+  [ -z "$stream_port" ] && stream_port=8080
+  if [ "$stream_port" = "80" ]; then
+    iptv_hint="IPTV / Smarters: ${PANEL_BASE_URL}  (port 80 — use your line username/password)"
+  elif [ "$PANEL_PUBLIC_PORT" = "443" ]; then
+    iptv_hint="IPTV HTTPS: https://${DOMAIN}:443  ·  IPTV HTTP edge: http://${DOMAIN}:${stream_port}  (or http://SERVER_IP:${stream_port})"
+  else
+    iptv_hint="IPTV / Smarters: http://${DOMAIN}:${stream_port}  (line username/password; domain installs also use https on :443 when SSL is enabled)"
+  fi
   echo ""
   echo "================================================================"
   echo " Nexlify Panel — installation complete"
@@ -347,6 +369,9 @@ print_install_complete() {
   echo " 1. Open:   $LOGIN_URL"
   echo " 2. Login:  admin / $ADMIN_PASS"
   echo " 3. License: Admin → License → paste your NXLF1 key"
+  echo ""
+  echo " IPTV:      $iptv_hint"
+  echo " Firewall: ports 22, 80, 443, ${stream_port}, 1935, 554 opened (UFW)"
   echo ""
   echo " Database:  nexlify / $PG_PASS  (localhost:5432)"
   echo " Saved to:  $CREDS_FILE"
@@ -475,7 +500,7 @@ if [ "$SKIP_NGINX" -eq 0 ] && [ "${NEXLIFY_USE_NGINX:-1}" = "1" ] && [ -n "$DOMA
   ln -sf "$NGINX_SITE" "/etc/nginx/sites-enabled/nexlify-panel-${DOMAIN}"
   nginx -t
   systemctl enable nginx
-  systemctl reload nginx
+  systemctl start nginx 2>/dev/null || systemctl reload nginx
 
   if [ "$SKIP_SSL" -eq 0 ] && [ -n "$EMAIL" ]; then
     log "Let's Encrypt SSL"
@@ -503,11 +528,27 @@ if [ -n "$LICENSE_KEY" ]; then
 fi
 bash scripts/panel-restart-safe.sh >>"$INSTALL_LOG" 2>&1 || bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1
 
-if [ "$SKIP_FIREWALL" -eq 0 ] && command -v ufw >/dev/null 2>&1; then
-  ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp || true
-  ufw allow 80/tcp >/dev/null 2>&1 || true
-  ufw allow 443/tcp >/dev/null 2>&1 || true
-  ufw --force enable >/dev/null 2>&1 || true
+if [ "$SKIP_FIREWALL" -eq 0 ]; then
+  progress_step "Configuring IPTV ports, nginx stream edge, and firewall"
+  bash scripts/installer-finalize-ports.sh >>"$INSTALL_LOG" 2>&1 || {
+    echo "WARN: port finalize failed — run: sudo bash scripts/sync-panel-ports.sh" >&2
+  }
+fi
+
+if [ "$MONOLITHIC" = "1" ]; then
+  progress_step "Monolithic profile — main server + local stream agent"
+  grep -q '^NEXLIFY_MONOLITHIC=' "$PANEL_DIR/.env" 2>/dev/null && \
+    sed -i 's/^NEXLIFY_MONOLITHIC=.*/NEXLIFY_MONOLITHIC=1/' "$PANEL_DIR/.env" || \
+    echo "NEXLIFY_MONOLITHIC=1" >> "$PANEL_DIR/.env"
+  grep -q '^NEXLIFY_RTMP_ENABLED=' "$PANEL_DIR/.env" 2>/dev/null || \
+    echo "NEXLIFY_RTMP_ENABLED=1" >> "$PANEL_DIR/.env"
+  chmod +x scripts/install-monolithic-profile.sh scripts/install-local-stream-agent.sh 2>/dev/null || true
+  bash scripts/install-monolithic-profile.sh "$DOMAIN" >>"$INSTALL_LOG" 2>&1 || {
+    echo "WARN: monolithic server row failed — create Main Server in Admin → Servers" >&2
+  }
+  bash scripts/install-local-stream-agent.sh >>"$INSTALL_LOG" 2>&1 || {
+    echo "WARN: local agent install failed — run: sudo bash scripts/install-local-stream-agent.sh" >&2
+  }
 fi
 
 PANEL_HEALTH_HOST="127.0.0.1"

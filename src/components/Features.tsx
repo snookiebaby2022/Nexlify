@@ -1,53 +1,54 @@
 import { AnimatedAvatar } from "@/components/AnimatedAvatar";
+import { Shield, Smartphone, Mail, Coins, Trophy, Layers } from "lucide-react";
 
 const features = [
   {
-    title: "Research & UX",
-    desc: "Polished back-office and reseller flows designed for operators who run at scale — without the clutter.",
-    icon: "◆",
-    accent: "from-violet-500 to-fuchsia-600",
-    motion: "float" as const,
+    title: "AI Copilot Security",
+    desc: "Analytics + AI insights continuously monitor logs for fraud, suspicious IP jumps, and compromised reseller accounts.",
+    icon: Shield,
+    accent: "from-emerald-500 to-teal-600",
+    motion: "pulse" as const,
     delay: 0,
   },
   {
-    title: "Security first",
-    desc: "Encrypted license validation, server binding, and instant revoke when WHMCS suspends or terminates.",
-    icon: "◇",
+    title: "Universal Devices",
+    desc: "M3U playlists, MAG/Stalker portals, Enigma2 devices, and secure Active Code API for mobile apps.",
+    icon: Smartphone,
     accent: "from-cyan-500 to-sky-600",
+    motion: "float" as const,
+    delay: 0.3,
+  },
+  {
+    title: "Automated Client Emails",
+    desc: "HTML welcome summaries with M3U and portal links when lines are created — no copy-paste credentials.",
+    icon: Mail,
+    accent: "from-violet-500 to-fuchsia-600",
     motion: "wobble" as const,
     delay: 0.5,
   },
   {
-    title: "WHMCS automation",
-    desc: "Create, renew, suspend, and terminate services — each event syncs panel license state in real time.",
-    icon: "○",
+    title: "Advanced Billing Logs",
+    desc: "Complete financial audit trail — track every credit added, deducted, or refunded with immutable logs.",
+    icon: Coins,
     accent: "from-amber-500 to-orange-500",
     motion: "float-slow" as const,
-    delay: 1,
-  },
-  {
-    title: "Your panel, your stack",
-    desc: "You already run the full IPTV UI. We only handle commerce and keys — plug in via one API call.",
-    icon: "▣",
-    accent: "from-emerald-500 to-teal-600",
-    motion: "pulse" as const,
-    delay: 0.3,
-  },
-  {
-    title: "Anti-Freeze & fast zapping",
-    desc: "Low-latency /live redirects, no live nginx buffering, Redis URL cache, and neighbour-channel prefetch for instant channel changes.",
-    icon: "⚡",
-    accent: "from-sky-500 to-cyan-500",
-    motion: "float" as const,
     delay: 0.7,
   },
   {
-    title: "Video management",
-    desc: "Dedicated VOD workspace at Content → Video — probe streams, import M3U playlists, and manage on-demand sources separately from live channels.",
-    icon: "▶",
+    title: "Live Sports Integration",
+    desc: "API-Sports fixtures on the reseller dashboard — UFC, NBA, Premier League, and more at a glance.",
+    icon: Trophy,
+    accent: "from-sky-500 to-cyan-500",
+    motion: "float" as const,
+    delay: 0.9,
+  },
+  {
+    title: "Bouquet Templates",
+    desc: "Unlimited package templates — load complex country and VOD bouquet selections in one click.",
+    icon: Layers,
     accent: "from-fuchsia-500 to-violet-600",
     motion: "pulse" as const,
-    delay: 0.9,
+    delay: 1.1,
   },
 ];
 
@@ -60,10 +61,10 @@ export function Features() {
             Why Nexlify
           </p>
           <h2 className="font-display mt-3 text-3xl font-bold text-white md:text-4xl">
-            Built for operators — not lookalikes
+            Everything operators expect — built in
           </h2>
           <p className="mt-4 text-[var(--muted)]">
-            Inspired by industry-leading panel software, with a distinct identity and WHMCS-native billing.
+            Security, devices, billing, sports, and bouquet tools in one maintained IPTV management stack.
           </p>
         </div>
 
@@ -74,7 +75,7 @@ export function Features() {
               className="group glass rounded-2xl p-8 transition-colors hover:border-violet-500/30"
             >
               <AnimatedAvatar accent={f.accent} size="sm" motion={f.motion} delay={f.delay}>
-                {f.icon}
+                <f.icon size={22} className="text-white" />
               </AnimatedAvatar>
               <h3 className="font-display mt-5 text-xl font-semibold text-white">{f.title}</h3>
               <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">{f.desc}</p>
