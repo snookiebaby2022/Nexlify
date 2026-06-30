@@ -465,6 +465,14 @@ if ! ADMIN_PASS="$ADMIN_PASS" node scripts/set-admin-password.cjs >>"$INSTALL_LO
   die "Failed to set admin password. Check $INSTALL_LOG and run: ADMIN_PASS='...' node scripts/set-admin-password.cjs"
 fi
 
+progress_step "Registering main server"
+if [ -f scripts/auto-register-server.cjs ]; then
+  DOMAIN="$DOMAIN" node scripts/auto-register-server.cjs >>"$INSTALL_LOG" 2>&1 || {
+    echo "WARN: Auto-register main server failed — add manually in Admin → Servers" >&2
+  }
+fi
+
+
 ensure_build_memory() {
   local mem_kb
   mem_kb="$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
