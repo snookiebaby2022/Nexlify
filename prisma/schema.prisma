@@ -1393,3 +1393,43 @@ model ConnectionGeography {
   @@index([lineId, lastSeenAt])
   @@index([streamId, lastSeenAt])
 }
+
+
+model IpWhitelist {
+  id        String   @id @default(cuid())
+  ip        String
+  ipRange   String?
+  isp       String?
+  label     String?
+  note      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ip])
+  @@index([isActive])
+}
+
+
+// === v1.8.3: Panel Instance Registry (push updates) ===
+
+model PanelInstance {
+  id                String   @id @default(cuid())
+  url               String   // full URL: https://panel.example.com or http://1.2.3.4
+  domain            String?  // panel domain if set
+  ip                String?  // detected IP
+  version           String   @default("1.0.0")
+  secret            String   // shared secret for internal API calls
+  isActive          Boolean  @default(true)
+  autoUpdateEnabled Boolean  @default(true)
+  lastSeenAt        DateTime @default(now())
+  registeredAt      DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  lastError         String?
+  metadata          Json?    // extra info: os, nodeVersion, etc.
+
+  @@index([url])
+  @@index([isActive, autoUpdateEnabled])
+  @@index([version])
+  @@index([lastSeenAt])
+}

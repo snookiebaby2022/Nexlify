@@ -433,7 +433,10 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         id: "updates",
         label: "Updates",
         icon: coloredGroupIcon("updates"),
-        items: [{ href: "/admin/settings/updates", label: "Panel Update" }],
+        items: [
+          { href: "/admin/settings/updates", label: "Panel Update" },
+          { href: "/admin/panels", label: "Registered Panels" },
+        ],
       },
     },
     {

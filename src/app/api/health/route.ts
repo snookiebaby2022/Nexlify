@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+let startupRegistrationAttempted = false;
+
 export async function GET() {
   const checks: Record<string, string> = { app: "ok" };
 
@@ -22,6 +24,22 @@ export async function GET() {
     }
   } catch {
     checks.redis = "error";
+  }
+
+  // Auto-register with vendor on first health check after startup
+  if (!startupRegistrationAttempted && checks.database === "ok") {
+    startupRegistrationAttempted = true;
+    try {
+      const { registerPanelWithVendor } = await import("@/lib/panel-vendor-sync");
+      const result = await registerPanelWithVendor();
+      if (result.ok) {
+        checks.vendorRegistration = "registered";
+      } else {
+        checks.vendorRegistration = "skipped";
+      }
+    } catch {
+      checks.vendorRegistration = "skipped";
+    }
   }
 
   const healthy = checks.database === "ok";

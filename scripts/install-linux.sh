@@ -418,6 +418,7 @@ set_kv PANEL_PUBLIC_PORT "${NEXLIFY_PANEL_PUBLIC_PORT:-80}"
 set_kv PANEL_COOKIE_SECURE 0
 set_kv NEXLIFY_LICENSE_COOKIE_SECURE 0
 set_kv PANEL_PRIMARY_DOMAIN "$DOMAIN"
+set_kv NEXT_PUBLIC_PANEL_URL "https://${DOMAIN}"
 bash scripts/ensure-panel-env.sh >>"$INSTALL_LOG" 2>&1
 set_kv REDIS_URL "redis://localhost:6379"
 set_kv NEXLIFY_LICENSE_API_URL "https://nexlify.live"

@@ -501,9 +501,21 @@ async function jobPanelAutoUpdate() {
   }
 }
 
+async function jobPanelHeartbeat() {
+  const start = Date.now();
+  try {
+    const { sendPanelHeartbeat } = await import("./panel-vendor-sync");
+    const result = await sendPanelHeartbeat();
+    await logCron("panel_heartbeat", result.ok ? "ok" : "error", result.error, Date.now() - start);
+  } catch (e) {
+    await logCron("panel_heartbeat", "error", String(e), Date.now() - start);
+  }
+}
+
 export async function runHourlyCronJobs() {
   await jobEpgSync();
   await jobPanelBackup();
   await jobAgentTokenRotation();
   await jobPanelAutoUpdate();
+  await jobPanelHeartbeat();
 }
