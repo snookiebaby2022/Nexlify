@@ -233,10 +233,15 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
                   <button
                     type="button"
                     onClick={() => {
-                      void navigator.clipboard.writeText(password).then(() => {
+                      void (async () => {
+                        try {
+                          await navigator.clipboard.writeText(password);
+                        } catch {
+                          return;
+                        }
                         setPasswordCopied(true);
                         setTimeout(() => setPasswordCopied(false), 2000);
-                      });
+                      })();
                     }}
                     className="p-1 text-slate-500 hover:text-slate-300 cursor-pointer"
                     aria-label="Copy password"
