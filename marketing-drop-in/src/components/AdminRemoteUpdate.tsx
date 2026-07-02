@@ -10,32 +10,55 @@ export function AdminRemoteUpdate() {
   const [results, setResults] = useState<Result[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const trigger = async () => {
-    const list = urls
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
+  const trigger = async (broadcast = false) => {
+    if (!broadcast) {
+      const list = urls
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
 
-    if (!list.length) {
-      alert("Enter at least one panel URL");
+      if (!list.length) {
+        alert("Enter at least one panel URL");
+        return;
+      }
+
+      if (!confirm(`Trigger update on ${list.length} panel(s)?`)) return;
+
+      setLoading(true);
+      setResults([]);
+
+      try {
+        const res = await fetch("/api/admin/remote-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ panelUrls: list, secret }),
+        });
+        const data = await res.json();
+        setResults(data.results || []);
+      } catch {
+        setResults(list.map((u) => ({ url: u, ok: false, message: "Request failed" })));
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
-    if (!confirm(`Trigger update on ${list.length} panel(s)?`)) return;
+    // Broadcast to all panels in the database
+    if (!confirm("Trigger update on EVERY panel that has a panelUrl saved? This may take a while.")) return;
 
     setLoading(true);
     setResults([]);
 
     try {
-      const res = await fetch("/api/admin/remote-update", {
+      const res = await fetch("/api/admin/remote-update/broadcast", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ panelUrls: list, secret }),
+        body: JSON.stringify({ secret }),
       });
       const data = await res.json();
       setResults(data.results || []);
     } catch {
-      setResults(list.map((u) => ({ url: u, ok: false, message: "Request failed" })));
+      setResults([{ url: "broadcast", ok: false, message: "Request failed" }]);
     } finally {
       setLoading(false);
     }
@@ -71,13 +94,23 @@ export function AdminRemoteUpdate() {
             />
           </div>
 
-          <button
-            onClick={trigger}
-            disabled={loading}
-            className="rounded-lg bg-rose-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-50"
-          >
-            {loading ? "Triggering updates..." : "Force Update on These Panels"}
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => trigger(false)}
+              disabled={loading}
+              className="rounded-lg bg-rose-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-50"
+            >
+              {loading ? "Triggering..." : "Force Update on These Panels"}
+            </button>
+
+            <button
+              onClick={() => trigger(true)}
+              disabled={loading}
+              className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-6 py-2.5 text-sm font-medium text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
+            >
+              {loading ? "Broadcasting..." : "Broadcast to ALL Panels"}
+            </button>
+          </div>
         </div>
       </section>
 
