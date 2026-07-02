@@ -225,6 +225,88 @@ export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string) 
   });
 }
 
+export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
+  const streams = await streamsForLineExport(line);
+  const movies = streams.filter((s) => s.type === StreamType.MOVIE);
+  const categoryIds = [
+    ...new Set(movies.map((s) => s.categoryId).filter(Boolean) as string[]),
+  ];
+
+  const rows: { category_id: string; category_name: string; parent_id: number }[] = [];
+
+  if (movies.some((s) => !s.categoryId)) {
+    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0 });
+  }
+
+  if (categoryIds.length) {
+    const cats = await prisma.category.findMany({
+      where: { id: { in: categoryIds } },
+      orderBy: { sortOrder: "asc" },
+    });
+    for (const c of cats) {
+      rows.push({ category_id: c.id, category_name: c.name, parent_id: 0 });
+    }
+  }
+
+  return rows;
+}
+
+export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: string | null) {
+  const streams = await streamsForLineExport(line);
+  let series = streams.filter((s) => s.type === StreamType.SERIES);
+  if (categoryId != null && categoryId !== "") {
+    if (categoryId === "0") {
+      series = series.filter((s) => !s.categoryId);
+    } else {
+      series = series.filter((s) => s.categoryId === categoryId);
+    }
+  }
+
+  return series.map((s, i) => ({
+    num: i + 1,
+    name: s.name,
+    series_id: s.id,
+    cover: s.streamIcon ?? "",
+    plot: "",
+    cast: "",
+    director: "",
+    genre: "",
+    releaseDate: "",
+    last_modified: Math.floor(s.updatedAt.getTime() / 1000).toString(),
+    rating: "",
+    rating_5based: 0,
+    backdrop_path: [] as string[],
+    episode_run_time: "",
+    category_id: s.categoryId ?? "0",
+  }));
+}
+
+export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
+  const streams = await streamsForLineExport(line);
+  const series = streams.filter((s) => s.type === StreamType.SERIES);
+  const categoryIds = [
+    ...new Set(series.map((s) => s.categoryId).filter(Boolean) as string[]),
+  ];
+
+  const rows: { category_id: string; category_name: string; parent_id: number }[] = [];
+
+  if (series.some((s) => !s.categoryId)) {
+    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0 });
+  }
+
+  if (categoryIds.length) {
+    const cats = await prisma.category.findMany({
+      where: { id: { in: categoryIds } },
+      orderBy: { sortOrder: "asc" },
+    });
+    for (const c of cats) {
+      rows.push({ category_id: c.id, category_name: c.name, parent_id: 0 });
+    }
+  }
+
+  return rows;
+}
+
 export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: string) {
   const streams = await streamsForLineExport(line);
   const withProviders = await prisma.stream.findMany({

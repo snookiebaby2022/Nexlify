@@ -20,9 +20,14 @@ export async function GET(req: NextRequest) {
       : { line: { ownerId: session.id }, ...(lineId ? { lineId } : {}) };
 
   const format = req.nextUrl.searchParams.get("format");
+  const includeAll = req.nextUrl.searchParams.get("all") === "1";
+  const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
 
   const connections = await prisma.liveConnection.findMany({
-    where,
+    where: {
+      ...where,
+      ...(includeAll ? {} : { lastSeenAt: { gte: staleBefore } }),
+    },
     include: {
       line: { select: { username: true } },
       stream: { select: { name: true, type: true } },

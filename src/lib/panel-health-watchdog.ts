@@ -19,7 +19,8 @@ function readEnvPort(repoPath: string): { host: string; port: string } {
     ).trim();
     const [host = "127.0.0.1", port = "13000"] = raw.split("|");
     return { host, port };
-  } catch {
+  } catch (err) {
+    console.warn("watchdog: failed to read .env port", err instanceof Error ? err.message : err);
     return { host: "127.0.0.1", port: "13000" };
   }
 }
@@ -30,7 +31,8 @@ function pm2NexlifyOnline(): boolean {
     const list = JSON.parse(out) as { name?: string; pm2_env?: { status?: string } }[];
     const apps = list.filter((a) => a.name === "nexlify");
     return apps.some((a) => a.pm2_env?.status === "online");
-  } catch {
+  } catch (err) {
+    console.warn("watchdog: pm2 jlist parse failed", err instanceof Error ? err.message : err);
     return false;
   }
 }
@@ -41,7 +43,8 @@ function curlHealth(host: string, port: string): boolean {
       timeout: 8000,
     });
     return true;
-  } catch {
+  } catch (err) {
+    console.warn("watchdog: curl health check failed", err instanceof Error ? err.message : err);
     return false;
   }
 }
@@ -52,7 +55,8 @@ async function lastRestartMs(): Promise<number> {
     const row = await prisma.panelSetting.findUnique({ where: { key: SETTING_KEY } });
     const ms = row?.value ? Date.parse(row.value) : NaN;
     return Number.isFinite(ms) ? ms : 0;
-  } catch {
+  } catch (err) {
+    console.warn("watchdog: failed to read last restart time", err instanceof Error ? err.message : err);
     return 0;
   }
 }
@@ -66,8 +70,8 @@ async function recordRestartAttempt(): Promise<void> {
       update: { value: now },
       create: { key: SETTING_KEY, value: now },
     });
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.warn("watchdog: failed to record restart attempt", err instanceof Error ? err.message : err);
   }
 }
 
@@ -76,12 +80,14 @@ async function restartScriptPath(repoPath: string): Promise<string | null> {
   try {
     await access(script);
     return script;
-  } catch {
+  } catch (err) {
+    console.warn("watchdog: restart script not found, trying fallback", err instanceof Error ? err.message : err);
     const fallback = path.join(repoPath, "scripts", "pm2-start.sh");
     try {
       await access(fallback);
       return fallback;
-    } catch {
+    } catch (err) {
+      console.warn("watchdog: fallback restart script also not found", err instanceof Error ? err.message : err);
       return null;
     }
   }
@@ -99,7 +105,8 @@ function spawnDetachedRestart(repoPath: string, script: string): void {
       stdio: "ignore",
       env: process.env,
     }).unref();
-  } catch {
+  } catch (err) {
+    console.warn("watchdog: setsid spawn failed, falling back to bash", err instanceof Error ? err.message : err);
     spawn("bash", [...args, ...(isSafe ? [] : [])], {
       cwd: repoPath,
       detached: true,
@@ -147,7 +154,8 @@ export async function maybeRestartUnhealthyPanel(): Promise<{
   let buildMissing = false;
   try {
     execSync("bash scripts/has-valid-next-build.sh", { cwd: repoPath, timeout: 8000, stdio: "ignore" });
-  } catch {
+  } catch (err) {
+    console.warn("watchdog: build validation failed", err instanceof Error ? err.message : err);
     buildMissing = true;
   }
 
@@ -162,8 +170,8 @@ export async function maybeRestartUnhealthyPanel(): Promise<{
         env: process.env,
       }).unref();
       return { action: "restarting", reason: "recover_missing_build" };
-    } catch {
-      /* fall through to normal restart */
+    } catch (err) {
+      console.warn("watchdog: recover script failed, falling through to normal restart", err instanceof Error ? err.message : err);
     }
   }
 

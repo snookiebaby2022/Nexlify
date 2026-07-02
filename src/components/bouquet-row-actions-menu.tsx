@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import { ChevronDown, Pencil } from "lucide-react";
+import { ChevronDown, Copy, Eye, Pencil, Trash2 } from "lucide-react";
 import { computePortalMenuPosition } from "@/lib/portal-menu-position";
 
 export function BouquetRowActionsMenu({
@@ -11,11 +11,15 @@ export function BouquetRowActionsMenu({
   isActive,
   busy,
   onToggleActive,
+  onDuplicate,
+  onDelete,
 }: {
   bouquetId: string;
   isActive: boolean;
   busy: boolean;
   onToggleActive: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
@@ -93,6 +97,41 @@ export function BouquetRowActionsMenu({
           >
             View lines
           </Link>
+          <Link
+            href={`/admin/bouquets/${bouquetId}`}
+            className="xui-lines-action-menu-item"
+            onClick={() => setOpen(false)}
+            role="menuitem"
+          >
+            <Eye size={15} className="opacity-70" />
+            View streams
+          </Link>
+          <button
+            type="button"
+            className="xui-lines-action-menu-item"
+            role="menuitem"
+            disabled={busy}
+            onClick={() => {
+              setOpen(false);
+              onDuplicate();
+            }}
+          >
+            <Copy size={15} className="opacity-70" />
+            Duplicate bouquet
+          </button>
+          <button
+            type="button"
+            className="xui-lines-action-menu-item xui-lines-action-menu-item--danger"
+            role="menuitem"
+            disabled={busy}
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+          >
+            <Trash2 size={15} className="opacity-70" />
+            Delete
+          </button>
         </div>
       </>,
       document.body

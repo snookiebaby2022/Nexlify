@@ -16,7 +16,7 @@ export default function AdminBouquetsPage() {
   >([]);
 
   const load = useCallback(() => {
-    fetch("/api/admin/bouquets")
+    fetch("/api/admin/bouquets", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setBouquets(d.bouquets ?? []));
   }, []);

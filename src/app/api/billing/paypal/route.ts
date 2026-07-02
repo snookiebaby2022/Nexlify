@@ -13,7 +13,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = await req.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
   const amount = Number(body.amount ?? 0);
   const currency = String(body.currency ?? "GBP").toUpperCase();
   const couponCode = body.couponCode ? String(body.couponCode).trim().toUpperCase() : undefined;

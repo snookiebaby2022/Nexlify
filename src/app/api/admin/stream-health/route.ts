@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole, StreamType } from "@prisma/client";
+import { probeStreamUrl } from "@/lib/stream-probe-server";
 
 export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
@@ -97,8 +98,33 @@ export async function POST(req: NextRequest) {
     const streamId = String(body.streamId ?? "");
     if (!streamId) return NextResponse.json({ error: "streamId required" }, { status: 400 });
 
-    // In future: trigger stream restart or health check
-    return NextResponse.json({ message: "Stream health check triggered" });
+    const stream = await prisma.stream.findUnique({
+      where: { id: streamId },
+      select: { id: true, name: true, streamUrl: true, backupUrl: true },
+    });
+    if (!stream) return NextResponse.json({ error: "Stream not found" }, { status: 404 });
+
+    const primaryProbe = await probeStreamUrl(stream.streamUrl, { fast: true });
+    let backupProbe = null;
+    if (stream.backupUrl) {
+      backupProbe = await probeStreamUrl(stream.backupUrl, { fast: true });
+    }
+
+    const lastProbeOk = primaryProbe.status === "online" || primaryProbe.status === "degraded";
+    const lastProbeError = lastProbeOk ? null : primaryProbe.message ?? "Probe failed";
+
+    await prisma.stream.update({
+      where: { id: streamId },
+      data: { lastProbeOk, lastProbeError },
+    });
+
+    return NextResponse.json({
+      streamId,
+      name: stream.name,
+      primary: { status: primaryProbe.status, message: primaryProbe.message },
+      backup: backupProbe ? { status: backupProbe.status, message: backupProbe.message } : null,
+      lastProbeOk,
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

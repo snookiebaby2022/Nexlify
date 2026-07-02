@@ -16,6 +16,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   billing_create: "Billing: line created",
   edit_bouquet: "Bouquet updated",
   create_bouquet: "Bouquet created",
+  delete_bouquet: "Bouquet deleted",
+  duplicate_bouquet: "Bouquet duplicated",
   mass_streams: "Mass edit streams",
   credit_add: "Credits added",
   credit_refund: "Credits refunded",

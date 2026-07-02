@@ -8,6 +8,9 @@ import {
   xtreamLiveStreams,
   xtreamLiveCategoriesForLine,
   xtreamVodStreams,
+  xtreamVodCategoriesForLine,
+  xtreamSeriesForLine,
+  xtreamSeriesCategoriesForLine,
 } from "@/lib/xtream";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { checkDdosShield } from "@/lib/ddos-shield";
@@ -110,12 +113,25 @@ export async function GET(req: NextRequest) {
     }
     case "get_vod_streams":
       return iptvJson(await xtreamVodStreams(line, baseUrl));
-    case "get_vod_categories":
-      return iptvJson([]);
-    case "get_series_categories":
-      return iptvJson([]);
-    case "get_series":
-      return iptvJson([]);
+    case "get_vod_categories": {
+      const ttl = await getCacheTtls();
+      const payload = await cacheGetOrSet(`xtream:vod_categories:${line.id}`, ttl.categories, () =>
+        xtreamVodCategoriesForLine(line)
+      );
+      return iptvJson(payload);
+    }
+    case "get_series_categories": {
+      const ttl = await getCacheTtls();
+      const payload = await cacheGetOrSet(`xtream:series_categories:${line.id}`, ttl.categories, () =>
+        xtreamSeriesCategoriesForLine(line)
+      );
+      return iptvJson(payload);
+    }
+    case "get_series": {
+      const seriesCategoryId = req.nextUrl.searchParams.get("category_id");
+      const payload = await xtreamSeriesForLine(line, seriesCategoryId);
+      return iptvJson(payload);
+    }
     case "get_short_epg": {
       const streamId = req.nextUrl.searchParams.get("stream_id");
       if (!streamId) return iptvJson([]);

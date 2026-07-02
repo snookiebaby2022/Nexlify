@@ -31,6 +31,8 @@ export function activityFixHref(log: {
       return "/admin/lines/mass-edit";
     case "edit_bouquet":
     case "create_bouquet":
+    case "delete_bouquet":
+    case "duplicate_bouquet":
       return log.entityId ? `/admin/bouquets` : "/admin/bouquets";
     case "mass_streams":
       return "/admin/management/mass-edit/streams";

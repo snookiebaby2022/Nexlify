@@ -28,7 +28,7 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "user", title: "Add user", category: "Users", redirect: "/admin/resellers/add" },
   { slug: "user_mass", title: "Mass edit users", category: "Users", redirect: "/admin/management/mass-edit/users" },
   { slug: "user_logs", title: "User logs", category: "Users", redirect: "/admin/management/logs" },
-  { slug: "profiles", title: "Profiles", category: "Users", description: "Stalker / device profiles." },
+  { slug: "profiles", title: "Profiles", category: "Users", redirect: "/admin/profiles" },
   { slug: "profile", title: "My profile", category: "Account", redirect: "/admin/profile" },
   { slug: "edit_profile", title: "Edit profile", category: "Account", redirect: "/admin/profile" },
 
@@ -93,7 +93,7 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "session", title: "Sessions", category: "Settings", redirect: "/admin/settings/security" },
   { slug: "settings_watch", title: "Watch folder settings", category: "Settings", redirect: "/admin/watch-folders" },
   { slug: "settings_plex", title: "Plex settings", category: "Settings", description: "Plex library integration." },
-  { slug: "setup", title: "Setup wizard", category: "Settings", description: "First-run panel setup." },
+  { slug: "setup", title: "Setup wizard", category: "Settings", redirect: "/admin/settings" },
   { slug: "license", title: "License", category: "Settings", redirect: "/admin/license" },
   { slug: "license_info", title: "License info", category: "Settings", redirect: "/admin/license" },
 
@@ -106,7 +106,7 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "useragents", title: "Blocked user agents", category: "Blocking", redirect: "/admin/management/blocked-user-agents" },
   { slug: "rtmp_ip", title: "RTMP IP", category: "Blocking", redirect: "/admin/management/rtmp-ips" },
   { slug: "rtmp_ips", title: "RTMP IPs", category: "Blocking", redirect: "/admin/management/rtmp-ips" },
-  { slug: "rtmp_monitor", title: "RTMP monitor", category: "Blocking", description: "Live RTMP publish monitor." },
+  { slug: "rtmp_monitor", title: "RTMP monitor", category: "Blocking", redirect: "/admin/rtmp_monitor" },
 
   { slug: "fingerprint", title: "Fingerprint", category: "Tools", redirect: "/admin/management/tools/fingerprint" },
   { slug: "mass_delete", title: "Mass delete", category: "Tools", redirect: "/admin/management/tools/mass-delete" },
@@ -114,10 +114,10 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
 
   { slug: "credit_logs", title: "Credit logs", category: "Logs", redirect: "/admin/resellers/credits" },
   { slug: "panel_logs", title: "Panel logs", category: "Logs", redirect: "/admin/management/logs" },
-  { slug: "client_logs", title: "Client logs", category: "Logs", description: "Player / app client logs." },
-  { slug: "restream_logs", title: "Restream logs", category: "Logs", description: "Restream detection log." },
-  { slug: "login_logs", title: "Login logs", category: "Logs", description: "Panel login attempts." },
-  { slug: "mysql_syslog", title: "MySQL syslog", category: "Logs", description: "Database syslog." },
+  { slug: "client_logs", title: "Client logs", category: "Logs", redirect: "/admin/client_logs" },
+  { slug: "restream_logs", title: "Restream logs", category: "Logs", redirect: "/admin/restream_logs" },
+  { slug: "login_logs", title: "Login logs", category: "Logs", redirect: "/admin/login_logs" },
+  { slug: "mysql_syslog", title: "MySQL syslog", category: "Logs", redirect: "/admin/mysql_syslog" },
 
   { slug: "live_connections", title: "Live connections", category: "Monitor", redirect: "/admin/connections" },
   { slug: "process_monitor", title: "Process monitor", category: "Monitor", redirect: "/admin/process_monitor" },
@@ -125,8 +125,8 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
 
   { slug: "watch", title: "Watch folders", category: "Import", redirect: "/admin/watch-folders" },
   { slug: "watch_add", title: "Add watch folder", category: "Import", redirect: "/admin/watch-folders" },
-  { slug: "watch_output", title: "Watch output", category: "Import", description: "Watch folder scan output." },
-  { slug: "ondemand", title: "On demand", category: "Import", description: "On-demand scan jobs." },
+  { slug: "watch_output", title: "Watch output", category: "Import", redirect: "/admin/watch_output" },
+  { slug: "ondemand", title: "On demand", category: "Import", redirect: "/admin/created_channels" },
   { slug: "queue", title: "Queue", category: "Import", redirect: "/admin/queue" },
 
   { slug: "created_channels", title: "Created channels", category: "Channels", redirect: "/admin/created_channels" },

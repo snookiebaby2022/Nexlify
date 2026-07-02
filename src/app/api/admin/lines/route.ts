@@ -58,16 +58,20 @@ export async function GET() {
 
   const displayIdByLineId = new Map(displayOrder.map((line, index) => [line.id, index + 1]));
   const activeConnByLineId = new Map<string, (typeof activeConnections)[number]>();
+  const activeConnCountByLineId = new Map<string, number>();
   for (const conn of activeConnections) {
     if (!activeConnByLineId.has(conn.lineId)) activeConnByLineId.set(conn.lineId, conn);
+    activeConnCountByLineId.set(conn.lineId, (activeConnCountByLineId.get(conn.lineId) ?? 0) + 1);
   }
 
   return NextResponse.json({
     lines: lines.map((line) => {
       const active = activeConnByLineId.get(line.id);
+      const activeCount = activeConnCountByLineId.get(line.id) ?? 0;
       return {
         ...line,
         displayId: displayIdByLineId.get(line.id) ?? 0,
+        activeConnectionCount: activeCount,
         activeConnection: active
           ? {
               ip: active.ip,

@@ -80,6 +80,39 @@ export function ManageBouquetsTable({
     }
   }
 
+  async function duplicateBouquet(b: ManageBouquetRow) {
+    setBusyId(b.id);
+    try {
+      const res = await fetch("/api/admin/bouquets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ duplicateOf: b.id }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(typeof j.error === "string" ? j.error : "Duplicate failed");
+      } else onRefresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deleteBouquet(b: ManageBouquetRow) {
+    if (!confirm(`Delete bouquet "${b.name}"? This will remove it from all lines and resellers.`)) return;
+    setBusyId(b.id);
+    try {
+      const res = await fetch(`/api/admin/bouquets?id=${b.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        alert(typeof j.error === "string" ? j.error : "Delete failed");
+      } else onRefresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const thClass = "text-left px-3 py-3 font-normal text-xs whitespace-nowrap cursor-pointer select-none";
   const SortHead = ({ label, col }: { label: string; col: typeof sortKey }) => (
     <th className={thClass} onClick={() => toggleSort(col)}>
@@ -208,6 +241,8 @@ export function ManageBouquetsTable({
                       isActive={b.isActive}
                       busy={busyId === b.id}
                       onToggleActive={() => void toggleActive(b)}
+                      onDuplicate={() => void duplicateBouquet(b)}
+                      onDelete={() => void deleteBouquet(b)}
                     />
                   </td>
                 </tr>

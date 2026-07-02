@@ -200,7 +200,7 @@ export function ManageLinesTable({
     const exp = formatExpireXui(l.expiresAt);
     const notes = splitNotes(l.notes);
     const pkg = l.bouquets[0]?.bouquet.name ?? "—";
-    const activeConn = l._count?.liveConnections ?? 0;
+    const activeConn = (l as { activeConnectionCount?: number }).activeConnectionCount ?? l._count?.liveConnections ?? 0;
     const isActive = l.status === "ACTIVE" && new Date(l.expiresAt) > new Date();
 
     return (
@@ -404,7 +404,7 @@ export function ManageLinesTable({
                 )}
               </div>
               <p className="text-xs">
-                Conn {(l._count?.liveConnections ?? 0)}/{l.maxConnections} · {l.owner?.username ?? "admin"}
+                Conn {(l as { activeConnectionCount?: number }).activeConnectionCount ?? l._count?.liveConnections ?? 0}/{l.maxConnections} · {l.owner?.username ?? "admin"}
               </p>
               <LastWatchedCell
                 streamName={l.lastWatchedStream?.name}

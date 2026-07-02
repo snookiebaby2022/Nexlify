@@ -139,6 +139,39 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
+
+  if (body.duplicateOf) {
+    const source = await prisma.bouquet.findUnique({
+      where: { id: body.duplicateOf },
+      include: { streams: { orderBy: { sortOrder: "asc" } } },
+    });
+    if (!source) return NextResponse.json({ error: "Source bouquet not found" }, { status: 404 });
+
+    const bouquet = await prisma.bouquet.create({
+      data: {
+        name: source.name + " (Copy)",
+        streams: {
+          create: source.streams.map((bs) => ({
+            streamId: bs.streamId,
+            sortOrder: bs.sortOrder,
+          })),
+        },
+      },
+      include: { streams: { include: { stream: true } } },
+    });
+
+    await logActivity("duplicate_bouquet", {
+      userId: session.id,
+      entity: "bouquet",
+      entityId: bouquet.id,
+      meta: { sourceId: source.id, sourceName: source.name, streamCount: source.streams.length },
+    });
+
+    await invalidateXtreamCategories();
+
+    return NextResponse.json({ bouquet });
+  }
+
   const streamIds: string[] = body.streamIds ?? [];
 
   const bouquet = await prisma.bouquet.create({
@@ -164,4 +197,28 @@ export async function POST(req: NextRequest) {
   await invalidateXtreamCategories();
 
   return NextResponse.json({ bouquet });
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const id = req.nextUrl.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const existing = await prisma.bouquet.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  await prisma.bouquet.delete({ where: { id } });
+
+  await logActivity("delete_bouquet", {
+    userId: session.id,
+    entity: "bouquet",
+    entityId: id,
+    meta: { name: existing.name },
+  });
+
+  await invalidateXtreamCategories();
+
+  return NextResponse.json({ ok: true });
 }

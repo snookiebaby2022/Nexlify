@@ -61,7 +61,12 @@ export async function POST(req: NextRequest) {
 
 
 
-  const body = await req.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
 
   const code = String(body.code ?? "").trim().toUpperCase();
 
@@ -185,7 +190,12 @@ export async function PUT(req: NextRequest) {
 
 
 
-  const body = await req.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
 
   const code = String(body.code ?? "").trim().toUpperCase();
 

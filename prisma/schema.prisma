@@ -249,6 +249,7 @@ model PanelUser {
   xdriveBackups       XdriveBackup[]
   serverCleanerTasks  ServerCleanerTask[]
   resellerApiKeys     ResellerApiKey[]
+  aiQueryLogs         AiQueryLog[]
 }
 
 model CreditTransaction {
@@ -401,6 +402,7 @@ model Stream {
   epgAutoAssignments  EpgAutoAssignment[]
   connectionGeographies ConnectionGeography[]
   lbSessions          LoadBalancerSession[] @relation(name: "LbSessionStream")
+  aiTranscodeSuggestions AiTranscodeSuggestion[]
 }
 
 model WatchFolder {
@@ -569,6 +571,7 @@ model Line {
   lbSessions         LoadBalancerSession[]
   connectionGeographies ConnectionGeography[]
   appsLocks          LineAppsLock[]
+  aiSupportChats     AiSupportChat[]
 }
 
 model LineChannelWatch {
@@ -1392,4 +1395,85 @@ model ConnectionGeography {
   @@index([country, lastSeenAt])
   @@index([lineId, lastSeenAt])
   @@index([streamId, lastSeenAt])
+}
+
+// === v1.9.0: AI Features ===
+
+model AiInsight {
+  id          String   @id @default(cuid())
+  type        String   // health_prediction, epg_suggestion, bouquet_recommendation, anomaly_detection, restream_risk, transcode_recommendation, seasonal_recommendation
+  severity    String   @default("info") // info, warning, critical
+  title       String
+  description String
+  data        Json?    // structured data for the insight
+  entityType  String?  // stream, line, bouquet, etc.
+  entityId    String?
+  isRead      Boolean  @default(false)
+  isActioned  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([entityType, entityId])
+  @@index([isRead, isActioned])
+}
+
+model AiQueryLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        PanelUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  query       String
+  sqlGenerated String?
+  result      Json?
+  tokensUsed  Int      @default(0)
+  latencyMs   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+model AiSupportChat {
+  id          String   @id @default(cuid())
+  sessionId   String
+  lineId      String?
+  line        Line?    @relation(fields: [lineId], references: [id], onDelete: SetNull)
+  role        String   // user, assistant
+  content     String
+  tokensUsed  Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([lineId])
+}
+
+model AiAnomalyLog {
+  id          String   @id @default(cuid())
+  type        String   // same_ip_spike, geo_impossible, device_mismatch, bandwidth_spike, connection_flood
+  severity    String   @default("warning") // info, warning, critical
+  entityType  String   // line, stream, connection
+  entityId    String?
+  description String
+  data        Json?
+  isResolved  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([entityType, entityId])
+  @@index([isResolved, createdAt])
+}
+
+model AiTranscodeSuggestion {
+  id          String   @id @default(cuid())
+  streamId    String?
+  stream      Stream?  @relation(fields: [streamId], references: [id], onDelete: SetNull)
+  reason      String
+  currentBitrate Int?
+  suggestedBitrate Int?
+  estimatedSavings Float? // percentage
+  viewerImpact String?  // description of viewer impact
+  isApplied   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([streamId, createdAt])
+  @@index([isApplied])
 }

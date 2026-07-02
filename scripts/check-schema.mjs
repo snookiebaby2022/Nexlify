@@ -1,6 +1,16 @@
 import { existsSync, readFileSync } from "fs";
+import { execSync } from "child_process";
 
 const schema = readFileSync("prisma/schema.prisma", "utf8");
+
+// Always regenerate Prisma client to prevent stale client mismatches
+try {
+  execSync("npx prisma generate", { stdio: "pipe", timeout: 30000 });
+  console.log("prisma generate OK");
+} catch (e) {
+  console.error("\nERROR: prisma generate failed. Run 'npx prisma generate' manually.\n");
+  process.exit(1);
+}
 
 function modelBody(name) {
   const m = schema.match(new RegExp(`model ${name}\\s*\\{([^}]*)\\}`, "m"));

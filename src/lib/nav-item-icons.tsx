@@ -322,6 +322,7 @@ export function coloredGroupIcon(groupId: string): ReactNode {
     "app-builder": { Icon: Layers, color: "#4ade80" },
     integrations: { Icon: Sparkles, color: "#d946ef" },
     updates: { Icon: RefreshCw, color: "#22d3ee" },
+    ai: { Icon: Sparkles, color: "#a78bfa" },
   };
   const entry = map[groupId];
   if (entry) return coloredIcon(entry.Icon, entry.color, GROUP_ICON_SIZE);
