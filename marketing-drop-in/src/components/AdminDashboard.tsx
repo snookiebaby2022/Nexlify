@@ -15,6 +15,7 @@ import { AdminSiteSettings } from "@/components/AdminSiteSettings";
 import { AdminAuditLog } from "@/components/AdminAuditLog";
 import { AdminCoupons } from "@/components/AdminCoupons";
 import { AdminContent } from "@/components/AdminContent";
+import { AdminRemoteUpdate } from "@/components/AdminRemoteUpdate";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -31,6 +32,7 @@ const TABS = [
   { id: "health", label: "Health" },
   { id: "audit", label: "Audit Log" },
   { id: "deploy", label: "Deploy" },
+  { id: "remote", label: "Remote Update" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -71,6 +73,7 @@ export function AdminDashboard() {
       {tab === "health" && <AdminHealth />}
       {tab === "audit" && <AdminAuditLog />}
       {tab === "deploy" && <AdminDeploy />}
+      {tab === "remote" && <AdminRemoteUpdate />}
     </div>
   );
 }
