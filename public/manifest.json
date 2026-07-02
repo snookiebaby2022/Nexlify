@@ -1,0 +1,18 @@
+{
+  "name": "Nexlify Panel",
+  "short_name": "Nexlify",
+  "description": "IPTV panel admin — manage lines, servers, and streams on the go.",
+  "start_url": "/admin/dashboard",
+  "display": "standalone",
+  "background_color": "#0a1628",
+  "theme_color": "#00c0ef",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+# Add to /var/www/nexlify/.env — optional ad & analytics IDs (load via GTM + AdPixels)
+
+# Google Search Console HTML tag verification (meta tag)
+# GOOGLE_SITE_VERIFICATION=your-google-verification-code
+
+# Meta (Facebook) Pixel — Ads Manager → Events Manager
+# NEXT_PUBLIC_META_PIXEL_ID=
+
+# TikTok Pixel — TikTok Ads → Events
+# NEXT_PUBLIC_TIKTOK_PIXEL_ID=
+
+# LinkedIn Insight Tag partner ID
+# NEXT_PUBLIC_LINKEDIN_PARTNER_ID=
+
+# Microsoft Clarity project ID — clarity.microsoft.com
+# NEXT_PUBLIC_CLARITY_ID=
+
+# Password reset + transactional mail (required for /forgot-password)
+# Copy from panel .env or run: python3 /path/to/sync-marketing-smtp.py
+# SMTP_HOST=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_USER=you@gmail.com
+# SMTP_PASS=your-app-password
+# SMTP_FROM=Nexlify <noreply@nexlify.live>
+
+# Marketing admin login (https://nexlify.live/admin) — synced to DB on every deploy
+# ADMIN_EMAIL=admin@nexlify.live
+# ADMIN_PASSWORD=your-secure-password-min-8-chars
+
+# Newsletter webhook (Brevo/Mailchimp/Zapier) — optional; else logs to data/newsletter-subscribers.log
+# NEWSLETTER_WEBHOOK_URL=https://hooks.example.com/newsletter
+
+# Live stream (https://nexlify.live/livestream) — OBS RTMP ingest + HLS playback
+# Requires nginx-rtmp on the VPS — see nginx/nexlify.live-rtmp-hls.conf in the panel repo
+# NEXT_PUBLIC_LIVESTREAM_HLS_URL=https://nexlify.live/hls/nexlify.m3u8
+# LIVESTREAM_RTMP_SERVER=rtmp://nexlify.live/live
+# LIVESTREAM_STREAM_KEY=your-secret-stream-key
+# LIVESTREAM_TITLE=Nexlify Live
+# LIVESTREAM_DESCRIPTION=Watch the Nexlify live broadcast.
