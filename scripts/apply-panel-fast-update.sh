@@ -107,6 +107,11 @@ bootstrap_patch_scripts() {
   fetch_one "${base}/scripts/panel-update-recover.sh?${cache}" "$ROOT/scripts/panel-update-recover.sh"
   fetch_one "${base}/scripts/has-valid-next-build.sh?${cache}" "$ROOT/scripts/has-valid-next-build.sh"
   normalize_scripts
+  # Auto-install tsx if not available (needed for background update worker)
+  if ! command -v npx >/dev/null 2>&1 || ! npx tsx --version >/dev/null 2>&1; then
+    echo "Installing tsx (required for update worker) ..."
+    npm install -g tsx 2>/dev/null || npm install -g tsx --prefix /usr/local 2>/dev/null || echo "WARN: could not install tsx globally"
+  fi
   if [ "$fetched" -eq 0 ]; then
     echo "Bootstrap: vendor scripts unchanged or unreachable (continuing with local copies)"
   fi

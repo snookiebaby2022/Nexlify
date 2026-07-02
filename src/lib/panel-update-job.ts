@@ -55,6 +55,7 @@ function findUpdateWorkerPid(): number | null {
 }
 
 const MAX_RUNNING_MS = 20 * 60 * 1000;
+const MAX_STUCK_AT_START_MS = 3 * 60 * 1000; // if stuck at "Starting update…" for 3 min, mark failed
 const MAX_FAILED_MS = 30 * 60 * 1000; // auto-clear failed jobs after 30 min
 const MAX_DONE_MS = 2 * 60 * 1000; // auto-clear completed jobs so reload does not re-show banner
 const MAX_SAME_VERSION_FAILED_MS = 5 * 60 * 1000; // re-sync failures stop nagging sooner
@@ -62,7 +63,12 @@ const MAX_SAME_VERSION_FAILED_MS = 5 * 60 * 1000; // re-sync failures stop naggi
 function isJobTimedOut(job: PanelUpdateJob): boolean {
   if (!job.startedAt) return false;
   const started = Date.parse(job.startedAt);
-  return Number.isFinite(started) && Date.now() - started > MAX_RUNNING_MS;
+  if (!Number.isFinite(started)) return false;
+  const elapsed = Date.now() - started;
+  if (elapsed > MAX_RUNNING_MS) return true;
+  // Fast-fail: if still stuck at "Starting update…" (2%), the worker likely crashed on boot
+  if (elapsed > MAX_STUCK_AT_START_MS && job.progress <= 2 && job.currentStep === "Starting update…") return true;
+  return false;
 }
 
 function isFailedJobStale(job: PanelUpdateJob): boolean {
@@ -136,13 +142,24 @@ export async function reconcileStaleUpdateJob(
     currentStep: null,
     finishedAt: new Date().toISOString(),
     message:
-      job.currentStep === "npm install"
+      job.progress <= 2 && job.currentStep === "Starting update…"
+        ? (() => {
+            let detail = "The update worker crashed before it could start. This usually means tsx is not installed or Node.js is too old.";
+            try {
+              const { readFileSync } = require("fs") as typeof import("fs");
+              const errLog = readFileSync(path.join(repoPath, ".update-worker-err.log"), "utf-8").trim();
+              if (errLog) detail += `\n\nError log:\n${errLog.slice(-1500)}`;
+            } catch {}
+            detail += `\n\nFix: SSH into the server and run:\n  cd ${repoPath} && npm install -g tsx && node --version\nThen try the update again.`;
+            return detail;
+          })()
+        : job.currentStep === "npm install"
         ? "Update was interrupted (often during npm install when the server restarts). The panel may already be up to date — reload the page or run Update again from Settings → Updates."
         : job.currentStep === "sync panel files"
           ? "Update failed while syncing files from nexlify.live. Check disk space and that the vendor tarball is published, then try again."
           : job.currentStep === "pm2 restart nexlify"
           ? "Update built successfully but the restart step was interrupted. The panel health watchdog should recover within a few minutes, or run: bash scripts/panel-restart-safe.sh"
-          : `Update stopped at “${job.currentStep ?? "unknown step"}”. The background worker is no longer running.`,
+          : `Update stopped at "${job.currentStep ?? "unknown step"}". The background worker is no longer running.`,
   };
   await writeUpdateJob(repoPath, reconciled);
   try {
@@ -233,21 +250,89 @@ export async function startBackgroundPanelUpdate(
   await writeUpdateJob(repoPath, initialJob);
 
   const scriptPath = path.join(repoPath, "scripts", "panel-update-background.ts");
-  const isolatedCmd =
-    process.platform === "linux"
-      ? `if command -v setsid >/dev/null 2>&1; then exec setsid npx tsx ${JSON.stringify(scriptPath)}; else exec npx tsx ${JSON.stringify(scriptPath)}; fi`
-      : `exec npx tsx ${JSON.stringify(scriptPath)}`;
-  const child = spawn("bash", ["-c", isolatedCmd], {
-    cwd: repoPath,
-    detached: true,
-    stdio: "ignore",
-    env: process.env,
-    windowsHide: true,
-  });
-  child.unref();
+  const errLogPath = path.join(repoPath, ".update-worker-err.log");
 
-  if (child.pid) {
-    await writeFile(getUpdatePidPath(repoPath), String(child.pid), "utf8");
+  // Try multiple ways to run tsx — some customer VPS have tsx in different locations
+  const runCmd =
+    process.platform === "linux"
+      ? `(command -v setsid >/dev/null 2>&1 && setsid bash -c 'CMD') || bash -c 'CMD'`
+      : `bash -c 'CMD'`;
+
+  const tsxCandidates = [
+    `npx tsx ${JSON.stringify(scriptPath)}`,
+    `npx --yes tsx ${JSON.stringify(scriptPath)}`,
+    `node --import tsx ${JSON.stringify(scriptPath)}`,
+  ];
+
+  let spawned = false;
+  for (const tsxCmd of tsxCandidates) {
+    const fullCmd = runCmd.replace("CMD", `${tsxCmd} 2>>${JSON.stringify(errLogPath)}`);
+    try {
+      const child = spawn("bash", ["-c", fullCmd], {
+        cwd: repoPath,
+        detached: true,
+        stdio: "ignore",
+        env: process.env,
+        windowsHide: true,
+      });
+      child.unref();
+
+      // If the process fails to spawn, try next candidate
+      let spawnFailed = false;
+      child.on("error", () => { spawnFailed = true; });
+
+      // Give it a moment to see if spawn itself fails
+      await new Promise((r) => setTimeout(r, 200));
+
+      if (spawnFailed || !child.pid) continue;
+
+      spawned = true;
+      await writeFile(getUpdatePidPath(repoPath), String(child.pid), "utf8");
+
+      // Write error to job file if worker exits within 30 seconds (crashed on boot)
+      child.on("exit", async (code, signal) => {
+        if (code === 0 && signal !== "SIGKILL") return;
+        try {
+          const job = await readUpdateJob(repoPath);
+          if (job && job.status === "running" && job.progress <= 2) {
+            let errDetail = `Worker exited with code ${code} (signal: ${signal})`;
+            try {
+              const { readFileSync } = await import("fs");
+              const errLog = readFileSync(errLogPath, "utf-8").trim();
+              if (errLog) errDetail += `\n${errLog.slice(-2000)}`;
+            } catch {}
+            await writeUpdateJob(repoPath, {
+              ...job,
+              status: "failed",
+              currentStep: null,
+              finishedAt: new Date().toISOString(),
+              message: `Update worker crashed on startup: ${errDetail}. Try running manually: cd ${repoPath} && npx tsx scripts/panel-update-background.ts`,
+            });
+          }
+        } catch {}
+      });
+
+      break;
+    } catch {
+      continue;
+    }
+  }
+
+  if (!spawned) {
+    // All tsx candidates failed — write a helpful error
+    let errDetail = "";
+    try {
+      const { readFileSync } = await import("fs");
+      errDetail = readFileSync(errLogPath, "utf-8").trim().slice(-1000);
+    } catch {}
+    await writeUpdateJob(repoPath, {
+      ...initialJob,
+      status: "failed",
+      currentStep: null,
+      finishedAt: new Date().toISOString(),
+      message: `Could not start update worker. None of the tsx runners are available on this server.${errDetail ? `\n${errDetail}` : ""}\nTry: npm install -g tsx`,
+    });
+    return { ok: false, error: "Could not start update worker — tsx not available" };
   }
 
   return { ok: true };
