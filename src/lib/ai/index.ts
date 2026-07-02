@@ -2,11 +2,15 @@ import OpenAI from "openai";
 
 let client: OpenAI | null = null;
 
+export function isAiConfigured(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY?.trim());
+}
+
 function getClient(): OpenAI {
   if (!client) {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.OPENAI_API_KEY?.trim();
     if (!apiKey) {
-      throw new Error("OPENAI_API_KEY environment variable is not set");
+      throw new Error("AI features require OPENAI_API_KEY. Add it to your .env file and restart the panel.");
     }
     client = new OpenAI({ apiKey });
   }

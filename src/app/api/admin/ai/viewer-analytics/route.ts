@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { aiChat } from "@/lib/ai";
+import { aiChat, isAiConfigured } from "@/lib/ai";
 import { PanelRole } from "@prisma/client";
 
 function parseUserAgent(ua: string | null): string {
@@ -24,6 +24,13 @@ function parseUserAgent(ua: string | null): string {
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  if (!isAiConfigured()) {
+    return NextResponse.json(
+      { error: "AI features require OPENAI_API_KEY. Add it to your .env file and restart the panel." },
+      { status: 503 }
+    );
+  }
 
   try {
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);

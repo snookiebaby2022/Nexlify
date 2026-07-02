@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { aiChatJSON } from "@/lib/ai";
+import { aiChatJSON, isAiConfigured } from "@/lib/ai";
 import { PanelRole } from "@prisma/client";
 
 interface EpgSuggestion {
@@ -18,6 +18,13 @@ interface AiResult {
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  if (!isAiConfigured()) {
+    return NextResponse.json(
+      { error: "AI features require OPENAI_API_KEY. Add it to your .env file and restart the panel." },
+      { status: 503 }
+    );
+  }
 
   try {
     const [sources, channelsWithoutEpg, existingPrograms] = await Promise.all([

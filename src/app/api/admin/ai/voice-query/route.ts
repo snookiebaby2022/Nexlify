@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
-import { aiChatJSON, aiTranscribe } from "@/lib/ai";
+import { aiChatJSON, aiTranscribe, isAiConfigured } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
 
 const READ_ONLY_TABLES = [
@@ -22,6 +22,13 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireSession([PanelRole.ADMIN]);
     if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    if (!isAiConfigured()) {
+      return NextResponse.json(
+        { error: "AI features require OPENAI_API_KEY. Add it to your .env file and restart the panel." },
+        { status: 503 }
+      );
+    }
 
     const formData = await req.formData();
     const audioFile = formData.get("audio") as File | null;

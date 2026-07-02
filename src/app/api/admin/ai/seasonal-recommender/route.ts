@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
-import { aiChatJSON } from "@/lib/ai";
+import { aiChatJSON, isAiConfigured } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
 
 interface SeasonalRecommendation {
@@ -16,6 +16,13 @@ export async function GET() {
   try {
     const session = await requireSession([PanelRole.ADMIN]);
     if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    if (!isAiConfigured()) {
+      return NextResponse.json(
+        { error: "AI features require OPENAI_API_KEY. Add it to your .env file and restart the panel." },
+        { status: 503 }
+      );
+    }
 
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
