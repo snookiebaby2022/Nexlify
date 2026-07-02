@@ -2,9 +2,83 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.8.5",
+  "latestVersion": "1.9.0",
 
   "releases": [
+
+    {
+
+      "version": "1.9.0",
+
+      "date": "2026-07-02",
+
+      "channel": "stable",
+
+      "summary": "AI Studio (14 features), live connection fixes, security hardening, CSS update fix.",
+
+      "changelog": [
+
+        "AI Studio: 14 AI-powered features including Health Predictor, EPG Scraper, Viewer Analytics, Bouquet Builder, Natural Language Admin, Transcode Recommender, Anomaly Detector, Support Chat, Restream Detector, Invoice Generator, Voice-to-Query, Logo Generator, Seasonal Recommender, Thumbnail Generator",
+
+        "Fix live connection count showing all-time instead of real-time active connections",
+
+        "Fix activity endpoint missing stale filter (claimed 5-minute window but returned all history)",
+
+        "Add portal login rate limiting to prevent brute force attacks",
+
+        "Add JSON body validation to 7 public API endpoints (portal login, password, support, billing)",
+
+        "Fix auth route inconsistency (admin routes now return 403 instead of 401)",
+
+        "Implement POST /api/admin/stream-health (was a stub returning success without doing anything)",
+
+        "Fix broken /admin/created_channels/add nav link",
+
+        "Watchdog empty catch blocks now log errors instead of silently swallowing them",
+
+        "Analytics endpoint wrapped in try/catch — missing tables no longer crash the admin dashboard",
+
+        "Auto-run prisma generate in prebuild — prevents stale Prisma client mismatches",
+
+        "New module pages: Login Logs, Client Logs, Restream Logs, Device Profiles, RTMP Monitor, MySQL Syslog, Watch Output",
+
+        "Postbuild hook ensures CSS/JS static assets are always copied to standalone (prevents CSS breakage after updates)",
+
+        "pm2-start.sh now auto-runs npm install when dependencies are missing",
+
+        "OpenAI SDK integration for AI features (requires OPENAI_API_KEY env var)"
+
+      ],
+
+      "fixes": [
+
+        "Live connections showed 47/2 instead of real active count (e.g. 1/2)",
+
+        "Activity endpoint returned all historical connections instead of 5-minute window",
+
+        "Portal login had no rate limiting — brute force vulnerability",
+
+        "Public API endpoints crashed on malformed JSON body",
+
+        "Admin routes returned 401 Unauthorized instead of 403 Forbidden",
+
+        "Stream health POST endpoint was a stub — did nothing",
+
+        "Broken nav link /admin/created_channels/add pointed to non-existent page",
+
+        "Watchdog errors were silently swallowed — invisible in logs",
+
+        "Analytics endpoint crash on missing AnalyticsSnapshot table broke admin login",
+
+        "Prisma client could become stale after schema changes — now auto-regenerated in prebuild",
+
+        "CSS/JS broke after updates because static assets weren't copied to standalone",
+
+        "New npm dependencies (like openai) weren't installed during pm2 restart"
+
+      ]
+
+    },
 
     {
 
