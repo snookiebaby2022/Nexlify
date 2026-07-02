@@ -9,6 +9,7 @@ import { AdminTickets } from "@/components/AdminTickets";
 import { AdminNewsletter } from "@/components/AdminNewsletter";
 import { AdminMarketing } from "@/components/AdminMarketing";
 import { AdminPlans } from "@/components/AdminPlans";
+import { AdminDeploy } from "@/components/AdminDeploy";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -19,6 +20,7 @@ const TABS = [
   { id: "tickets", label: "Tickets" },
   { id: "newsletter", label: "Newsletter" },
   { id: "marketing", label: "Marketing" },
+  { id: "deploy", label: "Deploy" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -53,6 +55,7 @@ export function AdminDashboard() {
       {tab === "tickets" && <AdminTickets />}
       {tab === "newsletter" && <AdminNewsletter />}
       {tab === "marketing" && <AdminMarketing />}
+      {tab === "deploy" && <AdminDeploy />}
     </div>
   );
 }
