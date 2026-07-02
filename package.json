@@ -9,6 +9,7 @@
     "dev": "node scripts/run-next.mjs dev",
     "prebuild": "node scripts/check-package.mjs && node scripts/check-schema.mjs",
     "build": "next build",
+    "postbuild": "bash scripts/prepare-standalone.sh",
     "start": "node scripts/run-next.mjs start",
     "pm2:start": "bash scripts/pm2-start.sh",
     "pm2:boot": "bash scripts/pm2-boot-enable.sh",

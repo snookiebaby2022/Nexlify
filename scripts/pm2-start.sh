@@ -63,8 +63,14 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 if ! bash scripts/has-valid-next-build.sh 2>/dev/null; then
-  echo "Missing valid .next — run: npm run build"
-  exit 1
+  echo "Missing valid .next — running: npm install && npm run build"
+  npm install --no-audit --no-fund --loglevel=error || true
+  npm run build || exit 1
+fi
+
+# Always ensure standalone static assets are fresh (prevents CSS/JS breakage after updates)
+if [ -f "$ROOT/.next/standalone/server.js" ]; then
+  bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
 fi
 
 normalize_exec_mode() {

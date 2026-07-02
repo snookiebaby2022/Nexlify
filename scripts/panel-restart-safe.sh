@@ -95,6 +95,10 @@ nexlify_only_restart() {
 
 full_restart() {
   log "Full panel restart via pm2-start.sh ..."
+  # Ensure dependencies are installed before restart (handles new packages from git pull)
+  if [ -f "$ROOT/package.json" ]; then
+    npm install --no-audit --no-fund --loglevel=error >>"$LOG_FILE" 2>&1 || true
+  fi
   bash "$ROOT/scripts/pm2-start.sh" >>"$LOG_FILE" 2>&1
 }
 
