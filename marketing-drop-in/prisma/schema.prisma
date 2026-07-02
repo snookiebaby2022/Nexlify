@@ -193,3 +193,32 @@ model PasswordResetToken {
   @@index([token])
   @@index([email])
 }
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  email     String?
+  action    String
+  detail    String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+}
+
+model BlogPost {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  title           String
+  excerpt         String
+  content         String
+  tag             String?
+  seoTitle        String?
+  seoDescription  String?
+  keywords        String?
+  published       Boolean  @default(false)
+  datePublished   DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}

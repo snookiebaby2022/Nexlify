@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyPassword, createSessionToken, setSessionCookie, repairAdminPasswordIfCorrupted } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -34,6 +35,8 @@ export async function POST(req: NextRequest) {
     });
 
     await setSessionCookie(token);
+
+    await logAudit({ userId: user.id, email: user.email, action: "login", ip: req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || null });
 
     return NextResponse.json({
       ok: true,
