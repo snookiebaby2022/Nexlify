@@ -25,13 +25,21 @@ export async function GET() {
       );
     }
 
-    const streams = await prisma.stream.findMany({
-      where: { type: "LIVE", isActive: true },
-      include: {
-        healthChecks: { orderBy: { checkedAt: "desc" }, take: 10 },
-        liveConnections: { where: { lastSeenAt: { gte: new Date(Date.now() - 30 * 60 * 1000) } } },
-      },
-    });
+    let streams: any[] = [];
+    try {
+      streams = await prisma.stream.findMany({
+        where: { type: "LIVE", isActive: true },
+        include: {
+          healthChecks: { orderBy: { checkedAt: "desc" }, take: 10 },
+          liveConnections: { where: { lastSeenAt: { gte: new Date(Date.now() - 30 * 60 * 1000) } } },
+        },
+      });
+    } catch {
+      // Fallback: query without relations if tables missing
+      streams = await prisma.stream.findMany({
+        where: { type: "LIVE", isActive: true },
+      });
+    }
 
     const streamData = streams.map((s) => ({
       id: s.id,

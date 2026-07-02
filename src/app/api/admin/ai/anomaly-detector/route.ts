@@ -27,29 +27,38 @@ export async function GET() {
 
     const recentWindow = new Date(Date.now() - 60 * 60 * 1000);
 
-    const [connections, geoData, deviceBindings, sameIpDetections] = await Promise.all([
-      prisma.liveConnection.findMany({
-        where: { lastSeenAt: { gte: recentWindow } },
-        include: { line: { select: { username: true } }, stream: { select: { name: true } } },
-        orderBy: { startedAt: "desc" },
-        take: 500,
-      }),
-      prisma.connectionGeography.findMany({
-        where: { lastSeenAt: { gte: recentWindow } },
-        orderBy: { lastSeenAt: "desc" },
-        take: 200,
-      }),
-      prisma.deviceBinding.findMany({
-        where: { lastSeenAt: { gte: recentWindow } },
-        orderBy: { lastSeenAt: "desc" },
-        take: 200,
-      }),
-      prisma.sameIpDetection.findMany({
-        where: { detectedAt: { gte: recentWindow }, actionTaken: false },
-        orderBy: { detectedAt: "desc" },
-        take: 100,
-      }),
-    ]);
+    let connections: any[] = [];
+    let geoData: any[] = [];
+    let deviceBindings: any[] = [];
+    let sameIpDetections: any[] = [];
+
+    try {
+      [connections, geoData, deviceBindings, sameIpDetections] = await Promise.all([
+        prisma.liveConnection.findMany({
+          where: { lastSeenAt: { gte: recentWindow } },
+          include: { line: { select: { username: true } }, stream: { select: { name: true } } },
+          orderBy: { startedAt: "desc" },
+          take: 500,
+        }),
+        prisma.connectionGeography.findMany({
+          where: { lastSeenAt: { gte: recentWindow } },
+          orderBy: { lastSeenAt: "desc" },
+          take: 200,
+        }),
+        prisma.deviceBinding.findMany({
+          where: { lastSeenAt: { gte: recentWindow } },
+          orderBy: { lastSeenAt: "desc" },
+          take: 200,
+        }),
+        prisma.sameIpDetection.findMany({
+          where: { detectedAt: { gte: recentWindow } },
+          orderBy: { detectedAt: "desc" },
+          take: 100,
+        }),
+      ]);
+    } catch {
+      // Some tables may not exist on older databases
+    }
 
     const input = {
       connections: connections.map((c) => ({

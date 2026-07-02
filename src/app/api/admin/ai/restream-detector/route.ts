@@ -26,32 +26,41 @@ export async function GET() {
 
     const recentWindow = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    const [connections, leakLogs, fingerprints, sameIp] = await Promise.all([
-      prisma.liveConnection.findMany({
-        where: { lastSeenAt: { gte: recentWindow } },
-        include: {
-          line: { select: { id: true, username: true, maxConnections: true, isRestreamer: true } },
-          stream: { select: { id: true, name: true } },
-        },
-        orderBy: { startedAt: "desc" },
-        take: 500,
-      }),
-      prisma.leakAuditLog.findMany({
-        where: { createdAt: { gte: recentWindow } },
-        orderBy: { createdAt: "desc" },
-        take: 200,
-      }),
-      prisma.streamFingerprint.findMany({
-        where: { createdAt: { gte: recentWindow }, isActive: true },
-        orderBy: { createdAt: "desc" },
-        take: 200,
-      }),
-      prisma.sameIpDetection.findMany({
-        where: { detectedAt: { gte: recentWindow } },
-        orderBy: { detectedAt: "desc" },
-        take: 200,
-      }),
-    ]);
+    let connections: any[] = [];
+    let leakLogs: any[] = [];
+    let fingerprints: any[] = [];
+    let sameIp: any[] = [];
+
+    try {
+      [connections, leakLogs, fingerprints, sameIp] = await Promise.all([
+        prisma.liveConnection.findMany({
+          where: { lastSeenAt: { gte: recentWindow } },
+          include: {
+            line: { select: { id: true, username: true, maxConnections: true, isRestreamer: true } },
+            stream: { select: { id: true, name: true } },
+          },
+          orderBy: { startedAt: "desc" },
+          take: 500,
+        }),
+        prisma.leakAuditLog.findMany({
+          where: { createdAt: { gte: recentWindow } },
+          orderBy: { createdAt: "desc" },
+          take: 200,
+        }),
+        prisma.streamFingerprint.findMany({
+          where: { createdAt: { gte: recentWindow }, isActive: true },
+          orderBy: { createdAt: "desc" },
+          take: 200,
+        }),
+        prisma.sameIpDetection.findMany({
+          where: { detectedAt: { gte: recentWindow } },
+          orderBy: { detectedAt: "desc" },
+          take: 200,
+        }),
+      ]);
+    } catch {
+      // Some tables may not exist on older databases
+    }
 
     const input = {
       connections: connections.map((c) => ({
