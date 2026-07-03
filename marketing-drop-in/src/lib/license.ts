@@ -1,4 +1,6 @@
 import { createPrivateKey, sign } from "crypto";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { prisma } from "@/lib/prisma";
 
 export function addDays(date: Date, days: number): Date {
@@ -24,12 +26,15 @@ function getTermDays(term: string): number {
   }
 }
 
+const PRIVATE_KEY_PATH = process.env.LICENSE_KEY_FILE?.trim() || "/var/www/nexlify/.license-keys/private.pem";
+
 function loadPrivateKey() {
-  const pem = process.env.LICENSE_SERVER_PRIVATE_PEM?.trim();
-  if (!pem) {
-    throw new Error("LICENSE_SERVER_PRIVATE_PEM is not configured");
+  try {
+    const pem = readFileSync(PRIVATE_KEY_PATH, "utf-8").trim();
+    return createPrivateKey(pem);
+  } catch {
+    throw new Error(`Failed to load private key from ${PRIVATE_KEY_PATH}`);
   }
-  return createPrivateKey(pem);
 }
 
 function signPayload(payload: Record<string, unknown>): string {
