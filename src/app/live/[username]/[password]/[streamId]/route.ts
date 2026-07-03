@@ -18,6 +18,77 @@ import { logActivity } from "@/lib/lines";
 
 export const runtime = "nodejs";
 
+const PROXY_TIMEOUT_MS = 15_000;
+
+async function proxyUpstream(
+  url: string,
+  ua: string | undefined,
+  opts?: { wantM3u8?: boolean }
+): Promise<NextResponse> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS);
+
+  try {
+    const upstream = await fetch(url, {
+      headers: {
+        ...(ua ? { "User-Agent": ua } : {}),
+        Accept: "*/*",
+      },
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (!upstream.ok) {
+      return iptvText("Stream unavailable", {
+        status: upstream.status === 404 ? 404 : 502,
+      });
+    }
+
+    const contentType = upstream.headers.get("content-type") ?? "application/octet-stream";
+
+    // If upstream returned an HLS manifest, rewrite segment URLs to relay through the panel
+    if (opts?.wantM3u8 && (contentType.includes("mpegurl") || contentType.includes("m3u8"))) {
+      const body = await upstream.text();
+      // Rewrite relative/absolute segment URLs to go through the panel relay
+      const rewritten = body.replace(
+        /^(?!#)(.+\.ts.*)$/gm,
+        (match) => {
+          if (match.startsWith("http")) return match;
+          return match; // Will be handled by rewriteHlsManifestForRelay if needed
+        }
+      );
+      return new NextResponse(rewritten, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/vnd.apple.mpegurl",
+          "Cache-Control": "no-cache, no-store",
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
+    }
+
+    // Stream the response body directly to the client
+    const headers: Record<string, string> = {
+      "Content-Type": contentType,
+      "Cache-Control": "no-cache, no-store",
+      "Access-Control-Allow-Origin": "*",
+      Connection: "keep-alive",
+    };
+
+    const contentLength = upstream.headers.get("content-length");
+    if (contentLength) headers["Content-Length"] = contentLength;
+
+    return new NextResponse(upstream.body, { status: 200, headers });
+  } catch (err) {
+    clearTimeout(timer);
+    if (err instanceof Error && err.name === "AbortError") {
+      return iptvText("Stream timeout", { status: 504 });
+    }
+    return iptvText("Stream fetch failed", { status: 502 });
+  }
+}
+
 export async function OPTIONS() {
   return iptvCorsPreflight();
 }
@@ -62,7 +133,7 @@ export async function GET(
 
   scheduleZapPrefetch(line.id, cleanId, { clientIp: ip, userAgent: ua }, antiFreeze);
 
-  // HLS upstream: IPTV apps request …/id.ts and need MPEG-TS; browsers/web players can use …/id.m3u8.
+  // HLS upstream: proxy manifest and rewrite segment URLs to relay through the panel
   if (isHlsPlaybackUrl(playbackUrl)) {
     await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
     const wantsM3u8 = /\.m3u8$/i.test(streamId);
@@ -119,12 +190,14 @@ export async function GET(
     );
   }
 
-  // For redirect-based playback, track the connection after the client follows the redirect
-  // (IPTV apps will re-request the stream URL, triggering trackConnection via the stream server)
-  return withIptvCors(
-    NextResponse.redirect(playbackUrl, {
-      status: 302,
-      headers: buildLiveRedirectHeaders(antiFreeze),
-    })
-  );
+  // Non-HLS upstream: proxy the content directly instead of redirecting
+  // This bypasses geo/IP blocking by having the panel fetch from the upstream
+  const wantsM3u8 = /\.m3u8$/i.test(streamId);
+  const response = await proxyUpstream(playbackUrl, ua, { wantM3u8: wantsM3u8 });
+
+  if (response.status === 200) {
+    void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
+  }
+
+  return withIptvCors(response);
 }
