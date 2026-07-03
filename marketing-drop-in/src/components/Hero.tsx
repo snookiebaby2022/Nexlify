@@ -26,8 +26,9 @@ export function Hero() {
     <section className="relative overflow-hidden mesh-bg">
       <div className="pointer-events-none absolute inset-0 grid-pattern opacity-40" />
 
-      <div className="pointer-events-none absolute -right-24 top-20 h-72 w-72 rounded-full bg-violet-600/20 blur-3xl hero-orb" />
-      <div className="pointer-events-none absolute -left-16 bottom-10 h-56 w-56 rounded-full bg-amber-500/15 blur-3xl hero-orb" />
+      <div className="pointer-events-none absolute -right-24 top-20 h-72 w-72 rounded-full bg-violet-500/15 blur-3xl hero-orb" />
+      <div className="pointer-events-none absolute -left-16 bottom-10 h-56 w-56 rounded-full bg-orange-500/10 blur-3xl hero-orb" />
+      <div className="pointer-events-none absolute right-1/3 top-1/2 h-40 w-40 rounded-full bg-cyan-500/8 blur-3xl hero-orb" />
 
       <div className="relative mx-auto max-w-6xl px-4 pb-20 pt-6 md:pb-32 md:pt-16 lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:gap-12 lg:pt-20">
         <div className="order-1 min-h-[440px] lg:order-2">
@@ -35,7 +36,7 @@ export function Hero() {
         </div>
 
         <div className="order-2 mt-10 lg:order-1 lg:mt-0">
-          <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 sm:px-4">
+          <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 sm:px-4">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-composited-pulse" />
             IPTV reseller software · WHMCS billing · Live demo
           </div>

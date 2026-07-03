@@ -8,7 +8,7 @@ const HIGHLIGHTS = [
     desc: "Voice-to-SQL, anomaly detection, bouquet builder, logo generator, and 11 more AI-powered tools.",
     color: "text-violet-400",
     bg: "bg-violet-500/10",
-    border: "border-violet-500/20",
+    border: "border-violet-500/15",
   },
   {
     icon: Shield,
@@ -16,7 +16,7 @@ const HIGHLIGHTS = [
     desc: "DDoS shield, stream fingerprinting, device binding, same-IP detection, and VPN auto-block.",
     color: "text-emerald-400",
     bg: "bg-emerald-500/10",
-    border: "border-emerald-500/20",
+    border: "border-emerald-500/15",
   },
   {
     icon: Radio,
@@ -24,7 +24,7 @@ const HIGHLIGHTS = [
     desc: "Sub-second playback with MediaMTX gateway — works on any device, any network.",
     color: "text-cyan-400",
     bg: "bg-cyan-500/10",
-    border: "border-cyan-500/20",
+    border: "border-cyan-500/15",
   },
   {
     icon: Cloud,
@@ -32,26 +32,26 @@ const HIGHLIGHTS = [
     desc: "Encrypted S3/GCS/Azure backup with retention policies — full restore in one click.",
     color: "text-sky-400",
     bg: "bg-sky-500/10",
-    border: "border-sky-500/20",
+    border: "border-sky-500/15",
   },
   {
     icon: Swords,
     title: "Intelligent Load Balancer",
     desc: "Health, geo, and bandwidth-weighted routing with DNS rotator and automatic failover.",
-    color: "text-amber-400",
-    bg: "bg-amber-500/10",
-    border: "border-amber-500/20",
+    color: "text-orange-400",
+    bg: "bg-orange-500/10",
+    border: "border-orange-500/15",
   },
 ];
 
 export function WhatsNewSection() {
   return (
-    <section className="relative overflow-hidden border-y border-white/10 bg-gradient-to-b from-[#0c0a1a] via-[#0a0814] to-[#0a0814]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(168,85,247,0.08),transparent)]" />
+    <section className="relative overflow-hidden border-y border-violet-500/10 bg-gradient-to-b from-[#0a0818] via-[#080714] to-[#080714]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(139,92,246,0.06),transparent)]" />
 
       <div className="relative mx-auto max-w-6xl px-4 py-16 md:py-20">
         <div className="flex items-center gap-3">
-          <div className="inline-flex rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-600 p-2">
+          <div className="inline-flex rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 p-2">
             <Sparkles size={18} className="text-white" />
           </div>
           <div>
@@ -84,7 +84,7 @@ export function WhatsNewSection() {
 
           <Link
             href="/updates"
-            className="glass flex items-center justify-center rounded-xl p-5 text-sm font-medium text-violet-300 transition-all hover:scale-[1.02] hover:text-violet-200 hover:border-violet-500/30"
+            className="glass flex items-center justify-center rounded-xl p-5 text-sm font-medium text-violet-300 transition-all hover:scale-[1.02] hover:text-violet-200 hover:border-violet-500/20"
           >
             View all release notes →
           </Link>

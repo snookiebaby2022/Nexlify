@@ -48,11 +48,11 @@ const CASE_STUDIES = [
 
 export function SocialProofSection() {
   return (
-    <section className="relative overflow-hidden border-y border-white/10 bg-[#0a0814] py-20 md:py-28">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_50%_0%,rgba(168,85,247,0.06),transparent)]" />
+    <section className="relative overflow-hidden border-y border-violet-500/10 bg-[#080714] py-20 md:py-28">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_50%_0%,rgba(139,92,246,0.04),transparent)]" />
 
       <div className="relative mx-auto max-w-6xl px-4">
-        <p className="text-sm font-semibold uppercase tracking-widest text-violet-400/90">
+        <p className="text-sm font-semibold uppercase tracking-widest text-violet-400">
           Trusted by operators
         </p>
         <h2 className="font-display mt-3 text-2xl font-bold text-white sm:text-3xl md:text-4xl">
@@ -86,7 +86,7 @@ export function SocialProofSection() {
             <a
               key={c.title}
               href={c.href}
-              className="glass block rounded-2xl p-6 transition-all hover:scale-[1.01] hover:border-violet-500/30"
+              className="glass block rounded-2xl p-6 transition-all hover:scale-[1.01] hover:border-violet-500/20"
             >
               <h4 className="font-semibold text-violet-200">{c.title}</h4>
               <p className="mt-2 text-sm text-[var(--muted)]">{c.summary}</p>

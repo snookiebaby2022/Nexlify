@@ -15,7 +15,7 @@ const certificates = [
 
 function IsoBadge({ top, bottom }: { top: string; bottom: string }) {
   return (
-    <div className="mx-auto w-full max-w-[220px] rounded-lg border border-violet-500/30 bg-white/5 px-4 py-3">
+    <div className="mx-auto w-full max-w-[220px] rounded-lg border border-violet-500/20 bg-white/[0.03] px-4 py-3">
       <div className="flex items-center gap-2">
         <span className="text-3xl font-light text-violet-300" aria-hidden>
           ✓
@@ -34,8 +34,8 @@ function IsoBadge({ top, bottom }: { top: string; bottom: string }) {
 
 export function ComplianceSection() {
   return (
-    <section className="relative overflow-hidden border-y border-white/10 bg-[#0a0814]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_50%_50%,rgba(168,85,247,0.04),transparent)]" />
+    <section className="relative overflow-hidden border-y border-violet-500/10 bg-[#080714]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_50%_50%,rgba(139,92,246,0.03),transparent)]" />
 
       <div className="relative mx-auto max-w-6xl px-4 py-16 md:py-20">
         <p className="text-center text-sm font-semibold uppercase tracking-widest text-violet-400">

@@ -5,8 +5,8 @@ const MIGRATE_DEMO_URL = `${DEMO_PANEL_URL.replace(/\/$/, "")}/admin/import/migr
 
 export function MigrationCtaSection() {
   return (
-    <section className="relative overflow-hidden border-y border-white/10 bg-gradient-to-b from-violet-950/30 to-[#080612] py-14 md:py-16">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_50%_0%,rgba(16,185,129,0.06),transparent)]" />
+    <section className="relative overflow-hidden border-y border-violet-500/10 bg-gradient-to-b from-violet-950/20 to-[#080714] py-14 md:py-16">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_50%_0%,rgba(16,185,129,0.05),transparent)]" />
 
       <div className="relative mx-auto max-w-4xl px-4 text-center">
         <p className="text-sm font-semibold uppercase tracking-widest text-emerald-400">
@@ -24,7 +24,7 @@ export function MigrationCtaSection() {
             href="/register?trial=1"
             data-track="trial_start"
             data-track-label="migration_cta_trial"
-            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-3 text-sm font-semibold text-slate-950 shadow-lg hover:brightness-110 transition-all sm:w-auto"
+            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 px-8 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 hover:brightness-110 transition-all sm:w-auto"
           >
             Start free trial
           </Link>
@@ -34,13 +34,13 @@ export function MigrationCtaSection() {
             rel="noopener noreferrer"
             data-track="demo_click"
             data-track-label="migration_cta_demo_wizard"
-            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-white/20 px-8 py-3 text-sm font-semibold text-white hover:border-emerald-400/40 transition-colors sm:w-auto"
+            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-white/15 px-8 py-3 text-sm font-semibold text-white hover:border-emerald-400/30 transition-colors sm:w-auto"
           >
             Try migration UI in demo
           </a>
           <Link
             href="/blog/migrate-from-xui-or-1-stream"
-            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10 px-8 py-3 text-sm font-semibold text-emerald-200 hover:border-emerald-400/50 transition-colors sm:w-auto"
+            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-8 py-3 text-sm font-semibold text-emerald-200 hover:border-emerald-400/30 transition-colors sm:w-auto"
           >
             Migration checklist
           </Link>

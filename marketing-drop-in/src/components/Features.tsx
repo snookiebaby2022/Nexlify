@@ -7,7 +7,7 @@ const features = [
     title: "AI Studio — 15 Tools",
     desc: "Voice-to-SQL queries, anomaly detection, bouquet builder, EPG scraper, logo/thumbnail generator, support chat, and more.",
     icon: Brain,
-    accent: "from-violet-500 to-fuchsia-600",
+    accent: "from-violet-500 to-fuchsia-500",
     motion: "pulse" as const,
     delay: 0,
     highlight: true,
@@ -16,7 +16,7 @@ const features = [
     title: "Anti-Piracy Security",
     desc: "DDoS shield, stream fingerprinting, invisible watermarking, device binding, same-IP detection, and VPN auto-block.",
     icon: Shield,
-    accent: "from-emerald-500 to-teal-600",
+    accent: "from-emerald-400 to-teal-500",
     motion: "float" as const,
     delay: 0.3,
     highlight: false,
@@ -25,7 +25,7 @@ const features = [
     title: "WebRTC Streaming",
     desc: "Low-latency WebRTC gateway with MediaMTX integration — sub-second playback on any device.",
     icon: Radio,
-    accent: "from-cyan-500 to-sky-600",
+    accent: "from-cyan-400 to-blue-500",
     motion: "wobble" as const,
     delay: 0.5,
     highlight: false,
@@ -34,7 +34,7 @@ const features = [
     title: "Universal Devices",
     desc: "M3U, MAG/Stalker portals, Enigma2, Active Code API, branded APK builder, and apps lock per line.",
     icon: Smartphone,
-    accent: "from-amber-500 to-orange-500",
+    accent: "from-orange-400 to-amber-500",
     motion: "float-slow" as const,
     delay: 0.7,
     highlight: false,
@@ -43,7 +43,7 @@ const features = [
     title: "xDrive Cloud Backup",
     desc: "Encrypted S3/GCS/Azure backup upload with retention policies — full panel restore in one click.",
     icon: Cloud,
-    accent: "from-sky-500 to-cyan-500",
+    accent: "from-sky-400 to-cyan-500",
     motion: "float" as const,
     delay: 0.9,
     highlight: false,
@@ -52,7 +52,7 @@ const features = [
     title: "Intelligent Load Balancer",
     desc: "Health, geo, and bandwidth-weighted server selection with DNS rotator and automatic failover.",
     icon: Wrench,
-    accent: "from-fuchsia-500 to-violet-600",
+    accent: "from-fuchsia-400 to-violet-500",
     motion: "pulse" as const,
     delay: 1.1,
     highlight: false,
@@ -64,12 +64,12 @@ export function Features() {
   const otherFeatures = features.filter((f) => !f.highlight);
 
   return (
-    <section className="relative overflow-hidden border-y border-white/10 bg-[#0a0814]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(168,85,247,0.06),transparent)]" />
+    <section className="relative overflow-hidden border-y border-violet-500/10 bg-[#080714]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(139,92,246,0.06),transparent)]" />
 
       <div className="relative mx-auto max-w-6xl px-4 py-20 md:py-28">
         <div className="max-w-2xl">
-          <p className="text-sm font-semibold uppercase tracking-widest text-amber-400/90">
+          <p className="text-sm font-semibold uppercase tracking-widest text-orange-400">
             Why Nexlify
           </p>
           <h2 className="font-display mt-3 text-3xl font-bold text-white md:text-4xl">
@@ -82,8 +82,9 @@ export function Features() {
 
         <div className="mt-14 grid gap-6 lg:grid-cols-2">
           {heroFeature && (
-            <article className="group glass relative overflow-hidden rounded-2xl p-8 transition-all hover:border-violet-500/30 lg:row-span-2">
-              <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
+            <article className="group glass relative overflow-hidden rounded-2xl p-8 transition-all hover:border-violet-500/20 lg:row-span-2">
+              <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-violet-500/8 blur-3xl" />
+              <div className="absolute -left-10 bottom-0 h-40 w-40 rounded-full bg-fuchsia-500/5 blur-3xl" />
               <div className="relative">
                 <AnimatedAvatar accent={heroFeature.accent} size="sm" motion={heroFeature.motion} delay={heroFeature.delay}>
                   <heroFeature.icon size={22} className="text-white" />
@@ -123,7 +124,7 @@ export function Features() {
             {otherFeatures.map((f) => (
               <article
                 key={f.title}
-                className="group glass rounded-2xl p-6 transition-all hover:scale-[1.02] hover:border-violet-500/30"
+                className="group glass rounded-2xl p-6 transition-all hover:scale-[1.02] hover:border-violet-500/20"
               >
                 <AnimatedAvatar accent={f.accent} size="sm" motion={f.motion} delay={f.delay}>
                   <f.icon size={20} className="text-white" />
@@ -138,7 +139,7 @@ export function Features() {
         <div className="mt-10 text-center">
           <Link
             href="/features"
-            className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-6 py-3 text-sm font-medium text-violet-200 transition-all hover:bg-violet-500/20 hover:border-violet-400/50"
+            className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-6 py-3 text-sm font-medium text-violet-200 transition-all hover:bg-violet-500/15 hover:border-violet-400/30"
           >
             Compare all 100+ features <ArrowRight size={14} />
           </Link>

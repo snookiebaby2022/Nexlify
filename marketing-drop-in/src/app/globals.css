@@ -3,13 +3,13 @@
 @tailwind utilities;
 
 :root {
-  --bg-deep: #07060f;
-  --bg-card: #12101f;
-  --fg: #f4f2ff;
-  --muted: #9b94b8;
-  --accent: #a855f7;
-  --accent-2: #f59e0b;
-  --glow: rgba(168, 85, 247, 0.35);
+  --bg-deep: #06050e;
+  --bg-card: #0f0d1e;
+  --fg: #f0edff;
+  --muted: #8b83ab;
+  --accent: #8b5cf6;
+  --accent-2: #f97316;
+  --glow: rgba(139, 92, 246, 0.4);
 }
 
 body {
@@ -25,26 +25,26 @@ body {
 .mesh-bg {
   background:
     radial-gradient(ellipse 80% 50% at 50% -20%, var(--glow), transparent),
-    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(245, 158, 11, 0.12), transparent),
-    radial-gradient(ellipse 50% 30% at 0% 50%, rgba(99, 102, 241, 0.15), transparent),
+    radial-gradient(ellipse 60% 40% at 100% 0%, rgba(249, 115, 22, 0.1), transparent),
+    radial-gradient(ellipse 50% 30% at 0% 50%, rgba(139, 92, 246, 0.12), transparent),
     var(--bg-deep);
 }
 
 .grid-pattern {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   background-size: 48px 48px;
 }
 
 .glass {
-  background: rgba(18, 16, 31, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(12px);
+  background: rgba(15, 13, 30, 0.8);
+  border: 1px solid rgba(139, 92, 246, 0.08);
+  backdrop-filter: blur(16px);
 }
 
 .text-gradient {
-  background: linear-gradient(135deg, #e9d5ff 0%, #a855f7 45%, #f59e0b 100%);
+  background: linear-gradient(135deg, #c4b5fd 0%, #8b5cf6 40%, #f97316 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -106,7 +106,7 @@ body {
 
 /* Skeleton placeholders — no pulse animation to avoid main-thread work on load */
 .skeleton-block {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(139, 92, 246, 0.04);
 }
 
 /* Avatar icon animations — transform + opacity only for compositing */
