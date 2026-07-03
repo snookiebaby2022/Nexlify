@@ -62,13 +62,6 @@ export async function GET(
 
   scheduleZapPrefetch(line.id, cleanId, { clientIp: ip, userAgent: ua }, antiFreeze);
 
-  void trackConnection({
-    lineId: line.id,
-    streamId: cleanId,
-    ip,
-    userAgent: req.headers.get("user-agent") ?? undefined,
-  });
-
   // HLS upstream: IPTV apps request …/id.ts and need MPEG-TS; browsers/web players can use …/id.m3u8.
   if (isHlsPlaybackUrl(playbackUrl)) {
     await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
@@ -91,6 +84,7 @@ export async function GET(
         });
         return iptvText(remux.error, { status: 502 });
       }
+      void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
       return withIptvCors(
         new NextResponse(remux.stream as BodyInit, {
           status: 200,
@@ -112,6 +106,7 @@ export async function GET(
       buildHlsRelayUrl(panelOrigin, username, password, cleanId, url);
     const body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
 
+    void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
     return withIptvCors(
       new NextResponse(body, {
         status: 200,
@@ -124,6 +119,8 @@ export async function GET(
     );
   }
 
+  // For redirect-based playback, track the connection after the client follows the redirect
+  // (IPTV apps will re-request the stream URL, triggering trackConnection via the stream server)
   return withIptvCors(
     NextResponse.redirect(playbackUrl, {
       status: 302,
