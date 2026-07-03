@@ -1,3 +1,4 @@
+import { createPrivateKey, sign } from "crypto";
 import { prisma } from "@/lib/prisma";
 
 export function addDays(date: Date, days: number): Date {
@@ -12,65 +13,60 @@ export function durationDaysToTerm(days: number): string {
   return "1y";
 }
 
-function licenseApiBase(): string {
-  const url = process.env.NEXLIFY_LICENSE_API_URL?.trim().replace(/\/$/, "");
-  if (!url) {
-    throw new Error("NEXLIFY_LICENSE_API_URL is not configured");
+function getTermDays(term: string): number {
+  switch (term) {
+    case "1m": return 30;
+    case "3m": return 90;
+    case "6m": return 180;
+    case "1y": return 365;
+    case "unlimited": return 36500;
+    default: return 30;
   }
-  return url;
 }
 
-/** Issue a signed NXLF1 key from the license server. */
+function loadPrivateKey() {
+  const pem = process.env.LICENSE_SERVER_PRIVATE_PEM?.trim();
+  if (!pem) {
+    throw new Error("LICENSE_SERVER_PRIVATE_PEM is not configured");
+  }
+  return createPrivateKey(pem);
+}
+
+function signPayload(payload: Record<string, unknown>): string {
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const priv = loadPrivateKey();
+  const sig = sign(null, Buffer.from(payloadB64), priv);
+  return `NXLF1.${payloadB64}.${sig.toString("base64url")}`;
+}
+
+/** Generate a signed NXLF1 license key locally (no license server needed). */
 export async function requestLicenseKey(opts: {
   email: string;
   durationDays?: number;
   term?: string;
 }): Promise<string> {
-  const secret = process.env.LICENSE_SERVER_API_SECRET?.trim() ?? "";
   const term =
     opts.term?.trim() ||
     durationDaysToTerm(opts.durationDays ?? 365);
-  let res: Response;
-  try {
-    res = await fetch(`${licenseApiBase()}/v1/issue`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
-      },
-      body: JSON.stringify({
-        email: opts.email,
-        term,
-        bind: true,
-      }),
-      cache: "no-store",
-    });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Network error";
-    throw new Error(`License server unreachable (${message})`);
-  }
+  const termDays = getTermDays(term);
+  const exp = Math.floor(Date.now() / 1000) + termDays * 86400;
+  const lid = `NX-${Date.now().toString(36)}`;
 
-  const contentType = res.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    throw new Error(
-      "License server misconfigured — NEXLIFY_LICENSE_API_URL must point to the license API (http://127.0.0.1:8787 on this server), not the marketing website",
-    );
-  }
-
-  const data = (await res.json()) as {
-    ok?: boolean;
-    license_key?: string;
-    error?: string;
+  const payload = {
+    v: 1,
+    lid,
+    sub: opts.email,
+    exp,
+    term,
+    tier: term === "unlimited" ? "unlimited" : "1y",
+    iat: Math.floor(Date.now() / 1000),
+    iid: "BIND_ON_ACTIVATE",
   };
 
-  if (!res.ok || !data.ok || !data.license_key) {
-    throw new Error(data.error ?? "License server rejected the request");
-  }
-
-  return data.license_key;
+  return signPayload(payload);
 }
 
-/** @deprecated Use requestLicenseKey — kept for call sites being migrated. */
+/** @deprecated Use requestLicenseKey */
 export async function generateLicenseKey(email: string, durationDays: number): Promise<string> {
   return requestLicenseKey({ email, durationDays });
 }
