@@ -1,5 +1,7 @@
 import { addDays, uniqueLicenseKey } from "@/lib/license";
 import { prisma } from "@/lib/prisma";
+import { generateActivationCode } from "@/lib/activation-code";
+import { sendActivationCodeEmail } from "@/lib/activation-email";
 import type { License, Plan } from "@/generated/prisma";
 
 export async function issueLicenseForOrder(orderId: string) {
@@ -15,7 +17,7 @@ export async function issueLicenseForOrder(orderId: string) {
   const key = await uniqueLicenseKey(order.user.email, days);
   const expiresAt = addDays(new Date(), days);
 
-  return prisma.license.create({
+  const license = await prisma.license.create({
     data: {
       key,
       userId: order.userId,
@@ -28,6 +30,14 @@ export async function issueLicenseForOrder(orderId: string) {
     },
     include: { plan: true },
   });
+
+  generateActivationCode(license.id, order.userId, order.user.email)
+    .then((code) =>
+      sendActivationCodeEmail(order.user.email, order.user.name, code, license.id)
+    )
+    .catch((e) => console.error("[licensing] Failed to send activation code:", e));
+
+  return license;
 }
 
 export async function validateLicenseKey(rawKey: string) {

@@ -51,7 +51,7 @@ export function isSafeUpstreamUrl(url: string): boolean {
   }
 }
 
-export function isAllowedHlsRelayTarget(target: string, _rootUpstream: string): boolean {
+export function isAllowedHlsRelayTarget(target: string, _rootUpstream = ""): boolean {
   // Line auth is required to hit the relay; block only private/local SSRF targets.
   return isSafeUpstreamUrl(target);
 }
@@ -66,7 +66,7 @@ export function rewriteHlsManifestForRelay(
   return body
     .split("\n")
     .map((line) => {
-      let out = line.replace(/URI="([^"]+)"/gi, (_, uri: string) => {
+      const out = line.replace(/URI="([^"]+)"/gi, (_match: string, uri: string) => {
         try {
           return `URI="${relay(new URL(uri, base).href)}"`;
         } catch {

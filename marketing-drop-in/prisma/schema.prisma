@@ -59,6 +59,7 @@ model User {
   addonEntitlements  AddonEntitlement[]
   tickets            Ticket[]
   ticketMessages     TicketMessage[]
+  activationCodes    ActivationCode[]
 }
 
 model Ticket {
@@ -148,6 +149,7 @@ model License {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   addonEntitlements AddonEntitlement[]
+  activationCodes   ActivationCode[]
 }
 
 /** WHMCS product → panel plugin service (Plex, Emby, etc.). */
@@ -221,4 +223,22 @@ model BlogPost {
   datePublished   DateTime @default(now())
   updatedAt       DateTime @updatedAt
   createdAt       DateTime @default(now())
+}
+
+model ActivationCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  licenseId String
+  userId    String
+  email     String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  license   License  @relation(fields: [licenseId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([code])
+  @@index([licenseId])
 }

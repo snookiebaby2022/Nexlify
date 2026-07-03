@@ -95,6 +95,47 @@ async function vendorFetch(path: string, init?: RequestInit) {
   }
 }
 
+export async function verifyActivationCodeWithVendor(
+  licenseKey: string,
+  code: string
+): Promise<{ ok: boolean; email?: string; plan?: string; expiresAt?: string; error?: string }> {
+  const base = vendorWebBase();
+  if (!base) return { ok: false, error: "Vendor URL not configured" };
+
+  try {
+    const res = await fetch(`${base}/api/licenses/verify-activation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ licenseKey, code }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    return await res.json();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Network error" };
+  }
+}
+
+export async function sendActivationCodeToVendor(
+  licenseKey: string
+): Promise<{ ok: boolean; email?: string; error?: string }> {
+  const base = vendorWebBase();
+  if (!base) return { ok: false, error: "Vendor URL not configured" };
+
+  try {
+    const res = await fetch(`${base}/api/licenses/send-code`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ licenseKey }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    return await res.json();
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Network error" };
+  }
+}
+
 export async function registerPanelWithVendor(
   licenseKey: string,
   panelHost: string

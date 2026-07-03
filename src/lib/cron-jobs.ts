@@ -411,12 +411,17 @@ export async function jobTelegramMonitoring() {
 export async function jobLicenseRevalidate() {
   const start = Date.now();
   try {
-    const host = process.env.PANEL_PRIMARY_DOMAIN ?? "localhost";
-    const { pollVendorLicenseSync } = await import("@/lib/license/remote-sync");
-    await pollVendorLicenseSync(host);
-    const { revalidateStoredLicense } = await import("@/lib/license");
-    const ok = await revalidateStoredLicense(host);
-    await logCron("license_revalidate", ok ? "ok" : "invalid", undefined, Date.now() - start);
+    const { heartbeatCheck } = await import("@/lib/license/server-guard");
+    const result = await heartbeatCheck();
+    await logCron(
+      "license_revalidate",
+      result.ok ? "ok" : "invalid",
+      result.reason,
+      Date.now() - start,
+    );
+    if (!result.ok) {
+      console.error(`[LICENSE] Heartbeat failed: ${result.reason}`);
+    }
   } catch (e) {
     await logCron("license_revalidate", "error", String(e), Date.now() - start);
   }

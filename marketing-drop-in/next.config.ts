@@ -1,3 +1,4 @@
+// marketing-drop-in/next.config.ts
 import type { NextConfig } from "next";
 import path from "path";
 import { MARKETING_SECURITY_HEADERS } from "./src/lib/security-headers";
@@ -11,9 +12,11 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // ✅ FIX #1: scope tracing to THIS project, not the parent
+  //    (the parent directory is a different Next.js app)
   ...(isVercel
     ? {}
-    : { outputFileTracingRoot: path.resolve(__dirname, "..") }),
+    : { outputFileTracingRoot: __dirname }),
   async headers() {
     return [
       {
@@ -29,39 +32,26 @@ const nextConfig: NextConfig = {
       {
         source: "/_next/static/:path*",
         headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
         ],
       },
       {
         source: "/opengraph-image",
         headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=86400, s-maxage=86400",
-          },
+          { key: "Cache-Control", value: "public, max-age=86400, s-maxage=86400" },
         ],
       },
       {
         source: "/twitter-image",
         headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=86400, s-maxage=86400",
-          },
+          { key: "Cache-Control", value: "public, max-age=86400, s-maxage=86400" },
         ],
       },
     ];
   },
   async redirects() {
     return [
-      {
-        source: "/docs/api",
-        destination: "/install",
-        permanent: true,
-      },
+      { source: "/docs/api", destination: "/install", permanent: true },
       {
         source: "/:path*",
         has: [{ type: "host", value: "www.nexlify.live" }],

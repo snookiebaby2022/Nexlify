@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+﻿import type { Metadata, Viewport } from "next";
 
 import { DM_Sans, Sora } from "next/font/google";
 
@@ -17,8 +17,6 @@ import { DEFAULT_DESCRIPTION, DEFAULT_KEYWORDS, hreflangAlternates } from "@/lib
 import { site } from "@/lib/site";
 
 import "./globals.css";
-
-
 
 const sora = Sora({
   variable: "--font-sora",
@@ -40,13 +38,11 @@ const dmSans = DM_Sans({
   fallback: ["system-ui", "Segoe UI", "sans-serif"],
 });
 
-
-
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
   title: {
     default: "IPTV Panel for Resellers - Secure Back Office, Worldwide",
-    template: "%s",
+    template: "%s | Nexlify",
   },
   description: DEFAULT_DESCRIPTION,
   keywords: DEFAULT_KEYWORDS,
@@ -94,65 +90,35 @@ export const metadata: Metadata = {
     : {}),
 };
 
-
-
 export const viewport: Viewport = {
-
   width: "device-width",
-
   initialScale: 1,
-
   themeColor: "#080612",
-
 };
 
-
-
 export default async function RootLayout({
-
   children,
-
 }: Readonly<{
-
   children: React.ReactNode;
-
 }>) {
-
   const user = await getSessionUser();
 
-
-
   return (
-
     <html
-
       lang="en"
-
       className={`${sora.variable} ${dmSans.variable} h-full antialiased`}
-
     >
-
       <head>
         <OrganizationJsonLd />
       </head>
-
       <body className="min-h-full flex flex-col overflow-x-hidden bg-black">
-
         <LivestreamAnalyticsGate>
           <DeferredMarketingScripts />
         </LivestreamAnalyticsGate>
-
         <ConditionalShell user={user}>{children}</ConditionalShell>
-
         <FreeLaunchBanner />
         <MarketingOverlays isLoggedIn={!!user} />
-
       </body>
-
     </html>
-
   );
-
 }
-
-

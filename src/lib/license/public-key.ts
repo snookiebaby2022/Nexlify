@@ -3,7 +3,7 @@
  * Private key: .license-keys/private.pem (never commit, never ship to customers).
  */
 export const DEFAULT_LICENSE_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAYwo0NG7c53ltWwIz2dju4S2sBo0NtnRYI3YANGKIREg=
+MCowBQYDK2VwAyEAwixEvcjHtGi9FFiheVssDyGRMkP85NBmZd5GUXqOiVA=
 -----END PUBLIC KEY-----
 `;
 

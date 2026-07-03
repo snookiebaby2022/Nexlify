@@ -23,6 +23,23 @@ export async function POST(req: NextRequest) {
   const key = normalizeLicenseKeyInput(String(body.licenseKey ?? body.key ?? ""));
   if (!key) return NextResponse.json({ error: "licenseKey required" }, { status: 400 });
 
+  const activationCode = String(body.activationCode ?? "").trim();
+  if (!activationCode) {
+    return NextResponse.json(
+      { error: "Activation code required. Check your email for the 6-digit code." },
+      { status: 400 }
+    );
+  }
+
+  const { verifyActivationCodeWithVendor } = await import("@/lib/license/remote-sync");
+  const vendorCheck = await verifyActivationCodeWithVendor(key, activationCode);
+  if (!vendorCheck.ok) {
+    return NextResponse.json(
+      { error: vendorCheck.error ?? "Activation code verification failed" },
+      { status: 400 }
+    );
+  }
+
   const host = panelHost(req);
   const result = await activateLicenseKey(key, host);
   if (!result.ok) {
