@@ -9,6 +9,7 @@ import { HomeNewsletterSignup, HomePricingSections } from "@/components/HomeBelo
 import { HomeSeoContent } from "@/components/HomeSeoContent";
 import { SocialProofSection } from "@/components/SocialProofSection";
 import { MigrationCtaSection } from "@/components/MigrationCtaSection";
+import { WhatsNewSection } from "@/components/WhatsNewSection";
 import { getSessionUser } from "@/lib/auth";
 import { toPlanView } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
@@ -35,8 +36,11 @@ export default async function HomePage() {
     <>
       <HomeFaqJsonLd />
       <Hero />
+      <WhatsNewSection />
       <SocialProofSection />
+      <Features />
       <DemoScreenshots />
+      <TechStackSection />
       <HomePricingSections
         plans={plans.map(toPlanView)}
         loggedIn={Boolean(user)}
@@ -44,11 +48,9 @@ export default async function HomePage() {
         whmcsCartBaseUrl={whmcsCartBaseUrl}
       />
       <MigrationCtaSection />
-      <TechStackSection />
-      <Features />
       <DemoBanner />
-      <HomeSeoContent />
       <ComplianceSection />
+      <HomeSeoContent />
       <section className="border-t border-white/10 bg-[#080612] py-16">
         <div className="mx-auto max-w-xl px-4 text-center">
           <h2 className="font-display text-xl font-semibold text-white">IPTV operator updates</h2>

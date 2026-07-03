@@ -33,8 +33,10 @@ const STACK = [
 
 export function TechStackSection() {
   return (
-    <section className="border-y border-white/10 bg-[#080612]">
-      <div className="mx-auto max-w-6xl px-4 py-20 md:py-24">
+    <section className="relative overflow-hidden border-y border-white/10 bg-[#080612]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(56,189,248,0.05),transparent)]" />
+
+      <div className="relative mx-auto max-w-6xl px-4 py-20 md:py-24">
         <div className="max-w-2xl">
           <p className="text-sm font-semibold uppercase tracking-widest text-cyan-400/90 flex items-center gap-2">
             <Zap size={16} /> Streaming stack
@@ -50,7 +52,7 @@ export function TechStackSection() {
           {STACK.map((item) => (
             <article
               key={item.title}
-              className="glass rounded-2xl p-8 border border-white/5 hover:border-cyan-500/20 transition-colors"
+              className="glass rounded-2xl p-8 border border-white/5 hover:border-cyan-500/20 transition-all hover:scale-[1.01]"
             >
               <div className={`inline-flex rounded-xl p-3 bg-gradient-to-br ${item.accent}`}>
                 <item.icon size={22} className="text-white" />

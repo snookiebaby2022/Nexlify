@@ -1,5 +1,6 @@
 import { AnimatedAvatar } from "@/components/AnimatedAvatar";
-import { Brain, Shield, Radio, Smartphone, Cloud, Wrench } from "lucide-react";
+import { Brain, Shield, Radio, Smartphone, Cloud, Wrench, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 const features = [
   {
@@ -9,6 +10,7 @@ const features = [
     accent: "from-violet-500 to-fuchsia-600",
     motion: "pulse" as const,
     delay: 0,
+    highlight: true,
   },
   {
     title: "Anti-Piracy Security",
@@ -17,6 +19,7 @@ const features = [
     accent: "from-emerald-500 to-teal-600",
     motion: "float" as const,
     delay: 0.3,
+    highlight: false,
   },
   {
     title: "WebRTC Streaming",
@@ -25,6 +28,7 @@ const features = [
     accent: "from-cyan-500 to-sky-600",
     motion: "wobble" as const,
     delay: 0.5,
+    highlight: false,
   },
   {
     title: "Universal Devices",
@@ -33,6 +37,7 @@ const features = [
     accent: "from-amber-500 to-orange-500",
     motion: "float-slow" as const,
     delay: 0.7,
+    highlight: false,
   },
   {
     title: "xDrive Cloud Backup",
@@ -41,6 +46,7 @@ const features = [
     accent: "from-sky-500 to-cyan-500",
     motion: "float" as const,
     delay: 0.9,
+    highlight: false,
   },
   {
     title: "Intelligent Load Balancer",
@@ -49,13 +55,19 @@ const features = [
     accent: "from-fuchsia-500 to-violet-600",
     motion: "pulse" as const,
     delay: 1.1,
+    highlight: false,
   },
 ];
 
 export function Features() {
+  const heroFeature = features.find((f) => f.highlight);
+  const otherFeatures = features.filter((f) => !f.highlight);
+
   return (
-    <section className="border-y border-white/10 bg-[#0a0814]">
-      <div className="mx-auto max-w-6xl px-4 py-20 md:py-28">
+    <section className="relative overflow-hidden border-y border-white/10 bg-[#0a0814]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(168,85,247,0.06),transparent)]" />
+
+      <div className="relative mx-auto max-w-6xl px-4 py-20 md:py-28">
         <div className="max-w-2xl">
           <p className="text-sm font-semibold uppercase tracking-widest text-amber-400/90">
             Why Nexlify
@@ -64,23 +76,72 @@ export function Features() {
             Everything operators expect — built in
           </h2>
           <p className="mt-4 text-[var(--muted)]">
-            Security, devices, billing, sports, and bouquet tools in one maintained IPTV management stack.
+            Security, devices, billing, and AI tools in one maintained IPTV management stack.
           </p>
         </div>
 
-        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((f) => (
-            <article
-              key={f.title}
-              className="group glass rounded-2xl p-8 transition-colors hover:border-violet-500/30"
-            >
-              <AnimatedAvatar accent={f.accent} size="sm" motion={f.motion} delay={f.delay}>
-                <f.icon size={22} className="text-white" />
-              </AnimatedAvatar>
-              <h3 className="font-display mt-5 text-xl font-semibold text-white">{f.title}</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">{f.desc}</p>
+        <div className="mt-14 grid gap-6 lg:grid-cols-2">
+          {heroFeature && (
+            <article className="group glass relative overflow-hidden rounded-2xl p-8 transition-all hover:border-violet-500/30 lg:row-span-2">
+              <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
+              <div className="relative">
+                <AnimatedAvatar accent={heroFeature.accent} size="sm" motion={heroFeature.motion} delay={heroFeature.delay}>
+                  <heroFeature.icon size={22} className="text-white" />
+                </AnimatedAvatar>
+                <h3 className="font-display mt-5 text-2xl font-bold text-white">{heroFeature.title}</h3>
+                <p className="mt-4 text-base leading-relaxed text-[var(--muted)]">{heroFeature.desc}</p>
+
+                <div className="mt-8 grid grid-cols-2 gap-3">
+                  {[
+                    "Voice-to-SQL",
+                    "Anomaly Detection",
+                    "Bouquet Builder",
+                    "EPG Scraper",
+                    "Logo Generator",
+                    "Support Chat",
+                    "Health Predictor",
+                    "Restream Detector",
+                  ].map((tool) => (
+                    <div key={tool} className="flex items-center gap-2 text-sm text-slate-300">
+                      <span className="h-1 w-1 rounded-full bg-violet-400" />
+                      {tool}
+                    </div>
+                  ))}
+                </div>
+
+                <Link
+                  href="/features"
+                  className="mt-8 inline-flex items-center gap-2 text-sm font-medium text-violet-300 hover:text-violet-200 transition-colors"
+                >
+                  View all 15 AI tools <ArrowRight size={14} />
+                </Link>
+              </div>
             </article>
-          ))}
+          )}
+
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
+            {otherFeatures.map((f) => (
+              <article
+                key={f.title}
+                className="group glass rounded-2xl p-6 transition-all hover:scale-[1.02] hover:border-violet-500/30"
+              >
+                <AnimatedAvatar accent={f.accent} size="sm" motion={f.motion} delay={f.delay}>
+                  <f.icon size={20} className="text-white" />
+                </AnimatedAvatar>
+                <h3 className="font-display mt-4 text-lg font-semibold text-white">{f.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{f.desc}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-10 text-center">
+          <Link
+            href="/features"
+            className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-6 py-3 text-sm font-medium text-violet-200 transition-all hover:bg-violet-500/20 hover:border-violet-400/50"
+          >
+            Compare all 100+ features <ArrowRight size={14} />
+          </Link>
         </div>
       </div>
     </section>

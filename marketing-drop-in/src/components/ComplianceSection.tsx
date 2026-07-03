@@ -34,8 +34,10 @@ function IsoBadge({ top, bottom }: { top: string; bottom: string }) {
 
 export function ComplianceSection() {
   return (
-    <section className="border-y border-white/10 bg-[#0a0814]">
-      <div className="mx-auto max-w-6xl px-4 py-16 md:py-20">
+    <section className="relative overflow-hidden border-y border-white/10 bg-[#0a0814]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_50%_50%,rgba(168,85,247,0.04),transparent)]" />
+
+      <div className="relative mx-auto max-w-6xl px-4 py-16 md:py-20">
         <p className="text-center text-sm font-semibold uppercase tracking-widest text-violet-400">
           Compliance
         </p>
@@ -47,7 +49,7 @@ export function ComplianceSection() {
           {certificates.map((cert) => (
             <article
               key={cert.standard}
-              className="glass flex flex-col items-center rounded-2xl px-8 py-10 text-center shadow-lg"
+              className="glass flex flex-col items-center rounded-2xl px-8 py-10 text-center shadow-lg transition-all hover:scale-[1.01]"
             >
               <IsoBadge top={cert.badgeTop} bottom={cert.badgeBottom} />
               <p className="mt-8 text-xl font-bold text-white md:text-2xl">{cert.standard}</p>

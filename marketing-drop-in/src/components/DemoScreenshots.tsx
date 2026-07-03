@@ -31,8 +31,10 @@ const LOOM_URL = process.env.NEXT_PUBLIC_LOOM_DEMO_URL?.trim() || null;
 
 export function DemoScreenshots() {
   return (
-    <section className="border-y border-white/10 bg-[#080612] py-20 md:py-28">
-      <div className="mx-auto max-w-6xl px-4">
+    <section className="relative overflow-hidden border-y border-white/10 bg-[#080612] py-20 md:py-28">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_100%,rgba(168,85,247,0.04),transparent)]" />
+
+      <div className="relative mx-auto max-w-6xl px-4">
         <p className="text-sm font-semibold uppercase tracking-widest text-violet-400/90">
           See the panel
         </p>
@@ -60,8 +62,8 @@ export function DemoScreenshots() {
           {SCREENSHOTS.map((shot) => {
             const View = shot.View;
             return (
-              <figure key={shot.title} className="flex flex-col">
-                <div role="img" aria-label={shot.alt} className="overflow-hidden">
+              <figure key={shot.title} className="flex flex-col transition-all hover:scale-[1.01]">
+                <div role="img" aria-label={shot.alt} className="overflow-hidden rounded-xl">
                   <View />
                 </div>
                 <figcaption className="mt-5 px-1">

@@ -1,0 +1,95 @@
+import { Sparkles, Brain, Shield, Radio, Cloud, Swords } from "lucide-react";
+import Link from "next/link";
+
+const HIGHLIGHTS = [
+  {
+    icon: Brain,
+    title: "AI Studio — 15 Tools",
+    desc: "Voice-to-SQL, anomaly detection, bouquet builder, logo generator, and 11 more AI-powered tools.",
+    color: "text-violet-400",
+    bg: "bg-violet-500/10",
+    border: "border-violet-500/20",
+  },
+  {
+    icon: Shield,
+    title: "Anti-Piracy Security",
+    desc: "DDoS shield, stream fingerprinting, device binding, same-IP detection, and VPN auto-block.",
+    color: "text-emerald-400",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/20",
+  },
+  {
+    icon: Radio,
+    title: "WebRTC Streaming",
+    desc: "Sub-second playback with MediaMTX gateway — works on any device, any network.",
+    color: "text-cyan-400",
+    bg: "bg-cyan-500/10",
+    border: "border-cyan-500/20",
+  },
+  {
+    icon: Cloud,
+    title: "xDrive Cloud Backup",
+    desc: "Encrypted S3/GCS/Azure backup with retention policies — full restore in one click.",
+    color: "text-sky-400",
+    bg: "bg-sky-500/10",
+    border: "border-sky-500/20",
+  },
+  {
+    icon: Swords,
+    title: "Intelligent Load Balancer",
+    desc: "Health, geo, and bandwidth-weighted routing with DNS rotator and automatic failover.",
+    color: "text-amber-400",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/20",
+  },
+];
+
+export function WhatsNewSection() {
+  return (
+    <section className="relative overflow-hidden border-y border-white/10 bg-gradient-to-b from-[#0c0a1a] via-[#0a0814] to-[#0a0814]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(168,85,247,0.08),transparent)]" />
+
+      <div className="relative mx-auto max-w-6xl px-4 py-16 md:py-20">
+        <div className="flex items-center gap-3">
+          <div className="inline-flex rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-600 p-2">
+            <Sparkles size={18} className="text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-widest text-violet-400">
+              What&apos;s new
+            </p>
+            <h2 className="font-display text-2xl font-bold text-white sm:text-3xl">
+              New in v1.9.0
+            </h2>
+          </div>
+        </div>
+
+        <p className="mt-4 max-w-2xl text-[var(--muted)]">
+          Major release with AI Studio, anti-piracy security, WebRTC streaming, cloud backups, and more.
+        </p>
+
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {HIGHLIGHTS.map((h) => (
+            <div
+              key={h.title}
+              className={`group glass rounded-xl p-5 transition-all hover:scale-[1.02] ${h.border}`}
+            >
+              <div className={`inline-flex rounded-lg p-2 ${h.bg}`}>
+                <h.icon size={18} className={h.color} />
+              </div>
+              <h3 className="font-display mt-3 text-base font-semibold text-white">{h.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{h.desc}</p>
+            </div>
+          ))}
+
+          <Link
+            href="/updates"
+            className="glass flex items-center justify-center rounded-xl p-5 text-sm font-medium text-violet-300 transition-all hover:scale-[1.02] hover:text-violet-200 hover:border-violet-500/30"
+          >
+            View all release notes →
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}

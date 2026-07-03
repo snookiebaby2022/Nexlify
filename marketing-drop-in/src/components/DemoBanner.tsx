@@ -5,8 +5,10 @@ export function DemoBanner() {
   const demo = getDemoConfig();
 
   return (
-    <section className="border-y border-white/10 bg-gradient-to-r from-violet-950/50 via-[#0a0814] to-amber-950/20">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-4 py-12 md:flex-row md:py-14">
+    <section className="relative overflow-hidden border-y border-white/10 bg-gradient-to-r from-violet-950/50 via-[#0a0814] to-amber-950/20">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_80%_at_100%_50%,rgba(245,158,11,0.08),transparent)]" />
+
+      <div className="relative mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-4 py-12 md:flex-row md:py-14">
         <div>
           <p className="text-sm font-semibold uppercase tracking-widest text-amber-400/90">
             Try before you buy
