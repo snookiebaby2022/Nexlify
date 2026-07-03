@@ -1,6 +1,6 @@
 import { decryptAtRest, encryptAtRest, isEncryptedAtRest } from "@/lib/encryption-at-rest";
 import { prisma } from "@/lib/prisma";
-import { isPanelLicenseExempt, isPanelLicenseExemptEnv } from "@/lib/panel-demo-host";
+import { isPanelLicenseExempt } from "@/lib/panel-demo-host";
 import type { LicensePayloadV1, LicenseStatus } from "./types";
 import { parseLicenseKey, licenseKeyHash, hostAllowed } from "./crypto";
 import { licenseTermLabel } from "./terms";

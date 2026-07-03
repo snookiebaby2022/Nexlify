@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFileSync, existsSync } from "fs";
+import { existsSync } from "fs";
 
 const execAsync = promisify(exec);
 
@@ -80,17 +80,12 @@ export async function GET() {
     }
   }
 
-  let dbSize = "";
-  const dbSizeRaw = await run("du -sh data/*.db 2>/dev/null || du -sh *.db 2>/dev/null");
-  if (dbSizeRaw) dbSize = dbSizeRaw.split(/\s+/)[0] || "";
-
   return NextResponse.json({
     disk,
     memory,
     uptime: uptimeRaw.replace("up ", ""),
     load,
     sslExpiry,
-    dbSize,
     nodeVersion: nodeRaw,
     pm2Services,
   });

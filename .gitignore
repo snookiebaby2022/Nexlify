@@ -8,4 +8,13 @@ backups/
 license-server/activations.json
 *.db
 .update-progress.json
-.DS_Store
+.update-progress.pid
+.panel-update-cache.json
+tsconfig.tsbuildinfo
+next-env.d.ts
+*.log
+__pycache__/
+*.pyc
+build-out.txt
+lint-out.txt
+.smoke-*

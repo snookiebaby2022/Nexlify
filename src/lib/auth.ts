@@ -141,3 +141,14 @@ export async function verifyPanelLogin(username: string, password: string) {
 export async function hashPassword(password: string) {
   return bcrypt.hash(password, 10);
 }
+
+export function requirePanelApiKey(request: Request): boolean {
+  const expected =
+    process.env.PANEL_API_SECRET?.trim() ??
+    process.env.NEXLIFY_PANEL_API_SECRET?.trim();
+  if (!expected) return false;
+  const provided =
+    request.headers.get("x-panel-api-key") ??
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  return provided === expected;
+}

@@ -5,3 +5,7 @@
 node_modules
 src/generated
 data
+devlog.txt
+tsconfig.tsbuildinfo
+next-env.d.ts
+*.log
