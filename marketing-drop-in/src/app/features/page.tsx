@@ -25,81 +25,127 @@ type FeatureRow = {
 
 
 const ROWS: FeatureRow[] = [
+  // AI Studio
+  { category: "AI Studio", feature: "AI Hub — central dashboard for all AI tools", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Voice Query — voice-to-SQL via Whisper transcription", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Natural Language — query database using plain English", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Anomaly Detector — AI fraud/abuse detection", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Bouquet Builder — AI-recommended bouquet configs", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "EPG Scraper — AI-powered EPG data extraction", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Health Predictor — predictive stream health analysis", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Viewer Analytics — AI-driven viewer behavior insights", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Support Chat — AI-powered customer support assistant", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Transcode Recommender — AI-suggested bitrate/resolution", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Restream Detector — AI unauthorized restream detection", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Logo Generator — AI logo creation via DALL-E 3", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Thumbnail Generator — AI thumbnail creation", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Invoice Generator — AI-generated invoices", nexlify: "new", typical: "missing" },
+  { category: "AI Studio", feature: "Seasonal Recommender — seasonal content suggestions", nexlify: "new", typical: "missing" },
 
-  { category: "User & Subscription", feature: "SMS expiry/renewal alerts (Twilio)", nexlify: "included", typical: "missing" },
-
-  { category: "User & Subscription", feature: "Multi-device add-on packages", nexlify: "included", typical: "partial" },
-
-  { category: "User & Subscription", feature: "Automated email + in-panel notifications", nexlify: "included", typical: "partial" },
-
-  { category: "Content & Streaming", feature: "Deep transcoding / stream processing", nexlify: "included", typical: "partial" },
-
-  { category: "Content & Streaming", feature: "Advanced load balancing", nexlify: "included", typical: "partial" },
-
-  { category: "Content & Streaming", feature: "Built-in web player", nexlify: "included", typical: "missing" },
-
-  { category: "Content & Streaming", feature: "MAG devices (full native support)", nexlify: "included", typical: "partial" },
-
-  { category: "Content & Streaming", feature: "Enigma2 bouquet tools", nexlify: "included", typical: "partial" },
-
-  { category: "Content & Streaming", feature: "All-in-one streaming engine", nexlify: "included", typical: "partial" },
-
-  { category: "Content & Streaming", feature: "Granular stream input management", nexlify: "included", typical: "partial" },
-
-  { category: "Content & Streaming", feature: "Legacy Xtream features", nexlify: "included", typical: "partial" },
-
-  { category: "Content & Streaming", feature: "Multi-server + backup source URLs", nexlify: "included", typical: "missing" },
-
-  { category: "Content & Streaming", feature: "Catch-up / DVR archive presets (24-72h)", nexlify: "included", typical: "partial" },
-
-  { category: "Content & Streaming", feature: "SchedulesDirect & WebGrab+Plus EPG", nexlify: "included", typical: "missing" },
-
-  { category: "Content & Streaming", feature: "ABR auto-switch + variant ladder hints", nexlify: "included", typical: "missing" },
-
-  { category: "Content & Streaming", feature: "Auto-fix dead links (cron probe)", nexlify: "included", typical: "missing" },
-
-  { category: "Content & Streaming", feature: "Backup source URL failover", nexlify: "included", typical: "missing" },
-
+  // Security
+  { category: "Security", feature: "DDoS Shield — Redis rate limiting + IP auto-block", nexlify: "new", typical: "missing" },
+  { category: "Security", feature: "Encryption at Rest — AES-256-GCM envelope encryption", nexlify: "new", typical: "missing" },
+  { category: "Security", feature: "VPN Auto-Block — auto-block VPN/hosting IPs", nexlify: "new", typical: "missing" },
+  { category: "Security", feature: "Bot Stealth — anti-bot/anti-scanner response headers", nexlify: "new", typical: "missing" },
+  { category: "Security", feature: "Device Binding — fingerprint-based device binding per line", nexlify: "new", typical: "missing" },
+  { category: "Security", feature: "Stream Fingerprinting — invisible watermarking + token signatures", nexlify: "new", typical: "missing" },
+  { category: "Security", feature: "Same-IP Detection — multi-line same-IP with auto-actions", nexlify: "new", typical: "missing" },
+  { category: "Security", feature: "Apps Lock — policy-based app allow/block-listing per line", nexlify: "new", typical: "missing" },
+  { category: "Security", feature: "Playback Rate Limiting — Redis per-line per-IP rate limiting", nexlify: "new", typical: "missing" },
+  { category: "Security", feature: "Playback Blocklist — IP/ASN/ISP/UA blocklist enforcement", nexlify: "new", typical: "missing" },
+  { category: "Security", feature: "Hide VOD URLs / VOD Proxy", nexlify: "new", typical: "missing" },
   { category: "Security", feature: "Enforce 2FA for resellers", nexlify: "included", typical: "partial" },
-
   { category: "Security", feature: "Stream leak audit log", nexlify: "included", typical: "missing" },
-
   { category: "Security", feature: "Playback URL token TTL", nexlify: "included", typical: "missing" },
+  { category: "Security", feature: "Geo-blocking per line + ASN/ISP blocklists", nexlify: "included", typical: "partial" },
+  { category: "Security", feature: "Server Guard — server security hardening", nexlify: "new", typical: "missing" },
 
-  { category: "Security", feature: "Geo-blocking per line + blocklists", nexlify: "included", typical: "partial" },
+  // Streaming & Infrastructure
+  { category: "Streaming & Infrastructure", feature: "WebRTC Streaming — full WebRTC gateway with MediaMTX", nexlify: "new", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Intelligent LB Pro — health + geo + bandwidth-weighted selection", nexlify: "new", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "DNS Rotator — round-robin/random DNS rotation per server", nexlify: "new", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Transcoding Studio — named FFmpeg profiles (NVENC, 1080p HQ, etc.)", nexlify: "new", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Streaming Engine — dedicated streaming engine config", nexlify: "new", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Process Monitor — real-time FFmpeg process monitoring", nexlify: "new", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Source Monitor — source down, bitrate drop, loop detection alerts", nexlify: "new", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Source Swap — automatic backup source URL failover config", nexlify: "new", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Performance Core — hardware-tier auto-optimization profiles", nexlify: "new", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Auto Issue Fix — automatic stream issue remediation", nexlify: "new", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "RTMP Management — RTMP endpoint and IP management", nexlify: "new", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Deep transcoding / stream processing", nexlify: "included", typical: "partial" },
+  { category: "Streaming & Infrastructure", feature: "Multi-server + backup source URLs", nexlify: "included", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Catch-up / DVR archive presets (24-72h)", nexlify: "included", typical: "partial" },
+  { category: "Streaming & Infrastructure", feature: "ABR auto-switch + variant ladder hints", nexlify: "included", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Auto-fix dead links (cron probe)", nexlify: "included", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "Stream auto-recovery failover", nexlify: "included", typical: "missing" },
+  { category: "Streaming & Infrastructure", feature: "All-in-one streaming engine", nexlify: "included", typical: "partial" },
+  { category: "Streaming & Infrastructure", feature: "Granular stream input management", nexlify: "included", typical: "partial" },
 
-  { category: "Monitoring", feature: "Telegram alerts (offline, load, abuse)", nexlify: "included", typical: "missing" },
+  // Content Management
+  { category: "Content Management", feature: "TMDB Integration — auto-sync posters, ratings, genres, overviews", nexlify: "new", typical: "missing" },
+  { category: "Content Management", feature: "Watch Folders — auto-scan directories for media import", nexlify: "new", typical: "missing" },
+  { category: "Content Management", feature: "M3U Sync Jobs — scheduled M3U playlist sync from providers", nexlify: "new", typical: "missing" },
+  { category: "Content Management", feature: "EPG Auto-Assignment — AI-powered EPG channel matching", nexlify: "new", typical: "missing" },
+  { category: "Content Management", feature: "EPG Calendar — visual EPG calendar view", nexlify: "new", typical: "missing" },
+  { category: "Content Management", feature: "Radio Stations — dedicated radio management", nexlify: "new", typical: "missing" },
+  { category: "Content Management", feature: "Created Channels (24/7) — looping channel creation", nexlify: "new", typical: "missing" },
+  { category: "Content Management", feature: "Stream Review — review M3U streams before import", nexlify: "new", typical: "missing" },
+  { category: "Content Management", feature: "Import Queue — queued import processing", nexlify: "new", typical: "missing" },
+  { category: "Content Management", feature: "SchedulesDirect & WebGrab+Plus EPG", nexlify: "included", typical: "missing" },
+  { category: "Content Management", feature: "Built-in web player", nexlify: "included", typical: "missing" },
+  { category: "Content Management", feature: "Legacy Xtream features", nexlify: "included", typical: "partial" },
 
-  { category: "Monitoring", feature: "Stream health dashboard + error fix", nexlify: "included", typical: "partial" },
+  // User & Reseller Management
+  { category: "User & Reseller", feature: "User Groups — hierarchical groups with config, color, banned flag", nexlify: "new", typical: "missing" },
+  { category: "User & Reseller", feature: "Packages — credit cost, device slots, bouquet assignments, duration", nexlify: "new", typical: "missing" },
+  { category: "User & Reseller", feature: "Access Codes — one-time use codes for line activation", nexlify: "new", typical: "missing" },
+  { category: "User & Reseller", feature: "Reseller API Keys — scoped keys with granular permissions + IP restrictions", nexlify: "new", typical: "missing" },
+  { category: "User & Reseller", feature: "Mass Edit — bulk ops for lines, streams, channels, movies, series, bouquets", nexlify: "new", typical: "missing" },
+  { category: "User & Reseller", feature: "Migration from NXT, XCIPTV, WHMCS, Xtream UI, XUI, Custom", nexlify: "new", typical: "partial" },
+  { category: "User & Reseller", feature: "Sub-reseller hierarchy & credits", nexlify: "included", typical: "missing" },
+  { category: "User & Reseller", feature: "MAG devices (full native support)", nexlify: "included", typical: "partial" },
+  { category: "User & Reseller", feature: "Enigma2 bouquet tools", nexlify: "included", typical: "partial" },
+  { category: "User & Reseller", feature: "Multi-device add-on packages", nexlify: "included", typical: "partial" },
+  { category: "User & Reseller", feature: "Automated email + in-panel notifications", nexlify: "included", typical: "partial" },
 
-  { category: "Monitoring", feature: "Usage & commission reports (CSV export)", nexlify: "included", typical: "missing" },
-
+  // Billing
+  { category: "Billing", feature: "WHMCS IPTV module — auto-provision, renew, suspend", nexlify: "included", typical: "partial" },
+  { category: "Billing", feature: "PayPal checkout (Orders v2) + Stripe", nexlify: "included", typical: "partial" },
   { category: "Billing", feature: "Coupon codes + checkout API", nexlify: "included", typical: "missing" },
+  { category: "Billing", feature: "Advanced billing logs — financial audit trail", nexlify: "included", typical: "missing" },
+  { category: "Billing", feature: "Commission reports (CSV export)", nexlify: "included", typical: "missing" },
 
-  { category: "Billing", feature: "PayPal checkout (Orders v2)", nexlify: "included", typical: "partial" },
+  // Monitoring & Analytics
+  { category: "Monitoring & Analytics", feature: "Connection World Map — geographic connection visualization", nexlify: "new", typical: "missing" },
+  { category: "Monitoring & Analytics", feature: "Bandwidth Over Time — bandwidth monitoring charts", nexlify: "new", typical: "missing" },
+  { category: "Monitoring & Analytics", feature: "Stream Rank / Top Channels — channel popularity ranking", nexlify: "new", typical: "missing" },
+  { category: "Monitoring & Analytics", feature: "Theft Detection — same-IP, VOD, stream theft with auto-disable", nexlify: "new", typical: "missing" },
+  { category: "Monitoring & Analytics", feature: "Live Connections — real-time connection monitoring", nexlify: "new", typical: "missing" },
+  { category: "Monitoring & Analytics", feature: "Stream health dashboard + error fix", nexlify: "included", typical: "partial" },
+  { category: "Monitoring & Analytics", feature: "Telegram alerts (offline, load, abuse)", nexlify: "included", typical: "missing" },
 
-  { category: "Billing", feature: "WHMCS webhook integration", nexlify: "included", typical: "partial" },
+  // App Builder
+  { category: "App Builder", feature: "Build branded APK — custom logo, colors, package name, server URL", nexlify: "new", typical: "missing" },
 
-  { category: "Billing", feature: "Website 50% launch coupon banner", nexlify: "new", typical: "missing" },
-
+  // UI/UX
+  { category: "UI/UX", feature: "Avatar Customization — animated frames and avatar studio", nexlify: "new", typical: "missing" },
+  { category: "UI/UX", feature: "Panel Chat — in-panel messaging between users", nexlify: "new", typical: "missing" },
+  { category: "UI/UX", feature: "Panel Notifications — admin-to-reseller announcements with priority", nexlify: "new", typical: "missing" },
+  { category: "UI/UX", feature: "Expiry Videos — custom videos for expired/suspended lines", nexlify: "new", typical: "missing" },
   { category: "UI/UX", feature: "Reseller white-label (logo, accent, support)", nexlify: "included", typical: "missing" },
-
   { category: "UI/UX", feature: "Multi-language panel (en, es, fr, ar)", nexlify: "included", typical: "missing" },
+  { category: "UI/UX", feature: "Subscriber portal — renew, M3U download, EPG, tickets", nexlify: "included", typical: "missing" },
 
-  { category: "UI/UX", feature: "Subscriber portal (/portal)", nexlify: "included", typical: "missing" },
-
-  { category: "UI/UX", feature: "Portal renew, M3U download, EPG, tickets", nexlify: "new", typical: "missing" },
-
-  { category: "Automation", feature: "Full backup ZIP/gzip + restore", nexlify: "included", typical: "partial" },
-
-  { category: "Automation", feature: "Scheduled EPG/channel cron UI", nexlify: "included", typical: "missing" },
-
-  { category: "Automation", feature: "PostgreSQL pg_dump cron script", nexlify: "new", typical: "missing" },
-
-  { category: "Automation", feature: "S3 remote backup placeholders", nexlify: "roadmap", typical: "missing" },
-
-  { category: "Automation", feature: "Stream auto-recovery failover", nexlify: "included", typical: "missing" },
-
+  // Automation & Maintenance
+  { category: "Automation & Maintenance", feature: "xDrive Encrypted Cloud Backup — S3/GCS/Azure with retention", nexlify: "new", typical: "missing" },
+  { category: "Automation & Maintenance", feature: "Server Cleaner — auto-cleanup of orphaned streams, expired lines, logs", nexlify: "new", typical: "missing" },
+  { category: "Automation & Maintenance", feature: "Disk Monitor — disk usage monitoring and alerts", nexlify: "new", typical: "missing" },
+  { category: "Automation & Maintenance", feature: "Panel Health Watchdog — auto-restart and health monitoring", nexlify: "new", typical: "missing" },
+  { category: "Automation & Maintenance", feature: "Panel Transfer — transfer panel data between servers", nexlify: "new", typical: "missing" },
+  { category: "Automation & Maintenance", feature: "Domain & SSL Management — in-panel SSL/domain config", nexlify: "new", typical: "missing" },
+  { category: "Automation & Maintenance", feature: "Cache/Redis Management — Redis caching layer config", nexlify: "new", typical: "missing" },
+  { category: "Automation & Maintenance", feature: "Scheduled Tasks (Cron UI) — visual cron job management", nexlify: "included", typical: "missing" },
+  { category: "Automation & Maintenance", feature: "Full backup ZIP/gzip + restore", nexlify: "included", typical: "partial" },
 ];
 
 
@@ -108,7 +154,7 @@ function Mark({ kind }: { kind: "included" | "new" | "roadmap" | "partial" | "mi
 
   if (kind === "included") return <span title="Included">✅ Included</span>;
 
-  if (kind === "new") return <span title="New in 1.5.3">🆕 New in 1.5.3</span>;
+  if (kind === "new") return <span title="New in 1.9.0">🆕 New</span>;
 
   if (kind === "roadmap") return <span title="Roadmap">🔜 Roadmap</span>;
 
@@ -383,7 +429,7 @@ export default function FeaturesPage() {
 
           <Link href="/updates" className="text-cyan-400 underline">
 
-            1.5.3 release notes
+            1.9.0 release notes
 
           </Link>
 
