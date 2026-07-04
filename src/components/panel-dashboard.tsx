@@ -627,7 +627,9 @@ export function PanelDashboard({
 
           <aside className="xl:col-span-4 space-y-5">
 
-            <DashboardExpiringLines widgetsUrl={widgetsUrl} linesHref={linesHref} />
+            <DashboardCard id="expiring-lines" title="Expiring in 7 days">
+              <DashboardExpiringLines widgetsUrl={widgetsUrl} linesHref={linesHref} />
+            </DashboardCard>
 
             <DashboardCard id="top-channels" title="Top channels">
               <ul className="divide-y text-sm" style={{ borderColor: "var(--border)" }}>
