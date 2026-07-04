@@ -109,6 +109,7 @@ export function useHlsPlayer(opts?: {
 
   const destroy = useCallback(() => {
     if (hlsRef.current) {
+      try { hlsRef.current.detachMedia(); } catch { /* ignore */ }
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
@@ -407,6 +408,7 @@ export async function attachUrlToVideo(
         clearTimeout(timeout);
         resolve({
           destroy() {
+            try { hls.detachMedia(); } catch { /* ignore */ }
             hls.destroy();
             (video as any).__hlsInstance = null;
           },

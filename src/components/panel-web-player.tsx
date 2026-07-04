@@ -187,6 +187,7 @@ function PanelWebPlayerInner() {
       try {
         playerRef.current?.destroy();
         playerRef.current = null;
+        video.pause();
         video.removeAttribute("src");
         video.load();
         if (cancelled) return;
@@ -204,7 +205,7 @@ function PanelWebPlayerInner() {
 
     return () => {
       cancelled = true;
-      playerRef.current?.destroy();
+      try { playerRef.current?.destroy(); } catch { /* ignore */ }
       playerRef.current = null;
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("playing", onPlaying);

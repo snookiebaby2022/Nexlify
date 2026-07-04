@@ -300,6 +300,7 @@ export default function WebPlayerPage() {
   useEffect(() => {
     if (!playingUrl || !videoRef.current) return;
     if (hlsRef.current) {
+      try { hlsRef.current.detachMedia(); } catch { /* ignore */ }
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
@@ -1025,6 +1026,7 @@ export default function WebPlayerPage() {
                     setPlayingUrl("");
                     setPlayingTitle("");
                     if (hlsRef.current) {
+                      try { hlsRef.current.detachMedia(); } catch { /* ignore */ }
                       hlsRef.current.destroy();
                       hlsRef.current = null;
                     }
