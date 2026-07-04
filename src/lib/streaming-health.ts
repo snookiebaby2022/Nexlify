@@ -14,6 +14,7 @@ export async function getStreamingHealthSnapshot() {
         isActive: true,
         agentLastSeen: true,
         agentToken: true,
+        healthStatus: true,
         maxClients: true,
       },
       orderBy: { name: "asc" },
@@ -48,7 +49,7 @@ export async function getStreamingHealthSnapshot() {
   const now = Date.now();
   const serverRows = servers.map((s) => {
     const hb = s.agentLastSeen ? new Date(s.agentLastSeen).getTime() : 0;
-    const online = s.isActive && hb > 0 && now - hb < 120_000;
+    const online = s.isActive && (s.healthStatus === "online" || s.healthStatus === "healthy" || (hb > 0 && now - hb < 300_000));
     return {
       id: s.id,
       name: s.name,

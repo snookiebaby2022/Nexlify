@@ -18,18 +18,21 @@ function trimBase(baseUrl: string): string {
 /**
  * URL placed in M3U / Xtream exports.
  * Plugin imports (nexlify://…) are proxied through /movie/… so playback resolves like /live/.
+ * @param output - "hls" for .m3u8 URLs, "ts" (default) for .ts URLs
  */
 export function exportPlaybackUrl(
   baseUrl: string,
   line: LineCreds,
   stream: Pick<Stream, "id" | "type" | "streamUrl" | "containerExtension">,
   full?: StreamWithProvider,
-  seed?: string
+  seed?: string,
+  output: "hls" | "ts" = "ts"
 ): string {
   const resolved = (full ?? stream) as StreamWithProvider;
 
   if (stream.type === StreamType.LIVE) {
-    return `${trimBase(baseUrl)}/live/${line.username}/${line.password}/${stream.id}.ts`;
+    const ext = output === "hls" ? "m3u8" : "ts";
+    return `${trimBase(baseUrl)}/live/${line.username}/${line.password}/${stream.id}.${ext}`;
   }
 
   if (isIntegrationStreamUrl(stream.streamUrl)) {

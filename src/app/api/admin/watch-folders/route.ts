@@ -22,6 +22,56 @@ export async function POST(req: NextRequest) {
     const folder = await prisma.watchFolder.findUnique({ where: { id: body.id } });
     if (!folder) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
+    // Handle M3U watch folders separately
+    if (folder.type === "M3U") {
+      try {
+        const res = await fetch(folder.path, {
+          signal: AbortSignal.timeout(30000),
+          headers: { "User-Agent": "Nexlify-Scanner/1.0" },
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const content = await res.text();
+        const { importFromM3uContent } = await import("@/lib/import-media");
+        const result = await importFromM3uContent(content, {
+          defaultType: "LIVE",
+          categoryId: folder.categoryId,
+          serverId: folder.serverId,
+        });
+
+        await prisma.watchFolder.update({
+          where: { id: folder.id },
+          data: { lastScan: new Date(), importedCount: { increment: result.imported } },
+        });
+        await prisma.importJob.create({
+          data: {
+            kind: ImportKind.WATCH_SCAN,
+            source: folder.path,
+            imported: result.imported,
+            skipped: result.skipped,
+            status: "done",
+            watchFolderId: folder.id,
+            categoryId: folder.categoryId,
+            serverId: folder.serverId,
+            message: `M3U scan: ${result.imported} imported, ${result.skipped} skipped`,
+          },
+        });
+        return NextResponse.json(result);
+      } catch (e) {
+        await prisma.importJob.create({
+          data: {
+            kind: ImportKind.WATCH_SCAN,
+            source: folder.path,
+            imported: 0,
+            skipped: 0,
+            status: "error",
+            watchFolderId: folder.id,
+            message: e instanceof Error ? e.message : "M3U scan failed",
+          },
+        });
+        return NextResponse.json({ error: e instanceof Error ? e.message : "M3U scan failed" }, { status: 400 });
+      }
+    }
+
     const mode =
       folder.type === "SERIES"
         ? "SERIES"

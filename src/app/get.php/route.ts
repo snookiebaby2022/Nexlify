@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   const username = req.nextUrl.searchParams.get("username");
   const password = req.nextUrl.searchParams.get("password");
   const type = req.nextUrl.searchParams.get("type") ?? "m3u_plus";
+  const output = (req.nextUrl.searchParams.get("output") ?? "ts") as "hls" | "ts";
 
   if (!username || !password) {
     return iptvText("Missing credentials", { status: 400 });
@@ -35,11 +36,11 @@ export async function GET(req: NextRequest) {
   if (deny) return iptvText("Forbidden", { status: deny === "rate" ? 429 : 403 });
 
   const baseUrl = serverBaseUrl(req.url, req.headers);
-  const body = await buildM3u(line, baseUrl, type);
+  const body = await buildM3u(line, baseUrl, type, output);
 
   return iptvText(body, {
     headers: {
-      "Content-Type": "application/x-mpegURL",
+      "Content-Type": "audio/x-mpegurl",
       "Content-Disposition": `attachment; filename="${username}.m3u"`,
     },
   });

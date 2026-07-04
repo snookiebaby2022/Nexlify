@@ -309,7 +309,7 @@ export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
   return rows;
 }
 
-export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: string) {
+export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: string, output: "hls" | "ts" = "ts") {
   const streams = await streamsForLineExport(line);
   const withProviders = await prisma.stream.findMany({
     where: { id: { in: streams.map((s) => s.id) } },
@@ -317,6 +317,7 @@ export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: st
   });
   const byId = new Map(withProviders.map((s) => [s.id, s]));
 
+  const isExtended = type === "m3u_plus";
   const lines: string[] = ["#EXTM3U"];
   for (const s of streams) {
     const full = byId.get(s.id) ?? s;
@@ -329,22 +330,23 @@ export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: st
         const variantFull = v.path.startsWith("http")
           ? ({ ...full, streamUrl: v.path } as typeof full)
           : ({ ...full, streamUrl: v.path } as typeof full);
-        lines.push(exportPlaybackUrl(baseUrl, line, s, variantFull));
+        lines.push(exportPlaybackUrl(baseUrl, line, s, variantFull, undefined, output));
       }
       continue;
     }
-    const logo = s.streamIcon ? ` tvg-logo="${s.streamIcon}"` : "";
-    const tvgId = resolveEpgId(s);
+    const logo = isExtended && s.streamIcon ? ` tvg-logo="${s.streamIcon}"` : "";
+    const tvgId = isExtended ? resolveEpgId(s) : "";
     const tvgName = s.name.replace(/"/g, "'");
     const group = s.type === StreamType.LIVE ? "Live" : s.type === StreamType.MOVIE ? "Movies" : "Series";
-    const playUrl = exportPlaybackUrl(baseUrl, line, s, full);
-    lines.push(
-      `#EXTINF:-1 tvg-id="${tvgId}" tvg-name="${tvgName}" channel-id="${resolveChannelId(s)}"${logo} group-title="${group}",${s.name}`
-    );
+    const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, output);
+    if (isExtended) {
+      lines.push(
+        `#EXTINF:-1 tvg-id="${tvgId}" tvg-name="${tvgName}" channel-id="${resolveChannelId(s)}"${logo} group-title="${group}",${s.name}`
+      );
+    } else {
+      lines.push(`#EXTINF:-1,${s.name}`);
+    }
     lines.push(playUrl);
-  }
-  if (type === "m3u_plus") {
-    return lines.join("\n");
   }
   return lines.join("\n");
 }

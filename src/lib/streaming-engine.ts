@@ -64,7 +64,7 @@ export async function getStreamingEngineSnapshot() {
 
   const serverRows = servers.map((s) => {
     const hb = s.agentLastSeen ? new Date(s.agentLastSeen).getTime() : 0;
-    const agentOnline = s.isActive && hb > 0 && now - hb < 120_000;
+    const agentOnline = s.isActive && (s.healthStatus === "online" || s.healthStatus === "healthy" || (hb > 0 && now - hb < 300_000));
     const runningProcs = processes.filter((p) => p.serverId === s.id && p.status === "running").length;
     return {
       id: s.id,

@@ -722,6 +722,9 @@ button {
 .panel-nav-submenu {
   margin: 0.25rem 0 0.35rem 0.65rem;
   padding-left: 0.65rem;
+  max-height: min(50vh, 20rem);
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .panel-nav-section + .panel-nav-section {

@@ -1,13 +1,128 @@
 "use client";
 
-import { useEffect, useMemo, useState, memo } from "react";
+import { useEffect, useMemo, useState, memo, useCallback } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, ChevronRight, ChevronDown, Folder, FolderOpen } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, ChevronDown, Folder, FolderOpen, Plus, Zap } from "lucide-react";
 import {
   CategoryTypeTabs,
   CATEGORY_TYPE_LABELS,
   type CategoryTab,
 } from "@/components/category-type-tabs";
+
+const PREDEFINED_CATEGORIES: Record<CategoryTab, string[]> = {
+  LIVE: [
+    "UK Entertainment", "UK Sports", "UK News", "UK Movies", "UK Documentaries",
+    "US Entertainment", "US Sports", "US News", "US Movies",
+    "Canadian", "Australian", "Irish",
+    "Sports", "Football", "Cricket", "Rugby", "Boxing", "UFC/MMA", "Tennis", "Golf", "F1/Motorsport",
+    "News", "Kids", "Documentaries", "Music", "Religious", "Adult",
+    "Arabic", "Turkish", "Indian", "Pakistani", "Bangla", "Filipino", "African",
+    "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Polish", "Scandinavian",
+    "Greek", "Romanian", "Hungarian", "Czech", "Balkan",
+    "Chinese", "Japanese", "Korean", "Thai", "Vietnamese",
+    "Latino", "Brazilian", "Mexican", "Argentine", "Colombian",
+  ],
+  MOVIE: [
+    "Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary",
+    "Drama", "Family", "Fantasy", "History", "Horror", "Music",
+    "Mystery", "Romance", "Science Fiction", "Thriller", "War", "Western",
+    "Bollywood", "Lollywood", "Turkish", "Arabic", "French", "Spanish",
+    "Korean", "Japanese", "Chinese", "Thai",
+  ],
+  SERIES: [
+    "Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary",
+    "Drama", "Family", "Fantasy", "History", "Horror", "Music",
+    "Mystery", "Romance", "Science Fiction", "Thriller", "War", "Western",
+    "Bollywood", "Turkish", "Arabic", "Korean", "Japanese",
+    "Reality", "Talk Show", "Game Show",
+  ],
+  RADIO: [
+    "Music", "News", "Talk", "Sports", "Religious", "Comedy", "Classic", "Jazz", "Rock", "Pop",
+  ],
+};
+
+function PredefinedCategories({
+  tab,
+  existingNames,
+  onAdded,
+}: {
+  tab: CategoryTab;
+  existingNames: string[];
+  onAdded: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const available = useMemo(
+    () => PREDEFINED_CATEGORIES[tab].filter((c) => !existingNames.includes(c.toLowerCase())),
+    [tab, existingNames]
+  );
+
+  const addOne = useCallback(async (name: string) => {
+    const res = await fetch("/api/admin/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, categoryType: tab, isAdult: false }),
+    });
+    return res.ok;
+  }, [tab]);
+
+  const addAll = useCallback(async () => {
+    setBusy(true);
+    setMsg("");
+    let added = 0;
+    for (const name of available) {
+      const ok = await addOne(name);
+      if (ok) added++;
+    }
+    setMsg(`Added ${added} categories`);
+    setBusy(false);
+    onAdded();
+  }, [available, addOne, onAdded]);
+
+  if (available.length === 0) return null;
+
+  return (
+    <div
+      className="rounded-lg border p-4"
+      style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Zap size={16} style={{ color: "var(--accent)" }} />
+          <span className="text-sm font-semibold">Quick Add — {CATEGORY_TYPE_LABELS[tab]} Categories</span>
+        </div>
+        <button
+          type="button"
+          onClick={addAll}
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded font-medium text-white"
+          style={{ background: "var(--accent)" }}
+        >
+          {busy ? "Adding…" : `Add all ${available.length}`}
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {available.map((name) => (
+          <button
+            key={name}
+            type="button"
+            onClick={async () => {
+              const ok = await addOne(name);
+              if (ok) onAdded();
+            }}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border hover:opacity-80 transition-opacity"
+            style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.08)" }}
+          >
+            <Plus size={10} />
+            {name}
+          </button>
+        ))}
+      </div>
+      {msg && <p className="text-xs text-green-400 mt-2">{msg}</p>}
+    </div>
+  );
+}
 
 type CategoryRow = {
   id: string;
@@ -193,6 +308,9 @@ export default function ManagementCategoriesPage() {
       </div>
 
       <CategoryTypeTabs active={tab} onChange={setTab} counts={tabCounts} />
+
+      {/* Predefined category quick-add */}
+      <PredefinedCategories tab={tab} existingNames={tabCategories.map((c) => c.name.toLowerCase())} onAdded={load} />
 
       <div
         className="rounded-lg border p-4 text-sm"
