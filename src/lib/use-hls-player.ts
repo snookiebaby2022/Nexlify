@@ -43,7 +43,7 @@ const HLS_CONFIG: Partial<Hls.Config> = {
   liveSyncDurationCount: 0,
   liveMaxLatencyDurationCount: 10,
   liveBackBufferLength: 30,
-  liveDurationInfinity: true,
+  liveDurationInfinity: false,
 
   // Discontinuity / ad-transition handling
   stretchShortVideoTrack: true,
@@ -393,11 +393,24 @@ export async function attachUrlToVideo(
     const hls = new Hls(HLS_CONFIG);
     (video as any).__hlsInstance = hls;
 
-    return new Promise<{ destroy: () => void }>((resolve) => {
+    return new Promise<{ destroy: () => void }>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        onError?.("Stream load timed out");
+        hls.destroy();
+        reject(new Error("Stream load timed out"));
+      }, 15000);
+
       hls.loadSource(url);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        clearTimeout(timeout);
+        resolve({
+          destroy() {
+            hls.destroy();
+            (video as any).__hlsInstance = null;
+          },
+        });
         video.play().catch(() => {});
       });
 
@@ -420,24 +433,8 @@ export async function attachUrlToVideo(
         }
       });
 
-      hls.on(Hls.Events.FRAG_CHANGED, (_event, data) => {
-        const frag = data.frag;
-        if (frag && frag.sn !== "initSegment" && frag.cc !== undefined) {
-          if (!video.paused && video.currentTime > 0) {
-            video.currentTime += 0.01;
-          }
-        }
-      });
-
       hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
         onLevelSwitch?.(data.level);
-      });
-
-      resolve({
-        destroy() {
-          hls.destroy();
-          (video as any).__hlsInstance = null;
-        },
       });
     });
   }

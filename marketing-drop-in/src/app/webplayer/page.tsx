@@ -308,7 +308,17 @@ export default function WebPlayerPage() {
     const isHls = lower.includes(".m3u8") || lower.includes("application/vnd.apple.mpegurl");
 
     if (isHls && Hls.isSupported()) {
-      const hls = new Hls({ maxBufferLength: 30, maxMaxBufferLength: 60 });
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 30,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        maxBufferSize: 60 * 1000 * 1000,
+        maxBufferHole: 1.0,
+        startFragPrefetch: true,
+        debug: false,
+      });
       hls.loadSource(playingUrl);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
