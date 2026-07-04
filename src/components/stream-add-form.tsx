@@ -162,6 +162,7 @@ function LiveStreamForm({
   const [parentStreams, setParentStreams] = useState<{ id: string; name: string }[]>([]);
   const [sources, setSources] = useState<string[]>([""]);
   const [saving, setSaving] = useState(false);
+  const [iconSearching, setIconSearching] = useState(false);
   const [insertMode, setInsertMode] = useState<"single" | "m3u" | "bulk">("single");
   const [bulkText, setBulkText] = useState("");
   const [meta, setMeta] = useState<LiveMeta>(emptyLiveMeta());
@@ -467,13 +468,48 @@ function LiveStreamForm({
               )}
             </div>
             <FormField label="Icon">
-              <input
-                className={formInputClass}
-                style={formInputStyle}
-                placeholder="Stream icon URL"
-                value={form.streamIcon}
-                onChange={(e) => setForm({ ...form, streamIcon: e.target.value })}
-              />
+              <div className="flex gap-2">
+                <input
+                  className={formInputClass + " flex-1"}
+                  style={formInputStyle}
+                  placeholder="Stream icon URL"
+                  value={form.streamIcon}
+                  onChange={(e) => setForm({ ...form, streamIcon: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!form.name.trim()) return;
+                    setIconSearching(true);
+                    try {
+                      const res = await fetch(`/api/admin/streams/icon-search?name=${encodeURIComponent(form.name.trim())}`);
+                      const data = await res.json();
+                      if (data.logo) {
+                        setForm({ ...form, streamIcon: data.logo });
+                      }
+                    } finally {
+                      setIconSearching(false);
+                    }
+                  }}
+                  disabled={!form.name.trim() || iconSearching}
+                  className="px-3 py-2 rounded-lg text-xs font-medium border hover:opacity-80 disabled:opacity-40 transition-opacity whitespace-nowrap"
+                  style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.1)" }}
+                  title="Auto-detect icon from channel name"
+                >
+                  {iconSearching ? "Searching…" : "Auto-detect"}
+                </button>
+              </div>
+              {form.streamIcon && (
+                <div className="mt-2 flex items-center gap-2">
+                  <img
+                    src={form.streamIcon}
+                    alt=""
+                    className="w-8 h-8 rounded object-contain bg-white/10"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                  <span className="text-xs truncate" style={{ color: "var(--muted)" }}>{form.streamIcon}</span>
+                </div>
+              )}
             </FormField>
             </>
             )}

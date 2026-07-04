@@ -8,7 +8,6 @@ import {
   ChevronDown,
   Filter,
   Layers,
-  Play,
   RefreshCw,
   Search,
   Square,
@@ -17,7 +16,6 @@ import {
 import { StreamRowActionsMenu } from "@/components/stream-row-actions-menu";
 import { StreamVerifyPanel } from "@/components/stream-verify-panel";
 import { StreamClientsModal } from "@/components/stream-clients-modal";
-import { StreamPreviewModal } from "@/components/stream-preview-modal";
 import { formatUptimeXui, type StreamLiveStat } from "@/lib/stream-live-stats";
 
 type Stream = {
@@ -93,7 +91,6 @@ export function StreamsList({
   const [serverId, setServerId] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive" | "online" | "offline">("");
   const [clientsModal, setClientsModal] = useState<{ id: string; name: string } | null>(null);
-  const [previewModal, setPreviewModal] = useState<Stream | null>(null);
 
   const load = useCallback(() => {
     const params = new URLSearchParams({
@@ -335,16 +332,6 @@ export function StreamsList({
                     />
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      className="xui-stream-play-btn"
-                      title="Preview stream"
-                      onClick={() => setPreviewModal(s)}
-                    >
-                      <Play size={14} fill="currentColor" />
-                    </button>
-                  </td>
-                  <td>
                     <Link
                       href={`/admin/servers/streams?edit=${s.id}#epg`}
                       className={`xui-stream-epg-btn ${s.epgChannelId ? "xui-stream-epg-btn--on" : ""}`}
@@ -386,16 +373,6 @@ export function StreamsList({
           streamId={clientsModal.id}
           streamName={clientsModal.name}
           onClose={() => setClientsModal(null)}
-        />
-      )}
-
-      {previewModal && (
-        <StreamPreviewModal
-          streamId={previewModal.id}
-          streamName={previewModal.name}
-          streamUrl={previewModal.streamUrl}
-          streamType={previewModal.type}
-          onClose={() => setPreviewModal(null)}
         />
       )}
     </div>
