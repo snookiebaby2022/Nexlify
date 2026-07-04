@@ -170,9 +170,9 @@ function PanelWebPlayerInner() {
     if (infoTimeoutRef.current) clearTimeout(infoTimeoutRef.current);
     infoTimeoutRef.current = setTimeout(() => setShowInfo(false), 4000);
 
-    // Register listeners BEFORE starting playback
-    const onWaiting = () => { if (!cancelled) setBuffering(true); };
-    const onPlaying = () => { if (!cancelled) { setBuffering(false); setIsPlaying(true); } };
+    let hasPlayedOnce = false;
+    const onWaiting = () => { if (!cancelled && hasPlayedOnce) setBuffering(true); };
+    const onPlaying = () => { if (!cancelled) { hasPlayedOnce = true; setBuffering(false); setIsPlaying(true); } };
     const onPause = () => { if (!cancelled) setIsPlaying(false); };
     const onError = () => {
       if (!cancelled) { setBuffering(false); setPlayerError("Video playback error"); }

@@ -42,7 +42,7 @@ export async function attachUrlToVideo(
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         video.play().catch(() => {
-          onError?.("Click play to start");
+          // Autoplay blocked — play overlay will handle user click
         });
       });
 
