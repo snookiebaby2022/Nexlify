@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
 export default function CdnIpsSettingsPage() {
   const [cf4, setCf4] = useState<string[]>([]);
@@ -42,9 +43,9 @@ export default function CdnIpsSettingsPage() {
     load();
   }
 
-  function copySnippet() {
-    void navigator.clipboard.writeText(nginx);
-    setMsg("Nginx snippet copied.");
+  async function copySnippet() {
+    const ok = await copyToClipboard(nginx);
+    setMsg(ok ? "Nginx snippet copied." : "Copy failed");
   }
 
   return (

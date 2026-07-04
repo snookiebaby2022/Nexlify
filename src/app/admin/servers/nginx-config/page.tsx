@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
 export default function ServerNginxConfigPage() {
   const [config, setConfig] = useState("");
@@ -65,7 +66,7 @@ export default function ServerNginxConfigPage() {
           type="button"
           className="rounded px-4 py-2 text-sm border"
           style={{ borderColor: "var(--border)" }}
-          onClick={() => navigator.clipboard.writeText(config)}
+          onClick={() => void copyToClipboard(config)}
         >
           Copy to clipboard
         </button>

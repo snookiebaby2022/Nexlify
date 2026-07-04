@@ -31,6 +31,7 @@ export default function AdminWatchFoldersPage() {
     autoScanMins: 0,
   });
   const [scanning, setScanning] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   function load() {
     fetch("/api/admin/watch-folders")
@@ -45,54 +46,84 @@ export default function AdminWatchFoldersPage() {
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
+    setError("");
     const path =
       form.sourceKind === "m3u"
         ? form.m3uUrl.trim()
         : form.path.trim();
     if (!path) {
-      alert(form.sourceKind === "m3u" ? "M3U URL is required." : "Local folder path is required.");
+      setError(form.sourceKind === "m3u" ? "M3U URL is required." : "Local folder path is required.");
       return;
     }
-    await fetch("/api/admin/watch-folders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: form.name,
-        path,
-        type: form.type,
-        categoryId: form.categoryId || null,
-        serverId: form.serverIds[0] || null,
-        autoScanMins: form.autoScanMins,
-      }),
-    });
-    setForm({
-      name: "",
-      sourceKind: "local",
-      path: "",
-      m3uUrl: "",
-      type: "MIXED",
-      categoryId: "",
-      serverIds: [],
-      autoScanMins: 0,
-    });
-    load();
+    try {
+      const res = await fetch("/api/admin/watch-folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          path,
+          type: form.type,
+          categoryId: form.categoryId || null,
+          serverId: form.serverIds[0] || null,
+          autoScanMins: form.autoScanMins,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Failed to add watch folder");
+        return;
+      }
+      setForm({
+        name: "",
+        sourceKind: "local",
+        path: "",
+        m3uUrl: "",
+        type: "MIXED",
+        categoryId: "",
+        serverIds: [],
+        autoScanMins: 0,
+      });
+      load();
+    } catch {
+      setError("Network error while adding watch folder");
+    }
   }
 
   async function scan(id: string) {
     setScanning(id);
-    await fetch("/api/admin/watch-folders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scan: true, id }),
-    });
-    setScanning(null);
-    load();
+    setError("");
+    try {
+      const res = await fetch("/api/admin/watch-folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scan: true, id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Scan failed");
+      }
+    } catch {
+      setError("Network error during scan");
+    } finally {
+      setScanning(null);
+      load();
+    }
   }
 
   async function remove(id: string) {
     if (!confirm("Remove this watch folder?")) return;
-    await fetch(`/api/admin/watch-folders?id=${id}`, { method: "DELETE" });
-    load();
+    setError("");
+    try {
+      const res = await fetch(`/api/admin/watch-folders?id=${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Failed to remove watch folder");
+        return;
+      }
+      load();
+    } catch {
+      setError("Network error while removing watch folder");
+    }
   }
 
   return (
@@ -105,6 +136,12 @@ export default function AdminWatchFoldersPage() {
           Auto-import movies and TV series from a local directory or remote M3U playlist URL.
         </p>
       </div>
+
+      {error && (
+        <div className="rounded-lg border px-4 py-3 text-sm" style={{ borderColor: "var(--danger)", background: "rgba(239,68,68,0.1)", color: "var(--danger)" }}>
+          {error}
+        </div>
+      )}
 
       <form
         onSubmit={add}

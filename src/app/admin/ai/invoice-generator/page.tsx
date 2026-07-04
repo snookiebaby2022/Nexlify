@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
 export default function InvoiceGeneratorPage() {
   const [lineId, setLineId] = useState("");
@@ -45,14 +46,16 @@ export default function InvoiceGeneratorPage() {
     }
   }
 
-  async function copyToClipboard() {
+  async function copyInvoice() {
     if (!result) return;
     const text = `${result.description}\n\n${result.lineItems
       .map((l) => `${l.item}  x${l.quantity}  $${l.rate.toFixed(2)}  $${l.amount.toFixed(2)}`)
       .join("\n")}\n\n${result.notes}`;
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }
 
   return (
@@ -143,7 +146,7 @@ export default function InvoiceGeneratorPage() {
             <h2 className="text-lg font-semibold">Generated Invoice</h2>
             <button
               type="button"
-              onClick={copyToClipboard}
+              onClick={copyInvoice}
               className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
               style={{ background: "var(--accent)", color: "white" }}
             >

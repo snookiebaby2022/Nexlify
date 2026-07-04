@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Copy, Eye, EyeOff } from "lucide-react";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
 export function CopyableCredential({
   value,
@@ -19,12 +20,10 @@ export function CopyableCredential({
   const [copied, setCopied] = useState(false);
 
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(value);
+    const ok = await copyToClipboard(value);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* ignore */
     }
   }
 

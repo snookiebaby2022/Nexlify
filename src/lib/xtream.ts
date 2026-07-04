@@ -123,10 +123,10 @@ export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
     ...new Set(live.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
 
-  const rows: { category_id: string; category_name: string; parent_id: number }[] = [];
+  const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
 
   if (live.some((s) => !s.categoryId)) {
-    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0 });
+    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
   }
 
   if (categoryIds.length) {
@@ -135,7 +135,7 @@ export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
       orderBy: { sortOrder: "asc" },
     });
     for (const c of cats) {
-      rows.push({ category_id: c.id, category_name: c.name, parent_id: 0 });
+      rows.push({ category_id: c.id, category_name: c.name, parent_id: 0, created_at: Math.floor(c.createdAt.getTime() / 1000).toString() });
     }
   }
 
@@ -189,6 +189,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, categoryId?: str
       epg_channel_id: resolveEpgId(s),
       channel_id: resolveChannelId(s),
       added: Math.floor(s.createdAt.getTime() / 1000).toString(),
+      updated_at: Math.floor(full.updatedAt.getTime() / 1000),
       category_id: s.categoryId ?? "0",
       custom_sid: full.parentStreamId ?? "",
       tv_archive: catchup || timeshiftHours > 0 ? 1 : 0,
@@ -217,6 +218,7 @@ export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string) 
       stream_id: s.id,
       stream_icon: s.streamIcon ?? "",
       added: Math.floor(s.createdAt.getTime() / 1000).toString(),
+      updated_at: Math.floor(full.updatedAt.getTime() / 1000),
       category_id: s.categoryId ?? "0",
       container_extension: full.containerExtension ?? "mp4",
       custom_sid: "",
@@ -232,10 +234,10 @@ export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
     ...new Set(movies.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
 
-  const rows: { category_id: string; category_name: string; parent_id: number }[] = [];
+  const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
 
   if (movies.some((s) => !s.categoryId)) {
-    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0 });
+    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
   }
 
   if (categoryIds.length) {
@@ -244,7 +246,7 @@ export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
       orderBy: { sortOrder: "asc" },
     });
     for (const c of cats) {
-      rows.push({ category_id: c.id, category_name: c.name, parent_id: 0 });
+      rows.push({ category_id: c.id, category_name: c.name, parent_id: 0, created_at: Math.floor(c.createdAt.getTime() / 1000).toString() });
     }
   }
 
@@ -288,10 +290,10 @@ export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
     ...new Set(series.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
 
-  const rows: { category_id: string; category_name: string; parent_id: number }[] = [];
+  const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
 
   if (series.some((s) => !s.categoryId)) {
-    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0 });
+    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
   }
 
   if (categoryIds.length) {
@@ -300,7 +302,7 @@ export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
       orderBy: { sortOrder: "asc" },
     });
     for (const c of cats) {
-      rows.push({ category_id: c.id, category_name: c.name, parent_id: 0 });
+      rows.push({ category_id: c.id, category_name: c.name, parent_id: 0, created_at: Math.floor(c.createdAt.getTime() / 1000).toString() });
     }
   }
 

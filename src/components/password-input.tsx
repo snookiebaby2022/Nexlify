@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Copy, Eye, EyeOff } from "lucide-react";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
 export function PasswordInput({
   value,
@@ -23,12 +24,10 @@ export function PasswordInput({
 
   async function copy() {
     if (!value) return;
-    try {
-      await navigator.clipboard.writeText(value);
+    const ok = await copyToClipboard(value);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* ignore */
     }
   }
 

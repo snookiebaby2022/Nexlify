@@ -171,6 +171,7 @@ export function pickPublicOrigin(requestOrigin: string, configuredOrigin?: strin
       return fromReq;
     }
 
+    if (isIpHost(reqHost) && !isIpHost(cfgHost)) return fromReq;
     if (!isIpHost(reqHost) && isIpHost(cfgHost)) return fromReq;
     if (!isIpHost(reqHost) && req.protocol === "https:" && cfg.protocol === "http:") return fromReq;
 

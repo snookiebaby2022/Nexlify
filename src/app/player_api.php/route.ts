@@ -38,6 +38,8 @@ export async function GET(req: NextRequest) {
   const username = req.nextUrl.searchParams.get("username");
   const password = req.nextUrl.searchParams.get("password");
   const action = req.nextUrl.searchParams.get("action");
+  const timestampParam = req.nextUrl.searchParams.get("timestamp");
+  const clientTimestamp = timestampParam ? Number(timestampParam) : null;
 
   if (!username || !password) {
     return iptvJson({ error: "credentials required" }, { status: 400 });
@@ -94,6 +96,12 @@ export async function GET(req: NextRequest) {
       const payload = await cacheGetOrSet(`xtream:live_categories:${line.id}`, ttl.categories, () =>
         xtreamLiveCategoriesForLine(line)
       );
+      if (clientTimestamp && clientTimestamp > 0) {
+        const filtered = payload.filter(
+          (c) => Number(c.created_at || 0) > clientTimestamp
+        );
+        return iptvJson({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
+      }
       return iptvJson(payload);
     }
     case "get_live_streams": {
@@ -109,15 +117,35 @@ export async function GET(req: NextRequest) {
           antiFreeze
         );
       }
+      if (clientTimestamp && clientTimestamp > 0) {
+        const filtered = payload.filter(
+          (s) => (s.updated_at ?? 0) > clientTimestamp
+        );
+        return iptvJson({ streams: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
+      }
       return iptvJson(payload);
     }
-    case "get_vod_streams":
-      return iptvJson(await xtreamVodStreams(line, baseUrl));
+    case "get_vod_streams": {
+      const payload = await xtreamVodStreams(line, baseUrl);
+      if (clientTimestamp && clientTimestamp > 0) {
+        const filtered = payload.filter(
+          (s) => (s.updated_at ?? 0) > clientTimestamp
+        );
+        return iptvJson({ streams: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
+      }
+      return iptvJson(payload);
+    }
     case "get_vod_categories": {
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(`xtream:vod_categories:${line.id}`, ttl.categories, () =>
         xtreamVodCategoriesForLine(line)
       );
+      if (clientTimestamp && clientTimestamp > 0) {
+        const filtered = payload.filter(
+          (c) => Number(c.created_at || 0) > clientTimestamp
+        );
+        return iptvJson({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
+      }
       return iptvJson(payload);
     }
     case "get_series_categories": {
@@ -125,6 +153,12 @@ export async function GET(req: NextRequest) {
       const payload = await cacheGetOrSet(`xtream:series_categories:${line.id}`, ttl.categories, () =>
         xtreamSeriesCategoriesForLine(line)
       );
+      if (clientTimestamp && clientTimestamp > 0) {
+        const filtered = payload.filter(
+          (c) => Number(c.created_at || 0) > clientTimestamp
+        );
+        return iptvJson({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
+      }
       return iptvJson(payload);
     }
     case "get_series": {

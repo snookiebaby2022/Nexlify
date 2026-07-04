@@ -6,6 +6,10 @@ import { useEffect, useState } from "react";
 
 import Link from "next/link";
 
+import { Copy, Check } from "lucide-react";
+
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
+
 import {
 
   LOCALE_STORAGE_KEY,
@@ -59,9 +63,17 @@ type PortalInfo = {
 
 
 function CopyField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    const ok = await copyToClipboard(value);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
-
     <div className="text-sm space-y-1">
 
       <div style={{ color: "#94a3b8" }}>{label}</div>
@@ -84,15 +96,15 @@ function CopyField({ label, value }: { label: string; value: string }) {
 
           type="button"
 
-          className="shrink-0 rounded px-2 text-xs border cursor-pointer"
+          className="shrink-0 rounded px-2 text-xs border cursor-pointer flex items-center gap-1 transition"
 
-          style={{ borderColor: "#1e3a5f", color: "#22d3ee" }}
+          style={{ borderColor: copied ? "#22c55e" : "#1e3a5f", color: copied ? "#22c55e" : "#22d3ee" }}
 
-          onClick={() => navigator.clipboard.writeText(value)}
+          onClick={copy}
 
         >
-
-          Copy
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? "Copied" : "Copy"}
 
         </button>
 

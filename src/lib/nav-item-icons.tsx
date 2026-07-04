@@ -289,6 +289,10 @@ const SETTINGS_ICON_MAP: Record<string, { Icon: LucideIcon; color: string }> = {
   "/admin/settings/lb-sessions": { Icon: Server, color: "#60a5fa" },
   "/admin/settings/mass-edit": { Icon: ListChecks, color: "#f59e0b" },
   "/admin/settings/migration": { Icon: ArrowRightLeft, color: "#34d399" },
+  "/admin/settings/nginx-cache": { Icon: Database, color: "#22d3ee" },
+  "/admin/settings/ip2proxy": { Icon: Shield, color: "#f87171" },
+  "/admin/settings/vod-burst": { Icon: Zap, color: "#fbbf24" },
+  "/admin/settings/allowed-domains": { Icon: Globe, color: "#818cf8" },
 };
 
 /** Colored icon for a settings sidebar link. */

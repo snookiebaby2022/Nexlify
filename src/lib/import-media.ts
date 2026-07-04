@@ -372,24 +372,29 @@ export async function importFromFolder(
       displayName: name,
     });
 
-    await prisma.stream.create({
-      data: {
-        name,
-        streamUrl: url,
-        streamIcon: meta.streamIcon,
-        type,
-        categoryId: meta.categoryId,
-        serverId: opts.serverId ?? null,
-        seriesName: series?.seriesName,
-        seasonNum: series?.seasonNum,
-        episodeNum: series?.episodeNum,
-        containerExtension: path.extname(file).replace(".", "") || "mp4",
-        agentStartCmd: meta.agentStartCmd,
-        isOnDemand: true,
-        vodMode: VodMode.ON_DEMAND,
-      },
-    });
-    imported++;
+    try {
+      await prisma.stream.create({
+        data: {
+          name,
+          streamUrl: url,
+          streamIcon: meta.streamIcon,
+          type,
+          categoryId: meta.categoryId,
+          serverId: opts.serverId ?? null,
+          seriesName: series?.seriesName,
+          seasonNum: series?.seasonNum,
+          episodeNum: series?.episodeNum,
+          containerExtension: path.extname(file).replace(".", "") || "mp4",
+          agentStartCmd: meta.agentStartCmd,
+          isOnDemand: true,
+          vodMode: VodMode.ON_DEMAND,
+        },
+      });
+      imported++;
+    } catch (err) {
+      console.warn(`[import] Failed to import ${file}:`, err instanceof Error ? err.message : err);
+      skipped++;
+    }
   }
 
   return { imported, skipped };

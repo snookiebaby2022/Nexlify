@@ -228,8 +228,13 @@ button {
   z-index: 1;
   display: flex;
   min-height: 100vh;
-  /* 1-Stream / XUI-style density — more rows and nav visible without scrolling */
-  zoom: 0.875;
+}
+
+/* 1-Stream / XUI-style density — more rows and nav visible without scrolling (desktop only) */
+@media (min-width: 1024px) {
+  .panel-shell-inner {
+    zoom: 0.875;
+  }
 }
 
 .panel-sidebar-column {
@@ -652,6 +657,7 @@ button {
   font-weight: 500;
   color: rgba(255, 255, 255, 0.88);
   transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  min-height: 44px;
 }
 
 .panel-nav-link:hover:not(.panel-nav-link--active) {
@@ -685,6 +691,7 @@ button {
   color: rgba(255, 255, 255, 0.9);
   background: transparent;
   transition: background 0.15s ease, box-shadow 0.15s ease;
+  min-height: 44px;
 }
 
 .panel-nav-group-btn:hover:not(.panel-nav-group-btn--active) {
@@ -739,12 +746,13 @@ button {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.45rem 0.65rem;
+  padding: 0.5rem 0.65rem;
   margin-bottom: 0.1rem;
   border-radius: 0.375rem;
   font-size: 0.8125rem;
   color: rgba(255, 255, 255, 0.68);
   transition: color 0.12s ease, background 0.12s ease;
+  min-height: 40px;
 }
 
 .panel-nav-sub-link:hover {

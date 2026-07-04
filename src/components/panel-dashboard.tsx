@@ -23,6 +23,7 @@ import { DashboardXuiSummaryCards } from "@/components/dashboard-xui-summary-car
 import { DashboardExpiringLines } from "@/components/dashboard-expiring-lines";
 
 import { DashboardInsightsPanels } from "@/components/dashboard-insights-panels";
+import { DashboardCacheRebuild } from "@/components/dashboard-cache-rebuild";
 
 import { DashboardXuiResourceMonitor } from "@/components/dashboard-xui-resource-monitor";
 
@@ -432,7 +433,7 @@ export function PanelDashboard({
 
           <div
 
-            className="grid lg:grid-cols-2 gap-4 p-4 pt-0 border-t"
+            className="grid lg:grid-cols-3 gap-4 p-4 pt-0 border-t"
 
             style={{ borderColor: "var(--border)" }}
 
@@ -543,6 +544,8 @@ export function PanelDashboard({
               </ul>
 
             </div>
+
+            <DashboardCacheRebuild />
 
           </div>
 

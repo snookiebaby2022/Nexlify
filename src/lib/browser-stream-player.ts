@@ -14,13 +14,10 @@ export async function attachUrlToVideo(
   onError?: (msg: string) => void
 ): Promise<StreamPlayerHandle | null> {
   video.src = url;
-  // Mute to bypass autoplay block, then unmute
-  video.muted = true;
   try {
     await video.play();
-    video.muted = false;
   } catch {
-    onError?.("Click play to start");
+    onError?.("Playback blocked — click play to start");
   }
   return null;
 }

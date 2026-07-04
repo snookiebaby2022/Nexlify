@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   Maximize, Minimize, Search, Tv, X, Menu, ArrowLeft, Heart, Clock,
   Loader2, AlertCircle, MonitorPlay, ChevronUp, ChevronDown, Volume2,
-  VolumeX, RotateCw, Zap, Info,
+  VolumeX, RotateCw, Zap, Info, Play, Pause,
 } from "lucide-react";
 import { attachUrlToVideo, type StreamPlayerHandle } from "@/lib/browser-stream-player";
 
@@ -53,6 +53,7 @@ function PanelWebPlayerInner() {
   const [epgProgram, setEpgProgram] = useState<EpgProgram | null>(null);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<StreamPlayerHandle | null>(null);
@@ -163,13 +164,10 @@ function PanelWebPlayerInner() {
     setBuffering(true);
     setPlayerError("");
     setShowInfo(true);
+    setIsPlaying(false);
 
     if (infoTimeoutRef.current) clearTimeout(infoTimeoutRef.current);
     infoTimeoutRef.current = setTimeout(() => setShowInfo(false), 4000);
-
-    // Set volume
-    video.volume = volume;
-    video.muted = muted;
 
     void (async () => {
       try {
@@ -187,13 +185,15 @@ function PanelWebPlayerInner() {
     })();
 
     const onWaiting = () => setBuffering(true);
-    const onPlaying = () => setBuffering(false);
+    const onPlaying = () => { setBuffering(false); setIsPlaying(true); };
+    const onPause = () => setIsPlaying(false);
     const onError = () => {
       setBuffering(false);
       setPlayerError("Video playback error");
     };
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("playing", onPlaying);
+    video.addEventListener("pause", onPause);
     video.addEventListener("error", onError);
 
     // Fetch EPG
@@ -206,6 +206,7 @@ function PanelWebPlayerInner() {
       playerRef.current = null;
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("pause", onPause);
       video.removeEventListener("error", onError);
       if (infoTimeoutRef.current) clearTimeout(infoTimeoutRef.current);
       if (epgTimeoutRef.current) clearTimeout(epgTimeoutRef.current);
@@ -218,7 +219,15 @@ function PanelWebPlayerInner() {
         }).catch(() => {});
       }
     };
-  }, [playingUrl, volume, muted, playingId, username, password, fetchEpg]);
+  }, [playingUrl, playingId, username, password, fetchEpg]);
+
+  // Sync volume/muted to video element
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.volume = volume;
+    video.muted = muted;
+  }, [volume, muted, playingUrl]);
 
   const filtered = streams.filter((s) => {
     if (activeCat && String(s.category_id ?? "") !== String(activeCat)) return false;
@@ -229,6 +238,7 @@ function PanelWebPlayerInner() {
   function playStream(s: LiveStream) {
     setPlayerError("");
     setBuffering(true);
+    setIsPlaying(false);
     const url = `${apiBase}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${s.stream_id}.m3u8`;
     setPlayingUrl(url);
     setPlayingTitle(s.name);
@@ -236,6 +246,21 @@ function PanelWebPlayerInner() {
     setPlayingCategory(cats.find((c) => String(c.category_id) === String(s.category_id))?.category_name ?? "");
     saveRecent(s);
     if (window.innerWidth < 768) setSidebarOpen(false);
+  }
+
+  function handlePlayClick() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = false;
+    setMuted(false);
+    video.play().then(() => setIsPlaying(true)).catch(() => {});
+  }
+
+  function handlePauseClick() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.pause();
+    setIsPlaying(false);
   }
 
   function playNextChannel() {
@@ -293,6 +318,16 @@ function PanelWebPlayerInner() {
       } else if (e.key === "ArrowDown" || e.key === "ArrowLeft") {
         e.preventDefault();
         playPrevChannel();
+      } else if (e.key === " ") {
+        e.preventDefault();
+        const video = videoRef.current;
+        if (video) {
+          if (video.paused) {
+            handlePlayClick();
+          } else {
+            video.pause();
+          }
+        }
       } else if (e.key === "f" || e.key === "F") {
         toggleFullscreen();
       } else if (e.key === "m" || e.key === "M") {
@@ -366,7 +401,7 @@ function PanelWebPlayerInner() {
             {loading ? "Loading…" : "Watch Live TV"}
           </button>
           <p className="text-[10px] text-neutral-500 text-center">
-            Keyboard shortcuts: ↑/↓ switch channels · F fullscreen · M mute · Esc close
+            Keyboard shortcuts: ↑/↓ switch channels · Space play/pause · F fullscreen · M mute · Esc close
           </p>
         </form>
       </div>
@@ -566,6 +601,18 @@ function PanelWebPlayerInner() {
                 <p className="text-xs text-neutral-400">Loading stream…</p>
               </div>
             )}
+            {!buffering && !playerError && !isPlaying && (
+              <button
+                type="button"
+                onClick={handlePlayClick}
+                className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 hover:bg-black/50 transition cursor-pointer gap-2 z-10"
+              >
+                <div className="w-16 h-16 rounded-full bg-[#00c0ef] flex items-center justify-center shadow-lg shadow-[#00c0ef]/30 hover:scale-105 transition-transform">
+                  <Play size={28} className="text-white ml-1" fill="white" />
+                </div>
+                <p className="text-xs text-neutral-300">Click to play</p>
+              </button>
+            )}
             {playerError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 gap-3 pointer-events-auto">
                 <AlertCircle size={28} className="text-red-400" />
@@ -643,6 +690,22 @@ function PanelWebPlayerInner() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const video = videoRef.current;
+                    if (!video) return;
+                    if (isPlaying) {
+                      video.pause();
+                    } else {
+                      handlePlayClick();
+                    }
+                  }}
+                  className="p-1.5 rounded bg-black/50 hover:bg-black/80 transition"
+                  title={isPlaying ? "Pause" : "Play"}
+                >
+                  {isPlaying ? <Pause size={14} /> : <Play size={14} />}
+                </button>
                 <button
                   type="button"
                   onClick={() => setMuted((m) => {

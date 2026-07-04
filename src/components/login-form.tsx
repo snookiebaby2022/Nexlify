@@ -5,6 +5,7 @@ import { Check, Copy, Eye, EyeOff, Lock, Shield, User } from "lucide-react";
 import { Login3dLogo } from "@/components/login-3d-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LogoAccentToggle } from "@/components/logo-accent-toggle";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
 const DEMO_ACCOUNTS = [
   { label: "Admin", username: "admin", password: "admin123" },
@@ -232,11 +233,12 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
                 {password ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(password).then(() => {
+                    onClick={async () => {
+                      const ok = await copyToClipboard(password);
+                      if (ok) {
                         setPasswordCopied(true);
                         setTimeout(() => setPasswordCopied(false), 2000);
-                      });
+                      }
                     }}
                     className="p-1 text-slate-500 hover:text-slate-300 cursor-pointer"
                     aria-label="Copy password"

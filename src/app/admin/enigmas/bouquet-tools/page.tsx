@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { LINE_ENIGMA_FORMATS, LINE_PLAYLIST_FORMAT_GROUPS, buildLinePlaylistUrl } from "@/lib/line-playlist-urls";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
 type Line = { id: string; username: string; password: string; isActive: boolean };
 
@@ -99,7 +100,7 @@ export default function EnigmaBouquetToolsPage() {
                         type="button"
                         className="text-xs px-2 py-1 rounded border"
                         style={{ borderColor: "var(--border)" }}
-                        onClick={() => navigator.clipboard.writeText(row.url)}
+                        onClick={() => void copyToClipboard(row.url)}
                       >
                         Copy URL
                       </button>

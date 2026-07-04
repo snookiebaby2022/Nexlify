@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Copy, Download, QrCode, X } from "lucide-react";
+import { ChevronDown, Copy, Check, Download, QrCode, X } from "lucide-react";
+import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import {
   LINE_PLAYLIST_FORMAT_GROUPS,
   buildLineEpgUrl,
@@ -39,6 +40,7 @@ export function DownloadPlaylistModal({
     radio: true,
   });
   const [selectedKey, setSelectedKey] = useState("m3u_plus:hls:m3u With Options - HLS");
+  const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
 
   const { host, proto, origin } = useMemo(() => {
     if (typeof window === "undefined") return { host: "", proto: "https:", origin: "" };
@@ -70,11 +72,10 @@ export function DownloadPlaylistModal({
   if (!open) return null;
 
   async function copyText(text: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      alert(`${label} copied`);
-    } catch {
-      prompt(`Copy ${label}:`, text);
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopiedLabel(label);
+      setTimeout(() => setCopiedLabel(null), 2000);
     }
   }
 
@@ -95,13 +96,19 @@ export function DownloadPlaylistModal({
   }
 
   function UrlRow({ label, url, filename }: { label: string; url: string; filename?: string }) {
+    const isCopied = copiedLabel === label;
     return (
       <div className="download-playlist-url-block">
         <div className="download-playlist-url-head">
           <span className="download-playlist-url-label">{label}</span>
           <span className="download-playlist-url-actions">
-            <button type="button" title="Copy" onClick={() => void copyText(url, label)}>
-              <Copy size={14} />
+            <button
+              type="button"
+              title="Copy"
+              onClick={() => void copyText(url, label)}
+              style={isCopied ? { color: "#22c55e" } : undefined}
+            >
+              {isCopied ? <Check size={14} /> : <Copy size={14} />}
             </button>
             <button
               type="button"
@@ -237,15 +244,15 @@ export function DownloadPlaylistModal({
                 <pre className="download-playlist-json">{qrJson}</pre>
                 <div className="download-playlist-api-links text-xs" style={{ color: "var(--muted)" }}>
                   <button type="button" className="underline" onClick={() => void copyText(buildLinePlayerApiUrl(host, proto, username, password), "Player API")}>
-                    M3U API
+                    {copiedLabel === "Player API" ? <Check size={10} className="inline" /> : "M3U API"}
                   </button>
                   {" · "}
                   <button type="button" className="underline" onClick={() => void copyText(buildLineEpgUrl(host, proto, username, password), "EPG")}>
-                    EPG URL
+                    {copiedLabel === "EPG" ? <Check size={10} className="inline" /> : "EPG URL"}
                   </button>
                   {" · "}
                   <button type="button" className="underline" onClick={() => void copyText(buildStalkerPortalUrl(host, proto), "Stalker")}>
-                    Stalker
+                    {copiedLabel === "Stalker" ? <Check size={10} className="inline" /> : "Stalker"}
                   </button>
                   {" · "}
                   <button type="button" className="underline" onClick={() => window.open(buildWebPlayerUrl(origin, username, password))}>
