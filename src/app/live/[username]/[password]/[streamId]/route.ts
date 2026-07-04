@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
 import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
-import { trackConnection } from "@/lib/connections";
+import { trackConnection, removeConnection } from "@/lib/connections";
 import {
   buildLiveRedirectHeaders,
   getAntiFreezeSettings,
@@ -156,8 +156,31 @@ export async function GET(
         return iptvText(remux.error, { status: 502 });
       }
       void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
+      const remuxBody = new ReadableStream({
+        start(controller) {
+          const reader = (remux.stream as ReadableStream).getReader();
+          const pump = () => {
+            reader.read().then(({ done, value }) => {
+              if (done) {
+                controller.close();
+                void removeConnection(line.id, cleanId, ip);
+                return;
+              }
+              controller.enqueue(value);
+              pump();
+            }).catch(() => {
+              controller.close();
+              void removeConnection(line.id, cleanId, ip);
+            });
+          };
+          pump();
+        },
+        cancel() {
+          void removeConnection(line.id, cleanId, ip);
+        },
+      });
       return withIptvCors(
-        new NextResponse(remux.stream as BodyInit, {
+        new NextResponse(remuxBody, {
           status: 200,
           headers: {
             ...buildLiveRedirectHeaders(antiFreeze),
@@ -226,6 +249,41 @@ export async function GET(
 
   if (response.status === 200) {
     void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
+
+    // Wrap the response body to detect when the client disconnects
+    const originalBody = response.body;
+    if (originalBody) {
+      const trackedBody = new ReadableStream({
+        start(controller) {
+          const reader = originalBody.getReader();
+          const pump = () => {
+            reader.read().then(({ done, value }) => {
+              if (done) {
+                controller.close();
+                void removeConnection(line.id, cleanId, ip);
+                return;
+              }
+              controller.enqueue(value);
+              pump();
+            }).catch(() => {
+              controller.close();
+              void removeConnection(line.id, cleanId, ip);
+            });
+          };
+          pump();
+        },
+        cancel() {
+          void removeConnection(line.id, cleanId, ip);
+        },
+      });
+
+      return withIptvCors(
+        new NextResponse(trackedBody, {
+          status: 200,
+          headers: Object.fromEntries(response.headers.entries()),
+        })
+      );
+    }
   }
 
   return withIptvCors(response);
