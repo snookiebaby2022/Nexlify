@@ -209,6 +209,14 @@ function PanelWebPlayerInner() {
       video.removeEventListener("error", onError);
       if (infoTimeoutRef.current) clearTimeout(infoTimeoutRef.current);
       if (epgTimeoutRef.current) clearTimeout(epgTimeoutRef.current);
+      // Signal disconnect so the connection slot frees immediately
+      if (playingId && username && password) {
+        fetch("/api/live/disconnect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password, streamId: playingId }),
+        }).catch(() => {});
+      }
     };
   }, [playingUrl, volume, muted, playingId, username, password, fetchEpg]);
 
@@ -259,6 +267,21 @@ function PanelWebPlayerInner() {
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
+
+  // Disconnect on tab close
+  useEffect(() => {
+    function onBeforeUnload() {
+      if (playingId && username && password) {
+        const data = JSON.stringify({ username, password, streamId: playingId });
+        navigator.sendBeacon(
+          "/api/live/disconnect",
+          new Blob([data], { type: "application/json" })
+        );
+      }
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [playingId, username, password]);
 
   // Keyboard shortcuts
   useEffect(() => {

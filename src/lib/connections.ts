@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 
-const STALE_MS = 5 * 60 * 1000;
+const STALE_MS = 30 * 1000; // 30 seconds — connections clear fast when user leaves
 
 export async function countActiveConnectionsForLine(lineId: string) {
   const staleBefore = new Date(Date.now() - STALE_MS);
@@ -28,19 +28,19 @@ export async function lineHasConnectionCapacity(
   if (maxConnections <= 0) return true;
   const active = await countLineSessions(lineId);
   if (active < maxConnections) return true;
-  // IPTV apps (Smarters, TiviMate) often reopen the same channel without closing the
-  // first session — allow refresh when this IP already has an active slot on that stream.
-  if (opts?.streamId && opts?.clientIp) {
+  // Same IP can always reconnect — allows channel switching from same device
+  // and handles stale connections from the same IP gracefully
+  if (opts?.clientIp) {
     const staleBefore = new Date(Date.now() - STALE_MS);
-    const existing = await prisma.liveConnection.findFirst({
+    const sameIpConns = await prisma.liveConnection.count({
       where: {
         lineId,
-        streamId: opts.streamId,
         ip: opts.clientIp,
         lastSeenAt: { gte: staleBefore },
       },
     });
-    if (existing) return true;
+    // If all active connections are from this IP, allow it (channel switching)
+    if (sameIpConns > 0) return true;
   }
   return false;
 }
@@ -52,6 +52,18 @@ export async function trackConnection(opts: {
   userAgent?: string;
 }) {
   const staleBefore = new Date(Date.now() - STALE_MS);
+
+  // Delete any stale connections from this IP first (handles channel switching)
+  if (opts.ip) {
+    await prisma.liveConnection.deleteMany({
+      where: {
+        lineId: opts.lineId,
+        ip: opts.ip,
+        lastSeenAt: { lt: staleBefore },
+      },
+    });
+  }
+
   const existing = await prisma.liveConnection.findFirst({
     where: {
       lineId: opts.lineId,
@@ -98,6 +110,13 @@ export async function trackConnection(opts: {
     ip: opts.ip,
   });
   return conn.id;
+}
+
+/** Remove connection when user stops watching */
+export async function removeConnection(lineId: string, streamId: string, ip: string) {
+  await prisma.liveConnection.deleteMany({
+    where: { lineId, streamId, ip },
+  });
 }
 
 const connectionInclude = {
