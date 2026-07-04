@@ -40,7 +40,7 @@ const HLS_CONFIG: Partial<Hls.Config> = {
   maxBufferHole: 1.0,
 
   // Live stream — stay behind live edge for stability
-  liveSyncDurationCount: 3,
+  liveSyncDurationCount: 0,
   liveMaxLatencyDurationCount: 10,
   liveBackBufferLength: 30,
   liveDurationInfinity: true,
