@@ -1,177 +1,148 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { DataTable } from "@/components/data-table";
-import { formatDateTime } from "@/lib/format";
-import { EPG_WORKING_LINKS } from "@/lib/epg-working-links";
+import { useState, useEffect, useCallback } from "react";
+import { RefreshCw, Plus, Trash2, RefreshCwIcon, Check, X } from "lucide-react";
 
-export default function AdminEpgSourcesPage() {
-  const [sources, setSources] = useState<
-    {
-      id: string;
-      name: string;
-      url: string;
-      lastSync: string | null;
-      syncEveryHours: number;
-      lastSyncError: string | null;
-      _count: { programs: number };
-    }[]
-  >([]);
-  const [syncing, setSyncing] = useState<string | null>(null);
-  const [msg, setMsg] = useState("");
+type EpgSource = {
+  id: string;
+  name: string;
+  url: string;
+  type: "xmltv" | "xtream" | "custom";
+  isActive: boolean;
+  priority: number;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  channelCount: number;
+};
 
-  function load() {
-    fetch("/api/admin/epg")
-      .then((r) => r.json())
-      .then((d) => setSources(d.sources));
-  }
+export default function EpgSourcesPage() {
+  const [sources, setSources] = useState<EpgSource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newSource, setNewSource] = useState({ name: "", url: "", type: "xmltv" as const, priority: 1 });
 
-  useEffect(() => {
-    load();
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/epg-sources?action=sources");
+      if (res.ok) setSources(await res.json());
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  async function sync(id: string) {
-    setSyncing(id);
-    setMsg("");
-    const res = await fetch("/api/admin/epg", {
+  useEffect(() => { load(); }, [load]);
+
+  const addSource = async () => {
+    if (!newSource.name || !newSource.url) return;
+    await fetch("/api/admin/epg-sources", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sync: true, sourceId: id }),
+      body: JSON.stringify({ action: "add", source: newSource }),
     });
-    const data = await res.json();
-    setSyncing(null);
-    if (!res.ok) setMsg(data.error ?? "Sync failed");
-    else setMsg(`Synced ${data.programsImported ?? 0} programmes`);
+    setNewSource({ name: "", url: "", type: "xmltv", priority: 1 });
+    setShowAdd(false);
     load();
-  }
+  };
 
-  async function forceSyncAll() {
-    setSyncing("all");
-    setMsg("");
-    const res = await fetch("/api/admin/epg", {
+  const removeSource = async (id: string) => {
+    await fetch("/api/admin/epg-sources", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ syncAll: true }),
+      body: JSON.stringify({ action: "remove", id }),
     });
-    const data = await res.json();
-    setSyncing(null);
-    setMsg(
-      res.ok
-        ? `Force synced ${data.synced ?? 0} / ${data.total ?? 0} source(s)`
-        : data.error ?? "Sync failed"
-    );
     load();
-  }
+  };
 
-  async function remove(id: string) {
-    await fetch(`/api/admin/epg?id=${id}`, { method: "DELETE" });
+  const syncSource = async (id: string) => {
+    await fetch("/api/admin/epg-sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "sync", id }),
+    });
     load();
-  }
+  };
+
+  const syncAll = async () => {
+    await fetch("/api/admin/epg-sources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "sync-all" }),
+    });
+    load();
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">EPG sources</h1>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={syncing === "all"}
-            className="text-sm px-3 py-2 rounded-md border cursor-pointer disabled:opacity-50"
-            style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
-            onClick={forceSyncAll}
-          >
-            {syncing === "all" ? "Force syncing…" : "Force sync all"}
+    <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Custom EPG Sources</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
+            Manage XMLTV and custom EPG sources for your channels
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={syncAll} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm border" style={{ borderColor: "var(--border)" }}>
+            <RefreshCwIcon size={14} /> Sync All
           </button>
-          <Link
-            href="/admin/epg/countries"
-            className="text-sm px-3 py-2 rounded-md border"
-            style={{ borderColor: "var(--border)" }}
-          >
-            Countries
-          </Link>
-          <Link
-            href="/admin/epg/add"
-            className="text-sm px-3 py-2 rounded-md"
-            style={{ background: "var(--accent)", color: "#fff" }}
-          >
-            + Add EPG
-          </Link>
-        </div>
-      </div>
-      {msg && <p className="text-sm" style={{ color: "var(--muted)" }}>{msg}</p>}
-
-      <div
-        className="rounded-lg border p-4 text-sm"
-        style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
-      >
-        <p className="font-medium mb-2">Working guide links</p>
-        <div className="flex flex-wrap gap-2">
-          {EPG_WORKING_LINKS.map((l) => (
-            <Link
-              key={l.code}
-              href={`/admin/epg/add?url=${encodeURIComponent(l.url)}&name=${encodeURIComponent(l.label)}`}
-              className="text-xs px-2 py-1 rounded border"
-              style={{ borderColor: "var(--border)", color: "var(--accent)" }}
-            >
-              + {l.label}
-            </Link>
-          ))}
+          <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "var(--accent)" }}>
+            <Plus size={14} /> Add Source
+          </button>
         </div>
       </div>
 
-      <DataTable
-        headers={["Name", "Programs", "Sync every (h)", "Last sync", "Actions"]}
-        rows={sources.map((s) => [
-          <span key={s.id}>
-            {s.name}
-            {s.lastSyncError && (
-              <span className="block text-xs" style={{ color: "var(--danger)" }}>
-                {s.lastSyncError}
-              </span>
-            )}
-          </span>,
-          s._count.programs,
-          <input
-            key={`h-${s.id}`}
-            type="number"
-            min={1}
-            className="w-16 rounded border px-1 py-0.5 text-xs bg-transparent"
-            style={{ borderColor: "var(--border)" }}
-            defaultValue={s.syncEveryHours}
-            onBlur={(e) => {
-              const v = parseInt(e.target.value, 10);
-              if (!Number.isNaN(v) && v !== s.syncEveryHours) {
-                fetch(`/api/admin/epg/${s.id}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ syncEveryHours: v }),
-                }).then(() => load());
-              }
-            }}
-          />,
-          s.lastSync ? formatDateTime(s.lastSync) : "Never",
-          <span key={`act-${s.id}`} className="flex gap-2">
-            <button
-              type="button"
-              className="text-xs px-2 py-1 rounded cursor-pointer"
-              style={{ background: "var(--accent)", color: "#fff" }}
-              disabled={syncing === s.id}
-              onClick={() => sync(s.id)}
-            >
-              {syncing === s.id ? "Syncing…" : "Force sync"}
-            </button>
-            <button
-              type="button"
-              className="text-xs cursor-pointer"
-              style={{ color: "var(--danger)" }}
-              onClick={() => remove(s.id)}
-            >
-              Delete
-            </button>
-          </span>,
-        ])}
-      />
+      {showAdd && (
+        <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+          <h3 className="text-sm font-semibold">Add EPG Source</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <input placeholder="Source name" value={newSource.name} onChange={(e) => setNewSource({ ...newSource, name: e.target.value })} className="px-3 py-2 rounded-lg border bg-transparent text-sm" style={{ borderColor: "var(--border)" }} />
+            <input placeholder="URL (XMLTV or API)" value={newSource.url} onChange={(e) => setNewSource({ ...newSource, url: e.target.value })} className="px-3 py-2 rounded-lg border bg-transparent text-sm" style={{ borderColor: "var(--border)" }} />
+          </div>
+          <div className="flex gap-3">
+            <select value={newSource.type} onChange={(e) => setNewSource({ ...newSource, type: e.target.value as "xmltv" | "xtream" | "custom" })} className="px-3 py-2 rounded-lg border bg-transparent text-sm" style={{ borderColor: "var(--border)" }}>
+              <option value="xmltv">XMLTV</option>
+              <option value="xtream">Xtream</option>
+              <option value="custom">Custom</option>
+            </select>
+            <input type="number" placeholder="Priority" value={newSource.priority} onChange={(e) => setNewSource({ ...newSource, priority: Number(e.target.value) })} className="w-24 px-3 py-2 rounded-lg border bg-transparent text-sm" style={{ borderColor: "var(--border)" }} min={1} max={10} />
+            <button onClick={addSource} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "var(--accent)" }}>Add</button>
+            <button onClick={() => setShowAdd(false)} className="px-4 py-2 rounded-lg text-sm border" style={{ borderColor: "var(--border)" }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {sources.map((source) => (
+          <div key={source.id} className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">{source.name}</span>
+                  <span className="text-xs px-2 py-0.5 rounded" style={{ background: source.isActive ? "rgba(34,197,94,0.15)" : "rgba(148,163,184,0.15)", color: source.isActive ? "#22c55e" : "var(--muted)" }}>
+                    {source.isActive ? "Active" : "Inactive"}
+                  </span>
+                  <span className="text-xs px-2 py-0.5 rounded" style={{ background: "rgba(0,192,239,0.15)", color: "var(--accent)" }}>
+                    {source.type.toUpperCase()}
+                  </span>
+                </div>
+                <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>{source.url}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs tabular-nums">{source.channelCount} channels</span>
+                <button onClick={() => syncSource(source.id)} className="p-1.5 rounded hover:opacity-80" title="Sync">
+                  <RefreshCw size={14} />
+                </button>
+                <button onClick={() => removeSource(source.id)} className="p-1.5 rounded hover:text-red-400" title="Remove">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+            {source.lastSyncAt && <p className="text-xs mt-2" style={{ color: "var(--muted)" }}>Last sync: {new Date(source.lastSyncAt).toLocaleString()}</p>}
+            {source.lastError && <p className="text-xs mt-1 text-red-400">Error: {source.lastError}</p>}
+          </div>
+        ))}
+        {sources.length === 0 && <p className="text-center py-8 text-sm" style={{ color: "var(--muted)" }}>No EPG sources configured</p>}
+      </div>
     </div>
   );
 }

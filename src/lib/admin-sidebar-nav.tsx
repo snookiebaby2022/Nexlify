@@ -270,6 +270,21 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
     {
       kind: "group",
       group: {
+        id: "infrastructure",
+        label: "Infrastructure",
+        icon: coloredGroupIcon("infrastructure"),
+        items: [
+          { href: "/admin/settings/catchup", label: "Catch-up TV (DVR)" },
+          { href: "/admin/epg/sources", label: "Custom EPG Sources" },
+          { href: "/admin/servers/load-balancer", label: "Load Balancer" },
+          { href: "/admin/sessions", label: "Session Management" },
+          { href: "/admin/analytics/retention", label: "Retention Analytics" },
+        ],
+      },
+    },
+    {
+      kind: "group",
+      group: {
         id: "ai",
         label: "AI Studio",
         icon: coloredGroupIcon("ai"),
