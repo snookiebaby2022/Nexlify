@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Maximize, Minimize, Search, Tv, X, Menu, ArrowLeft, Heart, Clock,
   Loader2, AlertCircle, MonitorPlay, ChevronUp, ChevronDown, Volume2,
-  VolumeX, RotateCw, Zap, Info, Play, Pause,
+  VolumeX, RotateCw, Zap, Info, Play, Pause, PictureInPicture, Radio,
 } from "lucide-react";
 import { attachUrlToVideo, type StreamPlayerHandle } from "@/lib/browser-stream-player";
 
@@ -71,6 +71,7 @@ function PanelWebPlayerInner() {
       setRecent(rec);
       const vol = parseFloat(localStorage.getItem("nexlify-volume") || "1");
       setVolume(Number.isFinite(vol) ? vol : 1);
+      setMuted(localStorage.getItem("nexlify-muted") === "true");
     } catch { /* ignore */ }
   }, []);
 
@@ -169,6 +170,18 @@ function PanelWebPlayerInner() {
     if (infoTimeoutRef.current) clearTimeout(infoTimeoutRef.current);
     infoTimeoutRef.current = setTimeout(() => setShowInfo(false), 4000);
 
+    // Register listeners BEFORE starting playback
+    const onWaiting = () => { if (!cancelled) setBuffering(true); };
+    const onPlaying = () => { if (!cancelled) { setBuffering(false); setIsPlaying(true); } };
+    const onPause = () => { if (!cancelled) setIsPlaying(false); };
+    const onError = () => {
+      if (!cancelled) { setBuffering(false); setPlayerError("Video playback error"); }
+    };
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("playing", onPlaying);
+    video.addEventListener("pause", onPause);
+    video.addEventListener("error", onError);
+
     void (async () => {
       try {
         playerRef.current?.destroy();
@@ -178,23 +191,11 @@ function PanelWebPlayerInner() {
         if (cancelled) return;
         playerRef.current = (await attachUrlToVideo(video, playingUrl, setPlayerError)) ?? null;
       } catch (err) {
-        setPlayerError(err instanceof Error ? err.message : "Player load failed");
+        if (!cancelled) setPlayerError(err instanceof Error ? err.message : "Player load failed");
       } finally {
         if (!cancelled) setBuffering(false);
       }
     })();
-
-    const onWaiting = () => setBuffering(true);
-    const onPlaying = () => { setBuffering(false); setIsPlaying(true); };
-    const onPause = () => setIsPlaying(false);
-    const onError = () => {
-      setBuffering(false);
-      setPlayerError("Video playback error");
-    };
-    video.addEventListener("waiting", onWaiting);
-    video.addEventListener("playing", onPlaying);
-    video.addEventListener("pause", onPause);
-    video.addEventListener("error", onError);
 
     // Fetch EPG
     if (epgTimeoutRef.current) clearTimeout(epgTimeoutRef.current);
@@ -210,7 +211,6 @@ function PanelWebPlayerInner() {
       video.removeEventListener("error", onError);
       if (infoTimeoutRef.current) clearTimeout(infoTimeoutRef.current);
       if (epgTimeoutRef.current) clearTimeout(epgTimeoutRef.current);
-      // Signal disconnect so the connection slot frees immediately
       if (playingId && username && password) {
         fetch("/api/live/disconnect", {
           method: "POST",
@@ -229,11 +229,11 @@ function PanelWebPlayerInner() {
     video.muted = muted;
   }, [volume, muted, playingUrl]);
 
-  const filtered = streams.filter((s) => {
+  const filtered = useMemo(() => streams.filter((s) => {
     if (activeCat && String(s.category_id ?? "") !== String(activeCat)) return false;
     if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
-  });
+  }), [streams, activeCat, search]);
 
   function playStream(s: LiveStream) {
     setPlayerError("");
@@ -293,9 +293,9 @@ function PanelWebPlayerInner() {
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
 
-  // Disconnect on tab close
+  // Disconnect on tab close / mobile pagehide
   useEffect(() => {
-    function onBeforeUnload() {
+    function cleanup() {
       if (playingId && username && password) {
         const data = JSON.stringify({ username, password, streamId: playingId });
         navigator.sendBeacon(
@@ -304,9 +304,18 @@ function PanelWebPlayerInner() {
         );
       }
     }
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("beforeunload", cleanup);
+    window.addEventListener("pagehide", cleanup);
+    return () => {
+      window.removeEventListener("beforeunload", cleanup);
+      window.removeEventListener("pagehide", cleanup);
+    };
   }, [playingId, username, password]);
+
+  // Persist muted to localStorage
+  useEffect(() => {
+    localStorage.setItem("nexlify-muted", String(muted));
+  }, [muted]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -587,6 +596,7 @@ function PanelWebPlayerInner() {
               className="w-full aspect-video bg-black"
               controls
               playsInline
+              onDoubleClick={toggleFullscreen}
               onVolumeChange={() => {
                 if (videoRef.current) {
                   setVolume(videoRef.current.volume);
@@ -621,18 +631,10 @@ function PanelWebPlayerInner() {
                   onClick={() => {
                     setPlayerError("");
                     setBuffering(true);
-                    // Force re-attach
-                    const video = videoRef.current;
-                    if (video) {
-                      playerRef.current?.destroy();
-                      playerRef.current = null;
-                      video.removeAttribute("src");
-                      video.load();
-                      void (async () => {
-                        playerRef.current = (await attachUrlToVideo(video, playingUrl, setPlayerError)) ?? null;
-                        setBuffering(false);
-                      })();
-                    }
+                    // Re-trigger the playback effect by toggling playingUrl
+                    const url = playingUrl;
+                    setPlayingUrl("");
+                    setTimeout(() => setPlayingUrl(url), 50);
                   }}
                   className="inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-white bg-[#00c0ef] hover:opacity-90 transition"
                 >
@@ -646,7 +648,14 @@ function PanelWebPlayerInner() {
               <div className="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
                 <div className="flex items-end justify-between">
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-white truncate">{playingTitle}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-bold text-white truncate">{playingTitle}</p>
+                      {playingUrl && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wider text-white bg-red-600 px-1.5 py-0.5 rounded shrink-0">
+                          <Radio size={8} className="animate-pulse" /> Live
+                        </span>
+                      )}
+                    </div>
                     {playingCategory && <p className="text-[10px] text-neutral-400">{playingCategory}</p>}
                     {epgProgram && (
                       <div className="flex items-center gap-1 mt-0.5">
@@ -718,6 +727,25 @@ function PanelWebPlayerInner() {
                 >
                   {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
                 </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={muted ? 0 : volume}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    setVolume(v);
+                    setMuted(v === 0);
+                    if (videoRef.current) {
+                      videoRef.current.volume = v;
+                      videoRef.current.muted = v === 0;
+                    }
+                    localStorage.setItem("nexlify-volume", String(v));
+                  }}
+                  className="w-16 h-1 accent-[#00c0ef] cursor-pointer"
+                  title="Volume"
+                />
                 <button
                   type="button"
                   onClick={playPrevChannel}
@@ -733,6 +761,24 @@ function PanelWebPlayerInner() {
                   title="Next channel"
                 >
                   <ChevronDown size={14} />
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const video = videoRef.current;
+                    if (!video) return;
+                    try {
+                      if (document.pictureInPictureElement) {
+                        await document.exitPictureInPicture();
+                      } else {
+                        await video.requestPictureInPicture();
+                      }
+                    } catch {}
+                  }}
+                  className="p-1.5 rounded bg-black/50 hover:bg-black/80 transition"
+                  title="Picture-in-Picture"
+                >
+                  <PictureInPicture size={14} />
                 </button>
                 <button
                   type="button"
