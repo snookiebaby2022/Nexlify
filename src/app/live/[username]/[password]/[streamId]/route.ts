@@ -18,7 +18,7 @@ import { logActivity } from "@/lib/lines";
 
 export const runtime = "nodejs";
 
-const PROXY_TIMEOUT_MS = 15_000;
+const PROXY_TIMEOUT_MS = 30_000;
 
 async function proxyUpstream(
   url: string,
