@@ -229,7 +229,7 @@ function PanelWebPlayerInner() {
   function playStream(s: LiveStream) {
     setPlayerError("");
     setBuffering(true);
-    const url = `${apiBase}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${s.stream_id}.m3u8`;
+    const url = `${apiBase}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${s.stream_id}`;
     setPlayingUrl(url);
     setPlayingTitle(s.name);
     setPlayingId(s.stream_id);
