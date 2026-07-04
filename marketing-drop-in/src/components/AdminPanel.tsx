@@ -205,8 +205,33 @@ export function AdminPanel() {
 
   const planSlugs = [...new Set(plans.map((p) => p.slug))];
 
+  // Summary stats
+  const now = Date.now();
+  const activeLicenses = licenses.filter((l) => l.status === "ACTIVE");
+  const onlineCount = activeLicenses.filter((l) => {
+    if (!l.lastSyncAt) return false;
+    const hoursSince = (now - new Date(l.lastSyncAt).getTime()) / 3600000;
+    return hoursSince < 24;
+  }).length;
+  const installedCount = activeLicenses.filter((l) => l.machineId).length;
+
   return (
     <div className="space-y-8">
+      {/* Summary Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {[
+          { label: "Total Licenses", value: licenses.length, color: "text-white" },
+          { label: "Active", value: activeLicenses.length, color: "text-emerald-400" },
+          { label: "Installed", value: installedCount, color: "text-cyan-400" },
+          { label: "Online (24h)", value: onlineCount, color: "text-emerald-400" },
+          { label: "Offline", value: installedCount - onlineCount, color: "text-amber-400" },
+        ].map((s) => (
+          <div key={s.label} className="rounded-lg border border-slate-800 bg-slate-900/50 p-3 text-center">
+            <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+            <div className="text-[10px] text-slate-500">{s.label}</div>
+          </div>
+        ))}
+      </div>
       <form
         onSubmit={issueManual}
         className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 max-w-lg space-y-4"
@@ -378,8 +403,35 @@ export function AdminPanel() {
                   </td>
                   <td className="px-4 py-3">{lic.user.email}</td>
                   <td className="px-4 py-3">{lic.plan.name}</td>
-                  <td className="px-4 py-3">{lic.status}</td>
-                  <td className="px-4 py-3">{formatDate(lic.expiresAt)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span>{lic.status}</span>
+                      {lic.status === "ACTIVE" && lic.machineId && (() => {
+                        const hoursSince = lic.lastSyncAt ? (now - new Date(lic.lastSyncAt).getTime()) / 3600000 : null;
+                        const isOnline = hoursSince !== null && hoursSince < 24;
+                        return (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full"
+                            style={{
+                              background: isOnline ? "rgba(34,197,94,0.15)" : "rgba(245,158,11,0.15)",
+                              color: isOnline ? "#22c55e" : "#f59e0b",
+                            }}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: isOnline ? "#22c55e" : "#f59e0b" }} />
+                            {isOnline ? "Online" : "Offline"}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div>{formatDate(lic.expiresAt)}</div>
+                    {lic.lastSyncAt && (
+                      <div className="text-[10px] text-slate-500 mt-0.5">
+                        Last sync: {new Date(lic.lastSyncAt).toLocaleDateString()} {new Date(lic.lastSyncAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3 max-w-[140px]">
                     <button
                       type="button"
