@@ -10,9 +10,9 @@ export const CONTENT_SECURITY_POLICY = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data: https://fonts.gstatic.com",
-  "connect-src 'self' https://www.google-analytics.com https://www.googletagmanager.com https://analytics.nexlify.live https://region1.google-analytics.com https://*.facebook.com https://*.tiktok.com https://*.linkedin.com https://*.clarity.ms https://api.stripe.com",
+  "connect-src 'self' http: https: https://www.google-analytics.com https://www.googletagmanager.com https://analytics.nexlify.live https://region1.google-analytics.com https://*.facebook.com https://*.tiktok.com https://*.linkedin.com https://*.clarity.ms https://api.stripe.com",
   "frame-src 'self' https://www.googletagmanager.com https://checkout.stripe.com",
-  "media-src 'self' https: blob:",
+  "media-src 'self' http: https: blob:",
 ].join("; ");
 
 export const MARKETING_SECURITY_HEADERS = [
