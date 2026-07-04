@@ -190,10 +190,37 @@ export async function GET(
     );
   }
 
-  // Non-HLS upstream: proxy the content directly instead of redirecting
-  // This bypasses geo/IP blocking by having the panel fetch from the upstream
+  // Non-HLS upstream
   const wantsM3u8 = /\.m3u8$/i.test(streamId);
-  const response = await proxyUpstream(playbackUrl, ua, { wantM3u8: wantsM3u8 });
+
+  if (wantsM3u8) {
+    // Generate an HLS manifest that points to the proxied TS stream
+    const segmentUrl = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(cleanId)}`;
+    const manifest = [
+      "#EXTM3U",
+      "#EXT-X-VERSION:3",
+      "#EXT-X-TARGETDURATION:9999",
+      "#EXT-X-PLAYLIST-TYPE:EVENT",
+      "#EXTINF:9999.0,",
+      segmentUrl,
+      "#EXT-X-ENDLIST",
+    ].join("\n");
+
+    void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
+    return withIptvCors(
+      new NextResponse(manifest, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/vnd.apple.mpegurl",
+          "Cache-Control": "no-cache, no-store",
+          "Access-Control-Allow-Origin": "*",
+        },
+      })
+    );
+  }
+
+  // Direct TS proxy for IPTV apps
+  const response = await proxyUpstream(playbackUrl, ua);
 
   if (response.status === 200) {
     void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
