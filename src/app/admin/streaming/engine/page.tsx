@@ -159,7 +159,6 @@ export default function StreamingEnginePage() {
         <Link href="/admin/streaming/transcoding" className="text-xs px-3 py-1.5 rounded border" style={{ borderColor: "var(--border)" }}>Transcoding</Link>
         <Link href="/admin/servers/load-balancer" className="text-xs px-3 py-1.5 rounded border" style={{ borderColor: "var(--border)" }}>Load balancer</Link>
         <Link href="/admin/streaming/health" className="text-xs px-3 py-1.5 rounded border" style={{ borderColor: "var(--border)" }}>Streaming health</Link>
-        <Link href="/webplayer" target="_blank" className="text-xs px-3 py-1.5 rounded border" style={{ borderColor: "var(--border)" }}>Web player</Link>
       </div>
 
       <section className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)" }}>

@@ -53,15 +53,6 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
       },
     },
     {
-      kind: "link",
-      link: {
-        href: "/webplayer",
-        label: "Web Player",
-        icon: coloredIcon(Tv, "#a78bfa", 18),
-        openInNewTab: true,
-      },
-    },
-    {
       kind: "group",
       group: {
         id: "subscriptions",

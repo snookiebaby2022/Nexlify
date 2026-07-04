@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import { FACEBOOK_URL, TELEGRAM_CHANNEL_URL } from "@/lib/marketing-constants";
 
 const links = [
-  { href: "/webplayer", label: "Web Player" },
   { href: "/epg", label: "EPG" },
   { href: "https://panel.demo.nexlify.live/", label: "Live demo", external: true },
   { href: "/install", label: "Install panel" },

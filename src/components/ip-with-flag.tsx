@@ -46,17 +46,18 @@ export function CountryFlag({
 }) {
   const cc = normalizeCountryCode(code);
   if (!cc) return null;
-  const flag = countryCodeToFlag(cc);
-  if (!flag) return null;
+  const lowCc = cc.toLowerCase();
   return (
-    <span
-      className={`inline-block leading-none shrink-0 text-base ${className}`.trim()}
-      role="img"
-      aria-label={title ?? cc}
+    <img
+      src={`https://flagcdn.com/16x12/${lowCc}.png`}
+      srcSet={`https://flagcdn.com/32x24/${lowCc}.png 2x`}
+      width="16"
+      height="12"
+      alt={title ?? cc}
       title={title ?? cc}
-    >
-      {flag}
-    </span>
+      className={`inline-block shrink-0 align-middle rounded-sm ${className}`.trim()}
+      style={{ verticalAlign: "middle" }}
+    />
   );
 }
 

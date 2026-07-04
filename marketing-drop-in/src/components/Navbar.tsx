@@ -9,7 +9,6 @@ import { FACEBOOK_URL, TELEGRAM_CHANNEL_URL } from "@/lib/marketing-constants";
 import { site } from "@/lib/site";
 
 const NAV_LINKS = [
-  { href: "/webplayer", label: "Web Player" },
   { href: "/epg", label: "EPG" },
   { href: "/install", label: "Install" },
   { href: "/requirements", label: "Requirements" },

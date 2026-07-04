@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { CountryFlag } from "@/components/ip-with-flag";
 
 const MAP_COLLAPSE_KEY = "nx-dash-collapse-connmap";
 
@@ -23,12 +24,6 @@ type MapData = {
     countryCode: string | null;
   }[];
 };
-
-function countryCodeToFlag(cc: string): string {
-  if (!cc || cc.length !== 2) return "";
-  const base = 127397;
-  return String.fromCodePoint(cc.toUpperCase().charCodeAt(0) + base, cc.toUpperCase().charCodeAt(1) + base);
-}
 
 export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl?: string }) {
   const [data, setData] = useState<MapData | null>(null);
@@ -200,7 +195,7 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
                 {p.stream && <div className="text-neutral-400">{p.stream}</div>}
                 {p.countryCode && (
                   <div className="text-neutral-500 mt-0.5">
-                    {countryCodeToFlag(p.countryCode)} {p.countryCode}
+                    <CountryFlag code={p.countryCode} /> {p.countryCode}
                   </div>
                 )}
               </div>
@@ -255,7 +250,7 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
               style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.15)" }}
             >
               <span className="flex items-center gap-1.5 truncate">
-                <span className="text-base leading-none">{countryCodeToFlag(c.countryCode)}</span>
+                <span className="text-base leading-none"><CountryFlag code={c.countryCode} /></span>
                 <span className="truncate">{c.countryName ?? c.countryCode}</span>
               </span>
               <span className="font-semibold tabular-nums shrink-0">{c.count}</span>
