@@ -194,16 +194,18 @@ export async function GET(
   const wantsM3u8 = /\.m3u8$/i.test(streamId);
 
   if (wantsM3u8) {
-    // Generate an HLS manifest that points to the proxied TS stream
+    // Generate an HLS manifest that points to the proxied TS stream.
+    // For non-HLS upstreams we use a sliding-window live-style manifest so
+    // hls.js treats the playlist as a live stream (no fixed total duration).
     const segmentUrl = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(cleanId)}`;
     const manifest = [
       "#EXTM3U",
       "#EXT-X-VERSION:3",
-      "#EXT-X-TARGETDURATION:9999",
+      "#EXT-X-TARGETDURATION:6",
+      "#EXT-X-MEDIA-SEQUENCE:0",
       "#EXT-X-PLAYLIST-TYPE:EVENT",
-      "#EXTINF:9999.0,",
+      "#EXTINF:6.0,",
       segmentUrl,
-      "#EXT-X-ENDLIST",
     ].join("\n");
 
     void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });

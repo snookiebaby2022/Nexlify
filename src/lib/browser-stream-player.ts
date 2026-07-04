@@ -27,10 +27,11 @@ export async function attachUrlToVideo(
     const hls = new Hls({
       enableWorker: true,
       lowLatencyMode: true,
-      backBufferLength: 30,
-      maxBufferLength: 30,
-      maxMaxBufferLength: 60,
+      backBufferLength: 10,
+      maxBufferLength: 6,
+      maxMaxBufferLength: 12,
       startFragPrefetch: true,
+      liveDurationInfinity: true,
       debug: false,
     });
 
