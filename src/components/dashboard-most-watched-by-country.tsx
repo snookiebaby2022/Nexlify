@@ -1,13 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { CountryFlag } from "@/components/ip-with-flag";
 import type { CountryWatch } from "@/lib/dashboard-widgets";
+
+const MWC_COLLAPSE_KEY = "nx-dash-collapse-mwc";
 
 export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: string }) {
   const [countries, setCountries] = useState<CountryWatch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(MWC_COLLAPSE_KEY) === "true");
+    } catch {}
+  }, []);
+
+  const toggleCollapse = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(MWC_COLLAPSE_KEY, String(next)); } catch {}
+      return next;
+    });
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -32,7 +49,14 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
       style={{ borderColor: "var(--border)", background: "var(--card)" }}
     >
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold">Most Watched By Country</h3>
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          className="flex items-center gap-1.5 text-sm font-semibold hover:opacity-80 transition-opacity cursor-pointer"
+        >
+          {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+          Most Watched By Country
+        </button>
         <button
           type="button"
           onClick={load}
@@ -45,7 +69,7 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
         </button>
       </div>
 
-      {countries.length === 0 ? (
+      {collapsed ? null : countries.length === 0 ? (
         <p className="text-sm text-center py-8" style={{ color: "var(--muted)" }}>
           No live viewers by country yet
         </p>

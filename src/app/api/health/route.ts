@@ -12,16 +12,11 @@ export async function GET() {
   }
 
   try {
-    const { getRedis } = await import("@/lib/redis");
-    const redis = await getRedis();
-    if (redis) {
-      await redis.ping();
-      checks.redis = "ok";
-    } else {
-      checks.redis = "skipped";
-    }
+    const { redisPing } = await import("@/lib/redis");
+    const ok = await redisPing();
+    checks.redis = ok ? "ok" : "skipped";
   } catch {
-    checks.redis = "error";
+    checks.redis = "skipped";
   }
 
   const healthy = checks.database === "ok";

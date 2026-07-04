@@ -1,12 +1,68 @@
 "use client";
 
-
-
 import { useCallback, useEffect, useState } from "react";
-
 import Link from "next/link";
+import { Play, Users, Zap, Layers, ChevronDown, ChevronRight } from "lucide-react";
 
-import { Play, Users, Zap, Layers } from "lucide-react";
+const LS_COLLAPSE_KEY = "nx-dash-sections";
+
+function loadCollapsed(): Record<string, boolean> {
+  try {
+    return JSON.parse(localStorage.getItem(LS_COLLAPSE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function DashboardCard({
+  id,
+  title,
+  titleExtra,
+  children,
+  className = "",
+}: {
+  id: string;
+  title: string;
+  titleExtra?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setCollapsed(loadCollapsed());
+  }, []);
+
+  const toggle = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      localStorage.setItem(LS_COLLAPSE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [id]);
+
+  const isCollapsed = !!collapsed[id];
+
+  return (
+    <div
+      className={`rounded-xl border overflow-hidden ${className}`}
+      style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+    >
+      <div className="px-4 py-3 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex items-center gap-1.5 text-sm font-semibold hover:opacity-80 transition-opacity cursor-pointer"
+        >
+          {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+          {title}
+        </button>
+        {titleExtra}
+      </div>
+      {!isCollapsed && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  );
+}
 
 import { DashboardStatBox } from "@/components/dashboard-stat-box";
 
@@ -573,49 +629,24 @@ export function PanelDashboard({
 
             <DashboardExpiringLines widgetsUrl={widgetsUrl} linesHref={linesHref} />
 
-            <div
-
-              className="rounded-xl border p-4"
-
-              style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
-
-            >
-
-              <h3 className="text-sm font-semibold mb-3">Top channels</h3>
-
+            <DashboardCard id="top-channels" title="Top channels">
               <ul className="divide-y text-sm" style={{ borderColor: "var(--border)" }}>
-
                 {(stats?.topChannels ?? []).slice(0, 6).map((ch) => (
-
                   <li key={ch.streamId} className="py-2 flex justify-between gap-2">
-
                     <span className="truncate text-xs">{ch.name}</span>
-
                     <span className="shrink-0 font-medium tabular-nums">{ch.watchCount}</span>
-
                   </li>
-
                 ))}
-
                 {!stats?.topChannels?.length && (
-
                   <li className="py-4 text-center text-xs" style={{ color: "var(--muted)" }}>
-
                     No watch data yet
-
                   </li>
-
                 )}
-
               </ul>
-
               <Link href="/admin/videolog" className="text-xs underline mt-2 inline-block" style={{ color: "var(--accent)" }}>
-
                 Video log →
-
               </Link>
-
-            </div>
+            </DashboardCard>
 
           </aside>
 
