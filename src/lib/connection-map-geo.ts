@@ -18,6 +18,39 @@ export function countryMapPosition(code: string | null | undefined): [number, nu
 export async function lookupGeoExtended(ip: string) {
   const { lookupGeo } = await import("./geoip");
   const geo = await lookupGeo(ip);
+
+  // Try ip-api.com first (more accurate, free, no API key)
+  try {
+    const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,lat,lon,city,isp`, {
+      signal: AbortSignal.timeout(4000),
+      headers: { "User-Agent": "NexlifyPanel/1.0" },
+    });
+    if (res.ok) {
+      const data = (await res.json()) as Record<string, unknown>;
+      if (data.status === "success") {
+        const lat = Number(data.lat);
+        const lon = Number(data.lon);
+        const pos =
+          Number.isFinite(lat) && Number.isFinite(lon)
+            ? [((lon + 180) / 360) * 100, ((90 - lat) / 180) * 100] as [number, number]
+            : countryMapPosition(String(data.countryCode ?? geo?.countryCode ?? ""));
+        return {
+          countryCode: geo?.countryCode ?? (data.countryCode ? String(data.countryCode) : null),
+          countryName: geo?.countryName ?? (data.country ? String(data.country) : null),
+          city: data.city ? String(data.city) : null,
+          isp: data.isp ? String(data.isp) : null,
+          lat: Number.isFinite(lat) ? lat : null,
+          lon: Number.isFinite(lon) ? lon : null,
+          mapX: pos?.[0] ?? 50,
+          mapY: pos?.[1] ?? 40,
+        };
+      }
+    }
+  } catch {
+    /* fallback to ipapi.co */
+  }
+
+  // Fallback to ipapi.co
   try {
     const res = await fetch(`https://ipapi.co/${ip}/json/`, {
       signal: AbortSignal.timeout(4000),
@@ -34,6 +67,8 @@ export async function lookupGeoExtended(ip: string) {
       return {
         countryCode: geo?.countryCode ?? (data.country_code ? String(data.country_code) : null),
         countryName: geo?.countryName ?? (data.country_name ? String(data.country_name) : null),
+        city: data.city ? String(data.city) : null,
+        isp: data.org ? String(data.org) : null,
         lat: Number.isFinite(lat) ? lat : null,
         lon: Number.isFinite(lon) ? lon : null,
         mapX: pos?.[0] ?? 50,
@@ -43,10 +78,13 @@ export async function lookupGeoExtended(ip: string) {
   } catch {
     /* fallback */
   }
+
   const pos = countryMapPosition(geo?.countryCode ?? null);
   return {
     countryCode: geo?.countryCode ?? null,
     countryName: geo?.countryName ?? null,
+    city: null,
+    isp: null,
     lat: null,
     lon: null,
     mapX: pos?.[0] ?? 50,

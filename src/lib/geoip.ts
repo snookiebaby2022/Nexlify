@@ -33,6 +33,32 @@ async function loadMmdb(path: string) {
 }
 
 async function lookupIpApi(ip: string): Promise<GeoLookup | null> {
+  // Try ip-api.com first (more accurate)
+  try {
+    const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,isp,as,proxy,hosting`, {
+      signal: AbortSignal.timeout(4000),
+      headers: { "User-Agent": "NexlifyPanel/1.0" },
+    });
+    if (res.ok) {
+      const data = (await res.json()) as Record<string, unknown>;
+      if (data.status === "success") {
+        const isp = String(data.isp ?? "");
+        const hosting = Boolean(data.hosting || data.proxy) ||
+          /hosting|vpn|proxy|datacenter|cloud|server/i.test(isp);
+        return {
+          countryCode: data.countryCode ? String(data.countryCode) : null,
+          countryName: data.country ? String(data.country) : null,
+          isp: isp || null,
+          asn: data.as ? String(data.as) : null,
+          isVpnOrHosting: hosting,
+        };
+      }
+    }
+  } catch {
+    /* fallback */
+  }
+
+  // Fallback to ipapi.co
   try {
     const res = await fetch(`https://ipapi.co/${ip}/json/`, {
       signal: AbortSignal.timeout(4000),
