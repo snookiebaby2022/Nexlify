@@ -68,7 +68,7 @@ export async function attachUrlToVideo(
   }
 
   if (mode === "mpegts") {
-    await loadScript("https://cdn.jsdelivr.net/npm/mpegts.js@1.7.13/dist/mpegts.js");
+    await loadScript("https://cdn.jsdelivr.net/npm/mpegts.js/dist/mpegts.js");
     const mpegts = (
       window as unknown as {
         mpegts?: {
