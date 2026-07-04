@@ -7,7 +7,8 @@ import {
   Loader2, AlertCircle, MonitorPlay, ChevronUp, ChevronDown, Volume2,
   VolumeX, RotateCw, Zap, Info, Play, Pause, PictureInPicture, Radio,
 } from "lucide-react";
-import { attachUrlToVideo, type StreamPlayerHandle } from "@/lib/browser-stream-player";
+import { attachUrlToVideo } from "@/lib/use-hls-player";
+import type { StreamPlayerHandle } from "@/lib/use-hls-player";
 
 type LiveStream = {
   stream_id: string;
