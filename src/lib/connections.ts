@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 
-const STALE_MS = 30 * 1000; // 30 seconds — connections clear fast when user leaves
+const STALE_MS = 600 * 1000; // 10 minutes — a single HTTP stream stays open for the entire viewing session
 
 export async function countActiveConnectionsForLine(lineId: string) {
   const staleBefore = new Date(Date.now() - STALE_MS);
