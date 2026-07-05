@@ -217,18 +217,50 @@ export async function GET(
     );
   }
 
-  // Non-HLS upstream
+  // Non-HLS upstream — proxy through Next.js (nginx handles the heavy lifting)
+  // This hides the upstream URL from clients and allows ISP block bypass
   const wantsM3u8 = /\.m3u8$/i.test(streamId);
 
-  if (wantsM3u8) {
-    // Redirect .m3u8 to the upstream URL directly
-    // This is how XUI One and 1-stream handle it — no proxy, no manifest generation
+  const response = await proxyUpstream(playbackUrl, ua, { wantM3u8: wantsM3u8 });
+
+  if (response.status === 200) {
     void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
-    return NextResponse.redirect(playbackUrl, 302);
+
+    // Wrap the response body to detect when the client disconnects
+    const originalBody = response.body;
+    if (originalBody) {
+      const trackedBody = new ReadableStream({
+        start(controller) {
+          const reader = originalBody.getReader();
+          const pump = () => {
+            reader.read().then(({ done, value }) => {
+              if (done) {
+                controller.close();
+                void removeConnection(line.id, cleanId, ip);
+                return;
+              }
+              controller.enqueue(value);
+              pump();
+            }).catch(() => {
+              controller.close();
+              void removeConnection(line.id, cleanId, ip);
+            });
+          };
+          pump();
+        },
+        cancel() {
+          void removeConnection(line.id, cleanId, ip);
+        },
+      });
+
+      return withIptvCors(
+        new NextResponse(trackedBody, {
+          status: 200,
+          headers: Object.fromEntries(response.headers.entries()),
+        })
+      );
+    }
   }
 
-  // For .ts requests, also redirect to upstream
-  // This avoids proxying through Next.js which causes compatibility issues
-  void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
-  return NextResponse.redirect(playbackUrl, 302);
+  return withIptvCors(response);
 }
