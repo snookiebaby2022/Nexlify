@@ -206,13 +206,9 @@ export async function GET(
   const wantsM3u8 = /\.m3u8$/i.test(streamId);
 
   if (wantsM3u8) {
-    // Redirect .m3u8 to .ts — most IPTV apps follow redirects
-    // This avoids ExoPlayer rejecting synthetic HLS manifests
-    const tsUrl = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(cleanId)}.ts`;
-    const host = req.headers.get("host") || req.nextUrl.host;
-    const proto = req.headers.get("x-forwarded-proto") || "http";
-    const redirectUrl = `${proto}://${host}${tsUrl}`;
-    return NextResponse.redirect(redirectUrl, 302);
+    // Serve TS stream directly for .m3u8 requests
+    // ExoPlayer (XCIPTV) doesn't follow redirects and rejects synthetic manifests
+    // Serving raw TS with video/mp2t content-type works with all players
   }
 
   // Direct TS proxy for IPTV apps
