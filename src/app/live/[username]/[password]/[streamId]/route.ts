@@ -220,7 +220,9 @@ export async function GET(
     // For non-HLS upstreams, redirect .m3u8 to .ts
     // This is the most compatible approach for all IPTV apps
     const tsUrl = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(cleanId)}.ts`;
-    return NextResponse.redirect(new URL(tsUrl, req.url), 302);
+    const origin = req.headers.get("origin") || req.headers.get("host") || req.nextUrl.origin;
+    const redirectUrl = origin.startsWith("http") ? `${origin}${tsUrl}` : `${req.nextUrl.protocol}//${origin}${tsUrl}`;
+    return NextResponse.redirect(redirectUrl, 302);
   }
 
   // Direct TS proxy for IPTV apps
