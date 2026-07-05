@@ -206,58 +206,14 @@ export async function GET(
   const wantsM3u8 = /\.m3u8$/i.test(streamId);
 
   if (wantsM3u8) {
-    // Serve TS stream directly for .m3u8 requests
-    // ExoPlayer (XCIPTV) doesn't follow redirects and rejects synthetic manifests
-    // Serving raw TS with video/mp2t content-type works with all players
-  }
-
-  // Direct TS proxy for IPTV apps
-  // Start the proxy immediately (don't wait for security checks)
-  const proxyPromise = proxyUpstream(playbackUrl, ua);
-
-  // Security checks disabled to avoid geo lookup delays
-  // (IP/geo/VPN checks) - can be re-enabled with a proper async implementation
-
-  const response = await proxyPromise;
-
-  if (response.status === 200) {
+    // Redirect .m3u8 to the upstream URL directly
+    // This is how XUI One and 1-stream handle it — no proxy, no manifest generation
     void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
-
-    // Wrap the response body to detect when the client disconnects
-    const originalBody = response.body;
-    if (originalBody) {
-      const trackedBody = new ReadableStream({
-        start(controller) {
-          const reader = originalBody.getReader();
-          const pump = () => {
-            reader.read().then(({ done, value }) => {
-              if (done) {
-                controller.close();
-                void removeConnection(line.id, cleanId, ip);
-                return;
-              }
-              controller.enqueue(value);
-              pump();
-            }).catch(() => {
-              controller.close();
-              void removeConnection(line.id, cleanId, ip);
-            });
-          };
-          pump();
-        },
-        cancel() {
-          void removeConnection(line.id, cleanId, ip);
-        },
-      });
-
-      return withIptvCors(
-        new NextResponse(trackedBody, {
-          status: 200,
-          headers: Object.fromEntries(response.headers.entries()),
-        })
-      );
-    }
+    return NextResponse.redirect(playbackUrl, 302);
   }
 
-  return withIptvCors(response);
+  // For .ts requests, also redirect to upstream
+  // This avoids proxying through Next.js which causes compatibility issues
+  void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
+  return NextResponse.redirect(playbackUrl, 302);
 }
