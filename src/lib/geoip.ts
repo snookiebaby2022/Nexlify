@@ -36,7 +36,7 @@ async function lookupIpApi(ip: string): Promise<GeoLookup | null> {
   // Try ip-api.com first (more accurate)
   try {
     const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,isp,as,proxy,hosting`, {
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(1500),
       headers: { "User-Agent": "NexlifyPanel/1.0" },
     });
     if (res.ok) {
@@ -61,7 +61,7 @@ async function lookupIpApi(ip: string): Promise<GeoLookup | null> {
   // Fallback to ipapi.co
   try {
     const res = await fetch(`https://ipapi.co/${ip}/json/`, {
-      signal: AbortSignal.timeout(4000),
+      signal: AbortSignal.timeout(1500),
       headers: { "User-Agent": "NexlifyPanel/1.0" },
     });
     if (!res.ok) return null;

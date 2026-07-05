@@ -25,7 +25,7 @@ export async function isSecurityShieldEnabled(panelHost?: string): Promise<boole
 async function lookupIpQualityScore(ip: string, apiKey: string): Promise<Partial<IpReputation> | null> {
   try {
     const url = `https://ipqualityscore.com/api/json/ip/${encodeURIComponent(apiKey)}/${encodeURIComponent(ip)}?strictness=1&allow_public_access_points=true`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
     if (!res.ok) return null;
     const data = (await res.json()) as Record<string, unknown>;
     if (data.success === false) return null;

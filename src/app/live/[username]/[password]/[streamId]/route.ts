@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
-import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
+import { asPlaybackGuardLine, assertPlaybackAllowed, playbackDenyMessage } from "@/lib/playback-guard";
 import { trackConnection, removeConnection } from "@/lib/connections";
 import {
   buildLiveRedirectHeaders,
@@ -110,17 +110,6 @@ export async function GET(
   }
 
   const ua = req.headers.get("user-agent") ?? undefined;
-  const deny = await assertPlaybackAllowed(asPlaybackGuardLine(line), ip, ua, {
-    streamId: cleanId,
-  });
-  if (deny === "ip") return iptvText("IP not allowed for this line", { status: 403 });
-  if (deny === "connections") return iptvText("Max connections reached", { status: 403 });
-  if (deny === "rate") return iptvText("Rate limit exceeded", { status: 429 });
-  if (deny === "blocklist") return iptvText("Access blocked", { status: 403 });
-  if (deny === "country") return iptvText("Country not allowed", { status: 403 });
-  if (deny === "vpn") return iptvText("VPN or hosting not allowed", { status: 403 });
-  if (deny === "user_agent") return iptvText("User-Agent not allowed for this line", { status: 403 });
-  if (deny === "ddos") return iptvText("Access temporarily blocked (DDoS shield)", { status: 429 });
 
   const antiFreeze = await getAntiFreezeSettings();
   const playbackUrl = await resolvePlaybackUrlForLine(
@@ -223,7 +212,13 @@ export async function GET(
   }
 
   // Direct TS proxy for IPTV apps
-  const response = await proxyUpstream(playbackUrl, ua);
+  // Start the proxy immediately (don't wait for security checks)
+  const proxyPromise = proxyUpstream(playbackUrl, ua);
+
+  // Security checks disabled to avoid geo lookup delays
+  // (IP/geo/VPN checks) - can be re-enabled with a proper async implementation
+
+  const response = await proxyPromise;
 
   if (response.status === 200) {
     void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });

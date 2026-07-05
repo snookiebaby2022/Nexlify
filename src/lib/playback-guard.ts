@@ -65,6 +65,19 @@ export async function assertPlaybackAllowed(
   userAgent?: string,
   options?: PlaybackGuardOptions
 ): Promise<PlaybackDenyReason | null> {
+  // Global timeout — fail-open if checks take too long to avoid blocking IPTV apps
+  const GUARD_TIMEOUT_MS = 2000;
+  const guardPromise = assertPlaybackAllowedInner(line, clientIp, userAgent, options);
+  const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), GUARD_TIMEOUT_MS));
+  return Promise.race([guardPromise, timeoutPromise]);
+}
+
+async function assertPlaybackAllowedInner(
+  line: PlaybackGuardLine,
+  clientIp: string | undefined,
+  userAgent?: string,
+  options?: PlaybackGuardOptions
+): Promise<PlaybackDenyReason | null> {
   if (clientIp) {
     const ddos = await checkDdosShield(clientIp);
     if (!ddos.ok) return "ddos";

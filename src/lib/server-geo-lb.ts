@@ -54,11 +54,17 @@ export async function pickServerForClient(clientIp?: string): Promise<string | n
   if (!pool.length) return null;
 
   if (geoEnabled && clientIp) {
-    const geo = await lookupGeo(clientIp);
-    const geoMatched = pool.filter((x) =>
-      serverMatchesGeo(x.server, geo?.countryCode ?? null, geo?.isp ?? null)
-    );
-    if (geoMatched.length) pool = geoMatched;
+    // Use Promise.race to avoid blocking on slow geo lookups (max 1s)
+    const geo = await Promise.race([
+      lookupGeo(clientIp),
+      new Promise<null>((r) => setTimeout(() => r(null), 1000)),
+    ]);
+    if (geo) {
+      const geoMatched = pool.filter((x) =>
+        serverMatchesGeo(x.server, geo.countryCode ?? null, geo.isp ?? null)
+      );
+      if (geoMatched.length) pool = geoMatched;
+    }
   }
 
   if (mode === "round_robin") {

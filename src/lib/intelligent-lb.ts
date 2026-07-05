@@ -42,11 +42,17 @@ export async function pickIntelligentServer(
 
   let geo: Awaited<ReturnType<typeof lookupGeo>> | null = null;
   if (clientIp && geoEnabled) {
-    geo = await lookupGeo(clientIp);
-    const geoMatched = pool.filter((x) =>
-      serverMatchesGeo(x.server, geo?.countryCode ?? null, geo?.isp ?? null)
-    );
-    if (geoMatched.length) pool = geoMatched;
+    // Use Promise.race to avoid blocking on slow geo lookups (max 1s)
+    geo = await Promise.race([
+      lookupGeo(clientIp),
+      new Promise<null>((r) => setTimeout(() => r(null), 1000)),
+    ]);
+    if (geo) {
+      const geoMatched = pool.filter((x) =>
+        serverMatchesGeo(x.server, geo.countryCode ?? null, geo.isp ?? null)
+      );
+      if (geoMatched.length) pool = geoMatched;
+    }
   }
 
   if (bandwidthAware && requiredBandwidthKbps != null && requiredBandwidthKbps > 0) {
@@ -75,7 +81,12 @@ export async function pickIntelligentServer(
 
 export async function rankServersForClient(clientIp?: string): Promise<LbServerScore[]> {
   const scores = await getServerLoadScores();
-  const geo = clientIp ? await lookupGeo(clientIp) : null;
+  const geo = clientIp
+    ? await Promise.race([
+        lookupGeo(clientIp),
+        new Promise<null>((r) => setTimeout(() => r(null), 1000)),
+      ])
+    : null;
 
   return scores.map((x) => {
     const reasons: string[] = [];
