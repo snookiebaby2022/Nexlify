@@ -218,17 +218,16 @@ export async function GET(
 
   if (wantsM3u8) {
     // Generate an HLS manifest that points to the proxied TS stream.
-    // Use VOD-style with a very long segment duration so hls.js treats this
-    // as a single continuous video rather than trying to re-fetch the manifest
-    // and sync with a non-existent live edge.
-    const segmentUrl = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(cleanId)}`;
+    // Use live-style without EXT-X-ENDLIST so IPTV apps keep playing.
+    // The segment URL points to the raw TS proxy which streams continuously.
+    const segmentUrl = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(cleanId)}.ts`;
     const manifest = [
       "#EXTM3U",
       "#EXT-X-VERSION:3",
-      "#EXT-X-TARGETDURATION:86400",
-      "#EXTINF:86400,",
+      "#EXT-X-TARGETDURATION:10",
+      "#EXT-X-MEDIA-SEQUENCE:0",
+      "#EXTINF:10.0,",
       segmentUrl,
-      "#EXT-X-ENDLIST",
     ].join("\n");
 
     void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
