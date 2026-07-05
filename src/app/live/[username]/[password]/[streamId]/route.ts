@@ -111,6 +111,21 @@ export async function GET(
 
   const ua = req.headers.get("user-agent") ?? undefined;
 
+  // Fast security checks (no slow geo lookups)
+  const { checkDdosShield } = await import("@/lib/ddos-shield");
+  const ddos = await checkDdosShield(ip);
+  if (!ddos.ok) return iptvText("Access temporarily blocked", { status: 429 });
+
+  const { checkLineIpAccess } = await import("@/lib/line-ip-lock");
+  if (!checkLineIpAccess(line, ip)) return iptvText("IP not allowed", { status: 403 });
+
+  const { lineHasConnectionCapacity } = await import("@/lib/connections");
+  const hasCapacity = await lineHasConnectionCapacity(line.id, line.maxConnections, {
+    streamId: cleanId,
+    clientIp: ip,
+  });
+  if (!hasCapacity) return iptvText("Max connections reached", { status: 403 });
+
   const antiFreeze = await getAntiFreezeSettings();
   const playbackUrl = await resolvePlaybackUrlForLine(
     line.id,
