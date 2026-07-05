@@ -31,8 +31,10 @@ export function exportPlaybackUrl(
   const resolved = (full ?? stream) as StreamWithProvider;
 
   if (stream.type === StreamType.LIVE) {
-    const ext = output === "hls" ? "m3u8" : "ts";
-    return `${trimBase(baseUrl)}/live/${line.username}/${line.password}/${stream.id}.${ext}`;
+    // For IPTV app compatibility, always use .ts in M3U exports.
+    // IPTV apps like XCIPTV, TiviMate, IPTV Smarters don't reliably follow
+    // HTTP redirects for HLS manifests. The raw TS stream works universally.
+    return `${trimBase(baseUrl)}/live/${line.username}/${line.password}/${stream.id}.ts`;
   }
 
   if (isIntegrationStreamUrl(stream.streamUrl)) {

@@ -217,12 +217,9 @@ export async function GET(
   const wantsM3u8 = /\.m3u8$/i.test(streamId);
 
   if (wantsM3u8) {
-    // For non-HLS upstreams, redirect .m3u8 to .ts
-    // This is the most compatible approach for all IPTV apps
-    const tsUrl = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(cleanId)}.ts`;
-    const origin = req.headers.get("origin") || req.headers.get("host") || req.nextUrl.origin;
-    const redirectUrl = origin.startsWith("http") ? `${origin}${tsUrl}` : `${req.nextUrl.protocol}//${origin}${tsUrl}`;
-    return NextResponse.redirect(redirectUrl, 302);
+    // For non-HLS upstreams, .m3u8 and .ts are treated the same.
+    // Many IPTV apps don't follow HTTP redirects, so we proxy the TS stream
+    // directly from both endpoints. The content-type is preserved.
   }
 
   // Direct TS proxy for IPTV apps
