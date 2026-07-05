@@ -217,30 +217,10 @@ export async function GET(
   const wantsM3u8 = /\.m3u8$/i.test(streamId);
 
   if (wantsM3u8) {
-    // Generate an HLS manifest that points to the proxied TS stream.
-    // Use live-style without EXT-X-ENDLIST so IPTV apps keep playing.
-    // The segment URL points to the raw TS proxy which streams continuously.
-    const segmentUrl = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(cleanId)}.ts`;
-    const manifest = [
-      "#EXTM3U",
-      "#EXT-X-VERSION:3",
-      "#EXT-X-TARGETDURATION:10",
-      "#EXT-X-MEDIA-SEQUENCE:0",
-      "#EXTINF:10.0,",
-      segmentUrl,
-    ].join("\n");
-
-    void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
-    return withIptvCors(
-      new NextResponse(manifest, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/vnd.apple.mpegurl",
-          "Cache-Control": "no-cache, no-store",
-          "Access-Control-Allow-Origin": "*",
-        },
-      })
-    );
+    // For non-HLS upstreams, redirect .m3u8 to .ts
+    // This is the most compatible approach for all IPTV apps
+    const tsUrl = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(cleanId)}.ts`;
+    return NextResponse.redirect(new URL(tsUrl, req.url), 302);
   }
 
   // Direct TS proxy for IPTV apps

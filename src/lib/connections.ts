@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 
-const STALE_MS = 120 * 1000; // 2 minutes — safety net; real cleanup happens on stream close
+const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours — connections stay alive until explicitly removed on stream close
 
 export async function countActiveConnectionsForLine(lineId: string) {
   const staleBefore = new Date(Date.now() - STALE_MS);
