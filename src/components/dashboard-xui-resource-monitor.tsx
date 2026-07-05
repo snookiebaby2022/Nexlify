@@ -9,145 +9,32 @@ const MAX_POINTS = 60;
 
 type ServiceStatus = { name: string; ok: boolean };
 
-function drawChart(
-  canvas: HTMLCanvasElement,
-  series: { values: number[]; color: string; label: string }[],
-  maxVal: number,
-  opts?: { fill?: boolean; gridLines?: number; suffix?: string }
-) {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  const w = rect.width * dpr;
-  const h = rect.height * dpr;
-  canvas.width = w;
-  canvas.height = h;
-  ctx.scale(dpr, dpr);
-  const cw = rect.width;
-  const ch = rect.height;
-  ctx.clearRect(0, 0, cw, ch);
-
-  const padTop = 8;
-  const padBottom = 20;
-  const padLeft = 0;
-  const padRight = 0;
-  const chartH = ch - padTop - padBottom;
-  const chartW = cw - padLeft - padRight;
-  const max = maxVal || 1;
-
-  // Grid lines
-  const gridCount = opts?.gridLines ?? 4;
-  ctx.strokeStyle = "rgba(148,163,184,0.08)";
-  ctx.lineWidth = 1;
-  for (let i = 0; i <= gridCount; i++) {
-    const y = padTop + (chartH / gridCount) * i;
-    ctx.beginPath();
-    ctx.moveTo(padLeft, y);
-    ctx.lineTo(cw - padRight, y);
-    ctx.stroke();
-  }
-
-  // Draw each series
-  for (const s of series) {
-    if (s.values.length < 2) continue;
-    const pts = s.values.map((v, i) => ({
-      x: padLeft + (i / (s.values.length - 1)) * chartW,
-      y: padTop + chartH - (Math.min(v, max) / max) * chartH,
-    }));
-
-    // Filled area
-    if (opts?.fill !== false) {
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, padTop + chartH);
-      for (const p of pts) ctx.lineTo(p.x, p.y);
-      ctx.lineTo(pts[pts.length - 1].x, padTop + chartH);
-      ctx.closePath();
-      const grad = ctx.createLinearGradient(0, padTop, 0, padTop + chartH);
-      grad.addColorStop(0, s.color.replace(")", ",0.25)").replace("rgb", "rgba"));
-      grad.addColorStop(1, s.color.replace(")", ",0.02)").replace("rgb", "rgba"));
-      ctx.fillStyle = grad;
-      ctx.fill();
-    }
-
-    // Line
-    ctx.beginPath();
-    for (let i = 0; i < pts.length; i++) {
-      if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
-      else ctx.lineTo(pts[i].x, pts[i].y);
-    }
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth = 1.5;
-    ctx.lineJoin = "round";
-    ctx.stroke();
-
-    // Current value dot
-    if (pts.length > 0) {
-      const last = pts[pts.length - 1];
-      ctx.beginPath();
-      ctx.arc(last.x, last.y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = s.color;
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(last.x, last.y, 5, 0, Math.PI * 2);
-      ctx.strokeStyle = s.color;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-  }
-
-  // Bottom labels
-  ctx.fillStyle = "rgba(148,163,184,0.5)";
-  ctx.font = "9px system-ui, sans-serif";
-  ctx.textAlign = "center";
-  const labels = ["60s", "45s", "30s", "15s", "Now"];
-  for (let i = 0; i < labels.length; i++) {
-    const x = padLeft + (i / (labels.length - 1)) * chartW;
-    ctx.fillText(labels[i], x, ch - 4);
-  }
-}
-
-function ChartCard({
-  title,
-  canvasRef,
-  legends,
-  collapsed,
-  onToggle,
+function MiniGraph({
+  values,
+  color,
+  maxVal = 100,
 }: {
-  title: string;
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  legends: { label: string; color: string; value: string }[];
-  collapsed: boolean;
-  onToggle: () => void;
+  values: number[];
+  color: string;
+  maxVal?: number;
 }) {
+  const max = maxVal || 1;
   return (
-    <div className="xui-dash-chart-card">
-      <div className="flex items-center justify-between mb-2">
-        <button
-          type="button"
-          onClick={onToggle}
-          className="flex items-center gap-1.5 text-sm font-semibold hover:opacity-80 transition-opacity cursor-pointer"
-        >
-          {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-          {title}
-        </button>
-        <div className="flex items-center gap-3">
-          {legends.map((l) => (
-            <span key={l.label} className="flex items-center gap-1.5 text-[11px] tabular-nums">
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: l.color }} />
-              <span style={{ color: "var(--muted)" }}>{l.label}</span>
-              <span className="font-semibold">{l.value}</span>
-            </span>
-          ))}
-        </div>
-      </div>
-      {!collapsed && (
-        <canvas
-          ref={canvasRef}
-          className="w-full"
-          style={{ height: 140 }}
-        />
-      )}
+    <div className="flex items-end gap-px h-[60px]">
+      {values.map((v, i) => {
+        const pct = Math.min(100, (v / max) * 100);
+        return (
+          <div
+            key={i}
+            className="flex-1 rounded-t-sm transition-all duration-300"
+            style={{
+              height: `${Math.max(2, pct)}%`,
+              background: color,
+              opacity: 0.3 + (i / values.length) * 0.7,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -164,9 +51,6 @@ export function DashboardXuiResourceMonitor({
     onlineServers: number;
   };
 }) {
-  const cpuMemRef = useRef<HTMLCanvasElement>(null);
-  const netRef = useRef<HTMLCanvasElement>(null);
-  const connRef = useRef<HTMLCanvasElement>(null);
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
     try {
@@ -232,44 +116,6 @@ export function DashboardXuiResourceMonitor({
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    if (cpuMemRef.current && !collapsed["cpu-mem"]) {
-      drawChart(
-        cpuMemRef.current,
-        [
-          { values: history.cpu, color: "rgb(56, 189, 248)", label: "CPU" },
-          { values: history.mem, color: "rgb(167, 139, 250)", label: "Memory" },
-        ],
-        100,
-        { fill: true, gridLines: 4, suffix: "%" }
-      );
-    }
-    if (netRef.current && !collapsed["net"]) {
-      drawChart(
-        netRef.current,
-        [
-          { values: history.upload, color: "rgb(74, 222, 128)", label: "Upload" },
-          { values: history.download, color: "rgb(251, 146, 60)", label: "Download" },
-        ],
-        100,
-        { fill: true, gridLines: 4, suffix: "%" }
-      );
-    }
-    if (connRef.current && !collapsed["conns"]) {
-      const maxConn = Math.max(5, ...history.conns);
-      drawChart(
-        connRef.current,
-        [
-          { values: history.conns, color: "rgb(56, 189, 248)", label: "Connections" },
-          { values: history.users, color: "rgb(167, 139, 250)", label: "Users" },
-          { values: history.streams, color: "rgb(74, 222, 128)", label: "Streams" },
-        ],
-        maxConn * 1.2,
-        { fill: true, gridLines: 4 }
-      );
-    }
-  }, [history, collapsed]);
-
   const lastCpu = history.cpu[history.cpu.length - 1] ?? 0;
   const lastMem = history.mem[history.mem.length - 1] ?? 0;
   const lastUp = history.upload[history.upload.length - 1] ?? 0;
@@ -281,40 +127,123 @@ export function DashboardXuiResourceMonitor({
   return (
     <section className="xui-dash-monitor space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ChartCard
-          title="CPU & Memory"
-          canvasRef={cpuMemRef}
-          collapsed={!!collapsed["cpu-mem"]}
-          onToggle={() => toggle("cpu-mem")}
-          legends={[
-            { label: "CPU", color: "rgb(56, 189, 248)", value: `${Math.round(lastCpu)}%` },
-            { label: "Memory", color: "rgb(167, 139, 250)", value: `${Math.round(lastMem)}%` },
-          ]}
-        />
-        <ChartCard
-          title="Network Traffic"
-          canvasRef={netRef}
-          collapsed={!!collapsed["net"]}
-          onToggle={() => toggle("net")}
-          legends={[
-            { label: "Upload", color: "rgb(74, 222, 128)", value: `${Math.round(lastUp)}%` },
-            { label: "Download", color: "rgb(251, 146, 60)", value: `${Math.round(lastDown)}%` },
-          ]}
-        />
-        <ChartCard
-          title="Connections"
-          canvasRef={connRef}
-          collapsed={!!collapsed["conns"]}
-          onToggle={() => toggle("conns")}
-          legends={[
-            { label: "Conns", color: "rgb(56, 189, 248)", value: String(lastConns) },
-            { label: "Users", color: "rgb(167, 139, 250)", value: String(lastUsers) },
-            { label: "Streams", color: "rgb(74, 222, 128)", value: String(lastStreams) },
-          ]}
-        />
+        {/* CPU & Memory */}
+        <div className="xui-dash-chart-card">
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => toggle("cpu-mem")}
+              className="flex items-center gap-1.5 text-sm font-semibold hover:opacity-80 transition-opacity cursor-pointer"
+            >
+              {collapsed["cpu-mem"] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              CPU &amp; Memory
+            </button>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-[11px] tabular-nums">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "rgb(56, 189, 248)" }} />
+                <span style={{ color: "var(--muted)" }}>CPU</span>
+                <span className="font-semibold">{Math.round(lastCpu)}%</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-[11px] tabular-nums">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "rgb(167, 139, 250)" }} />
+                <span style={{ color: "var(--muted)" }}>Mem</span>
+                <span className="font-semibold">{Math.round(lastMem)}%</span>
+              </span>
+            </div>
+          </div>
+          {!collapsed["cpu-mem"] && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] mb-1" style={{ color: "var(--muted)" }}>CPU</p>
+                <MiniGraph values={history.cpu} color="rgb(56, 189, 248)" />
+              </div>
+              <div>
+                <p className="text-[10px] mb-1" style={{ color: "var(--muted)" }}>Memory</p>
+                <MiniGraph values={history.mem} color="rgb(167, 139, 250)" />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Network Traffic */}
+        <div className="xui-dash-chart-card">
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => toggle("net")}
+              className="flex items-center gap-1.5 text-sm font-semibold hover:opacity-80 transition-opacity cursor-pointer"
+            >
+              {collapsed["net"] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              Network Traffic
+            </button>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-[11px] tabular-nums">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "rgb(74, 222, 128)" }} />
+                <span style={{ color: "var(--muted)" }}>Up</span>
+                <span className="font-semibold">{Math.round(lastUp)}%</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-[11px] tabular-nums">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "rgb(251, 146, 60)" }} />
+                <span style={{ color: "var(--muted)" }}>Down</span>
+                <span className="font-semibold">{Math.round(lastDown)}%</span>
+              </span>
+            </div>
+          </div>
+          {!collapsed["net"] && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] mb-1" style={{ color: "var(--muted)" }}>Upload</p>
+                <MiniGraph values={history.upload} color="rgb(74, 222, 128)" />
+              </div>
+              <div>
+                <p className="text-[10px] mb-1" style={{ color: "var(--muted)" }}>Download</p>
+                <MiniGraph values={history.download} color="rgb(251, 146, 60)" />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Connections */}
+        <div className="xui-dash-chart-card">
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => toggle("conns")}
+              className="flex items-center gap-1.5 text-sm font-semibold hover:opacity-80 transition-opacity cursor-pointer"
+            >
+              {collapsed["conns"] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+              Connections
+            </button>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-[11px] tabular-nums">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "rgb(56, 189, 248)" }} />
+                <span style={{ color: "var(--muted)" }}>Conns</span>
+                <span className="font-semibold">{lastConns}</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-[11px] tabular-nums">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "rgb(167, 139, 250)" }} />
+                <span style={{ color: "var(--muted)" }}>Users</span>
+                <span className="font-semibold">{lastUsers}</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-[11px] tabular-nums">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "rgb(74, 222, 128)" }} />
+                <span style={{ color: "var(--muted)" }}>Streams</span>
+                <span className="font-semibold">{lastStreams}</span>
+              </span>
+            </div>
+          </div>
+          {!collapsed["conns"] && (
+            <MiniGraph
+              values={history.conns}
+              color="rgb(56, 189, 248)"
+              maxVal={Math.max(5, ...history.conns)}
+            />
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Service Status */}
         <div className="xui-dash-chart-card">
           <button
             type="button"
@@ -336,6 +265,7 @@ export function DashboardXuiResourceMonitor({
           )}
         </div>
 
+        {/* Server Details */}
         {primary && (
           <div className="xui-dash-chart-card">
             <div className="flex items-center justify-between mb-3">
