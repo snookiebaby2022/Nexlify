@@ -274,6 +274,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         label: "Infrastructure",
         icon: coloredGroupIcon("infrastructure"),
         items: [
+          { href: "/admin/unique-features", label: "Unique Features" },
           { href: "/admin/settings/catchup", label: "Catch-up TV (DVR)" },
           { href: "/admin/epg/sources", label: "Custom EPG Sources" },
           { href: "/admin/servers/load-balancer", label: "Load Balancer" },
