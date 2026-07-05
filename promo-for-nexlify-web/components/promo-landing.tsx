@@ -18,6 +18,54 @@ const BENEFITS = [
     title: "Resellers + WHMCS",
     desc: "Credits, packages, and billing webhooks for real operator workflows.",
   },
+  {
+    title: "Dynamic Pricing Engine",
+    desc: "Peak/off-peak multipliers, time-based pricing, and automated suggestions.",
+  },
+  {
+    title: "Stream Fingerprinting",
+    desc: "Detect piracy with unique stream fingerprints and automatic flagging.",
+  },
+  {
+    title: "Advanced Analytics",
+    desc: "Real-time viewer stats, top channels, revenue tracking, and retention metrics.",
+  },
+  {
+    title: "White-label Mobile Apps",
+    desc: "Build branded Android/iOS apps for your resellers with custom packages.",
+  },
+  {
+    title: "Multi-tenancy",
+    desc: "Per-reseller branding, isolated configs, and tenant-level permissions.",
+  },
+  {
+    title: "Automated Backups",
+    desc: "One-click backup & restore with scheduled snapshots and version history.",
+  },
+  {
+    title: "Content Moderation",
+    desc: "Flag and review streams with severity levels and approval workflows.",
+  },
+  {
+    title: "Security Features",
+    desc: "IP whitelisting, brute-force protection, and real-time security alerts.",
+  },
+  {
+    title: "Transcoding Profiles",
+    desc: "H.264/H.265/VP9/AV1 with GPU acceleration and custom bitrate configs.",
+  },
+  {
+    title: "Viewer Loyalty Program",
+    desc: "Points, badges, and tier levels to reward your most active viewers.",
+  },
+  {
+    title: "Quality Monitoring",
+    desc: "Real-time alerts for bitrate drops, packet loss, and stream failures.",
+  },
+  {
+    title: "Failover Testing",
+    desc: "Automated backup stream testing with pass/fail reporting.",
+  },
 ] as const;
 
 function appendUtm(base: string, utm: Record<string, string>, placement: string) {
@@ -104,7 +152,7 @@ export function PromoLanding({ utm = {} }: PromoLandingProps) {
         </h1>
 
         <p className="text-sm sm:text-base mb-8 max-w-sm" style={{ color: "#8ba3c7" }}>
-          Modern control panel vs legacy XUI. Self-hosted on PostgreSQL — anti-freeze, resellers, WHMCS-ready.
+          Modern control panel vs legacy XUI. Self-hosted on PostgreSQL — anti-freeze, resellers, WHMCS-ready. Dynamic pricing, piracy detection, and 15+ advanced features.
         </p>
 
         {/* Dual CTAs */}
@@ -141,7 +189,7 @@ export function PromoLanding({ utm = {} }: PromoLandingProps) {
         </p>
 
         {/* Benefits */}
-        <div className="w-full grid gap-3 text-left">
+        <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
           {BENEFITS.map((b) => (
             <div
               key={b.title}

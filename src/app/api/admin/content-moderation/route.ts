@@ -1,38 +1,29 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
-import {
-  generateStreamFingerprint,
-  getStreamFingerprints,
-  detectFingerprintMatches,
-  markStreamAsPirated,
-} from "@/lib/stream-fingerprinting";
+import { flagStream, getModerationFlags, reviewFlag } from "@/lib/content-moderation";
 
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const [fingerprints, matches] = await Promise.all([
-    getStreamFingerprints(),
-    detectFingerprintMatches(),
-  ]);
-
-  return NextResponse.json({ fingerprints, matches });
+  const flags = await getModerationFlags();
+  return NextResponse.json({ flags });
 }
 
 export async function POST(req: Request) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { action, streamId } = await req.json();
+  const { action, streamId, reason, severity, flagId, status } = await req.json();
 
-  if (action === "generate") {
-    const fp = await generateStreamFingerprint(streamId);
-    return NextResponse.json(fp);
+  if (action === "flag") {
+    const flag = await flagStream(streamId, reason, severity);
+    return NextResponse.json(flag);
   }
 
-  if (action === "mark_pirated") {
-    await markStreamAsPirated(streamId);
+  if (action === "review") {
+    await reviewFlag(flagId, status);
     return NextResponse.json({ ok: true });
   }
 

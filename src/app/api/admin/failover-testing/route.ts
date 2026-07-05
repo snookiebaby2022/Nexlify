@@ -2,37 +2,38 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
 import {
-  generateStreamFingerprint,
-  getStreamFingerprints,
-  detectFingerprintMatches,
-  markStreamAsPirated,
-} from "@/lib/stream-fingerprinting";
+  createFailoverTest,
+  getFailoverTests,
+  updateFailoverTest,
+  deleteFailoverTest,
+} from "@/lib/failover-testing";
 
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const [fingerprints, matches] = await Promise.all([
-    getStreamFingerprints(),
-    detectFingerprintMatches(),
-  ]);
-
-  return NextResponse.json({ fingerprints, matches });
+  const tests = await getFailoverTests();
+  return NextResponse.json({ tests });
 }
 
 export async function POST(req: Request) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { action, streamId } = await req.json();
+  const { action, name, streamId, testId, status, result } = await req.json();
 
-  if (action === "generate") {
-    const fp = await generateStreamFingerprint(streamId);
-    return NextResponse.json(fp);
+  if (action === "create") {
+    const test = await createFailoverTest(name, streamId);
+    return NextResponse.json(test);
   }
 
-  if (action === "mark_pirated") {
-    await markStreamAsPirated(streamId);
+  if (action === "update") {
+    await updateFailoverTest(testId, status, result);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (action === "delete") {
+    await deleteFailoverTest(testId);
     return NextResponse.json({ ok: true });
   }
 

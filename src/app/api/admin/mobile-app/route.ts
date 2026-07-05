@@ -1,38 +1,29 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
-import {
-  generateStreamFingerprint,
-  getStreamFingerprints,
-  detectFingerprintMatches,
-  markStreamAsPirated,
-} from "@/lib/stream-fingerprinting";
+import { createMobileApp, getMobileApps, deleteMobileApp } from "@/lib/mobile-app-builder";
 
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const [fingerprints, matches] = await Promise.all([
-    getStreamFingerprints(),
-    detectFingerprintMatches(),
-  ]);
-
-  return NextResponse.json({ fingerprints, matches });
+  const apps = await getMobileApps();
+  return NextResponse.json({ apps });
 }
 
 export async function POST(req: Request) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { action, streamId } = await req.json();
+  const { action, name, packageName, resellerId, appId } = await req.json();
 
-  if (action === "generate") {
-    const fp = await generateStreamFingerprint(streamId);
-    return NextResponse.json(fp);
+  if (action === "create") {
+    const app = await createMobileApp(name, packageName, resellerId);
+    return NextResponse.json(app);
   }
 
-  if (action === "mark_pirated") {
-    await markStreamAsPirated(streamId);
+  if (action === "delete") {
+    await deleteMobileApp(appId);
     return NextResponse.json({ ok: true });
   }
 

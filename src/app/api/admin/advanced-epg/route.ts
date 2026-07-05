@@ -2,37 +2,38 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
 import {
-  generateStreamFingerprint,
-  getStreamFingerprints,
-  detectFingerprintMatches,
-  markStreamAsPirated,
-} from "@/lib/stream-fingerprinting";
+  createEpgSource,
+  getEpgSources,
+  deleteEpgSource,
+  syncEpgSource,
+} from "@/lib/advanced-epg";
 
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const [fingerprints, matches] = await Promise.all([
-    getStreamFingerprints(),
-    detectFingerprintMatches(),
-  ]);
-
-  return NextResponse.json({ fingerprints, matches });
+  const sources = await getEpgSources();
+  return NextResponse.json({ sources });
 }
 
 export async function POST(req: Request) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { action, streamId } = await req.json();
+  const { action, name, url, format, sourceId } = await req.json();
 
-  if (action === "generate") {
-    const fp = await generateStreamFingerprint(streamId);
-    return NextResponse.json(fp);
+  if (action === "create") {
+    const source = await createEpgSource(name, url, format);
+    return NextResponse.json(source);
   }
 
-  if (action === "mark_pirated") {
-    await markStreamAsPirated(streamId);
+  if (action === "delete") {
+    await deleteEpgSource(sourceId);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (action === "sync") {
+    await syncEpgSource(sourceId);
     return NextResponse.json({ ok: true });
   }
 

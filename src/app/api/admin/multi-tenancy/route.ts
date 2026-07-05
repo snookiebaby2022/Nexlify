@@ -1,38 +1,29 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
-import {
-  generateStreamFingerprint,
-  getStreamFingerprints,
-  detectFingerprintMatches,
-  markStreamAsPirated,
-} from "@/lib/stream-fingerprinting";
+import { createTenant, getTenants, deleteTenant, getTenantByReseller } from "@/lib/multi-tenancy";
 
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const [fingerprints, matches] = await Promise.all([
-    getStreamFingerprints(),
-    detectFingerprintMatches(),
-  ]);
-
-  return NextResponse.json({ fingerprints, matches });
+  const tenants = await getTenants();
+  return NextResponse.json({ tenants });
 }
 
 export async function POST(req: Request) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { action, streamId } = await req.json();
+  const { action, name, resellerId, branding, tenantId } = await req.json();
 
-  if (action === "generate") {
-    const fp = await generateStreamFingerprint(streamId);
-    return NextResponse.json(fp);
+  if (action === "create") {
+    const tenant = await createTenant(name, resellerId, branding);
+    return NextResponse.json(tenant);
   }
 
-  if (action === "mark_pirated") {
-    await markStreamAsPirated(streamId);
+  if (action === "delete") {
+    await deleteTenant(tenantId);
     return NextResponse.json({ ok: true });
   }
 

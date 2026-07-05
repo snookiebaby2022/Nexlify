@@ -205,16 +205,18 @@ export function DashboardXuiResourceMonitor({
 
         {/* Connections */}
         <div className="xui-dash-chart-card">
-          <div className="flex items-center justify-between mb-2">
-            <button
-              type="button"
-              onClick={() => toggle("conns")}
-              className="flex items-center gap-1.5 text-sm font-semibold hover:opacity-80 transition-opacity cursor-pointer"
-            >
-              {collapsed["conns"] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-              Connections
-            </button>
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-2 mb-2">
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => toggle("conns")}
+                className="flex items-center gap-1.5 text-sm font-semibold hover:opacity-80 transition-opacity cursor-pointer"
+              >
+                {collapsed["conns"] ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                Connections
+              </button>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
               <span className="flex items-center gap-1.5 text-[11px] tabular-nums">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ background: "rgb(56, 189, 248)" }} />
                 <span style={{ color: "var(--muted)" }}>Conns</span>

@@ -160,6 +160,22 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "content_playlists", title: "Content — playlists", category: "Content", redirect: "/admin/content/playlists" },
   { slug: "content_streams", title: "Content — streams", category: "Content", redirect: "/admin/content/streams" },
   { slug: "content_vod", title: "Content — VOD", category: "Content", redirect: "/admin/content/vod" },
+
+  { slug: "backup-restore", title: "Backup & Restore", category: "Advanced", redirect: "/admin/backup-restore" },
+  { slug: "mobile-apps", title: "Mobile Apps", category: "Advanced", redirect: "/admin/mobile-apps" },
+  { slug: "advanced-analytics", title: "Advanced Analytics", category: "Advanced", redirect: "/admin/advanced-analytics" },
+  { slug: "content-moderation", title: "Content Moderation", category: "Advanced", redirect: "/admin/content-moderation" },
+  { slug: "dynamic-pricing", title: "Dynamic Pricing", category: "Advanced", redirect: "/admin/dynamic-pricing" },
+  { slug: "multi-tenancy", title: "Multi-tenancy", category: "Advanced", redirect: "/admin/multi-tenancy" },
+  { slug: "advanced-epg", title: "Advanced EPG", category: "Advanced", redirect: "/admin/advanced-epg" },
+  { slug: "transcoding-profiles", title: "Transcoding Profiles", category: "Advanced", redirect: "/admin/transcoding-profiles" },
+  { slug: "loyalty-program", title: "Loyalty Program", category: "Advanced", redirect: "/admin/loyalty-program" },
+  { slug: "billing-integration", title: "Billing Integration", category: "Advanced", redirect: "/admin/billing-integration" },
+  { slug: "security-alerts", title: "Security Features", category: "Advanced", redirect: "/admin/security-alerts" },
+  { slug: "quality-monitoring", title: "Quality Monitoring", category: "Advanced", redirect: "/admin/quality-monitoring" },
+  { slug: "failover-testing", title: "Failover Testing", category: "Advanced", redirect: "/admin/failover-testing" },
+  { slug: "stream-fingerprinting", title: "Stream Fingerprinting", category: "Advanced", redirect: "/admin/stream-fingerprinting" },
+  { slug: "viewer-heatmap", title: "Viewer Heatmap", category: "Advanced", redirect: "/admin/analytics/viewer-heatmap" },
 ];
 
 export function getModuleBySlug(slug: string): AdminModuleDef | undefined {
