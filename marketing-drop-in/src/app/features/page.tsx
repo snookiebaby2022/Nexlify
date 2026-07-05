@@ -121,11 +121,29 @@ const ROWS: FeatureRow[] = [
   { category: "Monitoring & Analytics", feature: "Stream Rank / Top Channels — channel popularity ranking", nexlify: "new", typical: "missing" },
   { category: "Monitoring & Analytics", feature: "Theft Detection — same-IP, VOD, stream theft with auto-disable", nexlify: "new", typical: "missing" },
   { category: "Monitoring & Analytics", feature: "Live Connections — real-time connection monitoring", nexlify: "new", typical: "missing" },
+  { category: "Monitoring & Analytics", feature: "Viewer Heatmap — geographic viewer distribution", nexlify: "new", typical: "missing" },
+  { category: "Monitoring & Analytics", feature: "Advanced Analytics — real-time viewer stats, revenue, retention", nexlify: "new", typical: "missing" },
+  { category: "Monitoring & Analytics", feature: "Quality Monitoring — bitrate drops, packet loss, stream failure alerts", nexlify: "new", typical: "missing" },
+  { category: "Monitoring & Analytics", feature: "Failover Testing — automated backup stream testing with reporting", nexlify: "new", typical: "missing" },
   { category: "Monitoring & Analytics", feature: "Stream health dashboard + error fix", nexlify: "included", typical: "partial" },
   { category: "Monitoring & Analytics", feature: "Telegram alerts (offline, load, abuse)", nexlify: "included", typical: "missing" },
 
   // App Builder
   { category: "App Builder", feature: "Build branded APK — custom logo, colors, package name, server URL", nexlify: "new", typical: "missing" },
+  { category: "App Builder", feature: "White-label Mobile Apps — per-reseller branded Android/iOS apps", nexlify: "new", typical: "missing" },
+
+  // Business & Monetization
+  { category: "Business & Monetization", feature: "Dynamic Pricing Engine — peak/off-peak multipliers, time-based pricing", nexlify: "new", typical: "missing" },
+  { category: "Business & Monetization", feature: "Multi-tenancy — per-reseller branding, isolated configs, tenant permissions", nexlify: "new", typical: "missing" },
+  { category: "Business & Monetization", feature: "Loyalty Program — points, badges, tier levels for active viewers", nexlify: "new", typical: "missing" },
+  { category: "Business & Monetization", feature: "Billing Integration — Stripe, PayPal, WHMCS with invoice management", nexlify: "new", typical: "missing" },
+  { category: "Business & Monetization", feature: "Content Moderation — flag, review, approve/reject streams", nexlify: "new", typical: "missing" },
+
+  // Operations & Maintenance
+  { category: "Operations & Maintenance", feature: "Backup & Restore — automated backups with one-click restore", nexlify: "new", typical: "missing" },
+  { category: "Operations & Maintenance", feature: "Advanced EPG — multi-source EPG with sync and quality scoring", nexlify: "new", typical: "missing" },
+  { category: "Operations & Maintenance", feature: "Transcoding Profiles — H.264/H.265/VP9/AV1 with GPU acceleration", nexlify: "new", typical: "missing" },
+  { category: "Operations & Maintenance", feature: "Security Features — IP whitelist, brute-force protection, security alerts", nexlify: "new", typical: "missing" },
 
   // UI/UX
   { category: "UI/UX", feature: "Avatar Customization — animated frames and avatar studio", nexlify: "new", typical: "missing" },
