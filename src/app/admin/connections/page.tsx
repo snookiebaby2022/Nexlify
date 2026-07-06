@@ -1,17 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Hammer, Fingerprint } from "lucide-react";
 import { IpWithFlag } from "@/components/ip-with-flag";
 import { subscriptionPaths } from "@/lib/panel-paths";
 
-function formatConnDuration(startedAt: string | Date, lastSeenAt: string | Date): string {
-  const sec = Math.max(
-    0,
-    Math.floor((new Date(lastSeenAt).getTime() - new Date(startedAt).getTime()) / 1000)
-  );
+function formatConnDuration(startedAt: string | Date): string {
+  const sec = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
@@ -44,6 +41,7 @@ export default function AdminConnectionsPage() {
   >([]);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(10);
+  const [tick, setTick] = useState(0);
 
   function load() {
     fetch("/api/admin/connections")
@@ -54,6 +52,12 @@ export default function AdminConnectionsPage() {
   useEffect(() => {
     load();
     const t = setInterval(load, 15000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Tick every second to update durations in real-time
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, []);
 
@@ -143,7 +147,7 @@ export default function AdminConnectionsPage() {
                 <td>{c.ip ? <IpWithFlag ip={c.ip} /> : "—"}</td>
                 <td>
                   <span className="xui-duration-badge">
-                    {formatConnDuration(c.startedAt, c.lastSeenAt)}
+                    {formatConnDuration(c.startedAt)}
                   </span>
                 </td>
                 <td>{inferOutput(c.userAgent)}</td>
