@@ -95,7 +95,7 @@ export async function getStreamLiveStatsMap(
   const [connections, processes] = await Promise.all([
     prisma.liveConnection.findMany({
       where: { streamId: { in: uniqueIds }, lastSeenAt: { gte: staleBefore } },
-      select: { streamId: true },
+      select: { streamId: true, startedAt: true },
     }),
     prisma.streamProcess.findMany({
       where: { streamId: { in: uniqueIds }, lastSeenAt: { gte: staleBefore } },
@@ -104,9 +104,14 @@ export async function getStreamLiveStatsMap(
   ]);
 
   const viewersByStream = new Map<string, number>();
+  const earliestConnByStream = new Map<string, Date>();
   for (const c of connections) {
     if (!c.streamId) continue;
     viewersByStream.set(c.streamId, (viewersByStream.get(c.streamId) ?? 0) + 1);
+    const existing = earliestConnByStream.get(c.streamId);
+    if (!existing || new Date(c.startedAt) < existing) {
+      earliestConnByStream.set(c.streamId, new Date(c.startedAt));
+    }
   }
 
   const processesByStream = new Map<string, typeof processes>();
@@ -126,7 +131,8 @@ export async function getStreamLiveStatsMap(
       .map((p) => p.startedAt)
       .filter((d): d is Date => d != null)
       .sort((a, b) => a.getTime() - b.getTime())[0];
-    const uptimeSeconds = uptimeFromStarted(started);
+    // Fall back to earliest connection's startedAt when no process records exist
+    const uptimeSeconds = uptimeFromStarted(started) ?? uptimeFromStarted(earliestConnByStream.get(id));
     const servers = procs.map((p) => ({
       serverId: p.server.id,
       serverName: p.server.name,
