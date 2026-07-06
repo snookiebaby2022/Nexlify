@@ -87,9 +87,29 @@ export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-  await prisma.stream.updateMany({ where: { categoryId: id }, data: { categoryId: null } });
+  // Recursively collect all descendant category IDs
+  async function collectDescendants(parentId: string): Promise<string[]> {
+    const children = await prisma.category.findMany({ where: { parentId }, select: { id: true } });
+    let ids: string[] = [];
+    for (const child of children) {
+      ids.push(child.id);
+      ids = ids.concat(await collectDescendants(child.id));
+    }
+    return ids;
+  }
+
+  const descendantIds = await collectDescendants(id);
+  const allIds = [id, ...descendantIds];
+
+  // Un-categorize all streams in this category and its children
+  await prisma.stream.updateMany({ where: { categoryId: { in: allIds } }, data: { categoryId: null } });
+  // Delete all children first (bottom-up), then the parent
+  if (descendantIds.length > 0) {
+    await prisma.category.deleteMany({ where: { id: { in: descendantIds } } });
+  }
   await prisma.category.delete({ where: { id } });
+
   await invalidateXtreamCategories();
   await invalidateDashboardStats();
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, deleted: allIds.length });
 }

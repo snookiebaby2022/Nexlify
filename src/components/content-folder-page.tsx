@@ -394,25 +394,41 @@ export function ContentFolderPage({
 
 
 
-      {slug !== "streams" &&
-
-        !folder.adminRedirect &&
-
-        !folder.resellerRedirect &&
-
-        slug !== "vod" &&
-
-        slug !== "epg" &&
-
-        slug !== "playlists" && (
-
-          <p className="text-sm rounded-lg border p-4" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
-
-            This section is ready in the panel structure. Full {folder.title.toLowerCase()} management will be added in a future update.
-
+      {slug === "created" && (
+        <div className="rounded-lg border p-4 space-y-3" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+          <h3 className="font-medium text-sm">Panel-Created Channels</h3>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Created channels are custom streams you build directly in the panel. Use the stream creation form to add your own channels.
           </p>
+          <a href="/admin/streams/add" className="inline-block text-xs px-3 py-1.5 rounded font-medium text-white" style={{ background: "var(--accent)" }}>
+            Create new stream
+          </a>
+        </div>
+      )}
 
-        )}
+      {slug === "archive" && (
+        <div className="rounded-lg border p-4 space-y-3" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+          <h3 className="font-medium text-sm">Archived Streams</h3>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Archived streams are inactive streams that are kept for historical reference. Disable a stream to archive it — it won&apos;t appear in playlists but data is preserved.
+          </p>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Streams with <code className="px-1 py-0.5 rounded" style={{ background: "rgba(255,255,255,0.05)" }}>isActive: false</code> appear in this category.
+          </p>
+        </div>
+      )}
+
+      {slug === "delayed" && (
+        <div className="rounded-lg border p-4 space-y-3" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+          <h3 className="font-medium text-sm">Delayed / Time-Shifted Content</h3>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Delayed streams use catchup/timeshift features to allow viewers to watch past content. Configure timeshift settings per-stream in the stream editor.
+          </p>
+          <a href="/admin/settings/catchup" className="inline-block text-xs px-3 py-1.5 rounded font-medium text-white" style={{ background: "var(--accent)" }}>
+            Catchup settings
+          </a>
+        </div>
+      )}
 
     </div>
 

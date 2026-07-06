@@ -166,18 +166,35 @@ function flattenTree(nodes: CategoryNode[], expanded: Set<string>): CategoryNode
 const TreeRow = memo(function TreeRow({
   node,
   expanded,
+  allCategories,
   onToggle,
   onRemove,
   onMove,
+  onRename,
+  onReparent,
 }: {
   node: CategoryNode;
   expanded: boolean;
+  allCategories: CategoryRow[];
   onToggle: () => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
+  onRename: (id: string, name: string) => void;
+  onReparent: (id: string, parentId: string | null) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(node.name);
+  const [editParent, setEditParent] = useState(node.parentId ?? "");
   const hasChildren = node.children.length > 0;
   const indent = node.depth * 24;
+
+  function save() {
+    if (editName.trim() && editName !== node.name) onRename(node.id, editName.trim());
+    const newParent = editParent || null;
+    if (newParent !== node.parentId) onReparent(node.id, newParent);
+    setEditing(false);
+  }
+
   return (
     <div
       className="flex items-center gap-2 px-3 py-2 border-b"
@@ -192,24 +209,56 @@ const TreeRow = memo(function TreeRow({
         {hasChildren ? (expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />) : <ChevronRight size={14} className="opacity-0" />}
       </button>
       {hasChildren ? <FolderOpen size={14} style={{ color: "var(--accent)" }} /> : <Folder size={14} style={{ color: "var(--muted)" }} />}
-      <span className="flex-1 font-medium text-sm">{node.name}</span>
-      {node.isAdult && (
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Adult</span>
+
+      {editing ? (
+        <>
+          <input
+            className="flex-1 text-sm rounded border px-2 py-1 bg-transparent"
+            style={{ borderColor: "var(--border)" }}
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+            autoFocus
+          />
+          <select
+            className="text-xs rounded border px-1 py-1 bg-transparent"
+            style={{ borderColor: "var(--border)" }}
+            value={editParent}
+            onChange={(e) => setEditParent(e.target.value)}
+          >
+            <option value="">— No parent —</option>
+            {allCategories.filter((c) => c.id !== node.id).map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <button type="button" className="text-xs px-2 py-1 rounded text-white" style={{ background: "var(--accent)" }} onClick={save}>Save</button>
+          <button type="button" className="text-xs px-2 py-1 rounded" style={{ color: "var(--muted)" }} onClick={() => setEditing(false)}>Cancel</button>
+        </>
+      ) : (
+        <>
+          <span className="flex-1 font-medium text-sm">{node.name}</span>
+          {node.isAdult && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Adult</span>
+          )}
+          <span className="text-xs" style={{ color: "var(--muted)" }}>
+            {node._count.streams} streams
+          </span>
+          <div className="flex items-center gap-1">
+            <button type="button" className="p-1 rounded hover:bg-white/10 text-xs" title="Edit" onClick={() => { setEditing(true); setEditName(node.name); setEditParent(node.parentId ?? ""); }}>
+              Edit
+            </button>
+            <button type="button" className="p-1 rounded hover:bg-white/10" onClick={() => onMove(-1)}>
+              <ArrowUp size={12} />
+            </button>
+            <button type="button" className="p-1 rounded hover:bg-white/10" onClick={() => onMove(1)}>
+              <ArrowDown size={12} />
+            </button>
+            <button type="button" className="p-1 rounded text-red-400 hover:bg-red-400/10 text-xs" onClick={onRemove}>
+              Delete
+            </button>
+          </div>
+        </>
       )}
-      <span className="text-xs" style={{ color: "var(--muted)" }}>
-        {node._count.streams} streams
-      </span>
-      <div className="flex items-center gap-1">
-        <button type="button" className="p-1 rounded hover:bg-white/10" onClick={() => onMove(-1)}>
-          <ArrowUp size={12} />
-        </button>
-        <button type="button" className="p-1 rounded hover:bg-white/10" onClick={() => onMove(1)}>
-          <ArrowDown size={12} />
-        </button>
-        <button type="button" className="p-1 rounded text-red-400 hover:bg-red-400/10 text-xs" onClick={onRemove}>
-          Delete
-        </button>
-      </div>
     </div>
   );
 });
@@ -270,8 +319,26 @@ export default function ManagementCategoriesPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm("Delete this category? Streams will be uncategorized.")) return;
+    if (!confirm("Delete this category and all sub-categories? Streams will be uncategorized.")) return;
     await fetch(`/api/admin/categories?id=${id}`, { method: "DELETE" });
+    load();
+  }
+
+  async function renameCategory(id: string, newName: string) {
+    await fetch("/api/admin/categories", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, name: newName }),
+    });
+    load();
+  }
+
+  async function reparentCategory(id: string, newParentId: string | null) {
+    await fetch("/api/admin/categories", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, parentId: newParentId }),
+    });
     load();
   }
 
@@ -385,6 +452,7 @@ export default function ManagementCategoriesPage() {
             key={node.id}
             node={node}
             expanded={expanded.has(node.id)}
+            allCategories={tabCategories}
             onToggle={() =>
               setExpanded((prev) => {
                 const next = new Set(prev);
@@ -395,6 +463,8 @@ export default function ManagementCategoriesPage() {
             }
             onRemove={() => remove(node.id)}
             onMove={(dir) => move(node.id, dir)}
+            onRename={renameCategory}
+            onReparent={reparentCategory}
           />
         ))}
         {!tabCategories.length && (

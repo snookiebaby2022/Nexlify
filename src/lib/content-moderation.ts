@@ -1,7 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { cacheGet, cacheSet } from "@/lib/cache";
-
-const MODERATION_PREFIX = "moderation:";
 
 export type ModerationFlag = {
   id: string;
@@ -10,40 +7,48 @@ export type ModerationFlag = {
   reason: string;
   severity: "low" | "medium" | "high";
   status: "pending" | "reviewed" | "approved" | "rejected";
-  flaggedAt: number;
+  flaggedAt: Date;
+  reviewedAt: Date | null;
+  reviewedBy: string | null;
 };
 
 export async function flagStream(
   streamId: string,
   reason: string,
-  severity: ModerationFlag["severity"] = "medium"
+  severity: "low" | "medium" | "high" = "medium"
 ): Promise<ModerationFlag> {
   const stream = await prisma.stream.findUnique({ where: { id: streamId } });
-  const flag: ModerationFlag = {
-    id: `flag_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    streamId,
-    streamName: stream?.name ?? "",
-    reason,
-    severity,
-    status: "pending",
-    flaggedAt: Date.now(),
-  };
-
-  const flags = await getModerationFlags();
-  flags.push(flag);
-  await cacheSet(`${MODERATION_PREFIX}all`, flags, 86400);
-  return flag;
+  return prisma.moderationFlag.create({
+    data: {
+      streamId,
+      streamName: stream?.name ?? "",
+      reason,
+      severity,
+    },
+  }) as Promise<ModerationFlag>;
 }
 
-export async function getModerationFlags(): Promise<ModerationFlag[]> {
-  return (await cacheGet<ModerationFlag[]>(`${MODERATION_PREFIX}all`)) ?? [];
+export async function getModerationFlags(status?: string): Promise<ModerationFlag[]> {
+  return prisma.moderationFlag.findMany({
+    where: status ? { status } : undefined,
+    orderBy: { flaggedAt: "desc" },
+    take: 500,
+  }) as Promise<ModerationFlag[]>;
 }
 
-export async function reviewFlag(flagId: string, status: ModerationFlag["status"]): Promise<boolean> {
-  const flags = await getModerationFlags();
-  const idx = flags.findIndex((f) => f.id === flagId);
-  if (idx < 0) return false;
-  flags[idx].status = status;
-  await cacheSet(`${MODERATION_PREFIX}all`, flags, 86400);
-  return true;
+export async function reviewFlag(
+  flagId: string,
+  status: ModerationFlag["status"],
+  reviewedBy?: string
+): Promise<boolean> {
+  const result = await prisma.moderationFlag.updateMany({
+    where: { id: flagId },
+    data: { status, reviewedAt: new Date(), reviewedBy: reviewedBy ?? null },
+  });
+  return result.count > 0;
+}
+
+export async function deleteFlag(flagId: string): Promise<boolean> {
+  const result = await prisma.moderationFlag.deleteMany({ where: { id: flagId } });
+  return result.count > 0;
 }

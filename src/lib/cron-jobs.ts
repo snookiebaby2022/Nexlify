@@ -506,9 +506,72 @@ async function jobPanelAutoUpdate() {
   }
 }
 
+async function jobPgDump() {
+  const start = Date.now();
+  try {
+    const backup = await getSettingGroup("backup");
+    if (!backup.pgDumpCronEnabled) {
+      await logCron("pg_dump", "skipped", "disabled", Date.now() - start);
+      return;
+    }
+
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      await logCron("pg_dump", "error", "DATABASE_URL not set", Date.now() - start);
+      return;
+    }
+
+    const { mkdir, writeFile } = await import("fs/promises");
+    const { execSync } = await import("child_process");
+    const path = await import("path");
+
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const dir = path.resolve(process.cwd(), "./backups/pg");
+    await mkdir(dir, { recursive: true });
+    const outPath = path.join(dir, `nexlify-pg-${stamp}.sql.gz`);
+
+    execSync(`pg_dump "${databaseUrl}" | gzip -9 > "${outPath}"`, {
+      timeout: 300_000,
+      env: { ...process.env },
+    });
+
+    // Cleanup old dumps
+    const keepDays = Number(backup.pgDumpKeepDays ?? 14);
+    try {
+      const { readdirSync, statSync, unlinkSync } = await import("fs");
+      const files = readdirSync(dir).filter((f) => f.startsWith("nexlify-pg-") && f.endsWith(".sql.gz"));
+      const cutoff = Date.now() - keepDays * 86400000;
+      for (const f of files) {
+        const st = statSync(path.join(dir, f));
+        if (st.mtimeMs < cutoff) {
+          unlinkSync(path.join(dir, f));
+        }
+      }
+    } catch { /* best effort cleanup */ }
+
+    await logCron("pg_dump", "ok", `wrote ${outPath}`, Date.now() - start);
+  } catch (e) {
+    await logCron("pg_dump", "error", String(e), Date.now() - start);
+  }
+}
+
+async function jobCloudBackup() {
+  const start = Date.now();
+  try {
+    const { runCloudBackup, cleanupExpiredBackups } = await import("./cloud-backup");
+    await runCloudBackup();
+    const cleaned = await cleanupExpiredBackups();
+    await logCron("cloud_backup", "ok", `cleaned ${cleaned} expired`, Date.now() - start);
+  } catch (e) {
+    await logCron("cloud_backup", "error", String(e), Date.now() - start);
+  }
+}
+
 export async function runHourlyCronJobs() {
   await jobEpgSync();
   await jobPanelBackup();
   await jobAgentTokenRotation();
   await jobPanelAutoUpdate();
+  await jobPgDump();
+  await jobCloudBackup();
 }

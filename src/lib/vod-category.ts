@@ -1,27 +1,37 @@
-import type { StreamType } from "@prisma/client";
+import type { StreamType, CategoryType } from "@prisma/client";
 import { prisma } from "./prisma";
 
-async function findOrCreateCategory(name: string, parentId?: string | null): Promise<string> {
+function streamTypeToCategoryType(type: StreamType): CategoryType {
+  if (type === "MOVIE") return "MOVIE";
+  if (type === "SERIES") return "SERIES";
+  return "LIVE";
+}
+
+async function findOrCreateCategory(
+  name: string,
+  parentId?: string | null,
+  categoryType: CategoryType = "LIVE"
+): Promise<string> {
   const trimmed = name.trim().slice(0, 120);
   if (!trimmed) {
-    return findOrCreateCategory("Uncategorized", parentId);
+    return findOrCreateCategory("Uncategorized", parentId, categoryType);
   }
   const existing = await prisma.category.findFirst({
-    where: { name: trimmed, parentId: parentId ?? null },
+    where: { name: trimmed, parentId: parentId ?? null, categoryType },
   });
   if (existing) return existing.id;
   const created = await prisma.category.create({
-    data: { name: trimmed, parentId: parentId ?? null },
+    data: { name: trimmed, parentId: parentId ?? null, categoryType },
   });
   return created.id;
 }
 
 /** Root "Movies" category, optionally a genre child (e.g. Movies → Action). */
 export async function categoryForMovie(genreName?: string | null): Promise<string> {
-  const rootId = await findOrCreateCategory("Movies");
+  const rootId = await findOrCreateCategory("Movies", null, "MOVIE");
   const genre = genreName?.trim();
   if (genre && !/^movies?$/i.test(genre)) {
-    return findOrCreateCategory(genre, rootId);
+    return findOrCreateCategory(genre, rootId, "MOVIE");
   }
   return rootId;
 }
@@ -31,14 +41,14 @@ export async function categoryForSeries(
   seriesName?: string | null,
   genreName?: string | null
 ): Promise<string> {
-  const rootId = await findOrCreateCategory("TV Series");
+  const rootId = await findOrCreateCategory("TV Series", null, "SERIES");
   const show = seriesName?.trim();
   if (show) {
-    return findOrCreateCategory(show, rootId);
+    return findOrCreateCategory(show, rootId, "SERIES");
   }
   const genre = genreName?.trim();
   if (genre && !/^tv\s*series?$/i.test(genre)) {
-    return findOrCreateCategory(genre, rootId);
+    return findOrCreateCategory(genre, rootId, "SERIES");
   }
   return rootId;
 }
@@ -57,7 +67,7 @@ export async function categoryFromGroupName(
   if (type === "MOVIE") {
     return categoryForMovie(g);
   }
-  return findOrCreateCategory(g);
+  return findOrCreateCategory(g, null, streamTypeToCategoryType(type));
 }
 
 /** movies/foo.mp4 → Movies; series/Show/... → TV Series → Show */

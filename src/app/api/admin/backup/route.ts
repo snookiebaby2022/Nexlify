@@ -1,226 +1,139 @@
 import { NextRequest, NextResponse } from "next/server";
-
 import { requireSession } from "@/lib/auth";
-
 import { getSettingGroup } from "@/lib/panel-settings";
-
 import { prisma } from "@/lib/prisma";
-
 import { PanelRole } from "@prisma/client";
-
 import { mkdir } from "fs/promises";
-
 import path from "path";
-
 import { buildFullBackupSnapshot } from "@/lib/backup-run";
-
 import { writeBackupArchive } from "@/lib/backup-archive";
-
-
+import { restoreFullBackup } from "@/lib/backup-restore";
+import { computeChecksum, decryptBackup } from "@/lib/backup-run";
 
 export async function GET() {
-
   const session = await requireSession([PanelRole.ADMIN]);
-
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
   const backup = await getSettingGroup("backup");
-
   return NextResponse.json({ backup });
-
 }
 
-
-
 export async function POST(req: NextRequest) {
-
   const session = await requireSession([PanelRole.ADMIN]);
-
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-
-
   const backup = await getSettingGroup("backup");
-
   const formatParam = req.nextUrl.searchParams.get("format");
-
   const format =
-
     formatParam === "zip" || formatParam === "gzip"
-
       ? formatParam
-
       : backup.exportFormat === "zip"
-
         ? "zip"
-
         : backup.exportFormat === "gzip"
-
           ? "gzip"
-
           : "json";
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-
-
-
-  const snapshot = await buildFullBackupSnapshot();
-
+  const includePasswords = req.nextUrl.searchParams.get("passwords") === "true" || backup.includePasswords === true;
+  const snapshot = await buildFullBackupSnapshot({ includePasswords });
   const payload = JSON.stringify(snapshot, null, 2);
-
+  const checksum = computeChecksum(payload);
   const baseName = `nexlify-backup-${stamp}`;
-
-
-
   const target = backup.target === "remote" ? "remote" : "local";
 
-
-
   if (target === "local") {
-
     const rawPath = String(backup.localPath ?? "").trim();
-
     const dir = path.resolve(
-
       process.cwd(),
-
       rawPath && !rawPath.startsWith("(") ? rawPath.replace(/^\.\//, "") : "./backups"
-
     );
-
     await mkdir(dir, { recursive: true });
-
-    const { filePath, format: writtenFormat } = await writeBackupArchive(
-
-      dir,
-
-      baseName,
-
-      payload,
-
-      format
-
-    );
-
+    const { filePath, format: writtenFormat } = await writeBackupArchive(dir, baseName, payload, format);
     return NextResponse.json({
-
       ok: true,
-
       target: "local",
-
       path: filePath,
-
       format: writtenFormat,
-
+      checksum,
       full: true,
-
-      s3Configured: Boolean(String(backup.s3Bucket ?? "").trim()),
-
+      includePasswords,
       message: `Full panel backup written (${writtenFormat})`,
-
     });
-
   }
 
-
-
   return NextResponse.json({
-
     ok: true,
-
     target: "remote",
-
     filename: `${baseName}.${format === "json" ? "json" : format === "zip" ? "zip" : "json.gz"}`,
-
     format,
-
+    checksum,
     full: true,
-
     message: "Remote backup settings saved. Download via Run backup or SFTP.",
-
     remote: {
-
       protocol: backup.remoteProtocol,
-
       host: backup.remoteHost,
-
       path: backup.remotePath,
-
     },
-
-    s3Placeholder: {
-
-      bucket: backup.s3Bucket || "(set S3 bucket in backup settings)",
-
-      region: backup.s3Region || "eu-west-1",
-
-    },
-
     snapshotSize: payload.length,
-
   });
-
 }
-
-
 
 export async function PUT(req: NextRequest) {
-
   const session = await requireSession([PanelRole.ADMIN]);
-
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-
-
   const backup = await getSettingGroup("backup");
-
   if (!backup.allowRestoreUpload) {
-
     return NextResponse.json({ error: "Restore upload disabled in settings" }, { status: 403 });
-
   }
-
-
 
   const body = await req.json();
+  let snapshot = body.snapshot as Record<string, unknown> | undefined;
 
-  const settings = body.panelSettings as { key: string; value: string }[] | undefined;
-
-  if (!Array.isArray(settings)) {
-
-    return NextResponse.json({ error: "Invalid backup: panelSettings array required" }, { status: 400 });
-
+  // Handle encrypted backups
+  if (body.encrypted && body.data && body.password) {
+    try {
+      const decrypted = decryptBackup(Buffer.from(body.data, "base64"), body.password);
+      snapshot = JSON.parse(decrypted);
+    } catch {
+      return NextResponse.json({ error: "Decryption failed — wrong password or corrupted data" }, { status: 400 });
+    }
   }
 
-
-
-  for (const row of settings) {
-
-    if (!row.key) continue;
-
-    await prisma.panelSetting.upsert({
-
-      where: { key: row.key },
-
-      create: { key: row.key, value: row.value },
-
-      update: { value: row.value },
-
-    });
-
+  // Handle checksum verification
+  if (body.checksum && body.snapshot) {
+    const actualChecksum = computeChecksum(JSON.stringify(body.snapshot, null, 2));
+    if (actualChecksum !== body.checksum) {
+      return NextResponse.json({ error: "Checksum mismatch — backup may be corrupted" }, { status: 400 });
+    }
   }
 
+  // Support legacy settings-only restore
+  if (!snapshot && Array.isArray(body.panelSettings)) {
+    snapshot = { panelSettings: body.panelSettings };
+  }
 
+  if (!snapshot) {
+    return NextResponse.json({ error: "Invalid backup: snapshot or panelSettings array required" }, { status: 400 });
+  }
+
+  const result = await restoreFullBackup(snapshot);
 
   return NextResponse.json({
-
-    ok: true,
-
-    restored: settings.length,
-
-    message: "Panel settings restored from backup. Full line/stream restore uses Panel Transfer import.",
-
+    ok: result.errors.length === 0,
+    restored: {
+      settings: result.settings,
+      bouquets: result.bouquets,
+      categories: result.categories,
+      streams: result.streams,
+      lines: result.lines,
+      users: result.users,
+      packages: result.packages,
+      coupons: result.coupons,
+      epgSources: result.epgSources,
+    },
+    errors: result.errors,
+    message: result.errors.length === 0
+      ? "Full backup restored successfully."
+      : `Restored with ${result.errors.length} error(s). Check errors array.`,
   });
-
 }
-

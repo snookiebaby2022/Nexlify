@@ -405,6 +405,7 @@ model Stream {
   connectionGeographies ConnectionGeography[]
   lbSessions          LoadBalancerSession[] @relation(name: "LbSessionStream")
   aiTranscodeSuggestions AiTranscodeSuggestion[]
+  moderationFlags      ModerationFlag[]
 
   @@index([type, isActive])
   @@index([serverId])
@@ -1504,4 +1505,23 @@ model AiTranscodeSuggestion {
 
   @@index([streamId, createdAt])
   @@index([isApplied])
+}
+
+// === Content Moderation ===
+
+model ModerationFlag {
+  id          String   @id @default(cuid())
+  streamId    String
+  stream      Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  streamName  String
+  reason      String
+  severity    String   @default("medium") // low, medium, high
+  status      String   @default("pending") // pending, reviewed, approved, rejected
+  flaggedAt   DateTime @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  String?
+
+  @@index([streamId])
+  @@index([status])
+  @@index([severity])
 }

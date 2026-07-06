@@ -90,6 +90,9 @@ export function StreamsList({
   const [categoryId, setCategoryId] = useState("");
   const [serverId, setServerId] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive" | "online" | "offline">("");
+  const [audioFilter, setAudioFilter] = useState("");
+  const [videoFilter, setVideoFilter] = useState("");
+  const [qualityFilter, setQualityFilter] = useState("");
   const [clientsModal, setClientsModal] = useState<{ id: string; name: string } | null>(null);
 
   const load = useCallback(() => {
@@ -131,9 +134,12 @@ export function StreamsList({
       if (statusFilter === "inactive" && s.isActive) return false;
       if (statusFilter === "online" && !isPlayableStatus(s.liveStats)) return false;
       if (statusFilter === "offline" && isPlayableStatus(s.liveStats)) return false;
+      if (audioFilter && s.liveStats?.audioCodec !== audioFilter) return false;
+      if (videoFilter && s.liveStats?.videoCodec !== videoFilter) return false;
+      if (qualityFilter && s.liveStats?.quality !== qualityFilter) return false;
       return true;
     });
-  }, [streams, statusFilter]);
+  }, [streams, statusFilter, audioFilter, videoFilter, qualityFilter]);
 
   async function remove(id: string) {
     if (!confirm("Delete this stream?")) return;
@@ -223,14 +229,23 @@ export function StreamsList({
           <option value="active">Active</option>
           <option value="inactive">Disabled</option>
         </select>
-        <select className="xui-streams-filter-select" defaultValue="">
+        <select className="xui-streams-filter-select" value={audioFilter} onChange={(e) => { setAudioFilter(e.target.value); setPage(1); }}>
           <option value="">Audio</option>
+          {["aac", "mp3", "ac3", "eac3", "opus", "flac", "dts"].map((c) => (
+            <option key={c} value={c}>{c.toUpperCase()}</option>
+          ))}
         </select>
-        <select className="xui-streams-filter-select" defaultValue="">
+        <select className="xui-streams-filter-select" value={videoFilter} onChange={(e) => { setVideoFilter(e.target.value); setPage(1); }}>
           <option value="">Video</option>
+          {["h264", "h265", "hevc", "avc", "vp9", "av1", "mpeg2"].map((c) => (
+            <option key={c} value={c}>{c.toUpperCase()}</option>
+          ))}
         </select>
-        <select className="xui-streams-filter-select" defaultValue="">
+        <select className="xui-streams-filter-select" value={qualityFilter} onChange={(e) => { setQualityFilter(e.target.value); setPage(1); }}>
           <option value="">Quality</option>
+          {["240p", "360p", "480p", "720p", "1080p", "1080i", "1440p", "2160p", "4k"].map((q) => (
+            <option key={q} value={q}>{q.toUpperCase()}</option>
+          ))}
         </select>
         <select
           className="xui-streams-filter-select xui-streams-filter-select--narrow"
