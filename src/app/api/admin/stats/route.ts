@@ -108,9 +108,6 @@ async function loadStats() {
 export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const host = (req.headers.get("host") ?? "localhost").split(":")[0].toLowerCase();
-  const denied = await pluginEntitlementResponse("statistics", host);
-  if (denied) return denied;
 
   const ttl = await getCacheTtls();
   const stats = await cacheGetOrSet("stats:dashboard", ttl.stats, loadStats);
