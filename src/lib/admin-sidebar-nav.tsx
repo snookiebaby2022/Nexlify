@@ -161,6 +161,8 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         label: "EPG",
         icon: coloredGroupIcon("epg"),
         items: [
+          { href: "/admin/epg/manage", label: "Manage EPG" },
+          { href: "/admin/epg/auto-match", label: "EPG Auto-Match" },
           { href: "/admin/epg/sources", label: "EPG Sources" },
           { href: "/admin/epg/add", label: "Add EPG Source" },
           { href: "/admin/epg/channels", label: "EPG Channel Map" },
