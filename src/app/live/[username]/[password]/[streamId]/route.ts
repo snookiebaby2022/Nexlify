@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
+
+// Allow upstream fetches to sources with expired/self-signed TLS certs (common for IPTV CDNs)
+if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { asPlaybackGuardLine, assertPlaybackAllowed, playbackDenyMessage } from "@/lib/playback-guard";
 import { trackConnection, removeConnection } from "@/lib/connections";
 import {

@@ -2,6 +2,9 @@ import { gunzipSync } from "zlib";
 import type { StreamProxy } from "@prisma/client";
 import { fetchWithOptionalProxy } from "@/lib/proxy";
 
+// Allow upstream fetches to sources with expired/self-signed TLS certs
+if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+
 const EPG_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (compatible; NexlifyPanel/1.0; +https://github.com/iptv-org/epg)",
