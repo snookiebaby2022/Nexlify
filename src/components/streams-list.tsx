@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Filter,
+  Pencil,
   RefreshCw,
   Search,
   Square,
@@ -349,6 +350,13 @@ export function StreamsList({
                     )}
                   </td>
                   <td className="xui-streams-td-actions">
+                    <Link
+                      href={`/admin/servers/streams?edit=${s.id}`}
+                      className="p-1.5 rounded hover:bg-white/10 transition-colors"
+                      title="Edit stream"
+                    >
+                      <Pencil size={14} />
+                    </Link>
                     <StreamRowActionsMenu
                       streamId={s.id}
                       streamType={type}
