@@ -19,18 +19,24 @@ export async function POST(req: NextRequest) {
 
   let imported = 0;
   let skipped = 0;
+
+  const validMacs: string[] = [];
   for (const raw of macs) {
     const mac = normalizeEnigmaMac(String(raw));
     if (!mac) {
       skipped++;
       continue;
     }
-    try {
-      await prisma.enigmaDevice.create({ data: { mac, lineId, model } });
-      imported++;
-    } catch {
-      skipped++;
-    }
+    validMacs.push(mac);
+  }
+
+  if (validMacs.length > 0) {
+    const result = await prisma.enigmaDevice.createMany({
+      data: validMacs.map((mac) => ({ mac, lineId, model })),
+      skipDuplicates: true,
+    });
+    imported = result.count;
+    skipped += validMacs.length - result.count;
   }
 
   return NextResponse.json({ imported, skipped });

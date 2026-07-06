@@ -71,45 +71,67 @@ export async function handleAgentHeartbeat(
   });
 
   const processes = data.processes ?? [];
-  for (const p of processes) {
-    const streamId = p.streamId?.trim() || null;
-    if (!streamId) continue;
+  if (processes.length > 0) {
+    // Batch update agentPid on streams
+    const pidUpdates = processes
+      .filter((p) => p.pid != null && p.pid > 0 && p.streamId?.trim())
+      .map((p) =>
+        prisma.stream.update({
+          where: { id: p.streamId!.trim() },
+          data: { agentPid: p.pid! },
+        })
+      );
+    await Promise.all(pidUpdates);
 
-    const row = {
-      pid: p.pid ?? null,
-      name: p.name ?? null,
-      status: p.status ?? "running",
-      cpuPercent: p.cpuPercent ?? null,
-      memoryMb: p.memoryMb ?? null,
-      bitrateKbps: p.bitrateKbps ?? null,
-      errorMessage: p.errorMessage ?? null,
-      lastSeenAt: now,
-    };
+    // Batch upsert stream processes
+    const processData = processes
+      .filter((p) => p.streamId?.trim())
+      .map((p) => ({
+        serverId,
+        streamId: p.streamId!.trim(),
+        pid: p.pid ?? null,
+        name: p.name ?? null,
+        status: p.status ?? "running",
+        cpuPercent: p.cpuPercent ?? null,
+        memoryMb: p.memoryMb ?? null,
+        bitrateKbps: p.bitrateKbps ?? null,
+        errorMessage: p.errorMessage ?? null,
+        lastSeenAt: now,
+        startedAt: p.status === "running" ? now : undefined,
+      }));
 
-    const existing = await prisma.streamProcess.findUnique({
-      where: { serverId_streamId: { serverId, streamId } },
-    });
-    if (p.pid != null && p.pid > 0) {
-      await prisma.stream.update({
-        where: { id: streamId },
-        data: { agentPid: p.pid },
-      });
-    }
-
-    if (existing) {
-      await prisma.streamProcess.update({
-        where: { id: existing.id },
-        data: row,
-      });
-    } else {
-      await prisma.streamProcess.create({
-        data: {
-          serverId,
-          streamId,
-          ...row,
-          startedAt: row.status === "running" ? now : undefined,
-        },
-      });
+    // Use createMany with skipDuplicates, then update existing ones
+    if (processData.length > 0) {
+      await prisma.$transaction(
+        processData.map((row) =>
+          prisma.streamProcess.upsert({
+            where: { serverId_streamId: { serverId: row.streamId } },
+            create: {
+              serverId: row.serverId,
+              streamId: row.streamId,
+              pid: row.pid,
+              name: row.name,
+              status: row.status,
+              cpuPercent: row.cpuPercent,
+              memoryMb: row.memoryMb,
+              bitrateKbps: row.bitrateKbps,
+              errorMessage: row.errorMessage,
+              lastSeenAt: row.lastSeenAt,
+              startedAt: row.startedAt,
+            },
+            update: {
+              pid: row.pid,
+              name: row.name,
+              status: row.status,
+              cpuPercent: row.cpuPercent,
+              memoryMb: row.memoryMb,
+              bitrateKbps: row.bitrateKbps,
+              errorMessage: row.errorMessage,
+              lastSeenAt: row.lastSeenAt,
+            },
+          })
+        )
+      );
     }
   }
 }

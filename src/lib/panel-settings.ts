@@ -1,5 +1,25 @@
 import { prisma } from "@/lib/prisma";
 
+// In-memory cache for settings (avoids ioredis dependency in client bundles)
+const settingsCache = new Map<string, { data: Record<string, unknown>; expiresAt: number }>();
+const SETTINGS_CACHE_TTL_MS = 30_000; // 30 seconds
+
+function getCachedSetting(group: SettingGroup): Record<string, unknown> | null {
+  const entry = settingsCache.get(group);
+  if (entry && Date.now() < entry.expiresAt) return entry.data;
+  if (entry) settingsCache.delete(group);
+  return null;
+}
+
+function setCachedSetting(group: SettingGroup, data: Record<string, unknown>) {
+  settingsCache.set(group, { data, expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS });
+}
+
+export function invalidateSettingGroupCache(group?: SettingGroup) {
+  if (group) settingsCache.delete(group);
+  else settingsCache.clear();
+}
+
 export const SETTING_GROUPS = [
   "general",
   "community",
@@ -681,14 +701,21 @@ function settingKey(group: SettingGroup) {
 }
 
 export async function getSettingGroup(group: SettingGroup): Promise<Record<string, unknown>> {
+  const cached = getCachedSetting(group);
+  if (cached) return cached;
+
   const row = await prisma.panelSetting.findUnique({ where: { key: settingKey(group) } });
   const base = { ...DEFAULTS[group] };
-  if (!row?.value) return base;
-  try {
-    return { ...base, ...(JSON.parse(row.value) as Record<string, unknown>) };
-  } catch {
-    return base;
-  }
+  const result = (() => {
+    if (!row?.value) return base;
+    try {
+      return { ...base, ...(JSON.parse(row.value) as Record<string, unknown>) };
+    } catch {
+      return base;
+    }
+  })();
+  setCachedSetting(group, result);
+  return result;
 }
 
 export async function setSettingGroup(group: SettingGroup, data: Record<string, unknown>) {
@@ -696,8 +723,9 @@ export async function setSettingGroup(group: SettingGroup, data: Record<string, 
   await prisma.panelSetting.upsert({
     where: { key: settingKey(group) },
     create: { key: settingKey(group), value: JSON.stringify(merged) },
-    update: { value: JSON.stringify(merged) },
+    update: { key: settingKey(group), value: JSON.stringify(merged) },
   });
+  invalidateSettingGroupCache(group);
   return merged;
 }
 

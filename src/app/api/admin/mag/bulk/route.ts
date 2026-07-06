@@ -29,22 +29,27 @@ export async function POST(req: NextRequest) {
   let imported = 0;
   let skipped = 0;
 
+  const validMacs: string[] = [];
   for (const raw of macs) {
     const mac = normalizeMac(String(raw).trim());
     if (!mac || mac.length < 11) {
       skipped++;
       continue;
     }
-    try {
-      await prisma.magDevice.upsert({
-        where: { mac },
-        update: { lineId, model, isActive: true },
-        create: { mac, lineId, model },
-      });
-      imported++;
-    } catch {
-      skipped++;
-    }
+    validMacs.push(mac);
+  }
+
+  if (validMacs.length > 0) {
+    await prisma.$transaction(
+      validMacs.map((mac) =>
+        prisma.magDevice.upsert({
+          where: { mac },
+          update: { lineId, model, isActive: true },
+          create: { mac, lineId, model },
+        })
+      )
+    );
+    imported = validMacs.length;
   }
 
   return NextResponse.json({ imported, skipped });

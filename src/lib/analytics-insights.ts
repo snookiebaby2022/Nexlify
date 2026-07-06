@@ -54,13 +54,22 @@ export async function generateAnalyticsInsights(): Promise<AnalyticsInsight[]> {
     take: 10,
   });
 
+  // Batch load stream names instead of N+1 queries
+  const streamIds = geo.filter((r) => r.streamId).map((r) => r.streamId!);
+  const streamNames = streamIds.length > 0
+    ? await prisma.stream.findMany({
+        where: { id: { in: [...new Set(streamIds)] } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const streamNameMap = new Map(streamNames.map((s) => [s.id, s.name]));
+
   for (const row of geo) {
     if (!row.streamId) continue;
-    const stream = await prisma.stream.findUnique({ where: { id: row.streamId }, select: { name: true } });
     insights.push({
       type: "top_content_region",
       severity: "info",
-      title: `${stream?.name ?? row.streamId} popular in ${row.countryCode}`,
+      title: `${streamNameMap.get(row.streamId) ?? row.streamId} popular in ${row.countryCode}`,
       detail: `${row._sum.connectionCount ?? 0} connections this week.`,
       entityId: row.streamId,
       metric: Number(row._sum.connectionCount ?? 0),

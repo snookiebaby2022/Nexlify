@@ -45,11 +45,9 @@ const standaloneDir = resolve(__dirname, ".next/standalone");
 const useStandalone = existsSync(resolve(standaloneDir, "server.js"));
 
 const cpuCount = cpus().length;
-const panelInstances = useStandalone
-  ? 1
-  : process.env.PANEL_INSTANCES
-    ? parseInt(process.env.PANEL_INSTANCES, 10)
-    : Math.max(2, Math.min(cpuCount, 8));
+const panelInstances = process.env.PANEL_INSTANCES
+  ? parseInt(process.env.PANEL_INSTANCES, 10)
+  : Math.max(2, Math.min(cpuCount, 8));
 
 const sharedPanelEnv = {
   NODE_ENV: "production",
@@ -81,8 +79,8 @@ module.exports = {
           name: "nexlify",
           cwd: standaloneDir,
           script: "server.js",
-          instances: 1,
-          exec_mode: "fork",
+          instances: panelInstances,
+          exec_mode: "cluster",
           autorestart: true,
           max_restarts: 15,
           min_uptime: "15s",

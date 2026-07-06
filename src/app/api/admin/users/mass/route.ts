@@ -22,15 +22,27 @@ export async function POST(req: NextRequest) {
     count = r.count;
   } else if (action === "addCredits") {
     const amount = Number(body.credits ?? 0);
-    for (const id of ids) {
-      const user = await prisma.panelUser.findUnique({ where: { id } });
-      if (!user || user.role === PanelRole.ADMIN) continue;
-      const balance = user.credits + amount;
-      await prisma.panelUser.update({ where: { id }, data: { credits: balance } });
-      await prisma.creditTransaction.create({
-        data: { userId: id, amount, balanceAfter: balance, note: "Mass edit" },
+    if (amount !== 0) {
+      const users = await prisma.panelUser.findMany({
+        where: { id: { in: ids }, role: { not: PanelRole.ADMIN } },
+        select: { id: true, credits: true },
       });
-      count++;
+      if (users.length > 0) {
+        await prisma.$transaction([
+          ...users.map((u) =>
+            prisma.panelUser.update({
+              where: { id: u.id },
+              data: { credits: u.credits + amount },
+            })
+          ),
+          ...users.map((u) =>
+            prisma.creditTransaction.create({
+              data: { userId: u.id, amount, balanceAfter: u.credits + amount, note: "Mass edit" },
+            })
+          ),
+        ]);
+        count = users.length;
+      }
     }
   } else {
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });

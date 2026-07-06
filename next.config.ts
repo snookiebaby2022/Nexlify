@@ -25,6 +25,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  serverExternalPackages: ["ioredis"],
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

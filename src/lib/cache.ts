@@ -161,6 +161,8 @@ export async function cacheDel(pattern: string): Promise<number> {
   return redisDeleted + memoryDeleted;
 }
 
+const inFlight = new Map<string, Promise<unknown>>();
+
 export async function cacheGetOrSet<T>(
   key: string,
   ttlSec: number,
@@ -168,7 +170,15 @@ export async function cacheGetOrSet<T>(
 ): Promise<T> {
   const hit = await cacheGet<T>(key);
   if (hit !== null) return hit;
-  const fresh = await fn();
+
+  // Thundering herd protection: if another request is already fetching, wait for it
+  const existing = inFlight.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const promise = fn().finally(() => inFlight.delete(key));
+  inFlight.set(key, promise);
+
+  const fresh = await promise;
   await cacheSet(key, fresh, ttlSec);
   return fresh;
 }

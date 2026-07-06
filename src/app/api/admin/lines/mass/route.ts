@@ -101,25 +101,31 @@ export async function POST(req: NextRequest) {
       break;
     case "extend": {
       const days = Number(body.days ?? 30);
-      const lines = await prisma.line.findMany({ where });
-      for (const line of lines) {
-        const expiresAt = new Date(line.expiresAt > new Date() ? line.expiresAt : new Date());
-        expiresAt.setDate(expiresAt.getDate() + days);
-        await prisma.line.update({ where: { id: line.id }, data: { expiresAt } });
-        affected++;
-      }
+      const lines = await prisma.line.findMany({ where, select: { id: true, expiresAt: true } });
+      const now = new Date();
+      await prisma.$transaction(
+        lines.map((line) => {
+          const expiresAt = new Date(line.expiresAt > now ? line.expiresAt : now);
+          expiresAt.setDate(expiresAt.getDate() + days);
+          return prisma.line.update({ where: { id: line.id }, data: { expiresAt } });
+        })
+      );
+      affected = lines.length;
       break;
     }
     case "set_bouquets": {
       const bouquetIds: string[] = body.bouquetIds ?? [];
-      for (const lineId of lineIds) {
-        const line = await prisma.line.findFirst({ where: { ...where, id: lineId } });
-        if (!line) continue;
-        await prisma.lineBouquet.deleteMany({ where: { lineId } });
-        await prisma.lineBouquet.createMany({
-          data: bouquetIds.map((bouquetId) => ({ lineId, bouquetId })),
-        });
-        affected++;
+      const validLineIds = lineIds.filter(Boolean);
+      if (validLineIds.length > 0 && bouquetIds.length > 0) {
+        await prisma.$transaction([
+          prisma.lineBouquet.deleteMany({ where: { lineId: { in: validLineIds } } }),
+          prisma.lineBouquet.createMany({
+            data: validLineIds.flatMap((lineId) =>
+              bouquetIds.map((bouquetId) => ({ lineId, bouquetId }))
+            ),
+          }),
+        ]);
+        affected = validLineIds.length;
       }
       await invalidateXtreamCategories();
       break;

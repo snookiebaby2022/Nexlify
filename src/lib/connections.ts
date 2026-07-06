@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { cacheGetOrSet, cacheDeletePattern } from "./cache";
+import { cacheGetOrSet, cacheDel } from "./cache";
 
 const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours — connections stay alive until explicitly removed on stream close
 const CONNECTIONS_CACHE_TTL = 5; // 5 seconds — short TTL for dashboard responsiveness
@@ -131,7 +131,7 @@ export async function removeConnection(lineId: string, streamId: string, ip: str
     where: { lineId, streamId, ip },
   });
   // Invalidate connection caches
-  void cacheDeletePattern("conn:*").catch(() => {});
+  void cacheDel("conn:*").catch(() => {});
 }
 
 const connectionInclude = {

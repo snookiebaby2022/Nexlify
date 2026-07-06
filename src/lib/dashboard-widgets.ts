@@ -550,6 +550,7 @@ async function connectionsBreakdownForLines(lineWhere: Prisma.LineWhereInput) {
   const staleBefore = new Date(Date.now() - STALE_MS);
   const conns = await prisma.liveConnection.findMany({
     where: { lastSeenAt: { gte: staleBefore }, line: lineWhere },
+    select: { lineId: true },
   });
   if (conns.length === 0) {
     return { total: 0, lines: 0, devices: 0, restreamers: 0 };
