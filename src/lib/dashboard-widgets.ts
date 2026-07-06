@@ -682,12 +682,22 @@ export async function getMostWatchedByCountry(ownerId?: string): Promise<Country
     take: 5000,
   });
 
+  // Deduplicate: keep only the most recent entry per lineId+countryCode
+  const seen = new Set<string>();
+  const deduped: typeof geoPoints = [];
+  for (const g of geoPoints) {
+    const key = `${g.lineId || ""}:${g.countryCode || ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(g);
+  }
+
   const byCountry = new Map<
     string,
     { countryCode: string; countryName: string; streams: Map<string, number> }
   >();
 
-  for (const g of geoPoints) {
+  for (const g of deduped) {
     const countryCode = g.countryCode || "??";
     const countryName = g.country || "Unknown";
     const streamName = g.stream?.name ?? "Unknown";
