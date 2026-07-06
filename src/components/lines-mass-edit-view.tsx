@@ -108,6 +108,7 @@ const DEFAULT_FORM = {
   allowedIps: { unchanged: true } as TextFieldState,
   allowedUserAgents: { unchanged: true } as TextFieldState,
   disallowedUserAgents: { unchanged: true } as TextFieldState,
+  blockedIsps: { unchanged: true } as TextFieldState,
   allowedOutputs: { unchanged: true } as TextFieldState,
   lockToIp: "unchanged" as TriState,
 };
@@ -168,6 +169,7 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
     if (!form.allowedIps.unchanged) patch.allowedIps = form.allowedIps;
     if (!form.allowedUserAgents.unchanged) patch.allowedUserAgents = form.allowedUserAgents;
     if (!form.disallowedUserAgents.unchanged) patch.disallowedUserAgents = form.disallowedUserAgents;
+    if (!form.blockedIsps.unchanged) patch.blockedIsps = form.blockedIsps;
     if (!form.allowedOutputs.unchanged) patch.allowedOutputs = form.allowedOutputs;
     if (form.lockToIp !== "unchanged") patch.lockToIp = form.lockToIp;
     return patch;
@@ -403,6 +405,12 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
             value={form.disallowedUserAgents}
             onChange={(v) => setForm({ ...form, disallowedUserAgents: v })}
             placeholder="Substring match, comma-separated"
+          />
+          <MassEditTextField
+            label="Blocked ISPs"
+            value={form.blockedIsps}
+            onChange={(v) => setForm({ ...form, blockedIsps: v })}
+            placeholder="Verizon,AT&T"
           />
           <MassEditTextField
             label="Allowed Outputs"

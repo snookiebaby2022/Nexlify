@@ -23,6 +23,7 @@ type LineDetail = {
   allowedIps?: string | null;
   allowedCountries?: string | null;
   blockedCountries?: string | null;
+  blockedIsps?: string | null;
   allowedUserAgents?: string | null;
   isRestreamer: boolean;
   isTrial: boolean;
@@ -106,6 +107,7 @@ export function LineEditForm({
     allowedIps: "",
     allowedCountries: "",
     blockedCountries: "",
+    blockedIsps: "",
     allowedUserAgents: "",
     isEnabled: true,
     isTrial: false,
@@ -137,6 +139,7 @@ export function LineEditForm({
           allowedIps: row.allowedIps ?? "",
           allowedCountries: row.allowedCountries ?? "",
           blockedCountries: row.blockedCountries ?? "",
+          blockedIsps: row.blockedIsps ?? "",
           allowedUserAgents: row.allowedUserAgents ?? "",
           isEnabled: row.status === "ACTIVE",
           isTrial: row.isTrial,
@@ -187,6 +190,7 @@ export function LineEditForm({
         allowedIps: form.allowedIps || null,
         allowedCountries: form.allowedCountries || null,
         blockedCountries: form.blockedCountries || null,
+        blockedIsps: form.blockedIsps || null,
         allowedUserAgents: form.allowedUserAgents || null,
         isRestreamer: form.isRestreamer,
         isTrial: form.isTrial,
@@ -493,6 +497,15 @@ export function LineEditForm({
                   style={formInputStyle}
                   value={form.allowedUserAgents}
                   onChange={(e) => setForm({ ...form, allowedUserAgents: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Blocked ISPs (comma-separated)">
+                <input
+                  className={formInputClass}
+                  style={formInputStyle}
+                  placeholder="Verizon,AT&T"
+                  value={form.blockedIsps}
+                  onChange={(e) => setForm({ ...form, blockedIsps: e.target.value })}
                 />
               </FormField>
               <YesNo
