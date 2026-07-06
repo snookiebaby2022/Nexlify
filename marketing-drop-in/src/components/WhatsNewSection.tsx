@@ -59,7 +59,7 @@ export function WhatsNewSection() {
               What&apos;s new
             </p>
             <h2 className="font-display text-2xl font-bold text-white sm:text-3xl">
-              New in v1.9.0
+              New in v1.9.1
             </h2>
           </div>
         </div>

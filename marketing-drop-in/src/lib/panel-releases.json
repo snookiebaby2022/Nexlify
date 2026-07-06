@@ -2,9 +2,59 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.0",
+  "latestVersion": "1.9.1",
 
   "releases": [
+
+    {
+
+      "version": "1.9.1",
+
+      "date": "2026-07-06",
+
+      "channel": "stable",
+
+      "summary": "15 advanced features: dynamic pricing, stream fingerprinting, white-label apps, multi-tenancy, loyalty program, and more.",
+
+      "changelog": [
+
+        "Dynamic Pricing Engine — peak/off-peak multipliers, time-based pricing, automated suggestions",
+
+        "Stream Fingerprinting — unique stream fingerprints for piracy detection with auto-flagging",
+
+        "White-label Mobile Apps — build branded Android/iOS apps for resellers with custom packages",
+
+        "Multi-tenancy — per-reseller branding, isolated configs, tenant-level permissions",
+
+        "Viewer Loyalty Program — points, badges, tier levels to reward active viewers",
+
+        "Billing Integration — Stripe, PayPal, WHMCS with invoice management",
+
+        "Content Moderation — flag, review, approve/reject streams with severity levels",
+
+        "Automated Backup & Restore — one-click backup with scheduled snapshots",
+
+        "Advanced EPG Sources — multi-source EPG with sync and quality scoring",
+
+        "Transcoding Profiles — H.264/H.265/VP9/AV1 with GPU acceleration",
+
+        "Security Features — IP whitelist, brute-force protection, real-time security alerts",
+
+        "Quality Monitoring — bitrate drops, packet loss, stream failure alerts",
+
+        "Failover Testing — automated backup stream testing with pass/fail reporting",
+
+        "Advanced Analytics — real-time viewer stats, top channels, revenue tracking",
+
+        "Viewer Heatmap — geographic viewer distribution visualization",
+
+        "Fixed Connections panel layout overflow on smaller screens",
+
+        "Updated marketing site with 15 new feature benefits"
+
+      ]
+
+    },
 
     {
 

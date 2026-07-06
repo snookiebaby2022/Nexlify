@@ -1,18 +1,30 @@
 // Generated from src/lib/panel-releases.json — do not edit by hand
-export const PANEL_RELEASES_LATEST = "1.9.0";
+export const PANEL_RELEASES_LATEST = "1.9.1";
 export const PANEL_RELEASES_SNIPPET = [
   {
-    version: "1.9.0",
-    date: "2026-07-02",
+    version: "1.9.1",
+    date: "2026-07-06",
     channel: "stable",
     summary:
-      "AI Studio (14 features), live connection fixes, security hardening, CSS update fix.",
+      "15 advanced features: dynamic pricing, stream fingerprinting, white-label apps, multi-tenancy, loyalty program, and more.",
     changelog: [
-      "AI Studio: 14 AI-powered features including Health Predictor, EPG Scraper, Viewer Analytics, Bouquet Builder, Natural Language Admin, Transcode Recommender, Anomaly Detector, Support Chat, Restream Detector, Invoice Generator, Voice-to-Query, Logo Generator, Seasonal Recommender, Thumbnail Generator",
-      "Fix live connection count showing all-time instead of real-time active connections",
-      "Fix activity endpoint missing stale filter (claimed 5-minute window but returned all history)",
-      "Add portal login rate limiting to prevent brute force attacks",
-      "Add JSON body validation to 7 public API endpoints (portal login, password, support, billing)",
+      "Dynamic Pricing Engine — peak/off-peak multipliers, time-based pricing, automated suggestions",
+      "Stream Fingerprinting — unique stream fingerprints for piracy detection with auto-flagging",
+      "White-label Mobile Apps — build branded Android/iOS apps for resellers with custom packages",
+      "Multi-tenancy — per-reseller branding, isolated configs, tenant-level permissions",
+      "Viewer Loyalty Program — points, badges, tier levels to reward active viewers",
+      "Billing Integration — Stripe, PayPal, WHMCS with invoice management",
+      "Content Moderation — flag, review, approve/reject streams with severity levels",
+      "Automated Backup & Restore — one-click backup with scheduled snapshots",
+      "Advanced EPG Sources — multi-source EPG with sync and quality scoring",
+      "Transcoding Profiles — H.264/H.265/VP9/AV1 with GPU acceleration",
+      "Security Features — IP whitelist, brute-force protection, real-time security alerts",
+      "Quality Monitoring — bitrate drops, packet loss, stream failure alerts",
+      "Failover Testing — automated backup stream testing with pass/fail reporting",
+      "Advanced Analytics — real-time viewer stats, top channels, revenue tracking",
+      "Viewer Heatmap — geographic viewer distribution visualization",
+      "Fixed Connections panel layout overflow on smaller screens",
+      "Updated marketing site with 15 new feature benefits",
       "Fix auth route inconsistency (admin routes now return 403 instead of 401)",
       "Implement POST /api/admin/stream-health (was a stub returning success without doing anything)",
       "Fix broken /admin/created_channels/add nav link",

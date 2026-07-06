@@ -172,7 +172,7 @@ function Mark({ kind }: { kind: "included" | "new" | "roadmap" | "partial" | "mi
 
   if (kind === "included") return <span title="Included">✅ Included</span>;
 
-  if (kind === "new") return <span title="New in 1.9.0">🆕 New</span>;
+  if (kind === "new") return <span title="New in 1.9.1">🆕 New</span>;
 
   if (kind === "roadmap") return <span title="Roadmap">🔜 Roadmap</span>;
 
@@ -447,7 +447,7 @@ export default function FeaturesPage() {
 
           <Link href="/updates" className="text-cyan-400 underline">
 
-            1.9.0 release notes
+            1.9.1 release notes
 
           </Link>
 
