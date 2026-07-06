@@ -130,8 +130,8 @@ export async function getUsageForecast(metric: UsageForecast["metric"]): Promise
     const dateStr = date.toISOString().split("T")[0];
     let value = 0;
     if (metric === "connections") {
-      const count = await prisma.connectionLog.count({
-        where: { createdAt: { gte: date, lt: new Date(date.getTime() + 86400000) } },
+      const count = await prisma.liveConnection.count({
+        where: { startedAt: { gte: date, lt: new Date(date.getTime() + 86400000) } },
       });
       value = count;
     }
@@ -160,8 +160,8 @@ export async function getDashboardRetentionSummary(): Promise<{
   avgRetentionRate: number;
   topChannels: { streamId: string; name: string; viewers: number }[];
 }> {
-  const connections = await prisma.connectionLog.findMany({
-    where: { endedAt: null },
+  const connections = await prisma.liveConnection.findMany({
+    where: { lastSeenAt: { gte: new Date(Date.now() - 5 * 60 * 1000) } },
     include: { stream: { select: { id: true, name: true } } },
   });
   const channelCounts = new Map<string, { name: string; count: number }>();

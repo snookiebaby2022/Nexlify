@@ -17,15 +17,17 @@ export async function getAdvancedAnalytics(): Promise<AnalyticsData> {
   const cached = await cacheGet<AnalyticsData>(`${ANALYTICS_PREFIX}global`);
   if (cached) return cached;
 
-  const connections = await prisma.connectionLog.findMany({
+  const connections = await prisma.liveConnection.findMany({
     where: {
-      createdAt: { gte: new Date(Date.now() - 86400000) },
+      startedAt: { gte: new Date(Date.now() - 86400000) },
     },
+    select: { streamId: true },
     take: 10000,
   });
 
   const streamViewers = new Map<string, number>();
   connections.forEach((c) => {
+    if (!c.streamId) return;
     const count = streamViewers.get(c.streamId) ?? 0;
     streamViewers.set(c.streamId, count + 1);
   });

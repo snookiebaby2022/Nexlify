@@ -65,8 +65,8 @@ export default function SameIpDetectionPage() {
     setLoading(true);
     setError("");
     Promise.all([
-      fetch("/api/admin/same-ip-detections").then((r) => r.json()),
-      fetch("/api/admin/same-ip-detections/stats").then((r) => r.json()),
+      fetch("/api/admin/same-ip-detection").then((r) => r.json()),
+      fetch("/api/admin/same-ip-detection").then((r) => r.json()),
     ])
       .then(([data, s]) => {
         setDetections(data.detections ?? []);

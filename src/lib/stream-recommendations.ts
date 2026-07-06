@@ -18,15 +18,16 @@ export async function getStreamRecommendations(
   if (cached) return cached.slice(0, limit);
 
   // Get user's viewing history
-  const history = await prisma.connectionLog.findMany({
+  const history = await prisma.liveConnection.findMany({
     where: { lineId },
     select: { streamId: true },
     take: 100,
-    orderBy: { createdAt: "desc" },
+    orderBy: { startedAt: "desc" },
   });
 
   const streamCounts = new Map<string, number>();
   history.forEach((h) => {
+    if (!h.streamId) return;
     const count = streamCounts.get(h.streamId) ?? 0;
     streamCounts.set(h.streamId, count + 1);
   });

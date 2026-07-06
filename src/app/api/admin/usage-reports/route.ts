@@ -64,7 +64,13 @@ export async function GET() {
       maxConnections: l.maxConnections,
       watches: l._count.channelWatches,
     })),
-    bandwidth,
+    bandwidth: bandwidth.map((b) => ({
+      id: b.id,
+      connections: b.connections,
+      bytesIn: Number(b.bytesIn),
+      bytesOut: Number(b.bytesOut),
+      createdAt: b.createdAt,
+    })),
     topChannels: topWatched.map((t) => ({
       streamId: t.streamId,
       name: nameById.get(t.streamId) ?? t.streamId,

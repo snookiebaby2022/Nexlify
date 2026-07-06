@@ -22,13 +22,13 @@ export async function getViewerHeatmap(): Promise<ViewerHeatmap> {
   if (cached) return cached;
 
   // Get active connections with geo data
-  const connections = await prisma.connectionLog.findMany({
+  const connections = await prisma.liveConnection.findMany({
     where: {
-      createdAt: { gte: new Date(Date.now() - 3600000) }, // Last hour
+      startedAt: { gte: new Date(Date.now() - 3600000) },
     },
     select: {
       ip: true,
-      createdAt: true,
+      startedAt: true,
     },
     take: 1000,
   });
@@ -52,17 +52,17 @@ export async function getPeakViewingTimes(): Promise<{ hour: number; count: numb
   const cached = await cacheGet<{ hour: number; count: number }[]>(`${HEATMAP_PREFIX}peaks`);
   if (cached) return cached;
 
-  const connections = await prisma.connectionLog.findMany({
+  const connections = await prisma.liveConnection.findMany({
     where: {
-      createdAt: { gte: new Date(Date.now() - 86400000) }, // Last 24 hours
+      startedAt: { gte: new Date(Date.now() - 86400000) },
     },
-    select: { createdAt: true },
+    select: { startedAt: true },
     take: 10000,
   });
 
   const hourCounts = new Map<number, number>();
   connections.forEach((c) => {
-    const hour = new Date(c.createdAt).getHours();
+    const hour = new Date(c.startedAt).getHours();
     const count = hourCounts.get(hour) ?? 0;
     hourCounts.set(hour, count + 1);
   });

@@ -63,8 +63,8 @@ export default function StreamFingerprintPage() {
     setLoading(true);
     setError("");
     Promise.all([
-      fetch("/api/admin/stream-fingerprints").then((r) => r.json()),
-      fetch("/api/admin/stream-fingerprints/stats").then((r) => r.json()),
+      fetch("/api/admin/stream-fingerprint").then((r) => r.json()),
+      fetch("/api/admin/stream-fingerprint").then((r) => r.json()),
     ])
       .then(([data, s]) => {
         setFingerprints(data.fingerprints ?? []);

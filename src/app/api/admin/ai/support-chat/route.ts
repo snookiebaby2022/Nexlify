@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       ],
     });
 
-    return NextResponse.json({ response, sessionId: chatSessionId });
+    return NextResponse.json({ reply: response, sessionId: chatSessionId });
   } catch (error) {
     console.error("Support chat error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

@@ -1,13 +1,33 @@
+"use client";
+
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { getModuleBySlug, modulesByCategory, type AdminModuleDef } from "@/lib/xui-admin-modules";
 
 export function AdminModulePage({ slug }: { slug: string }) {
+  const router = useRouter();
   const mod = getModuleBySlug(slug);
+
+  useEffect(() => {
+    if (mod?.redirect) {
+      router.replace(mod.redirect);
+    }
+  }, [mod, router]);
+
   if (!mod) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-semibold">Unknown module</h1>
         <Link href="/admin/modules" style={{ color: "var(--accent)" }}>← All modules</Link>
+      </div>
+    );
+  }
+
+  if (mod.redirect) {
+    return (
+      <div className="p-8 text-center text-sm" style={{ color: "var(--muted)" }}>
+        Redirecting to {mod.title}…
       </div>
     );
   }

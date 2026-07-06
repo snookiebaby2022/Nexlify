@@ -71,8 +71,8 @@ export default function DeviceBindingPage() {
     setLoading(true);
     setError("");
     Promise.all([
-      fetch("/api/admin/device-bindings").then((r) => r.json()),
-      fetch("/api/admin/device-bindings/stats").then((r) => r.json()),
+      fetch("/api/admin/device-binding").then((r) => r.json()),
+      fetch("/api/admin/device-binding").then((r) => r.json()),
     ])
       .then(([data, s]) => {
         setBindings(data.bindings ?? []);
