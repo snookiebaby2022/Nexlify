@@ -6,6 +6,9 @@ import {
   syncAddonLicensesFromBilling,
 } from "@/lib/billing-addon-sync";
 
+/** Services that still require an addon license (third-party / premium). */
+const GATED_SERVICES = new Set(["proxy_plugins", "statistics"]);
+
 /** Maps integration types / routes to addon license service ids. */
 const PLUGIN_SERVICE_MAP: Record<string, string> = {
   plex: "plex",
@@ -74,6 +77,12 @@ export async function isPluginEntitled(
   if (limits.allPlugins) return { ok: true };
 
   const service = pluginServiceId(typeOrRoute);
+
+  // Built-in plugins are always entitled — only proxy_plugins and statistics require addon licenses
+  if (!GATED_SERVICES.has(service)) {
+    return { ok: true };
+  }
+
   if (await hasActiveAddonLicense(service)) return { ok: true };
   if (service !== "full_enterprise" && (await hasActiveAddonLicense("full_enterprise"))) {
     return { ok: true };

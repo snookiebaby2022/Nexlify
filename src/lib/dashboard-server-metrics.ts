@@ -178,8 +178,8 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
   }
 
   const snap = snapshots[0];
-  let networkInMbps = snap ? Number(snap.bytesIn) / 125_000 : 0;
-  let networkOutMbps = snap ? Number(snap.bytesOut) / 125_000 : 0;
+  let networkInMbps = snap ? Number(snap.bytesIn) / 125_000 / 60 : 0;
+  let networkOutMbps = snap ? Number(snap.bytesOut) / 125_000 / 60 : 0;
 
   if (!snap) {
     const activeConns = await listActiveConnections();

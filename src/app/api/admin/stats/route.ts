@@ -54,8 +54,8 @@ async function loadStats() {
   let networkOutPerMin = 0;
   if (snapshots.length >= 1) {
     const latest = snapshots[0];
-    networkInPerMin = Number(latest.bytesIn);
-    networkOutPerMin = Number(latest.bytesOut);
+    networkInPerMin = Number(latest.bytesIn) / 60;
+    networkOutPerMin = Number(latest.bytesOut) / 60;
   }
 
   let cronLogs: { job: string; status: string; createdAt: Date; fixHref: string }[] = [];
