@@ -5,6 +5,7 @@ import { syncEpgSource } from "./epg";
 import { enqueueAgentCommand, generateAgentToken } from "./stream-agent";
 import { runPanelBackup } from "./backup-run";
 import { reassignStreamsFromOfflineServers } from "./server-load";
+import { jobCheckStreamCerts } from "./cert-monitor";
 
 const ESTIMATED_MBPS_PER_STREAM = Number(process.env.ESTIMATED_MBPS_PER_STREAM ?? "4");
 
@@ -574,4 +575,5 @@ export async function runHourlyCronJobs() {
   await jobPanelAutoUpdate();
   await jobPgDump();
   await jobCloudBackup();
+  await jobCheckStreamCerts();
 }
