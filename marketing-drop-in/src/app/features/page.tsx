@@ -140,6 +140,9 @@ const ROWS: FeatureRow[] = [
   { category: "Business & Monetization", feature: "Content Moderation — flag, review, approve/reject streams", nexlify: "new", typical: "missing" },
 
   // Operations & Maintenance
+  { category: "Operations & Maintenance", feature: "Disaster Recovery API — one-click health check, restore-from-file, restore-latest", nexlify: "new", typical: "missing" },
+  { category: "Operations & Maintenance", feature: "Backup Encryption — AES-256-GCM with SHA-256 checksum verification", nexlify: "new", typical: "missing" },
+  { category: "Operations & Maintenance", feature: "Cloud Backup Worker — S3/xDrive/Dropbox upload with pg_dump integration", nexlify: "new", typical: "missing" },
   { category: "Operations & Maintenance", feature: "Backup & Restore — automated backups with one-click restore", nexlify: "new", typical: "missing" },
   { category: "Operations & Maintenance", feature: "Advanced EPG — multi-source EPG with sync and quality scoring", nexlify: "new", typical: "missing" },
   { category: "Operations & Maintenance", feature: "Transcoding Profiles — H.264/H.265/VP9/AV1 with GPU acceleration", nexlify: "new", typical: "missing" },
@@ -172,7 +175,7 @@ function Mark({ kind }: { kind: "included" | "new" | "roadmap" | "partial" | "mi
 
   if (kind === "included") return <span title="Included">✅ Included</span>;
 
-  if (kind === "new") return <span title="New in 1.9.1">🆕 New</span>;
+  if (kind === "new") return <span title="New in 1.9.2">🆕 New</span>;
 
   if (kind === "roadmap") return <span title="Roadmap">🔜 Roadmap</span>;
 
@@ -447,7 +450,7 @@ export default function FeaturesPage() {
 
           <Link href="/updates" className="text-cyan-400 underline">
 
-            1.9.1 release notes
+            1.9.2 release notes
 
           </Link>
 

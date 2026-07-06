@@ -2,9 +2,59 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.1",
+  "latestVersion": "1.9.2",
 
   "releases": [
+
+    {
+
+      "version": "1.9.2",
+
+      "date": "2026-07-06",
+
+      "channel": "stable",
+
+      "summary": "Bug fixes, backup/DR improvements, performance optimizations, and disaster recovery.",
+
+      "changelog": [
+
+        "Bug fixes: category delete cascade, VOD category type, category rename/re-parent, content moderation DB persistence, stream filters, content folder pages",
+
+        "Backup & Restore: full entity restore with upserts, AES-256-GCM encryption, SHA-256 checksums, line password inclusion",
+
+        "Cloud Backup Worker: S3/xDrive/Dropbox upload with pg_dump integration",
+
+        "Disaster Recovery API: one-click health check, restore-from-file, restore-latest",
+
+        "Performance: DB indexes, connection caching, N+1 batch fixes, settings cache, PM2 cluster mode",
+
+        "Fixed N+1 queries in stream-agent heartbeat, MAG bulk, Enigma bulk, and mass operations",
+
+        "Added thundering herd protection to cache layer",
+
+        "Gzip compression on static assets + nginx caching headers",
+
+        "Prisma connection pooling configured for 50 connections"
+
+      ],
+
+      "fixes": [
+
+        "Category delete left orphaned child categories — now cascades recursively",
+
+        "VOD categories defaulted to LIVE type instead of MOVIE/SERIES",
+
+        "Category edit had no UI for rename or re-parent",
+
+        "Content moderation flags were stored in cache only — lost on restart",
+
+        "Stream filter dropdowns (Audio/Video/Quality) were non-functional",
+
+        "Content folder pages (created, archive, delayed) showed empty placeholders"
+
+      ]
+
+    },
 
     {
 

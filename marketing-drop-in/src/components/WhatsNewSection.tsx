@@ -1,4 +1,4 @@
-import { Sparkles, Brain, Shield, Radio, Cloud, Swords } from "lucide-react";
+import { Sparkles, Brain, Shield, Radio, Cloud, Swords, ShieldCheck, Zap } from "lucide-react";
 import Link from "next/link";
 
 const HIGHLIGHTS = [
@@ -19,25 +19,25 @@ const HIGHLIGHTS = [
     border: "border-emerald-500/15",
   },
   {
-    icon: Radio,
-    title: "WebRTC Streaming",
-    desc: "Sub-second playback with MediaMTX gateway — works on any device, any network.",
-    color: "text-cyan-400",
-    bg: "bg-cyan-500/10",
-    border: "border-cyan-500/15",
-  },
-  {
-    icon: Cloud,
-    title: "xDrive Cloud Backup",
-    desc: "Encrypted S3/GCS/Azure backup with retention policies — full restore in one click.",
+    icon: ShieldCheck,
+    title: "Disaster Recovery",
+    desc: "One-click backup/restore with AES-256-GCM encryption, cloud upload to S3/xDrive/Dropbox, and pg_dump integration.",
     color: "text-sky-400",
     bg: "bg-sky-500/10",
     border: "border-sky-500/15",
   },
   {
+    icon: Zap,
+    title: "100K Performance",
+    desc: "DB indexes, connection caching, N+1 batch fixes, PM2 cluster mode, and gzip compression for massive scale.",
+    color: "text-amber-400",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/15",
+  },
+  {
     icon: Swords,
-    title: "Intelligent Load Balancer",
-    desc: "Health, geo, and bandwidth-weighted routing with DNS rotator and automatic failover.",
+    title: "Bug Fixes & Polish",
+    desc: "Category cascade delete, VOD types, stream filters, content moderation persistence, and inline category editing.",
     color: "text-orange-400",
     bg: "bg-orange-500/10",
     border: "border-orange-500/15",
@@ -59,13 +59,13 @@ export function WhatsNewSection() {
               What&apos;s new
             </p>
             <h2 className="font-display text-2xl font-bold text-white sm:text-3xl">
-              New in v1.9.1
+              New in v1.9.2
             </h2>
           </div>
         </div>
 
         <p className="mt-4 max-w-2xl text-[var(--muted)]">
-          Major release with AI Studio, anti-piracy security, WebRTC streaming, cloud backups, and more.
+          Major release with disaster recovery, performance for 100K+ concurrent users, and critical bug fixes across categories, backups, and content management.
         </p>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

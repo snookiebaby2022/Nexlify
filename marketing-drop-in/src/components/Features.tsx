@@ -1,5 +1,5 @@
 import { AnimatedAvatar } from "@/components/AnimatedAvatar";
-import { Brain, Shield, Radio, Smartphone, Cloud, Wrench, ArrowRight } from "lucide-react";
+import { Brain, Shield, Radio, Smartphone, Cloud, Wrench, ArrowRight, ShieldCheck, Zap } from "lucide-react";
 import Link from "next/link";
 
 const features = [
@@ -13,12 +13,30 @@ const features = [
     highlight: true,
   },
   {
+    title: "Disaster Recovery",
+    desc: "One-click backup/restore with AES-256-GCM encryption, cloud upload to S3/xDrive/Dropbox, pg_dump integration, and SHA-256 checksums.",
+    icon: ShieldCheck,
+    accent: "from-sky-400 to-cyan-500",
+    motion: "float" as const,
+    delay: 0.3,
+    highlight: false,
+  },
+  {
     title: "Anti-Piracy Security",
     desc: "DDoS shield, stream fingerprinting, invisible watermarking, device binding, same-IP detection, and VPN auto-block.",
     icon: Shield,
     accent: "from-emerald-400 to-teal-500",
     motion: "float" as const,
-    delay: 0.3,
+    delay: 0.4,
+    highlight: false,
+  },
+  {
+    title: "100K Concurrent Users",
+    desc: "DB indexes, connection caching, N+1 batch fixes, PM2 cluster mode, gzip compression — built for massive scale.",
+    icon: Zap,
+    accent: "from-amber-400 to-orange-500",
+    motion: "wobble" as const,
+    delay: 0.5,
     highlight: false,
   },
   {
@@ -27,7 +45,7 @@ const features = [
     icon: Radio,
     accent: "from-cyan-400 to-blue-500",
     motion: "wobble" as const,
-    delay: 0.5,
+    delay: 0.6,
     highlight: false,
   },
   {
