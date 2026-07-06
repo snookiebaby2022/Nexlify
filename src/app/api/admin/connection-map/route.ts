@@ -18,7 +18,12 @@ export async function GET() {
   const data = await cacheGetOrSet(cacheKey, MAP_CACHE_TTL, async () => {
     const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
 
-    // Use ConnectionGeography table instead of O(N) HTTP calls
+    // Use LiveConnection for real-time count (not accumulated ConnectionGeography)
+    const { listActiveConnections } = await import("@/lib/connections");
+    const activeConns = await listActiveConnections(scope);
+    const total = activeConns.length;
+
+    // Use ConnectionGeography for map points only (geo data for visualization)
     const geoPoints = await prisma.connectionGeography.findMany({
       where: {
         lastSeenAt: { gte: staleBefore },
@@ -28,7 +33,7 @@ export async function GET() {
       take: 5000,
     });
 
-    // Aggregate by country
+    // Aggregate by country using LiveConnection data when available, fallback to geo
     const byCountry = new Map<string, { countryCode: string; countryName: string; count: number; mapX: number; mapY: number }>();
     for (const g of geoPoints) {
       const cc = g.countryCode || "??";
@@ -59,7 +64,7 @@ export async function GET() {
     }));
 
     return {
-      total: geoPoints.reduce((sum, g) => sum + g.connectionCount, 0),
+      total,
       countries: Array.from(byCountry.values()).sort((a, b) => b.count - a.count),
       points,
     };

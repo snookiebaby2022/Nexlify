@@ -160,26 +160,28 @@ export async function GET(
         return iptvText(remux.error, { status: 502 });
       }
       void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
+      let closed = false;
       const remuxBody = new ReadableStream({
         start(controller) {
           const reader = (remux.stream as ReadableStream).getReader();
           const pump = () => {
             reader.read().then(({ done, value }) => {
               if (done) {
-                controller.close();
+                if (!closed) { closed = true; controller.close(); }
                 void removeConnection(line.id, cleanId, ip);
                 return;
               }
               controller.enqueue(value);
               pump();
             }).catch(() => {
-              controller.close();
+              if (!closed) { closed = true; controller.close(); }
               void removeConnection(line.id, cleanId, ip);
             });
           };
           pump();
         },
         cancel() {
+          if (!closed) { closed = true; }
           void removeConnection(line.id, cleanId, ip);
         },
       });
@@ -229,26 +231,28 @@ export async function GET(
     // Wrap the response body to detect when the client disconnects
     const originalBody = response.body;
     if (originalBody) {
+      let closed2 = false;
       const trackedBody = new ReadableStream({
         start(controller) {
           const reader = originalBody.getReader();
           const pump = () => {
             reader.read().then(({ done, value }) => {
               if (done) {
-                controller.close();
+                if (!closed2) { closed2 = true; controller.close(); }
                 void removeConnection(line.id, cleanId, ip);
                 return;
               }
               controller.enqueue(value);
               pump();
             }).catch(() => {
-              controller.close();
+              if (!closed2) { closed2 = true; controller.close(); }
               void removeConnection(line.id, cleanId, ip);
             });
           };
           pump();
         },
         cancel() {
+          if (!closed2) { closed2 = true; }
           void removeConnection(line.id, cleanId, ip);
         },
       });
