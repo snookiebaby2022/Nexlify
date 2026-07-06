@@ -140,10 +140,10 @@ export function DashboardXuiKpiRibbon({
           sub={
             <div className="space-y-0.5">
               <div className="flex items-center gap-1">
-                <ArrowUp size={12} /> Output: {(kpi?.networkOutMbps ?? 0).toLocaleString()} Mbps
+                <ArrowUp size={12} /> Output: {(kpi?.networkOutMbps ?? 0).toFixed(1)} Mbps
               </div>
               <div className="flex items-center gap-1">
-                <ArrowDown size={12} /> Input: {(kpi?.networkInMbps ?? 0).toLocaleString()} Mbps
+                <ArrowDown size={12} /> Input: {(kpi?.networkInMbps ?? 0).toFixed(1)} Mbps
               </div>
             </div>
           }

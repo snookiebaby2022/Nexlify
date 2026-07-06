@@ -195,8 +195,8 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     deadStreams,
     reportedChannels,
     channelRequests,
-    networkInMbps: Math.round(networkInMbps),
-    networkOutMbps: Math.round(networkOutMbps),
+    networkInMbps: Math.round(networkInMbps * 10) / 10,
+    networkOutMbps: Math.round(networkOutMbps * 10) / 10,
   };
 }
 
