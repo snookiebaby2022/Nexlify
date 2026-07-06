@@ -56,7 +56,7 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
         .catch(() => setData(null));
     }
     load();
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, [apiUrl]);
 

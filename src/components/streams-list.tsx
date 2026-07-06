@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -97,6 +97,8 @@ export function StreamsList({
   const [videoFilter, setVideoFilter] = useState("");
   const [qualityFilter, setQualityFilter] = useState("");
   const [clientsModal, setClientsModal] = useState<{ id: string; name: string } | null>(null);
+  const [tick, setTick] = useState(0);
+  const fetchTimeRef = useRef(0);
 
   const load = useCallback(() => {
     const params = new URLSearchParams({
@@ -113,6 +115,7 @@ export function StreamsList({
       .then((d) => {
         setStreams(d.streams ?? []);
         setTotal(d.total ?? d.streams?.length ?? 0);
+        fetchTimeRef.current = Date.now();
       });
   }, [type, categoryId, serverId, search, page, pageSize]);
 
@@ -127,9 +130,15 @@ export function StreamsList({
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, [load]);
+
+  // Tick every second for real-time uptime updates
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   const filtered = useMemo(() => {
     return streams.filter((s) => {
@@ -333,7 +342,7 @@ export function StreamsList({
                         ) : (
                           <CheckCircle2 size={14} className="xui-uptime-icon-ok" />
                         )}
-                        {formatUptimeXui(st?.uptimeSeconds ?? null)}
+                        {formatUptimeXui((st?.uptimeSeconds ?? 0) + (st?.uptimeSeconds != null ? Math.floor((Date.now() - fetchTimeRef.current) / 1000) : 0))}
                       </span>
                     ) : (
                       <span className="xui-uptime-badge xui-uptime-badge--idle">—</span>

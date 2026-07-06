@@ -39,7 +39,7 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, [load]);
 
