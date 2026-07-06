@@ -6,7 +6,21 @@ import {
   syncAddonLicensesFromBilling,
 } from "@/lib/billing-addon-sync";
 
-/** All plugins are free by default. */
+/** Services that will require addon licenses after the promotion ends. */
+const PROMO_GATED_SERVICES = new Set([
+  "plex", "emby", "jellyfin", "youtube",
+  "spotify", "apple_music", "deezer", "youtube_music",
+]);
+
+/** Promotion end date — set to null or a past date to gate the services above. */
+const PROMO_END_DATE: Date | null = null; // e.g. new Date("2026-08-01T00:00:00Z")
+
+function isPromoActive(): boolean {
+  if (!PROMO_END_DATE) return true; // no end date = always active
+  return new Date() < PROMO_END_DATE;
+}
+
+/** Services currently requiring an addon license (empty during promo). */
 const GATED_SERVICES = new Set<string>();
 
 /** Maps integration types / routes to addon license service ids. */
@@ -78,11 +92,17 @@ export async function isPluginEntitled(
 
   const service = pluginServiceId(typeOrRoute);
 
-  // Built-in plugins are always entitled — only proxy_plugins and statistics require addon licenses
-  if (!GATED_SERVICES.has(service)) {
+  // Built-in plugins (non-promo) are always free
+  if (!GATED_SERVICES.has(service) && !PROMO_GATED_SERVICES.has(service)) {
     return { ok: true };
   }
 
+  // Promo-gated services are free while promotion is active
+  if (PROMO_GATED_SERVICES.has(service) && isPromoActive()) {
+    return { ok: true };
+  }
+
+  // Otherwise check addon license
   if (await hasActiveAddonLicense(service)) return { ok: true };
   if (service !== "full_enterprise" && (await hasActiveAddonLicense("full_enterprise"))) {
     return { ok: true };
