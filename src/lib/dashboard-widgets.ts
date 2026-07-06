@@ -666,26 +666,34 @@ async function creditStats(userId: string) {
 }
 
 export async function getMostWatchedByCountry(ownerId?: string): Promise<CountryWatch[]> {
-  const connections = await listActiveConnections(ownerId);
+  const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
+
+  // Use ConnectionGeography table instead of O(N) HTTP calls
+  const geoPoints = await prisma.connectionGeography.findMany({
+    where: {
+      lastSeenAt: { gte: staleBefore },
+      ...(ownerId ? { line: { ownerId } } : {}),
+    },
+    include: {
+      stream: { select: { name: true } },
+    },
+    orderBy: { lastSeenAt: "desc" },
+    take: 5000,
+  });
+
   const byCountry = new Map<
     string,
     { countryCode: string; countryName: string; streams: Map<string, number> }
   >();
 
-  for (const c of connections) {
-    const ip = c.ip ? extractIpAddress(c.ip) : null;
-    let countryCode = "??";
-    let countryName = "Unknown";
-    if (ip && isPublicIp(ip)) {
-      const geo = await lookupGeoExtended(ip);
-      countryCode = geo.countryCode ?? "??";
-      countryName = geo.countryName ?? getCountryName(countryCode) ?? countryCode;
-    }
-    const streamName = c.stream?.name ?? "Unknown";
+  for (const g of geoPoints) {
+    const countryCode = g.countryCode || "??";
+    const countryName = g.country || "Unknown";
+    const streamName = g.stream?.name ?? "Unknown";
     const bucket =
       byCountry.get(countryCode) ??
       { countryCode, countryName, streams: new Map<string, number>() };
-    bucket.streams.set(streamName, (bucket.streams.get(streamName) ?? 0) + 1);
+    bucket.streams.set(streamName, (bucket.streams.get(streamName) ?? 0) + g.connectionCount);
     byCountry.set(countryCode, bucket);
   }
 

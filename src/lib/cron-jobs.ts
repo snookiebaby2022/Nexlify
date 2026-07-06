@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { listActiveConnections } from "./connections";
+import { listActiveConnections, countActiveConnections } from "./connections";
 import { importFromFolder } from "./import-media";
 import { syncEpgSource } from "./epg";
 import { enqueueAgentCommand, generateAgentToken } from "./stream-agent";
@@ -32,8 +32,8 @@ export async function jobCleanupConnections() {
 export async function jobBandwidthSnapshot() {
   const start = Date.now();
   try {
-    const connections = await listActiveConnections();
-    const count = connections.length;
+    // Use count instead of loading all rows into memory
+    const count = await countActiveConnections();
     const bytesOutPerSec = (count * ESTIMATED_MBPS_PER_STREAM * 1_000_000) / 8;
     const bytesOut = BigInt(Math.floor(bytesOutPerSec * 60));
     const bytesIn = BigInt(Math.floor(Number(bytesOut) / 10));

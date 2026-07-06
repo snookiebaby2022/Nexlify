@@ -260,6 +260,8 @@ model CreditTransaction {
   balanceAfter Int
   note        String?
   createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model StreamProxy {
@@ -403,6 +405,12 @@ model Stream {
   connectionGeographies ConnectionGeography[]
   lbSessions          LoadBalancerSession[] @relation(name: "LbSessionStream")
   aiTranscodeSuggestions AiTranscodeSuggestion[]
+
+  @@index([type, isActive])
+  @@index([serverId])
+  @@index([categoryId])
+  @@index([lastProbeOk])
+  @@index([providerId])
 }
 
 model WatchFolder {
@@ -487,6 +495,9 @@ model LiveConnection {
 
   @@index([lineId])
   @@index([lastSeenAt])
+  @@index([lastSeenAt, lineId])
+  @@index([streamId, lastSeenAt])
+  @@index([ip])
 }
 
 model Bouquet {
@@ -572,6 +583,11 @@ model Line {
   connectionGeographies ConnectionGeography[]
   appsLocks          LineAppsLock[]
   aiSupportChats     AiSupportChat[]
+
+  @@index([ownerId])
+  @@index([status, expiresAt])
+  @@index([expiresAt])
+  @@index([createdAt])
 }
 
 model LineChannelWatch {
@@ -596,6 +612,8 @@ model MagDevice {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([lineId])
 }
 
 model EnigmaDevice {
@@ -607,6 +625,8 @@ model EnigmaDevice {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([lineId])
 }
 
 model EpgSource {
@@ -663,6 +683,9 @@ model BillingEvent {
   status    String
   message   String?
   createdAt DateTime @default(now())
+
+  @@index([lineId, createdAt])
+  @@index([provider, createdAt])
 }
 
 model LineBouquet {
@@ -685,6 +708,11 @@ model ActivityLog {
   line      Line?    @relation(fields: [lineId], references: [id])
   meta      Json?
   createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([lineId, createdAt])
+  @@index([entity, entityId])
 }
 
 model PanelSetting {

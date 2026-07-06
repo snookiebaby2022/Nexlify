@@ -17,7 +17,10 @@ import {
 } from "@/lib/credential-generate";
 import { LineStatus } from "@prisma/client";
 
-export async function GET() {
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+export async function GET(req: NextRequest) {
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
@@ -28,9 +31,15 @@ export async function GET() {
   const where =
     session.role === PanelRole.ADMIN ? {} : { ownerId: session.id };
 
+  // Pagination
+  const url = new URL(req.url);
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
+  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(url.searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE)));
+  const skip = (page - 1) * pageSize;
+
   const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
 
-  const [lines, displayOrder, activeConnections] = await Promise.all([
+  const [lines, total, activeConnections] = await Promise.all([
     prisma.line.findMany({
       where,
       include: {
@@ -40,23 +49,21 @@ export async function GET() {
         _count: { select: { channelWatches: true, liveConnections: true } },
       },
       orderBy: { createdAt: "desc" },
+      skip,
+      take: pageSize,
     }),
-    prisma.line.findMany({
-      where,
-      orderBy: { createdAt: "asc" },
-      select: { id: true },
-    }),
+    prisma.line.count({ where }),
     prisma.liveConnection.findMany({
       where: {
         lastSeenAt: { gte: staleBefore },
         line: where,
       },
-      include: { stream: { select: { id: true, name: true } } },
+      select: { lineId: true, ip: true, stream: { select: { name: true } }, userAgent: true, lastSeenAt: true },
       orderBy: { lastSeenAt: "desc" },
+      take: 5000, // Safety limit
     }),
   ]);
 
-  const displayIdByLineId = new Map(displayOrder.map((line, index) => [line.id, index + 1]));
   const activeConnByLineId = new Map<string, (typeof activeConnections)[number]>();
   const activeConnCountByLineId = new Map<string, number>();
   for (const conn of activeConnections) {
@@ -65,12 +72,12 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    lines: lines.map((line) => {
+    lines: lines.map((line, index) => {
       const active = activeConnByLineId.get(line.id);
       const activeCount = activeConnCountByLineId.get(line.id) ?? 0;
       return {
         ...line,
-        displayId: displayIdByLineId.get(line.id) ?? 0,
+        displayId: skip + index + 1,
         activeConnectionCount: activeCount,
         activeConnection: active
           ? {
@@ -82,6 +89,12 @@ export async function GET() {
           : null,
       };
     }),
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+    },
   });
 }
 

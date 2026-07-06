@@ -60,7 +60,9 @@ export async function handleXuiAction(
     }
 
     case "get_users": {
+      const take = Math.min(1000, parseInt(params.get("limit") ?? "500", 10));
       const users = await prisma.panelUser.findMany({
+        take,
         select: {
           id: true,
           username: true,
@@ -75,7 +77,9 @@ export async function handleXuiAction(
     }
 
     case "get_lines": {
+      const take = Math.min(5000, parseInt(params.get("limit") ?? "1000", 10));
       const lines = await prisma.line.findMany({
+        take,
         include: { bouquets: { include: { bouquet: true } } },
         orderBy: { createdAt: "desc" },
       });
@@ -124,7 +128,9 @@ export async function handleXuiAction(
     }
 
     case "get_mag": {
+      const take = Math.min(5000, parseInt(params.get("limit") ?? "1000", 10));
       const devices = await prisma.magDevice.findMany({
+        take,
         include: { line: { select: { username: true } } },
         orderBy: { createdAt: "desc" },
       });
@@ -132,7 +138,15 @@ export async function handleXuiAction(
     }
 
     case "live_connections": {
-      const connections = await listActiveConnections();
+      const take = Math.min(5000, parseInt(params.get("limit") ?? "1000", 10));
+      const connections = await prisma.liveConnection.findMany({
+        take,
+        include: {
+          line: { select: { username: true } },
+          stream: { select: { name: true } },
+        },
+        orderBy: { lastSeenAt: "desc" },
+      });
       return { status: "success", connections };
     }
 

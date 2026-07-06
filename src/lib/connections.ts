@@ -1,6 +1,8 @@
 import { prisma } from "./prisma";
+import { cacheGetOrSet, cacheDeletePattern } from "./cache";
 
 const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours — connections stay alive until explicitly removed on stream close
+const CONNECTIONS_CACHE_TTL = 5; // 5 seconds — short TTL for dashboard responsiveness
 
 export async function countActiveConnectionsForLine(lineId: string) {
   const staleBefore = new Date(Date.now() - STALE_MS);
@@ -9,15 +11,26 @@ export async function countActiveConnectionsForLine(lineId: string) {
   });
 }
 
-/** Distinct active sessions: group by IP+stream or count rows based on policy */
+/** Count total active connections without loading rows into memory */
+export async function countActiveConnections(ownerId?: string): Promise<number> {
+  const staleBefore = new Date(Date.now() - STALE_MS);
+  const cacheKey = ownerId ? `conn:count:${ownerId}` : "conn:count:all";
+  return cacheGetOrSet(cacheKey, CONNECTIONS_CACHE_TTL, () =>
+    prisma.liveConnection.count({
+      where: ownerId ? { line: { ownerId }, lastSeenAt: { gte: staleBefore } } : { lastSeenAt: { gte: staleBefore } },
+    })
+  );
+}
+
+/** Distinct active sessions: use groupBy instead of loading all rows */
 export async function countLineSessions(lineId: string) {
   const staleBefore = new Date(Date.now() - STALE_MS);
-  const rows = await prisma.liveConnection.findMany({
+  const result = await prisma.liveConnection.groupBy({
+    by: ["ip", "streamId"],
     where: { lineId, lastSeenAt: { gte: staleBefore } },
-    select: { ip: true, streamId: true },
+    _count: true,
   });
-  const keys = new Set(rows.map((r) => `${r.ip ?? ""}:${r.streamId ?? ""}`));
-  return keys.size || rows.length;
+  return result.length || 1;
 }
 
 export async function lineHasConnectionCapacity(
@@ -117,6 +130,8 @@ export async function removeConnection(lineId: string, streamId: string, ip: str
   await prisma.liveConnection.deleteMany({
     where: { lineId, streamId, ip },
   });
+  // Invalidate connection caches
+  void cacheDeletePattern("conn:*").catch(() => {});
 }
 
 const connectionInclude = {
@@ -132,15 +147,20 @@ const connectionInclude = {
 } as const;
 
 export async function listActiveConnections(ownerId?: string) {
-  const staleBefore = new Date(Date.now() - STALE_MS);
-  await prisma.liveConnection.deleteMany({
-    where: { lastSeenAt: { lt: staleBefore } },
-  });
+  const cacheKey = ownerId ? `conn:list:${ownerId}` : "conn:list:all";
+  return cacheGetOrSet(cacheKey, CONNECTIONS_CACHE_TTL, async () => {
+    const staleBefore = new Date(Date.now() - STALE_MS);
+    // Fire-and-forget stale cleanup — don't block the response
+    void prisma.liveConnection.deleteMany({
+      where: { lastSeenAt: { lt: staleBefore } },
+    }).catch(() => {});
 
-  return prisma.liveConnection.findMany({
-    where: ownerId ? { line: { ownerId } } : undefined,
-    include: connectionInclude,
-    orderBy: { lastSeenAt: "desc" },
+    return prisma.liveConnection.findMany({
+      where: ownerId ? { line: { ownerId } } : undefined,
+      include: connectionInclude,
+      orderBy: { lastSeenAt: "desc" },
+      take: 5000, // Safety limit — dashboard should use countActiveConnections() for totals
+    });
   });
 }
 
