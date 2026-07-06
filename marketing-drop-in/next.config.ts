@@ -52,7 +52,6 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/docs/api", destination: "/install", permanent: true },
-      { source: "/login", destination: "/", permanent: false },
       {
         source: "/:path*",
         has: [{ type: "host", value: "www.nexlify.live" }],
