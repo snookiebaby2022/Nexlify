@@ -69,6 +69,8 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "epg", title: "EPG", category: "EPG", redirect: "/admin/epg" },
   { slug: "epgs", title: "EPG sources", category: "EPG", redirect: "/admin/epg/sources" },
   { slug: "epg_view", title: "EPG view", category: "EPG", redirect: "/admin/epg/sources" },
+  { slug: "epg_manage", title: "Manage EPG", category: "EPG", redirect: "/admin/epg/manage" },
+  { slug: "epg_auto_match", title: "EPG Auto-Match", category: "EPG", redirect: "/admin/epg/auto-match" },
 
   { slug: "mag", title: "MAG devices", category: "Devices", redirect: "/admin/mag" },
   { slug: "mags", title: "MAG list", category: "Devices", redirect: "/admin/mag" },

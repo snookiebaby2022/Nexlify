@@ -3,9 +3,26 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const action = req.nextUrl.searchParams.get("action");
+
+  if (action === "channels") {
+    // Return unique EPG channel IDs from the EpgProgram table
+    const programs = await prisma.epgProgram.findMany({
+      select: { channelId: true, title: true },
+      distinct: ["channelId"],
+      orderBy: { channelId: "asc" },
+      take: 5000,
+    });
+    const channels = programs.map((p) => ({
+      id: p.channelId,
+      displayName: p.title || p.channelId,
+    }));
+    return NextResponse.json({ channels });
+  }
 
   const streams = await prisma.stream.findMany({
     where: { type: "LIVE" },
