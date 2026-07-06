@@ -6,8 +6,8 @@ import {
   syncAddonLicensesFromBilling,
 } from "@/lib/billing-addon-sync";
 
-/** Services that still require an addon license (third-party / premium). */
-const GATED_SERVICES = new Set(["proxy_plugins", "statistics"]);
+/** All plugins are free by default. */
+const GATED_SERVICES = new Set<string>();
 
 /** Maps integration types / routes to addon license service ids. */
 const PLUGIN_SERVICE_MAP: Record<string, string> = {
