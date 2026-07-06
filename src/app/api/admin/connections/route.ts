@@ -17,8 +17,8 @@ export async function GET() {
   const connections = await listActiveConnections(ownerScope(session));
   const mapped = connections.map((c) => ({
     ...c,
-    startedAt: c.startedAt.toISOString(),
-    lastSeenAt: c.lastSeenAt.toISOString(),
+    startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
+    lastSeenAt: c.lastSeenAt instanceof Date ? c.lastSeenAt.toISOString() : String(c.lastSeenAt),
     serverName: c.stream?.server?.name ?? "Main Server",
   }));
   return NextResponse.json({ connections: mapped });

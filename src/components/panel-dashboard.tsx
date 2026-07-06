@@ -70,7 +70,7 @@ import { DashboardServerCard, type ServerDashboardMetrics } from "@/components/d
 
 import { formatDateTime } from "@/lib/format";
 
-import { AnimatedWorldMap } from "@/components/animated-world-map";
+import { ConnectionMap } from "@/components/connection-map";
 
 import { DashboardMostWatchedByCountry } from "@/components/dashboard-most-watched-by-country";
 
@@ -710,7 +710,7 @@ export function PanelDashboard({
 
       <div className="grid lg:grid-cols-2 gap-5">
 
-        <AnimatedWorldMap />
+        <ConnectionMap />
 
         <DashboardMostWatchedByCountry widgetsUrl={widgetsUrl} />
 
