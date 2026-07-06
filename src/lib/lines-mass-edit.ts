@@ -11,6 +11,7 @@ export type MassEditPatch = {
   allowedIps?: TextFieldState;
   allowedUserAgents?: TextFieldState;
   disallowedUserAgents?: TextFieldState;
+  blockedIsps?: TextFieldState;
   allowedOutputs?: TextFieldState;
   lockToIp?: TriState;
 };

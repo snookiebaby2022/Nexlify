@@ -18,10 +18,15 @@ export async function GET() {
   const data = await cacheGetOrSet(cacheKey, MAP_CACHE_TTL, async () => {
     const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
 
-    // Use LiveConnection for real-time count (not accumulated ConnectionGeography)
+    // Use LiveConnection for real-time count and per-country aggregation
     const { listActiveConnections } = await import("@/lib/connections");
     const activeConns = await listActiveConnections(scope);
     const total = activeConns.length;
+
+    // Cleanup stale ConnectionGeography rows
+    await prisma.connectionGeography.deleteMany({
+      where: { lastSeenAt: { lt: staleBefore } },
+    });
 
     // Use ConnectionGeography for map points only (geo data for visualization)
     const geoPoints = await prisma.connectionGeography.findMany({
@@ -33,35 +38,57 @@ export async function GET() {
       take: 5000,
     });
 
-    // Aggregate by country using LiveConnection data when available, fallback to geo
-    const byCountry = new Map<string, { countryCode: string; countryName: string; count: number; mapX: number; mapY: number }>();
+    // Build per-country counts from active connections, not accumulated connectionCount
+    const countryCounts = new Map<string, number>();
+    for (const conn of activeConns) {
+      const geo = geoPoints.find(
+        (g) => g.lineId === conn.lineId && g.streamId === (conn as Record<string, unknown>).streamId
+      );
+      const cc = geo?.countryCode || "??";
+      countryCounts.set(cc, (countryCounts.get(cc) ?? 0) + 1);
+    }
+
+    // Also count from geo points for connections that may have ended but still have geo data
     for (const g of geoPoints) {
       const cc = g.countryCode || "??";
-      const existing = byCountry.get(cc);
-      if (existing) {
-        existing.count += g.connectionCount;
-      } else {
-        byCountry.set(cc, {
-          countryCode: cc,
-          countryName: g.country,
-          count: g.connectionCount,
-          mapX: g.lng ? Math.max(0, Math.min(100, ((g.lng + 180) / 360) * 100)) : 50,
-          mapY: g.lat ? Math.max(0, Math.min(100, ((90 - g.lat) / 180) * 100)) : 40,
-        });
+      if (!countryCounts.has(cc)) {
+        countryCounts.set(cc, 0);
       }
     }
 
-    // Build points array from geo data
-    const points = geoPoints.map((g) => ({
-      id: g.id,
-      ip: g.city || "",
-      countryCode: g.countryCode,
-      countryName: g.country,
-      mapX: g.lng ? Math.max(0, Math.min(100, ((g.lng + 180) / 360) * 100)) : 50,
-      mapY: g.lat ? Math.max(0, Math.min(100, ((90 - g.lat) / 180) * 100)) : 40,
-      line: g.lineId || "",
-      stream: g.streamId || null,
-    }));
+    // Aggregate by country for the map
+    const byCountry = new Map<string, { countryCode: string; countryName: string; count: number; mapX: number; mapY: number }>();
+    for (const g of geoPoints) {
+      const cc = g.countryCode || "??";
+      if (byCountry.has(cc)) continue;
+      byCountry.set(cc, {
+        countryCode: cc,
+        countryName: g.country,
+        count: countryCounts.get(cc) ?? 0,
+        mapX: g.lng ? Math.max(0, Math.min(100, ((g.lng + 180) / 360) * 100)) : 50,
+        mapY: g.lat ? Math.max(0, Math.min(100, ((90 - g.lat) / 180) * 100)) : 40,
+      });
+    }
+
+    // Build points array from geo data, deduplicated by IP+stream
+    const seenPoints = new Set<string>();
+    const points = geoPoints
+      .filter((g) => {
+        const key = `${g.ip || ""}:${g.streamId || ""}`;
+        if (seenPoints.has(key)) return false;
+        seenPoints.add(key);
+        return true;
+      })
+      .map((g) => ({
+        id: g.id,
+        ip: g.city || "",
+        countryCode: g.countryCode,
+        countryName: g.country,
+        mapX: g.lng ? Math.max(0, Math.min(100, ((g.lng + 180) / 360) * 100)) : 50,
+        mapY: g.lat ? Math.max(0, Math.min(100, ((90 - g.lat) / 180) * 100)) : 40,
+        line: g.lineId || "",
+        stream: g.streamId || null,
+      }));
 
     return {
       total,

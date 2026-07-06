@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   ChevronDown,
   Filter,
-  Layers,
   RefreshCw,
   Search,
   Square,
@@ -54,16 +53,20 @@ function StreamInfoCell({ stream }: { stream: Stream }) {
     );
   }
   const kbps = stream.maxSpeedKbps ?? stream.minSpeedKbps;
+  const videoCodec = st.playbackMode === "proxy" ? "h264" : null;
+  const audioCodec = st.playbackMode === "proxy" ? "aac" : null;
   return (
     <div className="xui-stream-info">
       {kbps ? <div className="xui-stream-info-line">{kbps.toLocaleString()} Kbps</div> : null}
       <div className="xui-stream-info-icons">
-        <span title="h264">h264</span>
-        <Volume2 size={12} aria-hidden />
-        <span title="aac">aac</span>
-        <span title="1x">1x</span>
-        <Layers size={12} aria-hidden />
-        <span>— FPS</span>
+        {videoCodec && <span title={videoCodec}>{videoCodec}</span>}
+        {audioCodec && (
+          <>
+            <Volume2 size={12} aria-hidden />
+            <span title={audioCodec}>{audioCodec}</span>
+          </>
+        )}
+        {st.viewers > 0 && <span title={`${st.viewers} viewers`}>{st.viewers}x</span>}
       </div>
     </div>
   );
@@ -152,7 +155,7 @@ export function StreamsList({
   const to = Math.min(page * pageSize, total);
 
   return (
-    <div className="xui-streams-page space-y-0">
+    <div className="xui-streams-page space-y-4">
       <div className="xui-streams-topbar">
         <h1 className="xui-streams-title">{title === "Manage Streams" ? "Streams" : title}</h1>
         <div className="xui-streams-topbar-actions">
@@ -274,7 +277,6 @@ export function StreamsList({
               <th>Clients</th>
               <th>Uptime</th>
               <th>Actions</th>
-              <th>Player</th>
               <th>EPG</th>
               <th>Stream Info</th>
             </tr>

@@ -74,11 +74,11 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
           No live viewers by country yet
         </p>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-1">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
           {countries.map((c) => (
             <div
               key={c.countryCode}
-              className="shrink-0 w-[180px] rounded-lg border p-3"
+              className="rounded-lg border p-3"
               style={{ borderColor: "var(--border)", background: "var(--background)" }}
             >
               <div className="flex items-center gap-2 mb-2 pb-2 border-b" style={{ borderColor: "var(--border)" }}>
@@ -87,11 +87,11 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
               </div>
               <ul className="space-y-1.5">
                 {c.channels.map((ch) => (
-                  <li key={ch.name} className="flex justify-between gap-1 text-xs">
-                    <span className="truncate" style={{ color: "var(--muted)" }} title={ch.name}>
+                  <li key={ch.name} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="min-w-0 truncate" style={{ color: "var(--muted)" }} title={ch.name}>
                       {ch.name}
                     </span>
-                    <span className="shrink-0 font-semibold">{ch.count}</span>
+                    <span className="shrink-0 font-semibold tabular-nums">{ch.count}</span>
                   </li>
                 ))}
               </ul>

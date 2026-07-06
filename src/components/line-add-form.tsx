@@ -588,6 +588,15 @@ export function LineAddForm({
                 onChange={(e) => setForm({ ...form, allowedUserAgents: e.target.value })}
               />
             </FormField>
+            <FormField label="Blocked ISPs (comma-separated)">
+              <input
+                className={formInputClass}
+                style={formInputStyle}
+                placeholder="Verizon,AT&T"
+                value={form.blockedIsps}
+                onChange={(e) => setForm({ ...form, blockedIsps: e.target.value })}
+              />
+            </FormField>
             <YesNo
               label="Activate lock to IP"
               value={form.lockToIp}

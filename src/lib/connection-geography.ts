@@ -25,7 +25,6 @@ export async function recordConnectionGeography(opts: {
     await prisma.connectionGeography.update({
       where: { id: existing.id },
       data: {
-        connectionCount: { increment: 1 },
         lastSeenAt: new Date(),
         region: geo.isp ?? existing.region,
       },

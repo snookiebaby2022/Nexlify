@@ -177,8 +177,15 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
   }
 
   const snap = snapshots[0];
-  const networkInMbps = snap ? Number(snap.bytesIn) / 125_000 : 0;
-  const networkOutMbps = snap ? Number(snap.bytesOut) / 125_000 : 0;
+  let networkInMbps = snap ? Number(snap.bytesIn) / 125_000 : 0;
+  let networkOutMbps = snap ? Number(snap.bytesOut) / 125_000 : 0;
+
+  if (!snap) {
+    const activeConns = await listActiveConnections();
+    const estimated = activeConns.length * 4;
+    networkInMbps = Math.round(estimated / 10);
+    networkOutMbps = Math.round(estimated);
+  }
 
   return {
     paidUsers,
@@ -202,6 +209,7 @@ export async function getDashboardSummary() {
     connections,
     allServers,
     onlineServerCount,
+    liveConnectionStreams,
   ] = await Promise.all([
     prisma.stream.count({ where: { type: StreamType.LIVE, isActive: true } }),
     prisma.streamProcess.findMany({
@@ -227,9 +235,17 @@ export async function getDashboardSummary() {
         ],
       },
     }),
+    prisma.liveConnection.findMany({
+      where: { streamId: { not: null }, lastSeenAt: { gte: staleBefore } },
+      select: { streamId: true },
+      distinct: ["streamId"],
+      take: 500,
+    }),
   ]);
 
-  const onlineStreams = runningStreamIds.filter((r) => r.streamId).length;
+  const agentStreams = runningStreamIds.filter((r) => r.streamId).length;
+  const connectionStreams = liveConnectionStreams.length;
+  const onlineStreams = agentStreams > 0 ? agentStreams : connectionStreams;
   const onlineUsers = linesWithConnections.length;
   const streamSettings = await getSettingGroup("streams");
   const perLine = Number(streamSettings.maxConnectionsPerLine ?? 0);

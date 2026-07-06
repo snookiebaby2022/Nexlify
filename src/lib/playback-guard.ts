@@ -18,7 +18,8 @@ export type PlaybackDenyReason =
   | "vpn"
   | "user_agent"
   | "ddos"
-  | "reputation";
+  | "reputation"
+  | "isp";
 
 export type PlaybackGuardLine = {
   id: string;
@@ -29,6 +30,7 @@ export type PlaybackGuardLine = {
   blockedCountries: string | null;
   allowedUserAgents: string | null;
   disallowedUserAgents: string | null;
+  blockedIsps: string | null;
 };
 
 export function asPlaybackGuardLine(
@@ -38,6 +40,7 @@ export function asPlaybackGuardLine(
   > & {
     allowedUserAgents?: string | null;
     disallowedUserAgents?: string | null;
+    blockedIsps?: string | null;
   }
 ): PlaybackGuardLine {
   return {
@@ -49,6 +52,7 @@ export function asPlaybackGuardLine(
     blockedCountries: line.blockedCountries,
     allowedUserAgents: line.allowedUserAgents ?? null,
     disallowedUserAgents: line.disallowedUserAgents ?? null,
+    blockedIsps: line.blockedIsps ?? null,
   };
 }
 
@@ -121,6 +125,12 @@ async function assertPlaybackAllowedInner(
 
     if (!lineCountryAllowed(line, geo?.countryCode ?? null)) return "country";
 
+    // Per-line ISP blocking
+    if (line.blockedIsps && geo?.isp) {
+      const blockedIsps = line.blockedIsps.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (blockedIsps.some(blocked => geo.isp.toLowerCase().includes(blocked))) return "isp";
+    }
+
     const geoSettings = await getSettingGroup("geo");
     if (geoSettings.enabled && geoSettings.blockVpnHosting && geo?.isVpnOrHosting) {
       if (geoSettings.autoBlockVpnToBlocklist && clientIp) {
@@ -163,6 +173,8 @@ export function playbackDenyMessage(reason: PlaybackDenyReason): string {
       return "VPN or hosting not allowed";
     case "user_agent":
       return "User-Agent not allowed for this line";
+    case "isp":
+      return "ISP not allowed for this line";
     case "ddos":
       return "Access temporarily blocked (DDoS shield)";
     case "reputation":

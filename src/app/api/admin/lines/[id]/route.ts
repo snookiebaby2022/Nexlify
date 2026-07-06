@@ -69,6 +69,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
           ? String(body.blockedCountries)
           : null
         : undefined,
+    blockedIsps:
+      body.blockedIsps !== undefined
+        ? body.blockedIsps
+          ? String(body.blockedIsps)
+          : null
+        : undefined,
     allowedUserAgents:
       body.allowedUserAgents !== undefined
         ? body.allowedUserAgents

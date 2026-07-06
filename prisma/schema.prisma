@@ -556,6 +556,8 @@ model Line {
   allowedUserAgents String?
   /// Comma-separated User-Agent substrings to block.
   disallowedUserAgents String?
+  /// Comma-separated ISP names to block for this line (e.g. "Verizon,AT&T"). Empty = no restriction.
+  blockedIsps     String?
   /// When false, adult-tagged streams are blocked for this line.
   canWatchAdult    Boolean    @default(true)
   isRestreamer     Boolean    @default(false)

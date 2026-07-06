@@ -15,6 +15,7 @@ function applyMassEditPatch(patch: MassEditPatch) {
     allowedIps?: string | null;
     allowedUserAgents?: string | null;
     disallowedUserAgents?: string | null;
+    blockedIsps?: string | null;
     canWatchAdult?: boolean;
     allowedOutput?: string;
     lockToIp?: boolean;
@@ -39,6 +40,9 @@ function applyMassEditPatch(patch: MassEditPatch) {
   }
   if (patch.disallowedUserAgents && !patch.disallowedUserAgents.unchanged) {
     data.disallowedUserAgents = patch.disallowedUserAgents.value.trim() || null;
+  }
+  if (patch.blockedIsps && !patch.blockedIsps.unchanged) {
+    data.blockedIsps = patch.blockedIsps.value.trim() || null;
   }
   if (patch.canWatchAdult === "yes") data.canWatchAdult = true;
   if (patch.canWatchAdult === "no") data.canWatchAdult = false;

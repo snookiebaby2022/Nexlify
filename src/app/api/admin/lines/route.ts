@@ -225,6 +225,7 @@ export async function POST(req: NextRequest) {
       allowedIps: body.allowedIps ? String(body.allowedIps) : null,
       allowedCountries: body.allowedCountries ? String(body.allowedCountries) : null,
       blockedCountries: body.blockedCountries ? String(body.blockedCountries) : null,
+      blockedIsps: body.blockedIsps ? String(body.blockedIsps) : null,
       canWatchAdult: body.canWatchAdult === false ? false : true,
       isRestreamer: Boolean(body.isRestreamer),
       isTrial: Boolean(body.isTrial),
