@@ -197,8 +197,8 @@ export function PanelTopNav({
 
   const connections = stats?.onlineConnections ?? 0;
   const streamCount = stats?.streams ?? 0;
-  const inMbps = ((stats?.networkInPerMin ?? 0) / 1_000_000).toFixed(0);
-  const outMbps = ((stats?.networkOutPerMin ?? 0) / 1_000_000).toFixed(0);
+  const inMbps = ((stats?.networkInPerMin ?? 0) / 125_000 / 60).toFixed(1);
+  const outMbps = ((stats?.networkOutPerMin ?? 0) / 125_000 / 60).toFixed(1);
 
   return (
     <header className="shrink-0 overflow-visible" ref={navRef}>

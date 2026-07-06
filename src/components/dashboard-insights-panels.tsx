@@ -284,15 +284,15 @@ export function DashboardInsightsPanels({
         )}
 
         {data.bandwidth && (
-          <Panel title="Latest bandwidth snapshot" icon={<TrendingUp size={16} style={{ color: "#17a2b8" }} />}>
+          <Panel title="Bandwidth" icon={<TrendingUp size={16} style={{ color: "#17a2b8" }} />}>
             <div className="grid grid-cols-3 gap-3 text-center text-xs">
               <div>
                 <p style={{ color: "var(--muted)" }}>In</p>
-                <p className="text-lg font-bold mt-1">{data.bandwidth.inPerMin.toLocaleString()}</p>
+                <p className="text-lg font-bold mt-1">{(data.bandwidth.inPerMin / 125_000 / 60).toFixed(1)} <span className="text-xs font-normal">Mbps</span></p>
               </div>
               <div>
                 <p style={{ color: "var(--muted)" }}>Out</p>
-                <p className="text-lg font-bold mt-1">{data.bandwidth.outPerMin.toLocaleString()}</p>
+                <p className="text-lg font-bold mt-1">{(data.bandwidth.outPerMin / 125_000 / 60).toFixed(1)} <span className="text-xs font-normal">Mbps</span></p>
               </div>
               <div>
                 <p style={{ color: "var(--muted)" }}>Conns</p>

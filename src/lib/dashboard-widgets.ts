@@ -341,7 +341,9 @@ function ticketsCard(tickets: TicketQueueSummary, ticketsHref: string): SummaryC
 }
 
 function bandwidthCard(bw: BandwidthSummary, href: string): SummaryCardData {
-  const peak = Math.max(bw.inPerMin, bw.outPerMin, 1);
+  const inMbps = bw.inPerMin / 125_000 / 60;
+  const outMbps = bw.outPerMin / 125_000 / 60;
+  const peak = Math.max(inMbps, outMbps, 0.1);
   return {
     id: "bandwidth",
     title: "Bandwidth",
@@ -349,8 +351,8 @@ function bandwidthCard(bw: BandwidthSummary, href: string): SummaryCardData {
     variant: "teal",
     href,
     rows: [
-      { label: "In (snap)", value: bw.inPerMin, total: peak, color: "green" },
-      { label: "Out (snap)", value: bw.outPerMin, total: peak, color: "blue" },
+      { label: "In Mbps", value: inMbps, total: peak, color: "green" },
+      { label: "Out Mbps", value: outMbps, total: peak, color: "blue" },
     ],
   };
 }
