@@ -4,6 +4,7 @@ import { getSettingGroup } from "@/lib/panel-settings";
 import { listActiveConnections } from "@/lib/connections";
 
 const STALE_MS = 5 * 60 * 1000;
+const CONN_STALE_MS = 24 * 60 * 60 * 1000; // Match listActiveConnections 24h window
 const ASSUMED_RAM_MB = 16 * 1024;
 
 export type ServerMetricsRow = {
@@ -201,6 +202,7 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
 
 export async function getDashboardSummary() {
   const staleBefore = new Date(Date.now() - STALE_MS);
+  const connStaleBefore = new Date(Date.now() - CONN_STALE_MS);
   const [
     totalLiveStreams,
     runningStreamIds,
@@ -221,7 +223,7 @@ export async function getDashboardSummary() {
       where: { status: "ACTIVE", expiresAt: { gt: new Date() } },
     }),
     prisma.liveConnection.findMany({
-      where: { lastSeenAt: { gte: staleBefore } },
+      where: { lastSeenAt: { gte: connStaleBefore } },
       select: { lineId: true },
       distinct: ["lineId"],
     }),
@@ -236,7 +238,7 @@ export async function getDashboardSummary() {
       },
     }),
     prisma.liveConnection.findMany({
-      where: { streamId: { not: null }, lastSeenAt: { gte: staleBefore } },
+      where: { streamId: { not: null }, lastSeenAt: { gte: connStaleBefore } },
       select: { streamId: true },
       distinct: ["streamId"],
       take: 500,
@@ -267,6 +269,7 @@ export async function getDashboardSummary() {
 /** Dashboard summary scoped to a reseller/sub-reseller's owned lines. */
 export async function getResellerDashboardSummary(ownerId: string) {
   const staleBefore = new Date(Date.now() - STALE_MS);
+  const connStaleBefore = new Date(Date.now() - CONN_STALE_MS);
   const now = new Date();
   const lineWhere = { ownerId };
 
@@ -306,10 +309,21 @@ export async function getResellerDashboardSummary(ownerId: string) {
   const linesWithConnections = await prisma.liveConnection.findMany({
     where: {
       lineId: { in: [...lineIdSet] },
-      lastSeenAt: { gte: staleBefore },
+      lastSeenAt: { gte: connStaleBefore },
     },
     select: { lineId: true },
     distinct: ["lineId"],
+  });
+
+  const liveConnectionStreams = await prisma.liveConnection.findMany({
+    where: {
+      lineId: { in: [...lineIdSet] },
+      streamId: { not: null },
+      lastSeenAt: { gte: connStaleBefore },
+    },
+    select: { streamId: true },
+    distinct: ["streamId"],
+    take: 500,
   });
 
   const streamSettings = await getSettingGroup("streams");
@@ -317,8 +331,11 @@ export async function getResellerDashboardSummary(ownerId: string) {
   const maxConnections =
     perLine > 0 && totalActiveLines > 0 ? perLine * totalActiveLines : 0;
 
+  const agentStreams = runningStreamIds.filter((r) => r.streamId).length;
+  const connectionStreams = liveConnectionStreams.length;
+
   return {
-    onlineStreams: runningStreamIds.filter((r) => r.streamId).length,
+    onlineStreams: agentStreams > 0 ? agentStreams : connectionStreams,
     totalLiveStreams,
     onlineUsers: linesWithConnections.length,
     totalActiveLines,

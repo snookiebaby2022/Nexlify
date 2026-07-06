@@ -5,7 +5,7 @@ import {
   type StreamForPlaybackMode,
 } from "@/lib/stream-playback-mode";
 
-const STALE_MS = 5 * 60 * 1000;
+const STALE_MS = 24 * 60 * 60 * 1000; // Match connection tracking 24h window
 
 export type StreamLiveStat = {
   viewers: number;

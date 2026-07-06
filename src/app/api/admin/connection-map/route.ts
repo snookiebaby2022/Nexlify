@@ -16,7 +16,7 @@ export async function GET() {
   const cacheKey = scope ? `connmap:${scope}` : "connmap:all";
 
   const data = await cacheGetOrSet(cacheKey, MAP_CACHE_TTL, async () => {
-    const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
+    const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000); // Match connection tracking 24h window
 
     // Use LiveConnection for real-time count and per-country aggregation
     const { listActiveConnections } = await import("@/lib/connections");
@@ -25,7 +25,7 @@ export async function GET() {
 
     // Cleanup stale ConnectionGeography rows
     await prisma.connectionGeography.deleteMany({
-      where: { lastSeenAt: { lt: staleBefore } },
+      where: { lastSeenAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } },
     });
 
     // Use ConnectionGeography for map points only (geo data for visualization)

@@ -667,7 +667,7 @@ async function creditStats(userId: string) {
 }
 
 export async function getMostWatchedByCountry(ownerId?: string): Promise<CountryWatch[]> {
-  const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
+  const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000); // Match connection tracking 24h window
 
   // Use ConnectionGeography table instead of O(N) HTTP calls
   const geoPoints = await prisma.connectionGeography.findMany({
