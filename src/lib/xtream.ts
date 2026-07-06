@@ -90,7 +90,7 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
       message: !playable
         ? "Account inactive or expired"
         : atCapacity
-          ? "Max connections reached — channel list available; stop other devices to play"
+          ? "Max connections reached — you are using all allowed streams. Stop playback on other devices or increase your connection limit in the panel."
           : "",
       auth: playable ? 1 : 0,
       status: playable ? "Active" : "Disabled",

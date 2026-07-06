@@ -34,7 +34,7 @@ export async function GET(
     streamId: cleanId,
   });
   if (deny === "ip") return iptvText("IP not allowed for this line", { status: 403 });
-  if (deny === "connections") return iptvText("Max connections reached", { status: 403 });
+  if (deny === "connections") return iptvText("Max connections reached. You are using all allowed streams. Please disconnect another device or increase your connection limit in the panel.", { status: 403 });
   if (deny === "rate") return iptvText("Rate limit exceeded", { status: 429 });
   if (deny === "blocklist") return iptvText("Access blocked", { status: 403 });
   if (deny === "country") return iptvText("Country not allowed", { status: 403 });

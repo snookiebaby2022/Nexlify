@@ -30,7 +30,7 @@ export async function countLineSessions(lineId: string) {
     where: { lineId, lastSeenAt: { gte: staleBefore } },
     _count: true,
   });
-  return result.length || 1;
+  return result.length;
 }
 
 export async function lineHasConnectionCapacity(
