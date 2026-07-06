@@ -25,7 +25,12 @@ export default function EpgSourcesPage() {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/epg-sources?action=sources");
-      if (res.ok) setSources(await res.json());
+      if (res.ok) {
+        const data = await res.json();
+        setSources(Array.isArray(data) ? data : []);
+      }
+    } catch (err) {
+      console.error("Failed to load EPG sources:", err);
     } finally {
       setLoading(false);
     }

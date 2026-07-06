@@ -7,13 +7,15 @@ import { Hammer, Fingerprint } from "lucide-react";
 import { IpWithFlag } from "@/components/ip-with-flag";
 import { subscriptionPaths } from "@/lib/panel-paths";
 
-function formatConnDuration(startedAt: string, lastSeenAt: string): string {
+function formatConnDuration(startedAt: string | Date, lastSeenAt: string | Date): string {
   const sec = Math.max(
     0,
     Math.floor((new Date(lastSeenAt).getTime() - new Date(startedAt).getTime()) / 1000)
   );
-  const m = Math.floor(sec / 60);
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
   return `${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
 }
 

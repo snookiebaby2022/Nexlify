@@ -53,8 +53,8 @@ function StreamInfoCell({ stream }: { stream: Stream }) {
     );
   }
   const kbps = stream.maxSpeedKbps ?? stream.minSpeedKbps;
-  const videoCodec = st.playbackMode === "proxy" ? "h264" : null;
-  const audioCodec = st.playbackMode === "proxy" ? "aac" : null;
+  const videoCodec = st.videoCodec ?? (st.playbackMode === "transcode" ? "h264" : null);
+  const audioCodec = st.audioCodec ?? (st.playbackMode === "transcode" ? "aac" : null);
   return (
     <div className="xui-stream-info">
       {kbps ? <div className="xui-stream-info-line">{kbps.toLocaleString()} Kbps</div> : null}

@@ -14,6 +14,9 @@ export type StreamLiveStat = {
   displayStatus: string;
   playbackMode: StreamPlaybackMode;
   servers: { serverId: string; serverName: string; viewers: number; uptimeSeconds: number | null }[];
+  audioCodec?: string | null;
+  videoCodec?: string | null;
+  quality?: string | null;
 };
 
 export type StreamStatsInput = StreamForPlaybackMode & {

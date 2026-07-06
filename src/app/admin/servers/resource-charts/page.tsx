@@ -61,9 +61,9 @@ export default function ServerResourceChartsPage() {
               return {
                 ...prev,
                 [s.id]: {
-                  cpu: [...m.cpu.slice(-maxPoints + 1), d.cpuPercent ?? 0],
-                  ram: [...m.ram.slice(-maxPoints + 1), d.ramPercent ?? 0],
-                  disk: [...m.disk.slice(-maxPoints + 1), d.diskPercent ?? 0],
+                  cpu: [...m.cpu.slice(-maxPoints + 1), d.cpu ?? d.cpuPercent ?? 0],
+                  ram: [...m.ram.slice(-maxPoints + 1), d.ram ?? d.ramPercent ?? 0],
+                  disk: [...m.disk.slice(-maxPoints + 1), d.disk ?? d.diskPercent ?? 0],
                 },
               };
             });

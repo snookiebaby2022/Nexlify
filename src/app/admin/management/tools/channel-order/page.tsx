@@ -43,16 +43,22 @@ export default function ChannelOrderPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-lg">
+    <div className="space-y-6 max-w-4xl">
       <div className="flex flex-wrap gap-3">
         <h1 className="text-2xl font-semibold flex-1">Channel order</h1>
         <Link href="/admin/management/tools" className="text-sm" style={{ color: "var(--accent)" }}>← Tools</Link>
       </div>
       <p className="text-sm" style={{ color: "var(--muted)" }}>Order live channels as clients see them in playlists. <strong>Total: {streams.length} channels</strong></p>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
+        <select className="rounded border px-3 py-2 bg-transparent text-sm" style={{ borderColor: "var(--border)" }} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+          <option value="">All categories</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
         <button
           type="button"
-          className="text-xs px-3 py-1.5 rounded border"
+          className="text-xs px-3 py-1.5 rounded border cursor-pointer"
           style={{ borderColor: "var(--border)" }}
           onClick={() => {
             const sorted = [...streams].sort((a, b) => a.name.localeCompare(b.name));
@@ -64,7 +70,7 @@ export default function ChannelOrderPage() {
         </button>
         <button
           type="button"
-          className="text-xs px-3 py-1.5 rounded border"
+          className="text-xs px-3 py-1.5 rounded border cursor-pointer"
           style={{ borderColor: "var(--border)" }}
           onClick={() => {
             if (!confirm("Reset to original server order?")) return;
@@ -74,23 +80,21 @@ export default function ChannelOrderPage() {
         >
           Reset to Default
         </button>
+        <div className="flex-1" />
+        <button type="button" onClick={save} className="rounded px-4 py-2 cursor-pointer text-sm font-medium" style={{ background: "var(--accent)", color: "#fff" }}>Save order</button>
       </div>
-      <select className="rounded border px-3 py-2 bg-transparent w-full max-w-xs" style={{ borderColor: "var(--border)" }} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-        <option value="">All categories</option>
-        {categories.map((c) => (
-          <option key={c.id} value={c.id}>{c.name}</option>
-        ))}
-      </select>
-      <ul className="space-y-2">
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {streams.map((s, i) => (
-          <li key={s.id} className="flex items-center gap-2 rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
-            <span className="flex-1">{s.name}</span>
-            <button type="button" className="text-xs cursor-pointer" onClick={() => move(i, -1)}>↑</button>
-            <button type="button" className="text-xs cursor-pointer" onClick={() => move(i, 1)}>↓</button>
+          <li key={s.id} className="flex items-center gap-2 rounded border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
+            <span className="text-xs tabular-nums w-8 text-right shrink-0" style={{ color: "var(--muted)" }}>{i + 1}</span>
+            <span className="flex-1 text-sm truncate">{s.name}</span>
+            <div className="flex gap-1">
+              <button type="button" className="w-6 h-6 rounded flex items-center justify-center text-xs cursor-pointer hover:bg-white/10" onClick={() => move(i, -1)}>↑</button>
+              <button type="button" className="w-6 h-6 rounded flex items-center justify-center text-xs cursor-pointer hover:bg-white/10" onClick={() => move(i, 1)}>↓</button>
+            </div>
           </li>
         ))}
       </ul>
-      <button type="button" onClick={save} className="rounded px-4 py-2 cursor-pointer" style={{ background: "var(--accent)", color: "#fff" }}>Save order</button>
       {msg && <p className="text-sm">{msg}</p>}
     </div>
   );

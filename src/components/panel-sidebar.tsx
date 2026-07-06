@@ -368,7 +368,8 @@ export function PanelSidebar({
     setOpenIds((prev) => {
       const active = activeGroupIds(pathname, entries);
       if (active.size === 0) return prev;
-      const next = new Set(active);
+      // Merge active groups with previously open groups instead of replacing
+      const next = new Set([...prev, ...active]);
       persistOpenIds(next);
       return next;
     });
@@ -393,7 +394,7 @@ export function PanelSidebar({
       if (next.has(id)) {
         next.delete(id);
       } else {
-        next.clear();
+        // Allow multiple groups to be open simultaneously
         next.add(id);
       }
       persistOpenIds(next);
