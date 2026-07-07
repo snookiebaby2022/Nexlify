@@ -85,7 +85,9 @@ export function BouquetForm({
             <Package size={20} style={{ color: "#00c0ef" }} />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">{title}</h1>
+            <h1 className="text-xl font-semibold">
+              {title}{name.trim() ? `: ${name}` : ""}
+            </h1>
             <p className="text-xs" style={{ color: "var(--muted)" }}>
               {bouquetId ? "Edit bouquet contents and order" : "Create a new bouquet and assign streams"}
             </p>
