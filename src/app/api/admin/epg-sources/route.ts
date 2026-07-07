@@ -49,6 +49,8 @@ export async function POST(req: NextRequest) {
         },
       });
       await invalidateEpgCache();
+      // Auto-sync new source in background
+      void syncEpgSource(source.id).catch(() => {});
       return NextResponse.json({ id: source.id, name: source.name, url: source.url, type: source.sourceType, isActive: true, priority: 0, lastSyncAt: null, lastError: null, channelCount: 0 });
     }
     if (action === "update") {

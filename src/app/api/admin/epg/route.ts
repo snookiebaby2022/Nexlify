@@ -61,6 +61,10 @@ export async function POST(req: NextRequest) {
     },
   });
   await invalidateEpgCache();
+
+  // Auto-sync the new source in background
+  void syncEpgSource(source.id).catch(() => {});
+
   return NextResponse.json({ source });
 }
 
