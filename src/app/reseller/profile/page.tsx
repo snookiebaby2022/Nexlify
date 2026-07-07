@@ -29,7 +29,7 @@ export default function ResellerProfilePage() {
   } | null>(null);
 
   function load() {
-    fetch("/api/admin/profile")
+    fetch("/api/reseller/profile")
       .then((r) => r.json())
       .then((d) => {
         setUser(d.user);
@@ -59,7 +59,7 @@ export default function ResellerProfilePage() {
     e.preventDefault();
     setSaving(true);
     setMsg("");
-    const res = await fetch("/api/admin/profile", {
+    const res = await fetch("/api/reseller/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...form, avatarConfig, avatarUrl: null }),
@@ -77,7 +77,7 @@ export default function ResellerProfilePage() {
 
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
-    const res = await fetch("/api/admin/profile", {
+    const res = await fetch("/api/reseller/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(passwords),

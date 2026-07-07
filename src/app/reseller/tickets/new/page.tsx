@@ -13,7 +13,7 @@ export default function ResellerNewTicketPage() {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const res = await fetch("/api/admin/tickets", {
+    const res = await fetch("/api/reseller/tickets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),

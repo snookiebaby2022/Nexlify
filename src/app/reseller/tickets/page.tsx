@@ -9,7 +9,7 @@ export default function ResellerTicketsPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
 
   useEffect(() => {
-    fetch("/api/admin/tickets").then((r) => r.json()).then((d) => setTickets(d.tickets ?? []));
+    fetch("/api/reseller/tickets").then((r) => r.json()).then((d) => setTickets(d.tickets ?? []));
   }, []);
 
   return (

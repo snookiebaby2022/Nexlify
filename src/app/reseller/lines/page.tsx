@@ -14,11 +14,11 @@ function ResellerLinesContent() {
   function load() {
     setError("");
     Promise.all([
-      fetch("/api/admin/lines").then(async (r) => {
+      fetch("/api/reseller/lines").then(async (r) => {
         if (!r.ok) throw new Error("lines");
         return r.json();
       }),
-      fetch("/api/admin/bouquets").then(async (r) => {
+      fetch("/api/reseller/bouquets").then(async (r) => {
         if (!r.ok) throw new Error("bouquets");
         return r.json();
       }),
