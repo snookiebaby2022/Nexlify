@@ -234,9 +234,9 @@ export function ImportForm({
                   <FileText size={24} style={{ color: "var(--accent)" }} />
                   <div>
                     <p className="text-sm font-medium">{fileName}</p>
-                    <p className="text-xs" style={{ color: "var(--muted)" }}>
-                      {content.split("\n").filter((l) => l.includes("http")).length} streams detected
-                    </p>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  {content.split("\n").filter((l) => l.trim().startsWith("#EXTINF")).length} streams detected
+                </p>
                   </div>
                   <button
                     type="button"
