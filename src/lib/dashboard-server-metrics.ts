@@ -1,7 +1,7 @@
 import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
-import { listActiveConnections } from "@/lib/connections";
+import { listActiveConnections, listLiveConnections } from "@/lib/connections";
 
 const STALE_MS = 5 * 60 * 1000;
 const CONN_STALE_MS = 24 * 60 * 60 * 1000; // Match listActiveConnections 24h window
@@ -182,7 +182,7 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
   let networkOutMbps = snap ? Number(snap.bytesOut) / 125_000 / 60 : 0;
 
   if (!snap) {
-    const activeConns = await listActiveConnections();
+    const activeConns = await listLiveConnections();
     const estimated = activeConns.length * 4;
     networkInMbps = Math.round(estimated / 10);
     networkOutMbps = Math.round(estimated);
@@ -227,7 +227,7 @@ export async function getDashboardSummary() {
       select: { lineId: true },
       distinct: ["lineId"],
     }),
-    listActiveConnections(),
+    listLiveConnections(),
     prisma.streamServer.count(),
     prisma.streamServer.count({
       where: {

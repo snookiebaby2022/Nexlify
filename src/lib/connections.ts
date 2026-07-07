@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { cacheGetOrSet, cacheDel } from "./cache";
 
 const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours — connections stay alive until explicitly removed on stream close
+const LIVE_STALE_MS = 2 * 60 * 1000; // 2 minutes — for "live" connections display (shows who is actually watching now)
 const CONNECTIONS_CACHE_TTL = 5; // 5 seconds — short TTL for dashboard responsiveness
 
 export async function countActiveConnectionsForLine(lineId: string) {
@@ -161,6 +162,20 @@ export async function listActiveConnections(ownerId?: string) {
       orderBy: { lastSeenAt: "desc" },
       take: 5000, // Safety limit — dashboard should use countActiveConnections() for totals
     });
+  });
+}
+
+/** List connections that are actually live right now (refreshed within last 2 minutes) */
+export async function listLiveConnections(ownerId?: string) {
+  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
+  return prisma.liveConnection.findMany({
+    where: {
+      lastSeenAt: { gte: staleBefore },
+      ...(ownerId ? { line: { ownerId } } : {}),
+    },
+    include: connectionInclude,
+    orderBy: { lastSeenAt: "desc" },
+    take: 5000,
   });
 }
 

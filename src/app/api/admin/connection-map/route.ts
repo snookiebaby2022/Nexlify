@@ -19,8 +19,8 @@ export async function GET() {
     const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000); // Match connection tracking 24h window
 
     // Use LiveConnection for real-time count and per-country aggregation
-    const { listActiveConnections } = await import("@/lib/connections");
-    const activeConns = await listActiveConnections(scope);
+    const { listLiveConnections } = await import("@/lib/connections");
+    const activeConns = await listLiveConnections(scope);
     const total = activeConns.length;
 
     // Cleanup stale ConnectionGeography rows

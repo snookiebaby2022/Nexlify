@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth";
 import {
   clearActiveConnections,
   deleteActiveConnection,
-  listActiveConnections,
+  listLiveConnections,
 } from "@/lib/connections";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
@@ -14,7 +14,7 @@ export async function GET() {
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const connections = await listActiveConnections(ownerScope(session));
+  const connections = await listLiveConnections(ownerScope(session));
   const mapped = connections.map((c) => ({
     ...c,
     startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
