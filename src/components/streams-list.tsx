@@ -295,7 +295,7 @@ export function StreamsList({
             {filtered.map((s, i) => {
               const st = s.liveStats;
               const { name: serverName, host: serverHost } = serverLabel(s);
-              const rowId = s.sortOrder && s.sortOrder > 0 ? s.sortOrder : total - ((page - 1) * pageSize + i);
+              const rowId = (page - 1) * pageSize + i + 1;
               const isDirect = st?.status === "direct";
               const isOnline = st?.status === "online" && (st.uptimeSeconds ?? 0) > 0;
               const viewers = st?.viewers ?? 0;

@@ -76,7 +76,7 @@ export function PanelLiveChat({ username }: { username: string }) {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-[300] flex flex-col items-end gap-2">
+    <div className="fixed bottom-16 right-4 z-[300] flex flex-col items-end gap-2">
       {open && (
         <div
           className="w-[min(100vw-2rem,380px)] h-[min(70vh,520px)] rounded-2xl border shadow-2xl flex flex-col overflow-hidden"

@@ -45,7 +45,7 @@ export default function ChatAssistant() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-6 z-50 w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+        className="fixed bottom-36 right-6 z-50 w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
         style={{ background: "var(--accent)" }}
         title="Chat support"
       >
@@ -55,7 +55,7 @@ export default function ChatAssistant() {
   }
 
   return (
-    <div className="fixed bottom-24 right-6 z-50 w-80 rounded-2xl border shadow-2xl overflow-hidden flex flex-col" style={{ borderColor: "var(--border)", background: "var(--bg-card)", height: "480px" }}>
+    <div className="fixed bottom-36 right-6 z-50 w-80 rounded-2xl border shadow-2xl overflow-hidden flex flex-col" style={{ borderColor: "var(--border)", background: "var(--bg-card)", height: "480px" }}>
       <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "var(--border)", background: "linear-gradient(90deg, #00c0ef, #5eb8e8)" }}>
         <span className="text-sm font-semibold text-white">Nexlify Assistant</span>
         <div className="flex items-center gap-1">
