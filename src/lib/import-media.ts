@@ -280,7 +280,7 @@ export async function importM3uEntries(
           type,
           categoryId: meta.categoryId,
           serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
-          epgChannelId: entry.tvgId ?? null,
+          epgChannelId: entry.tvgId || entry.tvgName || entry.channelId || null,
           seriesName: type === "SERIES" ? entry.name : null,
           agentStartCmd: type === "LIVE" ? liveAgentStartCmd : agentStartCmd,
           isOnDemand: onDemand,

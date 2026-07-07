@@ -4,6 +4,8 @@ export type M3uEntry = {
   group?: string;
   logo?: string;
   tvgId?: string;
+  tvgName?: string;
+  channelId?: string;
 };
 
 export function parseM3u(content: string): M3uEntry[] {
@@ -20,11 +22,15 @@ export function parseM3u(content: string): M3uEntry[] {
       const groupMatch = line.match(/group-title="([^"]*)"/i);
       const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
       const idMatch = line.match(/tvg-id="([^"]*)"/i);
+      const tvgNameMatch = line.match(/tvg-name="([^"]*)"/i);
+      const channelIdMatch = line.match(/channel-id="([^"]*)"/i) ?? line.match(/channel_id="([^"]*)"/i);
       pending = {
         name: nameMatch?.[1]?.trim() ?? "Unknown",
         group: groupMatch?.[1],
         logo: logoMatch?.[1],
         tvgId: idMatch?.[1],
+        tvgName: tvgNameMatch?.[1],
+        channelId: channelIdMatch?.[1],
       };
       continue;
     }
@@ -44,6 +50,8 @@ export function parseM3u(content: string): M3uEntry[] {
         group: pending.group,
         logo: pending.logo,
         tvgId: pending.tvgId,
+        tvgName: pending.tvgName,
+        channelId: pending.channelId,
       });
       pending = null;
     }
