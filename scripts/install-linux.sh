@@ -488,6 +488,13 @@ progress_step "Starting services"
 bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1
 bash scripts/pm2-boot-enable.sh >>"$INSTALL_LOG" 2>&1 || true
 
+# Setup watchdog cron (auto-healing every 5 minutes)
+if [ -f scripts/nexlify-watchdog.sh ]; then
+  chmod +x scripts/nexlify-watchdog.sh
+  (crontab -l 2>/dev/null | grep -v nexlify-watchdog; echo "*/5 * * * * $PANEL_DIR/scripts/nexlify-watchdog.sh") | crontab -
+  log "Watchdog cron installed (auto-heals every 5 minutes)"
+fi
+
 if [ "$SKIP_NGINX" -eq 0 ] && [ "${NEXLIFY_USE_NGINX:-1}" = "1" ] && [ -n "$DOMAIN" ] && [ "$DOMAIN" != "localhost" ]; then
   mkdir -p /etc/nginx/conf.d
   cp nginx/nexlify-upstream.conf /etc/nginx/conf.d/nexlify-upstream.conf

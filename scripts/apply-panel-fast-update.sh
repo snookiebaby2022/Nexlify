@@ -318,6 +318,13 @@ cmd_restart() {
     pm2 save 2>/dev/null || true
   fi
   echo "PM2 restart complete."
+
+  # Ensure watchdog cron is installed
+  if [ -f "$ROOT/scripts/nexlify-watchdog.sh" ]; then
+    chmod +x "$ROOT/scripts/nexlify-watchdog.sh"
+    (crontab -l 2>/dev/null | grep -v nexlify-watchdog; echo "*/5 * * * * $ROOT/scripts/nexlify-watchdog.sh") | crontab -
+    echo "Watchdog cron ensured."
+  fi
 }
 
 cmd_recover() {
