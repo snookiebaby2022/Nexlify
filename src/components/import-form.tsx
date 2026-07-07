@@ -31,6 +31,8 @@ export function ImportForm({
   const [categoryId, setCategoryId] = useState("");
   const [serverId, setServerId] = useState("");
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [bouquets, setBouquets] = useState<{ id: string; name: string }[]>([]);
+  const [bouquetIds, setBouquetIds] = useState<string[]>([]);
   const [result, setResult] = useState("");
   const [onDemandDefault, setOnDemandDefault] = useState(false);
   const [serverIds, setServerIds] = useState<string[]>([]);
@@ -44,6 +46,9 @@ export function ImportForm({
     fetch("/api/admin/categories")
       .then((r) => r.json())
       .then((d) => setCategories(d.categories));
+    fetch("/api/admin/bouquets")
+      .then((r) => r.json())
+      .then((d) => setBouquets(d.bouquets ?? []));
   }, []);
 
   async function handleFile(file: File) {
@@ -101,6 +106,7 @@ export function ImportForm({
             categoryId: categoryId || null,
             serverId: serverIds[0] || serverId || null,
             defaultOnDemand: streamType === "LIVE" ? onDemandDefault : undefined,
+            bouquetIds: bouquetIds.length ? bouquetIds : undefined,
           }
         : tab === "vodfile"
           ? {
@@ -310,6 +316,28 @@ export function ImportForm({
               </option>
             ))}
           </select>
+          {bouquets.length > 0 && (
+            <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
+              <div className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>Assign to bouquets</div>
+              <div className="flex flex-wrap gap-2 max-h-[120px] overflow-y-auto">
+                {bouquets.map((b) => (
+                  <label key={b.id} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={bouquetIds.includes(b.id)}
+                      onChange={(e) => {
+                        setBouquetIds(e.target.checked
+                          ? [...bouquetIds, b.id]
+                          : bouquetIds.filter((id) => id !== b.id)
+                        );
+                      }}
+                    />
+                    {b.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <ServerTreePicker
