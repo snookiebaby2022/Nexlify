@@ -95,6 +95,16 @@ if ! node -e "require('tailwindcss')" 2>/dev/null; then
   cd "$PANEL_DIR" && npm install tailwindcss 2>/dev/null || true
 fi
 
+# --- Check 5b: DATABASE_URL uses localhost (not external IP) ---
+DB_URL=$(grep '^DATABASE_URL=' "$PANEL_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"')
+if echo "$DB_URL" | grep -q '@[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*:'; then
+  log "WARN: DATABASE_URL uses external IP — fixing to localhost"
+  CORRECT_URL=$(echo "$DB_URL" | sed 's|@[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*:|@localhost:|')
+  sed -i "s|$DB_URL|$CORRECT_URL|" "$PANEL_DIR/.env"
+  log "FIX: DATABASE_URL updated to localhost"
+  pm2 restart "$PM2_APP" 2>/dev/null || true
+fi
+
 # --- Check 6: tsx module present (for cron) ---
 if ! node -e "require('tsx')" 2>/dev/null; then
   log "WARN: tsx missing — installing"
