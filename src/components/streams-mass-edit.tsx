@@ -45,8 +45,6 @@ export function StreamsMassEdit({
   const [pageSize, setPageSize] = useState(100);
   const [search, setSearch] = useState("");
 
-  const [msg, setMsg] = useState("");
-
 
 
   const loadStreams = useCallback(() => {
