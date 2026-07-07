@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   VOD_IMPORT_FORMAT_EXAMPLE,
   VOD_EPISODE_IMPORT_EXAMPLE,
 } from "@/lib/vod-import-parser";
 import { ServerTreePicker } from "@/components/server-tree-picker";
+import { Upload, FileText, X } from "lucide-react";
 
 export function ImportForm({
   title,
@@ -33,6 +34,8 @@ export function ImportForm({
   const [result, setResult] = useState("");
   const [onDemandDefault, setOnDemandDefault] = useState(false);
   const [serverIds, setServerIds] = useState<string[]>([]);
+  const [fileName, setFileName] = useState("");
+  const [dragOver, setDragOver] = useState(false);
 
   const vodExample =
     streamType === "SERIES" ? VOD_EPISODE_IMPORT_EXAMPLE : VOD_IMPORT_FORMAT_EXAMPLE;
@@ -43,16 +46,42 @@ export function ImportForm({
       .then((d) => setCategories(d.categories));
   }, []);
 
+  async function handleFile(file: File) {
+    setFileName(file.name);
+    setContent(await file.text());
+  }
+
   async function onM3uFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setContent(await file.text());
+    await handleFile(file);
   }
 
   async function onVodFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setContent(await file.text());
+    await handleFile(file);
+  }
+
+  const onDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) await handleFile(file);
+  }, []);
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  }, []);
+
+  const onDragLeave = useCallback(() => {
+    setDragOver(false);
+  }, []);
+
+  function clearFile() {
+    setContent("");
+    setFileName("");
   }
 
   async function runImport() {
@@ -175,20 +204,85 @@ export function ImportForm({
         ) : tab === "m3u" && allowM3u ? (
           <>
             <input
-              placeholder="M3U URL (optional)"
+              placeholder="M3U URL (e.g. http://provider.com/get.php?username=...&type=m3u_plus&output=ts)"
               className="w-full rounded border px-3 py-2 bg-transparent"
               style={{ borderColor: "var(--border)" }}
               value={url}
               onChange={(e) => setUrl(e.target.value)}
             />
+
+            <div className="text-xs text-center" style={{ color: "var(--muted)" }}>— or —</div>
+
+            {/* Drag & drop file upload */}
+            <div
+              className={`rounded-lg border-2 border-dashed p-8 text-center transition-colors ${
+                dragOver ? "border-blue-400 bg-blue-50/5" : ""
+              }`}
+              style={{ borderColor: dragOver ? undefined : "var(--border)" }}
+              onDrop={onDrop}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+            >
+              {fileName ? (
+                <div className="flex items-center justify-center gap-3">
+                  <FileText size={24} style={{ color: "var(--accent)" }} />
+                  <div>
+                    <p className="text-sm font-medium">{fileName}</p>
+                    <p className="text-xs" style={{ color: "var(--muted)" }}>
+                      {content.split("\n").filter((l) => l.includes("http")).length} streams detected
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearFile}
+                    className="p-1 rounded hover:bg-white/10 cursor-pointer"
+                    title="Remove file"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Upload size={32} className="mx-auto mb-3" style={{ color: "var(--muted)" }} />
+                  <p className="text-sm font-medium mb-1">Drop M3U file here</p>
+                  <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
+                    or click to browse
+                  </p>
+                  <label
+                    className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs cursor-pointer hover:bg-white/5 transition-colors"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <Upload size={12} />
+                    Choose file
+                    <input
+                      type="file"
+                      accept=".m3u,.m3u8,.txt"
+                      className="hidden"
+                      onChange={onM3uFile}
+                    />
+                  </label>
+                </>
+              )}
+            </div>
+
             <textarea
               placeholder="Or paste M3U content…"
-              className="w-full rounded border px-3 py-2 bg-transparent min-h-[160px] font-mono text-xs"
+              className="w-full rounded border px-3 py-2 bg-transparent min-h-[120px] font-mono text-xs"
               style={{ borderColor: "var(--border)" }}
               value={content}
               onChange={(e) => setContent(e.target.value)}
             />
-            <input type="file" accept=".m3u,.m3u8,text/*" onChange={onM3uFile} />
+
+            <div className="rounded-lg border px-4 py-3 text-xs space-y-1" style={{ borderColor: "var(--border)", background: "rgba(34,197,94,0.05)" }}>
+              <p className="font-medium text-green-400">What gets imported:</p>
+              <ul className="list-disc list-inside space-y-0.5" style={{ color: "var(--muted)" }}>
+                <li>Channel names from <code>#EXTINF</code> title</li>
+                <li>Icons from <code>tvg-logo</code> attribute</li>
+                <li>EPG channel IDs from <code>tvg-id</code> attribute</li>
+                <li>Categories from <code>group-title</code> attribute</li>
+                <li>Stream URLs</li>
+              </ul>
+            </div>
           </>
         ) : (
           allowFolder && (
@@ -243,7 +337,8 @@ export function ImportForm({
         <button
           type="button"
           onClick={runImport}
-          className="rounded py-2 px-4 font-medium cursor-pointer"
+          disabled={!content && !url && !path}
+          className="rounded py-2 px-4 font-medium cursor-pointer disabled:opacity-50"
           style={{ background: "var(--accent)", color: "#fff" }}
         >
           Start import
