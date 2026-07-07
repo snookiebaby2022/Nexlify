@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { ProgressBar, useProgress } from "@/components/progress-bar";
 
 const PAGE_SIZES = [50, 100, 200, 500] as const;
 
@@ -44,6 +45,7 @@ export function StreamsMassEdit({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(100);
   const [search, setSearch] = useState("");
+  const progress = useProgress();
 
 
 
@@ -124,9 +126,7 @@ export function StreamsMassEdit({
 
 
   async function apply() {
-
     if (!selected.size) return;
-
     if (action === "delete" && !confirm(`Delete ${selected.size} items?`)) return;
 
     if (action === "setSpeed") {
@@ -173,70 +173,50 @@ export function StreamsMassEdit({
 
 
 
+    setMsg("");
+    progress.start(selected.size, `Processing ${action}…`);
+
     const res = await fetch("/api/admin/streams/mass", {
-
       method: "POST",
-
       headers: { "Content-Type": "application/json" },
-
       body: JSON.stringify({
-
         ids: [...selected],
-
         action,
-
         categoryId: action === "setCategory" ? categoryId || null : undefined,
-
         vodMode: action === "setVodMode" ? vodMode : undefined,
-
         archiveDays: action === "setVodMode" && archiveDays ? Number(archiveDays) : undefined,
-
         minSpeedKbps:
-
           action === "setSpeed"
-
             ? clearSpeed && minSpeed.trim() === ""
-
               ? null
-
               : minSpeed.trim() === ""
-
                 ? undefined
-
                 : Number(minSpeed)
-
             : undefined,
-
         maxSpeedKbps:
-
           action === "setSpeed"
-
             ? clearSpeed && maxSpeed.trim() === ""
-
               ? null
-
               : maxSpeed.trim() === ""
-
                 ? undefined
-
                 : Number(maxSpeed)
-
             : undefined,
-
         backupUrl: action === "setBackupUrl" ? backupUrl.trim() : undefined,
-
       }),
-
     });
 
     const data = await res.json();
 
-    setMsg(res.ok ? `Updated ${data.count} items` : data.error);
+    if (res.ok) {
+      progress.finish();
+      setMsg(`Updated ${data.count} items`);
+    } else {
+      progress.error(data.error ?? "Failed");
+      setMsg(data.error ?? "Failed");
+    }
 
     setSelected(new Set());
-
     loadStreams();
-
   }
 
 
@@ -436,6 +416,8 @@ export function StreamsMassEdit({
       </div>
 
       {msg && <p className="text-sm">{msg}</p>}
+
+      <ProgressBar progress={progress} />
 
       <div className="flex flex-wrap items-center gap-3">
         <input
