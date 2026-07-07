@@ -38,14 +38,13 @@ export const CONTENT_FOLDERS: ContentFolderDef[] = [
     title: "EPG",
     description: "Electronic program guide sources and channel mapping.",
     adminRedirect: "/admin/epg",
-    resellerRedirect: "/reseller/content/epg",
+    resellerRedirect: "/reseller/epg_view",
   },
   {
     slug: "playlists",
     title: "Playlists",
     description: "M3U playlists and imported channel lists.",
     adminRedirect: "/admin/import/m3u",
-    resellerRedirect: "/reseller/content/playlists",
   },
   {
     slug: "created",
