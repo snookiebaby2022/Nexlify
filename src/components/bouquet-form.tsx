@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Package, Plus, Minus, ChevronUp, ChevronDown } from "lucide-react";
 import type { DualListItem } from "@/components/dual-list-picker";
 import { XuiDualListPicker } from "@/components/xui-dual-list-picker";
 
@@ -71,87 +72,136 @@ export function BouquetForm({
     return <p className="text-sm" style={{ color: "var(--muted)" }}>Loading bouquet…</p>;
   }
 
+  const liveCount = streamIds.filter((id) => items.find((i) => i.id === id)?.sublabel === "LIVE").length;
+  const movieCount = streamIds.filter((id) => items.find((i) => i.id === id)?.sublabel === "MOVIE").length;
+  const seriesCount = streamIds.filter((id) => items.find((i) => i.id === id)?.sublabel === "SERIES").length;
+
   return (
-    <div className="max-w-5xl">
-      <form onSubmit={save} className="rounded-lg border overflow-visible" style={{ borderColor: "var(--border)" }}>
-        <div
-          className="flex items-center justify-between px-4 py-3"
-          style={{ background: "linear-gradient(90deg, #00c0ef 0%, #3c8dbc 100%)" }}
+    <div className="max-w-5xl space-y-4">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "rgba(0,192,239,0.15)" }}>
+            <Package size={20} style={{ color: "#00c0ef" }} />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold">{title}</h1>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              {bouquetId ? "Edit bouquet contents and order" : "Create a new bouquet and assign streams"}
+            </p>
+          </div>
+        </div>
+        <Link
+          href={backHref}
+          className="text-sm px-4 py-2 rounded border font-medium"
+          style={{ borderColor: "var(--border)", color: "var(--muted)" }}
         >
-          <h1 className="text-lg font-semibold text-white">{title}</h1>
-          <Link
-            href={backHref}
-            className="text-sm px-4 py-1.5 rounded font-medium text-white border border-white/70 hover:bg-white/10"
-          >
-            {manageLabel}
-          </Link>
+          {manageLabel}
+        </Link>
+      </div>
+
+      <form onSubmit={save} className="space-y-4">
+        {/* Name + Stats */}
+        <div className="rounded-lg border p-4 md:p-5 space-y-4" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
+          <div className="grid md:grid-cols-2 gap-4">
+            <label className="block text-sm">
+              <span className="font-medium mb-1.5 block">
+                Bouquet name <span style={{ color: "#ef4444" }}>*</span>
+              </span>
+              <input
+                required
+                className="w-full rounded border px-3 py-2.5 text-sm bg-transparent"
+                style={{ borderColor: "var(--border)" }}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Premium UK, Sports Pack"
+                list="bouquet-name-suggestions"
+              />
+              <datalist id="bouquet-name-suggestions">
+                {items.slice(0, 20).map((i) => (
+                  <option key={i.id} value={i.label} />
+                ))}
+              </datalist>
+            </label>
+
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="rounded-lg border px-3 py-2 text-center min-w-[80px]" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.1)" }}>
+                <p className="text-lg font-bold tabular-nums">{streamIds.length}</p>
+                <p className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Total</p>
+              </div>
+              {liveCount > 0 && (
+                <div className="rounded-lg border px-3 py-2 text-center min-w-[80px]" style={{ borderColor: "var(--border)", background: "rgba(34,197,94,0.05)" }}>
+                  <p className="text-lg font-bold tabular-nums text-green-400">{liveCount}</p>
+                  <p className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Live</p>
+                </div>
+              )}
+              {movieCount > 0 && (
+                <div className="rounded-lg border px-3 py-2 text-center min-w-[80px]" style={{ borderColor: "var(--border)", background: "rgba(59,130,246,0.05)" }}>
+                  <p className="text-lg font-bold tabular-nums text-blue-400">{movieCount}</p>
+                  <p className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Movies</p>
+                </div>
+              )}
+              {seriesCount > 0 && (
+                <div className="rounded-lg border px-3 py-2 text-center min-w-[80px]" style={{ borderColor: "var(--border)", background: "rgba(168,85,247,0.05)" }}>
+                  <p className="text-lg font-bold tabular-nums text-purple-400">{seriesCount}</p>
+                  <p className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Series</p>
+                </div>
+              )}
+              <div className="rounded-lg border px-3 py-2 text-center min-w-[80px]" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.1)" }}>
+                <p className="text-lg font-bold tabular-nums">{items.length}</p>
+                <p className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Catalog</p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div className="p-4 md:p-6 space-y-4" style={{ background: "var(--bg-card)" }}>
-          <label className="block text-sm max-w-xl">
-            <span className="font-medium">
-              Name <span style={{ color: "#ef4444" }}>*</span>
-            </span>
-            <input
-              required
-              className="mt-1.5 w-full rounded border px-3 py-2.5 text-sm bg-white"
-              style={{ borderColor: "#d1d5db", color: "#111" }}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Premium UK, Sports Pack"
-              list="bouquet-name-suggestions"
-            />
-            <datalist id="bouquet-name-suggestions">
-              {items.slice(0, 20).map((i) => (
-                <option key={i.id} value={i.label} />
-              ))}
-            </datalist>
-          </label>
+        {/* Type filter */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-xs font-medium mr-1" style={{ color: "var(--muted)" }}>Show:</span>
+          {(["", "LIVE", "MOVIE", "SERIES"] as const).map((t) => (
+            <button
+              key={t || "all"}
+              type="button"
+              className="text-xs px-3 py-1.5 rounded-full cursor-pointer transition-colors"
+              style={{
+                background: typeFilter === t ? "#3c8dbc" : "transparent",
+                color: typeFilter === t ? "#fff" : "var(--muted)",
+                border: `1px solid ${typeFilter === t ? "#3c8dbc" : "var(--border)"}`,
+              }}
+              onClick={() => setTypeFilter(t)}
+            >
+              {t === "" ? "All" : t === "LIVE" ? "Channels" : t === "MOVIE" ? "Movies" : "Series"}
+            </button>
+          ))}
+          <span className="text-xs ml-auto" style={{ color: "var(--muted)" }}>
+            {pickerItems.length} available
+          </span>
+        </div>
 
-          <div className="flex flex-wrap gap-2 items-center text-sm">
-            <span style={{ color: "var(--muted)" }}>Show in left list:</span>
-            {(["", "LIVE", "MOVIE", "SERIES"] as const).map((t) => (
-              <button
-                key={t || "all"}
-                type="button"
-                className="text-xs px-3 py-1 rounded cursor-pointer border"
-                style={{
-                  background: typeFilter === t ? "#3c8dbc" : "#fff",
-                  color: typeFilter === t ? "#fff" : "#374151",
-                  borderColor: "#d1d5db",
-                }}
-                onClick={() => setTypeFilter(t)}
-              >
-                {t === "" ? "All" : t === "LIVE" ? "Channels" : t === "MOVIE" ? "Movies" : "Series"}
-              </button>
-            ))}
-          </div>
+        {/* Dual list picker */}
+        <XuiDualListPicker
+          items={pickerItems}
+          allItems={items}
+          selectedIds={streamIds}
+          onChange={setStreamIds}
+        />
 
-          <XuiDualListPicker
-            items={pickerItems}
-            allItems={items}
-            selectedIds={streamIds}
-            onChange={setStreamIds}
-          />
-
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            {streamIds.length} stream(s) in bouquet · channel order = line playlist order ·{" "}
-            {items.length} in catalog
-          </p>
-
-          <div className="flex flex-wrap gap-3 pt-2 border-t" style={{ borderColor: "var(--border)" }}>
+        {/* Actions */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t" style={{ borderColor: "var(--border)" }}>
+          <div className="flex gap-3">
             <button
               type="submit"
-              disabled={saving}
-              className="btn-positive rounded px-6 py-2.5 font-medium disabled:opacity-50"
+              disabled={saving || !name.trim()}
+              className="rounded px-6 py-2.5 font-medium cursor-pointer disabled:opacity-50"
+              style={{ background: "var(--accent)", color: "#fff" }}
             >
               {saving ? "Saving…" : bouquetId ? "Save bouquet" : "Add bouquet"}
             </button>
-            <Link href={backHref} className="btn-cancel rounded px-6 py-2.5 text-sm font-medium inline-flex items-center">
+            <Link href={backHref} className="rounded px-6 py-2.5 text-sm font-medium inline-flex items-center border" style={{ borderColor: "var(--border)" }}>
               Cancel
             </Link>
           </div>
-          {msg && <p className="text-sm" style={{ color: "var(--danger)" }}>{msg}</p>}
+          {msg && <p className="text-sm" style={{ color: msg.includes("failed") || msg.includes("error") ? "var(--danger)" : "#22c55e" }}>{msg}</p>}
         </div>
       </form>
     </div>
