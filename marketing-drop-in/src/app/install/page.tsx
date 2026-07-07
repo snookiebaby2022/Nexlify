@@ -25,25 +25,25 @@ export default function InstallPage() {
       />
       <WebPageJsonLd
         path="/install"
-        name="Xtream panel installer for your VPS"
-        description="One-command installer for Nexlify Xtream-compatible IPTV panel on Ubuntu or Debian VPS worldwide."
+        name="Install Nexlify IPTV panel on your server"
+        description="One-command installer for Nexlify IPTV panel on any Ubuntu or Debian server."
         about="Install"
       />
       <SoftwareProductJsonLd path="/install" />
       <HowToJsonLd />
       <div className="mx-auto max-w-4xl px-4 py-16 md:py-24">
         <p className="text-sm font-semibold uppercase tracking-widest text-violet-400">
-          {site.domain} · worldwide VPS
+          {site.domain} · worldwide servers
         </p>
         <h1 className="font-display mt-2 text-3xl font-bold text-white md:text-4xl">
           Install your IPTV panel in one command
         </h1>
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-300 md:text-base">
-          Deploy the full Nexlify IPTV panel on a fresh Ubuntu or Debian VPS. One line to install, sign in
+          Deploy the full Nexlify IPTV panel on a fresh Ubuntu or Debian server. One line to install, sign in
           with the admin password printed at the end, then paste your license key in the panel — no license
-          flag required on the command line. IP installs use plain{" "}
-          <code className="text-violet-300">http://YOUR_IP/login</code> on port 80 (no{" "}
-          <code className="text-violet-300">:3000</code>).
+          flag required on the command line. The panel runs on port{" "}
+          <code className="text-violet-300">80</code> — use{" "}
+          <code className="text-violet-300">http://YOUR_SERVER_IP/login</code>.
         </p>
 
         <PageCta
@@ -58,8 +58,8 @@ export default function InstallPage() {
           <h2 className="font-display text-2xl font-bold text-white">How it works</h2>
           <ol className="list-decimal list-inside space-y-2 text-sm leading-relaxed text-[var(--muted)] md:text-base">
             <li>
-              SSH into your VPS and run the installer with <strong className="text-slate-300">--domain</strong>{" "}
-              set to your server IP or hostname
+              SSH into your server and run the installer with <strong className="text-slate-300">--ip</strong>{" "}
+              set to your server IP address
             </li>
             <li>
               Open the login URL from the terminal output (saved to{" "}
@@ -77,8 +77,7 @@ export default function InstallPage() {
             </li>
           </ol>
           <p className="text-sm leading-relaxed text-[var(--muted)] md:text-base">
-            The installer provisions Node.js, PostgreSQL, Redis, and PM2. Domain installs also configure nginx
-            and optional Let&apos;s Encrypt HTTPS. See{" "}
+            The installer provisions Node.js, PostgreSQL, Redis, and PM2 automatically. See{" "}
             <Link href="/requirements" className="text-violet-400 hover:text-violet-300 underline">
               system requirements
             </Link>{" "}

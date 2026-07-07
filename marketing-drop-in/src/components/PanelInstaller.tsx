@@ -61,10 +61,6 @@ export function PanelInstaller() {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const oneLine = oneClickInstallExample;
-  const domainWithSsl = buildOneClickInstallCommand({
-    domain: "panel.yourdomain.com",
-    email: "you@yourdomain.com",
-  });
 
   return (
     <section className="py-12 space-y-8">
@@ -72,8 +68,8 @@ export function PanelInstaller() {
         <h2 className="text-2xl font-bold text-white">One-click installer</h2>
         <p className="mt-2 text-[var(--muted)] leading-relaxed">
           Paste one command as <strong className="text-slate-300">root</strong>. Wait 5–15 minutes. Sign in at{" "}
-          <code className="text-violet-300">http://YOUR_IP/login</code> — port 80, no{" "}
-          <code className="text-violet-300">:3000</code>. Add your license in the panel after login.
+          <code className="text-violet-300">http://YOUR_SERVER_IP/login</code> — port 80.
+          Add your license in the panel after login.
         </p>
         <p className="mt-1 text-xs text-slate-500">Installer {INSTALLER_VERSION}</p>
       </div>
@@ -98,13 +94,13 @@ export function PanelInstaller() {
           </div>
           <div>
             <h3 className="text-lg font-semibold text-white">Copy &amp; run</h3>
-            <p className="text-xs text-[var(--muted)]">Only --domain is required</p>
+            <p className="text-xs text-[var(--muted)]">Only --ip is required</p>
           </div>
         </div>
 
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm space-y-2">
           <p className="font-semibold text-emerald-100">
-            Replace <code className="text-emerald-200">YOUR_IP_OR_DOMAIN</code> with your server IP or hostname
+            Replace <code className="text-emerald-200">YOUR_SERVER_IP</code> with your server IP address
           </p>
           <CopyBlock text={oneLine} label={`bash · ${INSTALLER_VERSION}`} display={`$ ${oneLine}`} />
         </div>
@@ -131,17 +127,7 @@ export function PanelInstaller() {
 
         <details className="rounded-xl border border-white/10 bg-black/10">
           <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-violet-300 hover:text-violet-200">
-            Domain + HTTPS (optional)
-          </summary>
-          <div className="px-4 pb-4 space-y-2">
-            <p className="text-xs text-[var(--muted)]">DNS must point at your VPS before running with --email.</p>
-            <CopyBlock text={domainWithSsl} label="bash · domain + SSL" display={`$ ${domainWithSsl}`} />
-          </div>
-        </details>
-
-        <details className="rounded-xl border border-white/10 bg-black/10">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-violet-300 hover:text-violet-200">
-            Generic template (replace YOUR_IP_OR_DOMAIN)
+            Generic template (replace YOUR_SERVER_IP)
           </summary>
           <div className="px-4 pb-4">
             <CopyBlock text={simpleInstallCommand} label="bash · template" display={`$ ${simpleInstallCommand}`} />
@@ -215,15 +201,11 @@ export function PanelInstaller() {
         <div>
           <h4 className="text-sm font-semibold text-white">Before you run</h4>
           <ul className="mt-2 text-sm text-[var(--muted)] space-y-1 list-disc list-inside">
-            <li>Ubuntu 22.04/24.04 or Debian 12 — fresh VPS recommended</li>
+            <li>Ubuntu 22.04/24.04 or Debian 12 — fresh server recommended</li>
             <li>Root or sudo over SSH</li>
             <li>
-              <strong className="text-slate-300">IP install:</strong> panel on port 80 — use{" "}
-              <code className="text-violet-300">http://IP/login</code>, never :3000
-            </li>
-            <li>
-              <strong className="text-slate-300">Domain install:</strong> point DNS first for HTTPS with{" "}
-              <code className="text-violet-300">--email</code>
+              <strong className="text-slate-300">IP install:</strong> panel runs on port 80 — use{" "}
+              <code className="text-violet-300">http://YOUR_SERVER_IP/login</code>
             </li>
             <li>Minimum 2 vCPU / 4 GB RAM</li>
           </ul>

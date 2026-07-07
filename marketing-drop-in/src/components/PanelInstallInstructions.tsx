@@ -61,17 +61,13 @@ function Step({ number, title, children }: { number: number; title: string; chil
 
 export function PanelInstallInstructions() {
   const oneLineCommand = oneClickInstallExample;
-  const domainCommand = buildOneClickInstallCommand({
-    domain: "panel.yourdomain.com",
-    email: "you@yourdomain.com",
-  });
 
   return (
     <section className="py-12 space-y-10">
       <div>
         <h2 className="text-2xl font-bold text-white">Installation guide</h2>
         <p className="mt-2 text-[var(--muted)]">
-          Install the panel first, sign in, then add your license — under 15 minutes on a fresh VPS.
+          Install the panel first, sign in, then add your license — under 15 minutes on a fresh server.
         </p>
       </div>
 
@@ -80,7 +76,7 @@ export function PanelInstallInstructions() {
           { icon: Terminal, label: "Node.js 20+", desc: "Runtime for panel & API" },
           { icon: Database, label: "PostgreSQL", desc: "Users, lines & streams" },
           { icon: Server, label: "PM2", desc: "Auto-restart on reboot" },
-          { icon: Shield, label: "Port 80 / HTTPS", desc: "IP = direct :80 · domain = nginx + SSL" },
+          { icon: Shield, label: "Port 80", desc: "Panel runs directly on port 80" },
         ].map(({ icon: Icon, label, desc }) => (
           <div key={label} className="rounded-xl border border-white/10 bg-[#12101f] p-4">
             <Icon className="h-5 w-5 text-violet-400 mb-2" />
@@ -91,9 +87,9 @@ export function PanelInstallInstructions() {
       </div>
 
       <div>
-        <Step number={1} title="Get a VPS">
+        <Step number={1} title="Get a server">
           <p>
-            Any fresh Ubuntu 22.04/24.04 or Debian 12 VPS. Minimum{" "}
+            Any fresh Ubuntu 22.04/24.04 or Debian 12 server. Minimum{" "}
             <strong className="text-white">2 vCPU / 4 GB RAM</strong> recommended. Hetzner, OVH,
             DigitalOcean, Vultr, and others all work.
           </p>
@@ -103,29 +99,26 @@ export function PanelInstallInstructions() {
             (SSH),{" "}
             <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">80</code>,{" "}
             <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">443</code>,{" "}
-            <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">8080</code>{" "}
-            (IPTV stream edge on domain installs),{" "}
             <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">1935</code>{" "}
             (RTMP), and{" "}
             <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs font-mono text-violet-300">554</code>{" "}
-            (RTSP). The installer opens these in UFW automatically. IP-only installs use port{" "}
-            <code className="text-violet-300">80</code> for both panel and IPTV.
+            (RTSP). The installer opens these in UFW automatically. The panel uses port{" "}
+            <code className="text-violet-300">80</code> for both the dashboard and IPTV streams.
           </p>
         </Step>
 
         <Step number={2} title="Run the installer">
           <p>
             SSH in as <strong className="text-white">root</strong> (or sudo). Replace{" "}
-            <code className="text-violet-300">YOUR_IP_OR_DOMAIN</code> with your server IP or hostname — only{" "}
-            <code className="text-violet-300">--domain</code> is required:
+            <code className="text-violet-300">YOUR_SERVER_IP</code> with your server IP address — only{" "}
+            <code className="text-violet-300">--ip</code> is required:
           </p>
           <CodeBlock command={oneLineCommand}>
             <span className="text-slate-500">$</span> {oneLineCommand}
           </CodeBlock>
           <p className="text-xs text-slate-500">
-            Installer version {INSTALLER_VERSION}. IP installs serve the panel on port 80 directly — use{" "}
-            <code className="text-violet-300">http://YOUR_IP/login</code>, never{" "}
-            <code className="text-violet-300">:3000</code>.
+            Installer version {INSTALLER_VERSION}. The panel runs on port 80 — use{" "}
+            <code className="text-violet-300">http://YOUR_SERVER_IP/login</code>.
           </p>
         </Step>
 
@@ -139,7 +132,7 @@ export function PanelInstallInstructions() {
           <ul className="list-disc list-inside space-y-1">
             <li>
               <strong className="text-white">URL:</strong>{" "}
-              <code className="text-violet-300">http://YOUR_IP/login</code> (no port in the address bar)
+              <code className="text-violet-300">http://YOUR_SERVER_IP/login</code>
             </li>
             <li>
               <strong className="text-white">User:</strong>{" "}
@@ -164,16 +157,7 @@ export function PanelInstallInstructions() {
           </p>
         </Step>
 
-        <Step number={5} title="Optional: domain + HTTPS">
-          <p>
-            Point an A record at your VPS, then install with email for Let&apos;s Encrypt:
-          </p>
-          <CodeBlock command={domainCommand}>
-            <span className="text-slate-500">$</span> {domainCommand}
-          </CodeBlock>
-        </Step>
-
-        <Step number={6} title="Clean reinstall (if needed)">
+        <Step number={5} title="Clean reinstall (if needed)">
           <p>If a previous install failed, wipe and reinstall fresh:</p>
           <CodeBlock command={cleanReinstallWithFreshFlag}>
             <span className="text-slate-500">$</span> {cleanReinstallWithFreshFlag}
@@ -194,12 +178,11 @@ export function PanelInstallInstructions() {
             </thead>
             <tbody className="text-[var(--muted)]">
               {[
-                ["--domain", "Server IP (HTTP on :80) or hostname (nginx + optional SSL)", "Yes"],
-                ["--email", "Let's Encrypt contact — enables HTTPS when DNS points here", "No"],
+                ["--ip", "Server IP address (required)", "Yes"],
                 ["--license", "Activate during install instead of in the panel UI", "No"],
                 ["--fresh", "Remove old /opt/nexlify-panel before install", "No"],
-                ["--skip-nginx", "Skip nginx (advanced)", "No"],
-                ["--skip-ssl", "HTTP only on domains", "No"],
+                ["--skip-firewall", "Do not open ufw ports", "No"],
+                ["--monolithic", "Panel + stream engine on this host", "No"],
               ].map(([flag, desc, req]) => (
                 <tr key={flag} className="border-b border-white/5 last:border-0">
                   <td className="py-3 pr-4 font-mono text-xs text-violet-300 whitespace-nowrap">{flag}</td>
@@ -238,19 +221,17 @@ export function PanelInstallInstructions() {
           <Globe className="h-5 w-5 text-sky-400 shrink-0 mt-0.5" />
           <div>
             <h4 className="text-sm font-semibold text-sky-100">IPTV Smarters / Xtream login</h4>
-            <p className="text-sm text-sky-200/70 mt-1 space-y-2">
+            <p className="text-sm text-sky-200/70 mt-1">
               <span className="block">
-                <strong className="text-sky-100">Domain + SSL (recommended):</strong> server{" "}
-                <code className="rounded bg-sky-500/10 px-1.5 py-0.5 text-xs font-mono">panel.yourdomain.com</code>,
-                port <code className="text-sky-200">443</code>, HTTPS on. Do not use{" "}
-                <code className="text-sky-200">:8080</code> with a Cloudflare domain — use your server IP for port 8080
-                only.
+                <strong className="text-sky-100">Server:</strong>{" "}
+                <code className="rounded bg-sky-500/10 px-1.5 py-0.5 text-xs font-mono">YOUR_SERVER_IP</code>
               </span>
               <span className="block">
-                <strong className="text-sky-100">IP install:</strong> server{" "}
-                <code className="rounded bg-sky-500/10 px-1.5 py-0.5 text-xs font-mono">YOUR_IP</code>, port{" "}
-                <code className="text-sky-200">80</code>, HTTP. Empty LIVE TV usually means the line has no bouquet or no
-                live streams assigned.
+                <strong className="text-sky-100">Port:</strong>{" "}
+                <code className="text-sky-200">80</code>
+              </span>
+              <span className="block">
+                <strong className="text-sky-100">Username &amp; Password:</strong> Your line credentials from the panel
               </span>
             </p>
           </div>
@@ -261,9 +242,9 @@ export function PanelInstallInstructions() {
         <div className="flex items-start gap-3">
           <Globe className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
           <div>
-            <h4 className="text-sm font-semibold text-amber-100">Login URL shows :3000?</h4>
+            <h4 className="text-sm font-semibold text-amber-100">Need help?</h4>
             <p className="text-sm text-amber-200/70 mt-1">
-              You&apos;re on an older build. SSH in and run{" "}
+              If the login page doesn&apos;t open, SSH in and run{" "}
               <code className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-mono text-amber-200">
                 cd /opt/nexlify-panel && bash scripts/fix-panel-ip-login.sh
               </code>{" "}
@@ -271,8 +252,7 @@ export function PanelInstallInstructions() {
               <code className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-mono text-amber-200">
                 panel.sh?{INSTALLER_VERSION}
               </code>
-              . The panel should always open at <code className="text-amber-200">http://YOUR_IP/login</code> with no
-              port number.
+              . The panel should open at <code className="text-amber-200">http://YOUR_SERVER_IP/login</code>.
             </p>
           </div>
         </div>

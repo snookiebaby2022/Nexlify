@@ -19,7 +19,7 @@ export function SystemRequirementsSection({
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
         <h2 className="text-lg font-semibold text-white">Minimum requirements</h2>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Ubuntu 22.04+ or Debian 12+. Panel: 4 GB RAM, 2 CPU, 20 GB SSD. Stream VPS: 8 GB+ for FFmpeg 8 transcode.
+          Ubuntu 22.04+ or Debian 12+. Panel: 4 GB RAM, 2 CPU, 20 GB SSD. Stream server: 8 GB+ for FFmpeg 8 transcode.
         </p>
         <ul className="mt-4 grid sm:grid-cols-2 gap-2 text-xs text-[var(--muted)]">
           {items.map((i) => (

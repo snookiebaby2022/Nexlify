@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip YOUR_SERVER_IP
 #
 # Then open the login URL, sign in with the admin password shown at the end,
 # and paste your license key under Admin → License.
@@ -11,41 +11,41 @@ set -euo pipefail
 
 PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
 PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz}"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v179}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v192}"
 CREDS_ROOT="/root/nexlify"
 DOMAIN=""
 EMAIL=""
 LICENSE_KEY="${NEXLIFY_LICENSE_KEY:-}"
-SKIP_NGINX=0
-SKIP_SSL=0
+SKIP_NGINX=1
+SKIP_SSL=1
 SKIP_FIREWALL=0
 FORCE_FRESH=0
+MONOLITHIC=0
 
 usage() {
   cat <<'EOF'
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip YOUR_SERVER_IP
 
 Options:
-  --domain HOST          Server IP or domain (required)
-  --email EMAIL          Optional — enables HTTPS when DNS points here
+  --ip IP                Server IP address (required)
   --license KEY          Optional — activate during install (default: enter in panel after login)
   --fresh                Wipe /opt/nexlify-panel before install
-  --skip-nginx           Do not configure nginx
-  --skip-ssl             HTTP only (no certbot)
   --skip-firewall        Do not open ufw ports
+  --monolithic           Panel + stream engine on this host (main server + local agent)
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain panel.example.com --email you@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip 203.0.113.10
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip 10.0.0.5 --license NXLF1-XXXXX
 EOF
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --ip) DOMAIN="${2:-}"; shift 2 ;;
     --domain) DOMAIN="${2:-}"; shift 2 ;;
     --email) EMAIL="${2:-}"; shift 2 ;;
     --license) LICENSE_KEY="${2:-}"; shift 2 ;;
@@ -55,6 +55,7 @@ while [ $# -gt 0 ]; do
     --skip-ssl) SKIP_SSL=1; shift ;;
     --skip-firewall) SKIP_FIREWALL=1; shift ;;
     --fresh) FORCE_FRESH=1; shift ;;
+    --monolithic) MONOLITHIC=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
@@ -63,7 +64,7 @@ done
 log() { echo ""; echo "==> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
 
-[ -n "$DOMAIN" ] || die "--domain is required (your server IP or hostname, e.g. 203.0.113.10 or panel.example.com)"
+[ -n "$DOMAIN" ] || die "--ip is required (your server IP address, e.g. 203.0.113.10)"
 
 case "$PANEL_ARCHIVE_URL" in
   *\?*) ;;
