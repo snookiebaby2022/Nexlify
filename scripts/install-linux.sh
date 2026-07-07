@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip YOUR_SERVER_IP
 #
 # Then open the login URL, sign in with the admin password shown at the end,
 # and paste your license key under Admin → License.
@@ -11,7 +11,7 @@ set -euo pipefail
 
 PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
 PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz}"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v180}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v192}"
 CREDS_ROOT="/root/nexlify"
 DOMAIN=""
 EMAIL=""
@@ -27,22 +27,19 @@ usage() {
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip YOUR_SERVER_IP
 
 Options:
-  --domain HOST          Server IP or domain (required)
-  --email EMAIL          Optional — enables HTTPS when DNS points here
+  --ip IP                Server IP address (required)
   --license KEY          Optional — activate during install (default: enter in panel after login)
   --fresh                Wipe /opt/nexlify-panel before install
-  --skip-nginx           Do not configure nginx
-  --skip-ssl             HTTP only (no certbot)
   --skip-firewall        Do not open ufw ports
   --monolithic           Panel + stream engine on this host (main server + local agent)
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=177' | sudo bash -s -- --domain panel.example.com --email you@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip 203.0.113.10
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip 10.0.0.5 --license NXLF1-XXXXX
 EOF
 }
 
