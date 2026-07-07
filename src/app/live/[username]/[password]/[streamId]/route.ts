@@ -164,6 +164,7 @@ export async function GET(
       }
       void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
       let closed = false;
+      let lastTrackAt2 = Date.now();
       const remuxBody = new ReadableStream({
         start(controller) {
           const reader = (remux.stream as ReadableStream).getReader();
@@ -173,6 +174,11 @@ export async function GET(
                 if (!closed) { closed = true; controller.close(); }
                 void removeConnection(line.id, cleanId, ip);
                 return;
+              }
+              // Refresh connection every 30 seconds during streaming
+              if (Date.now() - lastTrackAt2 > 30_000) {
+                lastTrackAt2 = Date.now();
+                void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
               }
               controller.enqueue(value);
               pump();
@@ -235,6 +241,7 @@ export async function GET(
     const originalBody = response.body;
     if (originalBody) {
       let closed2 = false;
+      let lastTrackAt = Date.now();
       const trackedBody = new ReadableStream({
         start(controller) {
           const reader = originalBody.getReader();
@@ -244,6 +251,11 @@ export async function GET(
                 if (!closed2) { closed2 = true; controller.close(); }
                 void removeConnection(line.id, cleanId, ip);
                 return;
+              }
+              // Refresh connection every 30 seconds during streaming
+              if (Date.now() - lastTrackAt > 30_000) {
+                lastTrackAt = Date.now();
+                void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
               }
               controller.enqueue(value);
               pump();
