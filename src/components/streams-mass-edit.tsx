@@ -1,82 +1,49 @@
 "use client";
 
-
-
-import { useCallback, useEffect, useState } from "react";
-
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-
+const PAGE_SIZES = [50, 100, 200, 500] as const;
 
 type Stream = {
-
   id: string;
-
   name: string;
-
   type: string;
-
   isActive: boolean;
-
   seriesName?: string | null;
-
   seasonNum?: number | null;
-
   episodeNum?: number | null;
-
   vodMode?: string;
-
 };
 
-
-
 export function StreamsMassEdit({
-
   title,
-
   description,
-
   typeFilter,
-
   episodesOnly,
-
   radioOnly,
-
 }: {
-
   title: string;
-
   description: string;
-
   typeFilter?: "LIVE" | "MOVIE" | "SERIES";
-
   episodesOnly?: boolean;
-
   radioOnly?: boolean;
-
 }) {
-
   const [streams, setStreams] = useState<Stream[]>([]);
-
   const [selected, setSelected] = useState<Set<string>>(new Set());
-
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
-
   const [action, setAction] = useState("disable");
-
   const [categoryId, setCategoryId] = useState("");
-
   const [minSpeed, setMinSpeed] = useState("");
-
   const [maxSpeed, setMaxSpeed] = useState("");
-
   const [clearSpeed, setClearSpeed] = useState(false);
-
   const [vodMode, setVodMode] = useState("LIVE");
-
   const [archiveDays, setArchiveDays] = useState("");
-
   const [backupUrl, setBackupUrl] = useState("");
+  const [msg, setMsg] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  const [search, setSearch] = useState("");
 
   const [msg, setMsg] = useState("");
 
@@ -122,18 +89,38 @@ export function StreamsMassEdit({
 
   }, [loadStreams]);
 
+  const filtered = useMemo(() => {
+    if (!search.trim()) return streams;
+    const q = search.toLowerCase();
+    return streams.filter((s) => s.name.toLowerCase().includes(q));
+  }, [streams, search]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paged = useMemo(() => {
+    return filtered.slice((page - 1) * pageSize, page * pageSize);
+  }, [filtered, page, pageSize]);
+
+  const allOnPageSelected = paged.length > 0 && paged.every((s) => selected.has(s.id));
 
   function toggle(id: string) {
-
     const n = new Set(selected);
-
     if (n.has(id)) n.delete(id);
-
     else n.add(id);
-
     setSelected(n);
+  }
 
+  function toggleAll() {
+    const n = new Set(selected);
+    if (allOnPageSelected) {
+      paged.forEach((s) => n.delete(s.id));
+    } else {
+      paged.forEach((s) => n.add(s.id));
+    }
+    setSelected(n);
+  }
+
+  function selectAll() {
+    setSelected(new Set(filtered.map((s) => s.id)));
   }
 
 
@@ -452,15 +439,42 @@ export function StreamsMassEdit({
 
       {msg && <p className="text-sm">{msg}</p>}
 
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="search"
+          placeholder="Search streams…"
+          className="rounded border px-3 py-1.5 text-sm bg-transparent"
+          style={{ borderColor: "var(--border)" }}
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+        />
+        <select
+          className="rounded border px-2 py-1.5 text-sm bg-transparent"
+          style={{ borderColor: "var(--border)" }}
+          value={pageSize}
+          onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+        >
+          {PAGE_SIZES.map((n) => (
+            <option key={n} value={n}>{n} / page</option>
+          ))}
+        </select>
+        <span className="text-xs" style={{ color: "var(--muted)" }}>
+          {selected.size} selected · {filtered.length} total
+        </span>
+        {selected.size < filtered.length && (
+          <button type="button" onClick={selectAll} className="text-xs px-2 py-1 rounded border cursor-pointer" style={{ borderColor: "var(--border)" }}>
+            Select all {filtered.length}
+          </button>
+        )}
+      </div>
+
       <div className="rounded-lg border overflow-auto max-h-[60vh]" style={{ borderColor: "var(--border)" }}>
-
         <table className="w-full text-sm">
-
           <thead>
-
             <tr style={{ background: "var(--bg-card)" }}>
-
-              <th className="p-3 w-10" />
+              <th className="p-3 w-10">
+                <input type="checkbox" checked={allOnPageSelected} onChange={toggleAll} />
+              </th>
 
               <th className="text-left p-3">Name</th>
 
@@ -476,7 +490,7 @@ export function StreamsMassEdit({
 
           <tbody>
 
-            {streams.map((s) => (
+            {paged.map((s) => (
 
               <tr key={s.id} className="border-t" style={{ borderColor: "var(--border)" }}>
 
@@ -517,6 +531,20 @@ export function StreamsMassEdit({
         </table>
 
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm">
+          <span style={{ color: "var(--muted)" }}>
+            Page {page} of {totalPages}
+          </span>
+          <div className="flex gap-1">
+            <button type="button" disabled={page <= 1} onClick={() => setPage(1)} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>«</button>
+            <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>‹</button>
+            <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>›</button>
+            <button type="button" disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>»</button>
+          </div>
+        </div>
+      )}
 
     </div>
 
