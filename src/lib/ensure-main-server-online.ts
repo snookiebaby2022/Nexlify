@@ -19,12 +19,37 @@ function pickMainServer(servers: ServerRow[]): ServerRow | undefined {
   );
 }
 
-/** Mark the main/panel server online when health was never probed (typical fresh install). */
+/** Auto-create a Main Server entry if none exists, then mark it online. */
 export async function ensureMainServerOnline(): Promise<void> {
   const servers = await prisma.streamServer.findMany({
     select: { id: true, host: true, sortOrder: true, healthStatus: true, panelSettings: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
+
+  // Auto-create Main Server if none exists
+  if (servers.length === 0) {
+    const panelHost = process.env.PANEL_PRIMARY_DOMAIN || process.env.SERVER_IP || "127.0.0.1";
+    const streamPort = Number(process.env.STREAM_HTTP_PORT || "80");
+    try {
+      await prisma.streamServer.create({
+        data: {
+          name: "Main Server",
+          host: panelHost,
+          port: streamPort,
+          protocol: "http",
+          maxClients: 1000,
+          isActive: true,
+          healthStatus: "online",
+          healthMessage: "Auto-created by panel",
+          lastHealthAt: new Date(),
+        },
+      });
+      return;
+    } catch {
+      // Ignore duplicate key errors
+    }
+  }
+
   const main = pickMainServer(servers);
   if (!main) return;
 

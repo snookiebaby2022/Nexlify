@@ -5,7 +5,6 @@ import {
   VOD_IMPORT_FORMAT_EXAMPLE,
   VOD_EPISODE_IMPORT_EXAMPLE,
 } from "@/lib/vod-import-parser";
-import { ServerTreePicker } from "@/components/server-tree-picker";
 import { Upload, FileText, X } from "lucide-react";
 
 export function ImportForm({
@@ -33,6 +32,7 @@ export function ImportForm({
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [bouquets, setBouquets] = useState<{ id: string; name: string }[]>([]);
   const [bouquetIds, setBouquetIds] = useState<string[]>([]);
+  const [serversList, setServersList] = useState<{ id: string; name: string }[]>([]);
   const [result, setResult] = useState("");
   const [onDemandDefault, setOnDemandDefault] = useState(false);
   const [serverIds, setServerIds] = useState<string[]>([]);
@@ -49,6 +49,9 @@ export function ImportForm({
     fetch("/api/admin/bouquets")
       .then((r) => r.json())
       .then((d) => setBouquets(d.bouquets ?? []));
+    fetch("/api/admin/servers")
+      .then((r) => r.json())
+      .then((d) => setServersList(d.servers ?? []));
   }, []);
 
   async function handleFile(file: File) {
@@ -340,14 +343,22 @@ export function ImportForm({
           )}
         </div>
 
-        <ServerTreePicker
-          label="Assign to streaming server (tree)"
-          selectedIds={serverIds.length ? serverIds : serverId ? [serverId] : []}
-          onChange={(ids) => {
-            setServerIds(ids);
-            setServerId(ids[0] ?? "");
-          }}
-        />
+        <div className="grid md:grid-cols-2 gap-3">
+          <label className="block text-sm">
+            <span className="font-medium mb-1.5 block" style={{ color: "var(--muted)" }}>Assign to server</span>
+            <select
+              className="w-full rounded border px-3 py-2 bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={serverId}
+              onChange={(e) => setServerId(e.target.value)}
+            >
+              <option value="">Auto (default)</option>
+              {serversList.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         {streamType === "LIVE" && tab === "m3u" && (
           <label className="flex items-center gap-2 text-sm cursor-pointer">
