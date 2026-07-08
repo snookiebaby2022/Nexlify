@@ -104,9 +104,11 @@ export function StreamProbePlayer({
       });
       const data = await res.json();
       if (data.stream?.streamUrl) {
-        const url = String(data.stream.streamUrl);
-        setResolvedUrl(url);
-        return url;
+        const rawUrl = String(data.stream.streamUrl);
+        // Use panel proxy for playback (handles TLS bypass for expired certs)
+        const proxyUrl = `/api/admin/streams/proxy?url=${encodeURIComponent(rawUrl)}`;
+        setResolvedUrl(proxyUrl);
+        return proxyUrl;
       }
       return streamUrl;
     } catch {
