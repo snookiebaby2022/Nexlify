@@ -95,6 +95,26 @@ if ! node -e "require('tailwindcss')" 2>/dev/null; then
   cd "$PANEL_DIR" && npm install tailwindcss 2>/dev/null || true
 fi
 
+# --- Check 5a: tsx module present (needed for cron daemon) ---
+if ! cd "$PANEL_DIR" && node -e "require('tsx')" 2>/dev/null; then
+  log "WARN: tsx missing — installing"
+  cd "$PANEL_DIR" && npm install tsx 2>/dev/null || true
+  # Restart cron if it's down
+  if ! pm2 jlist 2>/dev/null | python3 -c "import sys,json;procs=json.load(sys.stdin);print(next((p['pm2_env']['status'] for p in procs if p['name']=='$CRON_APP'),'missing'))" 2>/dev/null | grep -q "online"; then
+    log "FIX: Restarting cron daemon"
+    pm2 delete "$CRON_APP" 2>/dev/null || true
+    cd "$PANEL_DIR" && pm2 start node_modules/.bin/tsx --name "$CRON_APP" -- scripts/cron-daemon.ts 2>/dev/null || true
+  fi
+fi
+
+# --- Check 5b: Cron daemon running ---
+CRON_STATUS=$(pm2 jlist 2>/dev/null | python3 -c "import sys,json;procs=json.load(sys.stdin);print(next((p['pm2_env']['status'] for p in procs if p['name']=='$CRON_APP'),'missing'))" 2>/dev/null || echo "error")
+if [ "$CRON_STATUS" != "online" ]; then
+  log "WARN: Cron daemon is $CRON_STATUS — restarting"
+  pm2 delete "$CRON_APP" 2>/dev/null || true
+  cd "$PANEL_DIR" && pm2 start node_modules/.bin/tsx --name "$CRON_APP" -- scripts/cron-daemon.ts 2>/dev/null || true
+fi
+
 # --- Check 5b: DATABASE_URL uses localhost (not external IP) ---
 DB_URL=$(grep '^DATABASE_URL=' "$PANEL_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"')
 if echo "$DB_URL" | grep -q '@[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*:'; then
