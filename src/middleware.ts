@@ -30,7 +30,17 @@ import {
   isDemoMutationAllowed,
   demoModeBlockedResponse,
 } from "@/lib/panel-demo-mode";
-import { prisma } from "@/lib/prisma";
+let prismaPromise: ReturnType<typeof importPrisma> | null = null;
+async function importPrisma() {
+  const { prisma } = await import("@/lib/prisma");
+  return prisma;
+}
+function getPrisma() {
+  if (!prismaPromise) {
+    prismaPromise = importPrisma();
+  }
+  return prismaPromise;
+}
 
 function isPlaybackPath(pathname: string): boolean {
   return (
@@ -73,6 +83,8 @@ async function enforcePlaybackRestrictions(
   if (!username || !password) {
     return null;
   }
+
+  const prisma = await getPrisma();
 
   let line = await prisma.line.findUnique({
     where: { username },
