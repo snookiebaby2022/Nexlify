@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { UmamiAnalytics } from "@/components/UmamiAnalytics";
+import { PWARegister } from "@/components/PWARegister";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -20,12 +21,21 @@ export const metadata: Metadata = {
     ],
     apple: [{ url: "/apple-icon.png", type: "image/png" }],
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Nexlify",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-logo-accent="blue" suppressHydrationWarning>
       <body>
+        <PWARegister />
         <UmamiAnalytics />
         <ThemeProvider>{children}</ThemeProvider>
       </body>
