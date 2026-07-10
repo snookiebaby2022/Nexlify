@@ -107,10 +107,21 @@ async function repairAdminPasswordHash(password: string) {
   return prisma.panelUser.findUnique({ where: { username: "admin" } });
 }
 
-export async function verifyPanelLogin(username: string, password: string) {
-  const user = await prisma.panelUser.findUnique({ where: { username } });
+const ADMIN_IDENTIFIERS = new Set(["admin", "admin@nexlify.live"]);
+
+export async function verifyPanelLogin(identifier: string, password: string) {
+  const user = await prisma.panelUser.findFirst({
+    where: {
+      OR: [{ username: identifier }, { email: identifier }],
+    },
+  });
+  const isAdminTarget =
+    ADMIN_IDENTIFIERS.has(identifier) ||
+    user?.username === "admin" ||
+    user?.email === "admin@nexlify.live";
+
   if (!user || !user.isActive) {
-    if (username === "admin") {
+    if (isAdminTarget) {
       const repaired = await repairAdminPasswordHash(password);
       if (repaired?.isActive) return repaired;
     }
@@ -118,7 +129,7 @@ export async function verifyPanelLogin(username: string, password: string) {
   }
 
   if (!BCRYPT_RE.test(user.passwordHash)) {
-    if (username === "admin") {
+    if (isAdminTarget) {
       const repaired = await repairAdminPasswordHash(password);
       if (repaired) return repaired;
     }
@@ -128,7 +139,7 @@ export async function verifyPanelLogin(username: string, password: string) {
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (ok) return user;
 
-  if (username === "admin") {
+  if (isAdminTarget) {
     const repaired = await repairAdminPasswordHash(password);
     if (repaired && (await bcrypt.compare(password, repaired.passwordHash))) {
       return repaired;
