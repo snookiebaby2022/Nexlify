@@ -130,5 +130,20 @@ module.exports = {
         LICENSE_SERVER_PORT: "8787",
       },
     },
+    {
+      name: "nexlify-web",
+      cwd: resolve(__dirname, "marketing-drop-in"),
+      script: "node_modules/next/dist/bin/next",
+      args: "start -H 127.0.0.1 -p 13001",
+      instances: 1,
+      exec_mode: "fork",
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: "10s",
+      env: {
+        NODE_ENV: "production",
+        DATABASE_URL: fileEnv.DATABASE_URL || "",
+      },
+    },
   ],
 };
