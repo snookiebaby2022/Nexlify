@@ -143,6 +143,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         DATABASE_URL: fileEnv.DATABASE_URL || "",
+        JWT_SECRET: fileEnv.JWT_SECRET || "",
       },
     },
   ],
