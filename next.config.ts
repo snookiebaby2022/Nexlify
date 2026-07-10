@@ -17,7 +17,6 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  output: "standalone",
   distDir: ".next",
   eslint: {
     ignoreDuringBuilds: true,
