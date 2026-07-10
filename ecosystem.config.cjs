@@ -47,7 +47,7 @@ const useStandalone = existsSync(resolve(standaloneDir, "server.js"));
 const cpuCount = cpus().length;
 const panelInstances = process.env.PANEL_INSTANCES
   ? parseInt(process.env.PANEL_INSTANCES, 10)
-  : Math.max(2, Math.min(cpuCount, 8));
+  : 1;
 
 const sharedPanelEnv = {
   NODE_ENV: "production",
