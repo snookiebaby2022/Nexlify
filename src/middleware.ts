@@ -30,18 +30,6 @@ import {
   isDemoMutationAllowed,
   demoModeBlockedResponse,
 } from "@/lib/panel-demo-mode";
-let prismaPromise: ReturnType<typeof importPrisma> | null = null;
-async function importPrisma() {
-  const { prisma } = await import("@/lib/prisma");
-  return prisma;
-}
-function getPrisma() {
-  if (!prismaPromise) {
-    prismaPromise = importPrisma();
-  }
-  return prismaPromise;
-}
-
 function isPlaybackPath(pathname: string): boolean {
   return (
     pathname.startsWith("/live") ||
@@ -50,113 +38,6 @@ function isPlaybackPath(pathname: string): boolean {
     pathname.startsWith("/get.php") ||
     pathname.startsWith("/player_api.php")
   );
-}
-
-function userAgentToDeviceType(ua: string): string {
-  const lower = ua.toLowerCase();
-  if (lower.includes("mag")) return "mag";
-  if (lower.includes("enigma") || lower.includes("dreambox")) return "enigma";
-  if (lower.includes("kodi")) return "kodi";
-  if (lower.includes("smarttv") || lower.includes("tizen") || lower.includes("webos"))
-    return "smarttv";
-  if (lower.includes("iphone") || lower.includes("ipad") || lower.includes("ipod"))
-    return "ios";
-  if (lower.includes("android")) return "android";
-  return "web";
-}
-
-async function enforcePlaybackRestrictions(
-  req: NextRequest
-): Promise<NextResponse | null> {
-  const { searchParams } = req.nextUrl;
-  const username = searchParams.get("username");
-  const password = searchParams.get("password");
-  const appPackage =
-    searchParams.get("appPackage") ?? searchParams.get("app") ?? "";
-  const deviceId =
-    searchParams.get("device_id") ??
-    searchParams.get("deviceId") ??
-    searchParams.get("mac") ??
-    "";
-  const userAgent = req.headers.get("user-agent") ?? "";
-
-  if (!username || !password) {
-    return null;
-  }
-
-  const prisma = await getPrisma();
-
-  let line = await prisma.line.findUnique({
-    where: { username },
-    include: { appsLocks: { include: { policy: true } } },
-  });
-
-  if (!line) {
-    const code = username.trim().toUpperCase();
-    if (!code) return null;
-    line = await prisma.line.findFirst({
-      where: { activeCode: code, authMode: "ACTIVE_CODE" },
-      include: { appsLocks: { include: { policy: true } } },
-    });
-    if (!line) return null;
-    if (password !== line.password && password !== code) return null;
-  }
-
-  // Apps Lock enforcement
-  for (const lock of line.appsLocks) {
-    const policy = lock.policy;
-    if (!policy || !policy.isActive) continue;
-
-    const pkg = appPackage.trim();
-    const deviceType = userAgentToDeviceType(userAgent);
-
-    if (
-      policy.allowedApps.length > 0 &&
-      pkg &&
-      !policy.allowedApps.includes(pkg)
-    ) {
-      return NextResponse.json(
-        { error: "App not allowed by policy" },
-        { status: 403 }
-      );
-    }
-    if (pkg && policy.blockedApps.includes(pkg)) {
-      return NextResponse.json(
-        { error: "App blocked by policy" },
-        { status: 403 }
-      );
-    }
-    if (
-      policy.allowedAppTypes.length > 0 &&
-      !policy.allowedAppTypes.includes(deviceType)
-    ) {
-      return NextResponse.json(
-        { error: "Device type not allowed by policy" },
-        { status: 403 }
-      );
-    }
-  }
-
-  // Device Binding enforcement
-  if (line.authMode === "ACTIVE_CODE") {
-    if (!deviceId) {
-      return NextResponse.json(
-        { error: "Device binding required: no device identifier provided" },
-        { status: 403 }
-      );
-    }
-    const binding = await prisma.deviceBinding.findUnique({
-      where: { lineId_deviceId: { lineId: line.id, deviceId } },
-    });
-    if (!binding || binding.status !== "ACTIVE") {
-      return NextResponse.json(
-        { error: "Device not bound to this line" },
-        { status: 403 }
-      );
-    }
-  }
-
-  return null;
 }
 
 /** Same-origin redirect — keeps the browser on port 80/443, never :3000. */
@@ -310,11 +191,6 @@ export async function middleware(req: NextRequest) {
     const url = publicUrl(req, `${pathname}${req.nextUrl.search}`);
     url.protocol = "https:";
     return NextResponse.redirect(url, 308);
-  }
-
-  if (isPlaybackPath(pathname)) {
-    const block = await enforcePlaybackRestrictions(req);
-    if (block) return block;
   }
 
   if (PUBLIC.some((p) => pathname.startsWith(p))) {
