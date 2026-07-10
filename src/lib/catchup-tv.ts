@@ -91,7 +91,7 @@ export async function startRecording(
   const streamRecordings = await getStreamRecordings(streamId);
   streamRecordings.push(recording);
   await cacheSet(`${CATCHUP_PREFIX}stream:${streamId}`, streamRecordings, 86400);
-  void logActivity("catchup_recording_started", { recordingId: id, streamId, channelName });
+  void logActivity("catchup_recording_started", { entity: "catchup", entityId: id, meta: { recordingId: id, streamId, channelName } });
   return recording;
 }
 

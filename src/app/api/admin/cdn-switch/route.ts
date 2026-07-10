@@ -37,14 +37,22 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   try {
     if (body.action === "add") {
+      const name = String(body.name ?? "").trim().slice(0, 100);
+      const url = String(body.url ?? "").trim().slice(0, 500);
+      if (!name || !url) {
+        return NextResponse.json({ error: "name and url are required" }, { status: 400 });
+      }
+      try { new URL(url); } catch {
+        return NextResponse.json({ error: "Invalid URL" }, { status: 400 });
+      }
       const ep = await prisma.cdnEndpoint.create({
         data: {
-          name: body.name,
-          url: body.url,
-          priority: body.priority ?? 0,
-          isActive: body.isActive ?? true,
-          region: body.region ?? "global",
-          maxBandwidthMbps: body.maxBandwidthMbps ?? 1000,
+          name,
+          url,
+          priority: Math.max(0, Math.min(100, Number(body.priority) || 0)),
+          isActive: body.isActive !== false,
+          region: String(body.region ?? "global").slice(0, 50),
+          maxBandwidthMbps: Math.max(1, Math.min(100000, Number(body.maxBandwidthMbps) || 1000)),
         },
       });
       return NextResponse.json(ep);
