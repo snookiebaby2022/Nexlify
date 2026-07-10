@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     if (!flagId || !status) {
       return NextResponse.json({ error: "flagId and status required" }, { status: 400 });
     }
-    const ok = await reviewFlag(flagId, status, session.user?.name ?? undefined);
+    const ok = await reviewFlag(flagId, status, session.username);
     return NextResponse.json({ ok });
   }
 

@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth";
+import { PanelRole } from "@prisma/client";
 import { getOnlineAdmins, addCollabNote, resolveCollabNote, getCollabNotes, addCollabTask, updateCollabTask, getCollabTasks } from "@/lib/collaboration";
 import { iptvCorsPreflight } from "@/lib/iptv-cors";
 
 export async function OPTIONS() { return iptvCorsPreflight(); }
 
 export async function GET(req: NextRequest) {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const sp = req.nextUrl.searchParams;
   const action = sp.get("action");
   try {
@@ -24,16 +29,19 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const body = await req.json();
   try {
     if (body.action === "add-note") {
-      return NextResponse.json(await addCollabNote(body.authorId, body.authorName, body.content, body.streamId));
+      return NextResponse.json(await addCollabNote(session.id, session.username, body.content, body.streamId));
     }
     if (body.action === "resolve-note") {
       return NextResponse.json({ ok: await resolveCollabNote(body.noteId) });
     }
     if (body.action === "add-task") {
-      return NextResponse.json(await addCollabTask(body.title, body.assignedTo, body.createdBy, body.priority));
+      return NextResponse.json(await addCollabTask(body.title, body.assignedTo, session.id, body.priority));
     }
     if (body.action === "update-task") {
       return NextResponse.json({ ok: await updateCollabTask(body.taskId, body.updates) });

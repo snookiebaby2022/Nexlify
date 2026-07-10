@@ -19,8 +19,6 @@ export async function GET(req: NextRequest) {
       const update = async () => {
         try {
           const now = new Date();
-          const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
-          const fiveMinBefore = new Date(Date.now() - 5 * 60 * 1000);
 
           const [connections, bandwidthSnap, activeLines, liveStreams] = await Promise.all([
             listLiveConnections(session.role === "ADMIN" ? undefined : session.id),
@@ -77,7 +75,6 @@ export async function GET(req: NextRequest) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-store",
       Connection: "keep-alive",
-      "Access-Control-Allow-Origin": "*",
     },
   });
 }

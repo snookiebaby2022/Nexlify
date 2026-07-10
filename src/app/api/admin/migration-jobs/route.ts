@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { PanelRole } from "@prisma/client";
+import { PanelRole, MigrationSource } from "@prisma/client";
 
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
@@ -19,11 +19,12 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
+  const source = (body.source as MigrationSource) ?? MigrationSource.XTREAM_UI;
   const job = await prisma.migrationJob.create({
     data: {
-      sourceType: body.sourceType ?? "xtream",
+      source,
       sourceUrl: body.sourceUrl ?? "",
-      status: "PENDING",
+      status: "QUEUED",
       createdById: session.id,
     },
   });

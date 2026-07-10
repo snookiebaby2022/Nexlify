@@ -1591,3 +1591,17 @@ model ModerationFlag {
   @@index([status])
   @@index([severity])
 }
+
+model CdnEndpoint {
+  id               String   @id @default(cuid())
+  name             String
+  url              String
+  priority         Int      @default(0)
+  isActive         Boolean  @default(true)
+  region           String   @default("global")
+  maxBandwidthMbps Int      @default(1000)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([isActive, priority])
+}
