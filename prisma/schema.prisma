@@ -285,6 +285,8 @@ model Referral {
   convertedAt  DateTime?
   createdAt    DateTime  @default(now())
 
+  commissions  Commission[]
+
   @@unique([referrerId, referredId])
 }
 
