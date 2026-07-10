@@ -157,13 +157,13 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
               Nexlify Panel
             </p>
             <h1 className="text-3xl sm:text-4xl xl:text-5xl font-bold tracking-tight text-white leading-tight">
-              Stream management,
+              All-in-one broadcasting solution
               <span className="block text-transparent bg-clip-text bg-gradient-to-r from-sky-300 via-blue-400 to-orange-400">
-                built for operators
+                for businesses &amp; service providers
               </span>
             </h1>
             <p className="text-sm sm:text-base text-slate-400 leading-relaxed">
-              Secure access to lines, servers, bouquets, and live streams — all in one control panel.
+              Nexlify is a secure and reliable management tool for IPTV service providers — stream management, billing, EPG, and analytics in one control panel.
             </p>
           </div>
           <ul className="hidden sm:flex flex-col gap-2 text-sm text-slate-500">

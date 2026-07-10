@@ -11,7 +11,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: process.env.NEXT_PUBLIC_PANEL_NAME ?? "Nexlify",
-  description: "IPTV & OTT management panel",
+  description: "Nexlify — all-in-one broadcasting solution for businesses and a secure management tool for IPTV service providers.",
   manifest: "/manifest.json",
   icons: {
     icon: [
