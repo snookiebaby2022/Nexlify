@@ -11,7 +11,7 @@ set -euo pipefail
 
 PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
 PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz}"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v192}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v193}"
 CREDS_ROOT="/root/nexlify"
 DOMAIN=""
 EMAIL=""

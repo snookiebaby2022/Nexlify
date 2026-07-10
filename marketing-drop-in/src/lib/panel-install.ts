@@ -3,7 +3,7 @@
 export const PANEL_INSTALL_DIR = "/opt/nexlify-panel";
 export const CREDENTIALS_ROOT_DIR = "/root/nexlify";
 export const CREDENTIALS_FILE = `${CREDENTIALS_ROOT_DIR}/install-credentials`;
-export const INSTALLER_VERSION = "v192";
+export const INSTALLER_VERSION = "v193";
 
 export const cleanReinstallCommand = `sudo rm -rf ${PANEL_INSTALL_DIR}`;
 
