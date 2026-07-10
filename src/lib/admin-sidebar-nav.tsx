@@ -359,6 +359,8 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/management/tools/stream-tools", label: "Stream Tools" },
           { href: "/admin/management/tools/provider-urls", label: "Provider URL Tools" },
           { href: "/admin/management/tools/bulk-backup-urls", label: "Bulk Backup Sources" },
+          { href: "/admin/affiliates", label: "Affiliates & Referrals" },
+          { href: "/admin/commissions", label: "Commissions" },
           { href: "/admin/management/categories", label: "Categories" },
           { href: "/admin/import/migrate", label: "Panel Migration" },
           { href: "/admin/import/m3u", label: "M3U Import" },

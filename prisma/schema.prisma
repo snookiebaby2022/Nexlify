@@ -250,6 +250,56 @@ model PanelUser {
   serverCleanerTasks  ServerCleanerTask[]
   resellerApiKeys     ResellerApiKey[]
   aiQueryLogs         AiQueryLog[]
+
+  // Affiliate system
+  affiliate           Affiliate?
+  referralsMade       Referral[]    @relation("Referrer")
+  referralsReceived   Referral[]    @relation("Referred")
+  commissions         Commission[]
+}
+
+model Affiliate {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  user         PanelUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referralCode String    @unique
+  commissionRate Float   @default(0.10) // 10% default commission
+  isActive     Boolean   @default(true)
+  totalReferrals Int     @default(0)
+  totalCommissions Float @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  referrals    Referral[]
+  commissions  Commission[]
+}
+
+model Referral {
+  id           String    @id @default(cuid())
+  referrerId   String
+  referrer     PanelUser @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredId   String
+  referred     PanelUser @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
+  referralCode String
+  status       String    @default("active") // active, expired, converted
+  convertedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([referrerId, referredId])
+}
+
+model Commission {
+  id           String    @id @default(cuid())
+  affiliateId  String
+  affiliate    Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  referralId   String?
+  referral     Referral? @relation(fields: [referralId], references: [id], onDelete: SetNull)
+  amount       Float
+  type         String    @default("referral") // referral, bonus, recurring
+  status       String    @default("pending") // pending, approved, paid
+  paidAt       DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model CreditTransaction {
