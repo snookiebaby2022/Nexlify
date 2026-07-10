@@ -2,9 +2,65 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.2",
+  "latestVersion": "1.9.3",
 
   "releases": [
+
+    {
+
+      "version": "1.9.3",
+
+      "date": "2026-07-10",
+
+      "channel": "stable",
+
+      "summary": "Affiliate system, revenue sharing, auto-scaling, PWA, and security hardening.",
+
+      "changelog": [
+
+        "Affiliate/Referral System — referral links, click/signup tracking, commission rates, admin management",
+
+        "Automated Revenue Sharing — commission model, revenue splits, payout tracking",
+
+        "Auto-Scale Manager — CPU/memory monitoring, PM2 instance scaling, configurable thresholds, real-time metrics",
+
+        "PWA for iOS & Smart TV — service worker, offline caching, Add to Home Screen, works on Tizen/webOS",
+
+        "WebSocket real-time dashboard — live connection and bandwidth updates via SSE",
+
+        "CdnEndpoint model added for smart CDN switching",
+
+        "Security: added auth to collab, apps-lock, cdn-switch, bandwidth-predict, catchup API routes",
+
+        "Security: removed permissive CORS * from dashboard-stream SSE endpoint",
+
+        "Replaced mock analytics data with real BandwidthSnapshot queries",
+
+        "PWA manifest cleaned up — removed duplicate icon entries, added Apple web app metadata"
+      ],
+
+      "fixes": [
+
+        "MigrationJob used wrong field name (sourceType vs source) — now uses MigrationSource enum correctly",
+
+        "Content moderation review stored undefined author — fixed to use session.username",
+
+        "Collab route accepted untrusted client-supplied authorId/authorName — now uses session",
+
+        "5 admin API routes had zero authentication — all now require session",
+
+        "Dashboard-stream SSE had unused staleBefore/fiveMinBefore variables — removed",
+
+        "Analytics bandwidth returned random mock data — now queries real BandwidthSnapshot table",
+
+        "Analytics PDF returned fake download URL — now returns 501 not-implemented",
+
+        "MassEditEntity.RESellers had inconsistent casing — fixed to RESELLERS",
+
+        "Service worker referenced non-existent routes — updated to real admin paths"
+      ]
+
+    },
 
     {
 
