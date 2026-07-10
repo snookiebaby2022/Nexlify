@@ -1,12 +1,11 @@
 const CACHE_NAME = "nexlify-v1";
 const OFFLINE_URLS = [
   "/admin/dashboard",
-  "/admin/servers",
   "/admin/streams",
-  "/admin/channels",
   "/admin/lines",
   "/admin/tickets",
-  "/admin/monitoring",
+  "/admin/users",
+  "/admin/analytics",
 ];
 
 self.addEventListener("install", (event) => {

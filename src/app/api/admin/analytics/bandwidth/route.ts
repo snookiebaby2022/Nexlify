@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
 export async function GET(req: Request) {
@@ -9,14 +10,28 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const days = parseInt(searchParams.get("days") || "7", 10);
 
-  // Mock bandwidth data; replace with real connection log aggregation
-  const labels = [];
-  const values = [];
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  const snapshots = await prisma.bandwidthSnapshot.findMany({
+    where: { createdAt: { gte: cutoff } },
+    orderBy: { createdAt: "asc" },
+    select: { bytesOut: true, createdAt: true },
+  });
+
+  const dailyMap: Record<string, number> = {};
+  for (const s of snapshots) {
+    const day = s.createdAt.toISOString().split("T")[0];
+    dailyMap[day] = (dailyMap[day] ?? 0) + Number(s.bytesOut);
+  }
+
+  const labels: string[] = [];
+  const values: number[] = [];
   const now = Date.now();
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now - i * 24 * 60 * 60 * 1000);
-    labels.push(d.toISOString().split("T")[0]);
-    values.push(Math.round(500 + Math.random() * 1500));
+    const key = d.toISOString().split("T")[0];
+    labels.push(key);
+    values.push(Math.round((dailyMap[key] ?? 0) / 1_000_000_000));
   }
 
   return NextResponse.json({ labels, values, unit: "GB" });

@@ -139,7 +139,7 @@ enum MassEditEntity {
   MOVIES
   SERIES
   BOUQUETS
-  RESellers
+  RESELLERS
   MAG_DEVICES
   ENIGMA_DEVICES
 }
