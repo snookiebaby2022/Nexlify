@@ -280,6 +280,8 @@ model Referral {
   referrer     PanelUser @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
   referredId   String
   referred     PanelUser @relation("Referred", fields: [referredId], references: [id], onDelete: Cascade)
+  affiliateId  String?
+  affiliate    Affiliate? @relation(fields: [affiliateId], references: [id], onDelete: SetNull)
   referralCode String
   status       String    @default("active") // active, expired, converted
   convertedAt  DateTime?
@@ -294,6 +296,8 @@ model Commission {
   id           String    @id @default(cuid())
   affiliateId  String
   affiliate    Affiliate @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  userId       String?
+  user         PanelUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
   referralId   String?
   referral     Referral? @relation(fields: [referralId], references: [id], onDelete: SetNull)
   amount       Float
