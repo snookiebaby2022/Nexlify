@@ -89,6 +89,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/servers", label: "Manage Servers" },
           { href: "/admin/servers/resource-charts", label: "Resource Charts" },
           { href: "/admin/servers/load-balancer", label: "Load Balancer" },
+          { href: "/admin/auto-scale", label: "Auto-Scale Manager" },
           { href: "/admin/servers/nginx-config", label: "Recommended nginx config" },
           { href: "/admin/servers/install", label: "Server Install Wizard" },
           { href: "/admin/process_monitor", label: "Process Monitor" },
