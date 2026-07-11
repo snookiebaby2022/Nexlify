@@ -22,9 +22,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await requireSession([PanelRole.ADMIN]);
-  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const authSession = await requireSession([PanelRole.ADMIN]);
+  if (!authSession) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await req.json();
+  try {
+    if (body.action === "start") {
       const session = await startSocialStream(body.platformId, body.streamId, body.title);
       return NextResponse.json(session);
     }

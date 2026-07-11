@@ -6,7 +6,7 @@ set -e
 
 deploy_panel() {
   echo ">>> Deploying panel..."
-  cd /home/nexlify/nexlify-panel
+  cd /home/nexlify-panel
   git pull origin main
   npm install --production=false
   npm run build
