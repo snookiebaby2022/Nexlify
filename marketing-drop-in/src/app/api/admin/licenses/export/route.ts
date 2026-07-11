@@ -25,6 +25,7 @@ export async function GET() {
 
   const licenses = await prisma.license.findMany({
     orderBy: { createdAt: "desc" },
+    take: 10000,
     include: {
       user: { select: { email: true, name: true } },
       plan: { select: { name: true, slug: true } },

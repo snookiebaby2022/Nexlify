@@ -25,13 +25,14 @@ export async function GET() {
   const user = await requireAdmin();
   if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const [diskRaw, memRaw, uptimeRaw, loadRaw, pm2Raw, nodeRaw] = await Promise.all([
+  const [diskRaw, memRaw, uptimeRaw, loadRaw, pm2Raw, nodeRaw, dbSizeRaw] = await Promise.all([
     run("df -h / | tail -1"),
     run("free -m | grep Mem"),
     run("uptime -p"),
     run("cat /proc/loadavg"),
     run("pm2 jlist 2>/dev/null"),
     run("node --version"),
+    run("docker exec nexlify-panel-postgres-1 psql -U nexlify -d nexlify -t -A -c \"SELECT pg_size_pretty(pg_database_size('nexlify'))\" 2>/dev/null"),
   ]);
 
   let pm2Services: { name: string; status: string; pid: number; cpu: string; mem: string; uptime: number; restarts: number }[] = [];
@@ -88,5 +89,6 @@ export async function GET() {
     sslExpiry,
     nodeVersion: nodeRaw,
     pm2Services,
+    dbSize: dbSizeRaw || "",
   });
 }

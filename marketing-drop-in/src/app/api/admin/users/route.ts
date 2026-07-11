@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
       take: 100,
       include: {
-        _count: { select: { licenses: true, tickets: true } },
+        _count: { select: { licenses: true } },
       },
     });
     return NextResponse.json({
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
         trialBypass: u.trialBypass,
         createdAt: u.createdAt.toISOString(),
         licenseCount: u._count.licenses,
-        ticketCount: u._count.tickets,
+        ticketCount: 0,
       })),
     });
   }
@@ -54,7 +54,6 @@ export async function GET(request: Request) {
         take: 10,
         include: { plan: { select: { name: true } } },
       },
-      _count: { select: { tickets: true } },
     },
   });
 
@@ -73,7 +72,7 @@ export async function GET(request: Request) {
       utmMedium: user.utmMedium,
       utmCampaign: user.utmCampaign,
       createdAt: user.createdAt.toISOString(),
-      ticketCount: user._count.tickets,
+      ticketCount: 0,
       licenses: user.licenses.map((l) => ({
         id: l.id,
         key: l.key,

@@ -13,51 +13,43 @@ export async function GET(request: Request) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { searchParams } = new URL(request.url);
-  const status = searchParams.get("status");
-  const priority = searchParams.get("priority");
-  const openOnly = searchParams.get("open") === "1";
-
   try {
-    const whereClauses: string[] = [];
-    const params: unknown[] = [];
-    let idx = 1;
+    const tickets = await prisma.ticket.findMany({
+      orderBy: { updatedAt: "desc" },
+      take: 50,
+      include: {
+        user: { select: { email: true, name: true } },
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 3,
+        },
+        _count: { select: { messages: true } },
+      },
+    });
 
-    if (status) { whereClauses.push(`t.status = $${idx++}`); params.push(status); }
-    if (priority) { whereClauses.push(`t.priority = $${idx++}`); params.push(priority); }
-    if (openOnly) { whereClauses.push(`t.status != 'CLOSED'`); }
-
-    const where = whereClauses.length ? `WHERE ${whereClauses.join(" AND ")}` : "";
-
-    const tickets = await prisma.$queryRawUnsafe(`
-      SELECT t.id, t.subject, t.status, t.priority, t.category,
-             t."createdAt", t."updatedAt",
-             u.username as author_name,
-             (SELECT COUNT(*) FROM "TicketMessage" m WHERE m."ticketId" = t.id) as message_count
-      FROM "Ticket" t
-      LEFT JOIN "PanelUser" u ON t."createdById" = u.id
-      ${where}
-      ORDER BY t."updatedAt" DESC
-      LIMIT 50
-    `, ...params);
-
-    const openCount = await prisma.$queryRawUnsafe`
-      SELECT COUNT(*)::int as count FROM "Ticket" WHERE status != 'CLOSED'
-    `;
+    const openCount = await prisma.ticket.count({
+      where: { status: { not: "CLOSED" } },
+    });
 
     return NextResponse.json({
-      openCount: (openCount as Record<string, number>[])[0]?.count ?? 0,
-      tickets: (tickets as Record<string, unknown>[]).map((t) => ({
+      openCount,
+      tickets: tickets.map((t) => ({
         id: t.id,
         subject: t.subject,
         status: t.status,
         priority: t.priority,
-        email: t.author_name ?? "unknown",
-        name: t.author_name ?? "unknown",
-        messageCount: Number(t.message_count),
-        updatedAt: t.updatedAt?.toISOString?.() ?? String(t.updatedAt),
-        createdAt: t.createdAt?.toISOString?.() ?? String(t.createdAt),
-        messages: [],
+        email: t.user?.email ?? "unknown",
+        name: t.user?.name ?? "unknown",
+        messageCount: t._count.messages,
+        updatedAt: t.updatedAt.toISOString(),
+        createdAt: t.createdAt.toISOString(),
+        messages: t.messages.map((m) => ({
+          id: m.id,
+          body: m.body,
+          isStaff: false,
+          createdAt: m.createdAt.toISOString(),
+          authorEmail: "unknown",
+        })),
       })),
     });
   } catch (e) {
@@ -68,7 +60,7 @@ export async function GET(request: Request) {
 
 const patchSchema = z.object({
   id: z.string(),
-  status: z.enum(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"]).optional(),
+  status: z.enum(["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "CLOSED"]).optional(),
   priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]).optional(),
 });
 
@@ -121,7 +113,7 @@ export async function POST(request: Request) {
       }),
       prisma.ticket.update({
         where: { id: ticketId },
-        data: { status: "IN_PROGRESS", updatedAt: new Date() },
+        data: { status: "WAITING_CUSTOMER", updatedAt: new Date() },
       }),
     ]);
 

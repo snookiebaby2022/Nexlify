@@ -8,11 +8,28 @@ async function requireAdmin() {
   return user;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const { searchParams } = new URL(request.url);
+  const q = searchParams.get("q")?.trim() ?? "";
+  const status = searchParams.get("status")?.trim() ?? "";
+  const plan = searchParams.get("plan")?.trim() ?? "";
+
+  const where: Record<string, unknown> = {};
+  if (status) where.status = status;
+  if (plan) where.plan = { slug: plan };
+  if (q) {
+    where.OR = [
+      { key: { contains: q, mode: "insensitive" } },
+      { user: { email: { contains: q, mode: "insensitive" } } },
+      { notes: { contains: q, mode: "insensitive" } },
+    ];
+  }
+
   const licenses = await prisma.license.findMany({
+    where,
     include: {
       user: { select: { email: true, name: true } },
       plan: { select: { name: true, slug: true, priceCents: true } },
@@ -133,6 +150,18 @@ export async function DELETE(request: Request) {
 
   try {
     const body = await request.json();
+
+    // Bulk delete ended trial licenses
+    if (body.bulkEndedTrials) {
+      const result = await prisma.license.deleteMany({
+        where: {
+          status: { in: ["REVOKED", "EXPIRED"] },
+          plan: { slug: "trial" },
+        },
+      });
+      return NextResponse.json({ deleted: result.count });
+    }
+
     const ids: string[] = body.ids ?? (body.id ? [body.id] : []);
     if (!ids.length) return NextResponse.json({ error: "ids required" }, { status: 400 });
 

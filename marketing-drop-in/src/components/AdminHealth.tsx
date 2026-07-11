@@ -61,7 +61,7 @@ export function AdminHealth() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card label="SSL Certificate" value={data.sslExpiry || "—"} sub="nexlify.live" warn={data.sslExpiry.includes("days") && parseInt(data.sslExpiry.match(/\d+/)?.[0] || "999") < 30} />
-        <Card label="Database" value={data.dbSize || "—"} sub="SQLite file size" />
+        <Card label="Database" value={data.dbSize || "—"} sub="PostgreSQL size" />
       </div>
 
       <section className="glass rounded-2xl p-6">
