@@ -11,62 +11,59 @@ async function requireAdmin() {
 
 export async function GET(request: Request) {
   const admin = await requireAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get("status");
   const priority = searchParams.get("priority");
   const openOnly = searchParams.get("open") === "1";
 
-  const where: Record<string, unknown> = {};
-  if (status) where.status = status;
-  if (priority) where.priority = priority;
-  if (openOnly) where.status = { not: "CLOSED" };
+  try {
+    const whereClauses: string[] = [];
+    const params: unknown[] = [];
+    let idx = 1;
 
-  const tickets = await prisma.ticket.findMany({
-    where,
-    orderBy: { updatedAt: "desc" },
-    take: 50,
-    include: {
-      createdBy: { select: { username: true } },
-      messages: {
-        orderBy: { createdAt: "desc" },
-        take: 3,
-        include: {
-          author: { select: { username: true } },
-        },
-      },
-      _count: { select: { messages: true } },
-    },
-  });
+    if (status) { whereClauses.push(`t.status = $${idx++}`); params.push(status); }
+    if (priority) { whereClauses.push(`t.priority = $${idx++}`); params.push(priority); }
+    if (openOnly) { whereClauses.push(`t.status != 'CLOSED'`); }
 
-  const openCount = await prisma.ticket.count({
-    where: { status: { not: "CLOSED" } },
-  });
+    const where = whereClauses.length ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
-  return NextResponse.json({
-    openCount,
-    tickets: tickets.map((t) => ({
-      id: t.id,
-      subject: t.subject,
-      status: t.status,
-      priority: t.priority,
-      email: t.createdBy?.username ?? "unknown",
-      name: t.createdBy?.username ?? "unknown",
-      messageCount: t._count.messages,
-      updatedAt: t.updatedAt.toISOString(),
-      createdAt: t.createdAt.toISOString(),
-      messages: t.messages.map((m) => ({
-        id: m.id,
-        body: m.body,
-        isStaff: true,
-        createdAt: m.createdAt.toISOString(),
-        authorEmail: m.author?.username ?? "unknown",
+    const tickets = await prisma.$queryRawUnsafe(`
+      SELECT t.id, t.subject, t.status, t.priority, t.category,
+             t."createdAt", t."updatedAt",
+             u.username as author_name,
+             (SELECT COUNT(*) FROM "TicketMessage" m WHERE m."ticketId" = t.id) as message_count
+      FROM "Ticket" t
+      LEFT JOIN "PanelUser" u ON t."createdById" = u.id
+      ${where}
+      ORDER BY t."updatedAt" DESC
+      LIMIT 50
+    `, ...params);
+
+    const openCount = await prisma.$queryRawUnsafe`
+      SELECT COUNT(*)::int as count FROM "Ticket" WHERE status != 'CLOSED'
+    `;
+
+    return NextResponse.json({
+      openCount: (openCount as Record<string, number>[])[0]?.count ?? 0,
+      tickets: (tickets as Record<string, unknown>[]).map((t) => ({
+        id: t.id,
+        subject: t.subject,
+        status: t.status,
+        priority: t.priority,
+        email: t.author_name ?? "unknown",
+        name: t.author_name ?? "unknown",
+        messageCount: Number(t.message_count),
+        updatedAt: t.updatedAt?.toISOString?.() ?? String(t.updatedAt),
+        createdAt: t.createdAt?.toISOString?.() ?? String(t.createdAt),
+        messages: [],
       })),
-    })),
-  });
+    });
+  } catch (e) {
+    console.error("[admin/tickets GET]", e);
+    return NextResponse.json({ openCount: 0, tickets: [] });
+  }
 }
 
 const patchSchema = z.object({
@@ -77,9 +74,7 @@ const patchSchema = z.object({
 
 export async function PATCH(request: Request) {
   const admin = await requireAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const body = patchSchema.parse(await request.json());
@@ -107,20 +102,14 @@ const replySchema = z.object({
 
 export async function POST(request: Request) {
   const admin = await requireAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const { ticketId, body } = replySchema.parse(await request.json());
 
     const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
-    if (!ticket) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-    if (ticket.status === "CLOSED") {
-      return NextResponse.json({ error: "Ticket is closed" }, { status: 400 });
-    }
+    if (!ticket) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (ticket.status === "CLOSED") return NextResponse.json({ error: "Ticket is closed" }, { status: 400 });
 
     const [message] = await prisma.$transaction([
       prisma.ticketMessage.create({
@@ -128,9 +117,6 @@ export async function POST(request: Request) {
           ticketId,
           authorId: admin.id,
           body,
-        },
-        include: {
-          author: { select: { username: true } },
         },
       }),
       prisma.ticket.update({
