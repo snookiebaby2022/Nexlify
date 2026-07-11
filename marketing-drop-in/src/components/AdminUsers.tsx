@@ -1,19 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatDate } from "@/lib/format";
 
-type UserDetail = {
+type UserSummary = {
   id: string;
   email: string;
   name: string | null;
   role: string;
   trialBypass: boolean;
+  createdAt: string;
+  licenseCount: number;
+  ticketCount: number;
+};
+
+type UserDetail = UserSummary & {
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
-  createdAt: string;
-  ticketCount: number;
   licenses: {
     id: string;
     key: string;
@@ -31,19 +35,28 @@ type UserDetail = {
 };
 
 export function AdminUsers() {
-  const [email, setEmail] = useState("");
+  const [users, setUsers] = useState<UserSummary[]>([]);
+  const [selectedEmail, setSelectedEmail] = useState("");
   const [user, setUser] = useState<UserDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
-  async function search(e: React.FormEvent) {
-    e.preventDefault();
+  useEffect(() => {
+    fetch("/api/admin/users")
+      .then((r) => r.json())
+      .then((d) => setUsers(d.users ?? []))
+      .catch(() => {});
+  }, []);
+
+  async function lookup(email: string) {
+    setSelectedEmail(email);
     setError(null);
     setUser(null);
     setMessage(null);
     setLoading(true);
-    const res = await fetch(`/api/admin/users?email=${encodeURIComponent(email.trim())}`);
+    const res = await fetch(`/api/admin/users?email=${encodeURIComponent(email)}`);
     setLoading(false);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -80,30 +93,28 @@ export function AdminUsers() {
     setMessage("User updated");
   }
 
-  return (
-    <div className="space-y-8 max-w-3xl">
-      <form onSubmit={search} className="flex flex-wrap gap-3">
-        <input
-          type="email"
-          placeholder="user@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="flex-1 min-w-[240px] rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-white"
-        />
+  const filtered = search
+    ? users.filter(
+        (u) =>
+          u.email.toLowerCase().includes(search.toLowerCase()) ||
+          (u.name ?? "").toLowerCase().includes(search.toLowerCase())
+      )
+    : users;
+
+  if (user) {
+    return (
+      <div className="space-y-6 max-w-3xl">
         <button
-          type="submit"
-          disabled={loading}
-          className="rounded-lg bg-violet-600 px-5 py-2 font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+          type="button"
+          onClick={() => { setUser(null); setSelectedEmail(""); }}
+          className="text-sm text-violet-400 hover:underline"
         >
-          {loading ? "Searching…" : "Look up"}
+          ← Back to users
         </button>
-      </form>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-      {message && <p className="text-cyan-400 text-sm">{message}</p>}
+        {error && <p className="text-red-400 text-sm">{error}</p>}
+        {message && <p className="text-cyan-400 text-sm">{message}</p>}
 
-      {user && (
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 space-y-6">
           <div>
             <h2 className="font-display text-xl text-white">{user.email}</h2>
@@ -198,6 +209,65 @@ export function AdminUsers() {
               )}
             </ul>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-3 items-center">
+        <input
+          type="search"
+          placeholder="Search users by email or name…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 min-w-[200px] rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-white"
+        />
+      </div>
+
+      {loading && <p className="text-slate-400 text-sm">Loading…</p>}
+
+      {filtered.length === 0 ? (
+        <p className="text-slate-500">No users found.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-800">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-slate-800 bg-slate-900/80 text-slate-400">
+              <tr>
+                <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Role</th>
+                <th className="px-4 py-3">Licenses</th>
+                <th className="px-4 py-3">Joined</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/80">
+              {filtered.map((u) => (
+                <tr key={u.id} className="hover:bg-slate-800/30">
+                  <td className="px-4 py-3 text-white font-mono text-xs">{u.email}</td>
+                  <td className="px-4 py-3 text-slate-300">{u.name ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${u.role === "ADMIN" ? "bg-amber-500/20 text-amber-300" : "bg-slate-700 text-slate-300"}`}>
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-slate-400">{u.licenseCount}</td>
+                  <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(u.createdAt)}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => lookup(u.email)}
+                      className="text-xs text-violet-400 hover:underline"
+                    >
+                      View
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

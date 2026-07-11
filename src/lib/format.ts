@@ -1,5 +1,5 @@
 /** Stable UTC formatting — same output on server and client */
-const dateTimeFmt = new Intl.DateTimeFormat("en-US", {
+const dateTimeFmt = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
   month: "short",
   day: "numeric",
@@ -8,7 +8,7 @@ const dateTimeFmt = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-const dateFmt = new Intl.DateTimeFormat("en-US", {
+const dateFmt = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
   month: "short",
   day: "numeric",

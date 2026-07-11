@@ -20,7 +20,26 @@ export async function GET(request: Request) {
   const email = searchParams.get("email")?.trim().toLowerCase() ?? "";
 
   if (!email) {
-    return NextResponse.json({ error: "email query required" }, { status: 400 });
+    // List all users
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        _count: { select: { licenses: true, tickets: true } },
+      },
+    });
+    return NextResponse.json({
+      users: users.map((u) => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        trialBypass: u.trialBypass,
+        createdAt: u.createdAt.toISOString(),
+        licenseCount: u._count.licenses,
+        ticketCount: u._count.tickets,
+      })),
+    });
   }
 
   const user = await prisma.user.findUnique({

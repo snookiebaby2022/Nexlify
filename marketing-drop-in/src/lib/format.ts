@@ -10,7 +10,7 @@ export function formatMoney(cents: number, currency = "GBP"): string {
 export function formatDate(iso: string | Date | null): string {
   if (!iso) return "—";
   const d = typeof iso === "string" ? new Date(iso) : iso;
-  return d.toLocaleDateString("en-US", {
+  return d.toLocaleDateString("en-GB", {
     year: "numeric",
     month: "short",
     day: "numeric",
