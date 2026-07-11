@@ -30,6 +30,7 @@ function obfuscateLicenseKeywords(content) {
     if (!OBFUSCATION_MAP[kw]) {
       OBFUSCATION_MAP[kw] = obfuscateString(kw);
     }
+    result = result.split(kw).join(OBFUSCATION_MAP[kw]);
   }
   return result;
 }

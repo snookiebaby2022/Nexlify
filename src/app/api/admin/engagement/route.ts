@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth";
+import { PanelRole } from "@prisma/client";
 import { getTopEngagedStreams, getChannelTrends, getEngagementDashboard, getStreamEngagement } from "@/lib/viewer-engagement";
 import { iptvCorsPreflight } from "@/lib/iptv-cors";
 
 export async function OPTIONS() { return iptvCorsPreflight(); }
 
 export async function GET(req: NextRequest) {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const sp = req.nextUrl.searchParams;
   const action = sp.get("action");
   try {

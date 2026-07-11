@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
   const rows = lines.map((line) => {
     const daysActive = Math.max(
       1,
-      Math.ceil((Math.min(until.getTime(), line.expiresAt.getTime()) - line.createdAt.getTime()) / 86400000)
+      Math.ceil((Math.min(until.getTime(), (line.expiresAt ?? until).getTime()) - line.createdAt.getTime()) / 86400000)
     );
     const estimatedCredits = packages[0]?.creditCost ?? 1;
     return {

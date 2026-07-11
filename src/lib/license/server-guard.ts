@@ -88,12 +88,10 @@ export async function heartbeatCheck(): Promise<{ ok: boolean; reason?: string }
 
     return { ok: false, reason: `validation_failed_attempt_${failures}` };
   } catch (e) {
+    // Network errors are transient — do NOT permanently clear the license.
+    // Only increment the failure counter and report the error.
     const failures = await incrementHeartbeatFailures();
-    if (failures >= 3) {
-      const { clearStoredLicense } = await import("@/lib/license");
-      await clearStoredLicense();
-      return { ok: false, reason: `network_error_invalidated_after_${failures}_failures` };
-    }
+    console.warn(`[license] Heartbeat network error (attempt ${failures}/3):`, e instanceof Error ? e.message : e);
     return { ok: false, reason: `network_error_attempt_${failures}` };
   }
 }

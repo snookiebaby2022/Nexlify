@@ -19,7 +19,8 @@ export function LeakAuditPanel() {
   function load() {
     fetch("/api/admin/leak-audit?limit=50")
       .then((r) => r.json())
-      .then((d) => setLogs(d.logs ?? []));
+      .then((d) => setLogs(d.logs ?? []))
+      .catch(() => {});
   }
 
   useEffect(() => {

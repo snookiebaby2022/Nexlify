@@ -53,7 +53,7 @@ export async function handleBillingWebhook(
   switch (action) {
     case "create": {
       const username = payload.username ?? `svc_${payload.service_id}`;
-      const password = payload.password ?? Math.random().toString(36).slice(2, 10);
+      const password = payload.password ?? require("crypto").randomBytes(8).toString("hex");
       const days = payload.days ?? 30;
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + days);
@@ -86,10 +86,10 @@ export async function handleBillingWebhook(
         where: { id: line.id },
         data: { status: LineStatus.DISABLED },
       });
-      {
+      try {
         const { notifyLineSuspension } = await import("@/lib/panel-notification-events");
         await notifyLineSuspension(line.id, "Billing suspend");
-      }
+      } catch { /* notification failure should not abort the billing action */ }
       result = { ok: true, lineId: line.id, message: "suspended" };
       break;
 
@@ -117,15 +117,16 @@ export async function handleBillingWebhook(
         where: { id: line.id },
         data: { expiresAt, status: LineStatus.ACTIVE },
       });
-      {
+      try {
         const { notifyLineRenewal } = await import("@/lib/panel-notification-events");
         await notifyLineRenewal(line.id);
-      }
+      } catch { /* notification failure should not abort the billing action */ }
       result = { ok: true, lineId: line.id, message: "renewed" };
       break;
     }
 
     default:
+      console.warn(`[billing] Unknown action: ${action}`);
       return { ok: false, error: "Unknown action" };
   }
 

@@ -118,10 +118,14 @@ export function ManageUsersTable({
       panel === "reseller"
         ? `${usersApi}?id=${encodeURIComponent(id)}`
         : `/api/admin/resellers?id=${encodeURIComponent(id)}`;
-    const res = await fetch(url, { method: "DELETE" });
-    const j = await res.json();
-    if (!res.ok) alert(j.error ?? "Delete failed");
-    else onRefresh();
+    try {
+      const res = await fetch(url, { method: "DELETE" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) console.error("Delete failed:", j.error ?? "Unknown error");
+      else onRefresh();
+    } catch (e) {
+      console.error("Delete user network error:", e);
+    }
     setOpenAction(null);
   }
 

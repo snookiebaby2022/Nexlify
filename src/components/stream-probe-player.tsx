@@ -43,9 +43,14 @@ export function StreamProbePlayer({
     video.load();
 
     if (url.includes(".m3u8")) {
-      const script = document.createElement("script");
-      script.src = "https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js";
-      script.async = true;
+      const HLS_SRC = "https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js";
+      const existing = document.querySelector(`script[src="${HLS_SRC}"]`);
+      const script = (existing as HTMLScriptElement | null) ?? document.createElement("script");
+      if (!existing) {
+        script.src = HLS_SRC;
+        script.async = true;
+        document.body.appendChild(script);
+      }
       script.onload = () => {
         const Hls = (
           window as unknown as {
@@ -76,7 +81,7 @@ export function StreamProbePlayer({
       };
       document.body.appendChild(script);
       return () => {
-        script.remove();
+        if (!existing) script.remove();
       };
     }
 
@@ -122,19 +127,24 @@ export function StreamProbePlayer({
     setProbing(true);
     setProbe(null);
     setPlayerError("");
-    const res = await fetch("/api/admin/streams/probe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ streamId, url: streamUrl, fast }),
-    });
-    const data = await res.json();
-    setProbing(false);
-    if (!res.ok) {
-      setProbe({ status: "offline", message: data.error ?? "Probe failed" });
-      return;
+    try {
+      const res = await fetch("/api/admin/streams/probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamId, url: streamUrl, fast }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setProbe({ status: "offline", message: data.error ?? "Probe failed" });
+        return;
+      }
+      if (data.stream?.streamUrl) setResolvedUrl(String(data.stream.streamUrl));
+      setProbe(data.probe);
+    } catch {
+      setProbe({ status: "offline", message: "Network error — could not reach probe endpoint" });
+    } finally {
+      setProbing(false);
     }
-    if (data.stream?.streamUrl) setResolvedUrl(String(data.stream.streamUrl));
-    setProbe(data.probe);
   }
 
   useEffect(() => {

@@ -58,16 +58,21 @@ export function PanelLiveChat({ username }: { username: string }) {
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
-    const res = await fetch("/api/panel/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: text }),
-    });
-    setSending(false);
-    if (res.ok) {
-      setDraft("");
-      setEmojiOpen(false);
-      await load();
+    try {
+      const res = await fetch("/api/panel/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: text }),
+      });
+      if (res.ok) {
+        setDraft("");
+        setEmojiOpen(false);
+        await load();
+      }
+    } catch {
+      // Network error — silently ignore; the message was not delivered
+    } finally {
+      setSending(false);
     }
   }
 

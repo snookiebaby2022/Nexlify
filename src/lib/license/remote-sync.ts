@@ -110,6 +110,7 @@ export async function verifyActivationCodeWithVendor(
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
+    if (!res.ok) return { ok: false, error: `Vendor returned ${res.status}` };
     return await res.json();
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Network error" };
@@ -130,6 +131,7 @@ export async function sendActivationCodeToVendor(
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
+    if (!res.ok) return { ok: false, error: `Vendor returned ${res.status}` };
     return await res.json();
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Network error" };

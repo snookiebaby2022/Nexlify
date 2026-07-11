@@ -723,7 +723,7 @@ export async function setSettingGroup(group: SettingGroup, data: Record<string, 
   await prisma.panelSetting.upsert({
     where: { key: settingKey(group) },
     create: { key: settingKey(group), value: JSON.stringify(merged) },
-    update: { key: settingKey(group), value: JSON.stringify(merged) },
+    update: { value: JSON.stringify(merged) },
   });
   invalidateSettingGroupCache(group);
   return merged;
