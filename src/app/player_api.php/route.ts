@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
     }
     case "get_live_streams": {
       const categoryId = req.nextUrl.searchParams.get("category_id");
-      const payload = await xtreamLiveStreams(line, categoryId);
+      const payload = await xtreamLiveStreams(line, baseUrl, categoryId);
       const antiFreeze = await getAntiFreezeSettings();
       if (antiFreeze.zapPrefetchOnPlaylist) {
         const ids = payload.map((s) => String(s.stream_id));

@@ -6,6 +6,14 @@ import { exportPlaybackUrl } from "./export-playback-url";
 import { getStreamPlaybackMode } from "./stream-playback-mode";
 import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
+
+function cuidToNum(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
 import { parseBitrates, formatTimeshiftLabel } from "./stream-variants";
 import {
   portFromPanelBaseUrl,
@@ -142,7 +150,7 @@ export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
   return rows;
 }
 
-export async function xtreamLiveStreams(line: LineWithBouquets, categoryId?: string | null) {
+export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
   const streams = await streamsForLineExport(line);
   let live = streams.filter((s) => s.type === StreamType.LIVE);
   if (categoryId != null && categoryId !== "") {
@@ -184,7 +192,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, categoryId?: str
       num: i + 1,
       name: shiftLabel ? `${s.name} (${shiftLabel})` : s.name,
       stream_type: isCreatedLive ? "created_live" : "live",
-      stream_id: s.id,
+      stream_id: cuidToNum(s.id),
       stream_icon: s.streamIcon ?? "",
       epg_channel_id: resolveEpgId(s),
       channel_id: resolveChannelId(s),
@@ -193,7 +201,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, categoryId?: str
       category_id: s.categoryId ?? "0",
       custom_sid: full.parentStreamId ?? "",
       tv_archive: catchup || timeshiftHours > 0 ? 1 : 0,
-      direct_source: direct,
+      direct_source: direct || exportPlaybackUrl(baseUrl, line, s, full),
       tv_archive_duration: catchup ? archiveDays || timeshiftHours || 7 : timeshiftHours || 0,
       ...(abrLadder ? { abr_variants: abrLadder } : {}),
     };
@@ -215,7 +223,7 @@ export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string) 
       num: i + 1,
       name: s.name,
       stream_type: "movie",
-      stream_id: s.id,
+      stream_id: cuidToNum(s.id),
       stream_icon: s.streamIcon ?? "",
       added: Math.floor(s.createdAt.getTime() / 1000).toString(),
       updated_at: Math.floor(full.updatedAt.getTime() / 1000),
@@ -267,7 +275,7 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
   return series.map((s, i) => ({
     num: i + 1,
     name: s.name,
-    series_id: s.id,
+    series_id: cuidToNum(s.id),
     cover: s.streamIcon ?? "",
     plot: "",
     cast: "",

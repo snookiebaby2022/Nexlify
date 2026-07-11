@@ -69,6 +69,11 @@ const sharedPanelEnv = {
   NEXLIFY_LICENSE_VALID: fileEnv.NEXLIFY_LICENSE_VALID || "0",
   NEXLIFY_LICENSE_KEY: fileEnv.NEXLIFY_LICENSE_KEY || "",
   PANEL_TRUST_CLOUDFLARE: fileEnv.PANEL_TRUST_CLOUDFLARE || "1",
+  SMTP_HOST: fileEnv.SMTP_HOST || "",
+  SMTP_PORT: fileEnv.SMTP_PORT || "",
+  SMTP_USER: fileEnv.SMTP_USER || "",
+  SMTP_PASS: fileEnv.SMTP_PASS || "",
+  SMTP_FROM: fileEnv.SMTP_FROM || "",
 };
 
 /** @type {import('pm2').StartOptions} */
@@ -144,6 +149,12 @@ module.exports = {
         NODE_ENV: "production",
         DATABASE_URL: fileEnv.DATABASE_URL || "",
         JWT_SECRET: fileEnv.JWT_SECRET || "",
+        STRIPE_SECRET_KEY: fileEnv.STRIPE_SECRET_KEY || "",
+        SMTP_HOST: fileEnv.SMTP_HOST || "smtp.gmail.com",
+        SMTP_PORT: fileEnv.SMTP_PORT || "587",
+        SMTP_USER: fileEnv.SMTP_USER || "",
+        SMTP_PASS: fileEnv.SMTP_PASS || "",
+        SMTP_FROM: fileEnv.SMTP_FROM || "Nexlify <admin@nexlify.live>",
       },
     },
   ],

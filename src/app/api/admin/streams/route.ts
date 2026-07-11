@@ -112,7 +112,10 @@ export async function GET(req: NextRequest) {
     where.AND = [
       ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
       {
-        OR: [{ name: { contains: search } }, { streamUrl: { contains: search } }],
+        OR: [
+          { name: { contains: search, mode: "insensitive" } },
+          { streamUrl: { contains: search, mode: "insensitive" } },
+        ],
       },
     ];
   }
@@ -372,6 +375,9 @@ export async function PATCH(req: NextRequest) {
       const { streamUrl } = resolveSourceToStreamUrl(rawSource, getMediaImportRoot());
 
       data.streamUrl = streamUrl;
+      data.providerId = null;
+      data.providerPath = null;
+      data.hostedExternally = false;
 
     }
 

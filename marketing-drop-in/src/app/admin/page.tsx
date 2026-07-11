@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AdminDashboard } from "@/components/AdminDashboard";
+import { ClientErrorBoundary } from "@/components/ClientErrorBoundary";
 import { getSessionUser } from "@/lib/auth";
 
 import { pageSeo } from "@/lib/seo-pages";
@@ -20,7 +21,9 @@ export default async function AdminPage() {
         </p>
       </div>
 
-      <AdminDashboard />
+      <ClientErrorBoundary>
+        <AdminDashboard />
+      </ClientErrorBoundary>
     </div>
   );
 }

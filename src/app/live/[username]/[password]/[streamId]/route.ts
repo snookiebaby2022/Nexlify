@@ -104,8 +104,38 @@ export async function GET(
   if (demoBlock) return demoBlock;
 
   const { username, password, streamId } = await ctx.params;
-  const cleanId = streamId.replace(/\.(ts|m3u8)$/, "");
+  let cleanId = streamId.replace(/\.(ts|m3u8)$/, "");
   const ip = getClientIp(req);
+
+  // If cleanId is purely numeric (Xtream numeric stream_id), map it back to the cuid
+  if (/^\d+$/.test(cleanId)) {
+    const numericId = parseInt(cleanId, 10);
+    const { prisma } = await import("@/lib/prisma");
+    const lineWithBouquets = await prisma.line.findUnique({
+      where: { username },
+      include: {
+        bouquets: {
+          include: {
+            bouquet: {
+              include: { streams: { include: { stream: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (lineWithBouquets) {
+      const allStreams = lineWithBouquets.bouquets.flatMap((lb) => lb.bouquet.streams.map((bs) => bs.stream));
+      function mapCuidToNum(id: string): number {
+        let h = 0;
+        for (let i = 0; i < id.length; i++) {
+          h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+        }
+        return Math.abs(h);
+      }
+      const match = allStreams.find((s) => mapCuidToNum(s.id) === numericId);
+      if (match) cleanId = match.id;
+    }
+  }
 
   const line = await getLineForPlaybackAuth(username);
   if (!line || line.password !== password || !lineIsPlayable(line)) {

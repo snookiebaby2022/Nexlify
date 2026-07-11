@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { TicketPriority, TicketStatus } from "@/generated/prisma/client";
 
 async function requireAdmin() {
   const user = await getSessionUser();
@@ -17,8 +16,8 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const status = searchParams.get("status") as TicketStatus | null;
-  const priority = searchParams.get("priority") as TicketPriority | null;
+  const status = searchParams.get("status");
+  const priority = searchParams.get("priority");
   const openOnly = searchParams.get("open") === "1";
 
   const where: Record<string, unknown> = {};
@@ -31,12 +30,12 @@ export async function GET(request: Request) {
     orderBy: { updatedAt: "desc" },
     take: 50,
     include: {
-      user: { select: { email: true, name: true } },
+      createdBy: { select: { username: true } },
       messages: {
         orderBy: { createdAt: "desc" },
         take: 3,
         include: {
-          author: { select: { email: true, name: true, role: true } },
+          author: { select: { username: true } },
         },
       },
       _count: { select: { messages: true } },
@@ -54,17 +53,17 @@ export async function GET(request: Request) {
       subject: t.subject,
       status: t.status,
       priority: t.priority,
-      email: t.user.email,
-      name: t.user.name,
+      email: t.createdBy?.username ?? "unknown",
+      name: t.createdBy?.username ?? "unknown",
       messageCount: t._count.messages,
       updatedAt: t.updatedAt.toISOString(),
       createdAt: t.createdAt.toISOString(),
       messages: t.messages.map((m) => ({
         id: m.id,
         body: m.body,
-        isStaff: m.isStaff,
+        isStaff: true,
         createdAt: m.createdAt.toISOString(),
-        authorEmail: m.author.email,
+        authorEmail: m.author?.username ?? "unknown",
       })),
     })),
   });
@@ -72,7 +71,7 @@ export async function GET(request: Request) {
 
 const patchSchema = z.object({
   id: z.string(),
-  status: z.enum(["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "CLOSED"]).optional(),
+  status: z.enum(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"]).optional(),
   priority: z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]).optional(),
 });
 
@@ -129,15 +128,14 @@ export async function POST(request: Request) {
           ticketId,
           authorId: admin.id,
           body,
-          isStaff: true,
         },
         include: {
-          author: { select: { email: true, name: true, role: true } },
+          author: { select: { username: true } },
         },
       }),
       prisma.ticket.update({
         where: { id: ticketId },
-        data: { status: "WAITING_CUSTOMER", updatedAt: new Date() },
+        data: { status: "IN_PROGRESS", updatedAt: new Date() },
       }),
     ]);
 
