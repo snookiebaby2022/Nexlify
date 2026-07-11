@@ -40,7 +40,8 @@ export function TicketDetailView({
   const load = useCallback(() => {
     fetch(`/api/admin/tickets/${ticketId}`)
       .then((r) => r.json())
-      .then((d) => setTicket(d.ticket));
+      .then((d) => { if (d?.ticket) setTicket(d.ticket); })
+      .catch(() => setMsg("Failed to load ticket"));
   }, [ticketId]);
 
   useEffect(() => {
@@ -50,16 +51,21 @@ export function TicketDetailView({
   async function sendReply(e: React.FormEvent) {
     e.preventDefault();
     if (!reply.trim()) return;
-    const res = await fetch(`/api/admin/tickets/${ticketId}/messages`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: reply }),
-    });
-    if (res.ok) {
-      setReply("");
-      load();
-    } else {
-      setMsg((await res.json()).error ?? "Failed to send");
+    try {
+      const res = await fetch(`/api/admin/tickets/${ticketId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: reply }),
+      });
+      if (res.ok) {
+        setReply("");
+        load();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setMsg(d.error ?? "Failed to send");
+      }
+    } catch {
+      setMsg("Network error — could not send reply");
     }
   }
 

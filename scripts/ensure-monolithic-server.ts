@@ -76,7 +76,7 @@ async function main() {
 
     const data = {
       name: "Main Server",
-      host: ipMode ? domain : domain,
+      host: ipMode ? domain : domain.replace(/^https?:\/\//, ""),
       domain: ipMode ? null : domain,
       port: streamPort,
       httpsPort,

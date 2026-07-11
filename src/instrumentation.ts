@@ -10,6 +10,14 @@ export async function register() {
     } catch {
       /* DB unavailable during build */
     }
+    // Sync NEXLIFY_LICENSE_VALID from NEXLIFY_LICENSE_KEY env var so middleware
+    // can fast-path the license check without a DB/cookie round-trip.
+    try {
+      const { syncPanelLicenseEnvFromKey } = await import("@/lib/panel-license-env");
+      syncPanelLicenseEnvFromKey();
+    } catch {
+      /* key parse failure — license gate will fall back to cookie check */
+    }
     try {
       const { startupLicenseValidation } = await import("@/lib/license/server-guard");
       const result = await startupLicenseValidation();

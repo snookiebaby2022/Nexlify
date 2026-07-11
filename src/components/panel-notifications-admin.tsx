@@ -25,6 +25,7 @@ export function PanelNotificationsAdmin() {
   const [notifications, setNotifications] = useState<PanelNotificationRow[]>([]);
   const [resellers, setResellers] = useState<ResellerOption[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
     body: "",
@@ -42,7 +43,8 @@ export function PanelNotificationsAdmin() {
       .then((d) => {
         setNotifications(d.notifications ?? []);
         setResellers(d.resellers ?? []);
-      });
+      })
+      .catch(() => setError("Failed to load notifications"));
   }
 
   useEffect(() => {
@@ -52,31 +54,37 @@ export function PanelNotificationsAdmin() {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const res = await fetch("/api/admin/notifications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...form,
-        recipientId: form.target === "SPECIFIC_USER" ? form.recipientId : null,
-        expiresAt: form.expiresAt || null,
-      }),
-    });
-    setLoading(false);
-    if (res.ok) {
-      setForm({
-        title: "",
-        body: "",
-        kind: "MESSAGE",
-        priority: "NORMAL",
-        target: "ALL_RESELLERS",
-        recipientId: "",
-        isPinned: false,
-        expiresAt: "",
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          recipientId: form.target === "SPECIFIC_USER" ? form.recipientId : null,
+          expiresAt: form.expiresAt || null,
+        }),
       });
-      load();
-    } else {
-      const d = await res.json();
-      alert(d.error ?? "Failed to send");
+      if (res.ok) {
+        setForm({
+          title: "",
+          body: "",
+          kind: "MESSAGE",
+          priority: "NORMAL",
+          target: "ALL_RESELLERS",
+          recipientId: "",
+          isPinned: false,
+          expiresAt: "",
+        });
+        load();
+      } else {
+        const d = await res.json().catch(() => ({}));
+        setError(d.error ?? "Failed to send");
+      }
+    } catch {
+      setError("Network error — notification not sent");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -106,6 +114,12 @@ export function PanelNotificationsAdmin() {
           <Megaphone size={20} style={{ color: "var(--accent)" }} />
           Compose announcement
         </h2>
+
+        {error && (
+          <p className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: "var(--danger, #ef4444)", color: "var(--danger, #ef4444)" }}>
+            {error}
+          </p>
+        )}
 
         <label className="block text-sm">
           <span className="font-medium">Title</span>

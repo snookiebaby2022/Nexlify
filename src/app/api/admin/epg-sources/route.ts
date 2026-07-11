@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth";
+import { PanelRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { syncEpgSource } from "@/lib/epg";
 import { invalidateEpgCache } from "@/lib/cache-invalidate";
@@ -7,6 +9,8 @@ import { iptvCorsPreflight } from "@/lib/iptv-cors";
 export async function OPTIONS() { return iptvCorsPreflight(); }
 
 export async function GET(req: NextRequest) {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const sp = req.nextUrl.searchParams;
   const action = sp.get("action");
   try {
@@ -34,6 +38,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await req.json();
   const { action } = body;
   try {

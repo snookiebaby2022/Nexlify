@@ -148,7 +148,7 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
         <aside className="flex flex-col justify-center items-center lg:items-start px-8 py-12 lg:py-0 lg:w-[46%] lg:min-h-screen lg:pl-14 xl:pl-20 gap-8 text-center lg:text-left">
           {whiteLabel?.logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={whiteLabel.logoUrl} alt="" className="h-16 w-auto max-w-[220px] object-contain" />
+            <img src={whiteLabel.logoUrl} alt="Panel logo" className="h-16 w-auto max-w-[220px] object-contain" />
           ) : (
             <Login3dLogo size="lg" />
           )}

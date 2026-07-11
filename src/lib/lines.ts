@@ -45,7 +45,7 @@ export function effectiveLineStatus(line: Pick<Line, "status" | "expiresAt">): L
   if (line.status === LineStatus.BANNED || line.status === LineStatus.DISABLED) {
     return line.status;
   }
-  if (line.expiresAt < new Date()) return LineStatus.EXPIRED;
+  if (line.expiresAt && line.expiresAt < new Date()) return LineStatus.EXPIRED;
   return line.status;
 }
 

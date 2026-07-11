@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth";
+import { PanelRole } from "@prisma/client";
 import { getActiveSessions, addSession, removeSession, heartbeatSession, checkSessionAllowed, getSessionPolicy, cleanupStaleSessions } from "@/lib/session-management";
 import { iptvCorsPreflight } from "@/lib/iptv-cors";
 
 export async function OPTIONS() { return iptvCorsPreflight(); }
 
 export async function GET(req: NextRequest) {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const sp = req.nextUrl.searchParams;
   const action = sp.get("action");
   try {
@@ -33,8 +37,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await req.json();
-  const { action } = body;
   try {
     if (action === "add") {
       await addSession(body.session);

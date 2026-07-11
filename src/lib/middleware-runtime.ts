@@ -11,7 +11,7 @@ function peerIp(req: NextRequest): string {
   const real = req.headers.get("x-real-ip");
   if (real) return real.trim();
   const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",").pop()?.trim() ?? "";
+  if (fwd) return fwd.split(",")[0]?.trim() ?? "";
   return "";
 }
 

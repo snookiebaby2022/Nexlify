@@ -49,7 +49,9 @@ function redisMatchPattern(pattern: string): string {
 }
 
 async function ensureRedisReady(redis: NonNullable<ReturnType<typeof getRedis>>) {
-  if (redis.status !== "ready") await redis.connect();
+  // Only call connect() when the client has been fully closed; other non-ready
+  // states (connecting, reconnecting) manage their own lifecycle.
+  if (redis.status === "end") await redis.connect();
 }
 
 async function scanDeleteOnNode(redis: Redis, match: string): Promise<number> {

@@ -39,13 +39,18 @@ export default function AdminApiDocsPage() {
   }, []);
 
   async function saveHmac() {
-    await fetch("/api/admin/hmac-secret", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret: hmacSecret }),
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      await fetch("/api/admin/hmac-secret", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: hmacSecret }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      // Network error — notify via the saved state so the UI reflects failure
+      setSaved(false);
+    }
   }
 
   return (
@@ -69,6 +74,7 @@ export default function AdminApiDocsPage() {
           Sign query string with SHA-256 HMAC; send as <code>X-Nexlify-Signature</code> header.
         </p>
         <input
+          type="password"
           className="w-full rounded-lg border px-3 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
           placeholder="HMAC secret"

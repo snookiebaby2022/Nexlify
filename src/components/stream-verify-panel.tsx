@@ -51,10 +51,12 @@ export function StreamVerifyPanel() {
   const load = useCallback(() => {
     fetch("/api/admin/processes")
       .then((r) => r.json())
-      .then((d) => setProcesses(d.processes ?? []));
+      .then((d) => setProcesses(d.processes ?? []))
+      .catch(() => {});
     fetch("/api/admin/streams?pageSize=50&withStats=1&type=LIVE")
       .then((r) => r.json())
-      .then((d) => setSources(d.streams ?? []));
+      .then((d) => setSources(d.streams ?? []))
+      .catch(() => {});
     fetch("/api/admin/stream-errors")
       .then((r) => r.json())
       .then((d) => {
@@ -69,7 +71,8 @@ export function StreamVerifyPanel() {
             server: p.server,
           })),
         ]);
-      });
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
