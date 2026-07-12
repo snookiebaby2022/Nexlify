@@ -18,7 +18,6 @@ export async function GET(request: Request) {
       orderBy: { updatedAt: "desc" },
       take: 50,
       include: {
-        user: { select: { email: true, name: true } },
         messages: {
           orderBy: { createdAt: "desc" },
           take: 3,
@@ -38,8 +37,8 @@ export async function GET(request: Request) {
         subject: t.subject,
         status: t.status,
         priority: t.priority,
-        email: t.user?.email ?? "unknown",
-        name: t.user?.name ?? "unknown",
+        email: "unknown",
+        name: "unknown",
         messageCount: t._count.messages,
         updatedAt: t.updatedAt.toISOString(),
         createdAt: t.createdAt.toISOString(),

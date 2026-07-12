@@ -22,7 +22,6 @@ export default async function AdminTicketsPage() {
   const tickets = await prisma.ticket.findMany({
     orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
     include: {
-      user: { select: { email: true, name: true } },
       _count: { select: { messages: true } },
     },
   });
@@ -60,10 +59,6 @@ export default async function AdminTicketsPage() {
                   </span>
                 </div>
                 <p className="mt-2 font-medium text-white">{t.subject}</p>
-                <p className="text-sm text-[var(--muted)]">
-                  {t.user.name ? `${t.user.name} · ` : ""}
-                  {t.user.email}
-                </p>
               </div>
               <p className="text-xs text-[var(--muted)]">
                 {formatDate(t.updatedAt)} · {t._count.messages} msgs
