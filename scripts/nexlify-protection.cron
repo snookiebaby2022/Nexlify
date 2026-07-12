@@ -1,0 +1,11 @@
+# Nexlify Panel Protection Cron Jobs
+# Run protection checks every 5 minutes
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+
+# Run full protection check every 5 minutes
+*/5 * * * * root /opt/nexlify-panel/scripts/protect.sh all >> /var/log/nexlify-protection.log 2>&1
+
+# Create backup every hour
+0 * * * * root /opt/nexlify-panel/scripts/protect.sh backup >> /var/log/nexlify-protection.log 2>&1
