@@ -16,8 +16,33 @@ const securityHeaders = [
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
 ];
 
+const cacheHeaders = [
+  {
+    source: '/_next/static/(.*)',
+    headers: [
+      {
+        key: 'Cache-Control',
+        value: 'public, max-age=31536000, immutable',
+      },
+    ],
+  },
+  {
+    source: '/images/(.*)',
+    headers: [
+      {
+        key: 'Cache-Control',
+        value: 'public, max-age=86400, stale-while-revalidate=86400',
+      },
+    ],
+  },
+];
+
 const nextConfig: NextConfig = {
   distDir: ".next",
+  compress: true,
+  poweredByHeader: false,
+  generateEtags: true,
+  swcMinify: true,
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -25,8 +50,16 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   serverExternalPackages: ["ioredis"],
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+  },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      ...cacheHeaders,
+    ];
   },
   /** Allow accessing dev server by public IP (e.g. http://85.17.162.54:3000) */
   allowedDevOrigins: devOrigins,

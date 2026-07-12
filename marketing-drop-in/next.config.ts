@@ -6,11 +6,20 @@ import { MARKETING_SECURITY_HEADERS } from "./src/lib/security-headers";
 const isVercel = process.env.VERCEL === "1";
 
 const nextConfig: NextConfig = {
+  compress: true,
+  poweredByHeader: false,
+  generateEtags: true,
+  swcMinify: true,
   typescript: {
     ignoreBuildErrors: true,
   },
   eslint: {
     ignoreDuringBuilds: true,
+  },
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
   // ✅ FIX #1: scope tracing to THIS project, not the parent
   //    (the parent directory is a different Next.js app)
@@ -45,6 +54,15 @@ const nextConfig: NextConfig = {
         source: "/twitter-image",
         headers: [
           { key: "Cache-Control", value: "public, max-age=86400, s-maxage=86400" },
+        ],
+      },
+      {
+        source: '/images/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=86400, stale-while-revalidate=86400',
+          },
         ],
       },
     ];
