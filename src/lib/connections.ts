@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { cacheGetOrSet, cacheDel } from "./cache";
 
-const STALE_MS = 24 * 60 * 60 * 1000; // 24 hours — connections stay alive until explicitly removed on stream close
+const STALE_MS = 5 * 60 * 1000; // 5 minutes — connections expire quickly if not refreshed
 const LIVE_STALE_MS = 2 * 60 * 1000; // 2 minutes — for "live" connections display (shows who is actually watching now)
 const CONNECTIONS_CACHE_TTL = 5; // 5 seconds — short TTL for dashboard responsiveness
 

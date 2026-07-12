@@ -30,6 +30,50 @@ export async function jobCleanupConnections() {
   }
 }
 
+export async function jobStopIdleStreams() {
+  const start = Date.now();
+  try {
+    // Find all running stream processes
+    const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
+    const runningProcesses = await prisma.streamProcess.findMany({
+      where: {
+        status: "running",
+        lastSeenAt: { gte: staleBefore },
+      },
+      select: {
+        id: true,
+        streamId: true,
+        serverId: true,
+      },
+    });
+
+    let stopped = 0;
+    for (const proc of runningProcesses) {
+      // Check if this stream has any active connections
+      const connectionCount = await prisma.liveConnection.count({
+        where: {
+          streamId: proc.streamId,
+          lastSeenAt: { gte: staleBefore },
+        },
+      });
+
+      // If no active connections, stop the stream
+      if (connectionCount === 0) {
+        await prisma.streamProcess.update({
+          where: { id: proc.id },
+          data: { status: "stopped" },
+        });
+        await enqueueAgentCommand(proc.serverId, "stop_stream", { streamId: proc.streamId });
+        stopped++;
+      }
+    }
+
+    await logCron("stop_idle_streams", "ok", `stopped ${stopped} idle streams`, Date.now() - start);
+  } catch (e) {
+    await logCron("stop_idle_streams", "error", String(e), Date.now() - start);
+  }
+}
+
 export async function jobBandwidthSnapshot() {
   const start = Date.now();
   try {
@@ -447,6 +491,7 @@ async function jobPanelHealthWatchdog() {
 export async function runAllCronJobs() {
   await jobPanelHealthWatchdog();
   await jobCleanupConnections();
+  await jobStopIdleStreams();
   await jobBandwidthSnapshot();
   await jobWatchFolders();
   await jobImportQueue();
