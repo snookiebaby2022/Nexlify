@@ -67,13 +67,17 @@ export async function trackConnection(opts: {
 }) {
   const staleBefore = new Date(Date.now() - STALE_MS);
 
-  // Delete any stale connections from this IP first (handles channel switching)
+  // When a user switches channels, remove their previous active connection
+  // This prevents duplicate connections from showing in the dashboard
   if (opts.ip) {
+    // Delete ALL connections from this IP (not just stale ones)
+    // This handles channel switching - old connection is replaced with new one
     await prisma.liveConnection.deleteMany({
       where: {
         lineId: opts.lineId,
         ip: opts.ip,
-        lastSeenAt: { lt: staleBefore },
+        // Only delete if it's a different stream (channel switching)
+        streamId: opts.streamId ? { not: opts.streamId } : undefined,
       },
     });
   }
