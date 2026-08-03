@@ -1,6 +1,36 @@
-import { redirect } from "next/navigation";
+import { PromoLanding } from "@/components/promo-landing";
 
-/** Legacy growth /campaign URL — send to live demo. */
-export default function PromoIndexPage() {
-  redirect("/demo");
+type SearchParams = Record<string, string | string[] | undefined>;
+
+function pickUtm(params: SearchParams) {
+  const keys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"] as const;
+  const utm: Record<string, string> = {};
+  for (const key of keys) {
+    const raw = params[key];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (value) utm[key] = value;
+  }
+  return utm;
+}
+
+export const metadata = {
+  title: "Nexlify — Stream management, built for operators",
+  description:
+    "Modern self-hosted IPTV panel. PostgreSQL-native, anti-freeze, reseller tree, WHMCS-ready. All licenses free until September 1, 2026.",
+  openGraph: {
+    title: "Nexlify — Built for operators",
+    description: "All licenses free until September 1, 2026. Try the live demo.",
+    url: "https://nexlify.live/promo",
+  },
+};
+
+export default async function PromoPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
+  const params = await searchParams;
+  const utm = pickUtm(params);
+
+  return <PromoLanding utm={utm} />;
 }

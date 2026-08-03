@@ -6,6 +6,7 @@ import { ContentDisclaimer } from "@/components/ContentDisclaimer";
 import { TrialCtaButton } from "@/components/TrialCtaButton";
 import { DEMO_PANEL_URL } from "@/lib/demo";
 import { SOFTWARE_POSITIONING } from "@/lib/marketing-constants";
+import { FREE_PERIOD_END_LABEL, isFreePeriod } from "@/lib/marketing-coupon";
 import { site } from "@/lib/site";
 
 const HeroPanelCarousel = dynamic(
@@ -40,6 +41,13 @@ export function Hero() {
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-composited-pulse" />
             IPTV reseller software · WHMCS billing · Live demo
           </div>
+
+          {isFreePeriod() && (
+            <p className="mt-4 inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200">
+              <span className="font-bold text-amber-300">All licenses free</span>
+              until {FREE_PERIOD_END_LABEL} — no coupon needed
+            </p>
+          )}
 
           <h1 className="font-display mt-6 max-w-4xl text-3xl font-bold leading-[1.1] tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl">
             IPTV reseller panel —{" "}
