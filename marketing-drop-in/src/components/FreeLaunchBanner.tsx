@@ -3,22 +3,20 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { trackEvent } from "@/lib/analytics";
+import {
+  daysUntilFreePeriodEnds,
+  FREE_PERIOD_END_LABEL,
+  isFreePeriod,
+} from "@/lib/marketing-coupon";
 
-const FREE_PERIOD_END = "2026-08-01";
 const FREE_BANNER_KEY = "nexlify_free_banner_dismissed";
-
-function getDaysUntil(dateStr: string): number {
-  const end = new Date(dateStr);
-  const now = new Date();
-  const diff = end.getTime() - now.getTime();
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-}
 
 export function FreeLaunchBanner() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!isFreePeriod()) return;
     if (localStorage.getItem(FREE_BANNER_KEY) === "1") return;
     setVisible(true);
   }, []);
@@ -30,7 +28,7 @@ export function FreeLaunchBanner() {
 
   if (!visible) return null;
 
-  const daysLeft = getDaysUntil(FREE_PERIOD_END);
+  const daysLeft = daysUntilFreePeriodEnds();
 
   return (
     <div
@@ -51,7 +49,7 @@ export function FreeLaunchBanner() {
           </div>
           <p className="mt-1 text-sm font-medium text-white sm:text-base">
             <span className="font-bold text-amber-300">All licenses are free</span> until{" "}
-            <span className="text-amber-200">August 1, 2026</span> — no coupon needed
+            <span className="text-amber-200">{FREE_PERIOD_END_LABEL}</span> — no coupon needed
           </p>
         </div>
 

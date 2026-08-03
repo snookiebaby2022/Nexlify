@@ -26,15 +26,31 @@ function getTermDays(term: string): number {
   }
 }
 
-const PRIVATE_KEY_PATH = process.env.LICENSE_KEY_FILE?.trim() || "/var/www/nexlify/.license-keys/private.pem";
+function loadPrivateKeyPem(): string {
+  const fromEnv = process.env.LICENSE_SERVER_PRIVATE_PEM?.trim();
+  if (fromEnv) return fromEnv;
+
+  const candidates = [
+    process.env.LICENSE_KEY_FILE?.trim(),
+    join(process.cwd(), ".license-keys", "private.pem"),
+    "/var/www/nexlify/.license-keys/private.pem",
+  ].filter((p): p is string => Boolean(p));
+
+  for (const path of candidates) {
+    try {
+      return readFileSync(path, "utf-8").trim();
+    } catch {
+      /* try next path */
+    }
+  }
+
+  throw new Error(
+    "Missing license signing key — set LICENSE_SERVER_PRIVATE_PEM, LICENSE_KEY_FILE, or .license-keys/private.pem",
+  );
+}
 
 function loadPrivateKey() {
-  try {
-    const pem = readFileSync(PRIVATE_KEY_PATH, "utf-8").trim();
-    return createPrivateKey(pem);
-  } catch {
-    throw new Error(`Failed to load private key from ${PRIVATE_KEY_PATH}`);
-  }
+  return createPrivateKey(loadPrivateKeyPem());
 }
 
 function signPayload(payload: Record<string, unknown>): string {

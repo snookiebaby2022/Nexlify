@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth";
 import { issueLicenseForOrder } from "@/lib/licensing";
 import {
   couponCheckoutTotals,
+  isFreePeriod,
   NEXLIFY_LAUNCH_COUPON,
   PANEL_COUPON_API,
   type PanelCouponView,
@@ -57,6 +58,11 @@ export async function POST(request: Request) {
     let amountCents = plan.priceCents;
     let licenseDurationDays: number | null = null;
     let appliedCoupon: string | null = null;
+
+    if (isFreePeriod() && plan.slug !== TRIAL_PLAN_SLUG) {
+      amountCents = 0;
+      licenseDurationDays = plan.durationDays;
+    }
 
     const normalizedCoupon = couponCode?.trim().toUpperCase();
     if (normalizedCoupon) {

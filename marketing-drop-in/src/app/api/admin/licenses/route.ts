@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
+import { issueLicenseForOrder } from "@/lib/licensing";
 
 async function requireAdmin() {
   const user = await getSessionUser();
@@ -105,14 +106,18 @@ export async function POST(request: Request) {
     const plan = await prisma.plan.findUnique({ where: { id: planId } });
     if (!plan) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
 
+    let licenseDurationDays: number;
     let expiresAt: Date | null = null;
     if (durationDays === 0) {
+      licenseDurationDays = 36500;
       expiresAt = new Date("2099-12-31");
     } else if (term && term !== "plan") {
-      const days = term === "1m" ? 30 : term === "3m" ? 90 : term === "6m" ? 180 : term === "1y" ? 365 : plan.durationDays;
-      expiresAt = new Date(Date.now() + days * 86400000);
+      licenseDurationDays =
+        term === "1m" ? 30 : term === "3m" ? 90 : term === "6m" ? 180 : term === "1y" ? 365 : plan.durationDays;
+      expiresAt = new Date(Date.now() + licenseDurationDays * 86400000);
     } else {
-      expiresAt = new Date(Date.now() + plan.durationDays * 86400000);
+      licenseDurationDays = plan.durationDays;
+      expiresAt = new Date(Date.now() + licenseDurationDays * 86400000);
     }
 
     let user = await prisma.user.findUnique({ where: { email } });
@@ -122,17 +127,27 @@ export async function POST(request: Request) {
       });
     }
 
-    const key = `NXL-${Math.random().toString(36).slice(2, 8).toUpperCase()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-
-    const license = await prisma.license.create({
+    const order = await prisma.order.create({
       data: {
-        key,
         userId: user.id,
         planId: plan.id,
-        status: "ACTIVE",
-        maxLines: maxLines ? Number(maxLines) : plan.maxLines,
+        amountCents: 0,
+        status: "COMPLETED",
+        licenseDurationDays,
+      },
+    });
+
+    const issued = await issueLicenseForOrder(order.id);
+    if (!issued) {
+      return NextResponse.json({ error: "License issue failed" }, { status: 500 });
+    }
+
+    const license = await prisma.license.update({
+      where: { id: issued.id },
+      data: {
         expiresAt,
-        activatedAt: new Date(),
+        maxLines: maxLines ? Number(maxLines) : plan.maxLines,
+        notes: "Admin-issued",
       },
       include: { user: true, plan: true },
     });

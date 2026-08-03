@@ -1,4 +1,5 @@
 import { TRIAL_PLAN_SLUG, type PlanView } from "@/lib/plans";
+import { isFreePeriod } from "@/lib/marketing-coupon";
 
 export type PlanMarketing = {
   /** What differs on this plan (enforced by license). */
@@ -91,7 +92,8 @@ export function getPlanMarketing(plan: PlanView): PlanMarketing {
 
   return {
     planLimits: planLimitsFor(plan),
-    primaryLabel: plan.priceCents === 0 ? "Get free license" : "Buy license",
+    primaryLabel:
+      plan.priceCents === 0 || isFreePeriod() ? "Get free license" : "Buy license",
     primaryHref: null,
     primaryTrack: "checkout_start",
     isTrial: false,
@@ -101,6 +103,6 @@ export function getPlanMarketing(plan: PlanView): PlanMarketing {
 }
 
 export function formatPlanPrice(plan: PlanView, formatted: string): string {
-  if (plan.priceCents === 0) return "Free";
+  if (plan.priceCents === 0 || isFreePeriod()) return "Free";
   return formatted;
 }

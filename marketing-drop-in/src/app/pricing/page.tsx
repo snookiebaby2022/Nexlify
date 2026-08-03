@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { isStripeConfigured } from "@/lib/stripe";
 
 import { pageSeo } from "@/lib/seo-pages";
+import { FREE_PERIOD_END_LABEL } from "@/lib/marketing-coupon";
 
 export const metadata = pageSeo("/pricing");
 
@@ -44,13 +45,13 @@ export default async function PricingPage() {
       <PricingJsonLd />
       <div className="mx-auto max-w-6xl px-4 pt-16 text-center">
         <p className="text-sm font-semibold uppercase tracking-widest text-amber-400">
-          Free until August 1, 2026
+          Free until {FREE_PERIOD_END_LABEL}
         </p>
         <h1 className="font-display mt-2 text-4xl font-bold text-white md:text-5xl">
           All licenses free — IPTV reseller panel for operators worldwide
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-[var(--muted)]">
-          Nexlify IPTV management software is free for all operators until August 1, 2026.
+          Nexlify IPTV management software is free for all operators until {FREE_PERIOD_END_LABEL}.
           Every license includes the WHMCS IPTV module, instant digital delivery, and full panel
           access — no credit card required during the free period.
         </p>
@@ -113,7 +114,7 @@ export default async function PricingPage() {
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-center text-sm leading-relaxed text-[var(--muted)]">
           Every plan includes the WHMCS IPTV module, encrypted license keys, and access to the
-          one-click installer. All plans are <strong className="text-amber-300">free until August 1, 2026</strong> — no
+          one-click installer. All plans are <strong className="text-amber-300">free until {FREE_PERIOD_END_LABEL}</strong> — no
           credit card required. Upgrade as your line count grows.
         </p>
         <h3 className="mt-8 text-center text-lg font-semibold text-violet-300">

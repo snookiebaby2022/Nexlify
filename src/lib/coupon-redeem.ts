@@ -36,7 +36,7 @@ export function toCouponPublicView(coupon: {
   const soldOut = coupon.maxUses > 0 && coupon.uses >= coupon.maxUses;
   let percentOff = coupon.discountType === "percent" ? coupon.discountValue : 0;
 
-  // During free period (until Aug 1, 2026), all coupons give 100% off
+  // During free period (until Sep 1, 2026), all coupons give 100% off
   if (isFreePeriod()) {
     percentOff = 100;
   }

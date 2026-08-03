@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/format";
-import { readPendingCouponCode } from "@/lib/marketing-coupon";
+import { FREE_PERIOD_END_LABEL, isFreePeriod, readPendingCouponCode } from "@/lib/marketing-coupon";
 import { formatPlanPrice, getPlanMarketing, isTrialPlan, PRICING_HONESTY_NOTE, FULL_PANEL_FEATURES } from "@/lib/plan-marketing";
 import { FALLBACK_PLANS, gbpToUsdCents, type PlanView } from "@/lib/plans";
 
@@ -48,8 +48,8 @@ export function PricingSection({
         : `/login?next=${next}`;
       return;
     }
-    // During free period (Aug 1, 2026), all plans are free — bypass stripe check
-    if (plan.priceCents > 0 && !stripeEnabled) {
+    // During free period, all plans are free — bypass stripe check
+    if (plan.priceCents > 0 && !stripeEnabled && !isFreePeriod()) {
       setError("Stripe checkout is not configured — use WHMCS or contact support.");
       return;
     }
@@ -93,7 +93,7 @@ export function PricingSection({
       <div className="mx-auto max-w-6xl px-4">
         <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
           <p className="text-sm text-[var(--muted)]">
-            <span className="text-amber-300 font-semibold">Free until August 1, 2026</span> · instant digital delivery · no hidden fees
+            <span className="text-amber-300 font-semibold">Free until {FREE_PERIOD_END_LABEL}</span> · instant digital delivery · no hidden fees
           </p>
           <div
             className="inline-flex rounded-full border border-white/15 p-1"
@@ -123,7 +123,7 @@ export function PricingSection({
               Limited Time
             </span>
             <span className="text-xs font-semibold text-amber-200/80">
-              All licenses free until August 1, 2026 — no coupon needed
+              All licenses free until {FREE_PERIOD_END_LABEL} — no coupon needed
             </span>
           </div>
           <p className="mt-2 text-sm text-[var(--muted)]">
@@ -248,7 +248,7 @@ export function PricingSection({
             Explore the live demo
           </Link>
           {" · "}
-          <span className="text-amber-300/90">Free licenses end August 1, 2026</span>
+          <span className="text-amber-300/90">Free licenses end {FREE_PERIOD_END_LABEL}</span>
         </p>
 
         <p className="mt-4 text-center text-xs text-[var(--muted)]">
