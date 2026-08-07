@@ -87,26 +87,16 @@ fi
 # --- 3) Remove build breaker ---
 rm -f "$MARKETING/prisma.config.ts"
 
-# --- 4) Create marketing DB tables if missing ---
-echo "-> Ensuring marketing database schema..."
+# --- 4) Marketing database (separate from panel — never db push panel DB) ---
+echo "-> Ensuring marketing database..."
 cd "$MARKETING"
-if command -v npx >/dev/null 2>&1; then
-  for ENV_CAND in "$MARKETING/.env" /home/nexlify-panel/.env /opt/nexlify-panel/.env; do
-    if [ -f "$ENV_CAND" ]; then
-      DB_LINE="$(grep -m1 '^DATABASE_URL=' "$ENV_CAND" 2>/dev/null || true)"
-      if [ -n "$DB_LINE" ]; then
-        export DATABASE_URL="${DB_LINE#DATABASE_URL=}"
-        export DATABASE_URL="${DATABASE_URL#\"}"
-        export DATABASE_URL="${DATABASE_URL%\"}"
-        echo "   DATABASE_URL from $ENV_CAND"
-        break
-      fi
-    fi
-  done
-  npx prisma db push --accept-data-loss 2>&1 | tail -5
+if [ -f "$MARKETING/scripts/setup-marketing-database.sh" ]; then
+  bash "$MARKETING/scripts/setup-marketing-database.sh" "$MARKETING"
+else
+  echo "   WARNING: setup-marketing-database.sh missing — skip DB setup"
 fi
 
-# --- 5) Sync database plans ---
+# --- 5) Sync database plans (setup-marketing-database.sh already syncs; safe to re-run) ---
 echo "-> Syncing plans (trial + £50 nexlify)..."
 cd "$MARKETING"
 if command -v npx >/dev/null 2>&1; then

@@ -27,8 +27,10 @@ ENV_FILE="$MARKETING/.env"
 TMP="$(mktemp)"
 [ -f "$ENV_FILE" ] && cp "$ENV_FILE" "${ENV_FILE}.backup.$(date +%s)"
 
+# Never copy panel DATABASE_URL — marketing uses nexlify_marketing (see setup-marketing-database.sh)
 copy_kv() {
   local key="$1"
+  [ "$key" = "DATABASE_URL" ] && return 0
   [ -n "$PANEL_ENV" ] || return 0
   grep -E "^${key}=" "$PANEL_ENV" 2>/dev/null | head -1 >> "$TMP" || true
 }

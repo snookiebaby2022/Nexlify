@@ -1,8 +1,9 @@
 # Marketing website .env — copy to /var/www/nexlify/.env on VPS
 # Or run: bash scripts/setup-marketing-env.sh (auto-copies secrets from panel .env)
 
-# === Required (copy from /home/nexlify-panel/.env) ===
-DATABASE_URL="postgresql://nexlify:PASSWORD@127.0.0.1:5432/nexlify"
+# === Required — MUST be separate from panel DB (use setup-marketing-database.sh) ===
+# NEVER point this at the panel database (nexlify) — db push will destroy panel tables.
+DATABASE_URL="postgresql://nexlify:PASSWORD@127.0.0.1:5432/nexlify_marketing"
 JWT_SECRET="long-random-string-min-32-chars"
 
 # License signing — use FILE path only (never paste PEM lines into .env)
