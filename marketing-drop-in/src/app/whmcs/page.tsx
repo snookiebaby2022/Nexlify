@@ -23,7 +23,7 @@ const BENEFITS = [
   },
   {
     title: "Product ID mapping",
-    body: "Starter, Main, and Top Tier panel plans map to WHMCS product IDs 1–3. Addon plugins use separate IDs.",
+    body: "The Nexlify License maps to WHMCS product ID 1 — unlimited servers and all plugins included in one plan.",
   },
   {
     title: "Stripe + PayPal",
@@ -37,7 +37,7 @@ const BENEFITS = [
 
 const STEPS = [
   "Install the Nexlify WHMCS module from your license dashboard or docs.",
-  "Create WHMCS products for Starter, Main, and Top Tier — map product IDs in the module config.",
+  "Create a WHMCS product for the Nexlify License — map product ID 1 in the module config.",
   "Point the module API URL to your Nexlify licensing endpoint and paste your API key.",
   "Place a test order — confirm the license key appears in the client area and activates on your panel.",
 ] as const;

@@ -8,9 +8,8 @@ export type SchemaOffer = {
 };
 
 const DEFAULT_OFFERS: SchemaOffer[] = [
-  { name: "Starter", price: "50.00", priceCurrency: "GBP" },
-  { name: "Main", price: "150.00", priceCurrency: "GBP" },
-  { name: "Top Tier", price: "350.00", priceCurrency: "GBP" },
+  { name: "7-Day Trial", price: "0.00", priceCurrency: "GBP" },
+  { name: "Nexlify License", price: "50.00", priceCurrency: "GBP" },
 ];
 
 export function buildSoftwareApplicationSchema(options?: {

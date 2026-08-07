@@ -1,4 +1,5 @@
 import { DEFAULT_DESCRIPTION } from "@/lib/seo";
+import { buildSoftwareApplicationSchema } from "@/lib/software-schema";
 import { site } from "@/lib/site";
 import { JsonLdScript } from "@/components/JsonLdScript";
 
@@ -38,39 +39,11 @@ export function OrganizationJsonLd() {
     },
   };
 
-  const software = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: "Nexlify IPTV Panel",
-    applicationCategory: "BusinessApplication",
-    operatingSystem: "Linux (Ubuntu, Debian)",
+  const software = buildSoftwareApplicationSchema({
     url: site.url,
     description:
       "IPTV reseller panel with WHMCS automation, anti-freeze playback, and sub-second zapping. Management software for service providers worldwide.",
-    offers: [
-      {
-        "@type": "Offer",
-        name: "Starter",
-        price: "50",
-        priceCurrency: "GBP",
-        url: `${site.url}/pricing`,
-      },
-      {
-        "@type": "Offer",
-        name: "Main",
-        price: "150",
-        priceCurrency: "GBP",
-        url: `${site.url}/pricing`,
-      },
-      {
-        "@type": "Offer",
-        name: "Top Tier",
-        price: "350",
-        priceCurrency: "GBP",
-        url: `${site.url}/pricing`,
-      },
-    ],
-  };
+  });
 
   return (
     <>

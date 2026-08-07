@@ -72,33 +72,17 @@ PANEL_API_SECRET=panel-validate-secret`}
               Run <code className="text-violet-300">npm run db:seed</code> on the website. Default mapping:
             </p>
             <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-[var(--muted)]">
-              <li>WHMCS product ID <strong>1</strong> → Starter</li>
-              <li>WHMCS product ID <strong>2</strong> → Main</li>
-              <li>WHMCS product ID <strong>3</strong> → Top Tier</li>
+              <li>WHMCS product ID <strong>1</strong> → Nexlify License (£50/mo, all features)</li>
             </ul>
             <p className="mt-3 text-sm text-[var(--muted)]">
-              Create matching products in WHMCS Admin → Products/Services with those IDs (or update{" "}
-              <code className="text-violet-300">whmcsProductId</code> in the database).
+              Legacy Starter / Main / Top Tier product IDs are retired. Create one WHMCS product for
+              the Nexlify License (or update <code className="text-violet-300">whmcsProductId</code> in
+              the database).
             </p>
-            <p className="mt-4 text-sm font-medium text-white">Plugin addon products (same WHMCS module)</p>
-            <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-[var(--muted)]">
-              <li>ID <strong>4</strong> → Plex</li>
-              <li>ID <strong>5</strong> → Emby</li>
-              <li>ID <strong>6</strong> → Jellyfin</li>
-              <li>ID <strong>7</strong> → YouTube</li>
-              <li>ID <strong>8</strong> → Spotify</li>
-              <li>ID <strong>9</strong> → Apple Music</li>
-              <li>ID <strong>10</strong> → Deezer</li>
-              <li>ID <strong>11</strong> → YouTube Music</li>
-              <li>ID <strong>12</strong> → Statistics</li>
-              <li>ID <strong>14</strong> → Media Pack (Plex + Emby + Jellyfin)</li>
-              <li>ID <strong>15</strong> → Music Pack</li>
-              <li>ID <strong>16</strong> → Full Plugin Pack</li>
-            </ul>
-            <p className="mt-3 text-sm text-[var(--muted)]">
-              When a customer buys an addon or bundle, Nexlify records entitlements for each included plugin.
-              After they activate their panel license, the panel syncs addon rows automatically (License → Addon
-              Licenses).
+            <p className="mt-4 text-sm font-medium text-white">Plugins</p>
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              All media and music plugins are included in the Nexlify License — no separate WHMCS addon
+              products required.
             </p>
           </section>
 

@@ -32,12 +32,9 @@ Nexlify offers an IPTV reseller panel built for operators, integrating WHMCS bil
 
 ### Pricing & Trial Plans
 
-- 7-day free trial with no credit card needed
-- Multiple paid plans:
-  - Starter (£50/mo): Essential features for small operations
-  - Main (£150/mo): Scalable for growing operators
-  - Top Tier (£350/mo): Maximum capacity and all features
-- Pay via integrated billing; upgrade or scale effortlessly
+- 7-day free trial with no credit card needed — full panel, unlimited servers, all plugins
+- One paid plan: Nexlify License (£50/mo) — unlimited stream servers, all media & music plugins, every feature included
+- Free licenses until September 1, 2026; pay via Stripe or WHMCS after the promo
 
 ### Integrations & Bundles
 

@@ -149,7 +149,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "whmcs-products",
         question: "Which WHMCS product IDs map to plans?",
         answer:
-          "Product IDs 1–3 in WHMCS map to Starter, Main, and Top Tier panel plans (see the WHMCS docs for the current mapping). Addon products for plugins use separate product IDs configured in the module.",
+          "WHMCS product ID 1 maps to the Nexlify License (£50/mo, all features included). Legacy Starter/Main/Top Tier IDs are retired — see the WHMCS docs for the current mapping.",
         links: [{ label: "WHMCS docs", href: "/docs/whmcs" }],
       },
       {

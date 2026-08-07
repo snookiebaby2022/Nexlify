@@ -89,7 +89,7 @@ export function HomeSeoContent() {
             </h3>
             <p className="mt-4 text-sm leading-relaxed text-[var(--muted)] md:text-base">
               Connect the WHMCS IPTV module so new orders provision panel licenses automatically.
-              Starter and pro tiers suit solo resellers and growing service providers alike. Launch
+              One simple £50/mo license suits solo resellers and growing service providers alike. Launch
               coupons and trial registrations are available for worldwide operators evaluating
               cheap IPTV panel options without sacrificing security or support quality.
             </p>
