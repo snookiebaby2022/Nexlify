@@ -87,7 +87,26 @@ fi
 # --- 3) Remove build breaker ---
 rm -f "$MARKETING/prisma.config.ts"
 
-# --- 4) Sync database plans ---
+# --- 4) Create marketing DB tables if missing ---
+echo "-> Ensuring marketing database schema..."
+cd "$MARKETING"
+if command -v npx >/dev/null 2>&1; then
+  for ENV_CAND in "$MARKETING/.env" /home/nexlify-panel/.env /opt/nexlify-panel/.env; do
+    if [ -f "$ENV_CAND" ]; then
+      DB_LINE="$(grep -m1 '^DATABASE_URL=' "$ENV_CAND" 2>/dev/null || true)"
+      if [ -n "$DB_LINE" ]; then
+        export DATABASE_URL="${DB_LINE#DATABASE_URL=}"
+        export DATABASE_URL="${DATABASE_URL#\"}"
+        export DATABASE_URL="${DATABASE_URL%\"}"
+        echo "   DATABASE_URL from $ENV_CAND"
+        break
+      fi
+    fi
+  done
+  npx prisma db push --accept-data-loss 2>&1 | tail -5
+fi
+
+# --- 5) Sync database plans ---
 echo "-> Syncing plans (trial + £50 nexlify)..."
 cd "$MARKETING"
 if command -v npx >/dev/null 2>&1; then
@@ -109,7 +128,7 @@ else
   echo "   npx not found — skip plan sync"
 fi
 
-# --- 5) Rebuild ---
+# --- 6) Rebuild ---
 echo "-> Building..."
 rm -rf .next src/generated/prisma
 npx prisma generate 2>&1 | tail -1
@@ -121,13 +140,13 @@ if [ ! -f .next/BUILD_ID ]; then
   exit 1
 fi
 
-# --- 6) Restart ---
+# --- 7) Restart ---
 echo "-> Restarting PM2..."
 pm2 restart nexlify-web --update-env 2>&1 | tail -2
 pm2 save 2>/dev/null || true
 sleep 3
 
-# --- 7) Verify ---
+# --- 8) Verify ---
 echo ""
 echo "=== Verification ==="
 curl -s "http://127.0.0.1:13001/pricing" 2>/dev/null | grep -oE 'September 1, 2026|Nexlify License|7-Day Trial' | sort -u | head -10

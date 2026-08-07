@@ -4,10 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "prisma generate",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+  "prebuild": "prisma generate",
+  "build": "next build",
+  "start": "next start",
+  "lint": "next lint",
+  "db:push": "prisma db push --accept-data-loss",
+  "db:seed": "tsx prisma/seed.ts",
+  "db:sync-plans": "tsx scripts/sync-plans-vps.ts"
   },
   "dependencies": {
     "next": "15.5.19",
