@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getPlanLimits } from "@/lib/plan-limits";
 import { isPanelDemoHost } from "@/lib/panel-demo-host";
+import { isFreePeriod } from "@/lib/free-period";
 import {
   getStoredPanelLicenseKey,
   syncAddonLicensesFromBilling,
@@ -12,12 +13,8 @@ const PROMO_GATED_SERVICES = new Set([
   "spotify", "apple_music", "deezer", "youtube_music",
 ]);
 
-/** Promotion end date — set to null or a past date to gate the services above. */
-const PROMO_END_DATE: Date | null = null; // e.g. new Date("2026-08-01T00:00:00Z")
-
 function isPromoActive(): boolean {
-  if (!PROMO_END_DATE) return true; // no end date = always active
-  return new Date() < PROMO_END_DATE;
+  return isFreePeriod();
 }
 
 /** Services currently requiring an addon license (empty during promo). */
