@@ -80,7 +80,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     panelUrl: "",
     webhookUrls: "",
     webhookEvents: "*",
-    timezone: "UTC",
+    timezone: "Europe/London",
     defaultLanguage: "en",
     maintenanceMode: false,
     disableTrial: false,

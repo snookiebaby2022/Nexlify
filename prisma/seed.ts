@@ -39,6 +39,19 @@ async function main() {
     create: { key: "panel_name", value: "Nexlify" },
   });
 
+  await prisma.panelSetting.upsert({
+    where: { key: "settings.general" },
+    update: {},
+    create: {
+      key: "settings.general",
+      value: JSON.stringify({
+        panelName: "Nexlify",
+        timezone: "Europe/London",
+        defaultLanguage: "en",
+      }),
+    },
+  });
+
   console.log("Seed complete — Nexlify (minimal, no demo content)");
   if (process.env.QUIET_SEED !== "1") {
     console.log("Admin default password is set by install script — not logged here.");

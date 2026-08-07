@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatPanelDateTime } from "@/lib/format";
 
 export type LicenseStatusView = {
   valid: boolean;
@@ -20,7 +21,6 @@ export type LicenseStatusView = {
 
 export function usePanelLicenseStatus() {
   const [status, setStatus] = useState<LicenseStatusView | null>(null);
-  const [terms, setTerms] = useState<{ id: string; label: string; days: number }[]>([]);
 
   function load() {
     fetch("/api/license/status")
@@ -30,9 +30,6 @@ export function usePanelLicenseStatus() {
 
   useEffect(() => {
     load();
-    fetch("/api/license/terms")
-      .then((r) => r.json())
-      .then((d) => setTerms(d.terms ?? []));
   }, []);
 
   const onTrialOnly = Boolean(status?.valid && status.trial && !status.licensed);
@@ -40,7 +37,7 @@ export function usePanelLicenseStatus() {
     status?.licensed || (status?.valid && !status?.trial && status?.licensee)
   );
 
-  return { status, terms, load, onTrialOnly, isLicensed };
+  return { status, load, onTrialOnly, isLicensed };
 }
 
 export function PanelLicenseStatusCard({
@@ -79,7 +76,7 @@ export function PanelLicenseStatusCard({
           )}
           {status.expiresAt && (
             <p>
-              <strong>Expires:</strong> {new Date(status.expiresAt).toLocaleString()}
+              <strong>Expires:</strong> {formatPanelDateTime(status.expiresAt)}
             </p>
           )}
           {status.licenseId && (
@@ -98,7 +95,7 @@ export function PanelLicenseStatusCard({
           </p>
           {status.trialEndsAt && (
             <p>
-              <strong>Trial ends:</strong> {new Date(status.trialEndsAt).toLocaleString()}
+              <strong>Trial ends:</strong> {formatPanelDateTime(status.trialEndsAt)}
             </p>
           )}
         </>

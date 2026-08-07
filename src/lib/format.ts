@@ -19,6 +19,21 @@ export function formatDateTime(iso: string) {
   return dateTimeFmt.format(new Date(iso));
 }
 
+/** Panel license dates — UK locale, Europe/London timezone. */
+const panelLondonDateTimeFmt = new Intl.DateTimeFormat("en-GB", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  timeZone: "Europe/London",
+});
+
+export function formatPanelDateTime(iso: string) {
+  return panelLondonDateTimeFmt.format(new Date(iso));
+}
+
 export function formatDate(iso: string) {
   return dateFmt.format(new Date(iso));
 }

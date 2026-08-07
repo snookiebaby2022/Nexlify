@@ -8,7 +8,7 @@ import {
 } from "@/components/panel-license-status";
 
 export default function LicenseShowPage() {
-  const { status, terms, load, onTrialOnly, isLicensed } = usePanelLicenseStatus();
+  const { status, load, onTrialOnly, isLicensed } = usePanelLicenseStatus();
   const canEnter = Boolean(status?.valid);
 
   async function enterPanel() {
@@ -27,11 +27,6 @@ export default function LicenseShowPage() {
           Current Nexlify panel license status (paid key or trial).
         </p>
         <PanelLicenseStatusCard status={status} isLicensed={isLicensed} onTrialOnly={onTrialOnly} />
-        {terms.length > 0 && (
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            <strong>Plans:</strong> {terms.map((t) => t.label).join(" · ")}
-          </p>
-        )}
         {canEnter && (
           <button
             type="button"
