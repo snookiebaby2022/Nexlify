@@ -62,12 +62,19 @@ awk -F= '{
 rm -f "$TMP"
 chmod 600 "$ENV_FILE"
 
-if grep -q '^DATABASE_URL=' "$ENV_FILE"; then
-  echo "DATABASE_URL: OK"
-else
-  echo "DATABASE_URL: MISSING — check $PANEL_ENV"
+echo "Wrote $ENV_FILE ($(grep -cE '^[A-Z_]+=' "$ENV_FILE" || echo 0) keys)"
+
+# Marketing must use nexlify_marketing — never copy panel DATABASE_URL from copy_kv above
+if ! grep -q '^DATABASE_URL=' "$ENV_FILE" 2>/dev/null; then
+  echo "-> Setting DATABASE_URL for nexlify_marketing..."
+  bash "$(dirname "$0")/ensure-marketing-database-url.sh" "$MARKETING"
 fi
 
-echo "Wrote $ENV_FILE ($(grep -cE '^[A-Z_]+=' "$ENV_FILE" || echo 0) keys)"
+if grep -q '^DATABASE_URL=' "$ENV_FILE"; then
+  echo "DATABASE_URL: OK ($(grep '^DATABASE_URL=' "$ENV_FILE" | sed 's|.*@.*/||; s/"//g'))"
+else
+  echo "DATABASE_URL: MISSING — run: bash scripts/ensure-marketing-database-url.sh"
+fi
+
 grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | sort -u
 echo "Done."

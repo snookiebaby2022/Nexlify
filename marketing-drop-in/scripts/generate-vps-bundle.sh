@@ -90,30 +90,31 @@ rm -f "$MARKETING/prisma.config.ts"
 # --- 4) Marketing database (separate from panel — never db push panel DB) ---
 echo "-> Ensuring marketing database..."
 cd "$MARKETING"
+if [ -f "$MARKETING/scripts/ensure-marketing-database-url.sh" ]; then
+  bash "$MARKETING/scripts/ensure-marketing-database-url.sh" "$MARKETING"
+fi
 if [ -f "$MARKETING/scripts/setup-marketing-database.sh" ]; then
   bash "$MARKETING/scripts/setup-marketing-database.sh" "$MARKETING"
 else
-  echo "   WARNING: setup-marketing-database.sh missing — skip DB setup"
+  echo "   WARNING: setup-marketing-database.sh missing — skip DB schema push"
 fi
 
-# --- 5) Sync database plans (setup-marketing-database.sh already syncs; safe to re-run) ---
+# --- 5) Sync database plans (idempotent) ---
 echo "-> Syncing plans (trial + £50 nexlify)..."
 cd "$MARKETING"
 if command -v npx >/dev/null 2>&1; then
   npm install --include=dev --no-audit --no-fund 2>&1 | tail -2
-  for ENV_CAND in "$MARKETING/.env" /home/nexlify-panel/.env /opt/nexlify-panel/.env; do
-    if [ -f "$ENV_CAND" ]; then
-      DB_LINE="$(grep -m1 '^DATABASE_URL=' "$ENV_CAND" 2>/dev/null || true)"
-      if [ -n "$DB_LINE" ]; then
-        export DATABASE_URL="${DB_LINE#DATABASE_URL=}"
-        export DATABASE_URL="${DATABASE_URL#\"}"
-        export DATABASE_URL="${DATABASE_URL%\"}"
-        echo "   DATABASE_URL from $ENV_CAND"
-        break
-      fi
-    fi
-  done
-  npx tsx scripts/sync-plans-vps.ts 2>&1 || echo "   Plan sync failed — check DATABASE_URL in .env"
+  MARKETING_DIR="$MARKETING"
+  # shellcheck disable=SC1091
+  source "$MARKETING/scripts/load-marketing-env.sh" || {
+    echo "ERROR: Failed to load DATABASE_URL for marketing (nexlify_marketing)"
+    exit 1
+  }
+  echo "   DATABASE_URL → nexlify_marketing"
+  npx tsx scripts/sync-plans-vps.ts 2>&1 || {
+    echo "ERROR: Plan sync failed — check DATABASE_URL and PostgreSQL"
+    exit 1
+  }
 else
   echo "   npx not found — skip plan sync"
 fi
@@ -144,10 +145,20 @@ echo ""
 if [ -f .license-keys/private.pem ]; then echo "License key: OK"; else echo "License key: MISSING"; fi
 grep -q 'isFreePeriod()' src/app/api/checkout/route.ts 2>/dev/null && echo "Free checkout: OK" || echo "Free checkout: check checkout route"
 grep -q '^STRIPE_SECRET_KEY=sk_' .env 2>/dev/null && echo "Stripe: configured" || echo "Stripe: not set (needed after Sep 1 promo)"
-grep -q '^DATABASE_URL=' .env 2>/dev/null && echo "Database: configured" || echo "Database: MISSING"
+grep -q '^DATABASE_URL=' .env 2>/dev/null && echo "Database: configured ($(grep '^DATABASE_URL=' .env | sed 's|.*@.*/||; s/"//g'))" || echo "Database: MISSING"
 echo ""
 echo "=== Update complete ==="
 echo "Hard-refresh https://nexlify.live/pricing (Ctrl+Shift+R)"
+
+# --- 9) Test accounts (idempotent) ---
+if [ -f "$MARKETING/scripts/seed-test-accounts.ts" ]; then
+  echo ""
+  echo "-> Seeding test accounts..."
+  MARKETING_DIR="$MARKETING"
+  # shellcheck disable=SC1091
+  source "$MARKETING/scripts/load-marketing-env.sh"
+  npx tsx scripts/seed-test-accounts.ts 2>&1 || echo "   Test account seed failed (check license key + DB)"
+fi
 FOOTER
 
 chmod +x "$OUT"

@@ -2,33 +2,9 @@
  * Sync single-plan pricing on VPS (no git required).
  * Run: cd /var/www/nexlify && npx tsx scripts/sync-plans-vps.ts
  */
-import { config } from "dotenv";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { loadMarketingDatabaseUrl } from "./load-marketing-env";
 
-function loadDatabaseUrl(): void {
-  const envPaths = [
-    resolve(process.cwd(), ".env"),
-    "/var/www/nexlify/.env",
-    "/home/nexlify-panel/.env",
-    "/opt/nexlify-panel/.env",
-  ];
-
-  for (const envPath of envPaths) {
-    if (!existsSync(envPath)) continue;
-    config({ path: envPath, override: false });
-    if (process.env.DATABASE_URL?.trim()) return;
-  }
-}
-
-loadDatabaseUrl();
-
-if (!process.env.DATABASE_URL?.trim()) {
-  console.error(
-    "DATABASE_URL not found. Add it to /var/www/nexlify/.env or run: bash scripts/setup-marketing-env.sh",
-  );
-  process.exit(1);
-}
+loadMarketingDatabaseUrl();
 
 const UNLIMITED = 9999;
 const PAID_CENTS = 5000;
@@ -95,13 +71,13 @@ async function main() {
   });
 
   const off = await prisma.plan.updateMany({
-    where: { slug: { in: ["starter", "main", "top-tier"] } },
+    where: { slug: { in: ["starter", "main", "top-tier", "top_tier"] } },
     data: { active: false },
   });
 
   const active = await prisma.plan.findMany({
     where: { active: true },
-    select: { slug: true, priceCents: true, maxServers: true },
+    select: { slug: true, name: true, priceCents: true, maxServers: true },
     orderBy: { sortOrder: "asc" },
   });
 

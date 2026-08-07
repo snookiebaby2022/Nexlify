@@ -6,25 +6,10 @@
  *
  * Requires DATABASE_URL (nexlify_marketing) and license signing key (.license-keys/private.pem).
  */
-import { config } from "dotenv";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import bcrypt from "bcryptjs";
+import { loadMarketingDatabaseUrl } from "./load-marketing-env";
 
-function loadEnv(): void {
-  const paths = [
-    resolve(process.cwd(), ".env"),
-    "/var/www/nexlify/.env",
-    resolve(process.cwd(), "../.env"),
-  ];
-  for (const p of paths) {
-    if (!existsSync(p)) continue;
-    config({ path: p, override: false });
-    if (process.env.DATABASE_URL?.trim()) return;
-  }
-}
-
-loadEnv();
+loadMarketingDatabaseUrl();
 
 const TEST_PASSWORD = process.env.TEST_ACCOUNT_PASSWORD?.trim() || "NexlifyTest2026!";
 
@@ -60,11 +45,6 @@ const TEST_ACCOUNTS: {
 ];
 
 async function main() {
-  if (!process.env.DATABASE_URL?.trim()) {
-    console.error("DATABASE_URL not set — point at nexlify_marketing (.env)");
-    process.exit(1);
-  }
-
   const { prisma } = await import("../src/lib/prisma");
   const { issueTrialLicense, resetTrialEligibility } = await import("../src/lib/trial");
   const { issueLicenseForOrder, validateLicenseKey } = await import("../src/lib/licensing");
