@@ -122,7 +122,18 @@ export async function POST(request: Request) {
     }
 
     const stripe = getStripe();
-    let productId = plan.stripeProductId ?? undefined;
+    let productId = plan.stripeProductId?.trim() || undefined;
+
+    if (productId) {
+      try {
+        await stripe.products.retrieve(productId);
+      } catch {
+        console.warn(
+          `[admin/plans] Ignoring invalid stripeProductId ${productId} — creating new product`,
+        );
+        productId = undefined;
+      }
+    }
 
     if (!productId) {
       const product = await stripe.products.create({
@@ -154,7 +165,11 @@ export async function POST(request: Request) {
     if (e instanceof z.ZodError) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
+    const message =
+      e instanceof Error && e.message
+        ? e.message
+        : "Stripe sync failed";
     console.error("[admin/plans POST]", e);
-    return NextResponse.json({ error: "Stripe sync failed" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
