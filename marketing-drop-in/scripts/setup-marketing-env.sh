@@ -24,31 +24,25 @@ fi
 
 mkdir -p "$MARKETING"
 ENV_FILE="$MARKETING/.env"
+TMP="$(mktemp)"
 [ -f "$ENV_FILE" ] && cp "$ENV_FILE" "${ENV_FILE}.backup.$(date +%s)"
 
 copy_kv() {
   local key="$1"
   [ -n "$PANEL_ENV" ] || return 0
-  grep -E "^${key}=" "$PANEL_ENV" 2>/dev/null | head -1
+  grep -E "^${key}=" "$PANEL_ENV" 2>/dev/null | head -1 >> "$TMP" || true
 }
 
-{
-  copy_kv DATABASE_URL
-  copy_kv JWT_SECRET
-  copy_kv STRIPE_SECRET_KEY
-  copy_kv BILLING_WEBHOOK_SECRET
-  copy_kv PANEL_API_SECRET
-  copy_kv NEXLIFY_PANEL_API_SECRET
-  copy_kv ADMIN_EMAIL
-  copy_kv ADMIN_PASSWORD
-  copy_kv SMTP_HOST
-  copy_kv SMTP_PORT
-  copy_kv SMTP_USER
-  copy_kv SMTP_PASS
-  copy_kv SMTP_FROM
-  copy_kv WHMCS_API_SECRET
+: > "$TMP"
 
-  cat << 'DEFAULTS'
+for key in \
+  DATABASE_URL JWT_SECRET STRIPE_SECRET_KEY BILLING_WEBHOOK_SECRET \
+  PANEL_API_SECRET NEXLIFY_PANEL_API_SECRET ADMIN_EMAIL ADMIN_PASSWORD \
+  SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM WHMCS_API_SECRET; do
+  copy_kv "$key"
+done
+
+cat >> "$TMP" << 'DEFAULTS'
 NODE_ENV=production
 NEXT_PUBLIC_SITE_URL=https://nexlify.live
 NEXT_PUBLIC_WEBSITE_URL=https://nexlify.live
@@ -56,9 +50,22 @@ NEXT_PUBLIC_PANEL_URL=https://panel.nexlify.live
 NEXLIFY_LICENSE_API_URL=http://127.0.0.1:8787
 LICENSE_KEY_FILE=/var/www/nexlify/.license-keys/private.pem
 DEFAULTS
-} | awk -F= '!seen[$1]++' > "$ENV_FILE"
 
+# First occurrence wins (panel secrets before defaults)
+awk -F= '{
+  key=$1
+  if (!seen[key]++) print
+}' "$TMP" > "$ENV_FILE"
+
+rm -f "$TMP"
 chmod 600 "$ENV_FILE"
+
+if grep -q '^DATABASE_URL=' "$ENV_FILE"; then
+  echo "DATABASE_URL: OK"
+else
+  echo "DATABASE_URL: MISSING — check $PANEL_ENV"
+fi
+
 echo "Wrote $ENV_FILE ($(grep -cE '^[A-Z_]+=' "$ENV_FILE" || echo 0) keys)"
 grep -E '^[A-Z_]+=' "$ENV_FILE" | cut -d= -f1 | sort -u
 echo "Done."

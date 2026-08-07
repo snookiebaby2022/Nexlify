@@ -92,10 +92,18 @@ echo "-> Syncing plans (trial + £50 nexlify)..."
 cd "$MARKETING"
 if command -v npx >/dev/null 2>&1; then
   npm install --include=dev --no-audit --no-fund 2>&1 | tail -2
-  set -a
-  # shellcheck disable=SC1091
-  [ -f .env ] && . ./.env 2>/dev/null || true
-  set +a
+  for ENV_CAND in "$MARKETING/.env" /home/nexlify-panel/.env /opt/nexlify-panel/.env; do
+    if [ -f "$ENV_CAND" ]; then
+      DB_LINE="$(grep -m1 '^DATABASE_URL=' "$ENV_CAND" 2>/dev/null || true)"
+      if [ -n "$DB_LINE" ]; then
+        export DATABASE_URL="${DB_LINE#DATABASE_URL=}"
+        export DATABASE_URL="${DATABASE_URL#\"}"
+        export DATABASE_URL="${DATABASE_URL%\"}"
+        echo "   DATABASE_URL from $ENV_CAND"
+        break
+      fi
+    fi
+  done
   npx tsx scripts/sync-plans-vps.ts 2>&1 || echo "   Plan sync failed — check DATABASE_URL in .env"
 else
   echo "   npx not found — skip plan sync"

@@ -3,16 +3,39 @@
  * Run: cd /var/www/nexlify && npx tsx scripts/sync-plans-vps.ts
  */
 import { config } from "dotenv";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-config({ path: resolve(process.cwd(), ".env") });
+function loadDatabaseUrl(): void {
+  const envPaths = [
+    resolve(process.cwd(), ".env"),
+    "/var/www/nexlify/.env",
+    "/home/nexlify-panel/.env",
+    "/opt/nexlify-panel/.env",
+  ];
 
-import { prisma } from "../src/lib/prisma";
+  for (const envPath of envPaths) {
+    if (!existsSync(envPath)) continue;
+    config({ path: envPath, override: false });
+    if (process.env.DATABASE_URL?.trim()) return;
+  }
+}
+
+loadDatabaseUrl();
+
+if (!process.env.DATABASE_URL?.trim()) {
+  console.error(
+    "DATABASE_URL not found. Add it to /var/www/nexlify/.env or run: bash scripts/setup-marketing-env.sh",
+  );
+  process.exit(1);
+}
 
 const UNLIMITED = 9999;
 const PAID_CENTS = 5000;
 
 async function main() {
+  const { prisma } = await import("../src/lib/prisma");
+
   await prisma.plan.upsert({
     where: { slug: "trial" },
     update: {
@@ -91,4 +114,11 @@ main()
     console.error(e);
     process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    try {
+      const { prisma } = await import("../src/lib/prisma");
+      await prisma.$disconnect();
+    } catch {
+      /* ignore */
+    }
+  });

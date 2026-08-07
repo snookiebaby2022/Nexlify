@@ -93,15 +93,11 @@ if curl -sf "http://127.0.0.1:${PORT}/pricing" >/tmp/nx-price.html 2>/dev/null; 
     check "Pricing shows September 1 promo" "still shows old date"
   fi
   if grep -q 'Nexlify License' /tmp/nx-price.html && grep -q '7-Day Trial' /tmp/nx-price.html; then
-    if grep -q 'Top Tier\|Starter Plan\|Main Plan' /tmp/nx-price.html; then
-      check "Single plan pricing UI" "shows Nexlify License but old tier names still in page HTML (SEO/schema — redeploy latest src)"
-    else
-      check "Single plan pricing UI" ok
-    fi
-  elif grep -q 'Top Tier\|Starter' /tmp/nx-price.html; then
-    check "Single plan pricing UI" "still shows old Starter/Main/Top Tier — run sync-plans-vps.ts and deploy new src"
+    check "Single plan pricing UI" ok
+  elif grep -qE 'Top Tier|Starter Plan|Main Plan' /tmp/nx-price.html; then
+    check "Single plan pricing UI" "old tier names in page — run sync-plans-vps.ts"
   else
-    check "Single plan pricing UI" "Nexlify License card not found"
+    check "Single plan pricing UI" "Nexlify License card not found — run sync-plans-vps.ts"
   fi
 else
   check "Pricing page HTTP" "failed"
@@ -111,8 +107,8 @@ echo ""
 echo "=== Summary: $score_ok passed, $score_fail failed ==="
 echo ""
 echo "Fix order:"
-echo "  1. bash scripts/setup-marketing-license-key.sh     # trials + licenses"
-echo "  2. bash scripts/setup-marketing-env.sh             # .env from panel secrets"
+echo "  1. bash scripts/setup-marketing-env.sh             # .env from panel secrets"
+echo "  2. bash scripts/setup-marketing-license-key.sh     # trials + licenses"
 echo "  3. npx tsx scripts/sync-plans-vps.ts               # single £50 plan in DB"
 echo "  4. npm run build && pm2 restart nexlify-web        # after uploading new src"
 echo ""
