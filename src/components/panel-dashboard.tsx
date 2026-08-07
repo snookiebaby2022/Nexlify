@@ -238,32 +238,20 @@ export function PanelDashboard({
 
 
   const load = useCallback(() => {
+    const statsPromise = fetch(statsUrl).then((r) => (r.ok ? r.json() : {}));
+    const analyticsPromise = isReseller
+      ? Promise.resolve({})
+      : fetch("/api/admin/analytics")
+          .then((r) => (r.ok ? r.json() : {}))
+          .catch(() => ({}));
 
-    const fetches: [Promise<Stats>, Promise<{ topChannels?: TopChannel[] }>] = [
-
-      fetch(statsUrl).then((r) => (r.ok ? r.json() : {})),
-
-      fetch("/api/admin/analytics")
-
-        .then((r) => (r.ok ? r.json() : {}))
-
-        .catch(() => ({})),
-
-    ];
-
-    Promise.all(fetches).then(([statsData, analytics]) => {
-
+    Promise.all([statsPromise, analyticsPromise]).then(([statsData, analytics]) => {
       setStats({
-
         ...statsData,
-
         topChannels: analytics.topChannels ?? [],
-
       });
-
     });
-
-  }, [statsUrl]);
+  }, [statsUrl, isReseller]);
 
 
 

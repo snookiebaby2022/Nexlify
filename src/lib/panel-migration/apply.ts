@@ -71,7 +71,8 @@ export async function applyMigrationBundle(
   }
 
   if (options.importStreams !== false) {
-    for (const s of bundle.streams) {
+    for (let i = 0; i < bundle.streams.length; i++) {
+      const s = bundle.streams[i];
       if (options.skipExistingStreams) {
         const dup = await prisma.stream.findFirst({ where: { name: s.name } });
         if (dup) {
@@ -92,6 +93,7 @@ export async function applyMigrationBundle(
         : undefined;
 
       const serverId = options.defaultServerId ?? null;
+      const sortOrder = s.sortOrder ?? i;
 
       const created = await prisma.stream.create({
         data: {
@@ -99,6 +101,7 @@ export async function applyMigrationBundle(
           streamUrl: s.streamUrl,
           streamIcon: s.streamIcon ?? null,
           type,
+          sortOrder,
           serverId,
           categoryId: categoryId ?? null,
           epgChannelId: s.epgChannelId ?? null,
@@ -114,13 +117,14 @@ export async function applyMigrationBundle(
     for (const b of bundle.bouquets) {
       const bouquetId = bouquetIdByLegacy.get(b.legacyId);
       if (!bouquetId) continue;
-      for (const sid of b.streamLegacyIds) {
+      for (let idx = 0; idx < b.streamLegacyIds.length; idx++) {
+        const sid = b.streamLegacyIds[idx];
         const streamId = streamIdByLegacy.get(String(sid));
         if (!streamId) continue;
         await prisma.bouquetStream.upsert({
           where: { bouquetId_streamId: { bouquetId, streamId } },
-          create: { bouquetId, streamId },
-          update: {},
+          create: { bouquetId, streamId, sortOrder: idx },
+          update: { sortOrder: idx },
         });
       }
     }

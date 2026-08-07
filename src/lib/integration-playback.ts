@@ -1,9 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import {
-  buildPlexTranscodeM3u8,
-  resolvePlexProfile,
-} from "@/lib/plex-playback";
-import { parseIntegrationStreamUrl } from "@/lib/integration-stream-url";
+  parseIntegrationStreamUrl,
+} from "@/lib/integration-stream-url";
 import {
   resolveAppleRelayStream,
   resolveDeezerRelayStream,
@@ -60,11 +58,8 @@ export async function resolveIntegrationPlaybackUrl(streamUrl: string): Promise<
 
   switch (parsed.type) {
     case "plex": {
-      const base = String(cfg.url ?? "").replace(/\/$/, "");
-      const token = String(cfg.token ?? "");
-      if (!base || !token) return null;
-      const profile = resolvePlexProfile(cfg.transcodeProfile ?? "1080p");
-      return buildPlexTranscodeM3u8(base, token, parsed.itemId, profile);
+      const { resolvePlexIntegrationPlayback } = await import("@/lib/media-integrations");
+      return resolvePlexIntegrationPlayback(parsed.integrationId, parsed.itemId, cfg);
     }
 
     case "emby":

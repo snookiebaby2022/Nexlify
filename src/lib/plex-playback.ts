@@ -18,7 +18,7 @@ export function resolvePlexProfile(raw: unknown): PlexTranscodeProfile {
   return { ...PROFILES["1080p"], ...(PROFILES[key] ?? {}) };
 }
 
-type PlexJsonMetadata = {
+export type PlexJsonMetadata = {
   ratingKey?: string;
   key?: string;
   title?: string;

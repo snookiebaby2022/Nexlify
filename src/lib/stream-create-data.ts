@@ -8,6 +8,7 @@ import { normalizeStreamSource } from "./stream-source";
 import { parseStreamAdvancedFields } from "./stream-fields";
 import { categoryForMovie, categoryForSeries } from "./vod-category";
 import { enrichVodFromTmdb } from "./vod-tmdb-enrich";
+import { nextStreamSortOrder } from "./stream-order";
 
 export type StreamCreateInput = {
   name: string;
@@ -134,6 +135,7 @@ export async function buildStreamCreateData(body: StreamCreateInput) {
       streamUrl,
       streamIcon,
       type,
+      sortOrder: await nextStreamSortOrder(),
       serverId,
       agentStartCmd,
       categoryId,

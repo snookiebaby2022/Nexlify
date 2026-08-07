@@ -157,7 +157,8 @@ export async function importPanelTransfer(
   }
 
   if (options.importStreams !== false) {
-    for (const s of bundle.streams) {
+    for (let i = 0; i < bundle.streams.length; i++) {
+      const s = bundle.streams[i];
       const dup = await prisma.stream.findFirst({ where: { name: s.name } });
       if (dup && options.skipExistingStreams !== false) {
         streamIdByName.set(s.legacyId, dup.id);
@@ -214,6 +215,7 @@ export async function importPanelTransfer(
         streamUrl,
         streamIcon: s.streamIcon ?? null,
         type,
+        sortOrder: s.sortOrder ?? i,
         isActive: s.isActive !== false,
         epgChannelId: s.epgChannelId ?? null,
         channelId: s.channelId ?? null,
@@ -251,13 +253,14 @@ export async function importPanelTransfer(
     for (const b of bundle.bouquets) {
       const bouquetId = bouquetIdByName.get(b.legacyId) ?? bouquetIdByName.get(b.name);
       if (!bouquetId) continue;
-      for (const sid of b.streamLegacyIds) {
+      for (let idx = 0; idx < b.streamLegacyIds.length; idx++) {
+        const sid = b.streamLegacyIds[idx];
         const streamId = streamIdByName.get(sid);
         if (!streamId) continue;
         await prisma.bouquetStream.upsert({
           where: { bouquetId_streamId: { bouquetId, streamId } },
-          create: { bouquetId, streamId },
-          update: {},
+          create: { bouquetId, streamId, sortOrder: idx },
+          update: { sortOrder: idx },
         });
       }
     }

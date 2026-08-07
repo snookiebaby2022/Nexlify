@@ -31,6 +31,7 @@ export type PanelTransferBundle = {
     name: string;
     streamUrl: string;
     type: string;
+    sortOrder?: number;
     streamIcon?: string;
     categoryName?: string;
     providerName?: string;
@@ -102,7 +103,12 @@ export async function buildPanelTransferExport(
 
   if (sections.has("bouquets")) {
     const bouquets = await prisma.bouquet.findMany({
-      include: { streams: { include: { stream: { select: { name: true } } } } },
+      include: {
+        streams: {
+          include: { stream: { select: { name: true } } },
+          orderBy: { sortOrder: "asc" },
+        },
+      },
       orderBy: { sortOrder: "asc" },
     });
     bundle.bouquets = bouquets.map((b) => ({
@@ -133,13 +139,14 @@ export async function buildPanelTransferExport(
         category: { select: { name: true } },
         provider: { select: { name: true } },
       },
-      orderBy: { name: "asc" },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     });
     bundle.streams = streams.map((s) => ({
       legacyId: s.name,
       name: s.name,
       streamUrl: s.streamUrl,
       type: s.type,
+      sortOrder: s.sortOrder,
       streamIcon: s.streamIcon ?? undefined,
       categoryName: s.category?.name,
       providerName: s.provider?.name,

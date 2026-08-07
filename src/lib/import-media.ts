@@ -13,6 +13,7 @@ import {
 import { clearTmdbImportCache, enrichVodFromTmdb } from "./vod-tmdb-enrich";
 import { encodeImportVodMeta, type VodImportMetaInput } from "./vod-import-meta";
 import { getSettingGroup } from "./panel-settings";
+import { maxStreamSortOrder } from "./stream-order";
 
 const VIDEO_EXT = new Set([
   ".mp4",
@@ -214,16 +215,25 @@ export async function importM3uEntries(
     autoTmdb?: boolean;
     importMeta?: VodImportMetaInput;
     bouquetIds?: string[];
+    /** First sortOrder for M3U entry index 0 (default 0). */
+    sortOrderStart?: number;
+    /** When true, update sortOrder on existing streams matched by URL. */
+    reorderExisting?: boolean;
   }
 ) {
   clearTmdbImportCache();
   let imported = 0;
   let skipped = 0;
+  let reordered = 0;
   const errors: string[] = [];
   const selectedSet = opts.selectedUrls?.length ? new Set(opts.selectedUrls) : null;
   const bouquetIds = opts.bouquetIds ?? opts.importMeta?.bouquetIds ?? [];
+  const sortOrderStart =
+    opts.sortOrderStart ??
+    (opts.reorderExisting === false ? (await maxStreamSortOrder()) + 1 : 0);
 
-  for (const entry of entries) {
+  for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+    const entry = entries[entryIndex];
     if (!entry.url) {
       skipped++;
       continue;
@@ -232,10 +242,27 @@ export async function importM3uEntries(
       continue;
     }
     const type = guessStreamType(entry, opts.defaultType) as StreamType;
+    const entrySortOrder = sortOrderStart + entryIndex;
     const existing = await prisma.stream.findFirst({
       where: { streamUrl: entry.url, type },
     });
     if (existing) {
+      if (opts.reorderExisting !== false) {
+        await prisma.stream.update({
+          where: { id: existing.id },
+          data: { sortOrder: entrySortOrder },
+        });
+        if (bouquetIds.length) {
+          for (const bouquetId of bouquetIds) {
+            await prisma.bouquetStream.upsert({
+              where: { bouquetId_streamId: { bouquetId, streamId: existing.id } },
+              create: { bouquetId, streamId: existing.id, sortOrder: entrySortOrder },
+              update: { sortOrder: entrySortOrder },
+            });
+          }
+        }
+        reordered++;
+      }
       skipped++;
       continue;
     }
@@ -278,6 +305,7 @@ export async function importM3uEntries(
           streamUrl: entry.url,
           streamIcon: meta.streamIcon ?? entry.logo ?? null,
           type,
+          sortOrder: entrySortOrder,
           categoryId: meta.categoryId,
           serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
           epgChannelId: entry.tvgId || entry.tvgName || entry.channelId || null,
@@ -290,10 +318,10 @@ export async function importM3uEntries(
       });
       if (bouquetIds.length) {
         await prisma.bouquetStream.createMany({
-          data: bouquetIds.map((bouquetId, i) => ({
+          data: bouquetIds.map((bouquetId) => ({
             bouquetId,
             streamId: stream.id,
-            sortOrder: 9000 + i,
+            sortOrder: entrySortOrder,
           })),
           skipDuplicates: true,
         });
@@ -305,7 +333,12 @@ export async function importM3uEntries(
     }
   }
 
-  return { imported, skipped, errors: errors.length ? errors : undefined };
+  return {
+    imported,
+    skipped,
+    reordered: reordered || undefined,
+    errors: errors.length ? errors : undefined,
+  };
 }
 
 export async function importFromM3uContent(

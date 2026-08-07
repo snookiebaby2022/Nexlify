@@ -8,7 +8,10 @@ const lineInclude = {
     include: {
       bouquet: {
         include: {
-          streams: { include: { stream: true } },
+          streams: {
+            include: { stream: true },
+            orderBy: { sortOrder: "asc" as const },
+          },
         },
       },
     },
@@ -58,15 +61,23 @@ export function streamsForLine(
   options?: { excludeDisabled?: boolean }
 ): Stream[] {
   const excludeDisabled = options?.excludeDisabled !== false;
-  const map = new Map<string, Stream>();
+  const byId = new Map<string, { stream: Stream; order: number }>();
+
   for (const lb of line.bouquets) {
     if (excludeDisabled && !lb.bouquet.isActive) continue;
     for (const bs of lb.bouquet.streams) {
       if (excludeDisabled && !bs.stream.isActive) continue;
-      map.set(bs.stream.id, bs.stream);
+      const order = bs.sortOrder * 1_000_000 + bs.stream.sortOrder;
+      const prev = byId.get(bs.stream.id);
+      if (!prev || order < prev.order) {
+        byId.set(bs.stream.id, { stream: bs.stream, order });
+      }
     }
   }
-  return Array.from(map.values()).sort((a, b) => a.sortOrder - b.sortOrder);
+
+  return Array.from(byId.values())
+    .sort((a, b) => a.order - b.order || a.stream.name.localeCompare(b.stream.name))
+    .map((x) => x.stream);
 }
 
 export async function streamsForLineExport(line: LineWithBouquets): Promise<Stream[]> {

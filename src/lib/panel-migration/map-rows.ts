@@ -133,6 +133,9 @@ function mapStreams(data: SqlTableData | null, source: MigrationSource): Migrati
       channelId: r.channel_id ? String(r.channel_id) : r.custom_sid ? String(r.custom_sid) : undefined,
       containerExtension: r.container_extension ? String(r.container_extension) : undefined,
       isActive: Number(r.is_deleted ?? 0) !== 1 && Number(r.enabled ?? 1) !== 0,
+      sortOrder:
+        Number(r.order_num ?? r.sort_order ?? r.channel_order ?? r.order ?? r.num ?? NaN) ||
+        undefined,
     });
   }
   return out;
@@ -409,6 +412,7 @@ export function bundleFromJson(
         channelId: row.channelId ? String(row.channelId) : undefined,
         containerExtension: row.containerExtension ? String(row.containerExtension) : undefined,
         isActive: row.isActive !== false,
+        sortOrder: Number(row.sortOrder ?? 0) || undefined,
       };
     }),
     lines: pick("lines").map((l) => {

@@ -5,6 +5,7 @@ export type MigrationStreamRow = {
   name: string;
   streamUrl: string;
   type?: "LIVE" | "MOVIE" | "SERIES";
+  sortOrder?: number;
   streamIcon?: string;
   categoryLegacyId?: string;
   categoryName?: string;

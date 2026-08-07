@@ -10,6 +10,8 @@ export type M3uSyncOptions = {
   autoTmdb?: boolean;
   /** LIVE imports only — default on-demand for panel M3U imports */
   defaultOnDemand?: boolean;
+  sortOrderStart?: number;
+  reorderExisting?: boolean;
 };
 
 export function isRemoteM3uUrl(source: string): boolean {
@@ -52,5 +54,7 @@ export async function syncM3uFromUrl(url: string, opts: M3uSyncOptions = {}) {
     autoCategory: opts.autoCategory !== false,
     autoTmdb: opts.autoTmdb !== false,
     defaultOnDemand: opts.defaultOnDemand ?? (isLive ? true : undefined),
+    sortOrderStart: opts.sortOrderStart ?? 0,
+    reorderExisting: opts.reorderExisting ?? true,
   });
 }

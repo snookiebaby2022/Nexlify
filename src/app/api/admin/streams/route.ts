@@ -308,11 +308,12 @@ export async function POST(req: NextRequest) {
 
     const bouquetIds: string[] = Array.isArray(body.bouquetIds) ? body.bouquetIds : [];
     if (bouquetIds.length) {
+      const baseOrder = stream.sortOrder ?? 0;
       await prisma.bouquetStream.createMany({
         data: bouquetIds.map((bouquetId: string, i: number) => ({
           bouquetId,
           streamId: stream.id,
-          sortOrder: 9000 + i,
+          sortOrder: baseOrder + i,
         })),
         skipDuplicates: true,
       });
