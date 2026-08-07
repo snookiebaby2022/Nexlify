@@ -10,14 +10,19 @@ export type PlanLimits = {
   allPlugins: boolean;
 };
 
+const UNLIMITED_SERVERS = 9999;
+
+const UNLIMITED_LIMITS: PlanLimits = {
+  planSlug: "nexlify",
+  maxMainServers: 999,
+  maxLoadBalancers: 9998,
+  maxServers: UNLIMITED_SERVERS,
+  allPlugins: true,
+};
+
 const LIMITS_BY_SLUG: Record<string, PlanLimits> = {
-  trial: {
-    planSlug: "trial",
-    maxMainServers: 1,
-    maxLoadBalancers: 2,
-    maxServers: 3,
-    allPlugins: false,
-  },
+  trial: { ...UNLIMITED_LIMITS, planSlug: "trial" },
+  nexlify: UNLIMITED_LIMITS,
   starter: {
     planSlug: "starter",
     maxMainServers: 1,
@@ -56,13 +61,13 @@ function normalizeSlug(raw: string): string {
 
 export function limitsFromSlug(slug: string): PlanLimits {
   const key = normalizeSlug(slug);
-  return (
-    LIMITS_BY_SLUG[key] ??
-    LIMITS_BY_SLUG.starter
-  );
+  return LIMITS_BY_SLUG[key] ?? LIMITS_BY_SLUG.nexlify;
 }
 
 export function limitsFromMaxServers(maxServers: number): PlanLimits {
+  if (maxServers >= UNLIMITED_SERVERS) {
+    return { ...UNLIMITED_LIMITS, planSlug: "custom" };
+  }
   const main = 1;
   const lb = Math.max(0, maxServers - main);
   return {
@@ -84,7 +89,7 @@ export async function storePlanLimits(limits: PlanLimits): Promise<void> {
 
 export async function getPlanLimits(panelHost?: string): Promise<PlanLimits> {
   if (panelHost && isPanelDemoHost(panelHost)) {
-    return { ...LIMITS_BY_SLUG.starter, planSlug: "demo" };
+    return { ...UNLIMITED_LIMITS, planSlug: "demo" };
   }
 
   const row = await prisma.panelSetting.findUnique({ where: { key: PLAN_LIMITS_KEY } });
@@ -101,11 +106,12 @@ export async function getPlanLimits(panelHost?: string): Promise<PlanLimits> {
     return limitsFromSlug(stored.tier);
   }
 
-  return LIMITS_BY_SLUG.starter;
+  return LIMITS_BY_SLUG.nexlify;
 }
 
 export async function assertCanCreateMainServer(): Promise<string | null> {
   const limits = await getPlanLimits();
+  if (limits.maxMainServers >= 999) return null;
   const count = await prisma.streamServer.count();
   if (count >= limits.maxMainServers) {
     return `Plan limit reached: ${limits.maxMainServers} main panel server(s). Upgrade your license.`;
@@ -115,6 +121,7 @@ export async function assertCanCreateMainServer(): Promise<string | null> {
 
 export async function assertCanCreateLoadBalancer(): Promise<string | null> {
   const limits = await getPlanLimits();
+  if (limits.maxLoadBalancers >= 9998) return null;
   const count = await prisma.streamProxy.count();
   if (count >= limits.maxLoadBalancers) {
     return `Plan limit reached: ${limits.maxLoadBalancers} load balancer(s). Upgrade your license.`;

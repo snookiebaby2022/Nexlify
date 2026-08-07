@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatMoney } from "@/lib/format";
 import { FREE_PERIOD_END_LABEL, isFreePeriod, readPendingCouponCode } from "@/lib/marketing-coupon";
-import { formatPlanPrice, getPlanMarketing, isTrialPlan, PRICING_HONESTY_NOTE, FULL_PANEL_FEATURES } from "@/lib/plan-marketing";
+import { formatPlanPrice, getPlanMarketing, isTrialPlan, PRICING_HONESTY_NOTE, FULL_PANEL_FEATURES, postPromoPriceLabel } from "@/lib/plan-marketing";
 import { FALLBACK_PLANS, gbpToUsdCents, type PlanView } from "@/lib/plans";
 
 type Currency = "GBP" | "USD";
@@ -127,8 +127,9 @@ export function PricingSection({
             </span>
           </div>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            Plans differ by <strong className="text-slate-300">stream-server count</strong> and{" "}
-            <strong className="text-slate-300">plugin access</strong> only — not by feature flags.
+            Plans differ by <strong className="text-slate-300">trial vs paid license</strong> only — both
+            include <strong className="text-slate-300">unlimited servers</strong> and{" "}
+            <strong className="text-slate-300">all plugins</strong>.
           </p>
           <ul className="mt-4 grid gap-2 sm:grid-cols-2 text-sm text-slate-300">
             {FULL_PANEL_FEATURES.map((feature) => (
@@ -248,7 +249,7 @@ export function PricingSection({
             Explore the live demo
           </Link>
           {" · "}
-          <span className="text-amber-300/90">Free licenses end {FREE_PERIOD_END_LABEL}</span>
+          <span className="text-amber-300/90">{postPromoPriceLabel()} · unlimited servers included</span>
         </p>
 
         <p className="mt-4 text-center text-xs text-[var(--muted)]">

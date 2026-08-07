@@ -5,13 +5,13 @@ import { LegacyPanelPricingCompare } from "@/components/LegacyPanelPricingCompar
 import { PricingComparisonTable } from "@/components/PricingComparisonTable";
 import { PageCta } from "@/components/PageCta";
 import { PricingJsonLd } from "@/components/PricingJsonLd";
-import { PluginPricingSection } from "@/components/PluginPricingSection";
+import { IncludedFeaturesSection } from "@/components/IncludedFeaturesSection";
 import { PricingCheckoutLauncher } from "@/components/PricingCheckoutLauncher";
 import { PricingSection } from "@/components/PricingSection";
 import { TrialCtaButton } from "@/components/TrialCtaButton";
 import { getSessionUser } from "@/lib/auth";
 import { DEMO_PANEL_URL } from "@/lib/demo";
-import { toPlanView } from "@/lib/plans";
+import { toPlanView, plansForPricing } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { isStripeConfigured } from "@/lib/stripe";
 
@@ -33,6 +33,8 @@ export default async function PricingPage() {
   } catch (error) {
     console.error("[pricing] database unavailable:", error);
   }
+
+  const pricingPlans = plansForPricing(plans.map(toPlanView));
 
   return (
     <div className="mesh-bg">
@@ -63,7 +65,7 @@ export default async function PricingPage() {
         </div>
         <PageCta
           className="mt-4"
-          primary={{ label: "View license tiers below", href: "#license-tiers" }}
+          primary={{ label: "View plans below", href: "#license-tiers" }}
           secondary={[
             { label: "Try live demo", href: DEMO_PANEL_URL, external: true },
             { label: "WHMCS module docs", href: "/docs/whmcs" },
@@ -110,12 +112,12 @@ export default async function PricingPage() {
 
       <section className="mx-auto max-w-4xl px-4 pb-8" id="license-tiers">
         <h2 className="font-display text-center text-2xl font-bold text-white">
-          License tiers for service providers
+          Simple pricing for service providers
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-center text-sm leading-relaxed text-[var(--muted)]">
-          Every plan includes the WHMCS IPTV module, encrypted license keys, and access to the
-          one-click installer. All plans are <strong className="text-amber-300">free until {FREE_PERIOD_END_LABEL}</strong> — no
-          credit card required. Upgrade as your line count grows.
+          One license includes unlimited stream servers, all plugins, and the full Nexlify panel.
+          Free until <strong className="text-amber-300">{FREE_PERIOD_END_LABEL}</strong>, then{" "}
+          <strong className="text-amber-300">£50/month</strong>.
         </p>
         <h3 className="mt-8 text-center text-lg font-semibold text-violet-300">
           Currency and checkout options
@@ -135,19 +137,19 @@ export default async function PricingPage() {
       <Suspense fallback={null}>
         <PricingCheckoutLauncher
           loggedIn={Boolean(user)}
-          plans={plans.map((p) => ({ id: p.id, slug: p.slug }))}
+          plans={pricingPlans.map((p) => ({ id: p.id, slug: p.slug }))}
         />
       </Suspense>
 
       <PricingComparisonTable />
 
       <PricingSection
-        plans={plans.map(toPlanView)}
+        plans={pricingPlans}
         loggedIn={Boolean(user)}
         stripeEnabled={isStripeConfigured()}
         whmcsCartBaseUrl={process.env.NEXT_PUBLIC_WHMCS_URL ?? null}
       />
-      <PluginPricingSection whmcsCartBaseUrl={process.env.NEXT_PUBLIC_WHMCS_URL ?? null} />
+      <IncludedFeaturesSection />
     </div>
   );
 }

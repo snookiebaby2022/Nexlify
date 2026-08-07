@@ -6,57 +6,43 @@ const prisma = new PrismaClient();
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "snookiebaby2022@gmail.com";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 
+const UNLIMITED_SERVERS = 9999;
+const PAID_PRICE_CENTS = 5000;
+
 const DEFAULT_PLANS = [
   {
     name: "7-Day Trial",
     slug: "trial",
-    description: "Same full panel as paid tiers — 7 days, 3 servers, no card required.",
+    description:
+      "Full panel for 7 days — unlimited servers, all plugins, every feature. No card required.",
     priceCents: 0,
     durationDays: 7,
-    maxLines: 10000,
-    maxServers: 3,
+    maxLines: 100000,
+    maxServers: UNLIMITED_SERVERS,
     badge: "trial",
     sortOrder: 0,
+    active: true,
   },
   {
-    name: "Starter",
-    slug: "starter",
-    description: "Full Nexlify panel with entry server capacity. Plugins sold separately.",
-    priceCents: 1500,
+    name: "Nexlify License",
+    slug: "nexlify",
+    description:
+      "One simple plan — unlimited stream servers, all media & music plugins, every panel feature included.",
+    priceCents: PAID_PRICE_CENTS,
     durationDays: 30,
-    maxLines: 10000,
-    maxServers: 3,
-    badge: "starter",
+    maxLines: 100000,
+    maxServers: UNLIMITED_SERVERS,
+    badge: null,
     sortOrder: 1,
-  },
-  {
-    name: "Main",
-    slug: "main",
-    description: "Full panel for growing operators — more stream servers, same software.",
-    priceCents: 3000,
-    durationDays: 30,
-    maxLines: 10000,
-    maxServers: 11,
-    badge: "popular",
-    sortOrder: 2,
-  },
-  {
-    name: "Top Tier",
-    slug: "top-tier",
-    description: "Maximum servers plus all media & music plugins included in the license.",
-    priceCents: 6000,
-    durationDays: 30,
-    maxLines: 10000,
-    maxServers: 51,
-    badge: "new",
-    sortOrder: 3,
+    active: true,
   },
 ];
+
+const LEGACY_SLUGS = ["starter", "main", "top-tier"];
 
 async function main() {
   console.log("Seeding marketing database...");
 
-  // Create admin user
   const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 12);
   const admin = await prisma.user.upsert({
     where: { email: ADMIN_EMAIL },
@@ -70,19 +56,33 @@ async function main() {
   });
   console.log(`Admin user: ${admin.email} (${admin.id})`);
 
-  // Create default plans
   for (const plan of DEFAULT_PLANS) {
-    const existing = await prisma.plan.findUnique({ where: { slug: plan.slug } });
-    if (!existing) {
-      await prisma.plan.create({ data: plan });
-      console.log(`Created plan: ${plan.name} (${plan.slug})`);
-    } else {
-      console.log(`Plan already exists: ${plan.name} (${plan.slug})`);
-    }
+    await prisma.plan.upsert({
+      where: { slug: plan.slug },
+      update: {
+        name: plan.name,
+        description: plan.description,
+        priceCents: plan.priceCents,
+        durationDays: plan.durationDays,
+        maxLines: plan.maxLines,
+        maxServers: plan.maxServers,
+        badge: plan.badge,
+        sortOrder: plan.sortOrder,
+        active: plan.active,
+      },
+      create: plan,
+    });
+    console.log(`Upserted plan: ${plan.name} (${plan.slug})`);
   }
 
-  const planCount = await prisma.plan.count();
-  console.log(`Total plans: ${planCount}`);
+  const deactivated = await prisma.plan.updateMany({
+    where: { slug: { in: LEGACY_SLUGS } },
+    data: { active: false },
+  });
+  console.log(`Deactivated ${deactivated.count} legacy tier(s)`);
+
+  const planCount = await prisma.plan.count({ where: { active: true } });
+  console.log(`Active plans: ${planCount}`);
   console.log("Seed complete!");
 }
 

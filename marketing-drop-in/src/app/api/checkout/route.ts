@@ -114,7 +114,10 @@ export async function POST(request: Request) {
           licenseKey: license.key,
         });
       } catch (e) {
-        const message = e instanceof Error ? e.message : "Trial could not be started";
+        const raw = e instanceof Error ? e.message : "Trial could not be started";
+        const message = raw.includes("license signing key")
+          ? "Trial setup failed: license signing key is not configured on the server. Contact support."
+          : raw;
         return NextResponse.json({ error: message }, { status: 400 });
       }
     }

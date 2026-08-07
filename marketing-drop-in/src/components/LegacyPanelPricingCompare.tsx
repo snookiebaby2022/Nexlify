@@ -12,7 +12,7 @@ type Row = {
 const ROWS: Row[] = [
   {
     feature: "License from",
-    nexlify: "£50/mo (Starter)",
+    nexlify: "£50/mo (all inclusive)",
     xui: "Varies / community forks",
     oneStream: "Fork-dependent",
   },

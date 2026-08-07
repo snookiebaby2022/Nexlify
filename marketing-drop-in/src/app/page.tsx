@@ -11,7 +11,7 @@ import { SocialProofSection } from "@/components/SocialProofSection";
 import { MigrationCtaSection } from "@/components/MigrationCtaSection";
 import { WhatsNewSection } from "@/components/WhatsNewSection";
 import { getSessionUser } from "@/lib/auth";
-import { toPlanView } from "@/lib/plans";
+import { toPlanView, plansForPricing } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { pageSeo } from "@/lib/seo-pages";
 import { isStripeConfigured } from "@/lib/stripe";
@@ -42,7 +42,7 @@ export default async function HomePage() {
       <DemoScreenshots />
       <TechStackSection />
       <HomePricingSections
-        plans={plans.map(toPlanView)}
+        plans={plansForPricing(plans.map(toPlanView))}
         loggedIn={Boolean(user)}
         stripeEnabled={isStripeConfigured()}
         whmcsCartBaseUrl={whmcsCartBaseUrl}
