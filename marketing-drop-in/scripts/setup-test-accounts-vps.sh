@@ -1,10 +1,31 @@
+#!/usr/bin/env bash
+# One-shot: install + run marketing test account seed on VPS (no git required).
+# Upload via WinSCP, then: bash /root/setup-test-accounts-vps.sh
+
+set -euo pipefail
+
+MARKETING="${1:-/var/www/nexlify}"
+SCRIPT_DIR="$MARKETING/scripts"
+SEED="$SCRIPT_DIR/seed-test-accounts.ts"
+
+echo "=== Nexlify test account setup ==="
+echo "Marketing dir: $MARKETING"
+
+if [ ! -d "$MARKETING" ]; then
+  echo "ERROR: $MARKETING not found"
+  exit 1
+fi
+
+mkdir -p "$SCRIPT_DIR"
+
+# Write seed script (idempotent — overwrites with latest)
+if [ -f "$(dirname "$0")/seed-test-accounts.ts" ]; then
+  cp "$(dirname "$0")/seed-test-accounts.ts" "$SEED"
+  echo "-> Copied seed-test-accounts.ts from bundle"
+else
+  cat > "$SEED" << 'SEED_EOF'
 /**
  * Create marketing test accounts for trial + Nexlify License QA.
- *
- * Run on VPS:
- *   cd /var/www/nexlify && npx tsx scripts/seed-test-accounts.ts
- *
- * Requires DATABASE_URL (nexlify_marketing) and license signing key (.license-keys/private.pem).
  */
 import { config } from "dotenv";
 import { existsSync } from "node:fs";
@@ -36,27 +57,10 @@ const TEST_ACCOUNTS: {
   kind: AccountKind;
   trialBypass?: boolean;
 }[] = [
-  {
-    email: "trial.test@nexlify.live",
-    name: "Trial Test",
-    kind: "trial",
-  },
-  {
-    email: "license.test@nexlify.live",
-    name: "Nexlify License Test",
-    kind: "nexlify",
-  },
-  {
-    email: "signup.test@nexlify.live",
-    name: "Signup Flow Test",
-    kind: "empty",
-  },
-  {
-    email: "qa.retrial@nexlify.live",
-    name: "QA Retrial",
-    kind: "retrial",
-    trialBypass: true,
-  },
+  { email: "trial.test@nexlify.live", name: "Trial Test", kind: "trial" },
+  { email: "license.test@nexlify.live", name: "Nexlify License Test", kind: "nexlify" },
+  { email: "signup.test@nexlify.live", name: "Signup Flow Test", kind: "empty" },
+  { email: "qa.retrial@nexlify.live", name: "QA Retrial", kind: "retrial", trialBypass: true },
 ];
 
 async function main() {
@@ -144,12 +148,11 @@ async function main() {
       console.log(`Key:      ${licenseKey}`);
       console.log(`Valid:    ${check.ok ? "yes" : check.error}`);
     }
-    console.log(`Login:    https://nexlify.live/login`);
-    console.log(`Dashboard: https://nexlify.live/dashboard`);
     console.log("");
   }
 
-  console.log("Panel activation: paste license key at panel.nexlify.live → License → Add License");
+  console.log("Login: https://nexlify.live/login");
+  console.log("Panel: paste key at panel.nexlify.live → License → Add License");
   console.log("Done.");
 }
 
@@ -166,3 +169,34 @@ main()
       /* ignore */
     }
   });
+SEED_EOF
+  echo "-> Wrote embedded seed-test-accounts.ts"
+fi
+
+if [ ! -f "$MARKETING/.license-keys/private.pem" ]; then
+  for SRC in /home/nexlify-panel/.license-keys/private.pem /opt/nexlify-panel/.license-keys/private.pem; do
+    if [ -f "$SRC" ]; then
+      mkdir -p "$MARKETING/.license-keys"
+      cp "$SRC" "$MARKETING/.license-keys/private.pem"
+      chmod 600 "$MARKETING/.license-keys/private.pem"
+      echo "-> Copied license key from $SRC"
+      break
+    fi
+  done
+fi
+
+if [ ! -f "$MARKETING/.license-keys/private.pem" ]; then
+  echo "WARNING: No license signing key — trials/licenses will fail"
+  echo "Run: cd /home/nexlify-panel && npm run license:setup"
+fi
+
+cd "$MARKETING"
+export $(grep -m1 '^DATABASE_URL=' .env 2>/dev/null | xargs) || true
+
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "ERROR: DATABASE_URL missing in $MARKETING/.env"
+  exit 1
+fi
+
+echo "-> Running seed..."
+npx tsx scripts/seed-test-accounts.ts
