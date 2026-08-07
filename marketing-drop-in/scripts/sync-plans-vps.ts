@@ -2,6 +2,11 @@
  * Sync single-plan pricing on VPS (no git required).
  * Run: cd /var/www/nexlify && npx tsx scripts/sync-plans-vps.ts
  */
+import { config } from "dotenv";
+import { resolve } from "node:path";
+
+config({ path: resolve(process.cwd(), ".env") });
+
 import { prisma } from "../src/lib/prisma";
 
 const UNLIMITED = 9999;

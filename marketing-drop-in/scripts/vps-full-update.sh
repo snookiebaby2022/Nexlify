@@ -13,7 +13,7 @@ echo ""
 if [ ! -d "$MARKETING" ]; then
   echo "ERROR: $MARKETING not found"
   echo "Done."
-  return 0 2>/dev/null || true
+  exit 1
 fi
 
 # --- 1) Extract bundled source ---
@@ -68,7 +68,7 @@ npm run build 2>&1 | tail -5
 if [ ! -f .next/BUILD_ID ]; then
   echo "ERROR: Build failed — check output above"
   echo "Done."
-  return 0 2>/dev/null || true
+  exit 1
 fi
 
 # --- 6) Restart ---
