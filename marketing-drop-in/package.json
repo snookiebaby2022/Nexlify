@@ -9,8 +9,9 @@
   "start": "next start",
   "lint": "next lint",
   "db:push": "prisma db push --accept-data-loss",
-  "db:seed": "tsx prisma/seed.ts",
-  "db:sync-plans": "tsx scripts/sync-plans-vps.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:sync-plans": "tsx scripts/sync-plans-vps.ts",
+    "db:seed-test-accounts": "tsx scripts/seed-test-accounts.ts"
   },
   "dependencies": {
     "next": "15.5.19",
