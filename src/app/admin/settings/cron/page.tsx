@@ -5,7 +5,7 @@ export default function CronSettingsPage() {
     <SettingsPanelForm
       group="cron"
       title="Scheduled tasks"
-      description="Cron schedules for EPG sync, channel refresh, dead-link probes, and subscription notifications."
+      description="Cron schedules for EPG sync, M3U provider sync, channel refresh, dead-link probes, and subscription notifications."
       sections={[
         {
           title: "EPG & channels",
@@ -16,6 +16,11 @@ export default function CronSettingsPage() {
             { key: "channelRefreshEnabled", label: "Channel metadata refresh", type: "yesno" },
             { key: "channelRefreshCron", label: "Channel refresh cron", placeholder: "0 4 * * *" },
           ],
+        },
+        {
+          title: "Provider content",
+          info: "M3U auto-sync jobs run each minute when due (Admin → M3U Auto-Sync or Watch Folders with provider URL + auto-scan interval).",
+          fields: [],
         },
         {
           title: "Stream health",

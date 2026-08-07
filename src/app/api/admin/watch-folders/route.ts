@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { importFromFolder, resolveSafePath } from "@/lib/import-media";
+import { isRemoteM3uUrl } from "@/lib/m3u-watch-sync";
+import { runWatchFolderM3uSync } from "@/lib/m3u-sync-jobs";
 import { prisma } from "@/lib/prisma";
 import { ImportKind, PanelRole, WatchFolderType } from "@prisma/client";
 
@@ -22,21 +24,9 @@ export async function POST(req: NextRequest) {
     const folder = await prisma.watchFolder.findUnique({ where: { id: body.id } });
     if (!folder) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // Handle M3U watch folders separately
-    if (folder.type === "M3U") {
+    if (isRemoteM3uUrl(folder.path)) {
       try {
-        const res = await fetch(folder.path, {
-          signal: AbortSignal.timeout(30000),
-          headers: { "User-Agent": "Nexlify-Scanner/1.0" },
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const content = await res.text();
-        const { importFromM3uContent } = await import("@/lib/import-media");
-        const result = await importFromM3uContent(content, {
-          defaultType: "LIVE",
-          categoryId: folder.categoryId,
-          serverId: folder.serverId,
-        });
+        const result = await runWatchFolderM3uSync(folder);
 
         await prisma.watchFolder.update({
           where: { id: folder.id },
@@ -46,13 +36,19 @@ export async function POST(req: NextRequest) {
           data: {
             kind: ImportKind.WATCH_SCAN,
             source: folder.path,
+            streamType:
+              folder.type === "SERIES"
+                ? "SERIES"
+                : folder.type === "MOVIE"
+                  ? "MOVIE"
+                  : "LIVE",
             imported: result.imported,
             skipped: result.skipped,
             status: "done",
             watchFolderId: folder.id,
             categoryId: folder.categoryId,
             serverId: folder.serverId,
-            message: `M3U scan: ${result.imported} imported, ${result.skipped} skipped`,
+            message: `M3U sync: ${result.imported} imported, ${result.skipped} skipped`,
           },
         });
         return NextResponse.json(result);
@@ -65,10 +61,13 @@ export async function POST(req: NextRequest) {
             skipped: 0,
             status: "error",
             watchFolderId: folder.id,
-            message: e instanceof Error ? e.message : "M3U scan failed",
+            message: e instanceof Error ? e.message : "M3U sync failed",
           },
         });
-        return NextResponse.json({ error: e instanceof Error ? e.message : "M3U scan failed" }, { status: 400 });
+        return NextResponse.json(
+          { error: e instanceof Error ? e.message : "M3U sync failed" },
+          { status: 400 }
+        );
       }
     }
 
@@ -129,7 +128,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Validate input
   const name = String(body.name ?? "").trim();
   const folderPath = String(body.path ?? "").trim();
   if (!name) {
@@ -139,8 +137,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Path is required" }, { status: 400 });
   }
 
-  // Validate path is under MEDIA_IMPORT_ROOT for local folders
-  if (body.sourceKind !== "m3u" && process.env.MEDIA_IMPORT_ROOT) {
+  const isRemote = body.sourceKind === "m3u" || isRemoteM3uUrl(folderPath);
+  if (!isRemote && process.env.MEDIA_IMPORT_ROOT) {
     try {
       resolveSafePath(folderPath, process.env.MEDIA_IMPORT_ROOT);
     } catch {
@@ -152,7 +150,10 @@ export async function POST(req: NextRequest) {
   }
 
   const validTypes = Object.values(WatchFolderType);
-  const type = validTypes.includes(body.type) ? body.type : WatchFolderType.MIXED;
+  let type = validTypes.includes(body.type) ? body.type : WatchFolderType.MIXED;
+  if (isRemote && type === WatchFolderType.M3U) {
+    type = WatchFolderType.MIXED;
+  }
 
   const folder = await prisma.watchFolder.create({
     data: {
@@ -177,7 +178,6 @@ export async function DELETE(req: NextRequest) {
   const folder = await prisma.watchFolder.findUnique({ where: { id } });
   if (!folder) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Unlink associated import jobs before deleting
   await prisma.importJob.updateMany({
     where: { watchFolderId: id },
     data: { watchFolderId: null },

@@ -188,6 +188,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/content/vod", label: "VOD browser", section: "Library" },
           { href: "/admin/management/stream-providers", label: "VOD Providers", section: "Library" },
           { href: "/admin/watch-folders", label: "Watch Folders", section: "Library" },
+          { href: "/admin/m3u-sync", label: "M3U Auto-Sync", section: "Library" },
           { href: "/admin/import/movies", label: "Import Movies", section: "Import" },
           { href: "/admin/import/series", label: "Import Series", section: "Import" },
           { href: "/admin/queue", label: "Import Queue", section: "Import" },

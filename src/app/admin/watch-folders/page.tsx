@@ -63,6 +63,7 @@ export default function AdminWatchFoldersPage() {
           name: form.name,
           path,
           type: form.type,
+          sourceKind: form.sourceKind,
           categoryId: form.categoryId || null,
           serverId: form.serverIds[0] || null,
           autoScanMins: form.autoScanMins,
@@ -133,7 +134,14 @@ export default function AdminWatchFoldersPage() {
           Watch folders
         </h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Auto-import movies and TV series from a local directory or remote M3U playlist URL.
+          Auto-import movies and TV series from a local directory or upstream IPTV provider M3U URL.
+          Set auto-scan interval to re-pull new content from the provider on a schedule (requires nexlify-cron).
+        </p>
+        <p className="text-sm mt-2">
+          <Link href="/admin/m3u-sync" className="underline" style={{ color: "var(--accent)" }}>
+            M3U auto-sync jobs
+          </Link>{" "}
+          — dedicated scheduled sync with custom intervals per provider URL.
         </p>
       </div>
 
@@ -178,7 +186,7 @@ export default function AdminWatchFoldersPage() {
               <option value="MIXED">Mixed (movies + series)</option>
               <option value="MOVIE">Movies only</option>
               <option value="SERIES">TV series only</option>
-              <option value="M3U">M3U playlist</option>
+              {form.sourceKind === "local" && <option value="M3U">Local M3U file in folder</option>}
             </select>
           </label>
         </div>
@@ -196,9 +204,9 @@ export default function AdminWatchFoldersPage() {
             <input
               type="radio"
               checked={form.sourceKind === "m3u"}
-              onChange={() => setForm({ ...form, sourceKind: "m3u", type: "M3U" })}
+              onChange={() => setForm({ ...form, sourceKind: "m3u" })}
             />
-            Remote M3U URL
+            Remote M3U URL (provider playlist)
           </label>
         </div>
 
@@ -221,7 +229,7 @@ export default function AdminWatchFoldersPage() {
               M3U playlist URL
             </span>
             <input
-              placeholder="https://example.com/playlist.m3u"
+              placeholder="https://provider.example/get.php?username=...&type=m3u_plus&output=ts"
               className="w-full rounded border px-3 py-2 bg-transparent font-mono text-sm"
               style={{ borderColor: "var(--border)" }}
               value={form.m3uUrl}

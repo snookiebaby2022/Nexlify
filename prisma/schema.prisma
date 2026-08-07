@@ -1211,6 +1211,12 @@ model M3uSyncJob {
   url           String
   providerId    String?
   provider      StreamProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  /// LIVE | MOVIE | SERIES | MIXED
+  streamType    String    @default("MIXED")
+  categoryId    String?
+  serverId      String?
+  autoTmdb      Boolean   @default(true)
+  autoCategory  Boolean   @default(true)
   categoryMap   Json?     // auto-mapping rules
   autoAssignEpg Boolean   @default(true)
   lastSyncAt    DateTime?

@@ -6,6 +6,8 @@ import { enqueueAgentCommand, generateAgentToken } from "./stream-agent";
 import { runPanelBackup } from "./backup-run";
 import { reassignStreamsFromOfflineServers } from "./server-load";
 import { jobCheckStreamCerts } from "./cert-monitor";
+import { isRemoteM3uUrl } from "./m3u-watch-sync";
+import { runDueM3uSyncJobs, runWatchFolderM3uSync } from "./m3u-sync-jobs";
 
 const ESTIMATED_MBPS_PER_STREAM = Number(process.env.ESTIMATED_MBPS_PER_STREAM ?? "4");
 
@@ -137,7 +139,15 @@ export async function jobWatchFolders() {
       if (pending > 0) continue;
 
       const streamType =
-        folder.type === "SERIES" ? "SERIES" : folder.type === "MOVIE" ? "MOVIE" : "MOVIE";
+        folder.type === "SERIES"
+          ? "SERIES"
+          : folder.type === "MOVIE"
+            ? "MOVIE"
+            : folder.type === "LIVE"
+              ? "LIVE"
+              : isRemoteM3uUrl(folder.path)
+                ? "MIXED"
+                : "MIXED";
 
       await prisma.importJob.create({
         data: {
@@ -183,21 +193,37 @@ export async function jobImportQueue() {
 
     let mode: "MOVIE" | "SERIES" | "MIXED" =
       job.streamType === "SERIES" ? "SERIES" : job.streamType === "MOVIE" ? "MOVIE" : "MIXED";
+
+    let watchFolder: { type: string; path: string } | null = null;
     if (job.watchFolderId) {
-      const wf = await prisma.watchFolder.findUnique({ where: { id: job.watchFolderId } });
-      if (wf?.type === "MIXED") mode = "MIXED";
-      else if (wf?.type === "SERIES") mode = "SERIES";
-      else if (wf?.type === "MOVIE") mode = "MOVIE";
+      watchFolder = await prisma.watchFolder.findUnique({
+        where: { id: job.watchFolderId },
+        select: { type: true, path: true },
+      });
+      if (watchFolder?.type === "MIXED") mode = "MIXED";
+      else if (watchFolder?.type === "SERIES") mode = "SERIES";
+      else if (watchFolder?.type === "MOVIE") mode = "MOVIE";
     }
 
     let result = { imported: 0, skipped: 0 };
     try {
-      result = await importFromFolder(job.source, {
-        mode,
-        categoryId: job.categoryId,
-        serverId: job.serverId,
-        allowedRoot: process.env.MEDIA_IMPORT_ROOT,
-      });
+      if (watchFolder && isRemoteM3uUrl(job.source)) {
+        result = await runWatchFolderM3uSync({
+          id: job.watchFolderId!,
+          name: "",
+          path: job.source,
+          type: watchFolder.type,
+          categoryId: job.categoryId,
+          serverId: job.serverId,
+        });
+      } else {
+        result = await importFromFolder(job.source, {
+          mode,
+          categoryId: job.categoryId,
+          serverId: job.serverId,
+          allowedRoot: process.env.MEDIA_IMPORT_ROOT,
+        });
+      }
     } catch (e) {
       await prisma.importJob.update({
         where: { id: job.id },
@@ -488,6 +514,20 @@ async function jobPanelHealthWatchdog() {
   }
 }
 
+async function jobM3uSync() {
+  const start = Date.now();
+  try {
+    const result = await runDueM3uSyncJobs(5);
+    const msg =
+      result.errors.length > 0
+        ? `processed ${result.processed}, +${result.imported} new, ${result.errors.length} err`
+        : `processed ${result.processed}, +${result.imported} new, ${result.skipped} skipped`;
+    await logCron("m3u_sync", result.errors.length ? "warn" : "ok", msg, Date.now() - start);
+  } catch (e) {
+    await logCron("m3u_sync", "error", String(e), Date.now() - start);
+  }
+}
+
 export async function runAllCronJobs() {
   await jobPanelHealthWatchdog();
   await jobCleanupConnections();
@@ -495,6 +535,7 @@ export async function runAllCronJobs() {
   await jobBandwidthSnapshot();
   await jobWatchFolders();
   await jobImportQueue();
+  await jobM3uSync();
   await jobAgentAutoRestart();
   await jobServerRebalance();
   await jobTheftDetection();
