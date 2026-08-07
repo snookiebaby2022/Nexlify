@@ -17,6 +17,9 @@ NEXT_PUBLIC_WEBSITE_URL=https://nexlify.live
 NEXT_PUBLIC_PANEL_URL=https://panel.nexlify.live
 
 # === Payments (required after Sep 1, 2026 promo) ===
+# Create account: https://dashboard.stripe.com/register
+# API keys: https://dashboard.stripe.com/apikeys (Live mode for production)
+# Only the secret key is required — no webhook endpoint needed for current checkout flow.
 STRIPE_SECRET_KEY=sk_live_xxxx
 
 # === Panel API sync ===
@@ -48,11 +51,13 @@ ADMIN_PASSWORD=your-secure-password-min-8-chars
 # Microsoft Clarity project ID — clarity.microsoft.com
 # NEXT_PUBLIC_CLARITY_ID=
 
-# Password reset + transactional mail (required for /forgot-password)
+# Password reset + activation emails (required for /forgot-password and license activation codes)
+# Quick setup on VPS: bash scripts/configure-marketing-smtp-stripe.sh
+# Gmail: enable 2FA → Google Account → Security → App passwords → generate for "Mail"
 # SMTP_HOST=smtp.gmail.com
 # SMTP_PORT=587
 # SMTP_USER=you@gmail.com
-# SMTP_PASS=your-app-password
+# SMTP_PASS=your-16-char-app-password
 # SMTP_FROM=Nexlify <noreply@nexlify.live>
 
 # Newsletter webhook (Brevo/Mailchimp/Zapier) — optional; else logs to data/newsletter-subscribers.log

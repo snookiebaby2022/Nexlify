@@ -58,7 +58,14 @@ fi
 if grep -q '^STRIPE_SECRET_KEY=sk_' "$ROOT/.env" 2>/dev/null; then
   check "Stripe configured (post-promo payments)" ok
 else
-  check "Stripe configured (post-promo payments)" "STRIPE_SECRET_KEY not set — paid checkout after Sep 1 will fail"
+  check "Stripe configured (post-promo payments)" "STRIPE_SECRET_KEY not set — run: bash scripts/configure-marketing-smtp-stripe.sh"
+fi
+
+# 5b) SMTP for transactional mail
+if grep -q '^SMTP_HOST=' "$ROOT/.env" 2>/dev/null && grep -q '^SMTP_USER=' "$ROOT/.env" 2>/dev/null && grep -q '^SMTP_PASS=' "$ROOT/.env" 2>/dev/null; then
+  check "SMTP configured (activation + password reset)" ok
+else
+  check "SMTP configured (activation + password reset)" "SMTP_* not set — run: bash scripts/configure-marketing-smtp-stripe.sh"
 fi
 
 # 6) Build exists
