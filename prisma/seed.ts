@@ -3,19 +3,33 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-/** Minimal seed — admin user + panel name only (no demo lines/streams). */
+/** Minimal seed — admin + demo reseller + panel name (no demo lines/streams). */
 async function main() {
   const adminHash = await bcrypt.hash("admin123", 10);
+  const resellerHash = await bcrypt.hash("reseller123", 10);
 
-  await prisma.panelUser.upsert({
+  const admin = await prisma.panelUser.upsert({
     where: { username: "admin" },
-    update: {},
+    update: { isActive: true },
     create: {
       username: "admin",
       passwordHash: adminHash,
       role: PanelRole.ADMIN,
       credits: 999999,
       accessCode: "adminapi",
+    },
+  });
+
+  await prisma.panelUser.upsert({
+    where: { username: "reseller" },
+    update: { isActive: true, passwordHash: resellerHash },
+    create: {
+      username: "reseller",
+      passwordHash: resellerHash,
+      role: PanelRole.RESELLER,
+      credits: 10000,
+      accessCode: "resellerapi",
+      parentId: admin.id,
     },
   });
 
