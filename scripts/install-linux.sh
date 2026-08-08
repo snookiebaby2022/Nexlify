@@ -11,7 +11,13 @@ set -euo pipefail
 
 PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
 PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz}"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v193}"
+_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$_SCRIPT_DIR/panel-version.sh" ]; then
+  _PV="$(bash "$_SCRIPT_DIR/panel-version.sh" 2>/dev/null || echo 0)"
+else
+  _PV="0"
+fi
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v${_PV}}"
 CREDS_ROOT="/root/nexlify"
 DOMAIN=""
 EMAIL=""

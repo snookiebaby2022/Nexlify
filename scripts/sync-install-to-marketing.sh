@@ -40,6 +40,9 @@ cp -f "$SCRIPTS/verify-install-login.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/verify-panel-admin-login.cjs" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/reset-panel-admin.sh" "$INSTALL/scripts/"
 
+# Version helper (used when installer scripts run from panel repo)
+cp -f "$SCRIPTS/panel-version.sh" "$INSTALL/scripts/"
+
 PANEL_VER="$(node -p "require('$ROOT/package.json').version.replace(/\\./g,'')")"
 sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[0-9a-zA-Z]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
   "$INSTALL/apply-panel-fast-update.sh" "$INSTALL/panel.sh" 2>/dev/null || true
