@@ -6,6 +6,7 @@ import {
   buildOneClickInstallCommand,
   cleanReinstallWithFreshFlag,
   credentialsHelp,
+  INSTALLER_CACHE_QUERY,
   INSTALLER_VERSION,
   oneClickInstallExample,
 } from "@/lib/panel-install";
@@ -250,7 +251,7 @@ export function PanelInstallInstructions() {
               </code>{" "}
               — or reinstall with the latest{" "}
               <code className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-mono text-amber-200">
-                panel.sh?{INSTALLER_VERSION}
+                panel.sh?{INSTALLER_CACHE_QUERY}
               </code>
               . Check <code className="text-amber-200">login_url</code> in{" "}
               <code className="text-amber-200">/root/nexlify/install-credentials</code>.

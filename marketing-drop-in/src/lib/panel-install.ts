@@ -9,18 +9,23 @@ export const CREDENTIALS_FILE = `${CREDENTIALS_ROOT_DIR}/install-credentials`;
 /** Panel semver from synced release feed (matches package.json in panel repo). */
 export const PANEL_VERSION = panelReleases.latestVersion;
 
-/** Installer + tarball cache-bust — v1.9.7 matches panel Admin → Updates version. */
+/** Display label — matches Admin → Updates (e.g. v1.9.7). */
 export const INSTALLER_VERSION = `v${PANEL_VERSION}`;
+
+/** URL cache-bust query — must be v=1.9.7 not v1.9.7 */
+export const INSTALLER_CACHE_QUERY = `v=${PANEL_VERSION}`;
+
+export const installerPanelShUrl = `https://nexlify.live/install/panel.sh?${INSTALLER_CACHE_QUERY}`;
 
 export const cleanReinstallCommand = `sudo rm -rf ${PANEL_INSTALL_DIR}`;
 
-export const simpleInstallCommand = `curl -fsSL 'https://nexlify.live/install/panel.sh?${INSTALLER_VERSION}' | sudo bash`;
+export const simpleInstallCommand = `curl -fsSL '${installerPanelShUrl}' | sudo bash`;
 
 export function buildOneClickInstallCommand(opts?: {
   ip?: string;
   license?: string;
 }): string {
-  const base = `curl -fsSL 'https://nexlify.live/install/panel.sh?${INSTALLER_VERSION}' | sudo bash`;
+  const base = `curl -fsSL '${installerPanelShUrl}' | sudo bash`;
   const flags: string[] = [];
   if (opts?.ip?.trim()) flags.push(`--ip ${opts.ip.trim()}`);
   if (opts?.license?.trim()) flags.push(`--license ${opts.license.trim()}`);
@@ -30,9 +35,9 @@ export function buildOneClickInstallCommand(opts?: {
 
 export const oneClickInstallExample = buildOneClickInstallCommand();
 
-export const cleanReinstallWithFreshFlag = `curl -fsSL 'https://nexlify.live/install/panel.sh?${INSTALLER_VERSION}' | sudo bash -s -- --fresh`;
+export const cleanReinstallWithFreshFlag = `curl -fsSL '${installerPanelShUrl}' | sudo bash -s -- --fresh`;
 
-export const wgetInstallExample = `wget -qO- 'https://nexlify.live/install/panel.sh?${INSTALLER_VERSION}' | sudo bash`;
+export const wgetInstallExample = `wget -qO- '${installerPanelShUrl}' | sudo bash`;
 
 export const credentialsHelp = {
   file: CREDENTIALS_FILE,

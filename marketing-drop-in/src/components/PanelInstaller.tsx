@@ -17,6 +17,7 @@ import {
   cleanReinstallWithFreshFlag,
   credentialsHelp,
   INSTALLER_VERSION,
+  installerPanelShUrl,
   oneClickInstallExample,
   PANEL_INSTALL_DIR,
   simpleInstallCommand,
@@ -137,7 +138,7 @@ export function PanelInstaller() {
 
         <div className="flex flex-wrap items-center gap-3">
           <a
-            href={`https://nexlify.live/install/panel.sh?${INSTALLER_VERSION}`}
+            href={installerPanelShUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500 transition-colors"
