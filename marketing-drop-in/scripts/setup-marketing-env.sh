@@ -25,16 +25,23 @@ fi
 mkdir -p "$MARKETING"
 ENV_FILE="$MARKETING/.env"
 TMP="$(mktemp)"
-PREV_ENV=""
+ENV_BACKUP=""
 if [ -f "$ENV_FILE" ]; then
-  cp "$ENV_FILE" "${ENV_FILE}.backup.$(date +%s)"
-  PREV_ENV="$ENV_FILE"
+  ENV_BACKUP="${ENV_FILE}.backup.$(date +%s)"
+  cp "$ENV_FILE" "$ENV_BACKUP"
 fi
 
 read_prev() {
   local key="$1"
-  [ -n "$PREV_ENV" ] || return 0
-  grep -m1 "^${key}=" "$PREV_ENV" 2>/dev/null | head -1 || true
+  local f val
+  for f in $(ls -t "${ENV_FILE}.backup."* 2>/dev/null | head -5); do
+    val="$(grep -m1 "^${key}=" "$f" 2>/dev/null | head -1 || true)"
+    if [ -n "$val" ]; then
+      echo "$val"
+      return 0
+    fi
+  done
+  return 0
 }
 
 # Never copy panel DATABASE_URL — marketing uses nexlify_marketing (see setup-marketing-database.sh)
