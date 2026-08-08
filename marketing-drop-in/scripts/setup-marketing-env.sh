@@ -25,7 +25,17 @@ fi
 mkdir -p "$MARKETING"
 ENV_FILE="$MARKETING/.env"
 TMP="$(mktemp)"
-[ -f "$ENV_FILE" ] && cp "$ENV_FILE" "${ENV_FILE}.backup.$(date +%s)"
+PREV_ENV=""
+if [ -f "$ENV_FILE" ]; then
+  cp "$ENV_FILE" "${ENV_FILE}.backup.$(date +%s)"
+  PREV_ENV="$ENV_FILE"
+fi
+
+read_prev() {
+  local key="$1"
+  [ -n "$PREV_ENV" ] || return 0
+  grep -m1 "^${key}=" "$PREV_ENV" 2>/dev/null | head -1 || true
+}
 
 # Never copy panel DATABASE_URL — marketing uses nexlify_marketing (see setup-marketing-database.sh)
 copy_kv() {
@@ -58,6 +68,14 @@ awk -F= '{
   key=$1
   if (!seen[key]++) print
 }' "$TMP" > "$ENV_FILE"
+
+# Preserve marketing-only secrets if panel did not supply them
+for key in SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS SMTP_FROM STRIPE_SECRET_KEY BILLING_WEBHOOK_SECRET ADMIN_EMAIL ADMIN_PASSWORD; do
+  if ! grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
+    prev="$(read_prev "$key")"
+    [ -n "$prev" ] && echo "$prev" >> "$ENV_FILE"
+  fi
+done
 
 rm -f "$TMP"
 chmod 600 "$ENV_FILE"

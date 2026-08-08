@@ -27,6 +27,12 @@ http_code() {
   curl -sS -o /dev/null -w '%{http_code}' --max-time 12 "$1" 2>/dev/null || echo "000"
 }
 
+https_marketing_code() {
+  curl -sS -o /dev/null -w '%{http_code}' --max-time 12 -k \
+    -H "Host: nexlify.live" "https://127.0.0.1/" 2>/dev/null \
+    || http_code "https://nexlify.live/"
+}
+
 section "Environment paths"
 echo "Marketing: $MARKETING"
 echo "Panel:     ${PANEL:-NOT FOUND}"
@@ -116,7 +122,7 @@ if [ -d "$MARKETING" ]; then
 fi
 
 section "Marketing HTTPS (nginx → :13001)"
-code=$(http_code "https://127.0.0.1/" -H "Host: nexlify.live" -k 2>/dev/null || http_code "https://nexlify.live/")
+code=$(https_marketing_code)
 [ "$code" = "200" ] || [ "$code" = "301" ] || [ "$code" = "302" ] \
   && ok "nexlify.live HTTPS → $code" || fail "nexlify.live HTTPS → $code (nginx down?)"
 
