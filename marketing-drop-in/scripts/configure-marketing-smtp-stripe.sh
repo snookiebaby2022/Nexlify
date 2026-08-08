@@ -136,10 +136,17 @@ echo "Wrote SMTP + Stripe to $ENV_FILE"
 echo ""
 echo "-> Testing SMTP..."
 cd "$MARKETING"
-if npx tsx scripts/test-marketing-smtp.ts "$SMTP_USER" 2>&1; then
-  echo "SMTP test: OK (check inbox for $SMTP_USER)"
+SMTP_TEST_TO=""
+if [[ "$SMTP_USER" == *@* ]]; then
+  SMTP_TEST_TO="$SMTP_USER"
 else
-  echo "SMTP test: FAILED — check host/port/password (Gmail needs App Password + 2FA)"
+  SMTP_TEST_TO="$(read_env_val "$ENV_FILE" ADMIN_EMAIL)"
+  [ -z "$SMTP_TEST_TO" ] && SMTP_TEST_TO="snookiebaby2022@gmail.com"
+fi
+if npx tsx scripts/test-marketing-smtp.ts "$SMTP_TEST_TO" 2>&1; then
+  echo "SMTP test: OK (check inbox for $SMTP_TEST_TO)"
+else
+  echo "SMTP test: FAILED — check host/port/password (Resend: SMTP_USER must be 'resend', not your email)"
   exit 1
 fi
 

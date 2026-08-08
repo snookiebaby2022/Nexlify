@@ -12,9 +12,19 @@ for (const p of [resolve(process.cwd(), ".env"), "/var/www/nexlify/.env"]) {
 }
 
 async function main() {
-  const to = process.argv[2]?.trim() || process.env.SMTP_USER?.trim();
-  if (!to) {
-    console.error("Usage: npx tsx scripts/test-marketing-smtp.ts recipient@email.com");
+  const arg = process.argv[2]?.trim();
+  const adminEmail = process.env.ADMIN_EMAIL?.trim();
+  const smtpUser = process.env.SMTP_USER?.trim();
+  const to =
+    arg ||
+    adminEmail ||
+    (smtpUser && smtpUser.includes("@") ? smtpUser : "");
+
+  if (!to || !to.includes("@")) {
+    console.error(
+      "Usage: npx tsx scripts/test-marketing-smtp.ts recipient@email.com\n" +
+        "  (Resend uses SMTP_USER=resend — pass your inbox as the argument)"
+    );
     process.exit(1);
   }
 
