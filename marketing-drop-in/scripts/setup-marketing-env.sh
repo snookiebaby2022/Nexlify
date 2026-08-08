@@ -101,7 +101,7 @@ done
 if [ "$missing_smtp" = "1" ]; then
   echo "SMTP: not in panel .env — run: bash scripts/configure-marketing-smtp-stripe.sh"
 fi
-if ! grep -q '^STRIPE_SECRET_KEY=sk_' "$ENV_FILE" 2>/dev/null; then
+if ! grep -E '^STRIPE_SECRET_KEY="?sk_' "$ENV_FILE" 2>/dev/null; then
   echo "Stripe: not set — run: bash scripts/configure-marketing-smtp-stripe.sh (needed after Sep 1 promo)"
 fi
 

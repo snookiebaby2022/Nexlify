@@ -157,7 +157,7 @@ curl -s "http://127.0.0.1:13001/pricing" 2>/dev/null | grep -oE 'September 1, 20
 echo ""
 if [ -f .license-keys/private.pem ]; then echo "License key: OK"; else echo "License key: MISSING"; fi
 grep -q 'isFreePeriod()' src/app/api/checkout/route.ts 2>/dev/null && echo "Free checkout: OK" || echo "Free checkout: check checkout route"
-grep -q '^STRIPE_SECRET_KEY=sk_' .env 2>/dev/null && echo "Stripe: configured" || echo "Stripe: not set (needed after Sep 1 promo)"
+grep -E '^STRIPE_SECRET_KEY="?sk_' .env 2>/dev/null && echo "Stripe: configured" || echo "Stripe: not set (needed after Sep 1 promo)"
 grep -q '^DATABASE_URL=' .env 2>/dev/null && echo "Database: configured ($(grep '^DATABASE_URL=' .env | sed 's|.*@.*/||; s/"//g'))" || echo "Database: MISSING"
 echo ""
 echo "=== Update complete ==="

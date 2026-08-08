@@ -55,7 +55,7 @@ else
 fi
 
 # 5) Stripe for post-promo
-if grep -q '^STRIPE_SECRET_KEY=sk_' "$ROOT/.env" 2>/dev/null; then
+if grep -E '^STRIPE_SECRET_KEY="?sk_' "$ROOT/.env" 2>/dev/null; then
   check "Stripe configured (post-promo payments)" ok
 else
   check "Stripe configured (post-promo payments)" "STRIPE_SECRET_KEY not set — run: bash scripts/configure-marketing-smtp-stripe.sh"

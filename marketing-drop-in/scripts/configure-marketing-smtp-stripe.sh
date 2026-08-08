@@ -160,5 +160,5 @@ fi
 echo ""
 echo "=== Status ==="
 grep -q '^SMTP_HOST=' "$ENV_FILE" && echo "SMTP: configured ($SMTP_HOST:$SMTP_PORT)"
-grep -q '^STRIPE_SECRET_KEY=sk_' "$ENV_FILE" && echo "Stripe: configured" || echo "Stripe: not set"
+grep -E '^STRIPE_SECRET_KEY="?sk_' "$ENV_FILE" >/dev/null && echo "Stripe: configured" || echo "Stripe: not set"
 echo "Done."

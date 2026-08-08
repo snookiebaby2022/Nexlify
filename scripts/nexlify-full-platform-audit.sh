@@ -85,7 +85,7 @@ if [ -d "$MARKETING" ]; then
     grep -q '^ADMIN_EMAIL=' "$MARKETING/.env" && ok "ADMIN_EMAIL set" || warn "ADMIN_EMAIL missing"
     grep -q '^SMTP_HOST=' "$MARKETING/.env" && grep -q '^SMTP_PASS=' "$MARKETING/.env" \
       && ok "SMTP configured" || warn "SMTP not configured (activation emails + password reset)"
-    grep -q '^STRIPE_SECRET_KEY=sk_' "$MARKETING/.env" && ok "Stripe key set" || warn "STRIPE_SECRET_KEY missing (needed after Sep 1, 2026)"
+    grep -E '^STRIPE_SECRET_KEY="?sk_' "$MARKETING/.env" && ok "Stripe key set" || warn "STRIPE_SECRET_KEY missing (needed after Sep 1, 2026)"
   fi
 
   [ -f "$MARKETING/.license-keys/private.pem" ] && ok "License signing key present" \
