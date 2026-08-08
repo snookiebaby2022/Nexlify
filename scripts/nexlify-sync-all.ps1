@@ -2,10 +2,7 @@
 # Run from repo root: .\scripts\nexlify-sync-all.ps1
 
 $ErrorActionPreference = "Stop"
-$Root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-if (-not (Test-Path (Join-Path $Root "package.json"))) {
-    $Root = Split-Path $PSScriptRoot -Parent
-}
+$Root = Split-Path $PSScriptRoot -Parent
 Set-Location $Root
 
 Write-Host "=== Nexlify repo sync ===" -ForegroundColor Cyan
