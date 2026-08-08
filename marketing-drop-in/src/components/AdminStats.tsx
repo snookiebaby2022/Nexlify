@@ -22,10 +22,13 @@ function StatCard({
   );
 }
 
+import { isLicenseDeletable } from "@/lib/license-deletable";
+
 function trialDeletable(t: { status: string; expiresAt: string | null }): boolean {
-  if (t.status === "REVOKED" || t.status === "EXPIRED") return true;
-  if (t.expiresAt && new Date(t.expiresAt).getTime() < Date.now()) return true;
-  return false;
+  return isLicenseDeletable({
+    status: t.status,
+    expiresAt: t.expiresAt ? new Date(t.expiresAt) : null,
+  });
 }
 
 export function AdminStats() {
@@ -79,7 +82,7 @@ export function AdminStats() {
       alert(data.error ?? "Bulk delete failed");
       return;
     }
-    alert(`Deleted ${data.deleted ?? 0} trial licenses`);
+    alert(`Deleted ${data.deleted ?? 0} trial license(s)${data.skipped ? ` (${data.skipped} skipped)` : ""}`);
     load();
   }
 

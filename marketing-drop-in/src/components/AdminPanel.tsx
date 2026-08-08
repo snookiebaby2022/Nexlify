@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDate } from "@/lib/format";
+import { isLicenseDeletable } from "@/lib/license-deletable";
 
 type LicenseRow = {
   id: string;
@@ -19,23 +20,32 @@ type LicenseRow = {
   plan: { name: string; slug: string };
 };
 
-function isDeletable(lic: Pick<LicenseRow, "status" | "expiresAt">): boolean {
-  if (lic.status === "REVOKED" || lic.status === "EXPIRED") return true;
-  if (lic.expiresAt && new Date(lic.expiresAt).getTime() < Date.now()) return true;
-  return false;
-}
-
 const STATUS_OPTIONS = ["", "ACTIVE", "UNUSED", "SUSPENDED", "EXPIRED", "REVOKED"];
+
+function Flash({ message, type }: { message: string; type: "ok" | "err" }) {
+  return (
+    <div
+      className={`rounded-lg border px-4 py-3 text-sm ${
+        type === "ok"
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+          : "border-red-500/30 bg-red-500/10 text-red-200"
+      }`}
+    >
+      {message}
+    </div>
+  );
+}
 
 export function AdminPanel() {
   const [licenses, setLicenses] = useState<LicenseRow[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [issueEmail, setIssueEmail] = useState("");
   const [planId, setPlanId] = useState("");
   const [issueTerm, setIssueTerm] = useState<"plan" | "1m" | "3m" | "6m" | "1y" | "unlimited">("plan");
   const [issueMaxLines, setIssueMaxLines] = useState("");
   const [plans, setPlans] = useState<{ id: string; name: string; slug: string }[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
+  const [flash, setFlash] = useState<{ message: string; type: "ok" | "err" } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -56,12 +66,18 @@ export function AdminPanel() {
     return s ? `?${s}` : "";
   }, [search, statusFilter, planFilter]);
 
+  const notify = (message: string, type: "ok" | "err" = "ok") => {
+    setFlash({ message, type });
+    setTimeout(() => setFlash(null), 6000);
+  };
+
   const load = useCallback(async () => {
     setLoading(true);
     const res = await fetch(`/api/admin/licenses${query}`);
     if (res.ok) {
       const data = await res.json();
       setLicenses(data.licenses);
+      setTotalCount(data.summary?.total ?? data.licenses.length);
     }
     setLoading(false);
   }, [query]);
@@ -71,6 +87,10 @@ export function AdminPanel() {
   }, [load]);
 
   useEffect(() => {
+    setSelected(new Set());
+  }, [query]);
+
+  useEffect(() => {
     fetch("/api/plans")
       .then((r) => r.json())
       .then((d) => {
@@ -78,6 +98,21 @@ export function AdminPanel() {
         if (d.plans?.[0]) setPlanId(d.plans[0].id);
       });
   }, []);
+
+  const deletableInView = useMemo(
+    () => licenses.filter((l) => isLicenseDeletable({ status: l.status, expiresAt: l.expiresAt ? new Date(l.expiresAt) : null })),
+    [licenses]
+  );
+
+  const deletableIds = useMemo(() => new Set(deletableInView.map((l) => l.id)), [deletableInView]);
+
+  const selectedDeletable = useMemo(
+    () => [...selected].filter((id) => deletableIds.has(id)),
+    [selected, deletableIds]
+  );
+
+  const allDeletableSelected =
+    deletableInView.length > 0 && deletableInView.every((l) => selected.has(l.id));
 
   async function patchLicense(id: string, body: Record<string, unknown>) {
     setBusyId(id);
@@ -89,10 +124,11 @@ export function AdminPanel() {
     setBusyId(null);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      alert(data.error ?? "Update failed");
-      return;
+      notify(data.error ?? "Update failed", "err");
+      return false;
     }
     load();
+    return true;
   }
 
   async function revoke(id: string) {
@@ -100,59 +136,46 @@ export function AdminPanel() {
     await patchLicense(id, { status: "REVOKED" });
   }
 
-  async function reactivate(id: string) {
-    await patchLicense(id, { reactivate: true });
-  }
-
-  async function unsuspend(id: string) {
-    await patchLicense(id, { status: "ACTIVE" });
-  }
-
-  async function suspend(id: string) {
-    if (!confirm("Suspend this license on the customer panel?")) return;
-    await patchLicense(id, { status: "SUSPENDED" });
-  }
-
-  async function clearMachine(id: string) {
-    if (!confirm("Clear machine binding?")) return;
-    await patchLicense(id, { clearMachineId: true });
-  }
-
-  async function saveNotes() {
-    if (!notesEdit) return;
-    await patchLicense(notesEdit.id, { notes: notesEdit.notes });
-    setNotesEdit(null);
-  }
-
-  async function submitExtend(e: React.FormEvent) {
-    e.preventDefault();
-    if (!extendId) return;
-    await patchLicense(extendId, { extendDays });
-    setExtendId(null);
+  async function bulkRevoke() {
+    const active = [...selected].filter((id) => {
+      const lic = licenses.find((l) => l.id === id);
+      return lic && lic.status !== "REVOKED" && lic.status !== "EXPIRED";
+    });
+    if (!active.length) return;
+    if (!confirm(`Revoke ${active.length} selected license(s)? They can then be deleted.`)) return;
+    setBusyId("bulk-revoke");
+    let ok = 0;
+    for (const id of active) {
+      if (await patchLicense(id, { status: "REVOKED" })) ok++;
+    }
+    setBusyId(null);
+    notify(`Revoked ${ok} license(s)`);
+    setSelected(new Set());
   }
 
   async function removeLicenses(ids: string[]) {
     if (!ids.length) return;
-    if (!confirm(`Delete ${ids.length} license(s) permanently?`)) return;
+    if (!confirm(`Permanently delete ${ids.length} license(s)? This cannot be undone.`)) return;
     setBusyId("bulk");
     const res = await fetch("/api/admin/licenses", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
     });
+    const data = await res.json().catch(() => ({}));
     setBusyId(null);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      alert(data.error ?? "Delete failed");
+    if (!res.ok && res.status !== 207) {
+      notify(data.error ?? "Delete failed", "err");
       return;
     }
+    const msg = `Deleted ${data.deleted ?? 0}${data.skipped ? ` (${data.skipped} skipped — still active)` : ""}`;
+    notify(data.warning ? `${msg}. ${data.warning}` : msg);
     setSelected(new Set());
     load();
   }
 
   async function issueManual(e: React.FormEvent) {
     e.preventDefault();
-    setMessage(null);
     const body: Record<string, unknown> = { email: issueEmail, planId };
     if (issueTerm !== "plan") {
       body.term = issueTerm;
@@ -168,24 +191,18 @@ export function AdminPanel() {
     });
     const data = await res.json();
     if (!res.ok) {
-      setMessage(data.error ?? "Failed");
+      notify(data.error ?? "Failed", "err");
       return;
     }
-    const syncNote =
-      data.sync?.pushed === true
-        ? " — pushed to customer panel"
-        : data.sync?.pushed === false
-          ? ` — queued (panel will sync on next poll${data.sync?.error ? `: ${data.sync.error}` : ""})`
-          : "";
-    setMessage(`Issued key: ${data.license.key}${syncNote}`);
+    notify(`Issued key: ${data.license.key}`);
     setIssueEmail("");
     load();
   }
 
   function copyKey(key: string) {
     navigator.clipboard.writeText(key).then(
-      () => setMessage(`Copied ${key}`),
-      () => alert("Copy failed"),
+      () => notify(`Copied ${key}`),
+      () => notify("Copy failed", "err")
     );
   }
 
@@ -198,33 +215,34 @@ export function AdminPanel() {
     });
   }
 
-  const deletableSelected = [...selected].filter((id) => {
-    const lic = licenses.find((l) => l.id === id);
-    return lic && isDeletable(lic);
-  });
+  function toggleSelectAllDeletable() {
+    if (allDeletableSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(deletableInView.map((l) => l.id)));
+    }
+  }
 
   const planSlugs = [...new Set(plans.map((p) => p.slug))];
-
-  // Summary stats
   const now = Date.now();
   const activeLicenses = licenses.filter((l) => l.status === "ACTIVE");
   const onlineCount = activeLicenses.filter((l) => {
     if (!l.lastSyncAt) return false;
-    const hoursSince = (now - new Date(l.lastSyncAt).getTime()) / 3600000;
-    return hoursSince < 24;
+    return (now - new Date(l.lastSyncAt).getTime()) / 3600000 < 48;
   }).length;
   const installedCount = activeLicenses.filter((l) => l.machineId).length;
 
   return (
-    <div className="space-y-8">
-      {/* Summary Stats */}
+    <div className="space-y-6">
+      {flash && <Flash message={flash.message} type={flash.type} />}
+
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: "Total Licenses", value: licenses.length, color: "text-white" },
+          { label: "Total (filtered)", value: totalCount, color: "text-white" },
+          { label: "Shown", value: licenses.length, color: "text-slate-300" },
           { label: "Active", value: activeLicenses.length, color: "text-emerald-400" },
-          { label: "Installed", value: installedCount, color: "text-cyan-400" },
-          { label: "Online (24h)", value: onlineCount, color: "text-emerald-400" },
-          { label: "Offline", value: installedCount - onlineCount, color: "text-amber-400" },
+          { label: "Online (48h)", value: onlineCount, color: "text-emerald-400" },
+          { label: "Deletable", value: deletableInView.length, color: "text-amber-400" },
         ].map((s) => (
           <div key={s.label} className="rounded-lg border border-slate-800 bg-slate-900/50 p-3 text-center">
             <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
@@ -232,15 +250,12 @@ export function AdminPanel() {
           </div>
         ))}
       </div>
+
       <form
         onSubmit={issueManual}
         className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 max-w-lg space-y-4"
       >
         <h2 className="font-semibold text-white">Issue manual license</h2>
-        <p className="text-xs text-slate-400">
-          Keys auto-push to registered customer panels (add / renew / revoke / hold). First activation on
-          the panel registers its URL for future sync.
-        </p>
         <input
           type="email"
           placeholder="Customer email"
@@ -275,7 +290,7 @@ export function AdminPanel() {
         <input
           type="number"
           min={0}
-          placeholder="Max lines (optional — 0 = unlimited, blank = plan default)"
+          placeholder="Max lines (optional)"
           value={issueMaxLines}
           onChange={(e) => setIssueMaxLines(e.target.value)}
           className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-white"
@@ -286,7 +301,6 @@ export function AdminPanel() {
         >
           Issue key
         </button>
-        {message && <p className="text-sm text-cyan-400">{message}</p>}
       </form>
 
       <div className="flex flex-wrap gap-3 items-end">
@@ -329,213 +343,222 @@ export function AdminPanel() {
             ))}
           </select>
         </div>
-        {deletableSelected.length > 0 && (
+        <a
+          href="/api/admin/licenses/export"
+          className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:border-violet-500/40 hover:text-white"
+        >
+          Export CSV
+        </a>
+      </div>
+
+      {selected.size > 0 && (
+        <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-950/80 px-4 py-3 backdrop-blur">
+          <span className="text-sm text-violet-200 font-medium">{selected.size} selected</span>
+          {selectedDeletable.length > 0 && (
+            <button
+              type="button"
+              onClick={() => removeLicenses(selectedDeletable)}
+              disabled={busyId === "bulk"}
+              className="rounded-lg bg-red-600/90 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-500 disabled:opacity-50"
+            >
+              Delete deletable ({selectedDeletable.length})
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => removeLicenses(deletableSelected)}
-            disabled={busyId === "bulk"}
-            className="rounded-lg border border-red-500/40 px-4 py-2 text-sm text-red-300 hover:bg-red-500/10"
+            onClick={bulkRevoke}
+            disabled={busyId === "bulk-revoke"}
+            className="rounded-lg border border-amber-500/40 px-3 py-1.5 text-xs text-amber-200 hover:bg-amber-500/10 disabled:opacity-50"
           >
-            Delete selected ({deletableSelected.length})
+            Revoke selected
           </button>
-        )}
-      </div>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="rounded-lg px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-slate-400">Loading…</p>
+      ) : licenses.length === 0 ? (
+        <p className="text-slate-400 rounded-xl border border-slate-800 p-8 text-center">No licenses match filters.</p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-800">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-800 bg-slate-900/80 text-slate-400">
-              <tr>
-                <th className="px-2 py-3 w-8" />
-                <th className="px-4 py-3">Key</th>
-                <th className="px-4 py-3">User</th>
-                <th className="px-4 py-3">Plan</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Expires</th>
-                <th className="px-4 py-3">Notes</th>
-                <th className="px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {licenses.map((lic) => (
-                <tr key={lic.id} className="border-b border-slate-800/80 align-top">
-                  <td className="px-2 py-3">
-                    {isDeletable(lic) && (
+        <>
+          <p className="text-xs text-slate-500">
+            Showing {licenses.length} of {totalCount} licenses
+            {totalCount > licenses.length ? " — narrow filters or increase limit in API" : ""}
+          </p>
+          <div className="overflow-x-auto rounded-xl border border-slate-800">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-800 bg-slate-900/80 text-slate-400">
+                <tr>
+                  <th className="px-2 py-3 w-10">
+                    {deletableInView.length > 0 && (
                       <input
                         type="checkbox"
-                        checked={selected.has(lic.id)}
-                        onChange={() => toggleSelect(lic.id)}
+                        checked={allDeletableSelected}
+                        onChange={toggleSelectAllDeletable}
+                        title="Select all deletable in view"
                         className="rounded border-slate-600"
+                        aria-label="Select all deletable licenses"
                       />
                     )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => copyKey(lic.key)}
-                      className="font-mono text-xs text-cyan-300 hover:underline text-left"
-                      title="Click to copy"
+                  </th>
+                  <th className="px-4 py-3">Key</th>
+                  <th className="px-4 py-3">User</th>
+                  <th className="px-4 py-3">Plan</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Expires</th>
+                  <th className="px-4 py-3">Notes</th>
+                  <th className="px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {licenses.map((lic) => {
+                  const deletable = isLicenseDeletable({
+                    status: lic.status,
+                    expiresAt: lic.expiresAt ? new Date(lic.expiresAt) : null,
+                  });
+                  return (
+                    <tr
+                      key={lic.id}
+                      className={`border-b border-slate-800/80 align-top ${selected.has(lic.id) ? "bg-violet-950/20" : ""}`}
                     >
-                      {lic.key}
-                    </button>
-                    {lic.machineId && (
-                      <p className="mt-1 text-[10px] text-slate-500 truncate max-w-[120px]">
-                        machine: {lic.machineId}
-                      </p>
-                    )}
-                    {lic.panelUrl && (
-                      <p className="mt-1 text-[10px] text-emerald-500/80 truncate max-w-[160px]" title={lic.panelUrl}>
-                        panel: {lic.panelUrl}
-                      </p>
-                    )}
-                    {lic.pendingSyncAction && (
-                      <p className="mt-1 text-[10px] text-amber-400">
-                        pending: {lic.pendingSyncAction}
-                      </p>
-                    )}
-                    {lic.lastSyncError && (
-                      <p className="mt-1 text-[10px] text-red-400 truncate max-w-[160px]" title={lic.lastSyncError}>
-                        sync err: {lic.lastSyncError}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">{lic.user.email}</td>
-                  <td className="px-4 py-3">{lic.plan.name}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span>{lic.status}</span>
-                      {lic.status === "ACTIVE" && lic.machineId && (() => {
-                        const hoursSince = lic.lastSyncAt ? (now - new Date(lic.lastSyncAt).getTime()) / 3600000 : null;
-                        const isOnline = hoursSince !== null && hoursSince < 24;
-                        return (
-                          <span
-                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full"
-                            style={{
-                              background: isOnline ? "rgba(34,197,94,0.15)" : "rgba(245,158,11,0.15)",
-                              color: isOnline ? "#22c55e" : "#f59e0b",
-                            }}
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: isOnline ? "#22c55e" : "#f59e0b" }} />
-                            {isOnline ? "Online" : "Offline"}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div>{formatDate(lic.expiresAt)}</div>
-                    {lic.lastSyncAt && (
-                      <div className="text-[10px] text-slate-500 mt-0.5">
-                        Last sync: {new Date(lic.lastSyncAt).toLocaleDateString()} {new Date(lic.lastSyncAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 max-w-[140px]">
-                    <button
-                      type="button"
-                      onClick={() => setNotesEdit({ id: lic.id, notes: lic.notes ?? "" })}
-                      className="text-xs text-slate-400 hover:text-white truncate block max-w-full text-left"
-                    >
-                      {lic.notes || "Add notes…"}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => copyKey(lic.key)}
-                        className="text-cyan-400 hover:underline"
-                      >
-                        Copy
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setExtendId(lic.id);
-                          setExtendDays(30);
-                        }}
-                        className="text-emerald-400 hover:underline"
-                      >
-                        Extend
-                      </button>
-                      {lic.status === "SUSPENDED" && (
+                      <td className="px-2 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(lic.id)}
+                          onChange={() => toggleSelect(lic.id)}
+                          className="rounded border-slate-600"
+                          aria-label={`Select ${lic.key}`}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
                         <button
                           type="button"
-                          onClick={() => unsuspend(lic.id)}
-                          disabled={busyId === lic.id}
-                          className="text-violet-400 hover:underline disabled:opacity-50"
+                          onClick={() => copyKey(lic.key)}
+                          className="font-mono text-xs text-cyan-300 hover:underline text-left"
                         >
-                          Unsuspend
+                          {lic.key}
                         </button>
-                      )}
-                      {lic.status !== "SUSPENDED" &&
-                        lic.status !== "REVOKED" &&
-                        lic.status !== "EXPIRED" &&
-                        lic.status !== "UNUSED" && (
+                        {lic.panelUrl && (
+                          <p className="mt-1 text-[10px] text-emerald-500/80 truncate max-w-[160px]" title={lic.panelUrl}>
+                            {lic.panelUrl}
+                          </p>
+                        )}
+                        {lic.pendingSyncAction && (
+                          <p className="mt-1 text-[10px] text-amber-400">pending: {lic.pendingSyncAction}</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">{lic.user.email}</td>
+                      <td className="px-4 py-3">{lic.plan.name}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                            lic.status === "ACTIVE"
+                              ? "bg-emerald-500/15 text-emerald-300"
+                              : lic.status === "REVOKED" || lic.status === "EXPIRED"
+                                ? "bg-red-500/15 text-red-300"
+                                : lic.status === "SUSPENDED"
+                                  ? "bg-amber-500/15 text-amber-300"
+                                  : "bg-slate-700 text-slate-300"
+                          }`}
+                        >
+                          {lic.status}
+                        </span>
+                        {!deletable && lic.status === "ACTIVE" && (
+                          <p className="mt-1 text-[10px] text-slate-500">Revoke first to delete</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">{formatDate(lic.expiresAt)}</td>
+                      <td className="px-4 py-3 max-w-[140px]">
+                        <button
+                          type="button"
+                          onClick={() => setNotesEdit({ id: lic.id, notes: lic.notes ?? "" })}
+                          className="text-xs text-slate-400 hover:text-white truncate block max-w-full text-left"
+                        >
+                          {lic.notes || "Add notes…"}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs">
+                          <button type="button" onClick={() => copyKey(lic.key)} className="text-cyan-400 hover:underline">
+                            Copy
+                          </button>
                           <button
                             type="button"
-                            onClick={() => suspend(lic.id)}
-                            disabled={busyId === lic.id}
-                            className="text-amber-400 hover:underline disabled:opacity-50"
+                            onClick={() => {
+                              setExtendId(lic.id);
+                              setExtendDays(30);
+                            }}
+                            className="text-emerald-400 hover:underline"
                           >
-                            Hold
+                            Extend
                           </button>
-                        )}
-                      {(lic.status === "EXPIRED" || lic.status === "REVOKED") && (
-                        <button
-                          type="button"
-                          onClick={() => reactivate(lic.id)}
-                          disabled={busyId === lic.id}
-                          className="text-violet-400 hover:underline disabled:opacity-50"
-                        >
-                          Reactivate
-                        </button>
-                      )}
-                      {lic.machineId && (
-                        <button
-                          type="button"
-                          onClick={() => clearMachine(lic.id)}
-                          disabled={busyId === lic.id}
-                          className="text-amber-400 hover:underline disabled:opacity-50"
-                        >
-                          Clear machine
-                        </button>
-                      )}
-                      {lic.status !== "REVOKED" && lic.status !== "EXPIRED" && (
-                        <button
-                          type="button"
-                          onClick={() => revoke(lic.id)}
-                          disabled={busyId === lic.id}
-                          className="text-red-400 hover:underline disabled:opacity-50"
-                        >
-                          Revoke
-                        </button>
-                      )}
-                      {isDeletable(lic) && (
-                        <button
-                          type="button"
-                          onClick={() => removeLicenses([lic.id])}
-                          disabled={busyId === lic.id}
-                          className="text-slate-400 hover:text-red-300 hover:underline disabled:opacity-50"
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                          {lic.status === "SUSPENDED" && (
+                            <button
+                              type="button"
+                              onClick={() => patchLicense(lic.id, { status: "ACTIVE" })}
+                              disabled={busyId === lic.id}
+                              className="text-violet-400 hover:underline disabled:opacity-50"
+                            >
+                              Unsuspend
+                            </button>
+                          )}
+                          {lic.status !== "SUSPENDED" && lic.status !== "REVOKED" && lic.status !== "EXPIRED" && (
+                            <button
+                              type="button"
+                              onClick={() => patchLicense(lic.id, { status: "SUSPENDED" })}
+                              disabled={busyId === lic.id}
+                              className="text-amber-400 hover:underline disabled:opacity-50"
+                            >
+                              Hold
+                            </button>
+                          )}
+                          {lic.status !== "REVOKED" && (
+                            <button
+                              type="button"
+                              onClick={() => revoke(lic.id)}
+                              disabled={busyId === lic.id}
+                              className="text-red-400 hover:underline disabled:opacity-50"
+                            >
+                              Revoke
+                            </button>
+                          )}
+                          {deletable && (
+                            <button
+                              type="button"
+                              onClick={() => removeLicenses([lic.id])}
+                              disabled={busyId === lic.id}
+                              className="text-slate-400 hover:text-red-300 hover:underline disabled:opacity-50"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {extendId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <form
-            onSubmit={submitExtend}
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!extendId) return;
+              await patchLicense(extendId, { extendDays });
+              setExtendId(null);
+            }}
             className="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 p-6 space-y-4"
           >
             <h3 className="font-semibold text-white">Extend license</h3>
@@ -548,17 +571,10 @@ export function AdminPanel() {
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
             />
             <div className="flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setExtendId(null)}
-                className="px-4 py-2 text-sm text-slate-400"
-              >
+              <button type="button" onClick={() => setExtendId(null)} className="px-4 py-2 text-sm text-slate-400">
                 Cancel
               </button>
-              <button
-                type="submit"
-                className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white"
-              >
+              <button type="submit" className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white">
                 Extend
               </button>
             </div>
@@ -577,16 +593,16 @@ export function AdminPanel() {
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white text-sm"
             />
             <div className="flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setNotesEdit(null)}
-                className="px-4 py-2 text-sm text-slate-400"
-              >
+              <button type="button" onClick={() => setNotesEdit(null)} className="px-4 py-2 text-sm text-slate-400">
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={saveNotes}
+                onClick={async () => {
+                  if (!notesEdit) return;
+                  await patchLicense(notesEdit.id, { notes: notesEdit.notes });
+                  setNotesEdit(null);
+                }}
                 className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white"
               >
                 Save

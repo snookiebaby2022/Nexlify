@@ -60,6 +60,7 @@ export async function resetTrialEligibility(userId: string): Promise<number> {
   });
 
   for (const lic of trialLicenses) {
+    await prisma.activationCode.deleteMany({ where: { licenseId: lic.id } });
     await prisma.addonEntitlement.updateMany({
       where: { panelLicenseId: lic.id },
       data: { panelLicenseId: null },

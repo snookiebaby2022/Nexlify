@@ -1,6 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import {
+  BarChart3,
+  CreditCard,
+  FileText,
+  Globe,
+  HeartPulse,
+  KeyRound,
+  Mail,
+  Megaphone,
+  Package,
+  Radio,
+  ScrollText,
+  Settings,
+  Ticket,
+  Upload,
+  Users,
+} from "lucide-react";
 import { AdminStats } from "@/components/AdminStats";
 import { AdminPanel } from "@/components/AdminPanel";
 import { AdminOrders } from "@/components/AdminOrders";
@@ -17,63 +34,136 @@ import { AdminCoupons } from "@/components/AdminCoupons";
 import { AdminContent } from "@/components/AdminContent";
 import { AdminRemoteUpdate } from "@/components/AdminRemoteUpdate";
 
-const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "plans", label: "Plans & Stripe" },
-  { id: "licenses", label: "Licenses" },
-  { id: "orders", label: "Orders" },
-  { id: "coupons", label: "Coupons" },
-  { id: "users", label: "Users" },
-  { id: "tickets", label: "Tickets" },
-  { id: "newsletter", label: "Newsletter" },
-  { id: "content", label: "Blog" },
-  { id: "marketing", label: "Marketing" },
-  { id: "settings", label: "Settings" },
-  { id: "health", label: "Health" },
-  { id: "audit", label: "Audit Log" },
-  { id: "deploy", label: "Deploy" },
-  { id: "remote", label: "Remote Update" },
+const NAV_GROUPS = [
+  {
+    label: "Dashboard",
+    items: [
+      { id: "overview", label: "Overview", icon: BarChart3 },
+      { id: "health", label: "Health", icon: HeartPulse },
+      { id: "audit", label: "Audit Log", icon: ScrollText },
+    ],
+  },
+  {
+    label: "Commerce",
+    items: [
+      { id: "licenses", label: "Licenses", icon: KeyRound },
+      { id: "plans", label: "Plans & Stripe", icon: CreditCard },
+      { id: "orders", label: "Orders", icon: Package },
+      { id: "coupons", label: "Coupons", icon: Megaphone },
+    ],
+  },
+  {
+    label: "Customers",
+    items: [
+      { id: "users", label: "Users", icon: Users },
+      { id: "tickets", label: "Tickets", icon: Ticket },
+      { id: "newsletter", label: "Newsletter", icon: Mail },
+    ],
+  },
+  {
+    label: "Content",
+    items: [
+      { id: "content", label: "Blog", icon: FileText },
+      { id: "marketing", label: "Marketing", icon: Globe },
+      { id: "settings", label: "Settings", icon: Settings },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { id: "deploy", label: "Deploy", icon: Upload },
+      { id: "remote", label: "Remote Update", icon: Radio },
+    ],
+  },
 ] as const;
 
-type TabId = (typeof TABS)[number]["id"];
+type TabId = (typeof NAV_GROUPS)[number]["items"][number]["id"];
+
+const TAB_LABELS: Record<TabId, string> = Object.fromEntries(
+  NAV_GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.label]))
+) as Record<TabId, string>;
 
 export function AdminDashboard() {
   const [tab, setTab] = useState<TabId>("overview");
+  const [navQuery, setNavQuery] = useState("");
+
+  const filteredGroups = useMemo(() => {
+    const q = navQuery.trim().toLowerCase();
+    if (!q) return NAV_GROUPS;
+    return NAV_GROUPS.map((g) => ({
+      ...g,
+      items: g.items.filter((i) => i.label.toLowerCase().includes(q) || i.id.includes(q)),
+    })).filter((g) => g.items.length > 0);
+  }, [navQuery]);
 
   return (
-    <div className="space-y-8">
-      <nav className="flex flex-wrap gap-2">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              tab === t.id
-                ? "bg-violet-600 text-white"
-                : "border border-slate-700 text-slate-300 hover:border-violet-500/40 hover:text-white"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </nav>
+    <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+      <aside className="lg:w-56 shrink-0 space-y-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 px-2">Admin</p>
+          <input
+            type="search"
+            placeholder="Find section…"
+            value={navQuery}
+            onChange={(e) => setNavQuery(e.target.value)}
+            className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/80 px-3 py-2 text-sm text-white placeholder:text-slate-600"
+          />
+        </div>
+        <nav className="space-y-4">
+          {filteredGroups.map((group) => (
+            <div key={group.label}>
+              <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-600">
+                {group.label}
+              </p>
+              <ul className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = tab === item.id;
+                  return (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        onClick={() => setTab(item.id)}
+                        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                          active
+                            ? "bg-violet-600 text-white shadow-lg shadow-violet-900/30"
+                            : "text-slate-400 hover:bg-slate-800/80 hover:text-white"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4 shrink-0 opacity-80" />
+                        {item.label}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+      </aside>
 
-      {tab === "overview" && <AdminStats />}
-      {tab === "plans" && <AdminPlans />}
-      {tab === "licenses" && <AdminPanel />}
-      {tab === "orders" && <AdminOrders />}
-      {tab === "coupons" && <AdminCoupons />}
-      {tab === "users" && <AdminUsers />}
-      {tab === "tickets" && <AdminTickets />}
-      {tab === "newsletter" && <AdminNewsletter />}
-      {tab === "content" && <AdminContent />}
-      {tab === "marketing" && <AdminMarketing />}
-      {tab === "settings" && <AdminSiteSettings />}
-      {tab === "health" && <AdminHealth />}
-      {tab === "audit" && <AdminAuditLog />}
-      {tab === "deploy" && <AdminDeploy />}
-      {tab === "remote" && <AdminRemoteUpdate />}
+      <main className="min-w-0 flex-1 space-y-6">
+        <header className="border-b border-slate-800 pb-4">
+          <h1 className="text-xl font-bold text-white">{TAB_LABELS[tab]}</h1>
+          <p className="mt-1 text-sm text-slate-500">Nexlify marketing admin</p>
+        </header>
+
+        {tab === "overview" && <AdminStats />}
+        {tab === "plans" && <AdminPlans />}
+        {tab === "licenses" && <AdminPanel />}
+        {tab === "orders" && <AdminOrders />}
+        {tab === "coupons" && <AdminCoupons />}
+        {tab === "users" && <AdminUsers />}
+        {tab === "tickets" && <AdminTickets />}
+        {tab === "newsletter" && <AdminNewsletter />}
+        {tab === "content" && <AdminContent />}
+        {tab === "marketing" && <AdminMarketing />}
+        {tab === "settings" && <AdminSiteSettings />}
+        {tab === "health" && <AdminHealth />}
+        {tab === "audit" && <AdminAuditLog />}
+        {tab === "deploy" && <AdminDeploy />}
+        {tab === "remote" && <AdminRemoteUpdate />}
+      </main>
     </div>
   );
 }

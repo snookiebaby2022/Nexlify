@@ -52,7 +52,7 @@ export function AdminAuditLog() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {["", "login", "settings_update", "deploy", "blog_create", "blog_update", "blog_delete", "license_create", "license_update"].map((a) => (
+        {["", "login", "settings_update", "deploy", "blog_create", "blog_update", "blog_delete", "license_create", "license_update", "license_delete"].map((a) => (
           <button key={a} onClick={() => { setFilter(a); setPage(1); }}
             className={`rounded-full px-3 py-1 text-xs font-medium transition ${filter === a ? "bg-violet-600 text-white" : "border border-slate-700 text-slate-400 hover:text-white"}`}>
             {a || "All"}

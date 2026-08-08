@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 import { issueLicenseForOrder } from "@/lib/licensing";
+import {
+  deleteLicensesSafely,
+  findBulkDeletableTrialIds,
+} from "@/lib/license-admin";
 
 async function requireAdmin() {
   const user = await getSessionUser();
@@ -17,6 +22,7 @@ export async function GET(request: Request) {
   const q = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status")?.trim() ?? "";
   const plan = searchParams.get("plan")?.trim() ?? "";
+  const limit = Math.min(Number(searchParams.get("limit") ?? 200), 500);
 
   const where: Record<string, unknown> = {};
   if (status) where.status = status;
@@ -29,15 +35,18 @@ export async function GET(request: Request) {
     ];
   }
 
-  const licenses = await prisma.license.findMany({
-    where,
-    include: {
-      user: { select: { email: true, name: true } },
-      plan: { select: { name: true, slug: true, priceCents: true } },
-    },
-    orderBy: { updatedAt: "desc" },
-    take: 200,
-  });
+  const [total, licenses] = await Promise.all([
+    prisma.license.count({ where }),
+    prisma.license.findMany({
+      where,
+      include: {
+        user: { select: { email: true, name: true } },
+        plan: { select: { name: true, slug: true, priceCents: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: limit,
+    }),
+  ]);
 
   const mapped = licenses.map((l) => ({
     id: l.id,
@@ -86,7 +95,8 @@ export async function GET(request: Request) {
   });
 
   const summary = {
-    total: licenses.length,
+    total,
+    shown: licenses.length,
     active: licenses.filter((l) => l.status === "ACTIVE").length,
     expired: licenses.filter((l) => l.status === "EXPIRED").length,
     revoked: licenses.filter((l) => l.status === "REVOKED").length,
@@ -141,6 +151,14 @@ export async function PATCH(request: Request) {
     }
 
     const license = await prisma.license.update({ where: { id }, data: updateData });
+
+    await logAudit({
+      userId: admin.id,
+      email: admin.email,
+      action: "license_update",
+      detail: `${license.key} → ${JSON.stringify(updateData)}`,
+    });
+
     return NextResponse.json({ license });
   } catch (e) {
     console.error("[admin/licenses PATCH]", e);
@@ -208,6 +226,13 @@ export async function POST(request: Request) {
       include: { user: true, plan: true },
     });
 
+    await logAudit({
+      userId: admin.id,
+      email: admin.email,
+      action: "license_create",
+      detail: `${license.key} for ${email} (${plan.slug})`,
+    });
+
     return NextResponse.json({ license, sync: { pushed: false } });
   } catch (e) {
     console.error("[admin/licenses POST]", e);
@@ -221,25 +246,60 @@ export async function DELETE(request: Request) {
 
   try {
     const body = await request.json();
+    const adminOpts = { adminId: admin.id, adminEmail: admin.email };
 
-    // Bulk delete ended trial licenses
     if (body.bulkEndedTrials) {
-      const result = await prisma.license.deleteMany({
-        where: {
-          status: { in: ["REVOKED", "EXPIRED"] },
-          plan: { slug: "trial" },
-        },
+      const ids = await findBulkDeletableTrialIds();
+      const result = await deleteLicensesSafely(ids, {
+        ...adminOpts,
+        skipDeletableCheck: true,
       });
-      return NextResponse.json({ deleted: result.count });
+      if (result.errors.length) {
+        return NextResponse.json(
+          {
+            deleted: result.deleted,
+            skipped: result.skipped,
+            error: result.errors.join("; "),
+          },
+          { status: result.deleted ? 207 : 500 }
+        );
+      }
+      return NextResponse.json({
+        deleted: result.deleted,
+        skipped: result.skipped,
+      });
     }
 
     const ids: string[] = body.ids ?? (body.id ? [body.id] : []);
     if (!ids.length) return NextResponse.json({ error: "ids required" }, { status: 400 });
 
-    const result = await prisma.license.deleteMany({ where: { id: { in: ids } } });
-    return NextResponse.json({ deleted: result.count });
+    const result = await deleteLicensesSafely(ids, adminOpts);
+
+    if (result.deleted === 0 && result.errors.length) {
+      return NextResponse.json(
+        { error: result.errors.join("; "), skipped: result.skipped },
+        { status: 500 }
+      );
+    }
+
+    if (result.errors.length) {
+      return NextResponse.json(
+        {
+          deleted: result.deleted,
+          skipped: result.skipped,
+          warning: result.errors.join("; "),
+        },
+        { status: 207 }
+      );
+    }
+
+    return NextResponse.json({
+      deleted: result.deleted,
+      skipped: result.skipped,
+    });
   } catch (e) {
     console.error("[admin/licenses DELETE]", e);
-    return NextResponse.json({ error: "Delete failed" }, { status: 500 });
+    const msg = e instanceof Error ? e.message : "Delete failed";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
