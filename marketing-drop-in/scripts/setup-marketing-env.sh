@@ -101,14 +101,11 @@ else
   echo "DATABASE_URL: MISSING — run: bash scripts/ensure-marketing-database-url.sh"
 fi
 
-missing_smtp=0
-for k in SMTP_HOST SMTP_USER SMTP_PASS; do
-  grep -q "^${k}=" "$ENV_FILE" 2>/dev/null || missing_smtp=1
-done
-if [ "$missing_smtp" = "1" ]; then
-  echo "SMTP: not in panel .env — run: bash scripts/configure-marketing-smtp-stripe.sh"
-fi
-if ! grep -E '^STRIPE_SECRET_KEY="?sk_' "$ENV_FILE" 2>/dev/null; then
+grep -E '^SMTP_HOST=' "$ENV_FILE" >/dev/null && grep -E '^SMTP_PASS=' "$ENV_FILE" >/dev/null \
+  && echo "SMTP: configured" || echo "SMTP: not set — run: bash scripts/configure-marketing-smtp-stripe.sh"
+if grep -E '^STRIPE_SECRET_KEY="?sk_' "$ENV_FILE" >/dev/null; then
+  echo "Stripe: configured"
+else
   echo "Stripe: not set — run: bash scripts/configure-marketing-smtp-stripe.sh (needed after Sep 1 promo)"
 fi
 

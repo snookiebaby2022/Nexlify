@@ -173,13 +173,18 @@ if [ -f "$MARKETING/scripts/seed-test-accounts.ts" ]; then
   npx tsx scripts/seed-test-accounts.ts 2>&1 || echo "   Test account seed failed (check license key + DB)"
 fi
 
-# --- 11) Install full platform audit helper on /root ---
-if [ -f "$MARKETING/scripts/nexlify-full-platform-audit.sh" ]; then
-  cp "$MARKETING/scripts/nexlify-full-platform-audit.sh" /root/nexlify-full-platform-audit.sh
-  chmod +x /root/nexlify-full-platform-audit.sh
-  echo ""
+# --- 11) Install helpers + auto post-deploy (restore SMTP, publish, audit) ---
+for s in nexlify-full-platform-audit.sh vps-do-everything.sh restore-marketing-secrets.sh; do
+  if [ -f "$MARKETING/scripts/$s" ]; then
+    cp -f "$MARKETING/scripts/$s" "/root/$s"
+    chmod +x "/root/$s"
+  fi
+done
+
+if [ -x "$MARKETING/scripts/vps-do-everything.sh" ]; then
+  bash "$MARKETING/scripts/vps-do-everything.sh"
+else
   echo "Full audit: bash /root/nexlify-full-platform-audit.sh"
-  echo "         or: bash $MARKETING/scripts/nexlify-full-platform-audit.sh"
 fi
 FOOTER
 
