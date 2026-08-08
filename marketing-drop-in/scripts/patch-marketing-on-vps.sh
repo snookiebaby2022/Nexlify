@@ -14,6 +14,25 @@ else
 
 cd "$ROOT"
 
+echo "-> Fix install URL query string (?v= not ?v)"
+PI="src/lib/panel-install.ts"
+if [ -f "$PI" ]; then
+  if ! grep -q 'INSTALLER_CACHE_QUERY' "$PI" 2>/dev/null; then
+    sed -i \
+      -e 's|panel.sh?${INSTALLER_VERSION}|panel.sh?${INSTALLER_CACHE_QUERY}|g' \
+      -e 's|panel.sh?v1.9.7|panel.sh?v=1.9.7|g' \
+      "$PI"
+    grep -q 'INSTALLER_CACHE_QUERY' "$PI" || \
+      sed -i '/export const INSTALLER_VERSION/a export const INSTALLER_CACHE_QUERY = `v=${PANEL_VERSION}`;' "$PI"
+  fi
+fi
+if [ -d .next ]; then
+  find .next -type f -name '*.js' 2>/dev/null | while read -r f; do
+    grep -qE 'panel\.sh\?v1\.9\.7|panel\.sh\?v[0-9]+\.[0-9]+\.[0-9]+' "$f" 2>/dev/null && \
+      sed -i 's|panel.sh?v1.9.7|panel.sh?v=1.9.7|g' "$f"
+  done
+fi
+
 echo "-> Replace August 1 promo with September 1"
 find src -type f \( -name '*.ts' -o -name '*.tsx' \) -print0 | while IFS= read -r -d '' f; do
   sed -i \
@@ -80,6 +99,7 @@ pm2 restart nexlify-web --update-env 2>&1 | tail -3
 sleep 2
 echo "-> Verify"
 curl -s http://127.0.0.1:13001/pricing 2>/dev/null | grep -o 'Free until [^<]*' | head -1 || echo "(curl failed)"
+curl -s http://127.0.0.1:13001/install 2>/dev/null | grep -oE 'panel\.sh[^"'\''<> ]*' | head -3 || echo "(install curl failed)"
 
 echo "=== Done ==="
 fi

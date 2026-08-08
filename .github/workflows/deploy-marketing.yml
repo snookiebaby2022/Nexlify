@@ -1,0 +1,46 @@
+name: Deploy marketing site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "marketing-drop-in/**"
+      - "scripts/install-linux.sh"
+      - "scripts/sync-install-to-marketing.sh"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.VPS_SSH_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate VPS bundle
+        run: bash marketing-drop-in/scripts/generate-vps-bundle.sh
+
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          HOST="${VPS_HOST:?Set VPS_HOST secret}"
+          USER="${VPS_USER:-root}"
+          install -m 600 /dev/stdin ~/.ssh/deploy_key <<< "$VPS_SSH_KEY"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${USER}@${HOST}" \
+            "cat > /root/vps-full-update.sh" < marketing-drop-in/scripts/vps-full-update.sh
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${USER}@${HOST}" \
+            "chmod +x /root/vps-full-update.sh && nohup bash /root/vps-full-update.sh > /root/vps-full-update.log 2>&1 & echo DEPLOY_PID=\$!"
+
+      - name: Verify install URL (after deploy settles)
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          sleep 120
+          install -m 600 /dev/stdin ~/.ssh/deploy_key <<< "$VPS_SSH_KEY"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no "${VPS_USER:-root}@${VPS_HOST}" \
+            "curl -fsS http://127.0.0.1:13001/install | grep -oE 'panel.sh[^\"'\''<> ]*' | head -3 || true"

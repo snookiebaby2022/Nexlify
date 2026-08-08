@@ -54,7 +54,7 @@ if [ -n "$INSTALL_BACKUP" ] && [ -d "$INSTALL_BACKUP" ]; then
 fi
 
 # 3) Install helpers on /root
-for s in nexlify-full-platform-audit.sh vps-do-everything.sh restore-marketing-secrets.sh vps-fix-installer.sh; do
+for s in nexlify-full-platform-audit.sh vps-do-everything.sh restore-marketing-secrets.sh vps-fix-installer.sh vps-hotfix-marketing-now.sh vps-instant-install-url-fix.sh vps-patch-panel-installer.sh; do
   [ -f "$MARKETING/scripts/$s" ] && cp -f "$MARKETING/scripts/$s" "/root/$s" && chmod +x "/root/$s"
 done
 
