@@ -1,4 +1,4 @@
-# One command: git pull + sync + generate VPS bundle (Windows).
+# One command: git pull + sync + WinSCP panel sync + generate VPS bundle (Windows).
 # Run: cd C:\Users\lizzi\nexlify-panel; .\scripts\nexlify-fix-all.ps1
 
 $ErrorActionPreference = "Stop"
@@ -24,8 +24,17 @@ Remove-Item -Force "$Root\marketing-drop-in\scripts\vps-full-update.sh" -ErrorAc
 git fetch origin main
 git reset --hard origin/main
 
-Write-Host "-> Sync" -ForegroundColor Cyan
+Write-Host "-> Sync + generate bundle" -ForegroundColor Cyan
 & "$Root\scripts\nexlify-sync-all.ps1"
+
+Write-Host "-> WinSCP sync panel to VPS" -ForegroundColor Cyan
+$deployConfig = Join-Path $Root "windows\deploy.config.json"
+if (Test-Path $deployConfig) {
+    & (Join-Path $Root "windows\scripts\sync-to-vps.ps1")
+} else {
+    Write-Host "  SKIP: windows\deploy.config.json not found" -ForegroundColor Yellow
+    Write-Host "  Copy windows\deploy.config.example.json -> deploy.config.json and configure WinSCP"
+}
 
 Write-Host "-> Verify" -ForegroundColor Cyan
 $bash = $null
@@ -38,13 +47,19 @@ if ($bash) {
     Write-Host "  (skip verify - Git Bash not found)" -ForegroundColor Yellow
 }
 
+$bundle = "$Root\marketing-drop-in\scripts\vps-full-update.sh"
 Write-Host ""
-Write-Host "=== FIX-ALL COMPLETE ===" -ForegroundColor Green
+Write-Host "=== FIX-ALL COMPLETE (PC side) ===" -ForegroundColor Green
 Write-Host ""
-Write-Host "OPTION A - VPS self-deploy (no WinSCP):"
-Write-Host "  ssh root@YOUR_VPS ""cd /home/nexlify-panel && git fetch origin main && git reset --hard origin/main && bash scripts/nexlify-fix-all.sh"""
+if (-not (Test-Path $deployConfig)) {
+    Write-Host "Manual WinSCP uploads needed:"
+    Write-Host "  1. Panel scripts: sync whole repo (exclude node_modules) -> /home/nexlify-panel"
+    Write-Host "  2. Bundle: $bundle -> /root/vps-full-update.sh"
+} else {
+    Write-Host "Upload bundle via WinSCP (panel scripts synced above if sync succeeded):"
+    Write-Host "  FROM: $bundle"
+    Write-Host "  TO:   /root/vps-full-update.sh"
+}
 Write-Host ""
-Write-Host "OPTION B - Upload bundle via WinSCP:"
-Write-Host "  FROM: $Root\marketing-drop-in\scripts\vps-full-update.sh"
-Write-Host "  TO:   /root/vps-full-update.sh"
-Write-Host "  Then: bash /root/vps-full-update.sh"
+Write-Host "Then on VPS run:"
+Write-Host "  bash /home/nexlify-panel/scripts/nexlify-vps-fix-no-git.sh"

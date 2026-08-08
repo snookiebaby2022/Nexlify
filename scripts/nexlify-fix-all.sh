@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
 # One command: sync repo + deploy panel + deploy marketing + publish + audit (vendor VPS).
-# Run as root: bash /home/nexlify-panel/scripts/nexlify-fix-all.sh
+# Uses git if /home/nexlify-panel/.git exists, otherwise no-git WinSCP flow.
 
 set -euo pipefail
 
 PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
+
+if [ ! -d "$PANEL/.git" ]; then
+  echo "Panel is not a git repo (deployed via WinSCP). Using no-git fix..."
+  echo ""
+  exec bash "$PANEL/scripts/nexlify-vps-fix-no-git.sh"
+fi
+
 MARKETING="${MARKETING_DIR:-/var/www/nexlify}"
 
-echo "=== Nexlify fix-all (VPS) ==="
+echo "=== Nexlify fix-all (VPS + git) ==="
 echo "Panel:     $PANEL"
 echo "Marketing: $MARKETING"
 echo ""
