@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip YOUR_SERVER_IP
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=194' | sudo bash
 #
-# Then open the login URL, sign in with the admin password shown at the end,
-# and paste your license key under Admin → License.
+# Server IP/hostname is detected automatically. Then open the login URL, sign in
+# with the admin password shown at the end, and paste your license key under Admin → License.
 #
 # Env overrides: PANEL_DIR, PANEL_ARCHIVE_URL, NEXLIFY_LICENSE_KEY
 set -euo pipefail
@@ -33,10 +33,12 @@ usage() {
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip YOUR_SERVER_IP
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=194' | sudo bash
 
 Options:
-  --ip IP                Server IP address (required)
+  --ip IP                Override auto-detected server IP or hostname
+  --domain DOMAIN        Alias for --ip
+  --email EMAIL          Email for Let's Encrypt SSL (domain installs only)
   --license KEY          Optional — activate during install (default: enter in panel after login)
   --fresh                Wipe /opt/nexlify-panel before install
   --skip-firewall        Do not open ufw ports
@@ -44,14 +46,15 @@ Options:
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip 203.0.113.10
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=192' | sudo bash -s -- --ip 10.0.0.5 --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=194' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=194' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=194' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --domain) DOMAIN="${2:-}"; shift 2 ;;
+    --ip|--domain) DOMAIN="${2:-}"; shift 2 ;;
     --email) EMAIL="${2:-}"; shift 2 ;;
     --license) LICENSE_KEY="${2:-}"; shift 2 ;;
     --dir) PANEL_DIR="${2:-}"; shift 2 ;;
@@ -69,7 +72,37 @@ done
 log() { echo ""; echo "==> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
 
-[ -n "$DOMAIN" ] || die "--domain is required (your server IP or hostname, e.g. 203.0.113.10 or panel.example.com)"
+detect_server_address() {
+  local ip fqdn
+  if command -v curl >/dev/null 2>&1; then
+    for url in "https://api.ipify.org" "https://ifconfig.me/ip" "https://icanhazip.com"; do
+      ip="$(curl -fsSL --max-time 8 "$url" 2>/dev/null | tr -d '[:space:]' || true)"
+      if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "$ip"
+        return 0
+      fi
+    done
+  fi
+  if command -v hostname >/dev/null 2>&1; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "$ip"
+      return 0
+    fi
+    fqdn="$(hostname -f 2>/dev/null || true)"
+    if [ -n "$fqdn" ] && [ "$fqdn" != "localhost" ]; then
+      echo "$fqdn"
+      return 0
+    fi
+  fi
+  echo "localhost"
+}
+
+if [ -z "$DOMAIN" ]; then
+  log "Detecting server address..."
+  DOMAIN="$(detect_server_address)"
+  log "Using server address: $DOMAIN"
+fi
 
 case "$PANEL_ARCHIVE_URL" in
   *\?*) ;;
@@ -283,8 +316,6 @@ CRON_SECRET="$(openssl rand -hex 24)"
 BILLING_SECRET="$(openssl rand -hex 24)"
 ADMIN_PASS="$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)"
 CREDS_FILE="$CREDS_ROOT/install-credentials"
-DOMAIN="${DOMAIN:-$(hostname -f 2>/dev/null || echo localhost)}"
-
 # Raw IP installs: panel on port 80 directly — no nginx, no internal :3000.
 if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   SKIP_SSL=1
@@ -421,10 +452,15 @@ set_kv PANEL_PUBLIC_PORT "${NEXLIFY_PANEL_PUBLIC_PORT:-80}"
 set_kv PANEL_COOKIE_SECURE 0
 set_kv NEXLIFY_LICENSE_COOKIE_SECURE 0
 set_kv PANEL_PRIMARY_DOMAIN "$DOMAIN"
+if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  set_kv NEXT_PUBLIC_SERVER_URL "http://${DOMAIN}"
+else
+  set_kv NEXT_PUBLIC_SERVER_URL "http://${DOMAIN}"
+fi
 bash scripts/ensure-panel-env.sh >>"$INSTALL_LOG" 2>&1
 set_kv REDIS_URL "redis://localhost:6379"
 set_kv NEXLIFY_LICENSE_API_URL "https://nexlify.live"
-set_kv NEXLIFY_LICENSE_REQUIRE_ONLINE 0
+set_kv NEXLIFY_LICENSE_REQUIRE_ONLINE 1
 set_kv NEXLIFY_VENDOR_URL "https://nexlify.live"
 set_kv INSTALL_ADMIN_PASSWORD "$ADMIN_PASS"
 

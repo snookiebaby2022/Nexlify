@@ -8,11 +8,11 @@ const INSTALL_STEPS = [
   },
   {
     name: "Run the one-line installer",
-    text: "SSH in as root and run: curl -fsSL https://nexlify.live/install/panel.sh?v=164 | sudo bash -s -- --domain YOUR_IP_OR_DOMAIN",
+    text: "SSH in as root and run: curl -fsSL https://nexlify.live/install/panel.sh?v=194 | sudo bash — server IP is detected automatically.",
   },
   {
     name: "Sign in to the panel",
-    text: "Open the login URL printed when install finishes (http://YOUR_IP/login on port 80 — no :3000). Use admin and the generated password from /root/nexlify/install-credentials.",
+    text: "Open the login URL printed when install finishes (port 80 — no :3000). Use admin and the generated password from /root/nexlify/install-credentials.",
   },
   {
     name: "Activate your license",

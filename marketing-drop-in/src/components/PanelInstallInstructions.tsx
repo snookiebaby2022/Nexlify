@@ -109,16 +109,15 @@ export function PanelInstallInstructions() {
 
         <Step number={2} title="Run the installer">
           <p>
-            SSH in as <strong className="text-white">root</strong> (or sudo). Replace{" "}
-            <code className="text-violet-300">YOUR_SERVER_IP</code> with your server IP address — only{" "}
-            <code className="text-violet-300">--ip</code> is required:
+            SSH in as <strong className="text-white">root</strong> (or sudo). Paste one command — the installer
+            auto-detects your server IP:
           </p>
           <CodeBlock command={oneLineCommand}>
             <span className="text-slate-500">$</span> {oneLineCommand}
           </CodeBlock>
           <p className="text-xs text-slate-500">
-            Installer version {INSTALLER_VERSION}. The panel runs on port 80 — use{" "}
-            <code className="text-violet-300">http://YOUR_SERVER_IP/login</code>.
+            Installer version {INSTALLER_VERSION}. The panel runs on port 80 — your login URL is printed when
+            install finishes.
           </p>
         </Step>
 
@@ -132,7 +131,7 @@ export function PanelInstallInstructions() {
           <ul className="list-disc list-inside space-y-1">
             <li>
               <strong className="text-white">URL:</strong>{" "}
-              <code className="text-violet-300">http://YOUR_SERVER_IP/login</code>
+              <code className="text-violet-300">login_url</code> from install output
             </li>
             <li>
               <strong className="text-white">User:</strong>{" "}
@@ -178,7 +177,7 @@ export function PanelInstallInstructions() {
             </thead>
             <tbody className="text-[var(--muted)]">
               {[
-                ["--ip", "Server IP address (required)", "Yes"],
+                ["--ip / --domain", "Override auto-detected server IP or hostname", "No"],
                 ["--license", "Activate during install instead of in the panel UI", "No"],
                 ["--fresh", "Remove old /opt/nexlify-panel before install", "No"],
                 ["--skip-firewall", "Do not open ufw ports", "No"],
@@ -224,7 +223,8 @@ export function PanelInstallInstructions() {
             <p className="text-sm text-sky-200/70 mt-1">
               <span className="block">
                 <strong className="text-sky-100">Server:</strong>{" "}
-                <code className="rounded bg-sky-500/10 px-1.5 py-0.5 text-xs font-mono">YOUR_SERVER_IP</code>
+                <code className="rounded bg-sky-500/10 px-1.5 py-0.5 text-xs font-mono">your server IP</code>{" "}
+                (from install output)
               </span>
               <span className="block">
                 <strong className="text-sky-100">Port:</strong>{" "}
@@ -252,7 +252,8 @@ export function PanelInstallInstructions() {
               <code className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-mono text-amber-200">
                 panel.sh?{INSTALLER_VERSION}
               </code>
-              . The panel should open at <code className="text-amber-200">http://YOUR_SERVER_IP/login</code>.
+              . Check <code className="text-amber-200">login_url</code> in{" "}
+              <code className="text-amber-200">/root/nexlify/install-credentials</code>.
             </p>
           </div>
         </div>

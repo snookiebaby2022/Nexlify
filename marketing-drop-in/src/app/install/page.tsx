@@ -42,8 +42,7 @@ export default function InstallPage() {
           Deploy the full Nexlify IPTV panel on a fresh Ubuntu or Debian server. One line to install, sign in
           with the admin password printed at the end, then paste your license key in the panel — no license
           flag required on the command line. The panel runs on port{" "}
-          <code className="text-violet-300">80</code> — use{" "}
-          <code className="text-violet-300">http://YOUR_SERVER_IP/login</code>.
+          <code className="text-violet-300">80</code> — your login URL is printed when install completes.
         </p>
 
         <PageCta
@@ -58,8 +57,7 @@ export default function InstallPage() {
           <h2 className="font-display text-2xl font-bold text-white">How it works</h2>
           <ol className="list-decimal list-inside space-y-2 text-sm leading-relaxed text-[var(--muted)] md:text-base">
             <li>
-              SSH into your server and run the installer with <strong className="text-slate-300">--ip</strong>{" "}
-              set to your server IP address
+              SSH into your server and run the one-line installer — your server IP is detected automatically
             </li>
             <li>
               Open the login URL from the terminal output (saved to{" "}

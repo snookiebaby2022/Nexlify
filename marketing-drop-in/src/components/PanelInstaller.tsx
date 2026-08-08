@@ -67,8 +67,8 @@ export function PanelInstaller() {
       <div>
         <h2 className="text-2xl font-bold text-white">One-click installer</h2>
         <p className="mt-2 text-[var(--muted)] leading-relaxed">
-          Paste one command as <strong className="text-slate-300">root</strong>. Wait 5–15 minutes. Sign in at{" "}
-          <code className="text-violet-300">http://YOUR_SERVER_IP/login</code> — port 80.
+          Paste one command as <strong className="text-slate-300">root</strong>. Wait 5–15 minutes. The installer
+          detects your server IP automatically — sign in at the login URL printed at the end (port 80).
           Add your license in the panel after login.
         </p>
         <p className="mt-1 text-xs text-slate-500">Installer {INSTALLER_VERSION}</p>
@@ -94,14 +94,12 @@ export function PanelInstaller() {
           </div>
           <div>
             <h3 className="text-lg font-semibold text-white">Copy &amp; run</h3>
-            <p className="text-xs text-[var(--muted)]">Only --ip is required</p>
+            <p className="text-xs text-[var(--muted)]">No flags required — server IP is auto-detected</p>
           </div>
         </div>
 
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm space-y-2">
-          <p className="font-semibold text-emerald-100">
-            Replace <code className="text-emerald-200">YOUR_SERVER_IP</code> with your server IP address
-          </p>
+          <p className="font-semibold text-emerald-100">One command — paste and run</p>
           <CopyBlock text={oneLine} label={`bash · ${INSTALLER_VERSION}`} display={`$ ${oneLine}`} />
         </div>
 
@@ -127,10 +125,13 @@ export function PanelInstaller() {
 
         <details className="rounded-xl border border-white/10 bg-black/10">
           <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-violet-300 hover:text-violet-200">
-            Generic template (replace YOUR_SERVER_IP)
+            Optional flags (--license, --domain, --fresh)
           </summary>
-          <div className="px-4 pb-4">
-            <CopyBlock text={simpleInstallCommand} label="bash · template" display={`$ ${simpleInstallCommand}`} />
+          <div className="px-4 pb-4 space-y-3">
+            <CopyBlock text={simpleInstallCommand} label="bash · default" display={`$ ${simpleInstallCommand}`} />
+            <p className="text-xs text-slate-500">
+              Override auto-detected IP: add <code className="text-violet-300">-s -- --ip 203.0.113.10</code>
+            </p>
           </div>
         </details>
 
@@ -204,8 +205,8 @@ export function PanelInstaller() {
             <li>Ubuntu 22.04/24.04 or Debian 12 — fresh server recommended</li>
             <li>Root or sudo over SSH</li>
             <li>
-              <strong className="text-slate-300">IP install:</strong> panel runs on port 80 — use{" "}
-              <code className="text-violet-300">http://YOUR_SERVER_IP/login</code>
+              <strong className="text-slate-300">IP install:</strong> panel runs on port 80 — login URL is printed
+              at the end of install
             </li>
             <li>Minimum 2 vCPU / 4 GB RAM</li>
           </ul>
