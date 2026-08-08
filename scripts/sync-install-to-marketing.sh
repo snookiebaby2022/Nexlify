@@ -47,6 +47,9 @@ PANEL_VER="$(node -p "require('$ROOT/package.json').version.replace(/\\./g,'')")
 sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[0-9a-zA-Z]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
   "$INSTALL/apply-panel-fast-update.sh" "$INSTALL/panel.sh" 2>/dev/null || true
 
+# Keep installer script docs in sync with panel version (1.9.3 → v193)
+sed -i "s|panel\.sh?v=[0-9]*|panel.sh?v=${PANEL_VER}|g" "$SCRIPTS/install-linux.sh" "$INSTALL/panel.sh" 2>/dev/null || true
+
 sed -i 's/\r$//' "$INSTALL"/*.sh "$INSTALL"/scripts/*.sh 2>/dev/null || true
 chmod +x "$INSTALL"/*.sh "$INSTALL"/scripts/*.sh 2>/dev/null || true
 

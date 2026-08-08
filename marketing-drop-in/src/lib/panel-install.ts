@@ -1,9 +1,16 @@
 /** Shared copy for /install — keep installer docs in sync with scripts/install-linux.sh */
 
+import panelReleases from "./panel-releases.json";
+
 export const PANEL_INSTALL_DIR = "/opt/nexlify-panel";
 export const CREDENTIALS_ROOT_DIR = "/root/nexlify";
 export const CREDENTIALS_FILE = `${CREDENTIALS_ROOT_DIR}/install-credentials`;
-export const INSTALLER_VERSION = "v194";
+
+/** Panel semver from synced release feed (matches package.json in panel repo). */
+export const PANEL_VERSION = panelReleases.latestVersion;
+
+/** Cache-bust slug: 1.9.3 → v193 — must match scripts/panel-version.sh */
+export const INSTALLER_VERSION = `v${PANEL_VERSION.replace(/\./g, "")}`;
 
 export const cleanReinstallCommand = `sudo rm -rf ${PANEL_INSTALL_DIR}`;
 

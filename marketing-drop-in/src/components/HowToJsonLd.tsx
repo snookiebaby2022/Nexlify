@@ -1,4 +1,5 @@
 import { pageUrl } from "@/lib/seo";
+import { INSTALLER_VERSION } from "@/lib/panel-install";
 import { site } from "@/lib/site";
 
 const INSTALL_STEPS = [
@@ -8,7 +9,7 @@ const INSTALL_STEPS = [
   },
   {
     name: "Run the one-line installer",
-    text: "SSH in as root and run: curl -fsSL https://nexlify.live/install/panel.sh?v=194 | sudo bash — server IP is detected automatically.",
+    text: `SSH in as root and run: curl -fsSL https://nexlify.live/install/panel.sh?${INSTALLER_VERSION} | sudo bash — server IP is detected automatically.`,
   },
   {
     name: "Sign in to the panel",
