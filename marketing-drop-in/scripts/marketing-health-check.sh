@@ -83,6 +83,24 @@ else
 fi
 
 # 8) Live HTTP checks
+if curl -sf "http://127.0.0.1:${PORT}/" >/tmp/nx-home.html 2>/dev/null; then
+  check "Homepage HTTP (port $PORT)" ok
+else
+  check "Homepage HTTP (port $PORT)" "failed"
+fi
+
+if curl -sfk "https://127.0.0.1/" -H "Host: nexlify.live" >/dev/null 2>&1; then
+  check "Nginx HTTPS (443 → marketing)" ok
+else
+  check "Nginx HTTPS (443 → marketing)" "failed — check nginx -t and deploy/nginx-security-headers.conf"
+fi
+
+if [ -f "$ROOT/deploy/nginx-security-headers.conf" ]; then
+  check "deploy/nginx-security-headers.conf present" ok
+else
+  check "deploy/nginx-security-headers.conf present" "MISSING — nginx may fail on reboot (billing.nexlify.live include)"
+fi
+
 if curl -sf "http://127.0.0.1:${PORT}/register?trial=1" >/tmp/nx-reg.html 2>/dev/null; then
   if grep -q 'trial license' /tmp/nx-reg.html; then
     check "Trial register page (/register?trial=1)" ok

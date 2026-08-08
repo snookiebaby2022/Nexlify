@@ -84,10 +84,23 @@ if [ -f "$MARKETING/scripts/setup-marketing-env.sh" ]; then
   bash "$MARKETING/scripts/setup-marketing-env.sh" "$MARKETING"
 fi
 
-# --- 3) Remove build breaker ---
+# --- 3) Nginx include (billing.nexlify.live requires this path after reboot) ---
+if [ ! -f "$MARKETING/deploy/nginx-security-headers.conf" ]; then
+  mkdir -p "$MARKETING/deploy"
+  cat > "$MARKETING/deploy/nginx-security-headers.conf" << 'NGINX_HDR'
+# Shared security headers (included by billing.nexlify.live and other site configs)
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header X-XSS-Protection "1; mode=block" always;
+NGINX_HDR
+  echo "   Created deploy/nginx-security-headers.conf"
+fi
+
+# --- 4) Remove build breaker ---
 rm -f "$MARKETING/prisma.config.ts"
 
-# --- 4) Marketing database (separate from panel — never db push panel DB) ---
+# --- 5) Marketing database (separate from panel — never db push panel DB) ---
 echo "-> Ensuring marketing database..."
 cd "$MARKETING"
 if [ -f "$MARKETING/scripts/ensure-marketing-database-url.sh" ]; then
@@ -99,7 +112,7 @@ else
   echo "   WARNING: setup-marketing-database.sh missing — skip DB schema push"
 fi
 
-# --- 5) Sync database plans (idempotent) ---
+# --- 6) Sync database plans (idempotent) ---
 echo "-> Syncing plans (trial + £50 nexlify)..."
 cd "$MARKETING"
 if command -v npx >/dev/null 2>&1; then
@@ -119,7 +132,7 @@ else
   echo "   npx not found — skip plan sync"
 fi
 
-# --- 6) Rebuild ---
+# --- 7) Rebuild ---
 echo "-> Building..."
 rm -rf .next src/generated/prisma
 npx prisma generate 2>&1 | tail -1
@@ -131,13 +144,13 @@ if [ ! -f .next/BUILD_ID ]; then
   exit 1
 fi
 
-# --- 7) Restart ---
+# --- 8) Restart ---
 echo "-> Restarting PM2..."
 pm2 restart nexlify-web --update-env 2>&1 | tail -2
 pm2 save 2>/dev/null || true
 sleep 3
 
-# --- 8) Verify ---
+# --- 9) Verify ---
 echo ""
 echo "=== Verification ==="
 curl -s "http://127.0.0.1:13001/pricing" 2>/dev/null | grep -oE 'September 1, 2026|Nexlify License|7-Day Trial' | sort -u | head -10
@@ -150,7 +163,7 @@ echo ""
 echo "=== Update complete ==="
 echo "Hard-refresh https://nexlify.live/pricing (Ctrl+Shift+R)"
 
-# --- 9) Test accounts (idempotent) ---
+# --- 10) Test accounts (idempotent) ---
 if [ -f "$MARKETING/scripts/seed-test-accounts.ts" ]; then
   echo ""
   echo "-> Seeding test accounts..."
