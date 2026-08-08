@@ -39,6 +39,11 @@ if [ ! -s "$TMP" ] && command -v curl >/dev/null 2>&1; then
     echo "Using GitHub main branch copy"
   else
     rm -f "$TMP"
+    echo "   GitHub raw unavailable (private repo?) — trying in-place patch"
+    if [ -x "$MARKETING/scripts/vps-patch-panel-installer.sh" ]; then
+      bash "$MARKETING/scripts/vps-patch-panel-installer.sh" "$INSTALL/panel.sh"
+      exit $?
+    fi
   fi
 fi
 
