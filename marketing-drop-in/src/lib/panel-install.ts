@@ -9,8 +9,8 @@ export const CREDENTIALS_FILE = `${CREDENTIALS_ROOT_DIR}/install-credentials`;
 /** Panel semver from synced release feed (matches package.json in panel repo). */
 export const PANEL_VERSION = panelReleases.latestVersion;
 
-/** Cache-bust slug: 1.9.3 → v193 — must match scripts/panel-version.sh */
-export const INSTALLER_VERSION = `v${PANEL_VERSION.replace(/\./g, "")}`;
+/** Installer + tarball cache-bust — v1.9.7 matches panel Admin → Updates version. */
+export const INSTALLER_VERSION = `v${PANEL_VERSION}`;
 
 export const cleanReinstallCommand = `sudo rm -rf ${PANEL_INSTALL_DIR}`;
 

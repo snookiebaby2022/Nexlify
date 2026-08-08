@@ -49,10 +49,10 @@ cp -f "$ROOT/scripts/install-local-stream-agent.sh" "$INSTALL_DEST/scripts/insta
 cp -f "$ROOT/scripts/fix-stream-edge-now.sh" "$INSTALL_DEST/scripts/fix-stream-edge-now.sh"
 cp -f "$ROOT/scripts/verify-panel-ports.sh" "$INSTALL_DEST/scripts/verify-panel-ports.sh"
 cp -f "$ROOT/scripts/has-valid-next-build.sh" "$INSTALL_DEST/scripts/has-valid-next-build.sh"
-PANEL_VER="$(node -p "require('$ROOT/package.json').version.replace(/\\./g,'')")"
-sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[0-9a-zA-Z]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
+PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
+sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
   "$INSTALL_DEST/apply-panel-fast-update.sh" 2>/dev/null || true
-sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[0-9a-zA-Z]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
+sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
   "$INSTALL_DEST/panel.sh" 2>/dev/null || true
 sed -i 's/\r$//' "$INSTALL_DEST"/*.sh "$INSTALL_DEST"/scripts/*.sh 2>/dev/null || true
 chmod +x "$INSTALL_DEST"/*.sh "$INSTALL_DEST"/scripts/*.sh 2>/dev/null || true

@@ -2,9 +2,43 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.3",
+  "latestVersion": "1.9.7",
 
   "releases": [
+
+    {
+
+      "version": "1.9.7",
+
+      "date": "2026-08-08",
+
+      "channel": "stable",
+
+      "summary": "Installer semver alignment, one-click auto-IP install, marketing admin license fixes.",
+
+      "changelog": [
+
+        "Installer URL version now matches panel semver (v1.9.7 not v193)",
+
+        "One-command install with auto-detected server IP — no --ip flag required",
+
+        "Marketing admin: FK-safe license delete, select-all, bulk revoke/delete toolbar",
+
+        "Marketing admin dashboard redesigned with grouped sidebar navigation",
+
+        "Licenses locked to marketing users via online activation (NEXLIFY_LICENSE_REQUIRE_ONLINE)"
+      ],
+
+      "fixes": [
+
+        "Installer --ip flag was documented but not parsed — fixed",
+
+        "License delete failed on ActivationCode / AddonEntitlement FK constraints",
+
+        "INSTALLER_VERSION drifted from package.json (v194 vs v193 vs 1.9.3)"
+      ]
+
+    },
 
     {
 
