@@ -29,6 +29,12 @@ INSTALL_DEST="${PANEL_INSTALL_DEST:-/var/www/nexlify/public/install}"
 
 mkdir -p "$(dirname "$DEST")" "$INSTALL_DEST" "$INSTALL_DEST/scripts"
 cp -f "$TAR" "$DEST"
+
+PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
+
+if [ "${SKIP_INSTALL_SCRIPT_PUBLISH:-0}" = "1" ]; then
+  echo "Skipping installer script publish (marketing bundle owns /public/install — set SKIP_INSTALL_SCRIPT_PUBLISH=0 to override)"
+else
 cp -f "$ROOT/scripts/install-linux.sh" "$INSTALL_DEST/panel.sh"
 cp -f "$ROOT/scripts/fix-panel-auto-update.sh" "$INSTALL_DEST/fix-panel-auto-update.sh"
 cp -f "$ROOT/scripts/fix-panel-restart.sh" "$INSTALL_DEST/fix-panel-restart.sh"
@@ -49,18 +55,20 @@ cp -f "$ROOT/scripts/install-local-stream-agent.sh" "$INSTALL_DEST/scripts/insta
 cp -f "$ROOT/scripts/fix-stream-edge-now.sh" "$INSTALL_DEST/scripts/fix-stream-edge-now.sh"
 cp -f "$ROOT/scripts/verify-panel-ports.sh" "$INSTALL_DEST/scripts/verify-panel-ports.sh"
 cp -f "$ROOT/scripts/has-valid-next-build.sh" "$INSTALL_DEST/scripts/has-valid-next-build.sh"
-PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
 sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
   "$INSTALL_DEST/apply-panel-fast-update.sh" 2>/dev/null || true
 sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
   "$INSTALL_DEST/panel.sh" 2>/dev/null || true
 sed -i 's/\r$//' "$INSTALL_DEST"/*.sh "$INSTALL_DEST"/scripts/*.sh 2>/dev/null || true
 chmod +x "$INSTALL_DEST"/*.sh "$INSTALL_DEST"/scripts/*.sh 2>/dev/null || true
+fi
 
 echo "Published:"
 echo "  $DEST ($(du -h "$DEST" | cut -f1))"
+if [ "${SKIP_INSTALL_SCRIPT_PUBLISH:-0}" != "1" ]; then
 echo "  $INSTALL_DEST/panel.sh (one-click installer v${PANEL_VER})"
 echo "  $INSTALL_DEST/apply-panel-fast-update.sh"
 echo "  $INSTALL_DEST/fix-stream-edge-now.sh"
 echo "  port scripts → $INSTALL_DEST/scripts/"
+fi
 echo "Release feed: sync panel-releases.json to marketing and redeploy nexlify-web."

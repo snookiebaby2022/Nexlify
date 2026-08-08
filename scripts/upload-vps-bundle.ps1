@@ -40,7 +40,7 @@ option confirm off
 $openLine
 put "$bundle" /root/vps-full-update.sh
 chmod 755 /root/vps-full-update.sh
-call bash /root/vps-full-update.sh
+call bash -c "nohup bash /root/vps-full-update.sh > /root/vps-full-update.log 2>&1 & echo DEPLOY_STARTED_PID=$!"
 exit
 "@
 $f = Join-Path $env:TEMP "upload-vps-bundle.txt"
@@ -59,4 +59,7 @@ if ($code -ne 0) {
 }
 
 Write-Host ""
-Write-Host "=== DONE - VPS updated ===" -ForegroundColor Green
+Write-Host "=== UPLOAD OK — deploy running in background on VPS ===" -ForegroundColor Green
+Write-Host "Monitor on VPS:  tail -f /root/vps-full-update.log" -ForegroundColor Cyan
+Write-Host "When done:       bash /root/nexlify-full-platform-audit.sh" -ForegroundColor Cyan
+Write-Host "Quick installer fix (if needed): bash /var/www/nexlify/scripts/vps-fix-installer.sh" -ForegroundColor Cyan

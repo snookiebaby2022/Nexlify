@@ -11,6 +11,7 @@ SCRIPTS="$ROOT/scripts"
 mkdir -p "$INSTALL" "$INSTALL/scripts"
 
 cp -f "$SCRIPTS/install-linux.sh" "$INSTALL/panel.sh"
+cp -f "$SCRIPTS/install-linux.sh" "$ROOT/marketing-drop-in/scripts/install-linux.sh"
 cp -f "$SCRIPTS/fix-panel-auto-update.sh" "$INSTALL/"
 cp -f "$SCRIPTS/fix-panel-restart.sh" "$INSTALL/"
 cp -f "$SCRIPTS/fix-panel-license-sync.sh" "$INSTALL/"

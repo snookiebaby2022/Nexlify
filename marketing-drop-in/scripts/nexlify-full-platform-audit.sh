@@ -135,6 +135,17 @@ for url in \
   code=$(http_code "$url")
   [ "$code" = "200" ] && ok "$url → $code" || fail "$url → $code"
 done
+PANEL_SH="${MARKETING}/public/install/panel.sh"
+if [ -f "$PANEL_SH" ]; then
+  grep -q 'detect_server_address' "$PANEL_SH" \
+    && ok "panel.sh has auto-detect IP" \
+    || fail "panel.sh OLD (missing detect_server_address) — run: bash $MARKETING/scripts/vps-fix-installer.sh"
+  grep -q 'FATAL.*domain\|--domain is required' "$PANEL_SH" 2>/dev/null \
+    && fail "panel.sh still requires --domain (stale copy)" \
+    || ok "panel.sh no --domain required"
+else
+  fail "panel.sh missing at $PANEL_SH"
+fi
 
 section "IPTV panel ($PANEL)"
 if [ -n "$PANEL" ]; then

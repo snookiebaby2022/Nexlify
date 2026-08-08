@@ -29,14 +29,32 @@ if [ -n "$BACKUP" ] && [ -f "$ENV" ]; then
   [ "$restored" -gt 0 ] && echo "  Restored $restored secret(s) from backup" && pm2 restart nexlify-web --update-env 2>/dev/null || true
 fi
 
-# 2) Publish panel tarball if panel exists
+# 2) Publish panel tarball (installer scripts come from marketing bundle — see restore below)
+INSTALL_BACKUP=""
+if [ -d "$MARKETING/public/install" ]; then
+  INSTALL_BACKUP="$(mktemp -d /tmp/nexlify-install-backup.XXXXXX)"
+  cp -a "$MARKETING/public/install/." "$INSTALL_BACKUP/"
+fi
+
 if [ -f "$PANEL/scripts/publish-panel-release.sh" ]; then
   echo "-> Publish panel tarball"
-  (cd "$PANEL" && bash scripts/publish-panel-release.sh) 2>&1 | tail -5
+  SKIP_INSTALL_SCRIPT_PUBLISH=1 bash "$PANEL/scripts/publish-panel-release.sh" 2>&1 | tail -8
+fi
+
+if [ -n "$INSTALL_BACKUP" ] && [ -d "$INSTALL_BACKUP" ]; then
+  echo "-> Restore marketing installer scripts (canonical — not stale panel repo copy)"
+  mkdir -p "$MARKETING/public/install"
+  cp -a "$INSTALL_BACKUP/." "$MARKETING/public/install/"
+  rm -rf "$INSTALL_BACKUP"
+  if grep -q 'detect_server_address' "$MARKETING/public/install/panel.sh" 2>/dev/null; then
+    echo "   panel.sh OK (auto-detect IP)"
+  else
+    echo "   WARN: panel.sh missing detect_server_address — re-run vps-full-update.sh"
+  fi
 fi
 
 # 3) Install helpers on /root
-for s in nexlify-full-platform-audit.sh vps-do-everything.sh restore-marketing-secrets.sh; do
+for s in nexlify-full-platform-audit.sh vps-do-everything.sh restore-marketing-secrets.sh vps-fix-installer.sh; do
   [ -f "$MARKETING/scripts/$s" ] && cp -f "$MARKETING/scripts/$s" "/root/$s" && chmod +x "/root/$s"
 done
 
