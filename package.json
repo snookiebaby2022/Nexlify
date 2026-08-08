@@ -19,6 +19,7 @@
     "sync:install": "bash scripts/sync-install-to-marketing.sh",
     "sync:releases": "cp -f src/lib/panel-releases.json marketing-drop-in/src/lib/panel-releases.json && npm run releases:sync",
     "cleanup:local": "bash scripts/nexlify-local-cleanup.sh",
+    "verify:sync": "bash scripts/nexlify-verify-sync.sh",
     "db:generate": "prisma generate",
     "db:push": "prisma db push --accept-data-loss",
     "db:migrate": "prisma migrate dev",

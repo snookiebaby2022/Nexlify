@@ -1,33 +1,44 @@
-# Nexlify repo sync for Windows (no bash required).
-# Run from repo root: .\scripts\nexlify-sync-all.ps1
+# Nexlify repo sync for Windows.
+# Run from anywhere: .\scripts\nexlify-sync-all.ps1
+# Or:  cd C:\Users\lizzi\nexlify-panel; .\scripts\nexlify-sync-all.ps1
 
 $ErrorActionPreference = "Stop"
-$Root = Split-Path $PSScriptRoot -Parent
+
+function Find-NexlifyRoot([string]$Start) {
+    $dir = (Resolve-Path $Start).Path
+    while ($dir) {
+        $pkg = Join-Path $dir "package.json"
+        $mkt = Join-Path $dir "marketing-drop-in"
+        if ((Test-Path $pkg) -and (Test-Path $mkt)) { return $dir }
+        $parent = Split-Path $dir -Parent
+        if (-not $parent -or $parent -eq $dir) { break }
+        $dir = $parent
+    }
+    throw "Nexlify repo not found. cd to C:\Users\lizzi\nexlify-panel first."
+}
+
+$startDir = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
+$Root = Find-NexlifyRoot $startDir
 Set-Location $Root
+Write-Host "Repo root: $Root" -ForegroundColor DarkGray
 
 Write-Host "=== Nexlify repo sync ===" -ForegroundColor Cyan
 
 Write-Host "-> Panel releases -> marketing"
-Copy-Item -Force (Join-Path $Root "src\lib\panel-releases.json") `
-    (Join-Path $Root "marketing-drop-in\src\lib\panel-releases.json")
+Copy-Item -Force "$Root\src\lib\panel-releases.json" "$Root\marketing-drop-in\src\lib\panel-releases.json"
 npm run releases:sync
 
 Write-Host "-> Installer scripts -> marketing public/install"
-$install = Join-Path $Root "marketing-drop-in\public\install"
-$scripts = Join-Path $Root "scripts"
-New-Item -ItemType Directory -Force -Path $install, (Join-Path $install "scripts") | Out-Null
+$install = "$Root\marketing-drop-in\public\install"
+$scripts = "$Root\scripts"
+New-Item -ItemType Directory -Force -Path $install, "$install\scripts" | Out-Null
 
-$copyMap = @{
-    "install-linux.sh"                          = "panel.sh"
-    "fix-panel-auto-update.sh"                  = "fix-panel-auto-update.sh"
-    "fix-panel-restart.sh"                      = "fix-panel-restart.sh"
-    "fix-panel-license-sync.sh"                 = "fix-panel-license-sync.sh"
-    "fix-stream-edge-now.sh"                    = "fix-stream-edge-now.sh"
-    "apply-panel-fast-update.sh"                = "apply-panel-fast-update.sh"
-}
-foreach ($src in $copyMap.Keys) {
-    Copy-Item -Force (Join-Path $scripts $src) (Join-Path $install $copyMap[$src])
-}
+Copy-Item -Force "$scripts\install-linux.sh" "$install\panel.sh"
+Copy-Item -Force "$scripts\fix-panel-auto-update.sh" "$install\"
+Copy-Item -Force "$scripts\fix-panel-restart.sh" "$install\"
+Copy-Item -Force "$scripts\fix-panel-license-sync.sh" "$install\"
+Copy-Item -Force "$scripts\fix-stream-edge-now.sh" "$install\"
+Copy-Item -Force "$scripts\apply-panel-fast-update.sh" "$install\"
 
 $scriptCopies = @(
     "panel-restart-safe.sh", "panel-update-recover.sh", "install-mediamtx-webrtc.sh",
@@ -40,40 +51,31 @@ $scriptCopies = @(
     "verify-panel-admin-login.cjs", "reset-panel-admin.sh"
 )
 foreach ($f in $scriptCopies) {
-    Copy-Item -Force (Join-Path $scripts $f) (Join-Path $install "scripts\$f")
+    Copy-Item -Force "$scripts\$f" "$install\scripts\$f"
 }
-Copy-Item -Force (Join-Path $scripts "fix-panel-ip-login.sh") (Join-Path $install "scripts\fix-ip-login.sh")
-Copy-Item -Force (Join-Path $scripts "fix-panel-ip-login.sh") (Join-Path $install "fix-ip-login.sh") -ErrorAction SilentlyContinue
-
-$pkg = Get-Content (Join-Path $Root "package.json") | ConvertFrom-Json
-$ver = $pkg.version -replace '\.', ''
-foreach ($sh in @("apply-panel-fast-update.sh", "panel.sh")) {
-    $path = Join-Path $install $sh
-    if (Test-Path $path) {
-        (Get-Content $path -Raw) -replace 'PANEL_CACHE_BUST="\$\{PANEL_CACHE_BUST:-v[0-9a-zA-Z]*\}"', "PANEL_CACHE_BUST=`"`${PANEL_CACHE_BUST:-v$ver}`"" |
-            Set-Content $path -NoNewline
-    }
-}
+Copy-Item -Force "$scripts\fix-panel-ip-login.sh" "$install\scripts\fix-ip-login.sh"
+Copy-Item -Force "$scripts\fix-panel-ip-login.sh" "$install\fix-ip-login.sh" -ErrorAction SilentlyContinue
 
 Write-Host "-> Generate VPS deploy bundle"
-$genSh = Join-Path $Root "marketing-drop-in\scripts\generate-vps-bundle.sh"
 $bash = $null
 foreach ($candidate in @(
-    (Get-Command bash -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source),
     "C:\Program Files\Git\bin\bash.exe",
     "C:\Program Files (x86)\Git\bin\bash.exe"
 )) {
-    if ($candidate -and (Test-Path $candidate)) { $bash = $candidate; break }
+    if (Test-Path $candidate) { $bash = $candidate; break }
 }
-if ($bash) {
-    & $bash $genSh
-} else {
-    Write-Host "ERROR: bash not found. Install Git for Windows (includes Git Bash), then re-run." -ForegroundColor Red
-    Write-Host "  https://git-scm.com/download/win" -ForegroundColor Yellow
+if (-not $bash) {
+    Write-Host "ERROR: Git Bash not found. Install Git for Windows: https://git-scm.com/download/win" -ForegroundColor Red
     exit 1
 }
+& $bash "$Root\marketing-drop-in\scripts\generate-vps-bundle.sh"
 
 Write-Host ""
-Write-Host "=== Sync complete ===" -ForegroundColor Green
-Write-Host "Upload: marketing-drop-in\scripts\vps-full-update.sh -> VPS /root/"
-Write-Host "VPS panel: git pull && ./scripts/deploy-vps.sh && bash scripts/publish-panel-release.sh"
+Write-Host "=== DONE ===" -ForegroundColor Green
+Write-Host "Upload via WinSCP:"
+Write-Host "  FROM: $Root\marketing-drop-in\scripts\vps-full-update.sh"
+Write-Host "  TO:   /root/vps-full-update.sh"
+Write-Host ""
+Write-Host "Then on VPS:"
+Write-Host "  bash /root/vps-full-update.sh"
+Write-Host "  bash /root/nexlify-full-platform-audit.sh"
