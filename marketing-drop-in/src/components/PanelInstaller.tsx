@@ -12,15 +12,11 @@ import {
   Terminal,
   Wrench,
 } from "lucide-react";
+import { useLiveInstallCommand } from "@/hooks/useLiveInstallCommand";
 import {
-  buildOneClickInstallCommand,
   cleanReinstallWithFreshFlag,
   credentialsHelp,
-  INSTALLER_VERSION,
-  installerPanelShUrl,
-  oneClickInstallExample,
   PANEL_INSTALL_DIR,
-  simpleInstallCommand,
   wgetInstallExample,
 } from "@/lib/panel-install";
 
@@ -60,8 +56,8 @@ function CopyBlock({
 
 export function PanelInstaller() {
   const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const oneLine = oneClickInstallExample;
+  const live = useLiveInstallCommand();
+  const oneLine = live.command;
 
   return (
     <section className="py-12 space-y-8">
@@ -72,7 +68,7 @@ export function PanelInstaller() {
           detects your server IP automatically — sign in at the login URL printed at the end (port 80).
           Add your license in the panel after login.
         </p>
-        <p className="mt-1 text-xs text-slate-500">Installer {INSTALLER_VERSION}</p>
+        <p className="mt-1 text-xs text-slate-500">Installer {live.label}</p>
       </div>
 
       <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-6 space-y-4">
@@ -101,7 +97,7 @@ export function PanelInstaller() {
 
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm space-y-2">
           <p className="font-semibold text-emerald-100">One command — paste and run</p>
-          <CopyBlock text={oneLine} label={`bash · ${INSTALLER_VERSION}`} display={`$ ${oneLine}`} />
+          <CopyBlock text={oneLine} label={`bash · ${live.label}`} display={`$ ${oneLine}`} />
         </div>
 
         <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-300 space-y-2">
@@ -129,7 +125,7 @@ export function PanelInstaller() {
             Optional flags (--license, --domain, --fresh)
           </summary>
           <div className="px-4 pb-4 space-y-3">
-            <CopyBlock text={simpleInstallCommand} label="bash · default" display={`$ ${simpleInstallCommand}`} />
+            <CopyBlock text={oneLine} label="bash · default" display={`$ ${oneLine}`} />
             <p className="text-xs text-slate-500">
               Override auto-detected IP: add <code className="text-violet-300">-s -- --ip 203.0.113.10</code>
             </p>
@@ -138,7 +134,7 @@ export function PanelInstaller() {
 
         <div className="flex flex-wrap items-center gap-3">
           <a
-            href={installerPanelShUrl}
+            href={live.url}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500 transition-colors"

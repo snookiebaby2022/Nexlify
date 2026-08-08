@@ -51,6 +51,16 @@ sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"
 # Keep installer script docs in sync with panel semver (1.9.7 → ?v=1.9.7)
 sed -i "s|panel\.sh?v=[0-9.a-zA-Z]*|panel.sh?v=${PANEL_VER}|g" "$SCRIPTS/install-linux.sh" "$INSTALL/panel.sh" 2>/dev/null || true
 
+# Runtime install command JSON (uploadable without rebuild)
+cat > "$ROOT/marketing-drop-in/public/install-command.json" << EOF
+{
+  "version": "${PANEL_VER}",
+  "label": "v${PANEL_VER}",
+  "url": "https://nexlify.live/install/panel.sh?v=${PANEL_VER}",
+  "command": "curl -fsSL 'https://nexlify.live/install/panel.sh?v=${PANEL_VER}' | sudo bash"
+}
+EOF
+
 sed -i 's/\r$//' "$INSTALL"/*.sh "$INSTALL"/scripts/*.sh 2>/dev/null || true
 chmod +x "$INSTALL"/*.sh "$INSTALL"/scripts/*.sh 2>/dev/null || true
 

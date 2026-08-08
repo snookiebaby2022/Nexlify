@@ -2,13 +2,11 @@
 
 import { useState } from "react";
 import { Check, Copy, Terminal, Server, Shield, Database, Globe } from "lucide-react";
+import { useLiveInstallCommand } from "@/hooks/useLiveInstallCommand";
 import {
-  buildOneClickInstallCommand,
   cleanReinstallWithFreshFlag,
   credentialsHelp,
   INSTALLER_CACHE_QUERY,
-  INSTALLER_VERSION,
-  oneClickInstallExample,
 } from "@/lib/panel-install";
 
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -61,7 +59,8 @@ function Step({ number, title, children }: { number: number; title: string; chil
 }
 
 export function PanelInstallInstructions() {
-  const oneLineCommand = oneClickInstallExample;
+  const live = useLiveInstallCommand();
+  const oneLineCommand = live.command;
 
   return (
     <section className="py-12 space-y-10">
@@ -117,7 +116,7 @@ export function PanelInstallInstructions() {
             <span className="text-slate-500">$</span> {oneLineCommand}
           </CodeBlock>
           <p className="text-xs text-slate-500">
-            Installer version {INSTALLER_VERSION}. The panel runs on port 80 — your login URL is printed when
+            Installer version {live.label}. The panel runs on port 80 — your login URL is printed when
             install finishes.
           </p>
         </Step>
