@@ -22,15 +22,14 @@ tar -czf "$OUT" \
 
 echo "Built $OUT ($(du -h "$OUT" | cut -f1))"
 
-TAR_LIST="$(tar -tzf "$OUT")"
 missing=""
 for f in .env.example src/lib/panel-releases.json src/lib/lines.ts scripts/set-admin-password.cjs scripts/load-env.cjs scripts/panel-port-config.sh scripts/sync-license-env.mjs scripts/ensure-panel-env.sh scripts/fix-panel-ip-login.sh scripts/verify-install-smoke.sh scripts/verify-install-login.sh scripts/verify-panel-admin-login.cjs scripts/reset-panel-admin.sh scripts/apply-panel-fast-update.sh scripts/panel-restart-safe.sh nginx/nexlify-stream-edge.conf scripts/nexlify-port-registry.sh scripts/nexlify-firewall-ports.sh scripts/sync-panel-ports.sh scripts/install-nginx-stream-edge.sh scripts/install-nginx-rtmp.sh scripts/install-nginx-https-extra-ports.sh scripts/install-monolithic-profile.sh scripts/install-local-stream-agent.sh scripts/ensure-monolithic-server.ts scripts/fix-stream-edge-now.sh scripts/verify-panel-ports.sh scripts/installer-finalize-ports.sh; do
-  if ! echo "$TAR_LIST" | grep -qE "(^|/)${f}$"; then
+  if ! grep -qF "$f" < <(tar -tzf "$OUT"); then
     missing="${missing}\n  - ${f}"
   fi
 done
 if [ -n "$missing" ]; then
-  echo "WARN: tarball verify (continuing):${missing}" >&2
-else
-  echo "Tarball verify OK"
+  echo "ERROR: tarball missing required files:${missing}" >&2
+  exit 1
 fi
+echo "Tarball verify OK"
