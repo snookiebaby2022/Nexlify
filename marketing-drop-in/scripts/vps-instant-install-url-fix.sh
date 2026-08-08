@@ -1,25 +1,40 @@
 #!/usr/bin/env bash
-# Fix wrong install URL (?v1.9.7) on ALL marketing copies PM2 might serve.
-# Patches every known path + PM2 cwd. No rebuild required.
-#
-# SSH as root on 85.17.162.54 and run:
-#   bash /root/vps-instant-install-url-fix.sh
+# Fix wrong install URL (?v1.9.7 -> ?v=1.9.7) on ALL marketing copies.
+# The stale .next bundles use panel.sh?${VAR} where VAR="v1.9.7" — NOT a literal string.
 set -euo pipefail
 
 PORT="${MARKETING_PORT:-13001}"
+VER="${PANEL_VERSION:-1.9.7}"
+CORRECT_URL="https://nexlify.live/install/panel.sh?v=${VER}"
+CORRECT_CMD="curl -fsSL '${CORRECT_URL}' | sudo bash"
 
 pm2_cwd() {
+  pm2 describe nexlify-web 2>/dev/null | awk -F'│' '/exec cwd/{gsub(/ /,""); print $2; exit}'
   pm2 jlist 2>/dev/null | python3 -c "
 import json, sys
 try:
-  apps = json.load(sys.stdin)
+  for a in json.load(sys.stdin):
+    if a.get('name') in ('nexlify-web', 'nexlify-website'):
+      print(a.get('pm2_env', {}).get('pm_cwd', ''))
+      break
 except Exception:
-  sys.exit(0)
-for a in apps:
-  if a.get('name') in ('nexlify-web', 'nexlify-website'):
-    print(a.get('pm2_env', {}).get('pm_cwd', ''))
-    break
-" 2>/dev/null || true
+  pass
+" 2>/dev/null
+}
+
+patch_next_files() {
+  local dir="$1"
+  local n=0
+  [ -d "$dir/.next" ] || return 0
+  while IFS= read -r f; do
+    sed -i \
+      -e "s|https://nexlify.live/install/panel.sh?\${[^}]*}|${CORRECT_URL}|g" \
+      -e 's|panel.sh?v1.9.7|panel.sh?v=1.9.7|g' \
+      -e 's|panel.sh?v1\.9\.7|panel.sh?v=1.9.7|g' \
+      "$f"
+    n=$((n + 1))
+  done < <(find "$dir/.next" -type f \( -name '*.js' -o -name '*.json' \) 2>/dev/null)
+  echo "   patched $n .next file(s)"
 }
 
 patch_dir() {
@@ -28,78 +43,50 @@ patch_dir() {
   echo ""
   echo "-> $dir"
 
-  local pi="$dir/src/lib/panel-install.ts"
-  if [ -f "$pi" ] && ! grep -q 'INSTALLER_CACHE_QUERY' "$pi" 2>/dev/null; then
-    sed -i \
-      -e 's|panel.sh?${INSTALLER_VERSION}|panel.sh?${INSTALLER_CACHE_QUERY}|g' \
-      -e 's|panel.sh?v1.9.7|panel.sh?v=1.9.7|g' \
-      "$pi"
-    grep -q 'INSTALLER_CACHE_QUERY' "$pi" 2>/dev/null || \
-      sed -i '/export const INSTALLER_VERSION/a export const INSTALLER_CACHE_QUERY = `v=${PANEL_VERSION}`;' "$pi"
-    echo "   source panel-install.ts patched"
-  fi
-
-  local json="$dir/public/install-command.json"
-  if [ ! -f "$json" ] || ! grep -q '"url".*v=1.9.7' "$json" 2>/dev/null; then
-    mkdir -p "$(dirname "$json")"
-    cat > "$json" << 'JSON'
+  mkdir -p "$dir/public"
+  cat > "$dir/public/install-command.json" << JSON
 {
-  "version": "1.9.7",
-  "label": "v1.9.7",
-  "url": "https://nexlify.live/install/panel.sh?v=1.9.7",
-  "command": "curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.7' | sudo bash"
+  "version": "${VER}",
+  "label": "v${VER}",
+  "url": "${CORRECT_URL}",
+  "command": "${CORRECT_CMD}"
 }
 JSON
-    echo "   wrote public/install-command.json"
-  fi
+  echo "   wrote public/install-command.json"
 
-  local n=0
-  if [ -d "$dir/.next" ]; then
-    while IFS= read -r f; do
-      sed -i \
-        -e 's|panel.sh?v1.9.7|panel.sh?v=1.9.7|g' \
-        -e 's|panel.sh?v1\.9\.7|panel.sh?v=1.9.7|g' \
-        "$f"
-      n=$((n + 1))
-    done < <(grep -rlE 'panel\.sh\?v1\.9\.7|panel\.sh\?v[0-9]+\.[0-9]+\.[0-9]+' "$dir/.next" 2>/dev/null || true)
-  fi
-  echo "   patched $n cached .next file(s)"
+  patch_next_files "$dir"
 }
 
-echo "=== Nexlify install URL fix (all marketing paths) ==="
-
-CWD="$(pm2_cwd)"
+echo "=== Nexlify install URL fix (template \${VAR} patch) ==="
+CWD="$(pm2_cwd | head -1)"
 echo "PM2 nexlify-web cwd: ${CWD:-unknown}"
 
-for d in \
-  "$CWD" \
-  /var/www/nexlify \
-  /home/nexlify-panel/marketing-drop-in \
-  /opt/nexlify-panel/marketing-drop-in; do
+for d in "$CWD" /var/www/nexlify /home/nexlify-panel/marketing-drop-in /opt/nexlify-panel/marketing-drop-in; do
   [ -n "$d" ] && patch_dir "$d"
 done
 
 echo ""
 echo "-> Restarting nexlify-web..."
-pm2 restart nexlify-web --update-env 2>&1 | tail -3 || pm2 restart all --update-env 2>&1 | tail -3
+pm2 restart nexlify-web --update-env 2>&1 | tail -3
 pm2 save 2>/dev/null || true
 sleep 4
 
 echo ""
 echo "=== Verification ==="
-for port in "$PORT" 3001; do
-  if curl -fsS "http://127.0.0.1:${port}/install-command.json" 2>/dev/null | grep -q 'v=1.9.7'; then
-    echo "OK: port $port serves /install-command.json with ?v=1.9.7"
-  fi
-  html="$(curl -fsS "http://127.0.0.1:${port}/install" 2>/dev/null || true)"
-  if [ -n "$html" ]; then
-    echo "Port $port /install:"
-    echo "$html" | grep -oE 'panel\.sh[^"'\''<> ]*' | head -3 || echo "  (URL in client JS — hard-refresh after deploy)"
-  fi
-done
+curl -fsS "http://127.0.0.1:${PORT}/install-command.json" 2>/dev/null | head -1 || true
+echo ""
+HTML="$(curl -fsS "http://127.0.0.1:${PORT}/install" 2>/dev/null || true)"
+if echo "$HTML" | grep -q 'panel.sh?v=1.9.7'; then
+  echo "OK: /install shows ?v=${VER}"
+  echo "$HTML" | grep -oE 'panel\.sh[^"'\''<> ]*' | sort -u | head -5
+elif echo "$HTML" | grep -q 'panel.sh?v1.9.7'; then
+  echo "FAIL: still wrong — run full rebuild:"
+  echo "  cd /var/www/nexlify && bash /root/vps-hotfix-marketing-now.sh"
+  echo "$HTML" | grep -oE 'panel\.sh[^"'\''<> ]*' | sort -u | head -5
+  exit 1
+else
+  echo "WARN: could not confirm URL in HTML"
+fi
 
 echo ""
-echo "=== DONE ==="
-echo "Correct command: curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.7' | sudo bash"
 echo "Hard-refresh https://nexlify.live/install (Ctrl+Shift+R)"
-echo "If still wrong in browser: purge Cloudflare cache for nexlify.live"
