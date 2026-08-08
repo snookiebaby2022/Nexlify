@@ -58,11 +58,14 @@ model User {
   licenses           License[]
   addonEntitlements  AddonEntitlement[]
   activationCodes    ActivationCode[]
+  tickets            Ticket[]
+  ticketMessages     TicketMessage[] @relation("TicketMessageAuthor")
 }
 
 model Ticket {
   id        String         @id @default(cuid())
-  createdById String
+  userId    String         @map("createdById")
+  user      User           @relation(fields: [userId], references: [id])
   subject   String
   status    TicketStatus   @default(OPEN)
   priority  TicketPriority @default(NORMAL)
@@ -76,6 +79,7 @@ model TicketMessage {
   ticketId  String
   ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   authorId  String
+  author    User     @relation("TicketMessageAuthor", fields: [authorId], references: [id])
   body      String
   isStaff   Boolean  @default(false)
   createdAt DateTime @default(now())

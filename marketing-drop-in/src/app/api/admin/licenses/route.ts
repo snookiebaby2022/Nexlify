@@ -39,22 +39,78 @@ export async function GET(request: Request) {
     take: 200,
   });
 
-  return NextResponse.json({
-    licenses: licenses.map((l) => ({
+  const mapped = licenses.map((l) => ({
+    id: l.id,
+    key: l.key,
+    status: l.status,
+    expiresAt: l.expiresAt?.toISOString() ?? null,
+    maxLines: l.maxLines,
+    notes: l.notes,
+    machineId: l.machineId,
+    panelUrl: l.panelUrl,
+    lastSyncAt: l.lastSyncAt?.toISOString() ?? null,
+    lastSyncError: l.lastSyncError,
+    pendingSyncAction: l.pendingSyncAction,
+    user: { email: l.user.email, name: l.user.name },
+    plan: { name: l.plan.name, slug: l.plan.slug },
+  }));
+
+  const now = Date.now();
+  const onlineThresholdMs = 48 * 60 * 60 * 1000;
+
+  const installations = licenses.map((l) => {
+    const lastSyncMs = l.lastSyncAt?.getTime() ?? null;
+    const hoursSinceSync =
+      lastSyncMs !== null ? Math.floor((now - lastSyncMs) / (60 * 60 * 1000)) : null;
+    const isOnline =
+      l.status === "ACTIVE" &&
+      lastSyncMs !== null &&
+      now - lastSyncMs < onlineThresholdMs;
+
+    return {
       id: l.id,
       key: l.key,
-      status: l.status,
-      expiresAt: l.expiresAt?.toISOString() ?? null,
-      maxLines: l.maxLines,
-      notes: l.notes,
-      machineId: l.machineId,
+      email: l.user.email,
+      name: l.user.name,
+      plan: l.plan.name,
+      machineId: l.machineId ?? "",
       panelUrl: l.panelUrl,
+      status: l.status,
+      maxLines: l.maxLines,
+      activatedAt: l.activatedAt?.toISOString() ?? null,
       lastSyncAt: l.lastSyncAt?.toISOString() ?? null,
-      lastSyncError: l.lastSyncError,
-      pendingSyncAction: l.pendingSyncAction,
-      user: { email: l.user.email, name: l.user.name },
-      plan: { name: l.plan.name, slug: l.plan.slug },
-    })),
+      hoursSinceSync,
+      isOnline,
+      expiresAt: l.expiresAt?.toISOString() ?? null,
+    };
+  });
+
+  const summary = {
+    total: licenses.length,
+    active: licenses.filter((l) => l.status === "ACTIVE").length,
+    expired: licenses.filter((l) => l.status === "EXPIRED").length,
+    revoked: licenses.filter((l) => l.status === "REVOKED").length,
+    suspended: licenses.filter((l) => l.status === "SUSPENDED").length,
+    unused: licenses.filter((l) => l.status === "UNUSED").length,
+    online: installations.filter((i) => i.isOnline).length,
+  };
+
+  const recentActivations = licenses
+    .filter((l) => l.activatedAt)
+    .sort((a, b) => (b.activatedAt?.getTime() ?? 0) - (a.activatedAt?.getTime() ?? 0))
+    .slice(0, 10)
+    .map((l) => ({
+      email: l.user.email,
+      plan: l.plan.name,
+      activatedAt: l.activatedAt?.toISOString() ?? null,
+      panelUrl: l.panelUrl,
+    }));
+
+  return NextResponse.json({
+    licenses: mapped,
+    summary,
+    installations,
+    recentActivations,
   });
 }
 

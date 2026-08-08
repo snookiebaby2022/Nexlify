@@ -18,9 +18,13 @@ export async function GET(request: Request) {
       orderBy: { updatedAt: "desc" },
       take: 50,
       include: {
+        user: { select: { email: true, name: true } },
         messages: {
           orderBy: { createdAt: "desc" },
           take: 3,
+          include: {
+            author: { select: { email: true, role: true } },
+          },
         },
         _count: { select: { messages: true } },
       },
@@ -37,17 +41,17 @@ export async function GET(request: Request) {
         subject: t.subject,
         status: t.status,
         priority: t.priority,
-        email: "unknown",
-        name: "unknown",
+        email: t.user.email,
+        name: t.user.name ?? "unknown",
         messageCount: t._count.messages,
         updatedAt: t.updatedAt.toISOString(),
         createdAt: t.createdAt.toISOString(),
         messages: t.messages.map((m) => ({
           id: m.id,
           body: m.body,
-          isStaff: false,
+          isStaff: m.isStaff || m.author.role === "ADMIN",
           createdAt: m.createdAt.toISOString(),
-          authorEmail: "unknown",
+          authorEmail: m.author.email,
         })),
       })),
     });
@@ -108,6 +112,7 @@ export async function POST(request: Request) {
           ticketId,
           authorId: admin.id,
           body,
+          isStaff: true,
         },
       }),
       prisma.ticket.update({
