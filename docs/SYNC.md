@@ -19,13 +19,15 @@ Three places hold Nexlify files. This doc defines what belongs where and how to 
 
 ## After every `git pull` on your PC
 
+**Windows (PowerShell — no bash required):**
+
 ```powershell
 cd C:\Users\lizzi\nexlify-panel
 git pull origin main
-bash scripts/nexlify-sync-all.sh
+.\scripts\nexlify-sync-all.ps1
 ```
 
-Or on Git Bash / WSL:
+**Git Bash / Linux / WSL:**
 
 ```bash
 npm run sync:all
