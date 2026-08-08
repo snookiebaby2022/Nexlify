@@ -13,7 +13,7 @@ cd "$ROOT"
 PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz}"
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v166}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v193}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -107,6 +107,11 @@ bootstrap_patch_scripts() {
   fetch_one "${base}/scripts/panel-update-recover.sh?${cache}" "$ROOT/scripts/panel-update-recover.sh"
   fetch_one "${base}/scripts/has-valid-next-build.sh?${cache}" "$ROOT/scripts/has-valid-next-build.sh"
   normalize_scripts
+  # Auto-install tsx if not available (needed for background update worker)
+  if ! command -v npx >/dev/null 2>&1 || ! npx tsx --version >/dev/null 2>&1; then
+    echo "Installing tsx (required for update worker) ..."
+    npm install -g tsx 2>/dev/null || npm install -g tsx --prefix /usr/local 2>/dev/null || echo "WARN: could not install tsx globally"
+  fi
   if [ "$fetched" -eq 0 ]; then
     echo "Bootstrap: vendor scripts unchanged or unreachable (continuing with local copies)"
   fi
@@ -221,6 +226,8 @@ cmd_deps() {
 }
 
 cmd_prisma() {
+  # Prevent shell-exported DATABASE_URL from overriding .env
+  unset DATABASE_URL 2>/dev/null || true
   if schema_changed; then
     echo "Schema changed — prisma db push + generate ..."
     npx prisma db push --accept-data-loss --skip-generate
@@ -259,6 +266,8 @@ swap_staging_build() {
   fi
   export NEXLIFY_DIST_DIR=".next.staging"
   bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
+  # Strip PANEL_REPO_PATH from standalone .env (build-time path shouldn't persist)
+  sed -i '/^PANEL_REPO_PATH=/d' "$ROOT/.next.staging/standalone/.env" 2>/dev/null || true
   bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
   css_count="$(find .next.staging/static/css -name '*.css' 2>/dev/null | wc -l | tr -d ' ')"
   if [ -z "$css_count" ] || [ "$css_count" -lt 1 ]; then
@@ -309,6 +318,13 @@ cmd_restart() {
     pm2 save 2>/dev/null || true
   fi
   echo "PM2 restart complete."
+
+  # Ensure watchdog cron is installed
+  if [ -f "$ROOT/scripts/nexlify-watchdog.sh" ]; then
+    chmod +x "$ROOT/scripts/nexlify-watchdog.sh"
+    (crontab -l 2>/dev/null | grep -v nexlify-watchdog; echo "*/5 * * * * $ROOT/scripts/nexlify-watchdog.sh") | crontab -
+    echo "Watchdog cron ensured."
+  fi
 }
 
 cmd_recover() {
@@ -327,6 +343,11 @@ cmd_all() {
   cmd_build_standalone
   BUILD_SUCCEEDED=1
   cmd_restart
+  # Ensure Redis is running (required for panel cache)
+  if command -v redis-cli >/dev/null 2>&1 && ! redis-cli ping >/dev/null 2>&1; then
+    echo "Restarting Redis ..."
+    systemctl restart redis-server 2>/dev/null || service redis-server restart 2>/dev/null || true
+  fi
   if [ -x "$ROOT/scripts/installer-finalize-ports.sh" ]; then
     bash "$ROOT/scripts/installer-finalize-ports.sh" || echo "WARN: port finalize failed (run: sudo bash scripts/sync-panel-ports.sh)" >&2
   fi

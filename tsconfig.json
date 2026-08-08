@@ -37,8 +37,6 @@
   ],
   "exclude": [
     "node_modules",
-    "marketing-drop-in",
-    "marketing-growth-toolkit",
-    "promo-for-nexlify-web"
+    "marketing-drop-in"
   ]
 }

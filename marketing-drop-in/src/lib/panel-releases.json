@@ -244,6 +244,42 @@
 
       "channel": "stable",
 
+      "summary": "Dashboard layout fix, recharts dependency, removes fake v1.9.0 changelog entry.",
+
+      "changelog": [
+
+        "Dashboard server card: moved Servers metric next to Connections (was on the far right)",
+
+        "Added recharts dependency — Analytics and Resource Charts pages now build correctly",
+
+        "Removed hardcoded v1.9.0 changelog entry from Updates page (was showing a fake future version)",
+
+        "Redis server now auto-installed by install-linux.sh and nexlify-server-install.sh (was missing on some installs)",
+
+        "Cleanup scripts included in tarball for automatic file cleanup on updates"
+      ],
+
+      "fixes": [
+
+        "Dashboard layout: Servers stat was on the far right instead of next to Connections",
+
+        "Build failed with 'recharts Module not found' on Analytics and Resource Charts pages",
+
+        "v1.9.0 appeared in changelog with a fake future date (2025-07-15)",
+
+        "Redis cache showed 'Failed' on some panels where Redis wasn't installed"
+      ]
+
+    },
+
+    {
+
+      "version": "1.8.4",
+
+      "date": "2026-07-02",
+
+      "channel": "stable",
+
       "summary": "Critical install/repair fixes: DATABASE_URL override, standalone .env path, package.json in standalone, customer setup scripts.",
 
       "changelog": [

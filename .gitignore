@@ -2,6 +2,8 @@ node_modules
 .next
 .env
 .env.local
+.env.*
+!.env.example
 windows/deploy.config.json
 backups/
 .license-keys/
@@ -18,3 +20,12 @@ __pycache__/
 build-out.txt
 lint-out.txt
 .smoke-*
+
+# Build / publish artifacts (generate locally or on VPS)
+public/downloads/*.tar.gz
+dist/
+marketing-drop-in/scripts/vps-full-update.sh
+scripts/.panel-releases-website-snippet.ts
+
+# Env backups
+**/.env.backup.*

@@ -16,8 +16,8 @@ CREDS_ROOT="/root/nexlify"
 DOMAIN=""
 EMAIL=""
 LICENSE_KEY="${NEXLIFY_LICENSE_KEY:-}"
-SKIP_NGINX=1
-SKIP_SSL=1
+SKIP_NGINX=0
+SKIP_SSL=0
 SKIP_FIREWALL=0
 FORCE_FRESH=0
 MONOLITHIC=0
@@ -45,7 +45,6 @@ EOF
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --ip) DOMAIN="${2:-}"; shift 2 ;;
     --domain) DOMAIN="${2:-}"; shift 2 ;;
     --email) EMAIL="${2:-}"; shift 2 ;;
     --license) LICENSE_KEY="${2:-}"; shift 2 ;;
@@ -64,7 +63,7 @@ done
 log() { echo ""; echo "==> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
 
-[ -n "$DOMAIN" ] || die "--ip is required (your server IP address, e.g. 203.0.113.10)"
+[ -n "$DOMAIN" ] || die "--domain is required (your server IP or hostname, e.g. 203.0.113.10 or panel.example.com)"
 
 case "$PANEL_ARCHIVE_URL" in
   *\?*) ;;
@@ -454,7 +453,7 @@ export NEXT_TELEMETRY_DISABLED=1
 
 quiet_step "Installing npm dependencies" npm ci --no-audit --no-fund --loglevel=error
 
-quiet_step "Applying database schema" bash -c 'npx prisma generate && npx prisma db push --accept-data-loss'
+quiet_step "Applying database schema" bash -c 'unset DATABASE_URL 2>/dev/null; npx prisma generate && npx prisma db push --accept-data-loss'
 
 quiet_step "Seeding database" env QUIET_SEED=1 npm run db:seed
 
@@ -488,6 +487,13 @@ fi
 progress_step "Starting services"
 bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1
 bash scripts/pm2-boot-enable.sh >>"$INSTALL_LOG" 2>&1 || true
+
+# Setup watchdog cron (auto-healing every 5 minutes)
+if [ -f scripts/nexlify-watchdog.sh ]; then
+  chmod +x scripts/nexlify-watchdog.sh
+  (crontab -l 2>/dev/null | grep -v nexlify-watchdog; echo "*/5 * * * * $PANEL_DIR/scripts/nexlify-watchdog.sh") | crontab -
+  log "Watchdog cron installed (auto-heals every 5 minutes)"
+fi
 
 if [ "$SKIP_NGINX" -eq 0 ] && [ "${NEXLIFY_USE_NGINX:-1}" = "1" ] && [ -n "$DOMAIN" ] && [ "$DOMAIN" != "localhost" ]; then
   mkdir -p /etc/nginx/conf.d
@@ -533,6 +539,22 @@ if [ "$SKIP_FIREWALL" -eq 0 ]; then
   }
 fi
 
+if [ "$MONOLITHIC" = "1" ]; then
+  progress_step "Monolithic profile — main server + local stream agent"
+  grep -q '^NEXLIFY_MONOLITHIC=' "$PANEL_DIR/.env" 2>/dev/null && \
+    sed -i 's/^NEXLIFY_MONOLITHIC=.*/NEXLIFY_MONOLITHIC=1/' "$PANEL_DIR/.env" || \
+    echo "NEXLIFY_MONOLITHIC=1" >> "$PANEL_DIR/.env"
+  grep -q '^NEXLIFY_RTMP_ENABLED=' "$PANEL_DIR/.env" 2>/dev/null || \
+    echo "NEXLIFY_RTMP_ENABLED=1" >> "$PANEL_DIR/.env"
+  chmod +x scripts/install-monolithic-profile.sh scripts/install-local-stream-agent.sh 2>/dev/null || true
+  bash scripts/install-monolithic-profile.sh "$DOMAIN" >>"$INSTALL_LOG" 2>&1 || {
+    echo "WARN: monolithic server row failed — create Main Server in Admin → Servers" >&2
+  }
+  bash scripts/install-local-stream-agent.sh >>"$INSTALL_LOG" 2>&1 || {
+    echo "WARN: local agent install failed — run: sudo bash scripts/install-local-stream-agent.sh" >&2
+  }
+fi
+
 PANEL_HEALTH_HOST="127.0.0.1"
 PANEL_HEALTH_PORT="${NEXLIFY_PANEL_LISTEN_PORT:-${PORT:-13000}}"
 for i in $(seq 1 15); do
@@ -565,6 +587,7 @@ if ! ADMIN_PASS="$ADMIN_PASS" bash scripts/verify-install-login.sh >>"$INSTALL_L
 fi
 
 save_install_credentials "complete"
+cp "$PANEL_DIR/.env" "$PANEL_DIR/.env.original" 2>/dev/null || true
 progress_step "Install complete"
 print_install_complete
 if [ -z "$LICENSE_KEY" ]; then

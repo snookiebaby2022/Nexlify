@@ -75,6 +75,5 @@ if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
 
-Write-Host "Syncing growth toolkit CSS (no rebuild)..." -ForegroundColor Cyan
-& (Join-Path $PSScriptRoot "deploy-marketing-growth-toolkit.ps1")
+Write-Host "Marketing deploy complete." -ForegroundColor Green
 exit $LASTEXITCODE

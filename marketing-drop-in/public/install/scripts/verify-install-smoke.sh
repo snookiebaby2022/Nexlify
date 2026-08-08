@@ -54,4 +54,23 @@ if [ -n "$loc" ] && echo "$loc" | grep -qE ':3000|:3001|:13000|:13001'; then
   exit 1
 fi
 
+STREAM_PORT="$(read_env STREAM_HTTP_PORT)"
+[ -z "$STREAM_PORT" ] && STREAM_PORT="$(read_env STREAM_EDGE_PORT)"
+[ -z "$STREAM_PORT" ] && STREAM_PORT=8080
+BEHIND="$(read_env PANEL_BEHIND_NGINX)"
+if [ "$BEHIND" != "0" ] && [ "$BEHIND" != "false" ] && [ "$STREAM_PORT" != "80" ]; then
+  echo "==> Smoke: stream edge :${STREAM_PORT} (local)"
+  code="$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${STREAM_PORT}/player_api.php?username=__smoke__" 2>/dev/null || echo 000)"
+  if [ "$code" = "000" ]; then
+    echo "ERROR: stream edge not responding on :${STREAM_PORT}" >&2
+    exit 1
+  fi
+  echo "  stream edge HTTP ${code} (401/400 expected without credentials)"
+fi
+
+if [ -f scripts/verify-panel-ports.sh ]; then
+  echo "==> Smoke: verify panel ports"
+  bash scripts/verify-panel-ports.sh || true
+fi
+
 echo "==> Smoke checks passed (${BASE})"

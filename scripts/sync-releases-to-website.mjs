@@ -43,4 +43,9 @@ const entries = feed.releases.map(releaseToTs).join("\n");
 const out = join(root, "scripts", ".panel-releases-website-snippet.ts");
 const snippet = `// Generated from src/lib/panel-releases.json — do not edit by hand\nexport const PANEL_RELEASES_LATEST = ${tsString(feed.latestVersion)};\nexport const PANEL_RELEASES_SNIPPET = [\n${entries}\n];\n`;
 writeFileSync(out, snippet, "utf8");
+
+const marketingJson = join(root, "marketing-drop-in", "src", "lib", "panel-releases.json");
+writeFileSync(marketingJson, readFileSync(jsonPath, "utf8"), "utf8");
+
 console.log(`Wrote ${out} (${feed.releases.length} releases, latest ${feed.latestVersion})`);
+console.log(`Synced ${marketingJson}`);

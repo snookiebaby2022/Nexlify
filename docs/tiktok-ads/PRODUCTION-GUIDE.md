@@ -26,7 +26,7 @@ Drive traffic to **https://nexlify.live/promo?utm_source=tiktok** (landing page)
 
 **End card asset:** [`public/marketing/tiktok-end-card.png`](../../public/marketing/tiktok-end-card.png) (also in [`assets/tiktok-end-card.png`](./assets/tiktok-end-card.png))
 
-**Drop-in promo page for nexlify-web:** [`../../promo-for-nexlify-web/`](../../promo-for-nexlify-web/)
+**Promo landing page:** built into `marketing-drop-in/src/app/promo/` (deployed to nexlify.live/promo).
 
 ---
 

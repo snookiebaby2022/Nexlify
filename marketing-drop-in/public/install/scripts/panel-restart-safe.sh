@@ -62,6 +62,24 @@ nexlify_only_restart() {
   fi
 
   log "Restarting nexlify only (preserving nexlify-cron) ..."
+  if command -v pm2 >/dev/null 2>&1; then
+    for _ in 1 2 3 4 5 6; do
+      remaining="$(pm2 jlist 2>/dev/null | node -e "
+        const list = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+        process.stdout.write(String(list.filter((p) => p.name === 'nexlify').length));
+      " 2>/dev/null || echo 0)"
+      [ "$remaining" = "0" ] && break
+      pm2 jlist 2>/dev/null | node -e "
+        const { execSync } = require('child_process');
+        const list = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+        for (const x of list.filter((p) => p.name === 'nexlify')) {
+          try { execSync('pm2 delete ' + x.pm_id, { stdio: 'ignore' }); } catch {}
+        }
+      " 2>/dev/null || true
+      pm2 delete nexlify 2>/dev/null || true
+      sleep 1
+    done
+  fi
   pm2 delete nexlify 2>/dev/null || true
   pm2 start ecosystem.config.cjs --only nexlify --update-env >>"$LOG_FILE" 2>&1
   pm2 save >>"$LOG_FILE" 2>&1 || true
@@ -77,6 +95,10 @@ nexlify_only_restart() {
 
 full_restart() {
   log "Full panel restart via pm2-start.sh ..."
+  # Ensure dependencies are installed before restart (handles new packages from git pull)
+  if [ -f "$ROOT/package.json" ]; then
+    npm install --no-audit --no-fund --loglevel=error >>"$LOG_FILE" 2>&1 || true
+  fi
   bash "$ROOT/scripts/pm2-start.sh" >>"$LOG_FILE" 2>&1
 }
 

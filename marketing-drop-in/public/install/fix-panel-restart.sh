@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
 # One-shot fix: safe panel restart after updates + health watchdog (v1.5.7+).
-#   curl -fsSL 'https://nexlify.live/install/fix-panel-restart.sh?v=170' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/fix-panel-restart.sh?v=160' | sudo bash
 set -euo pipefail
 PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
 VENDOR_URL="${VENDOR_URL:-https://nexlify.live}"
-TARBALL="${VENDOR_URL}/downloads/nexlify-panel.tar.gz?v=170"
+TARBALL="${VENDOR_URL}/downloads/nexlify-panel.tar.gz?v=160"
 
 [ -d "$PANEL_DIR" ] || { echo "ERROR: panel not found at $PANEL_DIR" >&2; exit 1; }
 
+curl -fsSL "${VENDOR_URL}/install/apply-panel-fast-update.sh?v=160" -o "$PANEL_DIR/scripts/apply-panel-fast-update.sh.new" 2>/dev/null || true
+if [ -f "$PANEL_DIR/scripts/apply-panel-fast-update.sh.new" ]; then
+  mkdir -p "$PANEL_DIR/scripts"
+  sed -i 's/\r$//' "$PANEL_DIR/scripts/apply-panel-fast-update.sh.new"
+  chmod +x "$PANEL_DIR/scripts/apply-panel-fast-update.sh.new"
+  mv "$PANEL_DIR/scripts/apply-panel-fast-update.sh.new" "$PANEL_DIR/scripts/apply-panel-fast-update.sh"
+fi
+
 tmp="$(mktemp -d /tmp/nexlify-fix-restart-XXXXXX)"
 curl -fsSL "$TARBALL" -o "$tmp/panel.tar.gz"
-size="$(wc -c < "$tmp/panel.tar.gz" | tr -d ' ')"
-[ "$size" -gt 3000000 ] || { echo "ERROR: tarball too small ($size bytes)" >&2; exit 1; }
+size="$(wc -c < "$tmp/panel.tar.gz" | tr -d '[:space:]')"
+[ -n "$size" ] && [ "$size" -gt 500000 ] || { echo "ERROR: download too small (${size:-0} bytes)" >&2; exit 1; }
+tar -xOf "$tmp/panel.tar.gz" ./package.json >/dev/null 2>&1 || tar -xOf "$tmp/panel.tar.gz" package.json >/dev/null 2>&1 || { echo "ERROR: invalid panel tarball" >&2; exit 1; }
 
 mkdir -p "$tmp/extract"
 tar -xzf "$tmp/panel.tar.gz" -C "$tmp/extract"

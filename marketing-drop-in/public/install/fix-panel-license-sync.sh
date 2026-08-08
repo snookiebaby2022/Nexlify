@@ -73,7 +73,8 @@ npm run build
 
 echo "==> Restart PM2"
 if command -v pm2 >/dev/null 2>&1; then
-  pm2 restart nexlify-panel 2>/dev/null || pm2 restart all --update-env
+  cd "$PANEL_DIR"
+  bash scripts/pm2-start.sh >>/tmp/nexlify-license-sync.log 2>&1 || pm2 restart all --update-env
 fi
 
 echo ""
