@@ -34,10 +34,35 @@ cp -f "$TAR" "$DEST"
 
 PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
 
+installer_script_ok() {
+  local f="$1"
+  [ -f "$f" ] || return 1
+  grep -q 'detect_server_address' "$f" 2>/dev/null || return 1
+  ! grep -qE 'FATAL.*domain|--domain is required' "$f" 2>/dev/null
+}
+
+pick_installer_script() {
+  local candidate
+  for candidate in \
+    "$ROOT/marketing-drop-in/public/install/panel.sh" \
+    "$ROOT/scripts/install-linux.sh"; do
+    if installer_script_ok "$candidate"; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 if [ "${SKIP_INSTALL_SCRIPT_PUBLISH:-0}" = "1" ]; then
   echo "Skipping installer script publish (marketing bundle owns /public/install — set SKIP_INSTALL_SCRIPT_PUBLISH=0 to override)"
 else
-cp -f "$ROOT/scripts/install-linux.sh" "$INSTALL_DEST/panel.sh"
+INSTALLER_SRC="$(pick_installer_script || true)"
+if [ -z "$INSTALLER_SRC" ]; then
+  echo "WARN: No installer with auto-detect IP found — keeping existing $INSTALL_DEST/panel.sh" >&2
+  echo "      Run: bash marketing-drop-in/scripts/vps-fix-installer.sh" >&2
+else
+cp -f "$INSTALLER_SRC" "$INSTALL_DEST/panel.sh"
 cp -f "$ROOT/scripts/fix-panel-auto-update.sh" "$INSTALL_DEST/fix-panel-auto-update.sh"
 cp -f "$ROOT/scripts/fix-panel-restart.sh" "$INSTALL_DEST/fix-panel-restart.sh"
 cp -f "$ROOT/scripts/fix-stream-edge-now.sh" "$INSTALL_DEST/fix-stream-edge-now.sh"
@@ -63,6 +88,8 @@ sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"
   "$INSTALL_DEST/panel.sh" 2>/dev/null || true
 sed -i 's/\r$//' "$INSTALL_DEST"/*.sh "$INSTALL_DEST"/scripts/*.sh 2>/dev/null || true
 chmod +x "$INSTALL_DEST"/*.sh "$INSTALL_DEST"/scripts/*.sh 2>/dev/null || true
+echo "  installer source: $INSTALLER_SRC"
+fi
 fi
 
 echo "Published:"
