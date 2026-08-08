@@ -44,6 +44,11 @@ cp -f "$SCRIPTS/reset-panel-admin.sh" "$INSTALL/scripts/"
 # Version helper (used when installer scripts run from panel repo)
 cp -f "$SCRIPTS/panel-version.sh" "$INSTALL/scripts/"
 
+# VPS repair scripts (no git on server — served from /install/)
+cp -f "$ROOT/marketing-drop-in/scripts/vps-fix-installer.sh" "$INSTALL/"
+cp -f "$ROOT/marketing-drop-in/scripts/vps-patch-panel-installer.sh" "$INSTALL/"
+chmod +x "$INSTALL/vps-emergency-fix.sh" "$INSTALL/vps-fix-installer.sh" "$INSTALL/vps-patch-panel-installer.sh" 2>/dev/null || true
+
 PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
 sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
   "$INSTALL/apply-panel-fast-update.sh" "$INSTALL/panel.sh" 2>/dev/null || true
