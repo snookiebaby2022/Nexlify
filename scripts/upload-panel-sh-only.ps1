@@ -12,9 +12,25 @@ if (-not (Test-Path $panelSh)) {
 
 $config = Join-Path $Root "windows\deploy.config.json"
 if (-not (Test-Path $config)) {
-    Write-Host "No deploy.config.json — upload manually:" -ForegroundColor Yellow
-    Write-Host "  FROM: $panelSh"
-    Write-Host "  TO:   /var/www/nexlify/public/install/panel.sh"
+    Write-Host ""
+    Write-Host "=== No deploy.config.json — use one of these ===" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Option A — WinSCP (manual, no config file):" -ForegroundColor Cyan
+    Write-Host "  1. Open WinSCP, connect to 85.17.162.54 as root"
+    Write-Host "  2. Drag this file to the right path:"
+    Write-Host "     FROM: $panelSh"
+    Write-Host "     TO:   /var/www/nexlify/public/install/panel.sh"
+    Write-Host ""
+    Write-Host "Option B — SCP from PowerShell (if OpenSSH installed):" -ForegroundColor Cyan
+    Write-Host "  scp `"$panelSh`" root@85.17.162.54:/var/www/nexlify/public/install/panel.sh"
+    Write-Host ""
+    Write-Host "Option C — Create config from example:" -ForegroundColor Cyan
+    Write-Host "  copy windows\deploy.config.example.json windows\deploy.config.json"
+    Write-Host "  Edit host + password (or privateKey), then re-run this script."
+    Write-Host ""
+    Write-Host "Option D — Patch on VPS without upload (SSH as root on 85.17.162.54):" -ForegroundColor Cyan
+    Write-Host "  bash /var/www/nexlify/scripts/vps-patch-panel-installer.sh"
+    Write-Host "  (after full deploy) OR paste script from repo: marketing-drop-in/scripts/vps-patch-panel-installer.sh"
     exit 0
 }
 

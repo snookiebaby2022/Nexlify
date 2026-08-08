@@ -82,9 +82,15 @@ if 'detect_server_address' in text:
     print("Already patched")
     sys.exit(0)
 
-# Normalize legacy die/FATAL domain guard
+# Normalize legacy die/FATAL domain guard (multiple formats)
 text = re.sub(
-    r'\[ -n "\$DOMAIN" \] \|\| (?:die|echo "FATAL:).*?(?:\n|$)',
+    r'\[ -n "\$DOMAIN" \] \|\| (?:die|echo "FATAL:| \{ echo "FATAL:)[^\n]*\n',
+    '',
+    text,
+    flags=re.MULTILINE,
+)
+text = re.sub(
+    r'^\s*echo "FATAL: --domain is required[^\n]*\n\s*exit 1\s*\n',
     '',
     text,
     flags=re.MULTILINE,
