@@ -174,7 +174,7 @@ if [ -f "$MARKETING/scripts/seed-test-accounts.ts" ]; then
 fi
 
 # --- 11) Install helpers + auto post-deploy (restore SMTP, publish, audit) ---
-for s in nexlify-full-platform-audit.sh vps-do-everything.sh restore-marketing-secrets.sh; do
+for s in nexlify-full-platform-audit.sh vps-do-everything.sh restore-marketing-secrets.sh vps-fix-installer.sh; do
   if [ -f "$MARKETING/scripts/$s" ]; then
     cp -f "$MARKETING/scripts/$s" "/root/$s"
     chmod +x "/root/$s"
