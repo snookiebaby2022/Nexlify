@@ -44,6 +44,27 @@ const TEST_ACCOUNTS: {
   },
 ];
 
+/** Remove orders/licenses for re-seeding without FK violations (ActivationCode, AddonEntitlement). */
+async function resetUserCommerce(
+  prisma: Awaited<typeof import("../src/lib/prisma")>["prisma"],
+  userId: string
+) {
+  const licenses = await prisma.license.findMany({
+    where: { userId },
+    select: { id: true },
+  });
+  const licenseIds = licenses.map((l) => l.id);
+  if (licenseIds.length) {
+    await prisma.activationCode.deleteMany({ where: { licenseId: { in: licenseIds } } });
+    await prisma.addonEntitlement.updateMany({
+      where: { panelLicenseId: { in: licenseIds } },
+      data: { panelLicenseId: null },
+    });
+  }
+  await prisma.license.deleteMany({ where: { userId } });
+  await prisma.order.deleteMany({ where: { userId } });
+}
+
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const { issueTrialLicense, resetTrialEligibility } = await import("../src/lib/trial");
@@ -85,8 +106,7 @@ async function main() {
       const plan = await prisma.plan.findFirst({ where: { slug: "nexlify", active: true } });
       if (!plan) throw new Error("Nexlify plan missing — run scripts/sync-plans-vps.ts first");
 
-      await prisma.license.deleteMany({ where: { userId: user.id } });
-      await prisma.order.deleteMany({ where: { userId: user.id } });
+      await resetUserCommerce(prisma, user.id);
 
       const order = await prisma.order.create({
         data: {
@@ -107,8 +127,7 @@ async function main() {
       licenseKey = license.key;
       licenseNote = `Nexlify License · ${plan.durationDays} days · ACTIVE`;
     } else if (spec.kind === "empty") {
-      await prisma.license.deleteMany({ where: { userId: user.id } });
-      await prisma.order.deleteMany({ where: { userId: user.id } });
+      await resetUserCommerce(prisma, user.id);
       licenseNote = "No license — use for /register?trial=1 signup flow test";
     } else if (spec.kind === "retrial") {
       await resetTrialEligibility(user.id);

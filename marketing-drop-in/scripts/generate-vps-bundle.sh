@@ -172,6 +172,15 @@ if [ -f "$MARKETING/scripts/seed-test-accounts.ts" ]; then
   source "$MARKETING/scripts/load-marketing-env.sh"
   npx tsx scripts/seed-test-accounts.ts 2>&1 || echo "   Test account seed failed (check license key + DB)"
 fi
+
+# --- 11) Install full platform audit helper on /root ---
+if [ -f "$MARKETING/scripts/nexlify-full-platform-audit.sh" ]; then
+  cp "$MARKETING/scripts/nexlify-full-platform-audit.sh" /root/nexlify-full-platform-audit.sh
+  chmod +x /root/nexlify-full-platform-audit.sh
+  echo ""
+  echo "Full audit: bash /root/nexlify-full-platform-audit.sh"
+  echo "         or: bash $MARKETING/scripts/nexlify-full-platform-audit.sh"
+fi
 FOOTER
 
 chmod +x "$OUT"
