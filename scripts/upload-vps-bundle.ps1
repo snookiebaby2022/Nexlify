@@ -27,9 +27,9 @@ if ($Full) {
 
 if (-not (Test-Path $bundle)) {
     if ($Full) {
-        throw "Bundle missing: $bundle — run: bash marketing-drop-in/scripts/generate-vps-bundle.sh"
+        throw "Bundle missing: $bundle - run: bash marketing-drop-in/scripts/generate-vps-bundle.sh"
     }
-    throw "Hotfix script missing: $bundle — git pull origin main"
+    throw "Hotfix script missing: $bundle - git pull origin main"
 }
 
 $config = Join-Path $Root "windows\deploy.config.json"
