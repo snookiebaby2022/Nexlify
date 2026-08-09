@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Suspense } from "react";
 import { BreadcrumbJsonLd } from "@/components/BreadcrumbJsonLd";
 import { LegacyPanelPricingCompare } from "@/components/LegacyPanelPricingCompare";
