@@ -85,7 +85,7 @@ export function Features() {
     <section className="relative overflow-hidden border-y border-violet-500/10 bg-[#080714]">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(139,92,246,0.06),transparent)]" />
 
-      <div className="relative mx-auto max-w-6xl px-4 py-20 md:py-28">
+      <div className="relative mx-auto max-w-6xl px-4 pt-8 pb-16 md:pt-10 md:pb-20">
         <div className="max-w-2xl">
           <p className="text-sm font-semibold uppercase tracking-widest text-orange-400">
             Why Nexlify
@@ -98,7 +98,7 @@ export function Features() {
           </p>
         </div>
 
-        <div className="mt-14 grid gap-6 lg:grid-cols-2">
+        <div className="mt-6 grid gap-6 lg:grid-cols-2 lg:mt-8">
           {heroFeature && (
             <article className="group glass relative overflow-hidden rounded-2xl p-8 transition-all hover:border-violet-500/20 lg:row-span-2">
               <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-violet-500/8 blur-3xl" />
@@ -154,7 +154,7 @@ export function Features() {
           </div>
         </div>
 
-        <div className="mt-10 text-center">
+        <div className="mt-8 text-center">
           <Link
             href="/features"
             className="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 px-6 py-3 text-sm font-medium text-violet-200 transition-all hover:bg-violet-500/15 hover:border-violet-400/30"

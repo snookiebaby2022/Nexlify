@@ -34,7 +34,7 @@ export const FULL_PANEL_FEATURES = [
   "No subscriber line cap in panel software",
 ] as const;
 
-export const PRICING_HONESTY_NOTE = `One plan at £${PAID_PRICE_GBP_CENTS / 100}/month after ${FREE_PERIOD_END_LABEL} — everything included. Support via tickets and Telegram.`;
+export const PRICING_HONESTY_NOTE = `Completely free until ${FREE_PERIOD_END_LABEL}, then £${PAID_PRICE_GBP_CENTS / 100}/month — everything included. Support via tickets and Telegram.`;
 
 export function isTrialPlan(plan: PlanView): boolean {
   return (
@@ -69,7 +69,9 @@ function planLimitsFor(plan: PlanView): string[] {
     "All media & music plugins included",
     "Every Nexlify panel feature included",
     "WHMCS IPTV module included",
-    `£${PAID_PRICE_GBP_CENTS / 100}/month after free period`,
+    isFreePeriod()
+      ? `Free until ${FREE_PERIOD_END_LABEL}, then £${PAID_PRICE_GBP_CENTS / 100}/month`
+      : `£${PAID_PRICE_GBP_CENTS / 100}/month`,
   ];
 }
 

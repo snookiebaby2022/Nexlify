@@ -48,7 +48,7 @@ const CASE_STUDIES = [
 
 export function SocialProofSection() {
   return (
-    <section className="relative overflow-hidden border-y border-violet-500/10 bg-[#080714] py-20 md:py-28">
+    <section className="relative overflow-hidden border-y border-violet-500/10 bg-[#080714] py-16 md:py-20">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_50%_50%_at_50%_0%,rgba(139,92,246,0.04),transparent)]" />
 
       <div className="relative mx-auto max-w-6xl px-4">

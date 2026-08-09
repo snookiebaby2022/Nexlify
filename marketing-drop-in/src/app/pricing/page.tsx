@@ -6,6 +6,7 @@ import { PricingComparisonTable } from "@/components/PricingComparisonTable";
 import { PageCta } from "@/components/PageCta";
 import { PricingJsonLd } from "@/components/PricingJsonLd";
 import { IncludedFeaturesSection } from "@/components/IncludedFeaturesSection";
+import { PluginPricingSection } from "@/components/PluginPricingSection";
 import { PricingCheckoutLauncher } from "@/components/PricingCheckoutLauncher";
 import { PricingSection } from "@/components/PricingSection";
 import { TrialCtaButton } from "@/components/TrialCtaButton";
@@ -110,29 +111,16 @@ export default async function PricingPage() {
         </ul>
       </section>
 
-      <section className="mx-auto max-w-4xl px-4 pb-8" id="license-tiers">
+      <section className="mx-auto max-w-4xl px-4 pb-6 scroll-mt-24" id="license-tiers">
         <h2 className="font-display text-center text-2xl font-bold text-white">
           Simple pricing for service providers
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-center text-sm leading-relaxed text-[var(--muted)]">
           One license includes unlimited stream servers, all plugins, and the full Nexlify panel.
-          Free until <strong className="text-amber-300">{FREE_PERIOD_END_LABEL}</strong>, then{" "}
+          Completely free until <strong className="text-amber-300">{FREE_PERIOD_END_LABEL}</strong>, then{" "}
           <strong className="text-amber-300">£50/month</strong>.
         </p>
-        <h3 className="mt-8 text-center text-lg font-semibold text-violet-300">
-          Currency and checkout options
-        </h3>
-        <p className="mx-auto mt-3 max-w-2xl text-center text-sm text-[var(--muted)]">
-          Operators worldwide use the same Nexlify IPTV management software — choose GBP or USD at
-          checkout. Questions?{" "}
-          <Link href="/support" className="text-violet-400 hover:text-violet-300 underline">
-            Open a support ticket
-          </Link>
-          .
-        </p>
       </section>
-
-      <LegacyPanelPricingCompare />
 
       <Suspense fallback={null}>
         <PricingCheckoutLauncher
@@ -141,14 +129,19 @@ export default async function PricingPage() {
         />
       </Suspense>
 
-      <PricingComparisonTable />
-
       <PricingSection
         plans={pricingPlans}
         loggedIn={Boolean(user)}
         stripeEnabled={isStripeConfigured()}
         whmcsCartBaseUrl={process.env.NEXT_PUBLIC_WHMCS_URL ?? null}
       />
+
+      <PluginPricingSection whmcsCartBaseUrl={process.env.NEXT_PUBLIC_WHMCS_URL ?? null} />
+
+      <LegacyPanelPricingCompare />
+
+      <PricingComparisonTable />
+
       <IncludedFeaturesSection />
     </div>
   );

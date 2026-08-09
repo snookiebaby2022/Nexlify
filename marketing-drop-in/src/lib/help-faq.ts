@@ -182,8 +182,8 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "plugins",
         question: "What plugins and addons are available?",
         answer:
-          "Optional addons include Plex, Emby, Jellyfin, Spotify, Apple Music, Deezer, YouTube Music, statistics, and proxy integrations. Purchase through WHMCS; the panel checks entitlements via the addon API.",
-        links: [{ label: "Plugin pricing", href: "/pricing#plugins" }],
+          "All media and music plugins are included free with every Nexlify License — Plex, Emby, Jellyfin, Spotify, Apple Music, Deezer, YouTube Music, and more. No separate addon purchase required during the free period until September 1, 2026.",
+        links: [{ label: "Plugins included", href: "/pricing#plugins" }],
       },
       {
         id: "resellers",

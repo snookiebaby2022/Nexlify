@@ -172,8 +172,13 @@ export function PricingSection({
                 </p>
                 <p className="font-display mt-6 text-3xl font-bold text-white sm:text-4xl">
                   {priceDisplay}
-                  {!marketing.isTrial && plan.priceCents > 0 && (
+                  {!marketing.isTrial && plan.priceCents > 0 && !isFreePeriod() && (
                     <span className="text-base font-normal text-[var(--muted)]">/mo</span>
+                  )}
+                  {!marketing.isTrial && isFreePeriod() && plan.priceCents > 0 && (
+                    <span className="mt-1 block text-base font-normal text-amber-300/90">
+                      until {FREE_PERIOD_END_LABEL}
+                    </span>
                   )}
                   {marketing.isTrial && (
                     <span className="text-base font-normal text-emerald-400/90"> · 7 days</span>
