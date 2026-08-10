@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.9}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.13}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -106,6 +106,7 @@ bootstrap_patch_scripts() {
   fetch_one "${base}/apply-panel-fast-update.sh?${cache}" "$ROOT/scripts/apply-panel-fast-update.sh"
   fetch_one "${base}/scripts/panel-restart-safe.sh?${cache}" "$ROOT/scripts/panel-restart-safe.sh"
   fetch_one "${base}/scripts/panel-update-recover.sh?${cache}" "$ROOT/scripts/panel-update-recover.sh"
+  fetch_one "${base}/scripts/panel-update-background.sh?${cache}" "$ROOT/scripts/panel-update-background.sh"
   fetch_one "${base}/scripts/has-valid-next-build.sh?${cache}" "$ROOT/scripts/has-valid-next-build.sh"
   normalize_scripts
   # Auto-install tsx if not available (needed for background update worker)

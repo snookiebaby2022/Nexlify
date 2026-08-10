@@ -2,9 +2,45 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.11",
+  "latestVersion": "1.9.13",
 
   "releases": [
+
+    {
+
+      "version": "1.9.13",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Bulletproof update worker: bash launcher, PANEL_REPO_PATH in standalone, remove stale standalone/scripts.",
+
+      "changelog": [
+
+        "Update worker spawned via scripts/panel-update-background.sh (always cd to install root)",
+
+        "prepare-standalone sets PANEL_REPO_PATH to install root in standalone/.env",
+
+        "Removes .next/standalone/scripts on every build (prevents MODULE_NOT_FOUND)",
+
+        "fix-update-worker-now.sh hotfix for stuck panels without UI update",
+
+        "Bootstrap fetches panel-update-background.sh from nexlify.live during sync"
+      ],
+
+      "fixes": [
+
+        "Update worker crashed on startup: Cannot find module '../src/lib/panel-server'",
+
+        "Worker exited with code 127 when PM2 cwd is .next/standalone",
+
+        "Pre-v1.9.11 bundled code used standalone as repo path (package.json copied there)",
+
+        "Customer Admin → Settings → Updates failed immediately before sync could run"
+      ]
+
+    },
 
     {
 

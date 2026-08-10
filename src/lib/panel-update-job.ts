@@ -251,24 +251,26 @@ export async function startBackgroundPanelUpdate(
   };
   await writeUpdateJob(repoPath, initialJob);
 
-  const scriptPath = path.join(repoPath, "scripts", "panel-update-background.ts");
+  const launcherPath = path.join(repoPath, "scripts", "panel-update-background.sh");
+  const tsScriptPath = path.join(repoPath, "scripts", "panel-update-background.ts");
   const errLogPath = path.join(repoPath, ".update-worker-err.log");
 
-  // Try multiple ways to run tsx — some customer VPS have tsx in different locations
   const runCmd =
     process.platform === "linux"
       ? `(command -v setsid >/dev/null 2>&1 && setsid bash -c 'CMD') || bash -c 'CMD'`
       : `bash -c 'CMD'`;
 
-  const tsxCandidates = [
-    `npx tsx ${JSON.stringify(scriptPath)}`,
-    `npx --yes tsx ${JSON.stringify(scriptPath)}`,
-    `node --import tsx ${JSON.stringify(scriptPath)}`,
+  // Prefer bash launcher (cd to real panel root + tsx); fall back to tsx on .ts for older installs.
+  const workerCandidates = [
+    `bash ${JSON.stringify(launcherPath)}`,
+    `npx tsx ${JSON.stringify(tsScriptPath)}`,
+    `npx --yes tsx ${JSON.stringify(tsScriptPath)}`,
+    `node --import tsx ${JSON.stringify(tsScriptPath)}`,
   ];
 
   let spawned = false;
-  for (const tsxCmd of tsxCandidates) {
-    const fullCmd = runCmd.replace("CMD", `${tsxCmd} 2>>${JSON.stringify(errLogPath)}`);
+  for (const workerCmd of workerCandidates) {
+    const fullCmd = runCmd.replace("CMD", `${workerCmd} 2>>${JSON.stringify(errLogPath)}`);
     try {
       const child = spawn("bash", ["-c", fullCmd], {
         cwd: repoPath,
@@ -308,7 +310,7 @@ export async function startBackgroundPanelUpdate(
               status: "failed",
               currentStep: null,
               finishedAt: new Date().toISOString(),
-              message: `Update worker crashed on startup: ${errDetail}. Try running manually: cd ${repoPath} && npx tsx scripts/panel-update-background.ts`,
+              message: `Update worker crashed on startup: ${errDetail}. Try running manually: cd ${repoPath} && bash scripts/panel-update-background.sh`,
             });
           }
         } catch {}

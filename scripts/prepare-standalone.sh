@@ -6,6 +6,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+PANEL_ROOT="$(pwd)"
 
 DIST="${NEXLIFY_DIST_DIR:-.next}"
 
@@ -39,13 +40,16 @@ fi
 # Ensure standalone has live .env (DATABASE_URL, JWT, license keys)
 if [ -f .env ]; then
   cp -f .env "$DIST/standalone/.env"
-  sed -i '/^PANEL_REPO_PATH=/d' "$DIST/standalone/.env" 2>/dev/null || true
 fi
 
-# Remove PANEL_REPO_PATH from standalone .env if Next copied a build-time copy
+# Standalone PM2 cwd must resolve repo path to install root, not .next/standalone
 if [ -f "$DIST/standalone/.env" ]; then
-  sed -i '/^PANEL_REPO_PATH=/d' "$DIST/standalone/.env"
+  sed -i '/^PANEL_REPO_PATH=/d' "$DIST/standalone/.env" 2>/dev/null || true
+  echo "PANEL_REPO_PATH=$PANEL_ROOT" >> "$DIST/standalone/.env"
 fi
+
+# Stale scripts/ in standalone break the update worker (no src/ for module imports)
+rm -rf "$DIST/standalone/scripts" 2>/dev/null || true
 
 # Verify static assets were copied (fail-safe)
 if [ ! -d "$DIST/standalone/.next/static" ]; then
@@ -53,4 +57,4 @@ if [ ! -d "$DIST/standalone/.next/static" ]; then
   exit 1
 fi
 
-echo "prepare-standalone: OK ($DIST/static + public + package.json copied, PANEL_REPO_PATH cleaned)"
+echo "prepare-standalone: OK ($DIST/static + public + package.json copied, PANEL_REPO_PATH=$PANEL_ROOT, standalone/scripts removed)"

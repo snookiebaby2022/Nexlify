@@ -70,10 +70,16 @@ export function resolvePanelRepoPathSync(settingsRepoPath?: string): string {
     }
   }
 
-  if (explicit) return explicit;
   const envPath = process.env.PANEL_REPO_PATH?.trim();
-  if (envPath) return envPath;
+  if (envPath && !isStandaloneBuildDir(envPath) && isValidPanelRoot(envPath)) return envPath;
+
+  if (explicit && !isStandaloneBuildDir(explicit)) return explicit;
+
   const cwd = process.cwd();
-  if (isStandaloneBuildDir(cwd)) return path.join(cwd, "..", "..");
-  return cwd;
+  if (isStandaloneBuildDir(cwd)) {
+    const parent = path.join(cwd, "..", "..");
+    if (isValidPanelRoot(parent)) return parent;
+  }
+  if (isValidPanelRoot(cwd)) return cwd;
+  return envPath || (isStandaloneBuildDir(explicit ?? "") ? path.join(cwd, "..", "..") : cwd);
 }
