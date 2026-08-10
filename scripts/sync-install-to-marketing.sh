@@ -22,6 +22,7 @@ cp -f "$SCRIPTS/panel-update-recover.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/panel-update-background.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/panel-update-background.ts" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/fix-update-worker-now.sh" "$INSTALL/scripts/"
+cp -f "$SCRIPTS/fix-all-customer-updates.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/install-mediamtx-webrtc.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/installer-finalize-ports.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/sync-panel-ports.sh" "$INSTALL/scripts/"
@@ -58,6 +59,7 @@ chmod +x "$INSTALL/vps-emergency-fix.sh" "$INSTALL/vps-fix-installer.sh" "$INSTA
   "$INSTALL/vps-init-panel-git.sh" "$INSTALL/vps-publish-panel-release.sh" "$INSTALL/vps-fix-everything.sh" "$INSTALL/vps-git-auth.sh" 2>/dev/null || true
 
 PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
+cp -f "$ROOT/src/lib/panel-releases.json" "$ROOT/marketing-drop-in/public/panel-releases.json"
 sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
   "$INSTALL/apply-panel-fast-update.sh" "$INSTALL/panel.sh" 2>/dev/null || true
 

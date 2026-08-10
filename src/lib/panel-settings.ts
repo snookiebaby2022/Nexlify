@@ -719,7 +719,8 @@ export async function getSettingGroup(group: SettingGroup): Promise<Record<strin
 }
 
 export async function setSettingGroup(group: SettingGroup, data: Record<string, unknown>) {
-  const merged = { ...DEFAULTS[group], ...data };
+  const current = await getSettingGroup(group);
+  const merged = { ...current, ...data };
   await prisma.panelSetting.upsert({
     where: { key: settingKey(group) },
     create: { key: settingKey(group), value: JSON.stringify(merged) },

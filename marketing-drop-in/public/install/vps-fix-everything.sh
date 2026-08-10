@@ -178,9 +178,13 @@ cd "$SRC"
 npm run sync:releases
 bash scripts/sync-install-to-marketing.sh
 SKIP_INSTALL_SCRIPT_PUBLISH=1 bash scripts/publish-panel-release.sh
-mkdir -p "$MARKETING/public/install"
+mkdir -p "$MARKETING/public/install" "$MARKETING/public/downloads"
 rsync -a "$SRC/marketing-drop-in/public/install/" "$MARKETING/public/install/"
+cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
+cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/public/panel-releases.json"
+cp -f "$SRC/src/lib/panel-releases.json" "$MARKETING/public/panel-releases.json"
 sed -i 's/\r$//' "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
+chmod -R a+rX "$MARKETING/public/downloads" "$MARKETING/public/install" 2>/dev/null || true
 chmod +x "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
 for required in \
   "$MARKETING/public/downloads/nexlify-panel.tar.gz" \
@@ -195,7 +199,7 @@ done
 cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
 cd "$MARKETING"
 npm run build
-ensure_marketing_pm2 "$MARKETING_PORT"
+ensure_marketing_pm2 "$MARKETING_PORT" || true
 
 echo ""
 echo "=== 6) Health checks ==="
@@ -203,9 +207,14 @@ PANEL_PORT="${PORT:-${PANEL_PORT:-13000}}"
 fail=0
 curl -fsS "http://127.0.0.1:${PANEL_PORT}/api/health" >/dev/null && echo "OK  panel /api/health" || { echo "FAIL panel /api/health"; fail=1; }
 curl -fsS "http://127.0.0.1:${PANEL_PORT}/api/panel/version" >/dev/null && echo "OK  panel /api/panel/version" || { echo "FAIL panel /api/panel/version"; fail=1; }
-curl -fsS "http://127.0.0.1:${MARKETING_PORT}/api/panel-releases" 2>/dev/null | grep -q latestVersion && \
-  echo "OK  release feed: $(curl -fsS http://127.0.0.1:${MARKETING_PORT}/api/panel-releases 2>/dev/null | grep -o '"latestVersion":"[^"]*"')" || \
-  { echo "FAIL release feed (nexlify-web :${MARKETING_PORT})"; fail=1; }
+if curl_nginx /api/panel-releases 2>/dev/null | grep -q latestVersion; then
+  echo "OK  release feed (nginx): $(curl_nginx /api/panel-releases 2>/dev/null | grep -o '"latestVersion":"[^"]*"')"
+elif curl -fsS "http://127.0.0.1:${MARKETING_PORT}/api/panel-releases" 2>/dev/null | grep -q latestVersion; then
+  echo "OK  release feed (nexlify-web): $(curl -fsS http://127.0.0.1:${MARKETING_PORT}/api/panel-releases 2>/dev/null | grep -o '"latestVersion":"[^"]*"')"
+else
+  echo "FAIL release feed (nginx + nexlify-web :${MARKETING_PORT})"
+  fail=1
+fi
 curl_nginx /downloads/nexlify-panel.tar.gz | head -c 4 | grep -q . && \
   echo "OK  tarball download (nginx)" || \
   { echo "FAIL tarball download (nginx)"; fail=1; }

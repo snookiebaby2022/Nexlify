@@ -28,9 +28,11 @@ TAR="$STAGE/dist/nexlify-panel.tar.gz"
 
 DEST="${PANEL_PUBLISH_DEST:-/var/www/nexlify/public/downloads/nexlify-panel.tar.gz}"
 INSTALL_DEST="${PANEL_INSTALL_DEST:-/var/www/nexlify/public/install}"
+RELEASES_JSON="${PANEL_RELEASES_PUBLIC:-/var/www/nexlify/public/panel-releases.json}"
 
-mkdir -p "$(dirname "$DEST")" "$INSTALL_DEST" "$INSTALL_DEST/scripts"
+mkdir -p "$(dirname "$DEST")" "$INSTALL_DEST" "$INSTALL_DEST/scripts" "$(dirname "$RELEASES_JSON")"
 cp -f "$TAR" "$DEST"
+cp -f "$ROOT/src/lib/panel-releases.json" "$RELEASES_JSON"
 
 PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
 

@@ -334,12 +334,15 @@ export default function PanelUpdatesPage() {
 
   async function toggleAutoDownload(checked: boolean) {
     setAutoDownload(checked);
+    const current = await fetch("/api/admin/settings?group=server")
+      .then((r) => r.json())
+      .catch(() => ({ settings: {} }));
     await fetch("/api/admin/settings", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         group: "server",
-        settings: { panelUpdateAutoDownload: checked },
+        settings: { ...(current.settings ?? {}), panelUpdateAutoDownload: checked },
       }),
     });
   }

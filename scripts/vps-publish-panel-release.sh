@@ -104,9 +104,11 @@ SKIP_INSTALL_SCRIPT_PUBLISH=1 bash scripts/publish-panel-release.sh
 
 echo "-> Rebuild marketing site (panel-releases API)"
 cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
+cp -f "$SRC/src/lib/panel-releases.json" "$MARKETING/public/panel-releases.json"
 cd "$MARKETING"
 npm run build
-pm2 restart nexlify-web --update-env
+pm2 delete nexlify-web 2>/dev/null || true
+pm2 start npm --name nexlify-web --cwd "$MARKETING" -- start -- -H 127.0.0.1 -p 13001
 pm2 save 2>/dev/null || true
 
 echo ""

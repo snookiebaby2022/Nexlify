@@ -25,7 +25,11 @@
 
         "Update failed with: Cannot access 'toVersion' before initialization",
 
-        "Background update worker crashed on v1.9.7–v1.9.13 when a step failed before version re-read"
+        "Background update worker crashed on v1.9.7–v1.9.13 when a step failed before version re-read",
+
+        "Settings PATCH no longer wipes server settings when saving a single field",
+
+        "Release feed and tarball served from nginx disk when nexlify-web is down"
       ]
 
     },
