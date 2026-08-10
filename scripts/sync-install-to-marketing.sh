@@ -47,11 +47,12 @@ cp -f "$SCRIPTS/panel-version.sh" "$INSTALL/scripts/"
 # VPS repair scripts (no git on server — served from /install/)
 cp -f "$SCRIPTS/vps-init-panel-git.sh" "$INSTALL/"
 cp -f "$SCRIPTS/vps-publish-panel-release.sh" "$INSTALL/"
+cp -f "$SCRIPTS/vps-fix-everything.sh" "$INSTALL/"
 cp -f "$SCRIPTS/vps-git-auth.sh" "$INSTALL/"
 cp -f "$ROOT/marketing-drop-in/scripts/vps-fix-installer.sh" "$INSTALL/"
 cp -f "$ROOT/marketing-drop-in/scripts/vps-patch-panel-installer.sh" "$INSTALL/"
 chmod +x "$INSTALL/vps-emergency-fix.sh" "$INSTALL/vps-fix-installer.sh" "$INSTALL/vps-patch-panel-installer.sh" \
-  "$INSTALL/vps-init-panel-git.sh" "$INSTALL/vps-publish-panel-release.sh" "$INSTALL/vps-git-auth.sh" 2>/dev/null || true
+  "$INSTALL/vps-init-panel-git.sh" "$INSTALL/vps-publish-panel-release.sh" "$INSTALL/vps-fix-everything.sh" "$INSTALL/vps-git-auth.sh" 2>/dev/null || true
 
 PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
 sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
