@@ -35,7 +35,9 @@
 
         "Panel down on port 80 after failed rebuild (HTTP 000)",
 
-        "404 fetching vps-repair-standalone.sh from vendor install scripts"
+        "404 fetching vps-repair-standalone.sh from vendor install scripts",
+
+        "vps-fix-everything false FAIL on /api/panel/version (checked marketing :13001 not panel :13000)"
       ]
 
     },
