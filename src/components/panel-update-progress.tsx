@@ -2,15 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import type { PanelUpdateJob } from "@/lib/panel-update-job";
+import { usePanelUpdateJob } from "@/hooks/use-panel-update-job";
 import { STEP_DURATION_HINTS, formatUpdateElapsed } from "@/lib/panel-update-ui";
 
-type JobPayload = { job: PanelUpdateJob | null };
-
 export function PanelUpdateProgress() {
-  const [job, setJob] = useState<PanelUpdateJob | null>(null);
+  const { job, updateRunning } = usePanelUpdateJob();
   const [dismissed, setDismissed] = useState(false);
-  const [, tick] = useState(0);
 
   const jobKey = job
     ? `${job.status}:${job.finishedAt ?? job.startedAt ?? ""}:${job.message ?? ""}`
@@ -36,31 +33,6 @@ export function PanelUpdateProgress() {
     },
     [jobKey]
   );
-
-  const poll = useCallback(() => {
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 6000);
-    fetch("/api/admin/panel-update?light=1", { signal: controller.signal })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: JobPayload | null) => {
-        if (d?.job) setJob(d.job);
-        else setJob(null);
-      })
-      .catch(() => {})
-      .finally(() => window.clearTimeout(timer));
-  }, []);
-
-  useEffect(() => {
-    poll();
-    const id = setInterval(poll, 2000);
-    return () => clearInterval(id);
-  }, [poll]);
-
-  useEffect(() => {
-    if (!job || job.status !== "running") return;
-    const id = setInterval(() => tick((n) => n + 1), 1000);
-    return () => clearInterval(id);
-  }, [job?.status, job?.startedAt]);
 
   useEffect(() => {
     if (!job) return;

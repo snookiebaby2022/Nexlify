@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PanelUpdateConfirmModal } from "@/components/panel-update-confirm-modal";
+import { usePanelUpdateJob } from "@/hooks/use-panel-update-job";
 import type { NexlifyRelease } from "@/lib/panel-releases-feed";
 import { isVersionNewer } from "@/lib/panel-releases-feed";
 import type { PanelUpdateJob } from "@/lib/panel-update-job";
@@ -174,6 +175,7 @@ export default function PanelUpdatesPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [autoDownload, setAutoDownload] = useState(false);
   const autoStartedRef = useRef(false);
+  const { job: liveJob, updateRunning: liveUpdateRunning, refresh: refreshJob } = usePanelUpdateJob();
 
   const load = useCallback((opts?: { silent?: boolean }) => {
     if (!opts?.silent) {
@@ -207,8 +209,6 @@ export default function PanelUpdatesPage() {
             prev
               ? {
                   ...prev,
-                  job: d.job ?? prev.job,
-                  updateRunning: Boolean(d.updateRunning || d.job?.status === "running"),
                   version: { ...prev.version, installedVersion: d.version.installedVersion },
                 }
               : (d as PanelUpdatePayload)
@@ -249,13 +249,13 @@ export default function PanelUpdatesPage() {
   }, [load]);
 
   useEffect(() => {
-    if (!data?.updateRunning) return;
-    const id = setInterval(() => load({ silent: true }), 2500);
+    if (!liveUpdateRunning) return;
+    const id = setInterval(() => load({ silent: true }), 8000);
     return () => clearInterval(id);
-  }, [data?.updateRunning, load]);
+  }, [liveUpdateRunning, load]);
 
   useEffect(() => {
-    const running = Boolean(data?.updateRunning || data?.job?.status === "running");
+    const running = liveUpdateRunning;
     if (!data || loading || running || !autoDownload || !data.canAutoUpdate) return;
     const installed = data.version.installedVersion;
     const latest = data.releasesFeed?.latestVersion ?? installed;
@@ -294,25 +294,7 @@ export default function PanelUpdatesPage() {
       return;
     }
     setMsg("Update started in the background. You can keep using the panel — watch the progress bar at the bottom.");
-    setData((prev) =>
-      prev
-        ? {
-            ...prev,
-            updateRunning: true,
-            job: j.job ?? {
-              status: "running",
-              progress: 2,
-              currentStep: "Starting update…",
-              steps: [],
-              startedAt: new Date().toISOString(),
-              finishedAt: null,
-              message: null,
-              fromVersion: prev.version.installedVersion,
-              toVersion: null,
-            },
-          }
-        : prev
-    );
+    refreshJob();
     load({ silent: true });
   }
 
@@ -377,7 +359,8 @@ export default function PanelUpdatesPage() {
   const releases = data.releasesFeed?.releases ?? [];
   const showBanner =
     data.version.updateAvailable && isVersionNewer(latest, installed);
-  const jobRunning = Boolean(data.updateRunning || data.job?.status === "running");
+  const jobRunning = liveUpdateRunning;
+  const progressJob = liveJob?.status === "running" ? liveJob : null;
 
   return (
     <div className="space-y-6 pb-8 max-w-5xl">
@@ -439,49 +422,48 @@ export default function PanelUpdatesPage() {
         </div>
       )}
 
-      {jobRunning && data.job && (
+      {jobRunning && progressJob && (
         <div
           className="rounded-lg border px-4 py-3 space-y-2"
           style={{ borderColor: "rgba(56, 189, 248, 0.35)", background: "rgba(14, 165, 233, 0.08)" }}
         >
           <div className="flex items-center justify-between text-sm gap-3">
-            <span style={{ color: "var(--fg)" }}>{data.job.currentStep ?? "Updating…"}</span>
+            <span style={{ color: "var(--fg)" }}>{progressJob.currentStep ?? "Updating…"}</span>
             <span className="font-mono text-xs shrink-0" style={{ color: "var(--muted)" }}>
-              {formatUpdateElapsed(data.job.startedAt) && `${formatUpdateElapsed(data.job.startedAt)} · `}
-              {data.job.progress}%
+              {formatUpdateElapsed(progressJob.startedAt) && `${formatUpdateElapsed(progressJob.startedAt)} · `}
+              {progressJob.progress}%
             </span>
           </div>
           <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
             <div
               className="h-full rounded-full transition-all duration-500"
               style={{
-                width: `${data.job.progress}%`,
+                width: `${progressJob.progress}%`,
                 background: "linear-gradient(90deg, #22c55e, #38bdf8)",
               }}
             />
           </div>
-          {data.job.stepDetail && (
+          {progressJob.stepDetail && (
             <p className="text-xs" style={{ color: "#7dd3fc" }}>
-              {data.job.stepDetail}
+              {progressJob.stepDetail}
             </p>
           )}
-          {data.job.currentStep && STEP_DURATION_HINTS[data.job.currentStep] && (
+          {progressJob.currentStep && STEP_DURATION_HINTS[progressJob.currentStep] && (
             <p className="text-xs" style={{ color: "var(--muted)" }}>
-              Typical duration: {STEP_DURATION_HINTS[data.job.currentStep]}
+              Typical duration: {STEP_DURATION_HINTS[progressJob.currentStep]}
             </p>
           )}
-          {data.job.steps.filter((s) => s.status === "done").length > 0 && (
+          {progressJob.steps.filter((s) => s.status === "done").length > 0 && (
             <p className="text-xs" style={{ color: "var(--muted)" }}>
               Completed:{" "}
-              {data.job.steps
+              {progressJob.steps
                 .filter((s) => s.status === "done")
                 .map((s) => s.name)
                 .join(" → ")}
             </p>
           )}
           <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Running in the background — full updates usually take 3–6 minutes. The build step shows
-            live sub-progress (compiling, generating pages, etc.).
+            Synced with the progress bar at the bottom of the screen. Full updates usually take 3–6 minutes.
           </p>
         </div>
       )}
