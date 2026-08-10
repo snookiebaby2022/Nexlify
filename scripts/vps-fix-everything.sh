@@ -22,6 +22,50 @@ BRANCH="${NEXLIFY_GIT_BRANCH:-main}"
 PANEL_PORT="${PANEL_PORT:-13000}"
 MARKETING_PORT="${MARKETING_PORT:-13001}"
 
+ensure_marketing_pm2() {
+  local port="$1"
+  echo "-> Ensuring nexlify-web on 127.0.0.1:${port} (cwd: $MARKETING)"
+  cd "$MARKETING"
+  touch .env
+  sed -i 's/\r$//' .env 2>/dev/null || true
+  if grep -q '^PORT=' .env 2>/dev/null; then
+    sed -i "s|^PORT=.*|PORT=${port}|" .env
+  else
+    echo "PORT=${port}" >> .env
+  fi
+  if grep -q '^HOSTNAME=' .env 2>/dev/null; then
+    sed -i 's|^HOSTNAME=.*|HOSTNAME=127.0.0.1|' .env
+  else
+    echo "HOSTNAME=127.0.0.1" >> .env
+  fi
+  if [ -f "$PANEL/scripts/ensure-marketing-env.sh" ]; then
+    bash "$PANEL/scripts/ensure-marketing-env.sh" "$MARKETING" 2>/dev/null || true
+  fi
+  if [ ! -d node_modules/next ]; then
+    echo "-> Marketing npm install ..."
+    npm install --no-audit --no-fund --loglevel=error
+  fi
+  pm2 delete nexlify-web 2>/dev/null || true
+  pm2 start npm --name nexlify-web --cwd "$MARKETING" -- start -- -H 127.0.0.1 -p "$port"
+  pm2 save 2>/dev/null || true
+  echo "-> Waiting for nexlify-web on :${port} ..."
+  for _ in $(seq 1 45); do
+    if ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "ERROR: nexlify-web not listening on :${port}" >&2
+  pm2 logs nexlify-web --lines 30 --nostream 2>/dev/null || true
+  exit 1
+}
+
+curl_nginx() {
+  local path="$1"
+  curl -fsSk "https://127.0.0.1${path}" -H "Host: nexlify.live" 2>/dev/null \
+    || curl -fsS "http://127.0.0.1${path}" -H "Host: nexlify.live" 2>/dev/null
+}
+
 resolve_nexlify_git_url() {
   local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
   if [ -n "$token" ]; then
@@ -151,8 +195,7 @@ done
 cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
 cd "$MARKETING"
 npm run build
-pm2 restart nexlify-web --update-env 2>/dev/null || true
-pm2 save 2>/dev/null || true
+ensure_marketing_pm2 "$MARKETING_PORT"
 
 echo ""
 echo "=== 6) Health checks ==="
@@ -160,17 +203,21 @@ PANEL_PORT="${PORT:-${PANEL_PORT:-13000}}"
 fail=0
 curl -fsS "http://127.0.0.1:${PANEL_PORT}/api/health" >/dev/null && echo "OK  panel /api/health" || { echo "FAIL panel /api/health"; fail=1; }
 curl -fsS "http://127.0.0.1:${PANEL_PORT}/api/panel/version" >/dev/null && echo "OK  panel /api/panel/version" || { echo "FAIL panel /api/panel/version"; fail=1; }
-curl -fsS "http://127.0.0.1:${MARKETING_PORT}/api/panel-releases" | grep -q latestVersion && \
-  echo "OK  release feed: $(curl -fsS http://127.0.0.1:${MARKETING_PORT}/api/panel-releases | grep -o '"latestVersion":"[^"]*"')" || \
-  { echo "FAIL release feed"; fail=1; }
-curl -fsSI "http://127.0.0.1:${MARKETING_PORT}/downloads/nexlify-panel.tar.gz" 2>/dev/null | head -1 | grep -q 200 && \
-  echo "OK  tarball download" || { echo "FAIL tarball download"; fail=1; }
-curl -fsS "http://127.0.0.1:${MARKETING_PORT}/install/apply-panel-fast-update.sh" 2>/dev/null | grep -q apply-panel-fast-update && \
-  echo "OK  apply-panel-fast-update.sh" || { echo "FAIL apply-panel-fast-update.sh"; fail=1; }
-curl -fsS "http://127.0.0.1:${MARKETING_PORT}/install/scripts/fix-update-worker-now.sh" 2>/dev/null | grep -q fix-update-worker-now && \
-  echo "OK  install hotfix script" || { echo "FAIL install hotfix script"; fail=1; }
-curl -fsS "http://127.0.0.1:${MARKETING_PORT}/install/scripts/panel-update-background.sh" 2>/dev/null | grep -q panel-update-background && \
-  echo "OK  update worker launcher" || { echo "FAIL update worker launcher"; fail=1; }
+curl -fsS "http://127.0.0.1:${MARKETING_PORT}/api/panel-releases" 2>/dev/null | grep -q latestVersion && \
+  echo "OK  release feed: $(curl -fsS http://127.0.0.1:${MARKETING_PORT}/api/panel-releases 2>/dev/null | grep -o '"latestVersion":"[^"]*"')" || \
+  { echo "FAIL release feed (nexlify-web :${MARKETING_PORT})"; fail=1; }
+curl_nginx /downloads/nexlify-panel.tar.gz | head -c 4 | grep -q . && \
+  echo "OK  tarball download (nginx)" || \
+  { echo "FAIL tarball download (nginx)"; fail=1; }
+curl_nginx /install/apply-panel-fast-update.sh | grep -q apply-panel-fast-update && \
+  echo "OK  apply-panel-fast-update.sh (nginx)" || \
+  { echo "FAIL apply-panel-fast-update.sh (nginx)"; fail=1; }
+curl_nginx /install/scripts/fix-update-worker-now.sh | grep -q fix-update-worker-now && \
+  echo "OK  install hotfix script (nginx)" || \
+  { echo "FAIL install hotfix script (nginx)"; fail=1; }
+curl_nginx /install/scripts/panel-update-background.sh | grep -q panel-update-background && \
+  echo "OK  update worker launcher (nginx)" || \
+  { echo "FAIL update worker launcher (nginx)"; fail=1; }
 
 echo ""
 if [ "$fail" -eq 0 ]; then
