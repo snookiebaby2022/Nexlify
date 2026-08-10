@@ -5,8 +5,12 @@ on:
     branches: [main]
     paths:
       - "marketing-drop-in/**"
+      - "src/lib/panel-releases.json"
+      - "package.json"
       - "scripts/install-linux.sh"
       - "scripts/sync-install-to-marketing.sh"
+      - "scripts/publish-panel-release.sh"
+      - "scripts/apply-panel-fast-update.sh"
   workflow_dispatch:
 
 jobs:

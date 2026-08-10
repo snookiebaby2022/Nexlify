@@ -2,9 +2,35 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.7",
+  "latestVersion": "1.9.8",
 
   "releases": [
+
+    {
+
+      "version": "1.9.8",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Fix panel crash when uploading large SQL database dumps during migration.",
+
+      "changelog": [
+
+        "Panel migration: large .sql files upload directly to the server (multipart) instead of loading in the browser",
+
+        "Migration tips callout — prefer PostgreSQL (live) for 1-stream; paste/preview limited to 512KB exports"
+      ],
+
+      "fixes": [
+
+        "Client-side Application error when uploading database SQL dumps on Panel migration",
+
+        "Browser OOM from rendering multi-MB SQL in a textarea during import"
+      ]
+
+    },
 
     {
 
