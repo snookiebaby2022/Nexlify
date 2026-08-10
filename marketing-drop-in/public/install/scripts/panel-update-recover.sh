@@ -85,9 +85,13 @@ fi
 echo "Recover: rebuilding panel (no backup available) ..."
 pm2 stop nexlify 2>/dev/null || true
 pm2 delete nexlify 2>/dev/null || true
+if [ -x "$ROOT/scripts/ensure-customer-ip-env.sh" ]; then
+  bash "$ROOT/scripts/ensure-customer-ip-env.sh" || true
+fi
 export NEXT_PRIVATE_WORKER_THREADS=false
 npm run build
 bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
+bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
 restart_panel
 clear_stale_update_job
 echo "Recover: OK (rebuilt)"

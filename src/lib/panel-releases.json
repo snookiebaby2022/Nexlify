@@ -2,9 +2,39 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.18",
+  "latestVersion": "1.9.19",
 
   "releases": [
+
+    {
+
+      "version": "1.9.19",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Emergency fix-panel-down-now.sh for panel down or stuck mid-update.",
+
+      "changelog": [
+
+        "fix-panel-down-now.sh: cancel stuck update, restart in ~30s or rebuild if needed",
+
+        "Disables auto-apply during emergency recovery to stop retry loops",
+
+        "panel-update-recover runs ensure-customer-ip-env before rebuild"
+      ],
+
+      "fixes": [
+
+        "Panel blank/down while npm run build update running at 88%",
+
+        "Stuck update worker prevents PM2 restart",
+
+        "Mid-update crash leaves panel offline until manual recover"
+      ]
+
+    },
 
     {
 
