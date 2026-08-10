@@ -18,6 +18,8 @@ echo "==> Nexlify panel publish (in-app update feed + tarball)"
 command -v git >/dev/null || { echo "ERROR: git not installed — apt install git"; exit 1; }
 command -v node >/dev/null || { echo "ERROR: node not installed"; exit 1; }
 
+WORK_DIR=""
+
 resolve_source() {
   # Prefer live git pull when panel dir is a repo and already on latest semver.
   if [ -d "$PANEL/.git" ] && [ -f "$PANEL/scripts/publish-panel-release.sh" ]; then
@@ -28,18 +30,15 @@ resolve_source() {
   fi
 
   # WinSCP / no-git installs: clone fresh source to a temp dir.
-  local work
-  work="$(mktemp -d /tmp/nexlify-publish-src.XXXXXX)"
-  echo "-> No git in $PANEL — cloning $REPO ($BRANCH) to $work"
-  git clone --depth 1 --branch "$BRANCH" "$REPO" "$work/nexlify"
-  echo "$work/nexlify"
+  WORK_DIR="$(mktemp -d /tmp/nexlify-publish-src.XXXXXX)"
+  echo "-> No git in $PANEL — cloning $REPO ($BRANCH) to $WORK_DIR"
+  git clone --depth 1 --branch "$BRANCH" "$REPO" "$WORK_DIR/nexlify"
+  echo "$WORK_DIR/nexlify"
 }
 
 SRC="$(resolve_source)"
 cleanup() {
-  if [[ "$SRC" == /tmp/nexlify-publish-src.* ]]; then
-    rm -rf "$(dirname "$SRC")"
-  fi
+  [ -n "$WORK_DIR" ] && rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
 
