@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.17}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.18}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -291,6 +291,9 @@ cmd_prisma() {
 }
 
 cmd_build_prep() {
+  if [ -x "$ROOT/scripts/ensure-customer-ip-env.sh" ]; then
+    bash "$ROOT/scripts/ensure-customer-ip-env.sh" || true
+  fi
   local free_gb
   free_gb=$(df -BG . | awk 'NR==2{print $4}' | tr -d 'G')
   if [ -n "$free_gb" ] && [ "$free_gb" -lt 2 ]; then
@@ -364,6 +367,10 @@ cmd_restart() {
   else
     pm2 restart nexlify --update-env 2>/dev/null || pm2 start ecosystem.config.cjs --only nexlify --update-env
     pm2 save 2>/dev/null || true
+  fi
+  if [ -f "$ROOT/.next/standalone/server.js" ]; then
+    bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
+    bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
   fi
   echo "PM2 restart complete."
 

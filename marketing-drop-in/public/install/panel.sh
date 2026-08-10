@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.17' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.18' | sudo bash
 #
 # Server IP/hostname is detected automatically. Then open the login URL, sign in
 # with the admin password shown at the end, and paste your license key under Admin → License.
@@ -17,7 +17,7 @@ if [ -f "$_SCRIPT_DIR/panel-version.sh" ]; then
 else
   _PV="0"
 fi
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.17}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.18}"
 CREDS_ROOT="/root/nexlify"
 DOMAIN=""
 EMAIL=""
@@ -33,7 +33,7 @@ usage() {
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.17' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.18' | sudo bash
 
 Options:
   --ip IP                Override auto-detected server IP or hostname
@@ -46,9 +46,9 @@ Options:
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.17' | sudo bash
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.17' | sudo bash -s -- --license NXLF1-XXXXX
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.17' | sudo bash -s -- --domain panel.example.com --email admin@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.18' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.18' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.18' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 

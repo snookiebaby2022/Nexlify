@@ -2,9 +2,41 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.17",
+  "latestVersion": "1.9.18",
 
   "releases": [
+
+    {
+
+      "version": "1.9.18",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Permanent fix for client-side crash on IP customer panels after update.",
+
+      "changelog": [
+
+        "ensure-customer-ip-env.sh locks PANEL_PRIMARY_DOMAIN + NEXT_PUBLIC_* before every build",
+
+        "fix-customer-panel.sh always rebuilds for IP access and verifies JS chunks serve HTTP 200",
+
+        "fix-panel-ip-login.sh respects DOMAIN env, runs prepare-standalone + chunk verification",
+
+        "apply-panel-fast-update runs IP env lock before build and verify-standalone after restart"
+      ],
+
+      "fixes": [
+
+        "Application error: client-side exception on IP installs (75.119.137.174 and similar)",
+
+        "fix-customer-panel.sh updated panel but left wrong NEXT_PUBLIC URLs baked in build",
+
+        "Post-update standalone JS chunks 404 until IP rebuild + prepare-standalone"
+      ]
+
+    },
 
     {
 

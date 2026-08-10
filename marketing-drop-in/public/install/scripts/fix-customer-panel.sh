@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
-# Nexlify — one-shot customer panel repair (update + IP login + standalone assets).
+# Nexlify — complete customer panel repair (update + IP env + rebuild + verify).
 #
-# Fixes:
-#   - Stuck update / toVersion TDZ crash (v1.9.7–v1.9.13)
-#   - "Application error: client-side exception" on IP installs after update
-#   - Wrong NEXT_PUBLIC_* URLs (rebuilds with correct http://<IP>)
+# Fixes permanently:
+#   - Stuck update / toVersion TDZ crash
+#   - "Application error: client-side exception" on IP installs
+#   - Wrong NEXT_PUBLIC_* baked into build (rebuilds with http://<server-IP>)
+#   - Missing standalone JS/CSS chunks after update
 #
-# Run ON THE CUSTOMER VPS (SSH as root):
+# Run ON THE CUSTOMER VPS as root:
 #   curl -fsSL 'https://nexlify.live/install/fix-customer-panel.sh' | sudo bash
 #
-# If Cloudflare blocks curl, use vendor origin IP:
+# Cloudflare fallback:
 #   curl -fsSL 'http://85.17.162.54/install/fix-customer-panel.sh' -H 'Host: nexlify.live' | sudo bash
-#
-# Override panel path or IP if needed:
-#   PANEL_DIR=/opt/nexlify-panel DOMAIN=1.2.3.4 curl -fsSL '...' | sudo bash
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
@@ -31,7 +29,7 @@ find_panel_dir() {
     return 0
   fi
   for candidate in /opt/nexlify-panel /home/nexlify-panel; do
-    if [ -f "$candidate/package.json" ] && [ -f "$candidate/scripts/fix-panel-ip-login.sh" -o -f "$candidate/src/lib/panel-update.ts" ]; then
+    if [ -f "$candidate/package.json" ]; then
       echo "$candidate"
       return 0
     fi
@@ -42,6 +40,10 @@ find_panel_dir() {
 read_env_val() {
   local key="$1" file="$2"
   grep "^${key}=" "$file" 2>/dev/null | head -1 | cut -d= -f2- | sed -e 's/^["'\'' ]*//' -e 's/["'\'' ]*$//' || true
+}
+
+is_ip_host() {
+  [[ "${1:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
 }
 
 curl_vendor() {
@@ -72,19 +74,19 @@ fetch_script() {
 }
 
 detect_domain() {
-  if [ -n "${DOMAIN:-}" ]; then
+  if [ -n "${DOMAIN:-}" ] && is_ip_host "$DOMAIN"; then
     echo "$DOMAIN"
     return 0
   fi
   local from_env
   from_env="$(read_env_val PANEL_PRIMARY_DOMAIN "$PANEL/.env")"
-  if [[ "$from_env" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  if is_ip_host "$from_env"; then
     echo "$from_env"
     return 0
   fi
   local ip
   ip="$(curl -fsS --max-time 8 https://api.ipify.org 2>/dev/null || curl -fsS --max-time 8 https://ifconfig.me 2>/dev/null || true)"
-  if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  if is_ip_host "$ip"; then
     echo "$ip"
     return 0
   fi
@@ -93,6 +95,37 @@ detect_domain() {
     return 0
   fi
   echo "127.0.0.1"
+}
+
+verify_panel_ui() {
+  local port="$1"
+  local code chunk_code
+  code="$(curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/login" 2>/dev/null || echo 000)"
+  if [ "$code" != "200" ]; then
+    echo "ERROR: /login returned HTTP $code" >&2
+    return 1
+  fi
+  local html
+  html="$(curl -fsS "http://127.0.0.1:${port}/login" 2>/dev/null || true)"
+  local chunk
+  chunk="$(echo "$html" | grep -oE '/_next/static/[^"]+\.js' | head -1 || true)"
+  if [ -z "$chunk" ]; then
+    echo "ERROR: no JS chunk references in login HTML" >&2
+    return 1
+  fi
+  chunk_code="$(curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}${chunk}" 2>/dev/null || echo 000)"
+  if [ "$chunk_code" != "200" ]; then
+    echo "ERROR: JS chunk ${chunk} returned HTTP $chunk_code (client-side crash)" >&2
+    return 1
+  fi
+  local chunks
+  chunks="$(find "$PANEL/.next/standalone/.next/static/chunks" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "${chunks:-0}" -lt 1 ]; then
+    echo "ERROR: standalone has 0 JS chunks" >&2
+    return 1
+  fi
+  echo "   Verify OK: login HTTP 200, chunk HTTP 200, ${chunks} standalone chunks"
+  return 0
 }
 
 PANEL="$(find_panel_dir || true)"
@@ -115,6 +148,7 @@ echo "=========================================="
 echo ""
 echo "==> Fetching latest repair scripts ..."
 for s in \
+  ensure-customer-ip-env.sh \
   fix-panel-ip-login.sh \
   fix-stuck-customer-panel.sh \
   fix-all-customer-updates.sh \
@@ -134,17 +168,25 @@ done
 curl_vendor "${INSTALL_BASE}/apply-panel-fast-update.sh?${CACHE}" "$PANEL/scripts/apply-panel-fast-update.sh" 2>/dev/null && \
   chmod +x "$PANEL/scripts/apply-panel-fast-update.sh" 2>/dev/null || true
 
+# CRITICAL: persist IP in .env BEFORE any build (prevents wrong NEXT_PUBLIC_* URLs)
+echo ""
+echo "==> Step 0: lock IP env before any build ..."
+if [ -f "$PANEL/scripts/ensure-customer-ip-env.sh" ]; then
+  bash "$PANEL/scripts/ensure-customer-ip-env.sh"
+  DOMAIN="$(read_env_val PANEL_PRIMARY_DOMAIN "$PANEL/.env")"
+  export DOMAIN
+fi
+
 INSTALLED="$(bash "$PANEL/scripts/panel-version.sh" 2>/dev/null || node -p "require('$PANEL/package.json').version" 2>/dev/null || echo 0)"
 echo "   Installed version: v${INSTALLED}"
 
-# Step 1: stop update retry loop + patch TDZ if on old version
+echo ""
+echo "==> Step 1: stop update loop + worker hotfix ..."
 if [ -f "$PANEL/scripts/fix-update-worker-now.sh" ]; then
-  echo ""
-  echo "==> Step 1: stop update loop + worker hotfix ..."
   bash "$PANEL/scripts/fix-update-worker-now.sh" || true
 fi
 
-# Step 2: sync from vendor if still on pre-1.9.14 or user forced sync
+# Step 2: sync only when stuck on old broken versions (never skip IP rebuild after)
 NEEDS_SYNC=0
 if [ "${FORCE_SYNC:-0}" = "1" ]; then NEEDS_SYNC=1; fi
 if [ -f "$PANEL/src/lib/panel-update.ts" ] && ! grep -q 'let toVersion = fromVersion' "$PANEL/src/lib/panel-update.ts" 2>/dev/null; then
@@ -156,32 +198,41 @@ esac
 
 if [ "$NEEDS_SYNC" = "1" ] && [ -f "$PANEL/scripts/fix-all-customer-updates.sh" ]; then
   echo ""
-  echo "==> Step 2: sync + build latest panel from vendor ..."
+  echo "==> Step 2: sync old panel from vendor (pre-v1.9.14) ..."
   export PANEL_VENDOR_IP PANEL_VENDOR_HOST
+  bash "$PANEL/scripts/ensure-customer-ip-env.sh" || true
   bash "$PANEL/scripts/fix-all-customer-updates.sh" || echo "WARN: vendor sync failed — continuing with IP rebuild"
 else
   echo ""
-  echo "==> Step 2: skip vendor sync (panel already updated)"
+  echo "==> Step 2: skip vendor sync (already on v${INSTALLED})"
 fi
 
-# Step 3: IP login fix — rebuild with correct NEXT_PUBLIC_* (fixes client-side exception)
+# Step 3: ALWAYS rebuild for IP access — this is what fixes client-side exception
 echo ""
-echo "==> Step 3: rebuild for IP/domain access (DOMAIN=$DOMAIN) ..."
+echo "==> Step 3: rebuild panel for IP access (DOMAIN=$DOMAIN) ..."
 if [ ! -f "$PANEL/scripts/fix-panel-ip-login.sh" ]; then
   echo "ERROR: fix-panel-ip-login.sh missing after fetch" >&2
   exit 1
 fi
+export DOMAIN
 bash "$PANEL/scripts/fix-panel-ip-login.sh"
 
-# Step 4: ensure standalone static assets
 echo ""
-echo "==> Step 4: verify standalone static assets ..."
-if [ -f "$PANEL/scripts/vps-repair-standalone.sh" ]; then
-  bash "$PANEL/scripts/vps-repair-standalone.sh" || true
-fi
+echo "==> Step 4: final standalone asset check ..."
+bash "$PANEL/scripts/vps-repair-standalone.sh"
+
+echo ""
+echo "==> Step 5: verify panel UI ..."
+PORT="$(read_env_val PORT "$PANEL/.env")"
+PORT="${PORT:-80}"
+verify_panel_ui "$PORT"
 
 echo ""
 echo "=========================================="
-echo " DONE — open: http://${DOMAIN}/login"
-echo " Hard-refresh browser (Ctrl+Shift+R) if cached."
+echo " SUCCESS — panel repaired"
+echo " Open: http://${DOMAIN}/login"
+echo " Hard-refresh browser (Ctrl+Shift+R)"
+echo ""
+echo " Future in-panel updates will keep IP env"
+echo " (ensure-customer-ip-env runs before each build)."
 echo "=========================================="

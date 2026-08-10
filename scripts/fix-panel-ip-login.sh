@@ -17,8 +17,24 @@ read_env() {
   grep "^${1}=" .env 2>/dev/null | head -1 | cut -d= -f2- | sed -e 's/^["'\'' ]*//' -e 's/["'\'' ]*$//' || true
 }
 
-DOMAIN="$(read_env PANEL_PRIMARY_DOMAIN)"
+is_ip_host() {
+  [[ "${1:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
+# Respect DOMAIN passed from fix-customer-panel.sh (do not overwrite with stale .env).
+DOMAIN="${DOMAIN:-$(read_env PANEL_PRIMARY_DOMAIN)}"
+if is_ip_host "$DOMAIN"; then
+  set_kv PANEL_PRIMARY_DOMAIN "$DOMAIN"
+fi
 export DOMAIN
+
+if [ -f scripts/ensure-customer-ip-env.sh ]; then
+  bash scripts/ensure-customer-ip-env.sh
+  DOMAIN="$(read_env PANEL_PRIMARY_DOMAIN)"
+  [ -z "$DOMAIN" ] && DOMAIN="${DOMAIN:-$(read_env PANEL_PRIMARY_DOMAIN)}"
+  export DOMAIN
+fi
+
 if [ -f scripts/panel-port-config.sh ]; then
   # shellcheck source=scripts/panel-port-config.sh
   . scripts/panel-port-config.sh
@@ -27,7 +43,10 @@ fi
 echo "==> Panel port mode: $([ "${NEXLIFY_USE_NGINX:-1}" = "0" ] && echo 'direct :80' || echo 'nginx → :13000')"
 bash scripts/ensure-panel-env.sh
 
-if [[ "${DOMAIN:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+DOMAIN="$(read_env PANEL_PRIMARY_DOMAIN)"
+export DOMAIN
+
+if is_ip_host "${DOMAIN:-}"; then
   set_kv PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
   set_kv PANEL_PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
   set_kv PANEL_BIND_HOST "${NEXLIFY_PANEL_BIND_HOST:-0.0.0.0}"
@@ -59,9 +78,13 @@ if grep -q '^NEXLIFY_LICENSE_KEY=' .env; then
   node scripts/sync-license-env.mjs || true
 fi
 
-echo "==> Rebuilding panel"
+echo "==> Rebuilding panel (NEXT_PUBLIC_SERVER_URL=$(read_env NEXT_PUBLIC_SERVER_URL))"
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=3072}"
 npm run build
+
+echo "==> Preparing standalone static assets"
+bash scripts/prepare-standalone.sh
+bash scripts/verify-standalone.sh
 
 echo "==> Restarting PM2"
 bash scripts/pm2-start.sh
@@ -76,6 +99,17 @@ if [ -n "$CREDS_PASS" ] && [ -f scripts/verify-install-login.sh ]; then
   echo "==> Verifying admin login"
   chmod +x scripts/verify-install-login.sh
   ADMIN_PASS="$CREDS_PASS" bash scripts/verify-install-login.sh || echo "WARN: login verify failed"
+fi
+
+# Verify JS chunks are served (prevents client-side Application error)
+CHUNK="$(curl -fsS "http://127.0.0.1:${PORT_NOW}/login" 2>/dev/null | grep -oE '/_next/static/[^"]+\.js' | head -1 || true)"
+if [ -n "$CHUNK" ]; then
+  CODE="$(curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT_NOW}${CHUNK}" 2>/dev/null || echo 000)"
+  if [ "$CODE" != "200" ]; then
+    echo "ERROR: JS chunk returned HTTP $CODE — run: bash scripts/vps-repair-standalone.sh" >&2
+    exit 1
+  fi
+  echo "==> JS chunk OK (HTTP 200)"
 fi
 
 echo ""

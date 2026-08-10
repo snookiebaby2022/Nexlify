@@ -291,6 +291,9 @@ cmd_prisma() {
 }
 
 cmd_build_prep() {
+  if [ -x "$ROOT/scripts/ensure-customer-ip-env.sh" ]; then
+    bash "$ROOT/scripts/ensure-customer-ip-env.sh" || true
+  fi
   local free_gb
   free_gb=$(df -BG . | awk 'NR==2{print $4}' | tr -d 'G')
   if [ -n "$free_gb" ] && [ "$free_gb" -lt 2 ]; then
@@ -364,6 +367,10 @@ cmd_restart() {
   else
     pm2 restart nexlify --update-env 2>/dev/null || pm2 start ecosystem.config.cjs --only nexlify --update-env
     pm2 save 2>/dev/null || true
+  fi
+  if [ -f "$ROOT/.next/standalone/server.js" ]; then
+    bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
+    bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
   fi
   echo "PM2 restart complete."
 
