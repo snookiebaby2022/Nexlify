@@ -204,6 +204,15 @@ cp -f "$SRC/src/lib/panel-releases.json" "$MARKETING/public/panel-releases.json"
 sed -i 's/\r$//' "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
 chmod -R a+rX "$MARKETING/public/downloads" "$MARKETING/public/install" 2>/dev/null || true
 chmod +x "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
+PUBLIC_IP="${PANEL_VENDOR_IP:-$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)}"
+if [ -n "$PUBLIC_IP" ]; then
+  cat > "$MARKETING/public/install/panel-vendor-origin.env" << EOF
+PANEL_VENDOR_IP=${PUBLIC_IP}
+PANEL_VENDOR_HOST=nexlify.live
+EOF
+  chmod 644 "$MARKETING/public/install/panel-vendor-origin.env"
+  echo "   Origin bypass file: panel-vendor-origin.env (IP ${PUBLIC_IP})"
+fi
 for required in \
   "$MARKETING/public/downloads/nexlify-panel.tar.gz" \
   "$MARKETING/public/install/apply-panel-fast-update.sh" \
@@ -264,6 +273,30 @@ curl_nginx /install/scripts/fix-update-worker-now.sh | grep -q fix-update-worker
 curl_nginx /install/scripts/panel-update-background.sh | grep -q panel-update-background && \
   echo "OK  update worker launcher (nginx)" || \
   { echo "FAIL update worker launcher (nginx)"; fail=1; }
+
+echo ""
+echo "=== Public internet checks (Cloudflare — customer VPS sees these) ==="
+pub_fail=0
+pub_code="$(curl -fsS -o /dev/null -w '%{http_code}' -A 'NexlifyPanelUpdater/1.0' 'https://nexlify.live/downloads/nexlify-panel.tar.gz' 2>/dev/null || echo 000)"
+if [ "$pub_code" = "200" ]; then
+  echo "OK  public tarball (HTTP 200)"
+else
+  echo "FAIL public tarball (HTTP ${pub_code}) — Cloudflare blocking customer updates!"
+  echo "      Run: bash scripts/vps-fix-cloudflare-downloads.sh"
+  pub_fail=1
+fi
+pub_code="$(curl -fsS -o /dev/null -w '%{http_code}' -A 'NexlifyPanelUpdater/1.0' 'https://nexlify.live/api/panel-releases' 2>/dev/null || echo 000)"
+if [ "$pub_code" = "200" ]; then
+  echo "OK  public release feed (HTTP 200)"
+else
+  echo "FAIL public release feed (HTTP ${pub_code})"
+  pub_fail=1
+fi
+if [ "$pub_fail" -ne 0 ]; then
+  echo ""
+  echo "WARN: Fix Cloudflare WAF/bot fight for /downloads/ and /install/ (see scripts/vps-fix-cloudflare-downloads.sh)"
+  fail=1
+fi
 
 echo ""
 if [ "$fail" -eq 0 ]; then

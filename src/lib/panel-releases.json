@@ -2,9 +2,39 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.15",
+  "latestVersion": "1.9.16",
 
   "releases": [
+
+    {
+
+      "version": "1.9.16",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Fix customer updates blocked by Cloudflare 403 on downloads/install paths.",
+
+      "changelog": [
+
+        "apply-panel-fast-update falls back to origin IP when Cloudflare blocks curl",
+
+        "panel-vendor-origin.env published for direct-IP download bypass",
+
+        "vps-fix-cloudflare-downloads.sh tests public URLs and documents WAF skip rule"
+      ],
+
+      "fixes": [
+
+        "Customer panel sync failed: curl 403 on nexlify.live/downloads/nexlify-panel.tar.gz",
+
+        "Localhost tarball HTTP 200 but public internet got Cloudflare bot challenge",
+
+        "vps-fix-everything passed nginx checks while customers could not download updates"
+      ]
+
+    },
 
     {
 
