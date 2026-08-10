@@ -2,9 +2,41 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.21",
+  "latestVersion": "1.9.22",
 
   "releases": [
+
+    {
+
+      "version": "1.9.22",
+
+      "date": "2026-08-11",
+
+      "channel": "stable",
+
+      "summary": "Fix customer build failure: missing tailwindcss devDependency.",
+
+      "changelog": [
+
+        "ensure-build-deps.sh installs devDependencies before any panel rebuild",
+
+        "fix-panel-ip-login runs npm ci --include=dev before npm run build",
+
+        "apply-panel-fast-update detects missing tailwindcss and runs npm ci",
+
+        "Publish vps-repair-standalone.sh + verify-standalone.sh to install bundle"
+      ],
+
+      "fixes": [
+
+        "Build failed: Cannot find module tailwindcss on customer VPS",
+
+        "Panel down on port 80 after failed rebuild (HTTP 000)",
+
+        "404 fetching vps-repair-standalone.sh from vendor install scripts"
+      ]
+
+    },
 
     {
 

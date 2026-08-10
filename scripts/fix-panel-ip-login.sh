@@ -78,9 +78,16 @@ if grep -q '^NEXLIFY_LICENSE_KEY=' .env; then
   node scripts/sync-license-env.mjs || true
 fi
 
+echo "==> Installing build dependencies ..."
+bash scripts/ensure-build-deps.sh
+
 echo "==> Rebuilding panel (NEXT_PUBLIC_SERVER_URL=$(read_env NEXT_PUBLIC_SERVER_URL))"
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
-npm run build
+if ! npm run build; then
+  echo "ERROR: build failed — restoring previous panel if available ..." >&2
+  bash scripts/panel-update-recover.sh --quick 2>/dev/null || bash scripts/panel-update-recover.sh 2>/dev/null || true
+  exit 1
+fi
 
 echo "==> Preparing standalone static assets"
 bash scripts/prepare-standalone.sh

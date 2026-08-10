@@ -270,8 +270,11 @@ cmd_deps() {
   if lock_changed; then
     echo "Lockfile changed — running npm ci ..."
     npm ci --include=dev --include=optional || npm install --include=dev --include=optional
+  elif [ ! -d node_modules/tailwindcss ] || [ ! -d node_modules/typescript ]; then
+    echo "Dev dependencies missing (tailwindcss/typescript) — running npm ci ..."
+    npm ci --include=dev --include=optional || npm install --include=dev --include=optional
   else
-    echo "Lockfile unchanged — skipping npm install."
+    echo "Lockfile unchanged — dev deps present."
   fi
 }
 

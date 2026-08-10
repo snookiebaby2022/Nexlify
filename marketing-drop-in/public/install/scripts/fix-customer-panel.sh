@@ -149,10 +149,12 @@ echo ""
 echo "==> Fetching latest repair scripts ..."
 for s in \
   ensure-customer-ip-env.sh \
+  ensure-build-deps.sh \
   fix-panel-ip-login.sh \
   fix-stuck-customer-panel.sh \
   fix-all-customer-updates.sh \
   fix-update-worker-now.sh \
+  panel-update-recover.sh \
   vps-repair-standalone.sh \
   prepare-standalone.sh \
   verify-standalone.sh \
