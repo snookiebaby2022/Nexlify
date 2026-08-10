@@ -2,9 +2,35 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.24",
+  "latestVersion": "1.9.25",
 
   "releases": [
+
+    {
+
+      "version": "1.9.25",
+
+      "date": "2026-08-11",
+
+      "channel": "stable",
+
+      "summary": "Install verify scripts use browser UA — plain curl gets 404 on /login when bot-stealth is on.",
+
+      "changelog": [
+
+        "fix-customer-panel, verify-panel-upstream, fix-panel-ip-login use Mozilla UA for /login checks",
+
+        "Plain curl to /login returns 404 by design when PANEL_BLOCK_BOTS=1 (bot-stealth)"
+      ],
+
+      "fixes": [
+
+        "curl /login HTTP 404 while /api/health is healthy — false alarm during verify",
+
+        "verify-panel-upstream WARN login route odd response when blockBots enabled"
+      ]
+
+    },
 
     {
 

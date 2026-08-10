@@ -116,7 +116,8 @@ if [ -n "$CREDS_PASS" ] && [ -f scripts/verify-install-login.sh ]; then
 fi
 
 # Verify JS chunks are served (prevents client-side Application error)
-CHUNK="$(curl -fsS "http://127.0.0.1:${PORT_NOW}/login" 2>/dev/null | grep -oE '/_next/static/[^"]+\.js' | head -1 || true)"
+VERIFY_UA="${NEXLIFY_VERIFY_UA:-Mozilla/5.0 (compatible; NexlifyInstallVerify/1.0)}"
+CHUNK="$(curl -fsS -H "User-Agent: $VERIFY_UA" "http://127.0.0.1:${PORT_NOW}/login" 2>/dev/null | grep -oE '/_next/static/[^"]+\.js' | head -1 || true)"
 if [ -n "$CHUNK" ]; then
   CODE="$(curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT_NOW}${CHUNK}" 2>/dev/null || echo 000)"
   if [ "$CODE" != "200" ]; then

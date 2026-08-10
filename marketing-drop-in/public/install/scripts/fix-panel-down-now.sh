@@ -119,7 +119,7 @@ fi
 PORT="$(grep '^PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- || echo 80)"
 PORT="${PORT:-80}"
 sleep 3
-CODE="$(curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/login" 2>/dev/null || echo 000)"
+CODE="$(curl -fsS -o /dev/null -w '%{http_code}' -H "User-Agent: Mozilla/5.0 (compatible; NexlifyInstallVerify/1.0)" "http://127.0.0.1:${PORT}/login" 2>/dev/null || echo 000)"
 DOMAIN="$(grep '^PANEL_PRIMARY_DOMAIN=' .env 2>/dev/null | head -1 | cut -d= -f2- || echo 127.0.0.1)"
 
 echo ""

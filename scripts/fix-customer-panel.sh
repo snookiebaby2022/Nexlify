@@ -100,27 +100,28 @@ detect_domain() {
 verify_panel_ui() {
   local port="$1"
   local host="${PANEL_BIND_HOST:-127.0.0.1}"
+  local ua="${NEXLIFY_VERIFY_UA:-Mozilla/5.0 (compatible; NexlifyInstallVerify/1.0)}"
   case "$host" in 0.0.0.0|::|"*") host="127.0.0.1" ;; esac
   local code chunk_code attempt
 
   for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    code="$(curl -fsS -o /dev/null -w '%{http_code}' "http://${host}:${port}/login" 2>/dev/null || echo 000)"
+    code="$(curl -fsS -o /dev/null -w '%{http_code}' -H "User-Agent: $ua" "http://${host}:${port}/login" 2>/dev/null || echo 000)"
     [ "$code" = "200" ] && break
     [ "$attempt" -lt 10 ] && sleep 3
   done
   if [ "$code" != "200" ]; then
-    echo "ERROR: /login returned HTTP $code (after wait)" >&2
+    echo "ERROR: /login returned HTTP $code (after wait; bot-stealth blocks plain curl — use a browser)" >&2
     return 1
   fi
   local html
-  html="$(curl -fsS "http://${host}:${port}/login" 2>/dev/null || true)"
+  html="$(curl -fsS -H "User-Agent: $ua" "http://${host}:${port}/login" 2>/dev/null || true)"
   local chunk
   chunk="$(echo "$html" | grep -oE '/_next/static/[^"]+\.js' | head -1 || true)"
   if [ -z "$chunk" ]; then
     echo "ERROR: no JS chunk references in login HTML" >&2
     return 1
   fi
-  chunk_code="$(curl -fsS -o /dev/null -w '%{http_code}' "http://${host}:${port}${chunk}" 2>/dev/null || echo 000)"
+  chunk_code="$(curl -fsS -o /dev/null -w '%{http_code}' -H "User-Agent: $ua" "http://${host}:${port}${chunk}" 2>/dev/null || echo 000)"
   if [ "$chunk_code" != "200" ]; then
     echo "ERROR: JS chunk ${chunk} returned HTTP $chunk_code (client-side crash)" >&2
     return 1
