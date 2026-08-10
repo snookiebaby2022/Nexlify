@@ -69,6 +69,7 @@ const sharedPanelEnv = {
   NEXLIFY_LICENSE_VALID: fileEnv.NEXLIFY_LICENSE_VALID || "0",
   NEXLIFY_LICENSE_KEY: fileEnv.NEXLIFY_LICENSE_KEY || "",
   PANEL_TRUST_CLOUDFLARE: fileEnv.PANEL_TRUST_CLOUDFLARE || "1",
+  PANEL_REPO_PATH: __dirname,
   SMTP_HOST: fileEnv.SMTP_HOST || "",
   SMTP_PORT: fileEnv.SMTP_PORT || "",
   SMTP_USER: fileEnv.SMTP_USER || "",
