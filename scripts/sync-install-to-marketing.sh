@@ -27,7 +27,8 @@ cp -f "$SCRIPTS/fix-stuck-customer-panel.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/ensure-customer-ip-env.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/fix-customer-panel.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/fix-panel-down-now.sh" "$INSTALL/scripts/"
-cp -f "$SCRIPTS/verify-release-candidate.sh" "$INSTALL/scripts/"
+cp -f "$ROOT/marketing-drop-in/scripts/fix-marketing-now.sh" "$INSTALL/fix-marketing-now.sh"
+chmod +x "$INSTALL/fix-marketing-now.sh" 2>/dev/null || true
 cp -f "$SCRIPTS/fix-tarball-publish-now.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/vps-fix-cloudflare-downloads.sh" "$INSTALL/"
 cp -f "$SCRIPTS/install-mediamtx-webrtc.sh" "$INSTALL/scripts/"
@@ -66,6 +67,7 @@ chmod +x "$INSTALL/vps-emergency-fix.sh" "$INSTALL/vps-fix-installer.sh" "$INSTA
   "$INSTALL/vps-init-panel-git.sh" "$INSTALL/vps-publish-panel-release.sh" "$INSTALL/vps-fix-everything.sh" "$INSTALL/vps-git-auth.sh" 2>/dev/null || true
 
 PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
+cp -f "$ROOT/src/lib/panel-releases.json" "$ROOT/marketing-drop-in/src/lib/panel-releases.json"
 cp -f "$ROOT/src/lib/panel-releases.json" "$ROOT/marketing-drop-in/public/panel-releases.json"
 sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
   "$INSTALL/apply-panel-fast-update.sh" "$INSTALL/panel.sh" 2>/dev/null || true

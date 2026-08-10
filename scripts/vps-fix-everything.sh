@@ -231,6 +231,13 @@ fi
 echo "   Tarball published: $TARBALL ($(( TARBALL_SIZE / 1024 / 1024 ))MB)"
 cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
 cd "$MARKETING"
+if [ -x "$MARKETING/scripts/ensure-marketing-database-url.sh" ]; then
+  bash "$MARKETING/scripts/ensure-marketing-database-url.sh" "$MARKETING" || true
+fi
+# shellcheck disable=SC1091
+[ -f "$MARKETING/scripts/load-marketing-env.sh" ] && source "$MARKETING/scripts/load-marketing-env.sh" || true
+npx prisma generate >/dev/null 2>&1 || true
+npx prisma db push --accept-data-loss --skip-generate >/dev/null 2>&1 || true
 npm run build
 ensure_marketing_pm2 "$MARKETING_PORT" || true
 

@@ -2,9 +2,41 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.20",
+  "latestVersion": "1.9.21",
 
   "releases": [
+
+    {
+
+      "version": "1.9.21",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Fix nexlify.live marketing site server-side exception (SSR auth + DB).",
+
+      "changelog": [
+
+        "Marketing getSessionUser no longer crashes site when DATABASE_URL missing",
+
+        "fix-marketing-now.sh one-shot repair for vendor VPS",
+
+        "vps-fix-everything ensures nexlify_marketing DB before marketing rebuild",
+
+        "panel-releases.json synced to marketing src/lib on every publish"
+      ],
+
+      "fixes": [
+
+        "Application error: server-side exception on nexlify.live (digest 2269377318)",
+
+        "Logged-in users saw full site 500 when marketing PostgreSQL misconfigured",
+
+        "Stale panel-releases in marketing src/lib vs public/"
+      ]
+
+    },
 
     {
 

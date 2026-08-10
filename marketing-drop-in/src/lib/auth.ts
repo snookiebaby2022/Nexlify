@@ -86,7 +86,11 @@ export async function verifySessionToken(
   token: string,
 ): Promise<SessionUser | null> {
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const secret = process.env.JWT_SECRET;
+    if (!secret || secret.length < 32) {
+      return null;
+    }
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
     if (!payload.sub || typeof payload.email !== "string") {
       return null;
     }
@@ -118,19 +122,24 @@ export async function clearSessionCookie(): Promise<void> {
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const store = await cookies();
-  const token = store.get(COOKIE_NAME)?.value;
-  if (!token) return null;
+  try {
+    const store = await cookies();
+    const token = store.get(COOKIE_NAME)?.value;
+    if (!token) return null;
 
-  const session = await verifySessionToken(token);
-  if (!session) return null;
+    const session = await verifySessionToken(token);
+    if (!session) return null;
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.id },
-    select: { id: true, email: true, name: true, role: true },
-  });
+    const user = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { id: true, email: true, name: true, role: true },
+    });
 
-  return user;
+    return user;
+  } catch (error) {
+    console.error("[auth] getSessionUser failed (database or session error):", error);
+    return null;
+  }
 }
 
 export function requirePanelApiKey(request: Request): boolean {
