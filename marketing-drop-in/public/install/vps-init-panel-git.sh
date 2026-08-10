@@ -45,6 +45,8 @@ PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
 BRANCH="${NEXLIFY_GIT_BRANCH:-main}"
 
 REPO_URL="$(resolve_nexlify_git_url)"
+
+PRESERVE=(
   .env
   .env.local
   .env.production
@@ -56,8 +58,6 @@ REPO_URL="$(resolve_nexlify_git_url)"
   .panel-update-cache.json
   .update-progress.json
 )
-
-REPO_URL="$(resolve_nexlify_git_url)"
 
 echo "==> Nexlify panel — init git at $PANEL"
 command -v git >/dev/null || { echo "ERROR: install git first (apt install git)"; exit 1; }
