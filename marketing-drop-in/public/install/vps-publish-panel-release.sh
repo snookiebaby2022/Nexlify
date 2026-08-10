@@ -59,11 +59,11 @@ resolve_source() {
   if [ -d "$PANEL/.git" ] && [ -f "$PANEL/scripts/publish-panel-release.sh" ]; then
     echo "-> Updating existing git checkout at $PANEL" >&2
     git -C "$PANEL" remote set-url origin "$REPO_URL" 2>/dev/null || true
-    if ! git -C "$PANEL" fetch origin "$BRANCH" --depth 1 2>/dev/null; then
+    if ! git -C "$PANEL" fetch origin "$BRANCH" --depth 1 >/dev/null 2>&1; then
       require_git_auth_hint
       exit 1
     fi
-    git -C "$PANEL" reset --hard "origin/$BRANCH"
+    git -C "$PANEL" reset --hard "origin/$BRANCH" >/dev/null 2>&1
     echo "$PANEL"
     return 0
   fi
@@ -75,7 +75,7 @@ resolve_source() {
 
   WORK_DIR="$(mktemp -d /tmp/nexlify-publish-src.XXXXXX)"
   echo "-> No git in $PANEL — cloning to $WORK_DIR" >&2
-  git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$WORK_DIR/nexlify"
+  git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$WORK_DIR/nexlify" >/dev/null 2>&1
   echo "$WORK_DIR/nexlify"
 }
 
