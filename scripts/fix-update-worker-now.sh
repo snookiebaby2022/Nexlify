@@ -93,6 +93,7 @@ fetch_one() {
 
 fetch_one "${PANEL_INSTALL_BASE}/scripts/panel-update-background.sh?${CACHE}" "$ROOT/scripts/panel-update-background.sh"
 fetch_one "${PANEL_INSTALL_BASE}/scripts/panel-update-background.ts?${CACHE}" "$ROOT/scripts/panel-update-background.ts" 2>/dev/null || true
+fetch_one "${PANEL_INSTALL_BASE}/scripts/ensure-prisma-client.sh?${CACHE}" "$ROOT/scripts/ensure-prisma-client.sh" 2>/dev/null || true
 
 # Patch TDZ bug in panel-update.ts on pre-v1.9.14 installs ("Cannot access 'toVersion' before initialization")
 if [ -f "$ROOT/src/lib/panel-update.ts" ]; then
@@ -117,6 +118,13 @@ fi
 
 chmod +x "$ROOT/scripts/panel-update-background.sh" 2>/dev/null || true
 sed -i 's/\r$//' "$ROOT"/scripts/*.sh 2>/dev/null || true
+
+if [ -f "$ROOT/scripts/ensure-prisma-client.sh" ]; then
+  bash "$ROOT/scripts/ensure-prisma-client.sh" || true
+elif [ ! -d "$ROOT/node_modules/.prisma/client" ]; then
+  echo "==> Generating Prisma client (required for update worker) ..."
+  (cd "$ROOT" && unset DATABASE_URL 2>/dev/null; npx prisma generate) || true
+fi
 
 if ! command -v npx >/dev/null 2>&1 || ! npx tsx --version >/dev/null 2>&1; then
   echo "Installing tsx ..."

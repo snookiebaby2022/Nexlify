@@ -23,4 +23,6 @@ if [ ! -d node_modules/tailwindcss ]; then
   exit 1
 fi
 
+bash scripts/ensure-prisma-client.sh
+
 echo "ensure-build-deps: OK"

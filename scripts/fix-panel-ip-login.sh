@@ -46,6 +46,16 @@ bash scripts/ensure-panel-env.sh
 DOMAIN="$(read_env PANEL_PRIMARY_DOMAIN)"
 export DOMAIN
 
+echo "==> Ensuring dependencies + Prisma client ..."
+if [ -f scripts/ensure-build-deps.sh ]; then
+  bash scripts/ensure-build-deps.sh
+elif [ -f scripts/ensure-prisma-client.sh ]; then
+  bash scripts/ensure-prisma-client.sh
+else
+  unset DATABASE_URL 2>/dev/null || true
+  npx prisma generate
+fi
+
 if is_ip_host "${DOMAIN:-}"; then
   set_kv PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
   set_kv PANEL_PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
@@ -77,9 +87,6 @@ if grep -q '^NEXLIFY_LICENSE_KEY=' .env; then
   echo "==> Syncing license env for middleware"
   node scripts/sync-license-env.mjs || true
 fi
-
-echo "==> Installing build dependencies ..."
-bash scripts/ensure-build-deps.sh
 
 echo "==> Rebuilding panel (NEXT_PUBLIC_SERVER_URL=$(read_env NEXT_PUBLIC_SERVER_URL))"
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"

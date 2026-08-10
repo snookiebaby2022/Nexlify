@@ -2,9 +2,41 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.22",
+  "latestVersion": "1.9.23",
 
   "releases": [
+
+    {
+
+      "version": "1.9.23",
+
+      "date": "2026-08-11",
+
+      "channel": "stable",
+
+      "summary": "Fix customer repair: missing Prisma client breaks password sync and update worker.",
+
+      "changelog": [
+
+        "ensure-prisma-client.sh runs prisma generate when .prisma/client is missing",
+
+        "fix-panel-ip-login installs deps + generates Prisma before set-admin-password",
+
+        "fix-update-worker-now generates Prisma client before PM2 restart",
+
+        "fix-customer-panel fetches ensure-prisma-client.sh from vendor install bundle"
+      ],
+
+      "fixes": [
+
+        "Cannot find module .prisma/client/default during fix-customer-panel rebuild",
+
+        "Update worker crashed exit 127 — Prisma client not generated after npm ci",
+
+        "set-admin-password.cjs failed before panel rebuild on IP customer VPS"
+      ]
+
+    },
 
     {
 

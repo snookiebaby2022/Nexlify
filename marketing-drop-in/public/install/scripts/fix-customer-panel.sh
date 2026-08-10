@@ -149,6 +149,7 @@ echo ""
 echo "==> Fetching latest repair scripts ..."
 for s in \
   ensure-customer-ip-env.sh \
+  ensure-prisma-client.sh \
   ensure-build-deps.sh \
   fix-panel-ip-login.sh \
   fix-stuck-customer-panel.sh \
