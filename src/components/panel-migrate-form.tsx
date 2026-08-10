@@ -13,11 +13,21 @@ const SOURCE_OPTIONS = [
 
 type InputMode = "file" | "postgres";
 
+/** SQL/JSON pasted or previewed in the textarea — keep small to avoid browser OOM. */
+const MAX_INLINE_BYTES = 512 * 1024;
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function PanelMigrateForm() {
   const [source, setSource] = useState<string>("onestream");
   const [inputMode, setInputMode] = useState<InputMode>("postgres");
   const [format, setFormat] = useState<"sql" | "json">("sql");
   const [content, setContent] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [pgUrl, setPgUrl] = useState("");
   const [pgHost, setPgHost] = useState("");
   const [pgPort, setPgPort] = useState("5432");
@@ -76,15 +86,44 @@ export function PanelMigrateForm() {
     if (usePostgres) {
       return Boolean(pgUrl.trim() || (pgDatabase.trim() && pgUser.trim()));
     }
-    return Boolean(content.trim());
+    return Boolean(uploadFile || content.trim());
+  }
+
+  function migrationPayload(dryRun: boolean) {
+    return {
+      source,
+      dryRun,
+      importBouquets,
+      importStreams,
+      importLines,
+      importResellers,
+      importMag,
+      importEnigma,
+      importCategories,
+      importServers,
+      importEpg,
+      skipExistingLines: skipExisting,
+      skipExistingStreams: skipExisting,
+      defaultServerId: serverId || null,
+      format,
+    };
   }
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setContent(await file.text());
+    setUploadFile(file);
+    setContent("");
     if (file.name.endsWith(".json")) setFormat("json");
     else if (file.name.endsWith(".sql")) setFormat("sql");
+    if (file.size <= MAX_INLINE_BYTES) {
+      setContent(await file.text());
+    }
+  }
+
+  function clearUpload() {
+    setUploadFile(null);
+    setContent("");
   }
 
   async function testConnection() {
@@ -116,36 +155,36 @@ export function PanelMigrateForm() {
   async function run(dryRun: boolean) {
     setResult(dryRun ? "Scanning…" : "Importing…");
     setPreview("");
-    const payload: Record<string, unknown> = {
-      source,
-      dryRun,
-      importBouquets,
-      importStreams,
-      importLines,
-      importResellers,
-      importMag,
-      importEnigma,
-      importCategories,
-      importServers,
-      importEpg,
-      skipExistingLines: skipExisting,
-      skipExistingStreams: skipExisting,
-      defaultServerId: serverId || null,
-    };
 
+    let res: Response;
     if (usePostgres) {
-      payload.format = "postgres";
-      payload.pg = pgConfig();
+      const payload: Record<string, unknown> = {
+        ...migrationPayload(dryRun),
+        format: "postgres",
+        pg: pgConfig(),
+      };
+      res = await fetch("/api/admin/migrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else if (uploadFile && uploadFile.size > MAX_INLINE_BYTES) {
+      const form = new FormData();
+      form.append("file", uploadFile);
+      form.append("payload", JSON.stringify(migrationPayload(dryRun)));
+      res = await fetch("/api/admin/migrate", { method: "POST", body: form });
     } else {
-      payload.format = format;
-      payload.content = content;
+      const payload: Record<string, unknown> = {
+        ...migrationPayload(dryRun),
+        format,
+        content,
+      };
+      res = await fetch("/api/admin/migrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
     }
-
-    const res = await fetch("/api/admin/migrate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
     const data = await res.json();
     if (!res.ok) {
       setResult(`Error: ${data.error ?? res.statusText}`);
@@ -381,13 +420,36 @@ export function PanelMigrateForm() {
           <label className="block text-sm">
             Upload or paste export
             <input type="file" accept=".sql,.json,.txt" className="mt-1 block" onChange={onFile} />
-            <textarea
-              className="mt-2 w-full min-h-[160px] rounded px-3 py-2 font-mono text-xs"
-              style={{ background: "var(--card)", border: "1px solid var(--border)" }}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Paste SQL dump or JSON here…"
-            />
+            {uploadFile && uploadFile.size > MAX_INLINE_BYTES ? (
+              <div
+                className="mt-2 rounded px-3 py-2 text-xs"
+                style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+              >
+                <p>
+                  <strong>{uploadFile.name}</strong> ({formatBytes(uploadFile.size)}) — uploaded on the server when
+                  you run Preview or Import. Large dumps are not loaded into the browser to avoid crashes.
+                </p>
+                <button
+                  type="button"
+                  className="mt-2 text-xs underline"
+                  style={{ color: "var(--accent)" }}
+                  onClick={clearUpload}
+                >
+                  Remove file
+                </button>
+              </div>
+            ) : (
+              <textarea
+                className="mt-2 w-full min-h-[160px] rounded px-3 py-2 font-mono text-xs"
+                style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+                value={content}
+                onChange={(e) => {
+                  setContent(e.target.value);
+                  if (e.target.value.trim()) setUploadFile(null);
+                }}
+                placeholder="Paste SQL dump or JSON here (small exports only), or upload a .sql / .json file…"
+              />
+            )}
           </label>
         </>
       )}
