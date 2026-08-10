@@ -24,7 +24,9 @@
 
         "apply-panel-fast-update detects missing tailwindcss and runs npm ci",
 
-        "Publish vps-repair-standalone.sh + verify-standalone.sh to install bundle"
+        "Publish vps-repair-standalone.sh + verify-standalone.sh to install bundle",
+
+        "vps-fix-everything health checks use panel upstream port (not marketing PORT=13001)"
       ],
 
       "fixes": [

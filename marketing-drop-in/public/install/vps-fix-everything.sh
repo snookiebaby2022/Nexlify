@@ -19,8 +19,35 @@ fi
 PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
 MARKETING="${MARKETING_DIR:-/var/www/nexlify}"
 BRANCH="${NEXLIFY_GIT_BRANCH:-main}"
-PANEL_PORT="${PANEL_PORT:-13000}"
+PANEL_UPSTREAM_PORT="${PANEL_PORT:-13000}"
 MARKETING_PORT="${MARKETING_PORT:-13001}"
+
+read_panel_upstream_port() {
+  local from_env=""
+  if [ -f "$PANEL/.env" ]; then
+    from_env="$(grep -E '^(PORT|PANEL_PORT)=' "$PANEL/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]' || true)"
+  fi
+  echo "${from_env:-${PANEL_UPSTREAM_PORT:-13000}}"
+}
+
+panel_health_ok() {
+  local port="$1"
+  local body
+  body="$(curl -fsS "http://127.0.0.1:${port}/api/health" 2>/dev/null || true)"
+  [ -n "$body" ] || return 1
+  echo "$body" | grep -q '"status"[[:space:]]*:[[:space:]]*"healthy"' || return 1
+  echo "$body" | grep -q 'nexlify-marketing' && return 1
+  return 0
+}
+
+panel_version_ok() {
+  local port="$1"
+  local body
+  body="$(curl -fsS "http://127.0.0.1:${port}/api/panel/version" 2>/dev/null || true)"
+  [ -n "$body" ] || return 1
+  echo "$body" | grep -qE '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+"' || return 1
+  return 0
+}
 
 ensure_marketing_pm2() {
   local port="$1"
@@ -161,6 +188,8 @@ fi
 export PANEL_REPO_PATH="$PANEL"
 bash scripts/prepare-standalone.sh
 bash scripts/pm2-start.sh
+PANEL_UPSTREAM_PORT="$(read_panel_upstream_port)"
+echo "   Panel upstream: 127.0.0.1:${PANEL_UPSTREAM_PORT}"
 
 echo ""
 echo "=== 4) Nginx (panel + demo + marketing) ==="
@@ -243,11 +272,23 @@ ensure_marketing_pm2 "$MARKETING_PORT" || true
 
 echo ""
 echo "=== 6) Health checks ==="
-PANEL_PORT="${PORT:-${PANEL_PORT:-13000}}"
+# Do NOT use $PORT here — marketing .env sets PORT=13001 and poisons panel checks.
+PANEL_UPSTREAM_PORT="$(read_panel_upstream_port)"
 TARBALL="$MARKETING/public/downloads/nexlify-panel.tar.gz"
 fail=0
-curl -fsS "http://127.0.0.1:${PANEL_PORT}/api/health" >/dev/null && echo "OK  panel /api/health" || { echo "FAIL panel /api/health"; fail=1; }
-curl -fsS "http://127.0.0.1:${PANEL_PORT}/api/panel/version" >/dev/null && echo "OK  panel /api/panel/version" || { echo "FAIL panel /api/panel/version"; fail=1; }
+if panel_health_ok "$PANEL_UPSTREAM_PORT"; then
+  echo "OK  panel /api/health (:${PANEL_UPSTREAM_PORT})"
+else
+  echo "FAIL panel /api/health (:${PANEL_UPSTREAM_PORT})"
+  fail=1
+fi
+if panel_version_ok "$PANEL_UPSTREAM_PORT"; then
+  PANEL_VER="$(curl -fsS "http://127.0.0.1:${PANEL_UPSTREAM_PORT}/api/panel/version" 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).version||'')}catch{}})" 2>/dev/null || true)"
+  echo "OK  panel /api/panel/version (:${PANEL_UPSTREAM_PORT}${PANEL_VER:+, v${PANEL_VER}})"
+else
+  echo "FAIL panel /api/panel/version (:${PANEL_UPSTREAM_PORT})"
+  fail=1
+fi
 FEED_VER="$(curl_nginx /api/panel-releases 2>/dev/null | feed_latest_version)"
 if [ -z "$FEED_VER" ]; then
   FEED_VER="$(curl -fsS "http://127.0.0.1:${MARKETING_PORT}/api/panel-releases" 2>/dev/null | feed_latest_version || true)"
