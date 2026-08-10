@@ -2,9 +2,35 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.25",
+  "latestVersion": "1.9.26",
 
   "releases": [
+
+    {
+
+      "version": "1.9.26",
+
+      "date": "2026-08-11",
+
+      "channel": "stable",
+
+      "summary": "Fix Updates page and bottom overlay showing different progress during panel update.",
+
+      "changelog": [
+
+        "Shared usePanelUpdateJob hook — single poll source for both progress UIs",
+
+        "Updates page no longer keeps stale job when silent refresh fails during build"
+      ],
+
+      "fixes": [
+
+        "Top Updates bar stuck on sync panel files 24% while bottom overlay showed prepare build 50%",
+
+        "Mismatched elapsed time (23s vs 1m 53s) between two progress indicators"
+      ]
+
+    },
 
     {
 
