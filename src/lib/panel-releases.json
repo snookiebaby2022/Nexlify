@@ -2,9 +2,41 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.19",
+  "latestVersion": "1.9.20",
 
   "releases": [
+
+    {
+
+      "version": "1.9.20",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Stable updates: auto-apply OFF by default, nginx serves all repair scripts, build retry on webpack failure.",
+
+      "changelog": [
+
+        "Auto-apply when a new release is detected is OFF by default (manual update only)",
+
+        "nginx serves any /install/*.sh repair script (fixes 404 on fix-panel-down-now.sh)",
+
+        "Customer build retries with npm ci after webpack failure; 4GB Node heap",
+
+        "verify-release-candidate.sh blocks vendor publish if build fails"
+      ],
+
+      "fixes": [
+
+        "404 on https://nexlify.live/install/fix-panel-down-now.sh",
+
+        "Build failed because of webpack errors on low-memory customer VPS",
+
+        "Auto-apply loop broke panels during unstable releases"
+      ]
+
+    },
 
     {
 

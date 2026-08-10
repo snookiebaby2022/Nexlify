@@ -4,6 +4,7 @@
 #
 # Run ON CUSTOMER VPS as root:
 #   curl -fsSL 'https://nexlify.live/install/fix-panel-down-now.sh' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/scripts/fix-panel-down-now.sh' | sudo bash
 #
 # Cloudflare fallback:
 #   curl -fsSL 'http://85.17.162.54/install/fix-panel-down-now.sh' -H 'Host: nexlify.live' | sudo bash

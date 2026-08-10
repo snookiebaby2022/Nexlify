@@ -117,7 +117,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     }[],
     rollbackGitRef: null as string | null,
     updateCheckUrl: "",
-    panelUpdateAutoDownload: true,
+    panelUpdateAutoDownload: false,
     streamAgentUpgradeNotes:
       "Upgrade stream agents: Admin → Servers → action menu → Reinstall agent, or SSH to the node and re-run the install command from the server wizard. Match agent version to panel release shown on Updates.",
   },

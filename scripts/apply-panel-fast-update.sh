@@ -307,8 +307,15 @@ cmd_build_prep() {
 
 cmd_build_compile() {
   echo "Building panel (staging) ..."
+  export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
   export NEXT_PRIVATE_WORKER_THREADS=false
   export NEXLIFY_DIST_DIR=".next.staging"
+  if npm run build; then
+    return 0
+  fi
+  echo "WARN: npm run build failed (webpack?) — clean reinstall + retry once ..." >&2
+  rm -rf node_modules
+  npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error
   npm run build
 }
 

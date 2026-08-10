@@ -172,7 +172,7 @@ export default function PanelUpdatesPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [autoDownload, setAutoDownload] = useState(true);
+  const [autoDownload, setAutoDownload] = useState(false);
   const autoStartedRef = useRef(false);
 
   const load = useCallback((opts?: { silent?: boolean }) => {
@@ -238,9 +238,9 @@ export default function PanelUpdatesPage() {
         .then((r) => r.json())
         .then((d) => {
           const stored = d.settings?.panelUpdateAutoDownload;
-          setAutoDownload(stored !== false);
+          setAutoDownload(stored === true);
         })
-        .catch(() => setAutoDownload(true));
+        .catch(() => setAutoDownload(false));
     }
   }, []);
 

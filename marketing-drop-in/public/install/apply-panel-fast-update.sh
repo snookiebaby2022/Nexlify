@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.19}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.20}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -307,8 +307,15 @@ cmd_build_prep() {
 
 cmd_build_compile() {
   echo "Building panel (staging) ..."
+  export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
   export NEXT_PRIVATE_WORKER_THREADS=false
   export NEXLIFY_DIST_DIR=".next.staging"
+  if npm run build; then
+    return 0
+  fi
+  echo "WARN: npm run build failed (webpack?) — clean reinstall + retry once ..." >&2
+  rm -rf node_modules
+  npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error
   npm run build
 }
 

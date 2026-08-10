@@ -141,7 +141,7 @@ chmod +x "$PANEL"/scripts/*.sh 2>/dev/null || true
 rm -f "$PANEL/.update-progress.json" "$PANEL/.update-progress.pid" "$PANEL/.update-worker-err.log"
 
 echo ""
-echo "=== 2) Panel env + build ==="
+echo "=== 2) Panel env + build (release candidate verify) ==="
 cd "$PANEL"
 bash scripts/ensure-panel-env.sh
 set -a
@@ -149,10 +149,9 @@ set -a
 set +a
 export NEXT_PRIVATE_WORKER_THREADS=false
 export PANEL_REPO_PATH="$PANEL"
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
 npm ci --include=dev --include=optional
-npm run build
-bash scripts/prepare-standalone.sh
-bash scripts/verify-standalone.sh 2>/dev/null || true
+bash scripts/verify-release-candidate.sh
 
 echo ""
 echo "=== 3) PM2 restart panel ==="
@@ -273,6 +272,12 @@ curl_nginx /install/scripts/fix-update-worker-now.sh | grep -q fix-update-worker
 curl_nginx /install/scripts/panel-update-background.sh | grep -q panel-update-background && \
   echo "OK  update worker launcher (nginx)" || \
   { echo "FAIL update worker launcher (nginx)"; fail=1; }
+curl_nginx /install/fix-customer-panel.sh | grep -q 'customer panel repair' && \
+  echo "OK  fix-customer-panel.sh (nginx)" || \
+  { echo "FAIL fix-customer-panel.sh (nginx)"; fail=1; }
+curl_nginx /install/fix-panel-down-now.sh | grep -q 'fix-panel-down' && \
+  echo "OK  fix-panel-down-now.sh (nginx)" || \
+  { echo "FAIL fix-panel-down-now.sh (nginx)"; fail=1; }
 
 echo ""
 echo "=== Public internet checks (Cloudflare — customer VPS sees these) ==="

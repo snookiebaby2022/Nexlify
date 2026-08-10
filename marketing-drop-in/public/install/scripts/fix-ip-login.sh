@@ -79,7 +79,7 @@ if grep -q '^NEXLIFY_LICENSE_KEY=' .env; then
 fi
 
 echo "==> Rebuilding panel (NEXT_PUBLIC_SERVER_URL=$(read_env NEXT_PUBLIC_SERVER_URL))"
-export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=3072}"
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
 npm run build
 
 echo "==> Preparing standalone static assets"
