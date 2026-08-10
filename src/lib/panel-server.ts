@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { getSettingGroup, setSettingGroup } from "@/lib/panel-settings";
+import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
 import {
   resolvePanelListenPort,
   resolveStreamEdgeHttpPort,
@@ -236,5 +237,5 @@ export function buildPanelOrigin(
 }
 
 export function getResolvedRepoPath(settings: PanelServerSettings): string {
-  return settings.repoPath || process.env.PANEL_REPO_PATH || process.cwd();
+  return resolvePanelRepoPathSync(settings.repoPath);
 }

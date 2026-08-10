@@ -188,7 +188,17 @@ export default function PanelUpdatesPage() {
     const timer = window.setTimeout(() => controller.abort(), opts?.silent ? 8000 : 20000);
     fetch(url, { signal: controller.signal, cache: "no-store" })
       .then(async (r) => {
-        const d = (await r.json()) as PanelUpdatePayload & { error?: string };
+        const text = await r.text();
+        let d: PanelUpdatePayload & { error?: string };
+        try {
+          d = JSON.parse(text) as PanelUpdatePayload & { error?: string };
+        } catch {
+          throw new Error(
+            text.startsWith("Internal Server Error")
+              ? "Panel API error (500) — run: bash scripts/panel-update-recover.sh on the server"
+              : text.slice(0, 160) || `Failed to load updates (${r.status})`
+          );
+        }
         if (!r.ok || !d.version) {
           throw new Error(d.error ?? `Failed to load updates (${r.status})`);
         }

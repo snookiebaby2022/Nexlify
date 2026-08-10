@@ -2,9 +2,41 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.9",
+  "latestVersion": "1.9.10",
 
   "releases": [
+
+    {
+
+      "version": "1.9.10",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Fix Updates page 500, demo subdomain nginx, and panel root path in standalone mode.",
+
+      "changelog": [
+
+        "Resolve panel package.json from standalone cwd, PANEL_REPO_PATH, and install root",
+
+        "Updates page shows a clear error instead of JSON parse failure on API 500",
+
+        "panel.demo.nexlify.live nginx proxies to panel (demo mode) instead of redirecting away",
+
+        "vps-fix-both-sites.sh installs demo vhost alongside panel.nexlify.live"
+      ],
+
+      "fixes": [
+
+        "Admin → Settings → Updates: Unexpected token 'I', Internal Server Error is not valid JSON",
+
+        "panel.demo.nexlify.live not working (nginx redirected to panel.nexlify.live/login)",
+
+        "Version API failing when PM2 cwd is .next/standalone without repo package.json"
+      ]
+
+    },
 
     {
 

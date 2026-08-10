@@ -1,6 +1,7 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import { spawn } from "child_process";
+import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
 
 export type RemoteReleaseInfo = {
   tag: string;
@@ -52,11 +53,19 @@ function runGit(cwd: string, args: string[]): Promise<string> {
   });
 }
 
-export async function readInstalledVersion(repoPath: string): Promise<{ version: string; name: string }> {
-  const pkgPath = path.join(repoPath, "package.json");
-  const raw = await readFile(pkgPath, "utf8");
-  const pkg = JSON.parse(raw) as { version?: string; name?: string };
-  return { version: String(pkg.version ?? "0.0.0"), name: String(pkg.name ?? "nexlify") };
+export async function readInstalledVersion(repoPath?: string): Promise<{ version: string; name: string }> {
+  const root = resolvePanelRepoPathSync(repoPath);
+  const pkgPath = path.join(root, "package.json");
+  try {
+    const raw = await readFile(pkgPath, "utf8");
+    const pkg = JSON.parse(raw) as { version?: string; name?: string };
+    return { version: String(pkg.version ?? "0.0.0"), name: String(pkg.name ?? "nexlify") };
+  } catch (e) {
+    const fallback = process.env.NEXLIFY_PANEL_VERSION?.trim() || "0.0.0";
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[panel-version] could not read ${pkgPath}: ${msg} — using ${fallback}`);
+    return { version: fallback, name: "nexlify" };
+  }
 }
 
 export async function getPanelVersionInfo(repoPath: string): Promise<PanelVersionInfo> {

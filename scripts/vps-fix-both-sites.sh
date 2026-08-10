@@ -66,6 +66,10 @@ mkdir -p /etc/nginx/conf.d /etc/nginx/sites-available /etc/nginx/sites-enabled
 cp "$ROOT/nginx/nexlify-upstream.conf" /etc/nginx/conf.d/nexlify-upstream.conf
 cp "$ROOT/nginx/panel.nexlify.live.conf" /etc/nginx/sites-available/panel.nexlify.live
 cp "$ROOT/nginx/nexlify.live.conf" /etc/nginx/sites-available/nexlify.live
+if [ -f "$ROOT/nginx/panel.demo.nexlify.live.conf" ]; then
+  cp "$ROOT/nginx/panel.demo.nexlify.live.conf" /etc/nginx/sites-available/panel.demo.nexlify.live
+  ln -sf /etc/nginx/sites-available/panel.demo.nexlify.live /etc/nginx/sites-enabled/panel.demo.nexlify.live
+fi
 ln -sf /etc/nginx/sites-available/panel.nexlify.live /etc/nginx/sites-enabled/panel.nexlify.live
 ln -sf /etc/nginx/sites-available/nexlify.live /etc/nginx/sites-enabled/nexlify.live
 
@@ -155,4 +159,5 @@ curl -fsS -o /dev/null -w "webplayer :${MARKETING_PORT} HTTP %{http_code}\n" "ht
 echo ""
 echo "=== Done ==="
 echo "Panel:    https://panel.nexlify.live/login"
+echo "Demo:     https://panel.demo.nexlify.live/login"
 echo "Website:  https://nexlify.live/"
