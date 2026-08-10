@@ -128,8 +128,9 @@ export function PanelUpdateProgress() {
               </ul>
             )}
             <p className="panel-update-progress-hint">
-              The panel stays online during the build. Only the final restart (~10 seconds) briefly interrupts
-              access. Full updates usually finish in <strong>3–6 minutes</strong>; the build step is slowest.
+              The panel stays online during the compile (up to ~88%). Around{" "}
+              <strong>88–98%</strong> the new build is swapped in and PM2 restarts — expect a{" "}
+              <strong>15–60 second</strong> outage. Full updates usually finish in 3–6 minutes.
             </p>
           </>
         )}

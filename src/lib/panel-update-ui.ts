@@ -59,7 +59,13 @@ export function parseBuildSubProgress(line: string): { detail: string; ratio: nu
     return { detail: "Packaging standalone server for PM2…", ratio: 0.96 };
   }
   if (/Build OK|CSS bundle/i.test(t)) {
-    return { detail: "Build verification passed…", ratio: 0.99 };
+    return {
+      detail: "Build done — swapping build and restarting panel (~15–60s brief outage)…",
+      ratio: 0.99,
+    };
+  }
+  if (/Swapping .next.staging|Restarting panel on new build/i.test(t)) {
+    return { detail: "Swapping production build — panel briefly offline…", ratio: 0.995 };
   }
   return null;
 }

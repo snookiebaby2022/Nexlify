@@ -14,13 +14,14 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.26}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.27}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
 
 BUILD_SUCCEEDED=0
 UPDATE_TRAP_ACTIVE=0
+PANEL_RESTARTED=0
 
 # Cloudflare bot fight returns 403 to datacenter curl — fall back to origin IP + Host header.
 resolve_vendor_ip() {
@@ -335,15 +336,21 @@ swap_staging_build() {
     echo "ERROR: staging build has no CSS — aborting swap" >&2
     return 1
   fi
-  echo "Swapping .next.staging → .next (brief restart follows) ..."
+  echo "Swapping .next.staging → .next (panel restart follows immediately) ..."
   rm -rf "$ROOT/.next.old"
   if [ -d "$ROOT/.next" ]; then
     mv "$ROOT/.next" "$ROOT/.next.old"
   fi
   mv "$STAGING_DIR" "$ROOT/.next"
   write_cache
-  rm -rf "$BACKUP_DIR" "$ROOT/.next.old"
   echo "Build OK ($css_count CSS bundle(s))"
+  echo "Restarting panel on new build (expect ~15–60s brief outage) ..."
+  if cmd_restart; then
+    rm -rf "$BACKUP_DIR" "$ROOT/.next.old"
+  else
+    echo "WARN: restart after swap failed — keeping .next.old for recovery" >&2
+    return 1
+  fi
 }
 
 cmd_build_standalone() {
@@ -366,6 +373,10 @@ cmd_build() {
 }
 
 cmd_restart() {
+  if [ "$PANEL_RESTARTED" = "1" ]; then
+    echo "Panel already restarted after build swap."
+    return 0
+  fi
   if ! has_valid_next; then
     echo "WARN: restart skipped — no valid .next (run recover)" >&2
     return 1
@@ -382,6 +393,12 @@ cmd_restart() {
     bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
     bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
   fi
+  if [ -x "$ROOT/scripts/wait-panel-ready.sh" ]; then
+    bash "$ROOT/scripts/wait-panel-ready.sh" || echo "WARN: panel slow to respond after restart" >&2
+  else
+    sleep 5
+  fi
+  PANEL_RESTARTED=1
   echo "PM2 restart complete."
 
   # Ensure watchdog cron is installed

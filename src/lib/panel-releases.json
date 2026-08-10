@@ -2,9 +2,37 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.26",
+  "latestVersion": "1.9.27",
 
   "releases": [
+
+    {
+
+      "version": "1.9.27",
+
+      "date": "2026-08-11",
+
+      "channel": "stable",
+
+      "summary": "Reduce panel downtime at 88% update — immediate restart after build swap.",
+
+      "changelog": [
+
+        "Restart PM2 immediately after .next swap (no broken in-between state)",
+
+        "wait-panel-ready after restart before declaring update step done",
+
+        "Progress UI explains 88–98% brief outage is expected"
+      ],
+
+      "fixes": [
+
+        "Panel unreachable at 88% during in-panel update (swap without restart)",
+
+        "Update left panel down if restart step lagged after build swap"
+      ]
+
+    },
 
     {
 
