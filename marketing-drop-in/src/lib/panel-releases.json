@@ -2,9 +2,41 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.23",
+  "latestVersion": "1.9.24",
 
   "releases": [
+
+    {
+
+      "version": "1.9.24",
+
+      "date": "2026-08-11",
+
+      "channel": "stable",
+
+      "summary": "Fix fix-customer-panel false failure after redundant PM2 restart.",
+
+      "changelog": [
+
+        "vps-repair-standalone skips PM2 restart when SKIP_PM2_RESTART=1",
+
+        "fix-customer-panel step 4 no longer restarts PM2 after step 3 already did",
+
+        "verify_panel_ui retries /login up to 30s after PM2 restart",
+
+        "vps-repair-standalone reads PORT from .env (IP panels use :80 not :13000)"
+      ],
+
+      "fixes": [
+
+        "fix-customer-panel Step 5 ERROR /login HTTP 000 after vps-repair-standalone restart",
+
+        "Health check on wrong port 13000 for IP direct :80 installs",
+
+        "Race: verify ran before panel finished restarting (~15s startup)"
+      ]
+
+    },
 
     {
 
