@@ -2,9 +2,33 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.13",
+  "latestVersion": "1.9.14",
 
   "releases": [
+
+    {
+
+      "version": "1.9.14",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Fix update worker crash: Cannot access 'toVersion' before initialization.",
+
+      "changelog": [
+
+        "Initialize toVersion at start of update/rollback so failure paths never hit JS TDZ"
+      ],
+
+      "fixes": [
+
+        "Update failed with: Cannot access 'toVersion' before initialization",
+
+        "Background update worker crashed on v1.9.7–v1.9.13 when a step failed before version re-read"
+      ]
+
+    },
 
     {
 

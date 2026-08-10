@@ -355,6 +355,8 @@ export async function runPanelUpdateWithProgress(
   const settings = await getPanelServerSettings();
   const repoPath = resolvePanelRepoPathSync(settings.repoPath);
   const { version: fromVersion } = await readInstalledVersion(repoPath);
+  /** Initialized up front so failure returns never hit TDZ (shorthand `toVersion` in same scope). */
+  let toVersion = fromVersion;
   const jobSteps: PanelUpdateJob["steps"] = [];
 
   if (!isLinux()) {
@@ -465,7 +467,7 @@ export async function runPanelUpdateWithProgress(
 
   await writeUpdateCache(repoPath);
 
-  const { version: toVersion } = await readInstalledVersion(repoPath);
+  toVersion = (await readInstalledVersion(repoPath)).version;
   const mode = patchScript ? "patch" : "git";
   const msg =
     toVersion !== fromVersion
@@ -483,6 +485,7 @@ export async function runPanelRollback(): Promise<PanelUpdateResult> {
   const settings = await getPanelServerSettings();
   const repoPath = resolvePanelRepoPathSync(settings.repoPath);
   const { version: fromVersion } = await readInstalledVersion(repoPath);
+  let toVersion = fromVersion;
   const ref = settings.rollbackGitRef;
 
   if (!ref) {
@@ -518,7 +521,7 @@ export async function runPanelRollback(): Promise<PanelUpdateResult> {
   }
 
   await writeUpdateCache(repoPath);
-  const { version: toVersion } = await readInstalledVersion(repoPath);
+  toVersion = (await readInstalledVersion(repoPath)).version;
   const msg = `Rolled back to commit ${ref.slice(0, 8)} (v${toVersion}). Restart PM2.`;
   await recordResult(settings, true, msg, fromVersion, toVersion, "rollback", steps);
   return { ok: true, message: msg, steps, fromVersion, toVersion };

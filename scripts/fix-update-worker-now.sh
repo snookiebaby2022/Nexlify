@@ -60,6 +60,27 @@ fetch_one() {
 fetch_one "${PANEL_INSTALL_BASE}/scripts/panel-update-background.sh?${CACHE}" "$ROOT/scripts/panel-update-background.sh"
 fetch_one "${PANEL_INSTALL_BASE}/scripts/panel-update-background.ts?${CACHE}" "$ROOT/scripts/panel-update-background.ts" 2>/dev/null || true
 
+# Patch TDZ bug in panel-update.ts on pre-v1.9.14 installs ("Cannot access 'toVersion' before initialization")
+if [ -f "$ROOT/src/lib/panel-update.ts" ]; then
+  node -e "
+    const fs = require('fs');
+    const p = process.argv[1];
+    let s = fs.readFileSync(p, 'utf8');
+    if (s.includes('let toVersion = fromVersion')) process.exit(0);
+    if (!s.includes('const { version: toVersion }')) process.exit(0);
+    s = s.replace(
+      /(const \\{ version: fromVersion \\} = await readInstalledVersion\\(repoPath\\);\\n)/g,
+      '\$1  let toVersion = fromVersion;\\n'
+    );
+    s = s.replace(
+      /const \\{ version: toVersion \\} = await readInstalledVersion\\(repoPath\\);/g,
+      'toVersion = (await readInstalledVersion(repoPath)).version;'
+    );
+    fs.writeFileSync(p, s);
+    console.log('Patched src/lib/panel-update.ts (toVersion TDZ fix)');
+  " "$ROOT/src/lib/panel-update.ts" 2>/dev/null || true
+fi
+
 chmod +x "$ROOT/scripts/panel-update-background.sh" 2>/dev/null || true
 sed -i 's/\r$//' "$ROOT"/scripts/*.sh 2>/dev/null || true
 
