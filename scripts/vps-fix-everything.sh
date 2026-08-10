@@ -66,6 +66,24 @@ curl_nginx() {
     || curl -fsS "http://127.0.0.1${path}" -H "Host: nexlify.live" 2>/dev/null
 }
 
+curl_nginx_code() {
+  local path="$1"
+  curl -fsSk -o /dev/null -w '%{http_code}' "https://127.0.0.1${path}" -H "Host: nexlify.live" 2>/dev/null \
+    || curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1${path}" -H "Host: nexlify.live" 2>/dev/null \
+    || echo "000"
+}
+
+feed_latest_version() {
+  node -e "
+    let d='';
+    process.stdin.on('data',c=>d+=c);
+    process.stdin.on('end',()=>{
+      try { console.log(JSON.parse(d).latestVersion || ''); }
+      catch { console.log(''); }
+    });
+  " 2>/dev/null
+}
+
 resolve_nexlify_git_url() {
   local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
   if [ -n "$token" ]; then
@@ -196,6 +214,13 @@ for required in \
     exit 1
   fi
 done
+TARBALL="$MARKETING/public/downloads/nexlify-panel.tar.gz"
+TARBALL_SIZE="$(wc -c < "$TARBALL" | tr -d '[:space:]')"
+if [ -z "$TARBALL_SIZE" ] || [ "$TARBALL_SIZE" -lt 500000 ]; then
+  echo "ERROR: tarball too small (${TARBALL_SIZE:-0} bytes) — publish failed" >&2
+  exit 1
+fi
+echo "   Tarball published: $TARBALL ($(( TARBALL_SIZE / 1024 / 1024 ))MB)"
 cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
 cd "$MARKETING"
 npm run build
@@ -204,20 +229,32 @@ ensure_marketing_pm2 "$MARKETING_PORT" || true
 echo ""
 echo "=== 6) Health checks ==="
 PANEL_PORT="${PORT:-${PANEL_PORT:-13000}}"
+TARBALL="$MARKETING/public/downloads/nexlify-panel.tar.gz"
 fail=0
 curl -fsS "http://127.0.0.1:${PANEL_PORT}/api/health" >/dev/null && echo "OK  panel /api/health" || { echo "FAIL panel /api/health"; fail=1; }
 curl -fsS "http://127.0.0.1:${PANEL_PORT}/api/panel/version" >/dev/null && echo "OK  panel /api/panel/version" || { echo "FAIL panel /api/panel/version"; fail=1; }
-if curl_nginx /api/panel-releases 2>/dev/null | grep -q latestVersion; then
-  echo "OK  release feed (nginx): $(curl_nginx /api/panel-releases 2>/dev/null | grep -o '"latestVersion":"[^"]*"')"
-elif curl -fsS "http://127.0.0.1:${MARKETING_PORT}/api/panel-releases" 2>/dev/null | grep -q latestVersion; then
-  echo "OK  release feed (nexlify-web): $(curl -fsS http://127.0.0.1:${MARKETING_PORT}/api/panel-releases 2>/dev/null | grep -o '"latestVersion":"[^"]*"')"
+FEED_VER="$(curl_nginx /api/panel-releases 2>/dev/null | feed_latest_version)"
+if [ -z "$FEED_VER" ]; then
+  FEED_VER="$(curl -fsS "http://127.0.0.1:${MARKETING_PORT}/api/panel-releases" 2>/dev/null | feed_latest_version || true)"
+fi
+if [ -n "$FEED_VER" ]; then
+  echo "OK  release feed latestVersion=$FEED_VER"
 else
   echo "FAIL release feed (nginx + nexlify-web :${MARKETING_PORT})"
   fail=1
 fi
-curl_nginx /downloads/nexlify-panel.tar.gz | head -c 4 | grep -q . && \
-  echo "OK  tarball download (nginx)" || \
-  { echo "FAIL tarball download (nginx)"; fail=1; }
+if [ -s "$TARBALL" ] && [ "$(wc -c < "$TARBALL" | tr -d '[:space:]')" -gt 500000 ]; then
+  TARBALL_HTTP="$(curl_nginx_code /downloads/nexlify-panel.tar.gz)"
+  if [ "$TARBALL_HTTP" = "200" ]; then
+    echo "OK  tarball download (nginx, HTTP 200, $(du -h "$TARBALL" | cut -f1))"
+  else
+    echo "FAIL tarball download (nginx HTTP ${TARBALL_HTTP:-000}, file on disk: $(du -h "$TARBALL" | cut -f1))"
+    fail=1
+  fi
+else
+  echo "FAIL tarball missing or too small on disk: $TARBALL"
+  fail=1
+fi
 curl_nginx /install/apply-panel-fast-update.sh | grep -q apply-panel-fast-update && \
   echo "OK  apply-panel-fast-update.sh (nginx)" || \
   { echo "FAIL apply-panel-fast-update.sh (nginx)"; fail=1; }

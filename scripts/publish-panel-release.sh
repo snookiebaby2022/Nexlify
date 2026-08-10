@@ -33,6 +33,12 @@ RELEASES_JSON="${PANEL_RELEASES_PUBLIC:-/var/www/nexlify/public/panel-releases.j
 mkdir -p "$(dirname "$DEST")" "$INSTALL_DEST" "$INSTALL_DEST/scripts" "$(dirname "$RELEASES_JSON")"
 cp -f "$TAR" "$DEST"
 cp -f "$ROOT/src/lib/panel-releases.json" "$RELEASES_JSON"
+chmod 644 "$DEST" "$RELEASES_JSON"
+TAR_SIZE="$(wc -c < "$DEST" | tr -d '[:space:]')"
+if [ -z "$TAR_SIZE" ] || [ "$TAR_SIZE" -lt 500000 ]; then
+  echo "ERROR: tarball too small after build (${TAR_SIZE:-0} bytes)" >&2
+  exit 1
+fi
 
 PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
 
