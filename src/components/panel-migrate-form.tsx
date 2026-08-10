@@ -276,6 +276,25 @@ export function PanelMigrateForm() {
         </select>
       </label>
 
+      <div
+        className="rounded-lg p-3 text-sm"
+        style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+      >
+        <p className="font-medium">Migration tips</p>
+        <ul className="mt-1.5 space-y-1 opacity-80 list-disc pl-4">
+          {isOneStream && (
+            <li>
+              <strong>1-stream:</strong> prefer <strong>PostgreSQL (live)</strong> — connect to the source panel
+              database instead of uploading a dump when possible.
+            </li>
+          )}
+          <li>
+            Large <code>.sql</code> files upload directly to the server. Use paste or inline preview only for exports
+            under {formatBytes(MAX_INLINE_BYTES)}.
+          </li>
+        </ul>
+      </div>
+
       {isOneStream && (
         <div className="flex gap-2 text-sm">
           <button
