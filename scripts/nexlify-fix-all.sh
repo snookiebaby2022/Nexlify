@@ -8,6 +8,7 @@ PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
 
 if [ ! -d "$PANEL/.git" ]; then
   echo "Panel is not a git repo (deployed via WinSCP). Using no-git fix..."
+  echo "  Convert to git: curl -fsSL https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main/scripts/vps-init-panel-git.sh | bash"
   echo ""
   exec bash "$PANEL/scripts/nexlify-vps-fix-no-git.sh"
 fi

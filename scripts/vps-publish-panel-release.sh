@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Publish panel tarball + release feed for in-app panel updates.
 # Works even when /home/nexlify-panel has no git (WinSCP-only deploys).
+# To enable git on VPS: bash scripts/vps-init-panel-git.sh
 #
 # Run on vendor VPS as root:
 #   curl -fsSL https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main/scripts/vps-publish-panel-release.sh | bash
