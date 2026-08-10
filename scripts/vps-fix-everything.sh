@@ -138,6 +138,16 @@ mkdir -p "$MARKETING/public/install"
 rsync -a "$SRC/marketing-drop-in/public/install/" "$MARKETING/public/install/"
 sed -i 's/\r$//' "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
 chmod +x "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
+for required in \
+  "$MARKETING/public/downloads/nexlify-panel.tar.gz" \
+  "$MARKETING/public/install/apply-panel-fast-update.sh" \
+  "$MARKETING/public/install/scripts/panel-update-background.sh" \
+  "$MARKETING/public/install/scripts/fix-update-worker-now.sh"; do
+  if [ ! -f "$required" ]; then
+    echo "ERROR: publish incomplete — missing $required" >&2
+    exit 1
+  fi
+done
 cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
 cd "$MARKETING"
 npm run build
@@ -154,11 +164,13 @@ curl -fsS "http://127.0.0.1:${MARKETING_PORT}/api/panel-releases" | grep -q late
   echo "OK  release feed: $(curl -fsS http://127.0.0.1:${MARKETING_PORT}/api/panel-releases | grep -o '"latestVersion":"[^"]*"')" || \
   { echo "FAIL release feed"; fail=1; }
 curl -fsSI "http://127.0.0.1:${MARKETING_PORT}/downloads/nexlify-panel.tar.gz" 2>/dev/null | head -1 | grep -q 200 && \
-  echo "OK  tarball download" || echo "WARN tarball check"
+  echo "OK  tarball download" || { echo "FAIL tarball download"; fail=1; }
+curl -fsS "http://127.0.0.1:${MARKETING_PORT}/install/apply-panel-fast-update.sh" 2>/dev/null | grep -q apply-panel-fast-update && \
+  echo "OK  apply-panel-fast-update.sh" || { echo "FAIL apply-panel-fast-update.sh"; fail=1; }
 curl -fsS "http://127.0.0.1:${MARKETING_PORT}/install/scripts/fix-update-worker-now.sh" 2>/dev/null | grep -q fix-update-worker-now && \
-  echo "OK  install hotfix script" || echo "WARN install hotfix script missing"
+  echo "OK  install hotfix script" || { echo "FAIL install hotfix script"; fail=1; }
 curl -fsS "http://127.0.0.1:${MARKETING_PORT}/install/scripts/panel-update-background.sh" 2>/dev/null | grep -q panel-update-background && \
-  echo "OK  update worker launcher" || echo "WARN update worker launcher missing"
+  echo "OK  update worker launcher" || { echo "FAIL update worker launcher"; fail=1; }
 
 echo ""
 if [ "$fail" -eq 0 ]; then
