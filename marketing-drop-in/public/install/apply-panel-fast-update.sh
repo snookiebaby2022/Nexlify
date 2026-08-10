@@ -14,13 +14,61 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.15}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.16}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
 
 BUILD_SUCCEEDED=0
 UPDATE_TRAP_ACTIVE=0
+
+# Cloudflare bot fight returns 403 to datacenter curl — fall back to origin IP + Host header.
+resolve_vendor_ip() {
+  if [ -n "${PANEL_VENDOR_IP:-}" ]; then
+    echo "$PANEL_VENDOR_IP"
+    return 0
+  fi
+  if [ -f "$ROOT/.env" ]; then
+    local ip
+    ip="$(grep -E '^PANEL_VENDOR_IP=' "$ROOT/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r\"'"'"' ')"
+    if [ -n "$ip" ]; then
+      echo "$ip"
+      return 0
+    fi
+  fi
+  local origin="${PANEL_INSTALL_BASE}/panel-vendor-origin.env"
+  if curl -fsSL -A "NexlifyPanelUpdater/1.0" "$origin" -o /tmp/nexlify-vendor-origin.env 2>/dev/null; then
+    # shellcheck disable=SC1091
+    source /tmp/nexlify-vendor-origin.env 2>/dev/null || true
+    [ -n "${PANEL_VENDOR_IP:-}" ] && echo "$PANEL_VENDOR_IP" && return 0
+  fi
+  return 1
+}
+
+curl_vendor() {
+  local url="$1" dest="$2"
+  local ua="NexlifyPanelUpdater/1.0 (+https://nexlify.live)"
+  if curl -fsSL -A "$ua" --retry 2 --retry-delay 2 "$url" -o "$dest" 2>/dev/null; then
+    return 0
+  fi
+  local ip host path
+  ip="$(resolve_vendor_ip 2>/dev/null || true)"
+  host="${PANEL_VENDOR_HOST:-nexlify.live}"
+  if [[ "$url" == https://${host}* ]]; then
+    path="${url#https://${host}}"
+  elif [[ "$url" == https://nexlify.live* ]]; then
+    path="${url#https://nexlify.live}"
+  else
+    path=""
+  fi
+  if [ -n "$ip" ] && [ -n "$path" ]; then
+    echo "WARN: blocked by CDN — retry via origin http://${ip}${path} (Host: ${host})" >&2
+    curl -fsSL -A "$ua" "http://${ip}${path}" -H "Host: ${host}" -o "$dest"
+    return $?
+  fi
+  echo "ERROR: could not download $url (Cloudflare 403? Set PANEL_VENDOR_IP or fix CF WAF)" >&2
+  return 1
+}
 
 normalize_scripts() {
   sed -i 's/\r$//' "$ROOT"/scripts/*.sh 2>/dev/null || true
@@ -95,7 +143,7 @@ bootstrap_patch_scripts() {
   fetch_one() {
     local url="$1" dest="$2"
     mkdir -p "$(dirname "$dest")"
-    if curl -fsSL "$url" -o "${dest}.new" 2>/dev/null; then
+    if curl_vendor "$url" "${dest}.new"; then
       sed -i 's/\r$//' "${dest}.new" 2>/dev/null || true
       chmod +x "${dest}.new"
       mv "${dest}.new" "$dest"
@@ -191,7 +239,7 @@ cmd_sync() {
   tmp="$(mktemp -d /tmp/nexlify-panel-patch-XXXXXX)"
   archive="$tmp/panel.tar.gz"
   echo "Downloading $PANEL_ARCHIVE_URL ..."
-  curl -fsSL "$PANEL_ARCHIVE_URL" -o "$archive"
+  curl_vendor "$PANEL_ARCHIVE_URL" "$archive"
   verify_downloaded_archive "$archive" || { rm -rf "$tmp"; exit 1; }
   mkdir -p "$tmp/extract"
   tar -xzf "$archive" -C "$tmp/extract"
