@@ -2,9 +2,37 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.14",
+  "latestVersion": "1.9.15",
 
   "releases": [
+
+    {
+
+      "version": "1.9.15",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Fix vendor tarball download via nginx (root location + health check).",
+
+      "changelog": [
+
+        "nginx serves /downloads/ via root instead of alias (fixes 404 on tarball)",
+
+        "Health checks use HTTP status codes instead of curl|head (pipefail false negative)",
+
+        "Publish fails fast if tarball is missing or under 500KB"
+      ],
+
+      "fixes": [
+
+        "vps-fix-everything FAIL tarball download (nginx) despite file on disk",
+
+        "Release feed health check showed empty latestVersion with pretty-printed JSON"
+      ]
+
+    },
 
     {
 
