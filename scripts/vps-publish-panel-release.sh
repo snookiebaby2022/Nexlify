@@ -1,38 +1,68 @@
 #!/usr/bin/env bash
-# Publish panel v1.9.8+ tarball + release feed so customer panels can update in-app.
-# Run on vendor VPS (85.17.162.54) as root:
-#   cd /home/nexlify-panel && git pull origin main && bash scripts/vps-publish-panel-release.sh
+# Publish panel tarball + release feed for in-app panel updates.
+# Works even when /home/nexlify-panel has no git (WinSCP-only deploys).
+#
+# Run on vendor VPS as root:
+#   curl -fsSL https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main/scripts/vps-publish-panel-release.sh | bash
+# Or:
+#   bash /root/vps-publish-panel-release.sh
 set -euo pipefail
 
-PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
 MARKETING="${MARKETING_DIR:-/var/www/nexlify}"
+REPO="${NEXLIFY_GIT_REPO:-https://github.com/snookiebaby2022/Nexlify.git}"
+BRANCH="${NEXLIFY_GIT_BRANCH:-main}"
+PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
 
-echo "==> Panel publish (in-app update feed + tarball)"
-[ -d "$PANEL" ] || { echo "ERROR: panel dir missing: $PANEL"; exit 1; }
+echo "==> Nexlify panel publish (in-app update feed + tarball)"
 [ -d "$MARKETING" ] || { echo "ERROR: marketing dir missing: $MARKETING"; exit 1; }
+command -v git >/dev/null || { echo "ERROR: git not installed — apt install git"; exit 1; }
+command -v node >/dev/null || { echo "ERROR: node not installed"; exit 1; }
 
-cd "$PANEL"
+resolve_source() {
+  # Prefer live git pull when panel dir is a repo and already on latest semver.
+  if [ -d "$PANEL/.git" ] && [ -f "$PANEL/scripts/publish-panel-release.sh" ]; then
+    echo "-> Updating existing git checkout at $PANEL"
+    git -C "$PANEL" fetch origin "$BRANCH" --depth 1 2>/dev/null || git -C "$PANEL" pull origin "$BRANCH"
+    echo "$PANEL"
+    return 0
+  fi
+
+  # WinSCP / no-git installs: clone fresh source to a temp dir.
+  local work
+  work="$(mktemp -d /tmp/nexlify-publish-src.XXXXXX)"
+  echo "-> No git in $PANEL — cloning $REPO ($BRANCH) to $work"
+  git clone --depth 1 --branch "$BRANCH" "$REPO" "$work/nexlify"
+  echo "$work/nexlify"
+}
+
+SRC="$(resolve_source)"
+cleanup() {
+  if [[ "$SRC" == /tmp/nexlify-publish-src.* ]]; then
+    rm -rf "$(dirname "$SRC")"
+  fi
+}
+trap cleanup EXIT
+
+cd "$SRC"
 VER="$(node -p "require('./package.json').version")"
 echo "Panel source version: $VER"
 
-echo "-> Sync panel-releases.json to marketing"
+echo "-> Sync panel-releases.json to marketing drop-in"
 npm run sync:releases
 
-echo "-> Publish tarball to $MARKETING/public/downloads/"
+echo "-> Build and publish tarball"
 SKIP_INSTALL_SCRIPT_PUBLISH=1 bash scripts/publish-panel-release.sh
 
 echo "-> Rebuild marketing site (panel-releases API)"
+cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
 cd "$MARKETING"
-cp -f "$PANEL/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json" 2>/dev/null \
-  || cp -f "$PANEL/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
 npm run build
 pm2 restart nexlify-web --update-env
 pm2 save 2>/dev/null || true
 
 echo ""
 echo "Verify:"
-curl -fsS "http://127.0.0.1:13001/api/panel-releases" | head -c 200 || true
+curl -fsS "http://127.0.0.1:13001/api/panel-releases" 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const j=JSON.parse(d);console.log('latestVersion:',j.latestVersion)}catch(e){console.log(d.slice(0,200))}})" || true
+curl -fsSI "http://127.0.0.1:13001/downloads/nexlify-panel.tar.gz" 2>/dev/null | head -3 || true
 echo ""
-curl -fsSI "http://127.0.0.1:13001/downloads/nexlify-panel.tar.gz" | head -3 || true
-echo ""
-echo "Done. Customer panels on older versions can now use Admin → Settings → Updates."
+echo "Done — customer panels can update via Admin → Settings → Updates to v$VER"
