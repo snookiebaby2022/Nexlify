@@ -2,9 +2,71 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.9",
+  "latestVersion": "1.9.11",
 
   "releases": [
+
+    {
+
+      "version": "1.9.11",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Fix customer panel updates failing with Cannot find module panel-server.",
+
+      "changelog": [
+
+        "Update worker always runs from panel install root, not .next/standalone",
+
+        "panel-update-background.ts uses dynamic imports after resolving repo root",
+
+        "Repo path detection skips standalone build dir (requires scripts/ + src/)"
+      ],
+
+      "fixes": [
+
+        "Update worker crashed on startup: Cannot find module '../src/lib/panel-server'",
+
+        "Background update used /opt/.../standalone as repo path when PM2 cwd is standalone",
+
+        "Customer Admin → Settings → Updates failed immediately with exit code 127"
+      ]
+
+    },
+
+    {
+
+      "version": "1.9.10",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Fix Updates page 500, demo subdomain nginx, and panel root path in standalone mode.",
+
+      "changelog": [
+
+        "Resolve panel package.json from standalone cwd, PANEL_REPO_PATH, and install root",
+
+        "Updates page shows a clear error instead of JSON parse failure on API 500",
+
+        "panel.demo.nexlify.live nginx proxies to panel (demo mode) instead of redirecting away",
+
+        "vps-fix-both-sites.sh installs demo vhost alongside panel.nexlify.live"
+      ],
+
+      "fixes": [
+
+        "Admin → Settings → Updates: Unexpected token 'I', Internal Server Error is not valid JSON",
+
+        "panel.demo.nexlify.live not working (nginx redirected to panel.nexlify.live/login)",
+
+        "Version API failing when PM2 cwd is .next/standalone without repo package.json"
+      ]
+
+    },
 
     {
 

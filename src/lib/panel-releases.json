@@ -2,9 +2,39 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.10",
+  "latestVersion": "1.9.11",
 
   "releases": [
+
+    {
+
+      "version": "1.9.11",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Fix customer panel updates failing with Cannot find module panel-server.",
+
+      "changelog": [
+
+        "Update worker always runs from panel install root, not .next/standalone",
+
+        "panel-update-background.ts uses dynamic imports after resolving repo root",
+
+        "Repo path detection skips standalone build dir (requires scripts/ + src/)"
+      ],
+
+      "fixes": [
+
+        "Update worker crashed on startup: Cannot find module '../src/lib/panel-server'",
+
+        "Background update used /opt/.../standalone as repo path when PM2 cwd is standalone",
+
+        "Customer Admin → Settings → Updates failed immediately with exit code 127"
+      ]
+
+    },
 
     {
 

@@ -18,6 +18,7 @@ import {
   readPanelVersionForCacheBust,
 } from "@/lib/panel-update-bootstrap";
 import { getPanelVersionInfo, readInstalledVersion } from "@/lib/panel-version";
+import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
 
 export type UpdateProgressCallback = (update: Partial<PanelUpdateJob>) => void | Promise<void>;
 
@@ -352,7 +353,7 @@ export async function runPanelUpdateWithProgress(
   onProgress?: UpdateProgressCallback
 ): Promise<PanelUpdateResult> {
   const settings = await getPanelServerSettings();
-  const repoPath = path.resolve(settings.repoPath || process.cwd());
+  const repoPath = resolvePanelRepoPathSync(settings.repoPath);
   const { version: fromVersion } = await readInstalledVersion(repoPath);
   const jobSteps: PanelUpdateJob["steps"] = [];
 
@@ -480,7 +481,7 @@ export async function runPanelUpdate(): Promise<PanelUpdateResult> {
 
 export async function runPanelRollback(): Promise<PanelUpdateResult> {
   const settings = await getPanelServerSettings();
-  const repoPath = path.resolve(settings.repoPath || process.cwd());
+  const repoPath = resolvePanelRepoPathSync(settings.repoPath);
   const { version: fromVersion } = await readInstalledVersion(repoPath);
   const ref = settings.rollbackGitRef;
 

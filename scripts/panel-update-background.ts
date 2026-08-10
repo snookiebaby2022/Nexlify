@@ -1,9 +1,18 @@
 import path from "path";
+import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 import { access } from "fs/promises";
-import { getPanelServerSettings } from "../src/lib/panel-server";
-import { runPanelUpdateWithProgress } from "../src/lib/panel-update";
-import { readUpdateJob, writeUpdateJob, type PanelUpdateJob } from "../src/lib/panel-update-job";
+
+function resolveRepoRootFromScriptDir(scriptDir: string): string {
+  const normalized = path.resolve(scriptDir);
+  if (normalized.includes(`${path.sep}.next${path.sep}standalone`)) {
+    return path.resolve(normalized, "..", "..", "..");
+  }
+  return path.resolve(normalized, "..");
+}
+
+const REPO_ROOT = resolveRepoRootFromScriptDir(path.dirname(fileURLToPath(import.meta.url)));
+process.chdir(REPO_ROOT);
 
 async function spawnRecover(repoPath: string) {
   const script = path.join(repoPath, "scripts/panel-update-recover.sh");
@@ -16,8 +25,21 @@ async function spawnRecover(repoPath: string) {
 }
 
 async function main() {
+  const { getPanelServerSettings } = await import(
+    path.join(REPO_ROOT, "src/lib/panel-server.ts")
+  );
+  const { runPanelUpdateWithProgress } = await import(
+    path.join(REPO_ROOT, "src/lib/panel-update.ts")
+  );
+  const { readUpdateJob, writeUpdateJob } = await import(
+    path.join(REPO_ROOT, "src/lib/panel-update-job.ts")
+  );
+  const { resolvePanelRepoPathSync } = await import(
+    path.join(REPO_ROOT, "src/lib/panel-repo-path.ts")
+  );
+
   const server = await getPanelServerSettings();
-  const repoPath = path.resolve(server.repoPath || process.cwd());
+  const repoPath = resolvePanelRepoPathSync(server.repoPath);
   let job = await readUpdateJob(repoPath);
 
   if (!job || job.status !== "running") {
@@ -26,8 +48,8 @@ async function main() {
   }
 
   const result = await runPanelUpdateWithProgress(async (update) => {
-    job = { ...job!, ...update } as PanelUpdateJob;
-    await writeUpdateJob(repoPath, job);
+    job = { ...job!, ...update } as typeof job;
+    await writeUpdateJob(repoPath, job!);
   });
 
   await writeUpdateJob(repoPath, {
@@ -41,7 +63,7 @@ async function main() {
     steps: result.steps.map((s) => ({
       name: s.name,
       ok: s.ok,
-      status: s.ok ? "done" : "failed",
+      status: s.ok ? ("done" as const) : ("failed" as const),
       output: s.output,
     })),
   });
@@ -56,8 +78,17 @@ async function main() {
 main().catch(async (e) => {
   console.error(e);
   try {
+    const { getPanelServerSettings } = await import(
+      path.join(REPO_ROOT, "src/lib/panel-server.ts")
+    );
+    const { readUpdateJob, writeUpdateJob } = await import(
+      path.join(REPO_ROOT, "src/lib/panel-update-job.ts")
+    );
+    const { resolvePanelRepoPathSync } = await import(
+      path.join(REPO_ROOT, "src/lib/panel-repo-path.ts")
+    );
     const server = await getPanelServerSettings();
-    const repoPath = path.resolve(server.repoPath || process.cwd());
+    const repoPath = resolvePanelRepoPathSync(server.repoPath);
     const job = await readUpdateJob(repoPath);
     if (job) {
       await writeUpdateJob(repoPath, {

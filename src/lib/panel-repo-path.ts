@@ -1,7 +1,34 @@
 import fs from "fs";
 import path from "path";
 
-/** Candidate panel roots — first dir containing package.json wins. */
+export function isStandaloneBuildDir(dir: string): boolean {
+  return dir.includes(`${path.sep}.next${path.sep}standalone`);
+}
+
+/** True when dir looks like the panel install root (not .next/standalone). */
+export function isValidPanelRoot(dir: string): boolean {
+  try {
+    return (
+      fs.existsSync(path.join(dir, "package.json")) &&
+      fs.existsSync(path.join(dir, "scripts", "apply-panel-fast-update.sh")) &&
+      fs.existsSync(path.join(dir, "scripts", "panel-update-background.ts")) &&
+      fs.existsSync(path.join(dir, "src", "lib", "panel-server.ts"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Resolve install root from scripts/panel-update-background.ts location. */
+export function resolveRepoRootFromScriptDir(scriptDir: string): string {
+  const normalized = path.resolve(scriptDir);
+  if (normalized.includes(`${path.sep}.next${path.sep}standalone`)) {
+    return path.resolve(normalized, "..", "..", "..");
+  }
+  return path.resolve(normalized, "..");
+}
+
+/** Candidate panel roots — first valid install root wins. */
 export function panelRepoPathCandidates(settingsRepoPath?: string): string[] {
   const candidates: string[] = [];
   const add = (p: string | undefined) => {
@@ -13,30 +40,40 @@ export function panelRepoPathCandidates(settingsRepoPath?: string): string[] {
   add(process.env.PANEL_REPO_PATH);
 
   const cwd = process.cwd();
-  add(cwd);
-  add(path.join(cwd, ".."));
-  add(path.join(cwd, "../.."));
-
-  // Standalone PM2 cwd is .next/standalone — package.json is copied here on build.
-  if (cwd.includes(`${path.sep}.next${path.sep}standalone`)) {
+  if (isStandaloneBuildDir(cwd)) {
     add(path.join(cwd, "..", ".."));
+  } else {
+    add(cwd);
+    add(path.join(cwd, ".."));
   }
 
+  add("/opt/nexlify-panel");
   add("/home/nexlify-panel");
   return candidates;
 }
 
 export function resolvePanelRepoPathSync(settingsRepoPath?: string): string {
+  const explicit = settingsRepoPath?.trim();
+  if (explicit && isValidPanelRoot(explicit)) return explicit;
+
   for (const dir of panelRepoPathCandidates(settingsRepoPath)) {
+    if (isStandaloneBuildDir(dir)) continue;
+    if (isValidPanelRoot(dir)) return dir;
+  }
+
+  for (const dir of panelRepoPathCandidates(settingsRepoPath)) {
+    if (isStandaloneBuildDir(dir)) continue;
     try {
       if (fs.existsSync(path.join(dir, "package.json"))) return dir;
     } catch {
-      /* skip unreadable paths */
+      /* skip */
     }
   }
-  return (
-    settingsRepoPath?.trim() ||
-    process.env.PANEL_REPO_PATH?.trim() ||
-    process.cwd()
-  );
+
+  if (explicit) return explicit;
+  const envPath = process.env.PANEL_REPO_PATH?.trim();
+  if (envPath) return envPath;
+  const cwd = process.cwd();
+  if (isStandaloneBuildDir(cwd)) return path.join(cwd, "..", "..");
+  return cwd;
 }

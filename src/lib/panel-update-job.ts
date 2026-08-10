@@ -1,6 +1,7 @@
 import { readFile, writeFile } from "fs/promises";
 import { spawn, execSync } from "child_process";
 import path from "path";
+import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
 
 export type PanelUpdateJobStep = {
   name: string;
@@ -231,6 +232,7 @@ export async function startBackgroundPanelUpdate(
   repoPath: string,
   fromVersion: string
 ): Promise<{ ok: boolean; error?: string }> {
+  repoPath = resolvePanelRepoPathSync(repoPath);
   const existing = await reconcileStaleUpdateJob(repoPath);
   if (isJobRunning(existing)) {
     return { ok: false, error: "An update is already running" };
