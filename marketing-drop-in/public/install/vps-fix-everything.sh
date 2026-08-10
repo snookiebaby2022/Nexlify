@@ -97,13 +97,10 @@ echo "=== 3) PM2 restart panel ==="
 if ! command -v pm2 >/dev/null 2>&1; then
   npm install -g pm2
 fi
-pm2 delete nexlify 2>/dev/null || true
-pkill -f '.next/standalone/server' 2>/dev/null || true
-pkill -f 'next/dist/bin/next' 2>/dev/null || true
-sleep 1
-pm2 start ecosystem.config.cjs --only nexlify --update-env
-pm2 save 2>/dev/null || true
-sleep 5
+export PANEL_REPO_PATH="$PANEL"
+bash scripts/prepare-standalone.sh
+[ -f .env ] && cp -f .env .next/standalone/.env && sed -i '/^PANEL_REPO_PATH=/d' .next/standalone/.env 2>/dev/null || true
+bash scripts/pm2-start.sh
 
 echo ""
 echo "=== 4) Nginx (panel + demo + marketing) ==="
@@ -113,7 +110,12 @@ cp "$PANEL/nginx/panel.nexlify.live.conf" /etc/nginx/sites-available/panel.nexli
 cp "$PANEL/nginx/nexlify.live.conf" /etc/nginx/sites-available/nexlify.live
 if [ -f "$PANEL/nginx/panel.demo.nexlify.live.conf" ]; then
   cp "$PANEL/nginx/panel.demo.nexlify.live.conf" /etc/nginx/sites-available/panel.demo.nexlify.live
-  ln -sf /etc/nginx/sites-available/panel.demo.nexlify.live /etc/nginx/sites-enabled/panel.demo.nexlify.live
+  if [ -f "/etc/letsencrypt/live/panel.demo.nexlify.live/fullchain.pem" ]; then
+    ln -sf /etc/nginx/sites-available/panel.demo.nexlify.live /etc/nginx/sites-enabled/panel.demo.nexlify.live
+  else
+    echo "WARN: no SSL cert for panel.demo.nexlify.live — skipping demo vhost enable"
+    rm -f /etc/nginx/sites-enabled/panel.demo.nexlify.live 2>/dev/null || true
+  fi
 fi
 ln -sf /etc/nginx/sites-available/panel.nexlify.live /etc/nginx/sites-enabled/panel.nexlify.live
 ln -sf /etc/nginx/sites-available/nexlify.live /etc/nginx/sites-enabled/nexlify.live
@@ -122,6 +124,7 @@ if ! nginx -t 2>/dev/null; then
   echo "WARN: nginx -t failed — trying HTTP-only panel vhost"
   [ -f "$PANEL/nginx/panel.nexlify.live-http-only.conf" ] && \
     cp "$PANEL/nginx/panel.nexlify.live-http-only.conf" /etc/nginx/sites-available/panel.nexlify.live
+  rm -f /etc/nginx/sites-enabled/panel.demo.nexlify.live 2>/dev/null || true
   nginx -t
 fi
 systemctl reload nginx

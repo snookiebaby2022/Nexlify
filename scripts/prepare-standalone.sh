@@ -36,8 +36,13 @@ if [ -f package.json ]; then
   cp package.json "$DIST/standalone/package.json"
 fi
 
-# Remove PANEL_REPO_PATH from standalone .env — ecosystem.config.cjs sets it at runtime via __dirname
-# This prevents build-time paths (e.g. /home/nexlify-panel) from breaking on customer servers
+# Ensure standalone has live .env (DATABASE_URL, JWT, license keys)
+if [ -f .env ]; then
+  cp -f .env "$DIST/standalone/.env"
+  sed -i '/^PANEL_REPO_PATH=/d' "$DIST/standalone/.env" 2>/dev/null || true
+fi
+
+# Remove PANEL_REPO_PATH from standalone .env if Next copied a build-time copy
 if [ -f "$DIST/standalone/.env" ]; then
   sed -i '/^PANEL_REPO_PATH=/d' "$DIST/standalone/.env"
 fi
