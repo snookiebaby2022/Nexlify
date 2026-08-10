@@ -2,9 +2,39 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.16",
+  "latestVersion": "1.9.17",
 
   "releases": [
+
+    {
+
+      "version": "1.9.17",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Emergency fix for customer panels stuck on v1.9.7 with toVersion TDZ crash loop.",
+
+      "changelog": [
+
+        "fix-stuck-customer-panel.sh: self-contained repair via origin IP (bypasses Cloudflare)",
+
+        "Hotfix scripts disable auto-apply in DB to stop infinite retry loop",
+
+        "TDZ patch handles CRLF line endings on older customer installs"
+      ],
+
+      "fixes": [
+
+        "Customer still on v1.9.7 after vendor commands — repair must run on customer VPS",
+
+        "Auto-apply retried failed update every page load (Cannot access toVersion before initialization)",
+
+        "curl to nexlify.live returned 403 — scripts now default to origin IP 85.17.162.54"
+      ]
+
+    },
 
     {
 

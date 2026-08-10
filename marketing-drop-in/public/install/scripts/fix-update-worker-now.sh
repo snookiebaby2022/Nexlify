@@ -10,10 +10,34 @@ PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-https://nexlify.live/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
 CACHE="${PANEL_CACHE_BUST:-v${_PV}}"
 
+curl_vendor() {
+  local url="$1" dest="$2"
+  local ua="NexlifyPanelUpdater/1.0"
+  if curl -fsSL -A "$ua" --retry 2 "$url" -o "$dest" 2>/dev/null; then return 0; fi
+  local ip host path origin="${PANEL_INSTALL_BASE}/panel-vendor-origin.env"
+  ip="${PANEL_VENDOR_IP:-}"
+  host="${PANEL_VENDOR_HOST:-nexlify.live}"
+  if [ -z "$ip" ] && curl -fsSL -A "$ua" "$origin" -o /tmp/nexlify-vendor-origin.env 2>/dev/null; then
+    # shellcheck disable=SC1091
+    source /tmp/nexlify-vendor-origin.env 2>/dev/null || true
+    ip="${PANEL_VENDOR_IP:-}"
+    host="${PANEL_VENDOR_HOST:-nexlify.live}"
+  fi
+  if [ -z "$ip" ]; then ip="${PANEL_VENDOR_IP:-85.17.162.54}"; fi
+  if [[ "$url" == https://${host}* ]]; then path="${url#https://${host}}";
+  elif [[ "$url" == https://nexlify.live* ]]; then path="${url#https://nexlify.live}"; fi
+  if [ -n "$ip" ] && [ -n "$path" ]; then
+    echo "WARN: CDN blocked — fetch via http://${ip}${path} (Host: ${host})" >&2
+    curl -fsSL -A "$ua" "http://${ip}${path}" -H "Host: ${host}" -o "$dest"
+    return $?
+  fi
+  return 1
+}
+
 echo "=== fix-update-worker-now (panel root: $ROOT) ==="
 
 pkill -f 'panel-update-background' 2>/dev/null || true
-rm -f .update-progress.pid .update-in-progress
+rm -f .update-progress.pid .update-in-progress .update-progress.json
 
 # Point PM2 / standalone runtime at the real install root (fixes pre-v1.9.11 bundled code).
 for envfile in .env .next/standalone/.env; do
@@ -26,30 +50,40 @@ done
 # Stale copy in standalone breaks module resolution for old worker scripts.
 rm -rf .next/standalone/scripts 2>/dev/null || true
 
-# Fix DB repoPath if it points at .next/standalone (breaks pre-v1.9.11 update worker).
+# Fix DB repoPath + disable auto-apply (stops retry loop on TDZ crash).
 if [ -f data/panel.db ]; then
   node -e "
     const { execSync } = require('child_process');
     const db = 'data/panel.db';
+    const root = process.argv[1];
     try {
       const raw = execSync(\"sqlite3 \" + db + \" \\\"SELECT value FROM PanelSetting WHERE key='server';\\\"\", { encoding: 'utf8' }).trim();
       if (!raw) process.exit(0);
       const j = JSON.parse(raw);
+      let changed = false;
+      if (j.panelUpdateAutoDownload !== false) {
+        j.panelUpdateAutoDownload = false;
+        changed = true;
+        console.log('Disabled panelUpdateAutoDownload (retry loop stopped)');
+      }
       const rp = String(j.repoPath || '').trim();
-      if (rp.includes('/.next/standalone') || rp.endsWith('/standalone')) {
-        j.repoPath = process.env.PANEL_ROOT || '$ROOT';
+      if (!rp || rp.includes('/.next/standalone') || rp.endsWith('/standalone') || rp !== root) {
+        j.repoPath = root;
+        changed = true;
+        console.log('Fixed server.repoPath in panel.db →', root);
+      }
+      if (changed) {
         const esc = JSON.stringify(j).replace(/'/g, \"''\");
         execSync(\"sqlite3 \" + db + \" \\\"UPDATE PanelSetting SET value='\" + esc + \"' WHERE key='server';\\\"\");
-        console.log('Fixed server.repoPath in panel.db →', j.repoPath);
       }
     } catch (e) { /* ignore */ }
-  " 2>/dev/null || true
+  " "$ROOT" 2>/dev/null || true
 fi
 
 fetch_one() {
   local url="$1" dest="$2"
   mkdir -p "$(dirname "$dest")"
-  if curl -fsSL "$url" -o "${dest}.new" 2>/dev/null; then
+  if curl_vendor "$url" "${dest}.new"; then
     sed -i 's/\r$//' "${dest}.new" 2>/dev/null || true
     chmod +x "${dest}.new" 2>/dev/null || true
     mv "${dest}.new" "$dest"
@@ -69,7 +103,7 @@ if [ -f "$ROOT/src/lib/panel-update.ts" ]; then
     if (s.includes('let toVersion = fromVersion')) process.exit(0);
     if (!s.includes('const { version: toVersion }')) process.exit(0);
     s = s.replace(
-      /(const \\{ version: fromVersion \\} = await readInstalledVersion\\(repoPath\\);\\n)/g,
+      /(const \\{ version: fromVersion \\} = await readInstalledVersion\\(repoPath\\);\\r?\\n)/g,
       '\$1  let toVersion = fromVersion;\\n'
     );
     s = s.replace(
@@ -90,20 +124,7 @@ if ! command -v npx >/dev/null 2>&1 || ! npx tsx --version >/dev/null 2>&1; then
 fi
 
 if [ -f .update-progress.json ]; then
-  node -e "
-    const fs = require('fs');
-    const p = '.update-progress.json';
-    try {
-      const j = JSON.parse(fs.readFileSync(p, 'utf8'));
-      if (j.status === 'running') {
-        j.status = 'failed';
-        j.currentStep = null;
-        j.finishedAt = new Date().toISOString();
-        j.message = 'Cleared by fix-update-worker-now.sh — retry Update from Settings.';
-        fs.writeFileSync(p, JSON.stringify(j, null, 2));
-      }
-    } catch { fs.unlinkSync(p); }
-  " 2>/dev/null || rm -f .update-progress.json
+  echo "Cleared stale .update-progress.json"
 fi
 
 if command -v pm2 >/dev/null 2>&1; then
