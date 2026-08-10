@@ -113,6 +113,10 @@ done
 git config pull.rebase false
 git config --local advice.detachedHead false
 
+echo "-> Installing dependencies (do not reuse old WinSCP node_modules)"
+rm -rf "$PANEL/node_modules"
+npm ci
+
 VER="$(node -p "require('./package.json').version" 2>/dev/null || echo unknown)"
 echo ""
 echo "Done — $PANEL is now a git repo on $BRANCH (v$VER)."
