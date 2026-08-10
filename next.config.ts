@@ -37,12 +37,14 @@ const cacheHeaders = [
   },
 ];
 
+const distDir = process.env.NEXLIFY_DIST_DIR?.trim() || ".next";
+
 const nextConfig: NextConfig = {
-  distDir: ".next",
+  output: "standalone",
+  distDir,
   compress: true,
   poweredByHeader: false,
   generateEtags: true,
-  swcMinify: true,
   eslint: {
     ignoreDuringBuilds: true,
   },

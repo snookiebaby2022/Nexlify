@@ -2,9 +2,41 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.8",
+  "latestVersion": "1.9.9",
 
   "releases": [
+
+    {
+
+      "version": "1.9.9",
+
+      "date": "2026-08-10",
+
+      "channel": "stable",
+
+      "summary": "Fix in-panel update failing after successful build (standalone + staging dir).",
+
+      "changelog": [
+
+        "Panel updates: enable Next.js standalone output so PM2 and update validation succeed",
+
+        "Staging builds: next.config respects NEXLIFY_DIST_DIR (.next.staging) during zero-downtime updates",
+
+        "postbuild scripts (prepare-standalone, obfuscate-license) follow staging dist dir",
+
+        "Remove deprecated swcMinify from next.config (Next.js 15)"
+      ],
+
+      "fixes": [
+
+        "Admin → Settings → Updates failing with 'staging build invalid' despite successful compile",
+
+        "prepare-standalone skipping because .next/standalone/server.js was missing",
+
+        "Recovery loop: Missing valid .next after failed update on first install / no backup"
+      ]
+
+    },
 
     {
 
