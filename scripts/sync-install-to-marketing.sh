@@ -67,7 +67,8 @@ cp -f "$SCRIPTS/vps-git-auth.sh" "$INSTALL/"
 cp -f "$ROOT/marketing-drop-in/scripts/vps-fix-installer.sh" "$INSTALL/"
 cp -f "$ROOT/marketing-drop-in/scripts/vps-patch-panel-installer.sh" "$INSTALL/"
 chmod +x "$INSTALL/vps-emergency-fix.sh" "$INSTALL/vps-fix-installer.sh" "$INSTALL/vps-patch-panel-installer.sh" \
-  "$INSTALL/vps-init-panel-git.sh" "$INSTALL/vps-publish-panel-release.sh" "$INSTALL/vps-fix-everything.sh" "$INSTALL/vps-git-auth.sh" 2>/dev/null || true
+  "$INSTALL/vps-init-panel-git.sh" "$INSTALL/vps-publish-panel-release.sh" "$INSTALL/vps-fix-everything.sh" \
+  "$INSTALL/vps-sync-from-github.sh" "$INSTALL/vps-git-auth.sh" 2>/dev/null || true
 
 PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
 cp -f "$ROOT/src/lib/panel-releases.json" "$ROOT/marketing-drop-in/src/lib/panel-releases.json"
