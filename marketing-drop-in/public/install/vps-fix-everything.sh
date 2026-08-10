@@ -99,7 +99,6 @@ if ! command -v pm2 >/dev/null 2>&1; then
 fi
 export PANEL_REPO_PATH="$PANEL"
 bash scripts/prepare-standalone.sh
-[ -f .env ] && cp -f .env .next/standalone/.env && sed -i '/^PANEL_REPO_PATH=/d' .next/standalone/.env 2>/dev/null || true
 bash scripts/pm2-start.sh
 
 echo ""
@@ -130,10 +129,15 @@ fi
 systemctl reload nginx
 
 echo ""
-echo "=== 5) Publish tarball + release feed (v$VER) ==="
+echo "=== 5) Publish tarball + release feed + install scripts (v$VER) ==="
 cd "$SRC"
 npm run sync:releases
+bash scripts/sync-install-to-marketing.sh
 SKIP_INSTALL_SCRIPT_PUBLISH=1 bash scripts/publish-panel-release.sh
+mkdir -p "$MARKETING/public/install"
+rsync -a "$SRC/marketing-drop-in/public/install/" "$MARKETING/public/install/"
+sed -i 's/\r$//' "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
+chmod +x "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
 cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
 cd "$MARKETING"
 npm run build
@@ -151,6 +155,10 @@ curl -fsS "http://127.0.0.1:${MARKETING_PORT}/api/panel-releases" | grep -q late
   { echo "FAIL release feed"; fail=1; }
 curl -fsSI "http://127.0.0.1:${MARKETING_PORT}/downloads/nexlify-panel.tar.gz" 2>/dev/null | head -1 | grep -q 200 && \
   echo "OK  tarball download" || echo "WARN tarball check"
+curl -fsS "http://127.0.0.1:${MARKETING_PORT}/install/scripts/fix-update-worker-now.sh" 2>/dev/null | grep -q fix-update-worker-now && \
+  echo "OK  install hotfix script" || echo "WARN install hotfix script missing"
+curl -fsS "http://127.0.0.1:${MARKETING_PORT}/install/scripts/panel-update-background.sh" 2>/dev/null | grep -q panel-update-background && \
+  echo "OK  update worker launcher" || echo "WARN update worker launcher missing"
 
 echo ""
 if [ "$fail" -eq 0 ]; then

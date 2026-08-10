@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.13}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v${_PV}}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -268,8 +268,6 @@ swap_staging_build() {
   fi
   export NEXLIFY_DIST_DIR=".next.staging"
   bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
-  # Strip PANEL_REPO_PATH from standalone .env (build-time path shouldn't persist)
-  sed -i '/^PANEL_REPO_PATH=/d' "$ROOT/.next.staging/standalone/.env" 2>/dev/null || true
   bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
   css_count="$(find .next.staging/static/css -name '*.css' 2>/dev/null | wc -l | tr -d ' ')"
   if [ -z "$css_count" ] || [ "$css_count" -lt 1 ]; then
