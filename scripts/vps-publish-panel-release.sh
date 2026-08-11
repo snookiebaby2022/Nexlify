@@ -89,6 +89,13 @@ cd "$SRC"
 VER="$(node -p "require('./package.json').version")"
 echo "Panel source version: $VER"
 
+# Keep .next/standalone/package.json in sync so PM2 version label stays correct
+# when the vendor panel runs from the standalone directory without a rebuild.
+if [ -f "$PANEL/.next/standalone/server.js" ] && [ -f "$PANEL/package.json" ]; then
+  cp -f "$PANEL/package.json" "$PANEL/.next/standalone/package.json"
+  echo "-> Synced package.json to .next/standalone for PM2 version label"
+fi
+
 echo "-> Sync panel-releases.json to marketing drop-in"
 npm run sync:releases
 
