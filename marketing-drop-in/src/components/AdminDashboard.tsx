@@ -16,6 +16,7 @@ import {
   ScrollText,
   Settings,
   Ticket,
+  Unlock,
   Upload,
   Users,
 } from "lucide-react";
@@ -35,6 +36,7 @@ import { AdminCoupons } from "@/components/AdminCoupons";
 import { AdminContent } from "@/components/AdminContent";
 import { AdminRemoteUpdate } from "@/components/AdminRemoteUpdate";
 import { AdminCategories } from "@/components/AdminCategories";
+import { AdminUnlockIP } from "@/components/AdminUnlockIP";
 
 const NAV_GROUPS = [
   {
@@ -74,6 +76,7 @@ const NAV_GROUPS = [
     label: "Operations",
     items: [
       { id: "categories", label: "Categories", icon: Folder },
+      { id: "unlock-ip", label: "Unlock IP", icon: Unlock },
       { id: "deploy", label: "Deploy", icon: Upload },
       { id: "remote", label: "Remote Update", icon: Radio },
     ],
@@ -165,6 +168,7 @@ export function AdminDashboard() {
         {tab === "health" && <AdminHealth />}
         {tab === "audit" && <AdminAuditLog />}
         {tab === "categories" && <AdminCategories />}
+        {tab === "unlock-ip" && <AdminUnlockIP />}
         {tab === "deploy" && <AdminDeploy />}
         {tab === "remote" && <AdminRemoteUpdate />}
       </main>

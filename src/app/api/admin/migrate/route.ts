@@ -12,7 +12,7 @@ import {
 const SOURCES = new Set(MIGRATION_SOURCES.map((s) => s.id));
 
 /** Large SQL dumps are uploaded as multipart/form-data to avoid loading them in the browser. */
-const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
 
 function applyOptions(body: Record<string, unknown>) {
   return {

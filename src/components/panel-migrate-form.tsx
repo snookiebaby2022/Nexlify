@@ -52,6 +52,7 @@ export function PanelMigrateForm() {
   const [preview, setPreview] = useState("");
   const [result, setResult] = useState("");
   const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{ loaded: number; total: number } | null>(null);
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [showAllWarnings, setShowAllWarnings] = useState(false);
 
@@ -159,6 +160,7 @@ export function PanelMigrateForm() {
     setResult(dryRun ? "Scanning…" : "Importing…");
     setPreview("");
     setProgress(null);
+    setUploadProgress(null);
     setShowAllWarnings(false);
 
     let res: Response;
@@ -174,10 +176,30 @@ export function PanelMigrateForm() {
         body: JSON.stringify(payload),
       });
     } else if (uploadFile && uploadFile.size > MAX_INLINE_BYTES) {
+      // Use XMLHttpRequest for upload progress on large files
       const form = new FormData();
       form.append("file", uploadFile);
       form.append("payload", JSON.stringify(migrationPayload(dryRun)));
-      res = await fetch("/api/admin/migrate", { method: "POST", body: form });
+
+      res = await new Promise<Response>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/admin/migrate");
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress({ loaded: e.loaded, total: e.total });
+          }
+        };
+        xhr.onload = () => {
+          const body = xhr.responseText;
+          resolve(new Response(body, {
+            status: xhr.status,
+            headers: { "Content-Type": xhr.getResponseHeader("Content-Type") || "application/json" },
+          }));
+        };
+        xhr.onerror = () => reject(new Error("Upload failed"));
+        xhr.send(form);
+      });
+      setUploadProgress(null);
     } else {
       const payload: Record<string, unknown> = {
         ...migrationPayload(dryRun),
@@ -394,8 +416,8 @@ export function PanelMigrateForm() {
             </li>
           )}
           <li>
-            Large <code>.sql</code> files upload directly to the server. Use paste or inline preview only for exports
-            under {formatBytes(MAX_INLINE_BYTES)}.
+            Large <code>.sql</code> files upload directly to the server (up to 2 GB). Use paste or inline preview
+            only for exports under {formatBytes(MAX_INLINE_BYTES)}.
           </li>
         </ul>
       </div>
@@ -675,11 +697,29 @@ export function PanelMigrateForm() {
         </button>
       </div>
 
+      {uploadProgress && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs opacity-70">
+            <span>Uploading file…</span>
+            <span>{(uploadProgress.loaded / 1024 / 1024).toFixed(1)}MB / {(uploadProgress.total / 1024 / 1024).toFixed(1)}MB</span>
+          </div>
+          <div className="w-full rounded-full h-2" style={{ background: "var(--card)" }}>
+            <div
+              className="h-2 rounded-full transition-all duration-300"
+              style={{
+                background: "#f59e0b",
+                width: `${uploadProgress.total > 0 ? (uploadProgress.loaded / uploadProgress.total) * 100 : 0}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {progress && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs opacity-70">
             <span>{progress.phase}</span>
-            <span>{progress.current}/{progress.total}</span>
+            <span>{progress.current}/{progress.total} ({progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0}%)</span>
           </div>
           <div className="w-full rounded-full h-2" style={{ background: "var(--card)" }}>
             <div
