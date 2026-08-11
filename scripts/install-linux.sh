@@ -505,7 +505,7 @@ export NEXT_TELEMETRY_DISABLED=1
 
 quiet_step "Installing npm dependencies" npm ci --no-audit --no-fund --loglevel=error
 
-quiet_step "Applying database schema" bash -c 'unset DATABASE_URL 2>/dev/null; npx prisma generate && npx prisma db push --accept-data-loss'
+quiet_step "Applying database schema" bash -c 'unset DATABASE_URL 2>/dev/null; npx prisma generate && (npx prisma migrate deploy || npx prisma db push --accept-data-loss)'
 
 quiet_step "Seeding database" env QUIET_SEED=1 npm run db:seed
 
