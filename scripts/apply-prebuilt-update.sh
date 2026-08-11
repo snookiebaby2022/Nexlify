@@ -150,9 +150,7 @@ fi
 
 # Step 5: Run postbuild scripts
 echo "Running postbuild scripts ..."
-if [ -f scripts/obfuscate-license.js ]; then
-  node scripts/obfuscate-license.js 2>&1 || echo "WARN: obfuscate-license failed (non-fatal)"
-fi
+# Skip obfuscate-license.js — the prebuilt tarball already contains obfuscated files from the build server
 # Skip prepare-standalone.sh — prebuilt tarball uses `next start` mode, not standalone
 
 # Step 5b: Run database migrations if schema changed
