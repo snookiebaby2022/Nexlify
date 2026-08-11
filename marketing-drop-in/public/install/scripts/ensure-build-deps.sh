@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 need_ci=0
-for pkg in tailwindcss postcss autoprefixer typescript; do
+for pkg in tailwindcss postcss autoprefixer typescript tsx; do
   if [ ! -d "node_modules/$pkg" ]; then
     echo "ensure-build-deps: missing node_modules/$pkg"
     need_ci=1

@@ -159,6 +159,8 @@ for s in \
   ensure-customer-ip-env.sh \
   ensure-prisma-client.sh \
   ensure-build-deps.sh \
+  ensure-tsx.sh \
+  run-cron-daemon.sh \
   fix-panel-ip-login.sh \
   fix-stuck-customer-panel.sh \
   fix-all-customer-updates.sh \

@@ -110,8 +110,8 @@ module.exports = {
     {
       name: "nexlify-cron",
       cwd: __dirname,
-      script: "node_modules/tsx/dist/cli.mjs",
-      args: "scripts/cron-daemon.ts",
+      script: "scripts/run-cron-daemon.sh",
+      interpreter: "bash",
       instances: 1,
       exec_mode: "fork",
       autorestart: true,

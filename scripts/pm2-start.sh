@@ -5,11 +5,10 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 sed -i 's/\r$//' scripts/*.sh 2>/dev/null || true
 
-# Ensure tsx is available (required for background update worker)
-if ! command -v npx >/dev/null 2>&1 || ! npx tsx --version >/dev/null 2>&1; then
-  echo "Installing tsx (required for panel updates) ..."
-  npm install -g tsx 2>/dev/null || npm install -g tsx --prefix /usr/local 2>/dev/null || echo "WARN: tsx install failed — updates may not work until installed manually"
-fi
+# Ensure local tsx (nexlify-cron + update worker — PM2 uses node_modules, not global)
+bash scripts/ensure-tsx.sh || {
+  echo "WARN: ensure-tsx failed — nexlify-cron may not start until tsx is installed"
+}
 
 ./scripts/ensure-panel-env.sh
 

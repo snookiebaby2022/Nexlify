@@ -2,9 +2,37 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.27",
+  "latestVersion": "1.9.28",
 
   "releases": [
+
+    {
+
+      "version": "1.9.28",
+
+      "date": "2026-08-11",
+
+      "channel": "stable",
+
+      "summary": "Fix nexlify-cron failing when local tsx is missing (Script not found: node_modules/tsx/dist/cli.mjs).",
+
+      "changelog": [
+
+        "tsx moved to production dependencies (installed even with npm ci --omit=dev)",
+
+        "run-cron-daemon.sh wrapper resolves tsx from node_modules, global, or npx",
+
+        "ensure-tsx.sh runs before PM2 starts nexlify-cron"
+      ],
+
+      "fixes": [
+
+        "PM2 ERROR: Script not found: node_modules/tsx/dist/cli.mjs on customer VPS",
+
+        "nexlify-cron missing after exec_mode re-register during pm2-start"
+      ]
+
+    },
 
     {
 
