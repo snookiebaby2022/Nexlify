@@ -54,11 +54,28 @@ ensure_panel_running() {
 cleanup() {
   rm -f "$TMP_TGZ"
   rm -rf "$STAGING_DIR"
+  # Restore root package.json if it was corrupted during update
+  if [ -f "$ROOT_PKG_BACKUP" ] && [ -f package.json ]; then
+    # Only restore if the backup has the name field (corrupted files don't)
+    if grep -q '"name"' "$ROOT_PKG_BACKUP" && ! grep -q '"name"' package.json; then
+      echo "Restoring root package.json from backup (was corrupted) ..."
+      cp "$ROOT_PKG_BACKUP" package.json
+    fi
+    rm -f "$ROOT_PKG_BACKUP"
+  fi
 }
 trap cleanup EXIT
 
 echo "=== Nexlify Pre-built Update ==="
 echo "Download URL: $DOWNLOAD_URL"
+
+# Backup root package.json — the tarball extraction and sed operations should not touch it,
+# but some npm operations may strip it. Restore after update.
+ROOT_PKG_BACKUP="/tmp/nexlify-pkg-backup-$$.json"
+if [ -f package.json ]; then
+  cp package.json "$ROOT_PKG_BACKUP"
+  echo "Backed up root package.json"
+fi
 
 # Step 1: Backup current build
 backup_next_if_valid
@@ -115,7 +132,12 @@ if [ -f package.json ]; then
   fi
   if [ -n "$archive_version" ]; then
     echo "Setting package.json version to $archive_version ..."
-    sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$archive_version\"/" package.json
+    # Replace only the FIRST "version" field (top-level) — sed '0' limits to first match
+    sed -i "0,/^  \"version\": *\"[^\"]*\"/s//  \"version\": \"$archive_version\"/" package.json
+    # Fallback: if the above didn't match (e.g. minified JSON), try a broader pattern
+    if ! grep -q "\"version\": *\"$archive_version\"" package.json; then
+      sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$archive_version\"/" package.json
+    fi
   else
     echo "WARN: Could not derive version from download URL; package.json left unchanged"
   fi
@@ -140,6 +162,16 @@ fi
 # Step 6: Copy package.json to standalone if it exists
 if [ -f package.json ] && [ -d .next/standalone ]; then
   cp package.json .next/standalone/package.json 2>/dev/null || true
+fi
+
+# Step 6b: Restore root package.json if it was corrupted during update
+if [ -f "$ROOT_PKG_BACKUP" ]; then
+  if grep -q '"name"' "$ROOT_PKG_BACKUP" && ! grep -q '"name"' package.json; then
+    echo "Restoring root package.json from backup (was corrupted during update) ..."
+    cp "$ROOT_PKG_BACKUP" package.json
+    cp package.json .next/standalone/package.json 2>/dev/null || true
+  fi
+  rm -f "$ROOT_PKG_BACKUP"
 fi
 
 # Step 7: Restart panel and cron
