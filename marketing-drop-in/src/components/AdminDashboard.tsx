@@ -5,6 +5,7 @@ import {
   BarChart3,
   CreditCard,
   FileText,
+  Folder,
   Globe,
   HeartPulse,
   KeyRound,
@@ -33,6 +34,7 @@ import { AdminAuditLog } from "@/components/AdminAuditLog";
 import { AdminCoupons } from "@/components/AdminCoupons";
 import { AdminContent } from "@/components/AdminContent";
 import { AdminRemoteUpdate } from "@/components/AdminRemoteUpdate";
+import { AdminCategories } from "@/components/AdminCategories";
 
 const NAV_GROUPS = [
   {
@@ -71,6 +73,7 @@ const NAV_GROUPS = [
   {
     label: "Operations",
     items: [
+      { id: "categories", label: "Categories", icon: Folder },
       { id: "deploy", label: "Deploy", icon: Upload },
       { id: "remote", label: "Remote Update", icon: Radio },
     ],
@@ -161,6 +164,7 @@ export function AdminDashboard() {
         {tab === "settings" && <AdminSiteSettings />}
         {tab === "health" && <AdminHealth />}
         {tab === "audit" && <AdminAuditLog />}
+        {tab === "categories" && <AdminCategories />}
         {tab === "deploy" && <AdminDeploy />}
         {tab === "remote" && <AdminRemoteUpdate />}
       </main>
