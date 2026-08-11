@@ -19,6 +19,8 @@ tar -czf "$OUT" \
   --exclude=.env.production \
   --exclude=.env.development \
   --exclude=dist \
+  --exclude=marketing-drop-in \
+  --exclude=backups \
   -C "$ROOT" .
 
 echo "Built $OUT ($(du -h "$OUT" | cut -f1))"
