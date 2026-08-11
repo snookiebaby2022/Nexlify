@@ -319,7 +319,9 @@ CREDS_FILE="$CREDS_ROOT/install-credentials"
 # Raw IP installs: panel on port 80 directly — no nginx, no internal :3000.
 if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   SKIP_SSL=1
-  echo "NOTE: IP install — panel on http://${DOMAIN}/ (port 80, no :3000)."
+  SKIP_NGINX=1
+  NEXLIFY_USE_NGINX=0
+  echo "NOTE: IP install — panel on http://${DOMAIN}/ (port 80, no nginx)."
 fi
 
 if [ -f "$PANEL_DIR/scripts/panel-port-config.sh" ]; then
@@ -443,12 +445,20 @@ set_kv DATABASE_URL "postgresql://nexlify:${PG_PASS}@localhost:5432/nexlify"
 set_kv JWT_SECRET "$JWT_SECRET"
 set_kv CRON_SECRET "$CRON_SECRET"
 set_kv BILLING_WEBHOOK_SECRET "$BILLING_SECRET"
-set_kv PORT "${NEXLIFY_PANEL_LISTEN_PORT:-13000}"
-set_kv PANEL_PORT "${NEXLIFY_PANEL_LISTEN_PORT:-13000}"
+if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [ "${NEXLIFY_USE_NGINX:-1}" = "0" ]; then
+  set_kv PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
+  set_kv PANEL_PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
+  set_kv PANEL_BIND_HOST "0.0.0.0"
+  set_kv PANEL_BEHIND_NGINX "0"
+  set_kv PANEL_PUBLIC_PORT "80"
+else
+  set_kv PORT "${NEXLIFY_PANEL_LISTEN_PORT:-13000}"
+  set_kv PANEL_PORT "${NEXLIFY_PANEL_LISTEN_PORT:-13000}"
+  set_kv PANEL_BIND_HOST "${NEXLIFY_PANEL_BIND_HOST:-127.0.0.1}"
+  set_kv PANEL_BEHIND_NGINX "${NEXLIFY_PANEL_BEHIND_NGINX:-1}"
+  set_kv PANEL_PUBLIC_PORT "${NEXLIFY_PANEL_PUBLIC_PORT:-80}"
+fi
 set_kv WEBSITE_PORT "${NEXLIFY_WEBSITE_UPSTREAM_PORT:-13001}"
-set_kv PANEL_BEHIND_NGINX "${NEXLIFY_PANEL_BEHIND_NGINX:-1}"
-set_kv PANEL_BIND_HOST "${NEXLIFY_PANEL_BIND_HOST:-127.0.0.1}"
-set_kv PANEL_PUBLIC_PORT "${NEXLIFY_PANEL_PUBLIC_PORT:-80}"
 set_kv PANEL_COOKIE_SECURE 0
 set_kv NEXLIFY_LICENSE_COOKIE_SECURE 0
 set_kv PANEL_PRIMARY_DOMAIN "$DOMAIN"
@@ -615,7 +625,12 @@ fi
 progress_step "Verifying admin login"
 chmod +x scripts/verify-install-login.sh 2>/dev/null || true
 node scripts/sync-license-env.mjs >>"$INSTALL_LOG" 2>&1 || true
-bash scripts/panel-restart-safe.sh >>"$INSTALL_LOG" 2>&1 || bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1
+# Only restart if panel is not already healthy; otherwise the extra restart
+# can make login verification race with startup.
+PANEL_VERIFY_PORT="${NEXLIFY_PANEL_LISTEN_PORT:-${PORT:-13000}}"
+if ! curl -fsS "http://127.0.0.1:${PANEL_VERIFY_PORT}/api/health" >/dev/null 2>&1; then
+  bash scripts/panel-restart-safe.sh >>"$INSTALL_LOG" 2>&1 || bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1
+fi
 sleep 3
 if ! ADMIN_PASS="$ADMIN_PASS" bash scripts/verify-install-login.sh >>"$INSTALL_LOG" 2>&1; then
   echo "" >&2
