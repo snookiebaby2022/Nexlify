@@ -102,6 +102,10 @@ chmod +x "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.
 echo "-> Build and publish source tarball"
 SKIP_INSTALL_SCRIPT_PUBLISH=1 bash scripts/publish-panel-release.sh
 
+# Keep the source tarball inside the marketing source tree so the full-site rsync --delete does not remove it.
+mkdir -p "${SRC}/marketing-drop-in/public/downloads"
+cp -f "${PANEL_PUBLISH_DEST:-/var/www/nexlify/public/downloads/nexlify-panel.tar.gz}" "${SRC}/marketing-drop-in/public/downloads/nexlify-panel.tar.gz"
+
 echo "-> Build and publish prebuilt .next archive"
 bash scripts/build-prebuilt-download.sh "${SRC}/dist/next-${VER}.tar.gz" "${VER}"
 mkdir -p "${MARKETING}/public/downloads" "${SRC}/marketing-drop-in/public/downloads"
