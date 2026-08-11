@@ -48,10 +48,33 @@ if ! grep -q '^JWT_SECRET=' .env 2>/dev/null || [ "$(grep '^JWT_SECRET=' .env | 
 fi
 
 echo "==> 2) Sync panel-releases + install scripts ..."
-if [ -f "$PANEL/src/lib/panel-releases.json" ]; then
+# Always pull the latest panel-releases.json from GitHub (public repo, no auth needed).
+# This ensures the build always has the current latestVersion even if local source is stale.
+GITHUB_RAW="https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main"
+_releases_url="$GITHUB_RAW/marketing-drop-in/src/lib/panel-releases.json"
+_install_cmd_url="$GITHUB_RAW/marketing-drop-in/public/install-command.json"
+_whats_new_url="$GITHUB_RAW/marketing-drop-in/src/components/WhatsNewSection.tsx"
+
+if curl -fsSL --max-time 15 "$_releases_url" -o /tmp/panel-releases-latest.json 2>/dev/null; then
+  cp -f /tmp/panel-releases-latest.json "$MARKETING/src/lib/panel-releases.json"
+  cp -f /tmp/panel-releases-latest.json "$MARKETING/public/panel-releases.json"
+  echo "   Updated panel-releases.json from GitHub (latestVersion: $(node -p "require('/tmp/panel-releases-latest.json').latestVersion" 2>/dev/null || echo '?'))"
+elif [ -f "$PANEL/src/lib/panel-releases.json" ]; then
   cp -f "$PANEL/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
   cp -f "$PANEL/src/lib/panel-releases.json" "$MARKETING/public/panel-releases.json"
+  echo "   Copied panel-releases.json from panel source (GitHub unavailable)"
 fi
+
+if curl -fsSL --max-time 15 "$_install_cmd_url" -o /tmp/install-command-latest.json 2>/dev/null; then
+  cp -f /tmp/install-command-latest.json "$MARKETING/public/install-command.json"
+  echo "   Updated install-command.json from GitHub"
+fi
+
+if curl -fsSL --max-time 15 "$_whats_new_url" -o /tmp/WhatsNewSection-latest.tsx 2>/dev/null; then
+  cp -f /tmp/WhatsNewSection-latest.tsx "$MARKETING/src/components/WhatsNewSection.tsx"
+  echo "   Updated WhatsNewSection.tsx from GitHub"
+fi
+
 if [ -d "$PANEL/marketing-drop-in/public/install" ]; then
   rsync -a "$PANEL/marketing-drop-in/public/install/" "$MARKETING/public/install/" 2>/dev/null || \
     cp -a "$PANEL/marketing-drop-in/public/install/." "$MARKETING/public/install/"
