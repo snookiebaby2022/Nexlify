@@ -185,7 +185,7 @@ async function resolvePanelRestartStep(repoPath: string): Promise<UpdateStep> {
     } catch {
       // Detect the actual PM2 app name so the restart doesn't fail silently when the
       // app is registered under a name other than the hardcoded "nexlify".
-      const pm2AppName = await detectPm2AppName();
+      const pm2AppName = await detectPm2AppName(repoPath);
       return {
         name: "pm2 restart nexlify",
         command: "pm2",
@@ -197,30 +197,38 @@ async function resolvePanelRestartStep(repoPath: string): Promise<UpdateStep> {
 
 /**
  * Look up the PM2 app name for this panel install.
- * Checks ecosystem.config.cjs first, then falls back to reading the PM2 process list.
+ * Checks ecosystem.config.cjs first, then filters the PM2 process list by the panel's repoPath.
  * Returns "nexlify" if detection fails — matches the default app name in ecosystem.config.cjs.
  */
-async function detectPm2AppName(): Promise<string> {
+async function detectPm2AppName(repoPath: string): Promise<string> {
   // 1. Read from ecosystem.config.cjs — the authoritative source for this install
-  try {
-    const ecosystemPath = path.join(process.cwd(), "ecosystem.config.cjs");
-    const { readFileSync } = await import("fs");
-    const raw = readFileSync(ecosystemPath, "utf-8");
-    const match = raw.match(/name\s*:\s*["']([^"']+)["']/);
-    if (match?.[1]) return match[1];
-  } catch {
-    /* not found */
+  for (const ecosystemPath of [
+    path.join(repoPath, "ecosystem.config.cjs"),
+    path.join(process.cwd(), "ecosystem.config.cjs"),
+  ]) {
+    try {
+      const { readFileSync } = await import("fs");
+      const raw = readFileSync(ecosystemPath, "utf-8");
+      const match = raw.match(/name\s*:\s*["']([^"']+)["']/);
+      if (match?.[1]) return match[1];
+    } catch {
+      /* not found */
+    }
   }
 
-  // 2. Ask PM2 for the list of apps and find one whose script path is inside repoPath
+  // 2. Ask PM2 for the list of apps and find the one whose cwd matches this panel's repoPath
   if (process.platform !== "win32") {
     try {
       const { execSync } = await import("child_process");
       const out = execSync("pm2 jlist 2>/dev/null", { encoding: "utf8", timeout: 5000 });
       const list = JSON.parse(out) as Array<{ name?: string; pm2_env?: { pm_cwd?: string } }>;
-      for (const app of list) {
-        if (app.name) return app.name;
-      }
+      const resolvedRepoPath = path.resolve(repoPath);
+      // Prefer an exact cwd match; fall back to the first app only if there is exactly one
+      const matched = list.filter(
+        (app) => app.pm2_env?.pm_cwd && path.resolve(app.pm2_env.pm_cwd) === resolvedRepoPath
+      );
+      if (matched.length === 1 && matched[0].name) return matched[0].name;
+      if (list.length === 1 && list[0].name) return list[0].name;
     } catch {
       /* pm2 not available */
     }

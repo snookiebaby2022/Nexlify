@@ -13,7 +13,18 @@ const BOOTSTRAP_SCRIPT_URL =
   process.env.PANEL_BOOTSTRAP_SCRIPT_URL?.trim() ||
   "https://nexlify.live/install/fix-panel-auto-update.sh";
 
-/** Attempt to bootstrap `apply-panel-fast-update.sh` via the vendor install script. */
+/**
+ * Attempt to bootstrap `apply-panel-fast-update.sh` via the vendor install script.
+ *
+ * Security note: this executes a remote shell script, consistent with the existing install
+ * model used throughout the Nexlify update infrastructure (all customer-facing install commands
+ * use `curl | bash`). The URL is taken from `PANEL_BOOTSTRAP_SCRIPT_URL` (operator-controlled)
+ * or the hardcoded vendor default. Only the vendor can trigger this endpoint
+ * (gated by `isAuthorizedInternalRequest`), and the bootstrap only runs when the update script
+ * is already absent — i.e., once per older install. Operators who need stronger guarantees
+ * should pre-deploy `apply-panel-fast-update.sh` via their own pipeline instead of relying on
+ * this auto-bootstrap.
+ */
 async function tryBootstrapUpdateScript(repoPath: string): Promise<boolean> {
   try {
     const { execSync } = await import("child_process");

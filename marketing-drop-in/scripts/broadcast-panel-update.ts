@@ -95,9 +95,9 @@ async function main() {
         console.log("already updating");
         skipped++;
       } else if (status === 409 && data.bootstrapUrl) {
+        // Needs one-time bootstrap — tracked separately, not counted as a generic failure
         console.log(`needs bootstrap (${status}): ${data.error}`);
         needsBootstrap.push(url);
-        failed++;
       } else {
         console.log(`FAILED (${status}): ${data.error ?? JSON.stringify(data)}`);
         failed++;
@@ -110,14 +110,17 @@ async function main() {
 
   await withConcurrency(tasks, CONCURRENCY);
 
-  console.log(`\nDone: ${started} started, ${skipped} skipped, ${failed} failed`);
+  console.log(
+    `\nDone: ${started} started, ${skipped} skipped, ${failed} failed, ${needsBootstrap.length} need bootstrap`
+  );
   if (needsBootstrap.length > 0) {
-    console.log("\nThe following panels need bootstrapping before they can receive remote updates:");
+    console.log("\nThe following panels need a one-time bootstrap before they can receive remote updates:");
     for (const url of needsBootstrap) console.log(`  ${url}`);
     console.log(
       "\nBootstrap each panel by SSH-ing in and running:\n  curl -fsSL 'https://nexlify.live/install/fix-panel-auto-update.sh' | sudo bash"
     );
-  } else if (failed > 0) {
+  }
+  if (failed > 0) {
     console.log(
       "\nIf a panel keeps failing, bootstrap it once:\n  curl -fsSL 'https://nexlify.live/install/fix-panel-auto-update.sh' | sudo bash"
     );

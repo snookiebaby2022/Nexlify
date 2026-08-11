@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
       },
       issues,
       fixHint: issues.length > 0
-        ? "Edit your .env file on the server, then restart the panel (pm2 restart nexlify)"
+        ? "Edit your .env file on the server, then restart the panel (e.g. pm2 restart nexlify, or bash scripts/pm2-start.sh)"
         : null,
       at: new Date().toISOString(),
     },
