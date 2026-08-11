@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
 tmp=$(mktemp -d /tmp/nexlify-up-XXXXXX)
 curl -fsSL "https://nexlify.live/downloads/nexlify-panel.tar.gz?v=$(date +%s)" -o "$tmp/panel.tar.gz"
 size=$(wc -c < "$tmp/panel.tar.gz" | tr -d ' ')

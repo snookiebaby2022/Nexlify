@@ -9,7 +9,7 @@
 # Env overrides: PANEL_DIR, PANEL_ARCHIVE_URL, NEXLIFY_LICENSE_KEY
 set -euo pipefail
 
-PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
 PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz}"
 _SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$_SCRIPT_DIR/panel-version.sh" ]; then
@@ -40,7 +40,7 @@ Options:
   --domain DOMAIN        Alias for --ip
   --email EMAIL          Email for Let's Encrypt SSL (domain installs only)
   --license KEY          Optional — activate during install (default: enter in panel after login)
-  --fresh                Wipe /opt/nexlify-panel before install
+  --fresh                Wipe /home/nexlify-panel before install
   --skip-firewall        Do not open ufw ports
   --monolithic           Panel + stream engine on this host (main server + local agent)
   -h, --help             Show this help

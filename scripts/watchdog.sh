@@ -5,7 +5,7 @@
 set -euo pipefail
 
 LOG="/var/log/nexlify-watchdog.log"
-PANEL_DIR="/opt/nexlify-panel"
+PANEL_DIR="/home/nexlify-panel"
 MARKETING_DIR="$PANEL_DIR/marketing-drop-in"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG"; }

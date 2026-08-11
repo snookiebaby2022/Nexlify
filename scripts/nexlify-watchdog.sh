@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-PANEL_DIR="/opt/nexlify-panel"
+PANEL_DIR="/home/nexlify-panel"
 LOG="/var/log/nexlify-watchdog.log"
 PM2_APP="nexlify"
 CRON_APP="nexlify-cron"

@@ -2,7 +2,7 @@
 # Fix IP-install PM2 crash loop: EADDRINUSE on port 80 from orphan PM2 workers.
 set -euo pipefail
 
-PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
 cd "$PANEL_DIR"
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
@@ -33,7 +33,6 @@ pm2 delete nexlify 2>/dev/null || true
 
 echo "[fix-port80] Killing orphan node listeners on :${PORT}..."
 pkill -f 'next/dist/bin/next' 2>/dev/null || true
-pkill -f '/opt/nexlify-panel/.next/standalone/server' 2>/dev/null || true
 pkill -f '/home/nexlify-panel/.next/standalone/server' 2>/dev/null || true
 
 if command -v fuser >/dev/null 2>&1; then

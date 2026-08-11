@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VPS_HOST="${1:-root@85.17.162.54}"
-PANEL_DIR="/opt/nexlify-panel"
+PANEL_DIR="/home/nexlify-panel"
 
 echo "=== Setting up Nexlify Panel Protection ==="
 

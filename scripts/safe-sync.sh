@@ -17,7 +17,7 @@ fi
 
 TARGET="$1"
 PASSWORD="${2:-}"
-PANEL_DIR="/opt/nexlify-panel"
+PANEL_DIR="/home/nexlify-panel"
 
 if [ -n "$PASSWORD" ]; then
   RSYNC_SSH="sshpass -p '$PASSWORD' ssh -o StrictHostKeyChecking=no"

@@ -8,7 +8,7 @@
 #   Full cycle:    bash scripts/protect-next.sh cycle
 set -euo pipefail
 
-PANEL_DIR="/opt/nexlify-panel"
+PANEL_DIR="/home/nexlify-panel"
 MARKETING_DIR="$PANEL_DIR/marketing-drop-in"
 BACKUP_DIR="/var/backups/nexlify-next"
 LOG="/var/log/nexlify-next-backup.log"

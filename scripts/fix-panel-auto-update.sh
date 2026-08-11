@@ -2,7 +2,7 @@
 # One-shot upgrade: enable automatic tarball updates on existing Nexlify panels.
 #   curl -fsSL 'https://nexlify.live/install/fix-panel-auto-update.sh?v=160' | sudo bash
 set -euo pipefail
-PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
 VENDOR_URL="${VENDOR_URL:-https://nexlify.live}"
 TARBALL="${VENDOR_URL}/downloads/nexlify-panel.tar.gz?v=164"
 

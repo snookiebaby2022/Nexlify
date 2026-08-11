@@ -20,7 +20,7 @@ INSTALL_BASE="${NEXLIFY_INSTALL_BASE:-https://nexlify.live/install}"
 CACHE="${NEXLIFY_INSTALL_VER:-v$(date +%Y%m%d)}"
 
 find_panel_dir() {
-  for candidate in "${PANEL_DIR:-}" /opt/nexlify-panel /home/nexlify-panel; do
+  for candidate in "${PANEL_DIR:-}" /home/nexlify-panel /opt/nexlify-panel; do
     [ -n "$candidate" ] && [ -f "$candidate/package.json" ] && echo "$candidate" && return 0
   done
   return 1
@@ -44,7 +44,7 @@ fetch_script() {
 
 PANEL="$(find_panel_dir || true)"
 if [ -z "$PANEL" ]; then
-  echo "ERROR: panel not found at /opt/nexlify-panel or /home/nexlify-panel" >&2
+  echo "ERROR: panel not found at /home/nexlify-panel or /opt/nexlify-panel" >&2
   exit 1
 fi
 cd "$PANEL"

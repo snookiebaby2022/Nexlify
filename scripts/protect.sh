@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-PANEL_DIR="/opt/nexlify-panel"
+PANEL_DIR="/home/nexlify-panel"
 MARKETING_DIR="$PANEL_DIR/marketing-drop-in"
 BACKUP_DIR="/var/backups/nexlify"
 LOG="/var/log/nexlify-protection.log"

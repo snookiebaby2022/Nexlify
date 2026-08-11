@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
 cd "$PANEL_DIR"
 sed -i 's/\r$//' scripts/*.sh 2>/dev/null || true
 chmod +x scripts/*.sh
