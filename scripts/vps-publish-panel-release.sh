@@ -108,10 +108,20 @@ mkdir -p "${MARKETING}/public/downloads" "${SRC}/marketing-drop-in/public/downlo
 cp -f "${SRC}/dist/next-${VER}.tar.gz" "${MARKETING}/public/downloads/next-${VER}.tar.gz"
 cp -f "${SRC}/dist/next-${VER}.tar.gz" "${SRC}/marketing-drop-in/public/downloads/next-${VER}.tar.gz"
 
-echo "-> Rebuild marketing site (panel-releases API)"
-cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
+echo "-> Sync marketing site source and rebuild"
+# Sync canonical marketing source so visual/content updates from GitHub are live.
+rsync -a --delete \
+  --exclude=.git \
+  --exclude=node_modules \
+  --exclude=.next \
+  --exclude=.env \
+  --exclude=.env.local \
+  "$SRC/marketing-drop-in/" "$MARKETING/"
+cp -f "$SRC/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
 cp -f "$SRC/src/lib/panel-releases.json" "$MARKETING/public/panel-releases.json"
 cd "$MARKETING"
+# Ensure deps match the updated source.
+npm ci --no-audit --no-fund --loglevel=error 2>/dev/null || npm install --no-audit --no-fund --loglevel=error 2>/dev/null || true
 npm run build
 pm2 delete nexlify-web 2>/dev/null || true
 pm2 start npm --name nexlify-web --cwd "$MARKETING" -- start -- -H 127.0.0.1 -p 13001
