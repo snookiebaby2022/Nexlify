@@ -59,13 +59,14 @@ export async function POST(request: Request) {
     let licenseDurationDays: number | null = null;
     let appliedCoupon: string | null = null;
 
-    if (isFreePeriod() && plan.slug !== TRIAL_PLAN_SLUG) {
+    const freePeriod = isFreePeriod();
+    if (freePeriod && plan.slug !== TRIAL_PLAN_SLUG) {
       amountCents = 0;
       licenseDurationDays = plan.durationDays;
     }
 
     const normalizedCoupon = couponCode?.trim().toUpperCase();
-    if (normalizedCoupon) {
+    if (normalizedCoupon && !freePeriod) {
       const coupon = await validateCoupon(normalizedCoupon, plan.durationDays);
       if (!coupon) {
         return NextResponse.json({ error: "Invalid or expired coupon" }, { status: 400 });
