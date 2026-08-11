@@ -286,7 +286,9 @@ fi
 # For --fresh, also drop and recreate the PostgreSQL database so migrations deploy cleanly.
 if [ "$FORCE_FRESH" -eq 1 ]; then
   log "Fresh install — dropping existing database (if any)"
-  sudo -u postgres psql -c "DROP DATABASE IF EXISTS nexlify;" >/dev/null 2>&1 || true
+  sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='nexlify';" >/dev/null 2>&1 || true
+  sudo -u postgres psql -c "DROP DATABASE IF EXISTS nexlify WITH (FORCE);" >/dev/null 2>&1 || \
+    sudo -u postgres psql -c "DROP DATABASE IF EXISTS nexlify;" >/dev/null 2>&1 || true
 fi
 
 if panel_install_complete; then
