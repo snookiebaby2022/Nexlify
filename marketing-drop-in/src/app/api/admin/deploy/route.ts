@@ -63,6 +63,23 @@ async function syncMarketingSource(): Promise<{ output: string; ok: boolean }> {
   return { output: output || `Synced from ${MARKETING_SOURCE}`, ok: code === 0 };
 }
 
+async function syncPanelReleaseAssets(): Promise<{ output: string; ok: boolean }> {
+  const syncScript = join(PANEL_PATH, "scripts", "sync-install-to-marketing.sh");
+  if (!existsSync(syncScript)) {
+    return {
+      output: `Skipped — no sync script at ${syncScript}`,
+      ok: true,
+    };
+  }
+
+  const { stdout, stderr, code } = await run(`bash "${syncScript}"`, PANEL_PATH);
+  const output = (stdout + stderr).trim();
+  return {
+    output: output || "Synced panel release/install assets into marketing source",
+    ok: code === 0,
+  };
+}
+
 export async function GET() {
   const user = await requireAdmin();
   if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -164,6 +181,16 @@ export async function POST(req: Request) {
       name: "Git pull (panel repo)",
       output: `Skipped — no git repo at ${PANEL_PATH}`,
       ok: true,
+    });
+  }
+
+  const releaseAssets = await syncPanelReleaseAssets();
+  steps.push({ name: "Sync panel release assets", ...releaseAssets });
+  if (!releaseAssets.ok) {
+    return NextResponse.json({
+      ok: false,
+      message: "Release asset sync failed — marketing website was not rebuilt.",
+      steps,
     });
   }
 
