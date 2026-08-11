@@ -24,26 +24,17 @@ if [ ! -f .next/BUILD_ID ]; then
 fi
 
 echo "Building prebuilt .next archive: $OUT"
-# Run prepare-standalone to populate standalone/.next/ before archiving
-if [ -f scripts/prepare-standalone.sh ]; then
-  echo "Running prepare-standalone.sh to populate standalone/.next/ ..."
-  bash scripts/prepare-standalone.sh 2>&1 || echo "WARN: prepare-standalone failed (non-fatal)"
-fi
-# Only include files needed for production runtime:
-# - standalone/  (server.js + bundled deps, pre-populated .next/ with server/, static/, manifests)
-# - server/      (full server-side build output for standalone .next/ and next start fallback)
+# Only include files needed for `next start` mode:
+# - server/      (full server-side build output)
 # - static/      (static assets)
-# - BUILD_ID and manifest files (for next start fallback)
-# Exclude cache/ and diagnostics/ which bloat the archive.
+# - BUILD_ID and manifest files
+# Exclude standalone/ (not needed - customer VPS uses `next start` with existing node_modules),
+# cache/, and diagnostics/ which bloat the archive.
 tar -czf "$OUT" \
-  --exclude='standalone/.next/cache' \
-  --exclude='standalone/.next/diagnostics' \
-  --exclude='standalone/node_modules' \
   --exclude='cache' \
   --exclude='diagnostics' \
   -C .next \
   BUILD_ID \
-  standalone \
   static \
   server \
   routes-manifest.json \

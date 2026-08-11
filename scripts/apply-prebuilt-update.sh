@@ -106,6 +106,11 @@ if [ -d "$STAGING_DIR/.next" ]; then
   rmdir "$STAGING_DIR/.next" 2>/dev/null || true
 fi
 
+# Remove standalone/ directory — the prebuilt tarball uses `next start` mode (not standalone)
+# ecosystem.config.cjs detects standalone/server.js and would switch to standalone mode,
+# but standalone needs node_modules/ which the prebuilt tarball doesn't include.
+rm -rf "$STAGING_DIR/standalone" 2>/dev/null || true
+
 # Verify the staging directory has a valid build
 if [ ! -f "$STAGING_DIR/BUILD_ID" ]; then
   echo "ERROR: Extracted archive does not contain BUILD_ID — invalid build"
@@ -148,26 +153,13 @@ echo "Running postbuild scripts ..."
 if [ -f scripts/obfuscate-license.js ]; then
   node scripts/obfuscate-license.js 2>&1 || echo "WARN: obfuscate-license failed (non-fatal)"
 fi
-if [ -f scripts/prepare-standalone.sh ]; then
-  bash scripts/prepare-standalone.sh 2>&1 || echo "WARN: prepare-standalone skipped (non-fatal)"
-fi
+# Skip prepare-standalone.sh — prebuilt tarball uses `next start` mode, not standalone
 
 # Step 5b: Run database migrations if schema changed
 echo "Checking for database schema changes ..."
-if [ -f node_modules/.prisma/client/index.js ] || [ -f .next/standalone/node_modules/.prisma/client/index.js ]; then
+if [ -f node_modules/.prisma/client/index.js ]; then
   npx prisma generate 2>&1 || echo "WARN: prisma generate failed"
   npx prisma db push --accept-data-loss 2>&1 || echo "WARN: prisma db push failed (non-fatal)"
-fi
-
-# Step 5c: Copy package.json and .env to standalone if it exists
-if [ -f package.json ] && [ -d .next/standalone ]; then
-  cp package.json .next/standalone/package.json 2>/dev/null || true
-fi
-if [ -f .env ] && [ -d .next/standalone ]; then
-  cp -f .env .next/standalone/.env 2>/dev/null || true
-  # Ensure PANEL_REPO_PATH points to the real repo, not .next/standalone
-  sed -i '/^PANEL_REPO_PATH=/d' .next/standalone/.env 2>/dev/null || true
-  echo "PANEL_REPO_PATH=$ROOT" >> .next/standalone/.env
 fi
 
 # Step 6b: Restore root package.json if it was corrupted during update
@@ -175,7 +167,6 @@ if [ -f "$ROOT_PKG_BACKUP" ]; then
   if grep -q '"name"' "$ROOT_PKG_BACKUP" && ! grep -q '"name"' package.json; then
     echo "Restoring root package.json from backup (was corrupted during update) ..."
     cp "$ROOT_PKG_BACKUP" package.json
-    cp package.json .next/standalone/package.json 2>/dev/null || true
   fi
   rm -f "$ROOT_PKG_BACKUP"
 fi
