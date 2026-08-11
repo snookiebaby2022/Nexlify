@@ -104,6 +104,7 @@ SKIP_INSTALL_SCRIPT_PUBLISH=1 bash scripts/publish-panel-release.sh
 
 echo "-> Build and publish prebuilt .next archive"
 bash scripts/build-prebuilt-download.sh "${SRC}/dist/next-${VER}.tar.gz" "${VER}"
+mkdir -p "${MARKETING}/public/downloads" "${SRC}/marketing-drop-in/public/downloads"
 cp -f "${SRC}/dist/next-${VER}.tar.gz" "${MARKETING}/public/downloads/next-${VER}.tar.gz"
 cp -f "${SRC}/dist/next-${VER}.tar.gz" "${SRC}/marketing-drop-in/public/downloads/next-${VER}.tar.gz"
 

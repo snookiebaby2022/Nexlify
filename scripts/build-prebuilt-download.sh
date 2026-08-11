@@ -24,5 +24,29 @@ if [ ! -f .next/BUILD_ID ]; then
 fi
 
 echo "Building prebuilt .next archive: $OUT"
-tar -czf "$OUT" -C .next .
+# Only include files needed for production runtime:
+# - standalone/  (server.js + required server chunks)
+# - static/      (static assets)
+# - BUILD_ID and manifest files (for next start fallback)
+# Exclude cache/ and diagnostics/ which bloat the archive.
+tar -czf "$OUT" \
+  -C .next \
+  BUILD_ID \
+  standalone \
+  static \
+  routes-manifest.json \
+  build-manifest.json \
+  prerender-manifest.json \
+  required-server-files.json \
+  react-loadable-manifest.json \
+  app-build-manifest.json \
+  app-path-routes-manifest.json \
+  next-minimal-server.js.nft.json \
+  next-server.js.nft.json \
+  package.json \
+  export-marker.json \
+  images-manifest.json \
+  types \
+  2>/dev/null || true
+
 echo "Built $OUT ($(du -h "$OUT" | cut -f1))"
