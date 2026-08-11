@@ -404,10 +404,13 @@ cmd_restart() {
   # Ensure watchdog cron is installed
   if [ -f "$ROOT/scripts/nexlify-watchdog.sh" ]; then
     chmod +x "$ROOT/scripts/nexlify-watchdog.sh"
+    _cron_tmp="$(mktemp)"
     (
       crontab -l 2>/dev/null | grep -v nexlify-watchdog || true
       echo "*/5 * * * * $ROOT/scripts/nexlify-watchdog.sh"
-    ) | crontab - >/dev/null 2>&1 </dev/null
+    ) > "$_cron_tmp"
+    crontab "$_cron_tmp" >/dev/null 2>&1 || true
+    rm -f "$_cron_tmp"
   fi
 }
 
