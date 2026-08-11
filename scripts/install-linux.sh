@@ -482,6 +482,13 @@ set_kv NEXLIFY_LICENSE_REQUIRE_ONLINE 1
 set_kv NEXLIFY_VENDOR_URL "https://nexlify.live"
 set_kv INSTALL_ADMIN_PASSWORD "$ADMIN_PASS"
 
+# Generate encryption-at-rest key for AES-256-GCM license storage
+if ! grep -q '^ENCRYPTION_AT_REST_KEY=' .env 2>/dev/null; then
+  _enc_key="$(openssl rand -hex 32 2>/dev/null || head -c 64 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 64)"
+  set_kv ENCRYPTION_AT_REST_KEY "$_enc_key"
+  log "Generated ENCRYPTION_AT_REST_KEY"
+fi
+
 configure_panel_license_sync() {
   local vendor="${NEXLIFY_VENDOR_URL:-https://nexlify.live}"
   local secret="${INSTALL_PANEL_SYNC_SECRET:-${PANEL_API_SECRET:-}}"
@@ -512,6 +519,21 @@ export CI=1
 export NEXT_TELEMETRY_DISABLED=1
 
 quiet_step "Installing npm dependencies" npm ci --no-audit --no-fund --loglevel=error
+
+# Generate Ed25519 license signing keypair if missing (needed for trial/license issuance)
+if [ ! -f .license-keys/private.pem ]; then
+  progress_step "Generating license signing key"
+  mkdir -p .license-keys
+  node -e "
+    const { generateKeyPairSync } = require('crypto');
+    const fs = require('fs');
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    fs.mkdirSync('.license-keys', { recursive: true });
+    fs.writeFileSync('.license-keys/private.pem', privateKey.export({ type: 'pkcs8', format: 'pem' }), { mode: 0o600 });
+    fs.writeFileSync('.license-keys/public.pem', publicKey.export({ type: 'spki', format: 'pem' }));
+    console.log('License signing keypair generated');
+  " >>"$INSTALL_LOG" 2>&1 || log "WARN: license key generation failed — trials may not work"
+fi
 
 quiet_step "Applying database schema" bash -c 'unset DATABASE_URL 2>/dev/null; npx prisma generate && npx prisma db push --accept-data-loss && for m in prisma/migrations/*/; do npx prisma migrate resolve --applied "$(basename "$m")" 2>/dev/null || true; done'
 
@@ -631,6 +653,10 @@ export PANEL_PM2_WAIT_SEC=30
 export PANEL_HEALTH_WAIT_SEC=30
 bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1
 bash scripts/pm2-boot-enable.sh >>"$INSTALL_LOG" 2>&1 || true
+
+# Ensure a Main Server row exists in the database for the dashboard
+progress_step "Creating main server entry"
+npx tsx scripts/ensure-monolithic-server.ts --domain "$DOMAIN" >>"$INSTALL_LOG" 2>&1 || log "WARN: main server auto-create skipped (you can add one under Admin → Servers)"
 
 # Setup watchdog cron (auto-healing every 5 minutes)
 if [ -f scripts/nexlify-watchdog.sh ]; then

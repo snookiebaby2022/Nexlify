@@ -28,7 +28,7 @@ export async function ensureMainServerOnline(): Promise<void> {
 
   // Auto-create Main Server if none exists
   if (servers.length === 0) {
-    const panelHost = process.env.PANEL_PRIMARY_DOMAIN || process.env.SERVER_IP || "127.0.0.1";
+    const panelHost = process.env.PANEL_PRIMARY_DOMAIN || process.env.NEXT_PUBLIC_SERVER_URL?.replace(/^https?:\/\//, "") || process.env.SERVER_IP || "127.0.0.1";
     const streamPort = Number(process.env.STREAM_HTTP_PORT || "80");
     try {
       await prisma.streamServer.create({

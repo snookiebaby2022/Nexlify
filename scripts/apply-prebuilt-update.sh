@@ -130,14 +130,22 @@ if [ -f scripts/prepare-standalone.sh ]; then
   bash scripts/prepare-standalone.sh 2>&1 || echo "WARN: prepare-standalone skipped (non-fatal)"
 fi
 
+# Step 5b: Run database migrations if schema changed
+echo "Checking for database schema changes ..."
+if [ -f node_modules/.prisma/client/index.js ] || [ -f .next/standalone/node_modules/.prisma/client/index.js ]; then
+  npx prisma generate 2>&1 || echo "WARN: prisma generate failed"
+  npx prisma db push --accept-data-loss 2>&1 || echo "WARN: prisma db push failed (non-fatal)"
+fi
+
 # Step 6: Copy package.json to standalone if it exists
 if [ -f package.json ] && [ -d .next/standalone ]; then
   cp package.json .next/standalone/package.json 2>/dev/null || true
 fi
 
-# Step 7: Restart panel
+# Step 7: Restart panel and cron
 echo "Starting panel ..."
 pm2 start nexlify --update-env 2>/dev/null || pm2 restart nexlify --update-env 2>/dev/null || true
+pm2 restart nexlify-cron --update-env 2>/dev/null || true
 sleep 3
 
 # Step 8: Verify health

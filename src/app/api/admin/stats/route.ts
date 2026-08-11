@@ -9,8 +9,10 @@ import { formatAuditAction } from "@/lib/audit-log";
 import { activityFixHref, cronFixHref } from "@/lib/activity-fix-links";
 import { getDashboardServerMetrics, getDashboardSummary, getDashboardKpiExtended } from "@/lib/dashboard-server-metrics";
 import { pluginEntitlementResponse } from "@/lib/plugin-entitlement";
+import { ensureMainServerOnline } from "@/lib/ensure-main-server-online";
 
 async function loadStats() {
+  await ensureMainServerOnline();
   const now = new Date();
 
   let connections: Awaited<ReturnType<typeof listActiveConnections>> = [];
