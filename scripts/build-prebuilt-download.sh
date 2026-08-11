@@ -30,6 +30,10 @@ echo "Building prebuilt .next archive: $OUT"
 # - BUILD_ID and manifest files (for next start fallback)
 # Exclude cache/ and diagnostics/ which bloat the archive.
 tar -czf "$OUT" \
+  --exclude='standalone/.next/cache' \
+  --exclude='standalone/.next/diagnostics' \
+  --exclude='cache' \
+  --exclude='diagnostics' \
   -C .next \
   BUILD_ID \
   standalone \
