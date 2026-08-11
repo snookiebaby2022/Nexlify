@@ -92,8 +92,6 @@ echo "Panel source version: $VER"
 echo "-> Sync panel-releases.json to marketing drop-in"
 npm run sync:releases
 
-echo "-> Sync installer scripts to marketing public/install"
-bash scripts/sync-install-to-marketing.sh
 mkdir -p "$MARKETING/public/install"
 rsync -a marketing-drop-in/public/install/ "$MARKETING/public/install/"
 sed -i 's/\r$//' "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
