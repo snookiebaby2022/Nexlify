@@ -478,10 +478,26 @@ export async function runPanelUpdateWithProgress(
 
   if (prebuiltScript && downloadUrl) {
     mode = "prebuilt";
+    // Always fetch the latest prebuilt apply script first so fixes in the script itself are picked up.
+    const cacheBust = panelUpdateCacheBust(await readPanelVersionForCacheBust(repoPath));
+    const bootstrapStep: UpdateStep = {
+      name: "bootstrap update scripts",
+      command: "bash",
+      args: ["-c", buildBootstrapUpdateScriptsShell(repoPath, cacheBust)],
+    };
+    const bootstrapOk = await runSteps(repoPath, [bootstrapStep], onProgress, jobSteps, steps);
+    if (!bootstrapOk) {
+      await tryRecoverPanel(repoPath, steps);
+      const msg = "Update failed at step: bootstrap update scripts";
+      await recordResult(settings, false, msg, fromVersion, fromVersion, "update", steps);
+      return { ok: false, message: msg, steps, fromVersion, toVersion: fromVersion };
+    }
+    // Re-resolve the script path after bootstrap may have replaced it.
+    const freshPrebuiltScript = await resolvePrebuiltUpdateScript(repoPath);
     const prebuiltStep: UpdateStep = {
       name: "prebuilt download & apply",
       command: "bash",
-      args: [prebuiltScript, downloadUrl],
+      args: [freshPrebuiltScript || prebuiltScript, downloadUrl],
     };
     ok = await runSteps(repoPath, [prebuiltStep], onProgress, jobSteps, steps);
     if (ok) {
