@@ -16,25 +16,25 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Skip when VPS SSH is not configured
-        if: ${{ secrets.VPS_SSH_KEY == '' }}
+        if: ${{ env.VPS_SSH_KEY == '' }}
         run: |
           echo "Skipping deploy — add VPS_HOST, VPS_USER, and VPS_SSH_KEY repository secrets to enable."
           exit 0
 
       - name: Generate VPS bundle
-        if: ${{ secrets.VPS_SSH_KEY != '' }}
+        if: ${{ env.VPS_SSH_KEY != '' }}
         run: bash marketing-drop-in/scripts/generate-vps-bundle.sh
 
       - name: Deploy to VPS
-        if: ${{ secrets.VPS_SSH_KEY != '' }}
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        if: ${{ env.VPS_SSH_KEY != '' }}
         run: |
           set -euo pipefail
           HOST="${VPS_HOST:?Set VPS_HOST secret}"
@@ -46,11 +46,7 @@ jobs:
             "chmod +x /root/vps-full-update.sh && nohup bash /root/vps-full-update.sh > /root/vps-full-update.log 2>&1 & echo DEPLOY_PID=\$!"
 
       - name: Verify install URL (after deploy settles)
-        if: ${{ secrets.VPS_SSH_KEY != '' }}
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        if: ${{ env.VPS_SSH_KEY != '' }}
         run: |
           sleep 120
           install -m 600 /dev/stdin ~/.ssh/deploy_key <<< "$VPS_SSH_KEY"
