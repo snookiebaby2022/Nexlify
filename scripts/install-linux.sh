@@ -528,12 +528,90 @@ ensure_build_memory() {
   fi
 }
 
-ensure_build_memory
-export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=3072}"
+panel_version() {
+  node -p "require('./package.json').version" 2>/dev/null || echo ""
+}
 
-if ! quiet_step "Building panel" npm run build; then
-  save_install_credentials "build_failed"
-  die "Panel build failed. Credentials saved to $CREDS_FILE — see errors above, then: cd $PANEL_DIR && npm run build && bash scripts/pm2-start.sh"
+resolve_prebuilt_url() {
+  local ver="${1:-}"
+  [ -n "$ver" ] || return 1
+  local vendor="${NEXLIFY_VENDOR_URL:-https://nexlify.live}"
+  local ua="NexlifyPanelInstaller/1.0 (+https://nexlify.live)"
+  # Prefer explicit env override
+  if [ -n "${PANEL_PREBUILT_URL:-}" ]; then
+    echo "$PANEL_PREBUILT_URL"
+    return 0
+  fi
+  # Try releases feed
+  local feed_url="${vendor}/api/panel-releases"
+  local url
+  url="$(curl -fsSL -A "$ua" --connect-timeout 10 --max-time 30 "$feed_url" 2>/dev/null \
+    | node -e "
+      let d='';
+      process.stdin.on('data', c => d += c);
+      process.stdin.on('end', () => {
+        try {
+          const j = JSON.parse(d);
+          const r = (j.releases || []).find(x => x.version === process.argv[1]);
+          if (r && r.downloadUrl) process.stdout.write(r.downloadUrl);
+        } catch {}
+      });
+    " "$ver" 2>/dev/null)"
+  if [ -n "$url" ]; then
+    echo "$url"
+    return 0
+  fi
+  # Fallback to hardcoded pattern
+  echo "${vendor}/downloads/next-${ver}.tar.gz"
+}
+
+download_and_extract_prebuilt() {
+  local url="$1"
+  local tmp="/tmp/nexlify-next-prebuilt-$$.tar.gz"
+  local ua="NexlifyPanelInstaller/1.0 (+https://nexlify.live)"
+  echo "Downloading prebuilt .next archive: $url"
+  if ! curl -fsSL -A "$ua" --connect-timeout 30 --max-time 600 -o "$tmp" "$url" >>"$INSTALL_LOG" 2>&1; then
+    rm -f "$tmp"
+    return 1
+  fi
+  local bytes
+  bytes="$(wc -c < "$tmp" | tr -d ' ')"
+  if [ "${bytes:-0}" -lt 10000000 ]; then
+    rm -f "$tmp"
+    echo "WARN: prebuilt archive too small (${bytes} bytes)" >&2
+    return 1
+  fi
+  echo "Extracting prebuilt .next archive ($(du -h "$tmp" | cut -f1)) ..."
+  rm -rf .next
+  mkdir -p .next
+  if ! tar xzf "$tmp" -C .next >>"$INSTALL_LOG" 2>&1; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+  if [ ! -f .next/BUILD_ID ]; then
+    echo "WARN: prebuilt archive missing BUILD_ID" >&2
+    return 1
+  fi
+  # Prepare standalone assets just in case
+  bash scripts/prepare-standalone.sh >>"$INSTALL_LOG" 2>&1 || true
+  return 0
+}
+
+PANEL_VER="$(panel_version)"
+PREBUILT_URL="$(resolve_prebuilt_url "$PANEL_VER")"
+USED_PREBUILT=0
+
+if [ -n "$PREBUILT_URL" ] && download_and_extract_prebuilt "$PREBUILT_URL"; then
+  progress_step "Using prebuilt panel"
+  USED_PREBUILT=1
+else
+  ensure_build_memory
+  export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=3072}"
+  if ! quiet_step "Building panel" npm run build; then
+    save_install_credentials "build_failed"
+    die "Panel build failed. Credentials saved to $CREDS_FILE — see errors above, then: cd $PANEL_DIR && npm run build && bash scripts/pm2-start.sh"
+  fi
 fi
 
 progress_step "Starting services"
