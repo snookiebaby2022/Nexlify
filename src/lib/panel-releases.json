@@ -2,9 +2,39 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.30",
+  "latestVersion": "1.9.31",
 
   "releases": [
+
+    {
+
+      "version": "1.9.31",
+
+      "date": "2026-08-11",
+
+      "channel": "stable",
+
+      "summary": "Fix prebuilt update not updating package.json version on old panels.",
+
+      "changelog": [
+
+        "Bootstrap the latest apply-prebuilt-update.sh from nexlify.live before running a prebuilt update",
+
+        "Old panels now pick up script fixes (package.json version sync) during prebuilt updates"
+
+      ],
+
+      "fixes": [
+
+        "After prebuilt update the version API still reported the old version",
+
+        "apply-prebuilt-update.sh fixes could not reach panels that only ever used prebuilt updates"
+
+      ],
+
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.31.tar.gz"
+
+    },
 
     {
 
