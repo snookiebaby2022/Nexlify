@@ -127,6 +127,7 @@ rsync -a --delete \
   --exclude=.next \
   --exclude=.env \
   --exclude=.env.local \
+  --exclude=.license-keys \
   "$SRC/marketing-drop-in/" "$MARKETING/"
 cp -f "$SRC/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
 cp -f "$SRC/src/lib/panel-releases.json" "$MARKETING/public/panel-releases.json"

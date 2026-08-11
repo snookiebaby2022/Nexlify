@@ -11,7 +11,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   const ip = clientIp(request);
-  const limited = rateLimit(`send-code:${ip}`, 3, 60 * 60 * 1000);
+  const limited = rateLimit(`send-code:${ip}`, 10, 60 * 60 * 1000);
   if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
 
   try {
