@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# EMERGENCY: panel down, blank page, or stuck mid-update.
+# Nexlify — emergency fix-panel-down-now (panel down, blank page, or stuck mid-update).
 # Brings the panel back online in ~30s (restart) or ~5min (rebuild if needed).
 #
 # Run ON CUSTOMER VPS as root:

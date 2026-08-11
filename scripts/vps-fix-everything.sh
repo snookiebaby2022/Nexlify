@@ -244,6 +244,8 @@ fi
 for required in \
   "$MARKETING/public/downloads/nexlify-panel.tar.gz" \
   "$MARKETING/public/install/apply-panel-fast-update.sh" \
+  "$MARKETING/public/install/fix-panel-down-now.sh" \
+  "$MARKETING/public/install/fix-customer-panel.sh" \
   "$MARKETING/public/install/scripts/panel-update-background.sh" \
   "$MARKETING/public/install/scripts/fix-update-worker-now.sh"; do
   if [ ! -f "$required" ]; then
@@ -323,9 +325,16 @@ curl_nginx /install/scripts/panel-update-background.sh | grep -q panel-update-ba
 curl_nginx /install/fix-customer-panel.sh | grep -q 'customer panel repair' && \
   echo "OK  fix-customer-panel.sh (nginx)" || \
   { echo "FAIL fix-customer-panel.sh (nginx)"; fail=1; }
-curl_nginx /install/fix-panel-down-now.sh | grep -q 'fix-panel-down' && \
-  echo "OK  fix-panel-down-now.sh (nginx)" || \
-  { echo "FAIL fix-panel-down-now.sh (nginx)"; fail=1; }
+if curl_nginx /install/fix-panel-down-now.sh 2>/dev/null | grep -q 'fix-panel-down-now'; then
+  echo "OK  fix-panel-down-now.sh (nginx)"
+elif curl_nginx /install/scripts/fix-panel-down-now.sh 2>/dev/null | grep -q 'fix-panel-down-now'; then
+  echo "OK  fix-panel-down-now.sh (nginx, /install/scripts/ fallback)"
+else
+  echo "FAIL fix-panel-down-now.sh (nginx) — missing on disk or nginx not serving it"
+  [ -f "$MARKETING/public/install/fix-panel-down-now.sh" ] || \
+    echo "      disk: missing $MARKETING/public/install/fix-panel-down-now.sh" >&2
+  fail=1
+fi
 
 echo ""
 echo "=== Public internet checks (Cloudflare — customer VPS sees these) ==="

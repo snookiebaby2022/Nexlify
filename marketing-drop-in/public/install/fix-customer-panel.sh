@@ -99,21 +99,29 @@ detect_domain() {
 
 verify_panel_ui() {
   local port="$1"
-  local code chunk_code
-  code="$(curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}/login" 2>/dev/null || echo 000)"
+  local host="${PANEL_BIND_HOST:-127.0.0.1}"
+  local ua="${NEXLIFY_VERIFY_UA:-Mozilla/5.0 (compatible; NexlifyInstallVerify/1.0)}"
+  case "$host" in 0.0.0.0|::|"*") host="127.0.0.1" ;; esac
+  local code chunk_code attempt
+
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    code="$(curl -fsS -o /dev/null -w '%{http_code}' -H "User-Agent: $ua" "http://${host}:${port}/login" 2>/dev/null || echo 000)"
+    [ "$code" = "200" ] && break
+    [ "$attempt" -lt 10 ] && sleep 3
+  done
   if [ "$code" != "200" ]; then
-    echo "ERROR: /login returned HTTP $code" >&2
+    echo "ERROR: /login returned HTTP $code (after wait; bot-stealth blocks plain curl — use a browser)" >&2
     return 1
   fi
   local html
-  html="$(curl -fsS "http://127.0.0.1:${port}/login" 2>/dev/null || true)"
+  html="$(curl -fsS -H "User-Agent: $ua" "http://${host}:${port}/login" 2>/dev/null || true)"
   local chunk
   chunk="$(echo "$html" | grep -oE '/_next/static/[^"]+\.js' | head -1 || true)"
   if [ -z "$chunk" ]; then
     echo "ERROR: no JS chunk references in login HTML" >&2
     return 1
   fi
-  chunk_code="$(curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}${chunk}" 2>/dev/null || echo 000)"
+  chunk_code="$(curl -fsS -o /dev/null -w '%{http_code}' -H "User-Agent: $ua" "http://${host}:${port}${chunk}" 2>/dev/null || echo 000)"
   if [ "$chunk_code" != "200" ]; then
     echo "ERROR: JS chunk ${chunk} returned HTTP $chunk_code (client-side crash)" >&2
     return 1
@@ -149,10 +157,13 @@ echo ""
 echo "==> Fetching latest repair scripts ..."
 for s in \
   ensure-customer-ip-env.sh \
+  ensure-prisma-client.sh \
+  ensure-build-deps.sh \
   fix-panel-ip-login.sh \
   fix-stuck-customer-panel.sh \
   fix-all-customer-updates.sh \
   fix-update-worker-now.sh \
+  panel-update-recover.sh \
   vps-repair-standalone.sh \
   prepare-standalone.sh \
   verify-standalone.sh \
@@ -218,11 +229,14 @@ export DOMAIN
 bash "$PANEL/scripts/fix-panel-ip-login.sh"
 
 echo ""
-echo "==> Step 4: final standalone asset check ..."
-bash "$PANEL/scripts/vps-repair-standalone.sh"
+echo "==> Step 4: final standalone asset check (no PM2 restart — step 3 already restarted) ..."
+SKIP_PM2_RESTART=1 bash "$PANEL/scripts/vps-repair-standalone.sh"
 
 echo ""
 echo "==> Step 5: verify panel UI ..."
+if [ -f "$PANEL/scripts/wait-panel-ready.sh" ]; then
+  bash "$PANEL/scripts/wait-panel-ready.sh" || true
+fi
 PORT="$(read_env_val PORT "$PANEL/.env")"
 PORT="${PORT:-80}"
 verify_panel_ui "$PORT"

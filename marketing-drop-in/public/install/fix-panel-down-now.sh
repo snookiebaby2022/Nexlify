@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# EMERGENCY: panel down, blank page, or stuck mid-update.
+# Nexlify — emergency fix-panel-down-now (panel down, blank page, or stuck mid-update).
 # Brings the panel back online in ~30s (restart) or ~5min (rebuild if needed).
 #
 # Run ON CUSTOMER VPS as root:
 #   curl -fsSL 'https://nexlify.live/install/fix-panel-down-now.sh' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/scripts/fix-panel-down-now.sh' | sudo bash
 #
 # Cloudflare fallback:
 #   curl -fsSL 'http://85.17.162.54/install/fix-panel-down-now.sh' -H 'Host: nexlify.live' | sudo bash
@@ -118,7 +119,7 @@ fi
 PORT="$(grep '^PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- || echo 80)"
 PORT="${PORT:-80}"
 sleep 3
-CODE="$(curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/login" 2>/dev/null || echo 000)"
+CODE="$(curl -fsS -o /dev/null -w '%{http_code}' -H "User-Agent: Mozilla/5.0 (compatible; NexlifyInstallVerify/1.0)" "http://127.0.0.1:${PORT}/login" 2>/dev/null || echo 000)"
 DOMAIN="$(grep '^PANEL_PRIMARY_DOMAIN=' .env 2>/dev/null | head -1 | cut -d= -f2- || echo 127.0.0.1)"
 
 echo ""
