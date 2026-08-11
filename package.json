@@ -17,7 +17,7 @@
     "releases:sync": "node scripts/sync-releases-to-website.mjs",
     "sync:all": "bash scripts/nexlify-sync-all.sh",
     "sync:install": "bash scripts/sync-install-to-marketing.sh",
-    "sync:releases": "cp -f src/lib/panel-releases.json marketing-drop-in/src/lib/panel-releases.json && npm run releases:sync",
+    "sync:releases": "bash scripts/sync-install-to-marketing.sh && npm run releases:sync",
     "cleanup:local": "bash scripts/nexlify-local-cleanup.sh",
     "verify:sync": "bash scripts/nexlify-verify-sync.sh",
     "fix:all": "bash scripts/nexlify-fix-all.sh",
