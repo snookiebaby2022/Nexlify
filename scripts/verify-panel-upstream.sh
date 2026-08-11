@@ -8,6 +8,8 @@ set +a
 
 PORT="${PORT:-${PANEL_PORT:-13000}}"
 HOST="${PANEL_BIND_HOST:-127.0.0.1}"
+# 0.0.0.0 is a bind wildcard, not a valid connect address — use localhost for health checks.
+[ "$HOST" = "0.0.0.0" ] && HOST="127.0.0.1"
 URL="http://${HOST}:${PORT}/api/health"
 LOGIN_URL="http://${HOST}:${PORT}/login"
 VERIFY_UA="${NEXLIFY_VERIFY_UA:-Mozilla/5.0 (compatible; NexlifyInstallVerify/1.0)}"

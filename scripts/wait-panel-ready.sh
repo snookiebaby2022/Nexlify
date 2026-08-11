@@ -8,6 +8,8 @@ set +a
 
 PORT="${PORT:-${PANEL_PORT:-13000}}"
 HOST="${PANEL_BIND_HOST:-127.0.0.1}"
+# 0.0.0.0 is a bind wildcard, not a valid connect address — use localhost for health checks.
+[ "$HOST" = "0.0.0.0" ] && HOST="127.0.0.1"
 URL="http://${HOST}:${PORT}/api/health"
 MAX_PM2_WAIT="${PANEL_PM2_WAIT_SEC:-90}"
 MAX_HEALTH_WAIT="${PANEL_HEALTH_WAIT_SEC:-90}"
