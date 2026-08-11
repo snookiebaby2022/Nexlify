@@ -53,6 +53,7 @@ export function PanelMigrateForm() {
   const [result, setResult] = useState("");
   const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ loaded: number; total: number } | null>(null);
+  const [scanning, setScanning] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [showAllWarnings, setShowAllWarnings] = useState(false);
 
@@ -161,6 +162,7 @@ export function PanelMigrateForm() {
     setPreview("");
     setProgress(null);
     setUploadProgress(null);
+    setScanning(dryRun);
     setShowAllWarnings(false);
 
     let res: Response;
@@ -199,7 +201,6 @@ export function PanelMigrateForm() {
         xhr.onerror = () => reject(new Error("Upload failed"));
         xhr.send(form);
       });
-      setUploadProgress(null);
     } else {
       const payload: Record<string, unknown> = {
         ...migrationPayload(dryRun),
@@ -216,6 +217,8 @@ export function PanelMigrateForm() {
     // For dry runs, parse JSON response directly
     if (dryRun) {
       const data = await res.json();
+      setUploadProgress(null);
+      setScanning(false);
       if (!res.ok) {
         setResult(`Error: ${data.error ?? res.statusText}`);
         return;
@@ -227,11 +230,15 @@ export function PanelMigrateForm() {
     // For actual imports, read SSE stream
     if (!res.ok) {
       const data = await res.json();
+      setUploadProgress(null);
+      setScanning(false);
       setResult(`Error: ${data.error ?? res.statusText}`);
       return;
     }
 
     if (!res.body) {
+      setUploadProgress(null);
+      setScanning(false);
       setResult("Error: No response body");
       return;
     }
@@ -263,8 +270,12 @@ export function PanelMigrateForm() {
                   setProgress(data);
                   setResult(`Importing ${data.phase}: ${data.current}/${data.total}...`);
                 } else if (eventType === "complete") {
+                  setUploadProgress(null);
+                  setScanning(false);
                   handleCompleteResponse(data);
                 } else if (eventType === "error") {
+                  setUploadProgress(null);
+                  setScanning(false);
                   setResult(`Error: ${data.error}`);
                 }
               } catch {
@@ -276,6 +287,8 @@ export function PanelMigrateForm() {
       }
     } finally {
       reader.releaseLock();
+      setUploadProgress(null);
+      setScanning(false);
     }
   }
 
@@ -700,7 +713,7 @@ export function PanelMigrateForm() {
       {uploadProgress && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs opacity-70">
-            <span>Uploading file…</span>
+            <span>{scanning ? "Uploading & scanning…" : "Uploading file…"}</span>
             <span>{(uploadProgress.loaded / 1024 / 1024).toFixed(1)}MB / {(uploadProgress.total / 1024 / 1024).toFixed(1)}MB</span>
           </div>
           <div className="w-full rounded-full h-2" style={{ background: "var(--card)" }}>
@@ -712,6 +725,31 @@ export function PanelMigrateForm() {
               }}
             />
           </div>
+        </div>
+      )}
+
+      {scanning && !uploadProgress && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs opacity-70">
+            <span>Scanning file…</span>
+            <span className="animate-pulse">processing</span>
+          </div>
+          <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: "var(--card)" }}>
+            <div
+              className="h-2 rounded-full"
+              style={{
+                background: "var(--accent)",
+                width: "40%",
+                animation: "scan-progress 1.5s ease-in-out infinite",
+              }}
+            />
+          </div>
+          <style>{`
+            @keyframes scan-progress {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(350%); }
+            }
+          `}</style>
         </div>
       )}
 
