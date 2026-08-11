@@ -15,6 +15,7 @@ export function AdminUnlockIP() {
   const [mode, setMode] = useState<"all" | "specific">("all");
   const [urls, setUrls] = useState("");
   const [usernames, setUsernames] = useState("");
+  const [email, setEmail] = useState("");
   const [results, setResults] = useState<Result[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -29,12 +30,15 @@ export function AdminUnlockIP() {
       } else if (targetUsernames.length > 0) {
         body.usernames = targetUsernames;
       }
+      if (email.trim()) {
+        body.email = email;
+      }
 
       const res = await fetch("/api/admin/remote-unlock-ip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
-      });
+      };
       const data = await res.json();
       setResults(data.results || []);
     } catch {
@@ -134,6 +138,14 @@ export function AdminUnlockIP() {
                 placeholder="user1, user2, user3"
                 className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none"
               />
+              <label className="block text-sm text-slate-300 mt-2">Email address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@example.com"
+                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900/50 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none"
+              />
             </div>
           )}
 
@@ -163,7 +175,7 @@ export function AdminUnlockIP() {
                 <div className="font-mono text-xs text-slate-400 break-all">{r.url}</div>
                 <div className={`mt-1 ${r.ok ? "text-green-400" : "text-red-400"}`}>
                   {r.ok
-                    ? `Unlocked ${r.unlocked ?? 0} of ${r.total ?? 0} lines`
+                    ? `Unlocked ${r.unlocked ?? 0} of ${r.total ?? 0} lines${r.email ? ` (email: ${r.email})` : ""}`
                     : `Failed${r.error ? ` — ${r.error}` : ""}`}
                 </div>
               </div>
