@@ -11,6 +11,7 @@ rm -f "$OUT"
 tar -czf "$OUT" \
   --exclude=node_modules \
   --exclude=.next \
+  --exclude=.next.zip \
   --exclude=.git \
   --exclude=./data \
   --exclude=.env \
