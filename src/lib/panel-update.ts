@@ -19,6 +19,11 @@ import {
 } from "@/lib/panel-update-bootstrap";
 import { getPanelVersionInfo, readInstalledVersion } from "@/lib/panel-version";
 import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
+import {
+  DEFAULT_RELEASES_FEED_URL,
+  fetchNexlifyReleasesFeed,
+  isVersionNewer,
+} from "@/lib/panel-releases-feed";
 
 export type UpdateProgressCallback = (update: Partial<PanelUpdateJob>) => void | Promise<void>;
 
@@ -151,6 +156,37 @@ export async function resolvePatchUpdateScript(repoPath: string): Promise<string
     }
   }
   return null;
+}
+
+/** Check releases feed for a pre-built .next download URL for the target version. */
+export async function resolvePrebuiltDownloadUrl(
+  targetVersion: string,
+  repoPath: string,
+): Promise<string | null> {
+  try {
+    const settings = await getPanelServerSettings();
+    const feedUrl = settings.updateCheckUrl?.trim() || DEFAULT_RELEASES_FEED_URL;
+    const feed = await fetchNexlifyReleasesFeed(feedUrl);
+    const release = feed.releases.find((r) => r.version === targetVersion);
+    if (release?.downloadUrl) {
+      console.log(`[panel-update] Found prebuilt downloadUrl for v${targetVersion}`);
+      return release.downloadUrl;
+    }
+  } catch (err) {
+    console.log("[panel-update] Could not resolve prebuilt download URL:", err);
+  }
+  return null;
+}
+
+/** Locate the prebuilt update script if it exists. */
+export async function resolvePrebuiltUpdateScript(repoPath: string): Promise<string | null> {
+  const script = path.join(repoPath, "scripts/apply-prebuilt-update.sh");
+  try {
+    await access(script);
+    return script;
+  } catch {
+    return null;
+  }
 }
 
 export function panelUpdateManualSteps(repoPath: string): string[] {
@@ -424,9 +460,43 @@ export async function runPanelUpdateWithProgress(
   }
 
   let ok: boolean;
-  if (patchScript) {
+  let mode: "prebuilt" | "patch" | "git" = "git";
+
+  const prebuiltScript = await resolvePrebuiltUpdateScript(repoPath);
+  const downloadUrl = prebuiltScript ? await resolvePrebuiltDownloadUrl(toVersion, repoPath) : null;
+
+  if (prebuiltScript && downloadUrl) {
+    mode = "prebuilt";
+    const prebuiltStep: UpdateStep = {
+      name: "prebuilt download & apply",
+      command: "bash",
+      args: [prebuiltScript, downloadUrl],
+    };
+    ok = await runSteps(repoPath, [prebuiltStep], onProgress, jobSteps, steps);
+    if (ok) {
+      const restartStep = await resolvePanelRestartStep(repoPath);
+      await reportProgress(onProgress, {
+        currentStep: restartStep.name,
+        progress: progressForStep(restartStep.name) - 2,
+        steps: [...jobSteps, { name: restartStep.name, ok: false, status: "running" }],
+      });
+      const pm2 = await runCommand(repoPath, restartStep.command, restartStep.args, {
+        stepName: restartStep.name,
+      });
+      steps.push({ name: restartStep.name, ok: pm2.ok, output: pm2.output });
+      jobSteps.push({
+        name: restartStep.name,
+        ok: pm2.ok,
+        status: pm2.ok ? "done" : "failed",
+        output: pm2.output,
+      });
+      ok = pm2.ok;
+    }
+  } else if (patchScript) {
+    mode = "patch";
     ok = await runSteps(repoPath, await patchUpdateSteps(patchScript, repoPath), onProgress, jobSteps, steps);
   } else {
+    mode = "git";
     ok = await runSteps(
       repoPath,
       [{ name: "git pull", command: "git", args: ["pull", "--ff-only"] }],
@@ -468,7 +538,6 @@ export async function runPanelUpdateWithProgress(
   await writeUpdateCache(repoPath);
 
   toVersion = (await readInstalledVersion(repoPath)).version;
-  const mode = patchScript ? "patch" : "git";
   const msg =
     toVersion !== fromVersion
       ? `Updated from v${fromVersion} to v${toVersion} (${mode}). Panel restarted via PM2.`

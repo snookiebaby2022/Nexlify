@@ -99,8 +99,13 @@ rsync -a marketing-drop-in/public/install/ "$MARKETING/public/install/"
 sed -i 's/\r$//' "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
 chmod +x "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
 
-echo "-> Build and publish tarball"
+echo "-> Build and publish source tarball"
 SKIP_INSTALL_SCRIPT_PUBLISH=1 bash scripts/publish-panel-release.sh
+
+echo "-> Build and publish prebuilt .next archive"
+bash scripts/build-prebuilt-download.sh "${SRC}/dist/next-${VER}.tar.gz" "${VER}"
+cp -f "${SRC}/dist/next-${VER}.tar.gz" "${MARKETING}/public/downloads/next-${VER}.tar.gz"
+cp -f "${SRC}/dist/next-${VER}.tar.gz" "${SRC}/marketing-drop-in/public/downloads/next-${VER}.tar.gz"
 
 echo "-> Rebuild marketing site (panel-releases API)"
 cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"

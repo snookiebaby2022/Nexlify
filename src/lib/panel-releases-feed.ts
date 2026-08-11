@@ -8,6 +8,7 @@ export type NexlifyRelease = {
   notes?: string[];
   changelog: string[];
   fixes: string[];
+  downloadUrl?: string;
 };
 
 export type NexlifyReleasesFeed = {
@@ -84,6 +85,7 @@ function normalizeRelease(raw: Record<string, unknown>): NexlifyRelease {
       notes: Array.isArray(raw.notes) ? raw.notes.map(String) : undefined,
       changelog: raw.changelog.map(String),
       fixes: Array.isArray(raw.fixes) ? raw.fixes.map(String) : [],
+      downloadUrl: typeof raw.downloadUrl === "string" ? raw.downloadUrl : undefined,
     };
   }
 
@@ -113,5 +115,6 @@ function normalizeRelease(raw: Record<string, unknown>): NexlifyRelease {
           : undefined,
     changelog: features.length ? features : changelog,
     fixes,
+    downloadUrl: typeof raw.downloadUrl === "string" ? raw.downloadUrl : undefined,
   };
 }

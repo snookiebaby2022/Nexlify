@@ -11,7 +11,11 @@ import {
   reconcileStaleUpdateJob,
   startBackgroundPanelUpdate,
 } from "@/lib/panel-update-job";
-import { resolvePatchUpdateScript } from "@/lib/panel-update";
+import {
+  resolvePatchUpdateScript,
+  resolvePrebuiltUpdateScript,
+  resolvePrebuiltDownloadUrl,
+} from "@/lib/panel-update";
 
 export type PanelUpdateStatus = {
   installedVersion: string;
@@ -43,6 +47,10 @@ export async function getPanelUpdateStatus(): Promise<PanelUpdateStatus> {
     latestVersion != null && isVersionNewer(latestVersion, version.installedVersion);
   const job = await reconcileStaleUpdateJob(repoPath);
   const patchScript = await resolvePatchUpdateScript(repoPath);
+  const prebuiltScript = await resolvePrebuiltUpdateScript(repoPath);
+  const downloadUrl = prebuiltScript && latestVersion
+    ? await resolvePrebuiltDownloadUrl(latestVersion, repoPath)
+    : null;
 
   return {
     installedVersion: version.installedVersion,
@@ -50,7 +58,7 @@ export async function getPanelUpdateStatus(): Promise<PanelUpdateStatus> {
     updateAvailable,
     autoApplyEnabled: settings.panelUpdateAutoDownload === true,
     canAutoUpdate:
-      process.platform === "linux" && (version.isGitRepo || patchScript != null),
+      process.platform === "linux" && (version.isGitRepo || patchScript != null || !!downloadUrl),
     updateRunning: isJobRunning(job),
     repoPath,
   };
