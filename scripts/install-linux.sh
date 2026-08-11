@@ -283,6 +283,12 @@ if [ "$FORCE_FRESH" -eq 1 ] && [ -e "$PANEL_DIR" ]; then
   rm -rf "$PANEL_DIR"
 fi
 
+# For --fresh, also drop and recreate the PostgreSQL database so migrations deploy cleanly.
+if [ "$FORCE_FRESH" -eq 1 ]; then
+  log "Fresh install — dropping existing database (if any)"
+  sudo -u postgres psql -c "DROP DATABASE IF EXISTS nexlify;" >/dev/null 2>&1 || true
+fi
+
 if panel_install_complete; then
   progress_step "Using existing panel copy"
 elif [ -e "$PANEL_DIR" ]; then
