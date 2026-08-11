@@ -627,7 +627,12 @@ bash scripts/pm2-boot-enable.sh >>"$INSTALL_LOG" 2>&1 || true
 # Setup watchdog cron (auto-healing every 5 minutes)
 if [ -f scripts/nexlify-watchdog.sh ]; then
   chmod +x scripts/nexlify-watchdog.sh
-  (crontab -l 2>/dev/null | grep -v nexlify-watchdog; echo "*/5 * * * * $PANEL_DIR/scripts/nexlify-watchdog.sh") | crontab -
+  # Redirect stdin from /dev/null so crontab does not consume the install script
+  # when the installer is run via curl | bash.
+  (
+    crontab -l 2>/dev/null | grep -v nexlify-watchdog || true
+    echo "*/5 * * * * $PANEL_DIR/scripts/nexlify-watchdog.sh"
+  ) | crontab - >/dev/null 2>&1 </dev/null
   log "Watchdog cron installed (auto-heals every 5 minutes)"
 fi
 
