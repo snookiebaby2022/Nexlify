@@ -17,6 +17,29 @@ fi
 
 mkdir -p "$DIST/standalone/.next"
 
+# Copy all files the standalone server needs from .next/ into standalone/.next/
+# The standalone server.js sets distDir: "./.next" and runs from standalone/,
+# so it needs BUILD_ID, manifests, server/ etc. inside standalone/.next/.
+for f in BUILD_ID routes-manifest.json build-manifest.json prerender-manifest.json \
+         required-server-files.json react-loadable-manifest.json \
+         app-build-manifest.json app-path-routes-manifest.json \
+         next-minimal-server.js.nft.json next-server.js.nft.json \
+         package.json export-marker.json images-manifest.json; do
+  if [ -f "$DIST/$f" ]; then
+    cp -f "$DIST/$f" "$DIST/standalone/.next/$f"
+  fi
+done
+# Copy types/ directory if present
+if [ -d "$DIST/types" ]; then
+  rm -rf "$DIST/standalone/.next/types"
+  cp -a "$DIST/types" "$DIST/standalone/.next/types"
+fi
+# Copy server/ directory (pages-manifest.json etc. needed at runtime)
+if [ -d "$DIST/server" ]; then
+  rm -rf "$DIST/standalone/.next/server"
+  cp -a "$DIST/server" "$DIST/standalone/.next/server"
+fi
+
 # Copy static assets (CSS, JS chunks, images)
 if [ -d "$DIST/static" ]; then
   rm -rf "$DIST/standalone/.next/static"

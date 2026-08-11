@@ -159,9 +159,15 @@ if [ -f node_modules/.prisma/client/index.js ] || [ -f .next/standalone/node_mod
   npx prisma db push --accept-data-loss 2>&1 || echo "WARN: prisma db push failed (non-fatal)"
 fi
 
-# Step 6: Copy package.json to standalone if it exists
+# Step 5c: Copy package.json and .env to standalone if it exists
 if [ -f package.json ] && [ -d .next/standalone ]; then
   cp package.json .next/standalone/package.json 2>/dev/null || true
+fi
+if [ -f .env ] && [ -d .next/standalone ]; then
+  cp -f .env .next/standalone/.env 2>/dev/null || true
+  # Ensure PANEL_REPO_PATH points to the real repo, not .next/standalone
+  sed -i '/^PANEL_REPO_PATH=/d' .next/standalone/.env 2>/dev/null || true
+  echo "PANEL_REPO_PATH=$ROOT" >> .next/standalone/.env
 fi
 
 # Step 6b: Restore root package.json if it was corrupted during update
@@ -196,6 +202,23 @@ for i in 1 2 3 4 5 6 7 8 9 10; do
   sleep 3
 done
 
-echo "WARNING: Panel did not respond to health check after 30 seconds"
+# Fallback: standalone may have failed. Try removing standalone and restarting with next start.
+if [ -d .next/standalone ]; then
+  echo "Standalone mode failed. Falling back to next start mode ..."
+  rm -rf .next/standalone
+  pm2 restart nexlify --update-env 2>/dev/null || true
+  sleep 10
+  for i in 1 2 3 4 5; do
+    if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
+      echo "Panel is healthy (next start fallback)!"
+      rm -rf "$BACKUP_DIR"
+      exit 0
+    fi
+    echo "Waiting for next start fallback ($i/5) ..."
+    sleep 3
+  done
+fi
+
+echo "WARNING: Panel did not respond to health check after fallback attempts"
 ensure_panel_running || true
 exit 1
