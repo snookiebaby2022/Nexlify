@@ -58,7 +58,7 @@ function findUpdateWorkerPid(): number | null {
 const MAX_RUNNING_MS = 20 * 60 * 1000;
 const MAX_STUCK_AT_START_MS = 3 * 60 * 1000; // if stuck at "Starting update…" for 3 min, mark failed
 const MAX_FAILED_MS = 30 * 60 * 1000; // auto-clear failed jobs after 30 min
-const MAX_DONE_MS = 2 * 60 * 1000; // auto-clear completed jobs so reload does not re-show banner
+const MAX_DONE_MS = 10 * 60 * 1000; // auto-clear completed jobs after 10 min (was 2 min — too short to read)
 const MAX_SAME_VERSION_FAILED_MS = 5 * 60 * 1000; // re-sync failures stop nagging sooner
 
 function isJobTimedOut(job: PanelUpdateJob): boolean {
@@ -149,7 +149,7 @@ export async function reconcileStaleUpdateJob(
             try {
               const { readFileSync } = require("fs") as typeof import("fs");
               const errLog = readFileSync(path.join(repoPath, ".update-worker-err.log"), "utf-8").trim();
-              if (errLog) detail += `\n\nError log:\n${errLog.slice(-1500)}`;
+              if (errLog) detail += `\n\nError log:\n${errLog.slice(-4000)}`;
             } catch {}
             detail += `\n\nFix: SSH into the server and run:\n  cd ${repoPath} && npm install -g tsx && node --version\nThen try the update again.`;
             return detail;
@@ -303,7 +303,7 @@ export async function startBackgroundPanelUpdate(
             try {
               const { readFileSync } = await import("fs");
               const errLog = readFileSync(errLogPath, "utf-8").trim();
-              if (errLog) errDetail += `\n${errLog.slice(-2000)}`;
+              if (errLog) errDetail += `\n${errLog.slice(-4000)}`;
             } catch {}
             await writeUpdateJob(repoPath, {
               ...job,
@@ -327,7 +327,7 @@ export async function startBackgroundPanelUpdate(
     let errDetail = "";
     try {
       const { readFileSync } = await import("fs");
-      errDetail = readFileSync(errLogPath, "utf-8").trim().slice(-1000);
+      errDetail = readFileSync(errLogPath, "utf-8").trim().slice(-4000);
     } catch {}
     await writeUpdateJob(repoPath, {
       ...initialJob,

@@ -10,7 +10,6 @@ export function isValidPanelRoot(dir: string): boolean {
   try {
     return (
       fs.existsSync(path.join(dir, "package.json")) &&
-      fs.existsSync(path.join(dir, "scripts", "apply-panel-fast-update.sh")) &&
       fs.existsSync(path.join(dir, "scripts", "panel-update-background.ts")) &&
       fs.existsSync(path.join(dir, "src", "lib", "panel-server.ts"))
     );

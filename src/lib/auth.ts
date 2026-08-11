@@ -157,7 +157,13 @@ export function requirePanelApiKey(request: Request): boolean {
   const expected =
     process.env.PANEL_API_SECRET?.trim() ??
     process.env.NEXLIFY_PANEL_API_SECRET?.trim();
-  if (!expected) return false;
+  if (!expected) {
+    console.warn(
+      "[auth] requirePanelApiKey: PANEL_API_SECRET / NEXLIFY_PANEL_API_SECRET is not set — " +
+        "all remote API calls will be rejected. Set one of these in your .env file."
+    );
+    return false;
+  }
   const provided =
     request.headers.get("x-panel-api-key") ??
     request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");

@@ -9,6 +9,9 @@ const secret =
   process.env.NEXLIFY_PANEL_API_SECRET?.trim() ??
   "";
 
+/** Maximum parallel requests — avoids hammering panels or hitting OS socket limits. */
+const CONCURRENCY = parseInt(process.env.BROADCAST_CONCURRENCY ?? "8", 10);
+
 function normalizeUrl(raw: string | null | undefined): string {
   return String(raw ?? "")
     .trim()
@@ -31,13 +34,31 @@ async function triggerUpdate(panelUrl: string) {
     reason?: string;
     fromVersion?: string;
     error?: string;
+    bootstrapUrl?: string;
   };
   return { status: res.status, data };
 }
 
+/** Run an array of async tasks with a maximum concurrency limit. */
+async function withConcurrency<T>(
+  tasks: Array<() => Promise<T>>,
+  limit: number
+): Promise<T[]> {
+  const results: T[] = [];
+  const queue = [...tasks];
+  const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
+    while (queue.length > 0) {
+      const task = queue.shift();
+      if (task) results.push(await task());
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 async function main() {
   if (!secret) {
-    console.error("PANEL_API_SECRET not set");
+    console.error("PANEL_API_SECRET / NEXLIFY_PANEL_API_SECRET not set — cannot authenticate to customer panels");
     process.exit(1);
   }
 
@@ -56,13 +77,14 @@ async function main() {
     targets.push({ url, email: row.user?.email ?? "?" });
   }
 
-  console.log(`Broadcasting update to ${targets.length} panel(s)…\n`);
+  console.log(`Broadcasting update to ${targets.length} panel(s) (concurrency: ${CONCURRENCY})…\n`);
 
   let started = 0;
   let skipped = 0;
   let failed = 0;
+  const needsBootstrap: string[] = [];
 
-  for (const { url, email } of targets) {
+  const tasks = targets.map(({ url, email }) => async () => {
     process.stdout.write(`${url} (${email}) … `);
     try {
       const { status, data } = await triggerUpdate(url);
@@ -72,6 +94,10 @@ async function main() {
       } else if (data.ok && data.reason === "already_running") {
         console.log("already updating");
         skipped++;
+      } else if (status === 409 && data.bootstrapUrl) {
+        console.log(`needs bootstrap (${status}): ${data.error}`);
+        needsBootstrap.push(url);
+        failed++;
       } else {
         console.log(`FAILED (${status}): ${data.error ?? JSON.stringify(data)}`);
         failed++;
@@ -80,12 +106,20 @@ async function main() {
       console.log(`ERROR: ${e instanceof Error ? e.message : e}`);
       failed++;
     }
-  }
+  });
+
+  await withConcurrency(tasks, CONCURRENCY);
 
   console.log(`\nDone: ${started} started, ${skipped} skipped, ${failed} failed`);
-  if (failed > 0) {
+  if (needsBootstrap.length > 0) {
+    console.log("\nThe following panels need bootstrapping before they can receive remote updates:");
+    for (const url of needsBootstrap) console.log(`  ${url}`);
     console.log(
-      "\nBootstrap failed panels once:\n  curl -fsSL 'https://nexlify.live/install/fix-panel-auto-update.sh?v=169' | sudo bash"
+      "\nBootstrap each panel by SSH-ing in and running:\n  curl -fsSL 'https://nexlify.live/install/fix-panel-auto-update.sh' | sudo bash"
+    );
+  } else if (failed > 0) {
+    console.log(
+      "\nIf a panel keeps failing, bootstrap it once:\n  curl -fsSL 'https://nexlify.live/install/fix-panel-auto-update.sh' | sudo bash"
     );
   }
 }

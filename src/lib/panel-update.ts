@@ -183,13 +183,50 @@ async function resolvePanelRestartStep(repoPath: string): Promise<UpdateStep> {
       await access(pm2Start);
       return { name: "pm2 restart nexlify", command: "bash", args: [pm2Start] };
     } catch {
+      // Detect the actual PM2 app name so the restart doesn't fail silently when the
+      // app is registered under a name other than the hardcoded "nexlify".
+      const pm2AppName = await detectPm2AppName();
       return {
         name: "pm2 restart nexlify",
         command: "pm2",
-        args: ["restart", "nexlify", "--update-env"],
+        args: ["restart", pm2AppName, "--update-env"],
       };
     }
   }
+}
+
+/**
+ * Look up the PM2 app name for this panel install.
+ * Checks ecosystem.config.cjs first, then falls back to reading the PM2 process list.
+ * Returns "nexlify" if detection fails — matches the default app name in ecosystem.config.cjs.
+ */
+async function detectPm2AppName(): Promise<string> {
+  // 1. Read from ecosystem.config.cjs — the authoritative source for this install
+  try {
+    const ecosystemPath = path.join(process.cwd(), "ecosystem.config.cjs");
+    const { readFileSync } = await import("fs");
+    const raw = readFileSync(ecosystemPath, "utf-8");
+    const match = raw.match(/name\s*:\s*["']([^"']+)["']/);
+    if (match?.[1]) return match[1];
+  } catch {
+    /* not found */
+  }
+
+  // 2. Ask PM2 for the list of apps and find one whose script path is inside repoPath
+  if (process.platform !== "win32") {
+    try {
+      const { execSync } = await import("child_process");
+      const out = execSync("pm2 jlist 2>/dev/null", { encoding: "utf8", timeout: 5000 });
+      const list = JSON.parse(out) as Array<{ name?: string; pm2_env?: { pm_cwd?: string } }>;
+      for (const app of list) {
+        if (app.name) return app.name;
+      }
+    } catch {
+      /* pm2 not available */
+    }
+  }
+
+  return "nexlify";
 }
 
 async function recordResult(
