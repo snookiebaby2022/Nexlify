@@ -76,6 +76,7 @@ export function previewMigrationBundle(bundle: MigrationBundle) {
       servers: bundle.phase2?.servers.length ?? 0,
       epgSources: bundle.phase2?.epgSources.length ?? 0,
     },
+    warnings: bundle.warnings ?? [],
   };
 }
 

@@ -1,3 +1,7 @@
+/**
+ * DEPRECATED: Legacy migration job endpoints. No worker processes these jobs.
+ * Use POST /api/admin/migrate for actual migrations (runs synchronously with SSE progress).
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";

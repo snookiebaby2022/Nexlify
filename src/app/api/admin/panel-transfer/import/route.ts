@@ -32,8 +32,36 @@ export async function POST(req: NextRequest) {
     if (dryRun) {
       return NextResponse.json({ preview, result: null });
     }
-    const result = await importPanelTransfer(bundle, options);
-    return NextResponse.json({ preview, result });
+
+    // Stream progress for actual imports
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (event: string, data: unknown) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        };
+
+        try {
+          const onProgress = (phase: string, current: number, total: number) => {
+            send("progress", { phase, current, total });
+          };
+          const result = await importPanelTransfer(bundle, { ...options, onProgress });
+          send("complete", { preview, result });
+        } catch (e) {
+          send("error", { error: e instanceof Error ? e.message : String(e) });
+        }
+
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },

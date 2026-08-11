@@ -95,6 +95,8 @@ export type MigrationBundle = {
   magDevices?: MigrationMagRow[];
   enigmaDevices?: MigrationEnigmaRow[];
   phase2?: MigrationPhase2Data;
+  /** Warnings from parsing (e.g., tables not found, malformed SQL). */
+  warnings?: string[];
 };
 
 export type MigrationApplyOptions = {
@@ -111,6 +113,10 @@ export type MigrationApplyOptions = {
   skipExistingStreams?: boolean;
   defaultServerId?: string | null;
   ownerId?: string | null;
+  /** Transaction client — when provided, all DB calls use this instead of the global prisma. */
+  tx?: { stream: any; bouquet: any; line: any; panelUser: any; magDevice: any; enigmaDevice: any; bouquetStream: any; category: any; streamServer: any; epgSource: any; [key: string]: any };
+  /** Called periodically during import to report progress. */
+  onProgress?: (phase: string, current: number, total: number) => void;
 };
 
 export type MigrationApplyResult = {

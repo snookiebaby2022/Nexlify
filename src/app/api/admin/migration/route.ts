@@ -1,3 +1,8 @@
+/**
+ * DEPRECATED: This endpoint manages MigrationJob records, but no worker processes them.
+ * Actual migrations run synchronously via POST /api/admin/migrate.
+ * This endpoint is retained for historical data and potential future background job support.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";

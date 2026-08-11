@@ -51,6 +51,9 @@ export function PanelMigrateForm() {
   const [skipExisting, setSkipExisting] = useState(true);
   const [preview, setPreview] = useState("");
   const [result, setResult] = useState("");
+  const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null);
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [showAllWarnings, setShowAllWarnings] = useState(false);
 
   const isOneStream = source === "onestream";
   const usePostgres = isOneStream && inputMode === "postgres";
@@ -155,6 +158,8 @@ export function PanelMigrateForm() {
   async function run(dryRun: boolean) {
     setResult(dryRun ? "Scanning…" : "Importing…");
     setPreview("");
+    setProgress(null);
+    setShowAllWarnings(false);
 
     let res: Response;
     if (usePostgres) {
@@ -185,18 +190,84 @@ export function PanelMigrateForm() {
         body: JSON.stringify(payload),
       });
     }
-    const data = await res.json();
+
+    // For dry runs, parse JSON response directly
+    if (dryRun) {
+      const data = await res.json();
+      if (!res.ok) {
+        setResult(`Error: ${data.error ?? res.statusText}`);
+        return;
+      }
+      handlePreviewResponse(data);
+      return;
+    }
+
+    // For actual imports, read SSE stream
     if (!res.ok) {
+      const data = await res.json();
       setResult(`Error: ${data.error ?? res.statusText}`);
       return;
     }
 
-    if (data.probe?.mapping) {
-      const mapped = Object.keys(data.probe.mapping).join(", ");
+    if (!res.body) {
+      setResult("Error: No response body");
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE events from buffer
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            const eventType = line.slice(7).trim();
+            // Look for the next data line
+            const dataIdx = lines.indexOf(line);
+            if (dataIdx + 1 < lines.length && lines[dataIdx + 1].startsWith("data: ")) {
+              const dataStr = lines[dataIdx + 1].slice(6);
+              try {
+                const data = JSON.parse(dataStr);
+                if (eventType === "progress") {
+                  setProgress(data);
+                  setResult(`Importing ${data.phase}: ${data.current}/${data.total}...`);
+                } else if (eventType === "complete") {
+                  handleCompleteResponse(data);
+                } else if (eventType === "error") {
+                  setResult(`Error: ${data.error}`);
+                }
+              } catch {
+                // Skip malformed data
+              }
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  function handlePreviewResponse(data: Record<string, unknown>) {
+    const probe = data.probe as Record<string, unknown> | undefined;
+    if (probe?.mapping) {
+      const mapped = Object.keys(probe.mapping as Record<string, unknown>).join(", ");
       setProbeInfo((prev) => (prev ? prev : `Mapped: ${mapped}`));
     }
 
-    const c = data.preview?.counts;
+    const preview = data.preview as Record<string, unknown> | undefined;
+    const c = preview?.counts as Record<string, number> | undefined;
+    const parseWarnings = (preview?.warnings as string[]) ?? [];
+
     setPreview(
       c
         ? [
@@ -214,12 +285,44 @@ export function PanelMigrateForm() {
             .join(", ")
         : ""
     );
-    if (dryRun) {
+
+    if (parseWarnings.length) {
+      setResult(`Preview complete.\n\nParse warnings:\n${parseWarnings.map((w) => `  - ${w}`).join("\n")}`);
+    } else {
       setResult("Preview complete — review counts, then run import.");
-      return;
     }
-    const r = data.result;
+  }
+
+  function handleCompleteResponse(data: Record<string, unknown>) {
+    const probe = data.probe as Record<string, unknown> | undefined;
+    if (probe?.mapping) {
+      const mapped = Object.keys(probe.mapping as Record<string, unknown>).join(", ");
+      setProbeInfo((prev) => (prev ? prev : `Mapped: ${mapped}`));
+    }
+
+    const c = (data.preview as Record<string, unknown>)?.counts as Record<string, number> | undefined;
+    setPreview(
+      c
+        ? [
+            `${c.bouquets} bouquets`,
+            `${c.streams} streams`,
+            `${c.lines} lines`,
+            `${c.resellers} resellers`,
+            `${c.magDevices} MAG`,
+            `${c.enigmaDevices} Enigma`,
+            c.categories ? `${c.categories} categories` : null,
+            c.servers ? `${c.servers} servers` : null,
+            c.epgSources ? `${c.epgSources} EPG sources` : null,
+          ]
+            .filter(Boolean)
+            .join(", ")
+        : ""
+    );
+
+    const r = data.result as Record<string, { imported: number; skipped: number }> & { warnings?: string[] } | undefined;
     if (r) {
+      const warnings = r.warnings ?? [];
+      const visibleWarnings = showAllWarnings ? warnings : warnings.slice(0, 8);
       setResult(
         [
           `Bouquets: +${r.bouquets.imported} / skipped ${r.bouquets.skipped}`,
@@ -231,12 +334,14 @@ export function PanelMigrateForm() {
           `Categories: +${r.categories.imported} / skipped ${r.categories.skipped}`,
           `Servers: +${r.servers.imported} / skipped ${r.servers.skipped}`,
           `EPG: +${r.epgSources.imported} / skipped ${r.epgSources.skipped}`,
-          r.warnings?.length ? `Warnings: ${r.warnings.slice(0, 8).join("; ")}` : null,
+          visibleWarnings.length ? `Warnings: ${visibleWarnings.join("; ")}` : null,
+          !showAllWarnings && warnings.length > 8 ? `... and ${warnings.length - 8} more warnings` : null,
         ]
           .filter(Boolean)
           .join("\n")
       );
     }
+    setProgress(null);
   }
 
   const hint = SOURCE_OPTIONS.find((s) => s.id === source)?.label ?? source;
@@ -563,12 +668,30 @@ export function PanelMigrateForm() {
           type="button"
           className="px-4 py-2 rounded text-sm"
           style={{ background: "var(--accent)", color: "#fff" }}
-          onClick={() => run(false)}
+          onClick={() => setShowBackupModal(true)}
           disabled={!canRun()}
         >
           Run import
         </button>
       </div>
+
+      {progress && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs opacity-70">
+            <span>{progress.phase}</span>
+            <span>{progress.current}/{progress.total}</span>
+          </div>
+          <div className="w-full rounded-full h-2" style={{ background: "var(--card)" }}>
+            <div
+              className="h-2 rounded-full transition-all duration-300"
+              style={{
+                background: "var(--accent)",
+                width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {preview && (
         <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--accent)" }}>
@@ -582,6 +705,62 @@ export function PanelMigrateForm() {
         >
           {result}
         </pre>
+      )}
+
+      {showBackupModal && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowBackupModal(false)}
+        >
+          <div
+            className="rounded-lg p-6 max-w-md w-full mx-4 space-y-4"
+            style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-bold text-lg">Create backup first?</h3>
+            <p className="text-sm opacity-80">
+              We recommend creating a database backup before importing. You can do this from{" "}
+              <a href="/admin/backup-restore" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>
+                Admin → Backup &amp; Restore
+              </a>.
+            </p>
+            <p className="text-xs opacity-60">
+              If the import fails or produces unexpected results, you can restore from a backup.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                className="px-4 py-2 rounded text-sm"
+                style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+                onClick={() => setShowBackupModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded text-sm"
+                style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+                onClick={() => {
+                  window.open("/admin/backup-restore", "_blank");
+                  setShowBackupModal(false);
+                }}
+              >
+                Create backup first
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 rounded text-sm"
+                style={{ background: "var(--accent)", color: "#fff" }}
+                onClick={() => {
+                  setShowBackupModal(false);
+                  run(false);
+                }}
+              >
+                Import without backup
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma as globalPrisma } from "@/lib/prisma";
 import { pgRowsToTableData } from "./map-rows";
 import { rowToRecord, type SqlTableData } from "./sql-parse";
 import type {
@@ -117,8 +117,11 @@ export async function applyMigrationPhase2(
     importServers?: boolean;
     importEpg?: boolean;
     skipExisting?: boolean;
+    tx?: { category: any; streamServer: any; epgSource: any; [key: string]: any };
+    onProgress?: (phase: string, current: number, total: number) => void;
   }
 ) {
+  const prisma = opts.tx ?? globalPrisma;
   const result = {
     categories: { imported: 0, skipped: 0 },
     servers: { imported: 0, skipped: 0 },
@@ -128,7 +131,9 @@ export async function applyMigrationPhase2(
   const serverIdByLegacy = new Map<string, string>();
 
   if (opts.importCategories !== false) {
-    for (const c of data.categories) {
+    for (let i = 0; i < data.categories.length; i++) {
+      const c = data.categories[i];
+      opts.onProgress?.("categories", i + 1, data.categories.length);
       const dup = await prisma.category.findFirst({ where: { name: c.name } });
       if (dup) {
         categoryIdByLegacy.set(c.legacyId, dup.id);
@@ -144,7 +149,9 @@ export async function applyMigrationPhase2(
   }
 
   if (opts.importServers !== false) {
-    for (const s of data.servers) {
+    for (let i = 0; i < data.servers.length; i++) {
+      const s = data.servers[i];
+      opts.onProgress?.("servers", i + 1, data.servers.length);
       if (opts.skipExisting) {
         const dup = await prisma.streamServer.findFirst({ where: { host: s.host } });
         if (dup) {
@@ -167,7 +174,9 @@ export async function applyMigrationPhase2(
   }
 
   if (opts.importEpg !== false) {
-    for (const e of data.epgSources) {
+    for (let i = 0; i < data.epgSources.length; i++) {
+      const e = data.epgSources[i];
+      opts.onProgress?.("epg", i + 1, data.epgSources.length);
       const dup = await prisma.epgSource.findFirst({ where: { url: e.url } });
       if (dup) {
         result.epgSources.skipped++;

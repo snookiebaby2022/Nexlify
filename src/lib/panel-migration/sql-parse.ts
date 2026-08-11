@@ -152,3 +152,28 @@ export function rowToRecord(columns: string[], row: unknown[]): Record<string, u
   });
   return out;
 }
+
+/** Safe wrapper around parseMysqlInserts that catches errors and returns warnings. */
+export type SqlParseResult = {
+  tables: SqlTableData[];
+  warnings: string[];
+};
+
+export function parseMysqlInsertsSafe(sql: string, tableName: string): SqlParseResult {
+  const warnings: string[] = [];
+  try {
+    const tables = parseMysqlInserts(sql, tableName);
+    if (!tables.length) {
+      warnings.push(`No INSERT statements found for table "${tableName}"`);
+    } else {
+      const totalRows = tables.reduce((sum, t) => sum + t.rows.length, 0);
+      if (totalRows === 0) {
+        warnings.push(`Table "${tableName}" matched but contained no rows`);
+      }
+    }
+    return { tables, warnings };
+  } catch (e) {
+    warnings.push(`Failed to parse table "${tableName}": ${String(e)}`);
+    return { tables: [], warnings };
+  }
+}

@@ -112,40 +112,79 @@ export async function POST(req: NextRequest) {
   const opts = applyOptions(body);
 
   try {
-    if (format === "postgres") {
-      if (source !== "onestream") {
-        return NextResponse.json(
-          { error: "PostgreSQL live import is supported for 1-stream only" },
-          { status: 400 }
-        );
+    // For dry runs, return JSON directly (fast)
+    if (opts.dryRun) {
+      if (format === "postgres") {
+        const pg = body.pg as PostgresMigrationConfig | undefined;
+        if (!pg?.connectionString && !(pg?.host && pg?.database && pg?.user)) {
+          return NextResponse.json(
+            { error: "pg.connectionString or pg.host/database/user required" },
+            { status: 400 }
+          );
+        }
+        const out = await runMigrationFromPostgres(pg, source, opts);
+        return NextResponse.json({
+          preview: out.preview,
+          probe: out.probe,
+        });
       }
-      const pg = body.pg as PostgresMigrationConfig | undefined;
-      if (!pg?.connectionString && !(pg?.host && pg?.database && pg?.user)) {
-        return NextResponse.json(
-          { error: "pg.connectionString or pg.host/database/user required" },
-          { status: 400 }
-        );
+
+      const content = (uploadedContent ?? (body.content as string | undefined))?.trim();
+      if (!content) {
+        return NextResponse.json({ error: "content required" }, { status: 400 });
       }
-      const out = await runMigrationFromPostgres(pg, source, opts);
-      return NextResponse.json({
-        preview: out.preview,
-        result: out.result,
-        probe: out.probe,
-      });
+      const fileFormat = format === "json" || source === "nexlify_json" ? "json" : "sql";
+      const out = await runMigration(content, source, fileFormat, opts);
+      return NextResponse.json({ preview: out.preview });
     }
 
-    const content = (uploadedContent ?? (body.content as string | undefined))?.trim();
-    if (!content) {
-      return NextResponse.json({ error: "content required" }, { status: 400 });
-    }
+    // For actual imports, stream progress via SSE
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (event: string, data: unknown) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        };
 
-    const fileFormat =
-      format === "json" || source === "nexlify_json" ? "json" : "sql";
+        try {
+          const onProgress = (phase: string, current: number, total: number) => {
+            send("progress", { phase, current, total });
+          };
 
-    const out = await runMigration(content, source, fileFormat, opts);
-    return NextResponse.json({
-      preview: out.preview,
-      result: out.result,
+          if (format === "postgres") {
+            const pg = body.pg as PostgresMigrationConfig | undefined;
+            if (!pg?.connectionString && !(pg?.host && pg?.database && pg?.user)) {
+              send("error", { error: "pg.connectionString or pg.host/database/user required" });
+              controller.close();
+              return;
+            }
+            const out = await runMigrationFromPostgres(pg, source, { ...opts, onProgress });
+            send("complete", { preview: out.preview, result: out.result, probe: out.probe });
+          } else {
+            const content = (uploadedContent ?? (body.content as string | undefined))?.trim();
+            if (!content) {
+              send("error", { error: "content required" });
+              controller.close();
+              return;
+            }
+            const fileFormat = format === "json" || source === "nexlify_json" ? "json" : "sql";
+            const out = await runMigration(content, source, fileFormat, { ...opts, onProgress });
+            send("complete", { preview: out.preview, result: out.result });
+          }
+        } catch (e) {
+          send("error", { error: e instanceof Error ? e.message : String(e) });
+        }
+
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
     });
   } catch (e) {
     return NextResponse.json(

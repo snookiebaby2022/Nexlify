@@ -17,6 +17,7 @@ import {
 import {
   mergeSqlTables,
   parseMysqlInserts,
+  parseMysqlInsertsSafe,
   rowToRecord,
   type SqlTableData,
 } from "./sql-parse";
@@ -326,6 +327,21 @@ export function loadSqlTable(sql: string, tableNames: string[]): SqlTableData | 
   return null;
 }
 
+/** Like loadSqlTable but returns warnings about missing/malformed tables. */
+export function loadSqlTableWithWarnings(sql: string, tableNames: string[]): {
+  data: SqlTableData | null;
+  warnings: string[];
+} {
+  const allWarnings: string[] = [];
+  for (const name of tableNames) {
+    const { tables, warnings } = parseMysqlInsertsSafe(sql, name);
+    allWarnings.push(...warnings);
+    const merged = mergeSqlTables(tables);
+    if (merged && merged.rows.length) return { data: merged, warnings: allWarnings };
+  }
+  return { data: null, warnings: allWarnings };
+}
+
 export type MigrationTableSet = {
   streams: SqlTableData | null;
   bouquets: SqlTableData | null;
@@ -355,26 +371,44 @@ export function buildMigrationBundle(
 
 export function bundleFromSql(sql: string, source: MigrationSource): MigrationBundle {
   const profile = PANEL_PROFILES[source];
-  const streamsTable = firstTableFound(sql, profile.streams) ?? profile.streams[0];
-  const bouquetsTable = firstTableFound(sql, profile.bouquets) ?? profile.bouquets[0];
-  const linesTable = firstTableFound(sql, profile.lines) ?? profile.lines[0];
-  let resellersTable = firstTableFound(sql, profile.resellers);
-  if (resellersTable && resellersTable === linesTable) resellersTable = null;
-  const magTable = firstTableFound(sql, profile.mag);
-  const enigmaTable = firstTableFound(sql, profile.enigma);
+  const warnings: string[] = [];
 
-  return buildMigrationBundle(
+  const streamsResult = loadSqlTableWithWarnings(sql, profile.streams);
+  const streamsTable = streamsResult.data ?? profile.streams[0];
+  warnings.push(...streamsResult.warnings);
+
+  const bouquetsResult = loadSqlTableWithWarnings(sql, profile.bouquets);
+  const bouquetsTable = bouquetsResult.data ?? profile.bouquets[0];
+  warnings.push(...bouquetsResult.warnings);
+
+  const linesResult = loadSqlTableWithWarnings(sql, profile.lines);
+  const linesTable = linesResult.data ?? profile.lines[0];
+  warnings.push(...linesResult.warnings);
+
+  let resellersTable = loadSqlTable(sql, profile.resellers);
+  if (resellersTable && resellersTable === linesTable) resellersTable = null;
+  const magTable = loadSqlTable(sql, profile.mag);
+  const enigmaTable = loadSqlTable(sql, profile.enigma);
+
+  const bundle = buildMigrationBundle(
     {
-      streams: loadSqlTable(sql, [streamsTable]),
-      bouquets: loadSqlTable(sql, [bouquetsTable]),
-      lines: loadSqlTable(sql, [linesTable]),
-      resellers: resellersTable ? loadSqlTable(sql, [resellersTable]) : null,
-      mag: magTable ? loadSqlTable(sql, [magTable]) : null,
-      enigma: enigmaTable ? loadSqlTable(sql, [enigmaTable]) : null,
+      streams: streamsResult.data,
+      bouquets: bouquetsResult.data,
+      lines: linesResult.data,
+      resellers: resellersTable,
+      mag: magTable,
+      enigma: enigmaTable,
     },
     source,
     loadPhase2FromSql(sql, source)
   );
+
+  // Merge parse warnings into the bundle
+  if (warnings.length) {
+    bundle.warnings = [...(bundle.warnings ?? []), ...warnings];
+  }
+
+  return bundle;
 }
 
 export function bundleFromJson(
