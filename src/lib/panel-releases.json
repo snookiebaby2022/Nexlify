@@ -2,9 +2,37 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.28",
+  "latestVersion": "1.9.29",
 
   "releases": [
+
+    {
+
+      "version": "1.9.29",
+
+      "date": "2026-08-11",
+
+      "channel": "stable",
+
+      "summary": "Fix Updates page and bottom overlay showing different progress during panel update.",
+
+      "changelog": [
+
+        "Single PanelUpdateJobProvider — one poll loop shared by both progress UIs",
+
+        "Shared PanelUpdateRunningProgress component for identical step/percent display",
+
+        "Poll every 1s while update is running (was 1.5s per independent hook)"
+      ],
+
+      "fixes": [
+
+        "Updates page stuck on sync panel files 24% while bottom overlay showed npm install 32%",
+
+        "Two usePanelUpdateJob hook instances drifted when polls failed or ran out of phase"
+      ]
+
+    },
 
     {
 

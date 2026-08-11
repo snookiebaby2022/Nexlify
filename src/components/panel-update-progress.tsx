@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { usePanelUpdateJob } from "@/hooks/use-panel-update-job";
-import { STEP_DURATION_HINTS, formatUpdateElapsed } from "@/lib/panel-update-ui";
+import { PanelUpdateRunningProgress } from "@/components/panel-update-running-progress";
+import { formatUpdateElapsed } from "@/lib/panel-update-ui";
 
 export function PanelUpdateProgress() {
   const { job, updateRunning } = usePanelUpdateJob();
@@ -59,8 +60,6 @@ export function PanelUpdateProgress() {
   const done = job.status === "done";
   const failed = job.status === "failed";
   const elapsed = formatUpdateElapsed(job.startedAt);
-  const stepHint = job.currentStep ? STEP_DURATION_HINTS[job.currentStep] : null;
-  const doneSteps = job.steps.filter((s) => s.status === "done");
 
   return (
     <div
@@ -97,41 +96,7 @@ export function PanelUpdateProgress() {
 
         {running && (
           <>
-            <div className="panel-update-progress-track">
-              <div
-                className="panel-update-progress-fill"
-                style={{ width: `${Math.min(100, job.progress)}%` }}
-              />
-            </div>
-            <p className="panel-update-progress-step">
-              <span className="panel-update-progress-step-main">
-                {job.currentStep ?? "Working…"}
-                {stepHint && (
-                  <span className="panel-update-progress-step-hint"> · typical {stepHint}</span>
-                )}
-              </span>
-              <span className="panel-update-progress-pct">{job.progress}%</span>
-            </p>
-            {job.stepDetail && (
-              <p className="panel-update-progress-detail">{job.stepDetail}</p>
-            )}
-            {doneSteps.length > 0 && (
-              <ul className="panel-update-progress-steps-done" aria-label="Completed steps">
-                {doneSteps.slice(-4).map((s) => (
-                  <li key={s.name}>
-                    <span className="panel-update-progress-check" aria-hidden>
-                      ✓
-                    </span>
-                    {s.name}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="panel-update-progress-hint">
-              The panel stays online during the compile (up to ~88%). Around{" "}
-              <strong>88–98%</strong> the new build is swapped in and PM2 restarts — expect a{" "}
-              <strong>15–60 second</strong> outage. Full updates usually finish in 3–6 minutes.
-            </p>
+            <PanelUpdateRunningProgress job={job} variant="overlay" />
           </>
         )}
 

@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PanelUpdateConfirmModal } from "@/components/panel-update-confirm-modal";
 import { usePanelUpdateJob } from "@/hooks/use-panel-update-job";
+import { PanelUpdateRunningProgress } from "@/components/panel-update-running-progress";
 import type { NexlifyRelease } from "@/lib/panel-releases-feed";
 import { isVersionNewer } from "@/lib/panel-releases-feed";
 import type { PanelUpdateJob } from "@/lib/panel-update-job";
-import { STEP_DURATION_HINTS, formatUpdateElapsed } from "@/lib/panel-update-ui";
 
 type UpdateLog = {
   at: string;
@@ -422,51 +422,7 @@ export default function PanelUpdatesPage() {
         </div>
       )}
 
-      {jobRunning && progressJob && (
-        <div
-          className="rounded-lg border px-4 py-3 space-y-2"
-          style={{ borderColor: "rgba(56, 189, 248, 0.35)", background: "rgba(14, 165, 233, 0.08)" }}
-        >
-          <div className="flex items-center justify-between text-sm gap-3">
-            <span style={{ color: "var(--fg)" }}>{progressJob.currentStep ?? "Updating…"}</span>
-            <span className="font-mono text-xs shrink-0" style={{ color: "var(--muted)" }}>
-              {formatUpdateElapsed(progressJob.startedAt) && `${formatUpdateElapsed(progressJob.startedAt)} · `}
-              {progressJob.progress}%
-            </span>
-          </div>
-          <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${progressJob.progress}%`,
-                background: "linear-gradient(90deg, #22c55e, #38bdf8)",
-              }}
-            />
-          </div>
-          {progressJob.stepDetail && (
-            <p className="text-xs" style={{ color: "#7dd3fc" }}>
-              {progressJob.stepDetail}
-            </p>
-          )}
-          {progressJob.currentStep && STEP_DURATION_HINTS[progressJob.currentStep] && (
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
-              Typical duration: {STEP_DURATION_HINTS[progressJob.currentStep]}
-            </p>
-          )}
-          {progressJob.steps.filter((s) => s.status === "done").length > 0 && (
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
-              Completed:{" "}
-              {progressJob.steps
-                .filter((s) => s.status === "done")
-                .map((s) => s.name)
-                .join(" → ")}
-            </p>
-          )}
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Synced with the progress bar at the bottom of the screen. Full updates usually take 3–6 minutes.
-          </p>
-        </div>
-      )}
+      {jobRunning && progressJob && <PanelUpdateRunningProgress job={progressJob} variant="card" />}
 
       {msg && (
         <p className="text-sm rounded-lg border px-4 py-3" style={{ borderColor: "var(--border)" }}>

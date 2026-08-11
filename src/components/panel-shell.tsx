@@ -8,6 +8,7 @@ import { ResellerNotificationsWidget } from "@/components/reseller-notifications
 import { PanelCommunityBar } from "@/components/panel-community-bar";
 import { PanelUpdateBanner } from "@/components/panel-update-banner";
 import { PanelUpdateProgress } from "@/components/panel-update-progress";
+import { PanelUpdateJobProvider } from "@/contexts/panel-update-job-context";
 import { PanelReleaseNotesModal } from "@/components/panel-release-notes-modal";
 import { PanelDemoBanner } from "@/components/panel-demo-banner";
 import ChatAssistant from "@/components/chat-assistant";
@@ -40,6 +41,7 @@ export function PanelShell({
   const brandLogo = whiteLabel?.logoUrl;
 
   return (
+    <PanelUpdateJobProvider>
     <div className="panel-shell" style={accent ? ({ ["--accent" as string]: accent } as React.CSSProperties) : undefined}>
       <div className="panel-shell-inner">
         <div className="panel-sidebar-column hidden lg:block shrink-0">
@@ -111,5 +113,6 @@ export function PanelShell({
         </div>
       </div>
     </div>
+    </PanelUpdateJobProvider>
   );
 }
