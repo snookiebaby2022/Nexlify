@@ -17,6 +17,18 @@ fi
 
 mkdir -p "$DIST/standalone/.next"
 
+# Clean cache and diagnostics from standalone/.next/ (leftover from previous builds)
+rm -rf "$DIST/standalone/.next/cache" "$DIST/standalone/.next/diagnostics" 2>/dev/null || true
+
+# Clean bloat that next build copies into standalone (dist/, downloads/, marketing-drop-in/, etc.)
+# The standalone server only needs server.js, node_modules/, .next/, public/, package.json, .env
+for d in dist downloads marketing-drop-in src docs windows scripts prisma \
+         .git backups .next.zip; do
+  rm -rf "$DIST/standalone/$d" 2>/dev/null || true
+done
+# Remove stale lock files and non-essential root files
+rm -f "$DIST/standalone/package-lock.json" "$DIST/standalone/.gitignore" 2>/dev/null || true
+
 # Copy all files the standalone server needs from .next/ into standalone/.next/
 # The standalone server.js sets distDir: "./.next" and runs from standalone/,
 # so it needs BUILD_ID, manifests, server/ etc. inside standalone/.next/.
