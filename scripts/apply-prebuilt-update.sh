@@ -106,6 +106,21 @@ rm -rf .next
 mv "$STAGING_DIR" .next
 rm -rf "$STAGING_DIR"
 
+# Step 4b: Update repo package.json version so the version API reports the new release.
+# The prebuilt archive only contains .next; derive the version from the download URL.
+if [ -f package.json ]; then
+  archive_version=""
+  if [[ "$DOWNLOAD_URL" =~ next-([0-9]+\.[0-9]+\.[0-9]+)\.tar\.gz ]]; then
+    archive_version="${BASH_REMATCH[1]}"
+  fi
+  if [ -n "$archive_version" ]; then
+    echo "Setting package.json version to $archive_version ..."
+    sed -i "s/\"version\": *\"[^\"]*\"/\"version\": \"$archive_version\"/" package.json
+  else
+    echo "WARN: Could not derive version from download URL; package.json left unchanged"
+  fi
+fi
+
 # Step 5: Run postbuild scripts
 echo "Running postbuild scripts ..."
 if [ -f scripts/obfuscate-license.js ]; then

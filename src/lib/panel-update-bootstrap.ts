@@ -56,6 +56,7 @@ fetch() {
   return 1
 }
 fetch "$BASE/apply-panel-fast-update.sh?$BUST" "scripts/apply-panel-fast-update.sh" || true
+fetch "$BASE/apply-prebuilt-update.sh?$BUST" "scripts/apply-prebuilt-update.sh" || true
 fetch "$BASE/scripts/panel-restart-safe.sh?$BUST" "scripts/panel-restart-safe.sh" || true
 fetch "$BASE/scripts/panel-update-recover.sh?$BUST" "scripts/panel-update-recover.sh" || true
 fetch "$BASE/scripts/has-valid-next-build.sh?$BUST" "scripts/has-valid-next-build.sh" || true

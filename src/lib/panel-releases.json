@@ -2,9 +2,41 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.29",
+  "latestVersion": "1.9.30",
 
   "releases": [
+
+    {
+
+      "version": "1.9.30",
+
+      "date": "2026-08-11",
+
+      "channel": "stable",
+
+      "summary": "Add Prisma baseline migration so prisma migrate deploy works on existing and fresh databases.",
+
+      "changelog": [
+
+        "Generate baseline migration from current schema (20250601000000_baseline)",
+
+        "Remove redundant panel_notifications migration whose tables already exist via db push",
+
+        "Installer resolves all migrations as applied after prisma db push"
+
+      ],
+
+      "fixes": [
+
+        "prisma migrate deploy failed with P3005 because production schema was not baselined",
+
+        "panel_notifications migration could not apply because PanelNotification tables already existed"
+
+      ],
+
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.30.tar.gz"
+
+    },
 
     {
 

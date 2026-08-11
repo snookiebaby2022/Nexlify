@@ -463,7 +463,18 @@ export async function runPanelUpdateWithProgress(
   let mode: "prebuilt" | "patch" | "git" = "git";
 
   const prebuiltScript = await resolvePrebuiltUpdateScript(repoPath);
-  const downloadUrl = prebuiltScript ? await resolvePrebuiltDownloadUrl(toVersion, repoPath) : null;
+  let targetVersion = toVersion;
+  try {
+    const feed = await fetchNexlifyReleasesFeed(
+      settings.updateCheckUrl?.trim() || DEFAULT_RELEASES_FEED_URL,
+    );
+    if (feed.latestVersion && isVersionNewer(feed.latestVersion, fromVersion)) {
+      targetVersion = feed.latestVersion;
+    }
+  } catch {
+    /* keep targetVersion as fromVersion and fall back to patch/git below */
+  }
+  const downloadUrl = prebuiltScript ? await resolvePrebuiltDownloadUrl(targetVersion, repoPath) : null;
 
   if (prebuiltScript && downloadUrl) {
     mode = "prebuilt";
