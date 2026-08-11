@@ -1,5 +1,6 @@
 import { Sparkles, Brain, Shield, Radio, Cloud, Swords, ShieldCheck, Zap } from "lucide-react";
 import Link from "next/link";
+import { PANEL_VERSION } from "@/lib/panel-install";
 
 const HIGHLIGHTS = [
   {
@@ -59,13 +60,13 @@ export function WhatsNewSection() {
               What&apos;s new
             </p>
             <h2 className="font-display text-2xl font-bold text-white sm:text-3xl">
-              New in v1.9.2
+              New in v{PANEL_VERSION}
             </h2>
           </div>
         </div>
 
         <p className="mt-4 max-w-2xl text-[var(--muted)]">
-          Major release with disaster recovery, performance for 100K+ concurrent users, and critical bug fixes across categories, backups, and content management.
+          Latest stable release — reliable self-updates, AI Studio, anti-piracy security, disaster recovery, and performance built for 100K+ concurrent users.
         </p>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
