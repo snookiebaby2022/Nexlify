@@ -513,6 +513,9 @@ progress_step "Setting admin password"
 if ! ADMIN_PASS="$ADMIN_PASS" node scripts/set-admin-password.cjs >>"$INSTALL_LOG" 2>&1; then
   die "Failed to set admin password. Check $INSTALL_LOG and run: ADMIN_PASS='...' node scripts/set-admin-password.cjs"
 fi
+# Save credentials immediately so the admin password is preserved even if the
+# rest of the install is interrupted (SSH timeout, long PM2 startup, etc.).
+save_install_credentials "in_progress"
 
 ensure_build_memory() {
   local mem_kb
@@ -615,6 +618,9 @@ else
 fi
 
 progress_step "Starting services"
+# Shorter health waits during install — fresh VPS usually starts in <10s.
+export PANEL_PM2_WAIT_SEC=30
+export PANEL_HEALTH_WAIT_SEC=30
 bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1
 bash scripts/pm2-boot-enable.sh >>"$INSTALL_LOG" 2>&1 || true
 
