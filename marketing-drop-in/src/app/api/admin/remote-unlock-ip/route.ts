@@ -10,8 +10,15 @@ function panelApiSecret(): string | null {
   );
 }
 
-function normalizePanelUrl(raw: string): string {
-  return raw.trim().replace(/\/$/, "");
+function normalizePanelUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return null;
+  }
 }
 
 type UnlockResult = {
@@ -62,6 +69,10 @@ export async function POST(req: Request) {
 
   for (const rawUrl of panelUrls) {
     const url = normalizePanelUrl(rawUrl);
+    if (!url) {
+      results.push({ url: rawUrl, ok: false, error: "Invalid URL — must be a valid http:// or https:// address" });
+      continue;
+    }
     try {
       const res = await fetch(`${url}/api/admin/remote-unlock-ip`, {
         method: "POST",

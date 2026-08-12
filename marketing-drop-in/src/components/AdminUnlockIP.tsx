@@ -48,17 +48,34 @@ export function AdminUnlockIP() {
     }
   }
 
-  function getPanelUrls(): string[] {
-    return urls
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
+  function getPanelUrls(): { valid: string[]; invalid: string[] } {
+    const lines = urls.split("\n").map((s) => s.trim()).filter(Boolean);
+    const valid: string[] = [];
+    const invalid: string[] = [];
+    for (const line of lines) {
+      try {
+        const u = new URL(line);
+        // Only allow http/https
+        if (u.protocol !== "http:" && u.protocol !== "https:") {
+          invalid.push(line);
+          continue;
+        }
+        // Extract just the origin (protocol + host), strip paths
+        valid.push(`${u.protocol}//${u.host}`);
+      } catch {
+        invalid.push(line);
+      }
+    }
+    return { valid, invalid };
   }
 
   function handleUnlock() {
-    const panelUrls = getPanelUrls();
+    const { valid: panelUrls, invalid } = getPanelUrls();
+    if (invalid.length > 0) {
+      alert(`Invalid URLs removed:\n${invalid.join("\n")}\n\nPlease enter valid panel base URLs like http://45.88.138.18 (one per line).`);
+    }
     if (!panelUrls.length) {
-      alert("Enter at least one panel URL");
+      alert("Enter at least one valid panel URL (e.g. http://45.88.138.18)");
       return;
     }
 
