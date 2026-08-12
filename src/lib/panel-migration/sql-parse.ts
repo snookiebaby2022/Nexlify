@@ -177,3 +177,36 @@ export function parseMysqlInsertsSafe(sql: string, tableName: string): SqlParseR
     return { tables: [], warnings };
   }
 }
+
+/** Single-pass parser — scans SQL once and extracts ALL tables.
+ *  O(n) complexity instead of O(n×m), critical for large SQL dumps. */
+export function parseAllMysqlInserts(sql: string): Map<string, SqlTableData[]> {
+  const results = new Map<string, SqlTableData[]>();
+  const re = /INSERT\s+INTO\s+[`"']?(\w+)[`"']?\s*\(([^)]+)\)\s*VALUES\s*/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(sql)) !== null) {
+    const tableName = match[1].toLowerCase();
+    const colPart = match[2];
+    const columns = colPart.split(",").map((c) => c.trim().replace(/^`|`$/g, ""));
+    const valuesStart = match.index + match[0].length;
+    let valuesEnd = sql.length;
+    const nextInsert = sql.slice(valuesStart).search(/;\s*INSERT\s+INTO/i);
+    if (nextInsert >= 0) valuesEnd = valuesStart + nextInsert;
+    else {
+      const semi = sql.indexOf(";", valuesStart);
+      if (semi >= 0) valuesEnd = semi;
+    }
+    const valuesSection = sql.slice(valuesStart, valuesEnd);
+    const tupleStrings = extractRowTuples(valuesSection);
+    const rows = tupleStrings.map((t) =>
+      splitSqlTuple(t).map((cell) => unquoteSqlValue(cell))
+    );
+    const entry: SqlTableData = { columns, rows };
+    const existing = results.get(tableName) ?? [];
+    existing.push(entry);
+    results.set(tableName, existing);
+  }
+
+  return results;
+}

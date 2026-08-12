@@ -9,7 +9,7 @@ import {
   type PostgresMigrationConfig,
 } from "@/lib/panel-migration";
 import { writeFile, unlink, readFile, stat } from "fs/promises";
-import { createReadStream, createWriteStream } from "fs";
+import { createReadStream } from "fs";
 import { Readable } from "stream";
 
 const SOURCES = new Set(MIGRATION_SOURCES.map((s) => s.id));
@@ -111,76 +111,34 @@ async function readFileInChunks(
   });
 }
 
-/** Parse SQL file incrementally, extracting INSERT statements to a temp file.
- *  This avoids both memory bloat and data loss. Returns the extracted content. */
+/** Stream-read SQL file and return content string.
+ *  For very large files this still loads into memory — the single-pass parser handles it efficiently. */
 async function parseSqlFileIncremental(
   filePath: string,
   onProgress?: (bytesRead: number, totalBytes: number) => void
 ): Promise<string> {
-  const outputPath = `/tmp/nexlify-migrate-inserts-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`;
-  const outputStream = createWriteStream(outputPath, { encoding: "utf8" });
-  let outputError: Error | null = null;
-  outputStream.on("error", (err) => { outputError = err; });
+  const fileStats = await stat(filePath);
+  const totalBytes = fileStats.size;
+  const chunks: Buffer[] = [];
+  let bytesRead = 0;
+  let lastProgressBytes = 0;
 
-  let insertBuffer = "";
-  let inInsertStatement = false;
-  let statementCount = 0;
-
-  await readFileInChunks(
-    filePath,
-    (line, _bytesRead) => {
-      const trimmed = line.trim();
-
-      // Skip comments and empty lines
-      if (!trimmed || trimmed.startsWith("--") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
-        return;
+  return new Promise((resolve, reject) => {
+    const stream = createReadStream(filePath, { highWaterMark: 1024 * 1024 }); // 1MB chunks
+    stream.on("data", (chunk: Buffer) => {
+      bytesRead += chunk.length;
+      chunks.push(chunk);
+      if (onProgress && bytesRead - lastProgressBytes > 10 * 1024 * 1024) {
+        lastProgressBytes = bytesRead;
+        onProgress(bytesRead, totalBytes);
       }
-
-      // Detect start of INSERT statement
-      if (/^INSERT\s+INTO/i.test(trimmed)) {
-        inInsertStatement = true;
-        insertBuffer = line;
-      } else if (inInsertStatement) {
-        insertBuffer += line;
-
-        // Check if statement is complete (ends with ;)
-        if (trimmed.endsWith(";")) {
-          outputStream.write(insertBuffer + "\n");
-          statementCount++;
-          insertBuffer = "";
-          inInsertStatement = false;
-        }
-      }
-    },
-    onProgress
-  );
-
-  // Handle any remaining buffer
-  if (insertBuffer && inInsertStatement) {
-    outputStream.write(insertBuffer + "\n");
-    statementCount++;
-  }
-
-  outputStream.end();
-  await new Promise<void>((resolve, reject) => {
-    outputStream.on("finish", () => {
-      if (outputError) reject(outputError);
-      else resolve();
     });
-    outputStream.on("error", reject);
+    stream.on("end", () => {
+      if (onProgress) onProgress(bytesRead, totalBytes);
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+    stream.on("error", reject);
   });
-
-  // Read the extracted INSERT statements
-  const content = await readFile(outputPath, "utf8");
-
-  // Clean up temp file
-  try {
-    await unlink(outputPath);
-  } catch {
-    /* ignore */
-  }
-
-  return content;
 }
 
 async function parseRequestBody(req: NextRequest): Promise<
