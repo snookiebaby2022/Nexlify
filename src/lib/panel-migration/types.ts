@@ -97,6 +97,8 @@ export type MigrationBundle = {
   phase2?: MigrationPhase2Data;
   /** Warnings from parsing (e.g., tables not found, malformed SQL). */
   warnings?: string[];
+  /** Tables detected in the source dump — diagnostics for the Preview/Import report. */
+  tablesFound?: { name: string; rows: number; hasColumns: boolean }[];
 };
 
 export type MigrationApplyOptions = {

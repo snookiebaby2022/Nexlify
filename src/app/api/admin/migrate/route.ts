@@ -257,6 +257,7 @@ export async function POST(req: NextRequest) {
             epgSources: bundle.phase2?.epgSources.length ?? 0,
           },
           warnings: bundle.warnings ?? [],
+          tablesFound: bundle.tablesFound ?? [],
         };
         return NextResponse.json({ preview });
       } else {
@@ -327,6 +328,7 @@ export async function POST(req: NextRequest) {
                     epgSources: bundle.phase2?.epgSources.length ?? 0,
                   },
                   warnings: bundle.warnings ?? [],
+                  tablesFound: bundle.tablesFound ?? [],
                 },
                 result,
               });

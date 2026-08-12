@@ -304,6 +304,7 @@ export function PanelMigrateForm() {
     const preview = data.preview as Record<string, unknown> | undefined;
     const c = preview?.counts as Record<string, number> | undefined;
     const parseWarnings = (preview?.warnings as string[]) ?? [];
+    const tablesFound = (preview?.tablesFound as { name: string; rows: number; hasColumns: boolean }[]) ?? [];
 
     setPreview(
       c
@@ -323,10 +324,28 @@ export function PanelMigrateForm() {
         : ""
     );
 
+    const tablesLine = tablesFound.length
+      ? `Tables detected in dump: ${tablesFound
+          .map((t) => `${t.name} (${t.rows} rows${t.hasColumns ? "" : ", no column names"})`)
+          .join(", ")}`
+      : null;
+
     if (parseWarnings.length) {
-      setResult(`Preview complete.\n\nParse warnings:\n${parseWarnings.map((w) => `  - ${w}`).join("\n")}`);
+      setResult(
+        [
+          "Preview complete.",
+          tablesLine,
+          "",
+          "Parse warnings:",
+          ...parseWarnings.map((w) => `  - ${w}`),
+        ]
+          .filter(Boolean)
+          .join("\n")
+      );
     } else {
-      setResult("Preview complete — review counts, then run import.");
+      setResult(
+        ["Preview complete — review counts, then run import.", tablesLine].filter(Boolean).join("\n")
+      );
     }
   }
 
@@ -362,11 +381,20 @@ export function PanelMigrateForm() {
       const visibleWarnings = showAllWarnings ? warnings : warnings.slice(0, 8);
       const totalImported = r.bouquets.imported + r.streams.imported + r.lines.imported + r.resellers.imported +
         r.magDevices.imported + r.enigmaDevices.imported + r.categories.imported + r.servers.imported + r.epgSources.imported;
+      const tablesFound = (data.preview as Record<string, unknown> | undefined)?.tablesFound as
+        | { name: string; rows: number; hasColumns: boolean }[]
+        | undefined;
+      const tablesLine = tablesFound?.length
+        ? `Tables detected in dump: ${tablesFound
+            .map((t) => `${t.name} (${t.rows} rows${t.hasColumns ? "" : ", no column names"})`)
+            .join(", ")}`
+        : null;
       setResult(
         [
           totalImported > 0
             ? `Import complete! ${totalImported} item(s) loaded into the database.`
             : "Import complete! No new items were imported (all existing items were skipped).",
+          tablesLine,
           "",
           `Bouquets: +${r.bouquets.imported} / skipped ${r.bouquets.skipped}`,
           `Streams: +${r.streams.imported} / skipped ${r.streams.skipped}`,

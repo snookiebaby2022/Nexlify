@@ -382,6 +382,42 @@ export function buildMigrationBundle(
   };
 }
 
+function summarizeTables(
+  allTables: Map<string, SqlTableData[]>
+): { name: string; rows: number; hasColumns: boolean }[] {
+  return Array.from(allTables.entries()).map(([name, chunks]) => {
+    const merged = mergeSqlTables(chunks);
+    return {
+      name,
+      rows: merged?.rows.length ?? 0,
+      hasColumns: (merged?.columns.length ?? 0) > 0,
+    };
+  });
+}
+
+function warnIfUnmapped(bundle: MigrationBundle, tablesFound: { name: string; rows: number; hasColumns: boolean }[], warnings: string[]) {
+  const totalMapped =
+    bundle.streams.length +
+    bundle.bouquets.length +
+    bundle.lines.length +
+    (bundle.resellers?.length ?? 0) +
+    (bundle.magDevices?.length ?? 0) +
+    (bundle.enigmaDevices?.length ?? 0);
+  const hasData = tablesFound.some((t) => t.rows > 0);
+  if (totalMapped === 0 && hasData) {
+    const headerless = tablesFound.some((t) => t.rows > 0 && !t.hasColumns);
+    if (headerless) {
+      warnings.push(
+        "Detected table data but 0 rows could be mapped — the dump's INSERT statements appear to omit column names (e.g. `INSERT INTO table VALUES (...)`). Re-export WITH column names: use a standard mysqldump or phpMyAdmin 'Complete insert' export."
+      );
+    } else {
+      warnings.push(
+        "Detected table data but 0 rows matched the expected columns for the selected panel type — the source schema may differ."
+      );
+    }
+  }
+}
+
 export function bundleFromSql(sql: string, source: MigrationSource): MigrationBundle {
   const profile = PANEL_PROFILES[source];
   const warnings: string[] = [];
@@ -435,6 +471,10 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
     source,
     loadPhase2FromSql(allTables, source)
   );
+
+  const tablesFound = summarizeTables(allTables);
+  bundle.tablesFound = tablesFound;
+  warnIfUnmapped(bundle, tablesFound, warnings);
 
   // Merge parse warnings into the bundle
   if (warnings.length) {
@@ -594,6 +634,10 @@ export async function bundleFromSqlFile(
     source,
     loadPhase2FromSql(allTables, source)
   );
+
+  const tablesFound = summarizeTables(allTables);
+  bundle.tablesFound = tablesFound;
+  warnIfUnmapped(bundle, tablesFound, warnings);
 
   if (warnings.length) {
     bundle.warnings = [...(bundle.warnings ?? []), ...warnings];
