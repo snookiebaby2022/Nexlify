@@ -2,9 +2,45 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.31",
+  "latestVersion": "1.9.33",
 
   "releases": [
+
+    {
+
+      "version": "1.9.33",
+
+      "date": "2026-08-13",
+
+      "channel": "stable",
+
+      "summary": "Admin login auto-mints the license session cookie; panel migration now reports every detected SQL table and warns on headerless dumps.",
+
+      "changelog": [
+
+        "Auto-mint license session cookie on admin login so /admin is unlocked immediately",
+
+        "Panel migration: surface all detected SQL tables in preview and import reports",
+
+        "Panel migration: warn loudly when a dump is headerless (0 rows parsed)",
+
+        "Panel migration: fix false 'table not found' warnings for Midnight/Xtream sources"
+
+      ],
+
+      "fixes": [
+
+        "Admin had to open a stream or panel first before /admin routes were reachable",
+
+        "XUI.one headerless SQL backups parsed 0 streams/lines/bouquets with no warning",
+
+        "Midnight source showed spurious 'No INSERT for table streams' during preview"
+
+      ],
+
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.33.tar.gz"
+
+    },
 
     {
 
