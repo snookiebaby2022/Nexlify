@@ -39,11 +39,12 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { panelUrls, lineIds, usernames, unlockAll } = body as {
+  const { panelUrls, lineIds, usernames, unlockAll, email } = body as {
     panelUrls: string[];
     lineIds?: string[];
     usernames?: string[];
     unlockAll?: boolean;
+    email?: string;
   };
 
   if (!Array.isArray(panelUrls) || panelUrls.length === 0) {
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
           "x-panel-api-key": secret,
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },
-        body: JSON.stringify({ lineIds, usernames, unlockAll, email, serverIp }),
+        body: JSON.stringify({ lineIds, usernames, unlockAll, email }),
         cache: "no-store",
         signal: AbortSignal.timeout(30_000),
       });

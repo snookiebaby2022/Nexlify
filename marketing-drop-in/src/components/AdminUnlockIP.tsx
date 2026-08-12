@@ -90,8 +90,8 @@ export function AdminUnlockIP() {
           Unlock IP Restrictions
         </h2>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Remove IP lock restrictions on customer panel lines. This is useful when a customer
-          changes their IP or needs to access their panel from a new location.
+          Remove IP lock restrictions on IPTV panel subscription lines. This is useful when
+          end-users change their IP address and lose access to streams.
         </p>
 
         <div className="mt-4 space-y-4">
