@@ -358,8 +358,14 @@ export function PanelMigrateForm() {
     if (r) {
       const warnings = r.warnings ?? [];
       const visibleWarnings = showAllWarnings ? warnings : warnings.slice(0, 8);
+      const totalImported = r.bouquets.imported + r.streams.imported + r.lines.imported + r.resellers.imported +
+        r.magDevices.imported + r.enigmaDevices.imported + r.categories.imported + r.servers.imported + r.epgSources.imported;
       setResult(
         [
+          totalImported > 0
+            ? `Import complete! ${totalImported} item(s) loaded into the database.`
+            : "Import complete! No new items were imported (all existing items were skipped).",
+          "",
           `Bouquets: +${r.bouquets.imported} / skipped ${r.bouquets.skipped}`,
           `Streams: +${r.streams.imported} / skipped ${r.streams.skipped}`,
           `Lines: +${r.lines.imported} / skipped ${r.lines.skipped}`,
@@ -375,6 +381,8 @@ export function PanelMigrateForm() {
           .filter(Boolean)
           .join("\n")
       );
+    } else {
+      setResult("Import finished, but no result data was returned. The database may have been updated.");
     }
     setProgress(null);
   }
@@ -791,7 +799,7 @@ export function PanelMigrateForm() {
           onClick={() => setShowBackupModal(false)}
         >
           <div
-            className="rounded-lg p-6 max-w-md w-full mx-4 space-y-4"
+            className="rounded-lg p-6 max-w-xl w-full mx-4 space-y-4"
             style={{ background: "var(--card)", border: "1px solid var(--border)" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -805,10 +813,10 @@ export function PanelMigrateForm() {
             <p className="text-xs opacity-60">
               If the import fails or produces unexpected results, you can restore from a backup.
             </p>
-            <div className="flex gap-3 justify-end">
+            <div className="flex flex-wrap gap-3 justify-end">
               <button
                 type="button"
-                className="px-4 py-2 rounded text-sm"
+                className="px-4 py-2 rounded text-sm whitespace-nowrap"
                 style={{ background: "var(--card)", border: "1px solid var(--border)" }}
                 onClick={() => setShowBackupModal(false)}
               >
@@ -816,7 +824,7 @@ export function PanelMigrateForm() {
               </button>
               <button
                 type="button"
-                className="px-4 py-2 rounded text-sm"
+                className="px-4 py-2 rounded text-sm whitespace-nowrap"
                 style={{ background: "var(--card)", border: "1px solid var(--border)" }}
                 onClick={() => {
                   window.open("/admin/backup-restore", "_blank");
@@ -827,7 +835,7 @@ export function PanelMigrateForm() {
               </button>
               <button
                 type="button"
-                className="px-4 py-2 rounded text-sm"
+                className="px-4 py-2 rounded text-sm whitespace-nowrap"
                 style={{ background: "var(--accent)", color: "#fff" }}
                 onClick={() => {
                   setShowBackupModal(false);

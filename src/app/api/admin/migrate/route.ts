@@ -8,8 +8,8 @@ import {
   type MigrationSource,
   type PostgresMigrationConfig,
 } from "@/lib/panel-migration";
-import { writeFile, unlink } from "fs/promises";
-import { createReadStream } from "fs";
+import { writeFile, unlink, readFile, stat } from "fs/promises";
+import { createReadStream, createWriteStream } from "fs";
 import { Readable } from "stream";
 
 const SOURCES = new Set(MIGRATION_SOURCES.map((s) => s.id));
@@ -69,72 +69,118 @@ async function streamFileToDisk(file: File): Promise<string> {
   return tempPath;
 }
 
-/** Read file in chunks for processing */
-async function readFileInChunks(filePath: string, callback: (chunk: string) => void): Promise<void> {
+/** Read file in chunks for processing. Reports bytes read for progress tracking. */
+async function readFileInChunks(
+  filePath: string,
+  callback: (line: string, bytesRead: number) => void,
+  onProgress?: (bytesRead: number, totalBytes: number) => void
+): Promise<void> {
+  const fileStats = await stat(filePath);
+  const totalBytes = fileStats.size;
+
   return new Promise((resolve, reject) => {
     const stream = createReadStream(filePath, { encoding: "utf8", highWaterMark: 1024 * 1024 }); // 1MB chunks
     let buffer = "";
-    
+    let bytesRead = 0;
+    let lastProgressBytes = 0;
+
     stream.on("data", (chunk: string) => {
+      const chunkBytes = Buffer.byteLength(chunk, "utf8");
+      bytesRead += chunkBytes;
       buffer += chunk;
       // Process complete lines
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? ""; // Keep incomplete line in buffer
       for (const line of lines) {
-        callback(line + "\n");
+        callback(line + "\n", bytesRead);
+      }
+      // Report progress every 10MB
+      if (onProgress && bytesRead - lastProgressBytes > 10 * 1024 * 1024) {
+        lastProgressBytes = bytesRead;
+        onProgress(bytesRead, totalBytes);
       }
     });
-    
+
     stream.on("end", () => {
-      if (buffer) callback(buffer);
+      if (buffer) callback(buffer, bytesRead);
+      if (onProgress) onProgress(bytesRead, totalBytes);
       resolve();
     });
-    
+
     stream.on("error", reject);
   });
 }
 
-/** Parse SQL file incrementally, extracting INSERT statements */
-async function parseSqlFileIncremental(filePath: string): Promise<string> {
+/** Parse SQL file incrementally, extracting INSERT statements to a temp file.
+ *  This avoids both memory bloat and data loss. Returns the extracted content. */
+async function parseSqlFileIncremental(
+  filePath: string,
+  onProgress?: (bytesRead: number, totalBytes: number) => void
+): Promise<string> {
+  const outputPath = `/tmp/nexlify-migrate-inserts-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`;
+  const outputStream = createWriteStream(outputPath, { encoding: "utf8" });
+  let outputError: Error | null = null;
+  outputStream.on("error", (err) => { outputError = err; });
+
   let insertBuffer = "";
   let inInsertStatement = false;
-  let insertStatements: string[] = [];
-  
-  await readFileInChunks(filePath, (line) => {
-    const trimmed = line.trim();
-    
-    // Skip comments and empty lines
-    if (!trimmed || trimmed.startsWith("--") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
-      return;
-    }
-    
-    // Detect start of INSERT statement
-    if (/^INSERT\s+INTO/i.test(trimmed)) {
-      inInsertStatement = true;
-      insertBuffer = line;
-    } else if (inInsertStatement) {
-      insertBuffer += line;
-      
-      // Check if statement is complete (ends with ;)
-      if (trimmed.endsWith(";")) {
-        insertStatements.push(insertBuffer);
-        insertBuffer = "";
-        inInsertStatement = false;
-        
-        // Keep only recent statements to avoid memory bloat
-        if (insertStatements.length > 1000) {
-          insertStatements = insertStatements.slice(-500);
+  let statementCount = 0;
+
+  await readFileInChunks(
+    filePath,
+    (line, _bytesRead) => {
+      const trimmed = line.trim();
+
+      // Skip comments and empty lines
+      if (!trimmed || trimmed.startsWith("--") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
+        return;
+      }
+
+      // Detect start of INSERT statement
+      if (/^INSERT\s+INTO/i.test(trimmed)) {
+        inInsertStatement = true;
+        insertBuffer = line;
+      } else if (inInsertStatement) {
+        insertBuffer += line;
+
+        // Check if statement is complete (ends with ;)
+        if (trimmed.endsWith(";")) {
+          outputStream.write(insertBuffer + "\n");
+          statementCount++;
+          insertBuffer = "";
+          inInsertStatement = false;
         }
       }
-    }
-  });
-  
+    },
+    onProgress
+  );
+
   // Handle any remaining buffer
   if (insertBuffer && inInsertStatement) {
-    insertStatements.push(insertBuffer);
+    outputStream.write(insertBuffer + "\n");
+    statementCount++;
   }
-  
-  return insertStatements.join("\n");
+
+  outputStream.end();
+  await new Promise<void>((resolve, reject) => {
+    outputStream.on("finish", () => {
+      if (outputError) reject(outputError);
+      else resolve();
+    });
+    outputStream.on("error", reject);
+  });
+
+  // Read the extracted INSERT statements
+  const content = await readFile(outputPath, "utf8");
+
+  // Clean up temp file
+  try {
+    await unlink(outputPath);
+  } catch {
+    /* ignore */
+  }
+
+  return content;
 }
 
 async function parseRequestBody(req: NextRequest): Promise<
@@ -249,7 +295,7 @@ export async function POST(req: NextRequest) {
         // For large files, parse incrementally
         content = await parseSqlFileIncremental(filePath);
       } else {
-        content = (uploadedContent ?? (body.content as string | undefined))?.trim();
+        content = (uploadedContent ?? (body.content as string | undefined) ?? "").trim();
       }
       
       if (!content) {
@@ -290,10 +336,13 @@ export async function POST(req: NextRequest) {
             
             if (filePath) {
               send("progress", { phase: "scanning", current: 0, total: 100 });
-              content = await parseSqlFileIncremental(filePath);
-              send("progress", { phase: "scanning", current: 50, total: 100 });
+              content = await parseSqlFileIncremental(filePath, (bytesRead, totalBytes) => {
+                const pct = Math.round((bytesRead / totalBytes) * 100);
+                send("progress", { phase: "scanning", current: pct, total: 100 });
+              });
+              send("progress", { phase: "scanning", current: 100, total: 100 });
             } else {
-              content = (uploadedContent ?? (body.content as string | undefined))?.trim();
+              content = (uploadedContent ?? (body.content as string | undefined) ?? "").trim();
             }
             
             if (!content) {
