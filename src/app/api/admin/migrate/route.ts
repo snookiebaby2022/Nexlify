@@ -8,9 +8,9 @@ import {
   type MigrationSource,
   type PostgresMigrationConfig,
 } from "@/lib/panel-migration";
-import { writeFile, unlink, readFile, stat } from "fs/promises";
+import { bundleFromSqlFile } from "@/lib/panel-migration/map-rows";
+import { writeFile, unlink, stat } from "fs/promises";
 import { createReadStream } from "fs";
-import { Readable } from "stream";
 
 const SOURCES = new Set(MIGRATION_SOURCES.map((s) => s.id));
 
@@ -111,35 +111,7 @@ async function readFileInChunks(
   });
 }
 
-/** Stream-read SQL file and return content string.
- *  For very large files this still loads into memory — the single-pass parser handles it efficiently. */
-async function parseSqlFileIncremental(
-  filePath: string,
-  onProgress?: (bytesRead: number, totalBytes: number) => void
-): Promise<string> {
-  const fileStats = await stat(filePath);
-  const totalBytes = fileStats.size;
-  const chunks: Buffer[] = [];
-  let bytesRead = 0;
-  let lastProgressBytes = 0;
 
-  return new Promise((resolve, reject) => {
-    const stream = createReadStream(filePath, { highWaterMark: 1024 * 1024 }); // 1MB chunks
-    stream.on("data", (chunk: Buffer) => {
-      bytesRead += chunk.length;
-      chunks.push(chunk);
-      if (onProgress && bytesRead - lastProgressBytes > 10 * 1024 * 1024) {
-        lastProgressBytes = bytesRead;
-        onProgress(bytesRead, totalBytes);
-      }
-    });
-    stream.on("end", () => {
-      if (onProgress) onProgress(bytesRead, totalBytes);
-      resolve(Buffer.concat(chunks).toString("utf8"));
-    });
-    stream.on("error", reject);
-  });
-}
 
 async function parseRequestBody(req: NextRequest): Promise<
   | { ok: true; body: Record<string, unknown>; content?: string; filePath?: string }
@@ -247,11 +219,28 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      let content: string;
+      let content: string | undefined;
       
       if (filePath) {
-        // For large files, parse incrementally
-        content = await parseSqlFileIncremental(filePath);
+        // For large files, stream-parse directly to bundle
+        const bundle = await bundleFromSqlFile(filePath, source);
+        await cleanup();
+        const preview = {
+          source: bundle.source,
+          counts: {
+            bouquets: bundle.bouquets.length,
+            streams: bundle.streams.length,
+            lines: bundle.lines.length,
+            resellers: bundle.resellers?.length ?? 0,
+            magDevices: bundle.magDevices?.length ?? 0,
+            enigmaDevices: bundle.enigmaDevices?.length ?? 0,
+            categories: bundle.phase2?.categories.length ?? 0,
+            servers: bundle.phase2?.servers.length ?? 0,
+            epgSources: bundle.phase2?.epgSources.length ?? 0,
+          },
+          warnings: bundle.warnings ?? [],
+        };
+        return NextResponse.json({ preview });
       } else {
         content = (uploadedContent ?? (body.content as string | undefined) ?? "").trim();
       }
@@ -293,29 +282,48 @@ export async function POST(req: NextRequest) {
             const out = await runMigrationFromPostgres(pg, source, { ...opts, onProgress });
             send("complete", { preview: out.preview, result: out.result, probe: out.probe });
           } else {
-            let content: string;
+            let content: string | undefined;
             
             if (filePath) {
               send("progress", { phase: "scanning", current: 0, total: 100 });
-              content = await parseSqlFileIncremental(filePath, (bytesRead, totalBytes) => {
+              const bundle = await bundleFromSqlFile(filePath, source, (bytesRead, totalBytes) => {
                 const pct = Math.round((bytesRead / totalBytes) * 100);
                 send("progress", { phase: "scanning", current: pct, total: 100 });
               });
               send("progress", { phase: "scanning", current: 100, total: 100 });
+              // Import the bundle directly
+              const { applyMigrationBundle } = await import("@/lib/panel-migration/apply");
+              const result = await applyMigrationBundle(bundle, { ...opts, onProgress });
+              send("complete", {
+                preview: {
+                  source: bundle.source,
+                  counts: {
+                    bouquets: bundle.bouquets.length,
+                    streams: bundle.streams.length,
+                    lines: bundle.lines.length,
+                    resellers: bundle.resellers?.length ?? 0,
+                    magDevices: bundle.magDevices?.length ?? 0,
+                    enigmaDevices: bundle.enigmaDevices?.length ?? 0,
+                    categories: bundle.phase2?.categories.length ?? 0,
+                    servers: bundle.phase2?.servers.length ?? 0,
+                    epgSources: bundle.phase2?.epgSources.length ?? 0,
+                  },
+                  warnings: bundle.warnings ?? [],
+                },
+                result,
+              });
             } else {
               content = (uploadedContent ?? (body.content as string | undefined) ?? "").trim();
+              if (!content) {
+                send("error", { error: "content required" });
+                controller.close();
+                await cleanup();
+                return;
+              }
+              const fileFormat = format === "json" || source === "nexlify_json" ? "json" : "sql";
+              const out = await runMigration(content, source, fileFormat, { ...opts, onProgress });
+              send("complete", { preview: out.preview, result: out.result });
             }
-            
-            if (!content) {
-              send("error", { error: "content required" });
-              controller.close();
-              await cleanup();
-              return;
-            }
-            
-            const fileFormat = format === "json" || source === "nexlify_json" ? "json" : "sql";
-            const out = await runMigration(content, source, fileFormat, { ...opts, onProgress });
-            send("complete", { preview: out.preview, result: out.result });
           }
         } catch (e) {
           send("error", { error: e instanceof Error ? e.message : String(e) });

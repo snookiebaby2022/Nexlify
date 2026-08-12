@@ -19,6 +19,7 @@ import {
   parseAllMysqlInserts,
   parseMysqlInserts,
   parseMysqlInsertsSafe,
+  parseSqlDumpFile,
   rowToRecord,
   type SqlTableData,
 } from "./sql-parse";
@@ -534,4 +535,69 @@ export function pgRowsToTableData(rows: Record<string, unknown>[]): SqlTableData
     })
   );
   return { columns, rows: dataRows };
+}
+
+/** Stream-parse a SQL dump file (memory-efficient for large files). */
+export async function bundleFromSqlFile(
+  filePath: string,
+  source: MigrationSource,
+  onProgress?: (bytesRead: number, totalBytes: number) => void
+): Promise<MigrationBundle> {
+  const profile = PANEL_PROFILES[source];
+  const warnings: string[] = [];
+
+  const allTables = await parseSqlDumpFile(filePath, onProgress);
+
+  function findTable(names: string[]): SqlTableData | null {
+    for (const name of names) {
+      const chunks = allTables.get(name.toLowerCase()) ?? [];
+      const merged = mergeSqlTables(chunks);
+      if (merged && merged.rows.length) return merged;
+    }
+    return null;
+  }
+
+  function findTableWithWarnings(names: string[]): { data: SqlTableData | null; warnings: string[] } {
+    const w: string[] = [];
+    for (const name of names) {
+      const chunks = allTables.get(name.toLowerCase()) ?? [];
+      if (!chunks.length) {
+        w.push(`No INSERT statements found for table "${name}"`);
+        continue;
+      }
+      const merged = mergeSqlTables(chunks);
+      if (merged && merged.rows.length) return { data: merged, warnings: w };
+      w.push(`Table "${name}" matched but contained no rows`);
+    }
+    return { data: null, warnings: w };
+  }
+
+  const streamsResult = findTableWithWarnings(profile.streams);
+  const bouquetsResult = findTableWithWarnings(profile.bouquets);
+  const linesResult = findTableWithWarnings(profile.lines);
+  warnings.push(...streamsResult.warnings, ...bouquetsResult.warnings, ...linesResult.warnings);
+
+  let resellersTable = findTable(profile.resellers);
+  if (resellersTable && resellersTable === linesResult.data) resellersTable = null;
+  const magTable = findTable(profile.mag);
+  const enigmaTable = findTable(profile.enigma);
+
+  const bundle = buildMigrationBundle(
+    {
+      streams: streamsResult.data,
+      bouquets: bouquetsResult.data,
+      lines: linesResult.data,
+      resellers: resellersTable,
+      mag: magTable,
+      enigma: enigmaTable,
+    },
+    source,
+    loadPhase2FromSql(allTables, source)
+  );
+
+  if (warnings.length) {
+    bundle.warnings = [...(bundle.warnings ?? []), ...warnings];
+  }
+
+  return bundle;
 }

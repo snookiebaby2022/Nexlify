@@ -104,56 +104,134 @@ function extractRowTuples(valuesSection: string): string[] {
   return tuples;
 }
 
-export function parseMysqlInserts(sql: string, tableName: string): SqlTableData[] {
-  const results: SqlTableData[] = [];
-  const re = new RegExp(
-    `INSERT\\s+INTO\\s+\`?${tableName}\`?\\s*\\(([^)]+)\\)\\s*VALUES\\s*`,
-    "gi"
+/** Parse a single INSERT statement (already extracted, does not scan entire dump). */
+function parseSingleInsert(sql: string): { tableName: string; data: SqlTableData } | null {
+  const re = /^INSERT\s+INTO\s+[`"']?(\w+)[`"']?(?:\s*\(([^)]*)\))?\s*VALUES\s*/i;
+  const match = re.exec(sql);
+  if (!match) return null;
+
+  const tableName = match[1].toLowerCase();
+  const colPart = match[2] || "";
+  const columns = colPart
+    ? colPart.split(",").map((c) => c.trim().replace(/^`|`$/g, "")).filter(Boolean)
+    : [];
+
+  const valuesStart = match.index + match[0].length;
+  let valuesEnd = sql.length;
+  const semi = sql.indexOf(";", valuesStart);
+  if (semi >= 0) valuesEnd = semi;
+
+  const valuesSection = sql.slice(valuesStart, valuesEnd);
+  const tupleStrings = extractRowTuples(valuesSection);
+  const rows = tupleStrings.map((t) =>
+    splitSqlTuple(t).map((cell) => unquoteSqlValue(cell))
   );
+
+  return { tableName, data: { columns, rows } };
+}
+
+/** Parse ALL INSERTs from an in-memory SQL string (small dumps only). */
+export function parseAllMysqlInserts(sql: string): Map<string, SqlTableData[]> {
+  const results = new Map<string, SqlTableData[]>();
+  const insertRe = /INSERT\s+INTO\s+[`"']?\w+[`"']?/gi;
   let match: RegExpExecArray | null;
 
-  while ((match = re.exec(sql)) !== null) {
-    const colPart = match[1];
-    const columns = colPart.split(",").map((c) => c.trim().replace(/^`|`$/g, ""));
-    const valuesStart = match.index + match[0].length;
-    let valuesEnd = sql.length;
-    const nextInsert = sql.slice(valuesStart).search(/;\s*INSERT\s+INTO/i);
-    if (nextInsert >= 0) valuesEnd = valuesStart + nextInsert;
+  while ((match = insertRe.exec(sql)) !== null) {
+    const start = match.index;
+    // Find the end of this INSERT statement (next INSERT or end of string)
+    let end = sql.length;
+    const nextInsert = sql.slice(start + 1).search(/INSERT\s+INTO/i);
+    if (nextInsert >= 0) end = start + 1 + nextInsert;
     else {
-      const semi = sql.indexOf(";", valuesStart);
-      if (semi >= 0) valuesEnd = semi;
+      const semi = sql.lastIndexOf(";");
+      if (semi >= start) end = semi + 1;
     }
-    const valuesSection = sql.slice(valuesStart, valuesEnd);
-    const tupleStrings = extractRowTuples(valuesSection);
-    const rows = tupleStrings.map((t) =>
-      splitSqlTuple(t).map((cell) => unquoteSqlValue(cell))
-    );
-    results.push({ columns, rows });
+
+    const statement = sql.slice(start, end);
+    const parsed = parseSingleInsert(statement);
+    if (parsed) {
+      const existing = results.get(parsed.tableName) ?? [];
+      existing.push(parsed.data);
+      results.set(parsed.tableName, existing);
+    }
   }
 
   return results;
 }
 
-export function mergeSqlTables(chunks: SqlTableData[]): SqlTableData | null {
-  if (!chunks.length) return null;
-  const columns = chunks[0].columns;
-  const rows: unknown[][] = [];
-  for (const c of chunks) {
-    if (c.columns.join(",") !== columns.join(",")) continue;
-    rows.push(...c.rows);
+/** Stream-parse a SQL dump file line-by-line (memory-efficient for large dumps). */
+export async function parseSqlDumpFile(
+  filePath: string,
+  onProgress?: (bytesRead: number, totalBytes: number) => void
+): Promise<Map<string, SqlTableData[]>> {
+  const { createReadStream, statSync } = require("fs");
+  const { createInterface } = require("readline");
+
+  const totalBytes = statSync(filePath).size;
+  const results = new Map<string, SqlTableData[]>();
+
+  let buffer = "";
+  let inInsert = false;
+  let bytesRead = 0;
+  let lastProgressBytes = 0;
+
+  const stream = createReadStream(filePath, { encoding: "utf8" });
+  const rl = createInterface({ input: stream, crlfDelay: Infinity });
+
+  for await (const line of rl) {
+    bytesRead += Buffer.byteLength(line, "utf8") + 1; // +1 for newline
+
+    const trimmed = line.trim();
+
+    // Skip comments and empty lines
+    if (!trimmed || trimmed.startsWith("--") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
+      continue;
+    }
+
+    if (/^INSERT\s+INTO/i.test(trimmed)) {
+      inInsert = true;
+      buffer = line + "\n";
+    } else if (inInsert) {
+      buffer += line + "\n";
+      if (trimmed.endsWith(";")) {
+        const parsed = parseSingleInsert(buffer);
+        if (parsed) {
+          const existing = results.get(parsed.tableName) ?? [];
+          existing.push(parsed.data);
+          results.set(parsed.tableName, existing);
+        }
+        buffer = "";
+        inInsert = false;
+      }
+    }
+
+    if (onProgress && bytesRead - lastProgressBytes > 10 * 1024 * 1024) {
+      lastProgressBytes = bytesRead;
+      onProgress(bytesRead, totalBytes);
+    }
   }
-  return { columns, rows };
+
+  // Handle any remaining buffer (incomplete final statement)
+  if (buffer && inInsert) {
+    const parsed = parseSingleInsert(buffer);
+    if (parsed) {
+      const existing = results.get(parsed.tableName) ?? [];
+      existing.push(parsed.data);
+      results.set(parsed.tableName, existing);
+    }
+  }
+
+  if (onProgress) onProgress(totalBytes, totalBytes);
+  return results;
 }
 
-export function rowToRecord(columns: string[], row: unknown[]): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  columns.forEach((col, i) => {
-    out[col.toLowerCase()] = row[i];
-  });
-  return out;
+/** Legacy single-table parser (kept for compatibility). */
+export function parseMysqlInserts(sql: string, tableName: string): SqlTableData[] {
+  const all = parseAllMysqlInserts(sql);
+  return all.get(tableName.toLowerCase()) ?? [];
 }
 
-/** Safe wrapper around parseMysqlInserts that catches errors and returns warnings. */
+/** Safe wrapper around parseMysqlInserts. */
 export type SqlParseResult = {
   tables: SqlTableData[];
   warnings: string[];
@@ -178,35 +256,21 @@ export function parseMysqlInsertsSafe(sql: string, tableName: string): SqlParseR
   }
 }
 
-/** Single-pass parser — scans SQL once and extracts ALL tables.
- *  O(n) complexity instead of O(n×m), critical for large SQL dumps. */
-export function parseAllMysqlInserts(sql: string): Map<string, SqlTableData[]> {
-  const results = new Map<string, SqlTableData[]>();
-  const re = /INSERT\s+INTO\s+[`"']?(\w+)[`"']?\s*\(([^)]+)\)\s*VALUES\s*/gi;
-  let match: RegExpExecArray | null;
-
-  while ((match = re.exec(sql)) !== null) {
-    const tableName = match[1].toLowerCase();
-    const colPart = match[2];
-    const columns = colPart.split(",").map((c) => c.trim().replace(/^`|`$/g, ""));
-    const valuesStart = match.index + match[0].length;
-    let valuesEnd = sql.length;
-    const nextInsert = sql.slice(valuesStart).search(/;\s*INSERT\s+INTO/i);
-    if (nextInsert >= 0) valuesEnd = valuesStart + nextInsert;
-    else {
-      const semi = sql.indexOf(";", valuesStart);
-      if (semi >= 0) valuesEnd = semi;
-    }
-    const valuesSection = sql.slice(valuesStart, valuesEnd);
-    const tupleStrings = extractRowTuples(valuesSection);
-    const rows = tupleStrings.map((t) =>
-      splitSqlTuple(t).map((cell) => unquoteSqlValue(cell))
-    );
-    const entry: SqlTableData = { columns, rows };
-    const existing = results.get(tableName) ?? [];
-    existing.push(entry);
-    results.set(tableName, existing);
+export function mergeSqlTables(chunks: SqlTableData[]): SqlTableData | null {
+  if (!chunks.length) return null;
+  const columns = chunks[0].columns;
+  const rows: unknown[][] = [];
+  for (const c of chunks) {
+    if (c.columns.join(",") !== columns.join(",")) continue;
+    rows.push(...c.rows);
   }
+  return { columns, rows };
+}
 
-  return results;
+export function rowToRecord(columns: string[], row: unknown[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  columns.forEach((col, i) => {
+    out[col.toLowerCase()] = row[i];
+  });
+  return out;
 }

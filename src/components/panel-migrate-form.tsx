@@ -246,6 +246,7 @@ export function PanelMigrateForm() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let pendingEvent: string | null = null;
 
     try {
       while (true) {
@@ -253,35 +254,36 @@ export function PanelMigrateForm() {
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
 
-        // Parse SSE events from buffer
+        // Parse SSE events from buffer line-by-line
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
 
         for (const line of lines) {
           if (line.startsWith("event: ")) {
-            const eventType = line.slice(7).trim();
-            // Look for the next data line
-            const dataIdx = lines.indexOf(line);
-            if (dataIdx + 1 < lines.length && lines[dataIdx + 1].startsWith("data: ")) {
-              const dataStr = lines[dataIdx + 1].slice(6);
-              try {
-                const data = JSON.parse(dataStr);
-                if (eventType === "progress") {
-                  setProgress(data);
-                  setResult(`Importing ${data.phase}: ${data.current}/${data.total}...`);
-                } else if (eventType === "complete") {
-                  setUploadProgress(null);
-                  setScanning(false);
-                  handleCompleteResponse(data);
-                } else if (eventType === "error") {
-                  setUploadProgress(null);
-                  setScanning(false);
-                  setResult(`Error: ${data.error}`);
-                }
-              } catch {
-                // Skip malformed data
+            pendingEvent = line.slice(7).trim();
+          } else if (line.startsWith("data: ") && pendingEvent) {
+            const dataStr = line.slice(6);
+            try {
+              const data = JSON.parse(dataStr);
+              if (pendingEvent === "progress") {
+                setProgress(data);
+                setResult(`Importing ${data.phase}: ${data.current}/${data.total}...`);
+              } else if (pendingEvent === "complete") {
+                setUploadProgress(null);
+                setScanning(false);
+                handleCompleteResponse(data);
+              } else if (pendingEvent === "error") {
+                setUploadProgress(null);
+                setScanning(false);
+                setResult(`Error: ${data.error}`);
               }
+            } catch {
+              // Skip malformed data
             }
+            pendingEvent = null;
+          } else if (line === "" && pendingEvent) {
+            // Empty line marks end of event, reset state
+            pendingEvent = null;
           }
         }
       }
