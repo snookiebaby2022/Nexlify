@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
-import { mkdir } from "fs/promises";
+import { mkdir, readdir, stat, unlink } from "fs/promises";
 import path from "path";
 import { buildFullBackupSnapshot } from "@/lib/backup-run";
 import { writeBackupArchive } from "@/lib/backup-archive";
@@ -14,7 +14,38 @@ export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const backup = await getSettingGroup("backup");
-  return NextResponse.json({ backup });
+
+  // List local backup files
+  const rawPath = String(backup.localPath ?? "").trim();
+  const dir = path.resolve(
+    process.cwd(),
+    rawPath && !rawPath.startsWith("(") ? rawPath.replace(/^\.\//, "") : "./backups"
+  );
+
+  let backups: { id: string; name: string; createdAt: number; size: number; status: string; includes: string[] }[] = [];
+  try {
+    const files = await readdir(dir);
+    const backupFiles = files.filter((f) => f.startsWith("nexlify-backup-"));
+    const stats = await Promise.all(
+      backupFiles.map(async (f) => {
+        const filePath = path.join(dir, f);
+        const s = await stat(filePath);
+        return {
+          id: f,
+          name: f,
+          createdAt: s.mtimeMs,
+          size: s.size,
+          status: "completed" as const,
+          includes: ["settings", "bouquets", "categories", "streams", "lines", "users", "packages", "coupons", "epgSources"],
+        };
+      })
+    );
+    backups = stats.sort((a, b) => b.createdAt - a.createdAt);
+  } catch {
+    // Directory doesn't exist yet
+  }
+
+  return NextResponse.json({ backup, backups });
 }
 
 export async function POST(req: NextRequest) {
@@ -136,4 +167,29 @@ export async function PUT(req: NextRequest) {
       ? "Full backup restored successfully."
       : `Restored with ${result.errors.length} error(s). Check errors array.`,
   });
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const id = req.nextUrl.searchParams.get("id");
+  if (!id) {
+    return NextResponse.json({ error: "id required" }, { status: 400 });
+  }
+
+  const backup = await getSettingGroup("backup");
+  const rawPath = String(backup.localPath ?? "").trim();
+  const dir = path.resolve(
+    process.cwd(),
+    rawPath && !rawPath.startsWith("(") ? rawPath.replace(/^\.\//, "") : "./backups"
+  );
+
+  const filePath = path.join(dir, path.basename(id));
+  try {
+    await unlink(filePath);
+    return NextResponse.json({ ok: true, message: "Backup deleted" });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Delete failed" }, { status: 500 });
+  }
 }
