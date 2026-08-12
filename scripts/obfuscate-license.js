@@ -36,6 +36,8 @@ function obfuscateLicenseKeywords(content) {
 }
 
 function processDir(dir) {
+  // Skip files that break when modified (instrumentation hook, middleware)
+  const skipFiles = new Set(["instrumentation.js", "middleware.js"]);
   let entries;
   try {
     entries = readdirSync(dir);
@@ -57,6 +59,7 @@ function processDir(dir) {
         processDir(fullPath);
       }
     } else if (entry.endsWith(".js")) {
+      if (skipFiles.has(entry)) continue;
       try {
         const content = readFileSync(fullPath, "utf-8");
         if (
