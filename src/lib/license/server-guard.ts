@@ -43,10 +43,16 @@ export async function startupLicenseValidation(): Promise<{ ok: boolean; reason?
     return { ok: false, reason: "expired" };
   }
 
-  const { getOrCreateInstanceId } = await import("@/lib/license");
-  const instanceId = await getOrCreateInstanceId();
-  if (stored.boundInstanceId && stored.boundInstanceId !== instanceId) {
-    return { ok: false, reason: "wrong_instance" };
+  const { getOrCreateInstanceId, isEmailBoundLicense, licenseEmailMatches } = await import("@/lib/license");
+  if (isEmailBoundLicense()) {
+    if (!licenseEmailMatches(stored)) {
+      return { ok: false, reason: "email_mismatch" };
+    }
+  } else {
+    const instanceId = await getOrCreateInstanceId();
+    if (stored.boundInstanceId && stored.boundInstanceId !== instanceId) {
+      return { ok: false, reason: "wrong_instance" };
+    }
   }
 
   if (process.env.NEXLIFY_LICENSE_API_URL) {

@@ -10,6 +10,8 @@ export {
   getOrCreateInstanceId,
   getStoredLicense,
   clearStoredLicense,
+  isEmailBoundLicense,
+  licenseEmailMatches,
 } from "./state";
 export {
   issueLicenseSessionCookie,

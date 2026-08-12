@@ -4,10 +4,13 @@ import { join } from "path";
 const OBFUSCATION_MAP = {};
 
 function obfuscateString(str) {
-  return str
-    .split("")
-    .map((c) => String.fromCharCode(c.charCodeAt(0) ^ 0x42))
-    .join("");
+  // Produce a valid JS identifier (starts with _, rest [0-9a-z]) so the
+  // renamed tokens never break parsing. Deterministic per keyword.
+  let out = "_";
+  for (let i = 0; i < str.length; i++) {
+    out += (str.charCodeAt(i) ^ 0x42).toString(36);
+  }
+  return out;
 }
 
 function obfuscateLicenseKeywords(content) {

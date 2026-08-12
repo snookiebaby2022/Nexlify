@@ -8,6 +8,8 @@ import {
   revalidateStoredLicense,
   issueLicenseSessionCookie,
   issueTrialSessionCookie,
+  isEmailBoundLicense,
+  licenseEmailMatches,
 } from "@/lib/license";
 import { licenseCookieSecure } from "@/lib/license/cookie-options";
 
@@ -25,7 +27,11 @@ export async function POST(req: NextRequest) {
   const stored = await getStoredLicense();
 
   if (stored) {
-    if (stored.boundInstanceId !== instanceId) {
+    if (isEmailBoundLicense()) {
+      if (!licenseEmailMatches(stored)) {
+        return NextResponse.json({ error: "Stored license email does not match" }, { status: 400 });
+      }
+    } else if (stored.boundInstanceId !== instanceId) {
       return NextResponse.json({ error: "Stored license belongs to another installation" }, { status: 400 });
     }
     const valid = await revalidateStoredLicense(host);

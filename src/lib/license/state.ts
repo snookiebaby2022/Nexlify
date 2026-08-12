@@ -32,6 +32,21 @@ const INSTANCE_KEY = "license.instance_id";
 const TRIAL_KEY = "license.trial_started";
 const REMOTE_STATUS_KEY = "license.remote_status";
 
+/** Email-bound licensing: when set, the license is valid on any server/instance
+ *  as long as the stored licensee email (sub) matches this value — no IP/instance lock. */
+function licenseEmailBinding(): string | null {
+  const e = process.env.NEXLIFY_LICENSE_EMAIL?.trim().toLowerCase();
+  return e || null;
+}
+export function isEmailBoundLicense(): boolean {
+  return licenseEmailBinding() !== null;
+}
+export function licenseEmailMatches(stored: { sub?: string | null }): boolean {
+  const e = licenseEmailBinding();
+  if (!e) return true;
+  return stored.sub?.toLowerCase() === e;
+}
+
 export type StoredLicenseState = {
   keyHash: string;
   lid: string;
@@ -311,11 +326,16 @@ export async function revalidateStoredLicense(panelHost: string): Promise<boolea
   if (stored.exp * 1000 < Date.now()) return false;
 
   const instanceId = await getOrCreateInstanceId();
-  if (stored.boundInstanceId !== instanceId) return false;
+  if (isEmailBoundLicense()) {
+    // Email-bound: valid on any server/instance; only the licensee email gates it.
+    if (!licenseEmailMatches(stored)) return false;
+  } else {
+    if (stored.boundInstanceId !== instanceId) return false;
 
-  const currentIp = await getCurrentPublicIp();
-  if (stored.boundIp && stored.boundIp !== "unknown" && currentIp !== "unknown" && stored.boundIp !== currentIp) {
-    return false;
+    const currentIp = await getCurrentPublicIp();
+    if (stored.boundIp && stored.boundIp !== "unknown" && currentIp !== "unknown" && stored.boundIp !== currentIp) {
+      return false;
+    }
   }
 
   if (process.env.NEXLIFY_LICENSE_API_URL) {
@@ -444,8 +464,12 @@ export async function getLicenseStatus(panelHost: string): Promise<LicenseStatus
 
   const stored = await getStoredLicense();
   if (stored && stored.exp * 1000 > Date.now()) {
+    if (isEmailBoundLicense() && !licenseEmailMatches(stored)) {
+      return { valid: false, reason: "License email does not match the configured licensee" };
+    }
     const instanceId = await getOrCreateInstanceId();
-    if (stored.boundInstanceId === instanceId) {
+    const instanceOk = isEmailBoundLicense() ? true : stored.boundInstanceId === instanceId;
+    if (instanceOk) {
       const remoteStatus = await getRemoteAdminStatus();
       if (remoteStatus === "SUSPENDED") {
         return { valid: false, reason: "License suspended by vendor — contact support" };
@@ -464,13 +488,18 @@ export async function getLicenseStatus(panelHost: string): Promise<LicenseStatus
         expiresAt: new Date(stored.exp * 1000).toISOString(),
         licensee: stored.sub,
         licenseId: stored.lid,
-        instanceBound: true,
+        instanceBound: !isEmailBoundLicense(),
         boundIp: stored.boundIp,
         lastVerifiedAt: stored.lastVerifiedAt,
         onlineRequired: Boolean(process.env.NEXLIFY_LICENSE_API_URL?.trim()),
       };
     }
-    return { valid: false, reason: "License bound to another installation" };
+    return {
+      valid: false,
+      reason: isEmailBoundLicense()
+        ? "License email does not match the configured licensee"
+        : "License bound to another installation",
+    };
   }
 
   if (process.env.NEXLIFY_LICENSE_REQUIRE !== "0") {
