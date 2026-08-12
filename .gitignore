@@ -29,3 +29,44 @@ scripts/.panel-releases-website-snippet.ts
 
 # Env backups
 **/.env.backup.*
+
+# OpenCode config
+.opencode/
+
+# Temp scripts
+tmp-*.sh
+scripts/check_*.py
+scripts/fix_*.py
+scripts/test_*.py
+scripts/audit_*.py
+scripts/cleanup_test.py
+scripts/code_review.py
+scripts/debug_demo.py
+scripts/deploy_vps2.py
+scripts/extract_*.py
+scripts/final_check.py
+scripts/find_env.py
+scripts/full_audit.py
+scripts/full_verify.py
+scripts/gen_secret.py
+scripts/panel_audit*.py
+scripts/panel_auth_test.py
+scripts/panel_full_test.py
+scripts/patch_install.py
+scripts/perf_analysis.py
+scripts/perf_test.py
+scripts/quick_login.py
+scripts/rebuild_all.py
+scripts/restore_*.py
+scripts/revert_admin_pw.py
+scripts/setup_marketing_db.py
+scripts/setup_sync_env.py
+scripts/test_crud.py
+scripts/test_demo_*.py
+scripts/test_license_delete.py
+scripts/test_public_demo.py
+scripts/test_sync*.py
+scripts/test_trial*.py
+scripts/test_xtream.py
+scripts/verify_final2.py
+scripts/verify_separation.py
