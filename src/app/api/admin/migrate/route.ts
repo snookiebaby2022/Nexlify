@@ -275,6 +275,9 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
         };
 
+        // Send immediate event to prevent client timeout on long parses
+        send("start", { phase: "initializing" });
+
         try {
           const onProgress = (phase: string, current: number, total: number) => {
             send("progress", { phase, current, total });
