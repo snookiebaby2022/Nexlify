@@ -67,8 +67,9 @@ export async function POST(req: Request) {
         headers: {
           "Content-Type": "application/json",
           "x-panel-api-key": secret,
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         },
-        body: JSON.stringify({ lineIds, usernames, unlockAll }),
+        body: JSON.stringify({ lineIds, usernames, unlockAll, email, serverIp }),
         cache: "no-store",
         signal: AbortSignal.timeout(30_000),
       });
