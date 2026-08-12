@@ -11,19 +11,60 @@ import { verifyTotpCode } from "@/lib/totp";
 import { logActivity } from "@/lib/lines";
 import { setPanelSessionOnResponse } from "@/lib/session-cookie";
 import {
-  verifyLicenseSessionCookie,
-  verifyTrialSessionCookie,
-  LICENSE_SESSION_COOKIE,
-  LICENSE_TRIAL_COOKIE,
+  issueLicenseSessionCookie,
+  issueTrialSessionCookie,
 } from "@/lib/license/session-cookie";
+import {
+  getStoredLicense,
+  getOrCreateInstanceId,
+  getLicenseStatus,
+  revalidateStoredLicense,
+  isEmailBoundLicense,
+  licenseEmailMatches,
+} from "@/lib/license";
+import { licenseCookieSecure } from "@/lib/license/cookie-options";
 
-async function panelLicensed(req: NextRequest): Promise<boolean> {
-  if (process.env.NEXLIFY_LICENSE_VALID === "1") return true;
-  const licenseCookie = req.cookies.get(LICENSE_SESSION_COOKIE)?.value;
-  const trialCookie = req.cookies.get(LICENSE_TRIAL_COOKIE)?.value;
-  if (await verifyLicenseSessionCookie(licenseCookie)) return true;
-  if (await verifyTrialSessionCookie(trialCookie)) return true;
-  return false;
+/**
+ * If the panel is licensed (or in an active trial), build the license-session
+ * (or trial) cookie descriptor so the caller can drop it on the response. This
+ * lets an admin land directly on the dashboard after login instead of being
+ * bounced to /admin/license/add by the middleware license gate.
+ * Mirrors the logic in /api/license/enter-panel.
+ */
+async function buildLicenseCookie(
+  req: NextRequest
+): Promise<{ name: string; value: string; maxAge: number } | null> {
+  const host = (req.headers.get("host") ?? "localhost").split(":")[0].toLowerCase();
+  const instanceId = await getOrCreateInstanceId();
+  const stored = await getStoredLicense();
+
+  if (stored) {
+    if (isEmailBoundLicense() && !licenseEmailMatches(stored)) return null;
+    if (!isEmailBoundLicense() && stored.boundInstanceId !== instanceId) return null;
+
+    const valid = await revalidateStoredLicense(host);
+    if (!valid) return null;
+
+    const payload = {
+      v: 1 as const,
+      lid: stored.lid,
+      sub: stored.sub,
+      tier: stored.tier,
+      term: stored.term ?? stored.tier,
+      exp: stored.exp,
+      iat: Math.floor(Date.now() / 1000),
+    };
+    const cookie = await issueLicenseSessionCookie(payload, instanceId);
+    return { name: cookie.name, value: cookie.value, maxAge: Math.max(0, stored.exp - Math.floor(Date.now() / 1000)) };
+  }
+
+  const status = await getLicenseStatus(host);
+  if (status.valid && status.trial && status.trialEndsAt) {
+    const cookie = await issueTrialSessionCookie(status.trialEndsAt, instanceId);
+    return { name: cookie.name, value: cookie.value, maxAge: cookie.maxAge };
+  }
+
+  return null;
 }
 
 export async function POST(req: NextRequest) {
@@ -109,10 +150,10 @@ export async function POST(req: NextRequest) {
     meta: { ip, role: user.role },
   });
 
-  const licensed = await panelLicensed(req);
+  const licenseCookie = await buildLicenseCookie(req);
   const redirect =
     user.role === "ADMIN"
-      ? licensed
+      ? licenseCookie
         ? "/admin/dashboard"
         : "/admin/license/add"
       : "/reseller/dashboard";
@@ -124,5 +165,14 @@ export async function POST(req: NextRequest) {
     req,
     Number.isFinite(sessionDays) && sessionDays > 0 ? sessionDays : 7
   );
+  if (licenseCookie) {
+    res.cookies.set(licenseCookie.name, licenseCookie.value, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: licenseCookieSecure(req),
+      path: "/",
+      maxAge: licenseCookie.maxAge,
+    });
+  }
   return res;
 }
