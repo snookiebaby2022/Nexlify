@@ -435,18 +435,23 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
   }
 
   function findTableWithWarnings(names: string[]): { data: SqlTableData | null; warnings: string[] } {
-    const w: string[] = [];
+    const notFound: string[] = [];
     for (const name of names) {
       const chunks = allTables.get(name.toLowerCase()) ?? [];
       if (!chunks.length) {
-        w.push(`No INSERT statements found for table "${name}"`);
+        notFound.push(name);
         continue;
       }
       const merged = mergeSqlTables(chunks);
-      if (merged && merged.rows.length) return { data: merged, warnings: w };
-      w.push(`Table "${name}" matched but contained no rows`);
+      if (merged && merged.rows.length) return { data: merged, warnings: [] };
+      return { data: null, warnings: [`Table "${name}" matched but contained no rows`] };
     }
-    return { data: null, warnings: w };
+    return {
+      data: null,
+      warnings: [
+        `No INSERT statements found for any of these tables: ${notFound.map((n) => `"${n}"`).join(", ")}`,
+      ],
+    };
   }
 
   const streamsResult = findTableWithWarnings(profile.streams);
@@ -598,18 +603,23 @@ export async function bundleFromSqlFile(
   }
 
   function findTableWithWarnings(names: string[]): { data: SqlTableData | null; warnings: string[] } {
-    const w: string[] = [];
+    const notFound: string[] = [];
     for (const name of names) {
       const chunks = allTables.get(name.toLowerCase()) ?? [];
       if (!chunks.length) {
-        w.push(`No INSERT statements found for table "${name}"`);
+        notFound.push(name);
         continue;
       }
       const merged = mergeSqlTables(chunks);
-      if (merged && merged.rows.length) return { data: merged, warnings: w };
-      w.push(`Table "${name}" matched but contained no rows`);
+      if (merged && merged.rows.length) return { data: merged, warnings: [] };
+      return { data: null, warnings: [`Table "${name}" matched but contained no rows`] };
     }
-    return { data: null, warnings: w };
+    return {
+      data: null,
+      warnings: [
+        `No INSERT statements found for any of these tables: ${notFound.map((n) => `"${n}"`).join(", ")}`,
+      ],
+    };
   }
 
   const streamsResult = findTableWithWarnings(profile.streams);
