@@ -159,6 +159,8 @@ module.exports = {
         SMTP_USER: fileEnv.SMTP_USER || "",
         SMTP_PASS: fileEnv.SMTP_PASS || "",
         SMTP_FROM: fileEnv.SMTP_FROM || "Nexlify <admin@nexlify.live>",
+        PANEL_API_SECRET: fileEnv.PANEL_API_SECRET || "",
+        NEXLIFY_PANEL_API_SECRET: fileEnv.NEXLIFY_PANEL_API_SECRET || "",
       },
     },
   ],
