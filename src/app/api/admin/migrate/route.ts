@@ -9,16 +9,15 @@ import {
   type PostgresMigrationConfig,
 } from "@/lib/panel-migration";
 import { bundleFromSqlFile } from "@/lib/panel-migration/map-rows";
-import { writeFile, unlink, stat } from "fs/promises";
-import { createReadStream } from "fs";
+import Busboy from "busboy";
+import { Readable } from "stream";
+import { unlink, stat } from "fs/promises";
+import { createReadStream, createWriteStream } from "fs";
 
 const SOURCES = new Set(MIGRATION_SOURCES.map((s) => s.id));
 
 /** Large SQL dumps are uploaded as multipart/form-data to avoid loading them in the browser. */
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
-
-/** For files larger than this, use streaming instead of loading into memory */
-const STREAMING_THRESHOLD = 50 * 1024 * 1024; // 50MB
 
 function applyOptions(body: Record<string, unknown>) {
   return {
@@ -42,31 +41,6 @@ function applyOptions(body: Record<string, unknown>) {
 function parseBodyRecord(raw: unknown): Record<string, unknown> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   return raw as Record<string, unknown>;
-}
-
-/** Stream file to disk and return path */
-async function streamFileToDisk(file: File): Promise<string> {
-  const tempPath = `/tmp/nexlify-migrate-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`;
-  const stream = file.stream() as unknown as ReadableStream<Uint8Array>;
-  const reader = stream.getReader();
-  const chunks: Uint8Array[] = [];
-  
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-  
-  const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
-  const combined = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    combined.set(chunk, offset);
-    offset += chunk.length;
-  }
-  
-  await writeFile(tempPath, combined);
-  return tempPath;
 }
 
 /** Read file in chunks for processing. Reports bytes read for progress tracking. */
@@ -120,46 +94,7 @@ async function parseRequestBody(req: NextRequest): Promise<
   const contentType = req.headers.get("content-type") ?? "";
 
   if (contentType.includes("multipart/form-data")) {
-    const form = await req.formData();
-    const file = form.get("file");
-    const payloadRaw = form.get("payload");
-
-    if (!(file instanceof File) || file.size === 0) {
-      return { ok: false, error: "file required", status: 400 };
-    }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      return {
-        ok: false,
-        error: `File too large (max ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))}MB)`,
-        status: 413,
-      };
-    }
-
-    let body: Record<string, unknown> | null = null;
-    if (typeof payloadRaw === "string") {
-      try {
-        body = parseBodyRecord(JSON.parse(payloadRaw));
-      } catch {
-        return { ok: false, error: "Invalid payload JSON", status: 400 };
-      }
-    }
-    if (!body) {
-      return { ok: false, error: "payload required", status: 400 };
-    }
-
-    // For large files, stream to disk and process incrementally
-    if (file.size > STREAMING_THRESHOLD) {
-      const filePath = await streamFileToDisk(file);
-      return { ok: true, body, filePath };
-    }
-
-    // For small files, read into memory as before
-    const content = (await file.text()).trim();
-    if (!content) {
-      return { ok: false, error: "Uploaded file is empty", status: 400 };
-    }
-
-    return { ok: true, body, content };
+    return parseMultipart(req);
   }
 
   const body = parseBodyRecord(await req.json());
@@ -167,6 +102,89 @@ async function parseRequestBody(req: NextRequest): Promise<
     return { ok: false, error: "Invalid JSON body", status: 400 };
   }
   return { ok: true, body };
+}
+
+/**
+ * Stream multipart uploads directly from the raw request body.
+ * Next.js caps `req.formData()`/`req.json()` at ~10MB, so we bypass those
+ * high-level parsers and pipe `req.body` into busboy (no size limit).
+ */
+async function parseMultipart(req: NextRequest): Promise<
+  | { ok: true; body: Record<string, unknown>; content?: string; filePath?: string }
+  | { ok: false; error: string; status: number }
+> {
+  const contentType = req.headers.get("content-type") ?? "";
+  const busboy = Busboy({
+    headers: { "content-type": contentType },
+    limits: { fileSize: MAX_UPLOAD_BYTES },
+  });
+
+  let payloadRaw: string | null = null;
+  let tempPath: string | null = null;
+  let fileSize = 0;
+  let fileError: string | null = null;
+  let fileWriteDone: Promise<void> | null = null;
+
+  const parsed = new Promise<void>((resolve, reject) => {
+    busboy.on("field", (name, val) => {
+      if (name === "payload") payloadRaw = val;
+    });
+    busboy.on("file", (name, file, _info) => {
+      if (name !== "file") {
+        file.resume();
+        return;
+      }
+      tempPath = `/tmp/nexlify-migrate-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`;
+      const ws = createWriteStream(tempPath);
+      fileWriteDone = new Promise<void>((res, rej) => {
+        ws.on("finish", res);
+        ws.on("error", rej);
+      });
+      file.on("data", (d: Buffer) => {
+        fileSize += d.length;
+      });
+      file.on("limit", () => {
+        fileError = `File too large (max ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))}MB)`;
+      });
+      file.pipe(ws);
+    });
+    busboy.on("close", () => resolve());
+    busboy.on("error", reject);
+  });
+
+  try {
+    const nodeStream = Readable.fromWeb(
+      req.body as unknown as ReadableStream<Uint8Array>,
+    );
+    nodeStream.pipe(busboy);
+    await parsed;
+    if (fileWriteDone) await fileWriteDone;
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Failed to parse upload",
+      status: 400,
+    };
+  }
+
+  if (fileError) return { ok: false, error: fileError, status: 413 };
+  if (!tempPath || fileSize === 0) {
+    return { ok: false, error: "file required", status: 400 };
+  }
+
+  let body: Record<string, unknown> | null = null;
+  if (typeof payloadRaw === "string") {
+    try {
+      body = parseBodyRecord(JSON.parse(payloadRaw));
+    } catch {
+      return { ok: false, error: "Invalid payload JSON", status: 400 };
+    }
+  }
+  if (!body) {
+    return { ok: false, error: "payload required", status: 400 };
+  }
+
+  return { ok: true, body, filePath: tempPath };
 }
 
 export async function GET() {

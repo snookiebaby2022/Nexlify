@@ -51,6 +51,11 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Raise the middleware request-body clone limit so large migration uploads
+  // aren't truncated to 10MB before reaching Route Handlers (e.g.
+  // /api/admin/migrate). Without this, big .sql exports fail with
+  // "Failed to parse body as FormData".
+  middlewareClientMaxBodySize: "2gb",
   serverExternalPackages: ["ioredis"],
   images: {
     formats: ['image/avif', 'image/webp'],
@@ -71,6 +76,10 @@ const nextConfig: NextConfig = {
       // default limit and cause "Failed to parse body as FormData". Allow big bodies.
       bodySizeLimit: "2gb",
     },
+    // The license-session middleware clones the request body before it reaches
+    // Route Handlers. Its clone is capped at 10MB by default, which truncates
+    // large migration uploads ("Only the first 10MB will be available"). Raise it.
+    middlewareClientMaxBodySize: "2gb",
   },
 };
 
