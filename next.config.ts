@@ -67,7 +67,9 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: devOrigins,
   experimental: {
     serverActions: {
-      bodySizeLimit: "2mb",
+      // Large migration .sql uploads (Xtream/XUI/1-stream) easily exceed the
+      // default limit and cause "Failed to parse body as FormData". Allow big bodies.
+      bodySizeLimit: "2gb",
     },
   },
 };
