@@ -799,25 +799,25 @@ export function PanelMigrateForm() {
           onClick={() => setShowBackupModal(false)}
         >
           <div
-            className="rounded-lg p-6 max-w-xl w-full mx-4 space-y-4"
-            style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+            className="rounded-lg p-6 max-w-xl w-full mx-4 space-y-4 shadow-2xl"
+            style={{ background: "#0f172a", border: "1px solid var(--border)" }}
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-bold text-lg">Create backup first?</h3>
-            <p className="text-sm opacity-80">
+            <p className="text-sm" style={{ color: "#e2e8f0" }}>
               We recommend creating a database backup before importing. You can do this from{" "}
               <a href="/admin/backup-restore" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>
                 Admin → Backup &amp; Restore
               </a>.
             </p>
-            <p className="text-xs opacity-60">
+            <p className="text-xs" style={{ color: "#94a3b8" }}>
               If the import fails or produces unexpected results, you can restore from a backup.
             </p>
             <div className="flex flex-wrap gap-3 justify-end">
               <button
                 type="button"
                 className="px-4 py-2 rounded text-sm whitespace-nowrap"
-                style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+                style={{ background: "#1e293b", border: "1px solid var(--border)", color: "#e2e8f0" }}
                 onClick={() => setShowBackupModal(false)}
               >
                 Cancel
@@ -825,7 +825,7 @@ export function PanelMigrateForm() {
               <button
                 type="button"
                 className="px-4 py-2 rounded text-sm whitespace-nowrap"
-                style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+                style={{ background: "#1e293b", border: "1px solid var(--border)", color: "#e2e8f0" }}
                 onClick={() => {
                   window.open("/admin/backup-restore", "_blank");
                   setShowBackupModal(false);
