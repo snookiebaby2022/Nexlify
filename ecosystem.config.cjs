@@ -75,6 +75,9 @@ const sharedPanelEnv = {
   SMTP_USER: fileEnv.SMTP_USER || "",
   SMTP_PASS: fileEnv.SMTP_PASS || "",
   SMTP_FROM: fileEnv.SMTP_FROM || "",
+  PANEL_API_SECRET: fileEnv.PANEL_API_SECRET || "",
+  NEXLIFY_PANEL_API_SECRET: fileEnv.NEXLIFY_PANEL_API_SECRET || "",
+  PANEL_INTERNAL_SECRET: fileEnv.PANEL_INTERNAL_SECRET || "",
 };
 
 /** @type {import('pm2').StartOptions} */
