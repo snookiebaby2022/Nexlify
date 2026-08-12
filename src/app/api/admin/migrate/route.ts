@@ -8,11 +8,17 @@ import {
   type MigrationSource,
   type PostgresMigrationConfig,
 } from "@/lib/panel-migration";
+import { writeFile, unlink } from "fs/promises";
+import { createReadStream } from "fs";
+import { Readable } from "stream";
 
 const SOURCES = new Set(MIGRATION_SOURCES.map((s) => s.id));
 
 /** Large SQL dumps are uploaded as multipart/form-data to avoid loading them in the browser. */
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
+
+/** For files larger than this, use streaming instead of loading into memory */
+const STREAMING_THRESHOLD = 50 * 1024 * 1024; // 50MB
 
 function applyOptions(body: Record<string, unknown>) {
   return {
@@ -38,8 +44,101 @@ function parseBodyRecord(raw: unknown): Record<string, unknown> | null {
   return raw as Record<string, unknown>;
 }
 
+/** Stream file to disk and return path */
+async function streamFileToDisk(file: File): Promise<string> {
+  const tempPath = `/tmp/nexlify-migrate-${Date.now()}-${Math.random().toString(36).slice(2)}.sql`;
+  const stream = file.stream() as unknown as ReadableStream<Uint8Array>;
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  
+  const totalLength = chunks.reduce((sum, c) => sum + c.length, 0);
+  const combined = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.length;
+  }
+  
+  await writeFile(tempPath, combined);
+  return tempPath;
+}
+
+/** Read file in chunks for processing */
+async function readFileInChunks(filePath: string, callback: (chunk: string) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const stream = createReadStream(filePath, { encoding: "utf8", highWaterMark: 1024 * 1024 }); // 1MB chunks
+    let buffer = "";
+    
+    stream.on("data", (chunk: string) => {
+      buffer += chunk;
+      // Process complete lines
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? ""; // Keep incomplete line in buffer
+      for (const line of lines) {
+        callback(line + "\n");
+      }
+    });
+    
+    stream.on("end", () => {
+      if (buffer) callback(buffer);
+      resolve();
+    });
+    
+    stream.on("error", reject);
+  });
+}
+
+/** Parse SQL file incrementally, extracting INSERT statements */
+async function parseSqlFileIncremental(filePath: string): Promise<string> {
+  let insertBuffer = "";
+  let inInsertStatement = false;
+  let insertStatements: string[] = [];
+  
+  await readFileInChunks(filePath, (line) => {
+    const trimmed = line.trim();
+    
+    // Skip comments and empty lines
+    if (!trimmed || trimmed.startsWith("--") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
+      return;
+    }
+    
+    // Detect start of INSERT statement
+    if (/^INSERT\s+INTO/i.test(trimmed)) {
+      inInsertStatement = true;
+      insertBuffer = line;
+    } else if (inInsertStatement) {
+      insertBuffer += line;
+      
+      // Check if statement is complete (ends with ;)
+      if (trimmed.endsWith(";")) {
+        insertStatements.push(insertBuffer);
+        insertBuffer = "";
+        inInsertStatement = false;
+        
+        // Keep only recent statements to avoid memory bloat
+        if (insertStatements.length > 1000) {
+          insertStatements = insertStatements.slice(-500);
+        }
+      }
+    }
+  });
+  
+  // Handle any remaining buffer
+  if (insertBuffer && inInsertStatement) {
+    insertStatements.push(insertBuffer);
+  }
+  
+  return insertStatements.join("\n");
+}
+
 async function parseRequestBody(req: NextRequest): Promise<
-  | { ok: true; body: Record<string, unknown>; content?: string }
+  | { ok: true; body: Record<string, unknown>; content?: string; filePath?: string }
   | { ok: false; error: string; status: number }
 > {
   const contentType = req.headers.get("content-type") ?? "";
@@ -72,6 +171,13 @@ async function parseRequestBody(req: NextRequest): Promise<
       return { ok: false, error: "payload required", status: 400 };
     }
 
+    // For large files, stream to disk and process incrementally
+    if (file.size > STREAMING_THRESHOLD) {
+      const filePath = await streamFileToDisk(file);
+      return { ok: true, body, filePath };
+    }
+
+    // For small files, read into memory as before
     const content = (await file.text()).trim();
     if (!content) {
       return { ok: false, error: "Uploaded file is empty", status: 400 };
@@ -102,7 +208,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error }, { status: parsed.status });
   }
 
-  const { body, content: uploadedContent } = parsed;
+  const { body, content: uploadedContent, filePath } = parsed;
   const source = body.source as MigrationSource;
   if (!SOURCES.has(source)) {
     return NextResponse.json({ error: "Invalid source" }, { status: 400 });
@@ -110,6 +216,13 @@ export async function POST(req: NextRequest) {
 
   const format = body.format as string | undefined;
   const opts = applyOptions(body);
+
+  // Clean up temp file after processing
+  const cleanup = async () => {
+    if (filePath) {
+      try { await unlink(filePath); } catch { /* ignore */ }
+    }
+  };
 
   try {
     // For dry runs, return JSON directly (fast)
@@ -123,18 +236,30 @@ export async function POST(req: NextRequest) {
           );
         }
         const out = await runMigrationFromPostgres(pg, source, opts);
+        await cleanup();
         return NextResponse.json({
           preview: out.preview,
           probe: out.probe,
         });
       }
 
-      const content = (uploadedContent ?? (body.content as string | undefined))?.trim();
+      let content: string;
+      
+      if (filePath) {
+        // For large files, parse incrementally
+        content = await parseSqlFileIncremental(filePath);
+      } else {
+        content = (uploadedContent ?? (body.content as string | undefined))?.trim();
+      }
+      
       if (!content) {
+        await cleanup();
         return NextResponse.json({ error: "content required" }, { status: 400 });
       }
+      
       const fileFormat = format === "json" || source === "nexlify_json" ? "json" : "sql";
       const out = await runMigration(content, source, fileFormat, opts);
+      await cleanup();
       return NextResponse.json({ preview: out.preview });
     }
 
@@ -161,12 +286,23 @@ export async function POST(req: NextRequest) {
             const out = await runMigrationFromPostgres(pg, source, { ...opts, onProgress });
             send("complete", { preview: out.preview, result: out.result, probe: out.probe });
           } else {
-            const content = (uploadedContent ?? (body.content as string | undefined))?.trim();
+            let content: string;
+            
+            if (filePath) {
+              send("progress", { phase: "scanning", current: 0, total: 100 });
+              content = await parseSqlFileIncremental(filePath);
+              send("progress", { phase: "scanning", current: 50, total: 100 });
+            } else {
+              content = (uploadedContent ?? (body.content as string | undefined))?.trim();
+            }
+            
             if (!content) {
               send("error", { error: "content required" });
               controller.close();
+              await cleanup();
               return;
             }
+            
             const fileFormat = format === "json" || source === "nexlify_json" ? "json" : "sql";
             const out = await runMigration(content, source, fileFormat, { ...opts, onProgress });
             send("complete", { preview: out.preview, result: out.result });
@@ -176,6 +312,7 @@ export async function POST(req: NextRequest) {
         }
 
         controller.close();
+        await cleanup();
       },
     });
 
@@ -187,6 +324,7 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (e) {
+    await cleanup();
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },
       { status: 400 }
