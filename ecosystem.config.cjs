@@ -78,6 +78,7 @@ const sharedPanelEnv = {
   PANEL_API_SECRET: fileEnv.PANEL_API_SECRET || "",
   NEXLIFY_PANEL_API_SECRET: fileEnv.NEXLIFY_PANEL_API_SECRET || "",
   PANEL_INTERNAL_SECRET: fileEnv.PANEL_INTERNAL_SECRET || "",
+  NEXLIFY_LICENSE_SKIP_HOST_CHECK: fileEnv.NEXLIFY_LICENSE_SKIP_HOST_CHECK || "",
 };
 
 /** @type {import('pm2').StartOptions} */
