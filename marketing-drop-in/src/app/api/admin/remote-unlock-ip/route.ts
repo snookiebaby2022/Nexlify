@@ -41,6 +41,7 @@ export async function POST(req: Request) {
   }
 
   const secret = panelApiSecret();
+  console.log("[remote-unlock-ip] secret available:", secret ? "YES" : "NO");
   if (!secret) {
     return NextResponse.json({ error: "PANEL_API_SECRET not configured" }, { status: 500 });
   }
@@ -74,6 +75,7 @@ export async function POST(req: Request) {
       continue;
     }
     try {
+      console.log("[remote-unlock-ip] calling panel:", url, "unlockAll:", unlockAll);
       const res = await fetch(`${url}/api/admin/remote-unlock-ip`, {
         method: "POST",
         headers: {
@@ -93,6 +95,7 @@ export async function POST(req: Request) {
       }
 
       const data = await res.json();
+      console.log("[remote-unlock-ip] panel response:", res.status, JSON.stringify(data).slice(0, 200));
       results.push({
         url,
         ok: res.ok && data.ok === true,
