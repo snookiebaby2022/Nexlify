@@ -295,32 +295,31 @@ function headerlessStbSpecs(): FieldSpec[] {
 // confidently detected distinctive field.
 
 const XUI_COMMON: Record<HeaderlessTableType, string[]> = {
+  // Classic XUI / Xtream `users` (lines) — member_id owns the line, not user_id.
   lines: [
-    "id", "user_id", "username", "password", "ip", "exp_date",
-    "max_connections", "enabled", "is_banned", "admin_notes",
-    "bouquet", "package_ids", "max_viewers", "is_trial",
-    "is_reseller", "is_admin", "is_adult", "lock_device",
-    "forced_server_id", "allowed_ips", "blocked_ips", "is_resticted",
-    "allowed_countries", "blocked_countries", "external_id", "isp",
-    "notes", "mac", "mac_logging", "enabled_2",
-    "allowed_output", "default_live", "stream_id",
-    "creation_date", "subscription_data", "created_at",
+    "id", "member_id", "username", "password", "last_ip", "exp_date",
+    "admin_enabled", "enabled", "admin_notes", "reseller_notes",
+    "bouquet", "max_connections", "is_restreamer", "is_trial",
+    "is_mag", "is_e2", "forced_country", "forced_ua",
+    "allowed_ips", "allowed_ua", "created_at", "pair_id",
   ],
+  // Classic XUI / Xtream `streams`
   streams: [
-    "id", "user_id", "category_id", "stream_display_name", "stream_icon", "notes",
-    "stream_type", "stream_source", "stream_url", "container_extension",
-    "is_deleted", "enabled", "order_num",
+    "id", "type", "category_id", "stream_display_name", "stream_source",
+    "stream_icon", "notes", "created_channel", "read_native",
+    "movie_properties", "movie_subtitles", "direct_source",
+    "target_container", "epg_id", "channel_id", "order_num",
   ],
-  bouquets: ["id", "bouquet_name", "bouquet_channels", "sort_order"],
+  bouquets: ["id", "bouquet_name", "bouquet_channels", "bouquet_movies", "bouquet_series", "sort_order"],
   resellers: [
-    "id", "username", "password", "email", "is_admin", "is_reseller",
-    "member_group_id", "credits", "status",
+    "id", "username", "password", "email", "member_group_id", "credits",
+    "notes", "status", "owner_id", "date_registered",
   ],
-  mag: ["id", "mac", "username", "line_id", "model"],
-  enigma: ["id", "mac", "username", "line_id", "model"],
-  categories: ["id", "category_name", "parent_id"],
-  servers: ["id", "server_ip", "server_name", "port", "protocol"],
-  epg: ["id", "name", "url", "country"],
+  mag: ["id", "mac", "user_id", "username", "model"],
+  enigma: ["id", "mac", "user_id", "username", "model"],
+  categories: ["id", "category_type", "category_name", "parent_id", "cat_order", "is_adult"],
+  servers: ["id", "server_name", "domain_name", "server_ip", "private_ip", "http_port", "https_port", "rtmp_port"],
+  epg: ["id", "epg_name", "epg_file", "days_keep", "data"],
 };
 
 const KNOWN_COLUMN_ORDER: Partial<
@@ -332,6 +331,23 @@ const KNOWN_COLUMN_ORDER: Partial<
   streamcreed: XUI_COMMON,
   nxt: XUI_COMMON,
 };
+
+// Columns content-detection is trusted for — never overwritten by schema-order templates.
+const DISTINCTIVE = new Set([
+  "username",
+  "password",
+  "stream_source",
+  "stream_url",
+  "url",
+  "mac",
+  "stream_display_name",
+  "bouquet_name",
+  "category_name",
+  "server_name",
+  "server_ip",
+  "email",
+  "exp_date",
+]);
 
 // ---------------------------------------------------------------------------
 // inference
@@ -367,15 +383,21 @@ export function inferHeaderlessColumns(
     }
   }
 
-  // Schema-order fallback: for sources with a known column order (1-stream/XUI),
-  // the documented schema order is authoritative for resolving the many
-  // integer columns that content-based cannot separate. Override every position
-  // the template defines; positions beyond the template keep content-based (or
-  // placeholder). Tables without a known order rely on content-based alone.
+  // Schema-order fallback: only fill unclaimed / non-distinctive slots.
+  // Never override confidently detected usernames, passwords, URLs, etc.
   if (knownOrder) {
     for (let i = 0; i < nCols; i++) {
       const name = knownOrder[i];
-      if (name) columns[i] = name;
+      if (!name) continue;
+      const current = columns[i];
+      if (!current || current.startsWith("__c")) {
+        // Avoid duplicating a name already assigned by content detection.
+        if (columns.includes(name) && columns[i] !== name) continue;
+        columns[i] = name;
+      } else if (!DISTINCTIVE.has(current) && !columns.includes(name)) {
+        // Ambiguous integer column — prefer template name when free.
+        columns[i] = name;
+      }
     }
   }
 
@@ -425,7 +447,8 @@ function guessTypeFromContent(
  */
 export function applyHeaderlessInference(
   allTables: Map<string, SqlTableData[]>,
-  source: MigrationSource
+  source: MigrationSource,
+  createColumns?: Map<string, string[]>
 ): string[] {
   const profile = PANEL_PROFILES[source];
   const nameToType = new Map<string, HeaderlessTableType>();
@@ -459,6 +482,16 @@ export function applyHeaderlessInference(
       if (sample.length >= 200) break;
     }
     if (!sample.length) continue;
+
+    // Prefer CREATE TABLE column names when the dump includes DDL and widths match.
+    const ddlCols = createColumns?.get(name.toLowerCase());
+    if (ddlCols && ddlCols.length === sample[0].length) {
+      for (const c of headerless) c.columns = ddlCols.slice();
+      notes.push(
+        `Applied CREATE TABLE column names for headerless table "${name}" (${ddlCols.length} columns).`
+      );
+      continue;
+    }
 
     let type = nameToType.get(name.toLowerCase());
 

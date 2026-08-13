@@ -64,20 +64,21 @@ export const MIGRATION_GUIDE_PATHS: MigrationGuidePath[] = [
   {
     id: "xui",
     label: "XUI.one",
-    defaultDatabase: "xuoione",
+    defaultDatabase: "xui",
     engine: "mysql",
     oneStreamArtisan: "migrate-system:from xuione",
-    hint: "MySQL dump — default DB name xuoione (1-stream Migration Guide).",
+    hint: "MySQL dump — default DB name xui (also xuione / xuoione). Use scripts/xui-export-backup.sh on the XUI host.",
     steps: [
-      "On the XUI.one host, export a full MySQL dump of xuoione (prefer named columns / Complete inserts).",
+      "On the XUI.one host, run: mysqldump -u root --complete-insert --single-transaction xui > xui-backup.sql (or bash scripts/xui-export-backup.sh). Confirm DB name with SHOW DATABASES — often xui, sometimes xuione/xuoione.",
       TUNNEL_TIP,
       "In Nexlify: Admin → Import → Panel migration → source XUI.one → upload the .sql.",
-      "Preview — check lines, streams, bouquets, MAG, resellers, categories, servers, packages.",
+      "Preview — check lines, streams, bouquets, MAG, resellers, categories, servers, packages, series episodes.",
       "Optionally enable Clear existing IPTV data for a clean cutover, then Run import.",
     ],
     postImport: SHARED_POST_IMPORT,
     notes: [
-      "Nested bouquet JSON and junction tables (bouquet_streams, users_bouquets, …) are flattened automatically.",
+      "Nested bouquet JSON, streams_sys server links, series_episodes, and junction tables are flattened automatically.",
+      "Do not use a partial/table-only dump — export the full database.",
     ],
   },
   {

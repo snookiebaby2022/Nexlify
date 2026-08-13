@@ -17,9 +17,12 @@ export type PanelTableProfile = {
 export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
   xui: {
     streams: ["streams", "media_streams", "live_streams", "channels", "stream"],
-    bouquets: ["bouquets", "bouquet", "packages", "bundles"],
+    // Do not treat billing `packages` as bouquets — XUI keeps channel lists on `bouquets`.
+    bouquets: ["bouquets", "bouquet", "bundles"],
+    // Classic XUI/XC lines live in `users` when `lines` is absent.
     lines: ["lines", "subscribers", "clients", "users"],
-    resellers: ["users", "reg_users", "resellers", "sellers", "members"],
+    // Resellers are `reg_users` — never prefer `users` (that table is lines).
+    resellers: ["reg_users", "resellers", "sellers", "members"],
     mag: ["mag_devices", "mag", "stb_devices", "devices"],
     enigma: ["enigma_devices", "enigma", "enigma2_devices"],
     categories: ["stream_categories", "categories", "streams_categories", "channel_categories"],
@@ -41,7 +44,7 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
   },
   xtream_ui: {
     streams: ["streams", "media_streams", "live_streams", "channels"],
-    bouquets: ["bouquets", "bouquet", "packages", "bundles"],
+    bouquets: ["bouquets", "bouquet", "bundles"],
     lines: ["users", "lines", "subscribers", "clients"],
     resellers: ["reg_users", "resellers", "sellers"],
     mag: ["mag_devices", "mag", "stb_devices", "devices"],
@@ -54,9 +57,9 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
   /** StreamCreed — same MySQL lineage as XUI / XC; default DB streamcreed_db */
   streamcreed: {
     streams: ["streams", "media_streams", "live_streams", "channels", "stream"],
-    bouquets: ["bouquets", "bouquet", "packages", "bundles"],
+    bouquets: ["bouquets", "bouquet", "bundles"],
     lines: ["users", "lines", "subscribers", "clients"],
-    resellers: ["reg_users", "users", "resellers", "sellers", "members"],
+    resellers: ["reg_users", "resellers", "sellers", "members"],
     mag: ["mag_devices", "mag", "stb_devices", "devices"],
     enigma: ["enigma_devices", "enigma", "enigma2_devices"],
     categories: ["stream_categories", "categories", "streams_categories", "channel_categories"],
@@ -67,9 +70,9 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
   /** NXT-DASH — default DB nxt; best-effort XUI-lineage table names */
   nxt: {
     streams: ["streams", "media_streams", "live_streams", "channels", "stream"],
-    bouquets: ["bouquets", "bouquet", "packages", "bundles"],
+    bouquets: ["bouquets", "bouquet", "bundles"],
     lines: ["lines", "users", "subscribers", "clients"],
-    resellers: ["users", "reg_users", "resellers", "sellers", "members"],
+    resellers: ["reg_users", "resellers", "sellers", "members"],
     mag: ["mag_devices", "mag", "stb_devices", "devices"],
     enigma: ["enigma_devices", "enigma", "enigma2_devices"],
     categories: ["stream_categories", "categories", "streams_categories", "channel_categories"],

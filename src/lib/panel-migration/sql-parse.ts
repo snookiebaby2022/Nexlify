@@ -136,6 +136,109 @@ function parseSingleInsert(sql: string): { tableName: string; data: SqlTableData
   return { tableName, data: { columns, rows } };
 }
 
+/**
+ * Extract column names from CREATE TABLE statements in a mysqldump.
+ * Used to label headerless INSERT … VALUES dumps accurately.
+ */
+export function parseCreateTableColumns(sql: string): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const re =
+    /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[`"']?\w+[`"']?\.)?[`"']?(\w+)[`"']?\s*\(/gi;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(sql)) !== null) {
+    const tableName = match[1].toLowerCase();
+    const start = match.index + match[0].length;
+    let depth = 1;
+    let i = start;
+    let inQuote: "'" | '"' | "`" | null = null;
+    let escape = false;
+    for (; i < sql.length && depth > 0; i++) {
+      const ch = sql[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\" && inQuote && inQuote !== "`") {
+        escape = true;
+        continue;
+      }
+      if (inQuote) {
+        if (ch === inQuote) inQuote = null;
+        continue;
+      }
+      if (ch === "'" || ch === '"' || ch === "`") {
+        inQuote = ch;
+        continue;
+      }
+      if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+    }
+    const body = sql.slice(start, i - 1);
+    const cols: string[] = [];
+    // Split on commas at depth 0 within the CREATE body
+    let part = "";
+    depth = 0;
+    inQuote = null;
+    escape = false;
+    const parts: string[] = [];
+    for (let j = 0; j < body.length; j++) {
+      const ch = body[j];
+      if (escape) {
+        part += ch;
+        escape = false;
+        continue;
+      }
+      if (ch === "\\" && inQuote && inQuote !== "`") {
+        part += ch;
+        escape = true;
+        continue;
+      }
+      if (inQuote) {
+        part += ch;
+        if (ch === inQuote) inQuote = null;
+        continue;
+      }
+      if (ch === "'" || ch === '"' || ch === "`") {
+        inQuote = ch;
+        part += ch;
+        continue;
+      }
+      if (ch === "(") {
+        depth++;
+        part += ch;
+        continue;
+      }
+      if (ch === ")") {
+        depth--;
+        part += ch;
+        continue;
+      }
+      if (ch === "," && depth === 0) {
+        parts.push(part);
+        part = "";
+        continue;
+      }
+      part += ch;
+    }
+    if (part.trim()) parts.push(part);
+
+    for (const p of parts) {
+      const trimmed = p.trim();
+      if (
+        /^(PRIMARY\s+KEY|UNIQUE|KEY|INDEX|CONSTRAINT|FULLTEXT|SPATIAL|FOREIGN|CHECK)/i.test(
+          trimmed
+        )
+      ) {
+        continue;
+      }
+      const cm = /^[`"']?(\w+)[`"']?\s+/.exec(trimmed);
+      if (cm) cols.push(cm[1].toLowerCase());
+    }
+    if (cols.length) out.set(tableName, cols);
+  }
+  return out;
+}
+
 /** Parse ALL INSERTs from an in-memory SQL string (small dumps only). */
 export function parseAllMysqlInserts(sql: string): Map<string, SqlTableData[]> {
   const results = new Map<string, SqlTableData[]>();
@@ -168,15 +271,17 @@ export function parseAllMysqlInserts(sql: string): Map<string, SqlTableData[]> {
 export async function parseSqlDumpFile(
   filePath: string,
   onProgress?: (bytesRead: number, totalBytes: number) => void
-): Promise<Map<string, SqlTableData[]>> {
+): Promise<{ tables: Map<string, SqlTableData[]>; createColumns: Map<string, string[]> }> {
   const { createReadStream, statSync } = require("fs");
   const { createInterface } = require("readline");
 
   const totalBytes = statSync(filePath).size;
   const results = new Map<string, SqlTableData[]>();
+  const createColumns = new Map<string, string[]>();
 
   let buffer = "";
   let inInsert = false;
+  let inCreate = false;
   let bytesRead = 0;
   let lastProgressBytes = 0;
 
@@ -188,14 +293,47 @@ export async function parseSqlDumpFile(
 
     const trimmed = line.trim();
 
-    // Skip comments and empty lines
-    if (!trimmed || trimmed.startsWith("--") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
+    // Skip comments and empty lines (but keep buffering create/insert bodies)
+    if (!inInsert && !inCreate) {
+      if (!trimmed || trimmed.startsWith("--") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
+        continue;
+      }
+    }
+
+    if (!inInsert && /^(?:CREATE\s+TABLE)\b/i.test(trimmed)) {
+      inCreate = true;
+      buffer = line + "\n";
+      if (trimmed.endsWith(";")) {
+        for (const [k, v] of parseCreateTableColumns(buffer)) createColumns.set(k, v);
+        buffer = "";
+        inCreate = false;
+      }
+      continue;
+    }
+
+    if (inCreate) {
+      buffer += line + "\n";
+      if (trimmed.endsWith(";")) {
+        for (const [k, v] of parseCreateTableColumns(buffer)) createColumns.set(k, v);
+        buffer = "";
+        inCreate = false;
+      }
       continue;
     }
 
     if (/^(?:INSERT(?:\s+\w+)*\s+INTO|REPLACE\s+(?:INTO\s+)?)/i.test(trimmed)) {
       inInsert = true;
       buffer = line + "\n";
+      if (trimmed.endsWith(";")) {
+        const parsed = parseSingleInsert(buffer);
+        if (parsed) {
+          const existing = results.get(parsed.tableName) ?? [];
+          existing.push(parsed.data);
+          results.set(parsed.tableName, existing);
+        }
+        buffer = "";
+        inInsert = false;
+      }
     } else if (inInsert) {
       buffer += line + "\n";
       if (trimmed.endsWith(";")) {
@@ -225,9 +363,12 @@ export async function parseSqlDumpFile(
       results.set(parsed.tableName, existing);
     }
   }
+  if (buffer && inCreate) {
+    for (const [k, v] of parseCreateTableColumns(buffer)) createColumns.set(k, v);
+  }
 
   if (onProgress) onProgress(totalBytes, totalBytes);
-  return results;
+  return { tables: results, createColumns };
 }
 
 /** Legacy single-table parser (kept for compatibility). */

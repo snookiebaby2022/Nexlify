@@ -9,7 +9,7 @@ Paths below are mapped from the official **1-stream Migration Guide (Experimenta
 | Source panel | Default DB (guide) | Nexlify source | Input |
 |--------------|--------------------|----------------|--------|
 | **StreamCreed** | `streamcreed_db` | StreamCreed | MySQL `.sql` |
-| **XUI.one** | `xuoione` | XUI.one | MySQL `.sql` |
+| **XUI.one** | `xui` (also `xuione` / `xuoione`) | XUI.one | MySQL `.sql` — use `scripts/xui-export-backup.sh` |
 | **Xtream Codes** | `xtream_iptvpro` | Xtream Codes / Xtream UI | MySQL `.sql` |
 | **NXT-DASH** | `nxt` | NXT-DASH | MySQL `.sql` |
 | **1-stream** (into Nexlify) | (your PG DB) | 1-stream | **PostgreSQL live** (recommended) or `.sql` / JSON |
@@ -38,8 +38,22 @@ Paths below are mapped from the official **1-stream Migration Guide (Experimenta
 
 ## StreamCreed / XUI.one / Xtream Codes / NXT — SQL workflow
 
-1. On the source host, export a **full MySQL dump** of the default DB name above (phpMyAdmin → Export → **Complete inserts**, or `mysqldump` with column names).
-2. Prefer dumps **with column names**. Headerless `INSERT INTO t VALUES (...)` is auto-inferred, but named columns are more reliable.
+### Correct XUI.one dump (on the XUI host)
+
+XUI’s built-in backup cron dumps MySQL; for Nexlify you need a **full** dump with **column names**:
+
+```bash
+# Default XUI.one DB name is usually `xui` (confirm with: mysql -e 'SHOW DATABASES;')
+mysqldump -u root -p --single-transaction --complete-insert xui > xui-backup.sql
+
+# Or copy scripts/xui-export-backup.sh onto the XUI host and run it
+bash xui-export-backup.sh xui /root/xui-backup.sql
+```
+
+Avoid: table-only exports, phpMyAdmin “quick” dumps without Complete inserts, or restoring into Nexlify via `mysql` (use the Panel migration UI).
+
+1. On the source host, export a **full MySQL dump** of the default DB name above (phpMyAdmin → Export → **Complete inserts**, or `mysqldump` with `--complete-insert`).
+2. Prefer dumps **with column names** and `CREATE TABLE` DDL (standard mysqldump). Headerless `INSERT INTO t VALUES (...)` is auto-inferred from CREATE TABLE / content, but named columns are more reliable.
 3. In Nexlify: **Import → Panel migration** → select the matching source → upload the `.sql`.
 4. Click **Preview** — check mapped counts. Warnings explain unmapped tables.
 5. Leave **Import streams as stopped** enabled unless you intentionally want live streams immediately.
@@ -49,8 +63,13 @@ Paths below are mapped from the official **1-stream Migration Guide (Experimenta
 
 - Nested bouquet channels: `{"live":[1,2],"movie":[3],"series":[4]}`
 - `stream_source` JSON arrays → primary + backup URL
+- Correct stream `type` map: 1 live, 2 movie, 3 created, 4 radio, 5 series
+- JSON `category_id` arrays (e.g. `"[12]"`)
+- `streams_sys` → stream server assignment
+- `series` + `series_episodes` → SERIES streams
+- Resellers from `reg_users` (not mixed with line `users`)
 - Junction tables: `bouquet_streams`, `package_streams`, `users_bouquets`, etc.
-- Headerless INSERT inference (content + column-order templates)
+- Headerless INSERT inference via CREATE TABLE DDL + column-order templates
 
 ## 1-stream PostgreSQL (live) → Nexlify
 

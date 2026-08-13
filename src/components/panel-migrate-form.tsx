@@ -17,6 +17,10 @@ const SOURCE_OPTIONS = MIGRATION_GUIDE_PATHS.map((p) => ({
 const GUIDE_DEFAULT_DBS = new Set(
   MIGRATION_GUIDE_PATHS.map((p) => p.defaultDatabase).filter(Boolean) as string[]
 );
+// Also treat common XUI DB aliases as “guide defaults” so switching sources can refresh the hint field.
+GUIDE_DEFAULT_DBS.add("xuoione");
+GUIDE_DEFAULT_DBS.add("xuione");
+GUIDE_DEFAULT_DBS.add("xui");
 
 type InputMode = "file" | "postgres";
 

@@ -18,6 +18,7 @@ import {
 import {
   mergeSqlTables,
   parseAllMysqlInserts,
+  parseCreateTableColumns,
   parseMysqlInserts,
   parseMysqlInsertsSafe,
   parseSqlDumpFile,
@@ -27,6 +28,10 @@ import {
 import { PANEL_PROFILES, firstTableFound } from "./profiles";
 import { applyHeaderlessInference } from "./headerless-map";
 import { enrichSqlTablesFromJunctions, flattenIdList } from "./sql-junctions";
+import {
+  enrichStreamsFromSys,
+  mapSeriesEpisodesFromSql,
+} from "./xui-extras";
 
 function parseJsonField(val: unknown): unknown {
   if (val == null || val === "") return null;
@@ -77,18 +82,33 @@ function mapStreamType(val: unknown, source: MigrationSource): "LIVE" | "MOVIE" 
     source === "streamcreed" ||
     source === "nxt"
   ) {
-    if (n === 2 || n === 5) return "MOVIE";
-    if (n === 3 || n === 4) return "SERIES";
+    // Classic Xtream / XUI.one stream.type:
+    // 1 = live, 2 = movie, 3 = created channel (live), 4 = radio, 5 = series
+    if (n === 2) return "MOVIE";
+    if (n === 5) return "SERIES";
+    if (n === 1 || n === 3 || n === 4) return "LIVE";
   }
   const s = String(val ?? "").toLowerCase();
   if (s.includes("movie") || s === "vod") return "MOVIE";
   if (s.includes("series") || s.includes("episode")) return "SERIES";
+  if (s.includes("radio")) return "LIVE";
   return "LIVE";
+}
+
+/** XUI often stores category_id as JSON array e.g. "[12]" or [12,34] — take first id. */
+function firstLegacyId(val: unknown): string | undefined {
+  const ids = flattenIdList(val);
+  return ids[0] || undefined;
 }
 
 function lineStatusFromRow(r: Record<string, unknown>): MigrationLineRow["status"] {
   if (Number(r.is_banned) === 1 || r.banned === 1) return "BANNED";
-  if (Number(r.is_disabled) === 1 || Number(r.enabled) === 0 || Number(r.status) === 0)
+  if (
+    Number(r.is_disabled) === 1 ||
+    Number(r.enabled) === 0 ||
+    Number(r.admin_enabled) === 0 ||
+    Number(r.status) === 0
+  )
     return "DISABLED";
   const exp = r.exp_date ?? r.expires ?? r.expire_date ?? r.expires_at ?? r.expiration;
   if (exp && unixToDate(exp).getTime() < Date.now()) return "EXPIRED";
@@ -123,6 +143,10 @@ function mapStreams(data: SqlTableData | null, source: MigrationSource): Migrati
     const seriesName = r.series_name ?? r.show_name ?? r.tv_series;
     const seasonNum = Number(r.season_num ?? r.season ?? r.season_number ?? NaN);
     const episodeNum = Number(r.episode_num ?? r.episode ?? r.episode_number ?? NaN);
+    const typeRaw = r.type ?? r.stream_type;
+    const typeNum = Number(typeRaw);
+    const categoryLegacyId =
+      firstLegacyId(r.category_id) ?? firstLegacyId(r.stream_category_id);
     out.push({
       legacyId,
       name,
@@ -130,18 +154,13 @@ function mapStreams(data: SqlTableData | null, source: MigrationSource): Migrati
       backupUrl: backupExplicit
         ? String(backupExplicit)
         : backup || undefined,
-      type: mapStreamType(r.type ?? r.stream_type, source),
+      type: mapStreamType(typeRaw, source),
       streamIcon: r.stream_icon
         ? String(r.stream_icon)
         : r.logo
           ? String(r.logo)
           : undefined,
-      categoryLegacyId:
-        r.category_id != null
-          ? String(r.category_id)
-          : r.stream_category_id != null
-            ? String(r.stream_category_id)
-            : undefined,
+      categoryLegacyId,
       categoryName: r.category_name ? String(r.category_name) : undefined,
       epgChannelId: r.epg_channel_id
         ? String(r.epg_channel_id)
@@ -151,15 +170,22 @@ function mapStreams(data: SqlTableData | null, source: MigrationSource): Migrati
             ? String(r.channel_id)
             : undefined,
       channelId: r.channel_id ? String(r.channel_id) : r.custom_sid ? String(r.custom_sid) : undefined,
-      containerExtension: r.container_extension ? String(r.container_extension) : undefined,
+      containerExtension: r.container_extension
+        ? String(r.container_extension)
+        : r.target_container
+          ? String(r.target_container)
+          : undefined,
       isActive: Number(r.is_deleted ?? 0) !== 1 && Number(r.enabled ?? 1) !== 0,
       isAdult: Number(r.is_adult ?? r.adult ?? 0) === 1,
-      isRadio: Number(r.is_radio ?? r.radio ?? 0) === 1,
+      isRadio:
+        Number(r.is_radio ?? r.radio ?? 0) === 1 ||
+        typeNum === 4 ||
+        String(typeRaw ?? "").toLowerCase().includes("radio"),
       seriesName: seriesName ? String(seriesName) : undefined,
       seasonNum: Number.isFinite(seasonNum) && seasonNum > 0 ? seasonNum : undefined,
       episodeNum: Number.isFinite(episodeNum) && episodeNum > 0 ? episodeNum : undefined,
       serverLegacyId:
-        r.server_id != null
+        r.server_id != null && String(r.server_id) !== "" && String(r.server_id) !== "0"
           ? String(r.server_id)
           : r.stream_server_id != null
             ? String(r.stream_server_id)
@@ -226,17 +252,23 @@ function mapLines(data: SqlTableData | null): MigrationLineRow[] {
       blockedCountries: r.blocked_countries ? String(r.blocked_countries) : undefined,
       allowedOutput: r.allowed_outputs
         ? String(r.allowed_outputs)
-        : r.output_formats
-          ? String(r.output_formats)
-          : undefined,
+        : r.allowed_output
+          ? String(r.allowed_output)
+          : r.output_formats
+            ? String(r.output_formats)
+            : undefined,
       ownerLegacyId:
-        r.member_id != null
+        r.member_id != null && String(r.member_id) !== "" && String(r.member_id) !== "0"
           ? String(r.member_id)
-          : r.reseller_id != null
-            ? String(r.reseller_id)
-            : r.created_by != null
-              ? String(r.created_by)
-              : undefined,
+          : r.user_id != null && String(r.user_id) !== "" && String(r.user_id) !== "0"
+            ? String(r.user_id)
+            : r.reseller_id != null
+              ? String(r.reseller_id)
+              : r.owner_id != null
+                ? String(r.owner_id)
+                : r.created_by != null
+                  ? String(r.created_by)
+                  : undefined,
       isTrial: Number(r.is_trial ?? r.trial ?? 0) === 1,
       isRestreamer: Number(r.is_restreamer ?? r.restreamer ?? 0) === 1,
       allowedUserAgents: r.allowed_ua
@@ -274,8 +306,11 @@ function mapResellers(data: SqlTableData | null): MigrationResellerRow[] {
     if (!username || !password) continue;
     if (Number(r.is_admin ?? 0) === 1) continue;
     const group = Number(r.member_group_id ?? r.group_id ?? 0);
+    const hasResellerFlag =
+      r.is_reseller != null || r.member_group_id != null || r.group_id != null;
     const isReseller = Number(r.is_reseller ?? 0) === 1 || group > 1;
-    if (!isReseller) continue;
+    // reg_users rows are all panel users/resellers — if flags are absent, import them.
+    if (hasResellerFlag && !isReseller) continue;
     out.push({
       legacyId: r.id != null ? String(r.id) : undefined,
       username,
@@ -540,10 +575,11 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
 
   // Single-pass parse — O(n) instead of O(n×m)
   const allTables = parseAllMysqlInserts(sql);
+  const createColumns = parseCreateTableColumns(sql);
 
   // Headerless dumps (INSERT … VALUES without column names) yield empty
-  // columns; infer them by content so rows actually map.
-  warnings.push(...applyHeaderlessInference(allTables, source));
+  // columns; infer them by content / CREATE TABLE so rows actually map.
+  warnings.push(...applyHeaderlessInference(allTables, source, createColumns));
 
   function findTable(names: string[]): SqlTableData | null {
     for (const name of names) {
@@ -579,10 +615,31 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
   const linesResult = findTableWithWarnings(profile.lines);
   warnings.push(...streamsResult.warnings, ...bouquetsResult.warnings, ...linesResult.warnings);
 
-  let resellersTable = findTable(profile.resellers);
-  if (resellersTable && resellersTable === linesResult.data) resellersTable = null;
+  // Profiles put reg_users before users; never take a lines-table name when a
+  // dedicated reseller table exists.
+  const lineNames = new Set(profile.lines.map((n) => n.toLowerCase()));
+  let resellersTable: SqlTableData | null = null;
+  for (const name of profile.resellers) {
+    const key = name.toLowerCase();
+    const merged = mergeSqlTables(allTables.get(key) ?? []);
+    if (!merged?.rows.length) continue;
+    if (lineNames.has(key)) {
+      const hasDedicated = profile.resellers.some((n) => {
+        const k = n.toLowerCase();
+        if (lineNames.has(k)) return false;
+        return Boolean(mergeSqlTables(allTables.get(k) ?? [])?.rows.length);
+      });
+      if (hasDedicated) continue;
+    }
+    resellersTable = merged;
+    break;
+  }
+
   const magTable = findTable(profile.mag);
   const enigmaTable = findTable(profile.enigma);
+
+  const sysEnrich = enrichStreamsFromSys(allTables, streamsResult.data);
+  warnings.push(...sysEnrich.warnings);
 
   const junction = enrichSqlTablesFromJunctions(
     allTables,
@@ -593,7 +650,7 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
 
   const bundle = buildMigrationBundle(
     {
-      streams: streamsResult.data,
+      streams: sysEnrich.streams,
       bouquets: junction.bouquets,
       lines: junction.lines,
       resellers: resellersTable,
@@ -604,11 +661,17 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
     loadPhase2FromSql(allTables, source)
   );
 
+  const existingIds = new Set(bundle.streams.map((s) => s.legacyId));
+  const seriesEp = mapSeriesEpisodesFromSql(allTables, source, existingIds);
+  if (seriesEp.streams.length) {
+    bundle.streams.push(...seriesEp.streams);
+  }
+  warnings.push(...seriesEp.warnings);
+
   const tablesFound = summarizeTables(allTables);
   bundle.tablesFound = tablesFound;
   warnIfUnmapped(bundle, tablesFound, warnings);
 
-  // Merge parse warnings into the bundle
   if (warnings.length) {
     bundle.warnings = [...(bundle.warnings ?? []), ...warnings];
   }
@@ -735,11 +798,9 @@ export async function bundleFromSqlFile(
   const profile = PANEL_PROFILES[source];
   const warnings: string[] = [];
 
-  const allTables = await parseSqlDumpFile(filePath, onProgress);
+  const { tables: allTables, createColumns } = await parseSqlDumpFile(filePath, onProgress);
 
-  // Headerless dumps (INSERT … VALUES without column names) yield empty
-  // columns; infer them by content so rows actually map.
-  warnings.push(...applyHeaderlessInference(allTables, source));
+  warnings.push(...applyHeaderlessInference(allTables, source, createColumns));
 
   function findTable(names: string[]): SqlTableData | null {
     for (const name of names) {
@@ -775,10 +836,29 @@ export async function bundleFromSqlFile(
   const linesResult = findTableWithWarnings(profile.lines);
   warnings.push(...streamsResult.warnings, ...bouquetsResult.warnings, ...linesResult.warnings);
 
-  let resellersTable = findTable(profile.resellers);
-  if (resellersTable && resellersTable === linesResult.data) resellersTable = null;
+  const lineNames = new Set(profile.lines.map((n) => n.toLowerCase()));
+  let resellersTable: SqlTableData | null = null;
+  for (const name of profile.resellers) {
+    const key = name.toLowerCase();
+    const merged = mergeSqlTables(allTables.get(key) ?? []);
+    if (!merged?.rows.length) continue;
+    if (lineNames.has(key)) {
+      const hasDedicated = profile.resellers.some((n) => {
+        const k = n.toLowerCase();
+        if (lineNames.has(k)) return false;
+        return Boolean(mergeSqlTables(allTables.get(k) ?? [])?.rows.length);
+      });
+      if (hasDedicated) continue;
+    }
+    resellersTable = merged;
+    break;
+  }
+
   const magTable = findTable(profile.mag);
   const enigmaTable = findTable(profile.enigma);
+
+  const sysEnrich = enrichStreamsFromSys(allTables, streamsResult.data);
+  warnings.push(...sysEnrich.warnings);
 
   const junction = enrichSqlTablesFromJunctions(
     allTables,
@@ -789,7 +869,7 @@ export async function bundleFromSqlFile(
 
   const bundle = buildMigrationBundle(
     {
-      streams: streamsResult.data,
+      streams: sysEnrich.streams,
       bouquets: junction.bouquets,
       lines: junction.lines,
       resellers: resellersTable,
@@ -799,6 +879,13 @@ export async function bundleFromSqlFile(
     source,
     loadPhase2FromSql(allTables, source)
   );
+
+  const existingIds = new Set(bundle.streams.map((s) => s.legacyId));
+  const seriesEp = mapSeriesEpisodesFromSql(allTables, source, existingIds);
+  if (seriesEp.streams.length) {
+    bundle.streams.push(...seriesEp.streams);
+  }
+  warnings.push(...seriesEp.warnings);
 
   const tablesFound = summarizeTables(allTables);
   bundle.tablesFound = tablesFound;
