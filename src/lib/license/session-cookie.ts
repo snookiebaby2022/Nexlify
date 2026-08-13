@@ -13,6 +13,8 @@ function secret() {
   return new TextEncoder().encode(s ?? "dev-secret-change-me");
 }
 
+/** Prefer throwing only from issuers; verifiers catch via try/catch around jwtVerify. */
+
 export async function issueLicenseSessionCookie(payload: LicensePayloadV1, instanceId: string) {
   const exp = payload.exp;
   const token = await new SignJWT({
