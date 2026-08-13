@@ -95,12 +95,29 @@ export function mapEpgSources(data: SqlTableData | null): MigrationEpgRow[] {
   const out: MigrationEpgRow[] = [];
   for (const row of data.rows) {
     const r = rowToRecord(data.columns, row);
-    const url = String(r.url ?? r.epg_url ?? r.xmltv_url ?? "").trim();
+    const url = String(
+      r.url ??
+        r.epg_url ??
+        r.xmltv_url ??
+        r.epg_file ??
+        r.filename ??
+        r.source ??
+        r.path ??
+        ""
+    ).trim();
     if (!url) continue;
+    // Skip relative/local-only paths that aren't fetchable URLs unless they look like http(s)
+    const usable =
+      /^https?:\/\//i.test(url) ||
+      url.includes("://") ||
+      url.endsWith(".xml") ||
+      url.endsWith(".gz") ||
+      url.endsWith(".xmltv");
+    if (!usable && !url.includes("/")) continue;
     out.push({
-      name: String(r.name ?? r.epg_name ?? "EPG"),
+      name: String(r.name ?? r.epg_name ?? r.title ?? "EPG"),
       url,
-      country: r.country ? String(r.country) : undefined,
+      country: r.country ? String(r.country) : r.lang ? String(r.lang) : undefined,
     });
   }
   return out;

@@ -1,7 +1,7 @@
 /**
  * XUI.one / Xtream-lineage extras that the base SQL mapper does not cover:
- * - streams_sys → per-stream server assignment
- * - series + series_episodes → SERIES stream rows
+ * - streams_servers / streams_sys → per-stream server assignment
+ * - streams_series + streams_episodes → SERIES metadata / episode streams
  */
 
 import type { MigrationSource, MigrationStreamRow } from "./types";
@@ -37,7 +37,7 @@ function streamUrlsFromSource(val: unknown): { primary: string; backup?: string 
 }
 
 /**
- * Merge XUI `streams_sys` (stream_id, server_id, …) onto stream rows when
+ * Merge XUI `streams_servers` / `streams_sys` onto stream rows when
  * `server_id` is missing on the stream itself.
  */
 export function enrichStreamsFromSys(
@@ -48,9 +48,9 @@ export function enrichStreamsFromSys(
   if (!streams) return { streams, warnings };
 
   const sys = findMerged(allTables, [
+    "streams_servers",
     "streams_sys",
     "stream_sys",
-    "streams_servers",
     "stream_servers",
   ]);
   if (!sys) return { streams, warnings };
@@ -85,83 +85,133 @@ export function enrichStreamsFromSys(
   }
   if (filled) {
     warnings.push(
-      `Applied server_id from streams_sys for ${filled} stream(s) (${byStream.size} sys mappings).`
+      `Applied server_id from streams_servers/sys for ${filled} stream(s) (${byStream.size} mappings).`
     );
   }
   return { streams, warnings };
 }
 
+type SeriesMeta = {
+  name: string;
+  categoryLegacyId?: string;
+  icon?: string;
+};
+
+function loadSeriesMeta(allTables: Map<string, SqlTableData[]>): Map<string, SeriesMeta> {
+  const seriesTable = findMerged(allTables, [
+    "streams_series",
+    "series",
+    "tv_series",
+  ]);
+  const out = new Map<string, SeriesMeta>();
+  if (!seriesTable) return out;
+  for (const row of seriesTable.rows) {
+    const r = rowToRecord(seriesTable.columns, row);
+    const id = String(r.id ?? r.series_id ?? "");
+    if (!id) continue;
+    const title = String(
+      r.title ?? r.name ?? r.series_name ?? r.stream_display_name ?? ""
+    ).trim();
+    out.set(id, {
+      name: title || `Series ${id}`,
+      categoryLegacyId: flattenIdList(r.category_id)[0],
+      icon: r.cover
+        ? String(r.cover)
+        : r.stream_icon
+          ? String(r.stream_icon)
+          : r.image
+            ? String(r.image)
+            : undefined,
+    });
+  }
+  return out;
+}
+
 /**
- * Map XUI `series` + `series_episodes` into SERIES stream rows (episodes with URLs).
+ * Modern XUI.one: episodes usually live as rows in `streams`, linked via
+ * `streams_episodes` (stream_id + series_id + season/episode). Enrich those
+ * existing streams with SERIES metadata. Also create rows from episodes that
+ * carry their own stream_source (classic dumps).
  */
 export function mapSeriesEpisodesFromSql(
   allTables: Map<string, SqlTableData[]>,
   source: MigrationSource,
-  existingStreamIds: Set<string>
+  existingStreams: MigrationStreamRow[]
 ): { streams: MigrationStreamRow[]; warnings: string[] } {
   const warnings: string[] = [];
   const episodes = findMerged(allTables, [
+    "streams_episodes",
     "series_episodes",
     "episodes",
-    "streams_series",
   ]);
   if (!episodes) return { streams: [], warnings };
 
-  const seriesTable = findMerged(allTables, ["series", "tv_series"]);
-  const seriesNameById = new Map<string, string>();
-  const seriesCategoryById = new Map<string, string>();
-  const seriesIconById = new Map<string, string>();
-  if (seriesTable) {
-    for (const row of seriesTable.rows) {
-      const r = rowToRecord(seriesTable.columns, row);
-      const id = String(r.id ?? "");
-      if (!id) continue;
-      const title = String(r.title ?? r.name ?? r.series_name ?? "").trim();
-      if (title) seriesNameById.set(id, title);
-      const cat = flattenIdList(r.category_id)[0];
-      if (cat) seriesCategoryById.set(id, cat);
-      if (r.cover) seriesIconById.set(id, String(r.cover));
-      else if (r.stream_icon) seriesIconById.set(id, String(r.stream_icon));
-    }
-  }
+  const seriesMeta = loadSeriesMeta(allTables);
+  const byLegacy = new Map(existingStreams.map((s) => [s.legacyId, s]));
+  const existingIds = new Set(existingStreams.map((s) => s.legacyId));
+  const created: MigrationStreamRow[] = [];
+  let enriched = 0;
 
-  const out: MigrationStreamRow[] = [];
   for (const row of episodes.rows) {
     const r = rowToRecord(episodes.columns, row);
     const epId = String(r.id ?? r.episode_id ?? "");
-    const legacyId = epId ? `series_ep_${epId}` : "";
-    if (!legacyId || existingStreamIds.has(legacyId) || existingStreamIds.has(epId)) continue;
+    const linkedStreamId = String(r.stream_id ?? r.episode_stream_id ?? "");
+    const seriesId = String(r.series_id ?? r.show_id ?? "");
+    const meta = seriesId ? seriesMeta.get(seriesId) : undefined;
+    const seriesName =
+      meta?.name ||
+      String(r.series_name ?? "").trim() ||
+      (seriesId ? `Series ${seriesId}` : "Series");
+    const seasonNum = Number(
+      r.season_num ?? r.season ?? r.season_number ?? r.seasonid ?? NaN
+    );
+    const episodeNum = Number(
+      r.episode_num ?? r.episode ?? r.episode_number ?? r.sort ?? NaN
+    );
+    const epTitle = String(r.title ?? r.name ?? r.episode_name ?? "").trim();
 
+    // Path A: episode points at an existing streams.id (modern XUI.one)
+    if (linkedStreamId && byLegacy.has(linkedStreamId)) {
+      const s = byLegacy.get(linkedStreamId)!;
+      s.type = "SERIES";
+      s.seriesName = seriesName;
+      if (Number.isFinite(seasonNum) && seasonNum > 0) s.seasonNum = seasonNum;
+      if (Number.isFinite(episodeNum) && episodeNum > 0) s.episodeNum = episodeNum;
+      if (!s.categoryLegacyId && meta?.categoryLegacyId) {
+        s.categoryLegacyId = meta.categoryLegacyId;
+      }
+      if (!s.streamIcon && meta?.icon) s.streamIcon = meta.icon;
+      if (epTitle && !s.name.toLowerCase().includes(epTitle.toLowerCase())) {
+        s.name = epTitle;
+      }
+      enriched++;
+      continue;
+    }
+
+    // Path B: episode row has its own URL (classic / alternate dumps)
     const { primary: url, backup } = streamUrlsFromSource(
       r.stream_source ?? r.source ?? r.url ?? r.stream_url
     );
     if (!url) continue;
 
-    const seriesId = String(r.series_id ?? r.show_id ?? "");
-    const seriesName =
-      seriesNameById.get(seriesId) ||
-      String(r.series_name ?? r.title ?? r.name ?? "").trim() ||
-      (seriesId ? `Series ${seriesId}` : "Series");
-    const seasonNum = Number(r.season_num ?? r.season ?? r.season_number ?? NaN);
-    const episodeNum = Number(r.episode_num ?? r.episode ?? r.episode_number ?? NaN);
-    const epTitle = String(r.title ?? r.name ?? "").trim();
+    const legacyId = epId ? `series_ep_${epId}` : "";
+    if (!legacyId || existingIds.has(legacyId)) continue;
+
     const name =
       epTitle ||
       (Number.isFinite(seasonNum) && Number.isFinite(episodeNum)
         ? `${seriesName} S${seasonNum}E${episodeNum}`
         : `${seriesName} episode ${epId}`);
 
-    out.push({
+    const createdRow: MigrationStreamRow = {
       legacyId,
       name,
       streamUrl: url,
       backupUrl: backup,
       type: "SERIES",
-      streamIcon: r.stream_icon
-        ? String(r.stream_icon)
-        : seriesIconById.get(seriesId),
+      streamIcon: r.stream_icon ? String(r.stream_icon) : meta?.icon,
       categoryLegacyId:
-        flattenIdList(r.category_id)[0] ?? seriesCategoryById.get(seriesId),
+        flattenIdList(r.category_id)[0] ?? meta?.categoryLegacyId,
       seriesName,
       seasonNum: Number.isFinite(seasonNum) && seasonNum > 0 ? seasonNum : undefined,
       episodeNum: Number.isFinite(episodeNum) && episodeNum > 0 ? episodeNum : undefined,
@@ -176,13 +226,26 @@ export function mapSeriesEpisodesFromSql(
           ? String(r.server_id)
           : undefined,
       sortOrder: Number(r.sort_order ?? r.order ?? NaN) || undefined,
-    });
+    };
+    created.push(createdRow);
+    existingIds.add(legacyId);
   }
 
-  if (out.length) {
+  // Series catalog rows with no episode URL still help naming — optional no-op.
+  if (enriched) {
     warnings.push(
-      `Mapped ${out.length} series episode(s) from XUI series tables (${source}).`
+      `Enriched ${enriched} existing stream(s) with series/episode metadata from streams_episodes (${source}).`
     );
   }
-  return { streams: out, warnings };
+  if (created.length) {
+    warnings.push(
+      `Mapped ${created.length} series episode stream(s) from episode tables (${source}).`
+    );
+  } else if (!enriched && seriesMeta.size) {
+    warnings.push(
+      `Found ${seriesMeta.size} series in streams_series but no linkable episodes (need stream_id or stream_source on streams_episodes).`
+    );
+  }
+
+  return { streams: created, warnings };
 }

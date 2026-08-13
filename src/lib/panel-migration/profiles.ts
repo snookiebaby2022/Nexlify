@@ -19,16 +19,26 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
     streams: ["streams", "media_streams", "live_streams", "channels", "stream"],
     // Do not treat billing `packages` as bouquets — XUI keeps channel lists on `bouquets`.
     bouquets: ["bouquets", "bouquet", "bundles"],
-    // Classic XUI/XC lines live in `users` when `lines` is absent.
+    // Modern XUI.one has a dedicated `lines` table; classic XC used `users` for lines.
     lines: ["lines", "subscribers", "clients", "users"],
-    // Resellers are `reg_users` — never prefer `users` (that table is lines).
-    resellers: ["reg_users", "resellers", "sellers", "members"],
+    // Modern XUI.one: panel users/resellers are `users`. Classic: `reg_users`.
+    // `users` is last so it is only used when not already consumed as lines
+    // (finder skips line-table names when a dedicated reseller table exists).
+    resellers: ["reg_users", "resellers", "sellers", "members", "users"],
     mag: ["mag_devices", "mag", "stb_devices", "devices"],
     enigma: ["enigma_devices", "enigma", "enigma2_devices"],
-    categories: ["stream_categories", "categories", "streams_categories", "channel_categories"],
-    servers: ["streaming_servers", "servers", "streams_servers", "stream_servers"],
+    categories: ["streams_categories", "stream_categories", "categories", "channel_categories"],
+    // Prefer real streaming servers — never streams_servers (that's a junction).
+    servers: ["streaming_servers", "servers"],
     epg: ["epg_sources", "epgs", "epg"],
-    packages: ["packages", "user_packages", "line_packages", "credit_packages", "plans"],
+    packages: [
+      "users_packages",
+      "packages",
+      "user_packages",
+      "line_packages",
+      "credit_packages",
+      "plans",
+    ],
   },
   onestream: {
     streams: ["streams", "stream", "media_streams", "live_streams", "channels"],

@@ -305,18 +305,26 @@ function mapResellers(data: SqlTableData | null): MigrationResellerRow[] {
     const password = String(r.password ?? "").trim();
     if (!username || !password) continue;
     if (Number(r.is_admin ?? 0) === 1) continue;
-    const group = Number(r.member_group_id ?? r.group_id ?? 0);
-    const hasResellerFlag =
-      r.is_reseller != null || r.member_group_id != null || r.group_id != null;
-    const isReseller = Number(r.is_reseller ?? 0) === 1 || group > 1;
-    // reg_users rows are all panel users/resellers — if flags are absent, import them.
-    if (hasResellerFlag && !isReseller) continue;
+    const group = Number(r.member_group_id ?? r.group_id ?? r.groupid ?? NaN);
+    // XUI group 1 is typically Administrators — skip unless explicitly marked reseller.
+    if (Number.isFinite(group) && group <= 1 && Number(r.is_reseller ?? 0) !== 1) continue;
+
+    // Classic XC line-shaped rows (users table used for lines) — skip.
+    const looksLikeSubscriberLine =
+      r.exp_date != null &&
+      (r.bouquet != null || r.max_connections != null) &&
+      r.credits == null &&
+      r.member_group_id == null &&
+      r.owner_id == null &&
+      Number(r.is_reseller ?? 0) !== 1;
+    if (looksLikeSubscriberLine) continue;
+
     out.push({
       legacyId: r.id != null ? String(r.id) : undefined,
       username,
       password,
       credits: Number(r.credits ?? 0) || 0,
-      isActive: Number(r.status ?? 1) !== 0,
+      isActive: Number(r.status ?? 1) !== 0 && String(r.status ?? "") !== "0",
       email: r.email ? String(r.email) : undefined,
       notes: r.notes ? String(r.notes) : r.admin_notes ? String(r.admin_notes) : undefined,
       maxLines: Number(r.max_accounts ?? r.max_lines ?? r.max_users ?? NaN) || undefined,
@@ -326,13 +334,11 @@ function mapResellers(data: SqlTableData | null): MigrationResellerRow[] {
           ? String(r.dns)
           : undefined,
       parentLegacyId:
-        r.owner_id != null
+        r.owner_id != null && String(r.owner_id) !== "0"
           ? String(r.owner_id)
-          : r.parent_id != null
+          : r.parent_id != null && String(r.parent_id) !== "0"
             ? String(r.parent_id)
-            : r.member_id != null
-              ? String(r.member_id)
-              : undefined,
+            : undefined,
     });
   }
   return out;
@@ -347,10 +353,24 @@ export function mapPackages(data: SqlTableData | null): MigrationPackageRow[] {
     const legacyId = String(r.id ?? r.package_id ?? "");
     if (!legacyId) continue;
     const days = Number(
-      r.duration_in_days ?? r.duration ?? r.days ?? r.package_days ?? r.length_days ?? NaN
+      r.duration_in_days ??
+        r.duration ??
+        r.days ??
+        r.package_days ??
+        r.length_days ??
+        r.official_duration ??
+        r.trial_duration ??
+        NaN
     );
     const creditCost = Number(
-      r.credits ?? r.credit_cost ?? r.cost_credits ?? r.cost ?? r.price ?? NaN
+      r.credits ??
+        r.credit_cost ??
+        r.cost_credits ??
+        r.cost ??
+        r.price ??
+        r.official_credits ??
+        r.trial_credits ??
+        NaN
     );
     const trialRaw = r.is_trial ?? r.trial;
     const isTrialPackage =
@@ -661,8 +681,7 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
     loadPhase2FromSql(allTables, source)
   );
 
-  const existingIds = new Set(bundle.streams.map((s) => s.legacyId));
-  const seriesEp = mapSeriesEpisodesFromSql(allTables, source, existingIds);
+  const seriesEp = mapSeriesEpisodesFromSql(allTables, source, bundle.streams);
   if (seriesEp.streams.length) {
     bundle.streams.push(...seriesEp.streams);
   }
@@ -880,8 +899,7 @@ export async function bundleFromSqlFile(
     loadPhase2FromSql(allTables, source)
   );
 
-  const existingIds = new Set(bundle.streams.map((s) => s.legacyId));
-  const seriesEp = mapSeriesEpisodesFromSql(allTables, source, existingIds);
+  const seriesEp = mapSeriesEpisodesFromSql(allTables, source, bundle.streams);
   if (seriesEp.streams.length) {
     bundle.streams.push(...seriesEp.streams);
   }
