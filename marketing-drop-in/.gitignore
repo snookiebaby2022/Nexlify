@@ -1,6 +1,7 @@
 .vercel
 .env*
 .env.local
+.license-keys/
 .next
 node_modules
 src/generated

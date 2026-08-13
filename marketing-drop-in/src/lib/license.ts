@@ -26,7 +26,7 @@ function getTermDays(term: string): number {
   }
 }
 
-function loadPrivateKeyPem(): string {
+function loadPrivateKeyPem(): string | null {
   const fromEnv = process.env.LICENSE_SERVER_PRIVATE_PEM?.trim();
   if (fromEnv) return fromEnv;
 
@@ -44,18 +44,19 @@ function loadPrivateKeyPem(): string {
     }
   }
 
-  throw new Error(
-    "Missing license signing key — set LICENSE_SERVER_PRIVATE_PEM, LICENSE_KEY_FILE, or .license-keys/private.pem",
-  );
+  return null;
 }
 
 function loadPrivateKey() {
-  return createPrivateKey(loadPrivateKeyPem());
+  const pem = loadPrivateKeyPem();
+  if (!pem) return null;
+  return createPrivateKey(pem);
 }
 
 function signPayload(payload: Record<string, unknown>): string {
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const priv = loadPrivateKey();
+  if (!priv) throw new Error("license_signing_key_missing");
   const sig = sign(null, Buffer.from(payloadB64), priv);
   return `NXLF1.${payloadB64}.${sig.toString("base64url")}`;
 }

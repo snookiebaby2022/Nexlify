@@ -55,9 +55,11 @@ export async function POST(request: Request) {
         trial = trialLicensePayload(license);
       } catch (e) {
         const raw = e instanceof Error ? e.message : "Trial could not be started";
-        const message = raw.includes("license signing key")
-          ? "Trial setup failed: license signing key is not configured on the server. Contact support."
-          : raw;
+        const message = raw === "license_signing_key_missing"
+          ? "Trial is temporarily unavailable. Please try again later or contact support."
+          : raw.includes("license signing key")
+            ? "Trial is temporarily unavailable. Please try again later or contact support."
+            : raw;
         return NextResponse.json({ error: message }, { status: 400 });
       }
     }
