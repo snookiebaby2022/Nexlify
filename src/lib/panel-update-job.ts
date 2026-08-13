@@ -222,6 +222,10 @@ const STEP_PROGRESS: Record<string, number> = {
   "npm run build": 88,
   "prepare standalone": 94,
   "pm2 restart nexlify": 98,
+  // Prebuilt path steps (download → extract → apply replaces the old single step)
+  "download update": 30,
+  "extract update": 40,
+  "apply update": 90,
 };
 
 export function progressForStep(stepName: string): number {

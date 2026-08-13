@@ -11,6 +11,9 @@ export const STEP_DURATION_HINTS: Record<string, string> = {
   "prepare standalone": "~15s",
   "pm2 restart nexlify": "~15s",
   "git pull": "~30s",
+  "download update": "~15s",
+  "extract update": "~10s",
+  "apply update": "~30s",
 };
 
 export function formatUpdateElapsed(startedAt: string | null): string {

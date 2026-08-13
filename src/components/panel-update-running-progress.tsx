@@ -61,7 +61,7 @@ export function PanelUpdateRunningProgress({
           </ul>
         )}
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          Same progress as the bar at the bottom of the screen. Full updates usually take 3–6 minutes.
+          Full updates usually take 3–6 minutes.
         </p>
       </div>
     );

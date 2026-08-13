@@ -7,7 +7,6 @@ import { PanelLiveChat } from "@/components/panel-live-chat";
 import { ResellerNotificationsWidget } from "@/components/reseller-notifications-widget";
 import { PanelCommunityBar } from "@/components/panel-community-bar";
 import { PanelUpdateBanner } from "@/components/panel-update-banner";
-import { PanelUpdateProgress } from "@/components/panel-update-progress";
 import { PanelUpdateJobProvider } from "@/contexts/panel-update-job-context";
 import { PanelReleaseNotesModal } from "@/components/panel-release-notes-modal";
 import { PanelDemoBanner } from "@/components/panel-demo-banner";
@@ -107,7 +106,6 @@ export function PanelShell({
           </main>
           {username && <PanelLiveChat username={username} />}
           {role === "RESELLER" && <ResellerNotificationsWidget />}
-          {role === "ADMIN" && <PanelUpdateProgress />}
           {role === "ADMIN" && <PanelReleaseNotesModal />}
           <ChatAssistant />
         </div>

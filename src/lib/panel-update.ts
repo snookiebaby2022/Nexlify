@@ -494,31 +494,14 @@ export async function runPanelUpdateWithProgress(
     }
     // Re-resolve the script path after bootstrap may have replaced it.
     const freshPrebuiltScript = await resolvePrebuiltUpdateScript(repoPath);
-    const prebuiltStep: UpdateStep = {
-      name: "prebuilt download & apply",
-      command: "bash",
-      args: [freshPrebuiltScript || prebuiltScript, downloadUrl],
-    };
-    ok = await runSteps(repoPath, [prebuiltStep], onProgress, jobSteps, steps);
-    if (ok) {
-      const restartStep = await resolvePanelRestartStep(repoPath);
-      await reportProgress(onProgress, {
-        currentStep: restartStep.name,
-        progress: progressForStep(restartStep.name) - 2,
-        steps: [...jobSteps, { name: restartStep.name, ok: false, status: "running" }],
-      });
-      const pm2 = await runCommand(repoPath, restartStep.command, restartStep.args, {
-        stepName: restartStep.name,
-      });
-      steps.push({ name: restartStep.name, ok: pm2.ok, output: pm2.output });
-      jobSteps.push({
-        name: restartStep.name,
-        ok: pm2.ok,
-        status: pm2.ok ? "done" : "failed",
-        output: pm2.output,
-      });
-      ok = pm2.ok;
-    }
+    const script = freshPrebuiltScript || prebuiltScript;
+    // Run prebuilt steps individually for granular progress (download → extract → apply)
+    const prebuiltSteps: UpdateStep[] = [
+      { name: "download update", command: "bash", args: [script, downloadUrl, "download"] },
+      { name: "extract update", command: "bash", args: [script, downloadUrl, "extract"] },
+      { name: "apply update", command: "bash", args: [script, downloadUrl, "apply"] },
+    ];
+    ok = await runSteps(repoPath, prebuiltSteps, onProgress, jobSteps, steps);
   } else if (patchScript) {
     mode = "patch";
     ok = await runSteps(repoPath, await patchUpdateSteps(patchScript, repoPath), onProgress, jobSteps, steps);
