@@ -15,6 +15,8 @@ export type RepairImportedPanelResult = {
   bouquetsAlphaSorted: number;
   categoriesAlphaSorted: number;
   standardPackagesEnsured: number;
+  seriesLinkedToBouquets: number;
+  moviesLinkedToBouquets: number;
 };
 
 /**
@@ -34,6 +36,8 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
     bouquetsAlphaSorted: 0,
     categoriesAlphaSorted: 0,
     standardPackagesEnsured: 0,
+    seriesLinkedToBouquets: 0,
+    moviesLinkedToBouquets: 0,
   };
 
   const activated = await prisma.stream.updateMany({
@@ -187,7 +191,7 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
   }
 
   // Alphabetical sortOrder for bouquets & categories (player default).
-  const bouquets = await prisma.bouquet.findMany({ orderBy: { name: "asc" }, select: { id: true } });
+  const bouquets = await prisma.bouquet.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
   for (let i = 0; i < bouquets.length; i++) {
     await prisma.bouquet.update({ where: { id: bouquets[i].id }, data: { sortOrder: i + 1 } });
     result.bouquetsAlphaSorted++;
@@ -202,6 +206,53 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
       await prisma.category.update({ where: { id: list[i].id }, data: { sortOrder: i + 1 } });
       result.categoriesAlphaSorted++;
     }
+  }
+
+  // Import often maps only live/movie IDs into bouquets — series episodes never appear in players.
+  // Attach orphan SERIES (and unlinked MOVIE) streams into VOD-like bouquets.
+  const vodBouquet =
+    bouquets.find((b) => /^vod$/i.test(b.name.trim())) ||
+    bouquets.find((b) => /vod|movie|series|film/i.test(b.name)) ||
+    null;
+
+  async function linkOrphansToBouquet(
+    type: "SERIES" | "MOVIE",
+    bouquetId: string
+  ): Promise<number> {
+    const orphans = await prisma.stream.findMany({
+      where: {
+        type,
+        isActive: true,
+        bouquets: { none: {} },
+      },
+      select: { id: true },
+      take: 50_000,
+    });
+    if (!orphans.length) return 0;
+    let linked = 0;
+    const BATCH = 500;
+    for (let i = 0; i < orphans.length; i += BATCH) {
+      const chunk = orphans.slice(i, i + BATCH);
+      const res = await prisma.bouquetStream.createMany({
+        data: chunk.map((s, idx) => ({
+          bouquetId,
+          streamId: s.id,
+          sortOrder: i + idx,
+        })),
+        skipDuplicates: true,
+      });
+      linked += res.count;
+    }
+    return linked;
+  }
+
+  if (vodBouquet) {
+    result.seriesLinkedToBouquets = await linkOrphansToBouquet("SERIES", vodBouquet.id);
+    result.moviesLinkedToBouquets = await linkOrphansToBouquet("MOVIE", vodBouquet.id);
+  } else if (bouquets[0]) {
+    // Fallback: first bouquet alphabetically
+    result.seriesLinkedToBouquets = await linkOrphansToBouquet("SERIES", bouquets[0].id);
+    result.moviesLinkedToBouquets = await linkOrphansToBouquet("MOVIE", bouquets[0].id);
   }
 
   return result;

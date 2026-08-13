@@ -94,13 +94,30 @@ export function ManageLinesTable({
   const base = panel === "reseller" ? "/reseller" : "/admin";
   const [search, setSearch] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [pageSize, setPageSize] = useState(100);  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const isMdUp = useMediaQuery("(min-width: 768px)");
   const [bulk, setBulk] = useState("");
-  const [sortKey, setSortKey] = useState<"username" | "expiresAt" | "owner">("username");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [sortKey, setSortKey] = useState<"username" | "expiresAt" | "owner" | "createdAt">("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [createdBanner, setCreatedBanner] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const created = sp.get("created")?.trim();
+    const q = sp.get("q")?.trim();
+    if (created) {
+      setSearch(created);
+      setCreatedBanner(`Line “${created}” created — showing at top of search.`);
+      setSortKey("createdAt");
+      setSortDir("desc");
+    } else if (q) {
+      setSearch(q);
+    }
+  }, []);
 
   function closeEdit() {
     router.push(`${base}/lines`);
@@ -121,7 +138,8 @@ export function ManageLinesTable({
           (l.lastWatchedIp?.toLowerCase().includes(q) ?? false) ||
           l.bouquets.some((b) => b.bouquet.name.toLowerCase().includes(q))
       );
-    }    list = [...list].sort((a, b) => {
+    }
+    list = [...list].sort((a, b) => {
       let av: string | number = "";
       let bv: string | number = "";
       if (sortKey === "username") {
@@ -130,6 +148,9 @@ export function ManageLinesTable({
       } else if (sortKey === "owner") {
         av = a.owner?.username?.toLowerCase() ?? "";
         bv = b.owner?.username?.toLowerCase() ?? "";
+      } else if (sortKey === "createdAt") {
+        av = new Date(a.createdAt).getTime();
+        bv = new Date(b.createdAt).getTime();
       } else {
         av = new Date(a.expiresAt).getTime();
         bv = new Date(b.expiresAt).getTime();
@@ -156,7 +177,8 @@ export function ManageLinesTable({
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(key);
-      setSortDir("asc");
+      // Newest / latest-first for date columns; A→Z for names
+      setSortDir(key === "createdAt" || key === "expiresAt" ? "desc" : "asc");
     }
   }
 
@@ -301,12 +323,35 @@ export function ManageLinesTable({
           <div className="flex items-center gap-2 text-white">
             <ShoppingCart size={20} className="opacity-90" />
             <h1 className="text-lg font-semibold">Manage Lines</h1>
+            <span className="text-xs text-white/70 font-normal tabular-nums">
+              {lines.length.toLocaleString()} loaded · newest first
+            </span>
           </div>
           <Link href={`${base}/lines/add?package=1`} className="xui-lines-header-btn xui-lines-header-btn--primary">
             <PackagePlus size={16} />
             Add Line (with Package)
           </Link>
         </div>
+
+      {createdBanner ? (
+        <div
+          className="mx-3 mt-3 rounded-md border px-3 py-2 text-sm flex items-center justify-between gap-2"
+          style={{ borderColor: "rgba(34,197,94,0.4)", background: "rgba(34,197,94,0.1)" }}
+        >
+          <span>{createdBanner}</span>
+          <button
+            type="button"
+            className="text-xs underline"
+            onClick={() => {
+              setCreatedBanner("");
+              setSearch("");
+              router.replace(`${base}/lines`);
+            }}
+          >
+            Clear
+          </button>
+        </div>
+      ) : null}
 
       <div className="xui-lines-toolbar">
         <div className="flex flex-wrap items-center gap-2">
@@ -442,7 +487,7 @@ export function ManageLinesTable({
               <th className="xui-lines-th">Conn Info</th>
               <th className="xui-lines-th">Last Watched</th>
               <th className="xui-lines-th">Notes</th>
-              <th className="xui-lines-th">Created</th>
+              <SortHead label="Created" col="createdAt" />
               <th className="xui-lines-th">Actions</th>
             </tr>
           </thead>

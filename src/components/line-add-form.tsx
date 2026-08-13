@@ -252,7 +252,9 @@ export function LineAddForm({
         alert(data.error ?? `Failed to create line (${res.status})`);
         return;
       }
-      router.push(backHref);
+      const createdName =
+        (data as { line?: { username?: string } }).line?.username?.trim() || username;
+      router.push(`${backHref}?created=${encodeURIComponent(createdName)}`);
     } catch (e) {
       setSaving(false);
       alert(e instanceof Error ? e.message : "Network error — could not create line");

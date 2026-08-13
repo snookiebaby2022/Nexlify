@@ -17,8 +17,8 @@ import {
 } from "@/lib/credential-generate";
 import { LineStatus, Prisma } from "@prisma/client";
 
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 500;
+const MAX_PAGE_SIZE = 5000;
 
 export async function GET(req: NextRequest) {
   const session = await requireSession([

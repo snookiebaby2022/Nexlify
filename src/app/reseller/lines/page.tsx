@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ManageLinesTable, type ManageLineRow } from "@/components/manage-lines-table";
 
@@ -10,11 +10,12 @@ function ResellerLinesContent() {
   const [lines, setLines] = useState<ManageLineRow[]>([]);
   const [bouquets, setBouquets] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState("");
+  const [total, setTotal] = useState(0);
 
-  function load() {
+  const load = useCallback(() => {
     setError("");
     Promise.all([
-      fetch("/api/reseller/lines").then(async (r) => {
+      fetch("/api/reseller/lines?page=1&pageSize=5000").then(async (r) => {
         if (!r.ok) throw new Error("lines");
         return r.json();
       }),
@@ -25,6 +26,7 @@ function ResellerLinesContent() {
     ])
       .then(([linesData, bouquetData]) => {
         setLines(linesData.lines ?? []);
+        setTotal(linesData.pagination?.total ?? linesData.lines?.length ?? 0);
         setBouquets(bouquetData.bouquets ?? []);
       })
       .catch(() => {
@@ -32,11 +34,11 @@ function ResellerLinesContent() {
         setLines([]);
         setBouquets([]);
       });
-  }
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   return (
     <>
@@ -45,6 +47,11 @@ function ResellerLinesContent() {
           {error}
         </p>
       )}
+      {total > lines.length ? (
+        <p className="text-xs mb-2 px-1" style={{ color: "var(--muted)" }}>
+          Showing {lines.length.toLocaleString()} of {total.toLocaleString()} lines (newest first).
+        </p>
+      ) : null}
       <ManageLinesTable
         panel="reseller"
         lines={lines}
