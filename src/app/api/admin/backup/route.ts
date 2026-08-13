@@ -3,25 +3,44 @@ import { requireSession } from "@/lib/auth";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
-import { mkdir, readdir, stat, unlink } from "fs/promises";
+import { mkdir, readdir, stat, unlink, readFile } from "fs/promises";
 import path from "path";
 import { buildFullBackupSnapshot } from "@/lib/backup-run";
 import { writeBackupArchive } from "@/lib/backup-archive";
 import { restoreFullBackup } from "@/lib/backup-restore";
 import { computeChecksum, decryptBackup } from "@/lib/backup-run";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const backup = await getSettingGroup("backup");
 
-  // List local backup files
   const rawPath = String(backup.localPath ?? "").trim();
   const dir = path.resolve(
     process.cwd(),
     rawPath && !rawPath.startsWith("(") ? rawPath.replace(/^\.\//, "") : "./backups"
   );
 
+  // If ?file= param, read and return the backup file content
+  const fileParam = req.nextUrl.searchParams.get("file");
+  if (fileParam) {
+    const filePath = path.join(dir, path.basename(fileParam));
+    try {
+      const content = await readFile(filePath, "utf-8");
+      // Try to parse as JSON
+      try {
+        const snapshot = JSON.parse(content);
+        return NextResponse.json({ snapshot });
+      } catch {
+        // Not JSON (might be gzip/zip) — return raw
+        return NextResponse.json({ raw: content });
+      }
+    } catch {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+  }
+
+  // List local backup files
   let backups: { id: string; name: string; createdAt: number; size: number; status: string; includes: string[] }[] = [];
   try {
     const files = await readdir(dir);

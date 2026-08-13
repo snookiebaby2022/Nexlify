@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Download, Trash2, Plus, Database, CheckCircle } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { RefreshCw, Download, Trash2, Plus, Database, CheckCircle, Upload } from "lucide-react";
 
 type Backup = {
   id: string;
@@ -20,6 +20,11 @@ export default function BackupRestorePage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [showDatabaseRestore, setShowDatabaseRestore] = useState(false);
+  const [showFileUpload, setShowFileUpload] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [restoreInfo, setRestoreInfo] = useState<{
     backupId: string | null;
     tables: Record<DatabaseTable, { selected: boolean; count: number }>;
@@ -116,27 +121,85 @@ export default function BackupRestorePage() {
     });
   };
 
+  const handleFileUpload = async () => {
+    if (!uploadFile) return;
+    setUploading(true);
+    setUploadResult(null);
+    try {
+      const content = await uploadFile.text();
+      const res = await fetch("/api/admin/backup-restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "restore",
+          fileContent: content,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        const r = data.restored;
+        const parts = [
+          r.settings ? `${r.settings} settings` : "",
+          r.categories ? `${r.categories} categories` : "",
+          r.bouquets ? `${r.bouquets} bouquets` : "",
+          r.streams ? `${r.streams} streams` : "",
+          r.lines ? `${r.lines} lines` : "",
+          r.users ? `${r.users} users` : "",
+          r.packages ? `${r.packages} packages` : "",
+          r.coupons ? `${r.coupons} coupons` : "",
+          r.epgSources ? `${r.epgSources} EPG sources` : "",
+        ].filter(Boolean);
+        setUploadResult(`Restored: ${parts.join(", ") || "done"}`);
+        load();
+      } else {
+        setUploadResult("Error: " + (data.error || "Unknown error"));
+      }
+    } catch (err) {
+      setUploadResult("Error: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const performDatabaseRestore = async () => {
     if (!restoreInfo.backupId || !restoreInfo.confirmed) return;
     setLoading(true);
     try {
-      await fetch("/api/admin/backup-restore", {
+      const res = await fetch("/api/admin/backup", { method: "GET" });
+      const data = await res.json();
+      const backups = data.backups ?? [];
+      const backup = backups.find((b: { id: string }) => b.id === restoreInfo.backupId);
+      if (!backup) {
+        alert("Backup file not found");
+        setLoading(false);
+        return;
+      }
+
+      const fileRes = await fetch(`/api/admin/backup?file=${encodeURIComponent(restoreInfo.backupId)}`);
+      if (!fileRes.ok) {
+        alert("Failed to read backup file");
+        setLoading(false);
+        return;
+      }
+      const fileData = await fileRes.json();
+
+      const restoreRes = await fetch("/api/admin/backup-restore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "restore_database",
-          backupId: restoreInfo.backupId,
-          tables: Object.fromEntries(
-            Object.entries(restoreInfo.tables)
-              .filter(([, v]) => v.selected)
-              .map(([k]) => [k, true])
-          ),
+          action: "restore",
+          snapshot: fileData.snapshot ?? fileData,
         }),
       });
+      const result = await restoreRes.json();
       setLoading(false);
       setShowDatabaseRestore(false);
       cancelRestore();
-      load();
+      if (result.ok) {
+        load();
+      } else {
+        alert("Restore failed: " + (result.error || JSON.stringify(result.restored?.errors ?? "Unknown error")));
+      }
     } catch (err) {
       setLoading(false);
       alert("Database restore failed: " + (err instanceof Error ? err.message : String(err)));
@@ -159,6 +222,9 @@ export default function BackupRestorePage() {
           <button onClick={() => setShowCreate(true)} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded" style={{ background: "var(--accent)", color: "#fff" }}>
             <Plus size={12} /> New Backup
           </button>
+          <button onClick={() => { setShowFileUpload(!showFileUpload); setUploadResult(null); setUploadFile(null); }} className="flex items-center gap-1 text-xs px-3 py-1.5 rounded border" style={{ borderColor: "var(--border)" }}>
+            <Upload size={12} /> Upload Backup
+          </button>
         </div>
       </div>
 
@@ -170,6 +236,38 @@ export default function BackupRestorePage() {
             <button onClick={create} disabled={loading} className="px-3 py-1.5 rounded text-sm" style={{ background: "var(--accent)", color: "#fff" }}>Create</button>
             <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 rounded border text-sm" style={{ borderColor: "var(--border)" }}>Cancel</button>
           </div>
+        </div>
+      )}
+
+      {showFileUpload && (
+        <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+          <h3 className="text-sm font-semibold mb-3">Upload Backup File</h3>
+          <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
+            Upload a JSON backup or SQL dump file to restore your database.
+          </p>
+          <div className="flex gap-2 items-center">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.sql,.txt,.gz,.zip"
+              onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+              className="flex-1 text-sm"
+            />
+            <button
+              onClick={handleFileUpload}
+              disabled={!uploadFile || uploading}
+              className="px-3 py-1.5 rounded text-sm"
+              style={{ background: "var(--accent)", color: "#fff" }}
+            >
+              {uploading ? "Restoring..." : "Restore"}
+            </button>
+            <button onClick={() => { setShowFileUpload(false); setUploadFile(null); setUploadResult(null); }} className="px-3 py-1.5 rounded border text-sm" style={{ borderColor: "var(--border)" }}>Cancel</button>
+          </div>
+          {uploadResult && (
+            <p className={`text-xs mt-2 ${uploadResult.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>
+              {uploadResult}
+            </p>
+          )}
         </div>
       )}
 
