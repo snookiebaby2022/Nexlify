@@ -24,7 +24,12 @@ export async function GET(req: NextRequest) {
       include: {
         parent: { select: { id: true, name: true } },
         children: { select: { id: true, name: true, sortOrder: true, categoryType: true, isAdult: true } },
-        _count: { select: { streams: true, children: true } },
+        _count: {
+          select: {
+            streams: { where: { isActive: true } },
+            children: true,
+          },
+        },
       },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     });

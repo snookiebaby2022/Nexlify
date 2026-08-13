@@ -5,32 +5,45 @@ import { PanelRole, StreamType, type Prisma } from "@prisma/client";
 import { syncStreamBouquets } from "@/lib/stream-bouquets";
 import { invalidateDashboardStats, invalidateXtreamCategories } from "@/lib/cache-invalidate";
 
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
 export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const seriesId = req.nextUrl.searchParams.get("seriesId")?.trim();
+  const page = Math.max(1, parseInt(req.nextUrl.searchParams.get("page") ?? "1", 10) || 1);
+  const pageSize = Math.min(
+    MAX_PAGE_SIZE,
+    Math.max(1, parseInt(req.nextUrl.searchParams.get("pageSize") ?? String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE)
+  );
   const where: Prisma.StreamWhereInput = { type: StreamType.SERIES };
 
   if (seriesId) {
     const parent = await prisma.stream.findUnique({ where: { id: seriesId } });
-    if (!parent) return NextResponse.json({ episodes: [] });
+    if (!parent) return NextResponse.json({ episodes: [], total: 0, page, pageSize });
     const seriesName = parent.seriesName ?? parent.name;
     where.seriesName = seriesName;
   }
 
-  const rows = await prisma.stream.findMany({
-    where,
-    orderBy: [{ seasonNum: "asc" }, { episodeNum: "asc" }, { name: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      streamUrl: true,
-      seasonNum: true,
-      episodeNum: true,
-      seriesName: true,
-    },
-  });
+  const [total, rows] = await Promise.all([
+    prisma.stream.count({ where }),
+    prisma.stream.findMany({
+      where,
+      orderBy: [{ seasonNum: "asc" }, { episodeNum: "asc" }, { name: "asc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      select: {
+        id: true,
+        name: true,
+        streamUrl: true,
+        seasonNum: true,
+        episodeNum: true,
+        seriesName: true,
+      },
+    }),
+  ]);
 
   const episodes = rows.map((r) => ({
     id: r.id,
@@ -44,7 +57,13 @@ export async function GET(req: NextRequest) {
     },
   }));
 
-  return NextResponse.json({ episodes });
+  return NextResponse.json({
+    episodes,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  });
 }
 
 export async function POST(req: NextRequest) {

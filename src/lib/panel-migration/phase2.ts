@@ -59,19 +59,30 @@ export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[]
       .toUpperCase();
     const nameKey = name.toLowerCase();
 
+    // Classic XUI/XC: category_type 1=live, 2=movie, 3=series (4=radio on some panels).
     let categoryType: MigrationCategoryRow["categoryType"] = "LIVE";
     if (
       typeRaw.includes("MOVIE") ||
       typeRaw === "VOD" ||
-      typeRaw === "1" ||
+      typeRaw === "2" ||
       typeRaw === "MOVIES"
     ) {
       categoryType = "MOVIE";
-    } else if (typeRaw.includes("SERIES") || typeRaw === "2" || typeRaw === "TV") {
+    } else if (
+      typeRaw.includes("SERIES") ||
+      typeRaw === "3" ||
+      typeRaw === "TV" ||
+      typeRaw === "TV SERIES"
+    ) {
       categoryType = "SERIES";
-    } else if (typeRaw.includes("RADIO") || typeRaw === "3") {
+    } else if (typeRaw.includes("RADIO") || typeRaw === "4") {
       categoryType = "RADIO";
-    } else if (typeRaw.includes("LIVE") || typeRaw === "0" || typeRaw === "LIVE STREAMS") {
+    } else if (
+      typeRaw.includes("LIVE") ||
+      typeRaw === "0" ||
+      typeRaw === "1" ||
+      typeRaw === "LIVE STREAMS"
+    ) {
       categoryType = "LIVE";
     } else if (!typeRaw) {
       // Infer from name when category_type column was missing / mis-mapped.

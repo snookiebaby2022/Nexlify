@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { TicketsList, type TicketRow } from "@/components/ticket-ui";
-import { LifeBuoy, Filter, User, Tag } from "lucide-react";
+import { LifeBuoy } from "lucide-react";
+import type { TicketRow } from "@/components/ticket-ui";
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
@@ -11,6 +11,8 @@ export default function TicketsPage() {
   const [filterCategory, setFilterCategory] = useState("ALL");
   const [filterAssignee, setFilterAssignee] = useState("ALL");
   const [admins, setAdmins] = useState<{ id: string; username: string }[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   function load() {
     fetch("/api/admin/tickets")
@@ -18,7 +20,7 @@ export default function TicketsPage() {
       .then((d) => setTickets(d.tickets ?? []));
     fetch("/api/admin/resellers")
       .then((r) => r.json())
-      .then((d) => setAdmins((d.users ?? []).filter((u: any) => u.role === "ADMIN")));
+      .then((d) => setAdmins((d.users ?? []).filter((u: { role: string }) => u.role === "ADMIN")));
   }
 
   useEffect(() => {
@@ -50,6 +52,43 @@ export default function TicketsPage() {
     return true;
   });
 
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((t) => selected.has(t.id));
+
+  const toggleAll = useCallback(() => {
+    if (allFilteredSelected) {
+      setSelected(new Set());
+      return;
+    }
+    setSelected(new Set(filtered.map((t) => t.id)));
+  }, [allFilteredSelected, filtered]);
+
+  async function bulkSetStatus(status: string) {
+    if (!selected.size) return;
+    setBulkBusy(true);
+    await fetch("/api/admin/tickets", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [...selected], status }),
+    });
+    setBulkBusy(false);
+    setSelected(new Set());
+    load();
+  }
+
+  async function bulkDelete() {
+    if (!selected.size || !confirm(`Delete ${selected.size} ticket(s)? This cannot be undone.`)) return;
+    setBulkBusy(true);
+    await fetch("/api/admin/tickets", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [...selected] }),
+    });
+    setBulkBusy(false);
+    setSelected(new Set());
+    load();
+  }
+
   const categories = ["SUPPORT", "SUGGESTION", "REPORT", "BUG", "BILLING", "GENERAL"];
 
   const categoryLabel = (c: string) => {
@@ -78,7 +117,7 @@ export default function TicketsPage() {
           <div>
             <h1 className="text-2xl font-bold">Support tickets</h1>
             <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-              Manage customer support requests. Assign tickets, set categories, and track resolution.
+              Manage customer support requests. Select tickets to open, close, or delete in bulk.
             </p>
           </div>
         </div>
@@ -103,7 +142,9 @@ export default function TicketsPage() {
           >
             <option value="ALL">All categories</option>
             {categories.map((c) => (
-              <option key={c} value={c}>{categoryLabel(c)}</option>
+              <option key={c} value={c}>
+                {categoryLabel(c)}
+              </option>
             ))}
           </select>
           <select
@@ -115,14 +156,66 @@ export default function TicketsPage() {
             <option value="ALL">All assignees</option>
             <option value="">Unassigned</option>
             {admins.map((a) => (
-              <option key={a.id} value={a.id}>{a.username}</option>
+              <option key={a.id} value={a.id}>
+                {a.username}
+              </option>
             ))}
           </select>
         </div>
       </div>
 
-      <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
-        <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-4 py-3 text-xs font-semibold uppercase tracking-wider border-b" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="text-xs px-3 py-1.5 rounded border"
+          style={{ borderColor: "var(--border)" }}
+          onClick={toggleAll}
+        >
+          {allFilteredSelected ? "Clear selection" : "Select all"}
+        </button>
+        <span className="text-xs" style={{ color: "var(--muted)" }}>
+          {selected.size} selected
+        </span>
+        <button
+          type="button"
+          disabled={!selected.size || bulkBusy}
+          className="text-xs px-3 py-1.5 rounded text-white disabled:opacity-40"
+          style={{ background: "var(--accent)" }}
+          onClick={() => bulkSetStatus("OPEN")}
+        >
+          Mark open
+        </button>
+        <button
+          type="button"
+          disabled={!selected.size || bulkBusy}
+          className="text-xs px-3 py-1.5 rounded border disabled:opacity-40"
+          style={{ borderColor: "var(--border)" }}
+          onClick={() => bulkSetStatus("CLOSED")}
+        >
+          Mark closed
+        </button>
+        <button
+          type="button"
+          disabled={!selected.size || bulkBusy}
+          className="text-xs px-3 py-1.5 rounded disabled:opacity-40"
+          style={{ color: "var(--danger)", border: "1px solid var(--danger)" }}
+          onClick={bulkDelete}
+        >
+          Delete
+        </button>
+      </div>
+
+      <div
+        className="rounded-lg border overflow-hidden"
+        style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+      >
+        <div
+          className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-3 px-4 py-3 text-xs font-semibold uppercase tracking-wider border-b"
+          style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+        >
+          <span>
+            <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll} aria-label="Select all" />
+          </span>
           <span>Subject</span>
           <span>Category</span>
           <span>Assigned</span>
@@ -130,11 +223,29 @@ export default function TicketsPage() {
           <span></span>
         </div>
         {filtered.map((t) => (
-          <div key={t.id} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-4 py-3 items-center border-b" style={{ borderColor: "var(--border)" }}>
+          <div
+            key={t.id}
+            className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-3 px-4 py-3 items-center border-b"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <input
+              type="checkbox"
+              checked={selected.has(t.id)}
+              onChange={() => {
+                const next = new Set(selected);
+                if (next.has(t.id)) next.delete(t.id);
+                else next.add(t.id);
+                setSelected(next);
+              }}
+              aria-label={`Select ${t.subject}`}
+            />
             <Link href={`/admin/tickets/${t.id}`} className="text-sm hover:underline" style={{ color: "var(--accent)" }}>
               {t.subject}
             </Link>
-            <span className="text-xs px-2 py-0.5 rounded font-semibold" style={{ background: "rgba(0,192,239,0.15)", color: "var(--accent)" }}>
+            <span
+              className="text-xs px-2 py-0.5 rounded font-semibold"
+              style={{ background: "rgba(0,192,239,0.15)", color: "var(--accent)" }}
+            >
               {categoryLabel(t.category || "GENERAL")}
             </span>
             <select
@@ -145,7 +256,9 @@ export default function TicketsPage() {
             >
               <option value="">Unassigned</option>
               {admins.map((a) => (
-                <option key={a.id} value={a.id}>{a.username}</option>
+                <option key={a.id} value={a.id}>
+                  {a.username}
+                </option>
               ))}
             </select>
             <select
@@ -165,7 +278,9 @@ export default function TicketsPage() {
           </div>
         ))}
         {!filtered.length && (
-          <p className="p-4 text-sm text-center" style={{ color: "var(--muted)" }}>No tickets match your filters.</p>
+          <p className="p-4 text-sm text-center" style={{ color: "var(--muted)" }}>
+            No tickets match your filters.
+          </p>
         )}
       </div>
     </div>

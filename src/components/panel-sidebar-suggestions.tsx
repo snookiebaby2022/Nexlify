@@ -44,7 +44,7 @@ export function PanelSidebarSuggestions() {
         setError(data.error ?? "Could not send suggestion");
         return;
       }
-      setMsg("Suggestion sent! Thank you for your feedback.");
+      setMsg("Suggestion sent to Nexlify and saved in Support tickets. Thank you!");
       setMessage("");
       setTimeout(() => {
         setOpen(false);

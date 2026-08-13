@@ -122,7 +122,7 @@ export function PanelMigrateForm() {
   /** Extra tables: access codes, blocked UAs, groups, on-demand, live sessions, epg_api, crontab, profiles, … */
   const [importExtras, setImportExtras] = useState(true);
   /** Match 1-stream Migration Guide — streams imported stopped by default. */
-  const [importStreamsStopped, setImportStreamsStopped] = useState(true);
+  const [importStreamsStopped, setImportStreamsStopped] = useState(false);
   const [skipExisting, setSkipExisting] = useState(true);
   const [clearData, setClearData] = useState(false);
   const [preview, setPreview] = useState("");

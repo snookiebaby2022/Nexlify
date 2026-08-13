@@ -25,6 +25,7 @@ export default function AppBuilderPage() {
     logoUrl: "",
     primaryColor: "#00c0ef",
     serverUrl: "",
+    dnsHosts: "",
   });
   const [generating, setGenerating] = useState(false);
   const [builds, setBuilds] = useState<Build[]>([]);
@@ -43,17 +44,36 @@ export default function AppBuilderPage() {
   async function generate() {
     setGenerating(true);
     setError("");
+    const dnsLines = form.dnsHosts
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const serverUrl =
+      form.serverUrl.trim() ||
+      dnsLines[0] ||
+      "";
+    const payload = {
+      ...form,
+      serverUrl: dnsLines.length > 1 ? dnsLines.join("\n") : serverUrl,
+    };
     const res = await fetch("/api/admin/app-builder", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     setGenerating(false);
     if (!res.ok) {
       setError(data.error ?? "Failed to queue build");
     } else {
-      setForm({ appName: "", packageName: "", logoUrl: "", primaryColor: "#00c0ef", serverUrl: "" });
+      setForm({
+        appName: "",
+        packageName: "",
+        logoUrl: "",
+        primaryColor: "#00c0ef",
+        serverUrl: "",
+        dnsHosts: "",
+      });
       load();
     }
   }
@@ -158,7 +178,7 @@ export default function AppBuilderPage() {
             </div>
           </div>
           <div>
-            <label className="text-sm block mb-1">Server URL</label>
+            <label className="text-sm block mb-1">Primary panel URL</label>
             <input
               type="url"
               className="w-full rounded border px-3 py-2 bg-transparent"
@@ -168,6 +188,19 @@ export default function AppBuilderPage() {
               onChange={(e) => setForm({ ...form, serverUrl: e.target.value })}
             />
           </div>
+        </div>
+        <div>
+          <label className="text-sm block mb-1">App DNS / failover hosts</label>
+          <textarea
+            className="w-full rounded border px-3 py-2 bg-transparent text-sm min-h-[88px]"
+            style={{ borderColor: "var(--border)" }}
+            placeholder={"https://dns1.yourdomain.com\nhttps://dns2.yourdomain.com\nOptional: one host per line for failover"}
+            value={form.dnsHosts}
+            onChange={(e) => setForm({ ...form, dnsHosts: e.target.value })}
+          />
+          <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+            Embedded in the app as the Xtream/DNS list (primary URL first). Build pipeline must be connected for APK download.
+          </p>
         </div>
         <button
           type="button"

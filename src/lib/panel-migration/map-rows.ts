@@ -16,6 +16,7 @@ import {
   mapEpgSources,
   mapServers,
 } from "./phase2";
+import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
 import {
   mergeSqlTables,
   parseAllMysqlInserts,
@@ -432,7 +433,7 @@ export function mapPackages(data: SqlTableData | null): MigrationPackageRow[] {
     const r = rowToRecord(data.columns, row);
     const legacyId = String(r.id ?? r.package_id ?? "");
     if (!legacyId) continue;
-    const days = Number(
+    const rawDays = Number(
       r.duration_in_days ??
         r.duration ??
         r.days ??
@@ -459,7 +460,7 @@ export function mapPackages(data: SqlTableData | null): MigrationPackageRow[] {
       String(trialRaw).toLowerCase() !== "false" &&
       String(trialRaw).toLowerCase() !== "no";
     const hasBillingSignal =
-      (Number.isFinite(days) && days > 0) ||
+      (Number.isFinite(rawDays) && rawDays > 0) ||
       (Number.isFinite(creditCost) && creditCost > 0) ||
       isTrialPackage;
     // Skip rows that only look like channel bouquets (no duration/credits).
@@ -468,10 +469,13 @@ export function mapPackages(data: SqlTableData | null): MigrationPackageRow[] {
       r.package_name ?? r.name ?? r.title ?? `Package ${legacyId}`
     ).trim();
     if (!name) continue;
+    const days =
+      inferPackageDaysFromName(name, Number.isFinite(rawDays) ? rawDays : undefined) ??
+      (Number.isFinite(rawDays) && rawDays > 0 ? rawDays : 30);
     out.push({
       legacyId,
       name,
-      days: Number.isFinite(days) && days > 0 ? days : 30,
+      days,
       creditCost: Number.isFinite(creditCost) && creditCost >= 0 ? creditCost : 0,
       maxLines: Math.max(1, Number(r.max_connections ?? r.max_lines ?? r.connections ?? 1) || 1),
       bouquetLegacyIds: idsFromBouquetField(
@@ -479,7 +483,7 @@ export function mapPackages(data: SqlTableData | null): MigrationPackageRow[] {
       ),
       description: r.description ? String(r.description) : undefined,
       isActive: Number(r.status ?? r.is_active ?? 1) !== 0,
-      sortOrder: Number(r.sort_order ?? r.order ?? 0) || 0,
+      sortOrder: Number(r.sort_order ?? r.order ?? 0) || packageDurationSortKey(days, name),
     });
   }
   return out;

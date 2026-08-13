@@ -265,10 +265,12 @@ export function StreamsList({
             setPageSize(Number(e.target.value));
             setPage(1);
           }}
+          title="Show entries"
+          aria-label="Show entries"
         >
           {PAGE_SIZES.map((n) => (
             <option key={n} value={n}>
-              {n}
+              Show {n}
             </option>
           ))}
         </select>

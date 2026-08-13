@@ -174,8 +174,10 @@ async function categoryRowsForIds(
 
   const cats = await prisma.category.findMany({
     where: { id: { in: allIds } },
-    orderBy: { sortOrder: "asc" },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
+  // Default player order: alphabetical by name (sortOrder used as secondary when set uniquely).
+  cats.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   const idSet = new Set(cats.map((c) => c.id));
   for (const c of cats) {
     const parent =

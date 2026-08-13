@@ -13,8 +13,13 @@ type Episode = {
   series: { id: string; name: string };
 };
 
+const PAGE_SIZES = [25, 50, 100, 200] as const;
+
 export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: string }) {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [search, setSearch] = useState("");
   const [seriesFilter, setSeriesFilter] = useState(initialSeriesId ?? "");
   const [seasonFilter, setSeasonFilter] = useState("");
@@ -23,15 +28,20 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
   function load() {
     const params = new URLSearchParams();
     if (seriesFilter) params.set("seriesId", seriesFilter);
+    params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
     fetch(`/api/admin/episodes?${params}`)
       .then((r) => r.json())
-      .then((d) => setEpisodes(d.episodes ?? []))
+      .then((d) => {
+        setEpisodes(d.episodes ?? []);
+        setTotal(Number(d.total ?? d.episodes?.length ?? 0));
+      })
       .catch(() => {});
   }
 
   useEffect(() => {
     load();
-  }, [seriesFilter]);
+  }, [seriesFilter, page, pageSize]);
 
   const seriesOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -47,6 +57,8 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
       return true;
     });
   }, [episodes, search, seasonFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   async function remove(id: string) {
     if (!confirm("Delete this episode?")) return;
@@ -67,7 +79,7 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
         <div>
           <h1 className="text-xl font-semibold">Manage Episodes</h1>
           <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-            {filtered.length} episode{filtered.length !== 1 ? "s" : ""} · seasons & series from your VOD library
+            {total} episode{total !== 1 ? "s" : ""} · showing {filtered.length} on this page
           </p>
         </div>
         <Link href="/admin/content/episodes/add" className="xui-lines-header-btn xui-lines-header-btn--primary">
@@ -87,7 +99,32 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <select className="xui-lines-select" value={seriesFilter} onChange={(e) => setSeriesFilter(e.target.value)}>
+        <label className="text-xs flex items-center gap-2" style={{ color: "var(--muted)" }}>
+          Show
+          <select
+            className="xui-lines-select"
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+          >
+            {PAGE_SIZES.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          entries
+        </label>
+        <select
+          className="xui-lines-select"
+          value={seriesFilter}
+          onChange={(e) => {
+            setSeriesFilter(e.target.value);
+            setPage(1);
+          }}
+        >
           <option value="">All series</option>
           {seriesOptions.map((s) => (
             <option key={s.id} value={s.id}>
@@ -183,6 +220,30 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
             </Link>
           </p>
         )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs" style={{ color: "var(--muted)" }}>
+        <span>
+          Page {page} of {totalPages}
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="xui-lines-toolbar-btn"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Prev
+          </button>
+          <button
+            type="button"
+            className="xui-lines-toolbar-btn"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );

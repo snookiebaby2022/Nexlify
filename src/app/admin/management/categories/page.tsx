@@ -267,7 +267,14 @@ const TreeRow = memo(function TreeRow({
         </>
       ) : (
         <>
-          <span className="flex-1 font-medium text-sm">{node.name}</span>
+          <button
+            type="button"
+            className="flex-1 text-left font-medium text-sm hover:opacity-90"
+            onClick={hasChildren ? onToggle : undefined}
+            title={hasChildren ? (expanded ? "Collapse" : "Expand") : undefined}
+          >
+            {node.name}
+          </button>
           {node.isAdult && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Adult</span>
           )}

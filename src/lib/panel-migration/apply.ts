@@ -311,7 +311,7 @@ async function applyMigrationBundleInner(
             channelId: s.channelId?.trim() || null,
             containerExtension: s.containerExtension?.trim() || null,
             isActive:
-              options.importStreamsStopped !== false
+              options.importStreamsStopped === true
                 ? false
                 : s.isActive !== false,
             isAdult: s.isAdult === true,
@@ -370,11 +370,12 @@ async function applyMigrationBundleInner(
           return false;
         }
         const pw = await hashPassword(password);
+        const role = r.parentLegacyId ? PanelRole.SUB_RESELLER : PanelRole.RESELLER;
         const created = await prisma.panelUser.create({
           data: {
             username,
             passwordHash: pw,
-            role: PanelRole.RESELLER,
+            role,
             credits: Number(r.credits) || 0,
             isActive: r.isActive !== false,
             email: r.email?.trim() || null,
@@ -392,14 +393,17 @@ async function applyMigrationBundleInner(
       "Reseller"
     );
 
-    // Second pass: parent tree links
+    // Second pass: parent tree links + promote sub-resellers
     for (const r of bundle.resellers) {
       if (!r.legacyId || !r.parentLegacyId) continue;
       const id = resellerIdByLegacy.get(r.legacyId);
       const parentId = resellerIdByLegacy.get(r.parentLegacyId);
       if (!id || !parentId || id === parentId) continue;
       try {
-        await prisma.panelUser.update({ where: { id }, data: { parentId } });
+        await prisma.panelUser.update({
+          where: { id },
+          data: { parentId, role: PanelRole.SUB_RESELLER },
+        });
       } catch {
         /* ignore cycle/FK */
       }

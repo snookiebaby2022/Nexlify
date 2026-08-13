@@ -13,7 +13,8 @@ import {
   MIN_LINE_CREDENTIAL_LENGTH,
 } from "@/lib/credential-generate";
 import { LINE_DURATION_PRESETS } from "@/lib/line-duration-presets";
-import { creditCostForDays } from "@/lib/package-credits";
+import { creditCostForDays, packageLabelForDays } from "@/lib/package-credits";
+import { packageDurationSortKey } from "@/lib/package-days";
 
 function YesNo({
   label,
@@ -148,7 +149,21 @@ export function LineAddForm({
       .then((d) => setBouquets(d.bouquets ?? []));
     fetch("/api/admin/packages")
       .then((r) => r.json())
-      .then((d) => setPackages(d.packages ?? []));
+      .then((d) => {
+        const list = [...(d.packages ?? [])] as {
+          id: string;
+          name: string;
+          days: number;
+          creditCost: number;
+          maxLines: number;
+        }[];
+        list.sort(
+          (a, b) =>
+            packageDurationSortKey(a.days, a.name) - packageDurationSortKey(b.days, b.name) ||
+            a.name.localeCompare(b.name)
+        );
+        setPackages(list);
+      });
     fetch("/api/admin/lines/templates")
       .then((r) => r.json())
       .then((d) => setTemplates(d.templates ?? []));
@@ -199,37 +214,49 @@ export function LineAddForm({
     const days = form.unlimited ? 3650 : form.isTrial ? 1 : form.days;
 
     setSaving(true);
-    const res = await fetch("/api/admin/lines", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username,
-        password,
-        maxConnections: form.maxConnections,
-        days,
-        bouquetIds: form.bouquetIds,
-        ownerId: mode === "admin" && form.ownerId ? form.ownerId : undefined,
-        allowedCountries: form.allowedCountries || undefined,
-        blockedCountries: form.blockedCountries || undefined,
-        blockedIsps: form.blockedIsps || undefined,
-        allowedIps: form.allowedIps || undefined,
-        lockToIp: form.lockToIp,
-        templateId: templateId || undefined,
-        canWatchAdult: templates.find((t) => t.id === templateId)?.canWatchAdult ?? true,
-        packageId: form.packageId || undefined,
-        notes: notes || undefined,
-        status: form.isEnabled ? "ACTIVE" : "DISABLED",
-        isTrial: form.isTrial,
-        isRestreamer: form.isRestreamer,
-      }),
-    });
-    setSaving(false);
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data.error ?? "Failed to create line");
-      return;
+    let data: { error?: string; line?: unknown } = {};
+    try {
+      const res = await fetch("/api/admin/lines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          password,
+          maxConnections: form.maxConnections,
+          days,
+          expiresAt: form.unlimited ? undefined : form.expiresAt || undefined,
+          bouquetIds: form.bouquetIds,
+          ownerId: mode === "admin" && form.ownerId ? form.ownerId : undefined,
+          allowedCountries: form.allowedCountries || undefined,
+          blockedCountries: form.blockedCountries || undefined,
+          blockedIsps: form.blockedIsps || undefined,
+          allowedIps: form.allowedIps || undefined,
+          lockToIp: form.lockToIp,
+          templateId: templateId || undefined,
+          canWatchAdult: templates.find((t) => t.id === templateId)?.canWatchAdult ?? true,
+          packageId: form.packageId || undefined,
+          notes: notes || undefined,
+          status: form.isEnabled ? "ACTIVE" : "DISABLED",
+          isTrial: form.isTrial,
+          isRestreamer: form.isRestreamer,
+        }),
+      });
+      const text = await res.text();
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { error: text?.slice(0, 200) || `Server error (${res.status})` };
+      }
+      setSaving(false);
+      if (!res.ok) {
+        alert(data.error ?? `Failed to create line (${res.status})`);
+        return;
+      }
+      router.push(backHref);
+    } catch (e) {
+      setSaving(false);
+      alert(e instanceof Error ? e.message : "Network error — could not create line");
     }
-    router.push(backHref);
   }
 
   const expiryValue =
@@ -412,7 +439,7 @@ export function LineAddForm({
                             packageId: p.id,
                             days: p.days,
                             maxConnections: p.maxLines,
-                            isTrial: p.days === 1 && p.creditCost === 0,
+                            isTrial: p.days <= 2 && p.creditCost === 0,
                           });
                           setCreditHint(p.creditCost);
                           if (autoGenerate) applyGenerated();
@@ -425,7 +452,7 @@ export function LineAddForm({
                           color: form.packageId === p.id ? "#fff" : "var(--muted)",
                         }}
                       >
-                        {p.name} · {p.creditCost} cr · {p.days}d
+                        {p.name} · {p.creditCost} cr · {packageLabelForDays(p.days)}
                       </button>
                     ))}
                   </div>
@@ -441,7 +468,7 @@ export function LineAddForm({
                         packageId: e.target.value,
                         days: pkg?.days ?? form.days,
                         maxConnections: pkg?.maxLines ?? form.maxConnections,
-                        isTrial: pkg?.days === 1 && (pkg?.creditCost ?? 0) === 0 ? true : form.isTrial,
+                        isTrial: pkg && pkg.days <= 2 && (pkg.creditCost ?? 0) === 0 ? true : form.isTrial,
                       });
                       setCreditHint(pkg ? pkg.creditCost : creditCostForDays(form.days));
                     }}
@@ -449,7 +476,7 @@ export function LineAddForm({
                     <option value="">Package (optional)</option>
                     {packages.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.creditCost} cr, {p.days}d, max {p.maxLines} conn)
+                        {p.name} ({p.creditCost} cr, {packageLabelForDays(p.days)}, max {p.maxLines} conn)
                       </option>
                     ))}
                   </select>

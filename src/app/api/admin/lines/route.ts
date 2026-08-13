@@ -15,7 +15,7 @@ import {
   MIN_LINE_CREDENTIAL_LENGTH,
   validateLineCredential,
 } from "@/lib/credential-generate";
-import { LineStatus } from "@prisma/client";
+import { LineStatus, Prisma } from "@prisma/client";
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
@@ -106,7 +106,13 @@ export async function POST(req: NextRequest) {
   ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const security = await getSettingGroup("security");
   const minLen = Math.max(
     MIN_LINE_CREDENTIAL_LENGTH,
@@ -136,13 +142,27 @@ export async function POST(req: NextRequest) {
   });
   if (passErr) return NextResponse.json({ error: passErr }, { status: 400 });
 
+  const existing = await prisma.line.findUnique({ where: { username } });
+  if (existing) {
+    return NextResponse.json(
+      { error: `Username "${username}" is already taken. Choose another.` },
+      { status: 400 }
+    );
+  }
+
   let maxConnections = Number(body.maxConnections ?? 1);
   let days = Number(body.days ?? 30);
-  let bouquetIds: string[] = body.bouquetIds ?? [];
+  let bouquetIds: string[] = Array.isArray(body.bouquetIds) ? (body.bouquetIds as string[]) : [];
   let totalCost = 1;
 
   try {
-    const resolved = await resolveLineCreateFromPackage(body);
+    const resolved = await resolveLineCreateFromPackage(body as {
+      packageId?: string;
+      accessCode?: string;
+      days?: number;
+      maxConnections?: number;
+      bouquetIds?: string[];
+    });
     days = resolved.days;
     maxConnections = resolved.maxConnections;
     bouquetIds = resolved.bouquetIds;
@@ -169,6 +189,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Explicit expiry from the form calendar overrides package days when provided.
+  let expiresAt: Date;
+  if (body.expiresAt && String(body.expiresAt).trim()) {
+    const parsed = new Date(String(body.expiresAt));
+    if (Number.isNaN(parsed.getTime())) {
+      return NextResponse.json({ error: "Invalid expiry date" }, { status: 400 });
+    }
+    expiresAt = parsed;
+  } else {
+    expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + Math.max(1, days));
+  }
+
   const guard = await import("@/lib/reseller-line-guards").then((m) =>
     m.assertResellerCanCreateLine(session, bouquetIds)
   );
@@ -176,33 +209,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: guard.error }, { status: 400 });
   }
 
-  const paysCredits =
-    session.role === PanelRole.RESELLER || session.role === PanelRole.SUB_RESELLER;
-
-  if (paysCredits && totalCost > 0) {
-    const owner = await prisma.panelUser.findUnique({ where: { id: session.id } });
-    if (!owner) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-    if (owner.credits < totalCost) {
-      return NextResponse.json({ error: "Insufficient credits" }, { status: 400 });
-    }
-
-    await prisma.panelUser.update({
-      where: { id: session.id },
-      data: { credits: { decrement: totalCost } },
-    });
-    await prisma.creditTransaction.create({
-      data: {
-        userId: session.id,
-        amount: -totalCost,
-        balanceAfter: owner.credits - totalCost,
-        note: `Line ${username}`,
-      },
-    });
+  if (!bouquetIds.length && session.role !== PanelRole.ADMIN) {
+    return NextResponse.json(
+      { error: "Select at least one bouquet for this line" },
+      { status: 400 }
+    );
   }
 
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + days);
+  const paysCredits =
+    session.role === PanelRole.RESELLER || session.role === PanelRole.SUB_RESELLER;
 
   const statusRaw = String(body.status ?? "ACTIVE").toUpperCase();
   const status =
@@ -212,60 +227,97 @@ export async function POST(req: NextRequest) {
         ? LineStatus.BANNED
         : LineStatus.ACTIVE;
 
-  const line = await prisma.line.create({
-    data: {
-      username,
-      password,
-      status,
-      maxConnections,
-      expiresAt,
-      notes: body.notes ? String(body.notes) : null,
-      externalId: body.externalId ? String(body.externalId) : undefined,
-      ownerId:
-        session.role === PanelRole.ADMIN
-          ? body.ownerId
-            ? String(body.ownerId)
-            : undefined
-          : session.id,
-      lockToIp: Boolean(body.lockToIp),
-      allowedIps: body.allowedIps ? String(body.allowedIps) : null,
-      allowedCountries: body.allowedCountries ? String(body.allowedCountries) : null,
-      blockedCountries: body.blockedCountries ? String(body.blockedCountries) : null,
-      blockedIsps: body.blockedIsps ? String(body.blockedIsps) : null,
-      canWatchAdult: body.canWatchAdult === false ? false : true,
-      isRestreamer: Boolean(body.isRestreamer),
-      isTrial: Boolean(body.isTrial),
-      forcedServerId: body.forcedServerId ? String(body.forcedServerId) : null,
-      bouquets: { create: bouquetIds.map((bouquetId: string) => ({ bouquetId })) },
-    },
-    include: { bouquets: { include: { bouquet: true } } },
-  });
+  const ownerId =
+    session.role === PanelRole.ADMIN
+      ? body.ownerId
+        ? String(body.ownerId)
+        : undefined
+      : session.id;
 
-  if (body.accessCode) {
-    await incrementAccessCodeUse(String(body.accessCode));
-  }
+  try {
+    const line = await prisma.$transaction(async (tx) => {
+      if (paysCredits && totalCost > 0) {
+        const owner = await tx.panelUser.findUnique({ where: { id: session.id } });
+        if (!owner) throw new Error("Forbidden");
+        if (owner.credits < totalCost) throw new Error("Insufficient credits");
+        await tx.panelUser.update({
+          where: { id: session.id },
+          data: { credits: { decrement: totalCost } },
+        });
+        await tx.creditTransaction.create({
+          data: {
+            userId: session.id,
+            amount: -totalCost,
+            balanceAfter: owner.credits - totalCost,
+            note: `Line ${username}`,
+          },
+        });
+      }
 
-  await logActivity("create_line", {
-    userId: session.id,
-    lineId: line.id,
-    entity: "line",
-    entityId: line.id,
-  });
-
-  await invalidateXtreamCategories();
-
-  const panelUrl =
-    process.env.NEXT_PUBLIC_SERVER_URL?.trim() ||
-    (typeof body.panelUrl === "string" ? body.panelUrl : "") ||
-    "";
-  if (panelUrl) {
-    const { notifyLineWelcome } = await import("@/lib/panel-notification-events");
-    void notifyLineWelcome({
-      lineId: line.id,
-      panelUrl,
-      clientEmail: body.clientEmail ? String(body.clientEmail) : null,
+      return tx.line.create({
+        data: {
+          username,
+          password,
+          status,
+          maxConnections,
+          expiresAt,
+          notes: body.notes ? String(body.notes) : null,
+          externalId: body.externalId ? String(body.externalId) : undefined,
+          ownerId,
+          lockToIp: Boolean(body.lockToIp),
+          allowedIps: body.allowedIps ? String(body.allowedIps) : null,
+          allowedCountries: body.allowedCountries ? String(body.allowedCountries) : null,
+          blockedCountries: body.blockedCountries ? String(body.blockedCountries) : null,
+          blockedIsps: body.blockedIsps ? String(body.blockedIsps) : null,
+          canWatchAdult: body.canWatchAdult === false ? false : true,
+          isRestreamer: Boolean(body.isRestreamer),
+          isTrial: Boolean(body.isTrial),
+          forcedServerId: body.forcedServerId ? String(body.forcedServerId) : null,
+          bouquets: { create: bouquetIds.map((bouquetId: string) => ({ bouquetId })) },
+        },
+        include: { bouquets: { include: { bouquet: true } } },
+      });
     });
-  }
 
-  return NextResponse.json({ line });
+    if (body.accessCode) {
+      await incrementAccessCodeUse(String(body.accessCode));
+    }
+
+    await logActivity("create_line", {
+      userId: session.id,
+      lineId: line.id,
+      entity: "line",
+      entityId: line.id,
+    });
+
+    await invalidateXtreamCategories();
+
+    const panelUrl =
+      process.env.NEXT_PUBLIC_SERVER_URL?.trim() ||
+      (typeof body.panelUrl === "string" ? body.panelUrl : "") ||
+      "";
+    if (panelUrl) {
+      const { notifyLineWelcome } = await import("@/lib/panel-notification-events");
+      void notifyLineWelcome({
+        lineId: line.id,
+        panelUrl,
+        clientEmail: body.clientEmail ? String(body.clientEmail) : null,
+      });
+    }
+
+    return NextResponse.json({ line });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return NextResponse.json(
+        { error: `Username "${username}" is already taken. Choose another.` },
+        { status: 400 }
+      );
+    }
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "Insufficient credits" || msg === "Forbidden") {
+      return NextResponse.json({ error: msg }, { status: msg === "Forbidden" ? 403 : 400 });
+    }
+    console.error("[create_line]", e);
+    return NextResponse.json({ error: msg || "Failed to create line" }, { status: 500 });
+  }
 }

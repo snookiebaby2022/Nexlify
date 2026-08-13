@@ -179,8 +179,13 @@ async function resolveVodCategoryAndMeta(opts: {
 
   const useAutoCategory = opts.autoCategory !== false;
 
-  if (!categoryId && useAutoCategory) {
-    if (opts.groupOrCategory?.trim()) {
+  if (useAutoCategory) {
+    // Prefer TMDB genre / path / group over a fixed folder category so imports land in the right genre.
+    if (opts.type === "MOVIE" && enrichment?.genreNames[0]) {
+      categoryId = await categoryForMovie(enrichment.genreNames[0]);
+    } else if (opts.type === "SERIES" && (opts.seriesName || enrichment?.genreNames[0])) {
+      categoryId = await categoryForSeries(opts.seriesName, enrichment?.genreNames[0]);
+    } else if (opts.groupOrCategory?.trim()) {
       categoryId = await categoryFromGroupName(opts.groupOrCategory, opts.type);
     } else if (opts.filePath && opts.folderRoot) {
       categoryId = await categoryFromFolderPath(
@@ -190,13 +195,14 @@ async function resolveVodCategoryAndMeta(opts: {
         opts.seriesName
       );
     } else if (opts.type === "SERIES") {
-      const genre = enrichment?.genreNames[0];
-      categoryId = await categoryForSeries(opts.seriesName, genre);
+      categoryId = await categoryForSeries(opts.seriesName, enrichment?.genreNames[0]);
     } else if (opts.type === "MOVIE") {
       categoryId = await categoryForMovie(enrichment?.genreNames[0]);
+    } else if (opts.explicitCategoryId) {
+      categoryId = opts.explicitCategoryId;
     }
-  } else if (enrichment?.genreNames[0] && vodType === "MOVIE") {
-    // Explicit category on watch folder still gets TMDB poster/metadata
+  } else if (opts.explicitCategoryId) {
+    categoryId = opts.explicitCategoryId;
   }
 
   return { categoryId, streamIcon, agentStartCmd };

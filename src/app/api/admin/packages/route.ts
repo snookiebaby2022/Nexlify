@@ -14,7 +14,7 @@ export async function GET() {
 
   let packages = await prisma.package.findMany({
     where: { isActive: true },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    orderBy: [{ sortOrder: "asc" }, { days: "asc" }, { name: "asc" }],
   });
 
   if (session.role === PanelRole.RESELLER || session.role === PanelRole.SUB_RESELLER) {

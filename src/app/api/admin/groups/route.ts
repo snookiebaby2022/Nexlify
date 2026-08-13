@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { mergeGroupConfig } from "@/lib/group-config";
 import { ensureStandardGroupPackages, syncPackageCreditPricing } from "@/lib/group-packages";
+import { ensureStandardUserGroups } from "@/lib/ensure-user-groups";
 import { PanelRole, Prisma } from "@prisma/client";
 
 function serializeGroup(g: {
@@ -40,6 +41,14 @@ export async function GET(req: NextRequest) {
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: { _count: { select: { users: true } } },
   });
+  if (groups.length < 3) {
+    await ensureStandardUserGroups(prisma);
+    const refreshed = await prisma.userGroup.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      include: { _count: { select: { users: true } } },
+    });
+    return NextResponse.json({ groups: refreshed.map(serializeGroup) });
+  }
   return NextResponse.json({ groups: groups.map(serializeGroup) });
 }
 

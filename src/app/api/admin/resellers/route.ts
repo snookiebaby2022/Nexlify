@@ -19,6 +19,7 @@ function serializeUser(
     credits: number;
     notes: string | null;
     updatedAt: Date;
+    createdAt: Date;
     parent: { username: string } | null;
     group: { id: string; name: string } | null;
     _count: { lines: number };
@@ -39,6 +40,7 @@ function serializeUser(
     groupId: u.group?.id ?? null,
     groupName: u.group?.name ?? roleLabel(u.role),
     lines: u._count.lines,
+    createdAt: u.createdAt.toISOString(),
     lastLogin: u.updatedAt.toISOString(),
     ip: null as string | null,
   };
@@ -55,10 +57,28 @@ export async function GET() {
       group: { select: { id: true, name: true } },
       parent: { select: { username: true } },
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
   });
 
-  const users = rows.map((r, i) => serializeUser(r, i + 1));
+  const users = rows.map((r, i) =>
+    serializeUser(
+      {
+        id: r.id,
+        username: r.username,
+        email: r.email,
+        role: r.role,
+        isActive: r.isActive,
+        credits: r.credits,
+        notes: r.notes,
+        updatedAt: r.updatedAt,
+        createdAt: r.createdAt,
+        parent: r.parent,
+        group: r.group,
+        _count: r._count,
+      },
+      i + 1
+    )
+  );
   const resellers = users.filter((u) => u.role !== PanelRole.ADMIN);
 
   return NextResponse.json({ users, resellers });

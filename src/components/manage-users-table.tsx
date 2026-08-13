@@ -61,7 +61,7 @@ export function ManageUsersTable({
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(100);
   const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState<SortKey>("displayId");
+  const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [openAction, setOpenAction] = useState<string | null>(null);
 

@@ -124,7 +124,7 @@ export function ContentFolderPage({
 
     setLoading(true);
 
-    fetch("/api/admin/streams?type=LIVE&lite=1")
+    fetch("/api/admin/streams?type=LIVE&lite=1&page=1&pageSize=50")
 
       .then((r) => r.json())
 
@@ -134,7 +134,8 @@ export function ContentFolderPage({
 
         setLoading(false);
 
-      });
+      })
+      .catch(() => setLoading(false));
 
   }, [slug, panel]);
 
