@@ -293,12 +293,14 @@ export async function startBackgroundPanelUpdate(
       spawned = true;
       await writeFile(getUpdatePidPath(repoPath), String(child.pid), "utf8");
 
-      // Write error to job file if worker exits within 30 seconds (crashed on boot)
+      // Write error to job file when worker crashes — always, not just at startup.
+      // Previously this was gated on progress <= 2, which left mid-update crashes
+      // (e.g. at 48% during prebuilt apply) stuck at "running" forever.
       child.on("exit", async (code, signal) => {
         if (code === 0 && signal !== "SIGKILL") return;
         try {
           const job = await readUpdateJob(repoPath);
-          if (job && job.status === "running" && job.progress <= 2) {
+          if (job && job.status === "running") {
             let errDetail = `Worker exited with code ${code} (signal: ${signal})`;
             try {
               const { readFileSync } = await import("fs");
@@ -310,7 +312,7 @@ export async function startBackgroundPanelUpdate(
               status: "failed",
               currentStep: null,
               finishedAt: new Date().toISOString(),
-              message: `Update worker crashed on startup: ${errDetail}. Try running manually: cd ${repoPath} && bash scripts/panel-update-background.sh`,
+              message: `Update worker crashed: ${errDetail}. Try running manually: cd ${repoPath} && bash scripts/panel-update-background.sh`,
             });
           }
         } catch {}
