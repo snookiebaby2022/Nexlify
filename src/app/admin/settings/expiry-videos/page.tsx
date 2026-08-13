@@ -24,6 +24,30 @@ export default function ExpiryVideosSettingsPage() {
           ],
         },
         {
+          title: "Disabled / banned lines",
+          info: "Separate video redirect when a line is disabled (1-stream parity). Used before expiry video rules.",
+          fields: [
+            {
+              key: "disabledLineVideoUrl",
+              label: "Disabled-line video URL",
+              type: "text",
+              placeholder: "https://yourcdn.com/disabled.mp4",
+            },
+            {
+              key: "disabledLineRedirectUrl",
+              label: "Disabled-line redirect URL",
+              type: "text",
+              placeholder: "https://yourstore.com/support",
+            },
+            {
+              key: "disabledLineMessage",
+              label: "Disabled-line message",
+              type: "textarea",
+              placeholder: "This line is disabled. Contact your provider.",
+            },
+          ],
+        },
+        {
           title: "Redirect",
           fields: [
             { key: "expiryVideoRedirectUrl", label: "Redirect URL", type: "text", placeholder: "https://yourstore.com/renew", hint: "URL to redirect users after watching the video." },

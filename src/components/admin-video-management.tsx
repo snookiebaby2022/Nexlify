@@ -27,6 +27,7 @@ export function AdminVideoManagement() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
@@ -35,6 +36,7 @@ export function AdminVideoManagement() {
       page: String(page),
       pageSize: "50",
     });
+    if (search.trim()) params.set("search", search.trim());
     fetch(`/api/admin/streams?${params}`)
       .then((r) => r.json())
       .then((d) => {
@@ -43,7 +45,7 @@ export function AdminVideoManagement() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [page]);
+  }, [page, search]);
 
   useEffect(() => {
     load();
@@ -87,6 +89,20 @@ export function AdminVideoManagement() {
             <Upload size={14} />
             Import M3U
           </Link>
+          <a
+            href="/api/admin/movies/export?format=json"
+            className="text-sm px-3 py-2 rounded-md border"
+            style={{ borderColor: "var(--border)" }}
+          >
+            Export movies JSON
+          </a>
+          <a
+            href="/api/admin/movies/export?format=csv"
+            className="text-sm px-3 py-2 rounded-md border"
+            style={{ borderColor: "var(--border)" }}
+          >
+            Export CSV
+          </a>
           <Link
             href="/admin/videolog"
             className="text-sm px-3 py-2 rounded-md border"
@@ -95,6 +111,23 @@ export function AdminVideoManagement() {
             Video log
           </Link>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-3 items-center">
+        <input
+          type="search"
+          placeholder="Search name, URL, or TMDB ID…"
+          className="rounded border px-3 py-2 bg-transparent text-sm min-w-[240px]"
+          style={{ borderColor: "var(--border)" }}
+          value={search}
+          onChange={(e) => {
+            setPage(1);
+            setSearch(e.target.value);
+          }}
+        />
+        <span className="text-xs" style={{ color: "var(--muted)" }}>
+          {total} video source{total === 1 ? "" : "s"}
+        </span>
       </div>
 
       <div className="grid lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-6">

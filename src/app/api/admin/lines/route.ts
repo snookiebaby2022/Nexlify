@@ -127,7 +127,13 @@ export async function POST(req: NextRequest) {
 
   const userErr = validateLineCredential(username, "username", minLen);
   if (userErr) return NextResponse.json({ error: userErr }, { status: 400 });
-  const passErr = validateLineCredential(password, "password", minLen);
+  const { validateLinePasswordPolicy } = await import("@/lib/credential-generate");
+  const passErr = validateLinePasswordPolicy(password, username, {
+    minLength: minLen,
+    requireLetterAndDigit: security.linePasswordRequireLetterAndDigit === true,
+    blockCommonPasswords: security.linePasswordBlockCommon !== false,
+    disallowUsernameMatch: security.linePasswordDisallowUsername !== false,
+  });
   if (passErr) return NextResponse.json({ error: passErr }, { status: 400 });
 
   let maxConnections = Number(body.maxConnections ?? 1);

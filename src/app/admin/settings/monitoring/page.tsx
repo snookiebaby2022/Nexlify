@@ -26,6 +26,19 @@ export default function MonitoringSettingsPage() {
             { key: "alertAbuse", label: "Multiple failed stream probes", type: "yesno" },
           ],
         },
+        {
+          title: "Metrics export",
+          info: "Prometheus text exposition for Grafana / Datadog / etc. Scrape GET /api/metrics with Bearer token.",
+          fields: [
+            { key: "metricsExportEnabled", label: "Enable metrics endpoint", type: "yesno" },
+            {
+              key: "metricsExportToken",
+              label: "Metrics bearer token",
+              type: "password",
+              hint: "Required when enabled. Send as Authorization: Bearer <token> or ?token=",
+            },
+          ],
+        },
       ]}
     />
   );

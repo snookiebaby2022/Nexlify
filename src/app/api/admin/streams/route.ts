@@ -117,14 +117,27 @@ export async function GET(req: NextRequest) {
   }
   if (serverId) where.serverId = serverId;
   if (search) {
+    const tmdbNumeric = /^\d+$/.test(search) ? Number(search) : null;
+    const orFilters: Prisma.StreamWhereInput[] = [
+      { name: { contains: search, mode: "insensitive" } },
+      { streamUrl: { contains: search, mode: "insensitive" } },
+      { channelId: { contains: search, mode: "insensitive" } },
+      { epgChannelId: { contains: search, mode: "insensitive" } },
+      { agentStartCmd: { contains: `"tmdbId":"${search}"` } },
+      { agentStartCmd: { contains: `"tmdbId":${search}` } },
+    ];
+    if (tmdbNumeric != null && Number.isFinite(tmdbNumeric)) {
+      const jobs = await prisma.tmdbSyncJob.findMany({
+        where: { tmdbId: tmdbNumeric, streamId: { not: null } },
+        select: { streamId: true },
+        take: 500,
+      });
+      const ids = jobs.map((j) => j.streamId).filter((id): id is string => Boolean(id));
+      if (ids.length) orFilters.push({ id: { in: ids } });
+    }
     where.AND = [
       ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-      {
-        OR: [
-          { name: { contains: search, mode: "insensitive" } },
-          { streamUrl: { contains: search, mode: "insensitive" } },
-        ],
-      },
+      { OR: orFilters },
     ];
   }
 
@@ -151,6 +164,7 @@ export async function GET(req: NextRequest) {
           serverId: true,
           categoryId: true,
           epgChannelId: true,
+          channelId: true,
           timeshiftSeconds: true,
           isShifted: true,
           hostedExternally: true,

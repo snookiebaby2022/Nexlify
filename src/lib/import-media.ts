@@ -314,6 +314,7 @@ export async function importM3uEntries(
           isOnDemand: onDemand,
           vodMode: onDemand ? VodMode.ON_DEMAND : VodMode.LIVE,
           autoRestart: onDemand,
+          isAdult: opts.importMeta?.isAdult === true,
         },
       });
       if (bouquetIds.length) {
@@ -356,12 +357,14 @@ export async function importFromFolder(
     categoryId?: string | null;
     serverId?: string | null;
     allowedRoot?: string;
+    isAdult?: boolean;
   }
 ) {
   clearTmdbImportCache();
   const safe = resolveSafePath(folderPath, opts.allowedRoot ?? process.env.MEDIA_IMPORT_ROOT);
   let imported = 0;
   let skipped = 0;
+  const isAdult = opts.isAdult === true;
 
   const m3uFiles = walkVideos(safe).filter((f) => f.endsWith(".m3u") || f.endsWith(".m3u8"));
   for (const m3uFile of m3uFiles) {
@@ -370,6 +373,7 @@ export async function importFromFolder(
       defaultType: opts.mode === "SERIES" ? "SERIES" : opts.mode === "MOVIE" ? "MOVIE" : undefined,
       categoryId: opts.categoryId,
       serverId: opts.serverId,
+      importMeta: isAdult ? { isAdult: true } : undefined,
     });
     imported += r.imported;
     skipped += r.skipped;
@@ -421,6 +425,7 @@ export async function importFromFolder(
           agentStartCmd: meta.agentStartCmd,
           isOnDemand: true,
           vodMode: VodMode.ON_DEMAND,
+          isAdult,
         },
       });
       imported++;

@@ -30,6 +30,7 @@ export default function AdminWatchFoldersPage() {
     categoryId: "",
     serverIds: [] as string[],
     autoScanMins: 0,
+    isAdult: false,
   });
   const [scanning, setScanning] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -68,6 +69,7 @@ export default function AdminWatchFoldersPage() {
           categoryId: form.categoryId || null,
           serverId: form.serverIds[0] || null,
           autoScanMins: form.autoScanMins,
+          isAdult: form.isAdult,
         }),
       });
       const data = await res.json();
@@ -84,6 +86,7 @@ export default function AdminWatchFoldersPage() {
         categoryId: "",
         serverIds: [],
         autoScanMins: 0,
+        isAdult: false,
       });
       load();
     } catch {
@@ -278,6 +281,15 @@ export default function AdminWatchFoldersPage() {
           selectedIds={form.serverIds}
           onChange={(serverIds) => setForm({ ...form, serverIds })}
         />
+
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.isAdult}
+            onChange={(e) => setForm({ ...form, isAdult: e.target.checked })}
+          />
+          Mark imported content as adult
+        </label>
 
         <button
           type="submit"

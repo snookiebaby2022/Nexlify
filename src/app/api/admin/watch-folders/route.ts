@@ -84,6 +84,7 @@ export async function POST(req: NextRequest) {
         categoryId: folder.categoryId,
         serverId: folder.serverId,
         allowedRoot: process.env.MEDIA_IMPORT_ROOT,
+        isAdult: folder.isAdult === true,
       });
 
       await prisma.watchFolder.update({
@@ -163,6 +164,7 @@ export async function POST(req: NextRequest) {
       categoryId: body.categoryId || null,
       serverId: body.serverId || null,
       autoScanMins: Math.max(0, Number(body.autoScanMins ?? 0)),
+      isAdult: body.isAdult === true,
     },
   });
   return NextResponse.json({ folder });

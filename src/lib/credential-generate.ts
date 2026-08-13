@@ -35,3 +35,58 @@ export function validateLineCredential(
   }
   return null;
 }
+
+const COMMON_LINE_PASSWORDS = new Set(
+  [
+    "password",
+    "password1",
+    "123456",
+    "12345678",
+    "123456789",
+    "qwerty",
+    "abc123",
+    "111111",
+    "123123",
+    "admin",
+    "letmein",
+    "welcome",
+    "iloveyou",
+    "monkey",
+    "dragon",
+  ].map((s) => s.toLowerCase())
+);
+
+export type LinePasswordPolicy = {
+  minLength?: number;
+  requireLetterAndDigit?: boolean;
+  blockCommonPasswords?: boolean;
+  disallowUsernameMatch?: boolean;
+};
+
+/** Extra line-password rules (1-stream-style restrictions). */
+export function validateLinePasswordPolicy(
+  password: string,
+  username: string,
+  policy: LinePasswordPolicy = {}
+): string | null {
+  const pass = password.trim();
+  const user = username.trim();
+  const minLength = Math.max(
+    MIN_LINE_CREDENTIAL_LENGTH,
+    Number(policy.minLength) || MIN_LINE_CREDENTIAL_LENGTH
+  );
+  const base = validateLineCredential(pass, "password", minLength);
+  if (base) return base;
+  if (policy.disallowUsernameMatch !== false && user && pass.toLowerCase() === user.toLowerCase()) {
+    return "Password cannot match the username";
+  }
+  if (policy.blockCommonPasswords !== false && COMMON_LINE_PASSWORDS.has(pass.toLowerCase())) {
+    return "Password is too common — choose a stronger one";
+  }
+  if (policy.requireLetterAndDigit) {
+    if (!/[A-Za-z]/.test(pass) || !/\d/.test(pass)) {
+      return "Password must include at least one letter and one digit";
+    }
+  }
+  return null;
+}

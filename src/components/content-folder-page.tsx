@@ -35,6 +35,9 @@ type StreamRow = {
   dnsRotator?: unknown;
   bitrates?: unknown;
   parentStream?: { name: string } | null;
+  epgChannelId?: string | null;
+  channelId?: string | null;
+  lastProbeOk?: boolean | null;
 };
 
 
@@ -154,7 +157,10 @@ export function ContentFolderPage({
     return (
       s.name.toLowerCase().includes(q) ||
       s.streamUrl.toLowerCase().includes(q) ||
-      (s.category?.name ?? "").toLowerCase().includes(q)
+      (s.category?.name ?? "").toLowerCase().includes(q) ||
+      (s.epgChannelId ?? "").toLowerCase().includes(q) ||
+      (s.channelId ?? "").toLowerCase().includes(q) ||
+      (s.lastProbeOk === false && (q === "error" || q === "offline" || q === "fail"))
     );
   });
 
@@ -295,7 +301,7 @@ export function ContentFolderPage({
             <div className="flex-1 min-w-[200px]">
               <input
                 type="search"
-                placeholder="Search streams…"
+                placeholder="Search name, category, or error/offline…"
                 className="w-full rounded border px-3 py-2 text-sm bg-transparent"
                 style={{ borderColor: "var(--border)" }}
                 value={search}

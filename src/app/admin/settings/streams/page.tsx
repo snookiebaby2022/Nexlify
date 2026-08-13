@@ -18,6 +18,19 @@ export default function StreamSettingsPage() {
               type: "yesno",
             },
             {
+              key: "xcDefaultOrder",
+              label: "XC API default stream order",
+              type: "select",
+              options: [
+                { value: "sort_order", label: "Panel sort order" },
+                { value: "name", label: "Name A→Z" },
+                { value: "name_desc", label: "Name Z→A" },
+                { value: "added", label: "Date added (oldest first)" },
+                { value: "added_desc", label: "Date added (newest first)" },
+              ],
+              hint: "Default ordering for Xtream live/VOD/series listings.",
+            },
+            {
               key: "allowRestream",
               label: "Allow restream",
               type: "yesno",

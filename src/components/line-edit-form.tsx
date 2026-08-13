@@ -481,12 +481,12 @@ export function LineEditForm({
                   onChange={(e) => setForm({ ...form, blockedCountries: e.target.value })}
                 />
               </FormField>
-              <FormField label="Allowed IP addresses">
+              <FormField label="Allowed IP addresses / CIDR ranges">
                 <textarea
                   className={formInputClass}
                   style={formInputStyle}
                   rows={3}
-                  placeholder="One IP per line"
+                  placeholder={"10.0.0.0/8\n203.0.113.10\n2001:db8::/32"}
                   value={form.allowedIps}
                   onChange={(e) => setForm({ ...form, allowedIps: e.target.value })}
                 />

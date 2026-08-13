@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "WatchFolder" ADD COLUMN IF NOT EXISTS "isAdult" BOOLEAN NOT NULL DEFAULT false;

@@ -29,6 +29,38 @@ import {
   expandCategoryFilter,
 } from "./category-tree";
 
+type XcOrder = "sort_order" | "name" | "name_desc" | "added" | "added_desc";
+
+async function xcDefaultOrder(): Promise<XcOrder> {
+  const streams = await getSettingGroup("streams");
+  const v = String(streams.xcDefaultOrder ?? "sort_order");
+  if (v === "name" || v === "name_desc" || v === "added" || v === "added_desc" || v === "sort_order") {
+    return v;
+  }
+  return "sort_order";
+}
+
+function sortStreamsForXc<T extends { name: string; sortOrder: number; createdAt: Date }>(
+  rows: T[],
+  order: XcOrder
+): T[] {
+  const copy = [...rows];
+  switch (order) {
+    case "name":
+      return copy.sort((a, b) => a.name.localeCompare(b.name));
+    case "name_desc":
+      return copy.sort((a, b) => b.name.localeCompare(a.name));
+    case "added":
+      return copy.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    case "added_desc":
+      return copy.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    default:
+      return copy.sort(
+        (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+      );
+  }
+}
+
 type RequestHeaders = { get(name: string): string | null };
 
 /** Panel + IPTV base URL (M3U live links, Xtream when served from same host). */
@@ -178,6 +210,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
       live = live.filter((s) => s.categoryId && allowed.has(s.categoryId));
     }
   }
+  live = sortStreamsForXc(live, await xcDefaultOrder());
   const withProviders = await prisma.stream.findMany({
     where: { id: { in: live.map((s) => s.id) } },
     include: { provider: true, server: true },
@@ -241,6 +274,7 @@ export async function xtreamVodStreams(
       movies = movies.filter((s) => s.categoryId && allowed.has(s.categoryId));
     }
   }
+  movies = sortStreamsForXc(movies, await xcDefaultOrder());
   const withProviders = await prisma.stream.findMany({
     where: { id: { in: movies.map((s) => s.id) } },
     include: { provider: true },
@@ -285,6 +319,7 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
       series = series.filter((s) => s.categoryId && allowed.has(s.categoryId));
     }
   }
+  series = sortStreamsForXc(series, await xcDefaultOrder());
 
   return series.map((s, i) => ({
     num: i + 1,

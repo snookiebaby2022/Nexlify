@@ -75,6 +75,22 @@ export default function SecuritySettingsPage() {
               type: "number",
               hint: "Minimum 6. Used for validation on create.",
             },
+            {
+              key: "linePasswordRequireLetterAndDigit",
+              label: "Passwords require letter + digit",
+              type: "yesno",
+            },
+            {
+              key: "linePasswordBlockCommon",
+              label: "Block common passwords",
+              type: "yesno",
+              hint: "Rejects passwords like password, 123456, qwerty.",
+            },
+            {
+              key: "linePasswordDisallowUsername",
+              label: "Password cannot match username",
+              type: "yesno",
+            },
           ],
         },
         {

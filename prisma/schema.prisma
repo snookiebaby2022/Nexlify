@@ -486,6 +486,8 @@ model WatchFolder {
   categoryId    String?
   serverId      String?
   isActive      Boolean         @default(true)
+  /// Tag imported content as adult (1-stream parity).
+  isAdult       Boolean         @default(false)
   autoScanMins  Int             @default(0)
   lastScan      DateTime?
   importedCount Int             @default(0)

@@ -66,8 +66,19 @@ export async function GET(
   }
 
   const line = await getLineForPlaybackAuth(username);
-  if (!line || line.password !== password || !lineIsPlayable(line)) {
+  if (!line || line.password !== password) {
     return iptvText("Unauthorized", { status: 401 });
+  }
+  if (!lineIsPlayable(line)) {
+    const { resolveLineGateVideo } = await import("@/lib/line-gate-video");
+    const gate = await resolveLineGateVideo(line);
+    if (gate?.redirectUrl) {
+      return NextResponse.redirect(gate.redirectUrl, 302);
+    }
+    if (gate?.videoUrl) {
+      return NextResponse.redirect(gate.videoUrl, 302);
+    }
+    return iptvText(gate?.message ?? "Unauthorized", { status: 403 });
   }
 
   const ua = req.headers.get("user-agent") ?? undefined;
