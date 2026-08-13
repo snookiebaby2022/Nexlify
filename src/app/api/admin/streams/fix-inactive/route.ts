@@ -23,10 +23,23 @@ export async function POST(req: NextRequest) {
   }
 
   const type = body.type ? String(body.type).toUpperCase() : null;
-  const where =
-    action === "enable_by_type" && type && ["LIVE", "MOVIE", "SERIES", "RADIO"].includes(type)
-      ? { isActive: false as const, type: type as "LIVE" | "MOVIE" | "SERIES" | "RADIO" }
-      : { isActive: false as const };
+  const allowedTypes = ["LIVE", "MOVIE", "SERIES", "RADIO"] as const;
+  type StreamTypeFilter = (typeof allowedTypes)[number];
+  const typed =
+    action === "enable_by_type" && type && (allowedTypes as readonly string[]).includes(type)
+      ? (type as StreamTypeFilter)
+      : null;
+
+  if (action === "enable_by_type" && !typed) {
+    return NextResponse.json(
+      { error: "type required for enable_by_type (LIVE|MOVIE|SERIES|RADIO)" },
+      { status: 400 }
+    );
+  }
+
+  const where = typed
+    ? { isActive: false as const, type: typed }
+    : { isActive: false as const };
 
   const result = await prisma.stream.updateMany({
     where,
@@ -36,7 +49,7 @@ export async function POST(req: NextRequest) {
   await logActivity("fix_inactive_streams", {
     userId: session.id,
     entity: "stream",
-    meta: { updated: result.count, type: type ?? "ALL" },
+    meta: { updated: result.count, type: typed ?? "ALL" },
   });
   await invalidateXtreamCategories().catch(() => {});
   await invalidateDashboardStats().catch(() => {});

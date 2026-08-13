@@ -47,7 +47,8 @@ export function DashboardIssuesPanel({
   const offline = local?.offlineStreams ?? kpi?.offlineStreams ?? 0;
   const tickets = local?.openTickets ?? kpi?.openTickets ?? 0;
 
-  const totalIssues = inactive + dead + unstable + (offline > 0 ? 1 : 0);
+  // Count real problem volume (offline live feeds + tickets), not a boolean flag.
+  const totalIssues = inactive + dead + unstable + offline + tickets;
 
   const refresh = useCallback(() => {
     fetch(statsUrl)
@@ -73,9 +74,16 @@ export function DashboardIssuesPanel({
 
   useEffect(() => {
     refresh();
-  }, [refresh, kpi]);
+  }, [refresh]);
 
   async function activateAllInactive() {
+    if (
+      !confirm(
+        `Activate all ${inactive.toLocaleString()} inactive stream(s)?\n\nThis turns offline content back on for players.`
+      )
+    ) {
+      return;
+    }
     setBusy("activate");
     setMsg("");
     try {
@@ -211,6 +219,25 @@ export function DashboardIssuesPanel({
               style={{ borderColor: "var(--border)" }}
             >
               Stream health
+            </Link>
+          </div>
+        )}
+
+        {offline > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
+            <Power size={16} className="text-amber-400 shrink-0" />
+            <div className="flex-1 min-w-[160px]">
+              <p className="text-sm font-medium">{offline.toLocaleString()} live streams not online now</p>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Not reporting as online (source/server) — separate from inactive flag
+              </p>
+            </div>
+            <Link
+              href="/admin/content/streams?status=offline"
+              className="text-xs px-3 py-1.5 rounded border"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Review offline
             </Link>
           </div>
         )}
