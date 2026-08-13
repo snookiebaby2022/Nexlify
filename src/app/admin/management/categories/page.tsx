@@ -135,10 +135,19 @@ type CategoryRow = {
   parentId: string | null;
   categoryType: CategoryTab;
   isAdult: boolean;
+  activeCount?: number;
+  inactiveCount?: number;
   _count: { streams: number };
 };
 
 type CategoryNode = CategoryRow & { children: CategoryNode[]; depth: number };
+
+type CatStreamRow = {
+  id: string;
+  name: string;
+  type: string;
+  isActive: boolean;
+};
 
 function buildTree(cats: CategoryRow[]): CategoryNode[] {
   const map = new Map<string, CategoryNode>();
@@ -196,6 +205,7 @@ const TreeRow = memo(function TreeRow({
   onMove,
   onRename,
   onReparent,
+  onStreamsChanged,
 }: {
   node: CategoryNode;
   expanded: boolean;
@@ -205,12 +215,27 @@ const TreeRow = memo(function TreeRow({
   onMove: (dir: -1 | 1) => void;
   onRename: (id: string, name: string) => void;
   onReparent: (id: string, parentId: string | null) => void;
+  onStreamsChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(node.name);
   const [editParent, setEditParent] = useState(node.parentId ?? "");
+  const [showStreams, setShowStreams] = useState(false);
+  const [streams, setStreams] = useState<CatStreamRow[]>([]);
+  const [streamsLoading, setStreamsLoading] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const hasChildren = node.children.length > 0;
   const indent = node.depth * 24;
+  const activeCount = node.activeCount ?? 0;
+  const inactiveCount = node.inactiveCount ?? 0;
+  const totalStreams = node._count.streams;
+  const contentHref =
+    node.categoryType === "MOVIE"
+      ? `/admin/content/movies?categoryId=${node.id}`
+      : node.categoryType === "SERIES"
+        ? `/admin/content/series?categoryId=${node.id}`
+        : `/admin/content/streams?categoryId=${node.id}`;
+
   const parentOptions = useMemo(() => {
     const blocked = collectDescendantIdsLocal(node.id, allCategories);
     blocked.add(node.id);
@@ -226,76 +251,268 @@ const TreeRow = memo(function TreeRow({
     setEditing(false);
   }
 
-  return (
-    <div
-      className="flex items-center gap-2 px-3 py-2 border-b"
-      style={{ borderColor: "var(--border)", paddingLeft: `${12 + indent}px` }}
-    >
-      <button
-        type="button"
-        className="shrink-0 w-5 h-5 flex items-center justify-center"
-        onClick={hasChildren ? onToggle : undefined}
-        style={{ opacity: hasChildren ? 1 : 0.3 }}
-      >
-        {hasChildren ? (expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />) : <ChevronRight size={14} className="opacity-0" />}
-      </button>
-      {hasChildren ? <FolderOpen size={14} style={{ color: "var(--accent)" }} /> : <Folder size={14} style={{ color: "var(--muted)" }} />}
+  async function loadStreams() {
+    setStreamsLoading(true);
+    try {
+      const res = await fetch(
+        `/api/admin/streams?categoryId=${encodeURIComponent(node.id)}&page=1&pageSize=50&lite=1`
+      );
+      const data = await res.json();
+      setStreams(data.streams ?? []);
+    } catch {
+      setStreams([]);
+    } finally {
+      setStreamsLoading(false);
+    }
+  }
 
-      {editing ? (
-        <>
-          <input
-            className="flex-1 text-sm rounded border px-2 py-1 bg-transparent"
-            style={{ borderColor: "var(--border)" }}
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-            autoFocus
-          />
-          <select
-            className="text-xs rounded border px-1 py-1 bg-transparent"
-            style={{ borderColor: "var(--border)" }}
-            value={editParent}
-            onChange={(e) => setEditParent(e.target.value)}
-          >
-            <option value="">— No parent —</option>
-            {parentOptions.map((c) => (
-              <option key={c.id} value={c.id}>{c.label}</option>
-            ))}
-          </select>
-          <button type="button" className="text-xs px-2 py-1 rounded text-white" style={{ background: "var(--accent)" }} onClick={save}>Save</button>
-          <button type="button" className="text-xs px-2 py-1 rounded" style={{ color: "var(--muted)" }} onClick={() => setEditing(false)}>Cancel</button>
-        </>
-      ) : (
-        <>
-          <button
-            type="button"
-            className="flex-1 text-left font-medium text-sm hover:opacity-90"
-            onClick={hasChildren ? onToggle : undefined}
-            title={hasChildren ? (expanded ? "Collapse" : "Expand") : undefined}
-          >
-            {node.name}
-          </button>
-          {node.isAdult && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Adult</span>
+  async function toggleShowStreams() {
+    const next = !showStreams;
+    setShowStreams(next);
+    if (next) await loadStreams();
+  }
+
+  async function setCategoryActive(isActive: boolean) {
+    const label = isActive ? "online (active)" : "offline";
+    if (
+      !confirm(
+        `Set all streams in "${node.name}" (including subcategories) to ${label}?`
+      )
+    ) {
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const res = await fetch("/api/admin/categories/set-streams-active", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryId: node.id, isActive, includeDescendants: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error ?? "Failed to update streams");
+      } else {
+        onStreamsChanged();
+        if (showStreams) await loadStreams();
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function toggleOne(stream: CatStreamRow) {
+    const res = await fetch("/api/admin/streams", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: stream.id, isActive: !stream.isActive }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Failed to update stream");
+      return;
+    }
+    setStreams((prev) =>
+      prev.map((s) => (s.id === stream.id ? { ...s, isActive: !s.isActive } : s))
+    );
+    onStreamsChanged();
+  }
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-2 px-3 py-2 border-b"
+        style={{ borderColor: "var(--border)", paddingLeft: `${12 + indent}px` }}
+      >
+        <button
+          type="button"
+          className="shrink-0 w-5 h-5 flex items-center justify-center"
+          onClick={hasChildren ? onToggle : undefined}
+          style={{ opacity: hasChildren ? 1 : 0.3 }}
+        >
+          {hasChildren ? (
+            expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+          ) : (
+            <ChevronRight size={14} className="opacity-0" />
           )}
-          <span className="text-xs" style={{ color: "var(--muted)" }}>
-            {node._count.streams} streams
-          </span>
-          <div className="flex items-center gap-1">
-            <button type="button" className="p-1 rounded hover:bg-white/10 text-xs" title="Edit" onClick={() => { setEditing(true); setEditName(node.name); setEditParent(node.parentId ?? ""); }}>
-              Edit
+        </button>
+        {hasChildren ? (
+          <FolderOpen size={14} style={{ color: "var(--accent)" }} />
+        ) : (
+          <Folder size={14} style={{ color: "var(--muted)" }} />
+        )}
+
+        {editing ? (
+          <>
+            <input
+              className="flex-1 text-sm rounded border px-2 py-1 bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") save();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              autoFocus
+            />
+            <select
+              className="text-xs rounded border px-1 py-1 bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={editParent}
+              onChange={(e) => setEditParent(e.target.value)}
+            >
+              <option value="">— No parent —</option>
+              {parentOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="text-xs px-2 py-1 rounded text-white"
+              style={{ background: "var(--accent)" }}
+              onClick={save}
+            >
+              Save
             </button>
-            <button type="button" className="p-1 rounded hover:bg-white/10" onClick={() => onMove(-1)}>
-              <ArrowUp size={12} />
+            <button
+              type="button"
+              className="text-xs px-2 py-1 rounded"
+              style={{ color: "var(--muted)" }}
+              onClick={() => setEditing(false)}
+            >
+              Cancel
             </button>
-            <button type="button" className="p-1 rounded hover:bg-white/10" onClick={() => onMove(1)}>
-              <ArrowDown size={12} />
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="flex-1 text-left font-medium text-sm hover:opacity-90"
+              onClick={hasChildren ? onToggle : toggleShowStreams}
+              title={hasChildren ? (expanded ? "Collapse" : "Expand") : "Edit streams"}
+            >
+              {node.name}
             </button>
-            <button type="button" className="p-1 rounded text-red-400 hover:bg-red-400/10 text-xs" onClick={onRemove}>
-              Delete
-            </button>
-          </div>
-        </>
+            {node.isAdult && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Adult</span>
+            )}
+            <span className="text-xs tabular-nums" style={{ color: "var(--muted)" }} title="Active / inactive / total">
+              <span className="text-green-400">{activeCount}</span>
+              {" / "}
+              <span className="text-red-400">{inactiveCount}</span>
+              {" / "}
+              {totalStreams}
+            </span>
+            <div className="flex items-center gap-1 flex-wrap justify-end">
+              <button
+                type="button"
+                disabled={bulkBusy || totalStreams === 0}
+                className="text-[10px] px-2 py-0.5 rounded text-white disabled:opacity-40"
+                style={{ background: "#16a34a" }}
+                title="Set all streams in this category online"
+                onClick={() => setCategoryActive(true)}
+              >
+                Online
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy || totalStreams === 0}
+                className="text-[10px] px-2 py-0.5 rounded text-white disabled:opacity-40"
+                style={{ background: "#dc2626" }}
+                title="Set all streams in this category offline"
+                onClick={() => setCategoryActive(false)}
+              >
+                Offline
+              </button>
+              <button
+                type="button"
+                className="text-[10px] px-2 py-0.5 rounded border"
+                style={{ borderColor: "var(--border)" }}
+                onClick={toggleShowStreams}
+              >
+                {showStreams ? "Hide" : "Edit"}
+              </button>
+              <Link
+                href={contentHref}
+                className="text-[10px] px-2 py-0.5 rounded border"
+                style={{ borderColor: "var(--border)", color: "var(--accent)" }}
+              >
+                Open
+              </Link>
+              <button
+                type="button"
+                className="p-1 rounded hover:bg-white/10 text-xs"
+                title="Edit"
+                onClick={() => {
+                  setEditing(true);
+                  setEditName(node.name);
+                  setEditParent(node.parentId ?? "");
+                }}
+              >
+                Rename
+              </button>
+              <button type="button" className="p-1 rounded hover:bg-white/10" onClick={() => onMove(-1)}>
+                <ArrowUp size={12} />
+              </button>
+              <button type="button" className="p-1 rounded hover:bg-white/10" onClick={() => onMove(1)}>
+                <ArrowDown size={12} />
+              </button>
+              <button
+                type="button"
+                className="p-1 rounded text-red-400 hover:bg-red-400/10 text-xs"
+                onClick={onRemove}
+              >
+                Delete
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {showStreams && (
+        <div
+          className="border-b px-3 py-2 space-y-1"
+          style={{
+            borderColor: "var(--border)",
+            paddingLeft: `${28 + indent}px`,
+            background: "rgba(0,0,0,0.12)",
+          }}
+        >
+          {streamsLoading && (
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Loading streams…
+            </p>
+          )}
+          {!streamsLoading && streams.length === 0 && (
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              No streams in this category.
+            </p>
+          )}
+          {streams.map((s) => (
+            <div key={s.id} className="flex items-center gap-2 text-xs py-1">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ background: s.isActive ? "#22c55e" : "#ef4444" }}
+              />
+              <span className="flex-1 truncate font-medium">{s.name}</span>
+              <span style={{ color: "var(--muted)" }}>{s.type}</span>
+              <button
+                type="button"
+                className="px-2 py-0.5 rounded text-white"
+                style={{ background: s.isActive ? "#dc2626" : "#16a34a" }}
+                onClick={() => toggleOne(s)}
+              >
+                {s.isActive ? "Set offline" : "Set online"}
+              </button>
+            </div>
+          ))}
+          {streams.length >= 50 && (
+            <Link href={contentHref} className="text-xs underline" style={{ color: "var(--accent)" }}>
+              View all in library →
+            </Link>
+          )}
+        </div>
       )}
     </div>
   );
@@ -565,6 +782,7 @@ export default function ManagementCategoriesPage() {
             onMove={(dir) => move(node.id, dir)}
             onRename={renameCategory}
             onReparent={reparentCategory}
+            onStreamsChanged={load}
           />
         ))}
         {!tabCategories.length && (

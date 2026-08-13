@@ -73,7 +73,21 @@ async function loadStats() {
   let dashboard = { onlineStreams: 0, totalLiveStreams: 0, onlineUsers: 0, totalActiveLines: 0, onlineConnections: 0, maxConnections: 0, onlineServers: 0, totalServers: 0 };
   try { dashboard = await getDashboardSummary(); } catch (e) { console.error("[stats] getDashboardSummary error:", e); }
 
-  let dashboardKpi = { paidUsers: 0, trialUsers: 0, unstableStreams: 0, deadStreams: 0, reportedChannels: 0, channelRequests: 0, networkInMbps: 0, networkOutMbps: 0 };
+  let dashboardKpi = {
+    paidUsers: 0,
+    trialUsers: 0,
+    unstableStreams: 0,
+    deadStreams: 0,
+    reportedChannels: 0,
+    channelRequests: 0,
+    networkInMbps: 0,
+    networkOutMbps: 0,
+    inactiveStreams: 0,
+    inactiveLive: 0,
+    inactiveMovies: 0,
+    inactiveSeries: 0,
+    openTickets: 0,
+  };
   try { dashboardKpi = await getDashboardKpiExtended(); } catch (e) { console.error("[stats] getDashboardKpiExtended error:", e); }
 
   let serverMetrics: Awaited<ReturnType<typeof getDashboardServerMetrics>> = [];

@@ -33,6 +33,11 @@ export type DashboardKpiExtended = {
   channelRequests: number;
   networkInMbps: number;
   networkOutMbps: number;
+  inactiveStreams: number;
+  inactiveLive: number;
+  inactiveMovies: number;
+  inactiveSeries: number;
+  openTickets: number;
 };
 
 function clampPct(n: number) {
@@ -137,23 +142,29 @@ function isTrialLine(createdAt: Date, expiresAt: Date) {
 
 export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
   const now = new Date();
-  const staleBefore = new Date(Date.now() - STALE_MS);
 
-  const [activeLines, liveStreams, snapshots, tickets] = await Promise.all([
-    prisma.line.findMany({
-      where: { status: "ACTIVE", expiresAt: { gt: now } },
-      select: { createdAt: true, expiresAt: true },
-    }),
-    prisma.stream.findMany({
-      where: { type: StreamType.LIVE, isActive: true },
-      select: { lastProbeOk: true, backupUrl: true },
-    }),
-    prisma.bandwidthSnapshot.findMany({ take: 1, orderBy: { createdAt: "desc" } }),
-    prisma.ticket.findMany({
-      where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
-      select: { subject: true },
-    }),
-  ]);
+  const [activeLines, liveStreams, snapshots, tickets, inactiveByType, openTicketCount] =
+    await Promise.all([
+      prisma.line.findMany({
+        where: { status: "ACTIVE", expiresAt: { gt: now } },
+        select: { createdAt: true, expiresAt: true },
+      }),
+      prisma.stream.findMany({
+        where: { type: StreamType.LIVE, isActive: true },
+        select: { lastProbeOk: true, backupUrl: true },
+      }),
+      prisma.bandwidthSnapshot.findMany({ take: 1, orderBy: { createdAt: "desc" } }),
+      prisma.ticket.findMany({
+        where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
+        select: { subject: true },
+      }),
+      prisma.stream.groupBy({
+        by: ["type"],
+        where: { isActive: false },
+        _count: true,
+      }),
+      prisma.ticket.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] } } }),
+    ]);
 
   let trialUsers = 0;
   let paidUsers = 0;
@@ -191,6 +202,17 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     networkOutMbps = Math.round(estimated);
   }
 
+  let inactiveLive = 0;
+  let inactiveMovies = 0;
+  let inactiveSeries = 0;
+  let inactiveStreams = 0;
+  for (const row of inactiveByType) {
+    inactiveStreams += row._count;
+    if (row.type === "LIVE") inactiveLive = row._count;
+    else if (row.type === "MOVIE") inactiveMovies = row._count;
+    else if (row.type === "SERIES") inactiveSeries = row._count;
+  }
+
   return {
     paidUsers,
     trialUsers,
@@ -200,6 +222,11 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     channelRequests,
     networkInMbps: Math.round(networkInMbps * 10) / 10,
     networkOutMbps: Math.round(networkOutMbps * 10) / 10,
+    inactiveStreams,
+    inactiveLive,
+    inactiveMovies,
+    inactiveSeries,
+    openTickets: openTicketCount,
   };
 }
 

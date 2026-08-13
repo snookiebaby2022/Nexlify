@@ -89,6 +89,13 @@ cd "$SRC"
 VER="$(node -p "require('./package.json').version")"
 echo "Panel source version: $VER"
 
+# Keep .next/standalone/package.json in sync so PM2 version label stays correct
+# when the vendor panel runs from the standalone directory without a rebuild.
+if [ -f "$PANEL/.next/standalone/server.js" ] && [ -f "$PANEL/package.json" ]; then
+  cp -f "$PANEL/package.json" "$PANEL/.next/standalone/package.json"
+  echo "-> Synced package.json to .next/standalone for PM2 version label"
+fi
+
 echo "-> Sync panel-releases.json to marketing drop-in"
 npm run sync:releases
 
@@ -99,13 +106,34 @@ rsync -a marketing-drop-in/public/install/ "$MARKETING/public/install/"
 sed -i 's/\r$//' "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
 chmod +x "$MARKETING/public/install"/*.sh "$MARKETING/public/install"/scripts/*.sh 2>/dev/null || true
 
-echo "-> Build and publish tarball"
+echo "-> Build and publish source tarball"
 SKIP_INSTALL_SCRIPT_PUBLISH=1 bash scripts/publish-panel-release.sh
 
-echo "-> Rebuild marketing site (panel-releases API)"
-cp -f "$SRC/marketing-drop-in/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
+# Keep the source tarball inside the marketing source tree so the full-site rsync --delete does not remove it.
+mkdir -p "${SRC}/marketing-drop-in/public/downloads"
+cp -f "${PANEL_PUBLISH_DEST:-/var/www/nexlify/public/downloads/nexlify-panel.tar.gz}" "${SRC}/marketing-drop-in/public/downloads/nexlify-panel.tar.gz"
+
+echo "-> Build and publish prebuilt .next archive"
+bash scripts/build-prebuilt-download.sh "${SRC}/dist/next-${VER}.tar.gz" "${VER}"
+mkdir -p "${MARKETING}/public/downloads" "${SRC}/marketing-drop-in/public/downloads"
+cp -f "${SRC}/dist/next-${VER}.tar.gz" "${MARKETING}/public/downloads/next-${VER}.tar.gz"
+cp -f "${SRC}/dist/next-${VER}.tar.gz" "${SRC}/marketing-drop-in/public/downloads/next-${VER}.tar.gz"
+
+echo "-> Sync marketing site source and rebuild"
+# Sync canonical marketing source so visual/content updates from GitHub are live.
+rsync -a --delete \
+  --exclude=.git \
+  --exclude=node_modules \
+  --exclude=.next \
+  --exclude=.env \
+  --exclude=.env.local \
+  --exclude=.license-keys \
+  "$SRC/marketing-drop-in/" "$MARKETING/"
+cp -f "$SRC/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
 cp -f "$SRC/src/lib/panel-releases.json" "$MARKETING/public/panel-releases.json"
 cd "$MARKETING"
+# Ensure deps match the updated source.
+npm ci --no-audit --no-fund --loglevel=error 2>/dev/null || npm install --no-audit --no-fund --loglevel=error 2>/dev/null || true
 npm run build
 pm2 delete nexlify-web 2>/dev/null || true
 pm2 start npm --name nexlify-web --cwd "$MARKETING" -- start -- -H 127.0.0.1 -p 13001

@@ -93,6 +93,8 @@ import { DashboardQuickActions } from "@/components/dashboard-quick-actions";
 
 import { DashboardStackStrip } from "@/components/dashboard-stack-strip";
 
+import { DashboardIssuesPanel } from "@/components/dashboard-issues-panel";
+
 import type { DashboardKpiExtended } from "@/lib/dashboard-server-metrics";
 
 import type { StackComponentStatus } from "@/lib/nexlify-stack";
@@ -394,6 +396,8 @@ export function PanelDashboard({
             streamsHref={streamsHref}
 
           />
+
+          <DashboardIssuesPanel statsUrl={statsUrl} kpi={stats?.dashboardKpi} />
 
           <DashboardXuiSummaryCards widgetsUrl={widgetsUrl} />
 

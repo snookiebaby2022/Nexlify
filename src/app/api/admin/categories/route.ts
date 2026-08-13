@@ -26,14 +26,46 @@ export async function GET(req: NextRequest) {
         children: { select: { id: true, name: true, sortOrder: true, categoryType: true, isAdult: true } },
         _count: {
           select: {
-            streams: { where: { isActive: true } },
+            streams: true,
             children: true,
           },
         },
       },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     });
-    return NextResponse.json({ categories });
+
+    // Active / inactive counts per category (for online/offline controls).
+    const [activeGroups, inactiveGroups] = await Promise.all([
+      prisma.stream.groupBy({
+        by: ["categoryId"],
+        where: { isActive: true, categoryId: { not: null } },
+        _count: true,
+      }),
+      prisma.stream.groupBy({
+        by: ["categoryId"],
+        where: { isActive: false, categoryId: { not: null } },
+        _count: true,
+      }),
+    ]);
+    const activeMap = new Map(
+      activeGroups.filter((g) => g.categoryId).map((g) => [g.categoryId as string, g._count])
+    );
+    const inactiveMap = new Map(
+      inactiveGroups.filter((g) => g.categoryId).map((g) => [g.categoryId as string, g._count])
+    );
+
+    return NextResponse.json({
+      categories: categories.map((c) => ({
+        ...c,
+        activeCount: activeMap.get(c.id) ?? 0,
+        inactiveCount: inactiveMap.get(c.id) ?? 0,
+        _count: {
+          ...c._count,
+          // Keep streams as total so existing UI still works; prefer activeCount for “online”.
+          streams: c._count.streams,
+        },
+      })),
+    });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to load categories" },

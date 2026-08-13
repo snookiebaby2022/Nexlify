@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.29}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.35}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -404,8 +404,13 @@ cmd_restart() {
   # Ensure watchdog cron is installed
   if [ -f "$ROOT/scripts/nexlify-watchdog.sh" ]; then
     chmod +x "$ROOT/scripts/nexlify-watchdog.sh"
-    (crontab -l 2>/dev/null | grep -v nexlify-watchdog; echo "*/5 * * * * $ROOT/scripts/nexlify-watchdog.sh") | crontab -
-    echo "Watchdog cron ensured."
+    _cron_tmp="$(mktemp)"
+    (
+      crontab -l 2>/dev/null | grep -v nexlify-watchdog || true
+      echo "*/5 * * * * $ROOT/scripts/nexlify-watchdog.sh"
+    ) > "$_cron_tmp"
+    crontab "$_cron_tmp" >/dev/null 2>&1 || true
+    rm -f "$_cron_tmp"
   fi
 }
 

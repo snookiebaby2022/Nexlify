@@ -9,7 +9,7 @@
 #   curl -fsSL '...' | sudo PANEL_API_SECRET='your-secret' bash
 set -e
 
-PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
 VENDOR_URL="${NEXLIFY_VENDOR_URL:-https://nexlify.live}"
 TARBALL="${VENDOR_URL}/downloads/nexlify-panel.tar.gz?v=166"
 PANEL_API_SECRET="${PANEL_API_SECRET:-}"

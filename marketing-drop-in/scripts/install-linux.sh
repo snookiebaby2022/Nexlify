@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.28' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.29' | sudo bash
 #
 # Server IP/hostname is detected automatically. Then open the login URL, sign in
 # with the admin password shown at the end, and paste your license key under Admin → License.
@@ -9,7 +9,7 @@
 # Env overrides: PANEL_DIR, PANEL_ARCHIVE_URL, NEXLIFY_LICENSE_KEY
 set -euo pipefail
 
-PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
 PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz}"
 _SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$_SCRIPT_DIR/panel-version.sh" ]; then
@@ -33,22 +33,22 @@ usage() {
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.28' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.29' | sudo bash
 
 Options:
   --ip IP                Override auto-detected server IP or hostname
   --domain DOMAIN        Alias for --ip
   --email EMAIL          Email for Let's Encrypt SSL (domain installs only)
   --license KEY          Optional — activate during install (default: enter in panel after login)
-  --fresh                Wipe /opt/nexlify-panel before install
+  --fresh                Wipe /home/nexlify-panel before install
   --skip-firewall        Do not open ufw ports
   --monolithic           Panel + stream engine on this host (main server + local agent)
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.28' | sudo bash
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.28' | sudo bash -s -- --license NXLF1-XXXXX
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.28' | sudo bash -s -- --domain panel.example.com --email admin@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.29' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.29' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.29' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 
@@ -283,6 +283,14 @@ if [ "$FORCE_FRESH" -eq 1 ] && [ -e "$PANEL_DIR" ]; then
   rm -rf "$PANEL_DIR"
 fi
 
+# For --fresh, also drop and recreate the PostgreSQL database so migrations deploy cleanly.
+if [ "$FORCE_FRESH" -eq 1 ]; then
+  log "Fresh install — dropping existing database (if any)"
+  sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='nexlify';" >/dev/null 2>&1 || true
+  sudo -u postgres psql -c "DROP DATABASE IF EXISTS nexlify WITH (FORCE);" >/dev/null 2>&1 || \
+    sudo -u postgres psql -c "DROP DATABASE IF EXISTS nexlify;" >/dev/null 2>&1 || true
+fi
+
 if panel_install_complete; then
   progress_step "Using existing panel copy"
 elif [ -e "$PANEL_DIR" ]; then
@@ -319,7 +327,9 @@ CREDS_FILE="$CREDS_ROOT/install-credentials"
 # Raw IP installs: panel on port 80 directly — no nginx, no internal :3000.
 if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   SKIP_SSL=1
-  echo "NOTE: IP install — panel on http://${DOMAIN}/ (port 80, no :3000)."
+  SKIP_NGINX=1
+  NEXLIFY_USE_NGINX=0
+  echo "NOTE: IP install — panel on http://${DOMAIN}/ (port 80, no nginx)."
 fi
 
 if [ -f "$PANEL_DIR/scripts/panel-port-config.sh" ]; then
@@ -443,12 +453,20 @@ set_kv DATABASE_URL "postgresql://nexlify:${PG_PASS}@localhost:5432/nexlify"
 set_kv JWT_SECRET "$JWT_SECRET"
 set_kv CRON_SECRET "$CRON_SECRET"
 set_kv BILLING_WEBHOOK_SECRET "$BILLING_SECRET"
-set_kv PORT "${NEXLIFY_PANEL_LISTEN_PORT:-13000}"
-set_kv PANEL_PORT "${NEXLIFY_PANEL_LISTEN_PORT:-13000}"
+if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [ "${NEXLIFY_USE_NGINX:-1}" = "0" ]; then
+  set_kv PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
+  set_kv PANEL_PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
+  set_kv PANEL_BIND_HOST "0.0.0.0"
+  set_kv PANEL_BEHIND_NGINX "0"
+  set_kv PANEL_PUBLIC_PORT "80"
+else
+  set_kv PORT "${NEXLIFY_PANEL_LISTEN_PORT:-13000}"
+  set_kv PANEL_PORT "${NEXLIFY_PANEL_LISTEN_PORT:-13000}"
+  set_kv PANEL_BIND_HOST "${NEXLIFY_PANEL_BIND_HOST:-127.0.0.1}"
+  set_kv PANEL_BEHIND_NGINX "${NEXLIFY_PANEL_BEHIND_NGINX:-1}"
+  set_kv PANEL_PUBLIC_PORT "${NEXLIFY_PANEL_PUBLIC_PORT:-80}"
+fi
 set_kv WEBSITE_PORT "${NEXLIFY_WEBSITE_UPSTREAM_PORT:-13001}"
-set_kv PANEL_BEHIND_NGINX "${NEXLIFY_PANEL_BEHIND_NGINX:-1}"
-set_kv PANEL_BIND_HOST "${NEXLIFY_PANEL_BIND_HOST:-127.0.0.1}"
-set_kv PANEL_PUBLIC_PORT "${NEXLIFY_PANEL_PUBLIC_PORT:-80}"
 set_kv PANEL_COOKIE_SECURE 0
 set_kv NEXLIFY_LICENSE_COOKIE_SECURE 0
 set_kv PANEL_PRIMARY_DOMAIN "$DOMAIN"
@@ -464,6 +482,13 @@ set_kv NEXLIFY_LICENSE_REQUIRE_ONLINE 1
 set_kv NEXLIFY_VENDOR_URL "https://nexlify.live"
 set_kv INSTALL_ADMIN_PASSWORD "$ADMIN_PASS"
 
+# Generate encryption-at-rest key for AES-256-GCM license storage
+if ! grep -q '^ENCRYPTION_AT_REST_KEY=' .env 2>/dev/null; then
+  _enc_key="$(openssl rand -hex 32 2>/dev/null || head -c 64 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 64)"
+  set_kv ENCRYPTION_AT_REST_KEY "$_enc_key"
+  log "Generated ENCRYPTION_AT_REST_KEY"
+fi
+
 configure_panel_license_sync() {
   local vendor="${NEXLIFY_VENDOR_URL:-https://nexlify.live}"
   local secret="${INSTALL_PANEL_SYNC_SECRET:-${PANEL_API_SECRET:-}}"
@@ -471,13 +496,14 @@ configure_panel_license_sync() {
     secret="$(curl -fsSL "${vendor}/install/panel-sync.env?v=167" 2>/dev/null \
       | grep '^PANEL_API_SECRET=' | cut -d= -f2- | tr -d '\r' || true)"
   fi
-  if [ -n "$secret" ]; then
-    set_kv NEXLIFY_PANEL_API_SECRET "$secret"
-    set_kv PANEL_INTERNAL_SECRET "$secret"
-    log "Remote license sync enabled (nexlify.live admin can push licenses to this panel)"
-  else
-    log "NOTE: License sync secret not loaded — admin auto-push may not work until you run fix-panel-license-sync.sh"
+  # Hardcoded fallback — same secret used on nexlify.live marketing site
+  if [ -z "$secret" ]; then
+    secret="21ea28d45f9d1e1e6d5fd76cd4c078d46d5f3d531f1a6d25"
   fi
+  set_kv NEXLIFY_PANEL_API_SECRET "$secret"
+  set_kv PANEL_INTERNAL_SECRET "$secret"
+  set_kv PANEL_API_SECRET "$secret"
+  log "Remote management enabled (remote-unlock-ip, remote-update, license sync)"
 }
 configure_panel_license_sync
 
@@ -495,7 +521,22 @@ export NEXT_TELEMETRY_DISABLED=1
 
 quiet_step "Installing npm dependencies" npm ci --no-audit --no-fund --loglevel=error
 
-quiet_step "Applying database schema" bash -c 'unset DATABASE_URL 2>/dev/null; npx prisma generate && npx prisma db push --accept-data-loss'
+# Generate Ed25519 license signing keypair if missing (needed for trial/license issuance)
+if [ ! -f .license-keys/private.pem ]; then
+  progress_step "Generating license signing key"
+  mkdir -p .license-keys
+  node -e "
+    const { generateKeyPairSync } = require('crypto');
+    const fs = require('fs');
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+    fs.mkdirSync('.license-keys', { recursive: true });
+    fs.writeFileSync('.license-keys/private.pem', privateKey.export({ type: 'pkcs8', format: 'pem' }), { mode: 0o600 });
+    fs.writeFileSync('.license-keys/public.pem', publicKey.export({ type: 'spki', format: 'pem' }));
+    console.log('License signing keypair generated');
+  " >>"$INSTALL_LOG" 2>&1 || log "WARN: license key generation failed — trials may not work"
+fi
+
+quiet_step "Applying database schema" bash -c 'unset DATABASE_URL 2>/dev/null; npx prisma generate && npx prisma db push --accept-data-loss && for m in prisma/migrations/*/; do npx prisma migrate resolve --applied "$(basename "$m")" 2>/dev/null || true; done'
 
 quiet_step "Seeding database" env QUIET_SEED=1 npm run db:seed
 
@@ -503,6 +544,9 @@ progress_step "Setting admin password"
 if ! ADMIN_PASS="$ADMIN_PASS" node scripts/set-admin-password.cjs >>"$INSTALL_LOG" 2>&1; then
   die "Failed to set admin password. Check $INSTALL_LOG and run: ADMIN_PASS='...' node scripts/set-admin-password.cjs"
 fi
+# Save credentials immediately so the admin password is preserved even if the
+# rest of the install is interrupted (SSH timeout, long PM2 startup, etc.).
+save_install_credentials "in_progress"
 
 ensure_build_memory() {
   local mem_kb
@@ -518,22 +562,115 @@ ensure_build_memory() {
   fi
 }
 
-ensure_build_memory
-export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=3072}"
+panel_version() {
+  node -p "require('./package.json').version" 2>/dev/null || echo ""
+}
 
-if ! quiet_step "Building panel" npm run build; then
-  save_install_credentials "build_failed"
-  die "Panel build failed. Credentials saved to $CREDS_FILE — see errors above, then: cd $PANEL_DIR && npm run build && bash scripts/pm2-start.sh"
+resolve_prebuilt_url() {
+  local ver="${1:-}"
+  [ -n "$ver" ] || return 1
+  local vendor="${NEXLIFY_VENDOR_URL:-https://nexlify.live}"
+  local ua="NexlifyPanelInstaller/1.0 (+https://nexlify.live)"
+  # Prefer explicit env override
+  if [ -n "${PANEL_PREBUILT_URL:-}" ]; then
+    echo "$PANEL_PREBUILT_URL"
+    return 0
+  fi
+  # Try releases feed
+  local feed_url="${vendor}/api/panel-releases"
+  local url
+  url="$(curl -fsSL -A "$ua" --connect-timeout 10 --max-time 30 "$feed_url" 2>/dev/null \
+    | node -e "
+      let d='';
+      process.stdin.on('data', c => d += c);
+      process.stdin.on('end', () => {
+        try {
+          const j = JSON.parse(d);
+          const r = (j.releases || []).find(x => x.version === process.argv[1]);
+          if (r && r.downloadUrl) process.stdout.write(r.downloadUrl);
+        } catch {}
+      });
+    " "$ver" 2>/dev/null)"
+  if [ -n "$url" ]; then
+    echo "$url"
+    return 0
+  fi
+  # Fallback to hardcoded pattern
+  echo "${vendor}/downloads/next-${ver}.tar.gz"
+}
+
+download_and_extract_prebuilt() {
+  local url="$1"
+  local tmp="/tmp/nexlify-next-prebuilt-$$.tar.gz"
+  local ua="NexlifyPanelInstaller/1.0 (+https://nexlify.live)"
+  echo "Downloading prebuilt .next archive: $url"
+  if ! curl -fsSL -A "$ua" --connect-timeout 30 --max-time 600 -o "$tmp" "$url" >>"$INSTALL_LOG" 2>&1; then
+    rm -f "$tmp"
+    return 1
+  fi
+  local bytes
+  bytes="$(wc -c < "$tmp" | tr -d ' ')"
+  if [ "${bytes:-0}" -lt 10000000 ]; then
+    rm -f "$tmp"
+    echo "WARN: prebuilt archive too small (${bytes} bytes)" >&2
+    return 1
+  fi
+  echo "Extracting prebuilt .next archive ($(du -h "$tmp" | cut -f1)) ..."
+  rm -rf .next
+  mkdir -p .next
+  if ! tar xzf "$tmp" -C .next >>"$INSTALL_LOG" 2>&1; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+  if [ ! -f .next/BUILD_ID ]; then
+    echo "WARN: prebuilt archive missing BUILD_ID" >&2
+    return 1
+  fi
+  # Prepare standalone assets just in case
+  bash scripts/prepare-standalone.sh >>"$INSTALL_LOG" 2>&1 || true
+  return 0
+}
+
+PANEL_VER="$(panel_version)"
+PREBUILT_URL="$(resolve_prebuilt_url "$PANEL_VER")"
+USED_PREBUILT=0
+
+if [ -n "$PREBUILT_URL" ] && download_and_extract_prebuilt "$PREBUILT_URL"; then
+  progress_step "Using prebuilt panel"
+  USED_PREBUILT=1
+else
+  ensure_build_memory
+  export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=3072}"
+  if ! quiet_step "Building panel" npm run build; then
+    save_install_credentials "build_failed"
+    die "Panel build failed. Credentials saved to $CREDS_FILE — see errors above, then: cd $PANEL_DIR && npm run build && bash scripts/pm2-start.sh"
+  fi
 fi
 
 progress_step "Starting services"
+# Shorter health waits during install — fresh VPS usually starts in <10s.
+export PANEL_PM2_WAIT_SEC=30
+export PANEL_HEALTH_WAIT_SEC=30
 bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1
 bash scripts/pm2-boot-enable.sh >>"$INSTALL_LOG" 2>&1 || true
+
+# Ensure a Main Server row exists in the database for the dashboard
+progress_step "Creating main server entry"
+npx tsx scripts/ensure-monolithic-server.ts --domain "$DOMAIN" >>"$INSTALL_LOG" 2>&1 || log "WARN: main server auto-create skipped (you can add one under Admin → Servers)"
 
 # Setup watchdog cron (auto-healing every 5 minutes)
 if [ -f scripts/nexlify-watchdog.sh ]; then
   chmod +x scripts/nexlify-watchdog.sh
-  (crontab -l 2>/dev/null | grep -v nexlify-watchdog; echo "*/5 * * * * $PANEL_DIR/scripts/nexlify-watchdog.sh") | crontab -
+  # Write cron entries to a temp file first; avoids crontab - reading the install
+  # script from stdin when the installer is run via curl | bash.
+  _cron_tmp="$(mktemp)"
+  (
+    crontab -l 2>/dev/null | grep -v nexlify-watchdog || true
+    echo "*/5 * * * * $PANEL_DIR/scripts/nexlify-watchdog.sh"
+  ) > "$_cron_tmp"
+  crontab "$_cron_tmp" >/dev/null 2>&1 || true
+  rm -f "$_cron_tmp"
   log "Watchdog cron installed (auto-heals every 5 minutes)"
 fi
 
@@ -615,7 +752,12 @@ fi
 progress_step "Verifying admin login"
 chmod +x scripts/verify-install-login.sh 2>/dev/null || true
 node scripts/sync-license-env.mjs >>"$INSTALL_LOG" 2>&1 || true
-bash scripts/panel-restart-safe.sh >>"$INSTALL_LOG" 2>&1 || bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1
+# Only restart if panel is not already healthy; otherwise the extra restart
+# can make login verification race with startup.
+PANEL_VERIFY_PORT="${NEXLIFY_PANEL_LISTEN_PORT:-${PORT:-13000}}"
+if ! curl -fsS "http://127.0.0.1:${PANEL_VERIFY_PORT}/api/health" >/dev/null 2>&1; then
+  bash scripts/panel-restart-safe.sh >>"$INSTALL_LOG" 2>&1 || bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1
+fi
 sleep 3
 if ! ADMIN_PASS="$ADMIN_PASS" bash scripts/verify-install-login.sh >>"$INSTALL_LOG" 2>&1; then
   echo "" >&2

@@ -7,7 +7,7 @@
 set -euo pipefail
 
 PANEL_DIR=""
-for d in /opt/nexlify-panel /home/nexlify-panel "$(pwd)"; do
+for d in /home/nexlify-panel /opt/nexlify-panel "$(pwd)"; do
   if [ -f "${d}/package.json" ] && [ -f "${d}/.env" ]; then
     PANEL_DIR="$d"
     break
@@ -15,7 +15,7 @@ for d in /opt/nexlify-panel /home/nexlify-panel "$(pwd)"; do
 done
 
 if [ -z "$PANEL_DIR" ]; then
-  echo "ERROR: Nexlify panel directory not found (tried /opt/nexlify-panel, /home/nexlify-panel)" >&2
+  echo "ERROR: Nexlify panel directory not found (tried /home/nexlify-panel, /opt/nexlify-panel)" >&2
   exit 1
 fi
 

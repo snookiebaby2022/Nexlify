@@ -102,6 +102,19 @@ export function StreamsList({
   const [clientsModal, setClientsModal] = useState<{ id: string; name: string } | null>(null);
   const [tick, setTick] = useState(0);
   const fetchTimeRef = useRef(0);
+  const urlInitRef = useRef(false);
+
+  useEffect(() => {
+    if (urlInitRef.current || typeof window === "undefined") return;
+    urlInitRef.current = true;
+    const sp = new URLSearchParams(window.location.search);
+    const cat = sp.get("categoryId");
+    const status = sp.get("status");
+    if (cat) setCategoryId(cat);
+    if (status === "active" || status === "inactive" || status === "online" || status === "offline") {
+      setStatusFilter(status);
+    }
+  }, []);
 
   const load = useCallback(() => {
     const params = new URLSearchParams({
@@ -113,6 +126,9 @@ export function StreamsList({
     if (categoryId) params.set("categoryId", categoryId);
     if (serverId) params.set("serverId", serverId);
     if (search.trim()) params.set("search", search.trim());
+    if (statusFilter === "active" || statusFilter === "inactive") {
+      params.set("status", statusFilter);
+    }
     fetch(`/api/admin/streams?${params}`)
       .then((r) => r.json())
       .then((d) => {
@@ -120,7 +136,7 @@ export function StreamsList({
         setTotal(d.total ?? d.streams?.length ?? 0);
         fetchTimeRef.current = Date.now();
       });
-  }, [type, categoryId, serverId, search, page, pageSize]);
+  }, [type, categoryId, serverId, search, page, pageSize, statusFilter]);
 
   useEffect(() => {
     fetch("/api/admin/categories")

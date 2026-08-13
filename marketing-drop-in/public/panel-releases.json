@@ -1,2013 +1,1119 @@
 {
-
   "source": "nexlify-panel",
-
-  "latestVersion": "1.9.29",
-
+  "latestVersion": "1.9.35",
   "releases": [
-
     {
-
-      "version": "1.9.29",
-
-      "date": "2026-08-11",
-
+      "version": "1.9.35",
+      "date": "2026-08-14",
       "channel": "stable",
-
-      "summary": "Fix Updates page and bottom overlay showing different progress during panel update.",
-
+      "summary": "Category online/offline controls for streams, movies and episodes; dashboard Issues panel with one-click activate; post-import repair and lightweight cron.",
       "changelog": [
-
-        "Single PanelUpdateJobProvider — one poll loop shared by both progress UIs",
-
+        "Categories: Online/Offline bulk toggle per category (streams, movies, series/episodes) plus inline per-stream edit",
+        "Dashboard Issues panel: inactive, dead, and unstable streams with Activate all and deep links to fix",
+        "Create line hardened (transactions, clear errors, package day labels trial\u219212 months)",
+        "User groups seed Administrators / Resellers / Sub-resellers; import maps SUB_RESELLER",
+        "Support tickets: select all, bulk open/close/delete; suggestions forward to marketing admin",
+        "Cron runs as compiled Node bundle to cut post-import RAM; player categories alphabetical"
+      ],
+      "fixes": [
+        "Imported streams were all inactive so players showed empty categories",
+        "Group packages stored months as days (1 month = 1 day)",
+        "Create line could fail silently or debit credits without creating the line",
+        "Only Administrator user group existed after import",
+        "VOD browser / episodes could load unbounded lists and destabilize the panel"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.35.tar.gz"
+    },
+    {
+      "version": "1.9.34",
+      "date": "2026-08-13",
+      "channel": "stable",
+      "summary": "Panel migration now auto-maps headerless SQL dumps (INSERT without column names) using content inference plus the documented 1-Stream/XUI column order.",
+      "changelog": [
+        "Panel migration: headerless dumps (INSERT INTO ... VALUES with no column list) are now auto-mapped instead of importing 0 rows",
+        "Content-based column inference (username, password, MAC, URLs, IPs, dates) plus schema-order fallback for ambiguous integer columns",
+        "Auto-mapping reports which columns were inferred and warns only when a table is genuinely empty"
+      ],
+      "fixes": [
+        "XUI.one / 1-Stream backups exported without column names parsed 0 streams/lines/bouquets (silent data loss)",
+        "Migration preview showed every target table at 0 rows with no actionable message for headerless sources"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.34.tar.gz"
+    },
+    {
+      "version": "1.9.33",
+      "date": "2026-08-13",
+      "channel": "stable",
+      "summary": "Admin login auto-mints the license session cookie; panel migration now reports every detected SQL table and warns on headerless dumps.",
+      "changelog": [
+        "Auto-mint license session cookie on admin login so /admin is unlocked immediately",
+        "Panel migration: surface all detected SQL tables in preview and import reports",
+        "Panel migration: warn loudly when a dump is headerless (0 rows parsed)",
+        "Panel migration: fix false 'table not found' warnings for Midnight/Xtream sources"
+      ],
+      "fixes": [
+        "Admin had to open a stream or panel first before /admin routes were reachable",
+        "XUI.one headerless SQL backups parsed 0 streams/lines/bouquets with no warning",
+        "Midnight source showed spurious 'No INSERT for table streams' during preview"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.33.tar.gz"
+    },
+    {
+      "version": "1.9.31",
+      "date": "2026-08-11",
+      "channel": "stable",
+      "summary": "Fix prebuilt update not updating package.json version on old panels.",
+      "changelog": [
+        "Bootstrap the latest apply-prebuilt-update.sh from nexlify.live before running a prebuilt update",
+        "Old panels now pick up script fixes (package.json version sync) during prebuilt updates"
+      ],
+      "fixes": [
+        "After prebuilt update the version API still reported the old version",
+        "apply-prebuilt-update.sh fixes could not reach panels that only ever used prebuilt updates"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.31.tar.gz"
+    },
+    {
+      "version": "1.9.30",
+      "date": "2026-08-11",
+      "channel": "stable",
+      "summary": "Add Prisma baseline migration so prisma migrate deploy works on existing and fresh databases.",
+      "changelog": [
+        "Generate baseline migration from current schema (20250601000000_baseline)",
+        "Remove redundant panel_notifications migration whose tables already exist via db push",
+        "Installer resolves all migrations as applied after prisma db push"
+      ],
+      "fixes": [
+        "prisma migrate deploy failed with P3005 because production schema was not baselined",
+        "panel_notifications migration could not apply because PanelNotification tables already existed"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.30.tar.gz"
+    },
+    {
+      "version": "1.9.29",
+      "date": "2026-08-11",
+      "channel": "stable",
+      "summary": "Fix Updates page and bottom overlay showing different progress during panel update.",
+      "changelog": [
+        "Single PanelUpdateJobProvider \u2014 one poll loop shared by both progress UIs",
         "Shared PanelUpdateRunningProgress component for identical step/percent display",
-
         "Poll every 1s while update is running (was 1.5s per independent hook)"
       ],
-
       "fixes": [
-
         "Updates page stuck on sync panel files 24% while bottom overlay showed npm install 32%",
-
         "Two usePanelUpdateJob hook instances drifted when polls failed or ran out of phase"
-      ]
-
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.29.tar.gz"
     },
-
     {
-
       "version": "1.9.28",
-
       "date": "2026-08-11",
-
       "channel": "stable",
-
       "summary": "Fix nexlify-cron failing when local tsx is missing (Script not found: node_modules/tsx/dist/cli.mjs).",
-
       "changelog": [
-
         "tsx moved to production dependencies (installed even with npm ci --omit=dev)",
-
         "run-cron-daemon.sh wrapper resolves tsx from node_modules, global, or npx",
-
         "ensure-tsx.sh runs before PM2 starts nexlify-cron"
       ],
-
       "fixes": [
-
         "PM2 ERROR: Script not found: node_modules/tsx/dist/cli.mjs on customer VPS",
-
         "nexlify-cron missing after exec_mode re-register during pm2-start"
       ]
-
     },
-
     {
-
       "version": "1.9.27",
-
       "date": "2026-08-11",
-
       "channel": "stable",
-
-      "summary": "Reduce panel downtime at 88% update — immediate restart after build swap.",
-
+      "summary": "Reduce panel downtime at 88% update \u2014 immediate restart after build swap.",
       "changelog": [
-
         "Restart PM2 immediately after .next swap (no broken in-between state)",
-
         "wait-panel-ready after restart before declaring update step done",
-
-        "Progress UI explains 88–98% brief outage is expected"
+        "Progress UI explains 88\u201398% brief outage is expected"
       ],
-
       "fixes": [
-
         "Panel unreachable at 88% during in-panel update (swap without restart)",
-
         "Update left panel down if restart step lagged after build swap"
       ]
-
     },
-
     {
-
       "version": "1.9.26",
-
       "date": "2026-08-11",
-
       "channel": "stable",
-
       "summary": "Fix Updates page and bottom overlay showing different progress during panel update.",
-
       "changelog": [
-
-        "Shared usePanelUpdateJob hook — single poll source for both progress UIs",
-
+        "Shared usePanelUpdateJob hook \u2014 single poll source for both progress UIs",
         "Updates page no longer keeps stale job when silent refresh fails during build"
       ],
-
       "fixes": [
-
         "Top Updates bar stuck on sync panel files 24% while bottom overlay showed prepare build 50%",
-
         "Mismatched elapsed time (23s vs 1m 53s) between two progress indicators"
       ]
-
     },
-
     {
-
       "version": "1.9.25",
-
       "date": "2026-08-11",
-
       "channel": "stable",
-
-      "summary": "Install verify scripts use browser UA — plain curl gets 404 on /login when bot-stealth is on.",
-
+      "summary": "Install verify scripts use browser UA \u2014 plain curl gets 404 on /login when bot-stealth is on.",
       "changelog": [
-
         "fix-customer-panel, verify-panel-upstream, fix-panel-ip-login use Mozilla UA for /login checks",
-
         "Plain curl to /login returns 404 by design when PANEL_BLOCK_BOTS=1 (bot-stealth)"
       ],
-
       "fixes": [
-
-        "curl /login HTTP 404 while /api/health is healthy — false alarm during verify",
-
+        "curl /login HTTP 404 while /api/health is healthy \u2014 false alarm during verify",
         "verify-panel-upstream WARN login route odd response when blockBots enabled"
       ]
-
     },
-
     {
-
       "version": "1.9.24",
-
       "date": "2026-08-11",
-
       "channel": "stable",
-
       "summary": "Fix fix-customer-panel false failure after redundant PM2 restart.",
-
       "changelog": [
-
         "vps-repair-standalone skips PM2 restart when SKIP_PM2_RESTART=1",
-
         "fix-customer-panel step 4 no longer restarts PM2 after step 3 already did",
-
         "verify_panel_ui retries /login up to 30s after PM2 restart",
-
         "vps-repair-standalone reads PORT from .env (IP panels use :80 not :13000)"
       ],
-
       "fixes": [
-
         "fix-customer-panel Step 5 ERROR /login HTTP 000 after vps-repair-standalone restart",
-
         "Health check on wrong port 13000 for IP direct :80 installs",
-
         "Race: verify ran before panel finished restarting (~15s startup)"
       ]
-
     },
-
     {
-
       "version": "1.9.23",
-
       "date": "2026-08-11",
-
       "channel": "stable",
-
       "summary": "Fix customer repair: missing Prisma client breaks password sync and update worker.",
-
       "changelog": [
-
         "ensure-prisma-client.sh runs prisma generate when .prisma/client is missing",
-
         "fix-panel-ip-login installs deps + generates Prisma before set-admin-password",
-
         "fix-update-worker-now generates Prisma client before PM2 restart",
-
         "fix-customer-panel fetches ensure-prisma-client.sh from vendor install bundle"
       ],
-
       "fixes": [
-
         "Cannot find module .prisma/client/default during fix-customer-panel rebuild",
-
-        "Update worker crashed exit 127 — Prisma client not generated after npm ci",
-
+        "Update worker crashed exit 127 \u2014 Prisma client not generated after npm ci",
         "set-admin-password.cjs failed before panel rebuild on IP customer VPS"
       ]
-
     },
-
     {
-
       "version": "1.9.22",
-
       "date": "2026-08-11",
-
       "channel": "stable",
-
       "summary": "Fix customer build failure: missing tailwindcss devDependency.",
-
       "changelog": [
-
         "ensure-build-deps.sh installs devDependencies before any panel rebuild",
-
         "fix-panel-ip-login runs npm ci --include=dev before npm run build",
-
         "apply-panel-fast-update detects missing tailwindcss and runs npm ci",
-
         "Publish vps-repair-standalone.sh + verify-standalone.sh to install bundle",
-
         "vps-fix-everything health checks use panel upstream port (not marketing PORT=13001)"
       ],
-
       "fixes": [
-
         "Build failed: Cannot find module tailwindcss on customer VPS",
-
         "Panel down on port 80 after failed rebuild (HTTP 000)",
-
         "404 fetching vps-repair-standalone.sh from vendor install scripts",
-
         "vps-fix-everything false FAIL on /api/panel/version (checked marketing :13001 not panel :13000)"
       ]
-
     },
-
     {
-
       "version": "1.9.21",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Fix nexlify.live marketing site server-side exception (SSR auth + DB).",
-
       "changelog": [
-
         "Marketing getSessionUser no longer crashes site when DATABASE_URL missing",
-
         "fix-marketing-now.sh one-shot repair for vendor VPS",
-
         "vps-fix-everything ensures nexlify_marketing DB before marketing rebuild",
-
         "panel-releases.json synced to marketing src/lib on every publish"
       ],
-
       "fixes": [
-
         "Application error: server-side exception on nexlify.live (digest 2269377318)",
-
         "Logged-in users saw full site 500 when marketing PostgreSQL misconfigured",
-
         "Stale panel-releases in marketing src/lib vs public/"
       ]
-
     },
-
     {
-
       "version": "1.9.20",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Stable updates: auto-apply OFF by default, nginx serves all repair scripts, build retry on webpack failure.",
-
       "changelog": [
-
         "Auto-apply when a new release is detected is OFF by default (manual update only)",
-
         "nginx serves any /install/*.sh repair script (fixes 404 on fix-panel-down-now.sh)",
-
         "Customer build retries with npm ci after webpack failure; 4GB Node heap",
-
         "verify-release-candidate.sh blocks vendor publish if build fails"
       ],
-
       "fixes": [
-
         "404 on https://nexlify.live/install/fix-panel-down-now.sh",
-
         "Build failed because of webpack errors on low-memory customer VPS",
-
         "Auto-apply loop broke panels during unstable releases"
       ]
-
     },
-
     {
-
       "version": "1.9.19",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Emergency fix-panel-down-now.sh for panel down or stuck mid-update.",
-
       "changelog": [
-
         "fix-panel-down-now.sh: cancel stuck update, restart in ~30s or rebuild if needed",
-
         "Disables auto-apply during emergency recovery to stop retry loops",
-
         "panel-update-recover runs ensure-customer-ip-env before rebuild"
       ],
-
       "fixes": [
-
         "Panel blank/down while npm run build update running at 88%",
-
         "Stuck update worker prevents PM2 restart",
-
         "Mid-update crash leaves panel offline until manual recover"
       ]
-
     },
-
     {
-
       "version": "1.9.18",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Permanent fix for client-side crash on IP customer panels after update.",
-
       "changelog": [
-
         "ensure-customer-ip-env.sh locks PANEL_PRIMARY_DOMAIN + NEXT_PUBLIC_* before every build",
-
         "fix-customer-panel.sh always rebuilds for IP access and verifies JS chunks serve HTTP 200",
-
         "fix-panel-ip-login.sh respects DOMAIN env, runs prepare-standalone + chunk verification",
-
         "apply-panel-fast-update runs IP env lock before build and verify-standalone after restart"
       ],
-
       "fixes": [
-
         "Application error: client-side exception on IP installs (75.119.137.174 and similar)",
-
         "fix-customer-panel.sh updated panel but left wrong NEXT_PUBLIC URLs baked in build",
-
         "Post-update standalone JS chunks 404 until IP rebuild + prepare-standalone"
       ]
-
     },
-
     {
-
       "version": "1.9.17",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Emergency fix for customer panels stuck on v1.9.7 with toVersion TDZ crash loop.",
-
       "changelog": [
-
         "fix-stuck-customer-panel.sh: self-contained repair via origin IP (bypasses Cloudflare)",
-
         "Hotfix scripts disable auto-apply in DB to stop infinite retry loop",
-
         "TDZ patch handles CRLF line endings on older customer installs"
       ],
-
       "fixes": [
-
-        "Customer still on v1.9.7 after vendor commands — repair must run on customer VPS",
-
+        "Customer still on v1.9.7 after vendor commands \u2014 repair must run on customer VPS",
         "Auto-apply retried failed update every page load (Cannot access toVersion before initialization)",
-
-        "curl to nexlify.live returned 403 — scripts now default to origin IP 85.17.162.54"
+        "curl to nexlify.live returned 403 \u2014 scripts now default to origin IP 85.17.162.54"
       ]
-
     },
-
     {
-
       "version": "1.9.16",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Fix customer updates blocked by Cloudflare 403 on downloads/install paths.",
-
       "changelog": [
-
         "apply-panel-fast-update falls back to origin IP when Cloudflare blocks curl",
-
         "panel-vendor-origin.env published for direct-IP download bypass",
-
         "vps-fix-cloudflare-downloads.sh tests public URLs and documents WAF skip rule"
       ],
-
       "fixes": [
-
         "Customer panel sync failed: curl 403 on nexlify.live/downloads/nexlify-panel.tar.gz",
-
         "Localhost tarball HTTP 200 but public internet got Cloudflare bot challenge",
-
         "vps-fix-everything passed nginx checks while customers could not download updates"
       ]
-
     },
-
     {
-
       "version": "1.9.15",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Fix vendor tarball download via nginx (root location + health check).",
-
       "changelog": [
-
         "nginx serves /downloads/ via root instead of alias (fixes 404 on tarball)",
-
         "Health checks use HTTP status codes instead of curl|head (pipefail false negative)",
-
         "Publish fails fast if tarball is missing or under 500KB"
       ],
-
       "fixes": [
-
         "vps-fix-everything FAIL tarball download (nginx) despite file on disk",
-
         "Release feed health check showed empty latestVersion with pretty-printed JSON"
       ]
-
     },
-
     {
-
       "version": "1.9.14",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Fix update worker crash: Cannot access 'toVersion' before initialization.",
-
       "changelog": [
-
         "Initialize toVersion at start of update/rollback so failure paths never hit JS TDZ"
       ],
-
       "fixes": [
-
         "Update failed with: Cannot access 'toVersion' before initialization",
-
-        "Background update worker crashed on v1.9.7–v1.9.13 when a step failed before version re-read",
-
+        "Background update worker crashed on v1.9.7\u2013v1.9.13 when a step failed before version re-read",
         "Settings PATCH no longer wipes server settings when saving a single field",
-
         "Release feed and tarball served from nginx disk when nexlify-web is down"
       ]
-
     },
-
     {
-
       "version": "1.9.13",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Bulletproof update worker: bash launcher, PANEL_REPO_PATH in standalone, remove stale standalone/scripts.",
-
       "changelog": [
-
         "Update worker spawned via scripts/panel-update-background.sh (always cd to install root)",
-
         "prepare-standalone sets PANEL_REPO_PATH to install root in standalone/.env",
-
         "Removes .next/standalone/scripts on every build (prevents MODULE_NOT_FOUND)",
-
         "fix-update-worker-now.sh hotfix for stuck panels without UI update",
-
         "Bootstrap fetches panel-update-background.sh from nexlify.live during sync"
       ],
-
       "fixes": [
-
         "Update worker crashed on startup: Cannot find module '../src/lib/panel-server'",
-
         "Worker exited with code 127 when PM2 cwd is .next/standalone",
-
         "Pre-v1.9.11 bundled code used standalone as repo path (package.json copied there)",
-
-        "Customer Admin → Settings → Updates failed immediately before sync could run"
+        "Customer Admin \u2192 Settings \u2192 Updates failed immediately before sync could run"
       ]
-
     },
-
     {
-
       "version": "1.9.11",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Fix customer panel updates failing with Cannot find module panel-server.",
-
       "changelog": [
-
         "Update worker always runs from panel install root, not .next/standalone",
-
         "panel-update-background.ts uses dynamic imports after resolving repo root",
-
         "Repo path detection skips standalone build dir (requires scripts/ + src/)"
       ],
-
       "fixes": [
-
         "Update worker crashed on startup: Cannot find module '../src/lib/panel-server'",
-
         "Background update used /opt/.../standalone as repo path when PM2 cwd is standalone",
-
-        "Customer Admin → Settings → Updates failed immediately with exit code 127"
+        "Customer Admin \u2192 Settings \u2192 Updates failed immediately with exit code 127"
       ]
-
     },
-
     {
-
       "version": "1.9.10",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Fix Updates page 500, demo subdomain nginx, and panel root path in standalone mode.",
-
       "changelog": [
-
         "Resolve panel package.json from standalone cwd, PANEL_REPO_PATH, and install root",
-
         "Updates page shows a clear error instead of JSON parse failure on API 500",
-
         "panel.demo.nexlify.live nginx proxies to panel (demo mode) instead of redirecting away",
-
         "vps-fix-both-sites.sh installs demo vhost alongside panel.nexlify.live"
       ],
-
       "fixes": [
-
-        "Admin → Settings → Updates: Unexpected token 'I', Internal Server Error is not valid JSON",
-
+        "Admin \u2192 Settings \u2192 Updates: Unexpected token 'I', Internal Server Error is not valid JSON",
         "panel.demo.nexlify.live not working (nginx redirected to panel.nexlify.live/login)",
-
         "Version API failing when PM2 cwd is .next/standalone without repo package.json"
       ]
-
     },
-
     {
-
       "version": "1.9.9",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Fix in-panel update failing after successful build (standalone + staging dir).",
-
       "changelog": [
-
         "Panel updates: enable Next.js standalone output so PM2 and update validation succeed",
-
         "Staging builds: next.config respects NEXLIFY_DIST_DIR (.next.staging) during zero-downtime updates",
-
         "postbuild scripts (prepare-standalone, obfuscate-license) follow staging dist dir",
-
         "Remove deprecated swcMinify from next.config (Next.js 15)"
       ],
-
       "fixes": [
-
-        "Admin → Settings → Updates failing with 'staging build invalid' despite successful compile",
-
+        "Admin \u2192 Settings \u2192 Updates failing with 'staging build invalid' despite successful compile",
         "prepare-standalone skipping because .next/standalone/server.js was missing",
-
         "Recovery loop: Missing valid .next after failed update on first install / no backup"
       ]
-
     },
-
     {
-
       "version": "1.9.8",
-
       "date": "2026-08-10",
-
       "channel": "stable",
-
       "summary": "Fix panel crash when uploading large SQL database dumps during migration.",
-
       "changelog": [
-
         "Panel migration: large .sql files upload directly to the server (multipart) instead of loading in the browser",
-
-        "Migration tips callout — prefer PostgreSQL (live) for 1-stream; paste/preview limited to 512KB exports"
+        "Migration tips callout \u2014 prefer PostgreSQL (live) for 1-stream; paste/preview limited to 512KB exports"
       ],
-
       "fixes": [
-
         "Client-side Application error when uploading database SQL dumps on Panel migration",
-
         "Browser OOM from rendering multi-MB SQL in a textarea during import"
       ]
-
     },
-
     {
-
       "version": "1.9.7",
-
       "date": "2026-08-08",
-
       "channel": "stable",
-
       "summary": "Installer semver alignment, one-click auto-IP install, marketing admin license fixes.",
-
       "changelog": [
-
         "Installer URL version now matches panel semver (v1.9.7 not v193)",
-
-        "One-command install with auto-detected server IP — no --ip flag required",
-
+        "One-command install with auto-detected server IP \u2014 no --ip flag required",
         "Marketing admin: FK-safe license delete, select-all, bulk revoke/delete toolbar",
-
         "Marketing admin dashboard redesigned with grouped sidebar navigation",
-
         "Licenses locked to marketing users via online activation (NEXLIFY_LICENSE_REQUIRE_ONLINE)"
       ],
-
       "fixes": [
-
-        "Installer --ip flag was documented but not parsed — fixed",
-
+        "Installer --ip flag was documented but not parsed \u2014 fixed",
         "License delete failed on ActivationCode / AddonEntitlement FK constraints",
-
         "INSTALLER_VERSION drifted from package.json (v194 vs v193 vs 1.9.3)"
       ]
-
     },
-
     {
-
       "version": "1.9.3",
-
       "date": "2026-07-10",
-
       "channel": "stable",
-
       "summary": "Affiliate system, revenue sharing, auto-scaling, PWA, and security hardening.",
-
       "changelog": [
-
-        "Affiliate/Referral System — referral links, click/signup tracking, commission rates, admin management",
-
-        "Automated Revenue Sharing — commission model, revenue splits, payout tracking",
-
-        "Auto-Scale Manager — CPU/memory monitoring, PM2 instance scaling, configurable thresholds, real-time metrics",
-
-        "PWA for iOS & Smart TV — service worker, offline caching, Add to Home Screen, works on Tizen/webOS",
-
-        "WebSocket real-time dashboard — live connection and bandwidth updates via SSE",
-
+        "Affiliate/Referral System \u2014 referral links, click/signup tracking, commission rates, admin management",
+        "Automated Revenue Sharing \u2014 commission model, revenue splits, payout tracking",
+        "Auto-Scale Manager \u2014 CPU/memory monitoring, PM2 instance scaling, configurable thresholds, real-time metrics",
+        "PWA for iOS & Smart TV \u2014 service worker, offline caching, Add to Home Screen, works on Tizen/webOS",
+        "WebSocket real-time dashboard \u2014 live connection and bandwidth updates via SSE",
         "CdnEndpoint model added for smart CDN switching",
-
         "Security: added auth to collab, apps-lock, cdn-switch, bandwidth-predict, catchup API routes",
-
         "Security: removed permissive CORS * from dashboard-stream SSE endpoint",
-
         "Replaced mock analytics data with real BandwidthSnapshot queries",
-
-        "PWA manifest cleaned up — removed duplicate icon entries, added Apple web app metadata"
+        "PWA manifest cleaned up \u2014 removed duplicate icon entries, added Apple web app metadata"
       ],
-
       "fixes": [
-
-        "MigrationJob used wrong field name (sourceType vs source) — now uses MigrationSource enum correctly",
-
-        "Content moderation review stored undefined author — fixed to use session.username",
-
-        "Collab route accepted untrusted client-supplied authorId/authorName — now uses session",
-
-        "5 admin API routes had zero authentication — all now require session",
-
-        "Dashboard-stream SSE had unused staleBefore/fiveMinBefore variables — removed",
-
-        "Analytics bandwidth returned random mock data — now queries real BandwidthSnapshot table",
-
-        "Analytics PDF returned fake download URL — now returns 501 not-implemented",
-
-        "MassEditEntity.RESellers had inconsistent casing — fixed to RESELLERS",
-
-        "Service worker referenced non-existent routes — updated to real admin paths"
+        "MigrationJob used wrong field name (sourceType vs source) \u2014 now uses MigrationSource enum correctly",
+        "Content moderation review stored undefined author \u2014 fixed to use session.username",
+        "Collab route accepted untrusted client-supplied authorId/authorName \u2014 now uses session",
+        "5 admin API routes had zero authentication \u2014 all now require session",
+        "Dashboard-stream SSE had unused staleBefore/fiveMinBefore variables \u2014 removed",
+        "Analytics bandwidth returned random mock data \u2014 now queries real BandwidthSnapshot table",
+        "Analytics PDF returned fake download URL \u2014 now returns 501 not-implemented",
+        "MassEditEntity.RESellers had inconsistent casing \u2014 fixed to RESELLERS",
+        "Service worker referenced non-existent routes \u2014 updated to real admin paths"
       ]
-
     },
-
     {
-
       "version": "1.9.2",
-
       "date": "2026-07-06",
-
       "channel": "stable",
-
       "summary": "Bug fixes, backup/DR improvements, performance optimizations, and disaster recovery.",
-
       "changelog": [
-
         "Bug fixes: category delete cascade, VOD category type, category rename/re-parent, content moderation DB persistence, stream filters, content folder pages",
-
         "Backup & Restore: full entity restore with upserts, AES-256-GCM encryption, SHA-256 checksums, line password inclusion",
-
         "Cloud Backup Worker: S3/xDrive/Dropbox upload with pg_dump integration",
-
         "Disaster Recovery API: one-click health check, restore-from-file, restore-latest",
-
         "Performance: DB indexes, connection caching, N+1 batch fixes, settings cache, PM2 cluster mode",
-
         "Fixed N+1 queries in stream-agent heartbeat, MAG bulk, Enigma bulk, and mass operations",
-
         "Added thundering herd protection to cache layer",
-
         "Gzip compression on static assets + nginx caching headers",
-
         "Prisma connection pooling configured for 50 connections"
-
       ],
-
       "fixes": [
-
-        "Category delete left orphaned child categories — now cascades recursively",
-
+        "Category delete left orphaned child categories \u2014 now cascades recursively",
         "VOD categories defaulted to LIVE type instead of MOVIE/SERIES",
-
         "Category edit had no UI for rename or re-parent",
-
-        "Content moderation flags were stored in cache only — lost on restart",
-
+        "Content moderation flags were stored in cache only \u2014 lost on restart",
         "Stream filter dropdowns (Audio/Video/Quality) were non-functional",
-
         "Content folder pages (created, archive, delayed) showed empty placeholders"
-
       ]
-
     },
-
     {
-
       "version": "1.9.1",
-
       "date": "2026-07-06",
-
       "channel": "stable",
-
       "summary": "15 advanced features: dynamic pricing, stream fingerprinting, white-label apps, multi-tenancy, loyalty program, and more.",
-
       "changelog": [
-
-        "Dynamic Pricing Engine — peak/off-peak multipliers, time-based pricing, automated suggestions",
-
-        "Stream Fingerprinting — unique stream fingerprints for piracy detection with auto-flagging",
-
-        "White-label Mobile Apps — build branded Android/iOS apps for resellers with custom packages",
-
-        "Multi-tenancy — per-reseller branding, isolated configs, tenant-level permissions",
-
-        "Viewer Loyalty Program — points, badges, tier levels to reward active viewers",
-
-        "Billing Integration — Stripe, PayPal, WHMCS with invoice management",
-
-        "Content Moderation — flag, review, approve/reject streams with severity levels",
-
-        "Automated Backup & Restore — one-click backup with scheduled snapshots",
-
-        "Advanced EPG Sources — multi-source EPG with sync and quality scoring",
-
-        "Transcoding Profiles — H.264/H.265/VP9/AV1 with GPU acceleration",
-
-        "Security Features — IP whitelist, brute-force protection, real-time security alerts",
-
-        "Quality Monitoring — bitrate drops, packet loss, stream failure alerts",
-
-        "Failover Testing — automated backup stream testing with pass/fail reporting",
-
-        "Advanced Analytics — real-time viewer stats, top channels, revenue tracking",
-
-        "Viewer Heatmap — geographic viewer distribution visualization",
-
+        "Dynamic Pricing Engine \u2014 peak/off-peak multipliers, time-based pricing, automated suggestions",
+        "Stream Fingerprinting \u2014 unique stream fingerprints for piracy detection with auto-flagging",
+        "White-label Mobile Apps \u2014 build branded Android/iOS apps for resellers with custom packages",
+        "Multi-tenancy \u2014 per-reseller branding, isolated configs, tenant-level permissions",
+        "Viewer Loyalty Program \u2014 points, badges, tier levels to reward active viewers",
+        "Billing Integration \u2014 Stripe, PayPal, WHMCS with invoice management",
+        "Content Moderation \u2014 flag, review, approve/reject streams with severity levels",
+        "Automated Backup & Restore \u2014 one-click backup with scheduled snapshots",
+        "Advanced EPG Sources \u2014 multi-source EPG with sync and quality scoring",
+        "Transcoding Profiles \u2014 H.264/H.265/VP9/AV1 with GPU acceleration",
+        "Security Features \u2014 IP whitelist, brute-force protection, real-time security alerts",
+        "Quality Monitoring \u2014 bitrate drops, packet loss, stream failure alerts",
+        "Failover Testing \u2014 automated backup stream testing with pass/fail reporting",
+        "Advanced Analytics \u2014 real-time viewer stats, top channels, revenue tracking",
+        "Viewer Heatmap \u2014 geographic viewer distribution visualization",
         "Fixed Connections panel layout overflow on smaller screens",
-
         "Updated marketing site with 15 new feature benefits"
-
       ]
-
     },
-
     {
-
       "version": "1.9.0",
-
       "date": "2026-07-02",
-
       "channel": "stable",
-
       "summary": "AI Studio (14 features), live connection fixes, security hardening, CSS update fix.",
-
       "changelog": [
-
         "AI Studio: 14 AI-powered features including Health Predictor, EPG Scraper, Viewer Analytics, Bouquet Builder, Natural Language Admin, Transcode Recommender, Anomaly Detector, Support Chat, Restream Detector, Invoice Generator, Voice-to-Query, Logo Generator, Seasonal Recommender, Thumbnail Generator",
-
         "Fix live connection count showing all-time instead of real-time active connections",
-
         "Fix activity endpoint missing stale filter (claimed 5-minute window but returned all history)",
-
         "Add portal login rate limiting to prevent brute force attacks",
-
         "Add JSON body validation to 7 public API endpoints (portal login, password, support, billing)",
-
         "Fix auth route inconsistency (admin routes now return 403 instead of 401)",
-
         "Implement POST /api/admin/stream-health (was a stub returning success without doing anything)",
-
         "Fix broken /admin/created_channels/add nav link",
-
         "Watchdog empty catch blocks now log errors instead of silently swallowing them",
-
-        "Analytics endpoint wrapped in try/catch — missing tables no longer crash the admin dashboard",
-
-        "Auto-run prisma generate in prebuild — prevents stale Prisma client mismatches",
-
+        "Analytics endpoint wrapped in try/catch \u2014 missing tables no longer crash the admin dashboard",
+        "Auto-run prisma generate in prebuild \u2014 prevents stale Prisma client mismatches",
         "New module pages: Login Logs, Client Logs, Restream Logs, Device Profiles, RTMP Monitor, MySQL Syslog, Watch Output",
-
         "Postbuild hook ensures CSS/JS static assets are always copied to standalone (prevents CSS breakage after updates)",
-
         "pm2-start.sh now auto-runs npm install when dependencies are missing",
-
         "OpenAI SDK integration for AI features (requires OPENAI_API_KEY env var)"
-
       ],
-
       "fixes": [
-
         "Live connections showed 47/2 instead of real active count (e.g. 1/2)",
-
         "Activity endpoint returned all historical connections instead of 5-minute window",
-
-        "Portal login had no rate limiting — brute force vulnerability",
-
+        "Portal login had no rate limiting \u2014 brute force vulnerability",
         "Public API endpoints crashed on malformed JSON body",
-
         "Admin routes returned 401 Unauthorized instead of 403 Forbidden",
-
-        "Stream health POST endpoint was a stub — did nothing",
-
+        "Stream health POST endpoint was a stub \u2014 did nothing",
         "Broken nav link /admin/created_channels/add pointed to non-existent page",
-
-        "Watchdog errors were silently swallowed — invisible in logs",
-
+        "Watchdog errors were silently swallowed \u2014 invisible in logs",
         "Analytics endpoint crash on missing AnalyticsSnapshot table broke admin login",
-
-        "Prisma client could become stale after schema changes — now auto-regenerated in prebuild",
-
+        "Prisma client could become stale after schema changes \u2014 now auto-regenerated in prebuild",
         "CSS/JS broke after updates because static assets weren't copied to standalone",
-
         "New npm dependencies (like openai) weren't installed during pm2 restart"
-
       ]
-
     },
-
     {
-
       "version": "1.8.5",
-
       "date": "2026-07-02",
-
       "channel": "stable",
-
       "summary": "Dashboard layout fix, recharts dependency, removes fake v1.9.0 changelog entry.",
-
       "changelog": [
-
         "Dashboard server card: moved Servers metric next to Connections (was on the far right)",
-
-        "Added recharts dependency — Analytics and Resource Charts pages now build correctly",
-
+        "Added recharts dependency \u2014 Analytics and Resource Charts pages now build correctly",
         "Removed hardcoded v1.9.0 changelog entry from Updates page (was showing a fake future version)",
-
         "Redis server now auto-installed by install-linux.sh and nexlify-server-install.sh (was missing on some installs)",
-
         "Cleanup scripts included in tarball for automatic file cleanup on updates"
       ],
-
       "fixes": [
-
         "Dashboard layout: Servers stat was on the far right instead of next to Connections",
-
         "Build failed with 'recharts Module not found' on Analytics and Resource Charts pages",
-
         "v1.9.0 appeared in changelog with a fake future date (2025-07-15)",
-
         "Redis cache showed 'Failed' on some panels where Redis wasn't installed"
       ]
-
     },
-
     {
-
       "version": "1.8.4",
-
       "date": "2026-07-02",
-
       "channel": "stable",
-
       "summary": "Critical install/repair fixes: DATABASE_URL override, standalone .env path, package.json in standalone, customer setup scripts.",
-
       "changelog": [
-
-        "Fix shell DATABASE_URL override — scripts now unset stale env before prisma to prevent auth failures",
-
-        "Fix standalone .env PANEL_REPO_PATH — build-time path no longer baked into standalone (ecosystem.config.cjs sets it at runtime)",
-
-        "Copy package.json into standalone dir — version API no longer returns ENOENT on customer servers",
-
-        "New customer-setup.sh — one-command DB fix, prisma sync, main server registration, nginx, and PM2",
-
-        "New repair-panel.sh — quick repair for DB credentials, schema sync, and server registration",
-
-        "New cleanup-customer-server.sh — full cleanup script for all common deployment issues",
-
+        "Fix shell DATABASE_URL override \u2014 scripts now unset stale env before prisma to prevent auth failures",
+        "Fix standalone .env PANEL_REPO_PATH \u2014 build-time path no longer baked into standalone (ecosystem.config.cjs sets it at runtime)",
+        "Copy package.json into standalone dir \u2014 version API no longer returns ENOENT on customer servers",
+        "New customer-setup.sh \u2014 one-command DB fix, prisma sync, main server registration, nginx, and PM2",
+        "New repair-panel.sh \u2014 quick repair for DB credentials, schema sync, and server registration",
+        "New cleanup-customer-server.sh \u2014 full cleanup script for all common deployment issues",
         "deploy-vps.sh and install-linux.sh now unset DATABASE_URL before prisma",
-
         "prepare-standalone.sh strips PANEL_REPO_PATH from standalone .env after build"
-
       ],
-
       "fixes": [
-
         "ENOENT: no such file or directory, open '/home/nexlify-panel/package.json' on customer servers",
-
         "Prisma P1000 authentication failed when shell DATABASE_URL overrides .env credentials",
-
         "Main server not registered in Manage Servers after fresh install",
-
         "Update button failed on tarball-installed panels"
       ]
-
     },
-
     {
-
       "version": "1.8.3",
-
       "date": "2026-07-01",
-
       "channel": "stable",
-
       "summary": "Vendor tarball v1.8.3 with panel-version API, standalone packaging, and auto-update infrastructure.",
-
       "changelog": [
-
         "Panel version API endpoint /api/panel/version reads from package.json",
-
         "Standalone output with prepare-standalone.sh for optimized deployment",
-
         "Auto-update infrastructure via apply-panel-fast-update.sh",
-
         "ensure-monolithic-server.ts for monolithic install server registration"
-
       ],
-
       "fixes": []
-
     },
-
     {
-
       "version": "1.8.1",
-
       "date": "2026-06-27",
-
       "channel": "stable",
-
       "summary": "Smarters replay fix, xtream-masters EPG, live stream UX and logging improvements.",
-
       "changelog": [
-
         "Fix Smarters replay on same channel (max-connections reconnect for same IP+stream)",
-
         "HLS remux replaces prior session per viewer on channel replay",
-
         "EPG All Countries switched from iptv-org to xtream-masters.com/epg feeds",
-
         "EPG Channel Map: channel_id renamed to Stream ID in UI and CSV export",
-
         "Remove Direct source option from live streams (movies/series only)",
-
         "Stream logs: show HLS relay errors, stream names, and empty-state hints",
-
         "Dark theme: fix unreadable stream names in Manage Streams table"
-
       ]
-
     },
-
     {
-
       "version": "1.8.0",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
       "summary": "Monolithic mode: auto port sync on save, extra HTTP/HTTPS listeners, panel-driven RTMP, --monolithic installer.",
-
       "changelog": [
-
         "Edit Server / Settings save auto-runs sync-panel-ports (nginx + UFW, no manual sync step)",
-
         "Advanced tag ports generate extra nginx listen blocks (HTTP stream edge + HTTPS)",
-
         "RTMP vhost generated from server rtmpPort (install-nginx-rtmp.sh)",
-
         "Installer --monolithic: main server row + local stream agent on same host",
-
         "Remote servers: save queues agent Push config instead of panel nginx edits"
-
       ]
-
     },
-
     {
-
       "version": "1.7.9",
-
       "date": "2026-06-27",
-
       "channel": "stable",
-
       "summary": "Audit fixes: TS errors, PM2 dedupe, marketing licensing routes, full smoke audit script.",
-
       "changelog": [
-
         "Fix download playlist web player button (open prop shadowing window.open)",
-
         "Fix HLS MPEG-TS relay and live stream TypeScript errors",
-
         "PM2 restart dedupes orphan nexlify workers after mode switches",
-
         "Marketing: licenses/validate + whmcs API routes; licensing exports restored",
-
         "scripts/full-audit-smoke.sh for vendor/customer health checks"
-
       ]
-
     },
-
     {
-
       "version": "1.7.8",
-
       "date": "2026-06-27",
-
       "channel": "stable",
-
       "summary": "Fix Smarters empty LIVE TV when logging in on HTTPS 443; publish bootstrap script.",
-
       "changelog": [
-
         "server_info.port now matches the port clients use (443 for HTTPS domains, not forced 8080)",
-
         "Smarters no longer redirected to blocked :8080 after successful HTTPS login",
-
         "Publish has-valid-next-build.sh to nexlify.live/install/scripts/ (fixes bootstrap 404)",
-
         "Marketing install guide: Smarters use port 443 on domains, port 80 on IP installs"
-
       ]
-
     },
-
     {
-
       "version": "1.7.7",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
       "summary": "One-click installer ships full IPTV port fix; auto nginx + UFW on every install and update.",
-
       "changelog": [
-
         "Installer runs installer-finalize-ports.sh (nginx start, stream edge, UFW 22/80/443/8080/1935/554)",
-
         "Fast update applies port sync after every panel upgrade",
-
         "Install complete shows IPTV/Smarters URL and stream port in credentials",
-
         "Marketing installer v177; fix-stream-edge-now.sh published to nexlify.live/install/",
-
         "Publish script ships all port scripts with tarball and one-click installer"
-
       ]
-
     },
-
     {
-
       "version": "1.7.6",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
-      "summary": "Permanent IPTV port fix — firewall, nginx stream edge, and sync on install/deploy.",
-
+      "summary": "Permanent IPTV port fix \u2014 firewall, nginx stream edge, and sync on install/deploy.",
       "changelog": [
-
         "Central port registry + nexlify-firewall-ports.sh opens 22, 80, 443, 8080, 1935, 554",
-
-        "sync-panel-ports.sh: .env, nginx stream edge, UFW, and verify — runs on install and deploy",
-
+        "sync-panel-ports.sh: .env, nginx stream edge, UFW, and verify \u2014 runs on install and deploy",
         "Installer opens all IPTV ports automatically (skip with --skip-firewall)",
-
-        "Admin → Settings → Server: Sync ports & firewall button + port checklist",
-
+        "Admin \u2192 Settings \u2192 Server: Sync ports & firewall button + port checklist",
         "Stream port changes persist to .env and regenerate nginx on sync"
-
       ]
-
     },
-
     {
-
       "version": "1.7.5",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
       "summary": "Fix Smarters empty categories, port 8080 stream edge, and Xtream server_info.",
-
       "changelog": [
-
         "Invalidate Xtream category cache when lines or bouquets change (fixes empty LIVE TV after setup)",
-
         "Ship nginx stream edge on :8080 with installer + UFW rule",
-
         "Xtream server_info.port advertises stream HTTP port (8080) for HTTPS panels",
-
         "IP-only installs use port 80 for Xtream (not 8080) in server_info and env"
-
       ]
-
     },
-
     {
-
       "version": "1.7.4",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
       "summary": "Smarters category fix, XUI-style manage streams, dashboard monitor, and server install UI.",
-
       "changelog": [
-
         "Verify the Stream panel on Manage Streams (Active Servers, Stream Sources, Recent Errors)",
-
         "Dashboard resource monitor with CPU/memory/network charts and service status",
-
         "XUI-style server installation wizard with live install log",
-
         "Backup source URL field on stream edit; failover when primary probe fails",
-
         "Xtream get_live_categories scoped to line bouquets (fixes empty Entertainment category in Smarters)"
-
       ]
-
     },
-
     {
-
       "version": "1.7.3",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
-      "summary": "HLS→MPEG-TS remux for IPTV Smarters (.ts live URLs).",
-
+      "summary": "HLS\u2192MPEG-TS remux for IPTV Smarters (.ts live URLs).",
       "fixes": [
-
-        "IPTV Smarters playback error on HLS channels — /live/…/id.ts now streams real MPEG-TS via ffmpeg remux",
-
+        "IPTV Smarters playback error on HLS channels \u2014 /live/\u2026/id.ts now streams real MPEG-TS via ffmpeg remux",
         "HLS segment relay allows CDN hosts beyond the root manifest domain"
-
       ]
-
     },
-
     {
-
       "version": "1.7.2",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
-      "summary": "Full HLS relay for direct-source channels — fixes play-then-stop on Smarters.",
-
+      "summary": "Full HLS relay for direct-source channels \u2014 fixes play-then-stop on Smarters.",
       "changelog": [
-
         "HLS segments and sub-playlists now proxy through the panel instead of hitting upstream CDN directly",
-
         "Stream logs show live viewers and HLS relay errors for direct-source channels (no ffmpeg process)"
-
       ],
-
       "fixes": [
-
         "BBC ONE and other HLS direct channels stopping after a few seconds in IPTV Smarters",
-
-        "Empty stream logs for direct relay channels — live viewer activity now visible"
-
+        "Empty stream logs for direct relay channels \u2014 live viewer activity now visible"
       ]
-
     },
-
     {
-
       "version": "1.7.1",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
       "summary": "Panel UX polish, update-banner fix, and IPTV Smarters HLS playback fix.",
-
       "changelog": [
-
-        "Streaming Servers nav — Engine, Transcoding Studio, and Health moved below Cache / Redis",
-
+        "Streaming Servers nav \u2014 Engine, Transcoding Studio, and Health moved below Cache / Redis",
         "Panel UI zoomed out to 1-Stream / XUI-style density",
-
         "Update complete banner no longer reappears after Reload now"
-
       ],
-
       "fixes": [
-
-        "IPTV Smarters playback errors on HLS channels (BBC ONE, etc.) — panel serves HLS manifest instead of redirect",
-
+        "IPTV Smarters playback errors on HLS channels (BBC ONE, etc.) \u2014 panel serves HLS manifest instead of redirect",
         "Xtream direct_source no longer bypasses panel with raw upstream URLs",
-
         "Completed panel updates auto-clear from server after dismiss or reload"
-
       ]
-
     },
-
     {
-
       "version": "1.6.6",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
       "summary": "Enterprise feature packs: GPU transcoding, intelligent LB, archive, security shield, analytics AI, DVR, marketplace.",
-
       "changelog": [
-
-        "Transcoding Pro Pack — NVENC/VAAPI/QSV GPU ladders, 4K/HEVC, auto-fallback profiles",
-
-        "Intelligent LB Pack — health-check failover, geo + bandwidth-aware routing",
-
-        "Archive & Timeshift Pack — EPG-linked recording, 7–30 day retention, HLS/DASH output",
-
-        "Security Shield Pack — IPQualityScore + MaxMind, VPN/proxy/datacenter auto-block, webhooks",
-
-        "Analytics + AI Pack — churn prediction, regional rankings, SSE real-time monitor",
-
+        "Transcoding Pro Pack \u2014 NVENC/VAAPI/QSV GPU ladders, 4K/HEVC, auto-fallback profiles",
+        "Intelligent LB Pack \u2014 health-check failover, geo + bandwidth-aware routing",
+        "Archive & Timeshift Pack \u2014 EPG-linked recording, 7\u201330 day retention, HLS/DASH output",
+        "Security Shield Pack \u2014 IPQualityScore + MaxMind, VPN/proxy/datacenter auto-block, webhooks",
+        "Analytics + AI Pack \u2014 churn prediction, regional rankings, SSE real-time monitor",
         "DVR Pack + expanded client portal (password, devices) + PWA manifest + marketplace"
-
       ],
-
       "fixes": [
-
         "Geo LB and intelligent LB now wired into live playback routing",
-
         "Connection geography feeds analytics dashboards"
-
       ]
-
     },
-
     {
-
       "version": "1.6.5",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
       "summary": "Full WebRTC stack, geo LB, reseller guards, line templates, and safe updates.",
-
       "changelog": [
-
-        "Full WebRTC playback via MediaMTX WHEP — sub-second to ~3s latency with HLS fallback",
-
+        "Full WebRTC playback via MediaMTX WHEP \u2014 sub-second to ~3s latency with HLS fallback",
         "WebRTC player page, ICE/TURN settings, install-mediamtx-webrtc.sh for stream servers",
-
         "Geo-aware load balancing routes playback to nearest edge server",
-
         "VPN auto-blocklist, connection geography analytics, FFmpeg transcode profiles",
-
         "Line templates, sub-reseller max-lines and bouquet enforcement",
-
         "Safe panel updates with automatic rollback (v1.6.4+)"
-
       ],
-
       "fixes": [
-
         "Customer panel offline after failed auto-update",
-
         "Geo LB countries on servers were not used during playback"
-
       ]
-
     },
-
     {
-
       "version": "1.6.4",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
-      "summary": "Safe panel updates: automatic rollback and recovery if build fails — panel stays online.",
-
+      "summary": "Safe panel updates: automatic rollback and recovery if build fails \u2014 panel stays online.",
       "changelog": [
-
         "Updates back up .next before building and restore the previous build if npm run build fails",
-
-        "New panel-update-recover.sh — auto rollback, rebuild, and restart after interrupted updates",
-
+        "New panel-update-recover.sh \u2014 auto rollback, rebuild, and restart after interrupted updates",
         "Health watchdog and panel-restart-safe.sh call recover when .next is missing",
-
         "Failed updates always attempt recovery so the panel is not left offline at 82%"
-
       ],
-
       "fixes": [
-
         "Panel went offline when auto-update stopped PM2 and deleted .next but build never finished",
-
-        "Repeated crash on customer VPS during v1.6.0 → latest update attempts"
-
+        "Repeated crash on customer VPS during v1.6.0 \u2192 latest update attempts"
       ]
-
     },
-
     {
-
       "version": "1.6.3",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
       "summary": "Panel update progress: live build sub-steps, elapsed time, and faster VPS builds.",
-
       "changelog": [
-
         "Update banner shows elapsed time, typical step duration, and completed steps checklist",
-
         "Build progress now streams live from Next.js (compiling, generating pages, standalone packaging) instead of stuck at 82%",
-
-        "Settings → Updates page shows the same detailed sub-progress",
-
+        "Settings \u2192 Updates page shows the same detailed sub-progress",
         "VPS builds skip TypeScript type-check during update for faster npm run build"
-
       ],
-
       "fixes": [
-
         "Progress bar appeared frozen at 82% during npm run build even though the update was still running"
-
       ]
-
     },
-
     {
-
       "version": "1.6.2",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
       "summary": "Manage UI polish: server actions, line downloads, bouquets, sub-resellers, and Add Server improvements.",
-
       "changelog": [
-
-        "Manage Servers: larger Actions button with full menu — easier to tap on desktop and mobile",
-
-        "Manage Lines: expanded Download line menu — M3U file download, EPG, Stalker, web player, Enigma2, copy credentials",
-
+        "Manage Servers: larger Actions button with full menu \u2014 easier to tap on desktop and mobile",
+        "Manage Lines: expanded Download line menu \u2014 M3U file download, EPG, Stalker, web player, Enigma2, copy credentials",
         "Add Server: example placeholders and primary network interface auto-suggested from existing servers",
-
-        "Manage Streams: dedicated XUI table at Content → Streams",
-
+        "Manage Streams: dedicated XUI table at Content \u2192 Streams",
         "Manage Bouquets: XUI-style table with search, pagination, and quick enable/disable",
-
         "Sub-resellers: richer admin table with credits, lines, group, status, and actions"
-
       ],
-
       "fixes": [
-
         "Server action menus no longer clipped inside data tables"
-
       ]
-
     },
-
     {
-
       "version": "1.6.1",
-
       "date": "2026-06-26",
-
       "channel": "stable",
-
       "summary": "XUI-style content management: servers, streams, movies, series, and episodes overhaul.",
-
       "changelog": [
-
         "Manage Servers: expanded action menu (health, LB, connections, enable/disable, mark online), table default view, server tree removed",
-
         "Main panel server auto-marked online on fresh installs",
-
         "Manage Streams / Movies / Series: XUI toolbar with search, category & status filters, bulk enable/disable/delete, row actions",
-
         "Manage Episodes: full table with series/season filters and bulk delete",
-
         "Add Episode & Add Series: collapsible sections matching Add Movie layout",
-
         "Manage Streams split view: mass edit and stream health shortcuts",
-
         "Webplayer CORS + demo playback fix for panel.nexlify.live lines"
-
       ],
-
       "fixes": []
-
     },
-
     {
-
       "version": "1.6.0",
-
       "date": "2026-06-25",
-
       "channel": "stable",
-
       "summary": "Major v1.6.0: Anti-Sharing & Scalability, Advanced Monitoring, Mass Operations, Migration Tools, and Security hardening.",
-
       "changelog": [
-
         "ActiveCode / Device-Bound Authentication: bind subscriptions to specific device IDs for strongest anti-sharing protection",
-
         "Stream Fingerprint / Invisible Watermarking: trace leaks back to individual subscribers with unique tokens",
-
         "Same-IP / Multi-Login Detection + Auto Actions: real-time detection with auto-ban, disable, or notify",
-
         "Load Balancer Shared State: unlimited LB sessions with shared state across all load balancers",
-
         "TMDB Auto-Sync: automatic metadata, posters, descriptions, seasons/episodes for Movies & Series",
-
         "Mass Edit / Bulk Operations: bulk update, enable, disable, delete, assign bouquets on Lines, Streams, Movies, Series, MAG/Enigma devices",
-
         "Auto M3U Sync + Auto Channel Mapping: one-click sync from provider URLs with automatic channel-to-EPG mapping",
-
         "Advanced EPG Auto-Assignment: mass auto-mapping with 95%+ accuracy target, multiple sources, improved cron UI",
-
         "Auto Issue Fixing: smart analyzer detects audio loss, loops, freezes, and applies zero-downtime source swapping",
-
         "Real-time Down Source Monitoring + Alerts: health checks, bitrate monitoring, SourceMonitorAlert notifications",
-
         "Apps Lock: restrict subscriptions to specific player apps (iOS, Android, Web, MAG, Enigma, SmartTV, Kodi)",
-
         "Reseller API Keys: official external API with granular permissions and IP whitelisting for reseller automation",
-
         "xDrive / Encrypted Cloud Backup: encrypted backups with S3/GCS/Azure/xDrive support and configurable retention",
-
         "Server Cleaner: automated maintenance tasks (orphaned streams, expired lines, old logs, temp files, DB vacuum, broken streams)",
-
         "Custom Expiry Videos: branded messages when lines expire, suspend, or run low on credits",
-
         "Migration Tools: automated import from Xtream UI, XUI, NXT, WHMCS with selectable item types",
-
         "Connection Geography: live connections world map with country, region, city, bandwidth tracking",
-
         "Stream Health Dashboard: per-stream health checks with response time, bitrate, audio/video tracks, freeze/loop detection",
-
         "Live VideoLog: real-time viewer activity logging per stream and line"
-
       ],
-
       "fixes": [
-
         "Prisma schema expanded with 19 new models for v1.6.0 features",
-
         "Middleware now enforces Apps Lock and Device Binding on all playback paths",
-
         "Load Balancer session sharing uses explicit relation names to prevent ambiguity",
-
         "All new admin settings pages include search, filters, bulk actions, and CSV export"
-
       ]
-
     },
-
     {
-
       "version": "1.5.8",
-
       "date": "2026-06-25",
-
       "channel": "stable",
-
       "summary": "Full audit fixes, sidebar navigation improvements, EPG real data, App Builder APK generation, and safe PM2 restart.",
-
       "changelog": [
-
         "Sidebar navigation: renamed 'Created Channels' to 'Create 24/7 Channel', added Import M3U link, removed EPG Guide Browser",
-
         "Sidebar pathActive: parent categories no longer highlight when on action pages (add, edit, settings, etc.)",
-
         "Manage Lines: wrapped in form with autoComplete=off to prevent Google password save prompts",
-
         "EPG sources: updated URLs to .xml.gz format, fixed 404 errors",
-
         "EPG Calendar: now shows real program data from Prisma EpgProgram database instead of mock data",
-
         "Manage Streams: added search toolbar, stream count display, improved selected stream header layout",
-
         "VOD content: redesigned with 3 professional cards (Movies, TV Series, VOD Proxy)",
-
         "App Builder: added AppBuild Prisma model with real queue/download APK generation flow",
-
         "PM2 restart: added kill_timeout, wait_ready, listen_timeout for cluster mode stability",
-
         "Standalone output: Next.js build now uses output: 'standalone' for optimized deployment",
-
         "New settings pages: Server Guard, Performance Core, Auto Fix, LB Redirect, Cloud Backup, Server Cleaner, VOD Proxy, Apps Lock, Stream Analyzer, Source Swap, Source Monitor, Prefix Manager, Batch Manager, Expiry Videos, Disk Monitor"
-
       ],
-
       "fixes": [
-
-        "Orphaned next-server process holding port 13000 causing PM2 EADDRINUSE crashes — fixed with pm2-restart.sh cleanup script",
-
-        "Browser cache showing old sidebar content after updates — added cache-busting via version bump",
-
+        "Orphaned next-server process holding port 13000 causing PM2 EADDRINUSE crashes \u2014 fixed with pm2-restart.sh cleanup script",
+        "Browser cache showing old sidebar content after updates \u2014 added cache-busting via version bump",
         "EPG calendar date navigation and time-slot display improvements",
-
         "Updates page now shows correct latest version and release notes"
-
       ]
-
     },
-
     {
-
       "version": "1.5.7",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
-      "summary": "Safe panel restart after auto-updates — panel no longer goes offline when updates finish.",
-
+      "summary": "Safe panel restart after auto-updates \u2014 panel no longer goes offline when updates finish.",
       "changelog": [
-
         "panel-restart-safe.sh: nexlify-only restart during updates (does not kill nexlify-cron)",
-
         "Background update worker runs in setsid so it survives PM2 recycle",
-
         "Minute health watchdog auto-restarts panel if nexlify is down"
-
       ],
-
       "fixes": [
-
         "Auto-update no longer leaves /login unreachable after the pm2 restart step",
-
         "fix-panel-restart.sh one-shot upgrade for existing installs"
-
       ]
-
     },
-
     {
-
       "version": "1.5.6",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
-      "summary": "Fix Settings → Updates crash when loading release notes from nexlify.live.",
-
+      "summary": "Fix Settings \u2192 Updates crash when loading release notes from nexlify.live.",
       "changelog": [
-
         "Normalize marketing and panel release feed formats in fetchNexlifyReleasesFeed",
-
         "Fall back to bundled panel-releases.json when remote feed fails",
-
         "Marketing /api/panel-releases now serves canonical panel format"
-
       ],
-
       "fixes": [
-
-        "Settings → Updates no longer throws when release entries lack changelog/fixes arrays"
-
+        "Settings \u2192 Updates no longer throws when release entries lack changelog/fixes arrays"
       ]
-
     },
-
     {
-
       "version": "1.5.5",
-
       "date": "2026-06-18",
-
       "channel": "stable",
-
       "summary": "Manage streams UX, built-in DDoS shield, source probe on Add Stream, and automatic tarball updates for all panels.",
-
       "changelog": [
-
         "Manage Streams under Live / Radio / Channel with split layout and verify panel",
-
         "Check / probe source on Add Stream before saving",
-
         "Built-in DDoS shield on playback and Xtream API paths (Security settings)",
-
         "Automatic panel updates for tarball installs via apply-panel-fast-update.sh",
-
         "Hourly auto-update cron applies new releases when enabled (default on)"
-
       ],
-
       "fixes": [
-
         "Stream source URL normalization (https:/ typo) on save and probe",
-
         "Manage streams and legacy /admin/streams routes unified under /admin/content/streams"
-
       ]
-
     },
-
     {
-
       "version": "1.5.4",
-
       "date": "2026-06-24",
-
       "channel": "stable",
-
       "summary": "IPTV playback, EPG export, migration discoverability, and installer hardening for all customer VPS types.",
-
       "changelog": [
-
         "xmltv.php EPG export for subscriber lines (portal + players)",
-
         "/movie/ proxy routes public for integration VOD in M3U",
-
         "Fix Xtream server_info port to match nginx public URL (not :8080/:3000)",
-
         "ABR multi-bitrate M3U entries use authenticated /live/ URLs",
-
         "Adult content restriction enforced on playback",
-
         "Demo sandbox blocks player_api, get.php, live, movie, stalker, xmltv",
-
         "Reseller streaming-info: correct Stalker URL (load.php)",
-
         "Panel migration + M3U import in admin sidebar",
-
         "One-click installer v161: login redirect fix, license env, smoke tests"
-
       ],
-
       "fixes": [
-
         "Portal subscriber URLs use correct public origin behind nginx",
-
         "portal.php redirects to /portal",
-
         "Installer no longer sets STREAM_HTTP_PORT=3001 on panel-only VPS"
-
       ]
-
     },
-
     {
-
       "version": "1.5.3",
-
       "date": "2026-06-11",
-
       "channel": "stable",
-
       "summary": "Configure-ready polish, website 50% coupon popup, portal billing links, and operator tooling.",
-
       "notes": [
-
         "Marketing site: NEXLIFY50 coupon popup (50% off, 30 redemptions) on nexlify.live.",
-
         "Run npm run db:seed or upsert coupon NEXLIFY50 on production after deploy.",
-
         "Demo panel (panel.demo) blocks all mutations except login/logout."
-
       ],
-
       "changelog": [
-
         "Website 50% coupon popup with remaining uses, session dismiss, and register/pricing re-show",
-
         "Coupon API: public GET status, atomic redemption on checkout, NEXLIFY50 seed (30 max)",
-
         "PayPal Orders v2 create-order API wired to billing settings",
-
         "Features page: honest Included vs Roadmap matrix for v1.5.3",
-
         "Subscriber portal: renew/top-up links, M3U download, EPG link, ticket create",
-
         "i18n: login, portal, and key settings strings in en, es, fr, ar",
-
         "White-label: reseller group logo and accent on login and panel shell",
-
         "Fix panel update auto-download toggle persistence",
-
         "XUI modules: profiles list, hmac/hmacs to API docs, recording to webhooks, mag_events and videolog live",
-
         "MAG/Enigma add forms: MAC normalization hints",
-
         "Stream health browser: clients, logs link, one-click error fix",
-
         "Server install wizard: certbot and sysctl hints",
-
         "Full backup: ZIP/gzip export, S3 env placeholders, scheduled cron setting",
-
         "EPG cron fetches SchedulesDirect and WebGrab+ configured sources",
-
         "ABR variant ladder hints in Xtream live stream entries",
-
         "Commission report: CSV export and date range filter",
-
         "Reseller SMS on low credits via subscription notify cron",
-
         "Demo panel read-only API guard: POST/PUT/PATCH/DELETE blocked except login",
-
         "PostgreSQL pg_dump cron script and admin settings doc link",
-
         "Stream agent upgrade path documented in server settings"
-
       ],
-
       "fixes": [
-
         "Panel Updates page no longer forces auto-download on every load"
-
       ]
-
     },
-
     {
-
       "version": "1.5.2",
-
       "date": "2026-06-11",
-
       "channel": "stable",
-
       "summary": "SMS and Telegram alerts, subscriber portal, coupons, stream failover, and a full operator feature set.",
-
       "notes": [
-
         "Configure Twilio and Telegram under Settings before enabling SMS or ops alerts.",
-
         "Subscribers can log in at /portal with line username and password.",
-
         "Run prisma db push on the VPS after deploy for new Coupon and LeakAuditLog tables."
-
       ],
-
       "changelog": [
-
         "SMS notifications: Twilio settings plus automated expiry, renewal, suspension, and low-credit alerts",
-
         "Multi-device add-ons: extra device slots on packages applied to line maxConnections",
-
         "Enhanced notifications: email, SMS, and in-panel alerts wired to cron and billing webhooks",
-
         "Catch-up/DVR: archive presets and polished archive page",
-
         "EPG: SchedulesDirect and WebGrab+Plus source types with URL templates",
-
         "ABR auto-switch: stream setting plus Xtream abr_auto_switch server_info flag",
-
         "Auto-fix dead links: cron probes streams, restarts failures, uses backup URLs",
-
         "Security: enforce 2FA for resellers, leak audit log, playback token TTL, geo docs",
-
         "Telegram monitoring alerts for offline streams, high load, and abuse",
-
         "Stream health dashboard with probe status and connections per channel",
-
         "Usage reports and reseller commission/profit report pages",
-
         "Coupons: Prisma model, admin CRUD, checkout validation API",
-
         "PayPal settings placeholder and billing coupon hook",
-
         "White-label: reseller group logo, accent color, support email",
-
         "i18n scaffold: en, es, fr, ar with top-nav language switcher",
-
         "Subscriber portal at /portal with expiry, bouquets, player setup guides",
-
         "Stream backup URL failover in resolve-stream-url",
-
         "Cloud backup: full JSON export and settings restore upload",
-
         "Scheduled tasks settings UI for EPG, channel refresh, and dead-link probes",
-
         "Marketing /features comparison page on nexlify.live"
-
       ],
-
       "fixes": []
-
     },
-
     {
-
       "version": "1.5.1",
-
       "date": "2026-06-10",
-
       "channel": "stable",
-
       "summary": "What's new modal after panel updates and synced release notes across panel and website.",
-
       "notes": [
-
         "After updating or reloading, admins see a What's new popup for the installed version.",
-
         "Release notes are synced from one source to the panel API and nexlify.live."
-
       ],
-
       "changelog": [
-
         "What's new modal: pops once per version after a panel update or first admin login on a new version",
-
         "Synced release feed: single panel-releases.json drives panel API and marketing site updates page"
-
       ],
-
       "fixes": []
-
     },
-
     {
-
       "version": "1.5.0",
-
       "date": "2026-06-10",
-
       "channel": "stable",
-
       "summary": "XUI-style VOD import, sidebar persistence, expanded settings, and panel update reliability.",
-
       "notes": [
-
         "Import Movies and Import Series default to M3U/URL with dual-list selection and TMDB auto-fetch.",
-
         "Sidebar sections stay expanded when navigating; no more collapsing the active category.",
-
         "Panel update polling is lighter; the Updates page no longer hangs on a full reload during background jobs."
-
       ],
-
       "changelog": [
-
         "Import Movies & Series: XUI-style bulk import: M3U/URL default, dual-listbox picker, auto category, direct source, TMDB auto-fetch, bouquets, preview",
-
         "Sidebar category persistence: expanded groups saved in session storage across navigation",
-
         "Sub-reseller help: descriptive guidance on groups and admin sub-reseller list",
-
         "Streaming settings: on-demand probesize with auto recommended value (128000 bytes)",
-
         "Cache & Redis: expanded TTL options, key prefix, maxmemory guidance, flush-on-update toggle",
-
         "TMDB settings: fallback language, import auto-fetch, cache TTL, operator notes",
-
         "Panel update UX: lightweight job polling API, fetch timeouts, immediate progress after start"
-
       ],
-
       "fixes": [
-
         "Panel update no longer blocks Updates page on please-wait during background jobs",
-
         "Sidebar accordion no longer collapses the active category on every route change"
-
       ]
-
     },
-
     {
-
       "version": "1.4.0",
-
       "date": "2026-06-06",
-
       "channel": "stable",
-
       "summary": "In-panel notifications, reseller alert widget, server tree, on-demand imports, and branding fixes.",
-
       "notes": [
-
-        "After upgrading, use Admin → Updates or apply-panel-fast-update.sh for fast patch deploys.",
-
+        "After upgrading, use Admin \u2192 Updates or apply-panel-fast-update.sh for fast patch deploys.",
         "M3U channel imports default to on-demand; uncheck on the import form for 24/7 live restreaming."
-
       ],
-
       "changelog": [
-
         "In-panel notification system for admins and resellers",
-
         "Streaming servers server tree on Manage Servers",
-
         "M3U and channel imports default to on-demand",
-
         "XUI-style admin and reseller dashboards"
-
       ],
-
       "fixes": [
-
         "502 Bad Gateway after deploys when PM2 restart silently failed",
-
         "Favicon showed default Next.js triangle instead of NX icon"
-
       ]
-
     }
-
   ]
-
 }
-

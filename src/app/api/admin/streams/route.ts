@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.get("search")?.trim();
   const categoryId = req.nextUrl.searchParams.get("categoryId")?.trim();
   const serverId = req.nextUrl.searchParams.get("serverId")?.trim();
+  const statusParam = req.nextUrl.searchParams.get("status")?.trim()?.toLowerCase();
 
   const where: Prisma.StreamWhereInput = {};
 
@@ -76,6 +77,9 @@ export async function GET(req: NextRequest) {
     where.type = typeParam as StreamType;
 
   }
+
+  if (statusParam === "active") where.isActive = true;
+  if (statusParam === "inactive") where.isActive = false;
 
   if (vodMode && Object.values(VodMode).includes(vodMode as VodMode)) {
 
