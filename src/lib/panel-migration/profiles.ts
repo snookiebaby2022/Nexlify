@@ -152,7 +152,14 @@ export type Phase3AliasKind =
   | "epgLanguages"
   | "crontab"
   | "profiles"
-  | "creditLogs";
+  | "creditLogs"
+  | "outputDevices"
+  | "outputFormats"
+  | "streamOptions"
+  | "streamArguments"
+  | "streamErrors"
+  | "lineDivergence"
+  | "mysqlSyslog";
 
 type Phase3AliasMap = Partial<Record<Phase3AliasKind, string[]>>;
 
@@ -268,6 +275,13 @@ export const PHASE3_TABLE_ALIASES: {
       "credits_logs",
       "CreditTransaction",
     ],
+    outputDevices: ["output_devices", "output_device", "devices_output"],
+    outputFormats: ["output_formats", "output_format", "stream_formats"],
+    streamOptions: ["streams_options", "stream_options"],
+    streamArguments: ["streams_arguments", "stream_arguments", "ffmpeg_arguments"],
+    streamErrors: ["streams_errors", "stream_errors", "stream_error_logs"],
+    lineDivergence: ["lines_divergence", "line_divergence", "divergence"],
+    mysqlSyslog: ["mysql_syslog", "mysql_logs", "sql_syslog", "panel_syslog"],
   },
   bySource: {
     xui: {

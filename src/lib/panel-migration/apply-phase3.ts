@@ -97,6 +97,10 @@ export async function applyMigrationPhase3(
   phase3.crontab ??= [];
   phase3.profiles ??= [];
   phase3.creditLogs ??= [];
+  phase3.streamOptions ??= [];
+  phase3.streamArguments ??= [];
+  phase3.streamErrors ??= [];
+  phase3.extraTableBlobs ??= {};
   result.accessCodes ??= { imported: 0, skipped: 0 };
   result.blockedUserAgents ??= { imported: 0, skipped: 0 };
   result.userGroups ??= { imported: 0, skipped: 0 };
@@ -738,6 +742,46 @@ export async function applyMigrationPhase3(
         rows: phase3.watchRefresh,
         note: "Sample of XUI watch_refresh queue; not replayed automatically.",
       });
+    }
+
+    // Stream errors → StreamIssue
+    for (let i = 0; i < phase3.streamErrors.length; i++) {
+      const err = phase3.streamErrors[i];
+      onProgress?.("streamErrors", i + 1, phase3.streamErrors.length);
+      const streamId = err.streamLegacyId
+        ? streamIdByLegacy.get(err.streamLegacyId)
+        : null;
+      if (!streamId) {
+        result.extrasBlobs.skipped++;
+        continue;
+      }
+      try {
+        await prisma.streamIssue.create({
+          data: {
+            streamId,
+            issueType: "source_down",
+            severity: "warning",
+            detectedAt: err.createdAt ?? undefined,
+            fixResult: err.message.slice(0, 2000),
+          },
+        });
+        result.extrasBlobs.imported++;
+      } catch {
+        result.extrasBlobs.skipped++;
+      }
+    }
+
+    // Stream options / arguments as review blobs
+    if (phase3.streamOptions.length) {
+      await storeBlob("streams_options", phase3.streamOptions.slice(0, 5000));
+    }
+    if (phase3.streamArguments.length) {
+      await storeBlob("streams_arguments", phase3.streamArguments.slice(0, 5000));
+    }
+
+    // Extra table blobs (output_devices, formats, divergence, mysql_syslog, epg_api sample, …)
+    for (const [key, value] of Object.entries(phase3.extraTableBlobs ?? {})) {
+      await storeBlob(key, value);
     }
 
     // Credit logs

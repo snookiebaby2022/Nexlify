@@ -123,6 +123,10 @@ export function loadPhase3FromSql(
     crontab: [],
     profiles: [],
     creditLogs: [],
+    streamOptions: [],
+    streamArguments: [],
+    streamErrors: [],
+    extraTableBlobs: {},
   };
 
   const find = (kind: Phase3AliasKind) => findMerged(allTables, aliasesFor(source, kind));
@@ -672,44 +676,107 @@ export function loadPhase3FromSql(
     }
   }
 
-  // --- extras: epg_api channel catalog ---
+  // --- extras: epg_api channel / programme catalog (resilient column matching) ---
   const epgApi = find("epgApi");
   if (epgApi) {
     let n = 0;
+    let asPrograms = 0;
+    const cols = epgApi.columns.map((c) => c.toLowerCase());
     for (const row of epgApi.rows) {
       if (n >= EPG_API_CAP) break;
       const r = rowToRecord(epgApi.columns, row);
-      const channelId = String(
-        r.channel_id ?? r.epg_channel_id ?? r.xmltv_id ?? r.id ?? ""
-      ).trim();
+      const pick = (...keys: string[]) => {
+        for (const k of keys) {
+          const v = r[k];
+          if (v != null && String(v).trim() !== "" && String(v).trim() !== "0") {
+            return String(v).trim();
+          }
+        }
+        for (const [k, v] of Object.entries(r)) {
+          if (keys.some((want) => k.includes(want.replace(/_/g, ""))) || keys.some((want) => k.includes(want))) {
+            if (v != null && String(v).trim() !== "" && String(v).trim() !== "0") {
+              return String(v).trim();
+            }
+          }
+        }
+        return "";
+      };
+
+      let channelId = pick(
+        "channel_id",
+        "epg_channel_id",
+        "xmltv_id",
+        "tvg_id",
+        "channel",
+        "ch_id",
+        "stream_id",
+        "id"
+      );
+      let name = pick(
+        "name",
+        "channel_name",
+        "title",
+        "display_name",
+        "epg_name",
+        "stream_display_name"
+      );
+      // Positional fallback when CREATE TABLE names don't match known aliases.
+      if (!channelId) {
+        const vals = row
+          .map((v) => (v == null ? "" : String(v).trim()))
+          .filter((v) => v !== "" && v !== "0" && v !== "NULL");
+        if (vals.length) {
+          channelId = vals[0].slice(0, 200);
+          if (!name && vals.length > 1) name = vals[1].slice(0, 300);
+        }
+      }
       if (!channelId) continue;
+
       phase3.epgApiChannels.push({
-        sourceLegacyId:
-          r.epg_id != null && String(r.epg_id) !== "0"
-            ? String(r.epg_id)
-            : r.source_id != null
-              ? String(r.source_id)
-              : undefined,
+        sourceLegacyId: pick("epg_id", "source_id", "epg") || undefined,
         channelId: channelId.slice(0, 200),
-        name: r.name
-          ? String(r.name).slice(0, 300)
-          : r.channel_name
-            ? String(r.channel_name).slice(0, 300)
-            : undefined,
-        icon: r.icon ? String(r.icon).slice(0, 1000) : undefined,
-        language: r.lang
-          ? String(r.lang)
-          : r.language
-            ? String(r.language)
-            : undefined,
+        name: name ? name.slice(0, 300) : undefined,
+        icon: pick("icon", "logo", "image", "stream_icon")?.slice(0, 1000) || undefined,
+        language: pick("lang", "language", "epg_lang") || undefined,
       });
       n++;
+
+      // Some XUI epg_api rows are programmes (start/stop + title).
+      const title = pick("title", "programme", "program", "name");
+      const start = unixToDate(r.start ?? r.start_timestamp ?? r.date_start ?? r.begin);
+      const stop = unixToDate(r.end ?? r.stop ?? r.stop_timestamp ?? r.date_end ?? r.finish);
+      if (title && start && stop && stop > start && asPrograms < EPG_PROGRAM_CAP) {
+        phase3.epgPrograms.push({
+          sourceLegacyId: pick("epg_id", "source_id") || undefined,
+          channelId: channelId.slice(0, 200),
+          title: title.slice(0, 500),
+          description: pick("description", "desc", "plot")?.slice(0, 4000) || undefined,
+          start,
+          stop,
+        });
+        asPrograms++;
+      }
     }
     if (epgApi.rows.length > EPG_API_CAP) {
       warnings.push(
         `Capped epg_api import at ${EPG_API_CAP} of ${epgApi.rows.length} rows.`
       );
     }
+    if (n === 0) {
+      warnings.push(
+        `epg_api: 0 rows mapped from ${epgApi.rows.length} (columns: ${cols.slice(0, 12).join(", ") || "none"}). Storing raw sample blob.`
+      );
+    } else {
+      warnings.push(`Mapped ${n} epg_api channel row(s)${asPrograms ? `, ${asPrograms} as programmes` : ""}.`);
+    }
+    // Always keep a reviewable sample of the raw table.
+    phase3.extraTableBlobs = phase3.extraTableBlobs ?? {};
+    phase3.extraTableBlobs.epg_api = {
+      total: epgApi.rows.length,
+      mapped: n,
+      columns: epgApi.columns,
+      sample: epgApi.rows.slice(0, 50).map((row) => rowToRecord(epgApi.columns, row)),
+    };
   }
 
   // --- extras: epg languages ---
@@ -797,8 +864,121 @@ export function loadPhase3FromSql(
     }
   }
 
+  // --- extras: stream options / arguments / errors ---
+  const OPT_CAP = 5000;
+  const streamOpts = find("streamOptions");
+  if (streamOpts) {
+    let n = 0;
+    for (const row of streamOpts.rows) {
+      if (n >= OPT_CAP) break;
+      const r = rowToRecord(streamOpts.columns, row);
+      phase3.streamOptions.push({
+        streamLegacyId:
+          r.stream_id != null && String(r.stream_id) !== "0"
+            ? String(r.stream_id)
+            : undefined,
+        argumentLegacyId:
+          r.argument_id != null
+            ? String(r.argument_id)
+            : r.option_id != null
+              ? String(r.option_id)
+              : undefined,
+        key: r.name ? String(r.name) : r.argument ? String(r.argument) : undefined,
+        value: r.value != null ? String(r.value).slice(0, 2000) : undefined,
+      });
+      n++;
+    }
+  }
+  const streamArgs = find("streamArguments");
+  if (streamArgs) {
+    let n = 0;
+    for (const row of streamArgs.rows) {
+      if (n >= OPT_CAP) break;
+      const r = rowToRecord(streamArgs.columns, row);
+      phase3.streamArguments.push({
+        argumentLegacyId: r.id != null ? String(r.id) : undefined,
+        key: String(r.name ?? r.argument ?? r.key ?? "").trim() || undefined,
+        value: r.value != null ? String(r.value).slice(0, 2000) : r.wargument != null ? String(r.wargument).slice(0, 2000) : undefined,
+      });
+      n++;
+    }
+  }
+  const streamErrors = find("streamErrors");
+  if (streamErrors) {
+    let n = 0;
+    for (const row of streamErrors.rows) {
+      if (n >= LOG_CAP) break;
+      const r = rowToRecord(streamErrors.columns, row);
+      const message = String(
+        r.error ?? r.message ?? r.msg ?? r.description ?? ""
+      ).trim();
+      if (!message) continue;
+      phase3.streamErrors.push({
+        streamLegacyId:
+          r.stream_id != null && String(r.stream_id) !== "0"
+            ? String(r.stream_id)
+            : undefined,
+        message: message.slice(0, 2000),
+        createdAt: unixToDate(r.date ?? r.created ?? r.created_at ?? r.timestamp),
+      });
+      n++;
+    }
+  }
+
+  // --- extras: output devices/formats, divergence, mysql syslog → blobs (+ syslog → logs) ---
+  function tableBlob(kind: Phase3AliasKind, key: string, sample = 100) {
+    const table = find(kind);
+    if (!table?.rows.length) return;
+    phase3.extraTableBlobs = phase3.extraTableBlobs ?? {};
+    phase3.extraTableBlobs[key] = {
+      total: table.rows.length,
+      columns: table.columns,
+      sample: table.rows.slice(0, sample).map((row) => rowToRecord(table.columns, row)),
+    };
+  }
+  tableBlob("outputDevices", "output_devices");
+  tableBlob("outputFormats", "output_formats");
+  tableBlob("lineDivergence", "lines_divergence");
+
+  const mysqlSyslog = find("mysqlSyslog");
+  if (mysqlSyslog) {
+    tableBlob("mysqlSyslog", "mysql_syslog");
+    let n = 0;
+    for (const row of mysqlSyslog.rows) {
+      if (n >= 500) break;
+      const r = rowToRecord(mysqlSyslog.columns, row);
+      const message = String(
+        r.message ?? r.msg ?? r.error ?? r.query ?? r.log ?? ""
+      ).trim();
+      if (!message) continue;
+      phase3.activityLogs.push({
+        action: "mysql_syslog",
+        entity: "mysql",
+        meta: r,
+        createdAt: unixToDate(r.date ?? r.created ?? r.created_at ?? r.timestamp ?? r.time),
+      });
+      n++;
+    }
+  }
+
+  // Also keep capped samples of options/args for review
+  if (phase3.streamOptions.length) {
+    phase3.extraTableBlobs = phase3.extraTableBlobs ?? {};
+    phase3.extraTableBlobs.streams_options = {
+      total: phase3.streamOptions.length,
+      sample: phase3.streamOptions.slice(0, 100),
+    };
+  }
+  if (phase3.streamArguments.length) {
+    phase3.extraTableBlobs = phase3.extraTableBlobs ?? {};
+    phase3.extraTableBlobs.streams_arguments = {
+      total: phase3.streamArguments.length,
+      sample: phase3.streamArguments.slice(0, 100),
+    };
+  }
+
   warnings.push(
-    `Extended import (${source}): ${phase3.providers.length} providers, ${phase3.providerStreamLinks.length} provider↔stream links, ${phase3.watchFolders.length} watch folders, ${phase3.tickets.length} tickets, ${phase3.epgChannels.length} EPG channels, ${phase3.epgPrograms.length} EPG programmes, ${phase3.blockedAsns.length} ASNs, ${phase3.activityLogs.length} log rows, ${phase3.bandwidthSnapshots.length} stats snapshots${phase3.settingsRaw ? ", settings blob" : ""}, ${phase3.accessCodes.length} access codes, ${phase3.blockedUserAgents.length} blocked UAs, ${phase3.userGroups.length} groups, ${phase3.liveConnections.length} live sessions, ${phase3.onDemandStreamLegacyIds.length} on-demand streams, ${phase3.watchCategories.length} watch categories, ${phase3.watchRefresh.length} watch refresh, ${phase3.epgApiChannels.length} epg_api, ${phase3.epgLanguages.length} epg languages, ${phase3.crontab.length} crontab, ${phase3.profiles.length} profiles, ${phase3.creditLogs.length} credit logs.`
+    `Extended import (${source}): ${phase3.providers.length} providers, ${phase3.providerStreamLinks.length} provider↔stream links, ${phase3.watchFolders.length} watch folders, ${phase3.tickets.length} tickets, ${phase3.epgChannels.length} EPG channels, ${phase3.epgPrograms.length} EPG programmes, ${phase3.blockedAsns.length} ASNs, ${phase3.activityLogs.length} log rows, ${phase3.bandwidthSnapshots.length} stats snapshots${phase3.settingsRaw ? ", settings blob" : ""}, ${phase3.accessCodes.length} access codes, ${phase3.blockedUserAgents.length} blocked UAs, ${phase3.userGroups.length} groups, ${phase3.liveConnections.length} live sessions, ${phase3.onDemandStreamLegacyIds.length} on-demand streams, ${phase3.watchCategories.length} watch categories, ${phase3.watchRefresh.length} watch refresh, ${phase3.epgApiChannels.length} epg_api, ${phase3.epgLanguages.length} epg languages, ${phase3.crontab.length} crontab, ${phase3.profiles.length} profiles, ${phase3.creditLogs.length} credit logs, ${phase3.streamOptions.length} stream options, ${phase3.streamArguments.length} stream args, ${phase3.streamErrors.length} stream errors, ${Object.keys(phase3.extraTableBlobs ?? {}).length} extra blobs.`
   );
 
   return { phase3, warnings };

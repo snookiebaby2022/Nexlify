@@ -23,8 +23,8 @@ function obfuscateLicenseKeywords(content) {
     "validateWithVendor",
     "verifyOnlineIfRequired",
     "getOrCreateInstanceId",
-    "startupLicenseValidation",
-    "heartbeatCheck",
+    // Do NOT obfuscate startupLicenseValidation / heartbeatCheck — instrumentation.js
+    // imports them by name; renaming exports breaks startup ("a is not a function").
     "startupValidationOk",
   ];
 
@@ -63,6 +63,10 @@ function processDir(dir) {
       }
     } else if (entry.endsWith(".js")) {
       if (skipFiles.has(entry)) continue;
+      // Also skip any path segment named instrumentation (Next may nest it).
+      if (fullPath.includes(`${join("server", "instrumentation")}`) || fullPath.endsWith(`${join("", "instrumentation.js")}`)) {
+        continue;
+      }
       try {
         const content = readFileSync(fullPath, "utf-8");
         if (
@@ -70,8 +74,7 @@ function processDir(dir) {
           content.includes("activateLicenseKey") ||
           content.includes("clearStoredLicense") ||
           content.includes("validateWithVendor") ||
-          content.includes("startupLicenseValidation") ||
-          content.includes("heartbeatCheck")
+          content.includes("getOrCreateInstanceId")
         ) {
           writeFileSync(fullPath, obfuscateLicenseKeywords(content));
           console.log(`  Obfuscated: ${fullPath}`);

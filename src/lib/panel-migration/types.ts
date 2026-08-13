@@ -304,6 +304,19 @@ export type MigrationProfileRow = {
   options?: unknown;
 };
 
+export type MigrationStreamOptionRow = {
+  streamLegacyId?: string;
+  argumentLegacyId?: string;
+  key?: string;
+  value?: string;
+};
+
+export type MigrationStreamErrorRow = {
+  streamLegacyId?: string;
+  message: string;
+  createdAt?: Date;
+};
+
 export type MigrationCreditLogRow = {
   userLegacyId: string;
   amount: number;
@@ -337,6 +350,11 @@ export type MigrationPhase3Data = {
   crontab: MigrationCrontabRow[];
   profiles: MigrationProfileRow[];
   creditLogs: MigrationCreditLogRow[];
+  streamOptions: MigrationStreamOptionRow[];
+  streamArguments: MigrationStreamOptionRow[];
+  streamErrors: MigrationStreamErrorRow[];
+  /** Extra reference tables stored as PanelSetting JSON blobs. */
+  extraTableBlobs?: Record<string, unknown>;
 };
 
 export type MigrationPhase2Data = {
