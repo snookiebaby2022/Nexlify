@@ -48,6 +48,7 @@ export function PanelMigrateForm() {
   const [importCategories, setImportCategories] = useState(true);
   const [importServers, setImportServers] = useState(true);
   const [importEpg, setImportEpg] = useState(true);
+  const [importPackages, setImportPackages] = useState(true);
   const [skipExisting, setSkipExisting] = useState(true);
   const [clearData, setClearData] = useState(false);
   const [preview, setPreview] = useState("");
@@ -109,6 +110,7 @@ export function PanelMigrateForm() {
       importCategories,
       importServers,
       importEpg,
+      importPackages,
       skipExistingLines: skipExisting,
       skipExistingStreams: skipExisting,
       clearDataBeforeImport: clearData,
@@ -384,6 +386,7 @@ export function PanelMigrateForm() {
             c.categories ? `${c.categories} categories` : null,
             c.servers ? `${c.servers} servers` : null,
             c.epgSources ? `${c.epgSources} EPG sources` : null,
+            c.packages ? `${c.packages} packages` : null,
           ]
             .filter(Boolean)
             .join(", ")
@@ -395,7 +398,8 @@ export function PanelMigrateForm() {
       const warnings = r.warnings ?? [];
       const visibleWarnings = showAllWarnings ? warnings : warnings.slice(0, 8);
       const totalImported = r.bouquets.imported + r.streams.imported + r.lines.imported + r.resellers.imported +
-        r.magDevices.imported + r.enigmaDevices.imported + r.categories.imported + r.servers.imported + r.epgSources.imported;
+        r.magDevices.imported + r.enigmaDevices.imported + r.categories.imported + r.servers.imported + r.epgSources.imported +
+        (r.packages?.imported ?? 0);
       const tablesFound = (data.preview as Record<string, unknown> | undefined)?.tablesFound as
         | { name: string; rows: number; hasColumns: boolean }[]
         | undefined;
@@ -420,6 +424,7 @@ export function PanelMigrateForm() {
           `Categories: +${r.categories.imported} / skipped ${r.categories.skipped}`,
           `Servers: +${r.servers.imported} / skipped ${r.servers.skipped}`,
           `EPG: +${r.epgSources.imported} / skipped ${r.epgSources.skipped}`,
+          r.packages ? `Packages: +${r.packages.imported} / skipped ${r.packages.skipped}` : null,
           visibleWarnings.length ? `Warnings: ${visibleWarnings.join("; ")}` : null,
           !showAllWarnings && warnings.length > 8 ? `... and ${warnings.length - 8} more warnings` : null,
         ]
@@ -686,7 +691,11 @@ export function PanelMigrateForm() {
       <div className="flex flex-wrap gap-4 text-sm">
         <label>
           <input type="checkbox" checked={importBouquets} onChange={(e) => setImportBouquets(e.target.checked)} />{" "}
-          Bouquets / packages
+          Channel bouquets
+        </label>
+        <label>
+          <input type="checkbox" checked={importPackages} onChange={(e) => setImportPackages(e.target.checked)} />{" "}
+          Billing packages
         </label>
         <label>
           <input type="checkbox" checked={importStreams} onChange={(e) => setImportStreams(e.target.checked)} />{" "}

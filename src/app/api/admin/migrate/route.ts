@@ -31,6 +31,7 @@ function applyOptions(body: Record<string, unknown>) {
     importCategories: body.importCategories !== false,
     importServers: body.importServers !== false,
     importEpg: body.importEpg !== false,
+    importPackages: body.importPackages !== false,
     skipExistingLines: body.skipExistingLines !== false,
     skipExistingStreams: body.skipExistingStreams !== false,
     clearDataBeforeImport: Boolean(body.clearDataBeforeImport),
@@ -256,6 +257,9 @@ export async function POST(req: NextRequest) {
             categories: bundle.phase2?.categories.length ?? 0,
             servers: bundle.phase2?.servers.length ?? 0,
             epgSources: bundle.phase2?.epgSources.length ?? 0,
+            packages:
+              (bundle.packages?.length ?? 0) ||
+              (bundle.phase2?.packages?.length ?? 0),
           },
           warnings: bundle.warnings ?? [],
           tablesFound: bundle.tablesFound ?? [],
@@ -327,6 +331,9 @@ export async function POST(req: NextRequest) {
                     categories: bundle.phase2?.categories.length ?? 0,
                     servers: bundle.phase2?.servers.length ?? 0,
                     epgSources: bundle.phase2?.epgSources.length ?? 0,
+                    packages:
+                      (bundle.packages?.length ?? 0) ||
+                      (bundle.phase2?.packages?.length ?? 0),
                   },
                   warnings: bundle.warnings ?? [],
                   tablesFound: bundle.tablesFound ?? [],

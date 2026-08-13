@@ -7,12 +7,20 @@ export type MigrationStreamRow = {
   type?: "LIVE" | "MOVIE" | "SERIES";
   sortOrder?: number;
   streamIcon?: string;
+  backupUrl?: string;
   categoryLegacyId?: string;
   categoryName?: string;
   epgChannelId?: string;
   channelId?: string;
   containerExtension?: string;
   isActive?: boolean;
+  isAdult?: boolean;
+  isRadio?: boolean;
+  seriesName?: string;
+  seasonNum?: number;
+  episodeNum?: number;
+  serverLegacyId?: string;
+  notes?: string;
 };
 
 export type MigrationBouquetRow = {
@@ -38,6 +46,11 @@ export type MigrationLineRow = {
   blockedCountries?: string;
   allowedOutput?: string;
   ownerLegacyId?: string;
+  isTrial?: boolean;
+  isRestreamer?: boolean;
+  allowedUserAgents?: string;
+  disallowedUserAgents?: string;
+  forcedServerLegacyId?: string;
 };
 
 export type MigrationResellerRow = {
@@ -46,6 +59,11 @@ export type MigrationResellerRow = {
   password: string;
   credits?: number;
   isActive?: boolean;
+  email?: string;
+  notes?: string;
+  maxLines?: number;
+  resellerDns?: string;
+  parentLegacyId?: string;
 };
 
 export type MigrationMagRow = {
@@ -65,6 +83,8 @@ export type MigrationCategoryRow = {
   name: string;
   parentLegacyId?: string;
   categoryType?: "LIVE" | "MOVIE" | "SERIES" | "RADIO";
+  isAdult?: boolean;
+  sortOrder?: number;
 };
 
 export type MigrationServerRow = {
@@ -73,6 +93,9 @@ export type MigrationServerRow = {
   host: string;
   port: number;
   protocol?: string;
+  domain?: string;
+  maxClients?: number;
+  privateIp?: string;
 };
 
 export type MigrationEpgRow = {
@@ -81,10 +104,24 @@ export type MigrationEpgRow = {
   country?: string;
 };
 
+/** Billing/duration packages (distinct from channel bouquets when source has days/credits). */
+export type MigrationPackageRow = {
+  legacyId: string;
+  name: string;
+  days?: number;
+  creditCost?: number;
+  maxLines?: number;
+  bouquetLegacyIds?: string[];
+  description?: string;
+  isActive?: boolean;
+  sortOrder?: number;
+};
+
 export type MigrationPhase2Data = {
   categories: MigrationCategoryRow[];
   servers: MigrationServerRow[];
   epgSources: MigrationEpgRow[];
+  packages?: MigrationPackageRow[];
 };
 
 export type MigrationBundle = {
@@ -95,6 +132,7 @@ export type MigrationBundle = {
   resellers?: MigrationResellerRow[];
   magDevices?: MigrationMagRow[];
   enigmaDevices?: MigrationEnigmaRow[];
+  packages?: MigrationPackageRow[];
   phase2?: MigrationPhase2Data;
   /** Warnings from parsing (e.g., tables not found, malformed SQL). */
   warnings?: string[];
@@ -112,6 +150,7 @@ export type MigrationApplyOptions = {
   importCategories?: boolean;
   importServers?: boolean;
   importEpg?: boolean;
+  importPackages?: boolean;
   skipExistingLines?: boolean;
   skipExistingStreams?: boolean;
   clearDataBeforeImport?: boolean;
@@ -133,5 +172,6 @@ export type MigrationApplyResult = {
   categories: { imported: number; skipped: number };
   servers: { imported: number; skipped: number };
   epgSources: { imported: number; skipped: number };
+  packages: { imported: number; skipped: number };
   warnings: string[];
 };

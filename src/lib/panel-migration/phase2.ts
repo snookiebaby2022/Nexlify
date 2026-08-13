@@ -17,6 +17,16 @@ const PHASE2_TABLE_SCORES = {
     penalty: /log|panel/i,
   },
   epg: { patterns: [/^epg_sources?$/i, /^epg$/i], penalty: /program|data/i },
+  packages: {
+    patterns: [
+      /^credit_packages?$/i,
+      /^user_packages?$/i,
+      /^line_packages?$/i,
+      /^plans?$/i,
+      /^packages?$/i,
+    ],
+    penalty: /log|stream/i,
+  },
 } as const;
 
 function scoreTable(name: string, kind: keyof typeof PHASE2_TABLE_SCORES): number {
@@ -51,6 +61,8 @@ export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[]
           ? String(parentRaw)
           : undefined,
       categoryType,
+      isAdult: Number(r.is_adult ?? r.adult ?? 0) === 1,
+      sortOrder: Number(r.sort_order ?? r.order ?? r.cat_order ?? 0) || 0,
     });
   }
   return out;
@@ -70,6 +82,9 @@ export function mapServers(data: SqlTableData | null): MigrationServerRow[] {
       host,
       port: Number(r.port ?? r.http_port ?? 80) || 80,
       protocol: String(r.protocol ?? "http"),
+      domain: r.domain ? String(r.domain) : r.server_domain ? String(r.server_domain) : undefined,
+      maxClients: Number(r.total_clients ?? r.max_clients ?? r.capacity ?? NaN) || undefined,
+      privateIp: r.private_ip ? String(r.private_ip) : r.local_ip ? String(r.local_ip) : undefined,
     });
   }
   return out;
@@ -120,10 +135,15 @@ export async function loadPhase2FromPg(
     }
   };
 
+  const packageTable = await load("packages");
+  // Dynamic import avoids circular dependency with map-rows ↔ phase2.
+  const { mapPackages } = await import("./map-rows");
+
   return {
     categories: mapCategories(await load("categories")),
     servers: mapServers(await load("servers")),
     epgSources: mapEpgSources(await load("epg")),
+    packages: mapPackages(packageTable),
   };
 }
 
@@ -165,7 +185,12 @@ export async function applyMigrationPhase2(
           continue;
         }
         const created = await prisma.category.create({
-          data: { name, categoryType },
+          data: {
+            name,
+            categoryType,
+            isAdult: c.isAdult === true,
+            sortOrder: Number(c.sortOrder) || 0,
+          },
         });
         categoryIdByLegacy.set(c.legacyId, created.id);
         result.categories.imported++;
@@ -213,6 +238,9 @@ export async function applyMigrationPhase2(
             host,
             port: Number(s.port) || 80,
             protocol: String(s.protocol ?? "http").trim() || "http",
+            domain: s.domain?.trim() || null,
+            maxClients: Number(s.maxClients) || 1000,
+            privateIp: s.privateIp?.trim() || null,
           },
         });
         serverIdByLegacy.set(s.legacyId, created.id);

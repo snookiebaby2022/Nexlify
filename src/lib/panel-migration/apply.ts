@@ -19,6 +19,7 @@ function emptyResult(): MigrationApplyResult {
     categories: { imported: 0, skipped: 0 },
     servers: { imported: 0, skipped: 0 },
     epgSources: { imported: 0, skipped: 0 },
+    packages: { imported: 0, skipped: 0 },
     warnings: [],
   };
 }
@@ -181,6 +182,7 @@ async function applyMigrationBundleInner(
   }
 
   let categoryIdByLegacy = new Map<string, string>();
+  let serverIdByLegacy = new Map<string, string>();
 
   if (bundle.phase2) {
     try {
@@ -195,6 +197,7 @@ async function applyMigrationBundleInner(
       result.servers = phase2Out.result.servers;
       result.epgSources = phase2Out.result.epgSources;
       categoryIdByLegacy = phase2Out.categoryIdByLegacy;
+      serverIdByLegacy = phase2Out.serverIdByLegacy;
       if (Array.isArray(phase2Out.result.warnings)) {
         result.warnings.push(...phase2Out.result.warnings);
       }
@@ -265,19 +268,28 @@ async function applyMigrationBundleInner(
         const type =
           s.type === "MOVIE" ? StreamType.MOVIE : s.type === "SERIES" ? StreamType.SERIES : StreamType.LIVE;
         const categoryId = s.categoryLegacyId ? categoryIdByLegacy.get(s.categoryLegacyId) : undefined;
+        const mappedServerId = s.serverLegacyId
+          ? serverIdByLegacy.get(s.serverLegacyId)
+          : undefined;
         const created = await prisma.stream.create({
           data: {
             name,
             streamUrl,
+            backupUrl: s.backupUrl?.trim() || null,
             streamIcon: s.streamIcon?.trim() || null,
             type,
             sortOrder: Number.isFinite(s.sortOrder) ? Number(s.sortOrder) : idx,
-            serverId: serverId ?? null,
+            serverId: mappedServerId ?? serverId ?? null,
             categoryId: categoryId ?? null,
             epgChannelId: s.epgChannelId?.trim() || null,
             channelId: s.channelId?.trim() || null,
             containerExtension: s.containerExtension?.trim() || null,
             isActive: s.isActive !== false,
+            isAdult: s.isAdult === true,
+            isRadio: s.isRadio === true,
+            seriesName: s.seriesName?.trim() || null,
+            seasonNum: s.seasonNum ?? null,
+            episodeNum: s.episodeNum ?? null,
           },
         });
         streamIdByLegacy.set(s.legacyId, created.id);
@@ -332,6 +344,10 @@ async function applyMigrationBundleInner(
             role: PanelRole.RESELLER,
             credits: Number(r.credits) || 0,
             isActive: r.isActive !== false,
+            email: r.email?.trim() || null,
+            notes: r.notes?.trim() || null,
+            maxLines: Number(r.maxLines) || 500,
+            resellerDns: r.resellerDns?.trim() || null,
           },
         });
         if (r.legacyId) resellerIdByLegacy.set(r.legacyId, created.id);
@@ -342,6 +358,19 @@ async function applyMigrationBundleInner(
       result.warnings,
       "Reseller"
     );
+
+    // Second pass: parent tree links
+    for (const r of bundle.resellers) {
+      if (!r.legacyId || !r.parentLegacyId) continue;
+      const id = resellerIdByLegacy.get(r.legacyId);
+      const parentId = resellerIdByLegacy.get(r.parentLegacyId);
+      if (!id || !parentId || id === parentId) continue;
+      try {
+        await prisma.panelUser.update({ where: { id }, data: { parentId } });
+      } catch {
+        /* ignore cycle/FK */
+      }
+    }
   }
 
   if (options.importLines !== false) {
@@ -416,6 +445,13 @@ async function applyMigrationBundleInner(
           allowedCountries: l.allowedCountries?.trim() || null,
           blockedCountries: l.blockedCountries?.trim() || null,
           allowedOutput: l.allowedOutput?.trim() || "ts,hls,m3u8",
+          isTrial: l.isTrial === true,
+          isRestreamer: l.isRestreamer === true,
+          allowedUserAgents: l.allowedUserAgents?.trim() || null,
+          disallowedUserAgents: l.disallowedUserAgents?.trim() || null,
+          forcedServerId: l.forcedServerLegacyId
+            ? serverIdByLegacy.get(l.forcedServerLegacyId) ?? null
+            : null,
         };
 
         let lineId: string;
@@ -505,6 +541,52 @@ async function applyMigrationBundleInner(
       result.enigmaDevices,
       result.warnings,
       "Enigma"
+    );
+  }
+
+  const packageRows = [
+    ...new Map(
+      [...(bundle.packages ?? []), ...(bundle.phase2?.packages ?? [])].map((p) => [
+        String(p.legacyId),
+        p,
+      ])
+    ).values(),
+  ];
+  if (options.importPackages !== false && packageRows.length) {
+    const seen = new Set<string>();
+    await runEach(
+      packageRows,
+      async (p) => {
+        const name = String(p.name ?? "").trim();
+        if (!name || !p.legacyId || seen.has(name)) return false;
+        seen.add(name);
+        const existing = await prisma.package.findFirst({ where: { name } });
+        if (existing) return false;
+        const bouquetIds = [
+          ...new Set(
+            (p.bouquetLegacyIds ?? [])
+              .map((id) => bouquetIdByLegacy.get(String(id)))
+              .filter((id): id is string => Boolean(id))
+          ),
+        ];
+        await prisma.package.create({
+          data: {
+            name,
+            description: p.description?.trim() || null,
+            days: Math.max(1, Number(p.days) || 30),
+            creditCost: Math.max(0, Number(p.creditCost) || 0),
+            maxLines: Math.max(1, Number(p.maxLines) || 1),
+            bouquetIds,
+            sortOrder: Number(p.sortOrder) || 0,
+            isActive: p.isActive !== false,
+          },
+        });
+        return true;
+      },
+      (c, t) => options.onProgress?.("packages", c, t),
+      result.packages,
+      result.warnings,
+      "Package"
     );
   }
 

@@ -10,19 +10,22 @@ export type PanelTableProfile = {
   categories: string[];
   servers: string[];
   epg: string[];
+  /** Duration/credit packages (optional — XUI/1-stream billing packages). */
+  packages: string[];
 };
 
 export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
   xui: {
-    streams: ["streams", "media_streams", "live_streams", "channels"],
+    streams: ["streams", "media_streams", "live_streams", "channels", "stream"],
     bouquets: ["bouquets", "bouquet", "packages", "bundles"],
-    lines: ["lines", "subscribers", "clients"],
-    resellers: ["users", "reg_users", "resellers", "sellers"],
+    lines: ["lines", "subscribers", "clients", "users"],
+    resellers: ["users", "reg_users", "resellers", "sellers", "members"],
     mag: ["mag_devices", "mag", "stb_devices", "devices"],
     enigma: ["enigma_devices", "enigma", "enigma2_devices"],
     categories: ["stream_categories", "categories", "streams_categories", "channel_categories"],
     servers: ["streaming_servers", "servers", "streams_servers", "stream_servers"],
     epg: ["epg_sources", "epgs", "epg"],
+    packages: ["packages", "user_packages", "line_packages", "credit_packages", "plans"],
   },
   onestream: {
     streams: ["streams", "stream", "media_streams", "live_streams", "channels"],
@@ -34,6 +37,7 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
     categories: ["categories", "stream_categories", "streams_categories", "channel_categories"],
     servers: ["streaming_servers", "servers", "streams_servers", "stream_servers"],
     epg: ["epg_sources", "epg", "epgs"],
+    packages: ["packages", "package", "plans", "credit_packages", "user_packages"],
   },
   xtream_ui: {
     streams: ["streams", "media_streams", "live_streams", "channels"],
@@ -45,6 +49,7 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
     categories: ["stream_categories", "categories", "streams_categories", "channel_categories"],
     servers: ["streaming_servers", "servers", "streams_servers", "stream_servers"],
     epg: ["epg_sources", "epgs", "epg"],
+    packages: ["packages", "user_packages", "plans"],
   },
   midnight: {
     streams: ["streams", "channels", "media_streams", "live_streams"],
@@ -56,6 +61,7 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
     categories: ["categories", "stream_categories", "streams_categories", "channel_categories"],
     servers: ["servers", "streaming_servers", "streams_servers", "stream_servers"],
     epg: ["epg_sources", "epg", "epgs"],
+    packages: ["packages", "plans"],
   },
   nexlify_json: {
     streams: [],
@@ -67,6 +73,7 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
     categories: [],
     servers: [],
     epg: [],
+    packages: [],
   },
 };
 

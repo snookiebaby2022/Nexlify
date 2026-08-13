@@ -8,57 +8,62 @@ Admin → **Import** → **Panel migration** (`/admin/import/migrate`).
 |-------|--------|--------|
 | **1-stream** | **PostgreSQL live** (recommended) | Read-only connection; auto-detects `subscriptions`, `packages`, `streams`, junction tables, MAG |
 | **1-stream** | `.sql` / JSON | Fallback if DB is not reachable from Nexlify |
-| **XUI.one** | MySQL `.sql` backup | `lines`, `streams`, `bouquets`, `mag_devices` |
+| **XUI.one** | MySQL `.sql` backup | Full dump preferred; nested bouquet JSON + junction tables supported |
 | **Xtream UI** | `.sql` | Often uses `users` for lines |
 | **Midnight Streamers** | `.sql` or JSON | `channels` / `subscribers` aliases |
 | **Nexlify JSON** | `.json` | Universal interchange format |
 
+## What gets imported
+
+| Entity | Notes |
+|--------|--------|
+| Lines / subscriptions | Expiry, max cons, bouquets, IP lock, countries, trial/restreamer, UA lists, forced server |
+| Streams | URL + backup URL, type, category, EPG/channel ids, adult/radio, series/season/episode, server |
+| Bouquets | Channel lists — flattens XUI `{"live":[…],"vod":[…]}` and SQL junction tables |
+| Resellers | Credits, email, DNS, max lines, parent tree |
+| MAG / Enigma | Linked by username or line id |
+| Categories | Type, parent, adult, sort order |
+| Stream servers | Host/port/protocol, domain, capacity, private IP |
+| EPG sources | URL + country |
+| Packages | Duration/credit billing packages (when source has days/credits) |
+
+## XUI.one SQL — correct workflow
+
+1. On the XUI server, export a **full MySQL dump** (phpMyAdmin → Export → **Complete inserts** / mysqldump with column names).
+2. Prefer dumps **with column names**. Headerless `INSERT INTO t VALUES (...)` is auto-inferred, but named columns are more reliable.
+3. In Nexlify: **Import → Panel migration** → source **XUI.one** → upload the `.sql`.
+4. Click **Preview** — check mapped counts for lines/streams/bouquets. Warnings explain unmapped tables.
+5. Optionally enable **Clear existing IPTV data** on a clean cutover, then **Run import**.
+6. After import: assign/probe stream servers, re-check EPG, rotate passwords if needed.
+
+### XUI quirks handled
+
+- Nested bouquet channels: `{"live":[1,2],"movie":[3],"series":[4]}`
+- `stream_source` JSON arrays → primary + backup URL
+- Junction tables: `bouquet_streams`, `package_streams`, `users_bouquets`, etc.
+- Headerless INSERT inference (content + XUI column-order templates)
+
 ## 1-stream PostgreSQL (live)
 
-1. On the 1-stream server, create a **read-only** Postgres user (optional but recommended).
-2. Allow Nexlify VPS IP to connect to port `5432` (firewall / `pg_hba.conf`).
-3. In migration UI, choose **1-stream** → **PostgreSQL (live)**.
-4. Click **Test connection & detect tables** — confirms mapped tables and row counts.
-5. **Preview**, then **Run import**.
+1. Create a **read-only** Postgres user (optional).
+2. Allow Nexlify VPS IP on port `5432`.
+3. Choose **1-stream** → **PostgreSQL (live)** → **Test connection & detect tables**.
+4. **Preview**, then **Run import**.
 
-**Phase 2** (1-stream PostgreSQL only): also import **categories**, **stream servers**, and **EPG sources** when those tables are detected.
+Live PG also merges `package_streams` / `subscription_packages` junction tables. SQL dumps for 1-stream now get the same junction merge.
 
-Auto-mapping looks for table names such as:
+## File size limits
 
-- Lines: `subscriptions`, `lines`, `clients`, `subscribers`
-- Packages/bouquets: `packages`, `bouquets`, `bundles`
-- Streams: `streams`, `media_streams`, `live_streams`, `channels`
-- Junction: `package_streams`, `bouquet_streams`, `subscription_packages`
-- MAG: `mag_devices`, `stb_devices`
-
-Override schema with the **Schema** field if the panel uses a non-`public` schema.
-
-Credentials are **not stored** — only used for the migration request.
-
-## File-based workflow (other panels)
-
-1. Full MySQL/Postgres dump from the old panel.
-2. Upload or paste → **Preview** → **Run import**.
-
-## Nexlify JSON example
-
-```json
-{
-  "source": "nexlify_json",
-  "bouquets": [{ "legacyId": "1", "name": "Full", "streamLegacyIds": ["10", "11"] }],
-  "streams": [{ "legacyId": "10", "name": "CNN", "streamUrl": "http://...", "type": "LIVE" }],
-  "lines": [{ "username": "user1", "password": "pass1", "expiresAt": "2026-12-31T00:00:00Z", "bouquetLegacyIds": ["1"] }]
-}
-```
+- Paste/preview: ~512 KB
+- Upload multipart: up to **2 GB**
 
 ## After migration
 
 - Assign **stream servers** and probe streams.
-- Re-link **EPG** and categories.
+- Re-link **EPG** where channel ids differ.
 - Rotate line passwords if importing production plaintext passwords.
+- Review reseller tree and packages under Admin.
 
-## Why Nexlify vs legacy panels
+## Still configure on Nexlify (not in legacy dumps)
 
-- Same **PostgreSQL** stack as 1-stream (no MySQL conversion for 1-stream migrations).
-- **Live schema discovery** instead of manual table guessing.
-- **Fast playback** path, stream agent v2, IP lock, billing webhooks — see the advantages block on the migration page.
+Stream agents, blocklists, WHMCS, TMDB, CDN/RTMP edges, tickets, and most ops tooling are Nexlify-native — set those up after the data cutover.

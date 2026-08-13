@@ -4,6 +4,7 @@ import type {
   MigrationEnigmaRow,
   MigrationLineRow,
   MigrationMagRow,
+  MigrationPackageRow,
   MigrationPhase2Data,
   MigrationResellerRow,
   MigrationSource,
@@ -25,6 +26,7 @@ import {
 } from "./sql-parse";
 import { PANEL_PROFILES, firstTableFound } from "./profiles";
 import { applyHeaderlessInference } from "./headerless-map";
+import { enrichSqlTablesFromJunctions, flattenIdList } from "./sql-junctions";
 
 function parseJsonField(val: unknown): unknown {
   if (val == null || val === "") return null;
@@ -40,17 +42,18 @@ function parseJsonField(val: unknown): unknown {
 }
 
 function idsFromBouquetField(val: unknown): string[] {
-  const parsed = parseJsonField(val);
-  if (Array.isArray(parsed)) return parsed.map((x) => String(x));
-  if (typeof parsed === "string" && parsed) return [parsed];
-  return [];
+  return flattenIdList(val);
 }
 
-function streamUrlFromSource(val: unknown): string {
+function streamUrlsFromSource(val: unknown): { primary: string; backup?: string } {
   const parsed = parseJsonField(val);
-  if (Array.isArray(parsed) && parsed.length) return String(parsed[0]);
-  if (typeof parsed === "string" && parsed) return parsed;
-  return String(val ?? "").trim();
+  if (Array.isArray(parsed) && parsed.length) {
+    const urls = parsed.map((x) => String(x ?? "").trim()).filter(Boolean);
+    return { primary: urls[0] ?? "", backup: urls[1] };
+  }
+  if (typeof parsed === "string" && parsed) return { primary: parsed };
+  const s = String(val ?? "").trim();
+  return { primary: s };
 }
 
 function unixToDate(val: unknown): Date {
@@ -101,7 +104,7 @@ function mapStreams(data: SqlTableData | null, source: MigrationSource): Migrati
         r.title ??
         `Stream ${legacyId}`
     );
-    const url = streamUrlFromSource(
+    const { primary: url, backup } = streamUrlsFromSource(
       r.stream_source ??
         r.source ??
         r.url ??
@@ -109,11 +112,18 @@ function mapStreams(data: SqlTableData | null, source: MigrationSource): Migrati
         r.direct_source ??
         r.playback_url
     );
+    const backupExplicit = r.backup_url ?? r.stream_backup ?? r.backup_source;
     if (!url) continue;
+    const seriesName = r.series_name ?? r.show_name ?? r.tv_series;
+    const seasonNum = Number(r.season_num ?? r.season ?? r.season_number ?? NaN);
+    const episodeNum = Number(r.episode_num ?? r.episode ?? r.episode_number ?? NaN);
     out.push({
       legacyId,
       name,
       streamUrl: url,
+      backupUrl: backupExplicit
+        ? String(backupExplicit)
+        : backup || undefined,
       type: mapStreamType(r.type ?? r.stream_type, source),
       streamIcon: r.stream_icon
         ? String(r.stream_icon)
@@ -137,6 +147,18 @@ function mapStreams(data: SqlTableData | null, source: MigrationSource): Migrati
       channelId: r.channel_id ? String(r.channel_id) : r.custom_sid ? String(r.custom_sid) : undefined,
       containerExtension: r.container_extension ? String(r.container_extension) : undefined,
       isActive: Number(r.is_deleted ?? 0) !== 1 && Number(r.enabled ?? 1) !== 0,
+      isAdult: Number(r.is_adult ?? r.adult ?? 0) === 1,
+      isRadio: Number(r.is_radio ?? r.radio ?? 0) === 1,
+      seriesName: seriesName ? String(seriesName) : undefined,
+      seasonNum: Number.isFinite(seasonNum) && seasonNum > 0 ? seasonNum : undefined,
+      episodeNum: Number.isFinite(episodeNum) && episodeNum > 0 ? episodeNum : undefined,
+      serverLegacyId:
+        r.server_id != null
+          ? String(r.server_id)
+          : r.stream_server_id != null
+            ? String(r.stream_server_id)
+            : undefined,
+      notes: r.notes ? String(r.notes) : undefined,
       sortOrder:
         Number(r.order_num ?? r.sort_order ?? r.channel_order ?? r.order ?? r.num ?? NaN) ||
         undefined,
@@ -179,7 +201,7 @@ function mapLines(data: SqlTableData | null): MigrationLineRow[] {
     const username = String(r.username ?? r.user ?? r.login ?? r.account ?? "").trim();
     const password = String(r.password ?? r.pass ?? r.pwd ?? "").trim();
     if (!username || !password) continue;
-    const bouquetField = r.bouquet ?? r.bouquets ?? r.bouquet_ids ?? r.package_id;
+    const bouquetField = r.bouquet ?? r.bouquets ?? r.bouquet_ids ?? r.package_id ?? r.packages;
     out.push({
       legacyId: r.id != null ? String(r.id) : undefined,
       username,
@@ -209,6 +231,28 @@ function mapLines(data: SqlTableData | null): MigrationLineRow[] {
             : r.created_by != null
               ? String(r.created_by)
               : undefined,
+      isTrial: Number(r.is_trial ?? r.trial ?? 0) === 1,
+      isRestreamer: Number(r.is_restreamer ?? r.restreamer ?? 0) === 1,
+      allowedUserAgents: r.allowed_ua
+        ? String(r.allowed_ua)
+        : r.allowed_user_agents
+          ? String(r.allowed_user_agents)
+          : undefined,
+      disallowedUserAgents: r.forced_ua
+        ? undefined
+        : r.blocked_ua
+          ? String(r.blocked_ua)
+          : r.disallowed_user_agents
+            ? String(r.disallowed_user_agents)
+            : undefined,
+      forcedServerLegacyId:
+        r.forced_country != null && String(r.forced_country).startsWith("server:")
+          ? String(r.forced_country).slice(7)
+          : r.server_id != null
+            ? String(r.server_id)
+            : r.forced_server_id != null
+              ? String(r.forced_server_id)
+              : undefined,
     });
   }
   return out;
@@ -232,6 +276,69 @@ function mapResellers(data: SqlTableData | null): MigrationResellerRow[] {
       password,
       credits: Number(r.credits ?? 0) || 0,
       isActive: Number(r.status ?? 1) !== 0,
+      email: r.email ? String(r.email) : undefined,
+      notes: r.notes ? String(r.notes) : r.admin_notes ? String(r.admin_notes) : undefined,
+      maxLines: Number(r.max_accounts ?? r.max_lines ?? r.max_users ?? NaN) || undefined,
+      resellerDns: r.reseller_dns
+        ? String(r.reseller_dns)
+        : r.dns
+          ? String(r.dns)
+          : undefined,
+      parentLegacyId:
+        r.owner_id != null
+          ? String(r.owner_id)
+          : r.parent_id != null
+            ? String(r.parent_id)
+            : r.member_id != null
+              ? String(r.member_id)
+              : undefined,
+    });
+  }
+  return out;
+}
+
+/** Map duration/credit packages (skip pure channel-package rows already used as bouquets). */
+export function mapPackages(data: SqlTableData | null): MigrationPackageRow[] {
+  if (!data) return [];
+  const out: MigrationPackageRow[] = [];
+  for (const row of data.rows) {
+    const r = rowToRecord(data.columns, row);
+    const legacyId = String(r.id ?? r.package_id ?? "");
+    if (!legacyId) continue;
+    const days = Number(
+      r.duration_in_days ?? r.duration ?? r.days ?? r.package_days ?? r.length_days ?? NaN
+    );
+    const creditCost = Number(
+      r.credits ?? r.credit_cost ?? r.cost_credits ?? r.cost ?? r.price ?? NaN
+    );
+    const trialRaw = r.is_trial ?? r.trial;
+    const isTrialPackage =
+      trialRaw != null &&
+      Number(trialRaw) !== 0 &&
+      String(trialRaw).toLowerCase() !== "false" &&
+      String(trialRaw).toLowerCase() !== "no";
+    const hasBillingSignal =
+      (Number.isFinite(days) && days > 0) ||
+      (Number.isFinite(creditCost) && creditCost > 0) ||
+      isTrialPackage;
+    // Skip rows that only look like channel bouquets (no duration/credits).
+    if (!hasBillingSignal) continue;
+    const name = String(
+      r.package_name ?? r.name ?? r.title ?? `Package ${legacyId}`
+    ).trim();
+    if (!name) continue;
+    out.push({
+      legacyId,
+      name,
+      days: Number.isFinite(days) && days > 0 ? days : 30,
+      creditCost: Number.isFinite(creditCost) && creditCost >= 0 ? creditCost : 0,
+      maxLines: Math.max(1, Number(r.max_connections ?? r.max_lines ?? r.connections ?? 1) || 1),
+      bouquetLegacyIds: idsFromBouquetField(
+        r.bouquets ?? r.bouquet_ids ?? r.bouquet ?? r.packages
+      ),
+      description: r.description ? String(r.description) : undefined,
+      isActive: Number(r.status ?? r.is_active ?? 1) !== 0,
+      sortOrder: Number(r.sort_order ?? r.order ?? 0) || 0,
     });
   }
   return out;
@@ -317,6 +424,7 @@ function loadPhase2FromSql(
     categories: mapCategories(findTable(profile.categories)),
     servers: mapServers(findTable(profile.servers)),
     epgSources: mapEpgSources(findTable(profile.epg)),
+    packages: mapPackages(findTable(profile.packages)),
   };
 }
 
@@ -379,6 +487,7 @@ export function buildMigrationBundle(
     resellers: tables.resellers ? mapResellers(tables.resellers) : [],
     magDevices: tables.mag ? mapMag(tables.mag, lineIdToUsername) : [],
     enigmaDevices: tables.enigma ? mapEnigma(tables.enigma, lineIdToUsername) : [],
+    packages: phase2?.packages ?? [],
     phase2,
   };
 }
@@ -469,11 +578,18 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
   const magTable = findTable(profile.mag);
   const enigmaTable = findTable(profile.enigma);
 
+  const junction = enrichSqlTablesFromJunctions(
+    allTables,
+    bouquetsResult.data,
+    linesResult.data
+  );
+  warnings.push(...junction.warnings);
+
   const bundle = buildMigrationBundle(
     {
       streams: streamsResult.data,
-      bouquets: bouquetsResult.data,
-      lines: linesResult.data,
+      bouquets: junction.bouquets,
+      lines: junction.lines,
       resellers: resellersTable,
       mag: magTable,
       enigma: enigmaTable,
@@ -658,11 +774,18 @@ export async function bundleFromSqlFile(
   const magTable = findTable(profile.mag);
   const enigmaTable = findTable(profile.enigma);
 
+  const junction = enrichSqlTablesFromJunctions(
+    allTables,
+    bouquetsResult.data,
+    linesResult.data
+  );
+  warnings.push(...junction.warnings);
+
   const bundle = buildMigrationBundle(
     {
       streams: streamsResult.data,
-      bouquets: bouquetsResult.data,
-      lines: linesResult.data,
+      bouquets: junction.bouquets,
+      lines: junction.lines,
       resellers: resellersTable,
       mag: magTable,
       enigma: enigmaTable,
