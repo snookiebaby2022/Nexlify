@@ -46,17 +46,51 @@ export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[]
     const legacyId = String(r.id ?? "");
     if (!legacyId) continue;
     const parentRaw = r.parent_id ?? r.parentId ?? r.parent;
+    const name = String(
+      r.category_name ?? r.name ?? r.title ?? `Category ${legacyId}`
+    ).trim() || `Category ${legacyId}`;
+    // Skip rows that are clearly bouquet channel JSON dumped into categories.
+    if (name === "[]" || name === "{}" || /^\[.*\]$/.test(name)) continue;
+
     const typeRaw = String(
       r.category_type ?? r.type ?? r.cat_type ?? r.stream_type ?? ""
-    ).toUpperCase();
+    )
+      .trim()
+      .toUpperCase();
+    const nameKey = name.toLowerCase();
+
     let categoryType: MigrationCategoryRow["categoryType"] = "LIVE";
-    if (typeRaw.includes("MOVIE") || typeRaw === "VOD" || typeRaw === "1") categoryType = "MOVIE";
-    else if (typeRaw.includes("SERIES") || typeRaw === "2") categoryType = "SERIES";
-    else if (typeRaw.includes("RADIO")) categoryType = "RADIO";
-    else if (typeRaw.includes("LIVE") || typeRaw === "0") categoryType = "LIVE";
+    if (
+      typeRaw.includes("MOVIE") ||
+      typeRaw === "VOD" ||
+      typeRaw === "1" ||
+      typeRaw === "MOVIES"
+    ) {
+      categoryType = "MOVIE";
+    } else if (typeRaw.includes("SERIES") || typeRaw === "2" || typeRaw === "TV") {
+      categoryType = "SERIES";
+    } else if (typeRaw.includes("RADIO") || typeRaw === "3") {
+      categoryType = "RADIO";
+    } else if (typeRaw.includes("LIVE") || typeRaw === "0" || typeRaw === "LIVE STREAMS") {
+      categoryType = "LIVE";
+    } else if (!typeRaw) {
+      // Infer from name when category_type column was missing / mis-mapped.
+      if (nameKey === "movie" || nameKey === "movies" || nameKey === "vod") categoryType = "MOVIE";
+      else if (nameKey === "series" || nameKey === "tv series" || nameKey === "tv")
+        categoryType = "SERIES";
+      else if (nameKey === "radio" || nameKey === "radios") categoryType = "RADIO";
+      else categoryType = "LIVE";
+    }
+
+    // Type-only placeholder rows (name is just "live"/"movie"/"series") are not real
+    // stream categories — skip them so they don't pollute Manage Categories.
+    if (["live", "movie", "movies", "series", "radio", "vod", "tv"].includes(nameKey)) {
+      continue;
+    }
+
     out.push({
       legacyId,
-      name: String(r.category_name ?? r.name ?? `Category ${legacyId}`).trim() || `Category ${legacyId}`,
+      name,
       parentLegacyId:
         parentRaw != null && String(parentRaw).trim() && String(parentRaw) !== "0"
           ? String(parentRaw)
@@ -262,11 +296,11 @@ export async function applyMigrationPhase2(
             maxClients: Number(s.maxClients) || 1000,
             privateIp: s.privateIp?.trim() || null,
             sortOrder: i,
-            // First imported server is the main server.
+            // First imported = main (panel); all others default to load balancers.
             panelSettings:
               i === 0
                 ? ({ advanced: { serverRole: "main" } } as Prisma.InputJsonValue)
-                : undefined,
+                : ({ advanced: { serverRole: "lb" } } as Prisma.InputJsonValue),
           },
         });
         serverIdByLegacy.set(s.legacyId, created.id);

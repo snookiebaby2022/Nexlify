@@ -321,6 +321,22 @@ export default function ManagementCategoriesPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const raw = new URLSearchParams(window.location.search).get("type")?.toUpperCase();
+    if (raw === "LIVE" || raw === "MOVIE" || raw === "SERIES" || raw === "RADIO") {
+      setTab(raw);
+    }
+  }, []);
+
+  function changeTab(next: CategoryTab) {
+    setTab(next);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("type", next);
+      window.history.replaceState({}, "", url.toString());
+    }
+  }
   const tabCategories = useMemo(
     () => allCategories.filter((c) => (c.categoryType ?? "LIVE") === tab),
     [allCategories, tab]
@@ -443,7 +459,7 @@ export default function ManagementCategoriesPage() {
         </Link>
       </div>
 
-      <CategoryTypeTabs active={tab} onChange={setTab} counts={tabCounts} />
+      <CategoryTypeTabs active={tab} onChange={changeTab} counts={tabCounts} />
 
       {/* Predefined category quick-add */}
       <PredefinedCategories tab={tab} existingNames={tabCategories.map((c) => c.name.toLowerCase())} onAdded={load} />

@@ -222,9 +222,13 @@ function mapBouquets(data: SqlTableData | null): MigrationBouquetRow[] {
     const r = rowToRecord(data.columns, row);
     const legacyId = String(r.id ?? r.bouquet_id ?? "");
     if (!legacyId) continue;
-    const name = String(
+    let name = String(
       r.bouquet_name ?? r.name ?? r.package_name ?? r.title ?? `Bouquet ${legacyId}`
-    );
+    ).trim();
+    // Mis-mapped JSON channel lists sometimes land in the name field as "[]".
+    if (!name || name === "[]" || name === "{}" || /^\[.*\]$/.test(name)) {
+      name = `Bouquet ${legacyId}`;
+    }
     // Modern XUI.one splits live / movies / series / radios into separate columns.
     const streamLegacyIds = [
       ...idsFromBouquetField(

@@ -55,7 +55,8 @@ export const defaultPerformanceSettings = (): ServerPerformanceSettings => ({
 
 export const defaultAdvancedSettings = (): ServerAdvancedSettings => ({
   disableDiskRam: false,
-  serverRole: "standard",
+  // New servers default to load balancer — only the panel host is Main.
+  serverRole: "lb",
   httpPorts: [],
   httpsPorts: [],
   geoIpPriority: "low",
@@ -103,6 +104,18 @@ export function parseServerPanelSettings(raw: unknown): {
     )
   ) as Record<string, unknown>;
   return { network, performance, advanced, ssl: sslParsed, rest };
+}
+
+/** Explicit role from stored JSON only — ignores form defaults when role was never set. */
+export function readExplicitServerRole(
+  raw: unknown
+): "main" | "lb" | "standard" | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const adv = (raw as Record<string, unknown>).advanced;
+  if (!adv || typeof adv !== "object" || Array.isArray(adv)) return null;
+  const role = (adv as Record<string, unknown>).serverRole;
+  if (role === "main" || role === "lb" || role === "standard") return role;
+  return null;
 }
 
 export function buildServerPanelSettingsJson(

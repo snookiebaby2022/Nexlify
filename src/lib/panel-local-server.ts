@@ -26,13 +26,17 @@ function parsePortList(raw: unknown, exclude: number[]): number[] {
   return out;
 }
 
-/** True when host is this panel machine (localhost, primary domain, or subdomain). */
+/** True when host is this panel machine (localhost, primary domain, or panel IP). */
 export function isLocalPanelHost(host: string): boolean {
   const h = host.trim().toLowerCase();
   if (!h || h === "127.0.0.1" || h === "localhost" || h === "::1") return true;
   const primary = (process.env.PANEL_PRIMARY_DOMAIN ?? "").trim().toLowerCase();
-  if (!primary) return false;
-  return h === primary || h.endsWith(`.${primary}`);
+  if (primary && (h === primary || h.endsWith(`.${primary}`))) return true;
+  const serverIp = (process.env.SERVER_IP ?? "").trim().toLowerCase();
+  if (serverIp && h === serverIp) return true;
+  const publicIp = (process.env.PUBLIC_IP ?? process.env.PANEL_PUBLIC_IP ?? "").trim().toLowerCase();
+  if (publicIp && h === publicIp) return true;
+  return false;
 }
 
 export function isLocalPanelServer(server: {

@@ -277,7 +277,7 @@ function serverToForm(s: Record<string, unknown>): ServerFormState {
     healthMessage: String(s.healthMessage ?? ""),
     perfSysctlConf: performance.sysctlConf ?? "",
     advDisableDiskRam: advanced.disableDiskRam,
-    advServerRole: advanced.serverRole ?? "standard",
+    advServerRole: advanced.serverRole ?? "lb",
     advHttpPorts: uniquePortTags(
       String(s.port ?? STREAM_HTTP_PORT),
       ...(advanced.httpPorts ?? []).map(String)

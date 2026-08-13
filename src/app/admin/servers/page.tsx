@@ -8,6 +8,7 @@ import { PANEL_HTTP_PORT, STREAM_HTTP_PORT, STREAM_HTTPS_PORT } from "@/lib/serv
 import { IpWithFlag } from "@/components/ip-with-flag";
 import { ServerActionsMenu } from "@/components/server-actions-menu";
 import {
+  buildServerRoleContext,
   resolveServerRole,
   sortServersMainFirst,
 } from "@/lib/ensure-main-server-online";
@@ -163,15 +164,14 @@ export default function AdminServersPage() {
     load();
   }
 
-  const minSort =
-    servers.length > 0 ? Math.min(...servers.map((s) => s.sortOrder ?? 0)) : 0;
+  const roleCtx = buildServerRoleContext(servers);
 
   const totalServers = servers.length;
   const onlineServers = servers.filter((s) => isServerOnline(s)).length;
   const offlineServers = totalServers - onlineServers;
   const totalStreams = servers.reduce((sum, s) => sum + (s._count?.streams ?? 0), 0);
-  const lbServers = servers.filter((s) => resolveServerRole(s, minSort) === "lb").length;
-  const mainServer = servers.find((s) => resolveServerRole(s, minSort) === "main");
+  const lbServers = servers.filter((s) => resolveServerRole(s, roleCtx) === "lb").length;
+  const mainServer = servers.find((s) => resolveServerRole(s, roleCtx) === "main");
 
   function healthColor(status: string) {
     if (status === "online" || status === "healthy") return "var(--success)";
@@ -180,7 +180,7 @@ export default function AdminServersPage() {
   }
 
   function roleBadge(s: ServerRow) {
-    const role = resolveServerRole(s, minSort);
+    const role = resolveServerRole(s, roleCtx);
     const online = isServerOnline(s);
     const label = role === "main" ? "Main" : role === "lb" ? "LB" : "Standard";
     return (
@@ -273,7 +273,7 @@ export default function AdminServersPage() {
 
   function ServerCard({ s }: { s: ServerRow }) {
     const online = isServerOnline(s);
-    const role = resolveServerRole(s, minSort);
+    const role = resolveServerRole(s, roleCtx);
     const streamCount = s._count?.streams ?? 0;
     const lbCount = s._count?.lbSessions ?? 0;
     return (

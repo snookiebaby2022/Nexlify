@@ -1,9 +1,9 @@
 "use client";
 
 const TABS = [
-  { id: "LIVE", label: "Streams" },
+  { id: "LIVE", label: "Live TV" },
   { id: "MOVIE", label: "Movies" },
-  { id: "SERIES", label: "Series" },
+  { id: "SERIES", label: "TV Series" },
   { id: "RADIO", label: "Radio" },
 ] as const;
 

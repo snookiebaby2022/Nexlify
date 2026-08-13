@@ -130,7 +130,6 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         items: [
           { href: "/admin/streams/add", label: "Add Stream", section: "Live" },
           { href: "/admin/content/streams", label: "Manage Streams", section: "Live" },
-          { href: "/admin/categories", label: "Categories", section: "Live" },
           ...LIVE_NAV_FOLDERS.filter((f) => f.slug !== "streams").map((f) => ({
             href: `/admin/content/${f.slug}`,
             label: f.title,
@@ -140,6 +139,26 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/import/m3u/review", label: "M3U Stream Review", section: "Import" },
           { href: "/admin/streaming/health", label: "Streaming Health", section: "Import" },
           { href: "/admin/radios", label: "Radio Stations", section: "Radio" },
+        ],
+      },
+    },
+    {
+      kind: "group",
+      group: {
+        id: "categories",
+        label: "Categories",
+        icon: coloredGroupIcon("live"),
+        items: [
+          { href: "/admin/categories?type=LIVE", label: "Live TV", section: "Types" },
+          { href: "/admin/categories?type=MOVIE", label: "Movies", section: "Types" },
+          { href: "/admin/categories?type=SERIES", label: "TV Series", section: "Types" },
+          { href: "/admin/categories?type=RADIO", label: "Radio", section: "Types" },
+          { href: "/admin/categories", label: "All Categories", section: "Types" },
+          { href: "/admin/bouquets/add", label: "Add Bouquet", section: "Bouquets" },
+          { href: "/admin/bouquets", label: "Manage Bouquets", section: "Bouquets" },
+          { href: "/admin/bouquets/order", label: "Order Bouquets", section: "Bouquets" },
+          { href: "/admin/bouquets/templates", label: "Bouquet Templates", section: "Bouquets" },
+          { href: "/admin/resellers/bouquets", label: "Bouquet Access", section: "Bouquets" },
         ],
       },
     },
@@ -192,21 +211,6 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/import/movies", label: "Import Movies", section: "Import" },
           { href: "/admin/import/series", label: "Import Series", section: "Import" },
           { href: "/admin/queue", label: "Import Queue", section: "Import" },
-        ],
-      },
-    },
-    {
-      kind: "group",
-      group: {
-        id: "bouquets",
-        label: "Bouquets",
-        icon: coloredGroupIcon("bouquets"),
-        items: [
-          { href: "/admin/bouquets/add", label: "Add Bouquet" },
-          { href: "/admin/bouquets", label: "Manage Bouquets" },
-          { href: "/admin/bouquets/order", label: "Order Bouquets" },
-          { href: "/admin/bouquets/templates", label: "Bouquet Templates" },
-          { href: "/admin/resellers/bouquets", label: "Bouquet Access" },
         ],
       },
     },
