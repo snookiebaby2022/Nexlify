@@ -30,6 +30,24 @@ export async function applyMigrationBundle(
   const run = async (prisma: { stream: any; bouquet: any; line: any; panelUser: any; magDevice: any; enigmaDevice: any; bouquetStream: any; category: any; streamServer: any; epgSource: any; [key: string]: any }) => {
     const result = emptyResult();
 
+    // Clear all data before import if requested
+    if (options.clearDataBeforeImport) {
+      options.onProgress?.("clearing", 0, 1);
+      // Delete in order to respect foreign keys
+      await prisma.bouquetStream.deleteMany();
+      await prisma.lineBouquet.deleteMany();
+      await prisma.enigmaDevice.deleteMany();
+      await prisma.magDevice.deleteMany();
+      await prisma.line.deleteMany();
+      await prisma.stream.deleteMany();
+      await prisma.bouquet.deleteMany();
+      await prisma.panelUser.deleteMany();
+      await prisma.category.deleteMany();
+      await prisma.streamServer.deleteMany();
+      await prisma.epgSource.deleteMany();
+      options.onProgress?.("clearing", 1, 1);
+    }
+
     let categoryIdByLegacy = new Map<string, string>();
 
     if (bundle.phase2) {

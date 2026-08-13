@@ -33,6 +33,7 @@ function applyOptions(body: Record<string, unknown>) {
     importEpg: body.importEpg !== false,
     skipExistingLines: body.skipExistingLines !== false,
     skipExistingStreams: body.skipExistingStreams !== false,
+    clearDataBeforeImport: Boolean(body.clearDataBeforeImport),
     defaultServerId: (body.defaultServerId as string) ?? null,
     ownerId: (body.ownerId as string) ?? null,
   };

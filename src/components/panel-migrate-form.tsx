@@ -49,6 +49,7 @@ export function PanelMigrateForm() {
   const [importServers, setImportServers] = useState(true);
   const [importEpg, setImportEpg] = useState(true);
   const [skipExisting, setSkipExisting] = useState(true);
+  const [clearData, setClearData] = useState(false);
   const [preview, setPreview] = useState("");
   const [result, setResult] = useState("");
   const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null);
@@ -109,6 +110,7 @@ export function PanelMigrateForm() {
       importEpg,
       skipExistingLines: skipExisting,
       skipExistingStreams: skipExisting,
+      clearDataBeforeImport: clearData,
       defaultServerId: serverId || null,
       format,
     };
@@ -725,6 +727,10 @@ export function PanelMigrateForm() {
           <input type="checkbox" checked={skipExisting} onChange={(e) => setSkipExisting(e.target.checked)} />{" "}
           Skip existing usernames / stream names
         </label>
+        <label>
+          <input type="checkbox" checked={clearData} onChange={(e) => setClearData(e.target.checked)} />{" "}
+          <span style={{ color: "#ef4444" }}>Clear all data before import</span>
+        </label>
       </div>
 
       <div className="flex gap-3">
@@ -834,6 +840,11 @@ export function PanelMigrateForm() {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="font-bold text-lg">Create backup first?</h3>
+            {clearData && (
+              <p className="text-sm font-medium" style={{ color: "#ef4444" }}>
+                Warning: "Clear all data before import" is checked. All existing lines, streams, bouquets, users, categories, and servers will be permanently deleted before the import runs.
+              </p>
+            )}
             <p className="text-sm" style={{ color: "#e2e8f0" }}>
               We recommend creating a database backup before importing. You can do this from{" "}
               <a href="/admin/backup-restore" target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>

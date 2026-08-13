@@ -113,6 +113,7 @@ export type MigrationApplyOptions = {
   importEpg?: boolean;
   skipExistingLines?: boolean;
   skipExistingStreams?: boolean;
+  clearDataBeforeImport?: boolean;
   defaultServerId?: string | null;
   ownerId?: string | null;
   /** Transaction client — when provided, all DB calls use this instead of the global prisma. */
