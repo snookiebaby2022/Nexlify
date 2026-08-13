@@ -55,16 +55,55 @@ function idsFromBouquetField(val: unknown): string[] {
   return flattenIdList(val);
 }
 
+/** XUI often stores empty sources as 0 / "0" / [] — never treat those as URLs. */
+function isUsableStreamUrl(val: unknown): boolean {
+  if (val == null) return false;
+  // Numeric flags (direct_source 0/1, empty placeholders) are never URLs
+  if (typeof val === "number") return false;
+  const s = String(val).trim();
+  if (!s) return false;
+  const lower = s.toLowerCase();
+  if (lower === "0" || lower === "null" || lower === "undefined" || lower === "false") {
+    return false;
+  }
+  if (s === "[]" || s === "{}" || s === '[""]' || s === "['']") return false;
+  // Pure numeric strings are flags / ids, not stream URLs
+  if (/^-?\d+(\.\d+)?$/.test(s)) return false;
+  return true;
+}
+
 function streamUrlsFromSource(val: unknown): { primary: string; backup?: string } {
+  if (!isUsableStreamUrl(val) && val != null && typeof val !== "object") {
+    // Still allow JSON arrays/objects through parseJsonField below when stringy
+    const raw = String(val ?? "").trim();
+    if (!raw.startsWith("[") && !raw.startsWith("{")) {
+      return { primary: "" };
+    }
+  }
   const parsed = parseJsonField(val);
   if (Array.isArray(parsed) && parsed.length) {
-    const urls = parsed.map((x) => String(x ?? "").trim()).filter(Boolean);
+    const urls = parsed
+      .map((x) => String(x ?? "").trim())
+      .filter((u) => isUsableStreamUrl(u));
     return { primary: urls[0] ?? "", backup: urls[1] };
   }
-  if (typeof parsed === "string" && parsed) return { primary: parsed };
-  const s = String(val ?? "").trim();
-  return { primary: s };
+  if (typeof parsed === "string" && isUsableStreamUrl(parsed)) {
+    return { primary: parsed.trim() };
+  }
+  if (isUsableStreamUrl(val)) return { primary: String(val).trim() };
+  return { primary: "" };
 }
+
+/** First usable URL among candidates (avoids `??` treating numeric 0 as present). */
+function firstStreamUrl(...candidates: unknown[]): { primary: string; backup?: string } {
+  for (const c of candidates) {
+    const got = streamUrlsFromSource(c);
+    if (got.primary) return got;
+  }
+  return { primary: "" };
+}
+
+const VOD_CONTAINER_RE = /^(mp4|mkv|avi|mov|m4v|wmv|flv|webm|ts|mpg|mpeg)$/i;
 
 function unixToDate(val: unknown): Date {
   if (val instanceof Date && !Number.isNaN(val.getTime())) return val;
@@ -139,15 +178,21 @@ function mapStreams(
         r.title ??
         `Stream ${legacyId}`
     );
-    const { primary: url, backup } = streamUrlsFromSource(
-      r.stream_source ??
-        r.source ??
-        r.url ??
-        r.stream_url ??
-        r.direct_source ??
-        r.playback_url
+    // Never use `??` across these — XUI empty sources are often numeric 0.
+    const { primary: url, backup } = firstStreamUrl(
+      r.stream_source,
+      r.source,
+      r.url,
+      r.stream_url,
+      r.playback_url,
+      // direct_source is usually a 0/1 flag in XUI; only use if it looks like a URL
+      r.direct_source
     );
-    const backupExplicit = r.backup_url ?? r.stream_backup ?? r.backup_source;
+    const backupExplicit = firstStreamUrl(
+      r.backup_url,
+      r.stream_backup,
+      r.backup_source
+    ).primary;
     if (!url) continue;
     const seriesName = r.series_name ?? r.show_name ?? r.tv_series;
     const seasonNum = Number(r.season_num ?? r.season ?? r.season_number ?? NaN);
@@ -162,16 +207,30 @@ function mapStreams(
             Number(typeRaw) === 4 ||
             String(typeRaw ?? "").toLowerCase().includes("radio"),
         };
+    const containerExtension = r.container_extension
+      ? String(r.container_extension).replace(/^\./, "")
+      : r.target_container
+        ? String(r.target_container).replace(/^\./, "")
+        : undefined;
+    // VOD files mis-tagged as live (common when type column missing/0): prefer MOVIE.
+    let streamType = resolved.type;
+    if (
+      streamType === "LIVE" &&
+      !resolved.isRadio &&
+      containerExtension &&
+      VOD_CONTAINER_RE.test(containerExtension) &&
+      !/\.m3u8?$/i.test(url)
+    ) {
+      streamType = "MOVIE";
+    }
     const categoryLegacyId =
       firstLegacyId(r.category_id) ?? firstLegacyId(r.stream_category_id);
     out.push({
       legacyId,
       name,
       streamUrl: url,
-      backupUrl: backupExplicit
-        ? String(backupExplicit)
-        : backup || undefined,
-      type: resolved.type,
+      backupUrl: backupExplicit || backup || undefined,
+      type: streamType,
       streamIcon: r.stream_icon
         ? String(r.stream_icon)
         : r.logo
@@ -187,13 +246,11 @@ function mapStreams(
             ? String(r.channel_id)
             : undefined,
       channelId: r.channel_id ? String(r.channel_id) : r.custom_sid ? String(r.custom_sid) : undefined,
-      containerExtension: r.container_extension
-        ? String(r.container_extension)
-        : r.target_container
-          ? String(r.target_container)
-          : resolved.type === "MOVIE" || resolved.type === "SERIES"
-            ? "mp4"
-            : undefined,
+      containerExtension: containerExtension
+        ? containerExtension
+        : streamType === "MOVIE" || streamType === "SERIES"
+          ? "mp4"
+          : undefined,
       isActive: Number(r.is_deleted ?? 0) !== 1 && Number(r.enabled ?? 1) !== 0,
       isAdult: Number(r.is_adult ?? r.adult ?? 0) === 1,
       isRadio: resolved.isRadio || Number(r.is_radio ?? r.radio ?? 0) === 1,

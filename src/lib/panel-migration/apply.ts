@@ -276,6 +276,14 @@ async function applyMigrationBundleInner(
         const name = String(s.name ?? "").trim();
         const streamUrl = String(s.streamUrl ?? "").trim();
         if (!name || !streamUrl || !s.legacyId) return false;
+        // Reject XUI empty-source placeholders that slipped through older mappers
+        if (
+          streamUrl === "0" ||
+          streamUrl.toLowerCase() === "null" ||
+          /^-?\d+(\.\d+)?$/.test(streamUrl)
+        ) {
+          return false;
+        }
         if (options.skipExistingStreams) {
           const dup = await prisma.stream.findFirst({ where: { name, streamUrl } });
           if (dup) {

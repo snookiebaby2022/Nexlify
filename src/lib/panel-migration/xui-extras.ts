@@ -21,19 +21,43 @@ function findMerged(
   return null;
 }
 
+function isUsableStreamUrl(val: unknown): boolean {
+  if (val == null) return false;
+  if (typeof val === "number") return false;
+  const s = String(val).trim();
+  if (!s) return false;
+  const lower = s.toLowerCase();
+  if (lower === "0" || lower === "null" || lower === "undefined" || lower === "false") {
+    return false;
+  }
+  if (s === "[]" || s === "{}" || s === '[""]' || s === "['']") return false;
+  if (/^-?\d+(\.\d+)?$/.test(s)) return false;
+  return true;
+}
+
 function streamUrlsFromSource(val: unknown): { primary: string; backup?: string } {
   if (val == null || val === "") return { primary: "" };
+  if (typeof val === "number" && val === 0) return { primary: "" };
+  const s0 = typeof val === "string" ? val.trim() : null;
+  if (s0 && (s0.startsWith("[") || s0.startsWith("{"))) {
+    try {
+      const parsed = JSON.parse(s0);
+      if (Array.isArray(parsed)) {
+        const urls = parsed
+          .map((x) => String(x ?? "").trim())
+          .filter((u) => isUsableStreamUrl(u));
+        return { primary: urls[0] ?? "", backup: urls[1] };
+      }
+    } catch {
+      /* fall through */
+    }
+  }
   if (Array.isArray(val)) {
-    const urls = val.map((x) => String(x ?? "").trim()).filter(Boolean);
+    const urls = val.map((x) => String(x ?? "").trim()).filter((u) => isUsableStreamUrl(u));
     return { primary: urls[0] ?? "", backup: urls[1] };
   }
-  const s = String(val).trim();
-  if (!s) return { primary: "" };
-  try {
-    return streamUrlsFromSource(JSON.parse(s));
-  } catch {
-    return { primary: s };
-  }
+  if (isUsableStreamUrl(val)) return { primary: String(val).trim() };
+  return { primary: "" };
 }
 
 /** Map streams_types id / type_key → LIVE | MOVIE | SERIES (+ radio flag). */
@@ -279,10 +303,17 @@ export function mapSeriesEpisodesFromSql(
       continue;
     }
 
-    const { primary: url, backup } = streamUrlsFromSource(
-      r.stream_source ?? r.source ?? r.url ?? r.stream_url
-    );
-    if (!url) continue;
+    const { primary: url, backup } = streamUrlsFromSource(r.stream_source);
+    const fromSource = url
+      ? { primary: url, backup }
+      : streamUrlsFromSource(r.source);
+    const fromUrl = fromSource.primary
+      ? fromSource
+      : streamUrlsFromSource(r.url);
+    const resolvedUrl = fromUrl.primary
+      ? fromUrl
+      : streamUrlsFromSource(r.stream_url);
+    if (!resolvedUrl.primary) continue;
 
     const legacyId = epId ? `series_ep_${epId}` : linkedStreamId ? `series_ep_stream_${linkedStreamId}` : "";
     if (!legacyId || existingIds.has(legacyId)) continue;
@@ -296,8 +327,8 @@ export function mapSeriesEpisodesFromSql(
     created.push({
       legacyId,
       name,
-      streamUrl: url,
-      backupUrl: backup,
+      streamUrl: resolvedUrl.primary,
+      backupUrl: resolvedUrl.backup,
       type: "SERIES",
       streamIcon: r.stream_icon ? String(r.stream_icon) : meta?.icon,
       categoryLegacyId: flattenIdList(r.category_id)[0] ?? meta?.categoryLegacyId,

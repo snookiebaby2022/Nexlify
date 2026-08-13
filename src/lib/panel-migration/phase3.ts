@@ -681,7 +681,118 @@ export function loadPhase3FromSql(
   if (epgApi) {
     let n = 0;
     let asPrograms = 0;
+    let fromJson = 0;
     const cols = epgApi.columns.map((c) => c.toLowerCase());
+    const seenChannelIds = new Set<string>();
+
+    const pushApiChannel = (ch: {
+      sourceLegacyId?: string;
+      channelId: string;
+      name?: string;
+      icon?: string;
+      language?: string;
+    }) => {
+      if (n >= EPG_API_CAP) return;
+      const id = ch.channelId.slice(0, 200);
+      if (!id || seenChannelIds.has(id)) return;
+      seenChannelIds.add(id);
+      phase3.epgApiChannels.push({
+        sourceLegacyId: ch.sourceLegacyId,
+        channelId: id,
+        name: ch.name ? ch.name.slice(0, 300) : undefined,
+        icon: ch.icon ? ch.icon.slice(0, 1000) : undefined,
+        language: ch.language || undefined,
+      });
+      n++;
+    };
+
+    /** Expand JSON blobs XUI stores in data/base/channels columns. */
+    const expandJsonCatalog = (raw: unknown, sourceLegacyId?: string): number => {
+      if (raw == null) return 0;
+      let parsed: unknown = raw;
+      if (typeof raw === "string") {
+        const s = raw.trim();
+        if (!s || (s[0] !== "{" && s[0] !== "[")) return 0;
+        try {
+          parsed = JSON.parse(s);
+        } catch {
+          return 0;
+        }
+      }
+      const items: unknown[] = [];
+      if (Array.isArray(parsed)) {
+        items.push(...parsed);
+      } else if (parsed && typeof parsed === "object") {
+        const obj = parsed as Record<string, unknown>;
+        if (Array.isArray(obj.channels)) items.push(...obj.channels);
+        else if (Array.isArray(obj.data)) items.push(...obj.data);
+        else {
+          // Map keyed by channel id → {name, icon, ...} or bare name string
+          for (const [k, v] of Object.entries(obj)) {
+            if (v && typeof v === "object" && !Array.isArray(v)) {
+              items.push({ id: k, ...(v as object) });
+            } else if (typeof v === "string" || typeof v === "number") {
+              items.push({ id: k, name: String(v) });
+            }
+          }
+        }
+      }
+      let added = 0;
+      for (const item of items) {
+        if (n >= EPG_API_CAP) break;
+        if (item == null) continue;
+        if (typeof item === "string" || typeof item === "number") {
+          const before = n;
+          pushApiChannel({
+            sourceLegacyId,
+            channelId: String(item),
+            name: String(item),
+          });
+          if (n > before) added++;
+          continue;
+        }
+        if (typeof item !== "object") continue;
+        const o = item as Record<string, unknown>;
+        const channelId = String(
+          o.channel_id ??
+            o.epg_channel_id ??
+            o.xmltv_id ??
+            o.tvg_id ??
+            o.id ??
+            o.channel ??
+            o.key ??
+            ""
+        ).trim();
+        if (!channelId || channelId === "0") continue;
+        const before = n;
+        pushApiChannel({
+          sourceLegacyId,
+          channelId,
+          name: o.name
+            ? String(o.name)
+            : o.display_name
+              ? String(o.display_name)
+              : o.title
+                ? String(o.title)
+                : undefined,
+          icon: o.icon
+            ? String(o.icon)
+            : o.logo
+              ? String(o.logo)
+              : o.stream_icon
+                ? String(o.stream_icon)
+                : undefined,
+          language: o.lang
+            ? String(o.lang)
+            : o.language
+              ? String(o.language)
+              : undefined,
+        });
+        if (n > before) added++;
+      }
+      return added;
+    };
+
     for (const row of epgApi.rows) {
       if (n >= EPG_API_CAP) break;
       const r = rowToRecord(epgApi.columns, row);
@@ -693,7 +804,15 @@ export function loadPhase3FromSql(
           }
         }
         for (const [k, v] of Object.entries(r)) {
-          if (keys.some((want) => k.includes(want.replace(/_/g, ""))) || keys.some((want) => k.includes(want))) {
+          const kn = k.replace(/_/g, "");
+          if (
+            keys.some(
+              (want) =>
+                k === want ||
+                k.includes(want) ||
+                kn.includes(want.replace(/_/g, ""))
+            )
+          ) {
             if (v != null && String(v).trim() !== "" && String(v).trim() !== "0") {
               return String(v).trim();
             }
@@ -701,6 +820,41 @@ export function loadPhase3FromSql(
         }
         return "";
       };
+
+      const sourceLegacyId =
+        pick("epg_id", "source_id", "epg", "epg_source_id") || undefined;
+
+      // Prefer expanding nested JSON catalogs (common in XUI.one epg_api).
+      let expanded = 0;
+      for (const key of [
+        "data",
+        "base",
+        "channels",
+        "api",
+        "json",
+        "payload",
+        "content",
+        "epg_data",
+        "channel_list",
+      ]) {
+        if (r[key] != null) {
+          expanded += expandJsonCatalog(r[key], sourceLegacyId);
+        }
+      }
+      // Also scan any string/object cell that looks like a channel catalog.
+      if (!expanded) {
+        for (const v of Object.values(r)) {
+          if (typeof v === "string" && (v.trim().startsWith("{") || v.trim().startsWith("["))) {
+            expanded += expandJsonCatalog(v, sourceLegacyId);
+          } else if (v && typeof v === "object") {
+            expanded += expandJsonCatalog(v, sourceLegacyId);
+          }
+        }
+      }
+      if (expanded) {
+        fromJson += expanded;
+        continue;
+      }
 
       let channelId = pick(
         "channel_id",
@@ -718,28 +872,36 @@ export function loadPhase3FromSql(
         "title",
         "display_name",
         "epg_name",
-        "stream_display_name"
+        "stream_display_name",
+        "label",
+        "caption"
       );
       // Positional fallback when CREATE TABLE names don't match known aliases.
       if (!channelId) {
         const vals = row
           .map((v) => (v == null ? "" : String(v).trim()))
-          .filter((v) => v !== "" && v !== "0" && v !== "NULL");
+          .filter((v) => v !== "" && v !== "0" && v.toUpperCase() !== "NULL");
         if (vals.length) {
-          channelId = vals[0].slice(0, 200);
-          if (!name && vals.length > 1) name = vals[1].slice(0, 300);
+          // Prefer a non-numeric-looking channel id when present
+          const preferred =
+            vals.find((v) => /[a-zA-Z_\-.]/.test(v) && !v.startsWith("{") && !v.startsWith("[")) ??
+            vals[0];
+          channelId = preferred.slice(0, 200);
+          if (!name) {
+            const nameCand = vals.find((v) => v !== preferred && !v.startsWith("{") && !v.startsWith("["));
+            if (nameCand) name = nameCand.slice(0, 300);
+          }
         }
       }
       if (!channelId) continue;
 
-      phase3.epgApiChannels.push({
-        sourceLegacyId: pick("epg_id", "source_id", "epg") || undefined,
-        channelId: channelId.slice(0, 200),
-        name: name ? name.slice(0, 300) : undefined,
-        icon: pick("icon", "logo", "image", "stream_icon")?.slice(0, 1000) || undefined,
+      pushApiChannel({
+        sourceLegacyId,
+        channelId,
+        name: name || undefined,
+        icon: pick("icon", "logo", "image", "stream_icon") || undefined,
         language: pick("lang", "language", "epg_lang") || undefined,
       });
-      n++;
 
       // Some XUI epg_api rows are programmes (start/stop + title).
       const title = pick("title", "programme", "program", "name");
@@ -747,7 +909,7 @@ export function loadPhase3FromSql(
       const stop = unixToDate(r.end ?? r.stop ?? r.stop_timestamp ?? r.date_end ?? r.finish);
       if (title && start && stop && stop > start && asPrograms < EPG_PROGRAM_CAP) {
         phase3.epgPrograms.push({
-          sourceLegacyId: pick("epg_id", "source_id") || undefined,
+          sourceLegacyId: sourceLegacyId,
           channelId: channelId.slice(0, 200),
           title: title.slice(0, 500),
           description: pick("description", "desc", "plot")?.slice(0, 4000) || undefined,
@@ -757,9 +919,9 @@ export function loadPhase3FromSql(
         asPrograms++;
       }
     }
-    if (epgApi.rows.length > EPG_API_CAP) {
+    if (epgApi.rows.length > EPG_API_CAP && n >= EPG_API_CAP) {
       warnings.push(
-        `Capped epg_api import at ${EPG_API_CAP} of ${epgApi.rows.length} rows.`
+        `Capped epg_api import at ${EPG_API_CAP} of ${epgApi.rows.length} source rows.`
       );
     }
     if (n === 0) {
@@ -767,13 +929,16 @@ export function loadPhase3FromSql(
         `epg_api: 0 rows mapped from ${epgApi.rows.length} (columns: ${cols.slice(0, 12).join(", ") || "none"}). Storing raw sample blob.`
       );
     } else {
-      warnings.push(`Mapped ${n} epg_api channel row(s)${asPrograms ? `, ${asPrograms} as programmes` : ""}.`);
+      warnings.push(
+        `Mapped ${n} epg_api channel row(s)${fromJson ? ` (${fromJson} from JSON catalogs)` : ""}${asPrograms ? `, ${asPrograms} as programmes` : ""}.`
+      );
     }
     // Always keep a reviewable sample of the raw table.
     phase3.extraTableBlobs = phase3.extraTableBlobs ?? {};
     phase3.extraTableBlobs.epg_api = {
       total: epgApi.rows.length,
       mapped: n,
+      fromJson,
       columns: epgApi.columns,
       sample: epgApi.rows.slice(0, 50).map((row) => rowToRecord(epgApi.columns, row)),
     };
