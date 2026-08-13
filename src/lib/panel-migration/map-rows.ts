@@ -30,7 +30,10 @@ import { applyHeaderlessInference } from "./headerless-map";
 import { enrichSqlTablesFromJunctions, flattenIdList } from "./sql-junctions";
 import {
   enrichStreamsFromSys,
+  finalizeVodStreamDefaults,
+  loadStreamsTypeMap,
   mapSeriesEpisodesFromSql,
+  resolveStreamType,
 } from "./xui-extras";
 
 function parseJsonField(val: unknown): unknown {
@@ -115,7 +118,11 @@ function lineStatusFromRow(r: Record<string, unknown>): MigrationLineRow["status
   return "ACTIVE";
 }
 
-function mapStreams(data: SqlTableData | null, source: MigrationSource): MigrationStreamRow[] {
+function mapStreams(
+  data: SqlTableData | null,
+  source: MigrationSource,
+  typeMap?: Map<string, { type: "LIVE" | "MOVIE" | "SERIES"; isRadio?: boolean }>
+): MigrationStreamRow[] {
   if (!data) return [];
   const out: MigrationStreamRow[] = [];
   for (const row of data.rows) {
@@ -143,8 +150,16 @@ function mapStreams(data: SqlTableData | null, source: MigrationSource): Migrati
     const seriesName = r.series_name ?? r.show_name ?? r.tv_series;
     const seasonNum = Number(r.season_num ?? r.season ?? r.season_number ?? NaN);
     const episodeNum = Number(r.episode_num ?? r.episode ?? r.episode_number ?? NaN);
-    const typeRaw = r.type ?? r.stream_type;
-    const typeNum = Number(typeRaw);
+    const typeRaw = r.type ?? r.stream_type ?? r.type_key;
+    const resolved = typeMap
+      ? resolveStreamType(typeRaw, typeMap)
+      : {
+          type: mapStreamType(typeRaw, source),
+          isRadio:
+            Number(r.is_radio ?? r.radio ?? 0) === 1 ||
+            Number(typeRaw) === 4 ||
+            String(typeRaw ?? "").toLowerCase().includes("radio"),
+        };
     const categoryLegacyId =
       firstLegacyId(r.category_id) ?? firstLegacyId(r.stream_category_id);
     out.push({
@@ -154,7 +169,7 @@ function mapStreams(data: SqlTableData | null, source: MigrationSource): Migrati
       backupUrl: backupExplicit
         ? String(backupExplicit)
         : backup || undefined,
-      type: mapStreamType(typeRaw, source),
+      type: resolved.type,
       streamIcon: r.stream_icon
         ? String(r.stream_icon)
         : r.logo
@@ -174,13 +189,12 @@ function mapStreams(data: SqlTableData | null, source: MigrationSource): Migrati
         ? String(r.container_extension)
         : r.target_container
           ? String(r.target_container)
-          : undefined,
+          : resolved.type === "MOVIE" || resolved.type === "SERIES"
+            ? "mp4"
+            : undefined,
       isActive: Number(r.is_deleted ?? 0) !== 1 && Number(r.enabled ?? 1) !== 0,
       isAdult: Number(r.is_adult ?? r.adult ?? 0) === 1,
-      isRadio:
-        Number(r.is_radio ?? r.radio ?? 0) === 1 ||
-        typeNum === 4 ||
-        String(typeRaw ?? "").toLowerCase().includes("radio"),
+      isRadio: resolved.isRadio || Number(r.is_radio ?? r.radio ?? 0) === 1,
       seriesName: seriesName ? String(seriesName) : undefined,
       seasonNum: Number.isFinite(seasonNum) && seasonNum > 0 ? seasonNum : undefined,
       episodeNum: Number.isFinite(episodeNum) && episodeNum > 0 ? episodeNum : undefined,
@@ -209,16 +223,19 @@ function mapBouquets(data: SqlTableData | null): MigrationBouquetRow[] {
     const name = String(
       r.bouquet_name ?? r.name ?? r.package_name ?? r.title ?? `Bouquet ${legacyId}`
     );
-    const channels =
-      r.bouquet_channels ??
-      r.bouquet_streams ??
-      r.channels ??
-      r.stream_ids ??
-      r.streams;
+    // Modern XUI.one splits live / movies / series / radios into separate columns.
+    const streamLegacyIds = [
+      ...idsFromBouquetField(
+        r.bouquet_channels ?? r.bouquet_streams ?? r.channels ?? r.stream_ids ?? r.streams
+      ),
+      ...idsFromBouquetField(r.bouquet_movies ?? r.movies ?? r.movie_ids),
+      ...idsFromBouquetField(r.bouquet_series ?? r.series ?? r.series_ids),
+      ...idsFromBouquetField(r.bouquet_radios ?? r.radios ?? r.radio_ids),
+    ];
     out.push({
       legacyId,
       name,
-      streamLegacyIds: idsFromBouquetField(channels),
+      streamLegacyIds: [...new Set(streamLegacyIds.filter(Boolean))],
       sortOrder: Number(r.sort_order ?? r.order ?? 0) || 0,
     });
   }
@@ -537,12 +554,13 @@ export type MigrationTableSet = {
 export function buildMigrationBundle(
   tables: MigrationTableSet,
   source: MigrationSource,
-  phase2?: MigrationPhase2Data
+  phase2?: MigrationPhase2Data,
+  typeMap?: Map<string, { type: "LIVE" | "MOVIE" | "SERIES"; isRadio?: boolean }>
 ): MigrationBundle {
   const lineIdToUsername = lineIdMapFromLines(tables.lines);
   return {
     source,
-    streams: mapStreams(tables.streams, source),
+    streams: mapStreams(tables.streams, source, typeMap),
     bouquets: mapBouquets(tables.bouquets),
     lines: mapLines(tables.lines),
     resellers: tables.resellers ? mapResellers(tables.resellers) : [],
@@ -668,6 +686,7 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
   );
   warnings.push(...junction.warnings);
 
+  const typeMap = loadStreamsTypeMap(allTables);
   const bundle = buildMigrationBundle(
     {
       streams: sysEnrich.streams,
@@ -678,7 +697,8 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
       enigma: enigmaTable,
     },
     source,
-    loadPhase2FromSql(allTables, source)
+    loadPhase2FromSql(allTables, source),
+    typeMap
   );
 
   const seriesEp = mapSeriesEpisodesFromSql(allTables, source, bundle.streams);
@@ -686,6 +706,21 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
     bundle.streams.push(...seriesEp.streams);
   }
   warnings.push(...seriesEp.warnings);
+  finalizeVodStreamDefaults(bundle.streams);
+
+  const live = bundle.streams.filter((s) => s.type === "LIVE" && !s.isRadio).length;
+  const movies = bundle.streams.filter((s) => s.type === "MOVIE").length;
+  const episodes = bundle.streams.filter(
+    (s) => s.type === "SERIES" && (s.episodeNum != null || s.seasonNum != null)
+  ).length;
+  const seriesShows = new Set(
+    bundle.streams
+      .filter((s) => s.type === "SERIES" && s.seriesName)
+      .map((s) => s.seriesName!.toLowerCase())
+  ).size;
+  warnings.push(
+    `Content breakdown: ${live} live, ${movies} movies, ${seriesShows} TV series, ${episodes} TV episodes.`
+  );
 
   const tablesFound = summarizeTables(allTables);
   bundle.tablesFound = tablesFound;
@@ -886,6 +921,7 @@ export async function bundleFromSqlFile(
   );
   warnings.push(...junction.warnings);
 
+  const typeMap = loadStreamsTypeMap(allTables);
   const bundle = buildMigrationBundle(
     {
       streams: sysEnrich.streams,
@@ -896,7 +932,8 @@ export async function bundleFromSqlFile(
       enigma: enigmaTable,
     },
     source,
-    loadPhase2FromSql(allTables, source)
+    loadPhase2FromSql(allTables, source),
+    typeMap
   );
 
   const seriesEp = mapSeriesEpisodesFromSql(allTables, source, bundle.streams);
@@ -904,6 +941,21 @@ export async function bundleFromSqlFile(
     bundle.streams.push(...seriesEp.streams);
   }
   warnings.push(...seriesEp.warnings);
+  finalizeVodStreamDefaults(bundle.streams);
+
+  const live = bundle.streams.filter((s) => s.type === "LIVE" && !s.isRadio).length;
+  const movies = bundle.streams.filter((s) => s.type === "MOVIE").length;
+  const episodes = bundle.streams.filter(
+    (s) => s.type === "SERIES" && (s.episodeNum != null || s.seasonNum != null)
+  ).length;
+  const seriesShows = new Set(
+    bundle.streams
+      .filter((s) => s.type === "SERIES" && s.seriesName)
+      .map((s) => s.seriesName!.toLowerCase())
+  ).size;
+  warnings.push(
+    `Content breakdown: ${live} live, ${movies} movies, ${seriesShows} TV series, ${episodes} TV episodes.`
+  );
 
   const tablesFound = summarizeTables(allTables);
   bundle.tablesFound = tablesFound;

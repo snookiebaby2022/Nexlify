@@ -293,6 +293,10 @@ async function applyMigrationBundleInner(
             seriesName: s.seriesName?.trim() || null,
             seasonNum: s.seasonNum ?? null,
             episodeNum: s.episodeNum ?? null,
+            vodMode:
+              type === StreamType.MOVIE || type === StreamType.SERIES
+                ? "ON_DEMAND"
+                : "LIVE",
           },
         });
         streamIdByLegacy.set(s.legacyId, created.id);

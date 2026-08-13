@@ -350,6 +350,10 @@ export function PanelMigrateForm() {
         ? [
             `${c.bouquets} bouquets`,
             `${c.streams} streams`,
+            c.live != null ? `${c.live} live` : null,
+            c.movies != null ? `${c.movies} movies` : null,
+            c.series != null ? `${c.series} TV series` : null,
+            c.episodes != null ? `${c.episodes} TV episodes` : null,
             `${c.lines} lines`,
             `${c.resellers} resellers`,
             `${c.magDevices} MAG`,
@@ -357,6 +361,7 @@ export function PanelMigrateForm() {
             c.categories ? `${c.categories} categories` : null,
             c.servers ? `${c.servers} servers` : null,
             c.epgSources ? `${c.epgSources} EPG sources` : null,
+            c.packages ? `${c.packages} packages` : null,
           ]
             .filter(Boolean)
             .join(", ")
@@ -401,6 +406,10 @@ export function PanelMigrateForm() {
         ? [
             `${c.bouquets} bouquets`,
             `${c.streams} streams`,
+            c.live != null ? `${c.live} live` : null,
+            c.movies != null ? `${c.movies} movies` : null,
+            c.series != null ? `${c.series} TV series` : null,
+            c.episodes != null ? `${c.episodes} TV episodes` : null,
             `${c.lines} lines`,
             `${c.resellers} resellers`,
             `${c.magDevices} MAG`,
@@ -408,6 +417,7 @@ export function PanelMigrateForm() {
             c.categories ? `${c.categories} categories` : null,
             c.servers ? `${c.servers} servers` : null,
             c.epgSources ? `${c.epgSources} EPG sources` : null,
+            c.packages ? `${c.packages} packages` : null,
             c.packages ? `${c.packages} packages` : null,
           ]
             .filter(Boolean)

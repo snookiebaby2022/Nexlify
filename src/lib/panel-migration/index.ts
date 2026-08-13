@@ -52,11 +52,29 @@ export function parseMigrationInput(
 }
 
 export function previewMigrationBundle(bundle: MigrationBundle) {
+  const live = bundle.streams.filter((s) => s.type === "LIVE" && !s.isRadio).length;
+  const movies = bundle.streams.filter((s) => s.type === "MOVIE").length;
+  const episodes = bundle.streams.filter(
+    (s) => s.type === "SERIES" && (s.episodeNum != null || s.seasonNum != null)
+  ).length;
+  const seriesShows = new Set(
+    bundle.streams
+      .filter((s) => s.type === "SERIES" && s.seriesName)
+      .map((s) => String(s.seriesName).toLowerCase())
+  ).size;
+  const seriesOnly = bundle.streams.filter(
+    (s) => s.type === "SERIES" && s.episodeNum == null && s.seasonNum == null
+  ).length;
+
   return {
     source: bundle.source,
     counts: {
       bouquets: bundle.bouquets.length,
       streams: bundle.streams.length,
+      live,
+      movies,
+      series: seriesShows || seriesOnly,
+      episodes,
       lines: bundle.lines.length,
       resellers: bundle.resellers?.length ?? 0,
       magDevices: bundle.magDevices?.length ?? 0,
