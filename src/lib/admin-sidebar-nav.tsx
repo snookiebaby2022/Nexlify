@@ -431,6 +431,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/bouquets/templates", label: "Bouquet templates", section: "Content" },
           { href: "/admin/devices", label: "MAG & Enigma2", section: "Devices" },
           { href: "/admin/servers/install", label: "Install stream server", section: "Servers" },
+          { href: "/admin/servers#main-server", label: "Change main server", section: "Servers" },
           { href: "/admin/import/migrate", label: "Panel migration", section: "Import" },
           { href: "/admin/settings/cron", label: "Scheduled tasks", section: "Maintenance" },
           { href: "/admin/settings/updates", label: "Panel update", section: "Maintenance" },

@@ -274,8 +274,8 @@ export async function applyMigrationPhase3(
     }
   }
 
-  // --- full EPG guide (opt-in — epg_data can be huge; EPG source URLs use importEpg) ---
-  if (options.importEpgGuide === true && (phase3.epgPrograms.length || phase3.epgChannels.length)) {
+  // --- full EPG guide (default on; uncheck for source URLs only) ---
+  if (options.importEpgGuide !== false && (phase3.epgPrograms.length || phase3.epgChannels.length)) {
     let defaultSourceId =
       [...epgSourceIdByLegacy.values()][0] ??
       (await prisma.epgSource.findFirst())?.id ??

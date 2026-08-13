@@ -33,6 +33,39 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Preview strip in import order: servers → content → lines → extras. */
+function formatPreviewCounts(c: Record<string, number>): string {
+  return [
+    c.servers ? `${c.servers} servers` : null,
+    c.categories ? `${c.categories} categories` : null,
+    c.epgSources ? `${c.epgSources} EPG sources` : null,
+    c.providers ? `${c.providers} providers` : null,
+    c.providerLinks ? `${c.providerLinks} provider links` : null,
+    `${c.streams ?? 0} streams`,
+    c.live != null ? `${c.live} live` : null,
+    c.movies != null ? `${c.movies} movies` : null,
+    c.series != null ? `${c.series} TV series` : null,
+    c.episodes != null ? `${c.episodes} TV episodes` : null,
+    `${c.bouquets ?? 0} bouquets`,
+    c.packages ? `${c.packages} packages` : null,
+    c.watchFolders ? `${c.watchFolders} watch folders` : null,
+    c.watchLogs ? `${c.watchLogs} watch logs` : null,
+    `${c.lines ?? 0} lines`,
+    `${c.resellers ?? 0} resellers`,
+    `${c.magDevices ?? 0} MAG`,
+    `${c.enigmaDevices ?? 0} Enigma`,
+    c.tickets ? `${c.tickets} tickets` : null,
+    c.epgChannels ? `${c.epgChannels} EPG channels` : null,
+    c.epgPrograms ? `${c.epgPrograms} EPG programmes` : null,
+    c.blockedAsns ? `${c.blockedAsns} ASN blocks` : null,
+    c.activityLogs ? `${c.activityLogs} log rows` : null,
+    c.bandwidthSnapshots ? `${c.bandwidthSnapshots} stats snapshots` : null,
+    c.settings ? `settings blob` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
 export function PanelMigrateForm() {
   const [source, setSource] = useState<string>("onestream");
   const [inputMode, setInputMode] = useState<InputMode>("postgres");
@@ -63,8 +96,8 @@ export function PanelMigrateForm() {
   const [importProviders, setImportProviders] = useState(true);
   const [importWatchFolders, setImportWatchFolders] = useState(true);
   const [importTickets, setImportTickets] = useState(true);
-  /** Off by default — epg_data can be huge; EPG source URLs use importEpg. */
-  const [importEpgGuide, setImportEpgGuide] = useState(false);
+  /** Full EPG guide on by default (large dumps can take longer). */
+  const [importEpgGuide, setImportEpgGuide] = useState(true);
   const [importBlockedAsns, setImportBlockedAsns] = useState(true);
   const [importLogs, setImportLogs] = useState(true);
   const [importStats, setImportStats] = useState(true);
@@ -362,39 +395,7 @@ export function PanelMigrateForm() {
     const parseWarnings = (preview?.warnings as string[]) ?? [];
     const tablesFound = (preview?.tablesFound as { name: string; rows: number; hasColumns: boolean }[]) ?? [];
 
-    setPreview(
-      c
-        ? [
-            `${c.bouquets} bouquets`,
-            `${c.streams} streams`,
-            c.live != null ? `${c.live} live` : null,
-            c.movies != null ? `${c.movies} movies` : null,
-            c.series != null ? `${c.series} TV series` : null,
-            c.episodes != null ? `${c.episodes} TV episodes` : null,
-            `${c.lines} lines`,
-            `${c.resellers} resellers`,
-            `${c.magDevices} MAG`,
-            `${c.enigmaDevices} Enigma`,
-            c.categories ? `${c.categories} categories` : null,
-            c.servers ? `${c.servers} servers` : null,
-            c.epgSources ? `${c.epgSources} EPG sources` : null,
-            c.packages ? `${c.packages} packages` : null,
-            c.providers ? `${c.providers} providers` : null,
-            c.providerLinks ? `${c.providerLinks} provider links` : null,
-            c.watchFolders ? `${c.watchFolders} watch folders` : null,
-            c.watchLogs ? `${c.watchLogs} watch logs` : null,
-            c.tickets ? `${c.tickets} tickets` : null,
-            c.epgChannels ? `${c.epgChannels} EPG channels` : null,
-            c.epgPrograms ? `${c.epgPrograms} EPG programmes` : null,
-            c.blockedAsns ? `${c.blockedAsns} ASN blocks` : null,
-            c.activityLogs ? `${c.activityLogs} log rows` : null,
-            c.bandwidthSnapshots ? `${c.bandwidthSnapshots} stats snapshots` : null,
-            c.settings ? `settings blob` : null,
-          ]
-            .filter(Boolean)
-            .join(", ")
-        : ""
-    );
+    setPreview(c ? formatPreviewCounts(c) : "");
 
     const tablesLine = tablesFound.length
       ? `Tables detected in dump: ${tablesFound
@@ -429,39 +430,7 @@ export function PanelMigrateForm() {
     }
 
     const c = (data.preview as Record<string, unknown>)?.counts as Record<string, number> | undefined;
-    setPreview(
-      c
-        ? [
-            `${c.bouquets} bouquets`,
-            `${c.streams} streams`,
-            c.live != null ? `${c.live} live` : null,
-            c.movies != null ? `${c.movies} movies` : null,
-            c.series != null ? `${c.series} TV series` : null,
-            c.episodes != null ? `${c.episodes} TV episodes` : null,
-            `${c.lines} lines`,
-            `${c.resellers} resellers`,
-            `${c.magDevices} MAG`,
-            `${c.enigmaDevices} Enigma`,
-            c.categories ? `${c.categories} categories` : null,
-            c.servers ? `${c.servers} servers` : null,
-            c.epgSources ? `${c.epgSources} EPG sources` : null,
-            c.packages ? `${c.packages} packages` : null,
-            c.providers ? `${c.providers} providers` : null,
-            c.providerLinks ? `${c.providerLinks} provider links` : null,
-            c.watchFolders ? `${c.watchFolders} watch folders` : null,
-            c.watchLogs ? `${c.watchLogs} watch logs` : null,
-            c.tickets ? `${c.tickets} tickets` : null,
-            c.epgChannels ? `${c.epgChannels} EPG channels` : null,
-            c.epgPrograms ? `${c.epgPrograms} EPG programmes` : null,
-            c.blockedAsns ? `${c.blockedAsns} ASN blocks` : null,
-            c.activityLogs ? `${c.activityLogs} log rows` : null,
-            c.bandwidthSnapshots ? `${c.bandwidthSnapshots} stats snapshots` : null,
-            c.settings ? `settings blob` : null,
-          ]
-            .filter(Boolean)
-            .join(", ")
-        : ""
-    );
+    setPreview(c ? formatPreviewCounts(c) : "");
 
     const r = data.result as Record<string, { imported: number; skipped: number }> & { warnings?: string[] } | undefined;
     if (r) {
@@ -814,12 +783,32 @@ export function PanelMigrateForm() {
 
       <div className="flex flex-wrap gap-4 text-sm">
         <label>
-          <input type="checkbox" checked={importBouquets} onChange={(e) => setImportBouquets(e.target.checked)} />{" "}
-          Channel bouquets
+          <input
+            type="checkbox"
+            checked={importServers}
+            onChange={(e) => setImportServers(e.target.checked)}
+          />{" "}
+          Stream servers
         </label>
         <label>
-          <input type="checkbox" checked={importPackages} onChange={(e) => setImportPackages(e.target.checked)} />{" "}
-          Billing packages
+          <input
+            type="checkbox"
+            checked={importCategories}
+            onChange={(e) => setImportCategories(e.target.checked)}
+          />{" "}
+          Categories
+        </label>
+        <label>
+          <input type="checkbox" checked={importEpg} onChange={(e) => setImportEpg(e.target.checked)} />{" "}
+          EPG sources (URLs)
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={importProviders}
+            onChange={(e) => setImportProviders(e.target.checked)}
+          />{" "}
+          Providers / provider streams
         </label>
         <label>
           <input type="checkbox" checked={importStreams} onChange={(e) => setImportStreams(e.target.checked)} />{" "}
@@ -833,6 +822,22 @@ export function PanelMigrateForm() {
             disabled={!importStreams}
           />{" "}
           Import streams as stopped
+        </label>
+        <label>
+          <input type="checkbox" checked={importBouquets} onChange={(e) => setImportBouquets(e.target.checked)} />{" "}
+          Channel bouquets
+        </label>
+        <label>
+          <input type="checkbox" checked={importPackages} onChange={(e) => setImportPackages(e.target.checked)} />{" "}
+          Billing packages
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={importWatchFolders}
+            onChange={(e) => setImportWatchFolders(e.target.checked)}
+          />{" "}
+          Watch folders / watch logs
         </label>
         <label>
           <input type="checkbox" checked={importLines} onChange={(e) => setImportLines(e.target.checked)} />{" "}
@@ -861,22 +866,10 @@ export function PanelMigrateForm() {
         <label>
           <input
             type="checkbox"
-            checked={importCategories}
-            onChange={(e) => setImportCategories(e.target.checked)}
+            checked={importTickets}
+            onChange={(e) => setImportTickets(e.target.checked)}
           />{" "}
-          Categories
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={importServers}
-            onChange={(e) => setImportServers(e.target.checked)}
-          />{" "}
-          Stream servers
-        </label>
-        <label>
-          <input type="checkbox" checked={importEpg} onChange={(e) => setImportEpg(e.target.checked)} />{" "}
-          EPG sources (URLs)
+          Tickets
         </label>
         <label>
           <input
@@ -885,30 +878,6 @@ export function PanelMigrateForm() {
             onChange={(e) => setImportEpgGuide(e.target.checked)}
           />{" "}
           Full EPG guide (epg_data / epg_channels)
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={importProviders}
-            onChange={(e) => setImportProviders(e.target.checked)}
-          />{" "}
-          Providers / provider streams
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={importWatchFolders}
-            onChange={(e) => setImportWatchFolders(e.target.checked)}
-          />{" "}
-          Watch folders / watch logs
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={importTickets}
-            onChange={(e) => setImportTickets(e.target.checked)}
-          />{" "}
-          Tickets
         </label>
         <label>
           <input

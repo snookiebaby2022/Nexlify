@@ -2,6 +2,7 @@ import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { listActiveConnections, listLiveConnections } from "@/lib/connections";
+import { sortServersMainFirst } from "@/lib/ensure-main-server-online";
 
 const STALE_MS = 5 * 60 * 1000;
 const CONN_STALE_MS = 24 * 60 * 60 * 1000; // Match listActiveConnections 24h window
@@ -64,7 +65,9 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     connByServer.get(sid)!.add(c.lineId);
   }
 
-  return servers.map((s) => {
+  const ordered = sortServersMainFirst(servers);
+
+  return ordered.map((s) => {
     const online =
       s.healthStatus === "online" ||
       s.healthStatus === "healthy" ||

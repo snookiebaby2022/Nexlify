@@ -6,7 +6,7 @@ import { ensurePanelCategory } from "@/lib/ensure-panel-category";
 import { STREAM_HTTP_PORT, STREAM_HTTPS_PORT, PANEL_HTTP_PORT } from "@/lib/server-ports";
 import { PanelRole } from "@prisma/client";
 import { assertCanCreateMainServer } from "@/lib/plan-limits";
-import { ensureMainServerOnline } from "@/lib/ensure-main-server-online";
+import { ensureMainServerOnline, sortServersMainFirst } from "@/lib/ensure-main-server-online";
 import {
   isLocalPanelServer,
   serverPortProfile,
@@ -26,7 +26,7 @@ export async function GET() {
     },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
-  return NextResponse.json({ servers });
+  return NextResponse.json({ servers: sortServersMainFirst(servers) });
 }
 
 export async function POST(req: NextRequest) {

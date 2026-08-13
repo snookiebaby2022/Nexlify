@@ -27,6 +27,7 @@ const SETUP_SECTIONS = [
     title: "Streaming infrastructure",
     items: [
       { href: "/admin/servers/install", label: "Install stream server" },
+      { href: "/admin/servers#main-server", label: "Change main server" },
       { href: "/admin/settings/server", label: "Server & ports" },
       { href: "/admin/settings/binaries", label: "FFmpeg & binaries" },
       { href: "/admin/settings/streams", label: "Streaming options" },

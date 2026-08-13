@@ -38,7 +38,7 @@ Paths below are mapped from the official **1-stream Migration Guide (Experimenta
 | Providers | `providers` / `streams_providers` / `providers_streams` → StreamProvider + stream links (XUI, StreamCreed, Xtream UI, NXT, 1-stream when present) |
 | Watch folders | `watch_folders` + capped watch/import logs → WatchFolder / ImportJob |
 | Tickets | `tickets` (+ replies) → Ticket / TicketMessage (classic XC / XUI / StreamCreed) |
-| Full EPG guide | Opt-in: `epg_channels` catalog + capped `epg_data` programmes (all MySQL lineage panels + 1-stream) |
+| Full EPG guide | Default on: `epg_channels` catalog + capped `epg_data` programmes (uncheck for source URLs only) |
 | ASN blocks | `blocked_asns` → BlockedAsn (when the source has ASN tables) |
 | Logs / stats | Capped panel/line/user/stream/client logs → ActivityLog; server stats/activity → BandwidthSnapshot |
 | Settings | Stored as PanelSetting `migration.<source>_settings` for review (not applied blindly) |

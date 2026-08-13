@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { pgRowsToTableData } from "./map-rows";
 import { rowToRecord, type SqlTableData } from "./sql-parse";
+import type { Prisma } from "@prisma/client";
 import type {
   MigrationCategoryRow,
   MigrationEpgRow,
@@ -260,6 +261,12 @@ export async function applyMigrationPhase2(
             domain: s.domain?.trim() || null,
             maxClients: Number(s.maxClients) || 1000,
             privateIp: s.privateIp?.trim() || null,
+            sortOrder: i,
+            // First imported server is the main server.
+            panelSettings:
+              i === 0
+                ? ({ advanced: { serverRole: "main" } } as Prisma.InputJsonValue)
+                : undefined,
           },
         });
         serverIdByLegacy.set(s.legacyId, created.id);

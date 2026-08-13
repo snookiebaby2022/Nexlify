@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
 import {
   MIGRATION_SOURCES,
+  previewMigrationBundle,
   runMigration,
   runMigrationFromPostgres,
   type MigrationSource,
@@ -35,8 +36,8 @@ function applyOptions(body: Record<string, unknown>) {
     importProviders: body.importProviders !== false,
     importWatchFolders: body.importWatchFolders !== false,
     importTickets: body.importTickets !== false,
-    /** Opt-in — full epg_data can be huge; EPG source URLs use importEpg. */
-    importEpgGuide: body.importEpgGuide === true,
+    /** Full EPG guide on by default; uncheck for source URLs only. */
+    importEpgGuide: body.importEpgGuide !== false,
     importBlockedAsns: body.importBlockedAsns !== false,
     importLogs: body.importLogs !== false,
     importStats: body.importStats !== false,
@@ -256,26 +257,7 @@ export async function POST(req: NextRequest) {
         // For large files, stream-parse directly to bundle
         const bundle = await bundleFromSqlFile(filePath, source);
         await cleanup();
-        const preview = {
-          source: bundle.source,
-          counts: {
-            bouquets: bundle.bouquets.length,
-            streams: bundle.streams.length,
-            lines: bundle.lines.length,
-            resellers: bundle.resellers?.length ?? 0,
-            magDevices: bundle.magDevices?.length ?? 0,
-            enigmaDevices: bundle.enigmaDevices?.length ?? 0,
-            categories: bundle.phase2?.categories.length ?? 0,
-            servers: bundle.phase2?.servers.length ?? 0,
-            epgSources: bundle.phase2?.epgSources.length ?? 0,
-            packages:
-              (bundle.packages?.length ?? 0) ||
-              (bundle.phase2?.packages?.length ?? 0),
-          },
-          warnings: bundle.warnings ?? [],
-          tablesFound: bundle.tablesFound ?? [],
-        };
-        return NextResponse.json({ preview });
+        return NextResponse.json({ preview: previewMigrationBundle(bundle) });
       } else {
         content = (uploadedContent ?? (body.content as string | undefined) ?? "").trim();
       }
@@ -330,25 +312,7 @@ export async function POST(req: NextRequest) {
               const { applyMigrationBundle } = await import("@/lib/panel-migration/apply");
               const result = await applyMigrationBundle(bundle, { ...opts, onProgress });
               send("complete", {
-                preview: {
-                  source: bundle.source,
-                  counts: {
-                    bouquets: bundle.bouquets.length,
-                    streams: bundle.streams.length,
-                    lines: bundle.lines.length,
-                    resellers: bundle.resellers?.length ?? 0,
-                    magDevices: bundle.magDevices?.length ?? 0,
-                    enigmaDevices: bundle.enigmaDevices?.length ?? 0,
-                    categories: bundle.phase2?.categories.length ?? 0,
-                    servers: bundle.phase2?.servers.length ?? 0,
-                    epgSources: bundle.phase2?.epgSources.length ?? 0,
-                    packages:
-                      (bundle.packages?.length ?? 0) ||
-                      (bundle.phase2?.packages?.length ?? 0),
-                  },
-                  warnings: bundle.warnings ?? [],
-                  tablesFound: bundle.tablesFound ?? [],
-                },
+                preview: previewMigrationBundle(bundle),
                 result,
               });
             } else {

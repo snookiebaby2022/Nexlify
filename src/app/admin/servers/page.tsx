@@ -7,7 +7,10 @@ import { formatDateTime } from "@/lib/format";
 import { PANEL_HTTP_PORT, STREAM_HTTP_PORT, STREAM_HTTPS_PORT } from "@/lib/server-ports";
 import { IpWithFlag } from "@/components/ip-with-flag";
 import { ServerActionsMenu } from "@/components/server-actions-menu";
-import { parseServerPanelSettings } from "@/lib/server-panel-settings";
+import {
+  resolveServerRole,
+  sortServersMainFirst,
+} from "@/lib/ensure-main-server-online";
 import {
   Server,
   Activity,
@@ -48,17 +51,6 @@ type ServerRow = {
   _count: { streams: number; lbSessions: number; healthChecks: number };
 };
 
-function serverRole(s: ServerRow, minSort: number): "main" | "lb" | "standard" {
-  const { advanced } = parseServerPanelSettings(s.panelSettings);
-  if (advanced.serverRole === "main" || advanced.serverRole === "lb") return advanced.serverRole;
-  const hasGeo =
-    (Array.isArray(s.geoLbCountries) && s.geoLbCountries.length > 0) ||
-    (Array.isArray(s.geoLbIsps) && s.geoLbIsps.length > 0);
-  if (hasGeo) return "lb";
-  if ((s.sortOrder ?? 0) === minSort) return "main";
-  return "standard";
-}
-
 function isServerOnline(s: ServerRow): boolean {
   return s.healthStatus === "online" || s.healthStatus === "healthy";
 }
@@ -76,7 +68,7 @@ export default function AdminServersPage() {
   function load() {
     fetch("/api/admin/servers")
       .then((r) => r.json())
-      .then((d) => setServers(d.servers));
+      .then((d) => setServers(sortServersMainFirst(d.servers ?? [])));
     fetch("/api/admin/proxies")
       .then((r) => r.json())
       .then((d) => setProxies(d.proxies ?? []));
@@ -178,8 +170,8 @@ export default function AdminServersPage() {
   const onlineServers = servers.filter((s) => isServerOnline(s)).length;
   const offlineServers = totalServers - onlineServers;
   const totalStreams = servers.reduce((sum, s) => sum + (s._count?.streams ?? 0), 0);
-  const lbServers = servers.filter((s) => serverRole(s, minSort) === "lb").length;
-  const mainServer = servers.find((s) => serverRole(s, minSort) === "main");
+  const lbServers = servers.filter((s) => resolveServerRole(s, minSort) === "lb").length;
+  const mainServer = servers.find((s) => resolveServerRole(s, minSort) === "main");
 
   function healthColor(status: string) {
     if (status === "online" || status === "healthy") return "var(--success)";
@@ -188,7 +180,7 @@ export default function AdminServersPage() {
   }
 
   function roleBadge(s: ServerRow) {
-    const role = serverRole(s, minSort);
+    const role = resolveServerRole(s, minSort);
     const online = isServerOnline(s);
     const label = role === "main" ? "Main" : role === "lb" ? "LB" : "Standard";
     return (
@@ -281,7 +273,7 @@ export default function AdminServersPage() {
 
   function ServerCard({ s }: { s: ServerRow }) {
     const online = isServerOnline(s);
-    const role = serverRole(s, minSort);
+    const role = resolveServerRole(s, minSort);
     const streamCount = s._count?.streams ?? 0;
     const lbCount = s._count?.lbSessions ?? 0;
     return (
@@ -451,19 +443,29 @@ export default function AdminServersPage() {
       {/* Main Server Info */}
       {mainServer && (
         <div
-          className="rounded-xl border p-4 flex items-center gap-3"
+          id="main-server"
+          className="rounded-xl border p-4 flex flex-wrap items-center justify-between gap-3"
           style={{
             borderColor: "rgba(168,85,247,0.3)",
             background: "linear-gradient(135deg, rgba(168,85,247,0.08) 0%, rgba(59,130,246,0.05) 100%)",
           }}
         >
-          <Shield size={20} style={{ color: "#a855f7" }} />
-          <div>
-            <p className="text-sm font-medium">Main Server</p>
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
-              {mainServer.name} ({mainServer.host}:{mainServer.port}) — Primary entry point for all traffic
-            </p>
+          <div className="flex items-center gap-3">
+            <Shield size={20} style={{ color: "#a855f7" }} />
+            <div>
+              <p className="text-sm font-medium">Main Server</p>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                {mainServer.name} ({mainServer.host}:{mainServer.port}) — Primary entry point for all traffic
+              </p>
+            </div>
           </div>
+          <Link
+            href={`/admin/servers/${mainServer.id}/edit`}
+            className="text-xs px-3 py-1.5 rounded-md border"
+            style={{ borderColor: "rgba(168,85,247,0.4)", color: "#a855f7" }}
+          >
+            Change main server
+          </Link>
         </div>
       )}
 
