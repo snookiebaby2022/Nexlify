@@ -3,6 +3,8 @@ import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
 import { restoreFullBackup } from "@/lib/backup-restore";
 import { computeChecksum, decryptBackup } from "@/lib/backup-run";
+import { bundleFromSql } from "@/lib/panel-migration/map-rows";
+import type { MigrationBundle, MigrationSource } from "@/lib/panel-migration/types";
 
 /**
  * POST /api/admin/backup-restore
@@ -67,7 +69,7 @@ export async function POST(req: NextRequest) {
 
 /**
  * Parse uploaded backup content — handles both JSON snapshots and SQL dumps.
- * SQL dumps are converted to the snapshot format expected by restoreFullBackup.
+ * SQL dumps use the proper migration engine (bundleFromSql) for correct column mapping.
  */
 function parseUploadedBackupContent(content: string): Record<string, unknown> | null {
   const trimmed = content.trim();
@@ -76,7 +78,6 @@ function parseUploadedBackupContent(content: string): Record<string, unknown> | 
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
     try {
       const parsed = JSON.parse(trimmed);
-      // If it's an array, wrap in snapshot
       if (Array.isArray(parsed)) {
         return { panelSettings: parsed };
       }
@@ -86,170 +87,153 @@ function parseUploadedBackupContent(content: string): Record<string, unknown> | 
     }
   }
 
-  // Try SQL dump
+  // Try SQL dump — use the migration engine for proper column mapping
   if (/INSERT\s+INTO/i.test(trimmed)) {
-    return parseSqlDumpToSnapshot(trimmed);
+    return migrationBundleToSnapshot(trimmed);
   }
 
   return null;
 }
 
 /**
- * Parse a SQL dump file and convert INSERT statements to a snapshot format.
- * Maps common table names to snapshot keys.
- * Handles both single-row and multi-row INSERT statements.
+ * Quick-detect the most likely migration source by scanning table names in the SQL.
+ * Much faster than running bundleFromSql multiple times.
  */
-function parseSqlDumpToSnapshot(sql: string): Record<string, unknown> {
+function detectSource(sql: string): MigrationSource {
+  const lower = sql.toLowerCase();
+
+  // xtream_ui uses "users" as the lines table
+  if (/INSERT\s+INTO\s+[`"']?users[`"']?\s*\(/i.test(sql) && /INSERT\s+INTO\s+[`"']?lines[`"']?\s*\(/i.test(sql)) {
+    return "xtream_ui";
+  }
+
+  // onestream uses "subscriptions" or "subscription"
+  if (/INSERT\s+INTO\s+[`"']?subscriptions?[`"']?\s*\(/i.test(sql)) {
+    return "onestream";
+  }
+
+  // midnight uses "subscribers"
+  if (/INSERT\s+INTO\s+[`"']?subscribers[`"']?\s*\(/i.test(sql)) {
+    return "midnight";
+  }
+
+  // Default to xui (most common — has lines, streams, bouquets)
+  return "xui";
+}
+
+/**
+ * Convert a SQL dump to the snapshot format expected by restoreFullBackup,
+ * using the proper migration engine for column mapping.
+ */
+function migrationBundleToSnapshot(sql: string): Record<string, unknown> {
+  const source = detectSource(sql);
+  const bundle = bundleFromSql(sql, source);
+  return bundleToSnapshot(bundle);
+}
+
+/**
+ * Convert a MigrationBundle to the flat snapshot format used by restoreFullBackup.
+ */
+function bundleToSnapshot(bundle: MigrationBundle): Record<string, unknown> {
   const snapshot: Record<string, unknown> = {};
 
-  const TABLE_MAP: Record<string, string> = {
-    panel_settings: "panelSettings",
-    panelsetting: "panelSettings",
-    categories: "categories",
-    category: "categories",
-    bouquets: "bouquets",
-    bouquet: "bouquets",
-    streams: "streams",
-    stream: "streams",
-    lines: "lines",
-    line: "lines",
-    users: "users",
-    user: "users",
-    packages: "packages",
-    package: "packages",
-    coupons: "coupons",
-    coupon: "coupons",
-    epg_sources: "epgSources",
-    epgsource: "epgSources",
-  };
+  // Lines → snapshot.lines (with proper field names)
+  if (bundle.lines?.length) {
+    snapshot.lines = bundle.lines.map((l) => ({
+      id: l.legacyId ?? l.username,
+      username: l.username,
+      password: l.password,
+      expiresAt: l.expiresAt?.toISOString?.() ?? l.expiresAt,
+      maxConnections: l.maxConnections ?? 1,
+      status: l.status ?? "ACTIVE",
+      notes: l.notes ?? "",
+      allowedIps: l.allowedIps ?? "",
+      lockToIp: l.lockToIp ?? false,
+      canWatchAdult: l.canWatchAdult ?? false,
+      allowedCountries: l.allowedCountries ?? "",
+      blockedCountries: l.blockedCountries ?? "",
+      allowedOutput: l.allowedOutput ?? "",
+      ownerLegacyId: l.ownerLegacyId ?? "",
+    }));
+  }
 
-  // Match INSERT INTO `table` [columns] VALUES (...), (...), ...;
-  const insertRegex = /INSERT\s+INTO\s+[`"']?(\w+)[`"']?\s*(?:\([^)]*\)\s*)?VALUES\s*([\s\S]*?);\s*$/gim;
+  // Streams → snapshot.streams
+  if (bundle.streams?.length) {
+    snapshot.streams = bundle.streams.map((s) => ({
+      id: s.legacyId,
+      name: s.name,
+      streamUrl: s.streamUrl,
+      type: s.type ?? "LIVE",
+      sortOrder: s.sortOrder ?? 0,
+      streamIcon: s.streamIcon ?? "",
+      epgChannelId: s.epgChannelId ?? "",
+      channelId: s.channelId ?? "",
+      containerExtension: s.containerExtension ?? "",
+      isActive: s.isActive ?? true,
+    }));
+  }
 
-  let match;
-  while ((match = insertRegex.exec(sql)) !== null) {
-    const tableName = match[1].toLowerCase();
-    const valuesBlock = match[2];
+  // Bouquets → snapshot.bouquets (with stream links)
+  if (bundle.bouquets?.length) {
+    snapshot.bouquets = bundle.bouquets.map((b) => ({
+      id: b.legacyId,
+      name: b.name,
+      sortOrder: b.sortOrder ?? 0,
+      isActive: true,
+      streams: b.streamLegacyIds?.map((sid) => ({ streamId: sid })) ?? [],
+    }));
+  }
 
-    const snapshotKey = TABLE_MAP[tableName];
-    if (!snapshotKey) continue;
+  // Resellers → snapshot.users (panel admin users)
+  if (bundle.resellers?.length) {
+    snapshot.users = bundle.resellers.map((r) => ({
+      id: r.legacyId ?? r.username,
+      username: r.username,
+      password: r.password,
+      role: "RESELLER",
+      credits: r.credits ?? 0,
+      isActive: r.isActive ?? true,
+    }));
+  }
 
-    if (!Array.isArray(snapshot[snapshotKey])) {
-      snapshot[snapshotKey] = [];
-    }
-
-    // Split multi-row VALUES: (1,'a'), (2,'b') → ["(1,'a')", "(2,'b')"]
-    const rows = splitValueRows(valuesBlock);
-    for (const row of rows) {
-      const parsed = parseSqlValues(row);
-      if (parsed) {
-        (snapshot[snapshotKey] as Record<string, unknown>[]).push(parsed);
+  // MAG devices — attach to lines
+  if (bundle.magDevices?.length) {
+    const lines = (snapshot.lines as Record<string, unknown>[]) ?? [];
+    for (const mag of bundle.magDevices) {
+      const line = lines.find((l) => l.username === mag.lineUsername);
+      if (line) {
+        line.magMac = mag.mac;
       }
+    }
+  }
+
+  // Phase 2: categories, servers, epg
+  if (bundle.phase2) {
+    if (bundle.phase2.categories?.length) {
+      snapshot.categories = bundle.phase2.categories.map((c) => ({
+        id: c.legacyId,
+        name: c.name,
+        parentId: c.parentLegacyId ?? null,
+        categoryType: "LIVE",
+        sortOrder: 0,
+        isAdult: false,
+      }));
+    }
+    if (bundle.phase2.servers?.length) {
+      // Servers are handled by migration engine directly, include as info
+      (snapshot as any)._servers = bundle.phase2.servers;
+    }
+    if (bundle.phase2.epgSources?.length) {
+      snapshot.epgSources = bundle.phase2.epgSources.map((e) => ({
+        id: e.name,
+        name: e.name,
+        url: e.url,
+        country: e.country ?? "",
+      }));
     }
   }
 
   return snapshot;
-}
-
-/**
- * Split a multi-row VALUES block into individual row strings.
- * Handles nested parentheses, strings with commas, escaped quotes.
- * "(1,'a,b'), (2,'c')" → ["(1,'a,b')", "(2,'c')"]
- */
-function splitValueRows(block: string): string[] {
-  const rows: string[] = [];
-  let depth = 0;
-  let inString = false;
-  let stringChar = "";
-  let current = "";
-
-  for (let i = 0; i < block.length; i++) {
-    const ch = block[i];
-
-    if (inString) {
-      current += ch;
-      if (ch === stringChar && block[i + 1] !== stringChar) {
-        inString = false;
-      } else if (ch === stringChar && block[i + 1] === stringChar) {
-        current += stringChar;
-        i++;
-      }
-    } else {
-      if (ch === "'" || ch === '"') {
-        inString = true;
-        stringChar = ch;
-        current += ch;
-      } else if (ch === "(") {
-        if (depth === 0) current = "";
-        depth++;
-        current += ch;
-      } else if (ch === ")") {
-        depth--;
-        current += ch;
-        if (depth === 0 && current.trim()) {
-          rows.push(current.trim());
-          current = "";
-        }
-      } else {
-        current += ch;
-      }
-    }
-  }
-
-  return rows;
-}
-
-/**
- * Parse the VALUES (...) part of a single INSERT statement into a key-value object.
- * Handles strings, numbers, NULL, and basic types.
- */
-function parseSqlValues(valuesStr: string): Record<string, unknown> | null {
-  const values: unknown[] = [];
-  let current = "";
-  let inString = false;
-  let stringChar = "";
-
-  for (let i = 0; i < valuesStr.length; i++) {
-    const ch = valuesStr[i];
-
-    if (inString) {
-      if (ch === stringChar && valuesStr[i + 1] !== stringChar) {
-        inString = false;
-      } else if (ch === stringChar && valuesStr[i + 1] === stringChar) {
-        current += stringChar;
-        i++; // skip escaped quote
-      } else {
-        current += ch;
-      }
-    } else {
-      if (ch === "'" || ch === '"') {
-        inString = true;
-        stringChar = ch;
-      } else if (ch === ",") {
-        values.push(current.trim());
-        current = "";
-      } else {
-        current += ch;
-      }
-    }
-  }
-  if (current.trim()) values.push(current.trim());
-
-  if (values.length === 0) return null;
-
-  // Convert to typed values
-  return values.map((v) => {
-    const s = String(v);
-    if (s === "NULL" || s === "null") return null;
-    if (s === "true" || s === "1") return true;
-    if (s === "false" || s === "0") return false;
-    const num = Number(s);
-    if (!isNaN(num) && s !== "") return num;
-    return s;
-  }).reduce((obj, val, i) => {
-    obj[`col${i}`] = val;
-    return obj;
-  }, {} as Record<string, unknown>);
 }
 
 export async function GET() {
