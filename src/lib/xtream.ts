@@ -124,30 +124,77 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
   };
 }
 
+async function categoryRowsForIds(
+  categoryIds: string[],
+  includeUncategorized: boolean
+): Promise<{ category_id: string; category_name: string; parent_id: number | string; created_at: string }[]> {
+  const rows: { category_id: string; category_name: string; parent_id: number | string; created_at: string }[] = [];
+  if (includeUncategorized) {
+    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
+  }
+  if (!categoryIds.length) return rows;
+
+  // Include ancestor categories so apps can render subcategory trees
+  const allIds = new Set(categoryIds);
+  let frontier = [...categoryIds];
+  for (let depth = 0; depth < 8 && frontier.length; depth++) {
+    const parents = await prisma.category.findMany({
+      where: { id: { in: frontier }, parentId: { not: null } },
+      select: { parentId: true },
+    });
+    frontier = [];
+    for (const p of parents) {
+      if (p.parentId && !allIds.has(p.parentId)) {
+        allIds.add(p.parentId);
+        frontier.push(p.parentId);
+      }
+    }
+  }
+
+  const cats = await prisma.category.findMany({
+    where: { id: { in: [...allIds] } },
+    orderBy: { sortOrder: "asc" },
+  });
+  const idSet = new Set(cats.map((c) => c.id));
+  for (const c of cats) {
+    const parent =
+      c.parentId && idSet.has(c.parentId) ? c.parentId : 0;
+    rows.push({
+      category_id: c.id,
+      category_name: c.name,
+      parent_id: parent,
+      created_at: Math.floor(c.createdAt.getTime() / 1000).toString(),
+    });
+  }
+  return rows;
+}
+
+async function expandCategoryFilter(categoryId: string): Promise<string[]> {
+  const ids = [categoryId];
+  let frontier = [categoryId];
+  for (let depth = 0; depth < 8 && frontier.length; depth++) {
+    const children = await prisma.category.findMany({
+      where: { parentId: { in: frontier } },
+      select: { id: true },
+    });
+    frontier = [];
+    for (const child of children) {
+      if (!ids.includes(child.id)) {
+        ids.push(child.id);
+        frontier.push(child.id);
+      }
+    }
+  }
+  return ids;
+}
+
 export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
   const streams = await streamsForLineExport(line);
   const live = streams.filter((s) => s.type === StreamType.LIVE);
   const categoryIds = [
     ...new Set(live.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
-
-  const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
-
-  if (live.some((s) => !s.categoryId)) {
-    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
-  }
-
-  if (categoryIds.length) {
-    const cats = await prisma.category.findMany({
-      where: { id: { in: categoryIds } },
-      orderBy: { sortOrder: "asc" },
-    });
-    for (const c of cats) {
-      rows.push({ category_id: c.id, category_name: c.name, parent_id: 0, created_at: Math.floor(c.createdAt.getTime() / 1000).toString() });
-    }
-  }
-
-  return rows;
+  return categoryRowsForIds(categoryIds, live.some((s) => !s.categoryId));
 }
 
 export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
@@ -157,7 +204,8 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
     if (categoryId === "0") {
       live = live.filter((s) => !s.categoryId);
     } else {
-      live = live.filter((s) => s.categoryId === categoryId);
+      const allowed = new Set(await expandCategoryFilter(categoryId));
+      live = live.filter((s) => s.categoryId && allowed.has(s.categoryId));
     }
   }
   const withProviders = await prisma.stream.findMany({
@@ -241,24 +289,7 @@ export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
   const categoryIds = [
     ...new Set(movies.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
-
-  const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
-
-  if (movies.some((s) => !s.categoryId)) {
-    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
-  }
-
-  if (categoryIds.length) {
-    const cats = await prisma.category.findMany({
-      where: { id: { in: categoryIds } },
-      orderBy: { sortOrder: "asc" },
-    });
-    for (const c of cats) {
-      rows.push({ category_id: c.id, category_name: c.name, parent_id: 0, created_at: Math.floor(c.createdAt.getTime() / 1000).toString() });
-    }
-  }
-
-  return rows;
+  return categoryRowsForIds(categoryIds, movies.some((s) => !s.categoryId));
 }
 
 export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: string | null) {
@@ -268,7 +299,8 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
     if (categoryId === "0") {
       series = series.filter((s) => !s.categoryId);
     } else {
-      series = series.filter((s) => s.categoryId === categoryId);
+      const allowed = new Set(await expandCategoryFilter(categoryId));
+      series = series.filter((s) => s.categoryId && allowed.has(s.categoryId));
     }
   }
 
@@ -297,24 +329,7 @@ export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
   const categoryIds = [
     ...new Set(series.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
-
-  const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
-
-  if (series.some((s) => !s.categoryId)) {
-    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
-  }
-
-  if (categoryIds.length) {
-    const cats = await prisma.category.findMany({
-      where: { id: { in: categoryIds } },
-      orderBy: { sortOrder: "asc" },
-    });
-    for (const c of cats) {
-      rows.push({ category_id: c.id, category_name: c.name, parent_id: 0, created_at: Math.floor(c.createdAt.getTime() / 1000).toString() });
-    }
-  }
-
-  return rows;
+  return categoryRowsForIds(categoryIds, series.some((s) => !s.categoryId));
 }
 
 export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: string, output: "hls" | "ts" = "ts") {

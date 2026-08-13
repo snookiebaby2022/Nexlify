@@ -1,5 +1,5 @@
 import { LineStatus, PanelRole, StreamType } from "@prisma/client";
-import { prisma as globalPrisma } from "../prisma";
+import { prisma } from "../prisma";
 import { hashPassword } from "../auth";
 import { applyMigrationPhase2 } from "./phase2";
 import type {
@@ -23,188 +23,349 @@ function emptyResult(): MigrationApplyResult {
   };
 }
 
+const MAX_WARNINGS = 80;
+
+export function safeDate(val: unknown, fallbackDays = 365): Date {
+  if (val instanceof Date && !Number.isNaN(val.getTime())) {
+    const y = val.getUTCFullYear();
+    if (y >= 1970 && y <= 9999) return val;
+  }
+  if (typeof val === "string" && val.trim()) {
+    const d = new Date(val);
+    if (!Number.isNaN(d.getTime())) {
+      const y = d.getUTCFullYear();
+      if (y >= 1970 && y <= 9999) return d;
+    }
+  }
+  const n = Number(val);
+  if (Number.isFinite(n) && n > 0) {
+    const ms = n > 1e12 ? n : n * 1000;
+    const d = new Date(ms);
+    if (!Number.isNaN(d.getTime())) {
+      const y = d.getUTCFullYear();
+      if (y >= 1970 && y <= 9999) return d;
+    }
+  }
+  return new Date(Date.now() + fallbackDays * 86400000);
+}
+
+function shortErr(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  return msg.replace(/\s+/g, " ").slice(0, 220);
+}
+
+function pushWarning(warnings: string[], msg: string) {
+  if (warnings.length >= MAX_WARNINGS) {
+    if (warnings.length === MAX_WARNINGS) warnings.push("Further per-row warnings omitted.");
+    return;
+  }
+  warnings.push(msg);
+}
+
+/**
+ * Import each row independently. NEVER wrap many Prisma writes in one
+ * interactive transaction — a single unique/FK failure aborts the Postgres
+ * transaction (25P02) and kills the rest of the import.
+ */
+async function runEach<T>(
+  items: T[],
+  handler: (item: T, idx: number) => Promise<boolean>,
+  onProgress: (current: number, total: number) => void,
+  resultCounter: { imported: number; skipped: number },
+  warnings: string[],
+  label: string
+) {
+  for (let idx = 0; idx < items.length; idx++) {
+    onProgress(idx + 1, items.length);
+    try {
+      const success = await handler(items[idx], idx);
+      if (success) resultCounter.imported++;
+      else resultCounter.skipped++;
+    } catch (e) {
+      resultCounter.skipped++;
+      pushWarning(warnings, `${label} #${idx}: ${shortErr(e)}`);
+    }
+  }
+}
+
+async function safeClearIptvData(warnings: string[]) {
+  const steps: Array<[string, () => Promise<unknown>]> = [
+    ["liveConnection", () => prisma.liveConnection.deleteMany()],
+    ["lbSession", () => prisma.loadBalancerSession.deleteMany()],
+    ["lineChannelWatch", () => prisma.lineChannelWatch.deleteMany()],
+    ["streamFingerprint", () => prisma.streamFingerprint.deleteMany()],
+    ["deviceBinding", () => prisma.deviceBinding.deleteMany()],
+    ["sameIpDetection", () => prisma.sameIpDetection.deleteMany()],
+    ["lineAppsLock", () => prisma.lineAppsLock.deleteMany()],
+    ["enigmaDevice", () => prisma.enigmaDevice.deleteMany()],
+    ["magDevice", () => prisma.magDevice.deleteMany()],
+    ["lineBouquet", () => prisma.lineBouquet.deleteMany()],
+    ["bouquetStream", () => prisma.bouquetStream.deleteMany()],
+    ["resellerBouquet", () => prisma.resellerBouquet.deleteMany()],
+    [
+      "activityLog.line",
+      () => prisma.activityLog.updateMany({ where: { lineId: { not: null } }, data: { lineId: null } }),
+    ],
+    [
+      "billingEvent.line",
+      () => prisma.billingEvent.updateMany({ where: { lineId: { not: null } }, data: { lineId: null } }),
+    ],
+    [
+      "ticket.line",
+      () => prisma.ticket.updateMany({ where: { lineId: { not: null } }, data: { lineId: null } }),
+    ],
+    [
+      "aiSupportChat.line",
+      () => prisma.aiSupportChat.updateMany({ where: { lineId: { not: null } }, data: { lineId: null } }),
+    ],
+    [
+      "connectionGeography",
+      () => prisma.connectionGeography.updateMany({ data: { lineId: null, streamId: null } }),
+    ],
+    ["line.lastWatched", () => prisma.line.updateMany({ data: { lastWatchedStreamId: null } })],
+    ["streamProcess", () => prisma.streamProcess.deleteMany()],
+    ["streamHealthCheck", () => prisma.streamHealthCheck.deleteMany()],
+    ["streamIssue", () => prisma.streamIssue.deleteMany()],
+    ["sourceMonitorAlert", () => prisma.sourceMonitorAlert.deleteMany()],
+    ["moderationFlag", () => prisma.moderationFlag.deleteMany()],
+    ["tmdbSyncJob.stream", () => prisma.tmdbSyncJob.updateMany({ data: { streamId: null } })],
+    ["epgAutoAssignment.stream", () => prisma.epgAutoAssignment.updateMany({ data: { streamId: null } })],
+    [
+      "aiTranscodeSuggestion.stream",
+      () => prisma.aiTranscodeSuggestion.updateMany({ data: { streamId: null } }),
+    ],
+    ["line", () => prisma.line.deleteMany()],
+    ["stream", () => prisma.stream.deleteMany()],
+    ["bouquet", () => prisma.bouquet.deleteMany()],
+    ["category", () => prisma.category.deleteMany()],
+    ["epgProgram", () => prisma.epgProgram.deleteMany()],
+    ["epgSource", () => prisma.epgSource.deleteMany()],
+  ];
+  for (const [name, fn] of steps) {
+    try {
+      await fn();
+    } catch (e) {
+      pushWarning(warnings, `Clear ${name}: ${shortErr(e)}`);
+    }
+  }
+}
+
 export async function applyMigrationBundle(
   bundle: MigrationBundle,
   options: MigrationApplyOptions
 ): Promise<MigrationApplyResult> {
-  const run = async (prisma: { stream: any; bouquet: any; line: any; panelUser: any; magDevice: any; enigmaDevice: any; bouquetStream: any; category: any; streamServer: any; epgSource: any; [key: string]: any }) => {
-    const result = emptyResult();
+  const result = emptyResult();
+  try {
+    return await applyMigrationBundleInner(bundle, options, result);
+  } catch (e) {
+    pushWarning(result.warnings, `Import recovered from unexpected error: ${shortErr(e)}`);
+    return result;
+  }
+}
 
-    // Clear all data before import if requested
-    if (options.clearDataBeforeImport) {
-      options.onProgress?.("clearing", 0, 1);
-      // Delete in order to respect foreign keys
-      await prisma.bouquetStream.deleteMany();
-      await prisma.lineBouquet.deleteMany();
-      await prisma.enigmaDevice.deleteMany();
-      await prisma.magDevice.deleteMany();
-      await prisma.line.deleteMany();
-      await prisma.stream.deleteMany();
-      await prisma.bouquet.deleteMany();
-      await prisma.panelUser.deleteMany();
-      await prisma.category.deleteMany();
-      await prisma.streamServer.deleteMany();
-      await prisma.epgSource.deleteMany();
-      options.onProgress?.("clearing", 1, 1);
-    }
+async function applyMigrationBundleInner(
+  bundle: MigrationBundle,
+  options: MigrationApplyOptions,
+  result: MigrationApplyResult
+): Promise<MigrationApplyResult> {
+  if (options.clearDataBeforeImport) {
+    options.onProgress?.("clearing", 0, 1);
+    await safeClearIptvData(result.warnings);
+    options.onProgress?.("clearing", 1, 1);
+  }
 
-    let categoryIdByLegacy = new Map<string, string>();
+  let categoryIdByLegacy = new Map<string, string>();
 
-    if (bundle.phase2) {
+  if (bundle.phase2) {
+    try {
       const phase2Out = await applyMigrationPhase2(bundle.phase2, {
         importCategories: options.importCategories !== false,
         importServers: options.importServers !== false,
         importEpg: options.importEpg !== false,
         skipExisting: options.skipExistingStreams !== false,
-        tx: prisma,
         onProgress: options.onProgress,
       });
       result.categories = phase2Out.result.categories;
       result.servers = phase2Out.result.servers;
       result.epgSources = phase2Out.result.epgSources;
       categoryIdByLegacy = phase2Out.categoryIdByLegacy;
+      if (Array.isArray(phase2Out.result.warnings)) {
+        result.warnings.push(...phase2Out.result.warnings);
+      }
+    } catch (e) {
+      pushWarning(result.warnings, `Phase2 error: ${shortErr(e)}`);
     }
+  }
 
-    const bouquetIdByLegacy = new Map<string, string>();
-    const streamIdByLegacy = new Map<string, string>();
-    const resellerIdByLegacy = new Map<string, string>();
+  const bouquetIdByLegacy = new Map<string, string>();
+  const streamIdByLegacy = new Map<string, string>();
+  const resellerIdByLegacy = new Map<string, string>();
 
-    if (options.importBouquets !== false) {
-      for (let i = 0; i < bundle.bouquets.length; i++) {
-        const b = bundle.bouquets[i];
-        options.onProgress?.("bouquets", i + 1, bundle.bouquets.length);
-        const existing = await prisma.bouquet.findFirst({
-          where: { name: b.name },
-        });
+  if (options.importBouquets !== false) {
+    const seenNames = new Set<string>();
+    await runEach(
+      bundle.bouquets,
+      async (b) => {
+        const name = String(b.name ?? "").trim();
+        if (!name || !b.legacyId) return false;
+        if (seenNames.has(name)) {
+          const dup = await prisma.bouquet.findFirst({ where: { name } });
+          if (dup) bouquetIdByLegacy.set(b.legacyId, dup.id);
+          return false;
+        }
+        seenNames.add(name);
+        const existing = await prisma.bouquet.findFirst({ where: { name } });
         if (existing) {
           bouquetIdByLegacy.set(b.legacyId, existing.id);
-          result.bouquets.skipped++;
-          continue;
+          return false;
         }
         const created = await prisma.bouquet.create({
-          data: {
-            name: b.name,
-            sortOrder: b.sortOrder ?? 0,
-            isActive: true,
-          },
+          data: { name, sortOrder: Number(b.sortOrder) || 0, isActive: true },
         });
         bouquetIdByLegacy.set(b.legacyId, created.id);
-        result.bouquets.imported++;
-      }
+        return true;
+      },
+      (c, t) => options.onProgress?.("bouquets", c, t),
+      result.bouquets,
+      result.warnings,
+      "Bouquet"
+    );
+  }
+
+  if (options.importStreams !== false) {
+    let serverId = options.defaultServerId ?? undefined;
+    if (serverId) {
+      const exists = await prisma.streamServer.findUnique({ where: { id: serverId } }).catch(() => null);
+      if (!exists) serverId = undefined;
+    }
+    if (!serverId) {
+      const first = await prisma.streamServer.findFirst().catch(() => null);
+      serverId = first?.id ?? undefined;
     }
 
-    if (options.importStreams !== false) {
-      // Verify defaultServerId exists, fall back to first available server
-      let serverId = options.defaultServerId ?? null;
-      if (serverId) {
-        const exists = await prisma.streamServer.findUnique({ where: { id: serverId } });
-        if (!exists) serverId = null;
-      }
-      if (!serverId) {
-        const firstServer = await prisma.streamServer.findFirst();
-        serverId = firstServer?.id ?? null;
-      }
-
-      for (let i = 0; i < bundle.streams.length; i++) {
-        const s = bundle.streams[i];
-        options.onProgress?.("streams", i + 1, bundle.streams.length);
+    await runEach(
+      bundle.streams,
+      async (s, idx) => {
+        const name = String(s.name ?? "").trim();
+        const streamUrl = String(s.streamUrl ?? "").trim();
+        if (!name || !streamUrl || !s.legacyId) return false;
         if (options.skipExistingStreams) {
-          const dup = await prisma.stream.findFirst({
-            where: { name: s.name, streamUrl: s.streamUrl },
-          });
+          const dup = await prisma.stream.findFirst({ where: { name, streamUrl } });
           if (dup) {
             streamIdByLegacy.set(s.legacyId, dup.id);
-            result.streams.skipped++;
-            continue;
+            return false;
           }
         }
         const type =
-          s.type === "MOVIE"
-            ? StreamType.MOVIE
-            : s.type === "SERIES"
-              ? StreamType.SERIES
-              : StreamType.LIVE;
-
-        const categoryId = s.categoryLegacyId
-          ? categoryIdByLegacy.get(s.categoryLegacyId)
-          : undefined;
-
-        const sortOrder = s.sortOrder ?? i;
-
+          s.type === "MOVIE" ? StreamType.MOVIE : s.type === "SERIES" ? StreamType.SERIES : StreamType.LIVE;
+        const categoryId = s.categoryLegacyId ? categoryIdByLegacy.get(s.categoryLegacyId) : undefined;
         const created = await prisma.stream.create({
           data: {
-            name: s.name,
-            streamUrl: s.streamUrl,
-            streamIcon: s.streamIcon ?? null,
+            name,
+            streamUrl,
+            streamIcon: s.streamIcon?.trim() || null,
             type,
-            sortOrder,
-            serverId,
+            sortOrder: Number.isFinite(s.sortOrder) ? Number(s.sortOrder) : idx,
+            serverId: serverId ?? null,
             categoryId: categoryId ?? null,
-            epgChannelId: s.epgChannelId ?? null,
-            channelId: s.channelId ?? null,
-            containerExtension: s.containerExtension ?? null,
+            epgChannelId: s.epgChannelId?.trim() || null,
+            channelId: s.channelId?.trim() || null,
+            containerExtension: s.containerExtension?.trim() || null,
             isActive: s.isActive !== false,
           },
         });
         streamIdByLegacy.set(s.legacyId, created.id);
-        result.streams.imported++;
-      }
+        return true;
+      },
+      (c, t) => options.onProgress?.("streams", c, t),
+      result.streams,
+      result.warnings,
+      "Stream"
+    );
 
-      for (const b of bundle.bouquets) {
-        const bouquetId = bouquetIdByLegacy.get(b.legacyId);
-        if (!bouquetId) continue;
-        for (let idx = 0; idx < b.streamLegacyIds.length; idx++) {
-          const sid = b.streamLegacyIds[idx];
-          const streamId = streamIdByLegacy.get(String(sid));
-          if (!streamId) continue;
-          await prisma.bouquetStream.upsert({
-            where: { bouquetId_streamId: { bouquetId, streamId } },
-            create: { bouquetId, streamId, sortOrder: idx },
-            update: { sortOrder: idx },
-          });
-        }
+    const linkRows: { bouquetId: string; streamId: string; sortOrder: number }[] = [];
+    for (const b of bundle.bouquets) {
+      const bouquetId = bouquetIdByLegacy.get(b.legacyId);
+      if (!bouquetId) continue;
+      for (let idx = 0; idx < (b.streamLegacyIds?.length ?? 0); idx++) {
+        const streamId = streamIdByLegacy.get(String(b.streamLegacyIds[idx]));
+        if (!streamId) continue;
+        linkRows.push({ bouquetId, streamId, sortOrder: idx });
       }
     }
-
-    if (options.importResellers !== false) {
-      for (let i = 0; i < (bundle.resellers ?? []).length; i++) {
-        const r = bundle.resellers![i];
-        options.onProgress?.("resellers", i + 1, bundle.resellers!.length);
-        const exists = await prisma.panelUser.findUnique({
-          where: { username: r.username },
+    const LINK_BATCH = 500;
+    for (let i = 0; i < linkRows.length; i += LINK_BATCH) {
+      try {
+        await prisma.bouquetStream.createMany({
+          data: linkRows.slice(i, i + LINK_BATCH),
+          skipDuplicates: true,
         });
+      } catch (e) {
+        pushWarning(result.warnings, `Bouquet-stream links batch ${i}: ${shortErr(e)}`);
+      }
+    }
+  }
+
+  if (options.importResellers !== false && bundle.resellers?.length) {
+    await runEach(
+      bundle.resellers,
+      async (r) => {
+        const username = String(r.username ?? "").trim();
+        const password = String(r.password ?? "").trim();
+        if (!username || !password) return false;
+        const exists = await prisma.panelUser.findUnique({ where: { username } });
         if (exists) {
           if (r.legacyId) resellerIdByLegacy.set(r.legacyId, exists.id);
-          result.resellers.skipped++;
-          continue;
+          return false;
         }
+        const pw = await hashPassword(password);
         const created = await prisma.panelUser.create({
           data: {
-            username: r.username,
-            passwordHash: await hashPassword(r.password),
+            username,
+            passwordHash: pw,
             role: PanelRole.RESELLER,
-            credits: r.credits ?? 0,
+            credits: Number(r.credits) || 0,
             isActive: r.isActive !== false,
           },
         });
         if (r.legacyId) resellerIdByLegacy.set(r.legacyId, created.id);
-        result.resellers.imported++;
-      }
+        return true;
+      },
+      (c, t) => options.onProgress?.("resellers", c, t),
+      result.resellers,
+      result.warnings,
+      "Reseller"
+    );
+  }
+
+  if (options.importLines !== false) {
+    const existingLines = await prisma.line.findMany({
+      select: { id: true, username: true, externalId: true },
+    });
+    const byUsername = new Map(existingLines.map((l) => [l.username, l]));
+    const usedExternalIds = new Set(
+      existingLines.map((l) => l.externalId).filter((id): id is string => Boolean(id))
+    );
+    const seenUsernames = new Set<string>();
+
+    let ownerFallback: string | null = options.ownerId ?? null;
+    if (ownerFallback) {
+      const ownerOk = await prisma.panelUser.findUnique({ where: { id: ownerFallback } }).catch(() => null);
+      if (!ownerOk) ownerFallback = null;
     }
 
-    if (options.importLines !== false) {
-      for (let i = 0; i < bundle.lines.length; i++) {
-        const l = bundle.lines[i];
-        options.onProgress?.("lines", i + 1, bundle.lines.length);
-        if (options.skipExistingLines) {
-          const exists = await prisma.line.findUnique({
-            where: { username: l.username },
-          });
-          if (exists) {
-            result.lines.skipped++;
-            continue;
-          }
-        }
+    await runEach(
+      bundle.lines,
+      async (l) => {
+        const username = String(l.username ?? "").trim();
+        const password = String(l.password ?? "").trim();
+        if (!username || !password) return false;
+        if (seenUsernames.has(username)) return false;
+        seenUsernames.add(username);
+
+        const existing = byUsername.get(username);
+        if (existing && options.skipExistingLines !== false) return false;
+
         const status =
           l.status === "BANNED"
             ? LineStatus.BANNED
@@ -214,113 +375,132 @@ export async function applyMigrationBundle(
                 ? LineStatus.EXPIRED
                 : LineStatus.ACTIVE;
 
-        const bouquetIds = (l.bouquetLegacyIds ?? [])
-          .map((id) => bouquetIdByLegacy.get(String(id)))
-          .filter(Boolean) as string[];
+        const bouquetIds = [
+          ...new Set(
+            (l.bouquetLegacyIds ?? [])
+              .map((id) => bouquetIdByLegacy.get(String(id)))
+              .filter((id): id is string => Boolean(id))
+          ),
+        ];
 
-        const ownerId =
-          (l.ownerLegacyId ? resellerIdByLegacy.get(l.ownerLegacyId) : undefined) ??
-          options.ownerId ??
-          null;
+        let ownerId: string | null =
+          (l.ownerLegacyId ? resellerIdByLegacy.get(l.ownerLegacyId) : undefined) ?? ownerFallback;
 
-        try {
-          await prisma.line.create({
-            data: {
-              username: l.username,
-              password: l.password,
-              expiresAt: l.expiresAt,
-              maxConnections: l.maxConnections ?? 1,
-              status,
-              ownerId,
-              externalId: l.legacyId ?? null,
-              notes: l.notes ?? null,
-              allowedIps: l.allowedIps ?? null,
-              lockToIp: l.lockToIp ?? false,
-              canWatchAdult: l.canWatchAdult !== false,
-              allowedCountries: l.allowedCountries ?? null,
-              blockedCountries: l.blockedCountries ?? null,
-              allowedOutput: l.allowedOutput ?? "ts,hls,m3u8",
-              bouquets:
-                bouquetIds.length > 0
-                  ? { create: bouquetIds.map((bouquetId) => ({ bouquetId })) }
-                  : undefined,
-            },
+        if (ownerId && ownerId !== ownerFallback) {
+          const ok = await prisma.panelUser.findUnique({ where: { id: ownerId } }).catch(() => null);
+          if (!ok) ownerId = ownerFallback;
+        }
+
+        let externalId = l.legacyId?.trim() || null;
+        if (externalId && usedExternalIds.has(externalId) && existing?.externalId !== externalId) {
+          externalId = null;
+        }
+
+        const data = {
+          username,
+          password,
+          expiresAt: safeDate(l.expiresAt),
+          maxConnections: Math.max(1, Number(l.maxConnections) || 1),
+          status,
+          ownerId,
+          notes: l.notes?.trim() || null,
+          allowedIps: l.allowedIps?.trim() || null,
+          lockToIp: Boolean(l.lockToIp),
+          canWatchAdult: l.canWatchAdult !== false,
+          allowedCountries: l.allowedCountries?.trim() || null,
+          blockedCountries: l.blockedCountries?.trim() || null,
+          allowedOutput: l.allowedOutput?.trim() || "ts,hls,m3u8",
+        };
+
+        let lineId: string;
+        if (existing) {
+          await prisma.line.update({
+            where: { id: existing.id },
+            data: { ...data, ...(externalId ? { externalId } : {}) },
           });
-          result.lines.imported++;
-        } catch (e) {
-          result.lines.skipped++;
-          result.warnings.push(`Line ${l.username}: ${String(e)}`);
+          lineId = existing.id;
+        } else {
+          try {
+            const created = await prisma.line.create({
+              data: { ...data, externalId },
+            });
+            lineId = created.id;
+          } catch (e) {
+            const msg = shortErr(e);
+            if (!/unique|external/i.test(msg)) throw e;
+            const created = await prisma.line.create({
+              data: { ...data, externalId: null },
+            });
+            lineId = created.id;
+          }
+          byUsername.set(username, { id: lineId, username, externalId });
         }
-      }
-    }
+        if (externalId) usedExternalIds.add(externalId);
 
-    if (options.importMag !== false && bundle.magDevices?.length) {
-      for (let i = 0; i < bundle.magDevices.length; i++) {
-        const m = bundle.magDevices[i];
-        options.onProgress?.("mag", i + 1, bundle.magDevices.length);
-        const line = await prisma.line.findUnique({
-          where: { username: m.lineUsername },
-        });
-        if (!line) {
-          result.magDevices.skipped++;
-          result.warnings.push(`MAG ${m.mac}: line ${m.lineUsername} not found`);
-          continue;
+        if (bouquetIds.length) {
+          await prisma.lineBouquet
+            .createMany({
+              data: bouquetIds.map((bouquetId) => ({ lineId, bouquetId })),
+              skipDuplicates: true,
+            })
+            .catch((e) => {
+              pushWarning(result.warnings, `Line ${username} bouquets: ${shortErr(e)}`);
+            });
         }
-        try {
-          await prisma.magDevice.upsert({
-            where: { mac: m.mac },
-            create: {
-              mac: m.mac,
-              lineId: line.id,
-              model: m.model ?? null,
-            },
-            update: { lineId: line.id, model: m.model ?? null },
-          });
-          result.magDevices.imported++;
-        } catch {
-          result.magDevices.skipped++;
-        }
-      }
-    }
-
-    if (options.importEnigma !== false && bundle.enigmaDevices?.length) {
-      for (let i = 0; i < bundle.enigmaDevices.length; i++) {
-        const m = bundle.enigmaDevices[i];
-        options.onProgress?.("enigma", i + 1, bundle.enigmaDevices.length);
-        const line = await prisma.line.findUnique({
-          where: { username: m.lineUsername },
-        });
-        if (!line) {
-          result.enigmaDevices.skipped++;
-          result.warnings.push(`Enigma ${m.mac}: line ${m.lineUsername} not found`);
-          continue;
-        }
-        try {
-          await prisma.enigmaDevice.upsert({
-            where: { mac: m.mac },
-            create: {
-              mac: m.mac,
-              lineId: line.id,
-              model: m.model ?? null,
-            },
-            update: { lineId: line.id, model: m.model ?? null },
-          });
-          result.enigmaDevices.imported++;
-        } catch {
-          result.enigmaDevices.skipped++;
-        }
-      }
-    }
-
-    return result;
-  };
-
-  // If a transaction client was passed, use it directly; otherwise wrap in a transaction
-  if (options.tx) {
-    return run(options.tx);
+        return !existing;
+      },
+      (c, t) => options.onProgress?.("lines", c, t),
+      result.lines,
+      result.warnings,
+      "Line"
+    );
   }
-  return globalPrisma.$transaction(run, {
-    maxWait: 30000,
-    timeout: 600000, // 10 minutes for large imports
-  });
+
+  if (options.importMag !== false && bundle.magDevices?.length) {
+    await runEach(
+      bundle.magDevices,
+      async (m) => {
+        const mac = String(m.mac ?? "").trim().toUpperCase();
+        const lineUsername = String(m.lineUsername ?? "").trim();
+        if (!mac || !lineUsername) return false;
+        const line = await prisma.line.findUnique({ where: { username: lineUsername } });
+        if (!line) return false;
+        await prisma.magDevice.upsert({
+          where: { mac },
+          create: { mac, lineId: line.id, model: m.model?.trim() || null },
+          update: { lineId: line.id, model: m.model?.trim() || null },
+        });
+        return true;
+      },
+      (c, t) => options.onProgress?.("mag", c, t),
+      result.magDevices,
+      result.warnings,
+      "MAG"
+    );
+  }
+
+  if (options.importEnigma !== false && bundle.enigmaDevices?.length) {
+    await runEach(
+      bundle.enigmaDevices,
+      async (m) => {
+        const mac = String(m.mac ?? "").trim().toUpperCase();
+        const lineUsername = String(m.lineUsername ?? "").trim();
+        if (!mac || !lineUsername) return false;
+        const line = await prisma.line.findUnique({ where: { username: lineUsername } });
+        if (!line) return false;
+        await prisma.enigmaDevice.upsert({
+          where: { mac },
+          create: { mac, lineId: line.id, model: m.model?.trim() || null },
+          update: { lineId: line.id, model: m.model?.trim() || null },
+        });
+        return true;
+      },
+      (c, t) => options.onProgress?.("enigma", c, t),
+      result.enigmaDevices,
+      result.warnings,
+      "Enigma"
+    );
+  }
+
+  return result;
 }

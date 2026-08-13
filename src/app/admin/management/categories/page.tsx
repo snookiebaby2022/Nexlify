@@ -142,11 +142,27 @@ function buildTree(cats: CategoryRow[]): CategoryNode[] {
   cats.forEach((c) => map.set(c.id, { ...c, children: [], depth: 0 }));
   cats.forEach((c) => {
     const node = map.get(c.id)!;
-    if (c.parentId && map.has(c.parentId)) {
+    if (c.parentId && c.parentId !== c.id && map.has(c.parentId)) {
       const parent = map.get(c.parentId)!;
-      parent.children.push(node);
-      node.depth = parent.depth + 1;
-    } else roots.push(node);
+      // Avoid cycles: if parent is somehow under this node already, treat as root
+      let p: CategoryNode | undefined = parent;
+      let cycle = false;
+      const seen = new Set<string>([node.id]);
+      while (p) {
+        if (seen.has(p.id)) {
+          cycle = true;
+          break;
+        }
+        seen.add(p.id);
+        p = p.parentId && map.has(p.parentId) ? map.get(p.parentId) : undefined;
+      }
+      if (!cycle) {
+        parent.children.push(node);
+        node.depth = parent.depth + 1;
+        return;
+      }
+    }
+    roots.push(node);
   });
   roots.sort((a, b) => a.sortOrder - b.sortOrder);
   roots.forEach((r) => r.children.sort((a, b) => a.sortOrder - b.sortOrder));

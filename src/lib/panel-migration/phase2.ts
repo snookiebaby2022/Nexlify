@@ -1,4 +1,4 @@
-import { prisma as globalPrisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { pgRowsToTableData } from "./map-rows";
 import { rowToRecord, type SqlTableData } from "./sql-parse";
 import type {
@@ -34,10 +34,14 @@ export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[]
     const r = rowToRecord(data.columns, row);
     const legacyId = String(r.id ?? "");
     if (!legacyId) continue;
+    const parentRaw = r.parent_id ?? r.parentId ?? r.parent;
     out.push({
       legacyId,
-      name: String(r.category_name ?? r.name ?? `Category ${legacyId}`),
-      parentLegacyId: r.parent_id != null ? String(r.parent_id) : undefined,
+      name: String(r.category_name ?? r.name ?? `Category ${legacyId}`).trim() || `Category ${legacyId}`,
+      parentLegacyId:
+        parentRaw != null && String(parentRaw).trim() && String(parentRaw) !== "0"
+          ? String(parentRaw)
+          : undefined,
     });
   }
   return out;
@@ -100,7 +104,11 @@ export async function loadPhase2FromPg(
   const load = async (kind: keyof typeof PHASE2_TABLE_SCORES) => {
     const name = pickPhase2Table(tables, kind);
     if (!name) return null;
-    return pgRowsToTableData(await fetchTable(schema, name));
+    try {
+      return pgRowsToTableData(await fetchTable(schema, name));
+    } catch {
+      return null;
+    }
   };
 
   return {
@@ -117,75 +125,115 @@ export async function applyMigrationPhase2(
     importServers?: boolean;
     importEpg?: boolean;
     skipExisting?: boolean;
-    tx?: { category: any; streamServer: any; epgSource: any; [key: string]: any };
     onProgress?: (phase: string, current: number, total: number) => void;
   }
 ) {
-  const prisma = opts.tx ?? globalPrisma;
   const result = {
     categories: { imported: 0, skipped: 0 },
     servers: { imported: 0, skipped: 0 },
     epgSources: { imported: 0, skipped: 0 },
+    warnings: [] as string[],
   };
   const categoryIdByLegacy = new Map<string, string>();
   const serverIdByLegacy = new Map<string, string>();
 
-  if (opts.importCategories !== false) {
+  if (opts.importCategories !== false && data.categories.length) {
+    // Pass 1: create/find all categories without parents
     for (let i = 0; i < data.categories.length; i++) {
       const c = data.categories[i];
       opts.onProgress?.("categories", i + 1, data.categories.length);
-      const dup = await prisma.category.findFirst({ where: { name: c.name } });
-      if (dup) {
-        categoryIdByLegacy.set(c.legacyId, dup.id);
+      const name = String(c.name ?? "").trim();
+      if (!name || !c.legacyId) {
         result.categories.skipped++;
         continue;
       }
-      const created = await prisma.category.create({
-        data: { name: c.name },
-      });
-      categoryIdByLegacy.set(c.legacyId, created.id);
-      result.categories.imported++;
+      try {
+        const dup = await prisma.category.findFirst({ where: { name } });
+        if (dup) {
+          categoryIdByLegacy.set(c.legacyId, dup.id);
+          result.categories.skipped++;
+          continue;
+        }
+        const created = await prisma.category.create({ data: { name } });
+        categoryIdByLegacy.set(c.legacyId, created.id);
+        result.categories.imported++;
+      } catch {
+        result.categories.skipped++;
+      }
+    }
+
+    // Pass 2: attach parent/subcategory links
+    for (const c of data.categories) {
+      if (!c.parentLegacyId || !c.legacyId) continue;
+      const id = categoryIdByLegacy.get(c.legacyId);
+      const parentId = categoryIdByLegacy.get(c.parentLegacyId);
+      if (!id || !parentId || id === parentId) continue;
+      try {
+        await prisma.category.update({ where: { id }, data: { parentId } });
+      } catch {
+        /* keep category without parent rather than fail import */
+      }
     }
   }
 
-  if (opts.importServers !== false) {
+  if (opts.importServers !== false && data.servers.length) {
     for (let i = 0; i < data.servers.length; i++) {
       const s = data.servers[i];
       opts.onProgress?.("servers", i + 1, data.servers.length);
-      if (opts.skipExisting) {
-        const dup = await prisma.streamServer.findFirst({ where: { host: s.host } });
-        if (dup) {
-          serverIdByLegacy.set(s.legacyId, dup.id);
-          result.servers.skipped++;
-          continue;
-        }
+      const host = String(s.host ?? "").trim();
+      const name = String(s.name ?? host).trim();
+      if (!host || !s.legacyId) {
+        result.servers.skipped++;
+        continue;
       }
-      const created = await prisma.streamServer.create({
-        data: {
-          name: s.name,
-          host: s.host,
-          port: s.port,
-          protocol: s.protocol ?? "http",
-        },
-      });
-      serverIdByLegacy.set(s.legacyId, created.id);
-      result.servers.imported++;
+      try {
+        if (opts.skipExisting) {
+          const dup = await prisma.streamServer.findFirst({ where: { host } });
+          if (dup) {
+            serverIdByLegacy.set(s.legacyId, dup.id);
+            result.servers.skipped++;
+            continue;
+          }
+        }
+        const created = await prisma.streamServer.create({
+          data: {
+            name: name || host,
+            host,
+            port: Number(s.port) || 80,
+            protocol: String(s.protocol ?? "http").trim() || "http",
+          },
+        });
+        serverIdByLegacy.set(s.legacyId, created.id);
+        result.servers.imported++;
+      } catch {
+        result.servers.skipped++;
+      }
     }
   }
 
-  if (opts.importEpg !== false) {
+  if (opts.importEpg !== false && data.epgSources.length) {
     for (let i = 0; i < data.epgSources.length; i++) {
       const e = data.epgSources[i];
       opts.onProgress?.("epg", i + 1, data.epgSources.length);
-      const dup = await prisma.epgSource.findFirst({ where: { url: e.url } });
-      if (dup) {
+      const url = String(e.url ?? "").trim();
+      const name = String(e.name ?? "EPG").trim() || "EPG";
+      if (!url) {
         result.epgSources.skipped++;
         continue;
       }
-      await prisma.epgSource.create({
-        data: { name: e.name, url: e.url, country: e.country ?? null },
-      });
-      result.epgSources.imported++;
+      try {
+        const dup = await prisma.epgSource.findFirst({ where: { url } });
+        if (dup) {
+          result.epgSources.skipped++;
+          continue;
+        }
+        await prisma.epgSource.create({
+          data: { name, url, country: e.country?.trim() || null },
+        });
+        result.epgSources.imported++;
+      } catch {
+        result.epgSources.skipped++;
+      }
     }
   }
 

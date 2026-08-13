@@ -104,16 +104,22 @@ function extractRowTuples(valuesSection: string): string[] {
   return tuples;
 }
 
-/** Parse a single INSERT statement (already extracted, does not scan entire dump). */
+/** Parse a single INSERT/REPLACE statement (already extracted). */
 function parseSingleInsert(sql: string): { tableName: string; data: SqlTableData } | null {
-  const re = /^INSERT\s+INTO\s+[`"']?(\w+)[`"']?(?:\s*\(([^)]*)\))?\s*VALUES\s*/i;
+  // Handles: INSERT INTO t, INSERT IGNORE INTO `db`.`t`, REPLACE INTO t (`a`,`b`) VALUES ...
+  const re =
+    /^\s*(?:INSERT(?:\s+(?:IGNORE|DELAYED|LOW_PRIORITY|HIGH_PRIORITY))*\s+INTO|REPLACE\s+(?:INTO\s+)?)\s+(?:[`"']?\w+[`"']?\.)?[`"']?(\w+)[`"']?(?:\s*\(([^)]*)\))?\s*VALUES\s*/i;
   const match = re.exec(sql);
   if (!match) return null;
 
   const tableName = match[1].toLowerCase();
   const colPart = match[2] || "";
   const columns = colPart
-    ? colPart.split(",").map((c) => c.trim().replace(/^`|`$/g, "")).filter(Boolean)
+    ? colPart
+        .split(",")
+        .map((c) => c.trim().replace(/^[`"']|[`"']$/g, ""))
+        .filter(Boolean)
+        .map((c) => c.toLowerCase())
     : [];
 
   const valuesStart = match.index + match[0].length;
@@ -133,14 +139,13 @@ function parseSingleInsert(sql: string): { tableName: string; data: SqlTableData
 /** Parse ALL INSERTs from an in-memory SQL string (small dumps only). */
 export function parseAllMysqlInserts(sql: string): Map<string, SqlTableData[]> {
   const results = new Map<string, SqlTableData[]>();
-  const insertRe = /INSERT\s+INTO\s+[`"']?\w+[`"']?/gi;
+  const insertRe = /(?:INSERT(?:\s+(?:IGNORE|DELAYED|LOW_PRIORITY|HIGH_PRIORITY))*\s+INTO|REPLACE\s+(?:INTO\s+)?)\s+(?:[`"']?\w+[`"']?\.)?[`"']?\w+[`"']?/gi;
   let match: RegExpExecArray | null;
 
   while ((match = insertRe.exec(sql)) !== null) {
     const start = match.index;
-    // Find the end of this INSERT statement (next INSERT or end of string)
     let end = sql.length;
-    const nextInsert = sql.slice(start + 1).search(/INSERT\s+INTO/i);
+    const nextInsert = sql.slice(start + 1).search(/(?:INSERT(?:\s+\w+)*\s+INTO|REPLACE\s+(?:INTO\s+)?)/i);
     if (nextInsert >= 0) end = start + 1 + nextInsert;
     else {
       const semi = sql.lastIndexOf(";");
@@ -188,7 +193,7 @@ export async function parseSqlDumpFile(
       continue;
     }
 
-    if (/^INSERT\s+INTO/i.test(trimmed)) {
+    if (/^(?:INSERT(?:\s+\w+)*\s+INTO|REPLACE\s+(?:INTO\s+)?)/i.test(trimmed)) {
       inInsert = true;
       buffer = line + "\n";
     } else if (inInsert) {
@@ -258,13 +263,39 @@ export function parseMysqlInsertsSafe(sql: string, tableName: string): SqlParseR
 
 export function mergeSqlTables(chunks: SqlTableData[]): SqlTableData | null {
   if (!chunks.length) return null;
-  const columns = chunks[0].columns;
+  const colSet: string[] = [];
+  const seen = new Set<string>();
+  for (const c of chunks) {
+    for (const col of c.columns) {
+      const k = col.toLowerCase();
+      if (k && !seen.has(k)) {
+        seen.add(k);
+        colSet.push(k);
+      }
+    }
+  }
+  if (!colSet.length) {
+    const rows: unknown[][] = [];
+    for (const c of chunks) rows.push(...c.rows);
+    return { columns: [], rows };
+  }
   const rows: unknown[][] = [];
   for (const c of chunks) {
-    if (c.columns.join(",") !== columns.join(",")) continue;
-    rows.push(...c.rows);
+    const idx = new Map(c.columns.map((col, i) => [col.toLowerCase(), i]));
+    for (const row of c.rows) {
+      if (!c.columns.length && row.length) {
+        rows.push(row);
+        continue;
+      }
+      rows.push(
+        colSet.map((col) => {
+          const i = idx.get(col);
+          return i == null ? null : row[i];
+        })
+      );
+    }
   }
-  return { columns, rows };
+  return { columns: colSet, rows };
 }
 
 export function rowToRecord(columns: string[], row: unknown[]): Record<string, unknown> {

@@ -40,18 +40,49 @@ export async function restoreFullBackup(snapshot: Record<string, unknown>): Prom
     errors.push(`Settings: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // 2. Restore categories
+  // 2. Restore categories (parents first, then children)
   try {
-    const categories = snapshot.categories as { id: string; name: string; parentId?: string | null; categoryType?: string; sortOrder?: number; isAdult?: boolean }[] | undefined;
+    const categories = snapshot.categories as
+      | {
+          id: string;
+          name: string;
+          parentId?: string | null;
+          categoryType?: string;
+          sortOrder?: number;
+          isAdult?: boolean;
+        }[]
+      | undefined;
     if (Array.isArray(categories)) {
-      for (const cat of categories) {
-        if (!cat.id || !cat.name) continue;
-        await prisma.category.upsert({
-          where: { id: cat.id },
-          create: { id: cat.id, name: cat.name, parentId: cat.parentId ?? null, categoryType: (cat.categoryType as any) ?? "LIVE", sortOrder: cat.sortOrder ?? 0, isAdult: cat.isAdult ?? false },
-          update: { name: cat.name, parentId: cat.parentId ?? null },
-        });
-        counts.categories++;
+      const existing = new Set(
+        (await prisma.category.findMany({ select: { id: true } })).map((c) => c.id)
+      );
+      for (let pass = 0; pass < 3; pass++) {
+        for (const cat of categories) {
+          if (!cat.id || !cat.name || existing.has(cat.id)) continue;
+          const rawParent = cat.parentId ?? null;
+          const parentId = rawParent && existing.has(rawParent) ? rawParent : null;
+          if (rawParent && !parentId && pass < 2) continue;
+          try {
+            await prisma.category.upsert({
+              where: { id: cat.id },
+              create: {
+                id: cat.id,
+                name: cat.name,
+                parentId,
+                categoryType: (cat.categoryType as any) ?? "LIVE",
+                sortOrder: cat.sortOrder ?? 0,
+                isAdult: cat.isAdult ?? false,
+              },
+              update: { name: cat.name, parentId },
+            });
+            existing.add(cat.id);
+            counts.categories++;
+          } catch (e) {
+            if (pass === 2) {
+              errors.push(`Category ${cat.name}: ${e instanceof Error ? e.message : String(e)}`);
+            }
+          }
+        }
       }
     }
   } catch (e) {
