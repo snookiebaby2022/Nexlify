@@ -72,6 +72,9 @@ async function main() {
       } else if (data.ok && data.reason === "already_running") {
         console.log("already updating");
         skipped++;
+      } else if (data.ok && data.reason === "already_latest") {
+        console.log(`already latest (v${data.fromVersion ?? "?"})`);
+        skipped++;
       } else {
         console.log(`FAILED (${status}): ${data.error ?? JSON.stringify(data)}`);
         failed++;

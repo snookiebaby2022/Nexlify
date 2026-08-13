@@ -43,6 +43,9 @@ function isLinux() {
 
 const STEP_TIMEOUT_MS: Record<string, number> = {
   "bootstrap update scripts": 3 * 60 * 1000,
+  "download update": 4 * 60 * 1000,
+  "extract update": 3 * 60 * 1000,
+  "apply update": 10 * 60 * 1000,
   "npm install": 20 * 60 * 1000,
   "npm run build": 25 * 60 * 1000,
   "sync panel files": 5 * 60 * 1000,
@@ -464,19 +467,24 @@ export async function runPanelUpdateWithProgress(
 
   const prebuiltScript = await resolvePrebuiltUpdateScript(repoPath);
   let targetVersion = toVersion;
+  let hasNewerRelease = false;
   try {
     const feed = await fetchNexlifyReleasesFeed(
       settings.updateCheckUrl?.trim() || DEFAULT_RELEASES_FEED_URL,
     );
     if (feed.latestVersion && isVersionNewer(feed.latestVersion, fromVersion)) {
       targetVersion = feed.latestVersion;
+      hasNewerRelease = true;
     }
   } catch {
     /* keep targetVersion as fromVersion and fall back to patch/git below */
   }
-  const downloadUrl = prebuiltScript ? await resolvePrebuiltDownloadUrl(targetVersion, repoPath) : null;
+  const downloadUrl =
+    prebuiltScript && hasNewerRelease
+      ? await resolvePrebuiltDownloadUrl(targetVersion, repoPath)
+      : null;
 
-  if (prebuiltScript && downloadUrl) {
+  if (prebuiltScript && downloadUrl && hasNewerRelease) {
     mode = "prebuilt";
     // Always fetch the latest prebuilt apply script first so fixes in the script itself are picked up.
     const cacheBust = panelUpdateCacheBust(await readPanelVersionForCacheBust(repoPath));

@@ -60,6 +60,9 @@ fetch "$BASE/apply-prebuilt-update.sh?$BUST" "scripts/apply-prebuilt-update.sh" 
 fetch "$BASE/scripts/panel-restart-safe.sh?$BUST" "scripts/panel-restart-safe.sh" || true
 fetch "$BASE/scripts/panel-update-recover.sh?$BUST" "scripts/panel-update-recover.sh" || true
 fetch "$BASE/scripts/has-valid-next-build.sh?$BUST" "scripts/has-valid-next-build.sh" || true
+fetch "$BASE/scripts/panel-update-background.sh?$BUST" "scripts/panel-update-background.sh" || true
+fetch "$BASE/scripts/panel-update-background.ts?$BUST" "scripts/panel-update-background.ts" || true
+fetch "$BASE/panel-vendor-origin.env?$BUST" "scripts/panel-vendor-origin.env" || true
 sed -i 's/\\r$//' scripts/*.sh 2>/dev/null || true
 chmod +x scripts/*.sh 2>/dev/null || true
 echo "Bootstrap complete (vendor=$BASE cache=$BUST)"

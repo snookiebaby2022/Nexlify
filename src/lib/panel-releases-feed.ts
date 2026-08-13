@@ -1,3 +1,5 @@
+import releasesJson from "./panel-releases.json";
+
 export type NexlifyReleaseChannel = "stable" | "rc" | "beta";
 
 export type NexlifyRelease = {
@@ -41,22 +43,6 @@ export function isVersionNewer(candidate: string, installed: string): boolean {
     if (av < bv) return false;
   }
   return false;
-}
-
-export async function fetchNexlifyReleasesFeed(
-  url: string = DEFAULT_RELEASES_FEED_URL,
-): Promise<NexlifyReleasesFeed> {
-  const res = await fetch(url, {
-    headers: { Accept: "application/json", "User-Agent": "nexlify-panel" },
-    next: { revalidate: 300 },
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!res.ok) throw new Error(`Releases feed ${res.status}`);
-  const data = (await res.json()) as NexlifyReleasesFeed & {
-    releases?: Array<Record<string, unknown>>;
-  };
-  if (!Array.isArray(data.releases)) throw new Error("Invalid releases feed");
-  return normalizeReleasesFeed(data);
 }
 
 /** Accept canonical panel feed or legacy marketing feed (changes/title/description). */
@@ -117,4 +103,31 @@ function normalizeRelease(raw: Record<string, unknown>): NexlifyRelease {
     fixes,
     downloadUrl: typeof raw.downloadUrl === "string" ? raw.downloadUrl : undefined,
   };
+}
+
+function bundledFeed(): NexlifyReleasesFeed {
+  return normalizeReleasesFeed(releasesJson as Parameters<typeof normalizeReleasesFeed>[0]);
+}
+
+export async function fetchNexlifyReleasesFeed(
+  url: string = DEFAULT_RELEASES_FEED_URL,
+): Promise<NexlifyReleasesFeed> {
+  const browserUa =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": browserUa },
+      next: { revalidate: 300 },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) throw new Error(`Releases feed ${res.status}`);
+    const data = (await res.json()) as NexlifyReleasesFeed & {
+      releases?: Array<Record<string, unknown>>;
+    };
+    if (!Array.isArray(data.releases)) throw new Error("Invalid releases feed");
+    return normalizeReleasesFeed(data);
+  } catch {
+    // Cloudflare/datacenter blocks are common — use bundled feed so update checks still work.
+    return bundledFeed();
+  }
 }

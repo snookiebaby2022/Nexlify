@@ -8,6 +8,7 @@ import {
 } from "@/lib/panel-update-job";
 import { resolvePatchUpdateScript } from "@/lib/panel-update";
 import { readInstalledVersion } from "@/lib/panel-version";
+import { getPanelUpdateStatus } from "@/lib/panel-update-auto";
 
 /** Vendor (nexlify.live) triggers a background panel update on a customer VPS. */
 export async function POST(req: NextRequest) {
@@ -18,6 +19,9 @@ export async function POST(req: NextRequest) {
   if (process.platform !== "linux") {
     return NextResponse.json({ error: "Updates run on Linux VPS only" }, { status: 400 });
   }
+
+  const body = await req.json().catch(() => ({} as Record<string, unknown>));
+  const force = body?.force === true || body?.action === "force";
 
   const server = await getPanelServerSettings();
   const repoPath = getResolvedRepoPath(server);
@@ -38,6 +42,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, started: false, reason: "already_running" });
   }
 
+  const status = await getPanelUpdateStatus();
+  if (!force && !status.updateAvailable) {
+    return NextResponse.json({
+      ok: true,
+      started: false,
+      reason: "already_latest",
+      fromVersion: status.installedVersion,
+      latestVersion: status.latestVersion,
+    });
+  }
+
+  if (force) {
+    process.env.PANEL_UPDATE_FORCE = "1";
+  }
+
   const { version: fromVersion } = await readInstalledVersion(repoPath);
   const result = await startBackgroundPanelUpdate(repoPath, fromVersion);
   if (!result.ok) {
@@ -47,5 +66,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, started: true, fromVersion });
+  return NextResponse.json({
+    ok: true,
+    started: true,
+    fromVersion,
+    latestVersion: status.latestVersion,
+    forced: force,
+  });
 }

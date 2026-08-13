@@ -139,6 +139,53 @@ async function main() {
     fail("update_button_api", e instanceof Error ? e.message : String(e));
   }
 
+  // Remote + internal update routes (auth + already_latest / force wiring)
+  try {
+    const remoteSrc = await import("fs/promises").then((fs) =>
+      fs.readFile(path.join(PANEL_ROOT, "src/app/api/admin/remote-update/route.ts"), "utf8")
+    );
+    if (
+      remoteSrc.includes("requirePanelApiKey") &&
+      remoteSrc.includes("already_latest") &&
+      remoteSrc.includes("startBackgroundPanelUpdate")
+    ) {
+      pass("remote_update_api", "auth + already_latest + start wired");
+    } else {
+      fail("remote_update_api", "missing expected remote-update handlers");
+    }
+  } catch (e) {
+    fail("remote_update_api", e instanceof Error ? e.message : String(e));
+  }
+
+  try {
+    const internalSrc = await import("fs/promises").then((fs) =>
+      fs.readFile(path.join(PANEL_ROOT, "src/app/api/internal/panel-update/route.ts"), "utf8")
+    );
+    if (
+      internalSrc.includes("isAuthorizedInternalRequest") &&
+      internalSrc.includes("already_latest") &&
+      internalSrc.includes("startBackgroundPanelUpdate")
+    ) {
+      pass("internal_update_api", "auth + already_latest + start wired");
+    } else {
+      fail("internal_update_api", "missing expected internal panel-update handlers");
+    }
+  } catch (e) {
+    fail("internal_update_api", e instanceof Error ? e.message : String(e));
+  }
+
+  const prebuilt = path.join(PANEL_ROOT, "scripts/apply-prebuilt-update.sh");
+  try {
+    const src = await import("fs/promises").then((fs) => fs.readFile(prebuilt, "utf8"));
+    if (src.includes("PANEL_VENDOR_IP") && src.includes("Host:")) {
+      pass("prebuilt_cf_bypass", "origin IP fallback present");
+    } else {
+      fail("prebuilt_cf_bypass", "missing Cloudflare origin bypass in apply-prebuilt-update.sh");
+    }
+  } catch (e) {
+    fail("prebuilt_cf_bypass", e instanceof Error ? e.message : String(e));
+  }
+
   const passed = results.filter((r) => r.ok).length;
   const failed = results.filter((r) => !r.ok).length;
   console.log(`\n${passed} passed, ${failed} failed, ${results.length} total`);
