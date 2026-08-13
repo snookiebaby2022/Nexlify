@@ -29,6 +29,12 @@ function emptyResult(): MigrationApplyResult {
     activityLogs: { imported: 0, skipped: 0 },
     bandwidthSnapshots: { imported: 0, skipped: 0 },
     settings: { imported: 0, skipped: 0 },
+    accessCodes: { imported: 0, skipped: 0 },
+    blockedUserAgents: { imported: 0, skipped: 0 },
+    userGroups: { imported: 0, skipped: 0 },
+    liveConnections: { imported: 0, skipped: 0 },
+    onDemandStreams: { imported: 0, skipped: 0 },
+    extrasBlobs: { imported: 0, skipped: 0 },
     warnings: [],
   };
 }
@@ -564,12 +570,13 @@ async function applyMigrationBundleInner(
     );
   }
 
+  // packages and phase2.packages are often the same array reference (SQL load).
+  // Deduplicate by legacyId so preview/import never double-count users_packages.
   const packageRows = [
     ...new Map(
-      [...(bundle.packages ?? []), ...(bundle.phase2?.packages ?? [])].map((p) => [
-        String(p.legacyId),
-        p,
-      ])
+      [...(bundle.packages ?? []), ...(bundle.phase2?.packages ?? [])]
+        .filter((p) => p?.legacyId)
+        .map((p) => [String(p.legacyId), p] as const)
     ).values(),
   ];
   if (options.importPackages !== false && packageRows.length) {

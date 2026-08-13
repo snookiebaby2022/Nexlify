@@ -140,7 +140,19 @@ export type Phase3AliasKind =
   | "loginLogs"
   | "streamLogs"
   | "serverStats"
-  | "settings";
+  | "settings"
+  | "accessCodes"
+  | "blockedUserAgents"
+  | "userGroups"
+  | "liveConnections"
+  | "onDemandCheck"
+  | "watchCategories"
+  | "watchRefresh"
+  | "epgApi"
+  | "epgLanguages"
+  | "crontab"
+  | "profiles"
+  | "creditLogs";
 
 type Phase3AliasMap = Partial<Record<Phase3AliasKind, string[]>>;
 
@@ -215,6 +227,46 @@ export const PHASE3_TABLE_ALIASES: {
       "PanelSetting",
       "panel_settings",
       "panelsetting",
+    ],
+    accessCodes: ["access_codes", "access_code", "AccessCode", "activation_codes"],
+    blockedUserAgents: [
+      "blocked_uas",
+      "blocked_ua",
+      "blocked_user_agents",
+      "BlockedUserAgent",
+      "user_agents_blocked",
+    ],
+    userGroups: [
+      "users_groups",
+      "user_groups",
+      "member_groups",
+      "reg_user_group",
+      "UserGroup",
+    ],
+    liveConnections: [
+      "lines_live",
+      "line_live",
+      "live_connections",
+      "LiveConnection",
+      "lines_activity",
+    ],
+    onDemandCheck: [
+      "ondemand_check",
+      "on_demand_check",
+      "ondemand",
+      "streams_ondemand",
+    ],
+    watchCategories: ["watch_categories", "watch_category"],
+    watchRefresh: ["watch_refresh", "watch_refreshes"],
+    epgApi: ["epg_api", "epg_apis", "epg_api_channels"],
+    epgLanguages: ["epg_languages", "epg_language", "epg_langs"],
+    crontab: ["crontab", "cron_jobs", "cron_tab", "panel_crontab"],
+    profiles: ["profiles", "transcode_profiles", "encode_profiles", "stream_profiles"],
+    creditLogs: [
+      "users_credits_logs",
+      "user_credits_logs",
+      "credits_logs",
+      "CreditTransaction",
     ],
   },
   bySource: {

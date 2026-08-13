@@ -223,6 +223,94 @@ export type MigrationBandwidthRow = {
   createdAt?: Date;
 };
 
+export type MigrationAccessCodeRow = {
+  code: string;
+  packageLegacyId?: string;
+  bouquetLegacyIds?: string[];
+  days?: number;
+  maxConnections?: number;
+  maxUses?: number;
+  uses?: number;
+  expiresAt?: Date;
+  isActive?: boolean;
+  notes?: string;
+};
+
+export type MigrationBlockedUaRow = {
+  pattern: string;
+  reason?: string;
+  isActive?: boolean;
+};
+
+export type MigrationUserGroupRow = {
+  legacyId: string;
+  name: string;
+  description?: string;
+  isReseller?: boolean;
+  isBanned?: boolean;
+  sortOrder?: number;
+  config?: Record<string, unknown>;
+};
+
+export type MigrationLiveConnectionRow = {
+  lineLegacyId?: string;
+  lineUsername?: string;
+  streamLegacyId?: string;
+  ip?: string;
+  userAgent?: string;
+  startedAt?: Date;
+  lastSeenAt?: Date;
+};
+
+export type MigrationWatchCategoryRow = {
+  legacyId?: string;
+  folderLegacyId?: string;
+  categoryLegacyId?: string;
+  type?: string;
+  path?: string;
+};
+
+export type MigrationWatchRefreshRow = {
+  streamLegacyId?: string;
+  type?: string;
+  status?: string;
+  createdAt?: Date;
+  message?: string;
+};
+
+export type MigrationEpgApiChannelRow = {
+  sourceLegacyId?: string;
+  channelId: string;
+  name?: string;
+  icon?: string;
+  language?: string;
+};
+
+export type MigrationEpgLanguageRow = {
+  code: string;
+  name?: string;
+  isActive?: boolean;
+};
+
+export type MigrationCrontabRow = {
+  time?: string;
+  command?: string;
+  enabled?: boolean;
+};
+
+export type MigrationProfileRow = {
+  legacyId?: string;
+  name: string;
+  options?: unknown;
+};
+
+export type MigrationCreditLogRow = {
+  userLegacyId: string;
+  amount: number;
+  note?: string;
+  createdAt?: Date;
+};
+
 /** Extended XUI.one tables beyond core IPTV entities. */
 export type MigrationPhase3Data = {
   providers: MigrationProviderRow[];
@@ -237,6 +325,18 @@ export type MigrationPhase3Data = {
   bandwidthSnapshots: MigrationBandwidthRow[];
   /** Raw settings row(s) stored under PanelSetting for operator review. */
   settingsRaw?: Record<string, unknown>;
+  accessCodes: MigrationAccessCodeRow[];
+  blockedUserAgents: MigrationBlockedUaRow[];
+  userGroups: MigrationUserGroupRow[];
+  liveConnections: MigrationLiveConnectionRow[];
+  onDemandStreamLegacyIds: string[];
+  watchCategories: MigrationWatchCategoryRow[];
+  watchRefresh: MigrationWatchRefreshRow[];
+  epgApiChannels: MigrationEpgApiChannelRow[];
+  epgLanguages: MigrationEpgLanguageRow[];
+  crontab: MigrationCrontabRow[];
+  profiles: MigrationProfileRow[];
+  creditLogs: MigrationCreditLogRow[];
 };
 
 export type MigrationPhase2Data = {
@@ -282,6 +382,8 @@ export type MigrationApplyOptions = {
   importLogs?: boolean;
   importStats?: boolean;
   importSettings?: boolean;
+  /** access_codes, blocked_uas, groups, ondemand, live sessions, epg_api, crontab, profiles, … */
+  importExtras?: boolean;
   skipExistingLines?: boolean;
   skipExistingStreams?: boolean;
   clearDataBeforeImport?: boolean;
@@ -317,5 +419,11 @@ export type MigrationApplyResult = {
   activityLogs: { imported: number; skipped: number };
   bandwidthSnapshots: { imported: number; skipped: number };
   settings: { imported: number; skipped: number };
+  accessCodes: { imported: number; skipped: number };
+  blockedUserAgents: { imported: number; skipped: number };
+  userGroups: { imported: number; skipped: number };
+  liveConnections: { imported: number; skipped: number };
+  onDemandStreams: { imported: number; skipped: number };
+  extrasBlobs: { imported: number; skipped: number };
   warnings: string[];
 };

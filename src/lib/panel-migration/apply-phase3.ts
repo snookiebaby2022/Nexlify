@@ -84,6 +84,26 @@ export async function applyMigrationPhase3(
       (phase3.settingsRaw?._migrationSource as MigrationSource | undefined)
   );
 
+  // Older bundles / JSON may omit newer fields.
+  phase3.accessCodes ??= [];
+  phase3.blockedUserAgents ??= [];
+  phase3.userGroups ??= [];
+  phase3.liveConnections ??= [];
+  phase3.onDemandStreamLegacyIds ??= [];
+  phase3.watchCategories ??= [];
+  phase3.watchRefresh ??= [];
+  phase3.epgApiChannels ??= [];
+  phase3.epgLanguages ??= [];
+  phase3.crontab ??= [];
+  phase3.profiles ??= [];
+  phase3.creditLogs ??= [];
+  result.accessCodes ??= { imported: 0, skipped: 0 };
+  result.blockedUserAgents ??= { imported: 0, skipped: 0 };
+  result.userGroups ??= { imported: 0, skipped: 0 };
+  result.liveConnections ??= { imported: 0, skipped: 0 };
+  result.onDemandStreams ??= { imported: 0, skipped: 0 };
+  result.extrasBlobs ??= { imported: 0, skipped: 0 };
+
   // --- providers ---
   const providerIdByLegacy = new Map<string, string>();
   if (options.importProviders !== false && phase3.providers.length) {
@@ -467,6 +487,286 @@ export async function applyMigrationPhase3(
     } catch (e) {
       result.settings.skipped++;
       pushWarning(result.warnings, `Settings: ${shortErr(e)}`);
+    }
+  }
+
+  // --- extras (access codes, UAs, groups, live sessions, on-demand, epg_api, crontab, profiles, …) ---
+  if (options.importExtras !== false) {
+    const extrasPrefix = settingsKey.replace(/_settings$/, "");
+
+    // Access codes
+    for (let i = 0; i < phase3.accessCodes.length; i++) {
+      const a = phase3.accessCodes[i];
+      onProgress?.("accessCodes", i + 1, phase3.accessCodes.length);
+      try {
+        const existing = await prisma.accessCode.findUnique({ where: { code: a.code } });
+        if (existing) {
+          result.accessCodes.skipped++;
+          continue;
+        }
+        await prisma.accessCode.create({
+          data: {
+            code: a.code,
+            days: Math.max(1, a.days ?? 30),
+            maxConnections: Math.max(1, a.maxConnections ?? 1),
+            maxUses: Math.max(0, a.maxUses ?? 1),
+            uses: Math.max(0, a.uses ?? 0),
+            expiresAt: a.expiresAt ?? null,
+            isActive: a.isActive !== false,
+            notes: a.notes ?? null,
+            bouquetIds: a.bouquetLegacyIds ?? [],
+          },
+        });
+        result.accessCodes.imported++;
+      } catch (e) {
+        result.accessCodes.skipped++;
+        pushWarning(result.warnings, `Access code ${a.code}: ${shortErr(e)}`);
+      }
+    }
+
+    // Blocked user agents
+    for (let i = 0; i < phase3.blockedUserAgents.length; i++) {
+      const u = phase3.blockedUserAgents[i];
+      onProgress?.("blockedUserAgents", i + 1, phase3.blockedUserAgents.length);
+      try {
+        const dup = await prisma.blockedUserAgent.findFirst({
+          where: { pattern: u.pattern },
+        });
+        if (dup) {
+          result.blockedUserAgents.skipped++;
+          continue;
+        }
+        await prisma.blockedUserAgent.create({
+          data: {
+            pattern: u.pattern,
+            reason: u.reason ?? null,
+            isActive: u.isActive !== false,
+          },
+        });
+        result.blockedUserAgents.imported++;
+      } catch (e) {
+        result.blockedUserAgents.skipped++;
+        pushWarning(result.warnings, `Blocked UA: ${shortErr(e)}`);
+      }
+    }
+
+    // User groups
+    const groupIdByLegacy = new Map<string, string>();
+    for (let i = 0; i < phase3.userGroups.length; i++) {
+      const g = phase3.userGroups[i];
+      onProgress?.("userGroups", i + 1, phase3.userGroups.length);
+      try {
+        const dup = await prisma.userGroup.findFirst({ where: { name: g.name } });
+        if (dup) {
+          groupIdByLegacy.set(g.legacyId, dup.id);
+          result.userGroups.skipped++;
+          continue;
+        }
+        const created = await prisma.userGroup.create({
+          data: {
+            name: g.name,
+            description: g.description ?? null,
+            isReseller: g.isReseller === true,
+            isBanned: g.isBanned === true,
+            sortOrder: g.sortOrder ?? 0,
+            config: (g.config ?? {}) as Prisma.InputJsonValue,
+          },
+        });
+        groupIdByLegacy.set(g.legacyId, created.id);
+        result.userGroups.imported++;
+      } catch (e) {
+        result.userGroups.skipped++;
+        pushWarning(result.warnings, `User group ${g.name}: ${shortErr(e)}`);
+      }
+    }
+
+    // Live sessions (historical snapshot — capped)
+    for (let i = 0; i < phase3.liveConnections.length; i++) {
+      const c = phase3.liveConnections[i];
+      onProgress?.("liveConnections", i + 1, phase3.liveConnections.length);
+      try {
+        let lineId =
+          (c.lineLegacyId && lineIdByLegacy.get(c.lineLegacyId)) || null;
+        if (!lineId && c.lineUsername) {
+          const line = await prisma.line.findFirst({
+            where: { username: c.lineUsername },
+            select: { id: true },
+          });
+          lineId = line?.id ?? null;
+        }
+        if (!lineId) {
+          result.liveConnections.skipped++;
+          continue;
+        }
+        const streamId =
+          (c.streamLegacyId && streamIdByLegacy.get(c.streamLegacyId)) || null;
+        await prisma.liveConnection.create({
+          data: {
+            lineId,
+            streamId,
+            ip: c.ip ?? null,
+            userAgent: c.userAgent ?? null,
+            startedAt: c.startedAt ?? undefined,
+            lastSeenAt: c.lastSeenAt ?? c.startedAt ?? undefined,
+          },
+        });
+        result.liveConnections.imported++;
+      } catch (e) {
+        result.liveConnections.skipped++;
+        pushWarning(result.warnings, `Live session: ${shortErr(e)}`);
+      }
+    }
+
+    // On-demand flags on streams
+    if (phase3.onDemandStreamLegacyIds.length) {
+      let updated = 0;
+      for (let i = 0; i < phase3.onDemandStreamLegacyIds.length; i++) {
+        const legacyId = phase3.onDemandStreamLegacyIds[i];
+        onProgress?.(
+          "onDemandStreams",
+          i + 1,
+          phase3.onDemandStreamLegacyIds.length
+        );
+        const streamId = streamIdByLegacy.get(legacyId);
+        if (!streamId) {
+          result.onDemandStreams.skipped++;
+          continue;
+        }
+        try {
+          await prisma.stream.update({
+            where: { id: streamId },
+            data: { isOnDemand: true, vodMode: "ON_DEMAND" },
+          });
+          updated++;
+          result.onDemandStreams.imported++;
+        } catch {
+          result.onDemandStreams.skipped++;
+        }
+      }
+      if (updated) {
+        pushWarning(
+          result.warnings,
+          `Marked ${updated} stream(s) as on-demand from ondemand_check.`
+        );
+      }
+    }
+
+    // epg_api → attach to EpgSource.config.apiChannels
+    if (phase3.epgApiChannels.length) {
+      const bySource = new Map<string, typeof phase3.epgApiChannels>();
+      const fallbackId =
+        [...epgSourceIdByLegacy.values()][0] ??
+        (await prisma.epgSource.findFirst())?.id ??
+        null;
+      for (const ch of phase3.epgApiChannels) {
+        const key =
+          (ch.sourceLegacyId && epgSourceIdByLegacy.get(ch.sourceLegacyId)) ||
+          fallbackId;
+        if (!key) continue;
+        const list = bySource.get(key) ?? [];
+        list.push(ch);
+        bySource.set(key, list);
+      }
+      for (const [sourceId, channels] of bySource) {
+        try {
+          const existing = await prisma.epgSource.findUnique({ where: { id: sourceId } });
+          const prev =
+            existing?.config && typeof existing.config === "object"
+              ? (existing.config as Record<string, unknown>)
+              : {};
+          await prisma.epgSource.update({
+            where: { id: sourceId },
+            data: {
+              config: {
+                ...prev,
+                apiChannels: channels.slice(0, 50_000).map((c) => ({
+                  id: c.channelId,
+                  name: c.name,
+                  icon: c.icon,
+                  language: c.language,
+                })),
+              },
+            },
+          });
+          result.extrasBlobs.imported++;
+        } catch (e) {
+          result.extrasBlobs.skipped++;
+          pushWarning(result.warnings, `epg_api attach: ${shortErr(e)}`);
+        }
+      }
+    }
+
+    // Store reference blobs: epg languages, crontab, profiles, watch categories/refresh
+    async function storeBlob(suffix: string, value: unknown) {
+      if (value == null) return;
+      const key = `${extrasPrefix}_${suffix}`;
+      try {
+        await prisma.panelSetting.upsert({
+          where: { key },
+          create: { key, value: JSON.stringify(value) },
+          update: { value: JSON.stringify(value) },
+        });
+        result.extrasBlobs.imported++;
+      } catch (e) {
+        result.extrasBlobs.skipped++;
+        pushWarning(result.warnings, `${suffix} blob: ${shortErr(e)}`);
+      }
+    }
+
+    if (phase3.epgLanguages.length) {
+      await storeBlob("epg_languages", phase3.epgLanguages);
+    }
+    if (phase3.crontab.length) {
+      await storeBlob("crontab", phase3.crontab);
+      pushWarning(
+        result.warnings,
+        `Stored ${phase3.crontab.length} crontab row(s) under PanelSetting (Nexlify uses its own cron — review manually).`
+      );
+    }
+    if (phase3.profiles.length) {
+      await storeBlob("profiles", phase3.profiles);
+      pushWarning(
+        result.warnings,
+        `Stored ${phase3.profiles.length} transcoder profile(s) under PanelSetting (rebuild in Nexlify if needed).`
+      );
+    }
+    if (phase3.watchCategories.length) {
+      await storeBlob("watch_categories", phase3.watchCategories);
+    }
+    if (phase3.watchRefresh.length) {
+      await storeBlob("watch_refresh", {
+        rows: phase3.watchRefresh,
+        note: "Sample of XUI watch_refresh queue; not replayed automatically.",
+      });
+    }
+
+    // Credit logs
+    for (let i = 0; i < phase3.creditLogs.length; i++) {
+      const log = phase3.creditLogs[i];
+      onProgress?.("creditLogs", i + 1, phase3.creditLogs.length);
+      const userId = resellerIdByLegacy.get(log.userLegacyId);
+      if (!userId) {
+        result.extrasBlobs.skipped++;
+        continue;
+      }
+      try {
+        const user = await prisma.panelUser.findUnique({
+          where: { id: userId },
+          select: { credits: true },
+        });
+        await prisma.creditTransaction.create({
+          data: {
+            userId,
+            amount: log.amount,
+            balanceAfter: user?.credits ?? 0,
+            note: log.note ?? "Imported credit log",
+            createdAt: log.createdAt ?? undefined,
+          },
+        });
+        result.extrasBlobs.imported++;
+      } catch {
+        result.extrasBlobs.skipped++;
+      }
     }
   }
 }

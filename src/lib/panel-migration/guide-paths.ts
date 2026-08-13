@@ -77,7 +77,7 @@ export const MIGRATION_GUIDE_PATHS: MigrationGuidePath[] = [
     ],
     postImport: SHARED_POST_IMPORT,
     notes: [
-      "Nested bouquet JSON, streams_sys server links, series_episodes, junction tables, and extended tables (providers, watch, tickets, EPG guide, logs/ASN/settings) are mapped when present.",
+      "Nested bouquet JSON, streams_sys server links, series_episodes, junction tables, and extended tables (providers, watch, tickets, EPG guide, logs/ASN/settings, access codes, blocked UAs, groups, on-demand, live sessions, epg_api, crontab, profiles) are mapped when present.",
       "Do not use a partial/table-only dump — export the full database.",
     ],
   },

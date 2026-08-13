@@ -14,6 +14,10 @@ const LOG_CAP = 2500;
 const EPG_PROGRAM_CAP = 100_000;
 const WATCH_LOG_CAP = 500;
 const STATS_CAP = 500;
+const LIVE_CONN_CAP = 500;
+const EPG_API_CAP = 50_000;
+const WATCH_REFRESH_CAP = 500;
+const CREDIT_LOG_CAP = 2000;
 
 function aliasesFor(source: MigrationSource | undefined, kind: Phase3AliasKind): string[] {
   const shared = PHASE3_TABLE_ALIASES.shared[kind] ?? [];
@@ -107,6 +111,18 @@ export function loadPhase3FromSql(
     blockedAsns: [],
     activityLogs: [],
     bandwidthSnapshots: [],
+    accessCodes: [],
+    blockedUserAgents: [],
+    userGroups: [],
+    liveConnections: [],
+    onDemandStreamLegacyIds: [],
+    watchCategories: [],
+    watchRefresh: [],
+    epgApiChannels: [],
+    epgLanguages: [],
+    crontab: [],
+    profiles: [],
+    creditLogs: [],
   };
 
   const find = (kind: Phase3AliasKind) => findMerged(allTables, aliasesFor(source, kind));
@@ -452,8 +468,337 @@ export function loadPhase3FromSql(
     phase3.settingsRaw = raw;
   }
 
+  // --- extras: access codes ---
+  const accessCodes = find("accessCodes");
+  if (accessCodes) {
+    for (const row of accessCodes.rows) {
+      const r = rowToRecord(accessCodes.columns, row);
+      const code = String(r.code ?? r.access_code ?? r.key ?? "").trim();
+      if (!code) continue;
+      const typeHint = r.type != null ? String(r.type) : "";
+      const groupsHint = r.groups != null ? String(r.groups) : "";
+      phase3.accessCodes.push({
+        code: code.slice(0, 128),
+        packageLegacyId:
+          r.package_id != null && String(r.package_id) !== "0"
+            ? String(r.package_id)
+            : undefined,
+        bouquetLegacyIds: undefined,
+        days: Number(r.days ?? r.duration ?? r.length_days ?? 30) || 30,
+        maxConnections: Math.max(1, Number(r.max_connections ?? r.connections ?? 1) || 1),
+        maxUses: Math.max(0, Number(r.max_uses ?? r.uses_allowed ?? 1) || 1),
+        uses: Math.max(0, Number(r.uses ?? r.used ?? 0) || 0),
+        expiresAt: unixToDate(r.expires ?? r.exp_date ?? r.expire_at),
+        isActive: Number(r.enabled ?? r.active ?? r.is_active ?? 1) !== 0,
+        notes: [typeHint && `type=${typeHint}`, groupsHint && `groups=${groupsHint}`]
+          .filter(Boolean)
+          .join("; ")
+          .slice(0, 500) || undefined,
+      });
+    }
+  }
+
+  // --- extras: blocked user agents ---
+  const blockedUas = find("blockedUserAgents");
+  if (blockedUas) {
+    for (const row of blockedUas.rows) {
+      const r = rowToRecord(blockedUas.columns, row);
+      const pattern = String(
+        r.user_agent ?? r.ua ?? r.pattern ?? r.agent ?? r.blocked_ua ?? ""
+      ).trim();
+      if (!pattern) continue;
+      phase3.blockedUserAgents.push({
+        pattern: pattern.slice(0, 500),
+        reason: r.reason ? String(r.reason).slice(0, 500) : undefined,
+        isActive: Number(r.enabled ?? r.active ?? r.is_active ?? r.blocked ?? 1) !== 0,
+      });
+    }
+  }
+
+  // --- extras: user groups ---
+  const groups = find("userGroups");
+  if (groups) {
+    for (const row of groups.rows) {
+      const r = rowToRecord(groups.columns, row);
+      const legacyId = String(r.id ?? r.group_id ?? "");
+      const name = String(
+        r.group_name ?? r.name ?? r.title ?? `Group ${legacyId}`
+      ).trim();
+      if (!legacyId || !name) continue;
+      const config: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(r)) {
+        if (["id", "group_id", "group_name", "name", "title"].includes(k)) continue;
+        if (v == null) continue;
+        const s = String(v);
+        if (s.length > 2000) continue;
+        config[k] = v;
+      }
+      phase3.userGroups.push({
+        legacyId,
+        name,
+        description: r.description ? String(r.description).slice(0, 500) : undefined,
+        isReseller: Number(r.is_reseller ?? r.reseller ?? 0) === 1,
+        isBanned: Number(r.is_banned ?? r.banned ?? 0) === 1,
+        sortOrder: Number(r.sort_order ?? r.order ?? r.id ?? 0) || 0,
+        config,
+      });
+    }
+  }
+
+  // --- extras: live sessions (capped) ---
+  const live = find("liveConnections");
+  if (live) {
+    let n = 0;
+    for (const row of live.rows) {
+      if (n >= LIVE_CONN_CAP) break;
+      const r = rowToRecord(live.columns, row);
+      const lineLegacyId =
+        r.user_id != null
+          ? String(r.user_id)
+          : r.line_id != null
+            ? String(r.line_id)
+            : undefined;
+      const lineUsername = r.username ? String(r.username).trim() : undefined;
+      if (!lineLegacyId && !lineUsername) continue;
+      phase3.liveConnections.push({
+        lineLegacyId,
+        lineUsername,
+        streamLegacyId:
+          r.stream_id != null && String(r.stream_id) !== "0"
+            ? String(r.stream_id)
+            : undefined,
+        ip: r.user_ip ? String(r.user_ip) : r.ip ? String(r.ip) : undefined,
+        userAgent: r.user_agent
+          ? String(r.user_agent).slice(0, 500)
+          : r.ua
+            ? String(r.ua).slice(0, 500)
+            : undefined,
+        startedAt: unixToDate(r.date_start ?? r.started ?? r.started_at ?? r.date),
+        lastSeenAt: unixToDate(r.date_end ?? r.last_seen ?? r.updated ?? r.date),
+      });
+      n++;
+    }
+    if (live.rows.length > LIVE_CONN_CAP) {
+      warnings.push(
+        `Capped live-session import at ${LIVE_CONN_CAP} of ${live.rows.length} rows.`
+      );
+    }
+  }
+
+  // --- extras: on-demand stream flags ---
+  const onDemand = find("onDemandCheck");
+  if (onDemand) {
+    const ids = new Set<string>();
+    for (const row of onDemand.rows) {
+      const r = rowToRecord(onDemand.columns, row);
+      const sid = String(r.stream_id ?? r.id ?? r.streams_id ?? "").trim();
+      if (!sid || sid === "0") continue;
+      ids.add(sid);
+    }
+    phase3.onDemandStreamLegacyIds = [...ids];
+  }
+
+  // --- extras: watch categories (also enrich watch folders) ---
+  const watchCats = find("watchCategories");
+  if (watchCats) {
+    for (const row of watchCats.rows) {
+      const r = rowToRecord(watchCats.columns, row);
+      const categoryLegacyId =
+        r.cat_id != null
+          ? String(r.cat_id)
+          : r.category_id != null
+            ? String(r.category_id)
+            : undefined;
+      const folderLegacyId =
+        r.folder_id != null
+          ? String(r.folder_id)
+          : r.watch_folder_id != null
+            ? String(r.watch_folder_id)
+            : undefined;
+      phase3.watchCategories.push({
+        legacyId: r.id != null ? String(r.id) : undefined,
+        folderLegacyId,
+        categoryLegacyId:
+          categoryLegacyId && categoryLegacyId !== "0" ? categoryLegacyId : undefined,
+        type: r.type != null ? String(r.type) : undefined,
+        path: r.gen_folder
+          ? String(r.gen_folder)
+          : r.directory
+            ? String(r.directory)
+            : r.path
+              ? String(r.path)
+              : undefined,
+      });
+    }
+    // Enrich watch folders missing category from watch_categories
+    if (phase3.watchCategories.length && phase3.watchFolders.length) {
+      for (const f of phase3.watchFolders) {
+        if (f.categoryLegacyId) continue;
+        const match =
+          phase3.watchCategories.find((c) => c.folderLegacyId === f.legacyId) ||
+          phase3.watchCategories.find(
+            (c) => c.path && (c.path === f.path || f.path.includes(c.path))
+          );
+        if (match?.categoryLegacyId) f.categoryLegacyId = match.categoryLegacyId;
+      }
+    }
+  }
+
+  // --- extras: watch refresh (capped sample) ---
+  const watchRefresh = find("watchRefresh");
+  if (watchRefresh) {
+    let n = 0;
+    for (const row of watchRefresh.rows) {
+      if (n >= WATCH_REFRESH_CAP) break;
+      const r = rowToRecord(watchRefresh.columns, row);
+      phase3.watchRefresh.push({
+        streamLegacyId:
+          r.stream_id != null && String(r.stream_id) !== "0"
+            ? String(r.stream_id)
+            : undefined,
+        type: r.type != null ? String(r.type) : undefined,
+        status: r.status != null ? String(r.status) : undefined,
+        createdAt: unixToDate(r.date ?? r.created ?? r.created_at ?? r.timestamp),
+        message: r.message ? String(r.message).slice(0, 500) : undefined,
+      });
+      n++;
+    }
+    if (watchRefresh.rows.length > WATCH_REFRESH_CAP) {
+      warnings.push(
+        `Capped watch_refresh import at ${WATCH_REFRESH_CAP} of ${watchRefresh.rows.length} rows (full count kept in settings blob).`
+      );
+      if (!phase3.settingsRaw) phase3.settingsRaw = { _migrationSource: source };
+      phase3.settingsRaw.watch_refresh_total = watchRefresh.rows.length;
+    }
+  }
+
+  // --- extras: epg_api channel catalog ---
+  const epgApi = find("epgApi");
+  if (epgApi) {
+    let n = 0;
+    for (const row of epgApi.rows) {
+      if (n >= EPG_API_CAP) break;
+      const r = rowToRecord(epgApi.columns, row);
+      const channelId = String(
+        r.channel_id ?? r.epg_channel_id ?? r.xmltv_id ?? r.id ?? ""
+      ).trim();
+      if (!channelId) continue;
+      phase3.epgApiChannels.push({
+        sourceLegacyId:
+          r.epg_id != null && String(r.epg_id) !== "0"
+            ? String(r.epg_id)
+            : r.source_id != null
+              ? String(r.source_id)
+              : undefined,
+        channelId: channelId.slice(0, 200),
+        name: r.name
+          ? String(r.name).slice(0, 300)
+          : r.channel_name
+            ? String(r.channel_name).slice(0, 300)
+            : undefined,
+        icon: r.icon ? String(r.icon).slice(0, 1000) : undefined,
+        language: r.lang
+          ? String(r.lang)
+          : r.language
+            ? String(r.language)
+            : undefined,
+      });
+      n++;
+    }
+    if (epgApi.rows.length > EPG_API_CAP) {
+      warnings.push(
+        `Capped epg_api import at ${EPG_API_CAP} of ${epgApi.rows.length} rows.`
+      );
+    }
+  }
+
+  // --- extras: epg languages ---
+  const epgLangs = find("epgLanguages");
+  if (epgLangs) {
+    for (const row of epgLangs.rows) {
+      const r = rowToRecord(epgLangs.columns, row);
+      const code = String(r.code ?? r.lang ?? r.language_code ?? r.id ?? "").trim();
+      if (!code) continue;
+      phase3.epgLanguages.push({
+        code: code.slice(0, 32),
+        name: r.language
+          ? String(r.language)
+          : r.name
+            ? String(r.name)
+            : r.language_name
+              ? String(r.language_name)
+              : undefined,
+        isActive: Number(r.enabled ?? r.active ?? r.is_active ?? 1) !== 0,
+      });
+    }
+  }
+
+  // --- extras: crontab definitions ---
+  const crontab = find("crontab");
+  if (crontab) {
+    for (const row of crontab.rows) {
+      const r = rowToRecord(crontab.columns, row);
+      const command = String(
+        r.command ?? r.cmd ?? r.job ?? r.script ?? r.description ?? ""
+      ).trim();
+      const time = String(r.time ?? r.schedule ?? r.cron ?? r.minute ?? "").trim();
+      if (!command && !time) continue;
+      phase3.crontab.push({
+        time: time || undefined,
+        command: command || undefined,
+        enabled: Number(r.enabled ?? r.active ?? r.is_active ?? 1) !== 0,
+      });
+    }
+  }
+
+  // --- extras: transcoder profiles (stored for review) ---
+  const profiles = find("profiles");
+  if (profiles) {
+    for (const row of profiles.rows) {
+      const r = rowToRecord(profiles.columns, row);
+      const name = String(
+        r.profile_name ?? r.name ?? r.title ?? `Profile ${r.id ?? ""}`
+      ).trim();
+      if (!name) continue;
+      phase3.profiles.push({
+        legacyId: r.id != null ? String(r.id) : undefined,
+        name,
+        options: r.profile_options ?? r.options ?? r.data ?? r.config ?? undefined,
+      });
+    }
+  }
+
+  // --- extras: credit logs ---
+  const creditLogs = find("creditLogs");
+  if (creditLogs) {
+    let n = 0;
+    for (const row of creditLogs.rows) {
+      if (n >= CREDIT_LOG_CAP) break;
+      const r = rowToRecord(creditLogs.columns, row);
+      const userLegacyId = String(r.target_id ?? r.user_id ?? r.admin_id ?? "").trim();
+      const amount = Number(r.amount ?? r.credits ?? r.credit ?? NaN);
+      if (!userLegacyId || !Number.isFinite(amount) || amount === 0) continue;
+      phase3.creditLogs.push({
+        userLegacyId,
+        amount: Math.trunc(amount),
+        note: r.reason
+          ? String(r.reason).slice(0, 500)
+          : r.notes
+            ? String(r.notes).slice(0, 500)
+            : undefined,
+        createdAt: unixToDate(r.date ?? r.created ?? r.created_at ?? r.timestamp),
+      });
+      n++;
+    }
+    if (creditLogs.rows.length > CREDIT_LOG_CAP) {
+      warnings.push(
+        `Capped credit-log import at ${CREDIT_LOG_CAP} of ${creditLogs.rows.length} rows.`
+      );
+    }
+  }
+
   warnings.push(
-    `Extended import (${source}): ${phase3.providers.length} providers, ${phase3.providerStreamLinks.length} provider↔stream links, ${phase3.watchFolders.length} watch folders, ${phase3.tickets.length} tickets, ${phase3.epgChannels.length} EPG channels, ${phase3.epgPrograms.length} EPG programmes, ${phase3.blockedAsns.length} ASNs, ${phase3.activityLogs.length} log rows, ${phase3.bandwidthSnapshots.length} stats snapshots${phase3.settingsRaw ? ", settings blob" : ""}.`
+    `Extended import (${source}): ${phase3.providers.length} providers, ${phase3.providerStreamLinks.length} provider↔stream links, ${phase3.watchFolders.length} watch folders, ${phase3.tickets.length} tickets, ${phase3.epgChannels.length} EPG channels, ${phase3.epgPrograms.length} EPG programmes, ${phase3.blockedAsns.length} ASNs, ${phase3.activityLogs.length} log rows, ${phase3.bandwidthSnapshots.length} stats snapshots${phase3.settingsRaw ? ", settings blob" : ""}, ${phase3.accessCodes.length} access codes, ${phase3.blockedUserAgents.length} blocked UAs, ${phase3.userGroups.length} groups, ${phase3.liveConnections.length} live sessions, ${phase3.onDemandStreamLegacyIds.length} on-demand streams, ${phase3.watchCategories.length} watch categories, ${phase3.watchRefresh.length} watch refresh, ${phase3.epgApiChannels.length} epg_api, ${phase3.epgLanguages.length} epg languages, ${phase3.crontab.length} crontab, ${phase3.profiles.length} profiles, ${phase3.creditLogs.length} credit logs.`
   );
 
   return { phase3, warnings };

@@ -83,8 +83,33 @@ export function previewMigrationBundle(bundle: MigrationBundle) {
       categories: bundle.phase2?.categories.length ?? 0,
       servers: bundle.phase2?.servers.length ?? 0,
       epgSources: bundle.phase2?.epgSources.length ?? 0,
-      packages:
-        (bundle.packages?.length ?? 0) + (bundle.phase2?.packages?.length ?? 0),
+      // Prefer top-level packages; phase2.packages is the same array when loaded from SQL.
+      packages: (() => {
+        const top = bundle.packages ?? [];
+        const fromPhase2 = bundle.phase2?.packages ?? [];
+        if (top.length && fromPhase2.length && top === fromPhase2) return top.length;
+        if (top.length && fromPhase2.length) {
+          const ids = new Set(top.map((p) => String(p.legacyId)));
+          let extra = 0;
+          for (const p of fromPhase2) {
+            if (!ids.has(String(p.legacyId))) extra++;
+          }
+          return top.length + extra;
+        }
+        return top.length || fromPhase2.length;
+      })(),
+      accessCodes: phase3?.accessCodes?.length ?? 0,
+      blockedUserAgents: phase3?.blockedUserAgents?.length ?? 0,
+      userGroups: phase3?.userGroups?.length ?? 0,
+      liveConnections: phase3?.liveConnections?.length ?? 0,
+      onDemandStreams: phase3?.onDemandStreamLegacyIds?.length ?? 0,
+      watchCategories: phase3?.watchCategories?.length ?? 0,
+      watchRefresh: phase3?.watchRefresh?.length ?? 0,
+      epgApi: phase3?.epgApiChannels?.length ?? 0,
+      epgLanguages: phase3?.epgLanguages?.length ?? 0,
+      crontab: phase3?.crontab?.length ?? 0,
+      profiles: phase3?.profiles?.length ?? 0,
+      creditLogs: phase3?.creditLogs?.length ?? 0,
       providers: phase3?.providers.length ?? 0,
       providerLinks: phase3?.providerStreamLinks.length ?? 0,
       watchFolders: phase3?.watchFolders.length ?? 0,

@@ -50,6 +50,8 @@ function formatPreviewCounts(c: Record<string, number>): string {
     c.packages ? `${c.packages} packages` : null,
     c.watchFolders ? `${c.watchFolders} watch folders` : null,
     c.watchLogs ? `${c.watchLogs} watch logs` : null,
+    c.watchCategories ? `${c.watchCategories} watch categories` : null,
+    c.watchRefresh ? `${c.watchRefresh} watch refresh` : null,
     `${c.lines ?? 0} lines`,
     `${c.resellers ?? 0} resellers`,
     `${c.magDevices ?? 0} MAG`,
@@ -57,7 +59,17 @@ function formatPreviewCounts(c: Record<string, number>): string {
     c.tickets ? `${c.tickets} tickets` : null,
     c.epgChannels ? `${c.epgChannels} EPG channels` : null,
     c.epgPrograms ? `${c.epgPrograms} EPG programmes` : null,
+    c.epgApi ? `${c.epgApi} epg_api channels` : null,
+    c.epgLanguages ? `${c.epgLanguages} epg languages` : null,
     c.blockedAsns ? `${c.blockedAsns} ASN blocks` : null,
+    c.blockedUserAgents ? `${c.blockedUserAgents} blocked UAs` : null,
+    c.accessCodes ? `${c.accessCodes} access codes` : null,
+    c.userGroups ? `${c.userGroups} user groups` : null,
+    c.liveConnections ? `${c.liveConnections} live sessions` : null,
+    c.onDemandStreams ? `${c.onDemandStreams} on-demand streams` : null,
+    c.crontab ? `${c.crontab} crontab rows` : null,
+    c.profiles ? `${c.profiles} profiles` : null,
+    c.creditLogs ? `${c.creditLogs} credit logs` : null,
     c.activityLogs ? `${c.activityLogs} log rows` : null,
     c.bandwidthSnapshots ? `${c.bandwidthSnapshots} stats snapshots` : null,
     c.settings ? `settings blob` : null,
@@ -102,6 +114,8 @@ export function PanelMigrateForm() {
   const [importLogs, setImportLogs] = useState(true);
   const [importStats, setImportStats] = useState(true);
   const [importSettings, setImportSettings] = useState(true);
+  /** Extra tables: access codes, blocked UAs, groups, on-demand, live sessions, epg_api, crontab, profiles, … */
+  const [importExtras, setImportExtras] = useState(true);
   /** Match 1-stream Migration Guide — streams imported stopped by default. */
   const [importStreamsStopped, setImportStreamsStopped] = useState(true);
   const [skipExisting, setSkipExisting] = useState(true);
@@ -182,6 +196,7 @@ export function PanelMigrateForm() {
       importLogs,
       importStats,
       importSettings,
+      importExtras,
       importStreamsStopped,
       skipExistingLines: skipExisting,
       skipExistingStreams: skipExisting,
@@ -454,7 +469,13 @@ export function PanelMigrateForm() {
         (r.blockedAsns?.imported ?? 0) +
         (r.activityLogs?.imported ?? 0) +
         (r.bandwidthSnapshots?.imported ?? 0) +
-        (r.settings?.imported ?? 0);
+        (r.settings?.imported ?? 0) +
+        (r.accessCodes?.imported ?? 0) +
+        (r.blockedUserAgents?.imported ?? 0) +
+        (r.userGroups?.imported ?? 0) +
+        (r.liveConnections?.imported ?? 0) +
+        (r.onDemandStreams?.imported ?? 0) +
+        (r.extrasBlobs?.imported ?? 0);
       const tablesFound = (data.preview as Record<string, unknown> | undefined)?.tablesFound as
         | { name: string; rows: number; hasColumns: boolean }[]
         | undefined;
@@ -494,6 +515,24 @@ export function PanelMigrateForm() {
             ? `Stats: +${r.bandwidthSnapshots.imported} / skipped ${r.bandwidthSnapshots.skipped}`
             : null,
           r.settings ? `Settings: +${r.settings.imported} / skipped ${r.settings.skipped}` : null,
+          r.accessCodes
+            ? `Access codes: +${r.accessCodes.imported} / skipped ${r.accessCodes.skipped}`
+            : null,
+          r.blockedUserAgents
+            ? `Blocked UAs: +${r.blockedUserAgents.imported} / skipped ${r.blockedUserAgents.skipped}`
+            : null,
+          r.userGroups
+            ? `User groups: +${r.userGroups.imported} / skipped ${r.userGroups.skipped}`
+            : null,
+          r.liveConnections
+            ? `Live sessions: +${r.liveConnections.imported} / skipped ${r.liveConnections.skipped}`
+            : null,
+          r.onDemandStreams
+            ? `On-demand flags: +${r.onDemandStreams.imported} / skipped ${r.onDemandStreams.skipped}`
+            : null,
+          r.extrasBlobs
+            ? `Extra blobs (epg_api/crontab/profiles/…): +${r.extrasBlobs.imported} / skipped ${r.extrasBlobs.skipped}`
+            : null,
           visibleWarnings.length ? `Warnings: ${visibleWarnings.join("; ")}` : null,
           !showAllWarnings && warnings.length > 8 ? `... and ${warnings.length - 8} more warnings` : null,
         ]
@@ -902,6 +941,14 @@ export function PanelMigrateForm() {
             onChange={(e) => setImportSettings(e.target.checked)}
           />{" "}
           Settings (review blob)
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={importExtras}
+            onChange={(e) => setImportExtras(e.target.checked)}
+          />{" "}
+          Extra tables (access codes, UAs, groups, on-demand, live sessions, epg_api, crontab, profiles, …)
         </label>
         <label>
           <input type="checkbox" checked={skipExisting} onChange={(e) => setSkipExisting(e.target.checked)} />{" "}

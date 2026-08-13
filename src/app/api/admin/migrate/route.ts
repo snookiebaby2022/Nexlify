@@ -42,6 +42,7 @@ function applyOptions(body: Record<string, unknown>) {
     importLogs: body.importLogs !== false,
     importStats: body.importStats !== false,
     importSettings: body.importSettings !== false,
+    importExtras: body.importExtras !== false,
     skipExistingLines: body.skipExistingLines !== false,
     skipExistingStreams: body.skipExistingStreams !== false,
     clearDataBeforeImport: Boolean(body.clearDataBeforeImport),
