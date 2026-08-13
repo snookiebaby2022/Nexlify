@@ -387,6 +387,29 @@ const TYPE_PRIORITY: HeaderlessTableType[] = [
 ];
 
 /**
+ * For a headerless table whose name isn't in any profile, try every table type
+ * and return the one with the highest mapped-column ratio. Returns null if no
+ * type achieves at least 2 mapped columns.
+ */
+function guessTypeFromContent(
+  sample: unknown[][]
+): { type: HeaderlessTableType; mapped: number; total: number } | null {
+  if (!sample.length || !sample[0].length) return null;
+
+  let best: { type: HeaderlessTableType; mapped: number; total: number } | null = null;
+
+  for (const type of TYPE_PRIORITY) {
+    const columns = inferHeaderlessColumns(type, sample);
+    const mapped = columns.filter((c) => !c.startsWith("__c")).length;
+    if (mapped >= 2 && (!best || mapped > best.mapped)) {
+      best = { type, mapped, total: columns.length };
+    }
+  }
+
+  return best;
+}
+
+/**
  * Inspect every parsed table; for headerless tables (empty column list but rows
  * present) infer and attach canonical column names by content. Returns human
  * readable notes describing what was auto-mapped (for the migration report).
@@ -407,8 +430,6 @@ export function applyHeaderlessInference(
   const notes: string[] = [];
 
   for (const [name, chunks] of allTables) {
-    const type = nameToType.get(name.toLowerCase());
-    if (!type) continue;
     const headerless = chunks.filter((c) => c.columns.length === 0 && c.rows.length > 0);
     if (!headerless.length) continue;
 
@@ -429,6 +450,22 @@ export function applyHeaderlessInference(
       if (sample.length >= 200) break;
     }
     if (!sample.length) continue;
+
+    let type = nameToType.get(name.toLowerCase());
+
+    // Content-based fallback: if the table name isn't in any profile, try every
+    // type and pick the best match by mapped-column count.
+    if (!type) {
+      const guess = guessTypeFromContent(sample);
+      if (guess) {
+        type = guess.type;
+        notes.push(
+          `Guessed type "${type}" for unrecognized headerless table "${name}" (${guess.mapped}/${guess.total} columns matched).`
+        );
+      } else {
+        continue;
+      }
+    }
 
     const columns = inferHeaderlessColumns(type, sample, KNOWN_COLUMN_ORDER[source]?.[type]);
     const mapped = columns.filter((c) => !c.startsWith("__c")).length;
