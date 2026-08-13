@@ -283,10 +283,30 @@ export async function POST(req: NextRequest) {
         };
 
         // Send immediate event to prevent client timeout on long parses
-        send("start", { phase: "initializing" });
+        send("start", {
+          phase: "initializing",
+          message: filePath
+            ? "Upload received — preparing to scan SQL dump…"
+            : "Starting import…",
+        });
 
         try {
+          // Throttle SSE progress so huge tables (EPG/streams) don't flood the client.
+          let lastPhase = "";
+          let lastSentAt = 0;
+          let lastCurrent = -1;
           const onProgress = (phase: string, current: number, total: number) => {
+            const now = Date.now();
+            const phaseChanged = phase !== lastPhase;
+            const isDone = total > 0 && current >= total;
+            const everyN =
+              total > 50_000 ? 500 : total > 5_000 ? 100 : total > 500 ? 25 : 1;
+            const stepped = current === 1 || current % everyN === 0 || isDone;
+            if (!phaseChanged && !stepped && now - lastSentAt < 400) return;
+            if (!phaseChanged && current === lastCurrent && now - lastSentAt < 1000) return;
+            lastPhase = phase;
+            lastCurrent = current;
+            lastSentAt = now;
             send("progress", { phase, current, total });
           };
 
@@ -303,12 +323,28 @@ export async function POST(req: NextRequest) {
             let content: string | undefined;
             
             if (filePath) {
+              let dumpLabel = "SQL dump";
+              try {
+                const st = await stat(filePath);
+                dumpLabel = `${(st.size / (1024 * 1024)).toFixed(1)} MB SQL dump`;
+              } catch {
+                /* ignore */
+              }
+              send("status", { message: `Scanning & parsing ${dumpLabel}…` });
               send("progress", { phase: "scanning", current: 0, total: 100 });
+              let lastScanPct = -1;
               const bundle = await bundleFromSqlFile(filePath, source, (bytesRead, totalBytes) => {
                 const pct = Math.round((bytesRead / totalBytes) * 100);
-                send("progress", { phase: "scanning", current: pct, total: 100 });
+                if (pct !== lastScanPct) {
+                  lastScanPct = pct;
+                  send("progress", { phase: "scanning", current: pct, total: 100 });
+                }
               });
               send("progress", { phase: "scanning", current: 100, total: 100 });
+              const epgN = bundle.phase3?.epgPrograms?.length ?? 0;
+              send("status", {
+                message: `Parse complete — importing into database (${bundle.streams.length} streams, ${bundle.lines.length} lines, ${epgN} EPG programmes)…`,
+              });
               // Import the bundle directly
               const { applyMigrationBundle } = await import("@/lib/panel-migration/apply");
               const result = await applyMigrationBundle(bundle, { ...opts, onProgress });
@@ -341,8 +377,9 @@ export async function POST(req: NextRequest) {
     return new Response(stream, {
       headers: {
         "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
       },
     });
   } catch (e) {

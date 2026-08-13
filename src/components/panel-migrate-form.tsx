@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   MIGRATION_GUIDE_PATHS,
   guidePathFor,
@@ -132,6 +133,53 @@ export function PanelMigrateForm() {
   const [scanning, setScanning] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [showAllWarnings, setShowAllWarnings] = useState(false);
+  /** Live status lines shown during upload / scan / import. */
+  const [liveLog, setLiveLog] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [redirectSeconds, setRedirectSeconds] = useState<number | null>(null);
+  const redirectTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) clearInterval(redirectTimerRef.current);
+    };
+  }, []);
+
+  function appendLiveLog(line: string) {
+    setLiveLog((prev) => {
+      const next = [...prev, `${new Date().toLocaleTimeString()}  ${line}`];
+      // Keep the panel readable on very long imports
+      return next.length > 200 ? next.slice(-200) : next;
+    });
+  }
+
+  function clearRedirectCountdown() {
+    if (redirectTimerRef.current) {
+      clearInterval(redirectTimerRef.current);
+      redirectTimerRef.current = null;
+    }
+    setRedirectSeconds(null);
+  }
+
+  function startDashboardRedirect(delaySec = 12) {
+    clearRedirectCountdown();
+    setRedirectSeconds(delaySec);
+    redirectTimerRef.current = setInterval(() => {
+      setRedirectSeconds((prev) => {
+        if (prev == null) return null;
+        if (prev <= 1) {
+          if (redirectTimerRef.current) {
+            clearInterval(redirectTimerRef.current);
+            redirectTimerRef.current = null;
+          }
+          router.push("/admin");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
 
   const isOneStream = source === "onestream";
   const usePostgres = isOneStream && inputMode === "postgres";
@@ -254,151 +302,314 @@ export function PanelMigrateForm() {
   }
 
   async function run(dryRun: boolean) {
+    clearRedirectCountdown();
     setResult(dryRun ? "Scanning…" : "Importing…");
     setPreview("");
     setProgress(null);
     setUploadProgress(null);
+    setScanProgress(null);
     setScanning(dryRun);
+    setImporting(!dryRun);
     setShowAllWarnings(false);
+    setLiveLog([]);
+    appendLiveLog(dryRun ? "Starting preview…" : "Starting import…");
 
-    let res: Response;
-    if (usePostgres) {
-      const payload: Record<string, unknown> = {
-        ...migrationPayload(dryRun),
-        format: "postgres",
-        pg: pgConfig(),
-      };
-      res = await fetch("/api/admin/migrate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else if (uploadFile && uploadFile.size > MAX_INLINE_BYTES) {
-      // Use XMLHttpRequest for upload progress on large files
-      const form = new FormData();
-      form.append("file", uploadFile);
-      form.append("payload", JSON.stringify(migrationPayload(dryRun)));
-
-      res = await new Promise<Response>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", "/api/admin/migrate");
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            setUploadProgress({ loaded: e.loaded, total: e.total });
+    const handleSseEvent = (eventName: string, data: Record<string, unknown>) => {
+      if (eventName === "start") {
+        const msg = typeof data.message === "string" ? data.message : "Server started processing…";
+        appendLiveLog(msg);
+        setResult(msg);
+        setUploadProgress(null);
+        return;
+      }
+      if (eventName === "status") {
+        const msg = typeof data.message === "string" ? data.message : "Working…";
+        appendLiveLog(msg);
+        setResult(msg);
+        return;
+      }
+      if (eventName === "progress") {
+        if (data.phase === "scanning") {
+          setScanProgress({ current: Number(data.current) || 0, total: Number(data.total) || 100 });
+          setProgress(null);
+          setUploadProgress(null);
+          setResult(`Scanning file… ${data.current}%`);
+          if (Number(data.current) === 0 || Number(data.current) === 100 || Number(data.current) % 10 === 0) {
+            appendLiveLog(`Scanning SQL dump… ${data.current}%`);
           }
+        } else {
+          const phase = String(data.phase ?? "import");
+          const current = Number(data.current) || 0;
+          const total = Number(data.total) || 0;
+          setProgress({ phase, current, total });
+          setScanProgress(null);
+          setUploadProgress(null);
+          const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+          setResult(`Importing ${phase}: ${current}/${total} (${pct}%)`);
+          if (current === 1 || current === total || current % Math.max(1, Math.floor(total / 20) || 1) === 0) {
+            appendLiveLog(`Importing ${phase}: ${current}/${total} (${pct}%)`);
+          }
+        }
+        return;
+      }
+      if (eventName === "complete") {
+        setUploadProgress(null);
+        setScanning(false);
+        setScanProgress(null);
+        setImporting(false);
+        setProgress(null);
+        appendLiveLog("Import finished — building summary…");
+        handleCompleteResponse(data);
+        return;
+      }
+      if (eventName === "error") {
+        setUploadProgress(null);
+        setScanning(false);
+        setScanProgress(null);
+        setImporting(false);
+        setProgress(null);
+        const err = typeof data.error === "string" ? data.error : "Unknown error";
+        appendLiveLog(`Error: ${err}`);
+        setResult(`Error: ${err}`);
+      }
+    };
+
+    /** Parse SSE chunks; returns leftover incomplete buffer via carry. */
+    const consumeSse = (chunk: string, carry: { event: string | null; buf: string }) => {
+      const text = carry.buf + chunk;
+      const lines = text.split("\n");
+      carry.buf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          carry.event = line.slice(7).trim();
+        } else if (line.startsWith("data: ") && carry.event) {
+          try {
+            handleSseEvent(carry.event, JSON.parse(line.slice(6)) as Record<string, unknown>);
+          } catch {
+            /* skip malformed */
+          }
+          carry.event = null;
+        } else if (line === "") {
+          carry.event = null;
+        }
+      }
+    };
+
+    try {
+      if (usePostgres) {
+        const payload: Record<string, unknown> = {
+          ...migrationPayload(dryRun),
+          format: "postgres",
+          pg: pgConfig(),
         };
-        xhr.onload = () => {
-          const body = xhr.responseText;
-          resolve(new Response(body, {
-            status: xhr.status,
-            headers: { "Content-Type": xhr.getResponseHeader("Content-Type") || "application/json" },
-          }));
-        };
-        xhr.onerror = () => reject(new Error("Upload failed"));
-        xhr.send(form);
-      });
-    } else {
+        const res = await fetch("/api/admin/migrate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (dryRun) {
+          const data = await res.json();
+          setUploadProgress(null);
+          setScanning(false);
+          setScanProgress(null);
+          setImporting(false);
+          if (!res.ok) {
+            setResult(`Error: ${data.error ?? res.statusText}`);
+            return;
+          }
+          handlePreviewResponse(data);
+          return;
+        }
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setImporting(false);
+          setResult(`Error: ${(data as { error?: string }).error ?? res.statusText}`);
+          return;
+        }
+        if (!res.body) {
+          setImporting(false);
+          setResult("Error: No response body");
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        const carry = { event: null as string | null, buf: "" };
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          consumeSse(decoder.decode(value, { stream: true }), carry);
+        }
+        if (carry.buf) consumeSse("\n", carry);
+        return;
+      }
+
+      if (uploadFile && uploadFile.size > MAX_INLINE_BYTES) {
+        const form = new FormData();
+        form.append("file", uploadFile);
+        form.append("payload", JSON.stringify(migrationPayload(dryRun)));
+        appendLiveLog(`Uploading ${formatBytes(uploadFile.size)} dump to server…`);
+
+        if (dryRun) {
+          const res = await new Promise<Response>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open("POST", "/api/admin/migrate");
+            xhr.upload.onprogress = (e) => {
+              if (e.lengthComputable) {
+                setUploadProgress({ loaded: e.loaded, total: e.total });
+              }
+            };
+            xhr.onload = () => {
+              resolve(
+                new Response(xhr.responseText, {
+                  status: xhr.status,
+                  headers: {
+                    "Content-Type":
+                      xhr.getResponseHeader("Content-Type") || "application/json",
+                  },
+                })
+              );
+            };
+            xhr.onerror = () => reject(new Error("Upload failed"));
+            xhr.send(form);
+          });
+          const data = await res.json();
+          setUploadProgress(null);
+          setScanning(false);
+          setScanProgress(null);
+          setImporting(false);
+          if (!res.ok) {
+            setResult(`Error: ${data.error ?? res.statusText}`);
+            return;
+          }
+          handlePreviewResponse(data);
+          return;
+        }
+
+        // Import: parse SSE incrementally while XHR receives the stream.
+        // Waiting for onload alone buffers the whole import with no live UI.
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", "/api/admin/migrate");
+          xhr.responseType = "text";
+          let sseOffset = 0;
+          const carry = { event: null as string | null, buf: "" };
+          let uploadDoneLogged = false;
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              setUploadProgress({ loaded: e.loaded, total: e.total });
+              if (!uploadDoneLogged && e.loaded >= e.total) {
+                uploadDoneLogged = true;
+                appendLiveLog("Upload complete — waiting for server to start processing…");
+                setResult("Upload complete — server is preparing the import…");
+              }
+            }
+          };
+          xhr.upload.onload = () => {
+            if (!uploadDoneLogged) {
+              uploadDoneLogged = true;
+              appendLiveLog("Upload complete — waiting for server to start processing…");
+              setResult("Upload complete — server is preparing the import…");
+            }
+            setUploadProgress(null);
+          };
+
+          const pumpSse = () => {
+            const text = xhr.responseText || "";
+            if (text.length <= sseOffset) return;
+            const chunk = text.slice(sseOffset);
+            sseOffset = text.length;
+            consumeSse(chunk, carry);
+          };
+
+          xhr.onprogress = () => pumpSse();
+          xhr.onreadystatechange = () => {
+            if (xhr.readyState === 3 || xhr.readyState === 4) pumpSse();
+          };
+          xhr.onload = () => {
+            pumpSse();
+            if (carry.buf) consumeSse("\n", carry);
+            if (xhr.status >= 400) {
+              try {
+                const data = JSON.parse(xhr.responseText);
+                setResult(`Error: ${data.error ?? xhr.statusText}`);
+                appendLiveLog(`Error: ${data.error ?? xhr.statusText}`);
+              } catch {
+                setResult(`Error: ${xhr.statusText || "Import failed"}`);
+              }
+              setImporting(false);
+            }
+            resolve();
+          };
+          xhr.onerror = () => reject(new Error("Upload / import connection failed"));
+          xhr.send(form);
+        });
+        setUploadProgress(null);
+        setScanning(false);
+        setScanProgress(null);
+        setImporting(false);
+        return;
+      }
+
       const payload: Record<string, unknown> = {
         ...migrationPayload(dryRun),
         format,
         content,
       };
-      res = await fetch("/api/admin/migrate", {
+      const res = await fetch("/api/admin/migrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-    }
 
-    // For dry runs, parse JSON response directly
-    if (dryRun) {
-      const data = await res.json();
-      setUploadProgress(null);
-      setScanning(false);
-      setScanProgress(null);
-      if (!res.ok) {
-        setResult(`Error: ${data.error ?? res.statusText}`);
+      if (dryRun) {
+        const data = await res.json();
+        setUploadProgress(null);
+        setScanning(false);
+        setScanProgress(null);
+        setImporting(false);
+        if (!res.ok) {
+          setResult(`Error: ${data.error ?? res.statusText}`);
+          return;
+        }
+        handlePreviewResponse(data);
         return;
       }
-      handlePreviewResponse(data);
-      return;
-    }
 
-    // For actual imports, read SSE stream
-    if (!res.ok) {
-      const data = await res.json();
-      setUploadProgress(null);
-      setScanning(false);
-      setScanProgress(null);
-      setResult(`Error: ${data.error ?? res.statusText}`);
-      return;
-    }
-
-    if (!res.body) {
-      setUploadProgress(null);
-      setScanning(false);
-      setScanProgress(null);
-      setResult("Error: No response body");
-      return;
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let pendingEvent: string | null = null;
-
-    try {
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setImporting(false);
+        setResult(`Error: ${(data as { error?: string }).error ?? res.statusText}`);
+        return;
+      }
+      if (!res.body) {
+        setImporting(false);
+        setResult("Error: No response body");
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      const carry = { event: null as string | null, buf: "" };
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        // Parse SSE events from buffer line-by-line
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            pendingEvent = line.slice(7).trim();
-          } else if (line.startsWith("data: ") && pendingEvent) {
-            const dataStr = line.slice(6);
-            try {
-              const data = JSON.parse(dataStr);
-              if (pendingEvent === "progress") {
-                if (data.phase === "scanning") {
-                  setScanProgress({ current: data.current, total: data.total });
-                  setResult(`Scanning file… ${data.current}%`);
-                } else {
-                  setProgress(data);
-                  setScanProgress(null);
-                  setResult(`Importing ${data.phase}: ${data.current}/${data.total}...`);
-                }
-              } else if (pendingEvent === "complete") {
-                setUploadProgress(null);
-                setScanning(false);
-                setScanProgress(null);
-                handleCompleteResponse(data);
-              } else if (pendingEvent === "error") {
-                setUploadProgress(null);
-                setScanning(false);
-                setScanProgress(null);
-                setResult(`Error: ${data.error}`);
-              }
-            } catch {
-              // Skip malformed data
-            }
-            pendingEvent = null;
-          } else if (line === "" && pendingEvent) {
-            // Empty line marks end of event, reset state
-            pendingEvent = null;
-          }
-        }
+        consumeSse(decoder.decode(value, { stream: true }), carry);
       }
+      if (carry.buf) consumeSse("\n", carry);
+    } catch (e) {
+      setImporting(false);
+      setScanning(false);
+      setUploadProgress(null);
+      setScanProgress(null);
+      setProgress(null);
+      const msg = e instanceof Error ? e.message : String(e);
+      appendLiveLog(`Error: ${msg}`);
+      setResult(`Error: ${msg}`);
     } finally {
-      reader.releaseLock();
       setUploadProgress(null);
       setScanning(false);
       setScanProgress(null);
+      setImporting(false);
     }
   }
 
@@ -439,6 +650,7 @@ export function PanelMigrateForm() {
         ["Preview complete — review counts, then run import.", tablesLine].filter(Boolean).join("\n")
       );
     }
+    appendLiveLog("Preview complete.");
   }
 
   function handleCompleteResponse(data: Record<string, unknown>) {
@@ -451,7 +663,9 @@ export function PanelMigrateForm() {
     const c = (data.preview as Record<string, unknown>)?.counts as Record<string, number> | undefined;
     setPreview(c ? formatPreviewCounts(c) : "");
 
-    const r = data.result as Record<string, { imported: number; skipped: number }> & { warnings?: string[] } | undefined;
+    const r = data.result as (Record<string, { imported: number; skipped: number }> & {
+      warnings?: string[];
+    }) | undefined;
     if (r) {
       const warnings = r.warnings ?? [];
       const visibleWarnings = showAllWarnings ? warnings : warnings.slice(0, 8);
@@ -543,8 +757,16 @@ export function PanelMigrateForm() {
           .filter(Boolean)
           .join("\n")
       );
+      appendLiveLog(
+        totalImported > 0
+          ? `Import complete — ${totalImported} item(s) imported.`
+          : "Import complete — nothing new imported (skipped existing)."
+      );
+      startDashboardRedirect(12);
     } else {
       setResult("Import finished, but no result data was returned. The database may have been updated.");
+      appendLiveLog("Import finished (no detailed result payload).");
+      startDashboardRedirect(12);
     }
     setProgress(null);
   }
@@ -982,20 +1204,20 @@ export function PanelMigrateForm() {
         <button
           type="button"
           className="px-4 py-2 rounded text-sm"
-          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+          style={{ background: "var(--card)", border: "1px solid var(--border)", opacity: importing || scanning ? 0.5 : 1 }}
           onClick={() => run(true)}
-          disabled={!canRun()}
+          disabled={!canRun() || importing || scanning}
         >
           Preview
         </button>
         <button
           type="button"
           className="px-4 py-2 rounded text-sm"
-          style={{ background: "var(--accent)", color: "#fff" }}
+          style={{ background: "var(--accent)", color: "#fff", opacity: importing || scanning ? 0.5 : 1 }}
           onClick={() => setShowBackupModal(true)}
-          disabled={!canRun()}
+          disabled={!canRun() || importing || scanning}
         >
-          Run import
+          {importing ? "Importing…" : "Run import"}
         </button>
       </div>
 
@@ -1035,11 +1257,11 @@ export function PanelMigrateForm() {
         </div>
       )}
 
-      {scanning && !uploadProgress && !scanProgress && (
+      {(scanning || importing) && !uploadProgress && !scanProgress && !progress && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs opacity-70">
-            <span>Scanning file…</span>
-            <span className="animate-pulse">processing</span>
+            <span>{importing ? "Import in progress…" : "Scanning file…"}</span>
+            <span className="animate-pulse">working</span>
           </div>
           <div className="w-full rounded-full h-2.5 overflow-hidden" style={{ background: "var(--card)" }}>
             <div
@@ -1074,6 +1296,60 @@ export function PanelMigrateForm() {
                 width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%`,
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {liveLog.length > 0 && (
+        <div
+          className="rounded p-3 max-h-48 overflow-y-auto text-xs font-mono space-y-0.5"
+          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+        >
+          <div className="flex justify-between items-center mb-1 opacity-70 text-[11px] font-sans">
+            <span>Live import log</span>
+            {(importing || scanning || uploadProgress) && (
+              <span className="animate-pulse" style={{ color: "var(--accent)" }}>
+                running…
+              </span>
+            )}
+          </div>
+          {liveLog.map((line, i) => (
+            <div key={`${i}-${line.slice(0, 24)}`} className="opacity-90 whitespace-pre-wrap">
+              {line}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {redirectSeconds != null && redirectSeconds > 0 && (
+        <div
+          className="rounded p-3 text-sm flex flex-wrap items-center justify-between gap-3"
+          style={{ background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.35)" }}
+        >
+          <span>
+            Import complete. Opening the dashboard in <strong>{redirectSeconds}s</strong> so you can review
+            the results above…
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded text-xs"
+              style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+              onClick={() => clearRedirectCountdown()}
+            >
+              Stay here
+            </button>
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded text-xs"
+              style={{ background: "var(--accent)", color: "#fff" }}
+              onClick={() => {
+                clearRedirectCountdown();
+                router.push("/admin");
+              }}
+            >
+              Go to dashboard now
+            </button>
           </div>
         </div>
       )}
