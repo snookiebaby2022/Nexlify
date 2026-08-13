@@ -65,9 +65,10 @@ Avoid: table-only exports, phpMyAdmin “quick” dumps without Complete inserts
 - `stream_source` JSON arrays → primary + backup URL
 - Correct stream `type` map: 1 live, 2 movie, 3 created, 4 radio, 5 series
 - JSON `category_id` arrays (e.g. `"[12]"`)
-- `streams_sys` → stream server assignment
-- `series` + `series_episodes` → SERIES streams
-- Resellers from `reg_users` (not mixed with line `users`)
+- Modern XUI.one tables: `lines` + `users` (resellers), `streams_servers`, `streams_series`, `streams_episodes`, `streams_categories`, `users_packages`
+- `streams_servers` / `streams_sys` → stream server assignment
+- Series episodes enrich existing `streams` rows (or create rows when episode has its own URL)
+- Resellers from `reg_users` (classic) or `users` (modern, when `lines` exists)
 - Junction tables: `bouquet_streams`, `package_streams`, `users_bouquets`, etc.
 - Headerless INSERT inference via CREATE TABLE DDL + column-order templates
 
