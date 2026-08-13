@@ -122,3 +122,151 @@ export function firstTableFound(sql: string, names: string[]): string | null {
   }
   return null;
 }
+
+/** Extended entity table aliases for providers / watch / tickets / EPG guide / logs / ASN / settings. */
+export type Phase3AliasKind =
+  | "providers"
+  | "providerStreams"
+  | "watchFolders"
+  | "watchLogs"
+  | "tickets"
+  | "ticketReplies"
+  | "epgChannels"
+  | "epgPrograms"
+  | "blockedAsns"
+  | "panelLogs"
+  | "lineLogs"
+  | "userLogs"
+  | "loginLogs"
+  | "streamLogs"
+  | "serverStats"
+  | "settings";
+
+type Phase3AliasMap = Partial<Record<Phase3AliasKind, string[]>>;
+
+/**
+ * Shared aliases work across XUI / StreamCreed / Xtream Codes / NXT dumps.
+ * bySource adds panel-specific names (checked first).
+ */
+export const PHASE3_TABLE_ALIASES: {
+  shared: Record<Phase3AliasKind, string[]>;
+  bySource: Partial<Record<MigrationSource, Phase3AliasMap>>;
+} = {
+  shared: {
+    providers: [
+      "providers",
+      "stream_providers",
+      "streams_providers",
+      "StreamProvider",
+      "streamprovider",
+    ],
+    providerStreams: [
+      "providers_streams",
+      "provider_streams",
+      "streams_providers_streams",
+    ],
+    watchFolders: [
+      "watch_folders",
+      "watch_folder",
+      "WatchFolder",
+      "watchfolder",
+    ],
+    watchLogs: ["watch_logs", "watch_log"],
+    tickets: ["tickets", "ticket", "Ticket"],
+    ticketReplies: [
+      "tickets_replies",
+      "ticket_replies",
+      "ticket_messages",
+      "TicketMessage",
+      "ticketmessage",
+    ],
+    epgChannels: ["epg_channels", "epg_channel", "epg_channel_ids"],
+    epgPrograms: [
+      "epg_data",
+      "epg_programs",
+      "epg_programme",
+      "EpgProgram",
+      "epgprogram",
+      "epg_programmes",
+    ],
+    blockedAsns: [
+      "blocked_asns",
+      "blocked_asn",
+      "asn_blocks",
+      "BlockedAsn",
+      "blockedasn",
+    ],
+    panelLogs: ["panel_logs", "ActivityLog", "activity_logs", "activitylog"],
+    lineLogs: ["lines_logs", "line_logs", "client_logs"],
+    userLogs: ["users_logs", "user_logs", "reg_userlog", "reseller_logs"],
+    loginLogs: ["login_logs", "mag_logs", "suspicious_logs"],
+    streamLogs: ["streams_logs", "stream_logs"],
+    serverStats: [
+      "servers_stats",
+      "server_stats",
+      "server_activity",
+      "BandwidthSnapshot",
+      "bandwidth_snapshots",
+      "bandwidthsnapshot",
+    ],
+    settings: [
+      "settings",
+      "setting",
+      "PanelSetting",
+      "panel_settings",
+      "panelsetting",
+    ],
+  },
+  bySource: {
+    xui: {
+      providers: ["providers", "stream_providers"],
+      providerStreams: ["providers_streams"],
+      watchFolders: ["watch_folders"],
+      watchLogs: ["watch_logs"],
+      epgChannels: ["epg_channels"],
+      epgPrograms: ["epg_data"],
+      blockedAsns: ["blocked_asns"],
+      serverStats: ["servers_stats"],
+    },
+    streamcreed: {
+      // StreamCreed ≈ XC lineage; providers often via streams_providers addon.
+      providers: ["streams_providers", "providers", "stream_providers"],
+      epgPrograms: ["epg_data"],
+      lineLogs: ["client_logs", "lines_logs"],
+      userLogs: ["reg_userlog", "users_logs"],
+      serverStats: ["server_activity", "servers_stats"],
+    },
+    xtream_ui: {
+      providers: ["streams_providers", "providers", "stream_providers"],
+      providerStreams: ["providers_streams", "provider_streams"],
+      epgPrograms: ["epg_data"],
+      lineLogs: ["client_logs", "lines_logs"],
+      userLogs: ["reg_userlog", "users_logs"],
+      loginLogs: ["login_logs", "mag_logs", "suspicious_logs"],
+      serverStats: ["server_activity", "servers_stats"],
+    },
+    nxt: {
+      providers: ["providers", "streams_providers", "stream_providers"],
+      epgPrograms: ["epg_data", "epg_programs"],
+      watchFolders: ["watch_folders"],
+    },
+    onestream: {
+      providers: ["StreamProvider", "stream_providers", "providers"],
+      watchFolders: ["WatchFolder", "watch_folders"],
+      watchLogs: ["ImportJob", "import_jobs", "watch_logs"],
+      tickets: ["Ticket", "tickets"],
+      ticketReplies: ["TicketMessage", "ticket_messages", "tickets_replies"],
+      epgChannels: ["epg_channels"],
+      epgPrograms: ["EpgProgram", "epg_programs", "epg_data"],
+      blockedAsns: ["BlockedAsn", "blocked_asns"],
+      panelLogs: ["ActivityLog", "activity_logs", "panel_logs"],
+      serverStats: ["BandwidthSnapshot", "bandwidth_snapshots", "servers_stats"],
+      settings: ["PanelSetting", "panel_settings", "settings"],
+    },
+    midnight: {
+      providers: ["providers", "stream_providers"],
+      epgPrograms: ["epg_data", "epg_programs"],
+      watchFolders: ["watch_folders"],
+    },
+  },
+};

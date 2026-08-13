@@ -621,6 +621,7 @@ async function applyMigrationBundleInner(
         epgSourceIdByLegacy,
         resellerIdByLegacy,
         lineIdByLegacy,
+        source: bundle.source,
       });
     } catch (e) {
       pushWarning(result.warnings, `Phase3 error: ${shortErr(e)}`);

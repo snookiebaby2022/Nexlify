@@ -54,11 +54,11 @@ export const MIGRATION_GUIDE_PATHS: MigrationGuidePath[] = [
       "On the StreamCreed host, export a full MySQL dump of streamcreed_db (mysqldump or phpMyAdmin → Complete inserts).",
       TUNNEL_TIP,
       "In Nexlify: Admin → Import → Panel migration → source StreamCreed → upload the .sql.",
-      "Preview mapped counts (lines, streams, bouquets, packages), then Run import.",
+      "Preview mapped counts (lines, streams, bouquets, packages, tickets, EPG, logs when present), then Run import.",
     ],
     postImport: SHARED_POST_IMPORT,
     notes: [
-      "1-stream uses artisan migrate-system:from streamcreed against streamcreed_db; Nexlify maps the same dump through the StreamCreed / XUI-lineage SQL importer.",
+      "1-stream uses artisan migrate-system:from streamcreed against streamcreed_db; Nexlify maps the same dump through the StreamCreed / XUI-lineage SQL importer, including extended tables when present.",
     ],
   },
   {
@@ -72,12 +72,12 @@ export const MIGRATION_GUIDE_PATHS: MigrationGuidePath[] = [
       "On the XUI.one host, run: mysqldump -u root --complete-insert --single-transaction xui > xui-backup.sql (or bash scripts/xui-export-backup.sh). Confirm DB name with SHOW DATABASES — often xui, sometimes xuione/xuoione.",
       TUNNEL_TIP,
       "In Nexlify: Admin → Import → Panel migration → source XUI.one → upload the .sql.",
-      "Preview — check lines, streams, bouquets, MAG, resellers, categories, servers, packages, series episodes.",
+      "Preview — check lines, streams, bouquets, MAG, resellers, categories, servers, packages, providers, tickets, EPG.",
       "Optionally enable Clear existing IPTV data for a clean cutover, then Run import.",
     ],
     postImport: SHARED_POST_IMPORT,
     notes: [
-      "Nested bouquet JSON, streams_sys server links, series_episodes, and junction tables are flattened automatically.",
+      "Nested bouquet JSON, streams_sys server links, series_episodes, junction tables, and extended tables (providers, watch, tickets, EPG guide, logs/ASN/settings) are mapped when present.",
       "Do not use a partial/table-only dump — export the full database.",
     ],
   },
@@ -92,11 +92,12 @@ export const MIGRATION_GUIDE_PATHS: MigrationGuidePath[] = [
       "Export a full MySQL dump of xtream_iptvpro from the Xtream Codes / Xtream UI host.",
       TUNNEL_TIP,
       "In Nexlify: choose Xtream Codes / Xtream UI (not a separate StreamCreed artisan run).",
-      "Upload the .sql → Preview → Run import.",
+      "Upload the .sql → Preview → Run import (tickets, epg_data, settings, logs map when present; streams_providers if installed).",
     ],
     postImport: SHARED_POST_IMPORT,
     notes: [
       "The 1-stream guide routes Xtream Codes through the StreamCreed migrator with database name xtream_iptvpro. On Nexlify, select this source and use that same dump/DB name.",
+      "Classic XC has tickets/epg_data/settings/logs; providers/watch/ASN only if the fork added those tables.",
     ],
   },
   {
@@ -114,7 +115,7 @@ export const MIGRATION_GUIDE_PATHS: MigrationGuidePath[] = [
     ],
     postImport: SHARED_POST_IMPORT,
     notes: [
-      "Best-effort XUI-lineage table mapping. If Preview counts look wrong, export Nexlify JSON or adjust the dump and re-run.",
+      "Best-effort XUI-lineage table mapping including extended entities when table names match. If Preview counts look wrong, export Nexlify JSON or adjust the dump and re-run.",
     ],
   },
   {
@@ -132,6 +133,7 @@ export const MIGRATION_GUIDE_PATHS: MigrationGuidePath[] = [
     postImport: SHARED_POST_IMPORT,
     notes: [
       "This path migrates *out of* 1-stream into Nexlify. Do not run php artisan migrate-system on the Nexlify host.",
+      "Live PG also maps StreamProvider / WatchFolder / Ticket / EpgProgram / BlockedAsn / ActivityLog / settings when those tables exist.",
     ],
   },
   {
@@ -144,7 +146,9 @@ export const MIGRATION_GUIDE_PATHS: MigrationGuidePath[] = [
       "In Nexlify: source Midnight Streamers → upload → Preview → Run import.",
     ],
     postImport: SHARED_POST_IMPORT,
-    notes: [],
+    notes: [
+      "Extended entities (providers, tickets, EPG guide, etc.) import when matching table names are present in the dump.",
+    ],
   },
   {
     id: "nexlify_json",

@@ -17,7 +17,9 @@ import type {
   MigrationApplyOptions,
   MigrationApplyResult,
   MigrationPhase3Data,
+  MigrationSource,
 } from "./types";
+import { settingsKeyForSource } from "./phase3";
 
 function shortErr(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
@@ -63,6 +65,7 @@ export async function applyMigrationPhase3(
     epgSourceIdByLegacy: Map<string, string>;
     resellerIdByLegacy: Map<string, string>;
     lineIdByLegacy: Map<string, string>;
+    source?: string;
   }
 ) {
   const {
@@ -76,6 +79,10 @@ export async function applyMigrationPhase3(
     lineIdByLegacy,
   } = opts;
   const onProgress = options.onProgress;
+  const settingsKey = settingsKeyForSource(
+    (opts.source as MigrationSource | undefined) ??
+      (phase3.settingsRaw?._migrationSource as MigrationSource | undefined)
+  );
 
   // --- providers ---
   const providerIdByLegacy = new Map<string, string>();
@@ -279,7 +286,7 @@ export async function applyMigrationPhase3(
           name: "XUI EPG Import",
           url: "xui://imported-epg-data",
           sourceType: "xmltv",
-          config: { importedFrom: "xui_epg_data" },
+          config: { importedFrom: "panel_epg_data" },
         },
       });
       defaultSourceId = created.id;
@@ -445,9 +452,9 @@ export async function applyMigrationPhase3(
   if (options.importSettings !== false && phase3.settingsRaw) {
     try {
       await prisma.panelSetting.upsert({
-        where: { key: "migration.xui_settings" },
+        where: { key: settingsKey },
         create: {
-          key: "migration.xui_settings",
+          key: settingsKey,
           value: JSON.stringify(phase3.settingsRaw),
         },
         update: { value: JSON.stringify(phase3.settingsRaw) },
@@ -455,7 +462,7 @@ export async function applyMigrationPhase3(
       result.settings.imported++;
       pushWarning(
         result.warnings,
-        "Stored XUI settings as PanelSetting key migration.xui_settings (review manually — do not apply blindly)."
+        `Stored panel settings as PanelSetting key ${settingsKey} (review manually — do not apply blindly).`
       );
     } catch (e) {
       result.settings.skipped++;

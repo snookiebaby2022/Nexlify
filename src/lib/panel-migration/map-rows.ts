@@ -36,7 +36,7 @@ import {
   mapSeriesEpisodesFromSql,
   resolveStreamType,
 } from "./xui-extras";
-import { loadPhase3FromSql } from "./phase3-xui";
+import { loadPhase3FromSql } from "./phase3";
 
 function parseJsonField(val: unknown): unknown {
   if (val == null || val === "") return null;
@@ -724,7 +724,7 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
     `Content breakdown: ${live} live, ${movies} movies, ${seriesShows} TV series, ${episodes} TV episodes.`
   );
 
-  const phase3Out = loadPhase3FromSql(allTables);
+  const phase3Out = loadPhase3FromSql(allTables, source);
   bundle.phase3 = phase3Out.phase3;
   warnings.push(...phase3Out.warnings);
 
@@ -964,7 +964,7 @@ export async function bundleFromSqlFile(
     `Content breakdown: ${live} live, ${movies} movies, ${seriesShows} TV series, ${episodes} TV episodes.`
   );
 
-  const phase3Out = loadPhase3FromSql(allTables);
+  const phase3Out = loadPhase3FromSql(allTables, source);
   bundle.phase3 = phase3Out.phase3;
   warnings.push(...phase3Out.warnings);
 

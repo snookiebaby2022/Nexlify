@@ -397,6 +397,17 @@ export async function bundleFromPostgres(
 
     const bundle = buildMigrationBundle(tables, source, phase2);
 
+    const { loadPhase3FromPg } = await import("./phase3");
+    const phase3Out = await loadPhase3FromPg(
+      probe.tables.map((t) => ({ schema: t.schema, name: t.name })),
+      source,
+      (schema, table) => fetchTable(client, schema, table)
+    );
+    bundle.phase3 = phase3Out.phase3;
+    if (phase3Out.warnings.length) {
+      bundle.warnings = [...(bundle.warnings ?? []), ...phase3Out.warnings];
+    }
+
     return { bundle, probe, phase2 };
   } finally {
     await client.end().catch(() => undefined);
