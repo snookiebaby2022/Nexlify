@@ -94,6 +94,17 @@ export async function applyMigrationBundle(
     }
 
     if (options.importStreams !== false) {
+      // Verify defaultServerId exists, fall back to first available server
+      let serverId = options.defaultServerId ?? null;
+      if (serverId) {
+        const exists = await prisma.streamServer.findUnique({ where: { id: serverId } });
+        if (!exists) serverId = null;
+      }
+      if (!serverId) {
+        const firstServer = await prisma.streamServer.findFirst();
+        serverId = firstServer?.id ?? null;
+      }
+
       for (let i = 0; i < bundle.streams.length; i++) {
         const s = bundle.streams[i];
         options.onProgress?.("streams", i + 1, bundle.streams.length);
@@ -118,7 +129,6 @@ export async function applyMigrationBundle(
           ? categoryIdByLegacy.get(s.categoryLegacyId)
           : undefined;
 
-        const serverId = options.defaultServerId ?? null;
         const sortOrder = s.sortOrder ?? i;
 
         const created = await prisma.stream.create({
