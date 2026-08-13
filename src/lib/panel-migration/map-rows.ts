@@ -70,7 +70,13 @@ function unixToDate(val: unknown): Date {
 
 function mapStreamType(val: unknown, source: MigrationSource): "LIVE" | "MOVIE" | "SERIES" {
   const n = Number(val);
-  if (source === "xui" || source === "onestream" || source === "xtream_ui") {
+  if (
+    source === "xui" ||
+    source === "onestream" ||
+    source === "xtream_ui" ||
+    source === "streamcreed" ||
+    source === "nxt"
+  ) {
     if (n === 2 || n === 5) return "MOVIE";
     if (n === 3 || n === 4) return "SERIES";
   }

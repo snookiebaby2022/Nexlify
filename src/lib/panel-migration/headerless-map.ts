@@ -329,6 +329,8 @@ const KNOWN_COLUMN_ORDER: Partial<
   onestream: XUI_COMMON,
   xui: XUI_COMMON,
   xtream_ui: XUI_COMMON,
+  streamcreed: XUI_COMMON,
+  nxt: XUI_COMMON,
 };
 
 // ---------------------------------------------------------------------------

@@ -1,15 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  MIGRATION_GUIDE_PATHS,
+  guidePathFor,
+  type MigrationGuidePath,
+} from "@/lib/panel-migration/guide-paths";
+import type { MigrationSource } from "@/lib/panel-migration/types";
 
-const SOURCE_OPTIONS = [
-  { id: "xui", label: "XUI.one" },
-  { id: "onestream", label: "1-stream" },
-  { id: "xtream_ui", label: "Xtream UI" },
-  { id: "midnight", label: "Midnight Streamers" },
-  { id: "nexlify_json", label: "Nexlify JSON" },
-] as const;
+const SOURCE_OPTIONS = MIGRATION_GUIDE_PATHS.map((p) => ({
+  id: p.id,
+  label: p.label,
+}));
+
+const GUIDE_DEFAULT_DBS = new Set(
+  MIGRATION_GUIDE_PATHS.map((p) => p.defaultDatabase).filter(Boolean) as string[]
+);
 
 type InputMode = "file" | "postgres";
 
@@ -49,6 +56,8 @@ export function PanelMigrateForm() {
   const [importServers, setImportServers] = useState(true);
   const [importEpg, setImportEpg] = useState(true);
   const [importPackages, setImportPackages] = useState(true);
+  /** Match 1-stream Migration Guide — streams imported stopped by default. */
+  const [importStreamsStopped, setImportStreamsStopped] = useState(true);
   const [skipExisting, setSkipExisting] = useState(true);
   const [clearData, setClearData] = useState(false);
   const [preview, setPreview] = useState("");
@@ -62,6 +71,10 @@ export function PanelMigrateForm() {
 
   const isOneStream = source === "onestream";
   const usePostgres = isOneStream && inputMode === "postgres";
+  const path: MigrationGuidePath | undefined = useMemo(
+    () => guidePathFor(source as MigrationSource),
+    [source]
+  );
 
   useEffect(() => {
     fetch("/api/admin/servers")
@@ -73,6 +86,10 @@ export function PanelMigrateForm() {
     if (source === "nexlify_json") setFormat("json");
     if (source === "onestream") setInputMode("postgres");
     else setInputMode("file");
+    const db = guidePathFor(source as MigrationSource)?.defaultDatabase;
+    if (db) {
+      setPgDatabase((prev) => (!prev || GUIDE_DEFAULT_DBS.has(prev) ? db : prev));
+    }
   }, [source]);
 
   function pgConfig() {
@@ -111,6 +128,7 @@ export function PanelMigrateForm() {
       importServers,
       importEpg,
       importPackages,
+      importStreamsStopped,
       skipExistingLines: skipExisting,
       skipExistingStreams: skipExisting,
       clearDataBeforeImport: clearData,
@@ -437,19 +455,27 @@ export function PanelMigrateForm() {
     setProgress(null);
   }
 
-  const hint = SOURCE_OPTIONS.find((s) => s.id === source)?.label ?? source;
+  const hint = path?.label ?? SOURCE_OPTIONS.find((s) => s.id === source)?.label ?? source;
 
   return (
     <div className="space-y-6 max-w-3xl">
       <p className="text-sm opacity-80">
         Import from <strong>{hint}</strong>
+        {path?.defaultDatabase ? (
+          <>
+            {" "}
+            — default database name <code>{path.defaultDatabase}</code>
+          </>
+        ) : null}
         {isOneStream ? (
           <>
             {" "}
             — connect to the panel <strong>PostgreSQL</strong> database (read-only user recommended).
           </>
+        ) : path?.engine === "json" ? (
+          <> using a Nexlify JSON bundle.</>
         ) : (
-          <> using a MySQL <code>.sql</code> backup or Nexlify JSON.</>
+          <> using a MySQL <code>.sql</code> backup.</>
         )}{" "}
         Streams-only:{" "}
         <Link href="/admin/import/m3u" style={{ color: "var(--accent)" }}>
@@ -466,32 +492,47 @@ export function PanelMigrateForm() {
           value={source}
           onChange={(e) => setSource(e.target.value)}
         >
-          {SOURCE_OPTIONS.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.label}
-            </option>
-          ))}
+          {SOURCE_OPTIONS.map((s) => {
+            const db = guidePathFor(s.id)?.defaultDatabase;
+            return (
+              <option key={s.id} value={s.id}>
+                {s.label}
+                {db ? ` (${db})` : ""}
+              </option>
+            );
+          })}
         </select>
+        {path?.hint ? <p className="mt-1 text-xs opacity-70">{path.hint}</p> : null}
       </label>
 
-      <div
-        className="rounded-lg p-3 text-sm"
-        style={{ background: "var(--card)", border: "1px solid var(--border)" }}
-      >
-        <p className="font-medium">Migration tips</p>
-        <ul className="mt-1.5 space-y-1 opacity-80 list-disc pl-4">
-          {isOneStream && (
-            <li>
-              <strong>1-stream:</strong> prefer <strong>PostgreSQL (live)</strong> — connect to the source panel
-              database instead of uploading a dump when possible.
-            </li>
+      {path && (
+        <div
+          className="rounded-lg p-3 text-sm"
+          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+        >
+          <p className="font-medium">Correct migration path</p>
+          <p className="mt-1 text-xs opacity-70">
+            Mapped from the official 1-stream Migration Guide (Experimental) for use on Nexlify — use this
+            UI, not <code>php artisan migrate-system</code>.
+          </p>
+          <ol className="mt-2 space-y-1 opacity-90 list-decimal pl-4">
+            {path.steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+          {path.notes.length > 0 && (
+            <ul className="mt-2 space-y-1 opacity-70 list-disc pl-4 text-xs">
+              {path.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
           )}
-          <li>
-            Large <code>.sql</code> files upload directly to the server (up to 2 GB). Use paste or inline preview
-            only for exports under {formatBytes(MAX_INLINE_BYTES)}.
-          </li>
-        </ul>
-      </div>
+          <p className="mt-2 text-xs opacity-70">
+            Large <code>.sql</code> files upload directly to the server (up to 2 GB). Paste/inline preview only
+            for exports under {formatBytes(MAX_INLINE_BYTES)}.
+          </p>
+        </div>
+      )}
 
       {isOneStream && (
         <div className="flex gap-2 text-sm">
@@ -562,6 +603,7 @@ export function PanelMigrateForm() {
               <input
                 className="mt-1 w-full rounded px-3 py-2"
                 style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+                placeholder={path?.defaultDatabase ?? "dbname"}
                 value={pgDatabase}
                 onChange={(e) => setPgDatabase(e.target.value)}
               />
@@ -702,6 +744,15 @@ export function PanelMigrateForm() {
           Streams
         </label>
         <label>
+          <input
+            type="checkbox"
+            checked={importStreamsStopped}
+            onChange={(e) => setImportStreamsStopped(e.target.checked)}
+            disabled={!importStreams}
+          />{" "}
+          Import streams as stopped
+        </label>
+        <label>
           <input type="checkbox" checked={importLines} onChange={(e) => setImportLines(e.target.checked)} />{" "}
           Lines / subscriptions
         </label>
@@ -754,6 +805,20 @@ export function PanelMigrateForm() {
           <span style={{ color: "#ef4444" }}>Clear all data before import</span>
         </label>
       </div>
+
+      {path && path.postImport.length > 0 && (
+        <div
+          className="rounded-lg p-3 text-sm"
+          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+        >
+          <p className="font-medium">After import (guide checklist)</p>
+          <ul className="mt-1.5 space-y-1 opacity-80 list-disc pl-4 text-xs">
+            {path.postImport.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="flex gap-3">
         <button

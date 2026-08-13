@@ -284,7 +284,10 @@ async function applyMigrationBundleInner(
             epgChannelId: s.epgChannelId?.trim() || null,
             channelId: s.channelId?.trim() || null,
             containerExtension: s.containerExtension?.trim() || null,
-            isActive: s.isActive !== false,
+            isActive:
+              options.importStreamsStopped !== false
+                ? false
+                : s.isActive !== false,
             isAdult: s.isAdult === true,
             isRadio: s.isRadio === true,
             seriesName: s.seriesName?.trim() || null,

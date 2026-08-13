@@ -12,40 +12,29 @@ import {
   type PostgresMigrationConfig,
   type PostgresProbeResult,
 } from "./postgres";
+import { MIGRATION_GUIDE_PATHS } from "./guide-paths";
 
 export type { MigrationBundle, MigrationSource, MigrationApplyOptions, MigrationApplyResult };
+export {
+  MIGRATION_GUIDE_PATHS,
+  guidePathFor,
+  defaultDatabaseFor,
+} from "./guide-paths";
 
+/** Source dropdown — labels/hints/default DBs from the 1-stream Migration Guide paths. */
 export const MIGRATION_SOURCES: {
   id: MigrationSource;
   label: string;
   hint: string;
-}[] = [
-  {
-    id: "xui",
-    label: "XUI.one",
-    hint: "MySQL backup (.sql) from XUI — imports lines, bouquets, streams, MAG, Enigma, resellers, categories, servers, and EPG when present.",
-  },
-  {
-    id: "onestream",
-    label: "1-stream",
-    hint: "Live PostgreSQL connection (recommended) or SQL/JSON export. Imports subscriptions, packages, streams, MAG, Enigma, categories, servers, and EPG.",
-  },
-  {
-    id: "xtream_ui",
-    label: "Xtream UI",
-    hint: "Legacy Xtream Codes UI SQL dump (users/lines, streams, bouquets tables).",
-  },
-  {
-    id: "midnight",
-    label: "Midnight Streamers",
-    hint: "SQL dump or JSON bundle (streams, bouquets, lines/subscribers).",
-  },
-  {
-    id: "nexlify_json",
-    label: "Nexlify JSON",
-    hint: "Universal JSON format for manual exports or scripts.",
-  },
-];
+  defaultDatabase?: string;
+  engine: "mysql" | "postgres" | "json";
+}[] = MIGRATION_GUIDE_PATHS.map((p) => ({
+  id: p.id,
+  label: p.label,
+  hint: p.hint,
+  defaultDatabase: p.defaultDatabase,
+  engine: p.engine,
+}));
 
 export function parseMigrationInput(
   content: string,

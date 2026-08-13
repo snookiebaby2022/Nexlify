@@ -1,4 +1,11 @@
-export type MigrationSource = "xui" | "onestream" | "xtream_ui" | "midnight" | "nexlify_json";
+export type MigrationSource =
+  | "xui"
+  | "onestream"
+  | "xtream_ui"
+  | "streamcreed"
+  | "nxt"
+  | "midnight"
+  | "nexlify_json";
 
 export type MigrationStreamRow = {
   legacyId: string;
@@ -154,6 +161,11 @@ export type MigrationApplyOptions = {
   skipExistingLines?: boolean;
   skipExistingStreams?: boolean;
   clearDataBeforeImport?: boolean;
+  /**
+   * When true (default), imported streams are created stopped — matches the
+   * 1-stream Migration Guide behaviour so URLs can be verified before go-live.
+   */
+  importStreamsStopped?: boolean;
   defaultServerId?: string | null;
   ownerId?: string | null;
   /** Transaction client — when provided, all DB calls use this instead of the global prisma. */

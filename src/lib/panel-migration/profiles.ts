@@ -51,6 +51,32 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
     epg: ["epg_sources", "epgs", "epg"],
     packages: ["packages", "user_packages", "plans"],
   },
+  /** StreamCreed — same MySQL lineage as XUI / XC; default DB streamcreed_db */
+  streamcreed: {
+    streams: ["streams", "media_streams", "live_streams", "channels", "stream"],
+    bouquets: ["bouquets", "bouquet", "packages", "bundles"],
+    lines: ["users", "lines", "subscribers", "clients"],
+    resellers: ["reg_users", "users", "resellers", "sellers", "members"],
+    mag: ["mag_devices", "mag", "stb_devices", "devices"],
+    enigma: ["enigma_devices", "enigma", "enigma2_devices"],
+    categories: ["stream_categories", "categories", "streams_categories", "channel_categories"],
+    servers: ["streaming_servers", "servers", "streams_servers", "stream_servers"],
+    epg: ["epg_sources", "epgs", "epg"],
+    packages: ["packages", "user_packages", "line_packages", "credit_packages", "plans"],
+  },
+  /** NXT-DASH — default DB nxt; best-effort XUI-lineage table names */
+  nxt: {
+    streams: ["streams", "media_streams", "live_streams", "channels", "stream"],
+    bouquets: ["bouquets", "bouquet", "packages", "bundles"],
+    lines: ["lines", "users", "subscribers", "clients"],
+    resellers: ["users", "reg_users", "resellers", "sellers", "members"],
+    mag: ["mag_devices", "mag", "stb_devices", "devices"],
+    enigma: ["enigma_devices", "enigma", "enigma2_devices"],
+    categories: ["stream_categories", "categories", "streams_categories", "channel_categories"],
+    servers: ["streaming_servers", "servers", "streams_servers", "stream_servers"],
+    epg: ["epg_sources", "epgs", "epg"],
+    packages: ["packages", "user_packages", "plans", "credit_packages"],
+  },
   midnight: {
     streams: ["streams", "channels", "media_streams", "live_streams"],
     bouquets: ["bouquets", "packages", "bouquet", "bundles"],

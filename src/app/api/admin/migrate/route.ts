@@ -35,6 +35,8 @@ function applyOptions(body: Record<string, unknown>) {
     skipExistingLines: body.skipExistingLines !== false,
     skipExistingStreams: body.skipExistingStreams !== false,
     clearDataBeforeImport: Boolean(body.clearDataBeforeImport),
+    /** Default true — match 1-stream Migration Guide (streams imported stopped). */
+    importStreamsStopped: body.importStreamsStopped !== false,
     defaultServerId: (body.defaultServerId as string) ?? null,
     ownerId: (body.ownerId as string) ?? null,
   };

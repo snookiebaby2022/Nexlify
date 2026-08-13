@@ -2,65 +2,77 @@
 
 Admin → **Import** → **Panel migration** (`/admin/import/migrate`).
 
-## Supported sources
+Paths below are mapped from the official **1-stream Migration Guide (Experimental)** for use on **Nexlify**. Use this UI — do **not** run `php artisan migrate-system:from …` on the Nexlify host.
 
-| Panel | Input | Notes |
-|-------|--------|--------|
-| **1-stream** | **PostgreSQL live** (recommended) | Read-only connection; auto-detects `subscriptions`, `packages`, `streams`, junction tables, MAG |
-| **1-stream** | `.sql` / JSON | Fallback if DB is not reachable from Nexlify |
-| **XUI.one** | MySQL `.sql` backup | Full dump preferred; nested bouquet JSON + junction tables supported |
-| **Xtream UI** | `.sql` | Often uses `users` for lines |
-| **Midnight Streamers** | `.sql` or JSON | `channels` / `subscribers` aliases |
-| **Nexlify JSON** | `.json` | Universal interchange format |
+## Correct paths (default DB names)
+
+| Source panel | Default DB (guide) | Nexlify source | Input |
+|--------------|--------------------|----------------|--------|
+| **StreamCreed** | `streamcreed_db` | StreamCreed | MySQL `.sql` |
+| **XUI.one** | `xuoione` | XUI.one | MySQL `.sql` |
+| **Xtream Codes** | `xtream_iptvpro` | Xtream Codes / Xtream UI | MySQL `.sql` |
+| **NXT-DASH** | `nxt` | NXT-DASH | MySQL `.sql` |
+| **1-stream** (into Nexlify) | (your PG DB) | 1-stream | **PostgreSQL live** (recommended) or `.sql` / JSON |
+| **Midnight Streamers** | — | Midnight Streamers | `.sql` / JSON |
+| **Nexlify JSON** | — | Nexlify JSON | `.json` |
+
+### Guide → Nexlify mapping notes
+
+- 1-stream’s artisan migrators target **1-stream**. Nexlify’s importer targets **Nexlify** with the same dump / DB-access ideas.
+- The guide routes **Xtream Codes** through the StreamCreed migrator with DB `xtream_iptvpro`. On Nexlify, choose **Xtream Codes / Xtream UI** and use that dump/DB name.
+- If the source DB is not reachable from the Nexlify VPS, use an **SSH tunnel** and point the migrator (or dump tools) at localhost through the tunnel.
 
 ## What gets imported
 
 | Entity | Notes |
 |--------|--------|
 | Lines / subscriptions | Expiry, max cons, bouquets, IP lock, countries, trial/restreamer, UA lists, forced server |
-| Streams | URL + backup URL, type, category, EPG/channel ids, adult/radio, series/season/episode, server |
+| Streams | URL + backup URL, type, category, EPG/channel ids, adult/radio, series/season/episode, server — **imported stopped by default** (guide parity) |
 | Bouquets | Channel lists — flattens XUI `{"live":[…],"vod":[…]}` and SQL junction tables |
 | Resellers | Credits, email, DNS, max lines, parent tree |
 | MAG / Enigma | Linked by username or line id |
 | Categories | Type, parent, adult, sort order |
-| Stream servers | Host/port/protocol, domain, capacity, private IP |
+| Stream servers | Host/port/protocol, domain, capacity, private IP — **SSH passwords are not migrated** |
 | EPG sources | URL + country |
 | Packages | Duration/credit billing packages (when source has days/credits) |
 
-## XUI.one SQL — correct workflow
+## StreamCreed / XUI.one / Xtream Codes / NXT — SQL workflow
 
-1. On the XUI server, export a **full MySQL dump** (phpMyAdmin → Export → **Complete inserts** / mysqldump with column names).
+1. On the source host, export a **full MySQL dump** of the default DB name above (phpMyAdmin → Export → **Complete inserts**, or `mysqldump` with column names).
 2. Prefer dumps **with column names**. Headerless `INSERT INTO t VALUES (...)` is auto-inferred, but named columns are more reliable.
-3. In Nexlify: **Import → Panel migration** → source **XUI.one** → upload the `.sql`.
-4. Click **Preview** — check mapped counts for lines/streams/bouquets. Warnings explain unmapped tables.
-5. Optionally enable **Clear existing IPTV data** on a clean cutover, then **Run import**.
-6. After import: assign/probe stream servers, re-check EPG, rotate passwords if needed.
+3. In Nexlify: **Import → Panel migration** → select the matching source → upload the `.sql`.
+4. Click **Preview** — check mapped counts. Warnings explain unmapped tables.
+5. Leave **Import streams as stopped** enabled unless you intentionally want live streams immediately.
+6. Optionally enable **Clear existing IPTV data** on a clean cutover, then **Run import**.
 
-### XUI quirks handled
+### XUI / XC quirks handled
 
 - Nested bouquet channels: `{"live":[1,2],"movie":[3],"series":[4]}`
 - `stream_source` JSON arrays → primary + backup URL
 - Junction tables: `bouquet_streams`, `package_streams`, `users_bouquets`, etc.
-- Headerless INSERT inference (content + XUI column-order templates)
+- Headerless INSERT inference (content + column-order templates)
 
-## 1-stream PostgreSQL (live)
+## 1-stream PostgreSQL (live) → Nexlify
 
 1. Create a **read-only** Postgres user (optional).
-2. Allow Nexlify VPS IP on port `5432`.
+2. Allow Nexlify VPS IP on port `5432`, or open an SSH tunnel.
 3. Choose **1-stream** → **PostgreSQL (live)** → **Test connection & detect tables**.
 4. **Preview**, then **Run import**.
 
-Live PG also merges `package_streams` / `subscription_packages` junction tables. SQL dumps for 1-stream now get the same junction merge.
+Live PG also merges `package_streams` / `subscription_packages` junction tables. SQL dumps for 1-stream get the same junction merge.
 
 ## File size limits
 
 - Paste/preview: ~512 KB
 - Upload multipart: up to **2 GB**
 
-## After migration
+## After migration (guide checklist)
 
-- Assign **stream servers** and probe streams.
-- Re-link **EPG** where channel ids differ.
+- Streams are **stopped** by default — verify URLs, then enable.
+- Transcoder / encode profiles may be incomplete — rebuild on Nexlify.
+- Re-enter **server SSH passwords** (not present in dumps).
+- Assign / probe stream servers; re-link **EPG** where channel ids differ.
+- After cutover, **stop legacy XC / panel processes** on old servers.
 - Rotate line passwords if importing production plaintext passwords.
 - Review reseller tree and packages under Admin.
 
