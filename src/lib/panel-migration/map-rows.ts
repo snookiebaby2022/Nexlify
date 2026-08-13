@@ -6,6 +6,7 @@ import type {
   MigrationMagRow,
   MigrationPackageRow,
   MigrationPhase2Data,
+  MigrationPhase3Data,
   MigrationResellerRow,
   MigrationSource,
   MigrationStreamRow,
@@ -35,6 +36,7 @@ import {
   mapSeriesEpisodesFromSql,
   resolveStreamType,
 } from "./xui-extras";
+import { loadPhase3FromSql } from "./phase3-xui";
 
 function parseJsonField(val: unknown): unknown {
   if (val == null || val === "") return null;
@@ -722,6 +724,10 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
     `Content breakdown: ${live} live, ${movies} movies, ${seriesShows} TV series, ${episodes} TV episodes.`
   );
 
+  const phase3Out = loadPhase3FromSql(allTables);
+  bundle.phase3 = phase3Out.phase3;
+  warnings.push(...phase3Out.warnings);
+
   const tablesFound = summarizeTables(allTables);
   bundle.tablesFound = tablesFound;
   warnIfUnmapped(bundle, tablesFound, warnings);
@@ -828,6 +834,7 @@ export function bundleFromJson(
       model: row.model ? String(row.model) : undefined,
     })),
     phase2: obj.phase2 as MigrationPhase2Data | undefined,
+    phase3: obj.phase3 as MigrationPhase3Data | undefined,
   };
 }
 
@@ -956,6 +963,10 @@ export async function bundleFromSqlFile(
   warnings.push(
     `Content breakdown: ${live} live, ${movies} movies, ${seriesShows} TV series, ${episodes} TV episodes.`
   );
+
+  const phase3Out = loadPhase3FromSql(allTables);
+  bundle.phase3 = phase3Out.phase3;
+  warnings.push(...phase3Out.warnings);
 
   const tablesFound = summarizeTables(allTables);
   bundle.tablesFound = tablesFound;

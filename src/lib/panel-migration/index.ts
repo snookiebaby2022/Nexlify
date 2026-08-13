@@ -66,6 +66,7 @@ export function previewMigrationBundle(bundle: MigrationBundle) {
     (s) => s.type === "SERIES" && s.episodeNum == null && s.seasonNum == null
   ).length;
 
+  const phase3 = bundle.phase3;
   return {
     source: bundle.source,
     counts: {
@@ -84,6 +85,17 @@ export function previewMigrationBundle(bundle: MigrationBundle) {
       epgSources: bundle.phase2?.epgSources.length ?? 0,
       packages:
         (bundle.packages?.length ?? 0) + (bundle.phase2?.packages?.length ?? 0),
+      providers: phase3?.providers.length ?? 0,
+      providerLinks: phase3?.providerStreamLinks.length ?? 0,
+      watchFolders: phase3?.watchFolders.length ?? 0,
+      watchLogs: phase3?.watchLogs.length ?? 0,
+      tickets: phase3?.tickets.length ?? 0,
+      epgChannels: phase3?.epgChannels.length ?? 0,
+      epgPrograms: phase3?.epgPrograms.length ?? 0,
+      blockedAsns: phase3?.blockedAsns.length ?? 0,
+      activityLogs: phase3?.activityLogs.length ?? 0,
+      bandwidthSnapshots: phase3?.bandwidthSnapshots.length ?? 0,
+      settings: phase3?.settingsRaw ? 1 : 0,
     },
     warnings: bundle.warnings ?? [],
     tablesFound: bundle.tablesFound ?? [],

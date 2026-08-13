@@ -115,6 +115,7 @@ export function mapEpgSources(data: SqlTableData | null): MigrationEpgRow[] {
       url.endsWith(".xmltv");
     if (!usable && !url.includes("/")) continue;
     out.push({
+      legacyId: r.id != null ? String(r.id) : undefined,
       name: String(r.name ?? r.epg_name ?? r.title ?? "EPG"),
       url,
       country: r.country ? String(r.country) : r.lang ? String(r.lang) : undefined,
@@ -182,6 +183,7 @@ export async function applyMigrationPhase2(
   };
   const categoryIdByLegacy = new Map<string, string>();
   const serverIdByLegacy = new Map<string, string>();
+  const epgSourceIdByLegacy = new Map<string, string>();
 
   if (opts.importCategories !== false && data.categories.length) {
     // Pass 1: create/find all categories without parents
@@ -281,12 +283,14 @@ export async function applyMigrationPhase2(
       try {
         const dup = await prisma.epgSource.findFirst({ where: { url } });
         if (dup) {
+          if (e.legacyId) epgSourceIdByLegacy.set(e.legacyId, dup.id);
           result.epgSources.skipped++;
           continue;
         }
-        await prisma.epgSource.create({
+        const created = await prisma.epgSource.create({
           data: { name, url, country: e.country?.trim() || null },
         });
+        if (e.legacyId) epgSourceIdByLegacy.set(e.legacyId, created.id);
         result.epgSources.imported++;
       } catch {
         result.epgSources.skipped++;
@@ -294,5 +298,5 @@ export async function applyMigrationPhase2(
     }
   }
 
-  return { result, categoryIdByLegacy, serverIdByLegacy };
+  return { result, categoryIdByLegacy, serverIdByLegacy, epgSourceIdByLegacy };
 }

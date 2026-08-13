@@ -2,6 +2,7 @@ import { LineStatus, PanelRole, StreamType } from "@prisma/client";
 import { prisma } from "../prisma";
 import { hashPassword } from "../auth";
 import { applyMigrationPhase2 } from "./phase2";
+import { applyMigrationPhase3 } from "./apply-phase3";
 import type {
   MigrationApplyOptions,
   MigrationApplyResult,
@@ -20,6 +21,14 @@ function emptyResult(): MigrationApplyResult {
     servers: { imported: 0, skipped: 0 },
     epgSources: { imported: 0, skipped: 0 },
     packages: { imported: 0, skipped: 0 },
+    providers: { imported: 0, skipped: 0 },
+    watchFolders: { imported: 0, skipped: 0 },
+    tickets: { imported: 0, skipped: 0 },
+    epgPrograms: { imported: 0, skipped: 0 },
+    blockedAsns: { imported: 0, skipped: 0 },
+    activityLogs: { imported: 0, skipped: 0 },
+    bandwidthSnapshots: { imported: 0, skipped: 0 },
+    settings: { imported: 0, skipped: 0 },
     warnings: [],
   };
 }
@@ -183,6 +192,7 @@ async function applyMigrationBundleInner(
 
   let categoryIdByLegacy = new Map<string, string>();
   let serverIdByLegacy = new Map<string, string>();
+  let epgSourceIdByLegacy = new Map<string, string>();
 
   if (bundle.phase2) {
     try {
@@ -198,6 +208,7 @@ async function applyMigrationBundleInner(
       result.epgSources = phase2Out.result.epgSources;
       categoryIdByLegacy = phase2Out.categoryIdByLegacy;
       serverIdByLegacy = phase2Out.serverIdByLegacy;
+      epgSourceIdByLegacy = phase2Out.epgSourceIdByLegacy ?? new Map();
       if (Array.isArray(phase2Out.result.warnings)) {
         result.warnings.push(...phase2Out.result.warnings);
       }
@@ -209,6 +220,7 @@ async function applyMigrationBundleInner(
   const bouquetIdByLegacy = new Map<string, string>();
   const streamIdByLegacy = new Map<string, string>();
   const resellerIdByLegacy = new Map<string, string>();
+  const lineIdByLegacy = new Map<string, string>();
 
   if (options.importBouquets !== false) {
     const seenNames = new Set<string>();
@@ -485,6 +497,7 @@ async function applyMigrationBundleInner(
           byUsername.set(username, { id: lineId, username, externalId });
         }
         if (externalId) usedExternalIds.add(externalId);
+        if (l.legacyId) lineIdByLegacy.set(String(l.legacyId), lineId);
 
         if (bouquetIds.length) {
           await prisma.lineBouquet
@@ -595,6 +608,23 @@ async function applyMigrationBundleInner(
       result.warnings,
       "Package"
     );
+  }
+
+  if (bundle.phase3) {
+    try {
+      await applyMigrationPhase3(bundle.phase3, {
+        options,
+        result,
+        streamIdByLegacy,
+        categoryIdByLegacy,
+        serverIdByLegacy,
+        epgSourceIdByLegacy,
+        resellerIdByLegacy,
+        lineIdByLegacy,
+      });
+    } catch (e) {
+      pushWarning(result.warnings, `Phase3 error: ${shortErr(e)}`);
+    }
   }
 
   return result;

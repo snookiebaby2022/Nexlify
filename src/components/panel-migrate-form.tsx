@@ -60,6 +60,15 @@ export function PanelMigrateForm() {
   const [importServers, setImportServers] = useState(true);
   const [importEpg, setImportEpg] = useState(true);
   const [importPackages, setImportPackages] = useState(true);
+  const [importProviders, setImportProviders] = useState(true);
+  const [importWatchFolders, setImportWatchFolders] = useState(true);
+  const [importTickets, setImportTickets] = useState(true);
+  /** Off by default — epg_data can be huge; EPG source URLs use importEpg. */
+  const [importEpgGuide, setImportEpgGuide] = useState(false);
+  const [importBlockedAsns, setImportBlockedAsns] = useState(true);
+  const [importLogs, setImportLogs] = useState(true);
+  const [importStats, setImportStats] = useState(true);
+  const [importSettings, setImportSettings] = useState(true);
   /** Match 1-stream Migration Guide — streams imported stopped by default. */
   const [importStreamsStopped, setImportStreamsStopped] = useState(true);
   const [skipExisting, setSkipExisting] = useState(true);
@@ -132,6 +141,14 @@ export function PanelMigrateForm() {
       importServers,
       importEpg,
       importPackages,
+      importProviders,
+      importWatchFolders,
+      importTickets,
+      importEpgGuide,
+      importBlockedAsns,
+      importLogs,
+      importStats,
+      importSettings,
       importStreamsStopped,
       skipExistingLines: skipExisting,
       skipExistingStreams: skipExisting,
@@ -362,6 +379,17 @@ export function PanelMigrateForm() {
             c.servers ? `${c.servers} servers` : null,
             c.epgSources ? `${c.epgSources} EPG sources` : null,
             c.packages ? `${c.packages} packages` : null,
+            c.providers ? `${c.providers} providers` : null,
+            c.providerLinks ? `${c.providerLinks} provider links` : null,
+            c.watchFolders ? `${c.watchFolders} watch folders` : null,
+            c.watchLogs ? `${c.watchLogs} watch logs` : null,
+            c.tickets ? `${c.tickets} tickets` : null,
+            c.epgChannels ? `${c.epgChannels} EPG channels` : null,
+            c.epgPrograms ? `${c.epgPrograms} EPG programmes` : null,
+            c.blockedAsns ? `${c.blockedAsns} ASN blocks` : null,
+            c.activityLogs ? `${c.activityLogs} log rows` : null,
+            c.bandwidthSnapshots ? `${c.bandwidthSnapshots} stats snapshots` : null,
+            c.settings ? `settings blob` : null,
           ]
             .filter(Boolean)
             .join(", ")
@@ -418,7 +446,17 @@ export function PanelMigrateForm() {
             c.servers ? `${c.servers} servers` : null,
             c.epgSources ? `${c.epgSources} EPG sources` : null,
             c.packages ? `${c.packages} packages` : null,
-            c.packages ? `${c.packages} packages` : null,
+            c.providers ? `${c.providers} providers` : null,
+            c.providerLinks ? `${c.providerLinks} provider links` : null,
+            c.watchFolders ? `${c.watchFolders} watch folders` : null,
+            c.watchLogs ? `${c.watchLogs} watch logs` : null,
+            c.tickets ? `${c.tickets} tickets` : null,
+            c.epgChannels ? `${c.epgChannels} EPG channels` : null,
+            c.epgPrograms ? `${c.epgPrograms} EPG programmes` : null,
+            c.blockedAsns ? `${c.blockedAsns} ASN blocks` : null,
+            c.activityLogs ? `${c.activityLogs} log rows` : null,
+            c.bandwidthSnapshots ? `${c.bandwidthSnapshots} stats snapshots` : null,
+            c.settings ? `settings blob` : null,
           ]
             .filter(Boolean)
             .join(", ")
@@ -429,9 +467,25 @@ export function PanelMigrateForm() {
     if (r) {
       const warnings = r.warnings ?? [];
       const visibleWarnings = showAllWarnings ? warnings : warnings.slice(0, 8);
-      const totalImported = r.bouquets.imported + r.streams.imported + r.lines.imported + r.resellers.imported +
-        r.magDevices.imported + r.enigmaDevices.imported + r.categories.imported + r.servers.imported + r.epgSources.imported +
-        (r.packages?.imported ?? 0);
+      const totalImported =
+        r.bouquets.imported +
+        r.streams.imported +
+        r.lines.imported +
+        r.resellers.imported +
+        r.magDevices.imported +
+        r.enigmaDevices.imported +
+        r.categories.imported +
+        r.servers.imported +
+        r.epgSources.imported +
+        (r.packages?.imported ?? 0) +
+        (r.providers?.imported ?? 0) +
+        (r.watchFolders?.imported ?? 0) +
+        (r.tickets?.imported ?? 0) +
+        (r.epgPrograms?.imported ?? 0) +
+        (r.blockedAsns?.imported ?? 0) +
+        (r.activityLogs?.imported ?? 0) +
+        (r.bandwidthSnapshots?.imported ?? 0) +
+        (r.settings?.imported ?? 0);
       const tablesFound = (data.preview as Record<string, unknown> | undefined)?.tablesFound as
         | { name: string; rows: number; hasColumns: boolean }[]
         | undefined;
@@ -455,8 +509,22 @@ export function PanelMigrateForm() {
           `Enigma: +${r.enigmaDevices.imported} / skipped ${r.enigmaDevices.skipped}`,
           `Categories: +${r.categories.imported} / skipped ${r.categories.skipped}`,
           `Servers: +${r.servers.imported} / skipped ${r.servers.skipped}`,
-          `EPG: +${r.epgSources.imported} / skipped ${r.epgSources.skipped}`,
+          `EPG sources: +${r.epgSources.imported} / skipped ${r.epgSources.skipped}`,
           r.packages ? `Packages: +${r.packages.imported} / skipped ${r.packages.skipped}` : null,
+          r.providers ? `Providers: +${r.providers.imported} / skipped ${r.providers.skipped}` : null,
+          r.watchFolders
+            ? `Watch folders: +${r.watchFolders.imported} / skipped ${r.watchFolders.skipped}`
+            : null,
+          r.tickets ? `Tickets: +${r.tickets.imported} / skipped ${r.tickets.skipped}` : null,
+          r.epgPrograms
+            ? `EPG programmes: +${r.epgPrograms.imported} / skipped ${r.epgPrograms.skipped}`
+            : null,
+          r.blockedAsns ? `ASN blocks: +${r.blockedAsns.imported} / skipped ${r.blockedAsns.skipped}` : null,
+          r.activityLogs ? `Logs: +${r.activityLogs.imported} / skipped ${r.activityLogs.skipped}` : null,
+          r.bandwidthSnapshots
+            ? `Stats: +${r.bandwidthSnapshots.imported} / skipped ${r.bandwidthSnapshots.skipped}`
+            : null,
+          r.settings ? `Settings: +${r.settings.imported} / skipped ${r.settings.skipped}` : null,
           visibleWarnings.length ? `Warnings: ${visibleWarnings.join("; ")}` : null,
           !showAllWarnings && warnings.length > 8 ? `... and ${warnings.length - 8} more warnings` : null,
         ]
@@ -808,7 +876,63 @@ export function PanelMigrateForm() {
         </label>
         <label>
           <input type="checkbox" checked={importEpg} onChange={(e) => setImportEpg(e.target.checked)} />{" "}
-          EPG sources
+          EPG sources (URLs)
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={importEpgGuide}
+            onChange={(e) => setImportEpgGuide(e.target.checked)}
+          />{" "}
+          Full EPG guide (epg_data / epg_channels)
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={importProviders}
+            onChange={(e) => setImportProviders(e.target.checked)}
+          />{" "}
+          Providers / provider streams
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={importWatchFolders}
+            onChange={(e) => setImportWatchFolders(e.target.checked)}
+          />{" "}
+          Watch folders / watch logs
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={importTickets}
+            onChange={(e) => setImportTickets(e.target.checked)}
+          />{" "}
+          Tickets
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={importBlockedAsns}
+            onChange={(e) => setImportBlockedAsns(e.target.checked)}
+          />{" "}
+          ASN blocks
+        </label>
+        <label>
+          <input type="checkbox" checked={importLogs} onChange={(e) => setImportLogs(e.target.checked)} />{" "}
+          Logs (capped)
+        </label>
+        <label>
+          <input type="checkbox" checked={importStats} onChange={(e) => setImportStats(e.target.checked)} />{" "}
+          Stats snapshots (capped)
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={importSettings}
+            onChange={(e) => setImportSettings(e.target.checked)}
+          />{" "}
+          Settings (review blob)
         </label>
         <label>
           <input type="checkbox" checked={skipExisting} onChange={(e) => setSkipExisting(e.target.checked)} />{" "}

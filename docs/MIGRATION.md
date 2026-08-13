@@ -33,8 +33,15 @@ Paths below are mapped from the official **1-stream Migration Guide (Experimenta
 | MAG / Enigma | Linked by username or line id |
 | Categories | Type, parent, adult, sort order |
 | Stream servers | Host/port/protocol, domain, capacity, private IP — **SSH passwords are not migrated** |
-| EPG sources | URL + country |
+| EPG sources | URL + country (source URLs only — re-sync programmes after import) |
 | Packages | Duration/credit billing packages (when source has days/credits) |
+| Providers | `providers` / `providers_streams` → StreamProvider + stream links |
+| Watch folders | `watch_folders` + capped `watch_logs` → WatchFolder / ImportJob |
+| Tickets | `tickets` (+ replies) → Ticket / TicketMessage |
+| Full EPG guide | Opt-in: `epg_channels` catalog + capped `epg_data` programmes |
+| ASN blocks | `blocked_asns` → BlockedAsn |
+| Logs / stats | Capped panel/line/user/stream logs → ActivityLog; server stats → BandwidthSnapshot |
+| Settings | Stored as PanelSetting `migration.xui_settings` for review (not applied blindly) |
 
 ## StreamCreed / XUI.one / Xtream Codes / NXT — SQL workflow
 
@@ -66,6 +73,7 @@ Avoid: table-only exports, phpMyAdmin “quick” dumps without Complete inserts
 - Correct stream `type` map: 1 live, 2 movie, 3 created, 4 radio, 5 series
 - JSON `category_id` arrays (e.g. `"[12]"`)
 - Modern XUI.one tables: `lines` + `users` (resellers), `streams_servers`, `streams_series`, `streams_episodes`, `streams_categories`, `users_packages`
+- Extended XUI tables: `providers`, `providers_streams`, `watch_folders`, `watch_logs`, `tickets`, `epg_channels`, `epg_data`, `blocked_asns`, panel/line/user logs, `servers_stats`, `settings`
 - `streams_servers` / `streams_sys` → stream server assignment
 - Series episodes enrich existing `streams` rows (or create rows when episode has its own URL)
 - Resellers from `reg_users` (classic) or `users` (modern, when `lines` exists)
@@ -91,11 +99,12 @@ Live PG also merges `package_streams` / `subscription_packages` junction tables.
 - Streams are **stopped** by default — verify URLs, then enable.
 - Transcoder / encode profiles may be incomplete — rebuild on Nexlify.
 - Re-enter **server SSH passwords** (not present in dumps).
-- Assign / probe stream servers; re-link **EPG** where channel ids differ.
+- Assign / probe stream servers; re-link **EPG** where channel ids differ (or enable **Full EPG guide** to import `epg_channels` / capped `epg_data`).
+- Review imported providers, watch folders, tickets, ASN blocks, and `migration.xui_settings` under Admin.
 - After cutover, **stop legacy XC / panel processes** on old servers.
 - Rotate line passwords if importing production plaintext passwords.
 - Review reseller tree and packages under Admin.
 
 ## Still configure on Nexlify (not in legacy dumps)
 
-Stream agents, blocklists, WHMCS, TMDB, CDN/RTMP edges, tickets, and most ops tooling are Nexlify-native — set those up after the data cutover.
+Stream agents, blocklists, WHMCS, TMDB, CDN/RTMP edges, and most ops tooling are Nexlify-native — set those up after the data cutover.

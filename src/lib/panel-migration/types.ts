@@ -106,6 +106,7 @@ export type MigrationServerRow = {
 };
 
 export type MigrationEpgRow = {
+  legacyId?: string;
   name: string;
   url: string;
   country?: string;
@@ -122,6 +123,120 @@ export type MigrationPackageRow = {
   description?: string;
   isActive?: boolean;
   sortOrder?: number;
+};
+
+export type MigrationProviderRow = {
+  legacyId: string;
+  name: string;
+  baseUrl: string;
+  apiKey?: string;
+  providerType?: string;
+  notes?: string;
+  isActive?: boolean;
+};
+
+export type MigrationProviderStreamLink = {
+  providerLegacyId: string;
+  streamLegacyId: string;
+  providerPath?: string;
+};
+
+export type MigrationWatchFolderRow = {
+  legacyId: string;
+  name: string;
+  path: string;
+  type?: "MOVIE" | "SERIES" | "M3U" | "MIXED";
+  categoryLegacyId?: string;
+  serverLegacyId?: string;
+  isActive?: boolean;
+  isAdult?: boolean;
+  autoScanMins?: number;
+  lastScan?: Date;
+  importedCount?: number;
+};
+
+export type MigrationWatchLogRow = {
+  source: string;
+  status?: string;
+  imported?: number;
+  skipped?: number;
+  message?: string;
+  watchFolderLegacyId?: string;
+  createdAt?: Date;
+};
+
+export type MigrationTicketReplyRow = {
+  body: string;
+  authorLegacyId?: string;
+  createdAt?: Date;
+};
+
+export type MigrationTicketRow = {
+  legacyId: string;
+  subject: string;
+  body: string;
+  status?: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED";
+  priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+  category?: "SUPPORT" | "SUGGESTION" | "REPORT" | "BUG" | "BILLING" | "GENERAL";
+  createdByLegacyId?: string;
+  assignedToLegacyId?: string;
+  lineLegacyId?: string;
+  createdAt?: Date;
+  replies?: MigrationTicketReplyRow[];
+};
+
+export type MigrationEpgChannelRow = {
+  sourceLegacyId?: string;
+  channelId: string;
+  name?: string;
+  icon?: string;
+};
+
+export type MigrationEpgProgramRow = {
+  sourceLegacyId?: string;
+  channelId: string;
+  title: string;
+  description?: string;
+  start: Date;
+  stop: Date;
+};
+
+export type MigrationBlockedAsnRow = {
+  asn: string;
+  label?: string;
+  reason?: string;
+  isActive?: boolean;
+};
+
+export type MigrationActivityLogRow = {
+  action: string;
+  entity?: string;
+  entityId?: string;
+  meta?: Record<string, unknown>;
+  createdAt?: Date;
+};
+
+export type MigrationBandwidthRow = {
+  bytesIn?: number;
+  bytesOut?: number;
+  connections?: number;
+  createdAt?: Date;
+};
+
+/** Extended XUI.one tables beyond core IPTV entities. */
+export type MigrationPhase3Data = {
+  providers: MigrationProviderRow[];
+  providerStreamLinks: MigrationProviderStreamLink[];
+  watchFolders: MigrationWatchFolderRow[];
+  watchLogs: MigrationWatchLogRow[];
+  tickets: MigrationTicketRow[];
+  epgChannels: MigrationEpgChannelRow[];
+  epgPrograms: MigrationEpgProgramRow[];
+  blockedAsns: MigrationBlockedAsnRow[];
+  activityLogs: MigrationActivityLogRow[];
+  bandwidthSnapshots: MigrationBandwidthRow[];
+  /** Raw settings row(s) stored under PanelSetting for operator review. */
+  settingsRaw?: Record<string, unknown>;
 };
 
 export type MigrationPhase2Data = {
@@ -141,6 +256,7 @@ export type MigrationBundle = {
   enigmaDevices?: MigrationEnigmaRow[];
   packages?: MigrationPackageRow[];
   phase2?: MigrationPhase2Data;
+  phase3?: MigrationPhase3Data;
   /** Warnings from parsing (e.g., tables not found, malformed SQL). */
   warnings?: string[];
   /** Tables detected in the source dump — diagnostics for the Preview/Import report. */
@@ -158,6 +274,14 @@ export type MigrationApplyOptions = {
   importServers?: boolean;
   importEpg?: boolean;
   importPackages?: boolean;
+  importProviders?: boolean;
+  importWatchFolders?: boolean;
+  importTickets?: boolean;
+  importEpgGuide?: boolean;
+  importBlockedAsns?: boolean;
+  importLogs?: boolean;
+  importStats?: boolean;
+  importSettings?: boolean;
   skipExistingLines?: boolean;
   skipExistingStreams?: boolean;
   clearDataBeforeImport?: boolean;
@@ -185,5 +309,13 @@ export type MigrationApplyResult = {
   servers: { imported: number; skipped: number };
   epgSources: { imported: number; skipped: number };
   packages: { imported: number; skipped: number };
+  providers: { imported: number; skipped: number };
+  watchFolders: { imported: number; skipped: number };
+  tickets: { imported: number; skipped: number };
+  epgPrograms: { imported: number; skipped: number };
+  blockedAsns: { imported: number; skipped: number };
+  activityLogs: { imported: number; skipped: number };
+  bandwidthSnapshots: { imported: number; skipped: number };
+  settings: { imported: number; skipped: number };
   warnings: string[];
 };
