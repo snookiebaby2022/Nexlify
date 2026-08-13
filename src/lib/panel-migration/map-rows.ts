@@ -534,16 +534,33 @@ export function bundleFromJson(
     }),
     lines: pick("lines").map((l) => {
       const row = l as Record<string, unknown>;
+      // Parse bouquet from JSON array string (e.g. '[1,3,4,5]') to string[]
+      let bouquetIds: string[] = (row.bouquetLegacyIds as string[]) ?? [];
+      if (!bouquetIds.length && row.bouquet) {
+        try {
+          const raw = String(row.bouquet);
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) bouquetIds = parsed.map(String);
+        } catch { /* not JSON, ignore */ }
+      }
+      // Derive status from enabled/banned flags
+      let status: MigrationLineRow["status"] = (row.status as any) ?? "ACTIVE";
+      if (status === "ACTIVE") {
+        const enabled = row.enabled ?? row.is_enabled;
+        const banned = row.is_banned;
+        if (enabled === 0 || enabled === false) status = "DISABLED";
+        else if (banned === 1 || banned === true) status = "BANNED";
+      }
       return {
-        legacyId: row.legacyId ? String(row.legacyId) : undefined,
+        legacyId: row.legacyId ? String(row.legacyId) : row.id ? String(row.id) : undefined,
         username: String(row.username ?? ""),
         password: String(row.password ?? ""),
         expiresAt: row.expiresAt
           ? new Date(String(row.expiresAt))
           : unixToDate(row.exp_date),
         maxConnections: Number(row.maxConnections ?? row.max_connections ?? 1),
-        status: (row.status as MigrationLineRow["status"]) ?? "ACTIVE",
-        bouquetLegacyIds: (row.bouquetLegacyIds as string[]) ?? [],
+        status,
+        bouquetLegacyIds: bouquetIds,
         notes: row.notes ? String(row.notes) : undefined,
         allowedIps: row.allowedIps ? String(row.allowedIps) : undefined,
         lockToIp: Boolean(row.lockToIp),

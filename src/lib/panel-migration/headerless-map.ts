@@ -296,8 +296,15 @@ function headerlessStbSpecs(): FieldSpec[] {
 
 const XUI_COMMON: Record<HeaderlessTableType, string[]> = {
   lines: [
-    "id", "user_id", "package_id", "bouquet", "line_id", "username", "password",
-    "exp_date", "max_connections", "is_enabled", "is_banned", "notes", "reseller_id",
+    "id", "user_id", "username", "password", "ip", "exp_date",
+    "max_connections", "enabled", "is_banned", "admin_notes",
+    "bouquet", "package_ids", "max_viewers", "is_trial",
+    "is_reseller", "is_admin", "is_adult", "lock_device",
+    "forced_server_id", "allowed_ips", "blocked_ips", "is_resticted",
+    "allowed_countries", "blocked_countries", "external_id", "isp",
+    "notes", "mac", "mac_logging", "enabled_2",
+    "allowed_output", "default_live", "stream_id",
+    "creation_date", "subscription_data", "created_at",
   ],
   streams: [
     "id", "user_id", "category_id", "stream_display_name", "stream_icon", "notes",
