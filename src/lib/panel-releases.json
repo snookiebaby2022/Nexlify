@@ -2,9 +2,41 @@
 
   "source": "nexlify-panel",
 
-  "latestVersion": "1.9.33",
+  "latestVersion": "1.9.34",
 
   "releases": [
+
+    {
+
+      "version": "1.9.34",
+
+      "date": "2026-08-13",
+
+      "channel": "stable",
+
+      "summary": "Panel migration now auto-maps headerless SQL dumps (INSERT without column names) using content inference plus the documented 1-Stream/XUI column order.",
+
+      "changelog": [
+
+        "Panel migration: headerless dumps (INSERT INTO ... VALUES with no column list) are now auto-mapped instead of importing 0 rows",
+
+        "Content-based column inference (username, password, MAC, URLs, IPs, dates) plus schema-order fallback for ambiguous integer columns",
+
+        "Auto-mapping reports which columns were inferred and warns only when a table is genuinely empty"
+
+      ],
+
+      "fixes": [
+
+        "XUI.one / 1-Stream backups exported without column names parsed 0 streams/lines/bouquets (silent data loss)",
+
+        "Migration preview showed every target table at 0 rows with no actionable message for headerless sources"
+
+      ],
+
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.34.tar.gz"
+
+    },
 
     {
 

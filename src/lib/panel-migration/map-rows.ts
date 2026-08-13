@@ -24,6 +24,7 @@ import {
   type SqlTableData,
 } from "./sql-parse";
 import { PANEL_PROFILES, firstTableFound } from "./profiles";
+import { applyHeaderlessInference } from "./headerless-map";
 
 function parseJsonField(val: unknown): unknown {
   if (val == null || val === "") return null;
@@ -425,6 +426,10 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
   // Single-pass parse — O(n) instead of O(n×m)
   const allTables = parseAllMysqlInserts(sql);
 
+  // Headerless dumps (INSERT … VALUES without column names) yield empty
+  // columns; infer them by content so rows actually map.
+  warnings.push(...applyHeaderlessInference(allTables, source));
+
   function findTable(names: string[]): SqlTableData | null {
     for (const name of names) {
       const chunks = allTables.get(name.toLowerCase()) ?? [];
@@ -592,6 +597,10 @@ export async function bundleFromSqlFile(
   const warnings: string[] = [];
 
   const allTables = await parseSqlDumpFile(filePath, onProgress);
+
+  // Headerless dumps (INSERT … VALUES without column names) yield empty
+  // columns; infer them by content so rows actually map.
+  warnings.push(...applyHeaderlessInference(allTables, source));
 
   function findTable(names: string[]): SqlTableData | null {
     for (const name of names) {
