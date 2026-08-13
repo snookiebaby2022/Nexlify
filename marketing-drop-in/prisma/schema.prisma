@@ -242,3 +242,13 @@ model ActivationCode {
   @@index([code])
   @@index([licenseId])
 }
+
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  type      String   @default("info")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
