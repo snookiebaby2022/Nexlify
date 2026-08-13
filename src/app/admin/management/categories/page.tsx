@@ -8,6 +8,10 @@ import {
   CATEGORY_TYPE_LABELS,
   type CategoryTab,
 } from "@/components/category-type-tabs";
+import {
+  collectDescendantIdsLocal,
+  labeledCategoryOptions,
+} from "@/lib/category-options";
 
 const PREDEFINED_CATEGORIES: Record<CategoryTab, string[]> = {
   LIVE: [
@@ -164,8 +168,12 @@ function buildTree(cats: CategoryRow[]): CategoryNode[] {
     }
     roots.push(node);
   });
-  roots.sort((a, b) => a.sortOrder - b.sortOrder);
-  roots.forEach((r) => r.children.sort((a, b) => a.sortOrder - b.sortOrder));
+  roots.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  function sortRecursive(nodes: CategoryNode[]) {
+    nodes.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    nodes.forEach((n) => sortRecursive(n.children));
+  }
+  sortRecursive(roots);
   return roots;
 }
 
@@ -203,6 +211,13 @@ const TreeRow = memo(function TreeRow({
   const [editParent, setEditParent] = useState(node.parentId ?? "");
   const hasChildren = node.children.length > 0;
   const indent = node.depth * 24;
+  const parentOptions = useMemo(() => {
+    const blocked = collectDescendantIdsLocal(node.id, allCategories);
+    blocked.add(node.id);
+    return labeledCategoryOptions(
+      allCategories.filter((c) => !blocked.has(c.id))
+    );
+  }, [allCategories, node.id]);
 
   function save() {
     if (editName.trim() && editName !== node.name) onRename(node.id, editName.trim());
@@ -243,8 +258,8 @@ const TreeRow = memo(function TreeRow({
             onChange={(e) => setEditParent(e.target.value)}
           >
             <option value="">— No parent —</option>
-            {allCategories.filter((c) => c.id !== node.id).map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+            {parentOptions.map((c) => (
+              <option key={c.id} value={c.id}>{c.label}</option>
             ))}
           </select>
           <button type="button" className="text-xs px-2 py-1 rounded text-white" style={{ background: "var(--accent)" }} onClick={save}>Save</button>
@@ -291,8 +306,15 @@ export default function ManagementCategoriesPage() {
 
   function load() {
     fetch("/api/admin/categories")
-      .then((r) => r.json())
-      .then((d) => setAllCategories(d.categories ?? []));
+      .then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) {
+          setMsg(d.error ?? "Failed to load categories");
+          return;
+        }
+        setAllCategories(d.categories ?? []);
+      })
+      .catch(() => setMsg("Failed to load categories"));
   }
 
   useEffect(() => {
@@ -302,6 +324,11 @@ export default function ManagementCategoriesPage() {
   const tabCategories = useMemo(
     () => allCategories.filter((c) => (c.categoryType ?? "LIVE") === tab),
     [allCategories, tab]
+  );
+
+  const parentSelectOptions = useMemo(
+    () => labeledCategoryOptions(tabCategories),
+    [tabCategories]
   );
 
   const tabCounts = useMemo(() => {
@@ -323,11 +350,12 @@ export default function ManagementCategoriesPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, parentId: parentId || null, categoryType: tab, isAdult }),
     });
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setMsg((await res.json()).error ?? "Failed");
+      setMsg(data.error ?? "Failed");
       return;
     }
-    setMsg("Category added — drag order with arrows.");
+    setMsg("Category added — use arrows to reorder siblings.");
     setName("");
     setParentId("");
     setIsAdult(false);
@@ -336,42 +364,67 @@ export default function ManagementCategoriesPage() {
 
   async function remove(id: string) {
     if (!confirm("Delete this category and all sub-categories? Streams will be uncategorized.")) return;
-    await fetch(`/api/admin/categories?id=${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/admin/categories?id=${id}`, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg(data.error ?? "Delete failed");
+      return;
+    }
+    setMsg(`Deleted ${data.deleted ?? 1} categor${data.deleted === 1 ? "y" : "ies"}`);
     load();
   }
 
   async function renameCategory(id: string, newName: string) {
-    await fetch("/api/admin/categories", {
+    const res = await fetch("/api/admin/categories", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, name: newName }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setMsg(data.error ?? "Rename failed");
+      return;
+    }
     load();
   }
 
   async function reparentCategory(id: string, newParentId: string | null) {
-    await fetch("/api/admin/categories", {
+    const res = await fetch("/api/admin/categories", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, parentId: newParentId }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setMsg(data.error ?? "Reparent failed");
+      return;
+    }
     load();
   }
 
   async function move(id: string, dir: -1 | 1) {
-    const list = [...tabCategories];
-    const idx = list.findIndex((c) => c.id === id);
-    if (idx < 0) return;
+    const target = tabCategories.find((c) => c.id === id);
+    if (!target) return;
+    const siblings = tabCategories
+      .filter((c) => (c.parentId ?? null) === (target.parentId ?? null))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    const idx = siblings.findIndex((c) => c.id === id);
     const j = idx + dir;
-    if (j < 0 || j >= list.length) return;
+    if (idx < 0 || j < 0 || j >= siblings.length) return;
+    const list = [...siblings];
     [list[idx], list[j]] = [list[j], list[idx]];
     setBusy(true);
-    await fetch("/api/admin/categories", {
+    const res = await fetch("/api/admin/categories", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ order: list.map((c) => c.id) }),
     });
     setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setMsg(data.error ?? "Reorder failed");
+      return;
+    }
     load();
   }
 
@@ -443,9 +496,9 @@ export default function ManagementCategoriesPage() {
             onChange={(e) => setParentId(e.target.value)}
           >
             <option value="">— No parent (top-level) —</option>
-            {tabCategories.map((c) => (
+            {parentSelectOptions.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.label}
               </option>
             ))}
           </select>
@@ -458,7 +511,15 @@ export default function ManagementCategoriesPage() {
           <button type="submit" className="rounded px-5 py-2 text-sm font-medium" style={{ background: "var(--accent)", color: "#fff" }}>
             Add category
           </button>
-          {msg && <span className="text-sm text-green-400">{msg}</span>}
+          {msg && (
+            <span
+              className={`text-sm ${
+                /fail|error|cannot|required|not found|cycle/i.test(msg) ? "text-red-400" : "text-green-400"
+              }`}
+            >
+              {msg}
+            </span>
+          )}
         </div>
       </form>
 

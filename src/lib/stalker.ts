@@ -2,6 +2,9 @@ import type { LineWithBouquets } from "./lines";
 import { lineIsPlayable, streamsForLineExport } from "./lines";
 import { StreamType } from "@prisma/client";
 import { stalkerFfmpegCmd } from "./bin-tools";
+import { prisma } from "./prisma";
+import { expandCategoryFilter } from "./category-tree";
+
 export function stalkerJsResponse(data: unknown) {
   return {
     js: data,
@@ -60,29 +63,52 @@ export async function handleStalkerAction(
       });
 
     case "get_categories": {
-      const cats = new Map<string, { id: string; title: string; alias: string }>();
-      for (const s of streams) {
-        const id = s.categoryId ?? "0";
-        if (!cats.has(id)) {
-          cats.set(id, { id, title: id === "0" ? "Live" : id, alias: id });
+      const categoryIds = [
+        ...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[]),
+      ];
+      const cats = categoryIds.length
+        ? await prisma.category.findMany({
+            where: { id: { in: categoryIds } },
+            select: { id: true, name: true, sortOrder: true, isAdult: true },
+            orderBy: { sortOrder: "asc" },
+          })
+        : [];
+      const byId = new Map(cats.map((c) => [c.id, c]));
+      const rows: { id: string; title: string; alias: string; censored: number; number: number }[] =
+        [];
+      let n = 1;
+      if (streams.some((s) => !s.categoryId)) {
+        rows.push({ id: "0", title: "Live", alias: "0", censored: 0, number: n++ });
+      }
+      for (const c of cats) {
+        rows.push({
+          id: c.id,
+          title: c.name,
+          alias: c.id,
+          censored: c.isAdult ? 1 : 0,
+          number: n++,
+        });
+      }
+      // Include any orphan category ids as last resort
+      for (const id of categoryIds) {
+        if (!byId.has(id) && !rows.some((r) => r.id === id)) {
+          rows.push({ id, title: id, alias: id, censored: 0, number: n++ });
         }
       }
-      return stalkerJsResponse(
-        Array.from(cats.values()).map((c, i) => ({
-          id: c.id,
-          title: c.title,
-          alias: c.alias,
-          censored: 0,
-          number: i + 1,
-        }))
-      );
+      return stalkerJsResponse(rows);
     }
 
     case "get_ordered_list": {
       const genre = extra.genre ?? extra.category ?? "";
-      const filtered = genre
-        ? streams.filter((s) => (s.categoryId ?? "0") === genre)
-        : streams;
+      let filtered = streams;
+      if (genre) {
+        if (genre === "0") {
+          filtered = streams.filter((s) => !s.categoryId);
+        } else {
+          const allowed = new Set(await expandCategoryFilter(genre));
+          filtered = streams.filter((s) => s.categoryId && allowed.has(s.categoryId));
+        }
+      }
       const cmds = await Promise.all(filtered.map((s) => stalkerFfmpegCmd(s.id)));
       return stalkerJsResponse({
         total_items: filtered.length,

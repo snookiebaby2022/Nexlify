@@ -64,6 +64,7 @@ export type MigrationCategoryRow = {
   legacyId: string;
   name: string;
   parentLegacyId?: string;
+  categoryType?: "LIVE" | "MOVIE" | "SERIES" | "RADIO";
 };
 
 export type MigrationServerRow = {

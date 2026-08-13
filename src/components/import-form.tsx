@@ -6,6 +6,8 @@ import {
   VOD_EPISODE_IMPORT_EXAMPLE,
 } from "@/lib/vod-import-parser";
 import { Upload, FileText, X } from "lucide-react";
+import { CategorySelect } from "@/components/category-select";
+import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 
 export function ImportForm({
   title,
@@ -29,7 +31,7 @@ export function ImportForm({
   const [path, setPath] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [serverId, setServerId] = useState("");
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [bouquets, setBouquets] = useState<{ id: string; name: string }[]>([]);
   const [bouquetIds, setBouquetIds] = useState<string[]>([]);
   const [serversList, setServersList] = useState<{ id: string; name: string }[]>([]);
@@ -306,19 +308,15 @@ export function ImportForm({
         )}
 
         <div className="grid md:grid-cols-2 gap-3">
-          <select
+          <CategorySelect
             className="rounded border px-3 py-2 bg-transparent"
             style={{ borderColor: "var(--border)" }}
             value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-          >
-            <option value="">Default category</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            onChange={setCategoryId}
+            categories={categories}
+            typeFilter={categoryTypeForStream(streamType)}
+            emptyLabel="Default category"
+          />
           {bouquets.length > 0 && (
             <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
               <div className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>Assign to bouquets</div>

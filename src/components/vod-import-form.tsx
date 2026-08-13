@@ -12,6 +12,8 @@ import {
   formInputStyle,
   formSelectClass,
 } from "@/components/form-page-shell";
+import { CategorySelect } from "@/components/category-select";
+import type { CategoryOptionInput } from "@/lib/category-options";
 
 type ImportSource = "m3u" | "file" | "paste";
 
@@ -123,7 +125,7 @@ export function VodImportForm({
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [bouquetItems, setBouquetItems] = useState<DualListItem[]>([]);
   const [categoryId, setCategoryId] = useState("");
   const [autoCategory, setAutoCategory] = useState(true);
@@ -370,20 +372,16 @@ export function VodImportForm({
 
       <div className="grid md:grid-cols-2 gap-4">
         <FormField label="Category">
-          <select
+          <CategorySelect
             className={formSelectClass}
             style={formInputStyle}
             value={categoryId}
             disabled={autoCategory}
-            onChange={(e) => setCategoryId(e.target.value)}
-          >
-            <option value="">Without category</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            onChange={setCategoryId}
+            categories={categories}
+            typeFilter={streamType}
+            emptyLabel="Without category"
+          />
         </FormField>
         <YesNo
           label="Auto category"

@@ -24,6 +24,10 @@ import {
 import { getPanelServerSettings } from "./panel-server";
 import { getSettingGroup } from "./panel-settings";
 import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
+import {
+  collectCategoryAncestors,
+  expandCategoryFilter,
+} from "./category-tree";
 
 type RequestHeaders = { get(name: string): string | null };
 
@@ -134,25 +138,10 @@ async function categoryRowsForIds(
   }
   if (!categoryIds.length) return rows;
 
-  // Include ancestor categories so apps can render subcategory trees
-  const allIds = new Set(categoryIds);
-  let frontier = [...categoryIds];
-  for (let depth = 0; depth < 8 && frontier.length; depth++) {
-    const parents = await prisma.category.findMany({
-      where: { id: { in: frontier }, parentId: { not: null } },
-      select: { parentId: true },
-    });
-    frontier = [];
-    for (const p of parents) {
-      if (p.parentId && !allIds.has(p.parentId)) {
-        allIds.add(p.parentId);
-        frontier.push(p.parentId);
-      }
-    }
-  }
+  const allIds = await collectCategoryAncestors(categoryIds);
 
   const cats = await prisma.category.findMany({
-    where: { id: { in: [...allIds] } },
+    where: { id: { in: allIds } },
     orderBy: { sortOrder: "asc" },
   });
   const idSet = new Set(cats.map((c) => c.id));
@@ -167,25 +156,6 @@ async function categoryRowsForIds(
     });
   }
   return rows;
-}
-
-async function expandCategoryFilter(categoryId: string): Promise<string[]> {
-  const ids = [categoryId];
-  let frontier = [categoryId];
-  for (let depth = 0; depth < 8 && frontier.length; depth++) {
-    const children = await prisma.category.findMany({
-      where: { parentId: { in: frontier } },
-      select: { id: true },
-    });
-    frontier = [];
-    for (const child of children) {
-      if (!ids.includes(child.id)) {
-        ids.push(child.id);
-        frontier.push(child.id);
-      }
-    }
-  }
-  return ids;
 }
 
 export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
@@ -256,9 +226,21 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
   });
 }
 
-export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string) {
+export async function xtreamVodStreams(
+  line: LineWithBouquets,
+  baseUrl: string,
+  categoryId?: string | null
+) {
   const streams = await streamsForLineExport(line);
-  const movies = streams.filter((s) => s.type === StreamType.MOVIE);
+  let movies = streams.filter((s) => s.type === StreamType.MOVIE);
+  if (categoryId != null && categoryId !== "") {
+    if (categoryId === "0") {
+      movies = movies.filter((s) => !s.categoryId);
+    } else {
+      const allowed = new Set(await expandCategoryFilter(categoryId));
+      movies = movies.filter((s) => s.categoryId && allowed.has(s.categoryId));
+    }
+  }
   const withProviders = await prisma.stream.findMany({
     where: { id: { in: movies.map((s) => s.id) } },
     include: { provider: true },
@@ -340,6 +322,28 @@ export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: st
   });
   const byId = new Map(withProviders.map((s) => [s.id, s]));
 
+  const catIds = [...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[])];
+  const allCatIds = catIds.length ? await collectCategoryAncestors(catIds) : [];
+  const catRows = allCatIds.length
+    ? await prisma.category.findMany({
+        where: { id: { in: allCatIds } },
+        select: { id: true, name: true, parentId: true },
+      })
+    : [];
+  const catById = new Map(catRows.map((c) => [c.id, c]));
+  const fallbackGroup = (t: StreamType) =>
+    t === StreamType.LIVE ? "Live" : t === StreamType.MOVIE ? "Movies" : "Series";
+  const groupTitle = (s: (typeof streams)[number]) => {
+    if (!s.categoryId) return fallbackGroup(s.type);
+    const cat = catById.get(s.categoryId);
+    if (!cat) return fallbackGroup(s.type);
+    if (cat.parentId) {
+      const parent = catById.get(cat.parentId);
+      if (parent) return `${parent.name} / ${cat.name}`.replace(/"/g, "'");
+    }
+    return cat.name.replace(/"/g, "'");
+  };
+
   const isExtended = type === "m3u_plus";
   const lines: string[] = ["#EXTM3U"];
   for (const s of streams) {
@@ -360,7 +364,7 @@ export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: st
     const logo = isExtended && s.streamIcon ? ` tvg-logo="${s.streamIcon}"` : "";
     const tvgId = isExtended ? resolveEpgId(s) : "";
     const tvgName = s.name.replace(/"/g, "'");
-    const group = s.type === StreamType.LIVE ? "Live" : s.type === StreamType.MOVIE ? "Movies" : "Series";
+    const group = groupTitle(s);
     const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, output);
     if (isExtended) {
       lines.push(

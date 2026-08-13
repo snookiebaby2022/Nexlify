@@ -13,6 +13,8 @@ import { TmdbMetadataSection, emptyTmdbMeta, type TmdbMetaFields } from "@/compo
 import { ServerTreePicker } from "@/components/server-tree-picker";
 import { StreamBouquetSection } from "@/components/stream-bouquet-section";
 import { VodFormSection, VodYesNo } from "@/components/vod-form-section";
+import { CategorySelect } from "@/components/category-select";
+import type { CategoryOptionInput } from "@/lib/category-options";
 
 function encodeSeriesMeta(meta: Record<string, unknown>): string | null {
   return `NEXLIFY_VOD:${JSON.stringify({ v: 2, kind: "series", ...meta })}`;
@@ -26,7 +28,7 @@ export function VodSeriesForm({
   manageLabel?: string;
 }) {
   const router = useRouter();
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -117,19 +119,15 @@ export function VodSeriesForm({
             />
           </FormField>
           <FormField label="Category">
-            <select
+            <CategorySelect
               className={formSelectClass}
               style={formInputStyle}
               value={form.categoryId}
-              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-            >
-              <option value="">Without category</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={(categoryId) => setForm({ ...form, categoryId })}
+              categories={categories}
+              typeFilter="SERIES"
+              emptyLabel="Without category"
+            />
           </FormField>
           <VodYesNo
             label="Is adult series"

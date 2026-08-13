@@ -5,7 +5,11 @@ export async function invalidateDashboardStats() {
 }
 
 export async function invalidateXtreamCategories() {
-  await cacheDel("xtream:live_categories");
+  await Promise.all([
+    cacheDel("xtream:live_categories"),
+    cacheDel("xtream:vod_categories"),
+    cacheDel("xtream:series_categories"),
+  ]);
 }
 
 export async function invalidateEpgCache() {

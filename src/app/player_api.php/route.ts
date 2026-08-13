@@ -126,7 +126,8 @@ export async function GET(req: NextRequest) {
       return iptvJson(payload);
     }
     case "get_vod_streams": {
-      const payload = await xtreamVodStreams(line, baseUrl);
+      const vodCategoryId = req.nextUrl.searchParams.get("category_id");
+      const payload = await xtreamVodStreams(line, baseUrl, vodCategoryId);
       if (clientTimestamp && clientTimestamp > 0) {
         const filtered = payload.filter(
           (s) => (s.updated_at ?? 0) > clientTimestamp

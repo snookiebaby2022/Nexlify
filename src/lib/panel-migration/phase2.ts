@@ -35,6 +35,14 @@ export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[]
     const legacyId = String(r.id ?? "");
     if (!legacyId) continue;
     const parentRaw = r.parent_id ?? r.parentId ?? r.parent;
+    const typeRaw = String(
+      r.category_type ?? r.type ?? r.cat_type ?? r.stream_type ?? ""
+    ).toUpperCase();
+    let categoryType: MigrationCategoryRow["categoryType"] = "LIVE";
+    if (typeRaw.includes("MOVIE") || typeRaw === "VOD" || typeRaw === "1") categoryType = "MOVIE";
+    else if (typeRaw.includes("SERIES") || typeRaw === "2") categoryType = "SERIES";
+    else if (typeRaw.includes("RADIO")) categoryType = "RADIO";
+    else if (typeRaw.includes("LIVE") || typeRaw === "0") categoryType = "LIVE";
     out.push({
       legacyId,
       name: String(r.category_name ?? r.name ?? `Category ${legacyId}`).trim() || `Category ${legacyId}`,
@@ -42,6 +50,7 @@ export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[]
         parentRaw != null && String(parentRaw).trim() && String(parentRaw) !== "0"
           ? String(parentRaw)
           : undefined,
+      categoryType,
     });
   }
   return out;
@@ -148,13 +157,16 @@ export async function applyMigrationPhase2(
         continue;
       }
       try {
-        const dup = await prisma.category.findFirst({ where: { name } });
+        const categoryType = (c.categoryType as "LIVE" | "MOVIE" | "SERIES" | "RADIO") || "LIVE";
+        const dup = await prisma.category.findFirst({ where: { name, categoryType } });
         if (dup) {
           categoryIdByLegacy.set(c.legacyId, dup.id);
           result.categories.skipped++;
           continue;
         }
-        const created = await prisma.category.create({ data: { name } });
+        const created = await prisma.category.create({
+          data: { name, categoryType },
+        });
         categoryIdByLegacy.set(c.legacyId, created.id);
         result.categories.imported++;
       } catch {

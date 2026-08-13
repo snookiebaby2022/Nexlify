@@ -19,7 +19,11 @@ type LiveStream = {
   epg_channel_id?: string;
 };
 
-type Category = { category_id: string; category_name: string };
+type Category = {
+  category_id: string;
+  category_name: string;
+  parent_id?: number | string;
+};
 
 type EpgProgram = {
   title: string;
@@ -231,11 +235,33 @@ function PanelWebPlayerInner() {
     video.muted = muted;
   }, [volume, muted, playingUrl]);
 
+  const categoryMatchIds = useMemo(() => {
+    if (!activeCat) return null as Set<string> | null;
+    const ids = new Set<string>([String(activeCat)]);
+    // Expand selected category to include subcategory streams (Xtream parent_id)
+    let frontier = [String(activeCat)];
+    for (let depth = 0; depth < 8 && frontier.length; depth++) {
+      const next: string[] = [];
+      for (const c of cats) {
+        const pid = c.parent_id != null ? String(c.parent_id) : "";
+        if (pid && frontier.includes(pid) && !ids.has(String(c.category_id))) {
+          ids.add(String(c.category_id));
+          next.push(String(c.category_id));
+        }
+      }
+      frontier = next;
+    }
+    return ids;
+  }, [activeCat, cats]);
+
   const filtered = useMemo(() => streams.filter((s) => {
-    if (activeCat && String(s.category_id ?? "") !== String(activeCat)) return false;
+    if (categoryMatchIds) {
+      const cid = String(s.category_id ?? "0");
+      if (!categoryMatchIds.has(cid)) return false;
+    }
     if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
-  }), [streams, activeCat, search]);
+  }), [streams, categoryMatchIds, search]);
 
   function playStream(s: LiveStream) {
     setPlayerError("");

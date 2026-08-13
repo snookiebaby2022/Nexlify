@@ -3,31 +3,14 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { invalidateDashboardStats, invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { PanelRole, CategoryType } from "@prisma/client";
+import {
+  collectDescendantCategoryIds,
+  deleteCategoriesSafe,
+  resolveCategoryParent,
+  wouldCreateCategoryCycle,
+} from "@/lib/category-tree";
 
 const VALID_TYPES = new Set<string>(Object.values(CategoryType));
-
-async function wouldCreateCycle(id: string, parentId: string | null): Promise<boolean> {
-  if (!parentId) return false;
-  if (parentId === id) return true;
-  let current: string | null = parentId;
-  const seen = new Set<string>([id]);
-  while (current) {
-    if (seen.has(current)) return true;
-    seen.add(current);
-    const row = await prisma.category.findUnique({ where: { id: current }, select: { parentId: true } });
-    current = row?.parentId ?? null;
-  }
-  return false;
-}
-
-async function resolveParentId(raw: unknown): Promise<{ parentId: string | null; error?: string }> {
-  if (raw == null || raw === "" || raw === false) return { parentId: null };
-  const parentId = String(raw).trim();
-  if (!parentId) return { parentId: null };
-  const parent = await prisma.category.findUnique({ where: { id: parentId }, select: { id: true } });
-  if (!parent) return { parentId: null, error: "Parent category not found" };
-  return { parentId };
-}
 
 export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
@@ -67,7 +50,10 @@ export async function POST(req: NextRequest) {
       ? (String(body.categoryType).toUpperCase() as CategoryType)
       : CategoryType.LIVE;
 
-    const parent = await resolveParentId(body.parentId);
+    const parent = await resolveCategoryParent({
+      parentId: body.parentId,
+      childType: categoryType,
+    });
     if (parent.error) return NextResponse.json({ error: parent.error }, { status: 400 });
 
     const category = await prisma.category.create({
@@ -114,6 +100,9 @@ export async function PATCH(req: NextRequest) {
     const id = String(body.id ?? "");
     if (!id) return NextResponse.json({ error: "id or order required" }, { status: 400 });
 
+    const existing = await prisma.category.findUnique({ where: { id } });
+    if (!existing) return NextResponse.json({ error: "Category not found" }, { status: 404 });
+
     const data: {
       name?: string;
       categoryType?: CategoryType;
@@ -133,13 +122,27 @@ export async function PATCH(req: NextRequest) {
     if (body.isAdult !== undefined) data.isAdult = Boolean(body.isAdult);
     if (body.sortOrder !== undefined) data.sortOrder = Number(body.sortOrder) || 0;
 
+    const nextType = data.categoryType ?? existing.categoryType;
+
     if (body.parentId !== undefined) {
-      const parent = await resolveParentId(body.parentId);
+      const parent = await resolveCategoryParent({
+        parentId: body.parentId,
+        childType: nextType,
+      });
       if (parent.error) return NextResponse.json({ error: parent.error }, { status: 400 });
-      if (await wouldCreateCycle(id, parent.parentId)) {
+      if (await wouldCreateCategoryCycle(id, parent.parentId)) {
         return NextResponse.json({ error: "Cannot set parent — would create a cycle" }, { status: 400 });
       }
       data.parentId = parent.parentId;
+    } else if (data.categoryType && data.categoryType !== existing.categoryType && existing.parentId) {
+      // Type change: clear parent if it would become cross-type
+      const parent = await prisma.category.findUnique({
+        where: { id: existing.parentId },
+        select: { categoryType: true },
+      });
+      if (parent && parent.categoryType !== data.categoryType) {
+        data.parentId = null;
+      }
     }
 
     const category = await prisma.category.update({ where: { id }, data });
@@ -161,27 +164,9 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   try {
-    async function collectDescendants(parentId: string): Promise<string[]> {
-      const children = await prisma.category.findMany({ where: { parentId }, select: { id: true } });
-      let ids: string[] = [];
-      for (const child of children) {
-        ids.push(child.id);
-        ids = ids.concat(await collectDescendants(child.id));
-      }
-      return ids;
-    }
-
-    const descendantIds = await collectDescendants(id);
+    const descendantIds = await collectDescendantCategoryIds(id);
     const allIds = [id, ...descendantIds];
-
-    await prisma.stream.updateMany({
-      where: { categoryId: { in: allIds } },
-      data: { categoryId: null },
-    });
-    if (descendantIds.length > 0) {
-      await prisma.category.deleteMany({ where: { id: { in: descendantIds } } });
-    }
-    await prisma.category.delete({ where: { id } });
+    await deleteCategoriesSafe(allIds);
 
     await invalidateXtreamCategories();
     await invalidateDashboardStats();

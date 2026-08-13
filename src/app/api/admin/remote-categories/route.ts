@@ -3,6 +3,12 @@ import { requirePanelApiKey } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { invalidateXtreamCategories, invalidateDashboardStats } from "@/lib/cache-invalidate";
 import { CategoryType } from "@prisma/client";
+import {
+  clearAllCategoriesSafe,
+  deleteCategoriesSafe,
+  resolveCategoryParent,
+  wouldCreateCategoryCycle,
+} from "@/lib/category-tree";
 
 const VALID_TYPES = new Set<string>(Object.values(CategoryType));
 
@@ -12,13 +18,18 @@ type IncomingCategory = {
   isAdult?: boolean;
   sortOrder?: number;
   parentId?: string | null;
+  parentName?: string | null;
 };
+
+function resolveType(raw: unknown): CategoryType {
+  const t = String(raw ?? "LIVE").toUpperCase();
+  return VALID_TYPES.has(t) ? (t as CategoryType) : CategoryType.LIVE;
+}
 
 /**
  * Remote categories endpoint — called by the marketing site admin.
  * Accepts a list of categories and upserts them by name+type.
- * If a category with the same name+type exists, it is updated; otherwise created.
- * Requires the panel API secret (x-panel-api-key or Authorization).
+ * Parent links are applied in a second pass (by id or parentName).
  */
 export async function POST(req: NextRequest) {
   const ok = await requirePanelApiKey(req);
@@ -41,80 +52,131 @@ export async function POST(req: NextRequest) {
   let unchanged = 0;
   const errors: string[] = [];
 
+  // Pass 1: upsert without parents (avoids FK failures on remote ids)
+  const nameTypeToId = new Map<string, string>();
   for (const incoming of categories) {
     if (!incoming.name || typeof incoming.name !== "string") {
       errors.push("Skipped category with missing name");
       continue;
     }
-
-    const categoryType = VALID_TYPES.has(String(incoming.categoryType ?? "LIVE").toUpperCase())
-      ? (String(incoming.categoryType).toUpperCase() as CategoryType)
-      : CategoryType.LIVE;
+    const name = incoming.name.trim();
+    if (!name) {
+      errors.push("Skipped category with empty name");
+      continue;
+    }
+    const categoryType = resolveType(incoming.categoryType);
+    const key = `${categoryType}::${name.toLowerCase()}`;
 
     const existing = await prisma.category.findFirst({
-      where: { name: incoming.name.trim(), categoryType },
+      where: { name, categoryType },
     });
 
     if (existing) {
       const needsUpdate =
         existing.isAdult !== (incoming.isAdult === true) ||
-        existing.sortOrder !== (incoming.sortOrder ?? 0) ||
-        existing.parentId !== (incoming.parentId || null);
-
+        existing.sortOrder !== (incoming.sortOrder ?? 0);
       if (needsUpdate) {
         await prisma.category.update({
           where: { id: existing.id },
           data: {
             isAdult: incoming.isAdult === true,
             sortOrder: incoming.sortOrder ?? 0,
-            parentId: incoming.parentId || null,
           },
         });
         updated++;
       } else {
         unchanged++;
       }
+      nameTypeToId.set(key, existing.id);
     } else {
-      await prisma.category.create({
+      const row = await prisma.category.create({
         data: {
-          name: incoming.name.trim(),
+          name,
           categoryType,
           isAdult: incoming.isAdult === true,
           sortOrder: incoming.sortOrder ?? 0,
-          parentId: incoming.parentId || null,
+          parentId: null,
         },
       });
+      nameTypeToId.set(key, row.id);
       created++;
     }
   }
 
-  // Optionally delete categories not in the incoming list
+  // Pass 2: apply parent links
+  for (const incoming of categories) {
+    if (!incoming.name || typeof incoming.name !== "string") continue;
+    const name = incoming.name.trim();
+    if (!name) continue;
+    const categoryType = resolveType(incoming.categoryType);
+    const key = `${categoryType}::${name.toLowerCase()}`;
+    const id = nameTypeToId.get(key);
+    if (!id) continue;
+
+    let desiredParent: string | null = null;
+    if (incoming.parentName && String(incoming.parentName).trim()) {
+      const parentKey = `${categoryType}::${String(incoming.parentName).trim().toLowerCase()}`;
+      desiredParent = nameTypeToId.get(parentKey) ?? null;
+      if (!desiredParent) {
+        const parent = await prisma.category.findFirst({
+          where: { name: String(incoming.parentName).trim(), categoryType },
+          select: { id: true },
+        });
+        desiredParent = parent?.id ?? null;
+      }
+    } else if (incoming.parentId) {
+      const resolved = await resolveCategoryParent({
+        parentId: incoming.parentId,
+        childType: categoryType,
+      });
+      if (resolved.error) {
+        // parentId may be a remote id — try as name fallback
+        const parent = await prisma.category.findFirst({
+          where: { name: String(incoming.parentId).trim(), categoryType },
+          select: { id: true },
+        });
+        desiredParent = parent?.id ?? null;
+      } else {
+        desiredParent = resolved.parentId;
+      }
+    }
+
+    if (desiredParent && (await wouldCreateCategoryCycle(id, desiredParent))) {
+      errors.push(`Skipped parent for "${name}" — would create a cycle`);
+      desiredParent = null;
+    }
+
+    const current = await prisma.category.findUnique({
+      where: { id },
+      select: { parentId: true },
+    });
+    if (current && current.parentId !== desiredParent) {
+      await prisma.category.update({ where: { id }, data: { parentId: desiredParent } });
+      if (desiredParent) updated++;
+    }
+  }
+
   if (deleteMissing && categories.length > 0) {
-    const incomingNames = categories.map((c) => c.name.trim().toLowerCase());
-    const incomingTypes = categories.map((c) =>
-      VALID_TYPES.has(String(c.categoryType ?? "LIVE").toUpperCase())
-        ? String(c.categoryType).toUpperCase()
-        : "LIVE"
+    const incomingKeys = new Set(
+      categories
+        .filter((c) => c.name && typeof c.name === "string" && c.name.trim())
+        .map((c) => `${resolveType(c.categoryType)}::${c.name.trim().toLowerCase()}`)
+    );
+    const typesInSync = new Set(
+      categories.map((c) => resolveType(c.categoryType))
     );
 
     const existingAll = await prisma.category.findMany({
       select: { id: true, name: true, categoryType: true },
     });
 
-    const toDelete = existingAll.filter(
-      (e) =>
-        !incomingNames.includes(e.name.toLowerCase()) ||
-        !incomingTypes.includes(e.categoryType)
-    );
+    const toDelete = existingAll.filter((e) => {
+      if (!typesInSync.has(e.categoryType)) return false;
+      return !incomingKeys.has(`${e.categoryType}::${e.name.toLowerCase()}`);
+    });
 
     if (toDelete.length > 0) {
-      const deleteIds = toDelete.map((d) => d.id);
-      // Un-categorize streams in these categories
-      await prisma.stream.updateMany({
-        where: { categoryId: { in: deleteIds } },
-        data: { categoryId: null },
-      });
-      await prisma.category.deleteMany({ where: { id: { in: deleteIds } } });
+      await deleteCategoriesSafe(toDelete.map((d) => d.id));
     }
   }
 
@@ -146,4 +208,20 @@ export async function GET(req: NextRequest) {
   });
 
   return NextResponse.json({ categories });
+}
+
+/** DELETE all categories (safe for self-FK). Requires panel API key + confirm. */
+export async function DELETE(req: NextRequest) {
+  const ok = await requirePanelApiKey(req);
+  if (!ok) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const confirm = req.nextUrl.searchParams.get("confirm");
+  if (confirm !== "all") {
+    return NextResponse.json({ error: "Pass confirm=all to clear categories" }, { status: 400 });
+  }
+  await clearAllCategoriesSafe();
+  await invalidateXtreamCategories();
+  await invalidateDashboardStats();
+  return NextResponse.json({ ok: true });
 }

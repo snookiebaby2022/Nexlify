@@ -137,7 +137,13 @@ async function safeClearIptvData(warnings: string[]) {
     ["line", () => prisma.line.deleteMany()],
     ["stream", () => prisma.stream.deleteMany()],
     ["bouquet", () => prisma.bouquet.deleteMany()],
-    ["category", () => prisma.category.deleteMany()],
+    [
+      "category",
+      async () => {
+        const { clearAllCategoriesSafe } = await import("@/lib/category-tree");
+        await clearAllCategoriesSafe();
+      },
+    ],
     ["epgProgram", () => prisma.epgProgram.deleteMany()],
     ["epgSource", () => prisma.epgSource.deleteMany()],
   ];

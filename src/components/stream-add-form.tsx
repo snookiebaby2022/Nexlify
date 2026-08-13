@@ -21,6 +21,8 @@ import {
   formSelectClass,
 } from "@/components/form-page-shell";
 import { StreamProbePlayer } from "@/components/stream-probe-player";
+import { CategorySelect } from "@/components/category-select";
+import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 
 export type StreamAddInitial = {
   name?: string;
@@ -156,7 +158,7 @@ function LiveStreamForm({
   initial?: StreamAddInitial;
 }) {
   const router = useRouter();
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [epgSources, setEpgSources] = useState<{ id: string; name: string }[]>([]);
   const [advanced, setAdvanced] = useState<StreamAdvancedState>(emptyAdvancedState());
   const [parentStreams, setParentStreams] = useState<{ id: string; name: string }[]>([]);
@@ -517,19 +519,15 @@ function LiveStreamForm({
 
           <div className="space-y-4">
             <FormField label="Category">
-              <select
+              <CategorySelect
                 className={formSelectClass}
                 style={formInputStyle}
                 value={form.categoryId}
-                onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-              >
-                <option value="">Without category</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(categoryId) => setForm({ ...form, categoryId })}
+                categories={categories}
+                typeFilter={categoryTypeForStream("LIVE", form.isRadio)}
+                emptyLabel="Without category"
+              />
             </FormField>
             <StreamBouquetSection
               selectedIds={meta.bouquetIds}
@@ -838,7 +836,7 @@ function CompactStreamForm({
   initial?: StreamAddInitial;
 }) {
   const router = useRouter();
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [bouquetIds, setBouquetIds] = useState<string[]>([]);
   const [useProvider, setUseProvider] = useState(false);
   const [form, setForm] = useState({
@@ -975,19 +973,15 @@ function CompactStreamForm({
           </div>
         </>
       )}
-      <select
+      <CategorySelect
         className={formSelectClass}
         style={formInputStyle}
         value={form.categoryId}
-        onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-      >
-        <option value="">Category</option>
-        {categories.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+        onChange={(categoryId) => setForm({ ...form, categoryId })}
+        categories={categories}
+        typeFilter={categoryTypeForStream(defaultType)}
+        emptyLabel="Category"
+      />
       <StreamBouquetSection
         selectedIds={bouquetIds}
         onChange={setBouquetIds}

@@ -14,6 +14,8 @@ import {
   formSelectClass,
 } from "@/components/form-page-shell";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
+import { CategorySelect } from "@/components/category-select";
+import type { CategoryOptionInput } from "@/lib/category-options";
 
 function YesNo({
   label,
@@ -110,7 +112,7 @@ export function VodMovieForm({
   manageLabel?: string;
 }) {
   const router = useRouter();
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [tmdb, setTmdb] = useState<TmdbMetaFields>(emptyTmdbMeta());
   const [useProvider, setUseProvider] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -244,19 +246,15 @@ export function VodMovieForm({
             />
           </FormField>
           <FormField label="Category">
-            <select
+            <CategorySelect
               className={formSelectClass}
               style={formInputStyle}
               value={form.categoryId}
-              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-            >
-              <option value="">Without category</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+              onChange={(categoryId) => setForm({ ...form, categoryId })}
+              categories={categories}
+              typeFilter="MOVIE"
+              emptyLabel="Without category"
+            />
           </FormField>
           <FormField label="Location">
             <select

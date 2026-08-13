@@ -20,6 +20,8 @@ import {
   formSelectClass,
 } from "@/components/form-page-shell";
 import { StreamBouquetSection } from "@/components/stream-bouquet-section";
+import { CategorySelect } from "@/components/category-select";
+import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 
 type Stream = {
   id: string;
@@ -27,6 +29,7 @@ type Stream = {
   streamUrl: string;
   backupUrl?: string | null;
   type: string;
+  isRadio?: boolean;
   serverId?: string | null;
   categoryId?: string | null;
   epgChannelId?: string | null;
@@ -79,7 +82,7 @@ function EditSection({
 export function StreamManageEditPage({ streamId }: { streamId: string }) {
   const [stream, setStream] = useState<Stream | null>(null);
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [parentStreams, setParentStreams] = useState<{ id: string; name: string }[]>([]);
   const [advanced, setAdvanced] = useState<StreamAdvancedState>(emptyAdvancedState());
   const [form, setForm] = useState({
@@ -221,19 +224,15 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
                   />
                 </FormField>
                 <FormField label="Category">
-                  <select
+                  <CategorySelect
                     className={formSelectClass}
                     style={formInputStyle}
                     value={form.categoryId}
-                    onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                  >
-                    <option value="">— No category —</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(categoryId) => setForm({ ...form, categoryId })}
+                    categories={categories}
+                    typeFilter={categoryTypeForStream(stream?.type, stream?.isRadio)}
+                    emptyLabel="— No category —"
+                  />
                   <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
                     Organize under{" "}
                     <Link href="/admin/categories" className="underline" style={{ color: "var(--accent)" }}>

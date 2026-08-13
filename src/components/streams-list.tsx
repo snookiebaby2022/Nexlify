@@ -17,6 +17,8 @@ import { StreamRowActionsMenu } from "@/components/stream-row-actions-menu";
 import { StreamVerifyPanel } from "@/components/stream-verify-panel";
 import { StreamClientsModal } from "@/components/stream-clients-modal";
 import { formatUptimeXui, type StreamLiveStat } from "@/lib/stream-live-stats";
+import { CategorySelect } from "@/components/category-select";
+import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 
 type Stream = {
   id: string;
@@ -86,7 +88,7 @@ export function StreamsList({
 }) {
   const [streams, setStreams] = useState<Stream[]>([]);
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
@@ -220,21 +222,17 @@ export function StreamsList({
             </option>
           ))}
         </select>
-        <select
+        <CategorySelect
           className="xui-streams-filter-select"
           value={categoryId}
-          onChange={(e) => {
-            setCategoryId(e.target.value);
+          onChange={(v) => {
+            setCategoryId(v);
             setPage(1);
           }}
-        >
-          <option value="">All Categories</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          categories={categories}
+          typeFilter={type ? categoryTypeForStream(type) : null}
+          emptyLabel="All Categories"
+        />
         <select className="xui-streams-filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
           <option value="">No Filter</option>
           <option value="online">Online</option>

@@ -25,6 +25,7 @@ import {
   invalidateXtreamCategories,
 } from "@/lib/cache-invalidate";
 import { syncStreamBouquets } from "@/lib/stream-bouquets";
+import { expandCategoryFilter } from "@/lib/category-tree";
 
 
 
@@ -106,7 +107,14 @@ export async function GET(req: NextRequest) {
     ];
   }
 
-  if (categoryId) where.categoryId = categoryId;
+  if (categoryId) {
+    if (categoryId === "0" || categoryId.toLowerCase() === "uncategorized") {
+      where.categoryId = null;
+    } else {
+      const ids = await expandCategoryFilter(categoryId);
+      where.categoryId = { in: ids };
+    }
+  }
   if (serverId) where.serverId = serverId;
   if (search) {
     where.AND = [

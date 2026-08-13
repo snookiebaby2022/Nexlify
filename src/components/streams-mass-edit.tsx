@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ProgressBar, useProgress } from "@/components/progress-bar";
+import { CategorySelect } from "@/components/category-select";
+import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 
 const PAGE_SIZES = [50, 100, 200, 500] as const;
 
@@ -32,7 +34,7 @@ export function StreamsMassEdit({
 }) {
   const [streams, setStreams] = useState<Stream[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [action, setAction] = useState("disable");
   const [categoryId, setCategoryId] = useState("");
   const [minSpeed, setMinSpeed] = useState("");
@@ -262,19 +264,17 @@ export function StreamsMassEdit({
         </select>
 
         {action === "setCategory" && (
-
-          <select className="rounded border px-3 py-2 bg-transparent" style={{ borderColor: "var(--border)" }} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-
-            <option value="">—</option>
-
-            {categories.map((c) => (
-
-              <option key={c.id} value={c.id}>{c.name}</option>
-
-            ))}
-
-          </select>
-
+          <CategorySelect
+            className="rounded border px-3 py-2 bg-transparent"
+            style={{ borderColor: "var(--border)" }}
+            value={categoryId}
+            onChange={setCategoryId}
+            categories={categories}
+            typeFilter={
+              radioOnly ? "RADIO" : typeFilter ? categoryTypeForStream(typeFilter) : null
+            }
+            emptyLabel="—"
+          />
         )}
 
         {action === "setVodMode" && (

@@ -53,15 +53,29 @@ export async function restoreFullBackup(snapshot: Record<string, unknown>): Prom
         }[]
       | undefined;
     if (Array.isArray(categories)) {
-      const existing = new Set(
+      const knownIds = new Set(
         (await prisma.category.findMany({ select: { id: true } })).map((c) => c.id)
       );
+      for (const cat of categories) {
+        if (cat.id) knownIds.add(cat.id);
+      }
+      const restored = new Set<string>();
       for (let pass = 0; pass < 3; pass++) {
         for (const cat of categories) {
-          if (!cat.id || !cat.name || existing.has(cat.id)) continue;
+          if (!cat.id || !cat.name) continue;
           const rawParent = cat.parentId ?? null;
-          const parentId = rawParent && existing.has(rawParent) ? rawParent : null;
-          if (rawParent && !parentId && pass < 2) continue;
+          let parentId: string | null = null;
+          if (rawParent) {
+            const parentRow = await prisma.category.findUnique({
+              where: { id: rawParent },
+              select: { id: true },
+            });
+            if (parentRow) {
+              parentId = rawParent;
+            } else if (pass < 2) {
+              continue;
+            }
+          }
           try {
             await prisma.category.upsert({
               where: { id: cat.id },
@@ -73,10 +87,16 @@ export async function restoreFullBackup(snapshot: Record<string, unknown>): Prom
                 sortOrder: cat.sortOrder ?? 0,
                 isAdult: cat.isAdult ?? false,
               },
-              update: { name: cat.name, parentId },
+              update: {
+                name: cat.name,
+                parentId,
+                categoryType: (cat.categoryType as any) ?? "LIVE",
+                sortOrder: cat.sortOrder ?? 0,
+                isAdult: cat.isAdult ?? false,
+              },
             });
-            existing.add(cat.id);
-            counts.categories++;
+            knownIds.add(cat.id);
+            restored.add(cat.id);
           } catch (e) {
             if (pass === 2) {
               errors.push(`Category ${cat.name}: ${e instanceof Error ? e.message : String(e)}`);
@@ -84,6 +104,7 @@ export async function restoreFullBackup(snapshot: Record<string, unknown>): Prom
           }
         }
       }
+      counts.categories = restored.size;
     }
   } catch (e) {
     errors.push(`Categories: ${e instanceof Error ? e.message : String(e)}`);
