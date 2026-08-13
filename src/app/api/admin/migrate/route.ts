@@ -348,10 +348,31 @@ export async function POST(req: NextRequest) {
               // Import the bundle directly
               const { applyMigrationBundle } = await import("@/lib/panel-migration/apply");
               const result = await applyMigrationBundle(bundle, { ...opts, onProgress });
-              send("complete", {
-                preview: previewMigrationBundle(bundle),
-                result,
-              });
+              const preview = previewMigrationBundle(bundle);
+              // Keep the completion payload small — huge warning lists / table dumps
+              // spike CPU+RAM when serializing the SSE "complete" event.
+              if (Array.isArray(preview.warnings) && preview.warnings.length > 40) {
+                preview.warnings = [
+                  ...preview.warnings.slice(0, 40),
+                  `… ${preview.warnings.length - 40} more warnings omitted`,
+                ];
+              }
+              if (Array.isArray(result.warnings) && result.warnings.length > 40) {
+                result.warnings = [
+                  ...result.warnings.slice(0, 40),
+                  `… ${result.warnings.length - 40} more warnings omitted`,
+                ];
+              }
+              send("complete", { preview, result });
+              // Help GC release the parsed dump sooner on large imports.
+              (bundle as { streams?: unknown }).streams = [];
+              (bundle as { lines?: unknown }).lines = [];
+              if (bundle.phase3) {
+                bundle.phase3.epgPrograms = [];
+                bundle.phase3.epgApiChannels = [];
+                bundle.phase3.providerStreamLinks = [];
+                bundle.phase3.blockedAsns = [];
+              }
             } else {
               content = (uploadedContent ?? (body.content as string | undefined) ?? "").trim();
               if (!content) {

@@ -4,6 +4,9 @@
  *
  * Uses Redis-based distributed locking so only one instance runs jobs
  * across a multi-instance / cluster deployment.
+ *
+ * Soft memory guard: after each tick, if RSS is high, exit so PM2 restarts
+ * a fresh lean process (prevents tsx heap growth after large imports).
  */
 import { runAllCronJobs, runHourlyCronJobs } from "../src/lib/cron-jobs";
 import { getRedis } from "../src/lib/redis";
@@ -12,6 +15,8 @@ const MINUTE_MS = 60_000;
 const LOCK_TTL_S = 300; // 5-minute safety net
 const MINUTE_LOCK_KEY = "nexlify:cron:minute";
 const HOURLY_LOCK_KEY = "nexlify:cron:hourly";
+/** Exit for PM2 recycle when RSS exceeds this (MB). */
+const RECYCLE_RSS_MB = Number(process.env.NEXLIFY_CRON_RECYCLE_RSS_MB ?? "420");
 
 let lastHour = -1;
 
@@ -34,6 +39,16 @@ async function releaseLock(key: string) {
   } catch {
     /* ignore */
   }
+}
+
+function maybeRecycleForMemory() {
+  const rssMb = process.memoryUsage().rss / (1024 * 1024);
+  if (rssMb < RECYCLE_RSS_MB) return;
+  console.log(
+    `[nexlify-cron] RSS ${rssMb.toFixed(0)}MB >= ${RECYCLE_RSS_MB}MB — exiting for PM2 recycle`
+  );
+  // Give logs a moment to flush, then exit cleanly (PM2 autorestart).
+  setTimeout(() => process.exit(0), 250);
 }
 
 async function tickMinute() {
@@ -64,9 +79,12 @@ async function tickMinute() {
     console.error("[nexlify-cron] minute jobs error", e);
   } finally {
     await releaseLock(MINUTE_LOCK_KEY);
+    maybeRecycleForMemory();
   }
 }
 
-console.log("[nexlify-cron] daemon started");
+console.log(
+  `[nexlify-cron] daemon started (recycle RSS>${RECYCLE_RSS_MB}MB, heap cap via NODE_OPTIONS)`
+);
 void tickMinute();
 setInterval(() => void tickMinute(), MINUTE_MS);

@@ -51,7 +51,7 @@ export default function LoadBalancerPage() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 8000);
+    const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, [load]);
 

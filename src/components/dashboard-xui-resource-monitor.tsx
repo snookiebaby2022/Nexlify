@@ -98,7 +98,7 @@ export function DashboardXuiResourceMonitor({
 
   useEffect(() => {
     tick();
-    const t = setInterval(tick, 4000);
+    const t = setInterval(tick, 15000);
     return () => clearInterval(t);
   }, [tick]);
 

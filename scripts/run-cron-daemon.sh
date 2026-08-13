@@ -6,6 +6,13 @@ cd "$ROOT"
 
 bash "$ROOT/scripts/ensure-tsx.sh" >/dev/null 2>&1 || true
 
+# Keep the cron worker lean. Build/install scripts often set 3–4GB which lets
+# tsx retain a huge heap after large imports / EPG jobs.
+CRON_HEAP_MB="${NEXLIFY_CRON_MAX_OLD_SPACE_MB:-512}"
+# Strip any existing max-old-space-size then apply cron cap.
+_CLEAN_NODE_OPTS="$(printf '%s' "${NODE_OPTIONS:-}" | sed -E 's/--max-old-space-size=[0-9]+//g')"
+export NODE_OPTIONS="${_CLEAN_NODE_OPTS} --max-old-space-size=${CRON_HEAP_MB}"
+
 TSX_LOCAL="$ROOT/node_modules/tsx/dist/cli.mjs"
 if [ -f "$TSX_LOCAL" ]; then
   exec node "$TSX_LOCAL" "$ROOT/scripts/cron-daemon.ts"

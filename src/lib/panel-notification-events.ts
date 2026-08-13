@@ -19,6 +19,19 @@ async function createInPanelAlert(opts: {
   });
   if (!admin) return;
 
+  // Dedupe identical alerts for 24h (prevents minute-cron spam after large imports).
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const dup = await prisma.panelNotification.findFirst({
+    where: {
+      title: opts.title,
+      body: opts.body,
+      recipientId: opts.recipientId ?? null,
+      createdAt: { gte: since },
+    },
+    select: { id: true },
+  });
+  if (dup) return;
+
   await prisma.panelNotification.create({
     data: {
       title: opts.title,

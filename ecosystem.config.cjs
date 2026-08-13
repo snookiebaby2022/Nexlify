@@ -79,6 +79,8 @@ const sharedPanelEnv = {
   NEXLIFY_PANEL_API_SECRET: fileEnv.NEXLIFY_PANEL_API_SECRET || "",
   PANEL_INTERNAL_SECRET: fileEnv.PANEL_INTERNAL_SECRET || "",
   NEXLIFY_LICENSE_SKIP_HOST_CHECK: fileEnv.NEXLIFY_LICENSE_SKIP_HOST_CHECK || "",
+  // Cap panel heap — large imports temporarily need room, but 4GB invites bloat.
+  NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=1536",
 };
 
 /** @type {import('pm2').StartOptions} */
@@ -95,6 +97,7 @@ module.exports = {
           max_restarts: 15,
           min_uptime: "15s",
           kill_timeout: 8000,
+          max_memory_restart: "1800M",
           env: sharedPanelEnv,
         }
       : {
@@ -109,6 +112,7 @@ module.exports = {
           min_uptime: "10s",
           kill_timeout: 5000,
           listen_timeout: 60000,
+          max_memory_restart: "1800M",
           env: sharedPanelEnv,
         },
     {
@@ -121,9 +125,12 @@ module.exports = {
       autorestart: true,
       max_restarts: 10,
       min_uptime: "10s",
+      max_memory_restart: "700M",
       env: {
         NODE_ENV: "production",
         DATABASE_URL: fileEnv.DATABASE_URL || "",
+        NEXLIFY_CRON_MAX_OLD_SPACE_MB: fileEnv.NEXLIFY_CRON_MAX_OLD_SPACE_MB || "512",
+        NEXLIFY_CRON_RECYCLE_RSS_MB: fileEnv.NEXLIFY_CRON_RECYCLE_RSS_MB || "420",
       },
     },
     {

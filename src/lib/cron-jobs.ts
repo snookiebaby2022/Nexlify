@@ -12,14 +12,42 @@ import { runDueM3uSyncJobs, runWatchFolderM3uSync } from "./m3u-sync-jobs";
 const ESTIMATED_MBPS_PER_STREAM = Number(process.env.ESTIMATED_MBPS_PER_STREAM ?? "4");
 
 async function logCron(job: string, status: string, message?: string, durationMs?: number) {
-  await prisma.cronRunLog.create({
-    data: { job, status, message, durationMs },
-  });
+  // Persist errors/warnings always; skip trivial idle "ok" noise to keep CronRunLog small.
+  const trivialOk =
+    status === "ok" &&
+    (!message ||
+      /^(idle|0 |disabled|skipped)/i.test(message) ||
+      message === "disabled" ||
+      /^synced 0/.test(message) ||
+      /^processed 0/.test(message) ||
+      /^queued 0/.test(message) ||
+      /^probed 0/.test(message) ||
+      /^0 alerts/.test(message) ||
+      /^0 expired/.test(message) ||
+      /^0 streams/.test(message) ||
+      /^0 removed/.test(message) ||
+      /^stopped 0/.test(message) ||
+      /^rotated 0/.test(message) ||
+      message.includes("skipped (schedule)"));
+  if (!trivialOk || status !== "ok") {
+    await prisma.cronRunLog.create({
+      data: { job, status, message, durationMs },
+    });
+  }
+}
+
+/** Avoid running heavy notify/probe jobs every single minute. */
+async function dueEvery(key: string, intervalMs: number): Promise<boolean> {
+  const settingKey = `cron_due_${key}`;
+  const row = await prisma.panelSetting.findUnique({ where: { key: settingKey } });
+  const last = row?.value ? Date.parse(row.value) : 0;
+  if (Number.isFinite(last) && Date.now() - last < intervalMs) return false;
   await prisma.panelSetting.upsert({
-    where: { key: "cron_last_run" },
+    where: { key: settingKey },
     update: { value: new Date().toISOString() },
-    create: { key: "cron_last_run", value: new Date().toISOString() },
+    create: { key: settingKey, value: new Date().toISOString() },
   });
+  return true;
 }
 
 export async function jobCleanupConnections() {
@@ -375,6 +403,7 @@ export async function jobServerRebalance() {
 }
 
 export async function jobTheftDetection() {
+  if (!(await dueEvery("theft_detection", 15 * 60_000))) return;
   const start = Date.now();
   try {
     const { loadTheftSettings, runLineTheftJob, runVodTheftJob, runStreamTheftJob } =
@@ -437,6 +466,7 @@ export async function jobExpireLines() {
 }
 
 export async function jobDeadLinkProbe() {
+  if (!(await dueEvery("dead_link_probe", 15 * 60_000))) return;
   const start = Date.now();
   try {
     const { runDeadLinkProbeJob } = await import("@/lib/panel-monitoring-jobs");
@@ -453,6 +483,8 @@ export async function jobDeadLinkProbe() {
 }
 
 export async function jobSubscriptionNotify() {
+  // Expiry/low-credit checks are expensive after large imports — run every 30 min.
+  if (!(await dueEvery("subscription_notify", 30 * 60_000))) return;
   const start = Date.now();
   try {
     const { runSubscriptionNotificationJob } = await import("@/lib/panel-notification-events");
@@ -469,6 +501,7 @@ export async function jobSubscriptionNotify() {
 }
 
 export async function jobTelegramMonitoring() {
+  if (!(await dueEvery("telegram_monitoring", 15 * 60_000))) return;
   const start = Date.now();
   try {
     const { runTelegramMonitoringJob } = await import("@/lib/panel-monitoring-jobs");
@@ -528,6 +561,40 @@ async function jobM3uSync() {
   }
 }
 
+export async function jobCleanupCronLogs() {
+  const start = Date.now();
+  try {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const r = await prisma.cronRunLog.deleteMany({ where: { createdAt: { lt: cutoff } } });
+    let trimmed = 0;
+    const total = await prisma.cronRunLog.count();
+    if (total > 8000) {
+      const excess = await prisma.cronRunLog.findMany({
+        orderBy: { createdAt: "asc" },
+        take: total - 5000,
+        select: { id: true },
+      });
+      for (let i = 0; i < excess.length; i += 1000) {
+        const chunk = excess.slice(i, i + 1000).map((x) => x.id);
+        const del = await prisma.cronRunLog.deleteMany({ where: { id: { in: chunk } } });
+        trimmed += del.count;
+      }
+    }
+    const notifCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const n = await prisma.panelNotification.deleteMany({
+      where: { createdAt: { lt: notifCutoff }, kind: "ALERT" },
+    });
+    await logCron(
+      "cleanup_cron_logs",
+      "ok",
+      `logs ${r.count + trimmed}, alerts ${n.count}`,
+      Date.now() - start
+    );
+  } catch (e) {
+    await logCron("cleanup_cron_logs", "error", String(e), Date.now() - start);
+  }
+}
+
 export async function runAllCronJobs() {
   await jobPanelHealthWatchdog();
   await jobCleanupConnections();
@@ -545,6 +612,12 @@ export async function runAllCronJobs() {
   await jobDeadLinkProbe();
   await jobSubscriptionNotify();
   await jobTelegramMonitoring();
+  await jobCleanupCronLogs();
+  await prisma.panelSetting.upsert({
+    where: { key: "cron_last_run" },
+    update: { value: new Date().toISOString() },
+    create: { key: "cron_last_run", value: new Date().toISOString() },
+  });
 }
 
 export async function jobAgentTokenRotation() {
