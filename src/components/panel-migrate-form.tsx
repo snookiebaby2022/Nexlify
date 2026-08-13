@@ -53,6 +53,7 @@ export function PanelMigrateForm() {
   const [preview, setPreview] = useState("");
   const [result, setResult] = useState("");
   const [progress, setProgress] = useState<{ phase: string; current: number; total: number } | null>(null);
+  const [scanProgress, setScanProgress] = useState<{ current: number; total: number } | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{ loaded: number; total: number } | null>(null);
   const [scanning, setScanning] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
@@ -221,6 +222,7 @@ export function PanelMigrateForm() {
       const data = await res.json();
       setUploadProgress(null);
       setScanning(false);
+      setScanProgress(null);
       if (!res.ok) {
         setResult(`Error: ${data.error ?? res.statusText}`);
         return;
@@ -234,6 +236,7 @@ export function PanelMigrateForm() {
       const data = await res.json();
       setUploadProgress(null);
       setScanning(false);
+      setScanProgress(null);
       setResult(`Error: ${data.error ?? res.statusText}`);
       return;
     }
@@ -241,6 +244,7 @@ export function PanelMigrateForm() {
     if (!res.body) {
       setUploadProgress(null);
       setScanning(false);
+      setScanProgress(null);
       setResult("Error: No response body");
       return;
     }
@@ -268,15 +272,23 @@ export function PanelMigrateForm() {
             try {
               const data = JSON.parse(dataStr);
               if (pendingEvent === "progress") {
-                setProgress(data);
-                setResult(`Importing ${data.phase}: ${data.current}/${data.total}...`);
+                if (data.phase === "scanning") {
+                  setScanProgress({ current: data.current, total: data.total });
+                  setResult(`Scanning file… ${data.current}%`);
+                } else {
+                  setProgress(data);
+                  setScanProgress(null);
+                  setResult(`Importing ${data.phase}: ${data.current}/${data.total}...`);
+                }
               } else if (pendingEvent === "complete") {
                 setUploadProgress(null);
                 setScanning(false);
+                setScanProgress(null);
                 handleCompleteResponse(data);
               } else if (pendingEvent === "error") {
                 setUploadProgress(null);
                 setScanning(false);
+                setScanProgress(null);
                 setResult(`Error: ${data.error}`);
               }
             } catch {
@@ -293,6 +305,7 @@ export function PanelMigrateForm() {
       reader.releaseLock();
       setUploadProgress(null);
       setScanning(false);
+      setScanProgress(null);
     }
   }
 
@@ -757,14 +770,14 @@ export function PanelMigrateForm() {
       {uploadProgress && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs opacity-70">
-            <span>{scanning ? "Uploading & scanning…" : "Uploading file…"}</span>
+            <span>Uploading file…</span>
             <span>{(uploadProgress.loaded / 1024 / 1024).toFixed(1)}MB / {(uploadProgress.total / 1024 / 1024).toFixed(1)}MB</span>
           </div>
-          <div className="w-full rounded-full h-2" style={{ background: "var(--card)" }}>
+          <div className="w-full rounded-full h-2.5 overflow-hidden" style={{ background: "var(--card)" }}>
             <div
-              className="h-2 rounded-full transition-all duration-300"
+              className="h-2.5 rounded-full transition-all duration-300"
               style={{
-                background: "#f59e0b",
+                background: "linear-gradient(90deg, #f59e0b, #f97316)",
                 width: `${uploadProgress.total > 0 ? (uploadProgress.loaded / uploadProgress.total) * 100 : 0}%`,
               }}
             />
@@ -772,17 +785,35 @@ export function PanelMigrateForm() {
         </div>
       )}
 
-      {scanning && !uploadProgress && (
+      {scanProgress && !uploadProgress && (
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs opacity-70">
+            <span>Scanning & parsing SQL…</span>
+            <span>{scanProgress.current}%</span>
+          </div>
+          <div className="w-full rounded-full h-2.5 overflow-hidden" style={{ background: "var(--card)" }}>
+            <div
+              className="h-2.5 rounded-full transition-all duration-300"
+              style={{
+                background: "linear-gradient(90deg, #06b6d4, #3b82f6)",
+                width: `${scanProgress.total > 0 ? (scanProgress.current / scanProgress.total) * 100 : 0}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {scanning && !uploadProgress && !scanProgress && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs opacity-70">
             <span>Scanning file…</span>
             <span className="animate-pulse">processing</span>
           </div>
-          <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: "var(--card)" }}>
+          <div className="w-full rounded-full h-2.5 overflow-hidden" style={{ background: "var(--card)" }}>
             <div
-              className="h-2 rounded-full"
+              className="h-2.5 rounded-full"
               style={{
-                background: "var(--accent)",
+                background: "linear-gradient(90deg, #06b6d4, #3b82f6)",
                 width: "40%",
                 animation: "scan-progress 1.5s ease-in-out infinite",
               }}
@@ -800,14 +831,14 @@ export function PanelMigrateForm() {
       {progress && (
         <div className="space-y-1">
           <div className="flex justify-between text-xs opacity-70">
-            <span>{progress.phase}</span>
+            <span>Importing {progress.phase}…</span>
             <span>{progress.current}/{progress.total} ({progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0}%)</span>
           </div>
-          <div className="w-full rounded-full h-2" style={{ background: "var(--card)" }}>
+          <div className="w-full rounded-full h-2.5 overflow-hidden" style={{ background: "var(--card)" }}>
             <div
-              className="h-2 rounded-full transition-all duration-300"
+              className="h-2.5 rounded-full transition-all duration-300"
               style={{
-                background: "var(--accent)",
+                background: "linear-gradient(90deg, #22c55e, #10b981)",
                 width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%`,
               }}
             />
