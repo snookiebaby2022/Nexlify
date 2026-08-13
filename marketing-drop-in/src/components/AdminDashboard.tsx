@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   BarChart3,
+  Bell,
   CreditCard,
   FileText,
   Folder,
@@ -37,6 +38,7 @@ import { AdminContent } from "@/components/AdminContent";
 import { AdminRemoteUpdate } from "@/components/AdminRemoteUpdate";
 import { AdminCategories } from "@/components/AdminCategories";
 import { AdminUnlockIP } from "@/components/AdminUnlockIP";
+import { AdminAnnouncements } from "@/components/AdminAnnouncements";
 
 const NAV_GROUPS = [
   {
@@ -69,6 +71,7 @@ const NAV_GROUPS = [
     items: [
       { id: "content", label: "Blog", icon: FileText },
       { id: "marketing", label: "Marketing", icon: Globe },
+      { id: "announcements", label: "Announcements", icon: Bell },
       { id: "settings", label: "Settings", icon: Settings },
     ],
   },
@@ -164,6 +167,7 @@ export function AdminDashboard() {
         {tab === "newsletter" && <AdminNewsletter />}
         {tab === "content" && <AdminContent />}
         {tab === "marketing" && <AdminMarketing />}
+        {tab === "announcements" && <AdminAnnouncements />}
         {tab === "settings" && <AdminSiteSettings />}
         {tab === "health" && <AdminHealth />}
         {tab === "audit" && <AdminAuditLog />}
