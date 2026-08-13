@@ -161,6 +161,7 @@ for s in \
   ensure-build-deps.sh \
   ensure-tsx.sh \
   run-cron-daemon.sh \
+  build-cron.mjs \
   fix-panel-ip-login.sh \
   fix-stuck-customer-panel.sh \
   fix-all-customer-updates.sh \

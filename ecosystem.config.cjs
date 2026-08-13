@@ -130,7 +130,7 @@ module.exports = {
         NODE_ENV: "production",
         DATABASE_URL: fileEnv.DATABASE_URL || "",
         NEXLIFY_CRON_MAX_OLD_SPACE_MB: fileEnv.NEXLIFY_CRON_MAX_OLD_SPACE_MB || "512",
-        NEXLIFY_CRON_RECYCLE_RSS_MB: fileEnv.NEXLIFY_CRON_RECYCLE_RSS_MB || "420",
+        NEXLIFY_CRON_RECYCLE_RSS_MB: fileEnv.NEXLIFY_CRON_RECYCLE_RSS_MB || "400",
       },
     },
     {

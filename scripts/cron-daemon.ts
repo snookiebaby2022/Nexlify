@@ -16,7 +16,7 @@ const LOCK_TTL_S = 300; // 5-minute safety net
 const MINUTE_LOCK_KEY = "nexlify:cron:minute";
 const HOURLY_LOCK_KEY = "nexlify:cron:hourly";
 /** Exit for PM2 recycle when RSS exceeds this (MB). */
-const RECYCLE_RSS_MB = Number(process.env.NEXLIFY_CRON_RECYCLE_RSS_MB ?? "420");
+const RECYCLE_RSS_MB = Number(process.env.NEXLIFY_CRON_RECYCLE_RSS_MB ?? "400");
 
 let lastHour = -1;
 

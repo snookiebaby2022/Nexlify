@@ -95,16 +95,16 @@ if ! node -e "require('tailwindcss')" 2>/dev/null; then
   cd "$PANEL_DIR" && npm install tailwindcss 2>/dev/null || true
 fi
 
-# --- Check 5a: tsx module present (needed for cron daemon) ---
-if ! cd "$PANEL_DIR" && node -e "require('tsx')" 2>/dev/null; then
-  log "WARN: tsx missing — installing"
-  cd "$PANEL_DIR" && npm install tsx 2>/dev/null || true
-  # Restart cron if it's down
-  if ! pm2 jlist 2>/dev/null | python3 -c "import sys,json;procs=json.load(sys.stdin);print(next((p['pm2_env']['status'] for p in procs if p['name']=='$CRON_APP'),'missing'))" 2>/dev/null | grep -q "online"; then
-    log "FIX: Restarting cron daemon"
-    pm2 delete "$CRON_APP" 2>/dev/null || true
-    cd "$PANEL_DIR" && pm2 start node_modules/.bin/tsx --name "$CRON_APP" -- scripts/cron-daemon.ts 2>/dev/null || true
+# --- Check 5a: ensure cron bundle (or tsx fallback) exists ---
+if [ ! -f "$PANEL_DIR/scripts/cron-daemon.bundle.cjs" ]; then
+  if [ -f "$PANEL_DIR/scripts/build-cron.mjs" ]; then
+    log "WARN: cron bundle missing — building"
+    (cd "$PANEL_DIR" && node scripts/build-cron.mjs) 2>/dev/null || true
   fi
+fi
+if [ ! -f "$PANEL_DIR/scripts/cron-daemon.bundle.cjs" ] && ! cd "$PANEL_DIR" && node -e "require('tsx')" 2>/dev/null; then
+  log "WARN: tsx missing (cron fallback) — installing"
+  cd "$PANEL_DIR" && npm install tsx 2>/dev/null || true
 fi
 
 # --- Check 5b: Cron daemon running ---
@@ -112,7 +112,11 @@ CRON_STATUS=$(pm2 jlist 2>/dev/null | python3 -c "import sys,json;procs=json.loa
 if [ "$CRON_STATUS" != "online" ]; then
   log "WARN: Cron daemon is $CRON_STATUS — restarting"
   pm2 delete "$CRON_APP" 2>/dev/null || true
-  cd "$PANEL_DIR" && pm2 start node_modules/.bin/tsx --name "$CRON_APP" -- scripts/cron-daemon.ts 2>/dev/null || true
+  if [ -f "$PANEL_DIR/ecosystem.config.cjs" ]; then
+    cd "$PANEL_DIR" && pm2 start ecosystem.config.cjs --only "$CRON_APP" 2>/dev/null || true
+  else
+    cd "$PANEL_DIR" && pm2 start scripts/run-cron-daemon.sh --name "$CRON_APP" --interpreter bash 2>/dev/null || true
+  fi
 fi
 
 # --- Check 5b: DATABASE_URL uses localhost (not external IP) ---

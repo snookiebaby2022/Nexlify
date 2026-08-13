@@ -24,6 +24,8 @@ lint-out.txt
 # Build / publish artifacts (generate locally or on VPS)
 public/downloads/*.tar.gz
 dist/
+scripts/cron-daemon.bundle.cjs
+
 marketing-drop-in/scripts/vps-full-update.sh
 scripts/.panel-releases-website-snippet.ts
 
