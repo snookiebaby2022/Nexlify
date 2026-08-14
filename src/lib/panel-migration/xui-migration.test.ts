@@ -20,7 +20,7 @@ test("flattenIdList accepts plain XUI bouquet arrays", () => {
 test("modern XUI fixture maps lines, bouquets, packages, providers, mag", () => {
   const sql = readFileSync(join(process.cwd(), "scripts/fixtures/xui-modern.sql"), "utf8");
   const bundle = parseMigrationInput(sql, "xui", "sql");
-  assert.ok(bundle.streams.length >= 2, `streams=${bundle.streams.length}`);
+  assert.ok(bundle.streams.length >= 3, `streams=${bundle.streams.length}`);
   assert.ok(bundle.lines.some((l) => l.username === "line1" && l.password === "pass1"));
   const news = bundle.streams.find((s) => s.name === "News HD");
   assert.ok(news, "News HD stream");
@@ -28,6 +28,14 @@ test("modern XUI fixture maps lines, bouquets, packages, providers, mag", () => 
   assert.match(String(news!.backupUrl), /user:secret@cdn2\.example\.com/);
   assert.equal(news!.extraSourceUrls?.length, 1);
   assert.match(String(news!.extraSourceUrls?.[0]), /user:secret@cdn3\.example\.com/);
+  const fixed = bundle.streams.find((s) => s.name === "Empty Source Live");
+  assert.ok(fixed, "empty source live kept");
+  assert.match(fixed!.streamUrl, /edge\.example\.com\/live\/empty-source-fixed/);
+  assert.equal(fixed!.sortOrder, 0, "order=0 preserved");
+  assert.ok(
+    (bundle.phase3?.onDemandStreamLegacyIds ?? []).includes("3"),
+    "on_demand from streams_servers"
+  );
   const main = bundle.bouquets.find((b) => b.name === "Main");
   assert.ok(main, "Main bouquet");
   assert.ok(main!.streamLegacyIds.includes("1"), `channels ${main!.streamLegacyIds}`);
@@ -60,4 +68,19 @@ test("streamUrlsFromSource keeps every credentialed URL", async () => {
   assert.equal(got.primary, "http://a:b@one/x");
   assert.equal(got.backup, "http://a:b@two/x");
   assert.deepEqual(got.extras, ["http://a:b@three/x"]);
+});
+
+test("empty stream_source becomes pending placeholder when no sys URL", async () => {
+  const { pendingStreamUrl, isPendingStreamUrl } = await import("./stream-source-urls");
+  const u = pendingStreamUrl("42", "xui");
+  assert.equal(u, "pending://xui/42");
+  assert.equal(isPendingStreamUrl(u), true);
+  const sql = `
+CREATE TABLE \`streams\` (\`id\` int, \`type\` int, \`stream_display_name\` varchar(255), \`stream_source\` mediumtext);
+INSERT INTO \`streams\` (\`id\`,\`type\`,\`stream_display_name\`,\`stream_source\`) VALUES (99,1,'Orphan','[]');
+`;
+  const bundle = parseMigrationInput(sql, "xui", "sql");
+  const orphan = bundle.streams.find((s) => s.legacyId === "99");
+  assert.ok(orphan);
+  assert.equal(orphan!.streamUrl, "pending://xui/99");
 });

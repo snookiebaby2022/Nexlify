@@ -26,7 +26,8 @@ CREATE TABLE `streams_episodes` (
   `id` int(11) NOT NULL, `season_num` int(11), `series_id` int(11), `stream_id` int(11), `episode_num` int(11)
 );
 CREATE TABLE `streams_servers` (
-  `server_stream_id` int(11) NOT NULL, `stream_id` int(11), `server_id` int(11)
+  `server_stream_id` int(11) NOT NULL, `stream_id` int(11), `server_id` int(11),
+  `current_source` mediumtext, `on_demand` tinyint(1) DEFAULT 0
 );
 CREATE TABLE `bouquets` (
   `id` int(11) NOT NULL, `bouquet_name` varchar(255), `bouquet_channels` mediumtext,
@@ -73,11 +74,15 @@ INSERT INTO `users` (`id`,`username`,`password`,`email`,`member_group_id`,`credi
 INSERT INTO `streams` (`id`,`type`,`category_id`,`stream_display_name`,`stream_source`,`stream_icon`,`notes`,`target_container`,`epg_id`,`channel_id`,`order`) VALUES
 (1,1,'[10]','News HD','["http://user:secret@cdn.example.com/live/1","http://user:secret@cdn2.example.com/live/1","http://user:secret@cdn3.example.com/live/1"]',NULL,NULL,NULL,1,'ch1',1),
 (2,2,'[11]','Movie A','["http://vod.example.com/movie/a.mp4"]',NULL,NULL,'mp4',NULL,NULL,2),
+(3,1,'[10]','Empty Source Live','[]',NULL,NULL,NULL,NULL,'ch3',0),
 (50,5,'[12]','Pilot Ep File','["http://example.com/ep/1"]',NULL,NULL,'mp4',NULL,NULL,3);
 
 INSERT INTO `streams_series` (`id`,`title`,`category_id`,`cover`) VALUES (7,'Cool Show','[12]',NULL);
 INSERT INTO `streams_episodes` (`id`,`season_num`,`series_id`,`stream_id`,`episode_num`) VALUES (100,1,7,50,1);
-INSERT INTO `streams_servers` (`server_stream_id`,`stream_id`,`server_id`) VALUES (1,1,9),(2,50,9);
+INSERT INTO `streams_servers` (`server_stream_id`,`stream_id`,`server_id`,`current_source`,`on_demand`) VALUES
+(1,1,9,'["http://user:secret@cdn.example.com/live/1"]',1),
+(2,50,9,NULL,1),
+(3,3,9,'["http://edge.example.com/live/empty-source-fixed"]',1);
 
 -- Real XUI.one stores plain ID arrays (not {"live":[...]} objects)
 INSERT INTO `bouquets` (`id`,`bouquet_name`,`bouquet_channels`,`bouquet_movies`,`bouquet_series`,`bouquet_radios`,`bouquet_order`) VALUES

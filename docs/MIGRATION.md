@@ -27,7 +27,7 @@ Paths below are mapped from the official **1-stream Migration Guide (Experimenta
 | Entity | Notes |
 |--------|--------|
 | Lines / subscriptions | Username + **plaintext password**, expiry, max cons, bouquets, IP lock, countries, trial/restreamer, UA lists, forced server |
-| Streams | **All** source URLs with embedded credentials kept as-is: primary → `streamUrl`, 2nd → `backupUrl`, further sources → stream `bitrates` JSON. Type, category, EPG/channel ids, adult/radio, series/season/episode, server — **imported stopped by default** (guide parity) |
+| Streams | **All** stream rows kept (empty sources filled from `streams_servers.current_source`, else `pending://` placeholder). URLs with credentials kept as-is. Default import: **on-demand** for live/movies/series. Sorted by source `order`. |
 | Bouquets | Channel lists — flattens XUI `{"live":[…],"vod":[…]}` and SQL junction tables |
 | Resellers | Username + password (hashed on import so the same password still works), credits, email, DNS, max lines, parent tree |
 | MAG / Enigma | Linked by username or line id |
@@ -99,7 +99,8 @@ Live PG also merges `package_streams` / `subscription_packages` junction tables.
 
 ## After migration (guide checklist)
 
-- Streams are **stopped** by default — verify URLs, then enable.
+- Streams are imported **on-demand** by default (start when a client plays them). Uncheck “Import all streams as on-demand” only if you want always-running live agents.
+- Streams are **active** by default; optionally import as stopped to verify URLs first.
 - Transcoder / encode profiles may be incomplete — rebuild on Nexlify.
 - Re-enter **server SSH passwords** (not present in MySQL dumps; Nexlify does not store them from SQL).
 - Assign / probe stream servers; re-link **EPG** where channel ids differ (or enable **Full EPG guide** to import `epg_channels` / capped `epg_data`).

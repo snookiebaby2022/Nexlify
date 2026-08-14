@@ -300,8 +300,12 @@ async function applyMigrationBundleInner(
         const mappedServerId = s.serverLegacyId
           ? serverIdByLegacy.get(s.serverLegacyId)
           : undefined;
-        const vodMode =
-          type === StreamType.MOVIE || type === StreamType.SERIES ? "ON_DEMAND" : "LIVE";
+        const onDemand = options.importStreamsOnDemand !== false;
+        const vodMode = onDemand
+          ? "ON_DEMAND"
+          : type === StreamType.MOVIE || type === StreamType.SERIES
+            ? "ON_DEMAND"
+            : "LIVE";
 
         const bitrates = extraSourcesToBitrates(s.extraSourceUrls);
         const dup = await prisma.stream.findFirst({
@@ -317,6 +321,8 @@ async function applyMigrationBundleInner(
                 name,
                 type,
                 vodMode,
+                isOnDemand: onDemand || type !== StreamType.LIVE,
+                autoRestart: onDemand || type !== StreamType.LIVE,
                 isRadio: s.isRadio === true,
                 isAdult: s.isAdult === true,
                 seriesName: s.seriesName?.trim() || null,
@@ -331,6 +337,7 @@ async function applyMigrationBundleInner(
                   ? { containerExtension: s.containerExtension.trim() }
                   : {}),
                 ...(s.epgChannelId?.trim() ? { epgChannelId: s.epgChannelId.trim() } : {}),
+                ...(Number.isFinite(s.sortOrder) ? { sortOrder: Number(s.sortOrder) } : {}),
               },
             });
           } catch (e) {
@@ -357,6 +364,8 @@ async function applyMigrationBundleInner(
                 : s.isActive !== false,
             isAdult: s.isAdult === true,
             isRadio: s.isRadio === true,
+            isOnDemand: onDemand || type !== StreamType.LIVE,
+            autoRestart: onDemand || type !== StreamType.LIVE,
             seriesName: s.seriesName?.trim() || null,
             seasonNum: s.seasonNum ?? null,
             episodeNum: s.episodeNum ?? null,

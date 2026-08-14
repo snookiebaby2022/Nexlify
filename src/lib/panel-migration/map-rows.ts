@@ -41,7 +41,7 @@ import {
   resolveStreamType,
 } from "./xui-extras";
 import { loadPhase3FromSql } from "./phase3";
-import { firstStreamUrl } from "./stream-source-urls";
+import { firstStreamUrl, isPendingStreamUrl, pendingStreamUrl } from "./stream-source-urls";
 
 function idsFromBouquetField(val: unknown): string[] {
   return flattenIdList(val);
@@ -131,10 +131,13 @@ function mapStreams(
       r.stream_url,
       r.playback_url,
       r.current_source,
+      r.adaptive_link,
+      r.cchannel_rsources,
       r.target_container && String(r.target_container).includes("://") ? r.target_container : null,
+      // direct_source is often a 0/1 flag — only treat as URL when it looks like one
       r.direct_source
     );
-    const url = fromSources.primary;
+    let url = fromSources.primary;
     const backup = fromSources.backup;
     const extras = [...fromSources.extras];
     const backupExplicit = firstStreamUrl(
@@ -144,10 +147,13 @@ function mapStreams(
     ).primary;
     if (backupExplicit && backup && backupExplicit !== backup) {
       extras.unshift(backup);
-    } else if (backupExplicit && !backup) {
-      /* use explicit as backup below */
     }
-    if (!url) continue;
+    // Keep catalog complete: empty XUI sources become pending:// so bouquets/episodes still link
+    let usedPending = false;
+    if (!url) {
+      url = pendingStreamUrl(legacyId, source);
+      usedPending = true;
+    }
     const seriesName = r.series_name ?? r.show_name ?? r.tv_series;
     const seasonNum = Number(r.season_num ?? r.season ?? r.season_number ?? NaN);
     const episodeNum = Number(r.episode_num ?? r.episode ?? r.episode_number ?? NaN);
@@ -171,6 +177,7 @@ function mapStreams(
     if (
       streamType === "LIVE" &&
       !resolved.isRadio &&
+      !usedPending &&
       containerExtension &&
       VOD_CONTAINER_RE.test(containerExtension) &&
       !/\.m3u8?$/i.test(url)
@@ -219,9 +226,10 @@ function mapStreams(
             ? String(r.stream_server_id)
             : undefined,
       notes: r.notes ? String(r.notes) : undefined,
-      sortOrder:
-        Number(r.order_num ?? r.sort_order ?? r.channel_order ?? r.order ?? r.num ?? NaN) ||
-        undefined,
+      sortOrder: (() => {
+        const n = Number(r.order_num ?? r.sort_order ?? r.channel_order ?? r.order ?? r.num ?? NaN);
+        return Number.isFinite(n) ? n : undefined;
+      })(),
     });
   }
   return out;
@@ -747,9 +755,15 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
   );
   {
     const streamRows = sysEnrich.streams?.rows.length ?? 0;
+    const pending = bundle.streams.filter((s) => isPendingStreamUrl(s.streamUrl)).length;
     if (streamRows && bundle.streams.length < streamRows) {
       warnings.push(
-        `Mapped ${bundle.streams.length} of ${streamRows} stream row(s); ${streamRows - bundle.streams.length} skipped (empty or unusable stream_source). Re-export streams_sys with the dump if URLs live there.`
+        `Mapped ${bundle.streams.length} of ${streamRows} stream row(s); ${streamRows - bundle.streams.length} skipped (missing id/name).`
+      );
+    }
+    if (pending) {
+      warnings.push(
+        `${pending} stream(s) had no playable URL in the dump (empty stream_source and no streams_servers current_source) — imported as pending:// placeholders so bouquets/episodes stay linked. Re-export streams_servers with the dump or fix URLs after import.`
       );
     }
   }
@@ -760,6 +774,14 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
   }
   warnings.push(...seriesEp.warnings);
   finalizeVodStreamDefaults(bundle.streams);
+
+  // Stable sort: respect source order column so lists match the old panel
+  bundle.streams.sort((a, b) => {
+    const ao = Number.isFinite(a.sortOrder) ? Number(a.sortOrder) : Number.MAX_SAFE_INTEGER;
+    const bo = Number.isFinite(b.sortOrder) ? Number(b.sortOrder) : Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
+    return String(a.legacyId).localeCompare(String(b.legacyId), undefined, { numeric: true });
+  });
 
   const live = bundle.streams.filter((s) => s.type === "LIVE" && !s.isRadio).length;
   const movies = bundle.streams.filter((s) => s.type === "MOVIE").length;
@@ -777,6 +799,13 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
 
   const phase3Out = loadPhase3FromSql(allTables, source);
   bundle.phase3 = phase3Out.phase3;
+  if (sysEnrich.onDemandStreamLegacyIds.length && bundle.phase3) {
+    const set = new Set([
+      ...(bundle.phase3.onDemandStreamLegacyIds ?? []),
+      ...sysEnrich.onDemandStreamLegacyIds,
+    ]);
+    bundle.phase3.onDemandStreamLegacyIds = [...set];
+  }
   warnings.push(...phase3Out.warnings);
 
   const tablesFound = summarizeTables(allTables);
@@ -999,9 +1028,15 @@ export async function bundleFromSqlFile(
   );
   {
     const streamRows = sysEnrich.streams?.rows.length ?? 0;
+    const pending = bundle.streams.filter((s) => isPendingStreamUrl(s.streamUrl)).length;
     if (streamRows && bundle.streams.length < streamRows) {
       warnings.push(
-        `Mapped ${bundle.streams.length} of ${streamRows} stream row(s); ${streamRows - bundle.streams.length} skipped (empty or unusable stream_source). Re-export streams_sys with the dump if URLs live there.`
+        `Mapped ${bundle.streams.length} of ${streamRows} stream row(s); ${streamRows - bundle.streams.length} skipped (missing id/name).`
+      );
+    }
+    if (pending) {
+      warnings.push(
+        `${pending} stream(s) had no playable URL in the dump (empty stream_source and no streams_servers current_source) — imported as pending:// placeholders so bouquets/episodes stay linked. Re-export streams_servers with the dump or fix URLs after import.`
       );
     }
   }
@@ -1012,6 +1047,14 @@ export async function bundleFromSqlFile(
   }
   warnings.push(...seriesEp.warnings);
   finalizeVodStreamDefaults(bundle.streams);
+
+  // Stable sort: respect source order column so lists match the old panel
+  bundle.streams.sort((a, b) => {
+    const ao = Number.isFinite(a.sortOrder) ? Number(a.sortOrder) : Number.MAX_SAFE_INTEGER;
+    const bo = Number.isFinite(b.sortOrder) ? Number(b.sortOrder) : Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
+    return String(a.legacyId).localeCompare(String(b.legacyId), undefined, { numeric: true });
+  });
 
   const live = bundle.streams.filter((s) => s.type === "LIVE" && !s.isRadio).length;
   const movies = bundle.streams.filter((s) => s.type === "MOVIE").length;
@@ -1029,6 +1072,13 @@ export async function bundleFromSqlFile(
 
   const phase3Out = loadPhase3FromSql(allTables, source);
   bundle.phase3 = phase3Out.phase3;
+  if (sysEnrich.onDemandStreamLegacyIds.length && bundle.phase3) {
+    const set = new Set([
+      ...(bundle.phase3.onDemandStreamLegacyIds ?? []),
+      ...sysEnrich.onDemandStreamLegacyIds,
+    ]);
+    bundle.phase3.onDemandStreamLegacyIds = [...set];
+  }
   warnings.push(...phase3Out.warnings);
 
   const tablesFound = summarizeTables(allTables);

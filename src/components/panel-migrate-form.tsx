@@ -121,8 +121,10 @@ export function PanelMigrateForm() {
   const [importSettings, setImportSettings] = useState(true);
   /** Extra tables: access codes, blocked UAs, groups, on-demand, live sessions, epg_api, crontab, profiles, … */
   const [importExtras, setImportExtras] = useState(true);
-  /** Match 1-stream Migration Guide — streams imported stopped by default. */
+  /** Opt-in: import streams stopped for verification before go-live. */
   const [importStreamsStopped, setImportStreamsStopped] = useState(false);
+  /** Default on: live + VOD + series import as on-demand. */
+  const [importStreamsOnDemand, setImportStreamsOnDemand] = useState(true);
   const [skipExisting, setSkipExisting] = useState(true);
   const [clearData, setClearData] = useState(false);
   const [preview, setPreview] = useState("");
@@ -279,6 +281,7 @@ export function PanelMigrateForm() {
       importSettings,
       importExtras,
       importStreamsStopped,
+      importStreamsOnDemand,
       skipExistingLines: skipExisting,
       skipExistingStreams: skipExisting,
       clearDataBeforeImport: clearData,
@@ -1100,6 +1103,15 @@ export function PanelMigrateForm() {
         <label>
           <input type="checkbox" checked={importStreams} onChange={(e) => setImportStreams(e.target.checked)} />{" "}
           Streams
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={importStreamsOnDemand}
+            onChange={(e) => setImportStreamsOnDemand(e.target.checked)}
+            disabled={!importStreams}
+          />{" "}
+          Import all streams as on-demand
         </label>
         <label>
           <input

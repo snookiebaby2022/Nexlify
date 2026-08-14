@@ -27,12 +27,13 @@ export type MigrationGuidePath = {
 };
 
 const SHARED_POST_IMPORT = [
-  "Review imported streams — by default they are imported stopped so you can verify URLs before going live.",
+  "Review imported streams — they import as on-demand by default (start when played). Optionally import as stopped if you want to verify URLs first.",
   "Transcoder / encode profiles may be incomplete after import; re-check and rebuild profiles on Nexlify.",
   "Server SSH passwords are not in SQL dumps — re-enter them on each stream server in Nexlify.",
   "Assign / probe stream servers and re-link EPG where channel ids differ.",
   "After cutover, stop legacy XC / panel processes on the old servers so clients do not keep hitting them.",
   "Line passwords, stream URLs (with embedded credentials), provider user/pass, and EPG URLs are imported from the dump as-is — optionally rotate line passwords after cutover.",
+  "Any pending:// streams had no URL in the dump — fix those source URLs under Streams before go-live.",
 ];
 
 const TUNNEL_TIP =

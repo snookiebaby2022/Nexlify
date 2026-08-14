@@ -46,8 +46,10 @@ function applyOptions(body: Record<string, unknown>) {
     skipExistingLines: body.skipExistingLines !== false,
     skipExistingStreams: body.skipExistingStreams !== false,
     clearDataBeforeImport: Boolean(body.clearDataBeforeImport),
-    /** Default true — match 1-stream Migration Guide (streams imported stopped). */
+    /** Opt-in: import streams stopped for URL verification before go-live. */
     importStreamsStopped: body.importStreamsStopped === true,
+    /** Default on: all streams (live/movies/series) import as on-demand. */
+    importStreamsOnDemand: body.importStreamsOnDemand !== false,
     defaultServerId: (body.defaultServerId as string) ?? null,
     ownerId: (body.ownerId as string) ?? null,
   };

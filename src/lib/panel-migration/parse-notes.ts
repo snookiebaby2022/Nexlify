@@ -17,8 +17,11 @@ export function isMigrationParseNote(message: string): boolean {
     w.startsWith("Capped ") ||
     w.startsWith("Extended import") ||
     w.startsWith("Applied server_id") ||
+    w.startsWith("Filled ") ||
+    (w.startsWith("Found ") && w.includes("marked on-demand")) ||
     w.startsWith("Merged ") ||
-    w.startsWith("streams_episodes has ")
+    w.startsWith("streams_episodes has ") ||
+    w.includes("pending:// placeholders")
   );
 }
 

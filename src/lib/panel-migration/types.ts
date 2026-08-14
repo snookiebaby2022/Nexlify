@@ -410,10 +410,15 @@ export type MigrationApplyOptions = {
   skipExistingStreams?: boolean;
   clearDataBeforeImport?: boolean;
   /**
-   * When true (default), imported streams are created stopped — matches the
-   * 1-stream Migration Guide behaviour so URLs can be verified before go-live.
+   * When true, imported streams are created stopped — so URLs can be verified before go-live.
+   * Default is false (streams imported active).
    */
   importStreamsStopped?: boolean;
+  /**
+   * When true (default), every imported stream is marked on-demand (`isOnDemand` + `vodMode: ON_DEMAND`)
+   * so live/VOD/series start when a client requests them.
+   */
+  importStreamsOnDemand?: boolean;
   defaultServerId?: string | null;
   ownerId?: string | null;
   /** Transaction client — when provided, all DB calls use this instead of the global prisma. */

@@ -8,7 +8,11 @@
 import type { MigrationSource, MigrationStreamRow } from "./types";
 import { mergeSqlTables, rowToRecord, type SqlTableData } from "./sql-parse";
 import { flattenIdList } from "./sql-junctions";
-import { streamUrlsFromSource } from "./stream-source-urls";
+import {
+  mergeStreamSourceUrls,
+  streamUrlsFromSource,
+  type StreamSourceUrls,
+} from "./stream-source-urls";
 
 function findMerged(
   allTables: Map<string, SqlTableData[]>,
@@ -91,12 +95,22 @@ export function resolveStreamType(
   return { type: "LIVE", isRadio: false };
 }
 
+/**
+ * Fill server_id + missing stream URLs from streams_servers / streams_sys.
+ * Merges every current_source across server rows (XUI often leaves streams.stream_source = []).
+ * Also collects stream ids marked on_demand on streams_servers.
+ */
 export function enrichStreamsFromSys(
   allTables: Map<string, SqlTableData[]>,
   streams: SqlTableData | null
-): { streams: SqlTableData | null; warnings: string[] } {
+): {
+  streams: SqlTableData | null;
+  warnings: string[];
+  onDemandStreamLegacyIds: string[];
+} {
   const warnings: string[] = [];
-  if (!streams) return { streams, warnings };
+  const onDemandStreamLegacyIds: string[] = [];
+  if (!streams) return { streams, warnings, onDemandStreamLegacyIds };
 
   const sys = findMerged(allTables, [
     "streams_servers",
@@ -104,10 +118,12 @@ export function enrichStreamsFromSys(
     "stream_sys",
     "stream_servers",
   ]);
-  if (!sys) return { streams, warnings };
+  if (!sys) return { streams, warnings, onDemandStreamLegacyIds };
 
   const byStream = new Map<string, string>();
-  const urlByStream = new Map<string, { primary: string; backup?: string }>();
+  const urlByStream = new Map<string, StreamSourceUrls>();
+  const onDemandIds = new Set<string>();
+
   for (const row of sys.rows) {
     const r = rowToRecord(sys.columns, row);
     const sid = String(r.stream_id ?? r.id ?? "");
@@ -115,7 +131,15 @@ export function enrichStreamsFromSys(
     if (sid && serverId && serverId !== "0" && !byStream.has(sid)) {
       byStream.set(sid, serverId);
     }
-    if (!sid || urlByStream.has(sid)) continue;
+    if (!sid) continue;
+
+    if (
+      Number(r.on_demand ?? r.ondemand ?? r.ondemand_check ?? 0) === 1 ||
+      String(r.on_demand ?? "").toLowerCase() === "true"
+    ) {
+      onDemandIds.add(sid);
+    }
+
     const info =
       typeof r.stream_info === "string" && r.stream_info.trim().startsWith("{")
         ? (() => {
@@ -128,17 +152,24 @@ export function enrichStreamsFromSys(
         : r.stream_info && typeof r.stream_info === "object"
           ? (r.stream_info as Record<string, unknown>)
           : null;
-    const got = streamUrlsFromSource(
-      r.current_source ??
-        r.stream_source ??
-        r.source ??
-        r.url ??
-        info?.current_source ??
-        info?.source ??
-        info?.stream_source
+
+    const got = mergeStreamSourceUrls(
+      streamUrlsFromSource(r.current_source),
+      streamUrlsFromSource(r.stream_source),
+      streamUrlsFromSource(r.source),
+      streamUrlsFromSource(r.url),
+      streamUrlsFromSource(r.cchannel_rsources),
+      streamUrlsFromSource(info?.current_source),
+      streamUrlsFromSource(info?.source),
+      streamUrlsFromSource(info?.stream_source)
     );
-    if (got.primary) urlByStream.set(sid, got);
+    if (got.primary) {
+      const prev = urlByStream.get(sid);
+      urlByStream.set(sid, prev ? mergeStreamSourceUrls(prev, got) : got);
+    }
   }
+
+  onDemandStreamLegacyIds.push(...onDemandIds);
 
   let serverIdx = streams.columns.findIndex((c) => c === "server_id");
   if (serverIdx < 0) {
@@ -167,15 +198,14 @@ export function enrichStreamsFromSys(
     }
     if (sourceIdx >= 0) {
       const existingUrl = streamUrlsFromSource(row[sourceIdx]);
-      if (!existingUrl.primary) {
-        const fromSys = urlByStream.get(id);
-        if (fromSys?.primary) {
-          const all = [fromSys.primary, fromSys.backup, ...fromSys.extras].filter(
-            Boolean
-          ) as string[];
-          row[sourceIdx] = all.length > 1 ? JSON.stringify(all) : all[0];
-          urlsFilled++;
-        }
+      const fromSys = urlByStream.get(id);
+      if (fromSys?.primary) {
+        const merged = existingUrl.primary
+          ? mergeStreamSourceUrls(existingUrl, fromSys)
+          : fromSys;
+        const all = [merged.primary, merged.backup, ...merged.extras].filter(Boolean) as string[];
+        row[sourceIdx] = all.length > 1 ? JSON.stringify(all) : all[0];
+        if (!existingUrl.primary) urlsFilled++;
       }
     }
   }
@@ -186,10 +216,15 @@ export function enrichStreamsFromSys(
   }
   if (urlsFilled) {
     warnings.push(
-      `Filled ${urlsFilled} missing stream URL(s) from streams_sys current_source.`
+      `Filled ${urlsFilled} missing stream URL(s) from streams_servers/sys current_source.`
     );
   }
-  return { streams, warnings };
+  if (onDemandIds.size) {
+    warnings.push(
+      `Found ${onDemandIds.size} stream(s) marked on-demand in streams_servers.`
+    );
+  }
+  return { streams, warnings, onDemandStreamLegacyIds };
 }
 
 type SeriesMeta = {

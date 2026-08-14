@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.63",
+  "latestVersion": "1.9.64",
   "releases": [
+    {
+      "version": "1.9.64",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "SQL migration imports all streams (fill URLs from streams_servers, pending placeholders), sorts by order, and defaults every stream to on-demand.",
+      "changelog": [
+        "Empty stream_source rows kept: fill from streams_servers.current_source or pending:// placeholders",
+        "Import all streams as on-demand by default (live + movies + series)",
+        "Preserve sort order=0 and sort mapped streams by source order",
+        "Merge multi-server current_source URLs and streams_servers on_demand flags"
+      ],
+      "fixes": [
+        "Live channels with [] stream_source skipped even when URL lived on streams_servers",
+        "order=0 lost during migration sort",
+        "Live streams imported as always-on instead of on-demand"
+      ]
+    },
     {
       "version": "1.9.63",
       "date": "2026-08-14",

@@ -16,6 +16,16 @@ export type StreamSourceUrls = {
   extras: string[];
 };
 
+/** Placeholder so catalog rows without a playable URL are still imported (bouquets / episodes). */
+export function pendingStreamUrl(legacyId: string, source = "xui"): string {
+  const id = String(legacyId || "unknown").replace(/[^a-zA-Z0-9_-]/g, "_");
+  return `pending://${source}/${id}`;
+}
+
+export function isPendingStreamUrl(url: string): boolean {
+  return /^pending:\/\//i.test(String(url ?? "").trim());
+}
+
 /** XUI often stores empty sources as 0 / "0" / [] — never treat those as URLs. */
 export function isUsableStreamUrl(val: unknown): boolean {
   if (val == null) return false;
@@ -42,6 +52,20 @@ function fromUrlList(urls: string[]): StreamSourceUrls {
   };
 }
 
+/** Merge several source lists into primary / backup / extras (deduped, order preserved). */
+export function mergeStreamSourceUrls(...parts: StreamSourceUrls[]): StreamSourceUrls {
+  const seen = new Set<string>();
+  const all: string[] = [];
+  for (const p of parts) {
+    for (const u of [p.primary, p.backup, ...p.extras]) {
+      if (!u || seen.has(u)) continue;
+      seen.add(u);
+      all.push(u);
+    }
+  }
+  return fromUrlList(all);
+}
+
 /** Parse stream_source / source / url fields into primary, backup, and remaining extras. */
 export function streamUrlsFromSource(val: unknown): StreamSourceUrls {
   if (val == null || val === "") return { primary: "", extras: [] };
@@ -59,6 +83,13 @@ export function streamUrlsFromSource(val: unknown): StreamSourceUrls {
       if (Array.isArray(parsed)) {
         return fromUrlList(parsed.map((x) => String(x ?? "")));
       }
+      if (parsed && typeof parsed === "object") {
+        // Some panels nest sources under keys
+        const obj = parsed as Record<string, unknown>;
+        const nested =
+          obj.sources ?? obj.source ?? obj.urls ?? obj.stream_source ?? obj.current_source;
+        if (nested != null) return streamUrlsFromSource(nested);
+      }
     } catch {
       /* fall through */
     }
@@ -75,25 +106,19 @@ export function streamUrlsFromSource(val: unknown): StreamSourceUrls {
     }
   }
 
-  // parseJsonField-style: allow string arrays that failed JSON.parse above via comma split
-  if (typeof val === "string") {
-    const s = val.trim();
-    if (s.includes(",") && !s.includes("://")) {
-      // unlikely; fall through
-    }
-  }
-
   if (isUsableStreamUrl(val)) return { primary: String(val).trim(), extras: [] };
   return { primary: "", extras: [] };
 }
 
 /** First non-empty source among candidates (avoids `??` treating numeric 0 as present). */
 export function firstStreamUrl(...candidates: unknown[]): StreamSourceUrls {
+  const found: StreamSourceUrls[] = [];
   for (const c of candidates) {
     const got = streamUrlsFromSource(c);
-    if (got.primary) return got;
+    if (got.primary) found.push(got);
   }
-  return { primary: "", extras: [] };
+  if (!found.length) return { primary: "", extras: [] };
+  return mergeStreamSourceUrls(...found);
 }
 
 /** Same shape as stream-add-form: extra sources beyond backup live in `bitrates` JSON. */
