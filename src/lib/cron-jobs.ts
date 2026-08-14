@@ -8,8 +8,7 @@ import { reassignStreamsFromOfflineServers } from "./server-load";
 import { jobCheckStreamCerts } from "./cert-monitor";
 import { isRemoteM3uUrl } from "./m3u-watch-sync";
 import { runDueM3uSyncJobs, runWatchFolderM3uSync } from "./m3u-sync-jobs";
-
-const ESTIMATED_MBPS_PER_STREAM = Number(process.env.ESTIMATED_MBPS_PER_STREAM ?? "4");
+import { snapshotNicTrafficForCron } from "./host-metrics";
 
 async function logCron(job: string, status: string, message?: string, durationMs?: number) {
   // Persist errors/warnings always; skip trivial idle "ok" noise to keep CronRunLog small.
@@ -107,11 +106,10 @@ export async function jobStopIdleStreams() {
 export async function jobBandwidthSnapshot() {
   const start = Date.now();
   try {
-    // Use count instead of loading all rows into memory
     const count = await countActiveConnections();
-    const bytesOutPerSec = (count * ESTIMATED_MBPS_PER_STREAM * 1_000_000) / 8;
-    const bytesOut = BigInt(Math.floor(bytesOutPerSec * 60));
-    const bytesIn = BigInt(Math.floor(Number(bytesOut) / 10));
+    const nic = await snapshotNicTrafficForCron();
+    const bytesOut = nic?.bytesOut ?? BigInt(0);
+    const bytesIn = nic?.bytesIn ?? BigInt(0);
 
     await prisma.bandwidthSnapshot.create({
       data: {
@@ -142,7 +140,7 @@ export async function jobBandwidthSnapshot() {
     const old = new Date(Date.now() - 48 * 3600 * 1000);
     await prisma.bandwidthSnapshot.deleteMany({ where: { createdAt: { lt: old } } });
 
-    await logCron("bandwidth_snapshot", "ok", `${count} streams`, Date.now() - start);
+    await logCron("bandwidth_snapshot", "ok", `${count} conns nic=${nic ? "yes" : "init"}`, Date.now() - start);
   } catch (e) {
     await logCron("bandwidth_snapshot", "error", String(e), Date.now() - start);
   }

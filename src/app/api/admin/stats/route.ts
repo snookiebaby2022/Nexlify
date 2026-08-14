@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { listActiveConnections } from "@/lib/connections";
+import { listLiveConnections } from "@/lib/connections";
 import { cacheGetOrSet } from "@/lib/cache";
 import { getCacheTtls } from "@/lib/cache-ttl";
 import { prisma } from "@/lib/prisma";
@@ -15,7 +15,7 @@ async function loadStats() {
   await ensureMainServerOnline();
   const now = new Date();
 
-  let connections: Awaited<ReturnType<typeof listActiveConnections>> = [];
+  let connections: Awaited<ReturnType<typeof listLiveConnections>> = [];
   let snapshots: { bytesIn: bigint; bytesOut: bigint }[] = [];
   let totalIn: { value: string } | null = null;
   let totalOut: { value: string } | null = null;
@@ -29,7 +29,7 @@ async function loadStats() {
       prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
       prisma.stream.count({ where: { type: StreamType.LIVE, isActive: true } }),
       prisma.magDevice.count({ where: { isActive: true } }),
-      listActiveConnections(),
+      listLiveConnections(),
       prisma.activityLog.findMany({ take: 8, orderBy: { createdAt: "desc" }, where: { createdAt: { gte: new Date(Date.now() - 3 * 60 * 60 * 1000) } } }),
       prisma.panelSetting.findUnique({ where: { key: "cron_last_run" } }),
       prisma.bandwidthSnapshot.findMany({ take: 2, orderBy: { createdAt: "desc" } }),

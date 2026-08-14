@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { buildAgentConfigForServer } from "@/lib/stream-agent-config";
+import { hostMetricsFromHeartbeat, persistHostMetrics } from "@/lib/host-metrics";
 
 export function generateAgentToken(): string {
   return randomBytes(32).toString("hex");
@@ -56,21 +57,26 @@ export async function handleAgentHeartbeat(
   data: {
     version?: string;
     processes?: HeartbeatProcess[];
+    [key: string]: unknown;
   }
 ) {
   const now = new Date();
+  const hostSample = hostMetricsFromHeartbeat(data);
   await prisma.streamServer.update({
     where: { id: serverId },
     data: {
       agentLastSeen: now,
-      agentVersion: data.version ?? undefined,
+      agentVersion: typeof data.version === "string" ? data.version : undefined,
       healthStatus: "online",
-      healthMessage: data.version ? `Agent ${data.version}` : "Agent online",
+      healthMessage: typeof data.version === "string" ? `Agent ${data.version}` : "Agent online",
       lastHealthAt: now,
     },
   });
+  if (hostSample) {
+    await persistHostMetrics(serverId, hostSample).catch(() => {});
+  }
 
-  const processes = data.processes ?? [];
+  const processes = (Array.isArray(data.processes) ? data.processes : []) as HeartbeatProcess[];
   if (processes.length > 0) {
     // Batch update agentPid on streams
     const pidUpdates = processes

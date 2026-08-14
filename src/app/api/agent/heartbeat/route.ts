@@ -6,10 +6,11 @@ export async function POST(req: NextRequest) {
   const server = await requireAgentServer(req);
   if (!server) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({}));
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   await handleAgentHeartbeat(server.id, {
-    version: body.version,
-    processes: body.processes,
+    ...body,
+    version: typeof body.version === "string" ? body.version : undefined,
+    processes: Array.isArray(body.processes) ? body.processes : undefined,
   });
 
   return NextResponse.json({ ok: true, serverId: server.id });

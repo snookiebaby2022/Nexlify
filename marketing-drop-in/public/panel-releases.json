@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.45",
+  "latestVersion": "1.9.46",
   "releases": [
+    {
+      "version": "1.9.46",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Dashboard and Servers show real host CPU, RAM, disk, and NIC — not invented stream-count percentages.",
+      "changelog": [
+        "Main server gauges sample this machine (load average, MemAvailable, disk, NIC bytes)",
+        "Remote servers use CPU/RAM/disk from the stream agent heartbeat instead of the panel's own OS",
+        "Online users and connections use a 2-minute live window; bandwidth snapshots read the NIC instead of estimating from connection count"
+      ],
+      "fixes": [
+        "Dashboard CPU sat near 40% on direct-stream panels because it was derived from channel count",
+        "Every server resource chart showed the panel host's CPU with network and connections hard-coded to 0",
+        "Server tiles drew a sine-wave sparkline and labelled live connections as req/s"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.46.tar.gz"
+    },
     {
       "version": "1.9.45",
       "date": "2026-08-14",

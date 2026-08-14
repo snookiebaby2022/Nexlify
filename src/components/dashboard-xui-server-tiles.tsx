@@ -50,6 +50,16 @@ function Gauge({ label, pct }: { label: string; pct: number }) {
 }
 
 export function DashboardXuiServerTiles({ servers }: { servers: ServerDashboardMetrics[] }) {
+  const cpuHist = useRef<Record<string, number[]>>({});
+  const lastAt = useRef(0);
+  if (Date.now() - lastAt.current >= 4000) {
+    lastAt.current = Date.now();
+    for (const s of servers) {
+      const prev = cpuHist.current[s.id] ?? [];
+      cpuHist.current[s.id] = [...prev.slice(-11), Math.min(100, Math.max(0, s.cpu))];
+    }
+  }
+
   if (!servers.length) return null;
 
   return (
@@ -59,10 +69,12 @@ export function DashboardXuiServerTiles({ servers }: { servers: ServerDashboardM
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {servers.map((s) => {
-          const history = Array.from({ length: 12 }, (_, i) =>
-            Math.max(0, (s.connections ?? 0) + Math.sin(i + s.id.length) * 3 + i * 0.5)
-          );
+          const history = cpuHist.current[s.id]?.length
+            ? cpuHist.current[s.id]
+            : [s.cpu, s.cpu];
           const headerColor = s.online ? "#00a65a" : "#dd4b39";
+          const slots = s.maxClients && s.maxClients > 0 ? s.maxClients : 0;
+          const conxPct = slots > 0 ? Math.min(100, ((s.connections ?? 0) / slots) * 100) : 0;
           return (
             <div
               key={s.id}
@@ -76,7 +88,9 @@ export function DashboardXuiServerTiles({ servers }: { servers: ServerDashboardM
                 <Link href="/admin/servers" className="truncate hover:underline">
                   {s.name}
                 </Link>
-                <span className="text-[10px] font-normal opacity-90 tabular-nums">{s.connections ?? 0} req/s</span>
+                <span className="text-[10px] font-normal opacity-90 tabular-nums">
+                  {s.connections ?? 0} conns
+                </span>
               </div>
               <div className="p-3 space-y-3">
                 <Sparkline values={history} color={headerColor} />
@@ -109,7 +123,7 @@ export function DashboardXuiServerTiles({ servers }: { servers: ServerDashboardM
                 <div className="flex justify-around pt-1">
                   <Gauge label="CPU" pct={s.cpu} />
                   <Gauge label="RAM" pct={s.memory} />
-                  <Gauge label="CONX" pct={Math.min(100, (s.connections ?? 0) * 8)} />
+                  <Gauge label="CONX" pct={conxPct} />
                 </div>
                 <div className="space-y-1.5 pt-1">
                   <div>

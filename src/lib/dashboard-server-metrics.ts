@@ -1,12 +1,15 @@
 import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
-import { listActiveConnections, listLiveConnections } from "@/lib/connections";
+import { LIVE_STALE_MS, STALE_MS, listLiveConnections } from "@/lib/connections";
 import { sortServersMainFirst } from "@/lib/ensure-main-server-online";
-
-const STALE_MS = 5 * 60 * 1000;
-const CONN_STALE_MS = 24 * 60 * 60 * 1000; // Match listActiveConnections 24h window
-const ASSUMED_RAM_MB = 16 * 1024;
+import { isThisPanelMachine } from "@/lib/panel-local-server";
+import {
+  persistHostMetrics,
+  readStoredHostMetrics,
+  sampleLocalHostMetrics,
+  type HostMetricsSample,
+} from "@/lib/host-metrics";
 
 export type ServerMetricsRow = {
   id: string;
@@ -22,6 +25,7 @@ export type ServerMetricsRow = {
   users?: number;
   streamsOn?: number;
   streamsOff?: number;
+  maxClients?: number;
 };
 
 export type DashboardKpiExtended = {
@@ -45,13 +49,25 @@ function clampPct(n: number) {
   return Math.min(100, Math.max(0, Math.round(n)));
 }
 
+function emptyHostSample(): HostMetricsSample {
+  return {
+    cpu: 0,
+    memory: 0,
+    storage: 0,
+    upload: 0,
+    download: 0,
+    uploadMbps: 0,
+    downloadMbps: 0,
+    at: Date.now(),
+  };
+}
+
 export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
   const staleBefore = new Date(Date.now() - STALE_MS);
+  const liveBefore = new Date(Date.now() - LIVE_STALE_MS);
   const servers = await prisma.streamServer.findMany({
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: {
-      _count: { select: { streams: true } },
-      processes: { where: { lastSeenAt: { gte: staleBefore } } },
       streams: {
         where: { isActive: true, type: StreamType.LIVE },
         select: { id: true, lastProbeOk: true },
@@ -60,27 +76,31 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
   });
 
   const conns = await prisma.liveConnection.findMany({
-    where: { lastSeenAt: { gte: staleBefore } },
+    where: { lastSeenAt: { gte: liveBefore } },
     select: { lineId: true, stream: { select: { serverId: true } } },
   });
-  const connByServer = new Map<string, Set<string>>();
+  const usersByServer = new Map<string, Set<string>>();
+  const connsByServer = new Map<string, number>();
   for (const c of conns) {
     const sid = c.stream?.serverId;
     if (!sid) continue;
-    if (!connByServer.has(sid)) connByServer.set(sid, new Set());
-    connByServer.get(sid)!.add(c.lineId);
+    connsByServer.set(sid, (connsByServer.get(sid) ?? 0) + 1);
+    if (!usersByServer.has(sid)) usersByServer.set(sid, new Set());
+    usersByServer.get(sid)!.add(c.lineId);
   }
 
   const ordered = sortServersMainFirst(servers);
+  let localSample: HostMetricsSample | null = null;
 
-  return ordered.map((s) => {
+  const rows: ServerMetricsRow[] = [];
+  for (const s of ordered) {
     const online =
       s.healthStatus === "online" ||
       s.healthStatus === "healthy" ||
       (s.agentLastSeen != null && s.agentLastSeen >= staleBefore);
 
     if (!online) {
-      return {
+      rows.push({
         id: s.id,
         name: s.name,
         host: s.host,
@@ -90,48 +110,48 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
         memory: 0,
         storage: 0,
         cpu: 0,
-      };
+        connections: 0,
+        users: 0,
+        streamsOn: 0,
+        streamsOff: 0,
+        maxClients: s.maxClients,
+      });
+      continue;
     }
 
-    const running = s.processes.filter((p) => p.status === "running");
-    const cpuVals = running.map((p) => p.cpuPercent).filter((v): v is number => v != null && v >= 0);
-    const memMb = running.reduce((a, p) => a + (p.memoryMb ?? 0), 0);
-    const bitrate = running.reduce((a, p) => a + (p.bitrateKbps ?? 0), 0);
-    const slots = s.maxClients > 0 ? s.maxClients : 1000;
-    const slotsUsed = Math.max(s._count.streams, running.length);
+    let host = emptyHostSample();
+    if (isThisPanelMachine(s)) {
+      if (!localSample) {
+        localSample = sampleLocalHostMetrics(s.bandwidthMbps ?? 1000);
+        await persistHostMetrics(s.id, localSample).catch(() => {});
+      }
+      host = localSample;
+    } else {
+      host = readStoredHostMetrics(s.panelSettings) ?? emptyHostSample();
+    }
 
-    const cpu =
-      cpuVals.length > 0
-        ? cpuVals.reduce((a, b) => a + b, 0) / cpuVals.length
-        : Math.min(40, 8 + slotsUsed * 2);
-
-    const memory = memMb > 0 ? (memMb / ASSUMED_RAM_MB) * 100 : Math.min(90, 20 + slotsUsed * 4);
-
-    const capKbps = (s.bandwidthMbps ?? 100) * 1000;
-    const download = capKbps > 0 ? (bitrate / capKbps) * 100 : Math.min(60, bitrate / 50);
-    const upload = download > 0 ? Math.min(100, download * 0.15 + 2) : Math.min(15, running.length * 2);
-
-    const storage = (slotsUsed / slots) * 100;
-    const serverConns = connByServer.get(s.id);
     const streamsOn = s.streams.filter((st) => st.lastProbeOk === true).length;
     const streamsOff = s.streams.filter((st) => st.lastProbeOk === false).length;
 
-    return {
+    rows.push({
       id: s.id,
       name: s.name,
       host: s.host,
       online: true,
-      upload: clampPct(upload),
-      download: clampPct(download),
-      memory: clampPct(memory),
-      storage: clampPct(storage),
-      cpu: clampPct(cpu),
-      connections: serverConns?.size ?? 0,
-      users: serverConns?.size ?? 0,
+      upload: clampPct(host.upload),
+      download: clampPct(host.download),
+      memory: clampPct(host.memory),
+      storage: clampPct(host.storage),
+      cpu: clampPct(host.cpu),
+      connections: connsByServer.get(s.id) ?? 0,
+      users: usersByServer.get(s.id)?.size ?? 0,
       streamsOn,
       streamsOff,
-    };
-  });
+      maxClients: s.maxClients,
+    });
+  }
+
+  return rows;
 }
 
 const TRIAL_MAX_DAYS = 2.5;
@@ -192,15 +212,13 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     else reportedChannels++;
   }
 
+  const liveNic = sampleLocalHostMetrics();
+  let networkInMbps = liveNic.downloadMbps;
+  let networkOutMbps = liveNic.uploadMbps;
   const snap = snapshots[0];
-  let networkInMbps = snap ? Number(snap.bytesIn) / 125_000 / 60 : 0;
-  let networkOutMbps = snap ? Number(snap.bytesOut) / 125_000 / 60 : 0;
-
-  if (!snap) {
-    const activeConns = await listLiveConnections();
-    const estimated = activeConns.length * 4;
-    networkInMbps = Math.round(estimated / 10);
-    networkOutMbps = Math.round(estimated);
+  if (networkInMbps <= 0 && networkOutMbps <= 0 && snap) {
+    networkInMbps = Number(snap.bytesIn) / 125_000 / 60;
+    networkOutMbps = Number(snap.bytesOut) / 125_000 / 60;
   }
 
   let inactiveLive = 0;
@@ -234,7 +252,7 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
 
 export async function getDashboardSummary() {
   const staleBefore = new Date(Date.now() - STALE_MS);
-  const connStaleBefore = new Date(Date.now() - CONN_STALE_MS);
+  const connStaleBefore = new Date(Date.now() - LIVE_STALE_MS);
   const [
     totalLiveStreams,
     runningStreamIds,
@@ -301,7 +319,7 @@ export async function getDashboardSummary() {
 /** Dashboard summary scoped to a reseller/sub-reseller's owned lines. */
 export async function getResellerDashboardSummary(ownerId: string) {
   const staleBefore = new Date(Date.now() - STALE_MS);
-  const connStaleBefore = new Date(Date.now() - CONN_STALE_MS);
+  const connStaleBefore = new Date(Date.now() - LIVE_STALE_MS);
   const now = new Date();
   const lineWhere = { ownerId };
 
@@ -324,7 +342,7 @@ export async function getResellerDashboardSummary(ownerId: string) {
       where: { ...lineWhere, status: "ACTIVE", expiresAt: { gt: now } },
     }),
     prisma.line.findMany({ where: lineWhere, select: { id: true } }),
-    listActiveConnections(ownerId),
+    listLiveConnections(ownerId),
     prisma.streamServer.count(),
     prisma.streamServer.count({
       where: {

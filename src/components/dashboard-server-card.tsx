@@ -19,6 +19,7 @@ export type ServerDashboardMetrics = {
   users?: number;
   streamsOn?: number;
   streamsOff?: number;
+  maxClients?: number;
 };
 
 export function DashboardServerCard({ server }: { server: ServerDashboardMetrics }) {

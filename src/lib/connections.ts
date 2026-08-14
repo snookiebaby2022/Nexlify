@@ -1,8 +1,8 @@
 import { prisma } from "./prisma";
 import { cacheGetOrSet, cacheDel } from "./cache";
 
-const STALE_MS = 5 * 60 * 1000; // 5 minutes — connections expire quickly if not refreshed
-const LIVE_STALE_MS = 2 * 60 * 1000; // 2 minutes — for "live" connections display (shows who is actually watching now)
+export const STALE_MS = 5 * 60 * 1000; // 5 minutes — connections expire quickly if not refreshed
+export const LIVE_STALE_MS = 2 * 60 * 1000; // 2 minutes — for "live" connections display (shows who is actually watching now)
 const CONNECTIONS_CACHE_TTL = 5; // 5 seconds — short TTL for dashboard responsiveness
 
 export async function countActiveConnectionsForLine(lineId: string) {
@@ -161,7 +161,10 @@ export async function listActiveConnections(ownerId?: string) {
     }).catch(() => {});
 
     return prisma.liveConnection.findMany({
-      where: ownerId ? { line: { ownerId } } : undefined,
+      where: {
+        lastSeenAt: { gte: staleBefore },
+        ...(ownerId ? { line: { ownerId } } : {}),
+      },
       include: connectionInclude,
       orderBy: { lastSeenAt: "desc" },
       take: 5000, // Safety limit — dashboard should use countActiveConnections() for totals

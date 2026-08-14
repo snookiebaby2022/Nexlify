@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { listLiveConnections } from "@/lib/connections";
+import { sampleLocalHostMetrics } from "@/lib/host-metrics";
 
 export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER]);
@@ -20,26 +21,25 @@ export async function GET(req: NextRequest) {
         try {
           const now = new Date();
 
-          const [connections, bandwidthSnap, activeLines, liveStreams] = await Promise.all([
+          const [connections, bandwidthSnap, activeLines] = await Promise.all([
             listLiveConnections(session.role === "ADMIN" ? undefined : session.id),
             prisma.bandwidthSnapshot.findFirst({ orderBy: { createdAt: "desc" } }),
             prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
-            prisma.stream.count({ where: { type: "LIVE", isActive: true } }),
           ]);
 
-          const networkOutMbps = bandwidthSnap
-            ? Math.round(Number(bandwidthSnap.bytesOut) / 125000 / 60 * 10) / 10
-            : connections.length * 4;
-
-          const networkInMbps = bandwidthSnap
-            ? Math.round(Number(bandwidthSnap.bytesIn) / 125000 / 60 * 10) / 10
-            : Math.round(connections.length * 0.4 * 10) / 10;
+          const nic = sampleLocalHostMetrics();
+          let networkOutMbps = nic.uploadMbps;
+          let networkInMbps = nic.downloadMbps;
+          if (networkOutMbps <= 0 && networkInMbps <= 0 && bandwidthSnap) {
+            networkOutMbps = Math.round((Number(bandwidthSnap.bytesOut) / 125000 / 60) * 10) / 10;
+            networkInMbps = Math.round((Number(bandwidthSnap.bytesIn) / 125000 / 60) * 10) / 10;
+          }
 
           send({
             timestamp: now.toISOString(),
             onlineConnections: connections.length,
             onlineUsers: new Set(connections.map((c) => c.lineId)).size,
-            onlineStreams: liveStreams,
+            onlineStreams: new Set(connections.map((c) => c.streamId).filter(Boolean)).size,
             totalActiveLines: activeLines,
             networkInMbps,
             networkOutMbps,

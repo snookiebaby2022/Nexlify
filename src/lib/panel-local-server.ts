@@ -1,3 +1,4 @@
+import os from "os";
 import { parseServerPanelSettings } from "@/lib/server-panel-settings";
 import { RTMP_PORT, STREAM_HTTPS_PORT } from "@/lib/server-ports";
 
@@ -26,16 +27,47 @@ function parsePortList(raw: unknown, exclude: number[]): number[] {
   return out;
 }
 
-/** True when host is this panel machine (localhost, primary domain, or panel IP). */
+let nicIpCache: { at: number; ips: Set<string> } | null = null;
+
+function panelNicIps(): Set<string> {
+  if (nicIpCache && Date.now() - nicIpCache.at < 30_000) return nicIpCache.ips;
+  const ips = new Set(["127.0.0.1", "localhost", "::1"]);
+  try {
+    for (const addrs of Object.values(os.networkInterfaces())) {
+      for (const a of addrs ?? []) {
+        if (a.address) ips.add(a.address.toLowerCase());
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  nicIpCache = { at: Date.now(), ips };
+  return ips;
+}
+
+function hostWithoutIpv4Port(host: string): string {
+  const m = host.match(/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/);
+  return m ? m[1] : host;
+}
+
+/** True when host is this panel machine (localhost, NIC IP, primary domain, or panel IP). */
 export function isLocalPanelHost(host: string): boolean {
-  const h = host.trim().toLowerCase();
-  if (!h || h === "127.0.0.1" || h === "localhost" || h === "::1") return true;
+  const h = hostWithoutIpv4Port(host.trim().toLowerCase().replace(/^\[|\]$/g, "").split("%")[0] ?? "");
+  if (!h) return false;
+  if (panelNicIps().has(h)) return true;
   const primary = (process.env.PANEL_PRIMARY_DOMAIN ?? "").trim().toLowerCase();
   if (primary && (h === primary || h.endsWith(`.${primary}`))) return true;
   const serverIp = (process.env.SERVER_IP ?? "").trim().toLowerCase();
   if (serverIp && h === serverIp) return true;
   const publicIp = (process.env.PUBLIC_IP ?? process.env.PANEL_PUBLIC_IP ?? "").trim().toLowerCase();
   if (publicIp && h === publicIp) return true;
+  return false;
+}
+
+/** True when this StreamServer row is the machine running the panel (not merely role=main). */
+export function isThisPanelMachine(server: { host: string; domain?: string | null }): boolean {
+  if (isLocalPanelHost(server.host)) return true;
+  if (server.domain && isLocalPanelHost(server.domain)) return true;
   return false;
 }
 
