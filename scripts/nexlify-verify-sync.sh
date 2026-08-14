@@ -36,9 +36,39 @@ fi
 
 section "Release feed"
 if diff -q src/lib/panel-releases.json marketing-drop-in/src/lib/panel-releases.json >/dev/null 2>&1; then
-  ok "panel-releases.json in sync (panel → marketing)"
+  ok "panel-releases.json in sync (panel → marketing src)"
 else
   fail "panel-releases.json drift — run: npm run sync:releases"
+fi
+if diff -q src/lib/panel-releases.json marketing-drop-in/public/panel-releases.json >/dev/null 2>&1; then
+  ok "panel-releases.json in sync (panel → marketing public)"
+else
+  fail "public/panel-releases.json drift — run: npm run sync:releases"
+fi
+
+PKG_VER="$(node -p "require('./package.json').version" 2>/dev/null || echo "")"
+REL_VER="$(node -p "require('./src/lib/panel-releases.json').latestVersion" 2>/dev/null || echo "")"
+IC_VER="$(node -p "require('./marketing-drop-in/public/install-command.json').version" 2>/dev/null || echo "")"
+LS_VER="$(node -p "require('./license-server/package.json').version" 2>/dev/null || echo "")"
+if [ -n "$PKG_VER" ] && [ "$PKG_VER" = "$REL_VER" ] && [ "$PKG_VER" = "$IC_VER" ] && [ "$PKG_VER" = "$LS_VER" ]; then
+  ok "versions aligned at $PKG_VER"
+else
+  fail "version mismatch package=$PKG_VER releases=$REL_VER install-command=$IC_VER license-server=$LS_VER"
+fi
+
+section "Installer secret file"
+SYNC_ENV="marketing-drop-in/public/install/panel-sync.env"
+if [ ! -f "$SYNC_ENV" ]; then
+  fail "missing $SYNC_ENV"
+elif grep -qE '^PANEL_API_SECRET=.+' "$SYNC_ENV"; then
+  fail "$SYNC_ENV publishes PANEL_API_SECRET — must be a comment-only stub"
+else
+  ok "panel-sync.env has no published secret"
+fi
+if diff -q scripts/install-linux.sh marketing-drop-in/scripts/install-linux.sh >/dev/null 2>&1; then
+  ok "marketing-drop-in/scripts/install-linux.sh matches scripts/"
+else
+  fail "marketing-drop-in/scripts/install-linux.sh drift — run: bash scripts/sync-install-to-marketing.sh"
 fi
 
 section "Installer scripts (scripts/ → marketing-drop-in/public/install/)"
