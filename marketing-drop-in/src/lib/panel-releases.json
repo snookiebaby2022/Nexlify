@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.64",
+  "latestVersion": "1.9.65",
   "releases": [
+    {
+      "version": "1.9.65",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Harden panel updates: clear stuck 88% markers, recover dead workers via watchdog, clearer update UI with progress heartbeats.",
+      "changelog": [
+        "Watchdog clears stale .update-in-progress when the update worker is dead so the panel can restart",
+        "Stuck mid-build jobs fail fast (~90s) instead of freezing the UI at 88%",
+        "Build progress starts ~50% and heartbeats during compile; bottom overlay + failed-update card on Updates",
+        "Stronger next build retry (clear caches + ensure SWC binary); never bare pm2 restart nexlify"
+      ],
+      "fixes": [
+        "Panel stuck at 88% with nexlify PM2 missing after a failed build",
+        "Watchdog skipped forever while .update-in-progress lingered after worker crash",
+        "Update UI jumped to 86% and looked frozen for the whole compile"
+      ]
+    },
     {
       "version": "1.9.64",
       "date": "2026-08-14",

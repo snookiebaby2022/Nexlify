@@ -404,9 +404,14 @@ cmd_build_compile() {
   if node ./node_modules/next/dist/bin/next build; then
     return 0
   fi
-  echo "WARN: next build failed (webpack?) — clean reinstall + retry once ..." >&2
+  echo "WARN: next build failed (webpack?) — clear caches + reinstall optional SWC + retry once ..." >&2
+  rm -rf .next.staging node_modules/.cache .next/cache 2>/dev/null || true
   rm -rf node_modules
   npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error
+  # Ensure platform SWC binary is present (missing binary → "generate is not a function")
+  npm install --no-save --include=optional @next/swc-linux-x64-gnu 2>/dev/null || \
+    npm install --no-save --include=optional @next/swc-linux-x64-musl 2>/dev/null || true
+  export NEXLIFY_DIST_DIR=".next.staging"
   node ./node_modules/next/dist/bin/next build
 }
 

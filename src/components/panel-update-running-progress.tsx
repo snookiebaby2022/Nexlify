@@ -61,7 +61,8 @@ export function PanelUpdateRunningProgress({
           </ul>
         )}
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          Full updates usually take 3–6 minutes.
+          Progress climbs during compile (~50–88%). The live panel stays online until the final swap
+          (~15–60s). Typical total: 3–6 minutes.
         </p>
       </div>
     );
@@ -95,9 +96,10 @@ export function PanelUpdateRunningProgress({
         </ul>
       )}
       <p className="panel-update-progress-hint">
-        The panel stays online during the compile (up to ~88%). Around{" "}
-        <strong>88–98%</strong> the new build is swapped in and PM2 restarts — expect a{" "}
-        <strong>15–60 second</strong> outage. Full updates usually finish in 3–6 minutes.
+        Compile progress moves from ~50% to ~88% while the new build is prepared in the background —
+        the live panel stays up. Around <strong>88–98%</strong> the build is swapped in and PM2
+        restarts (~15–60s brief outage). Typical total time: 3–6 minutes. If this sits unchanged for
+        more than 10 minutes, open Settings → Updates and use Clear stuck update.
       </p>
     </>
   );

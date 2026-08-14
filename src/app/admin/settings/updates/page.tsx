@@ -381,6 +381,24 @@ export default function PanelUpdatesPage() {
     data.version.updateAvailable && isVersionNewer(latest, installed);
   const jobRunning = liveUpdateRunning;
   const progressJob = liveJob?.status === "running" ? liveJob : null;
+  const failedJob = liveJob?.status === "failed" ? liveJob : null;
+
+  async function clearStuckUpdate() {
+    setMsg("");
+    const res = await fetch("/api/admin/panel-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "cancel" }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg((j as { error?: string }).error ?? "Could not clear stuck update");
+      return;
+    }
+    setMsg("Cleared stuck update. You can try Update panel again.");
+    refreshJob();
+    load({ silent: true });
+  }
 
   return (
     <div className="space-y-6 pb-8 max-w-5xl">
@@ -391,9 +409,35 @@ export default function PanelUpdatesPage() {
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
             Installed <strong>v{installed}</strong>
+            {data.version.gitBranch ? (
+              <span className="ml-2 font-mono text-xs">
+                ({data.version.gitBranch}
+                {data.version.gitCommit ? `@${data.version.gitCommit.slice(0, 7)}` : ""})
+              </span>
+            ) : null}
           </p>
+          {data.version.gitDirty && (
+            <p className="text-xs mt-1" style={{ color: "#fbbf24" }}>
+              Local files differ from git — an update will reset them to origin/main.
+            </p>
+          )}
+          {data.version.remoteError && (
+            <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>
+              Git remote: {data.version.remoteError}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {(jobRunning || failedJob) && (
+            <button
+              type="button"
+              onClick={() => void clearStuckUpdate()}
+              className="rounded-lg border px-3 py-2 text-xs cursor-pointer"
+              style={{ borderColor: "rgba(248,113,113,0.45)", color: "#fca5a5" }}
+            >
+              Clear stuck update
+            </button>
+          )}
           {showBanner && (
             <button
               type="button"
@@ -449,6 +493,46 @@ export default function PanelUpdatesPage() {
       )}
 
       {jobRunning && progressJob && <PanelUpdateRunningProgress job={progressJob} variant="card" />}
+
+      {failedJob && (
+        <div
+          className="rounded-lg border px-4 py-3 space-y-2"
+          style={{ borderColor: "rgba(248,113,113,0.4)", background: "rgba(239,68,68,0.08)" }}
+        >
+          <p className="text-sm font-semibold" style={{ color: "#fca5a5" }}>
+            Last update failed
+            {failedJob.fromVersion && failedJob.toVersion
+              ? ` (v${failedJob.fromVersion} → v${failedJob.toVersion})`
+              : ""}
+          </p>
+          {failedJob.message && (
+            <p className="text-xs whitespace-pre-wrap" style={{ color: "var(--fg)" }}>
+              {failedJob.message}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => void clearStuckUpdate()}
+              className="rounded-lg border px-3 py-1.5 text-xs cursor-pointer"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Dismiss
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmVersion(latest);
+                setConfirmOpen(true);
+              }}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-white cursor-pointer"
+              style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)" }}
+            >
+              Retry update
+            </button>
+          </div>
+        </div>
+      )}
 
       {msg && (
         <p className="text-sm rounded-lg border px-4 py-3" style={{ borderColor: "var(--border)" }}>

@@ -43,8 +43,10 @@ export function PanelUpdateConfirmModal({
           Update to v{targetVersion}?
         </h2>
         <p className="mt-3 text-center text-sm leading-relaxed" style={{ color: "var(--muted)" }}>
-          Your system will pull the latest code, install dependencies, migrate the database, and
-          rebuild the panel. The app may be briefly unavailable. Back up your database first.
+          The panel will sync to <strong>v{targetVersion}</strong> (git reset to latest), install
+          dependencies, migrate the database, and rebuild into a staging folder so the current
+          panel stays online until the final swap. Expect a brief 15–60s outage at the end.
+          Local script edits on the server are overwritten.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <button

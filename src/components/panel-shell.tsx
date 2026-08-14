@@ -7,6 +7,7 @@ import { PanelLiveChat } from "@/components/panel-live-chat";
 import { ResellerNotificationsWidget } from "@/components/reseller-notifications-widget";
 import { PanelCommunityBar } from "@/components/panel-community-bar";
 import { PanelUpdateBanner } from "@/components/panel-update-banner";
+import { PanelUpdateProgress } from "@/components/panel-update-progress";
 import { PanelUpdateJobProvider } from "@/contexts/panel-update-job-context";
 import { PanelReleaseNotesModal } from "@/components/panel-release-notes-modal";
 import { PanelDemoBanner } from "@/components/panel-demo-banner";
@@ -100,8 +101,9 @@ export function PanelShell({
           />
           <main className="panel-main-content flex-1 p-4 md:p-6 pb-24 overflow-auto min-w-0 flex flex-col">
             {isDemo && <PanelDemoBanner />}
-            {role === "ADMIN" && <PanelUpdateBanner />}
-            <div className="flex-1">{children}</div>
+          {role === "ADMIN" && <PanelUpdateBanner />}
+          {role === "ADMIN" && <PanelUpdateProgress />}
+          <div className="flex-1">{children}</div>
             <PanelCommunityBar />
           </main>
           {username && <PanelLiveChat username={username} />}

@@ -55,27 +55,42 @@ function findUpdateWorkerPid(): number | null {
   }
 }
 
-const MAX_RUNNING_MS = 20 * 60 * 1000;
+const MAX_RUNNING_MS = 35 * 60 * 1000; // must exceed build timeout (~25 min) + swap/restart
 const MAX_STUCK_AT_START_MS = 3 * 60 * 1000; // if stuck at "Starting update…" for 3 min, mark failed
 /** git fetch/pull should finish in ~30s; treat >2.5 min as hung even if the worker PID is still alive */
 const MAX_STUCK_GIT_PULL_MS = 150 * 1000;
+/** Build step with a dead worker — fail fast so watchdog can bring the panel back */
+const MAX_STUCK_BUILD_DEAD_MS = 90 * 1000;
 const MAX_FAILED_MS = 30 * 60 * 1000; // auto-clear failed jobs after 30 min
 const MAX_DONE_MS = 2 * 60 * 1000; // auto-clear completed jobs so reload does not re-show banner
 const MAX_SAME_VERSION_FAILED_MS = 5 * 60 * 1000; // re-sync failures stop nagging sooner
 
-function isJobTimedOut(job: PanelUpdateJob): boolean {
+function isJobTimedOut(job: PanelUpdateJob, workerAlive: boolean): boolean {
   if (!job.startedAt) return false;
   const started = Date.parse(job.startedAt);
   if (!Number.isFinite(started)) return false;
   const elapsed = Date.now() - started;
   if (elapsed > MAX_RUNNING_MS) return true;
   // Fast-fail: if still stuck at "Starting update…" (2%), the worker likely crashed on boot
-  if (elapsed > MAX_STUCK_AT_START_MS && job.progress <= 2 && job.currentStep === "Starting update…") return true;
+  if (elapsed > MAX_STUCK_AT_START_MS && job.progress <= 2 && job.currentStep === "Starting update…") {
+    return true;
+  }
   // Fast-fail hung git fetch/pull (UI shows 14% / "git pull")
   if (
     elapsed > MAX_STUCK_GIT_PULL_MS &&
     job.currentStep === "git pull" &&
     job.progress <= 16
+  ) {
+    return true;
+  }
+  // Worker died mid-build — do not leave UI at 88% until 35 min later
+  if (
+    !workerAlive &&
+    elapsed > MAX_STUCK_BUILD_DEAD_MS &&
+    (job.currentStep === "npm run build" ||
+      job.currentStep === "prepare build" ||
+      job.currentStep === "prepare standalone" ||
+      job.currentStep === "pm2 restart nexlify")
   ) {
     return true;
   }
@@ -144,10 +159,21 @@ export async function reconcileStaleUpdateJob(
     workerPid != null && Number.isFinite(workerPid) && isUpdateWorkerAlive(workerPid);
   const scriptAlive = findUpdateWorkerPid() != null;
   const alive = pidAlive || scriptAlive;
+  const started = job.startedAt ? Date.parse(job.startedAt) : NaN;
+  const elapsed = Number.isFinite(started) ? Date.now() - started : 0;
 
-  if (alive && !isJobTimedOut(job)) return job;
+  // Still healthy
+  if (alive && !isJobTimedOut(job, true)) return job;
 
-  // Timed out (or worker dead) — stop hung git/update children so the next attempt can run.
+  // Worker not up yet (just spawned)
+  if (!alive && elapsed < 45_000 && !isJobTimedOut(job, false)) return job;
+
+  // Dead worker but not timed out yet — only keep waiting early in the job
+  if (!alive && !isJobTimedOut(job, false) && elapsed < MAX_STUCK_AT_START_MS) {
+    return job;
+  }
+
+  // Timed out (or worker dead past grace) — stop hung git/update children so the next attempt can run.
   if (alive) {
     try {
       const { execSync } = require("child_process") as typeof import("child_process");
@@ -189,7 +215,7 @@ export async function reconcileStaleUpdateJob(
         : job.currentStep === "npm install"
         ? "Update was interrupted (often during npm install when the server restarts). The panel may already be up to date — reload the page or run Update again from Settings → Updates."
         : job.currentStep === "npm run build" || job.currentStep === "prepare build" || job.currentStep === "prepare standalone"
-        ? "Update was interrupted during the build. The panel should stay online on the previous build — reload Settings → Updates and try again, or run: bash scripts/fix-panel-down-now.sh"
+        ? "Update stopped during the build (worker crashed or timed out). The previous build should still be on disk — the watchdog will restart the panel. Retry from Settings → Updates, or SSH: curl -fsSL 'https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main/scripts/rebuild-panel-safe.sh' | sudo bash"
         : job.currentStep === "sync panel files"
           ? "Update failed while syncing files from nexlify.live. Check disk space and that the vendor tarball is published, then try again."
           : job.currentStep === "pm2 restart nexlify"
@@ -259,6 +285,7 @@ const STEP_PROGRESS: Record<string, number> = {
   "prisma generate": 48,
   "prisma (skipped)": 50,
   "prepare build": 52,
+  // End-of-build assigned %; UI climbs 52→88 via stdout while compiling
   "npm run build": 88,
   "prepare standalone": 94,
   "pm2 restart nexlify": 98,

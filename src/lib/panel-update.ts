@@ -13,7 +13,7 @@ import {
   readUpdateJob,
   type PanelUpdateJob,
 } from "@/lib/panel-update-job";
-import { progressDuringBuild, parseBuildSubProgress } from "@/lib/panel-update-ui";
+import { progressDuringBuild, parseBuildSubProgress, BUILD_STEP_PROGRESS_START } from "@/lib/panel-update-ui";
 import {
   buildBootstrapUpdateScriptsShell,
   panelUpdateCacheBust,
@@ -237,11 +237,11 @@ export function panelUpdateManualSteps(repoPath: string): string[] {
     "# Patch VPS (fast — skips npm when lockfile unchanged):",
     "bash /var/www/nexlify/deploy/panel-patches/apply-panel-fast-update.sh",
     "# Or git-based install:",
-    "git pull --ff-only",
+    "git reset --hard origin/main",
     "npm ci --include=dev",
     "npx prisma db push --accept-data-loss",
     "npx prisma generate",
-    "npm run build",
+    "bash scripts/apply-panel-fast-update.sh build-prep && bash scripts/apply-panel-fast-update.sh build-compile && bash scripts/apply-panel-fast-update.sh swap",
     "bash scripts/panel-restart-safe.sh --nexlify-only",
   ];
 }
@@ -261,10 +261,15 @@ async function resolvePanelRestartStep(repoPath: string): Promise<UpdateStep> {
       await access(pm2Start);
       return { name: "pm2 restart nexlify", command: "bash", args: [pm2Start] };
     } catch {
+      // Never bare `pm2 restart nexlify` — process may not exist after a failed swap.
+      const eco = path.join(repoPath, "ecosystem.config.cjs");
       return {
         name: "pm2 restart nexlify",
-        command: "pm2",
-        args: ["restart", "nexlify", "--update-env"],
+        command: "bash",
+        args: [
+          "-c",
+          `pm2 delete nexlify 2>/dev/null || true; pm2 start "${eco}" --only nexlify && pm2 save`,
+        ],
       };
     }
   }
@@ -330,50 +335,87 @@ async function runSteps(
 ): Promise<boolean> {
   let lastStreamWrite = 0;
   for (const step of steps) {
+    const isBuildStep = step.name === "npm run build";
     await reportProgress(onProgress, {
       currentStep: step.name,
-      stepDetail: null,
-      progress: progressForStep(step.name) - 2,
+      stepDetail: isBuildStep ? "Starting production build…" : null,
+      // Build climbs 52→88 via stdout; do not jump straight to 86
+      progress: isBuildStep
+        ? BUILD_STEP_PROGRESS_START
+        : Math.max(0, progressForStep(step.name) - 2),
       steps: [...jobSteps, { name: step.name, ok: false, status: "running" }],
     });
 
-    const isBuildStep = step.name === "npm run build";
-    let lastBuildDetail = "";
+    let lastBuildDetail = isBuildStep ? "Starting production build…" : "";
+    let lastBuildRatio = 0.04;
+    const buildStartedAt = Date.now();
 
-    const result = await runCommand(repoPath, step.command, step.args, {
-      stepName: step.name,
-      onStream: isBuildStep
-        ? async (line) => {
-            const parsed = parseBuildSubProgress(line);
-            if (!parsed) return;
-            lastBuildDetail = parsed.detail;
-            const now = Date.now();
-            if (now - lastStreamWrite < 1500) return;
-            lastStreamWrite = now;
-            await reportProgress(onProgress, {
-              currentStep: step.name,
-              stepDetail: parsed.detail,
-              progress: progressDuringBuild(parsed.ratio),
-              steps: [...jobSteps, { name: step.name, ok: false, status: "running" }],
-            });
-          }
-        : undefined,
-    });
+    const heartbeat = isBuildStep
+      ? setInterval(() => {
+          const mins = Math.max(1, Math.round((Date.now() - buildStartedAt) / 60000));
+          void reportProgress(onProgress, {
+            currentStep: step.name,
+            stepDetail:
+              lastBuildDetail ||
+              `Still compiling… (${mins} min elapsed — this step often takes 2–5 minutes)`,
+            progress: progressDuringBuild(Math.max(lastBuildRatio, 0.08)),
+            steps: [...jobSteps, { name: step.name, ok: false, status: "running" }],
+          });
+        }, 20_000)
+      : null;
 
-    resultSteps.push({ name: step.name, ok: result.ok, output: result.output });
-    jobSteps.push({
-      name: step.name,
-      ok: result.ok,
-      status: result.ok ? "done" : "failed",
-      output: result.output,
-    });
-    await reportProgress(onProgress, {
-      currentStep: result.ok ? null : step.name,
-      stepDetail: result.ok ? null : lastBuildDetail || null,
-      progress: progressForStep(step.name),
-      steps: [...jobSteps],
-    });
-    if (!result.ok) return false;
+    try {
+      const result = await runCommand(repoPath, step.command, step.args, {
+        stepName: step.name,
+        onStream: isBuildStep
+          ? async (line) => {
+              const parsed = parseBuildSubProgress(line);
+              if (!parsed) {
+                // Unmatched webpack lines — keep a soft heartbeat detail
+                if (/Compiling|webpack|✓|○|ƒ|⚠/i.test(line) && Date.now() - lastStreamWrite > 8000) {
+                  lastBuildDetail = "Compiling…";
+                  lastStreamWrite = Date.now();
+                  await reportProgress(onProgress, {
+                    currentStep: step.name,
+                    stepDetail: lastBuildDetail,
+                    progress: progressDuringBuild(Math.max(lastBuildRatio, 0.1)),
+                    steps: [...jobSteps, { name: step.name, ok: false, status: "running" }],
+                  });
+                }
+                return;
+              }
+              lastBuildDetail = parsed.detail;
+              lastBuildRatio = parsed.ratio;
+              const now = Date.now();
+              if (now - lastStreamWrite < 1500) return;
+              lastStreamWrite = now;
+              await reportProgress(onProgress, {
+                currentStep: step.name,
+                stepDetail: parsed.detail,
+                progress: progressDuringBuild(parsed.ratio),
+                steps: [...jobSteps, { name: step.name, ok: false, status: "running" }],
+              });
+            }
+          : undefined,
+      });
+
+      resultSteps.push({ name: step.name, ok: result.ok, output: result.output });
+      jobSteps.push({
+        name: step.name,
+        ok: result.ok,
+        status: result.ok ? "done" : "failed",
+        output: result.output,
+      });
+      await reportProgress(onProgress, {
+        currentStep: result.ok ? null : step.name,
+        stepDetail: result.ok ? null : lastBuildDetail || null,
+        progress: progressForStep(step.name),
+        steps: [...jobSteps],
+      });
+      if (!result.ok) return false;
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+    }
   }
   return true;
 }

@@ -29,8 +29,57 @@ HOST="${PANEL_BIND_HOST:-127.0.0.1}"
 HEALTH_URL="http://${HOST}:${PORT}/api/health"
 
 update_in_progress() {
-  if [ -f "$PANEL_DIR/.update-in-progress" ]; then
+  # Clear stale markers left by a crashed update worker (was blocking restarts forever).
+  clear_stale_update_marker() {
+    local marker="$PANEL_DIR/.update-in-progress"
+    [ -f "$marker" ] || return 0
+    local pid
+    pid="$(tr -d '[:space:]' < "$marker" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      return 1 # still alive — do not clear
+    fi
+    if pgrep -f 'panel-update-background' >/dev/null 2>&1; then
+      return 1
+    fi
+    if pgrep -f 'next build' >/dev/null 2>&1 || pgrep -f 'npm run build' >/dev/null 2>&1; then
+      return 1
+    fi
+    log "CLEAR: stale .update-in-progress (worker dead) — allowing panel recovery"
+    rm -f "$marker" "$PANEL_DIR/.update-progress.pid" 2>/dev/null || true
+    if [ -f "$PANEL_DIR/.update-progress.json" ] && grep -q '"status"[[:space:]]*:[[:space:]]*"running"' "$PANEL_DIR/.update-progress.json" 2>/dev/null; then
+      node -e '
+        const fs=require("fs");
+        const p=process.argv[1];
+        try {
+          const j=JSON.parse(fs.readFileSync(p,"utf8"));
+          if (j.status==="running") {
+            j.status="failed";
+            j.finishedAt=new Date().toISOString();
+            j.currentStep=null;
+            j.message="Update worker died — cleared by watchdog. Panel will be restarted. Retry from Settings → Updates if needed.";
+            fs.writeFileSync(p, JSON.stringify(j,null,2));
+          }
+        } catch {}
+      ' "$PANEL_DIR/.update-progress.json" 2>/dev/null || true
+    fi
     return 0
+  }
+  clear_stale_update_marker || true
+
+  if [ -f "$PANEL_DIR/.update-in-progress" ]; then
+    local pid
+    pid="$(tr -d '[:space:]' < "$PANEL_DIR/.update-in-progress" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+    if pgrep -f 'panel-update-background' >/dev/null 2>&1; then
+      return 0
+    fi
+    if pgrep -f 'next build' >/dev/null 2>&1 || pgrep -f 'npm run build' >/dev/null 2>&1; then
+      return 0
+    fi
+    # Marker file with dead PID — treat as not in progress
+    return 1
   fi
   if [ -f "$PANEL_DIR/.update-progress.pid" ]; then
     local pid
