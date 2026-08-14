@@ -1,7 +1,20 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.58",
+  "latestVersion": "1.9.59",
   "releases": [
+    {
+      "version": "1.9.59",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "In-panel git updates always reset --hard to origin/main so dirty local scripts cannot stick at git pull 14%.",
+      "changelog": [
+        "Git update path uses reset --hard origin/main (no ff-only merge blocked by local script edits)",
+        "Retry once after clearing .git index locks if the first reset fails"
+      ],
+      "fixes": [
+        "Demo/customer panels stuck Updating… git pull 14% because local watchdog/install script edits blocked merge"
+      ]
+    },
     {
       "version": "1.9.58",
       "date": "2026-08-14",

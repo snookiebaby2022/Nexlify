@@ -617,10 +617,26 @@ export async function runPanelUpdateWithProgress(
   } else if (mode === "patch" && patchScript) {
     ok = await runSteps(repoPath, await patchUpdateSteps(patchScript, repoPath), onProgress, jobSteps, steps);
   } else {
-    const gitApply = force
-      ? ({ name: "git pull", command: "git", args: ["reset", "--hard", "origin/main"] } satisfies UpdateStep)
-      : ({ name: "git pull", command: "git", args: ["merge", "--ff-only", "origin/main"] } satisfies UpdateStep);
+    // Panel installs track origin/main. Always hard-reset after fetch so local
+    // script hotfixes / chmod / line-ending noise cannot block the update and
+    // leave the UI stuck at "git pull" 14%.
+    const gitApply = {
+      name: "git pull",
+      command: "git",
+      args: ["reset", "--hard", "origin/main"],
+    } satisfies UpdateStep;
     ok = await runSteps(repoPath, [gitApply], onProgress, jobSteps, steps);
+    if (!ok) {
+      await runCommand(repoPath, "rm", ["-f", ".git/index.lock", ".git/HEAD.lock"]);
+      ok = await runSteps(
+        repoPath,
+        [{ name: "git pull", command: "git", args: ["reset", "--hard", "origin/main"] }],
+        onProgress,
+        jobSteps,
+        steps,
+      );
+    }
+    // Legacy: if someone still forced merge-only elsewhere, keep force retry path.
     if (!ok && force) {
       ok = await runSteps(
         repoPath,
