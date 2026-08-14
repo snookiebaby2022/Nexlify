@@ -45,6 +45,9 @@ function isLinux() {
 }
 
 const STEP_TIMEOUT_MS: Record<string, number> = {
+  /** Hung git fetch/pull is common (DNS, GitHub, credential prompts) — fail fast. */
+  "git pull": 90 * 1000,
+  "git stash local changes": 60 * 1000,
   "bootstrap update scripts": 3 * 60 * 1000,
   "download update": 4 * 60 * 1000,
   "extract update": 3 * 60 * 1000,
@@ -68,7 +71,17 @@ function runCommand(
 ): Promise<{ ok: boolean; output: string }> {
   const stepName = options?.stepName;
   return new Promise((resolve) => {
-    const child = spawn(command, args, { cwd, windowsHide: true, env: process.env });
+    const env = { ...process.env };
+    // Never block on interactive git auth prompts during panel updates.
+    if (command === "git" || stepName === "git pull" || stepName === "git stash local changes") {
+      env.GIT_TERMINAL_PROMPT = "0";
+      env.GIT_ASKPASS = "echo";
+      env.GCM_INTERACTIVE = "never";
+      // Abort slow/hung HTTPS transfers instead of sitting at 14% forever.
+      env.GIT_HTTP_LOW_SPEED_LIMIT = env.GIT_HTTP_LOW_SPEED_LIMIT || "1000";
+      env.GIT_HTTP_LOW_SPEED_TIME = env.GIT_HTTP_LOW_SPEED_TIME || "45";
+    }
+    const child = spawn(command, args, { cwd, windowsHide: true, env });
     let output = "";
     let settled = false;
     let lineBuf = "";
@@ -91,7 +104,10 @@ function runCommand(
     const timer = setTimeout(() => {
       child.kill("SIGTERM");
       setTimeout(() => child.kill("SIGKILL"), 5000).unref?.();
-      finish(false, `${output}\n\nTimed out after ${Math.round(timeoutMs / 60000)} minutes`);
+      const secs = Math.round(timeoutMs / 1000);
+      const human =
+        secs >= 60 ? `${Math.round(secs / 60)} minute(s)` : `${secs}s`;
+      finish(false, `${output}\n\nTimed out after ${human}`);
     }, timeoutMs);
     child.stdout.on("data", (d) => {
       const s = d.toString();

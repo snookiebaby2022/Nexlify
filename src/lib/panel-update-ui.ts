@@ -10,7 +10,7 @@ export const STEP_DURATION_HINTS: Record<string, string> = {
   "npm run build": "2–5 min — longest step",
   "prepare standalone": "~15s",
   "pm2 restart nexlify": "~15s",
-  "git pull": "~30s",
+  "git pull": "~30s (fails after ~90s if hung)",
   "download update": "~15s",
   "extract update": "~10s",
   "apply update": "~30s",

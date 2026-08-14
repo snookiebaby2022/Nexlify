@@ -57,6 +57,8 @@ function findUpdateWorkerPid(): number | null {
 
 const MAX_RUNNING_MS = 20 * 60 * 1000;
 const MAX_STUCK_AT_START_MS = 3 * 60 * 1000; // if stuck at "Starting update…" for 3 min, mark failed
+/** git fetch/pull should finish in ~30s; treat >2.5 min as hung even if the worker PID is still alive */
+const MAX_STUCK_GIT_PULL_MS = 150 * 1000;
 const MAX_FAILED_MS = 30 * 60 * 1000; // auto-clear failed jobs after 30 min
 const MAX_DONE_MS = 2 * 60 * 1000; // auto-clear completed jobs so reload does not re-show banner
 const MAX_SAME_VERSION_FAILED_MS = 5 * 60 * 1000; // re-sync failures stop nagging sooner
@@ -69,6 +71,14 @@ function isJobTimedOut(job: PanelUpdateJob): boolean {
   if (elapsed > MAX_RUNNING_MS) return true;
   // Fast-fail: if still stuck at "Starting update…" (2%), the worker likely crashed on boot
   if (elapsed > MAX_STUCK_AT_START_MS && job.progress <= 2 && job.currentStep === "Starting update…") return true;
+  // Fast-fail hung git fetch/pull (UI shows 14% / "git pull")
+  if (
+    elapsed > MAX_STUCK_GIT_PULL_MS &&
+    job.currentStep === "git pull" &&
+    job.progress <= 16
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -137,13 +147,35 @@ export async function reconcileStaleUpdateJob(
 
   if (alive && !isJobTimedOut(job)) return job;
 
+  // Timed out (or worker dead) — stop hung git/update children so the next attempt can run.
+  if (alive) {
+    try {
+      const { execSync } = require("child_process") as typeof import("child_process");
+      if (workerPid != null && Number.isFinite(workerPid)) {
+        try {
+          process.kill(workerPid, "SIGTERM");
+        } catch {
+          /* already gone */
+        }
+      }
+      execSync("pkill -f panel-update-background || true; pkill -f 'git fetch origin' || true", {
+        stdio: "ignore",
+        timeout: 5000,
+      });
+    } catch {
+      /* best-effort */
+    }
+  }
+
   const reconciled: PanelUpdateJob = {
     ...job,
     status: "failed",
     currentStep: null,
     finishedAt: new Date().toISOString(),
     message:
-      job.progress <= 2 && job.currentStep === "Starting update…"
+      job.currentStep === "git pull" && job.progress <= 16
+        ? "Update stuck on git pull/fetch (network, GitHub access, or git auth prompt). Cleared — run SSH repair: curl -fsSL 'https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main/scripts/fix-remote-update-now.sh' | sudo bash"
+        : job.progress <= 2 && job.currentStep === "Starting update…"
         ? (() => {
             let detail = "The update worker crashed before it could start. This usually means tsx is not installed or Node.js is too old.";
             try {
