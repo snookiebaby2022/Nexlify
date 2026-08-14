@@ -60,6 +60,8 @@ export async function POST(req: NextRequest) {
       selectedUrls: Array.isArray(body.selectedUrls) ? body.selectedUrls : undefined,
       autoCategory: body.autoCategory !== false,
       autoTmdb: body.autoTmdb !== false,
+      autoBouquetFromGroup:
+        streamType === StreamType.LIVE ? body.autoBouquetFromGroup !== false : false,
       importMeta: body.importMeta,
       bouquetIds: body.bouquetIds,
     });

@@ -14,8 +14,8 @@ export default function ImportM3uPage() {
         </Link>
       </div>
       <ImportForm
-      title="Import M3U"
-      description="Import live channels from M3U URL, file upload, or pasted playlist."
+      title="Import live streams"
+      description="Paste your IPTV provider M3U URL (get.php / m3u_plus). Channels are imported using tvg-name, tvg-logo, and group-title — categories and bouquets are created automatically."
       streamType="LIVE"
       allowFolder={false}
     />

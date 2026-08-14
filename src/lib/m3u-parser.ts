@@ -37,12 +37,15 @@ export function parseM3u(content: string): M3uEntry[] {
 
     if (line.startsWith("#EXTINF:")) {
       const nameMatch = line.match(/,(.+)$/);
+      const tvgName = attr(line, "tvg-name")?.trim();
+      const commaName = nameMatch?.[1]?.trim();
+      // Prefer tvg-name for live IPTV playlists (cleaner channel titles).
       pending = {
-        name: nameMatch?.[1]?.trim() || attr(line, "tvg-name") || "Unknown",
+        name: tvgName || commaName || "Unknown",
         group: attr(line, "group-title"),
         logo: attr(line, "tvg-logo"),
         tvgId: attr(line, "tvg-id"),
-        tvgName: attr(line, "tvg-name"),
+        tvgName: tvgName || undefined,
         channelId: attr(line, "channel-id") ?? attr(line, "channel_id"),
       };
       continue;

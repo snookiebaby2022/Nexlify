@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.54",
+  "latestVersion": "1.9.55",
   "releases": [
+    {
+      "version": "1.9.55",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Fast live M3U import from provider URLs using tvg-name, tvg-logo, and group-title.",
+      "changelog": [
+        "Live import prefers tvg-name for channel titles and maps tvg-logo / group-title automatically",
+        "Batched LIVE inserts (createMany) with cached categories for much faster provider playlist uploads",
+        "Optional auto-create bouquets from group-title and assign each channel"
+      ],
+      "fixes": [
+        "Live M3U import was sequential per-channel and preferred the raw EXTINF comma title over tvg-name"
+      ]
+    },
     {
       "version": "1.9.54",
       "date": "2026-08-14",

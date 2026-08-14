@@ -37,6 +37,7 @@ export function ImportForm({
   const [serversList, setServersList] = useState<{ id: string; name: string }[]>([]);
   const [result, setResult] = useState("");
   const [onDemandDefault, setOnDemandDefault] = useState(false);
+  const [autoBouquetFromGroup, setAutoBouquetFromGroup] = useState(true);
   const [serverIds, setServerIds] = useState<string[]>([]);
   const [fileName, setFileName] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -115,6 +116,8 @@ export function ImportForm({
             categoryId: categoryId || null,
             serverId: serverIds[0] || serverId || null,
             defaultOnDemand: streamType === "LIVE" ? onDemandDefault : undefined,
+            autoCategory: true,
+            autoBouquetFromGroup: streamType === "LIVE" ? autoBouquetFromGroup : undefined,
             bouquetIds: bouquetIds.length ? bouquetIds : undefined,
           }
         : tab === "vodfile"
@@ -289,13 +292,13 @@ export function ImportForm({
             />
 
             <div className="rounded-lg border px-4 py-3 text-xs space-y-1" style={{ borderColor: "var(--border)", background: "rgba(34,197,94,0.05)" }}>
-              <p className="font-medium text-green-400">What gets imported:</p>
+              <p className="font-medium text-green-400">Fast auto-import maps:</p>
               <ul className="list-disc list-inside space-y-0.5" style={{ color: "var(--muted)" }}>
-                <li>Channel names from <code>#EXTINF</code> title</li>
-                <li>Icons from <code>tvg-logo</code> attribute</li>
-                <li>EPG channel IDs from <code>tvg-id</code> attribute</li>
-                <li>Categories from <code>group-title</code> attribute</li>
-                <li>Stream URLs</li>
+                <li>Channel name from <code>tvg-name</code> (falls back to #EXTINF title)</li>
+                <li>Icon from <code>tvg-logo</code></li>
+                <li>Category from <code>group-title</code> (created automatically)</li>
+                <li>Bouquet from <code>group-title</code> when enabled below</li>
+                <li>EPG id from <code>tvg-id</code></li>
               </ul>
             </div>
           </>
@@ -377,16 +380,28 @@ export function ImportForm({
         </div>
 
         {streamType === "LIVE" && tab === "m3u" && (
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input
-              type="checkbox"
-              checked={onDemandDefault}
-              onChange={(e) => setOnDemandDefault(e.target.checked)}
-            />
-            <span>
-              Import channels as <strong>on demand</strong> (recommended — saves bandwidth)
-            </span>
-          </label>
+          <>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoBouquetFromGroup}
+                onChange={(e) => setAutoBouquetFromGroup(e.target.checked)}
+              />
+              <span>
+                Auto-create bouquets from <code>group-title</code> and assign each channel
+              </span>
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={onDemandDefault}
+                onChange={(e) => setOnDemandDefault(e.target.checked)}
+              />
+              <span>
+                Import channels as <strong>on demand</strong> (recommended — saves bandwidth)
+              </span>
+            </label>
+          </>
         )}
 
         <button
@@ -396,7 +411,7 @@ export function ImportForm({
           className="rounded py-2 px-4 font-medium cursor-pointer disabled:opacity-50"
           style={{ background: "var(--accent)", color: "#fff" }}
         >
-          Start import
+          {streamType === "LIVE" && tab === "m3u" ? "Import live streams" : "Start import"}
         </button>
         {result && <p className="text-sm">{result}</p>}
       </div>

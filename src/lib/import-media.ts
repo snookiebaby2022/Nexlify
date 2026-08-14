@@ -221,6 +221,8 @@ export async function importM3uEntries(
     autoTmdb?: boolean;
     importMeta?: VodImportMetaInput;
     bouquetIds?: string[];
+    /** Create/attach bouquets from group-title on LIVE imports (default true). */
+    autoBouquetFromGroup?: boolean;
     /** First sortOrder for M3U entry index 0 (default 0). */
     sortOrderStart?: number;
     /** When true, update sortOrder on existing streams matched by URL. */
@@ -228,6 +230,23 @@ export async function importM3uEntries(
   }
 ) {
   clearTmdbImportCache();
+
+  // Fast path for live IPTV playlists (provider get.php / m3u_plus).
+  if (opts.defaultType === "LIVE") {
+    const { importLiveM3uEntriesFast } = await import("./import-live-m3u");
+    return importLiveM3uEntriesFast(entries, {
+      categoryId: opts.categoryId,
+      serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
+      defaultOnDemand: opts.defaultOnDemand,
+      selectedUrls: opts.selectedUrls,
+      autoCategory: opts.autoCategory,
+      bouquetIds: opts.bouquetIds ?? opts.importMeta?.bouquetIds,
+      autoBouquetFromGroup: opts.autoBouquetFromGroup,
+      sortOrderStart: opts.sortOrderStart,
+      reorderExisting: opts.reorderExisting,
+    });
+  }
+
   let imported = 0;
   let skipped = 0;
   let reordered = 0;
