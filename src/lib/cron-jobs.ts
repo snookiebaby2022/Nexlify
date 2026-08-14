@@ -691,8 +691,30 @@ async function jobPgDump() {
       if (elapsed < minGapMs) return;
     }
 
-    const { runPgDumpToGzip, cleanupOldPgDumps } = await import("./pg-dump");
-    const result = await runPgDumpToGzip({ timeoutMs: 2 * 60 * 60 * 1000 });
+    const { runPgDumpToGzip, cleanupOldPgDumps, sanitizePgDumpError } = await import("./pg-dump");
+    let result: Awaited<ReturnType<typeof runPgDumpToGzip>> | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        result = await runPgDumpToGzip({ timeoutMs: 2 * 60 * 60 * 1000 });
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        const msg = sanitizePgDumpError(e).toLowerCase();
+        const transient =
+          msg.includes("connection refused") ||
+          msg.includes("could not connect") ||
+          msg.includes("the database system is starting") ||
+          msg.includes("the database system is shutting down") ||
+          msg.includes("server closed the connection") ||
+          msg.includes("timeout expired") ||
+          msg.includes("pg_dump already running");
+        if (!transient || attempt === 2) break;
+        await new Promise((r) => setTimeout(r, 15_000));
+      }
+    }
+    if (!result) throw lastErr ?? new Error("pg_dump failed");
     cleanupOldPgDumps(result.dir, Number(backup.pgDumpKeepDays ?? 14));
     await prisma.panelSetting.upsert({
       where: { key: "pg_dump_last_run" },

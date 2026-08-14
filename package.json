@@ -1,6 +1,6 @@
 {
   "name": "nexlify",
-  "version": "1.9.52",
+  "version": "1.9.53",
   "private": true,
   "engines": {
     "node": ">=18.17.0"
@@ -13,7 +13,7 @@
     "start": "node scripts/run-next.mjs start",
     "pm2:start": "bash scripts/pm2-start.sh",
     "pm2:boot": "bash scripts/pm2-boot-enable.sh",
-    "test": "tsx --test src/lib/secrets-equal.test.ts src/lib/ffmpeg-agent.test.ts src/lib/playback-token.test.ts src/lib/panel-update-mode.test.ts src/lib/panel-server.test.ts marketing-drop-in/src/lib/rate-limit.test.ts marketing-drop-in/src/lib/json-ld.test.ts marketing-drop-in/src/lib/panel-url-variants.test.ts",
+    "test": "tsx --test src/lib/secrets-equal.test.ts src/lib/ffmpeg-agent.test.ts src/lib/playback-token.test.ts src/lib/panel-update-mode.test.ts src/lib/panel-server.test.ts src/lib/backup-schedule.test.ts marketing-drop-in/src/lib/rate-limit.test.ts marketing-drop-in/src/lib/json-ld.test.ts marketing-drop-in/src/lib/panel-url-variants.test.ts",
     "lint": "next lint",
     "releases:sync": "node scripts/sync-releases-to-website.mjs",
     "sync:all": "bash scripts/nexlify-sync-all.sh",

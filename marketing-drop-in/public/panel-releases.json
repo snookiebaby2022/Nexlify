@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.52",
+  "latestVersion": "1.9.53",
   "releases": [
+    {
+      "version": "1.9.53",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Stop false pg_dump cron errors after panel/PM2 restarts; keep daily backups reliable.",
+      "changelog": [
+        "nexlify-cron no longer fires hourly jobs on the first tick after start (avoids pg_dump during Postgres restart)",
+        "Hourly schedule uses UTC hours to match dump/backup cron expressions",
+        "pg_dump retries once on transient connection errors",
+        "Scheduled panel backup matches the target UTC hour (not only minute 0)"
+      ],
+      "fixes": [
+        "Cron log showed pg_dump (error) right after updates because hourly jobs ran while Postgres was restarting",
+        "PM2 memory recycle of nexlify-cron re-triggered hourly dumps mid-hour"
+      ]
+    },
     {
       "version": "1.9.52",
       "date": "2026-08-14",

@@ -60,7 +60,8 @@ export async function shouldRunScheduledBackup(): Promise<boolean> {
   if (!backup.enabled) return false;
 
   const expr = String(backup.scheduleCron || "0 3 * * *").trim();
-  if (!cronMatchesNow(expr)) return false;
+  // Hourly worker may tick at :00–:59 of the target hour — match hour/day, not exact minute.
+  if (!cronMatchesThisHour(expr)) return false;
 
   const last = await prisma.panelSetting.findUnique({ where: { key: BACKUP_LAST_RUN_KEY } });
   if (last?.value) {

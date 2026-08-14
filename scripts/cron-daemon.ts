@@ -18,7 +18,12 @@ const HOURLY_LOCK_KEY = "nexlify:cron:hourly";
 /** Exit for PM2 recycle when RSS exceeds this (MB). */
 const RECYCLE_RSS_MB = Number(process.env.NEXLIFY_CRON_RECYCLE_RSS_MB ?? "400");
 
-let lastHour = -1;
+/**
+ * Seed with the current UTC hour so the first tick after start/restart does NOT
+ * fire runHourlyCronJobs. Otherwise every pm2 restart (and memory recycle) re-runs
+ * pg_dump / panel_backup mid-deploy while Postgres may still be coming up.
+ */
+let lastHour = new Date().getUTCHours();
 
 async function acquireLock(key: string): Promise<boolean> {
   const redis = getRedis();
@@ -59,7 +64,7 @@ async function tickMinute() {
 
   try {
     await runAllCronJobs();
-    const h = new Date().getHours();
+    const h = new Date().getUTCHours();
     if (h !== lastHour) {
       lastHour = h;
       if (await acquireLock(HOURLY_LOCK_KEY)) {
