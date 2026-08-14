@@ -1,6 +1,5 @@
 import os from "os";
 import { readFileSync } from "fs";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { detectServerHardware, sampleCpuPercent } from "@/lib/server-hardware";
 import { parseServerPanelSettings } from "@/lib/server-panel-settings";
@@ -161,17 +160,28 @@ export function mergeHostMetricsSettings(existing: unknown, sample: HostMetricsS
 }
 
 export async function persistHostMetrics(serverId: string, sample: HostMetricsSample): Promise<void> {
-  const server = await prisma.streamServer.findUnique({
-    where: { id: serverId },
-    select: { panelSettings: true },
+  const payload = JSON.stringify({
+    cpu: sample.cpu,
+    memory: sample.memory,
+    storage: sample.storage,
+    upload: sample.upload,
+    download: sample.download,
+    uploadMbps: sample.uploadMbps,
+    downloadMbps: sample.downloadMbps,
+    at: sample.at,
   });
-  if (!server) return;
-  await prisma.streamServer.update({
-    where: { id: serverId },
-    data: {
-      panelSettings: mergeHostMetricsSettings(server.panelSettings, sample) as Prisma.InputJsonValue,
-    },
-  });
+  await prisma.$executeRawUnsafe(
+    `UPDATE "StreamServer"
+     SET "panelSettings" = jsonb_set(
+       COALESCE("panelSettings", '{}'::jsonb),
+       '{hostMetrics}',
+       $1::jsonb,
+       true
+     )
+     WHERE id = $2`,
+    payload,
+    serverId
+  );
 }
 
 /** Bytes transferred on the primary NIC, scaled to a 60-second window for bandwidthSnapshot. */

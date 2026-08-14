@@ -1,3 +1,5 @@
+import { randomInt } from "crypto";
+
 /** Minimum length for line usernames and passwords (panel-wide). */
 export const MIN_LINE_CREDENTIAL_LENGTH = 6;
 
@@ -12,14 +14,14 @@ export function lettersOnly(value: string): string {
 function randomFrom(chars: string, length: number): string {
   let out = "";
   for (let i = 0; i < length; i++) {
-    out += chars[Math.floor(Math.random() * chars.length)];
+    out += chars[randomInt(chars.length)];
   }
   return out;
 }
 
 /** Random line username (min 6 chars). */
 export function generateLineUsername(): string {
-  const len = 8 + Math.floor(Math.random() * 4);
+  const len = 8 + randomInt(4);
   return randomFrom(USER_CHARS, Math.max(MIN_LINE_CREDENTIAL_LENGTH, len));
 }
 

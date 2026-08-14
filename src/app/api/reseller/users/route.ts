@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
     const created = await tx.panelUser.create({
       data: {
         username,
-        passwordHash: await bcrypt.hash(password, 10),
+        passwordHash: await bcrypt.hash(password, 12),
         email: body.email ? String(body.email).trim() : null,
         role: PanelRole.SUB_RESELLER,
         parentId: session.id,

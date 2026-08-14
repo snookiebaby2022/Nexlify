@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAllCronJobs, runHourlyCronJobs } from "@/lib/cron-jobs";
+import { secretsEqual } from "@/lib/secrets-equal";
 
 export async function GET(req: NextRequest) {
-  const secret = req.headers.get("x-cron-secret") ?? req.nextUrl.searchParams.get("secret");
+  const secret = req.headers.get("x-cron-secret");
   const expected = process.env.CRON_SECRET;
 
   if (!expected) {
     return NextResponse.json({ error: "Cron not configured" }, { status: 503 });
   }
-  if (secret !== expected) {
+  if (!secretsEqual(secret, expected)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -66,7 +66,7 @@ export async function PATCH(req: NextRequest) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const ok = await bcrypt.compare(body.currentPassword, existing.passwordHash);
     if (!ok) return NextResponse.json({ error: "Current password incorrect" }, { status: 400 });
-    data.passwordHash = await bcrypt.hash(String(body.newPassword).trim(), 10);
+    data.passwordHash = await bcrypt.hash(String(body.newPassword).trim(), 12);
   }
 
   const user = await prisma.panelUser.update({

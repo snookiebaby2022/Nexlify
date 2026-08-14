@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { jwtSecretBytes } from "@/lib/jwt-secret";
 import { panelSessionCookieOptions, panelSessionCookieSecure } from "@/lib/session-cookie";
+import { secretsEqual } from "@/lib/secrets-equal";
 import type { PanelRole } from "@prisma/client";
 
 const COOKIE = "nexlify_session";
@@ -94,12 +95,12 @@ export async function requireSession(roles?: PanelRole[]) {
 
 async function repairAdminPasswordHash(password: string) {
   const installPass = process.env.INSTALL_ADMIN_PASSWORD?.trim();
-  if (!installPass || installPass !== password) return null;
+  if (!installPass || !secretsEqual(password, installPass)) return null;
 
   const user = await prisma.panelUser.findUnique({ where: { username: "admin" } });
   if (!user) return null;
 
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(password, 12);
   await prisma.panelUser.update({
     where: { username: "admin" },
     data: { passwordHash: hash, isActive: true, role: "ADMIN" },
@@ -121,7 +122,8 @@ export async function verifyPanelLogin(identifier: string, password: string) {
     user?.email === "admin@nexlify.live";
 
   if (!user || !user.isActive) {
-    if (isAdminTarget) {
+    const hashBroken = !user || !BCRYPT_RE.test(user.passwordHash);
+    if (isAdminTarget && hashBroken) {
       const repaired = await repairAdminPasswordHash(password);
       if (repaired?.isActive) return repaired;
     }
@@ -139,18 +141,11 @@ export async function verifyPanelLogin(identifier: string, password: string) {
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (ok) return user;
 
-  if (isAdminTarget) {
-    const repaired = await repairAdminPasswordHash(password);
-    if (repaired && (await bcrypt.compare(password, repaired.passwordHash))) {
-      return repaired;
-    }
-  }
-
   return null;
 }
 
 export async function hashPassword(password: string) {
-  return bcrypt.hash(password, 10);
+  return bcrypt.hash(password, 12);
 }
 
 export function requirePanelApiKey(request: Request): boolean {
@@ -161,5 +156,5 @@ export function requirePanelApiKey(request: Request): boolean {
   const provided =
     request.headers.get("x-panel-api-key") ??
     request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  return provided === expected;
+  return secretsEqual(provided, expected);
 }

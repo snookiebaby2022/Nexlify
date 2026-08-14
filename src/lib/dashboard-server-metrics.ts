@@ -5,7 +5,6 @@ import { LIVE_STALE_MS, STALE_MS, listLiveConnections } from "@/lib/connections"
 import { sortServersMainFirst } from "@/lib/ensure-main-server-online";
 import { isThisPanelMachine } from "@/lib/panel-local-server";
 import {
-  persistHostMetrics,
   readStoredHostMetrics,
   sampleLocalHostMetrics,
   type HostMetricsSample,
@@ -123,7 +122,6 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     if (isThisPanelMachine(s)) {
       if (!localSample) {
         localSample = sampleLocalHostMetrics(s.bandwidthMbps ?? 1000);
-        await persistHostMetrics(s.id, localSample).catch(() => {});
       }
       host = localSample;
     } else {

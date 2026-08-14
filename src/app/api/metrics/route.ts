@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
+import { secretsEqual } from "@/lib/secrets-equal";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization") ?? "";
   const q = req.nextUrl.searchParams.get("token") ?? "";
   const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
-  if (bearer !== token && q !== token) {
+  if (!secretsEqual(bearer, token) && !secretsEqual(q, token)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

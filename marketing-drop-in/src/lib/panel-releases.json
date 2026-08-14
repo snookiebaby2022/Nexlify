@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.46",
+  "latestVersion": "1.9.47",
   "releases": [
+    {
+      "version": "1.9.47",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Harden auth secrets: unique panel API keys, timing-safe compares, no install-password admin reset after login works.",
+      "changelog": [
+        "New installs generate a unique PANEL_API_SECRET instead of a shared git fallback",
+        "API keys, cron, metrics, and internal calls use constant-time secret compares",
+        "INSTALL_ADMIN_PASSWORD can only repair a missing/broken admin hash, not overwrite a working password",
+        "Line and reseller credentials use CSPRNG; bcrypt cost 12; host metrics persist via jsonb_set"
+      ],
+      "fixes": [
+        "Shared installer API secret allowed anyone with the public repo to call remote-update and remote-unlock on panels that used the fallback",
+        "Knowing the original install password reset admin even after the owner changed it",
+        "Cron secret accepted in the URL query string (leaked in access logs)"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.47.tar.gz"
+    },
     {
       "version": "1.9.46",
       "date": "2026-08-14",

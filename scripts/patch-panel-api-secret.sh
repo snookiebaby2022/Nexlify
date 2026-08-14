@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Add PANEL_API_SECRET to a panel's .env if missing.
-# Run on the target server: sudo bash scripts/patch-panel-api-secret.sh
-#
-# This enables remote management features (unlock-IP, remote-update, license sync)
-# between the marketing site and customer panels.
+# Run on the target server:
+#   sudo PANEL_API_SECRET='from-vendor' bash scripts/patch-panel-api-secret.sh
 set -euo pipefail
 
 PANEL_DIR="${PANEL_DIR:-/home/nexlify}"
-PANEL_API_SECRET="21ea28d45f9d1e1e6d5fd76cd4c078d46d5f3d531f1a6d25"
+PANEL_API_SECRET="${PANEL_API_SECRET:-}"
+
+if [ -z "$PANEL_API_SECRET" ]; then
+  echo "ERROR: Set PANEL_API_SECRET before running (do not use a shared git-committed value)."
+  echo "  sudo PANEL_API_SECRET='your-secret' bash scripts/patch-panel-api-secret.sh"
+  exit 1
+fi
 
 if [ ! -f "$PANEL_DIR/.env" ]; then
   echo "ERROR: $PANEL_DIR/.env not found"

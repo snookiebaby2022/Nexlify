@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.46' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.47' | sudo bash
 #
 # Server IP/hostname is detected automatically. Then open the login URL, sign in
 # with the admin password shown at the end, and paste your license key under Admin → License.
@@ -34,7 +34,7 @@ usage() {
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.46' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.47' | sudo bash
 
 Options:
   --ip IP                Override auto-detected server IP or hostname
@@ -48,9 +48,9 @@ Options:
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.46' | sudo bash
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.46' | sudo bash -s -- --license NXLF1-XXXXX
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.46' | sudo bash -s -- --domain panel.example.com --email admin@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.47' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.47' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.47' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 
@@ -536,9 +536,11 @@ configure_panel_license_sync() {
     secret="$(curl -fsSL "${vendor}/install/panel-sync.env?v=167" 2>/dev/null \
       | grep '^PANEL_API_SECRET=' | cut -d= -f2- | tr -d '\r' || true)"
   fi
-  # Hardcoded fallback — same secret used on nexlify.live marketing site
+  # Fetch vendor sync secret when provided; otherwise generate a unique per-install secret.
+  # Do not embed a shared fallback in this script.
   if [ -z "$secret" ]; then
-    secret="21ea28d45f9d1e1e6d5fd76cd4c078d46d5f3d531f1a6d25"
+    secret="$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+    log "Generated unique PANEL_API_SECRET (set INSTALL_PANEL_SYNC_SECRET to use vendor remote-update)"
   fi
   set_kv NEXLIFY_PANEL_API_SECRET "$secret"
   set_kv PANEL_INTERNAL_SECRET "$secret"

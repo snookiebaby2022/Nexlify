@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession, hashPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
+import { randomBytes } from "crypto";
 
 function roleLabel(role: PanelRole) {
   if (role === PanelRole.ADMIN) return "admin";
@@ -137,7 +138,9 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
-  const password = body.password || Math.random().toString(36).slice(2, 10);
+  const password = typeof body.password === "string" && body.password.trim()
+    ? body.password
+    : randomBytes(12).toString("hex");
 
   const role =
     body.role === "SUB_RESELLER" ? PanelRole.SUB_RESELLER : PanelRole.RESELLER;

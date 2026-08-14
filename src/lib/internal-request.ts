@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { secretsEqual } from "@/lib/secrets-equal";
 
 /** True when the request is an authorized internal call (not spoofable via X-Forwarded-For alone). */
 export function isAuthorizedInternalRequest(req: NextRequest): boolean {
@@ -10,7 +11,7 @@ export function isAuthorizedInternalRequest(req: NextRequest): boolean {
     const provided =
       req.headers.get("x-panel-internal-secret") ??
       req.headers.get("x-panel-api-key");
-    return provided === secret;
+    return secretsEqual(provided, secret);
   }
   if (process.env.NODE_ENV === "production") return false;
   return !req.headers.get("x-forwarded-for") && !req.headers.get("x-real-ip");

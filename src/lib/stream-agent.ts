@@ -76,7 +76,8 @@ export async function handleAgentHeartbeat(
     await persistHostMetrics(serverId, hostSample).catch(() => {});
   }
 
-  const processes = (Array.isArray(data.processes) ? data.processes : []) as HeartbeatProcess[];
+  const processes = (Array.isArray(data.processes) ? data.processes : [])
+    .slice(0, 200) as HeartbeatProcess[];
   if (processes.length > 0) {
     // Batch update agentPid on streams
     const pidUpdates = processes
@@ -111,7 +112,7 @@ export async function handleAgentHeartbeat(
       await prisma.$transaction(
         processData.map((row) =>
           prisma.streamProcess.upsert({
-            where: { serverId_streamId: { serverId: row.streamId } },
+            where: { serverId_streamId: { serverId: row.serverId, streamId: row.streamId } },
             create: {
               serverId: row.serverId,
               streamId: row.streamId,

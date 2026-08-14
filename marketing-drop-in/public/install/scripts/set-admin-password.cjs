@@ -21,7 +21,7 @@ async function main() {
 
   const prisma = new PrismaClient();
   try {
-    const hash = await bcrypt.hash(pass, 10);
+    const hash = await bcrypt.hash(pass, 12);
     await prisma.panelUser.upsert({
       where: { username: "admin" },
       update: { passwordHash: hash, isActive: true, role: "ADMIN" },
