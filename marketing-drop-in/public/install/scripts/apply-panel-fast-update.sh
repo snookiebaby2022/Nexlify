@@ -113,6 +113,9 @@ backup_next_if_valid() {
     echo "Backing up current production build to .next.backup ..."
     rm -rf "$BACKUP_DIR"
     cp -a .next "$BACKUP_DIR"
+    # Strip accidental recursive symlinks that break next build NFT tracing
+    find "$BACKUP_DIR" -type l \( -name '.next' -o -name '.next.staging' \) -delete 2>/dev/null || true
+    find .next -type l \( -name '.next' -o -name '.next.staging' \) -delete 2>/dev/null || true
     echo "Backup OK"
   else
     echo "No complete .next to backup (first install or prior failed build)"

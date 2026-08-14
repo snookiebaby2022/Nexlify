@@ -23,13 +23,27 @@ STANDALONE="$TARGET/standalone"
 if [ -d "$STANDALONE/.next.staging" ]; then
   mkdir -p "$STANDALONE/.next"
   if command -v rsync >/dev/null 2>&1; then
-    rsync -a "$STANDALONE/.next.staging/" "$STANDALONE/.next/"
+    rsync -a --exclude='.next' --exclude='.next.staging' "$STANDALONE/.next.staging/" "$STANDALONE/.next/"
   else
     cp -a "$STANDALONE/.next.staging/." "$STANDALONE/.next/"
   fi
   rm -rf "$STANDALONE/.next.staging"
   echo "fix-next-distdir: merged standalone/.next.staging → standalone/.next"
 fi
+
+# Remove accidental recursive symlinks (e.g. standalone/.next/.next → .next)
+# that break next build NFT with "Recursive symlink detected"
+for nest in "$STANDALONE/.next" "$STANDALONE/.next.staging" "$TARGET"; do
+  [ -e "$nest/.next" ] || [ -L "$nest/.next" ] || continue
+  if [ -L "$nest/.next" ]; then
+    echo "fix-next-distdir: removing recursive symlink $nest/.next"
+    rm -f "$nest/.next"
+  elif [ -d "$nest/.next" ] && [ "$nest" = "$STANDALONE/.next" ]; then
+    # Never keep a nested .next directory inside standalone/.next
+    echo "fix-next-distdir: removing nested directory $nest/.next"
+    rm -rf "$nest/.next"
+  fi
+done
 
 # Also fix a top-level nested name if someone copied the whole dist oddly
 if [ -d "$TARGET/.next.staging" ] && [ "$TARGET" != "$ROOT" ]; then
