@@ -66,13 +66,44 @@ export async function resolveAutoChannelLogo(
 export async function applyAutoLogoToStream(streamId: string): Promise<string | null> {
   const stream = await prisma.stream.findUnique({
     where: { id: streamId },
-    select: { id: true, name: true, type: true, streamIcon: true, epgChannelId: true },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      streamIcon: true,
+      epgChannelId: true,
+      seriesName: true,
+    },
   });
-  if (!stream || stream.type !== StreamType.LIVE || stream.streamIcon) return stream?.streamIcon ?? null;
+  if (!stream || stream.streamIcon) return stream?.streamIcon ?? null;
 
-  const logo = await resolveAutoChannelLogo(stream.name, { epgChannelId: stream.epgChannelId });
-  if (!logo) return null;
+  if (stream.type === StreamType.LIVE) {
+    const logo = await resolveAutoChannelLogo(stream.name, { epgChannelId: stream.epgChannelId });
+    if (!logo) return null;
+    await prisma.stream.update({ where: { id: streamId }, data: { streamIcon: logo } });
+    return logo;
+  }
 
-  await prisma.stream.update({ where: { id: streamId }, data: { streamIcon: logo } });
-  return logo;
+  if (stream.type === StreamType.MOVIE || stream.type === StreamType.SERIES) {
+    try {
+      const { enrichVodFromTmdb } = await import("@/lib/vod-tmdb-enrich");
+      const enrich = await enrichVodFromTmdb(
+        stream.seriesName?.trim() || stream.name,
+        stream.type === StreamType.SERIES ? "SERIES" : "MOVIE"
+      );
+      if (!enrich?.streamIcon) return null;
+      await prisma.stream.update({
+        where: { id: streamId },
+        data: {
+          streamIcon: enrich.streamIcon,
+          ...(enrich.agentStartCmd ? { agentStartCmd: enrich.agentStartCmd } : {}),
+        },
+      });
+      return enrich.streamIcon;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
 }

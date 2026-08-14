@@ -40,7 +40,7 @@ export default function AdminConnectionsPage() {
     }[]
   >([]);
   const [search, setSearch] = useState("");
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(50);
   const [tick, setTick] = useState(0);
 
   function load() {

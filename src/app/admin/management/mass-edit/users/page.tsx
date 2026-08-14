@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-const PAGE_SIZES = [50, 100, 200, 500] as const;
+const PAGE_SIZES = [10, 25, 50, 100] as const;
 
 type User = {
   id: string;
@@ -20,7 +20,7 @@ export default function MassEditUsersPage() {
   const [credits, setCredits] = useState(10);
   const [msg, setMsg] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(100);
+  const [pageSize, setPageSize] = useState(50);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export default function MassEditUsersPage() {
     return users.filter((u) => u.username.toLowerCase().includes(q) || u.role.toLowerCase().includes(q));
   }, [users, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filtered.length entriesSize));
   const paged = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page, pageSize]);
   const allOnPageSelected = paged.length > 0 && paged.every((u) => selected.has(u.id));
 
@@ -97,7 +97,7 @@ export default function MassEditUsersPage() {
       <div className="flex flex-wrap items-center gap-3">
         <input type="search" placeholder="Search users…" className="rounded border px-3 py-1.5 text-sm bg-transparent" style={{ borderColor: "var(--border)" }} value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
         <select className="rounded border px-2 py-1.5 text-sm bg-transparent" style={{ borderColor: "var(--border)" }} value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}>
-          {PAGE_SIZES.map((n) => <option key={n} value={n}>{n} / page</option>)}
+          {PAGE_SIZES.map((n) => <option key={n} value={n}>{n} entries</option>)}
         </select>
         <span className="text-xs" style={{ color: "var(--muted)" }}>{selected.size} selected · {filtered.length} total</span>
         {selected.size < filtered.length && (

@@ -15,6 +15,7 @@ import {
 import { LINE_DURATION_PRESETS } from "@/lib/line-duration-presets";
 import { creditCostForDays, packageLabelForDays } from "@/lib/package-credits";
 import { packageDurationSortKey } from "@/lib/package-days";
+import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
 
 function YesNo({
   label,
@@ -136,6 +137,7 @@ export function LineAddForm({
       days: preset.days,
       isTrial: preset.isTrial,
       unlimited: false,
+      expiresAt: "", // recompute from days
       packageId: pkg?.id ?? f.packageId,
       maxConnections: pkg?.maxLines ?? f.maxConnections,
     }));
@@ -211,7 +213,8 @@ export function LineAddForm({
     }
 
     const notes = [form.adminNotes, form.resellerNotes].filter(Boolean).join("\n---\n");
-    const days = form.unlimited ? 3650 : form.isTrial ? 1 : form.days;
+    // Duration comes from package/days — isTrial is a flag only (do not force 1 day).
+    const days = form.unlimited ? 3650 : Math.max(1, Number(form.days) || 1);
 
     setSaving(true);
     let data: { error?: string; line?: unknown } = {};
@@ -263,11 +266,7 @@ export function LineAddForm({
 
   const expiryValue =
     form.expiresAt ||
-    (() => {
-      const d = new Date();
-      d.setDate(d.getDate() + (form.unlimited ? 3650 : form.days));
-      return d.toISOString().slice(0, 16);
-    })();
+    toDatetimeLocalValue(expiryFromDays(form.unlimited ? 3650 : form.days));
 
   return (
     <form onSubmit={submit} className="max-w-6xl space-y-4 panel-form-mobile-tight">
@@ -441,6 +440,8 @@ export function LineAddForm({
                             packageId: p.id,
                             days: p.days,
                             maxConnections: p.maxLines,
+                            unlimited: false,
+                            expiresAt: "",
                             isTrial: p.days <= 2 && p.creditCost === 0,
                           });
                           setCreditHint(p.creditCost);
@@ -465,14 +466,17 @@ export function LineAddForm({
                     value={form.packageId}
                     onChange={(e) => {
                       const pkg = packages.find((p) => p.id === e.target.value);
+                      const days = pkg?.days ?? form.days;
                       setForm({
                         ...form,
                         packageId: e.target.value,
-                        days: pkg?.days ?? form.days,
+                        days,
                         maxConnections: pkg?.maxLines ?? form.maxConnections,
-                        isTrial: pkg && pkg.days <= 2 && (pkg.creditCost ?? 0) === 0 ? true : form.isTrial,
+                        unlimited: false,
+                        expiresAt: "",
+                        isTrial: pkg ? pkg.days <= 2 && (pkg.creditCost ?? 0) === 0 : false,
                       });
-                      setCreditHint(pkg ? pkg.creditCost : creditCostForDays(form.days));
+                      setCreditHint(pkg ? pkg.creditCost : creditCostForDays(days));
                     }}
                   >
                     <option value="">Package (optional)</option>
@@ -497,7 +501,7 @@ export function LineAddForm({
                 }
               />
             </FormField>
-            <FormField label="Expiry date (UTC) — click to edit">
+            <FormField label="Expiry date — updates when you pick a package">
               <div className="relative">
                 <input
                   type="datetime-local"
@@ -507,15 +511,11 @@ export function LineAddForm({
                   disabled={form.unlimited}
                   onChange={(e) => setForm({ ...form, expiresAt: e.target.value })}
                 />
-                {!form.unlimited && (
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted)] pointer-events-none">
-                    📅
-                  </span>
-                )}
               </div>
               {!form.unlimited && (
                 <p className="text-xs text-[var(--muted)] mt-1">
-                  Click the field to open the calendar picker. Select a date and time to set custom expiry.
+                  {packageLabelForDays(form.days)} from now
+                  {form.expiresAt ? " (custom date set — clear package re-pick to reset)" : ""}.
                 </p>
               )}
             </FormField>
@@ -537,7 +537,7 @@ export function LineAddForm({
                   value={form.days}
                   onChange={(e) => {
                     const days = parseInt(e.target.value, 10) || 30;
-                    setForm({ ...form, days });
+                    setForm({ ...form, days, expiresAt: "", unlimited: false });
                     setCreditHint(creditCostForDays(days));
                   }}
                 />

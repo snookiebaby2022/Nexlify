@@ -32,7 +32,7 @@ export function ManageSubResellersTable({
   onRefresh: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<"displayId" | "username" | "credits" | "lines">("displayId");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -67,7 +67,7 @@ export function ManageSubResellersTable({
   }, [resellers, search, sortKey, sortDir]);
 
   const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total entriesSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 

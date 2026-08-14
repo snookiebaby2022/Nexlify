@@ -6,7 +6,7 @@ import { ProgressBar, useProgress } from "@/components/progress-bar";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 
-const PAGE_SIZES = [50, 100, 200, 500] as const;
+const PAGE_SIZES = [10, 25, 50, 100] as const;
 
 type Stream = {
   id: string;
@@ -45,7 +45,7 @@ export function StreamsMassEdit({
   const [backupUrl, setBackupUrl] = useState("");
   const [msg, setMsg] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(100);
+  const [pageSize, setPageSize] = useState(50);
   const [search, setSearch] = useState("");
   const progress = useProgress();
 
@@ -97,7 +97,7 @@ export function StreamsMassEdit({
     return streams.filter((s) => s.name.toLowerCase().includes(q));
   }, [streams, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filtered.length entriesSize));
   const paged = useMemo(() => {
     return filtered.slice((page - 1) * pageSize, page * pageSize);
   }, [filtered, page, pageSize]);
@@ -435,7 +435,7 @@ export function StreamsMassEdit({
           onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
         >
           {PAGE_SIZES.map((n) => (
-            <option key={n} value={n}>{n} / page</option>
+            <option key={n} value={n}>{n} entries</option>
           ))}
         </select>
         <span className="text-xs" style={{ color: "var(--muted)" }}>

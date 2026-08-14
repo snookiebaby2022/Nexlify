@@ -5,7 +5,7 @@ import Link from "next/link";
 
 type Entity = "streams" | "lines" | "users";
 
-const PAGE_SIZES = [25, 50, 100, 200] as const;
+const PAGE_SIZES = [10, 25, 50, 100] as const;
 
 export function MassDeletePanel({
   entity,
@@ -106,7 +106,7 @@ export function MassDeletePanel({
     load();
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total entriesSize));
 
   return (
     <div className="space-y-6">

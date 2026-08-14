@@ -42,7 +42,7 @@ export default function StreamSettingsPage() {
               key: "autoChannelLogos",
               label: "Auto-fetch channel logos",
               type: "yesno",
-              hint: "When enabled, new live streams without an icon get a logo from TMDB TV search or public logo URLs.",
+              hint: "When enabled, new live streams without an icon get a logo from TMDB TV search or public logo URLs. Movies/series use TMDB posters when an API key is set (Settings → TMDB).",
             },
             {
               key: "autoChannelLogoSource",

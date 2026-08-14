@@ -59,7 +59,7 @@ export function ManageUsersTable({
   const addUserHref = panel === "reseller" ? "/reseller/users/add" : "/admin/resellers/add";
   const creditsHref = panel === "reseller" ? "/reseller/users/credits" : "/admin/resellers/credits";
   const [search, setSearch] = useState("");
-  const [pageSize, setPageSize] = useState(100);
+  const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -99,7 +99,7 @@ export function ManageUsersTable({
   }, [users, search, sortKey, sortDir]);
 
   const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total entriesSize));
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * pageSize;
   const pageRows = filtered.slice(start, start + pageSize);

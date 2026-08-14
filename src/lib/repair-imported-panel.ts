@@ -2,6 +2,7 @@ import type { PrismaClient, PanelRole } from "@prisma/client";
 import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
 import { ensureStandardUserGroups } from "@/lib/ensure-user-groups";
 import { packageLabelForDays, STANDARD_PACKAGE_TEMPLATES } from "@/lib/package-credits";
+import { reassignUncategorizedLiveStreams } from "@/lib/reassign-uncategorized-live";
 
 export type RepairImportedPanelResult = {
   streamsActivated: number;
@@ -17,6 +18,8 @@ export type RepairImportedPanelResult = {
   standardPackagesEnsured: number;
   seriesLinkedToBouquets: number;
   moviesLinkedToBouquets: number;
+  uncategorizedReassigned: number;
+  uncategorizedRemaining: number;
 };
 
 /**
@@ -38,6 +41,8 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
     standardPackagesEnsured: 0,
     seriesLinkedToBouquets: 0,
     moviesLinkedToBouquets: 0,
+    uncategorizedReassigned: 0,
+    uncategorizedRemaining: 0,
   };
 
   const activated = await prisma.stream.updateMany({
@@ -150,6 +155,10 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
     data: { categoryId: liveUncat.id },
   });
   result.liveCategorized = liveFix.count;
+
+  const reassigned = await reassignUncategorizedLiveStreams(prisma);
+  result.uncategorizedReassigned = reassigned.moved;
+  result.uncategorizedRemaining = reassigned.remaining;
 
   // Promote resellers with a parent to SUB_RESELLER.
   const withParent = await prisma.panelUser.findMany({

@@ -13,7 +13,7 @@ type Episode = {
   series: { id: string; name: string };
 };
 
-const PAGE_SIZES = [25, 50, 100, 200] as const;
+const PAGE_SIZES = [10, 25, 50, 100] as const;
 
 export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: string }) {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -58,7 +58,7 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
     });
   }, [episodes, search, seasonFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total entriesSize));
 
   async function remove(id: string) {
     if (!confirm("Delete this episode?")) return;

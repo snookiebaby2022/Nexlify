@@ -94,7 +94,7 @@ export function ManageLinesTable({
   const base = panel === "reseller" ? "/reseller" : "/admin";
   const [search, setSearch] = useState("");
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [pageSize, setPageSize] = useState(100);
+  const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -534,7 +534,7 @@ export function ManageLinesTable({
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-xs" style={{ color: "var(--muted)" }}>
-            Rows per page
+            Show entries
             <select
               className="xui-lines-select py-1"
               value={pageSize}

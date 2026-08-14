@@ -128,6 +128,21 @@ export async function buildStreamCreateData(body: StreamCreateInput) {
     const { resolveAutoChannelLogo } = await import("@/lib/channel-logo");
     streamIcon = await resolveAutoChannelLogo(body.name, { epgChannelId: body.epgChannelId });
   }
+  if (!streamIcon && (type === "MOVIE" || type === "SERIES")) {
+    try {
+      const { enrichVodFromTmdb } = await import("@/lib/vod-tmdb-enrich");
+      const enrichment = await enrichVodFromTmdb(
+        body.seriesName || body.name,
+        type === "SERIES" ? "SERIES" : "MOVIE"
+      );
+      if (enrichment?.streamIcon) {
+        streamIcon = enrichment.streamIcon;
+        if (!agentStartCmd && enrichment.agentStartCmd) agentStartCmd = enrichment.agentStartCmd;
+      }
+    } catch {
+      /* TMDB optional */
+    }
+  }
 
   return {
     data: {

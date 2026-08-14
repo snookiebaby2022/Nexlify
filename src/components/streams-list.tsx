@@ -19,6 +19,7 @@ import { StreamClientsModal } from "@/components/stream-clients-modal";
 import { formatUptimeXui, type StreamLiveStat } from "@/lib/stream-live-stats";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
+import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
 
 type Stream = {
   id: string;
@@ -36,7 +37,7 @@ type Stream = {
   liveStats?: StreamLiveStat | null;
 };
 
-const PAGE_SIZES = [25, 50, 100, 200] as const;
+const PAGE_SIZES = LIST_PAGE_SIZE_OPTIONS;
 
 function serverLabel(s: Stream) {
   const name = s.server?.name ?? "Main Server";
@@ -91,7 +92,7 @@ export function StreamsList({
   const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_LIST_PAGE_SIZE);
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [serverId, setServerId] = useState("");
