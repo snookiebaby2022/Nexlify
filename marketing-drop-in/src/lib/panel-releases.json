@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.40",
+  "latestVersion": "1.9.41",
   "releases": [
+    {
+      "version": "1.9.41",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Permanently fix recurring pg_dump cron errors on customer panels.",
+      "changelog": [
+        "pg_dump uses the newest PostgreSQL client binary (avoids server/client version mismatch)",
+        "Dumps pass host/user/database as argv plus PGPASSWORD (Prisma URL query flags no longer break libpq)",
+        "Backup folder is the panel install root, not .next/standalone; timeout raised to 2 hours with a lock file",
+        "Installer and panel updates install/symlink postgresql-client; PM2 cron PATH includes /usr/lib/postgresql/*/bin"
+      ],
+      "fixes": [
+        "Dashboard cron log showed pg_dump (error) every hour",
+        "pg_dump: server version mismatch when /usr/bin/pg_dump lagged the running Postgres",
+        "invalid URI query parameter: schema from Prisma DATABASE_URL",
+        "Cloud backup cleared PGPASSWORD and aborted the dump"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.41.tar.gz"
+    },
     {
       "version": "1.9.40",
       "date": "2026-08-14",

@@ -20,6 +20,20 @@ function loadEnv() {
   return out;
 }
 
+function pgBinPath() {
+  const extra = [
+    "/usr/local/bin",
+    "/usr/lib/postgresql/18/bin",
+    "/usr/lib/postgresql/17/bin",
+    "/usr/lib/postgresql/16/bin",
+    "/usr/lib/postgresql/15/bin",
+    "/usr/lib/postgresql/14/bin",
+    "/usr/bin",
+    "/bin",
+  ].join(":");
+  return `${extra}:${process.env.PATH || "/usr/bin:/bin"}`;
+}
+
 const fileEnv = loadEnv();
 const panelPort = String(
   process.env.PORT || process.env.PANEL_PORT || fileEnv.PORT || fileEnv.PANEL_PORT || "13000"
@@ -79,6 +93,7 @@ const sharedPanelEnv = {
   NEXLIFY_PANEL_API_SECRET: fileEnv.NEXLIFY_PANEL_API_SECRET || "",
   PANEL_INTERNAL_SECRET: fileEnv.PANEL_INTERNAL_SECRET || "",
   NEXLIFY_LICENSE_SKIP_HOST_CHECK: fileEnv.NEXLIFY_LICENSE_SKIP_HOST_CHECK || "",
+  PATH: pgBinPath(),
   // Cap panel heap — large imports temporarily need room, but 4GB invites bloat.
   NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=1536",
 };
@@ -129,6 +144,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         DATABASE_URL: fileEnv.DATABASE_URL || "",
+        PATH: pgBinPath(),
         NEXLIFY_CRON_MAX_OLD_SPACE_MB: fileEnv.NEXLIFY_CRON_MAX_OLD_SPACE_MB || "512",
         NEXLIFY_CRON_RECYCLE_RSS_MB: fileEnv.NEXLIFY_CRON_RECYCLE_RSS_MB || "400",
       },

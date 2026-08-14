@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.40}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.41}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -276,6 +276,9 @@ cmd_deps() {
     npm ci --include=dev --include=optional || npm install --include=dev --include=optional
   else
     echo "Lockfile unchanged — dev deps present."
+  fi
+  if [ -x "$ROOT/scripts/ensure-pg-dump.sh" ]; then
+    bash "$ROOT/scripts/ensure-pg-dump.sh" || echo "WARN: pg_dump helper skipped"
   fi
 }
 

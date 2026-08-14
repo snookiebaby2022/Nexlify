@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.40' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.41' | sudo bash
 #
 # Server IP/hostname is detected automatically. Then open the login URL, sign in
 # with the admin password shown at the end, and paste your license key under Admin → License.
@@ -34,7 +34,7 @@ usage() {
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.40' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.41' | sudo bash
 
 Options:
   --ip IP                Override auto-detected server IP or hostname
@@ -48,9 +48,9 @@ Options:
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.40' | sudo bash
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.40' | sudo bash -s -- --license NXLF1-XXXXX
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.40' | sudo bash -s -- --domain panel.example.com --email admin@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.41' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.41' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.41' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 
@@ -237,7 +237,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 progress_step "Installing system packages"
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates gnupg nginx postgresql postgresql-contrib \
+apt-get install -y -qq curl ca-certificates gnupg nginx postgresql postgresql-contrib postgresql-client \
   redis-server ffmpeg build-essential python3 openssl rsync
 
 if ! command -v node >/dev/null 2>&1 || [ "$(node -v | sed 's/v//' | cut -d. -f1)" -lt 20 ]; then
@@ -353,6 +353,11 @@ sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='nexlify'" | gre
 sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='nexlify'" | grep -q 1 || \
   sudo -u postgres psql -c "CREATE DATABASE nexlify OWNER nexlify;"
 sudo -u postgres psql -c "ALTER USER nexlify WITH PASSWORD '${PG_PASS}';" >/dev/null
+if [ -x "$PANEL_DIR/scripts/ensure-pg-dump.sh" ]; then
+  ENSURE_PG_DUMP_REQUIRED=0 bash "$PANEL_DIR/scripts/ensure-pg-dump.sh" || true
+elif [ -x scripts/ensure-pg-dump.sh ]; then
+  ENSURE_PG_DUMP_REQUIRED=0 bash scripts/ensure-pg-dump.sh || true
+fi
 
 JWT_SECRET="$(openssl rand -hex 32)"
 CRON_SECRET="$(openssl rand -hex 24)"

@@ -60,7 +60,7 @@ export async function runCloudBackup(): Promise<CloudBackupJob> {
       pgDumpPath = await runPgDump();
     } catch (e) {
       // Non-fatal — continue without DB dump
-      console.error("pg_dump failed during cloud backup:", e);
+      console.error("pg_dump failed during cloud backup:", e instanceof Error ? e.message : e);
     }
   }
 
@@ -174,24 +174,12 @@ export async function markUploaded(backupId: string, uploadUrl?: string): Promis
 }
 
 /**
- * Run pg_dump from Node.js
+ * Run pg_dump from Node.js (shared helper — never shells the DATABASE_URL).
  */
 async function runPgDump(): Promise<string> {
-  const { execSync } = await import("child_process");
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) throw new Error("DATABASE_URL not set");
-
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const dir = path.resolve(process.cwd(), "./backups/pg");
-  await mkdir(dir, { recursive: true });
-  const outPath = path.join(dir, `nexlify-pg-${stamp}.sql.gz`);
-
-  execSync(`pg_dump "${databaseUrl}" | gzip -9 > "${outPath}"`, {
-    timeout: 300_000,
-    env: { ...process.env, PGPASSWORD: "" },
-  });
-
-  return outPath;
+  const { runPgDumpToGzip } = await import("@/lib/pg-dump");
+  const result = await runPgDumpToGzip({ timeoutMs: 2 * 60 * 60 * 1000 });
+  return result.outPath;
 }
 
 /**

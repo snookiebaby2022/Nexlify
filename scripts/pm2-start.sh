@@ -9,6 +9,9 @@ sed -i 's/\r$//' scripts/*.sh 2>/dev/null || true
 bash scripts/ensure-tsx.sh || {
   echo "WARN: ensure-tsx failed — nexlify-cron may not start until tsx is installed"
 }
+bash scripts/ensure-pg-dump.sh || {
+  echo "WARN: pg_dump not on PATH — PostgreSQL backups may fail until postgresql-client is installed"
+}
 
 ./scripts/ensure-panel-env.sh
 

@@ -38,6 +38,9 @@ deploy_panel() {
   dir="$(resolve_panel_dir)"
   echo ">>> Deploying panel at $dir ..."
   cd "$dir"
+  if [ -x scripts/ensure-pg-dump.sh ]; then
+    bash scripts/ensure-pg-dump.sh || echo "WARN: pg_dump helper skipped"
+  fi
   git pull origin main || true
   npm install --production=false
   if command -v npx >/dev/null 2>&1 && [ -d prisma ]; then

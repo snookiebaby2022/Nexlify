@@ -19,6 +19,8 @@ type BackupSettings = {
   s3Bucket?: string;
   s3Region?: string;
   pgDumpCronEnabled?: boolean;
+  pgDumpCronSchedule?: string;
+  pgDumpKeepDays?: number;
 };
 
 const EVERY_24H_CRON = "0 3 * * *";
@@ -148,6 +150,41 @@ export default function BackupSettingsPage() {
               value={data.keepDays}
               onChange={(e) => setData({ ...data, keepDays: parseInt(e.target.value, 10) })}
             />
+          </label>
+        </div>
+      </SettingsPanel>
+
+      <SettingsPanel
+        title="PostgreSQL dumps"
+        info="Writes a gzipped SQL dump via pg_dump. Uses the matching PostgreSQL client and never puts the database password on the shell. Default: daily at 04:00 UTC."
+      >
+        <div className="grid md:grid-cols-2 gap-4 w-full">
+          <YesNo
+            label="Enable PostgreSQL dumps (nexlify-cron)"
+            value={data.pgDumpCronEnabled === true}
+            onChange={(pgDumpCronEnabled) => setData({ ...data, pgDumpCronEnabled })}
+          />
+          <label className="block text-sm">
+            <span style={{ color: "var(--muted)" }}>Keep dumps (days)</span>
+            <input
+              type="number"
+              className={inputClass}
+              style={inputStyle}
+              value={data.pgDumpKeepDays ?? 14}
+              onChange={(e) => setData({ ...data, pgDumpKeepDays: parseInt(e.target.value, 10) })}
+            />
+          </label>
+          <label className="block text-sm md:col-span-2">
+            <span style={{ color: "var(--muted)" }}>Dump schedule (UTC hour)</span>
+            <input
+              className={inputClass}
+              style={inputStyle}
+              value={data.pgDumpCronSchedule || "0 4 * * *"}
+              onChange={(e) => setData({ ...data, pgDumpCronSchedule: e.target.value })}
+            />
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              Files land in <code className="font-mono">backups/pg/</code> under the panel install.
+            </p>
           </label>
         </div>
       </SettingsPanel>

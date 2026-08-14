@@ -670,48 +670,46 @@ async function jobPgDump() {
   const start = Date.now();
   try {
     const backup = await getSettingGroup("backup");
-    if (!backup.pgDumpCronEnabled) {
-      await logCron("pg_dump", "skipped", "disabled", Date.now() - start);
+    const dumpOn =
+      backup.pgDumpCronEnabled === true ||
+      backup.pgDumpCronEnabled === "true" ||
+      backup.pgDumpCronEnabled === 1 ||
+      backup.pgDumpCronEnabled === "1";
+    if (!dumpOn) {
       return;
     }
 
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) {
-      await logCron("pg_dump", "error", "DATABASE_URL not set", Date.now() - start);
+    const { cronMatchesThisHour } = await import("./backup-schedule");
+    const expr = String(backup.pgDumpCronSchedule || "0 4 * * *").trim();
+    if (!cronMatchesThisHour(expr)) {
       return;
     }
 
-    const { mkdir, writeFile } = await import("fs/promises");
-    const { execSync } = await import("child_process");
-    const path = await import("path");
+    const last = await prisma.panelSetting.findUnique({ where: { key: "pg_dump_last_run" } });
+    if (last?.value) {
+      const elapsed = Date.now() - new Date(last.value).getTime();
+      const hourField = expr.split(/\s+/)[1] ?? "4";
+      const minGapMs = hourField === "*" ? 50 * 60_000 : 23 * 60 * 60 * 1000;
+      if (elapsed < minGapMs) return;
+    }
 
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const dir = path.resolve(process.cwd(), "./backups/pg");
-    await mkdir(dir, { recursive: true });
-    const outPath = path.join(dir, `nexlify-pg-${stamp}.sql.gz`);
-
-    execSync(`pg_dump "${databaseUrl}" | gzip -9 > "${outPath}"`, {
-      timeout: 300_000,
-      env: { ...process.env },
+    const { runPgDumpToGzip, cleanupOldPgDumps } = await import("./pg-dump");
+    const result = await runPgDumpToGzip({ timeoutMs: 2 * 60 * 60 * 1000 });
+    cleanupOldPgDumps(result.dir, Number(backup.pgDumpKeepDays ?? 14));
+    await prisma.panelSetting.upsert({
+      where: { key: "pg_dump_last_run" },
+      create: { key: "pg_dump_last_run", value: new Date().toISOString() },
+      update: { value: new Date().toISOString() },
     });
-
-    // Cleanup old dumps
-    const keepDays = Number(backup.pgDumpKeepDays ?? 14);
-    try {
-      const { readdirSync, statSync, unlinkSync } = await import("fs");
-      const files = readdirSync(dir).filter((f) => f.startsWith("nexlify-pg-") && f.endsWith(".sql.gz"));
-      const cutoff = Date.now() - keepDays * 86400000;
-      for (const f of files) {
-        const st = statSync(path.join(dir, f));
-        if (st.mtimeMs < cutoff) {
-          unlinkSync(path.join(dir, f));
-        }
-      }
-    } catch { /* best effort cleanup */ }
-
-    await logCron("pg_dump", "ok", `wrote ${outPath}`, Date.now() - start);
+    await logCron(
+      "pg_dump",
+      "ok",
+      `wrote ${result.outPath} (${result.bytes} bytes via ${result.pgDumpPath})`,
+      Date.now() - start
+    );
   } catch (e) {
-    await logCron("pg_dump", "error", String(e), Date.now() - start);
+    const { sanitizePgDumpError } = await import("./pg-dump");
+    await logCron("pg_dump", "error", sanitizePgDumpError(e), Date.now() - start);
   }
 }
 

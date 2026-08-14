@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+export PATH="/usr/local/bin:/usr/lib/postgresql/18/bin:/usr/lib/postgresql/17/bin:/usr/lib/postgresql/16/bin:/usr/lib/postgresql/15/bin:/usr/lib/postgresql/14/bin:/usr/bin:/bin:${PATH:-}"
+
 # Keep the cron worker lean. Build/install scripts often set 3–4GB which lets
 # tsx retain a huge heap after large imports / EPG jobs.
 CRON_HEAP_MB="${NEXLIFY_CRON_MAX_OLD_SPACE_MB:-512}"

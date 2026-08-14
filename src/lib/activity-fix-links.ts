@@ -61,6 +61,7 @@ export function cronFixHref(job: string, status: string): string | null {
   if (status === "ok") return null;
   const j = job.toLowerCase();
   if (j.includes("epg")) return "/admin/epg/sources";
+  if (j.includes("pg_dump") || j.includes("pgdump")) return "/admin/settings/backup";
   if (j.includes("backup")) return "/admin/settings/backup";
   if (j.includes("ssl") || j.includes("cert")) return "/admin/settings/domains";
   if (j.includes("stream") || j.includes("probe")) return "/admin/stream_errors";

@@ -37,6 +37,22 @@ export function cronMatchesNow(expression: string, date = new Date()): boolean {
   );
 }
 
+/**
+ * Hourly cron workers rarely run at minute 0. Match hour/day/month/dow only
+ * so a daily "0 4 * * *" dump still runs during the 04:00 UTC hourly tick.
+ */
+export function cronMatchesThisHour(expression: string, date = new Date()): boolean {
+  const parts = expression.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+  const [, hour, dom, month, dow] = parts;
+  return (
+    fieldMatches(hour, date.getUTCHours(), 0, 23) &&
+    fieldMatches(dom, date.getUTCDate(), 1, 31) &&
+    fieldMatches(month, date.getUTCMonth() + 1, 1, 12) &&
+    fieldMatches(dow, date.getUTCDay(), 0, 6)
+  );
+}
+
 const BACKUP_LAST_RUN_KEY = "backup_last_run";
 
 export async function shouldRunScheduledBackup(): Promise<boolean> {

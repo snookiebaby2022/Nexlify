@@ -202,6 +202,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     s3SecretKey: "",
     pgDumpCronEnabled: false,
     pgDumpCronSchedule: "0 4 * * *",
+    pgDumpKeepDays: 14,
     pgDumpDocUrl: "/admin/settings/server#pg-dump",
   },
   tmdb: {

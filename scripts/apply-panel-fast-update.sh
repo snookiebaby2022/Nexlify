@@ -277,6 +277,9 @@ cmd_deps() {
   else
     echo "Lockfile unchanged — dev deps present."
   fi
+  if [ -x "$ROOT/scripts/ensure-pg-dump.sh" ]; then
+    bash "$ROOT/scripts/ensure-pg-dump.sh" || echo "WARN: pg_dump helper skipped"
+  fi
 }
 
 cmd_prisma() {
