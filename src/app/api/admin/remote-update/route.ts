@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { version: fromVersion } = await readInstalledVersion(repoPath);
-  const result = await startBackgroundPanelUpdate(repoPath, fromVersion);
+  const result = await startBackgroundPanelUpdate(repoPath, fromVersion, undefined, { force });
 
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.error }, { status: 500 });

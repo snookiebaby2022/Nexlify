@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { clearLicenseServerBinding, setLicenseServerStatus } from "@/lib/license-server-admin";
 import { secretsEqual } from "@/lib/secrets-equal";
 import { requirePanelApiKey } from "@/lib/auth";
+import { panelUrlCandidates } from "@/lib/panel-url-variants";
 
 export type PanelSyncAction =
   | "ACTIVATE"
@@ -46,13 +47,30 @@ export async function requirePanelSyncAuth(
 }
 
 export async function apiKeyForPanelUrl(panelUrl: string): Promise<string | null> {
-  const url = normalizePanelUrl(panelUrl);
-  const row = await prisma.license.findFirst({
-    where: { panelUrl: url, panelApiSecret: { not: null } },
-    orderBy: { activatedAt: "desc" },
-    select: { panelApiSecret: true },
-  });
-  if (row?.panelApiSecret?.trim()) return row.panelApiSecret.trim();
+  const candidates = panelUrlCandidates(panelUrl);
+  if (candidates.length) {
+    const row = await prisma.license.findFirst({
+      where: { panelUrl: { in: candidates }, panelApiSecret: { not: null } },
+      orderBy: { activatedAt: "desc" },
+      select: { panelApiSecret: true },
+    });
+    if (row?.panelApiSecret?.trim()) return row.panelApiSecret.trim();
+  }
+  try {
+    const host = new URL(
+      /^https?:\/\//i.test(panelUrl.trim()) ? panelUrl.trim() : `http://${panelUrl.trim()}`,
+    ).hostname;
+    if (host) {
+      const row = await prisma.license.findFirst({
+        where: { panelUrl: { contains: host }, panelApiSecret: { not: null } },
+        orderBy: { activatedAt: "desc" },
+        select: { panelApiSecret: true },
+      });
+      if (row?.panelApiSecret?.trim()) return row.panelApiSecret.trim();
+    }
+  } catch {
+    /* ignore */
+  }
   return panelApiSecret();
 }
 

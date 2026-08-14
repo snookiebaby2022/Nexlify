@@ -235,7 +235,8 @@ export function progressForStep(stepName: string): number {
 export async function startBackgroundPanelUpdate(
   repoPath: string,
   fromVersion: string,
-  targetVersion?: string
+  targetVersion?: string,
+  opts?: { force?: boolean }
 ): Promise<{ ok: boolean; error?: string }> {
   repoPath = resolvePanelRepoPathSync(repoPath);
   const existing = await reconcileStaleUpdateJob(repoPath);
@@ -281,7 +282,11 @@ export async function startBackgroundPanelUpdate(
         cwd: repoPath,
         detached: true,
         stdio: "ignore",
-        env: process.env,
+        env: {
+          ...process.env,
+          PANEL_REPO_PATH: repoPath,
+          ...(opts?.force ? { PANEL_UPDATE_FORCE: "1" } : {}),
+        },
         windowsHide: true,
       });
       child.unref();

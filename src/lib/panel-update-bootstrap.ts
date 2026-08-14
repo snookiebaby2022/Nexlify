@@ -43,6 +43,8 @@ cd '${root}'
 mkdir -p scripts
 BASE='${base}'
 BUST='${bust}'
+GH='https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main'
+ORIGIN_IP='${(process.env.PANEL_VENDOR_IP || "85.17.162.54").replace(/'/g, "")}'
 fetch() {
   local url="$1" dest="$2"
   if curl -fsSL "$url" -o "$dest.new"; then
@@ -52,19 +54,33 @@ fetch() {
     echo "OK: $dest"
     return 0
   fi
-  echo "WARN: could not fetch $url" >&2
   return 1
 }
-fetch "$BASE/apply-panel-fast-update.sh?$BUST" "scripts/apply-panel-fast-update.sh" || true
-fetch "$BASE/apply-prebuilt-update.sh?$BUST" "scripts/apply-prebuilt-update.sh" || true
-fetch "$BASE/scripts/panel-restart-safe.sh?$BUST" "scripts/panel-restart-safe.sh" || true
-fetch "$BASE/scripts/panel-update-recover.sh?$BUST" "scripts/panel-update-recover.sh" || true
-fetch "$BASE/scripts/has-valid-next-build.sh?$BUST" "scripts/has-valid-next-build.sh" || true
-fetch "$BASE/scripts/panel-update-background.sh?$BUST" "scripts/panel-update-background.sh" || true
-fetch "$BASE/scripts/panel-update-background.ts?$BUST" "scripts/panel-update-background.ts" || true
-fetch "$BASE/panel-vendor-origin.env?$BUST" "scripts/panel-vendor-origin.env" || true
+fetch_vendor() {
+  local rel="$1" dest="$2"
+  fetch "$BASE/$rel?$BUST" "$dest" && return 0
+  local host path
+  host='nexlify.live'
+  path="/install/$rel"
+  curl -fsS --max-time 60 --resolve "\${host}:443:\${ORIGIN_IP}" "https://\${host}\${path}?$BUST" -o "$dest.new" 2>/dev/null || return 1
+  sed -i 's/\\r$//' "$dest.new" 2>/dev/null || true
+  chmod +x "$dest.new"
+  mv "$dest.new" "$dest"
+  echo "OK origin: $dest"
+}
+fetch_gh() {
+  local rel="$1" dest="$2"
+  fetch "$GH/$rel" "$dest"
+}
+fetch_gh scripts/apply-panel-fast-update.sh scripts/apply-panel-fast-update.sh || fetch_vendor apply-panel-fast-update.sh scripts/apply-panel-fast-update.sh || true
+fetch_gh scripts/apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || fetch_vendor apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || true
+fetch_gh scripts/panel-restart-safe.sh scripts/panel-restart-safe.sh || fetch_vendor scripts/panel-restart-safe.sh scripts/panel-restart-safe.sh || true
+fetch_gh scripts/panel-update-recover.sh scripts/panel-update-recover.sh || fetch_vendor scripts/panel-update-recover.sh scripts/panel-update-recover.sh || true
+fetch_gh scripts/has-valid-next-build.sh scripts/has-valid-next-build.sh || fetch_vendor scripts/has-valid-next-build.sh scripts/has-valid-next-build.sh || true
+fetch_gh scripts/panel-update-background.sh scripts/panel-update-background.sh || fetch_vendor scripts/panel-update-background.sh scripts/panel-update-background.sh || true
+fetch_gh scripts/panel-update-background.ts scripts/panel-update-background.ts || fetch_vendor scripts/panel-update-background.ts scripts/panel-update-background.ts || true
 sed -i 's/\\r$//' scripts/*.sh 2>/dev/null || true
 chmod +x scripts/*.sh 2>/dev/null || true
-echo "Bootstrap complete (vendor=$BASE cache=$BUST)"
+echo "Bootstrap complete (github+vendor=$BASE cache=$BUST)"
 `.trim();
 }

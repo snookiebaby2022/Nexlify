@@ -7,7 +7,7 @@ import {
   startBackgroundPanelUpdate,
 } from "@/lib/panel-update-job";
 import { resolvePatchUpdateScript } from "@/lib/panel-update";
-import { readInstalledVersion } from "@/lib/panel-version";
+import { getPanelVersionInfo, readInstalledVersion } from "@/lib/panel-version";
 import { getPanelUpdateStatus } from "@/lib/panel-update-auto";
 
 /** Vendor (nexlify.live) triggers a background panel update on a customer VPS. */
@@ -26,12 +26,13 @@ export async function POST(req: NextRequest) {
   const server = await getPanelServerSettings();
   const repoPath = getResolvedRepoPath(server);
   const patchScript = await resolvePatchUpdateScript(repoPath);
-  if (!patchScript) {
+  const versionInfo = await getPanelVersionInfo(repoPath);
+  if (!patchScript && !versionInfo.isGitRepo) {
     return NextResponse.json(
       {
         ok: false,
         error:
-          "No update script on this panel. Run: curl -fsSL https://nexlify.live/install/fix-panel-auto-update.sh | sudo bash",
+          "This panel has no git checkout and no update script. On the VPS run: curl -fsSL https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main/scripts/fix-remote-update-now.sh | sudo bash",
       },
       { status: 409 }
     );
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { version: fromVersion } = await readInstalledVersion(repoPath);
-  const result = await startBackgroundPanelUpdate(repoPath, fromVersion);
+  const result = await startBackgroundPanelUpdate(repoPath, fromVersion, undefined, { force });
   if (!result.ok) {
     return NextResponse.json(
       { ok: false, error: result.error ?? "Could not start update" },

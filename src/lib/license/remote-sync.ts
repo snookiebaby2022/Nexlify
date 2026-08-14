@@ -5,6 +5,7 @@ import {
   getOrCreateInstanceId,
   getStoredLicense,
   storeRawKeyForOnline,
+  readLicenseRawKey,
 } from "@/lib/license";
 
 const REMOTE_STATUS_KEY = "license.remote_status";
@@ -197,6 +198,11 @@ export async function pollVendorLicenseSync(panelHost: string): Promise<boolean>
   const keyHash = stored?.keyHash ?? "";
   const params = new URLSearchParams({ instanceId });
   if (keyHash) params.set("keyHash", keyHash);
+
+  const rawKey = await readLicenseRawKey();
+  if (rawKey) {
+    await registerPanelWithVendor(rawKey, panelHost);
+  }
 
   const res = await vendorFetch(`/api/licenses/sync?${params.toString()}`);
   if (!res?.ok) return false;

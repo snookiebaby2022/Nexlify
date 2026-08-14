@@ -25,6 +25,7 @@ import {
   fetchNexlifyReleasesFeed,
   isVersionNewer,
 } from "@/lib/panel-releases-feed";
+import { choosePanelUpdateMode, isPanelUpdateForced } from "@/lib/panel-update-mode";
 
 export type UpdateProgressCallback = (update: Partial<PanelUpdateJob>) => void | Promise<void>;
 
@@ -483,8 +484,9 @@ export async function runPanelUpdateWithProgress(
     }
   }
 
-  let ok: boolean;
+  let ok = false;
   let mode: "prebuilt" | "patch" | "git" = "git";
+  const force = isPanelUpdateForced();
 
   const prebuiltScript = await resolvePrebuiltUpdateScript(repoPath);
   let targetVersion = toVersion;
@@ -505,12 +507,37 @@ export async function runPanelUpdateWithProgress(
   } catch {
     /* keep targetVersion as fromVersion and fall back to patch/git below */
   }
+
+  let gitFetchOk: boolean | undefined;
+  if (versionInfo.isGitRepo) {
+    const fetch = await runCommand(repoPath, "git", ["fetch", "origin", "main"], {
+      stepName: "git pull",
+    });
+    steps.push({ name: "git fetch origin main", ok: fetch.ok, output: fetch.output });
+    gitFetchOk = fetch.ok;
+  }
+
   const downloadUrl =
     prebuiltScript && hasNewerRelease
       ? await resolvePrebuiltDownloadUrl(targetVersion, repoPath)
       : null;
 
-  if (prebuiltScript && downloadUrl && hasNewerRelease) {
+  const chosen = choosePanelUpdateMode({
+    isGitRepo: versionInfo.isGitRepo,
+    gitFetchOk,
+    hasPatchScript: Boolean(patchScript),
+    hasPrebuiltDownload: Boolean(downloadUrl),
+    hasNewerRelease,
+  });
+  if (!chosen) {
+    const msg =
+      "No update method available (not a git repo, and no patch/prebuilt script).";
+    await recordResult(settings, false, msg, fromVersion, fromVersion, "update", steps);
+    return { ok: false, message: msg, steps, fromVersion, toVersion: fromVersion };
+  }
+  mode = chosen;
+
+  if (mode === "prebuilt" && prebuiltScript && downloadUrl) {
     mode = "prebuilt";
     // Always fetch the latest prebuilt apply script first so fixes in the script itself are picked up.
     const cacheBust = panelUpdateCacheBust(await readPanelVersionForCacheBust(repoPath));
@@ -536,18 +563,22 @@ export async function runPanelUpdateWithProgress(
       { name: "apply update", command: "bash", args: [script, downloadUrl, "apply"] },
     ];
     ok = await runSteps(repoPath, prebuiltSteps, onProgress, jobSteps, steps);
-  } else if (patchScript) {
-    mode = "patch";
+  } else if (mode === "patch" && patchScript) {
     ok = await runSteps(repoPath, await patchUpdateSteps(patchScript, repoPath), onProgress, jobSteps, steps);
   } else {
-    mode = "git";
-    ok = await runSteps(
-      repoPath,
-      [{ name: "git pull", command: "git", args: ["pull", "--ff-only"] }],
-      onProgress,
-      jobSteps,
-      steps
-    );
+    const gitApply = force
+      ? ({ name: "git pull", command: "git", args: ["reset", "--hard", "origin/main"] } satisfies UpdateStep)
+      : ({ name: "git pull", command: "git", args: ["merge", "--ff-only", "origin/main"] } satisfies UpdateStep);
+    ok = await runSteps(repoPath, [gitApply], onProgress, jobSteps, steps);
+    if (!ok && force) {
+      ok = await runSteps(
+        repoPath,
+        [{ name: "git pull", command: "git", args: ["reset", "--hard", "origin/main"] }],
+        onProgress,
+        jobSteps,
+        steps,
+      );
+    }
     if (ok) {
       ok = await runSteps(repoPath, await postPullBuildSteps(repoPath), onProgress, jobSteps, steps);
     }

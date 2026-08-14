@@ -129,9 +129,13 @@ do_download() {
       path=""
     fi
     if [ -n "$ip" ] && [ -n "$path" ]; then
-      echo "WARN: CDN blocked download — retry via http://${ip}${path} (Host: ${host})" >&2
-      curl -fsSL -A "$ua" --connect-timeout 20 --max-time 180 -o "$dest" \
-        "http://${ip}${path}" -H "Host: ${host}"
+      echo "WARN: CDN blocked download — retry via origin https://${host}${path} (--resolve ${host}:443:${ip})" >&2
+      if curl -fsS -A "$ua" --connect-timeout 20 --max-time 180 --resolve "${host}:443:${ip}" \
+        "https://${host}${path}" -o "$dest" 2>/dev/null; then
+        return 0
+      fi
+      curl -fsS -k -A "$ua" --connect-timeout 20 --max-time 180 -o "$dest" \
+        "https://${ip}${path}" -H "Host: ${host}"
       return $?
     fi
     return 1

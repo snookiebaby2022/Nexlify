@@ -1,7 +1,29 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.49",
+  "latestVersion": "1.9.50",
   "releases": [
+    {
+      "version": "1.9.50",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Fix remote panel updates: git pull from GitHub, origin HTTPS bypass, force re-sync, and per-panel API keys.",
+      "changelog": [
+        "Git checkouts apply origin/main instead of a possibly stale vendor tarball",
+        "Force re-sync runs git reset --hard origin/main then rebuilds",
+        "Vendor download fallback uses HTTPS --resolve to the origin IP (no Cloudflare 301 loop)",
+        "Update worker sets PANEL_REPO_PATH so standalone cwd cannot run the wrong tree",
+        "Marketing remote-update tries HTTP for IP panels, optional secret override, and /api/internal/panel-update",
+        "License poll re-registers the panel API secret so vendor remote-update keeps working"
+      ],
+      "fixes": [
+        "Remote-update on git VPS installs always used apply-panel-fast-update.sh and re-downloaded old nexlify.live tarball",
+        "Origin fallback curl -L followed HTTP 301 back to Cloudflare (403)",
+        "PANEL_UPDATE_FORCE was set but never read by the worker",
+        "Vendor lookup required an exact panelUrl match (https vs http / trailing slash → 403)",
+        "Unique PANEL_API_SECRET was only stored on first license activate"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.50.tar.gz"
+    },
     {
       "version": "1.9.49",
       "date": "2026-08-14",

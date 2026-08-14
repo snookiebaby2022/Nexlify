@@ -161,7 +161,8 @@ export async function POST(req: NextRequest) {
     const started = await startBackgroundPanelUpdate(
       repoPath,
       fromVersion,
-      typeof body.targetVersion === "string" ? body.targetVersion.replace(/^v/i, "").trim() : undefined
+      typeof body.targetVersion === "string" ? body.targetVersion.replace(/^v/i, "").trim() : undefined,
+      { force: body.force === true },
     );
     if (!started.ok) {
       return NextResponse.json({ error: started.error ?? "Could not start update" }, { status: 409 });

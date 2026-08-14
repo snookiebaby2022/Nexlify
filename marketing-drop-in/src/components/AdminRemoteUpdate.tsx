@@ -70,8 +70,9 @@ export function AdminRemoteUpdate() {
       <section className="glass rounded-2xl p-6">
         <h2 className="font-display text-xl font-semibold text-white">Remote Panel Update</h2>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Force a panel update on one or more customer panels. This bypasses their local &quot;Auto-apply&quot; setting.
-          Panels already on the latest version are skipped unless you enable force re-sync.
+          Force a panel update on one or more customer panels. Git checkouts pull
+          <code className="mx-1 text-violet-300">origin/main</code> from GitHub (not the vendor tarball).
+          IP panels are tried over HTTP first. Optional secret overrides the key stored on the license.
         </p>
 
         <div className="mt-4 space-y-4">
@@ -87,7 +88,7 @@ export function AdminRemoteUpdate() {
 
           <div>
             <label className="block text-sm text-slate-300">
-              Panel API Secret (optional — uses server PANEL_API_SECRET when blank)
+              Panel API secret (optional — uses the key this panel registered; paste from the VPS .env to override)
             </label>
             <input
               type="password"

@@ -49,25 +49,47 @@ resolve_vendor_ip() {
 curl_vendor() {
   local url="$1" dest="$2"
   local ua="NexlifyPanelUpdater/1.0 (+https://nexlify.live)"
-  if curl -fsSL -A "$ua" --retry 2 --retry-delay 2 "$url" -o "$dest" 2>/dev/null; then
+  if curl -fsSL -A "$ua" --retry 2 --retry-delay 2 --max-time 60 "$url" -o "$dest" 2>/dev/null; then
     return 0
   fi
   local ip host path
-  ip="$(resolve_vendor_ip 2>/dev/null || true)"
+  ip="$(resolve_vendor_ip 2>/dev/null || echo "85.17.162.54")"
   host="${PANEL_VENDOR_HOST:-nexlify.live}"
+  path=""
   if [[ "$url" == https://${host}* ]]; then
     path="${url#https://${host}}"
   elif [[ "$url" == https://nexlify.live* ]]; then
     path="${url#https://nexlify.live}"
-  else
-    path=""
+  elif [[ "$url" == http://nexlify.live* ]]; then
+    path="${url#http://nexlify.live}"
   fi
+  # HTTPS to origin via --resolve. Do NOT follow HTTP 301 back to Cloudflare.
   if [ -n "$ip" ] && [ -n "$path" ]; then
-    echo "WARN: blocked by CDN — retry via origin http://${ip}${path} (Host: ${host})" >&2
-    curl -fsSL -A "$ua" "http://${ip}${path}" -H "Host: ${host}" -o "$dest"
+    echo "WARN: CDN blocked — retry origin https://${host}${path} (--resolve ${host}:443:${ip})" >&2
+    if curl -fsS -A "$ua" --max-time 90 --resolve "${host}:443:${ip}" --resolve "${host}:80:${ip}" \
+      "https://${host}${path}" -o "$dest" 2>/dev/null; then
+      return 0
+    fi
+    if curl -fsS -k -A "$ua" --max-time 90 "https://${ip}${path}" -H "Host: ${host}" -o "$dest" 2>/dev/null; then
+      return 0
+    fi
+  fi
+  # GitHub raw for installer/scripts when vendor origin is stale or unreachable
+  local gh="https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main"
+  local gh_path=""
+  case "$path" in
+    /install/panel.sh) gh_path="scripts/install-linux.sh" ;;
+    /install/apply-panel-fast-update.sh) gh_path="scripts/apply-panel-fast-update.sh" ;;
+    /install/apply-prebuilt-update.sh) gh_path="scripts/apply-prebuilt-update.sh" ;;
+    /install/scripts/*) gh_path="scripts/${path#/install/scripts/}" ;;
+    /install/*) gh_path="marketing-drop-in/public/install/${path#/install/}" ;;
+  esac
+  if [ -n "$gh_path" ]; then
+    echo "WARN: vendor origin failed — retry GitHub ${gh_path}" >&2
+    curl -fsSL -A "$ua" --max-time 90 "${gh}/${gh_path}" -o "$dest"
     return $?
   fi
-  echo "ERROR: could not download $url (Cloudflare 403? Set PANEL_VENDOR_IP or fix CF WAF)" >&2
+  echo "ERROR: could not download $url (Cloudflare 403? Set PANEL_VENDOR_IP)" >&2
   return 1
 }
 
