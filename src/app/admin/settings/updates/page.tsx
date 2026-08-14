@@ -54,12 +54,14 @@ function channelBadge(channel: NexlifyRelease["channel"]) {
 function ReleaseTimeline({
   release,
   isLatest,
+  isInstalled,
   canUpdate,
   busy,
   onUpdate,
 }: {
   release: NexlifyRelease;
   isLatest: boolean;
+  isInstalled: boolean;
   canUpdate: boolean;
   busy: boolean;
   onUpdate: () => void;
@@ -86,21 +88,33 @@ function ReleaseTimeline({
         <p className="mt-2 font-display text-xl font-bold" style={{ color: "#00c0ef" }}>
           v{release.version}
         </p>
+        {isInstalled && (
+          <span
+            className="mt-2 mr-1 inline-block rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+            style={{ background: "rgba(56, 189, 248, 0.2)", color: "#38bdf8" }}
+          >
+            Installed
+          </span>
+        )}
         <span
           className="mt-2 inline-block rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
           style={{ background: badge.bg, color: badge.color }}
         >
           {badge.label}
         </span>
-        {isLatest && canUpdate && (
+        {canUpdate && (
           <button
             type="button"
             disabled={busy}
             onClick={onUpdate}
             className="mt-4 w-full rounded-lg px-3 py-2 text-sm font-semibold text-white cursor-pointer disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)" }}
+            style={{
+              background: isLatest
+                ? "linear-gradient(135deg, #22c55e, #16a34a)"
+                : "linear-gradient(135deg, #0ea5e9, #0284c7)",
+            }}
           >
-            {busy ? "Updating…" : "Update"}
+            {busy ? "Updating…" : isLatest ? "Update" : `Update to v${release.version}`}
           </button>
         )}
       </aside>
@@ -173,6 +187,7 @@ export default function PanelUpdatesPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmVersion, setConfirmVersion] = useState<string | null>(null);
   const [autoDownload, setAutoDownload] = useState(false);
   const autoStartedRef = useRef(false);
   const { job: liveJob, updateRunning: liveUpdateRunning, refresh: refreshJob } = usePanelUpdateJob();
@@ -280,13 +295,18 @@ export default function PanelUpdatesPage() {
     })();
   }, [data, loading, autoDownload, load]);
 
-  async function runUpdate() {
+  async function runUpdate(targetVersion?: string) {
     setConfirmOpen(false);
     setMsg("");
+    const to =
+      targetVersion ||
+      confirmVersion ||
+      data?.releasesFeed?.latestVersion ||
+      data?.version.installedVersion;
     const res = await fetch("/api/admin/panel-update", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "start" }),
+      body: JSON.stringify({ action: "start", targetVersion: to }),
     });
     const j = await res.json();
     if (!res.ok) {
@@ -378,7 +398,10 @@ export default function PanelUpdatesPage() {
             <button
               type="button"
               disabled={jobRunning}
-              onClick={() => setConfirmOpen(true)}
+              onClick={() => {
+                setConfirmVersion(latest);
+                setConfirmOpen(true);
+              }}
               className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white cursor-pointer disabled:opacity-50"
               style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)" }}
             >
@@ -413,7 +436,10 @@ export default function PanelUpdatesPage() {
           <button
             type="button"
             disabled={jobRunning}
-            onClick={() => setConfirmOpen(true)}
+            onClick={() => {
+              setConfirmVersion(latest);
+              setConfirmOpen(true);
+            }}
             className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white cursor-pointer disabled:opacity-50"
             style={{ background: "linear-gradient(135deg, #22c55e, #16a34a)" }}
           >
@@ -464,14 +490,22 @@ export default function PanelUpdatesPage() {
             No release notes loaded. Check network access to nexlify.live/api/panel-releases.
           </p>
         ) : (
-          releases.map((release, index) => (
+          releases.map((release) => (
             <ReleaseTimeline
               key={release.version}
               release={release}
-              isLatest={index === 0}
-              canUpdate={showBanner && index === 0}
+              isLatest={release.version === latest}
+              isInstalled={release.version === installed}
+              canUpdate={
+                data.canAutoUpdate &&
+                isVersionNewer(release.version, installed) &&
+                !jobRunning
+              }
               busy={jobRunning}
-              onUpdate={() => setConfirmOpen(true)}
+              onUpdate={() => {
+                setConfirmVersion(release.version);
+                setConfirmOpen(true);
+              }}
             />
           ))
         )}
@@ -505,9 +539,9 @@ export default function PanelUpdatesPage() {
 
       <PanelUpdateConfirmModal
         open={confirmOpen}
-        targetVersion={latest}
+        targetVersion={confirmVersion || latest}
         busy={jobRunning}
-        onConfirm={runUpdate}
+        onConfirm={() => runUpdate(confirmVersion || latest)}
         onCancel={() => setConfirmOpen(false)}
       />
     </div>

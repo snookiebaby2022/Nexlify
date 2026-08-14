@@ -33,16 +33,64 @@ export function parseVersionParts(version: string): number[] {
 }
 
 export function isVersionNewer(candidate: string, installed: string): boolean {
-  const a = parseVersionParts(candidate);
-  const b = parseVersionParts(installed);
-  const len = Math.max(a.length, b.length);
+  return compareVersions(candidate, installed) > 0;
+}
+
+/** Positive if a is newer than b, negative if older, 0 if equal. */
+export function compareVersions(a: string, b: string): number {
+  const av = parseVersionParts(a);
+  const bv = parseVersionParts(b);
+  const len = Math.max(av.length, bv.length);
   for (let i = 0; i < len; i++) {
-    const av = a[i] ?? 0;
-    const bv = b[i] ?? 0;
-    if (av > bv) return true;
-    if (av < bv) return false;
+    const left = av[i] ?? 0;
+    const right = bv[i] ?? 0;
+    if (left > right) return 1;
+    if (left < right) return -1;
   }
-  return false;
+  return 0;
+}
+
+export const GITHUB_RELEASES_FEED_URL =
+  "https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main/src/lib/panel-releases.json";
+
+export const STATIC_RELEASES_FEED_URL = "https://nexlify.live/panel-releases.json";
+
+function releaseScore(r: NexlifyRelease): number {
+  return (r.changelog?.length ?? 0) + (r.fixes?.length ?? 0) + (r.downloadUrl ? 2 : 0) + (r.summary ? 1 : 0);
+}
+
+/** Union of feeds; newest semver wins for latestVersion. Stale nexlify.live must not hide GitHub/bundled releases. */
+export function mergeReleasesFeeds(feeds: NexlifyReleasesFeed[]): NexlifyReleasesFeed {
+  const byVersion = new Map<string, NexlifyRelease>();
+  for (const feed of feeds) {
+    for (const raw of feed.releases ?? []) {
+      const version = String(raw.version ?? "").replace(/^v/i, "");
+      if (!version) continue;
+      const next = { ...raw, version };
+      const existing = byVersion.get(version);
+      if (!existing || releaseScore(next) >= releaseScore(existing)) {
+        byVersion.set(version, next);
+      }
+    }
+  }
+  const releases = [...byVersion.values()].sort((a, b) => compareVersions(b.version, a.version));
+  const latestFromFeeds = feeds
+    .map((f) => f.latestVersion)
+    .filter((v): v is string => Boolean(v));
+  let latestVersion = releases[0]?.version ?? null;
+  for (const candidate of latestFromFeeds) {
+    if (!latestVersion || compareVersions(candidate, latestVersion) > 0) {
+      latestVersion = candidate.replace(/^v/i, "");
+    }
+  }
+  if (latestVersion && releases[0] && compareVersions(releases[0].version, latestVersion) > 0) {
+    latestVersion = releases[0].version;
+  }
+  return {
+    source: "nexlify-merged",
+    latestVersion,
+    releases,
+  };
 }
 
 /** Accept canonical panel feed or legacy marketing feed (changes/title/description). */
@@ -109,25 +157,38 @@ function bundledFeed(): NexlifyReleasesFeed {
   return normalizeReleasesFeed(releasesJson as Parameters<typeof normalizeReleasesFeed>[0]);
 }
 
-export async function fetchNexlifyReleasesFeed(
-  url: string = DEFAULT_RELEASES_FEED_URL,
-): Promise<NexlifyReleasesFeed> {
+async function fetchFeedJson(url: string): Promise<NexlifyReleasesFeed | null> {
   const browserUa =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  const headers: Record<string, string> = { Accept: "application/json", "User-Agent": browserUa };
+  const token = process.env.GITHUB_TOKEN?.trim() || process.env.GH_TOKEN?.trim();
+  if (token && url.includes("githubusercontent.com")) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  const sep = url.includes("?") ? "&" : "?";
   try {
-    const res = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": browserUa },
-      next: { revalidate: 300 },
+    const res = await fetch(`${url}${sep}cb=${Date.now()}`, {
+      headers,
+      cache: "no-store",
       signal: AbortSignal.timeout(10000),
     });
-    if (!res.ok) throw new Error(`Releases feed ${res.status}`);
+    if (!res.ok) return null;
     const data = (await res.json()) as NexlifyReleasesFeed & {
       releases?: Array<Record<string, unknown>>;
     };
-    if (!Array.isArray(data.releases)) throw new Error("Invalid releases feed");
+    if (!Array.isArray(data.releases)) return null;
     return normalizeReleasesFeed(data);
   } catch {
-    // Cloudflare/datacenter blocks are common — use bundled feed so update checks still work.
-    return bundledFeed();
+    return null;
   }
+}
+
+export async function fetchNexlifyReleasesFeed(
+  url: string = DEFAULT_RELEASES_FEED_URL,
+): Promise<NexlifyReleasesFeed> {
+  const urls = [...new Set([url, DEFAULT_RELEASES_FEED_URL, STATIC_RELEASES_FEED_URL, GITHUB_RELEASES_FEED_URL])];
+  const remote = await Promise.all(urls.map((u) => fetchFeedJson(u)));
+  const feeds = remote.filter((f): f is NexlifyReleasesFeed => Boolean(f));
+  feeds.push(bundledFeed());
+  return mergeReleasesFeeds(feeds);
 }

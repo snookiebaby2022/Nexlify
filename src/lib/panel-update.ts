@@ -9,6 +9,7 @@ import {
 import { lockfileChanged, schemaChanged, writeUpdateCache } from "@/lib/panel-update-cache";
 import {
   progressForStep,
+  readUpdateJob,
   type PanelUpdateJob,
 } from "@/lib/panel-update-job";
 import { progressDuringBuild, parseBuildSubProgress } from "@/lib/panel-update-ui";
@@ -172,6 +173,11 @@ export async function resolvePrebuiltDownloadUrl(
     const feed = await fetchNexlifyReleasesFeed(feedUrl);
     const release = feed.releases.find((r) => r.version === targetVersion);
     if (release?.downloadUrl) {
+      const reachable = await downloadUrlReachable(release.downloadUrl);
+      if (!reachable) {
+        console.log(`[panel-update] downloadUrl not reachable for v${targetVersion}: ${release.downloadUrl}`);
+        return null;
+      }
       console.log(`[panel-update] Found prebuilt downloadUrl for v${targetVersion}`);
       return release.downloadUrl;
     }
@@ -179,6 +185,21 @@ export async function resolvePrebuiltDownloadUrl(
     console.log("[panel-update] Could not resolve prebuilt download URL:", err);
   }
   return null;
+}
+
+async function downloadUrlReachable(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.status === 404 || res.status === 410) return false;
+    return res.ok || res.status === 405;
+  } catch {
+    return false;
+  }
 }
 
 /** Locate the prebuilt update script if it exists. */
@@ -472,7 +493,12 @@ export async function runPanelUpdateWithProgress(
     const feed = await fetchNexlifyReleasesFeed(
       settings.updateCheckUrl?.trim() || DEFAULT_RELEASES_FEED_URL,
     );
-    if (feed.latestVersion && isVersionNewer(feed.latestVersion, fromVersion)) {
+    const job = await readUpdateJob(repoPath);
+    const requested = job?.toVersion?.replace(/^v/i, "").trim() || "";
+    if (requested && isVersionNewer(requested, fromVersion)) {
+      targetVersion = requested;
+      hasNewerRelease = true;
+    } else if (feed.latestVersion && isVersionNewer(feed.latestVersion, fromVersion)) {
       targetVersion = feed.latestVersion;
       hasNewerRelease = true;
     }

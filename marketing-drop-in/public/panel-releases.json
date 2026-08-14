@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.43",
+  "latestVersion": "1.9.44",
   "releases": [
+    {
+      "version": "1.9.44",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Admin → Updates lists current GitHub releases (including 1.9.42) even when nexlify.live lags.",
+      "changelog": [
+        "Updates page merges GitHub, bundled notes, and nexlify.live so new versions are not hidden by a stale marketing feed",
+        "Each release newer than the installed panel has its own Update button",
+        "Marketing release API prefers public/panel-releases.json so the feed can be updated without a full site rebuild"
+      ],
+      "fixes": [
+        "v1.9.42 did not appear under Settings → Updates because nexlify.live was still serving v1.9.35",
+        "Update was only offered on the top card, so older-but-still-newer releases had no Update option"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.44.tar.gz"
+    },
     {
       "version": "1.9.43",
       "date": "2026-08-14",

@@ -158,7 +158,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const started = await startBackgroundPanelUpdate(repoPath, fromVersion);
+    const started = await startBackgroundPanelUpdate(
+      repoPath,
+      fromVersion,
+      typeof body.targetVersion === "string" ? body.targetVersion.replace(/^v/i, "").trim() : undefined
+    );
     if (!started.ok) {
       return NextResponse.json({ error: started.error ?? "Could not start update" }, { status: 409 });
     }

@@ -234,7 +234,8 @@ export function progressForStep(stepName: string): number {
 
 export async function startBackgroundPanelUpdate(
   repoPath: string,
-  fromVersion: string
+  fromVersion: string,
+  targetVersion?: string
 ): Promise<{ ok: boolean; error?: string }> {
   repoPath = resolvePanelRepoPathSync(repoPath);
   const existing = await reconcileStaleUpdateJob(repoPath);
@@ -251,7 +252,7 @@ export async function startBackgroundPanelUpdate(
     finishedAt: null,
     message: null,
     fromVersion,
-    toVersion: null,
+    toVersion: targetVersion?.replace(/^v/i, "").trim() || null,
   };
   await writeUpdateJob(repoPath, initialJob);
 
