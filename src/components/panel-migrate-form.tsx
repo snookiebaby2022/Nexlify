@@ -333,6 +333,161 @@ export function PanelMigrateForm() {
     );
   }
 
+  function handleMigrateSseEvent(eventName: string, data: Record<string, unknown>) {
+    if (eventName === "start") {
+      const msg = typeof data.message === "string" ? data.message : "Server started processing…";
+      appendLiveLog(msg);
+      setResult(msg);
+      setUploadProgress(null);
+      return;
+    }
+    if (eventName === "status") {
+      const msg = typeof data.message === "string" ? data.message : "Working…";
+      appendLiveLog(msg);
+      setResult(msg);
+      return;
+    }
+    if (eventName === "progress") {
+      if (data.phase === "scanning") {
+        setScanProgress({ current: Number(data.current) || 0, total: Number(data.total) || 100 });
+        setProgress(null);
+        setUploadProgress(null);
+        setResult(`Scanning file… ${data.current}%`);
+        if (Number(data.current) === 0 || Number(data.current) === 100 || Number(data.current) % 10 === 0) {
+          appendLiveLog(`Scanning SQL dump… ${data.current}%`);
+        }
+      } else {
+        const phase = String(data.phase ?? "import");
+        const current = Number(data.current) || 0;
+        const total = Number(data.total) || 0;
+        setProgress({ phase, current, total });
+        setScanProgress(null);
+        setUploadProgress(null);
+        const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+        setResult(`Importing ${phase}: ${current}/${total} (${pct}%)`);
+        if (current === 1 || current === total || current % Math.max(1, Math.floor(total / 20) || 1) === 0) {
+          appendLiveLog(`Importing ${phase}: ${current}/${total} (${pct}%)`);
+        }
+      }
+      return;
+    }
+    if (eventName === "complete") {
+      setUploadProgress(null);
+      setScanning(false);
+      setScanProgress(null);
+      setImporting(false);
+      setProgress(null);
+      if (data.result) {
+        appendLiveLog("Import finished — building summary…");
+        handleCompleteResponse(data);
+      } else {
+        appendLiveLog("Preview finished — building summary…");
+        handlePreviewResponse(data);
+      }
+      return;
+    }
+    if (eventName === "error") {
+      setUploadProgress(null);
+      setScanning(false);
+      setScanProgress(null);
+      setImporting(false);
+      setProgress(null);
+      const err = typeof data.error === "string" ? data.error : "Unknown error";
+      appendLiveLog(`Error: ${err}`);
+      setResult(`Error: ${err}`);
+    }
+  }
+
+  /** Parse SSE chunks; returns leftover incomplete buffer via carry. */
+  function consumeMigrateSse(chunk: string, carry: { event: string | null; buf: string }) {
+    const text = carry.buf + chunk;
+    const lines = text.split("\n");
+    carry.buf = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.startsWith("event: ")) {
+        carry.event = line.slice(7).trim();
+      } else if (line.startsWith("data: ") && carry.event) {
+        try {
+          handleMigrateSseEvent(carry.event, JSON.parse(line.slice(6)) as Record<string, unknown>);
+        } catch {
+          /* skip malformed */
+        }
+        carry.event = null;
+      } else if (line === "") {
+        carry.event = null;
+      }
+    }
+  }
+
+  async function readMigrateSseBody(res: Response) {
+    if (!res.body) {
+      setResult("Error: No response body");
+      setImporting(false);
+      setScanning(false);
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    const carry = { event: null as string | null, buf: "" };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      consumeMigrateSse(decoder.decode(value, { stream: true }), carry);
+    }
+    if (carry.buf) consumeMigrateSse("\n", carry);
+  }
+
+  async function resumeLastUpload(dryRun: boolean) {
+    clearRedirectCountdown();
+    setImporting(true);
+    setScanning(true);
+    setPreview("");
+    setProgress(null);
+    setUploadProgress(null);
+    setScanProgress(null);
+    setShowAllWarnings(false);
+    setLiveLog([]);
+    appendLiveLog(
+      dryRun
+        ? "Resuming preview from last uploaded dump on server (no re-upload)…"
+        : "Resuming import from last uploaded dump on server (no re-upload)…"
+    );
+    setResult("Resuming from server dump…");
+    try {
+      const res = await fetch("/api/admin/migrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...migrationPayload(dryRun),
+          action: "resumeLatestUpload",
+          resumeLatestUpload: true,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setResult(`Error: ${(data as { error?: string }).error ?? res.statusText}`);
+        appendLiveLog(`Error: ${(data as { error?: string }).error ?? res.statusText}`);
+        setImporting(false);
+        setScanning(false);
+        return;
+      }
+      await readMigrateSseBody(res);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const friendly =
+        /network|fetch|failed to fetch|connection/i.test(msg)
+          ? "Connection lost while watching the migration worker. The dump is still on the server — click Resume last upload again (do not re-upload)."
+          : msg;
+      setResult(`Error: ${friendly}`);
+      appendLiveLog(`Error: ${friendly}`);
+    } finally {
+      setUploadProgress(null);
+      setScanning(false);
+      setScanProgress(null);
+      setImporting(false);
+    }
+  }
+
   async function run(dryRun: boolean) {
     clearRedirectCountdown();
     setResult(dryRun ? "Scanning…" : "Importing…");
@@ -346,91 +501,7 @@ export function PanelMigrateForm() {
     setLiveLog([]);
     appendLiveLog(dryRun ? "Starting preview…" : "Starting import…");
 
-    const handleSseEvent = (eventName: string, data: Record<string, unknown>) => {
-      if (eventName === "start") {
-        const msg = typeof data.message === "string" ? data.message : "Server started processing…";
-        appendLiveLog(msg);
-        setResult(msg);
-        setUploadProgress(null);
-        return;
-      }
-      if (eventName === "status") {
-        const msg = typeof data.message === "string" ? data.message : "Working…";
-        appendLiveLog(msg);
-        setResult(msg);
-        return;
-      }
-      if (eventName === "progress") {
-        if (data.phase === "scanning") {
-          setScanProgress({ current: Number(data.current) || 0, total: Number(data.total) || 100 });
-          setProgress(null);
-          setUploadProgress(null);
-          setResult(`Scanning file… ${data.current}%`);
-          if (Number(data.current) === 0 || Number(data.current) === 100 || Number(data.current) % 10 === 0) {
-            appendLiveLog(`Scanning SQL dump… ${data.current}%`);
-          }
-        } else {
-          const phase = String(data.phase ?? "import");
-          const current = Number(data.current) || 0;
-          const total = Number(data.total) || 0;
-          setProgress({ phase, current, total });
-          setScanProgress(null);
-          setUploadProgress(null);
-          const pct = total > 0 ? Math.round((current / total) * 100) : 0;
-          setResult(`Importing ${phase}: ${current}/${total} (${pct}%)`);
-          if (current === 1 || current === total || current % Math.max(1, Math.floor(total / 20) || 1) === 0) {
-            appendLiveLog(`Importing ${phase}: ${current}/${total} (${pct}%)`);
-          }
-        }
-        return;
-      }
-      if (eventName === "complete") {
-        setUploadProgress(null);
-        setScanning(false);
-        setScanProgress(null);
-        setImporting(false);
-        setProgress(null);
-        if (data.result) {
-          appendLiveLog("Import finished — building summary…");
-          handleCompleteResponse(data);
-        } else {
-          appendLiveLog("Preview finished — building summary…");
-          handlePreviewResponse(data);
-        }
-        return;
-      }
-      if (eventName === "error") {
-        setUploadProgress(null);
-        setScanning(false);
-        setScanProgress(null);
-        setImporting(false);
-        setProgress(null);
-        const err = typeof data.error === "string" ? data.error : "Unknown error";
-        appendLiveLog(`Error: ${err}`);
-        setResult(`Error: ${err}`);
-      }
-    };
-
-    /** Parse SSE chunks; returns leftover incomplete buffer via carry. */
-    const consumeSse = (chunk: string, carry: { event: string | null; buf: string }) => {
-      const text = carry.buf + chunk;
-      const lines = text.split("\n");
-      carry.buf = lines.pop() ?? "";
-      for (const line of lines) {
-        if (line.startsWith("event: ")) {
-          carry.event = line.slice(7).trim();
-        } else if (line.startsWith("data: ") && carry.event) {
-          try {
-            handleSseEvent(carry.event, JSON.parse(line.slice(6)) as Record<string, unknown>);
-          } catch {
-            /* skip malformed */
-          }
-          carry.event = null;
-        } else if (line === "") {
-          carry.event = null;
-        }
-      }
-    };
+    const consumeSse = consumeMigrateSse;
 
     try {
       if (usePostgres) {
@@ -566,7 +637,7 @@ export function PanelMigrateForm() {
           };
           xhr.onerror = () => {
             const msg = uploadReachedEnd
-              ? "Connection lost while processing the dump on the server. Retry — if it fails again, the panel may need more memory for this file size."
+              ? "Connection lost while watching the migration worker. The dump is still on the server — click Resume last upload (do not re-upload)."
               : "Upload failed — connection lost before the dump finished uploading.";
             reject(new Error(msg));
           };
@@ -1259,7 +1330,7 @@ export function PanelMigrateForm() {
         Repair alone does not re-read the SQL file.
       </p>
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 flex-wrap">
         <button
           type="button"
           className="px-4 py-2 rounded text-sm"
@@ -1277,6 +1348,16 @@ export function PanelMigrateForm() {
           disabled={!canRun() || importing || scanning}
         >
           {importing ? "Importing…" : "Run import"}
+        </button>
+        <button
+          type="button"
+          className="px-4 py-2 rounded text-sm"
+          style={{ background: "var(--card)", border: "1px solid var(--border)", opacity: importing || scanning ? 0.5 : 1 }}
+          disabled={importing || scanning || usePostgres}
+          title="Re-run preview/import using the last SQL dump already on the server (no re-upload)"
+          onClick={() => void resumeLastUpload(false)}
+        >
+          Resume last upload
         </button>
         <button
           type="button"

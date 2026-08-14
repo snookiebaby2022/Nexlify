@@ -124,6 +124,14 @@ except Exception:
 }
 
 safe_restart_panel() {
+  if [ -f "$PANEL_DIR/scripts/nexlify-migrate-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$PANEL_DIR/scripts/nexlify-migrate-guard.sh"
+    if nexlify_migrate_in_progress; then
+      log "SKIP restart: SQL migration in progress"
+      return 0
+    fi
+  fi
   log "FIX: restarting panel via panel-restart-safe / pm2-start (PORT=${PORT})"
   if [ -f "$PANEL_DIR/scripts/panel-restart-safe.sh" ]; then
     bash "$PANEL_DIR/scripts/panel-restart-safe.sh" --nexlify-only >>"$LOG" 2>&1 || true

@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.68",
+  "latestVersion": "1.9.69",
   "releases": [
+    {
+      "version": "1.9.69",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Large SQL migrate runs in a detached worker so panel restarts cannot kill mid-scan; Resume last upload reattaches without re-uploading.",
+      "changelog": [
+        "SQL dump preview/import runs in scripts/panel-migrate-background.ts outside PM2 nexlify",
+        "Resume last upload reuses /tmp/nexlify-migrate-*.sql and watches an in-progress worker",
+        "Shared nexlify-migrate-guard blocks restart/rebuild/watchdog while migrate lock is held",
+        "Worker logs to /tmp/nexlify-migrate-worker.log with 8GB Node heap"
+      ],
+      "fixes": [
+        "Connection lost while processing the dump when a rebuild/restart recycled nexlify mid-scan",
+        "Had to re-upload ~1GB dumps after a dropped browser connection"
+      ]
+    },
     {
       "version": "1.9.68",
       "date": "2026-08-14",
@@ -31,7 +47,7 @@
       ],
       "fixes": [
         "Preview of ~987MB SQL dump failed with Upload failed after file reached the server",
-        "PM2 max_memory_restart ~700M–1800M recycled nexlify during large migration parse"
+        "PM2 max_memory_restart ~700M\u20131800M recycled nexlify during large migration parse"
       ]
     },
     {
@@ -40,7 +56,7 @@
       "channel": "stable",
       "summary": "Fix client-side Application error after updates: normalize staging distDir so /_next/static assets always serve.",
       "changelog": [
-        "After staging→.next swap, rewrite baked distDir .next.staging → .next in standalone/server.js and manifests",
+        "After staging\u2192.next swap, rewrite baked distDir .next.staging \u2192 .next in standalone/server.js and manifests",
         "Merge nested standalone/.next.staging into standalone/.next so pages and CSS/JS share one tree",
         "prepare-standalone + verify-standalone + post-restart checks fail if staging distDir leaks into production",
         "wait-panel-ready verifies a webpack chunk returns HTTP 200 (not just /api/health)"

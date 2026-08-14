@@ -3,22 +3,124 @@ import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
 import {
   MIGRATION_SOURCES,
-  previewMigrationBundle,
   runMigration,
   runMigrationFromPostgres,
   type MigrationSource,
   type PostgresMigrationConfig,
 } from "@/lib/panel-migration";
-import { bundleFromSqlFile } from "@/lib/panel-migration/map-rows";
 import Busboy from "busboy";
 import { Readable } from "stream";
-import { unlink, stat, writeFile } from "fs/promises";
-import { createReadStream, createWriteStream } from "fs";
+import { unlink } from "fs/promises";
+import { createWriteStream } from "fs";
+import {
+  findLatestMigrateUpload,
+  reconcileMigrateJob,
+  startMigrateBackgroundJob,
+  type MigrateJob,
+} from "@/lib/panel-migrate-job";
 
 const SOURCES = new Set(MIGRATION_SOURCES.map((s) => s.id));
 
 /** Large SQL dumps are uploaded as multipart/form-data to avoid loading them in the browser. */
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024;
+
+function sseWatchJob(jobId: string, keepFile: boolean, filePath?: string): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: unknown) => {
+        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+      };
+      send("start", {
+        phase: "initializing",
+        message: "Migration worker started (survives panel restarts)…",
+        jobId,
+      });
+      let lastMsg = "";
+      let lastProg = "";
+      const cleanup = async () => {
+        if (!keepFile && filePath) {
+          try {
+            await unlink(filePath);
+          } catch {
+            /* ignore */
+          }
+        }
+      };
+      try {
+        for (let i = 0; i < 7200; i++) {
+          // up to ~2h at 1s
+          const job = (await reconcileMigrateJob()) as MigrateJob | null;
+          if (!job || job.id !== jobId) {
+            await new Promise((r) => setTimeout(r, 500));
+            continue;
+          }
+          if (job.message && job.message !== lastMsg) {
+            lastMsg = job.message;
+            send("status", { message: job.message });
+          }
+          if (job.progress) {
+            const key = `${job.progress.phase}:${job.progress.current}:${job.progress.total}`;
+            if (key !== lastProg) {
+              lastProg = key;
+              send("progress", job.progress);
+            }
+          }
+          if (job.status === "done") {
+            send("complete", {
+              preview: job.preview,
+              result: job.result,
+              jobId: job.id,
+            });
+            await cleanup();
+            controller.close();
+            return;
+          }
+          if (job.status === "failed") {
+            send("error", { error: job.error || job.message || "Migration failed" });
+            await cleanup();
+            controller.close();
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+        send("error", {
+          error:
+            "Timed out waiting for migration worker. If the panel restarted, click Resume last upload.",
+        });
+      } catch (e) {
+        send("error", { error: e instanceof Error ? e.message : String(e) });
+      }
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
+async function startBackgroundAndWatch(
+  filePath: string,
+  source: MigrationSource,
+  opts: ReturnType<typeof applyOptions>,
+  keepFile: boolean
+): Promise<Response> {
+  const started = await startMigrateBackgroundJob({
+    filePath,
+    source,
+    dryRun: opts.dryRun,
+    options: opts as unknown as Record<string, unknown>,
+  });
+  if (!started.ok) {
+    return NextResponse.json({ error: started.error }, { status: 409 });
+  }
+  return sseWatchJob(started.job.id, keepFile, filePath);
+}
 
 function applyOptions(body: Record<string, unknown>) {
   return {
@@ -59,49 +161,6 @@ function parseBodyRecord(raw: unknown): Record<string, unknown> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   return raw as Record<string, unknown>;
 }
-
-/** Read file in chunks for processing. Reports bytes read for progress tracking. */
-async function readFileInChunks(
-  filePath: string,
-  callback: (line: string, bytesRead: number) => void,
-  onProgress?: (bytesRead: number, totalBytes: number) => void
-): Promise<void> {
-  const fileStats = await stat(filePath);
-  const totalBytes = fileStats.size;
-
-  return new Promise((resolve, reject) => {
-    const stream = createReadStream(filePath, { encoding: "utf8", highWaterMark: 1024 * 1024 }); // 1MB chunks
-    let buffer = "";
-    let bytesRead = 0;
-    let lastProgressBytes = 0;
-
-    stream.on("data", (chunk: string) => {
-      const chunkBytes = Buffer.byteLength(chunk, "utf8");
-      bytesRead += chunkBytes;
-      buffer += chunk;
-      // Process complete lines
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? ""; // Keep incomplete line in buffer
-      for (const line of lines) {
-        callback(line + "\n", bytesRead);
-      }
-      // Report progress every 10MB
-      if (onProgress && bytesRead - lastProgressBytes > 10 * 1024 * 1024) {
-        lastProgressBytes = bytesRead;
-        onProgress(bytesRead, totalBytes);
-      }
-    });
-
-    stream.on("end", () => {
-      if (buffer) callback(buffer, bytesRead);
-      if (onProgress) onProgress(bytesRead, totalBytes);
-      resolve();
-    });
-
-    stream.on("error", reject);
-  });
-}
-
 
 
 async function parseRequestBody(req: NextRequest): Promise<
@@ -219,7 +278,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error }, { status: parsed.status });
   }
 
-  const { body, content: uploadedContent, filePath } = parsed;
+  let { body, content: uploadedContent, filePath } = parsed;
+
+  // Resume / watch without re-uploading a ~1GB dump
+  if (body.action === "watchJob" && typeof body.jobId === "string") {
+    const job = await reconcileMigrateJob();
+    if (!job || job.id !== body.jobId) {
+      return NextResponse.json({ error: "Migration job not found" }, { status: 404 });
+    }
+    return sseWatchJob(job.id, true, job.filePath);
+  }
+  if (body.action === "jobStatus") {
+    const job = await reconcileMigrateJob();
+    return NextResponse.json({ job });
+  }
+  if (body.resumeLatestUpload === true || body.action === "resumeLatestUpload") {
+    const latest = await findLatestMigrateUpload();
+    if (!latest) {
+      return NextResponse.json(
+        { error: "No recent uploaded SQL dump found on the server (/tmp)." },
+        { status: 404 }
+      );
+    }
+    filePath = latest.path;
+    if (!body.source) {
+      return NextResponse.json({ error: "source required" }, { status: 400 });
+    }
+  }
+  if (typeof body.existingFilePath === "string" && body.existingFilePath.startsWith("/tmp/nexlify-migrate-")) {
+    filePath = body.existingFilePath;
+  }
+
   const source = body.source as MigrationSource;
   if (!SOURCES.has(source)) {
     return NextResponse.json({ error: "Invalid source" }, { status: 400 });
@@ -228,92 +317,13 @@ export async function POST(req: NextRequest) {
   const format = body.format as string | undefined;
   const opts = applyOptions(body);
 
-  // Clean up temp file after processing
-  const cleanup = async () => {
-    if (filePath) {
-      try { await unlink(filePath); } catch { /* ignore */ }
-    }
-  };
-
   try {
-    // Large file dry-runs: stream progress via SSE (same as import). Waiting for a
-    // single JSON response after a ~1GB upload often looks like "Upload failed"
-    // when PM2/heap kills the process mid-parse with no bytes sent yet.
-    if (opts.dryRun && filePath) {
-      const encoder = new TextEncoder();
-      const stream = new ReadableStream({
-        async start(controller) {
-          const send = (event: string, data: unknown) => {
-            controller.enqueue(
-              encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-            );
-          };
-          const heartbeat = setInterval(() => {
-            try {
-              send("status", { message: "Still scanning SQL dump…" });
-            } catch {
-              /* closed */
-            }
-          }, 15000);
-          try {
-            send("start", {
-              phase: "initializing",
-              message: "Upload received — preparing preview…",
-            });
-            let dumpLabel = "SQL dump";
-            try {
-              const st = await stat(filePath);
-              dumpLabel = `${(st.size / (1024 * 1024)).toFixed(1)} MB SQL dump`;
-            } catch {
-              /* ignore */
-            }
-            send("status", { message: `Scanning & parsing ${dumpLabel} for preview…` });
-            send("progress", { phase: "scanning", current: 0, total: 100 });
-            let lastScanPct = -1;
-            const bundle = await bundleFromSqlFile(filePath, source, (bytesRead, totalBytes) => {
-              const pct = Math.round((bytesRead / totalBytes) * 100);
-              if (pct !== lastScanPct) {
-                lastScanPct = pct;
-                send("progress", { phase: "scanning", current: pct, total: 100 });
-              }
-            });
-            send("progress", { phase: "scanning", current: 100, total: 100 });
-            const preview = previewMigrationBundle(bundle);
-            if (Array.isArray(preview.warnings) && preview.warnings.length > 40) {
-              preview.warnings = [
-                ...preview.warnings.slice(0, 40),
-                `… ${preview.warnings.length - 40} more warnings omitted`,
-              ];
-            }
-            send("complete", { preview });
-            (bundle as { streams?: unknown }).streams = [];
-            (bundle as { lines?: unknown }).lines = [];
-            if (bundle.phase3) {
-              bundle.phase3.epgPrograms = [];
-              bundle.phase3.epgApiChannels = [];
-              bundle.phase3.providerStreamLinks = [];
-              bundle.phase3.blockedAsns = [];
-            }
-          } catch (e) {
-            send("error", { error: e instanceof Error ? e.message : String(e) });
-          } finally {
-            clearInterval(heartbeat);
-            controller.close();
-            await cleanup();
-          }
-        },
-      });
-      return new Response(stream, {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache, no-transform",
-          Connection: "keep-alive",
-          "X-Accel-Buffering": "no",
-        },
-      });
+    // Large dumps: detached worker so pm2/rebuild cannot kill mid-scan
+    if (filePath) {
+      return await startBackgroundAndWatch(filePath, source, opts, true);
     }
 
-    // For dry runs, return JSON directly (fast)
+    // For dry runs, return JSON directly (fast) — small/pasted content only
     if (opts.dryRun) {
       if (format === "postgres") {
         const pg = body.pg as PostgresMigrationConfig | undefined;
@@ -324,62 +334,32 @@ export async function POST(req: NextRequest) {
           );
         }
         const out = await runMigrationFromPostgres(pg, source, opts);
-        await cleanup();
         return NextResponse.json({
           preview: out.preview,
           probe: out.probe,
         });
       }
 
-      let content: string | undefined;
-      
-      if (filePath) {
-        // For large files, stream-parse directly to bundle
-        const bundle = await bundleFromSqlFile(filePath, source);
-        await cleanup();
-        return NextResponse.json({ preview: previewMigrationBundle(bundle) });
-      } else {
-        content = (uploadedContent ?? (body.content as string | undefined) ?? "").trim();
-      }
-      
+      const content = (uploadedContent ?? (body.content as string | undefined) ?? "").trim();
       if (!content) {
-        await cleanup();
         return NextResponse.json({ error: "content required" }, { status: 400 });
       }
-      
+
       const fileFormat = format === "json" || source === "nexlify_json" ? "json" : "sql";
       const out = await runMigration(content, source, fileFormat, opts);
-      await cleanup();
       return NextResponse.json({ preview: out.preview });
     }
 
-    // For actual imports, stream progress via SSE
+    // Small/pasted imports (and postgres): SSE in-process
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
         const send = (event: string, data: unknown) => {
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
         };
-        const lockPath = "/tmp/nexlify-migrate-in-progress";
-        try {
-          await writeFile(lockPath, String(Date.now()), "utf8");
-        } catch { /* ignore */ }
-        const heartbeat = setInterval(() => {
-          try {
-            send("status", { message: "Import still running — please keep this tab open…" });
-          } catch { /* closed */ }
-        }, 12000);
-
-        // Send immediate event to prevent client timeout on long parses
-        send("start", {
-          phase: "initializing",
-          message: filePath
-            ? "Upload received — preparing to scan SQL dump…"
-            : "Starting import…",
-        });
+        send("start", { phase: "initializing", message: "Starting import…" });
 
         try {
-          // Throttle SSE progress so huge tables (EPG/streams) don't flood the client.
           let lastPhase = "";
           let lastSentAt = 0;
           let lastCurrent = -1;
@@ -408,84 +388,20 @@ export async function POST(req: NextRequest) {
             const out = await runMigrationFromPostgres(pg, source, { ...opts, onProgress });
             send("complete", { preview: out.preview, result: out.result, probe: out.probe });
           } else {
-            let content: string | undefined;
-            
-            if (filePath) {
-              let dumpLabel = "SQL dump";
-              try {
-                const st = await stat(filePath);
-                dumpLabel = `${(st.size / (1024 * 1024)).toFixed(1)} MB SQL dump`;
-              } catch {
-                /* ignore */
-              }
-              send("status", { message: `Scanning & parsing ${dumpLabel}…` });
-              send("progress", { phase: "scanning", current: 0, total: 100 });
-              let lastScanPct = -1;
-              const bundle = await bundleFromSqlFile(filePath, source, (bytesRead, totalBytes) => {
-                const pct = Math.round((bytesRead / totalBytes) * 100);
-                if (pct !== lastScanPct) {
-                  lastScanPct = pct;
-                  send("progress", { phase: "scanning", current: pct, total: 100 });
-                }
-              });
-              send("progress", { phase: "scanning", current: 100, total: 100 });
-              const epgN = bundle.phase3?.epgPrograms?.length ?? 0;
-              send("status", {
-                message: `Parse complete — importing into database (${bundle.streams.length} streams, ${bundle.lines.length} lines, ${epgN} EPG programmes)…`,
-              });
-              // Import the bundle directly
-              const { applyMigrationBundle } = await import("@/lib/panel-migration/apply");
-              const result = await applyMigrationBundle(bundle, { ...opts, onProgress });
-              const preview = previewMigrationBundle(bundle);
-              // Keep the completion payload small — huge warning lists / table dumps
-              // spike CPU+RAM when serializing the SSE "complete" event.
-              if (Array.isArray(preview.warnings) && preview.warnings.length > 40) {
-                preview.warnings = [
-                  ...preview.warnings.slice(0, 40),
-                  `… ${preview.warnings.length - 40} more warnings omitted`,
-                ];
-              }
-              if (Array.isArray(result.warnings) && result.warnings.length > 40) {
-                result.warnings = [
-                  ...result.warnings.slice(0, 40),
-                  `… ${result.warnings.length - 40} more warnings omitted`,
-                ];
-              }
-              send("complete", { preview, result });
-              // Help GC release the parsed dump sooner on large imports.
-              (bundle as { streams?: unknown }).streams = [];
-              (bundle as { lines?: unknown }).lines = [];
-              if (bundle.phase3) {
-                bundle.phase3.epgPrograms = [];
-                bundle.phase3.epgApiChannels = [];
-                bundle.phase3.providerStreamLinks = [];
-                bundle.phase3.blockedAsns = [];
-              }
-            } else {
-              content = (uploadedContent ?? (body.content as string | undefined) ?? "").trim();
-              if (!content) {
-                send("error", { error: "content required" });
-                controller.close();
-                await cleanup();
-                return;
-              }
-              const fileFormat = format === "json" || source === "nexlify_json" ? "json" : "sql";
-              const out = await runMigration(content, source, fileFormat, { ...opts, onProgress });
-              send("complete", { preview: out.preview, result: out.result });
+            const content = (uploadedContent ?? (body.content as string | undefined) ?? "").trim();
+            if (!content) {
+              send("error", { error: "content required" });
+              controller.close();
+              return;
             }
+            const fileFormat = format === "json" || source === "nexlify_json" ? "json" : "sql";
+            const out = await runMigration(content, source, fileFormat, { ...opts, onProgress });
+            send("complete", { preview: out.preview, result: out.result });
           }
         } catch (e) {
           send("error", { error: e instanceof Error ? e.message : String(e) });
-        } finally {
-          clearInterval(heartbeat);
-          try {
-            await unlink(lockPath);
-          } catch {
-            /* ignore */
-          }
         }
         controller.close();
-        await cleanup();
       },
     });
 
@@ -498,7 +414,6 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (e) {
-    await cleanup();
     return NextResponse.json(
       { error: e instanceof Error ? e.message : String(e) },
       { status: 400 }

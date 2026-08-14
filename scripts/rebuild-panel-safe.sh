@@ -31,6 +31,14 @@ ROOT="$(find_panel)" || {
 cd "$ROOT"
 echo "=== Safe rebuild at $ROOT ==="
 
+if [ -f "$ROOT/scripts/nexlify-migrate-guard.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$ROOT/scripts/nexlify-migrate-guard.sh"
+  if ! nexlify_refuse_restart_if_migrating; then
+    exit 1
+  fi
+fi
+
 # Do not recycle the panel while a large SQL import is in progress
 if [ -f /tmp/nexlify-migrate-in-progress ]; then
   age=$(( $(date +%s) - $(stat -c %Y /tmp/nexlify-migrate-in-progress 2>/dev/null || echo 0) ))

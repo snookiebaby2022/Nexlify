@@ -493,6 +493,13 @@ cmd_swap() {
 }
 
 cmd_build() {
+  if [ -f "$ROOT/scripts/nexlify-migrate-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-migrate-guard.sh"
+    if ! nexlify_refuse_restart_if_migrating; then
+      return 1
+    fi
+  fi
   UPDATE_TRAP_ACTIVE=1
   trap 'update_trap_exit $?' EXIT
   touch "$ROOT/.update-in-progress"
@@ -504,6 +511,13 @@ cmd_build() {
 }
 
 cmd_restart() {
+  if [ -f "$ROOT/scripts/nexlify-migrate-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-migrate-guard.sh"
+    if ! nexlify_refuse_restart_if_migrating; then
+      return 1
+    fi
+  fi
   if [ "$PANEL_RESTARTED" = "1" ]; then
     echo "Panel already restarted after build swap."
     return 0
