@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.67",
+  "latestVersion": "1.9.68",
   "releases": [
+    {
+      "version": "1.9.68",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Harden large SQL import: heartbeats + migrate lock so rebuilds cannot kill mid-import; ignore backup junk in dirty-git warning.",
+      "changelog": [
+        "SSE heartbeats during import apply keep the browser connection alive on multi-minute dumps",
+        "rebuild-panel-safe refuses to restart while /tmp/nexlify-migrate-in-progress exists",
+        "Default panel heap 8GB / PM2 max_memory_restart 8GB for large migrations",
+        "Updates page ignores .next.backup/.next.old/.next.staging as git-dirty noise"
+      ],
+      "fixes": [
+        "Import connection failed right after parse when a rebuild recycled nexlify mid-import",
+        "Updates page showed Local files differ from leftover .next.backup trees"
+      ]
+    },
     {
       "version": "1.9.67",
       "date": "2026-08-14",

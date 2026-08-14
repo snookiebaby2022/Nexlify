@@ -96,7 +96,7 @@ const sharedPanelEnv = {
   PATH: pgBinPath(),
   // Large SQL migration uploads (~1GB+) need headroom for parse + preview.
   // Override via NODE_OPTIONS in .env when a box is memory-constrained.
-  NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=4096",
+  NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=8192",
 };
 
 /** @type {import('pm2').StartOptions} */
@@ -115,7 +115,7 @@ module.exports = {
           kill_timeout: 8000,
           // PM2 RSS kill must stay above large dump parse peaks (was 700M–1800M and
           // aborted ~1GB SQL preview mid-request → browser "Upload failed").
-          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "6144M",
+          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "8192M",
           env: sharedPanelEnv,
         }
       : {
@@ -130,7 +130,7 @@ module.exports = {
           min_uptime: "10s",
           kill_timeout: 5000,
           listen_timeout: 60000,
-          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "6144M",
+          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "8192M",
           env: sharedPanelEnv,
         },
     {

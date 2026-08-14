@@ -12,7 +12,7 @@ import {
 import { bundleFromSqlFile } from "@/lib/panel-migration/map-rows";
 import Busboy from "busboy";
 import { Readable } from "stream";
-import { unlink, stat } from "fs/promises";
+import { unlink, stat, writeFile } from "fs/promises";
 import { createReadStream, createWriteStream } from "fs";
 
 const SOURCES = new Set(MIGRATION_SOURCES.map((s) => s.id));
@@ -360,6 +360,15 @@ export async function POST(req: NextRequest) {
         const send = (event: string, data: unknown) => {
           controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
         };
+        const lockPath = "/tmp/nexlify-migrate-in-progress";
+        try {
+          await writeFile(lockPath, String(Date.now()), "utf8");
+        } catch { /* ignore */ }
+        const heartbeat = setInterval(() => {
+          try {
+            send("status", { message: "Import still running — please keep this tab open…" });
+          } catch { /* closed */ }
+        }, 12000);
 
         // Send immediate event to prevent client timeout on long parses
         send("start", {
@@ -467,8 +476,14 @@ export async function POST(req: NextRequest) {
           }
         } catch (e) {
           send("error", { error: e instanceof Error ? e.message : String(e) });
+        } finally {
+          clearInterval(heartbeat);
+          try {
+            await unlink(lockPath);
+          } catch {
+            /* ignore */
+          }
         }
-
         controller.close();
         await cleanup();
       },

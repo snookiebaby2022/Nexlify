@@ -31,6 +31,17 @@ ROOT="$(find_panel)" || {
 cd "$ROOT"
 echo "=== Safe rebuild at $ROOT ==="
 
+# Do not recycle the panel while a large SQL import is in progress
+if [ -f /tmp/nexlify-migrate-in-progress ]; then
+  age=$(( $(date +%s) - $(stat -c %Y /tmp/nexlify-migrate-in-progress 2>/dev/null || echo 0) ))
+  if [ "$age" -lt 7200 ]; then
+    echo "ERROR: SQL migration import in progress (/tmp/nexlify-migrate-in-progress, ${age}s old)." >&2
+    echo "Wait for the import to finish (or remove the lock if it is stale) before rebuilding." >&2
+    exit 1
+  fi
+  rm -f /tmp/nexlify-migrate-in-progress
+fi
+
 pkill -f 'panel-update-background' 2>/dev/null || true
 pkill -f 'next build' 2>/dev/null || true
 rm -f .update-progress.pid .update-in-progress .update-progress.json

@@ -83,7 +83,28 @@ export async function getPanelVersionInfo(repoPath: string): Promise<PanelVersio
     gitBranch = await runGit(repoPath, ["rev-parse", "--abbrev-ref", "HEAD"]);
     gitCommit = await runGit(repoPath, ["rev-parse", "--short", "HEAD"]);
     const status = await runGit(repoPath, ["status", "--porcelain"]);
-    gitDirty = status.length > 0;
+    // Ignore build/backup leftovers that are not real local edits
+    gitDirty = status
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .some((line) => {
+        const path = line.replace(/^[?\sAMDRCU]{1,2}\s+/, "").replace(/^"/, "").replace(/"$/, "");
+        if (!path) return false;
+        if (
+          path === ".next.backup" ||
+          path.startsWith(".next.backup/") ||
+          path === ".next.old" ||
+          path.startsWith(".next.old/") ||
+          path === ".next.staging" ||
+          path.startsWith(".next.staging/") ||
+          path === "standalone" ||
+          path.startsWith("standalone/")
+        ) {
+          return false;
+        }
+        return true;
+      });
   } catch {
     isGitRepo = false;
   }
