@@ -447,6 +447,31 @@ cmd_build_standalone() {
   BUILD_SUCCEEDED=1
 }
 
+# Swap staging → .next without restart (caller restarts via panel-restart-safe).
+cmd_swap() {
+  if ! bash "$ROOT/scripts/has-valid-next-build.sh" ".next.staging"; then
+    echo "ERROR: staging build invalid — keeping current .next online" >&2
+    return 1
+  fi
+  export NEXLIFY_DIST_DIR=".next.staging"
+  bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
+  bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
+  css_count="$(find .next.staging/static/css -name '*.css' 2>/dev/null | wc -l | tr -d ' ')"
+  if [ -z "$css_count" ] || [ "$css_count" -lt 1 ]; then
+    echo "ERROR: staging build has no CSS — aborting swap" >&2
+    return 1
+  fi
+  echo "Swapping .next.staging → .next (restart deferred) ..."
+  rm -rf "$ROOT/.next.old"
+  if [ -d "$ROOT/.next" ]; then
+    mv "$ROOT/.next" "$ROOT/.next.old"
+  fi
+  mv "$STAGING_DIR" "$ROOT/.next"
+  write_cache
+  BUILD_SUCCEEDED=1
+  echo "Build OK ($css_count CSS bundle(s)) — ready for restart"
+}
+
 cmd_build() {
   UPDATE_TRAP_ACTIVE=1
   trap 'update_trap_exit $?' EXIT
@@ -539,12 +564,13 @@ case "$STEP" in
   build-prep) cmd_build_prep ;;
   build-compile) cmd_build_compile ;;
   build-standalone) cmd_build_standalone ;;
+  swap) cmd_swap ;;
   build) cmd_build ;;
   restart) cmd_restart ;;
   recover) cmd_recover "$@" ;;
   all) cmd_all ;;
   *)
-    echo "Unknown step: $STEP (use sync|deps|prisma|build|recover|restart|all)" >&2
+    echo "Unknown step: $STEP (use sync|deps|prisma|build|build-prep|build-compile|build-standalone|swap|recover|restart|all)" >&2
     exit 1
     ;;
 esac

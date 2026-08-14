@@ -37,6 +37,7 @@ async function main() {
   const { resolvePanelRepoPathSync } = await import(
     path.join(REPO_ROOT, "src/lib/panel-repo-path.ts")
   );
+  const { writeFile, unlink } = await import("fs/promises");
 
   const server = await getPanelServerSettingsSafe();
   const repoPath = resolvePanelRepoPathSync(server.repoPath);
@@ -45,6 +46,12 @@ async function main() {
   if (!job || job.status !== "running") {
     console.error("No running update job found");
     process.exit(1);
+  }
+
+  try {
+    await writeFile(path.join(repoPath, ".update-in-progress"), String(process.pid), "utf8");
+  } catch {
+    /* ignore */
   }
 
   const result = await runPanelUpdateWithProgress(async (update) => {
@@ -67,6 +74,12 @@ async function main() {
       output: s.output,
     })),
   });
+
+  try {
+    await unlink(path.join(repoPath, ".update-in-progress"));
+  } catch {
+    /* ignore */
+  }
 
   if (!result.ok) {
     await spawnRecover(repoPath);
@@ -99,6 +112,12 @@ main().catch(async (e) => {
         finishedAt: new Date().toISOString(),
         message: e instanceof Error ? e.message : "Update crashed",
       });
+    }
+    try {
+      const { unlink } = await import("fs/promises");
+      await unlink(path.join(repoPath, ".update-in-progress"));
+    } catch {
+      /* ignore */
     }
     await spawnRecover(repoPath);
   } catch {

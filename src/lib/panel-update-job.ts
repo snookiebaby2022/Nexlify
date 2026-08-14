@@ -156,6 +156,8 @@ export async function reconcileStaleUpdateJob(
           })()
         : job.currentStep === "npm install"
         ? "Update was interrupted (often during npm install when the server restarts). The panel may already be up to date — reload the page or run Update again from Settings → Updates."
+        : job.currentStep === "npm run build" || job.currentStep === "prepare build" || job.currentStep === "prepare standalone"
+        ? "Update was interrupted during the build. The panel should stay online on the previous build — reload Settings → Updates and try again, or run: bash scripts/fix-panel-down-now.sh"
         : job.currentStep === "sync panel files"
           ? "Update failed while syncing files from nexlify.live. Check disk space and that the vendor tarball is published, then try again."
           : job.currentStep === "pm2 restart nexlify"
@@ -165,6 +167,12 @@ export async function reconcileStaleUpdateJob(
   await writeUpdateJob(repoPath, reconciled);
   try {
     await writeFile(getUpdatePidPath(repoPath), "", "utf8");
+  } catch {
+    /* ignore */
+  }
+  try {
+    const { unlinkSync } = require("fs") as typeof import("fs");
+    unlinkSync(path.join(repoPath, ".update-in-progress"));
   } catch {
     /* ignore */
   }

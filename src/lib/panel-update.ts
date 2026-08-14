@@ -381,6 +381,36 @@ async function patchUpdateSteps(patchScript: string, repoPath: string): Promise<
 }
 
 async function postPullBuildSteps(repoPath: string): Promise<UpdateStep[]> {
+  // Prefer zero-downtime staging build when the fast-update script is present.
+  const patchScript = await resolvePatchUpdateScript(repoPath);
+  if (patchScript) {
+    const steps: UpdateStep[] = [];
+    if (await lockfileChanged(repoPath)) {
+      steps.push({ name: "npm install", command: "bash", args: [patchScript, "deps"] });
+    } else {
+      steps.push({
+        name: "npm install (skipped)",
+        command: "bash",
+        args: ["-c", "echo lockfile unchanged — skipping npm ci"],
+      });
+    }
+    if (await schemaChanged(repoPath)) {
+      steps.push({ name: "prisma db push", command: "bash", args: [patchScript, "prisma"] });
+    } else {
+      steps.push({
+        name: "prisma (skipped)",
+        command: "bash",
+        args: ["-c", "echo schema unchanged — skipping prisma"],
+      });
+    }
+    steps.push(
+      { name: "prepare build", command: "bash", args: [patchScript, "build-prep"] },
+      { name: "npm run build", command: "bash", args: [patchScript, "build-compile"] },
+      { name: "prepare standalone", command: "bash", args: [patchScript, "swap"] },
+    );
+    return steps;
+  }
+
   const steps: UpdateStep[] = [];
   if (await lockfileChanged(repoPath)) {
     steps.push(await npmInstallStep(repoPath));

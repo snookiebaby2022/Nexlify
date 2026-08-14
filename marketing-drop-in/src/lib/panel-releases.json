@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.53",
+  "latestVersion": "1.9.54",
   "releases": [
+    {
+      "version": "1.9.54",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Stop cron watchdog from causing 502 during panel updates; keep the live build online until staging swap.",
+      "changelog": [
+        "nexlify-watchdog skips restarts while an update is running and never starts PORT=80 -i max",
+        "Watchdog health-checks the .env upstream port (e.g. 13000), not nginx :80",
+        "Git updates build into .next.staging then swap, so refresh mid-build should not blank the panel",
+        "Update worker writes .update-in-progress so watchdogs and recover scripts cooperate"
+      ],
+      "fixes": [
+        "Stuck in-panel update at 88% (npm run build) then refresh → 502 Bad Gateway",
+        "Watchdog started a PM2 cluster on port 80 and fought nginx until all workers errored"
+      ]
+    },
     {
       "version": "1.9.53",
       "date": "2026-08-14",
