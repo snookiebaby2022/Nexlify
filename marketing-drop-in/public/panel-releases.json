@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.65",
+  "latestVersion": "1.9.66",
   "releases": [
+    {
+      "version": "1.9.66",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Fix client-side Application error after updates: normalize staging distDir so /_next/static assets always serve.",
+      "changelog": [
+        "After staging→.next swap, rewrite baked distDir .next.staging → .next in standalone/server.js and manifests",
+        "Merge nested standalone/.next.staging into standalone/.next so pages and CSS/JS share one tree",
+        "prepare-standalone + verify-standalone + post-restart checks fail if staging distDir leaks into production",
+        "wait-panel-ready verifies a webpack chunk returns HTTP 200 (not just /api/health)"
+      ],
+      "fixes": [
+        "Application error: a client-side exception has occurred (static chunks 404 after staging build swap)",
+        "Updates page blank/crash when server.js still pointed at ./.next.staging"
+      ]
+    },
     {
       "version": "1.9.65",
       "date": "2026-08-14",

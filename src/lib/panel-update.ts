@@ -515,7 +515,7 @@ async function postPullBuildSteps(repoPath: string): Promise<UpdateStep[]> {
     command: "bash",
     args: [
       "-c",
-      'export NEXLIFY_DIST_DIR=.next.staging NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" NEXT_PRIVATE_WORKER_THREADS=false; rm -rf .next.staging; node ./node_modules/next/dist/bin/next build && bash scripts/prepare-standalone.sh && if [ -d .next ]; then mv .next .next.old; fi && mv .next.staging .next && rm -rf .next.old',
+      'export NEXLIFY_DIST_DIR=.next.staging NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" NEXT_PRIVATE_WORKER_THREADS=false; rm -rf .next.staging; node ./node_modules/next/dist/bin/next build && bash scripts/prepare-standalone.sh && if [ -d .next ]; then mv .next .next.old; fi && mv .next.staging .next && export NEXLIFY_DIST_DIR=.next && bash scripts/fix-next-distdir-references.sh .next && bash scripts/prepare-standalone.sh && rm -rf .next.old',
     ],
   });
   return steps;

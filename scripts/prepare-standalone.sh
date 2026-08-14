@@ -86,9 +86,20 @@ fi
 # Stale scripts/ in standalone break the update worker (no src/ for module imports)
 rm -rf "$DIST/standalone/scripts" 2>/dev/null || true
 
-# Verify static assets were copied (fail-safe)
+# Staging builds bake distDir=./.next.staging and may nest the server tree there.
+# Normalize to ./.next before swap/restart so /_next/static never 404s.
+if [ -x "$PANEL_ROOT/scripts/fix-next-distdir-references.sh" ]; then
+  bash "$PANEL_ROOT/scripts/fix-next-distdir-references.sh" "$PANEL_ROOT/$DIST"
+fi
+
+# Verify static assets were copied (fail-safe) — after distdir normalize
 if [ ! -d "$DIST/standalone/.next/static" ]; then
   echo "prepare-standalone: ERROR static assets missing after copy!"
+  exit 1
+fi
+
+if [ -f "$DIST/standalone/server.js" ] && grep -q '\.next\.staging' "$DIST/standalone/server.js" 2>/dev/null; then
+  echo "prepare-standalone: ERROR server.js still references .next.staging" >&2
   exit 1
 fi
 

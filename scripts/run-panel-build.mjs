@@ -82,10 +82,14 @@ if (updating && !alreadyStaging) {
   run("bash", [
     "-c",
     'if [ -f .next.staging/BUILD_ID ] || [ -f .next.staging/standalone/server.js ]; then ' +
-      "bash scripts/prepare-standalone.sh 2>/dev/null || true; " +
+      "export NEXLIFY_DIST_DIR=.next.staging; bash scripts/prepare-standalone.sh 2>/dev/null || true; " +
       "rm -rf .next.old; " +
       "[ -d .next ] && mv .next .next.old; " +
-      "mv .next.staging .next; rm -rf .next.old; " +
+      "mv .next.staging .next; " +
+      "export NEXLIFY_DIST_DIR=.next; " +
+      "bash scripts/fix-next-distdir-references.sh .next 2>/dev/null || true; " +
+      "bash scripts/prepare-standalone.sh 2>/dev/null || true; " +
+      "rm -rf .next.old; " +
       "echo Swapped .next.staging → .next; " +
       "else echo ERROR: staging build invalid; exit 1; fi",
   ]);

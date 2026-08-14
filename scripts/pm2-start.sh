@@ -80,6 +80,7 @@ fi
 
 # Always ensure standalone static assets are fresh (prevents CSS/JS breakage after updates)
 if [ -f "$ROOT/.next/standalone/server.js" ]; then
+  bash "$ROOT/scripts/fix-next-distdir-references.sh" "$ROOT/.next" 2>/dev/null || true
   bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
 fi
 

@@ -67,6 +67,9 @@ else
   rm -rf .next.old
   [ -d .next ] && mv .next .next.old
   mv .next.staging .next
+  export NEXLIFY_DIST_DIR=.next
+  bash scripts/fix-next-distdir-references.sh .next 2>/dev/null || true
+  bash scripts/prepare-standalone.sh 2>/dev/null || true
   rm -rf .next.old
 fi
 

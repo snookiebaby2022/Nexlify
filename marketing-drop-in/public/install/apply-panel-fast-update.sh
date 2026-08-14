@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.55}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v${_PV}}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -400,13 +400,19 @@ cmd_build_compile() {
   export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
   export NEXT_PRIVATE_WORKER_THREADS=false
   export NEXLIFY_DIST_DIR=".next.staging"
-  if npm run build; then
+  # Call next directly — do not use `npm run build` (that wrapper routes back here).
+  if node ./node_modules/next/dist/bin/next build; then
     return 0
   fi
-  echo "WARN: npm run build failed (webpack?) — clean reinstall + retry once ..." >&2
+  echo "WARN: next build failed (webpack?) — clear caches + reinstall optional SWC + retry once ..." >&2
+  rm -rf .next.staging node_modules/.cache .next/cache 2>/dev/null || true
   rm -rf node_modules
   npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error
-  npm run build
+  # Ensure platform SWC binary is present (missing binary → "generate is not a function")
+  npm install --no-save --include=optional @next/swc-linux-x64-gnu 2>/dev/null || \
+    npm install --no-save --include=optional @next/swc-linux-x64-musl 2>/dev/null || true
+  export NEXLIFY_DIST_DIR=".next.staging"
+  node ./node_modules/next/dist/bin/next build
 }
 
 swap_staging_build() {
@@ -428,6 +434,12 @@ swap_staging_build() {
     mv "$ROOT/.next" "$ROOT/.next.old"
   fi
   mv "$STAGING_DIR" "$ROOT/.next"
+  # Ensure baked staging distDir never reaches production runtime
+  unset NEXLIFY_DIST_DIR || true
+  export NEXLIFY_DIST_DIR=".next"
+  bash "$ROOT/scripts/fix-next-distdir-references.sh" "$ROOT/.next" 2>/dev/null || true
+  bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
+  bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
   write_cache
   echo "Build OK ($css_count CSS bundle(s))"
   echo "Restarting panel on new build (expect ~15–60s brief outage) ..."
@@ -467,6 +479,11 @@ cmd_swap() {
     mv "$ROOT/.next" "$ROOT/.next.old"
   fi
   mv "$STAGING_DIR" "$ROOT/.next"
+  unset NEXLIFY_DIST_DIR || true
+  export NEXLIFY_DIST_DIR=".next"
+  bash "$ROOT/scripts/fix-next-distdir-references.sh" "$ROOT/.next" 2>/dev/null || true
+  bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
+  bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
   write_cache
   BUILD_SUCCEEDED=1
   echo "Build OK ($css_count CSS bundle(s)) — ready for restart"
@@ -501,6 +518,9 @@ cmd_restart() {
     pm2 save 2>/dev/null || true
   fi
   if [ -f "$ROOT/.next/standalone/server.js" ]; then
+    unset NEXLIFY_DIST_DIR || true
+    export NEXLIFY_DIST_DIR=".next"
+    bash "$ROOT/scripts/fix-next-distdir-references.sh" "$ROOT/.next" 2>/dev/null || true
     bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
     bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
   fi
@@ -508,6 +528,30 @@ cmd_restart() {
     bash "$ROOT/scripts/wait-panel-ready.sh" || echo "WARN: panel slow to respond after restart" >&2
   else
     sleep 5
+  fi
+  # Fail loud if static assets 404 (causes "Application error: client-side exception")
+  _chunk="$(find "$ROOT/.next/static/chunks" -maxdepth 1 -name 'webpack-*.js' 2>/dev/null | head -1 || true)"
+  if [ -n "$_chunk" ]; then
+    _bn="$(basename "$_chunk")"
+    _code="$(curl -sS -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' "http://127.0.0.1/_next/static/chunks/${_bn}" 2>/dev/null || echo 000)"
+    if [ "$_code" = "000" ]; then
+      _code="$(curl -sS -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' "http://127.0.0.1:13000/_next/static/chunks/${_bn}" 2>/dev/null || echo 000)"
+    fi
+    if [ "$_code" != "200" ]; then
+      echo "ERROR: /_next/static/chunks/${_bn} returned HTTP ${_code} — fixing distdir and retrying prepare..." >&2
+      bash "$ROOT/scripts/fix-next-distdir-references.sh" "$ROOT/.next" 2>/dev/null || true
+      bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
+      if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
+        bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only 2>/dev/null || true
+        sleep 3
+      fi
+      _code2="$(curl -sS -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' "http://127.0.0.1/_next/static/chunks/${_bn}" 2>/dev/null || echo 000)"
+      if [ "$_code2" != "200" ]; then
+        echo "ERROR: static assets still HTTP ${_code2} after repair — UI will show client-side exception" >&2
+        return 1
+      fi
+      echo "Static assets recovered after distdir repair."
+    fi
   fi
   PANEL_RESTARTED=1
   echo "PM2 restart complete."

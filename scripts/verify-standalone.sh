@@ -48,6 +48,26 @@ fi
 
 
 
+if [ -d "$STANDALONE/.next.staging" ]; then
+
+  echo "ERROR: standalone/.next.staging present — run: bash scripts/fix-next-distdir-references.sh $DIST"
+
+  exit 1
+
+fi
+
+
+
+if grep -q '\.next\.staging' "$STANDALONE/server.js" 2>/dev/null; then
+
+  echo "ERROR: server.js still references .next.staging — run: bash scripts/fix-next-distdir-references.sh $DIST"
+
+  exit 1
+
+fi
+
+
+
 if [ ! -d "$STANDALONE/public" ]; then
 
   echo "WARN: standalone/public missing"
