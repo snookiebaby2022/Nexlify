@@ -144,14 +144,16 @@ export function loadPhase3FromSql(
       if (!legacyId || !name || !baseUrl) continue;
       const user = String(r.username ?? r.user ?? "").trim();
       const pass = String(r.password ?? r.pass ?? "").trim();
+      const legacyFlag = Number(r.legacy ?? r.legacy_xc ?? r.is_legacy ?? 0) === 1;
       phase3.providers.push({
         legacyId,
         name,
         baseUrl,
         apiKey: user && pass ? `${user}:${pass}` : user || undefined,
-        providerType:
-          Number(r.legacy_xc ?? 0) === 1
-            ? "xtream_vod"
+        providerType: legacyFlag
+          ? "xtream_vod"
+          : user && pass
+            ? "live_upstream"
             : Number(r.is_live ?? 0) === 1
               ? "live_upstream"
               : "generic_url",
@@ -167,17 +169,27 @@ export function loadPhase3FromSql(
       const providerLegacyId = String(
         r.provider_id ?? r.providers_id ?? r.stream_provider_id ?? ""
       );
-      const streamLegacyId = String(r.stream_id ?? r.streams_id ?? "");
-      if (!providerLegacyId || !streamLegacyId) continue;
-      phase3.providerStreamLinks.push({
-        providerLegacyId,
-        streamLegacyId,
-        providerPath: r.path
-          ? String(r.path)
-          : r.provider_path
-            ? String(r.provider_path)
-            : undefined,
-      });
+      // XUI providers_streams.stream_id is often the *remote* catalogue id, not local streams.id.
+      // Prefer an explicit local link column when present; otherwise keep stream_id as path.
+      const localStreamLegacyId = String(
+        r.local_stream_id ?? r.streams_id ?? r.nexlify_stream_id ?? ""
+      );
+      const remoteId = String(r.stream_id ?? r.remote_id ?? r.channel_id ?? "");
+      if (!providerLegacyId) continue;
+      if (localStreamLegacyId) {
+        phase3.providerStreamLinks.push({
+          providerLegacyId,
+          streamLegacyId: localStreamLegacyId,
+          providerPath: remoteId || undefined,
+        });
+      } else if (remoteId && remoteId !== "0" && remoteId.toLowerCase() !== "null") {
+        // Best-effort: only useful when remote id happens to match a local legacy stream id.
+        phase3.providerStreamLinks.push({
+          providerLegacyId,
+          streamLegacyId: remoteId,
+          providerPath: remoteId,
+        });
+      }
     }
   }
 

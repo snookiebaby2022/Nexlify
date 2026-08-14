@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.61",
+  "latestVersion": "1.9.62",
   "releases": [
+    {
+      "version": "1.9.62",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Improve XUI.one SQL migration using a real MariaDB xui dump schema (packages months, bouquet_order, providers ip/port/ssl, MAG mag_id).",
+      "changelog": [
+        "Package duration respects official_duration_in / trial_duration_in (months → days, hours → days)",
+        "Bouquet sort uses bouquet_order; headerless templates match real XUI.one column order",
+        "Providers build baseUrl from ip/port/ssl and treat username+password as live upstream",
+        "Fixtures + unit tests for modern XUI dump shapes (plain bouquet ID arrays)"
+      ],
+      "fixes": [
+        "12 month XUI packages imported as 12 days",
+        "Bouquet order ignored when column is bouquet_order",
+        "XUI providers with ip/port/ssl not mapped as usable upstream URLs"
+      ]
+    },
     {
       "version": "1.9.61",
       "date": "2026-08-14",

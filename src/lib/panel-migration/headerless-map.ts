@@ -303,19 +303,29 @@ const XUI_COMMON: Record<HeaderlessTableType, string[]> = {
     "is_mag", "is_e2", "forced_country", "forced_ua",
     "allowed_ips", "allowed_ua", "created_at", "pair_id",
   ],
-  // Classic XUI / Xtream `streams`
+  // Classic XUI / Xtream `streams` — modern XUI.one uses `order` (not order_num)
   streams: [
     "id", "type", "category_id", "stream_display_name", "stream_source",
     "stream_icon", "notes", "created_channel", "read_native",
     "movie_properties", "movie_subtitles", "direct_source",
-    "target_container", "epg_id", "channel_id", "order_num",
+    "target_container", "epg_id", "channel_id", "order",
   ],
-  bouquets: ["id", "bouquet_name", "bouquet_channels", "bouquet_movies", "bouquet_series", "sort_order"],
+  // Real XUI.one: plain ID arrays in bouquet_* + bouquet_order
+  bouquets: [
+    "id",
+    "bouquet_name",
+    "bouquet_channels",
+    "bouquet_movies",
+    "bouquet_radios",
+    "bouquet_series",
+    "bouquet_order",
+  ],
   resellers: [
     "id", "username", "password", "email", "member_group_id", "credits",
     "notes", "status", "owner_id", "date_registered",
   ],
-  mag: ["id", "mac", "user_id", "username", "model"],
+  // Real XUI.one MAG PK is mag_id
+  mag: ["mag_id", "user_id", "mac", "username", "model"],
   enigma: ["id", "mac", "user_id", "username", "model"],
   categories: ["id", "category_type", "category_name", "parent_id", "cat_order", "is_adult"],
   servers: ["id", "server_name", "domain_name", "server_ip", "private_ip", "http_port", "https_port", "rtmp_port"],

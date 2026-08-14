@@ -313,7 +313,8 @@ function mapBouquets(data: SqlTableData | null): MigrationBouquetRow[] {
       legacyId,
       name,
       streamLegacyIds: [...new Set(streamLegacyIds.filter(Boolean))],
-      sortOrder: Number(r.sort_order ?? r.order ?? 0) || 0,
+      sortOrder:
+        Number(r.bouquet_order ?? r.sort_order ?? r.order ?? r.cat_order ?? 0) || 0,
     });
   }
   return out;
@@ -438,6 +439,18 @@ function mapResellers(data: SqlTableData | null): MigrationResellerRow[] {
   return out;
 }
 
+/** Convert XUI package duration (amount + unit) to whole days. */
+export function xuiDurationToDays(amount: number, unit: unknown): number {
+  if (!Number.isFinite(amount) || amount <= 0) return NaN;
+  const u = String(unit ?? "days").trim().toLowerCase();
+  if (u.startsWith("hour")) return Math.max(1, Math.ceil(amount / 24));
+  if (u.startsWith("day")) return Math.round(amount);
+  if (u.startsWith("week")) return Math.round(amount * 7);
+  if (u.startsWith("month")) return Math.round(amount * 30);
+  if (u.startsWith("year")) return Math.round(amount * 365);
+  return Math.round(amount);
+}
+
 /** Map duration/credit packages (skip pure channel-package rows already used as bouquets). */
 export function mapPackages(data: SqlTableData | null): MigrationPackageRow[] {
   if (!data) return [];
@@ -446,16 +459,33 @@ export function mapPackages(data: SqlTableData | null): MigrationPackageRow[] {
     const r = rowToRecord(data.columns, row);
     const legacyId = String(r.id ?? r.package_id ?? "");
     if (!legacyId) continue;
-    const rawDays = Number(
-      r.duration_in_days ??
-        r.duration ??
-        r.days ??
-        r.package_days ??
-        r.length_days ??
-        r.official_duration ??
-        r.trial_duration ??
-        NaN
+    const trialRaw = r.is_trial ?? r.trial;
+    const isTrialPackage =
+      trialRaw != null &&
+      Number(trialRaw) !== 0 &&
+      String(trialRaw).toLowerCase() !== "false" &&
+      String(trialRaw).toLowerCase() !== "no";
+    // Prefer official duration; fall back to trial fields for trial-only packages.
+    const amount = Number(
+      isTrialPackage
+        ? (r.trial_duration ??
+            r.official_duration ??
+            r.duration_in_days ??
+            r.duration ??
+            r.days ??
+            NaN)
+        : (r.official_duration ??
+            r.duration_in_days ??
+            r.duration ??
+            r.days ??
+            r.package_days ??
+            r.trial_duration ??
+            NaN)
     );
+    const unit = isTrialPackage
+      ? (r.trial_duration_in ?? r.official_duration_in ?? r.duration_in ?? "days")
+      : (r.official_duration_in ?? r.trial_duration_in ?? r.duration_in ?? "days");
+    const rawDays = xuiDurationToDays(amount, unit);
     const creditCost = Number(
       r.credits ??
         r.credit_cost ??
@@ -466,12 +496,6 @@ export function mapPackages(data: SqlTableData | null): MigrationPackageRow[] {
         r.trial_credits ??
         NaN
     );
-    const trialRaw = r.is_trial ?? r.trial;
-    const isTrialPackage =
-      trialRaw != null &&
-      Number(trialRaw) !== 0 &&
-      String(trialRaw).toLowerCase() !== "false" &&
-      String(trialRaw).toLowerCase() !== "no";
     const hasBillingSignal =
       (Number.isFinite(rawDays) && rawDays > 0) ||
       (Number.isFinite(creditCost) && creditCost > 0) ||
@@ -495,7 +519,7 @@ export function mapPackages(data: SqlTableData | null): MigrationPackageRow[] {
         r.bouquets ?? r.bouquet_ids ?? r.bouquet ?? r.packages
       ),
       description: r.description ? String(r.description) : undefined,
-      isActive: Number(r.status ?? r.is_active ?? 1) !== 0,
+      isActive: Number(r.status ?? r.is_active ?? r.enabled ?? 1) !== 0,
       sortOrder: Number(r.sort_order ?? r.order ?? 0) || packageDurationSortKey(days, name),
     });
   }
