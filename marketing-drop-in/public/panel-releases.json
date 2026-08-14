@@ -1,7 +1,27 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.35",
+  "latestVersion": "1.9.36",
   "releases": [
+    {
+      "version": "1.9.36",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Fix Add Line package expiry (24h/48h/week/month), uncategorized live reassignment, list Show entries default 50, auto icons for live/movies/series.",
+      "changelog": [
+        "Add Line: expiry uses package days (trials no longer forced to 1 day); local datetime display; 24h/48h/week/month presets",
+        "Packages API and create-line normalize imported month/day values by package name",
+        "Uncategorized LIVE streams reassigned during post-import repair",
+        "List tables default to 50 rows with Show entries controls",
+        "Auto-add icons for live channels plus TMDB posters for movies/series"
+      ],
+      "fixes": [
+        "48 Hours package saved as 24 Hours because isTrial forced days=1",
+        "Expiry datetime showed 6 days / 29 days due to UTC ISO formatting",
+        "Broken Math.ceil after page-size rename blocked panel builds",
+        "Admin sessions POST referenced undefined action"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.36.tar.gz"
+    },
     {
       "version": "1.9.35",
       "date": "2026-08-14",

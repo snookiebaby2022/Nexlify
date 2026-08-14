@@ -51,7 +51,7 @@ export function ManageBouquetsTable({
   }, [bouquets, search, sortKey, sortDir]);
 
   const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total entriesSize));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 

@@ -35,7 +35,7 @@ export default function MassEditUsersPage() {
     return users.filter((u) => u.username.toLowerCase().includes(q) || u.role.toLowerCase().includes(q));
   }, [users, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length entriesSize));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = useMemo(() => filtered.slice((page - 1) * pageSize, page * pageSize), [filtered, page, pageSize]);
   const allOnPageSelected = paged.length > 0 && paged.every((u) => selected.has(u.id));
 

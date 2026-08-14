@@ -14,7 +14,7 @@ import {
 } from "@/lib/credential-generate";
 import { LINE_DURATION_PRESETS } from "@/lib/line-duration-presets";
 import { creditCostForDays, packageLabelForDays } from "@/lib/package-credits";
-import { packageDurationSortKey } from "@/lib/package-days";
+import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
 import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
 
 function YesNo({
@@ -125,6 +125,7 @@ export function LineAddForm({
       allowedCountries: tpl.allowedCountries,
       blockedCountries: tpl.blockedCountries,
       unlimited: false,
+      expiresAt: "",
     }));
     setCreditHint(tpl.creditCost);
     if (autoGenerate) applyGenerated();
@@ -152,13 +153,16 @@ export function LineAddForm({
     fetch("/api/admin/packages")
       .then((r) => r.json())
       .then((d) => {
-        const list = [...(d.packages ?? [])] as {
+        const list = ((d.packages ?? []) as {
           id: string;
           name: string;
           days: number;
           creditCost: number;
           maxLines: number;
-        }[];
+        }[]).map((p) => ({
+          ...p,
+          days: inferPackageDaysFromName(p.name, p.days) ?? p.days,
+        }));
         list.sort(
           (a, b) =>
             packageDurationSortKey(a.days, a.name) - packageDurationSortKey(b.days, b.name) ||
@@ -215,6 +219,12 @@ export function LineAddForm({
     const notes = [form.adminNotes, form.resellerNotes].filter(Boolean).join("\n---\n");
     // Duration comes from package/days — isTrial is a flag only (do not force 1 day).
     const days = form.unlimited ? 3650 : Math.max(1, Number(form.days) || 1);
+    // Match the expiry the user sees (local datetime → ISO), never force 1 day for trials.
+    const expiresAtPayload = form.unlimited
+      ? undefined
+      : new Date(
+          form.expiresAt || toDatetimeLocalValue(expiryFromDays(days))
+        ).toISOString();
 
     setSaving(true);
     let data: { error?: string; line?: unknown } = {};
@@ -227,7 +237,7 @@ export function LineAddForm({
           password,
           maxConnections: form.maxConnections,
           days,
-          expiresAt: form.unlimited ? undefined : form.expiresAt || undefined,
+          expiresAt: expiresAtPayload,
           bouquetIds: form.bouquetIds,
           ownerId: mode === "admin" && form.ownerId ? form.ownerId : undefined,
           allowedCountries: form.allowedCountries || undefined,

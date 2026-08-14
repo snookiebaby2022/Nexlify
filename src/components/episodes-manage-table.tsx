@@ -58,7 +58,7 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
     });
   }, [episodes, search, seasonFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(total entriesSize));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   async function remove(id: string) {
     if (!confirm("Delete this episode?")) return;

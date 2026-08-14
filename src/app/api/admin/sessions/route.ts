@@ -40,6 +40,7 @@ export async function POST(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await req.json();
+  const action = String(body.action ?? "");
   try {
     if (action === "add") {
       await addSession(body.session);

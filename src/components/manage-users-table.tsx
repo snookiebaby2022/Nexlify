@@ -99,7 +99,7 @@ export function ManageUsersTable({
   }, [users, search, sortKey, sortDir]);
 
   const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total entriesSize));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * pageSize;
   const pageRows = filtered.slice(start, start + pageSize);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { mergeGroupConfig } from "@/lib/group-config";
+import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
 import { PanelRole } from "@prisma/client";
 
 export async function GET() {
@@ -29,7 +30,17 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ packages });
+  const normalized = packages
+    .map((p) => {
+      const days = inferPackageDaysFromName(p.name, p.days) ?? p.days;
+      return { ...p, days, sortOrder: packageDurationSortKey(days, p.name) };
+    })
+    .sort(
+      (a, b) =>
+        a.sortOrder - b.sortOrder || a.days - b.days || a.name.localeCompare(b.name)
+    );
+
+  return NextResponse.json({ packages: normalized });
 }
 
 export async function POST(req: NextRequest) {

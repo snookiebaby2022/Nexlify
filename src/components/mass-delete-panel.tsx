@@ -106,7 +106,7 @@ export function MassDeletePanel({
     load();
   }
 
-  const totalPages = Math.max(1, Math.ceil(total entriesSize));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <div className="space-y-6">

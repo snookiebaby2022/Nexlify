@@ -178,15 +178,23 @@ export async function POST(req: NextRequest) {
     const { getLineTemplate } = await import("@/lib/line-templates");
     const tpl = getLineTemplate(String(body.templateId));
     if (tpl) {
-      days = tpl.days;
-      maxConnections = tpl.maxConnections;
-      totalCost = tpl.creditCost;
-      body.lockToIp = tpl.lockToIp;
-      body.allowedCountries = tpl.allowedCountries || body.allowedCountries;
-      body.blockedCountries = tpl.blockedCountries || body.blockedCountries;
-      body.canWatchAdult = tpl.canWatchAdult;
-      if (tpl.isTrial) body.isTrial = true;
+      // Template fills defaults only — explicit form days/maxConnections win.
+      if (body.days == null || body.days === "") days = tpl.days;
+      if (body.maxConnections == null || body.maxConnections === "") {
+        maxConnections = tpl.maxConnections;
+      }
+      if (body.packageId == null || body.packageId === "") totalCost = tpl.creditCost;
+      body.lockToIp = body.lockToIp ?? tpl.lockToIp;
+      body.allowedCountries = body.allowedCountries || tpl.allowedCountries || body.allowedCountries;
+      body.blockedCountries = body.blockedCountries || tpl.blockedCountries || body.blockedCountries;
+      body.canWatchAdult = body.canWatchAdult ?? tpl.canWatchAdult;
+      if (tpl.isTrial && body.isTrial == null) body.isTrial = true;
     }
+  }
+
+  // Prefer client-sent days (package/preset) when package resolution didn't override.
+  if (body.days != null && body.days !== "" && !body.packageId) {
+    days = Math.max(1, Number(body.days) || days);
   }
 
   // Explicit expiry from the form calendar overrides package days when provided.

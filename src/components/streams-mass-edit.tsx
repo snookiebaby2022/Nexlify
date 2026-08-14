@@ -97,7 +97,7 @@ export function StreamsMassEdit({
     return streams.filter((s) => s.name.toLowerCase().includes(q));
   }, [streams, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length entriesSize));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = useMemo(() => {
     return filtered.slice((page - 1) * pageSize, page * pageSize);
   }, [filtered, page, pageSize]);

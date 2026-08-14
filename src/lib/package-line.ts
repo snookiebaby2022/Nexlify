@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { inferPackageDaysFromName } from "@/lib/package-days";
 
 export async function resolveLineCreateFromPackage(body: {
   packageId?: string;
@@ -30,7 +31,7 @@ export async function resolveLineCreateFromPackage(body: {
       where: { id: String(body.packageId), isActive: true },
     });
     if (!pkg) throw new Error("Package not found");
-    days = pkg.days;
+    days = inferPackageDaysFromName(pkg.name, pkg.days) ?? pkg.days;
     maxConnections = pkg.maxLines;
     if (pkg.bouquetIds.length) bouquetIds = [...pkg.bouquetIds];
     creditCost = Math.max(0, pkg.creditCost);
