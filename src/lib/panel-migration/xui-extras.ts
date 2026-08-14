@@ -414,6 +414,11 @@ export function mapSeriesEpisodesFromSql(
     warnings.push(
       `Tagged ${enriched} TV episode stream(s) from streams_episodes (${seriesMeta.size} series catalog rows, ${source}).`
     );
+    if (episodes.rows.length > enriched * 2) {
+      warnings.push(
+        `streams_episodes has ${episodes.rows.length} catalog row(s); ${enriched} existing stream(s) were tagged as TV episodes. Extra rows are XUI season/TMDB listings without a playable file — they are not imported as empty streams.`
+      );
+    }
   }
   if (created.length) {
     warnings.push(`Created ${created.length} TV episode stream(s) from episode URLs (${source}).`);

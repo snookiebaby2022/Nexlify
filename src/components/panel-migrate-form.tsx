@@ -652,6 +652,7 @@ export function PanelMigrateForm() {
     const preview = data.preview as Record<string, unknown> | undefined;
     const c = preview?.counts as Record<string, number> | undefined;
     const parseWarnings = (preview?.warnings as string[]) ?? [];
+    const parseNotes = (preview?.notes as string[]) ?? [];
     const tablesFound = (preview?.tablesFound as { name: string; rows: number; hasColumns: boolean }[]) ?? [];
 
     setPreview(c ? formatPreviewCounts(c) : "");
@@ -662,23 +663,15 @@ export function PanelMigrateForm() {
           .join(", ")}`
       : null;
 
-    if (parseWarnings.length) {
-      setResult(
-        [
-          "Preview complete.",
-          tablesLine,
-          "",
-          "Parse warnings:",
-          ...parseWarnings.map((w) => `  - ${w}`),
-        ]
-          .filter(Boolean)
-          .join("\n")
-      );
-    } else {
-      setResult(
-        ["Preview complete — review counts, then run import.", tablesLine].filter(Boolean).join("\n")
-      );
+    const blocks: string[] = ["Preview complete."];
+    if (tablesLine) blocks.push(tablesLine);
+    if (parseNotes.length) {
+      blocks.push("", "How the dump was read:", ...parseNotes.map((w) => `  - ${w}`));
     }
+    if (parseWarnings.length) {
+      blocks.push("", "Needs attention:", ...parseWarnings.map((w) => `  - ${w}`));
+    }
+    setResult(blocks.filter(Boolean).join("\n"));
     appendLiveLog("Preview complete.");
   }
 

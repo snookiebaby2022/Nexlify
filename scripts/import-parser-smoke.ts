@@ -10,6 +10,7 @@ import {
   urlsFromPhpSerialized,
 } from "../src/lib/panel-migration/sql-junctions";
 import { parseM3u } from "../src/lib/m3u-parser";
+import { isMigrationParseNote } from "../src/lib/panel-migration/parse-notes";
 
 let failed = 0;
 function eq(name: string, got: unknown, want: unknown) {
@@ -51,6 +52,11 @@ eq("m3u count", m3u.length, 3);
 eq("m3u https after vlcopt", m3u[0]?.url, "https://cdn.example.com/cnn.m3u8");
 eq("m3u udp", m3u[1]?.url, "udp://@239.1.1.1:1234");
 eq("m3u host:port", m3u[2]?.url, "host.example.com:8080/live/2");
+
+eq("headerless create table is a note", isMigrationParseNote('Applied CREATE TABLE column names for headerless table "streams" (55 columns).'), true);
+eq("content breakdown is a note", isMigrationParseNote("Content breakdown: 1548 live, 5811 movies, 2688 TV series, 11796 TV episodes."), true);
+eq("60 skipped of 19215 is a note", isMigrationParseNote("Mapped 19155 of 19215 stream row(s); 60 skipped (empty or unusable stream_source)."), true);
+eq("missing table stays a warning", isMigrationParseNote('Table "streams" matched but contained no rows'), false);
 
 if (failed) {
   console.error(`\n${failed} failure(s)`);

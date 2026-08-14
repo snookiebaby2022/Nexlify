@@ -12,7 +12,7 @@ import {
   type PostgresMigrationConfig,
   type PostgresProbeResult,
 } from "./postgres";
-import { MIGRATION_GUIDE_PATHS } from "./guide-paths";
+import { splitMigrationMessages } from "./parse-notes";
 
 export type { MigrationBundle, MigrationSource, MigrationApplyOptions, MigrationApplyResult };
 export {
@@ -67,6 +67,7 @@ export function previewMigrationBundle(bundle: MigrationBundle) {
   ).length;
 
   const phase3 = bundle.phase3;
+  const split = splitMigrationMessages(bundle.warnings ?? []);
   return {
     source: bundle.source,
     counts: {
@@ -126,7 +127,8 @@ export function previewMigrationBundle(bundle: MigrationBundle) {
       bandwidthSnapshots: phase3?.bandwidthSnapshots.length ?? 0,
       settings: phase3?.settingsRaw ? 1 : 0,
     },
-    warnings: bundle.warnings ?? [],
+    warnings: split.warnings,
+    notes: split.notes,
     tablesFound: bundle.tablesFound ?? [],
   };
 }
