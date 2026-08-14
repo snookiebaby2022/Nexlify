@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.38",
+  "latestVersion": "1.9.39",
   "releases": [
+    {
+      "version": "1.9.39",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Finish stream/category/bouquet import: attach lines to bouquets, keep playable URLs only, M3U host:port.",
+      "changelog": [
+        "Repair attaches lines with no bouquets so players actually see imported streams",
+        "Re-import still links bouquets on existing lines instead of skipping them",
+        "Stream URLs must look playable (scheme or host:port); PHP-serialized sources still extract",
+        "M3U accepts host:port/path rows and any :// URL after VLC option lines"
+      ],
+      "fixes": [
+        "Imported streams existed in Manage Streams but lines had no bouquets so players showed nothing",
+        "Skip-existing lines blocked bouquet repair on a second migrate",
+        "Non-URL stream_source text could be stored as the playback URL"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.39.tar.gz"
+    },
     {
       "version": "1.9.38",
       "date": "2026-08-14",

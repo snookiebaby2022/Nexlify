@@ -10,8 +10,20 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
-    const [streams, live, movie, series, uncategorized, noUrl, inactive, bouquets, categories, linked] =
-      await Promise.all([
+    const [
+      streams,
+      live,
+      movie,
+      series,
+      uncategorized,
+      noUrl,
+      inactive,
+      bouquets,
+      categories,
+      linked,
+      lines,
+      linesWithoutBouquets,
+    ] = await Promise.all([
         prisma.stream.count(),
         prisma.stream.count({ where: { type: "LIVE" } }),
         prisma.stream.count({ where: { type: "MOVIE" } }),
@@ -26,6 +38,8 @@ export async function GET() {
         prisma.bouquet.count(),
         prisma.category.count(),
         prisma.bouquetStream.count(),
+        prisma.line.count(),
+        prisma.line.count({ where: { bouquets: { none: {} } } }),
       ]);
     const liveOrphans = await prisma.stream.count({
       where: { type: "LIVE", bouquets: { none: {} } },
@@ -42,6 +56,8 @@ export async function GET() {
       categories,
       bouquetLinks: linked,
       liveOrphans,
+      lines,
+      linesWithoutBouquets,
     });
   } catch (e) {
     return NextResponse.json(

@@ -19,6 +19,7 @@ export type RepairImportedPanelResult = {
   seriesLinkedToBouquets: number;
   moviesLinkedToBouquets: number;
   liveLinkedToBouquets: number;
+  linesLinkedToBouquets: number;
   uncategorizedReassigned: number;
   uncategorizedRemaining: number;
 };
@@ -43,6 +44,7 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
     seriesLinkedToBouquets: 0,
     moviesLinkedToBouquets: 0,
     liveLinkedToBouquets: 0,
+    linesLinkedToBouquets: 0,
     uncategorizedReassigned: 0,
     uncategorizedRemaining: 0,
   };
@@ -297,6 +299,24 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
       }
     }
     result.liveLinkedToBouquets = linked;
+  }
+
+  // Lines with no bouquets see zero streams in players even when channels imported.
+  if (bouquets.length) {
+    const orphanLines = await prisma.line.findMany({
+      where: { bouquets: { none: {} } },
+      select: { id: true },
+    });
+    if (orphanLines.length) {
+      const bouquetIds = bouquets.map((b) => b.id);
+      for (const line of orphanLines) {
+        const res = await prisma.lineBouquet.createMany({
+          data: bouquetIds.map((bouquetId) => ({ lineId: line.id, bouquetId })),
+          skipDuplicates: true,
+        });
+        result.linesLinkedToBouquets += res.count;
+      }
+    }
   }
 
   return result;

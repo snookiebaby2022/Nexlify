@@ -43,6 +43,15 @@ export function phpSerializedIdValues(input: string): string[] {
 const STREAM_URL_RE =
   /^(https?|rtmp|rtmps|rtsp|rtsps|udp|rtp|srt|mms|mmsh|file):\/\//i;
 
+/** True for a playable IPTV URL (scheme, absolute path, or host:port/path). */
+export function looksLikePlayableUrl(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  if (STREAM_URL_RE.test(t) || t.startsWith("/") || t.startsWith("//")) return true;
+  if (/^[a-z0-9.-]+:\d+\//i.test(t)) return true;
+  return t.includes("://");
+}
+
 /** Pull playable URLs out of a PHP-serialized stream_source blob. */
 export function urlsFromPhpSerialized(val: unknown): string[] {
   if (typeof val !== "string") return [];
@@ -50,7 +59,7 @@ export function urlsFromPhpSerialized(val: unknown): string[] {
   if (!looksLikePhpSerialized(s)) return [];
   return phpSerializedStringValues(s)
     .map((u) => u.trim())
-    .filter((u) => STREAM_URL_RE.test(u) || u.startsWith("/") || u.startsWith("//"));
+    .filter((u) => looksLikePlayableUrl(u));
 }
 
 /** Flatten XUI-style bouquet channel payloads:

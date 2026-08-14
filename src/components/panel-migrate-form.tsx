@@ -149,6 +149,8 @@ export function PanelMigrateForm() {
     bouquetLinks: number;
     liveOrphans: number;
     noUrl?: number;
+    lines?: number;
+    linesWithoutBouquets?: number;
   } | null>(null);
   const [redirectSeconds, setRedirectSeconds] = useState<number | null>(null);
   const redirectTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1240,6 +1242,9 @@ export function PanelMigrateForm() {
             {importHealth.bouquetLinks.toLocaleString()} bouquet links
             {importHealth.liveOrphans ? ` · ${importHealth.liveOrphans.toLocaleString()} live streams not in any bouquet` : ""}
             {importHealth.noUrl ? ` · ${importHealth.noUrl.toLocaleString()} streams with empty URL` : ""}
+            {importHealth.linesWithoutBouquets
+              ? ` · ${importHealth.linesWithoutBouquets.toLocaleString()} lines with no bouquets`
+              : ""}
             {importHealth.uncategorized ? ` · ${importHealth.uncategorized.toLocaleString()} uncategorized` : ""}
             {importHealth.inactive ? ` · ${importHealth.inactive.toLocaleString()} inactive` : ""}
           </p>
@@ -1281,7 +1286,7 @@ export function PanelMigrateForm() {
               } else {
                 const r = d.result ?? {};
                 setResult(
-                  `Repair done. Activated ${r.streamsActivated ?? 0} streams; linked ${r.liveLinkedToBouquets ?? 0} live, ${r.moviesLinkedToBouquets ?? 0} movies, ${r.seriesLinkedToBouquets ?? 0} series into bouquets; categorized ${r.liveCategorized ?? 0} live / ${r.movieCategorized ?? 0} movies / ${r.seriesCategorized ?? 0} series.`
+                  `Repair done. Activated ${r.streamsActivated ?? 0} streams; linked ${r.liveLinkedToBouquets ?? 0} live, ${r.moviesLinkedToBouquets ?? 0} movies, ${r.seriesLinkedToBouquets ?? 0} series into bouquets; attached ${r.linesLinkedToBouquets ?? 0} line-bouquet links; categorized ${r.liveCategorized ?? 0} live / ${r.movieCategorized ?? 0} movies / ${r.seriesCategorized ?? 0} series.`
                 );
                 loadImportHealth();
               }

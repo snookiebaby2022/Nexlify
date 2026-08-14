@@ -7,7 +7,12 @@
 
 import type { MigrationSource, MigrationStreamRow } from "./types";
 import { mergeSqlTables, rowToRecord, type SqlTableData } from "./sql-parse";
-import { flattenIdList, looksLikePhpSerialized, urlsFromPhpSerialized } from "./sql-junctions";
+import {
+  flattenIdList,
+  looksLikePhpSerialized,
+  looksLikePlayableUrl,
+  urlsFromPhpSerialized,
+} from "./sql-junctions";
 
 function findMerged(
   allTables: Map<string, SqlTableData[]>,
@@ -33,7 +38,7 @@ function isUsableStreamUrl(val: unknown): boolean {
   if (s === "[]" || s === "{}" || s === '[""]' || s === "['']") return false;
   if (/^-?\d+(\.\d+)?$/.test(s)) return false;
   if (looksLikePhpSerialized(s)) return false;
-  return true;
+  return looksLikePlayableUrl(s);
 }
 
 function streamUrlsFromSource(val: unknown): { primary: string; backup?: string } {

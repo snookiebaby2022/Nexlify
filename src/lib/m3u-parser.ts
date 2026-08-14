@@ -21,6 +21,8 @@ function isStreamUrlLine(line: string): boolean {
   if (/^(https?|rtmp|rtmps|rtsp|rtsps|udp|rtp|srt|mms|mmsh|file):\/\//i.test(line)) return true;
   if (line.startsWith("//")) return true;
   if (line.startsWith("/")) return true;
+  if (line.includes("://")) return true;
+  if (/^[a-z0-9.-]+:\d+\//i.test(line)) return true;
   return false;
 }
 

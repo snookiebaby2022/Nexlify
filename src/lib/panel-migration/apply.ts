@@ -3,7 +3,7 @@ import { prisma } from "../prisma";
 import { hashPassword } from "../auth";
 import { applyMigrationPhase2 } from "./phase2";
 import { applyMigrationPhase3 } from "./apply-phase3";
-import { urlsFromPhpSerialized } from "./sql-junctions";
+import { urlsFromPhpSerialized, looksLikePlayableUrl } from "./sql-junctions";
 import type {
   MigrationApplyOptions,
   MigrationApplyResult,
@@ -288,6 +288,11 @@ async function applyMigrationBundleInner(
         ) {
           return false;
         }
+        if (!looksLikePlayableUrl(streamUrl) && !streamUrl.startsWith("pending://")) {
+          const php = urlsFromPhpSerialized(streamUrl)[0];
+          if (php) streamUrl = php;
+          else return false;
+        }
         if (options.skipExistingStreams) {
           const dup = await prisma.stream.findFirst({ where: { name, streamUrl } });
           if (dup) {
@@ -440,7 +445,6 @@ async function applyMigrationBundleInner(
         seenUsernames.add(username);
 
         const existing = byUsername.get(username);
-        if (existing && options.skipExistingLines !== false) return false;
 
         const status =
           l.status === "BANNED"
@@ -458,6 +462,25 @@ async function applyMigrationBundleInner(
               .filter((id): id is string => Boolean(id))
           ),
         ];
+
+        async function attachLineBouquets(lineId: string) {
+          if (!bouquetIds.length) return;
+          await prisma.lineBouquet
+            .createMany({
+              data: bouquetIds.map((bouquetId) => ({ lineId, bouquetId })),
+              skipDuplicates: true,
+            })
+            .catch((e) => {
+              pushWarning(result.warnings, `Line ${username} bouquets: ${shortErr(e)}`);
+            });
+        }
+
+        if (existing && options.skipExistingLines !== false) {
+          if (l.legacyId) lineIdByLegacy.set(String(l.legacyId), existing.id);
+          const n = await prisma.lineBouquet.count({ where: { lineId: existing.id } });
+          if (n === 0) await attachLineBouquets(existing.id);
+          return false;
+        }
 
         let ownerId: string | null =
           (l.ownerLegacyId ? resellerIdByLegacy.get(l.ownerLegacyId) : undefined) ?? ownerFallback;
@@ -521,16 +544,7 @@ async function applyMigrationBundleInner(
         if (externalId) usedExternalIds.add(externalId);
         if (l.legacyId) lineIdByLegacy.set(String(l.legacyId), lineId);
 
-        if (bouquetIds.length) {
-          await prisma.lineBouquet
-            .createMany({
-              data: bouquetIds.map((bouquetId) => ({ lineId, bouquetId })),
-              skipDuplicates: true,
-            })
-            .catch((e) => {
-              pushWarning(result.warnings, `Line ${username} bouquets: ${shortErr(e)}`);
-            });
-        }
+        await attachLineBouquets(lineId);
         return !existing;
       },
       (c, t) => options.onProgress?.("lines", c, t),
@@ -655,10 +669,10 @@ async function applyMigrationBundleInner(
     options.onProgress?.("repair", 0, 1);
     const { repairImportedPanel } = await import("@/lib/repair-imported-panel");
     const repair = await repairImportedPanel(prisma);
-    if (repair.liveLinkedToBouquets || repair.seriesLinkedToBouquets || repair.moviesLinkedToBouquets) {
+    if (repair.liveLinkedToBouquets || repair.seriesLinkedToBouquets || repair.moviesLinkedToBouquets || repair.linesLinkedToBouquets) {
       pushWarning(
         result.warnings,
-        `Post-import repair: linked ${repair.liveLinkedToBouquets} live, ${repair.moviesLinkedToBouquets} movie, ${repair.seriesLinkedToBouquets} series stream(s) into bouquets; activated ${repair.streamsActivated}.`
+        `Post-import repair: linked ${repair.liveLinkedToBouquets} live, ${repair.moviesLinkedToBouquets} movie, ${repair.seriesLinkedToBouquets} series stream(s) into bouquets; attached ${repair.linesLinkedToBouquets} line-bouquet link(s); activated ${repair.streamsActivated}.`
       );
     }
     options.onProgress?.("repair", 1, 1);

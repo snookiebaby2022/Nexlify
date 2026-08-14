@@ -33,6 +33,7 @@ import {
   enrichSqlTablesFromJunctions,
   flattenIdList,
   looksLikePhpSerialized,
+  looksLikePlayableUrl,
   urlsFromPhpSerialized,
 } from "./sql-junctions";
 import {
@@ -77,7 +78,7 @@ function isUsableStreamUrl(val: unknown): boolean {
   if (/^-?\d+(\.\d+)?$/.test(s)) return false;
   // PHP serialize blobs are not playable URLs (extract first via urlsFromPhpSerialized).
   if (looksLikePhpSerialized(s)) return false;
-  return true;
+  return looksLikePlayableUrl(s);
 }
 
 function streamUrlsFromSource(val: unknown): { primary: string; backup?: string } {
