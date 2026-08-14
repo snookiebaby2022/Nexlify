@@ -13,7 +13,7 @@ bash scripts/ensure-pg-dump.sh || {
   echo "WARN: pg_dump not on PATH — PostgreSQL backups may fail until postgresql-client is installed"
 }
 
-./scripts/ensure-panel-env.sh
+bash scripts/ensure-panel-env.sh
 
 set -a
 [ -f .env ] && . ./.env

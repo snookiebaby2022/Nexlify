@@ -77,12 +77,24 @@ fi
 VER="$(node -p "require('./package.json').version" 2>/dev/null || echo unknown)"
 echo "=== Done. Panel should be on v${VER} ==="
 
-if [ -x scripts/wait-panel-ready.sh ]; then
+if [ -f scripts/wait-panel-ready.sh ]; then
   bash scripts/wait-panel-ready.sh || true
 fi
 
 echo "Health:"
-curl -sS -m 8 http://127.0.0.1:13000/api/health || curl -sS -m 8 http://127.0.0.1/api/health || true
+for i in 1 2 3 4 5 6; do
+  if curl -sS -m 8 http://127.0.0.1:13000/api/health 2>/dev/null | grep -q '"app":"ok"'; then
+    curl -sS -m 8 http://127.0.0.1:13000/api/health || true
+    echo
+    break
+  fi
+  if curl -sS -m 8 http://127.0.0.1/api/health 2>/dev/null | grep -q '"app":"ok"'; then
+    curl -sS -m 8 http://127.0.0.1/api/health || true
+    echo
+    break
+  fi
+  sleep 5
+done
 echo
 echo "Remote-update: vendor Admin → Remote Panel Update, force re-sync, URL http://THIS_IP (not https)"
 echo "If this host is 45.88.138.18, confirm /api/panel/version is no longer 1.9.45"
