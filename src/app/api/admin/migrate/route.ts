@@ -236,6 +236,83 @@ export async function POST(req: NextRequest) {
   };
 
   try {
+    // Large file dry-runs: stream progress via SSE (same as import). Waiting for a
+    // single JSON response after a ~1GB upload often looks like "Upload failed"
+    // when PM2/heap kills the process mid-parse with no bytes sent yet.
+    if (opts.dryRun && filePath) {
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        async start(controller) {
+          const send = (event: string, data: unknown) => {
+            controller.enqueue(
+              encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+            );
+          };
+          const heartbeat = setInterval(() => {
+            try {
+              send("status", { message: "Still scanning SQL dump…" });
+            } catch {
+              /* closed */
+            }
+          }, 15000);
+          try {
+            send("start", {
+              phase: "initializing",
+              message: "Upload received — preparing preview…",
+            });
+            let dumpLabel = "SQL dump";
+            try {
+              const st = await stat(filePath);
+              dumpLabel = `${(st.size / (1024 * 1024)).toFixed(1)} MB SQL dump`;
+            } catch {
+              /* ignore */
+            }
+            send("status", { message: `Scanning & parsing ${dumpLabel} for preview…` });
+            send("progress", { phase: "scanning", current: 0, total: 100 });
+            let lastScanPct = -1;
+            const bundle = await bundleFromSqlFile(filePath, source, (bytesRead, totalBytes) => {
+              const pct = Math.round((bytesRead / totalBytes) * 100);
+              if (pct !== lastScanPct) {
+                lastScanPct = pct;
+                send("progress", { phase: "scanning", current: pct, total: 100 });
+              }
+            });
+            send("progress", { phase: "scanning", current: 100, total: 100 });
+            const preview = previewMigrationBundle(bundle);
+            if (Array.isArray(preview.warnings) && preview.warnings.length > 40) {
+              preview.warnings = [
+                ...preview.warnings.slice(0, 40),
+                `… ${preview.warnings.length - 40} more warnings omitted`,
+              ];
+            }
+            send("complete", { preview });
+            (bundle as { streams?: unknown }).streams = [];
+            (bundle as { lines?: unknown }).lines = [];
+            if (bundle.phase3) {
+              bundle.phase3.epgPrograms = [];
+              bundle.phase3.epgApiChannels = [];
+              bundle.phase3.providerStreamLinks = [];
+              bundle.phase3.blockedAsns = [];
+            }
+          } catch (e) {
+            send("error", { error: e instanceof Error ? e.message : String(e) });
+          } finally {
+            clearInterval(heartbeat);
+            controller.close();
+            await cleanup();
+          }
+        },
+      });
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
+      });
+    }
+
     // For dry runs, return JSON directly (fast)
     if (opts.dryRun) {
       if (format === "postgres") {

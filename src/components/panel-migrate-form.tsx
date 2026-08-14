@@ -390,8 +390,13 @@ export function PanelMigrateForm() {
         setScanProgress(null);
         setImporting(false);
         setProgress(null);
-        appendLiveLog("Import finished — building summary…");
-        handleCompleteResponse(data);
+        if (data.result) {
+          appendLiveLog("Import finished — building summary…");
+          handleCompleteResponse(data);
+        } else {
+          appendLiveLog("Preview finished — building summary…");
+          handlePreviewResponse(data);
+        }
         return;
       }
       if (eventName === "error") {
@@ -481,44 +486,9 @@ export function PanelMigrateForm() {
         form.append("payload", JSON.stringify(migrationPayload(dryRun)));
         appendLiveLog(`Uploading ${formatBytes(uploadFile.size)} dump to server…`);
 
-        if (dryRun) {
-          const res = await new Promise<Response>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open("POST", "/api/admin/migrate");
-            xhr.upload.onprogress = (e) => {
-              if (e.lengthComputable) {
-                setUploadProgress({ loaded: e.loaded, total: e.total });
-              }
-            };
-            xhr.onload = () => {
-              resolve(
-                new Response(xhr.responseText, {
-                  status: xhr.status,
-                  headers: {
-                    "Content-Type":
-                      xhr.getResponseHeader("Content-Type") || "application/json",
-                  },
-                })
-              );
-            };
-            xhr.onerror = () => reject(new Error("Upload failed"));
-            xhr.send(form);
-          });
-          const data = await res.json();
-          setUploadProgress(null);
-          setScanning(false);
-          setScanProgress(null);
-          setImporting(false);
-          if (!res.ok) {
-            setResult(`Error: ${data.error ?? res.statusText}`);
-            return;
-          }
-          handlePreviewResponse(data);
-          return;
-        }
-
-        // Import: parse SSE incrementally while XHR receives the stream.
-        // Waiting for onload alone buffers the whole import with no live UI.
+        // Preview + import both stream SSE after upload so large dumps keep the
+        // connection alive (JSON-only preview looked like "Upload failed" when
+        // PM2 killed the process mid-parse with no response bytes yet).
         await new Promise<void>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           xhr.open("POST", "/api/admin/migrate");
@@ -526,22 +496,41 @@ export function PanelMigrateForm() {
           let sseOffset = 0;
           const carry = { event: null as string | null, buf: "" };
           let uploadDoneLogged = false;
+          let uploadReachedEnd = false;
 
           xhr.upload.onprogress = (e) => {
             if (e.lengthComputable) {
               setUploadProgress({ loaded: e.loaded, total: e.total });
               if (!uploadDoneLogged && e.loaded >= e.total) {
                 uploadDoneLogged = true;
-                appendLiveLog("Upload complete — waiting for server to start processing…");
-                setResult("Upload complete — server is preparing the import…");
+                uploadReachedEnd = true;
+                appendLiveLog(
+                  dryRun
+                    ? "Upload complete — building preview (large dumps can take a few minutes)…"
+                    : "Upload complete — waiting for server to start processing…"
+                );
+                setResult(
+                  dryRun
+                    ? "Upload complete — scanning dump for preview…"
+                    : "Upload complete — server is preparing the import…"
+                );
               }
             }
           };
           xhr.upload.onload = () => {
+            uploadReachedEnd = true;
             if (!uploadDoneLogged) {
               uploadDoneLogged = true;
-              appendLiveLog("Upload complete — waiting for server to start processing…");
-              setResult("Upload complete — server is preparing the import…");
+              appendLiveLog(
+                dryRun
+                  ? "Upload complete — building preview…"
+                  : "Upload complete — waiting for server to start processing…"
+              );
+              setResult(
+                dryRun
+                  ? "Upload complete — scanning dump for preview…"
+                  : "Upload complete — server is preparing the import…"
+              );
             }
             setUploadProgress(null);
           };
@@ -567,13 +556,20 @@ export function PanelMigrateForm() {
                 setResult(`Error: ${data.error ?? xhr.statusText}`);
                 appendLiveLog(`Error: ${data.error ?? xhr.statusText}`);
               } catch {
-                setResult(`Error: ${xhr.statusText || "Import failed"}`);
+                setResult(
+                  `Error: ${xhr.statusText || (dryRun ? "Preview failed" : "Import failed")}`
+                );
               }
               setImporting(false);
             }
             resolve();
           };
-          xhr.onerror = () => reject(new Error("Upload / import connection failed"));
+          xhr.onerror = () => {
+            const msg = uploadReachedEnd
+              ? "Connection lost while processing the dump on the server. Retry — if it fails again, the panel may need more memory for this file size."
+              : "Upload failed — connection lost before the dump finished uploading.";
+            reject(new Error(msg));
+          };
           xhr.send(form);
         });
         setUploadProgress(null);

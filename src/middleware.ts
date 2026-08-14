@@ -262,5 +262,10 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|php)$).*)"],
+  // Skip middleware for huge SQL migration uploads — Next clones/buffers the
+  // body when middleware runs, which can OOM/PM2-kill ~1GB dumps mid-request.
+  // Auth is still enforced in the route via requireSession().
+  matcher: [
+    "/((?!_next|favicon.ico|api/admin/migrate|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|php)$).*)",
+  ],
 };

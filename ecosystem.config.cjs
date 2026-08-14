@@ -94,8 +94,9 @@ const sharedPanelEnv = {
   PANEL_INTERNAL_SECRET: fileEnv.PANEL_INTERNAL_SECRET || "",
   NEXLIFY_LICENSE_SKIP_HOST_CHECK: fileEnv.NEXLIFY_LICENSE_SKIP_HOST_CHECK || "",
   PATH: pgBinPath(),
-  // Cap panel heap — large imports temporarily need room, but 4GB invites bloat.
-  NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=1536",
+  // Large SQL migration uploads (~1GB+) need headroom for parse + preview.
+  // Override via NODE_OPTIONS in .env when a box is memory-constrained.
+  NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=4096",
 };
 
 /** @type {import('pm2').StartOptions} */
@@ -112,7 +113,9 @@ module.exports = {
           max_restarts: 15,
           min_uptime: "15s",
           kill_timeout: 8000,
-          max_memory_restart: "1800M",
+          // PM2 RSS kill must stay above large dump parse peaks (was 700M–1800M and
+          // aborted ~1GB SQL preview mid-request → browser "Upload failed").
+          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "6144M",
           env: sharedPanelEnv,
         }
       : {
@@ -127,7 +130,7 @@ module.exports = {
           min_uptime: "10s",
           kill_timeout: 5000,
           listen_timeout: 60000,
-          max_memory_restart: "1800M",
+          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "6144M",
           env: sharedPanelEnv,
         },
     {

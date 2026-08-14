@@ -76,6 +76,8 @@ const nextConfig: NextConfig = {
     // Route Handlers. Its clone is capped at 10MB by default, which truncates
     // large migration uploads ("Only the first 10MB will be available"). Raise it.
     middlewareClientMaxBodySize: "2gb",
+    // Next 15.5+ standalone proxy defaults to ~1MB and can drop multipart bodies.
+    proxyClientMaxBodySize: "2gb",
   },
 };
 

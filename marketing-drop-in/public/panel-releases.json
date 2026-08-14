@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.66",
+  "latestVersion": "1.9.67",
   "releases": [
+    {
+      "version": "1.9.67",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Fix ~1GB SQL migration preview \"Upload failed\": raise PM2/heap limits and stream preview progress.",
+      "changelog": [
+        "Raise nexlify PM2 max_memory_restart to 6GB and Node heap default to 4GB so large dump preview/import is not killed mid-request",
+        "Skip middleware body cloning for /api/admin/migrate; set proxyClientMaxBodySize to 2gb",
+        "Large-file Preview uses SSE scan progress (same as Import) instead of a silent JSON wait",
+        "Clearer client errors when the connection drops after upload vs during upload"
+      ],
+      "fixes": [
+        "Preview of ~987MB SQL dump failed with Upload failed after file reached the server",
+        "PM2 max_memory_restart ~700M–1800M recycled nexlify during large migration parse"
+      ]
+    },
     {
       "version": "1.9.66",
       "date": "2026-08-14",
