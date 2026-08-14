@@ -13,13 +13,10 @@ import {
   type PostgresProbeResult,
 } from "./postgres";
 import { splitMigrationMessages } from "./parse-notes";
+import { MIGRATION_GUIDE_PATHS } from "./guide-paths";
 
 export type { MigrationBundle, MigrationSource, MigrationApplyOptions, MigrationApplyResult };
-export {
-  MIGRATION_GUIDE_PATHS,
-  guidePathFor,
-  defaultDatabaseFor,
-} from "./guide-paths";
+export { MIGRATION_GUIDE_PATHS, guidePathFor, defaultDatabaseFor } from "./guide-paths";
 
 /** Source dropdown — labels/hints/default DBs from the 1-stream Migration Guide paths. */
 export const MIGRATION_SOURCES: {

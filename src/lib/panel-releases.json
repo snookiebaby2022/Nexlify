@@ -1,7 +1,20 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.44",
+  "latestVersion": "1.9.45",
   "releases": [
+    {
+      "version": "1.9.45",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Fix panel build crash: MIGRATION_GUIDE_PATHS is not defined.",
+      "changelog": [
+        "Panel migration source list imports MIGRATION_GUIDE_PATHS instead of only re-exporting it"
+      ],
+      "fixes": [
+        "next build failed collecting page data for /api/admin/migrate with ReferenceError: MIGRATION_GUIDE_PATHS is not defined"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.45.tar.gz"
+    },
     {
       "version": "1.9.44",
       "date": "2026-08-14",
