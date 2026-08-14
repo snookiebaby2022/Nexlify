@@ -32,9 +32,6 @@ import { applyHeaderlessInference } from "./headerless-map";
 import {
   enrichSqlTablesFromJunctions,
   flattenIdList,
-  looksLikePhpSerialized,
-  looksLikePlayableUrl,
-  urlsFromPhpSerialized,
 } from "./sql-junctions";
 import {
   enrichStreamsFromSys,
@@ -44,76 +41,10 @@ import {
   resolveStreamType,
 } from "./xui-extras";
 import { loadPhase3FromSql } from "./phase3";
-
-function parseJsonField(val: unknown): unknown {
-  if (val == null || val === "") return null;
-  if (typeof val === "object") return val;
-  const s = String(val).trim();
-  if (!s) return null;
-  try {
-    return JSON.parse(s);
-  } catch {
-    if (s.includes(",")) return s.split(",").map((x) => x.trim());
-    return s;
-  }
-}
+import { firstStreamUrl } from "./stream-source-urls";
 
 function idsFromBouquetField(val: unknown): string[] {
   return flattenIdList(val);
-}
-
-/** XUI often stores empty sources as 0 / "0" / [] — never treat those as URLs. */
-function isUsableStreamUrl(val: unknown): boolean {
-  if (val == null) return false;
-  // Numeric flags (direct_source 0/1, empty placeholders) are never URLs
-  if (typeof val === "number") return false;
-  const s = String(val).trim();
-  if (!s) return false;
-  const lower = s.toLowerCase();
-  if (lower === "0" || lower === "null" || lower === "undefined" || lower === "false") {
-    return false;
-  }
-  if (s === "[]" || s === "{}" || s === '[""]' || s === "['']") return false;
-  // Pure numeric strings are flags / ids, not stream URLs
-  if (/^-?\d+(\.\d+)?$/.test(s)) return false;
-  // PHP serialize blobs are not playable URLs (extract first via urlsFromPhpSerialized).
-  if (looksLikePhpSerialized(s)) return false;
-  return looksLikePlayableUrl(s);
-}
-
-function streamUrlsFromSource(val: unknown): { primary: string; backup?: string } {
-  if (typeof val === "string") {
-    const php = urlsFromPhpSerialized(val);
-    if (php.length) return { primary: php[0], backup: php[1] };
-  }
-  if (!isUsableStreamUrl(val) && val != null && typeof val !== "object") {
-    // Still allow JSON arrays/objects through parseJsonField below when stringy
-    const raw = String(val ?? "").trim();
-    if (!raw.startsWith("[") && !raw.startsWith("{") && !looksLikePhpSerialized(raw)) {
-      return { primary: "" };
-    }
-  }
-  const parsed = parseJsonField(val);
-  if (Array.isArray(parsed) && parsed.length) {
-    const urls = parsed
-      .map((x) => String(x ?? "").trim())
-      .filter((u) => isUsableStreamUrl(u));
-    return { primary: urls[0] ?? "", backup: urls[1] };
-  }
-  if (typeof parsed === "string" && isUsableStreamUrl(parsed)) {
-    return { primary: parsed.trim() };
-  }
-  if (isUsableStreamUrl(val)) return { primary: String(val).trim() };
-  return { primary: "" };
-}
-
-/** First usable URL among candidates (avoids `??` treating numeric 0 as present). */
-function firstStreamUrl(...candidates: unknown[]): { primary: string; backup?: string } {
-  for (const c of candidates) {
-    const got = streamUrlsFromSource(c);
-    if (got.primary) return got;
-  }
-  return { primary: "" };
 }
 
 const VOD_CONTAINER_RE = /^(mp4|mkv|avi|mov|m4v|wmv|flv|webm|ts|mpg|mpeg)$/i;
@@ -192,7 +123,8 @@ function mapStreams(
         `Stream ${legacyId}`
     );
     // Never use `??` across these — XUI empty sources are often numeric 0.
-    const { primary: url, backup } = firstStreamUrl(
+    // Keep every playable URL (credentials in path/userinfo included — never stripped).
+    const fromSources = firstStreamUrl(
       r.stream_source,
       r.source,
       r.url,
@@ -202,11 +134,19 @@ function mapStreams(
       r.target_container && String(r.target_container).includes("://") ? r.target_container : null,
       r.direct_source
     );
+    const url = fromSources.primary;
+    const backup = fromSources.backup;
+    const extras = [...fromSources.extras];
     const backupExplicit = firstStreamUrl(
       r.backup_url,
       r.stream_backup,
       r.backup_source
     ).primary;
+    if (backupExplicit && backup && backupExplicit !== backup) {
+      extras.unshift(backup);
+    } else if (backupExplicit && !backup) {
+      /* use explicit as backup below */
+    }
     if (!url) continue;
     const seriesName = r.series_name ?? r.show_name ?? r.tv_series;
     const seasonNum = Number(r.season_num ?? r.season ?? r.season_number ?? NaN);
@@ -244,6 +184,7 @@ function mapStreams(
       name,
       streamUrl: url,
       backupUrl: backupExplicit || backup || undefined,
+      extraSourceUrls: extras.length ? extras : undefined,
       type: streamType,
       streamIcon: r.stream_icon
         ? String(r.stream_icon)
@@ -876,6 +817,10 @@ export function bundleFromJson(
         legacyId: String(row.legacyId ?? row.id ?? ""),
         name: String(row.name ?? ""),
         streamUrl: String(row.streamUrl ?? row.url ?? ""),
+        backupUrl: row.backupUrl ? String(row.backupUrl) : undefined,
+        extraSourceUrls: Array.isArray(row.extraSourceUrls)
+          ? (row.extraSourceUrls as unknown[]).map(String).filter(Boolean)
+          : undefined,
         type: (row.type as MigrationStreamRow["type"]) ?? "LIVE",
         streamIcon: row.streamIcon ? String(row.streamIcon) : undefined,
         categoryLegacyId: row.categoryLegacyId ? String(row.categoryLegacyId) : undefined,

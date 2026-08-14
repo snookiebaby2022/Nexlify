@@ -26,22 +26,24 @@ Paths below are mapped from the official **1-stream Migration Guide (Experimenta
 
 | Entity | Notes |
 |--------|--------|
-| Lines / subscriptions | Expiry, max cons, bouquets, IP lock, countries, trial/restreamer, UA lists, forced server |
-| Streams | URL + backup URL, type, category, EPG/channel ids, adult/radio, series/season/episode, server — **imported stopped by default** (guide parity) |
+| Lines / subscriptions | Username + **plaintext password**, expiry, max cons, bouquets, IP lock, countries, trial/restreamer, UA lists, forced server |
+| Streams | **All** source URLs with embedded credentials kept as-is: primary → `streamUrl`, 2nd → `backupUrl`, further sources → stream `bitrates` JSON. Type, category, EPG/channel ids, adult/radio, series/season/episode, server — **imported stopped by default** (guide parity) |
 | Bouquets | Channel lists — flattens XUI `{"live":[…],"vod":[…]}` and SQL junction tables |
-| Resellers | Credits, email, DNS, max lines, parent tree |
+| Resellers | Username + password (hashed on import so the same password still works), credits, email, DNS, max lines, parent tree |
 | MAG / Enigma | Linked by username or line id |
 | Categories | Type, parent, adult, sort order |
-| Stream servers | Host/port/protocol, domain, capacity, private IP — **SSH passwords are not migrated** |
-| EPG sources | URL + country (source URLs only — re-sync programmes after import) |
+| Stream servers | Host/port/protocol, `domain_name`, HTTP/HTTPS/RTMP broadcast ports, capacity, private IP — **SSH passwords are not in SQL dumps** (re-enter on Nexlify) |
+| EPG sources | Full source URL + country (re-sync programmes after import unless Full EPG guide is enabled) |
 | Packages | Duration/credit billing packages (when source has days/credits) |
-| Providers | `providers` / `streams_providers` / `providers_streams` → StreamProvider + stream links (XUI, StreamCreed, Xtream UI, NXT, 1-stream when present) |
+| Providers | Host/IP + port + SSL → `baseUrl`; **username:password** stored as provider `apiKey` for live upstream |
 | Watch folders | `watch_folders` + capped watch/import logs → WatchFolder / ImportJob |
 | Tickets | `tickets` (+ replies) → Ticket / TicketMessage (classic XC / XUI / StreamCreed) |
 | Full EPG guide | Default on: `epg_channels` catalog + capped `epg_data` programmes (uncheck for source URLs only) |
 | ASN blocks | `blocked_asns` → BlockedAsn (when the source has ASN tables) |
 | Logs / stats | Capped panel/line/user/stream/client logs → ActivityLog; server stats/activity → BandwidthSnapshot |
 | Settings | Stored as PanelSetting `migration.<source>_settings` for review (not applied blindly) |
+
+Credentials and playable URLs in the dump are **preserved** on import (nothing is stripped or redacted in the migrator). Admin UI may still hide sensitive fields from lower roles after import.
 
 ## StreamCreed / XUI.one / Xtream Codes / NXT — SQL workflow
 
@@ -69,7 +71,7 @@ Avoid: table-only exports, phpMyAdmin “quick” dumps without Complete inserts
 ### XUI / XC quirks handled
 
 - Nested bouquet channels: `{"live":[1,2],"movie":[3],"series":[4]}`
-- `stream_source` JSON arrays → primary + backup URL
+- `stream_source` JSON/PHP arrays → **all** URLs kept (primary + backup + extras); credentials in URLs unchanged
 - Correct stream `type` map: 1 live, 2 movie, 3 created, 4 radio, 5 series
 - JSON `category_id` arrays (e.g. `"[12]"`)
 - Modern XUI.one tables: `lines` + `users` (resellers), `streams_servers`, `streams_series`, `streams_episodes`, `streams_categories`, `users_packages`
@@ -79,6 +81,7 @@ Avoid: table-only exports, phpMyAdmin “quick” dumps without Complete inserts
 - Resellers from `reg_users` (classic) or `users` (modern, when `lines` exists)
 - Junction tables: `bouquet_streams`, `package_streams`, `users_bouquets`, etc.
 - Headerless INSERT inference via CREATE TABLE DDL + column-order templates
+- Servers: `domain_name`, `http_broadcast_port` / `https_broadcast_port`, `rtmp_port`
 
 ## 1-stream PostgreSQL (live) → Nexlify
 
@@ -98,11 +101,11 @@ Live PG also merges `package_streams` / `subscription_packages` junction tables.
 
 - Streams are **stopped** by default — verify URLs, then enable.
 - Transcoder / encode profiles may be incomplete — rebuild on Nexlify.
-- Re-enter **server SSH passwords** (not present in dumps).
+- Re-enter **server SSH passwords** (not present in MySQL dumps; Nexlify does not store them from SQL).
 - Assign / probe stream servers; re-link **EPG** where channel ids differ (or enable **Full EPG guide** to import `epg_channels` / capped `epg_data`).
 - Review imported providers, watch folders, tickets, ASN blocks, and `migration.<source>_settings` under Admin.
 - After cutover, **stop legacy XC / panel processes** on old servers.
-- Rotate line passwords if importing production plaintext passwords.
+- Line and provider passwords/URLs arrive **as in the dump** — optionally rotate line passwords after cutover if you do not want production plaintext retained.
 - Review reseller tree and packages under Admin.
 
 ## Still configure on Nexlify (not in legacy dumps)

@@ -29,10 +29,10 @@ export type MigrationGuidePath = {
 const SHARED_POST_IMPORT = [
   "Review imported streams — by default they are imported stopped so you can verify URLs before going live.",
   "Transcoder / encode profiles may be incomplete after import; re-check and rebuild profiles on Nexlify.",
-  "Server SSH passwords are not migrated — re-enter credentials on each stream server.",
+  "Server SSH passwords are not in SQL dumps — re-enter them on each stream server in Nexlify.",
   "Assign / probe stream servers and re-link EPG where channel ids differ.",
   "After cutover, stop legacy XC / panel processes on the old servers so clients do not keep hitting them.",
-  "Rotate line passwords if you imported production plaintext credentials.",
+  "Line passwords, stream URLs (with embedded credentials), provider user/pass, and EPG URLs are imported from the dump as-is — optionally rotate line passwords after cutover.",
 ];
 
 const TUNNEL_TIP =
@@ -77,7 +77,7 @@ export const MIGRATION_GUIDE_PATHS: MigrationGuidePath[] = [
     ],
     postImport: SHARED_POST_IMPORT,
     notes: [
-      "Nested bouquet JSON or plain ID arrays, streams_sys/streams_servers links, series episodes, providers (ip/port/ssl), watch folders, tickets, EPG, packages with month/hour duration units, MAG (mag_id), and junction tables are mapped when present.",
+      "Nested bouquet JSON or plain ID arrays, streams_sys/streams_servers links, series episodes, providers (ip/port/ssl + user:pass), all stream_source URLs with credentials, server domain_name/broadcast ports, watch folders, tickets, EPG, packages with month/hour duration units, MAG (mag_id), and junction tables are mapped when present.",
       "Do not use a partial/table-only dump — export the full database.",
     ],
   },

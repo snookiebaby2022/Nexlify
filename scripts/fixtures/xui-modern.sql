@@ -71,8 +71,8 @@ INSERT INTO `users` (`id`,`username`,`password`,`email`,`member_group_id`,`credi
 (1,'admin','apass','admin@x.com',1,0,NULL,1,0);
 
 INSERT INTO `streams` (`id`,`type`,`category_id`,`stream_display_name`,`stream_source`,`stream_icon`,`notes`,`target_container`,`epg_id`,`channel_id`,`order`) VALUES
-(1,1,'[10]','News HD','["http://example.com/live/1"]',NULL,NULL,NULL,1,'ch1',1),
-(2,2,'[11]','Movie A','["http://example.com/movie/a"]',NULL,NULL,'mp4',NULL,NULL,2),
+(1,1,'[10]','News HD','["http://user:secret@cdn.example.com/live/1","http://user:secret@cdn2.example.com/live/1","http://user:secret@cdn3.example.com/live/1"]',NULL,NULL,NULL,1,'ch1',1),
+(2,2,'[11]','Movie A','["http://vod.example.com/movie/a.mp4"]',NULL,NULL,'mp4',NULL,NULL,2),
 (50,5,'[12]','Pilot Ep File','["http://example.com/ep/1"]',NULL,NULL,'mp4',NULL,NULL,3);
 
 INSERT INTO `streams_series` (`id`,`title`,`category_id`,`cover`) VALUES (7,'Cool Show','[12]',NULL);

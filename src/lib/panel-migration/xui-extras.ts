@@ -7,12 +7,8 @@
 
 import type { MigrationSource, MigrationStreamRow } from "./types";
 import { mergeSqlTables, rowToRecord, type SqlTableData } from "./sql-parse";
-import {
-  flattenIdList,
-  looksLikePhpSerialized,
-  looksLikePlayableUrl,
-  urlsFromPhpSerialized,
-} from "./sql-junctions";
+import { flattenIdList } from "./sql-junctions";
+import { streamUrlsFromSource } from "./stream-source-urls";
 
 function findMerged(
   allTables: Map<string, SqlTableData[]>,
@@ -24,50 +20,6 @@ function findMerged(
     if (merged && merged.rows.length) return merged;
   }
   return null;
-}
-
-function isUsableStreamUrl(val: unknown): boolean {
-  if (val == null) return false;
-  if (typeof val === "number") return false;
-  const s = String(val).trim();
-  if (!s) return false;
-  const lower = s.toLowerCase();
-  if (lower === "0" || lower === "null" || lower === "undefined" || lower === "false") {
-    return false;
-  }
-  if (s === "[]" || s === "{}" || s === '[""]' || s === "['']") return false;
-  if (/^-?\d+(\.\d+)?$/.test(s)) return false;
-  if (looksLikePhpSerialized(s)) return false;
-  return looksLikePlayableUrl(s);
-}
-
-function streamUrlsFromSource(val: unknown): { primary: string; backup?: string } {
-  if (val == null || val === "") return { primary: "" };
-  if (typeof val === "number" && val === 0) return { primary: "" };
-  if (typeof val === "string") {
-    const php = urlsFromPhpSerialized(val);
-    if (php.length) return { primary: php[0], backup: php[1] };
-  }
-  const s0 = typeof val === "string" ? val.trim() : null;
-  if (s0 && (s0.startsWith("[") || s0.startsWith("{"))) {
-    try {
-      const parsed = JSON.parse(s0);
-      if (Array.isArray(parsed)) {
-        const urls = parsed
-          .map((x) => String(x ?? "").trim())
-          .filter((u) => isUsableStreamUrl(u));
-        return { primary: urls[0] ?? "", backup: urls[1] };
-      }
-    } catch {
-      /* fall through */
-    }
-  }
-  if (Array.isArray(val)) {
-    const urls = val.map((x) => String(x ?? "").trim()).filter((u) => isUsableStreamUrl(u));
-    return { primary: urls[0] ?? "", backup: urls[1] };
-  }
-  if (isUsableStreamUrl(val)) return { primary: String(val).trim() };
-  return { primary: "" };
 }
 
 /** Map streams_types id / type_key → LIVE | MOVIE | SERIES (+ radio flag). */
@@ -218,9 +170,10 @@ export function enrichStreamsFromSys(
       if (!existingUrl.primary) {
         const fromSys = urlByStream.get(id);
         if (fromSys?.primary) {
-          row[sourceIdx] = fromSys.backup
-            ? JSON.stringify([fromSys.primary, fromSys.backup])
-            : fromSys.primary;
+          const all = [fromSys.primary, fromSys.backup, ...fromSys.extras].filter(
+            Boolean
+          ) as string[];
+          row[sourceIdx] = all.length > 1 ? JSON.stringify(all) : all[0];
           urlsFilled++;
         }
       }
@@ -363,17 +316,14 @@ export function mapSeriesEpisodesFromSql(
       continue;
     }
 
-    const { primary: url, backup } = streamUrlsFromSource(r.stream_source);
-    const fromSource = url
-      ? { primary: url, backup }
-      : streamUrlsFromSource(r.source);
-    const fromUrl = fromSource.primary
-      ? fromSource
-      : streamUrlsFromSource(r.url);
-    const resolvedUrl = fromUrl.primary
-      ? fromUrl
-      : streamUrlsFromSource(r.stream_url);
-    if (!resolvedUrl.primary) continue;
+    const finalUrl = (() => {
+      for (const c of [r.stream_source, r.source, r.url, r.stream_url]) {
+        const got = streamUrlsFromSource(c);
+        if (got.primary) return got;
+      }
+      return streamUrlsFromSource(null);
+    })();
+    if (!finalUrl.primary) continue;
 
     const legacyId = epId ? `series_ep_${epId}` : linkedStreamId ? `series_ep_stream_${linkedStreamId}` : "";
     if (!legacyId || existingIds.has(legacyId)) continue;
@@ -387,8 +337,9 @@ export function mapSeriesEpisodesFromSql(
     created.push({
       legacyId,
       name,
-      streamUrl: resolvedUrl.primary,
-      backupUrl: resolvedUrl.backup,
+      streamUrl: finalUrl.primary,
+      backupUrl: finalUrl.backup,
+      extraSourceUrls: finalUrl.extras.length ? finalUrl.extras : undefined,
       type: "SERIES",
       streamIcon: r.stream_icon ? String(r.stream_icon) : meta?.icon,
       categoryLegacyId: flattenIdList(r.category_id)[0] ?? meta?.categoryLegacyId,

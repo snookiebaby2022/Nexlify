@@ -15,6 +15,8 @@ export type MigrationStreamRow = {
   sortOrder?: number;
   streamIcon?: string;
   backupUrl?: string;
+  /** Additional source URLs beyond primary + backup (from multi-entry stream_source). */
+  extraSourceUrls?: string[];
   categoryLegacyId?: string;
   categoryName?: string;
   epgChannelId?: string;
@@ -103,6 +105,8 @@ export type MigrationServerRow = {
   domain?: string;
   maxClients?: number;
   privateIp?: string;
+  httpsPort?: number;
+  rtmpPort?: number;
 };
 
 export type MigrationEpgRow = {

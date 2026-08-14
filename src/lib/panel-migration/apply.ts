@@ -1,6 +1,7 @@
 import { LineStatus, PanelRole, StreamType } from "@prisma/client";
 import { prisma } from "../prisma";
 import { hashPassword } from "../auth";
+import { extraSourcesToBitrates } from "./stream-source-urls";
 import { applyMigrationPhase2 } from "./phase2";
 import { applyMigrationPhase3 } from "./apply-phase3";
 import { urlsFromPhpSerialized, looksLikePlayableUrl } from "./sql-junctions";
@@ -302,8 +303,7 @@ async function applyMigrationBundleInner(
         const vodMode =
           type === StreamType.MOVIE || type === StreamType.SERIES ? "ON_DEMAND" : "LIVE";
 
-        // Match by URL so a second import can retag LIVE/MOVIE/SERIES without duplicates
-        // (episode titles often differ from the original stream_display_name).
+        const bitrates = extraSourcesToBitrates(s.extraSourceUrls);
         const dup = await prisma.stream.findFirst({
           where: { streamUrl },
           select: { id: true },
@@ -325,6 +325,7 @@ async function applyMigrationBundleInner(
                 ...(categoryId ? { categoryId } : {}),
                 ...(mappedServerId ? { serverId: mappedServerId } : {}),
                 ...(s.backupUrl?.trim() ? { backupUrl: s.backupUrl.trim() } : {}),
+                ...(bitrates ? { bitrates } : {}),
                 ...(s.streamIcon?.trim() ? { streamIcon: s.streamIcon.trim() } : {}),
                 ...(s.containerExtension?.trim()
                   ? { containerExtension: s.containerExtension.trim() }
@@ -360,6 +361,7 @@ async function applyMigrationBundleInner(
             seasonNum: s.seasonNum ?? null,
             episodeNum: s.episodeNum ?? null,
             vodMode,
+            ...(bitrates ? { bitrates } : {}),
           },
         });
         streamIdByLegacy.set(s.legacyId, created.id);

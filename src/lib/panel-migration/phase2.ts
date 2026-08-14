@@ -122,15 +122,37 @@ export function mapServers(data: SqlTableData | null): MigrationServerRow[] {
     const legacyId = String(r.id ?? "");
     const host = String(r.server_ip ?? r.host ?? r.ip ?? "").trim();
     if (!legacyId || !host) continue;
+    const httpPort =
+      Number(r.port ?? r.http_port ?? r.http_broadcast_port ?? NaN) || 0;
+    const httpsPort =
+      Number(r.https_port ?? r.https_broadcast_port ?? NaN) || undefined;
+    const enableHttps =
+      Number(r.enable_https ?? r.https ?? 0) === 1 ||
+      String(r.protocol ?? "").toLowerCase() === "https";
+    const protocol = enableHttps
+      ? "https"
+      : String(r.protocol ?? "http").trim() || "http";
+    const port =
+      protocol === "https" && httpsPort
+        ? httpsPort
+        : httpPort || (protocol === "https" ? 443 : 80);
     out.push({
       legacyId,
       name: String(r.server_name ?? r.name ?? host),
       host,
-      port: Number(r.port ?? r.http_port ?? 80) || 80,
-      protocol: String(r.protocol ?? "http"),
-      domain: r.domain ? String(r.domain) : r.server_domain ? String(r.server_domain) : undefined,
+      port,
+      protocol,
+      domain: String(
+        r.domain ?? r.server_domain ?? r.domain_name ?? ""
+      ).trim() || undefined,
       maxClients: Number(r.total_clients ?? r.max_clients ?? r.capacity ?? NaN) || undefined,
-      privateIp: r.private_ip ? String(r.private_ip) : r.local_ip ? String(r.local_ip) : undefined,
+      privateIp: r.private_ip
+        ? String(r.private_ip)
+        : r.local_ip
+          ? String(r.local_ip)
+          : undefined,
+      httpsPort: httpsPort || undefined,
+      rtmpPort: Number(r.rtmp_port ?? NaN) || undefined,
     });
   }
   return out;
@@ -306,6 +328,12 @@ export async function applyMigrationPhase2(
             domain: s.domain?.trim() || null,
             maxClients: Number(s.maxClients) || 1000,
             privateIp: s.privateIp?.trim() || null,
+            ...(Number.isFinite(s.httpsPort) && s.httpsPort
+              ? { httpsPort: Number(s.httpsPort) }
+              : {}),
+            ...(Number.isFinite(s.rtmpPort) && s.rtmpPort
+              ? { rtmpPort: Number(s.rtmpPort) }
+              : {}),
             sortOrder: i,
             // First imported = main (panel); all others default to load balancers.
             panelSettings:
