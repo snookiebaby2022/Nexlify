@@ -11,11 +11,12 @@ import type { MigrationPhase3Data, MigrationSource } from "./types";
 import { PHASE3_TABLE_ALIASES, type Phase3AliasKind } from "./profiles";
 
 const LOG_CAP = 2500;
-const EPG_PROGRAM_CAP = 100_000;
+/** Full EPG guide — large XUI dumps can exceed 500k programmes; do not silently drop. */
+const EPG_PROGRAM_CAP = 2_000_000;
 const WATCH_LOG_CAP = 500;
 const STATS_CAP = 500;
 const LIVE_CONN_CAP = 500;
-const EPG_API_CAP = 50_000;
+const EPG_API_CAP = 100_000;
 const WATCH_REFRESH_CAP = 500;
 const CREDIT_LOG_CAP = 2000;
 

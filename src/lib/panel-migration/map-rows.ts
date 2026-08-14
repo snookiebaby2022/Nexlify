@@ -68,9 +68,10 @@ function mapStreamType(val: unknown, source: MigrationSource): "LIVE" | "MOVIE" 
     source === "onestream" ||
     source === "xtream_ui" ||
     source === "streamcreed" ||
-    source === "nxt"
+    source === "nxt" ||
+    source === "midnight"
   ) {
-    // Classic Xtream / XUI.one stream.type:
+    // Classic Xtream / XUI.one / StreamCreed / NXT / Midnight stream.type:
     // 1 = live, 2 = movie, 3 = created channel (live), 4 = radio, 5 = series
     if (n === 2) return "MOVIE";
     if (n === 5) return "SERIES";

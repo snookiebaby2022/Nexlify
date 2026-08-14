@@ -340,6 +340,7 @@ const KNOWN_COLUMN_ORDER: Partial<
   xtream_ui: XUI_COMMON,
   streamcreed: XUI_COMMON,
   nxt: XUI_COMMON,
+  midnight: XUI_COMMON,
 };
 
 // Columns content-detection is trusted for — never overwritten by schema-order templates.

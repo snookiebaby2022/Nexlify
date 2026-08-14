@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.71",
+  "latestVersion": "1.9.72",
   "releases": [
+    {
+      "version": "1.9.72",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Complete SQL migrate for all panel sources: raise EPG caps, Midnight type mapping, regression tests so semicolon plots cannot drop rows.",
+      "changelog": [
+        "EPG programme import cap raised to 2M (was 100k) so large epg_data tables are not truncated",
+        "Midnight Streams uses the same numeric stream.type map and headerless column templates as XUI lineage",
+        "Regression tests for xui, onestream, xtream_ui, streamcreed, nxt, midnight against semicolon-in-plot dumps",
+        "scripts/compare-migrate-dump.ts compares dump table rows to mapped preview counts"
+      ],
+      "fixes": [
+        "EPG guide silently capped at 100k programmes on large XUI dumps",
+        "Midnight SQL uploads could mis-classify live/movie/series numeric types"
+      ]
+    },
     {
       "version": "1.9.71",
       "date": "2026-08-14",
