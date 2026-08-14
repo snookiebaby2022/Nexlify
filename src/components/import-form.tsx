@@ -47,10 +47,14 @@ export function ImportForm({
   useEffect(() => {
     fetch("/api/admin/categories")
       .then((r) => r.json())
-      .then((d) => setCategories(d.categories));
+      .then((d) => setCategories(Array.isArray(d.categories) ? d.categories : []));
     fetch("/api/admin/bouquets")
       .then((r) => r.json())
-      .then((d) => setBouquets(d.bouquets ?? []));
+      .then((d) => {
+        const list = Array.isArray(d.bouquets) ? d.bouquets : [];
+        setBouquets(list);
+        setBouquetIds(list.map((b: { id: string }) => b.id));
+      });
     fetch("/api/admin/servers")
       .then((r) => r.json())
       .then((d) => setServersList(d.servers ?? []));
@@ -319,7 +323,21 @@ export function ImportForm({
           />
           {bouquets.length > 0 && (
             <div className="rounded border px-3 py-2" style={{ borderColor: "var(--border)" }}>
-              <div className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>Assign to bouquets</div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-medium" style={{ color: "var(--muted)" }}>Assign to bouquets</div>
+                <button
+                  type="button"
+                  className="text-[11px] underline"
+                  style={{ color: "var(--accent)" }}
+                  onClick={() =>
+                    setBouquetIds(
+                      bouquetIds.length === bouquets.length ? [] : bouquets.map((b) => b.id)
+                    )
+                  }
+                >
+                  {bouquetIds.length === bouquets.length ? "Clear" : "Select all"}
+                </button>
+              </div>
               <div className="flex flex-wrap gap-2 max-h-[120px] overflow-y-auto">
                 {bouquets.map((b) => (
                   <label key={b.id} className="flex items-center gap-1.5 text-xs cursor-pointer">

@@ -11,6 +11,11 @@ nexlify_load_ports_from_env "$ROOT"
 
 DEST="/etc/nginx/rtmp.d/nexlify-rtmp.conf"
 LEGACY_DEST="/etc/nginx/conf.d/nexlify-rtmp.conf"
+
+if [ -f /etc/nexlify/production.lock ] && [ "${FORCE_NGINX_UNLOCK:-}" != "1" ]; then
+  echo "[rtmp] production.lock is set — leaving nginx RTMP config unchanged"
+  exit 0
+fi
 HLS_DIR="${NEXLIFY_HLS_DIR:-/var/www/nexlify-hls}"
 RTMP_PORT="$NEXLIFY_PORT_RTMP"
 

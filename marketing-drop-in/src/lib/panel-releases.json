@@ -1,7 +1,27 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.37",
+  "latestVersion": "1.9.38",
   "releases": [
+    {
+      "version": "1.9.38",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Fix stream/category/bouquet import (XUI URLs and PHP-serialized bouquets) and lock production nginx configs so panels stay up.",
+      "changelog": [
+        "SQL import fills missing stream URLs from streams_sys current_source and PHP-serialized stream_source",
+        "Bouquet channel lists parse PHP serialize without treating array indexes as stream IDs",
+        "Post-import repair auto-runs and attaches orphan LIVE streams to bouquets",
+        "M3U import accepts more URL schemes and keeps VLC option lines between EXTINF and the URL",
+        "Migrate page shows import health and a Repair existing import button",
+        "lock-production-configs.sh freezes nginx configs (not the database or import uploads)"
+      ],
+      "fixes": [
+        "Streams skipped or imported with unplayable URLs when XUI stored the source in streams_sys or PHP serialize",
+        "Bouquets imported empty because PHP channel lists included 0/1 indexes as stream IDs",
+        "Live streams present in Manage Streams but missing from player bouquets after migrate"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.38.tar.gz"
+    },
     {
       "version": "1.9.37",
       "date": "2026-08-14",

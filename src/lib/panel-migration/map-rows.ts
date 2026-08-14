@@ -29,7 +29,12 @@ import {
 } from "./sql-parse";
 import { PANEL_PROFILES, firstTableFound } from "./profiles";
 import { applyHeaderlessInference } from "./headerless-map";
-import { enrichSqlTablesFromJunctions, flattenIdList } from "./sql-junctions";
+import {
+  enrichSqlTablesFromJunctions,
+  flattenIdList,
+  looksLikePhpSerialized,
+  urlsFromPhpSerialized,
+} from "./sql-junctions";
 import {
   enrichStreamsFromSys,
   finalizeVodStreamDefaults,
@@ -70,14 +75,20 @@ function isUsableStreamUrl(val: unknown): boolean {
   if (s === "[]" || s === "{}" || s === '[""]' || s === "['']") return false;
   // Pure numeric strings are flags / ids, not stream URLs
   if (/^-?\d+(\.\d+)?$/.test(s)) return false;
+  // PHP serialize blobs are not playable URLs (extract first via urlsFromPhpSerialized).
+  if (looksLikePhpSerialized(s)) return false;
   return true;
 }
 
 function streamUrlsFromSource(val: unknown): { primary: string; backup?: string } {
+  if (typeof val === "string") {
+    const php = urlsFromPhpSerialized(val);
+    if (php.length) return { primary: php[0], backup: php[1] };
+  }
   if (!isUsableStreamUrl(val) && val != null && typeof val !== "object") {
     // Still allow JSON arrays/objects through parseJsonField below when stringy
     const raw = String(val ?? "").trim();
-    if (!raw.startsWith("[") && !raw.startsWith("{")) {
+    if (!raw.startsWith("[") && !raw.startsWith("{") && !looksLikePhpSerialized(raw)) {
       return { primary: "" };
     }
   }
@@ -186,7 +197,8 @@ function mapStreams(
       r.url,
       r.stream_url,
       r.playback_url,
-      // direct_source is usually a 0/1 flag in XUI; only use if it looks like a URL
+      r.current_source,
+      r.target_container && String(r.target_container).includes("://") ? r.target_container : null,
       r.direct_source
     );
     const backupExplicit = firstStreamUrl(
@@ -767,6 +779,14 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
     loadPhase2FromSql(allTables, source),
     typeMap
   );
+  {
+    const streamRows = sysEnrich.streams?.rows.length ?? 0;
+    if (streamRows && bundle.streams.length < streamRows) {
+      warnings.push(
+        `Mapped ${bundle.streams.length} of ${streamRows} stream row(s); ${streamRows - bundle.streams.length} skipped (empty or unusable stream_source). Re-export streams_sys with the dump if URLs live there.`
+      );
+    }
+  }
 
   const seriesEp = mapSeriesEpisodesFromSql(allTables, source, bundle.streams);
   if (seriesEp.streams.length) {
@@ -1007,6 +1027,14 @@ export async function bundleFromSqlFile(
     loadPhase2FromSql(allTables, source),
     typeMap
   );
+  {
+    const streamRows = sysEnrich.streams?.rows.length ?? 0;
+    if (streamRows && bundle.streams.length < streamRows) {
+      warnings.push(
+        `Mapped ${bundle.streams.length} of ${streamRows} stream row(s); ${streamRows - bundle.streams.length} skipped (empty or unusable stream_source). Re-export streams_sys with the dump if URLs live there.`
+      );
+    }
+  }
 
   const seriesEp = mapSeriesEpisodesFromSql(allTables, source, bundle.streams);
   if (seriesEp.streams.length) {

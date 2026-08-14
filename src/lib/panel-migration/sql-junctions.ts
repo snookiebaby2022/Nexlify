@@ -1,10 +1,63 @@
 import type { SqlTableData } from "./sql-parse";
 import { mergeSqlTables, rowToRecord } from "./sql-parse";
 
+export function looksLikePhpSerialized(s: string): boolean {
+  const t = s.trim();
+  return /^(a|O|C):\d+:\{/.test(t) || /^s:\d+:"/.test(t);
+}
+
+/** String payloads from PHP serialize (`s:N:"value"`), length-accurate. */
+export function phpSerializedStringValues(input: string): string[] {
+  const out: string[] = [];
+  const s = input;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] !== "s" || s[i + 1] !== ":") continue;
+    let j = i + 2;
+    let num = "";
+    while (j < s.length && s[j] >= "0" && s[j] <= "9") num += s[j++];
+    if (!num || s[j] !== ":" || s[j + 1] !== '"') continue;
+    const len = Number(num);
+    const start = j + 2;
+    if (!Number.isFinite(len) || len < 0 || start + len > s.length) continue;
+    out.push(s.slice(start, start + len));
+    i = start + len;
+  }
+  return out;
+}
+
+/**
+ * Array *values* (not keys) from PHP-serialized id lists.
+ * `a:2:{i:0;i:12;i:1;i:34;}` → `["12","34"]` (skips the 0/1 indexes).
+ */
+export function phpSerializedIdValues(input: string): string[] {
+  const ids: string[] = [];
+  const re = /(?:i:\d+;|s:\d+:"(?:\\.|[^"\\])*";)(?:i:(\d+);|s:\d+:"(\d+)")/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(input))) {
+    const id = m[1] || m[2];
+    if (id && id !== "0") ids.push(id);
+  }
+  return [...new Set(ids)];
+}
+
+const STREAM_URL_RE =
+  /^(https?|rtmp|rtmps|rtsp|rtsps|udp|rtp|srt|mms|mmsh|file):\/\//i;
+
+/** Pull playable URLs out of a PHP-serialized stream_source blob. */
+export function urlsFromPhpSerialized(val: unknown): string[] {
+  if (typeof val !== "string") return [];
+  const s = val.trim();
+  if (!looksLikePhpSerialized(s)) return [];
+  return phpSerializedStringValues(s)
+    .map((u) => u.trim())
+    .filter((u) => STREAM_URL_RE.test(u) || u.startsWith("/") || u.startsWith("//"));
+}
+
 /** Flatten XUI-style bouquet channel payloads:
  *  - `[1,2,3]`
  *  - `{"live":[1,2],"vod":[3],"series":[4]}`
  *  - `"1,2,3"`
+ *  - PHP serialized arrays (`a:2:{s:4:"live";a:2:{i:0;i:12;…}}`)
  */
 export function flattenIdList(val: unknown): string[] {
   if (val == null || val === "") return [];
@@ -26,6 +79,10 @@ export function flattenIdList(val: unknown): string[] {
   }
   const s = String(val).trim();
   if (!s) return [];
+  if (looksLikePhpSerialized(s)) {
+    const ids = phpSerializedIdValues(s);
+    if (ids.length) return ids;
+  }
   try {
     return flattenIdList(JSON.parse(s));
   } catch {

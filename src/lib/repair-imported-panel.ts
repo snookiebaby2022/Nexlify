@@ -18,6 +18,7 @@ export type RepairImportedPanelResult = {
   standardPackagesEnsured: number;
   seriesLinkedToBouquets: number;
   moviesLinkedToBouquets: number;
+  liveLinkedToBouquets: number;
   uncategorizedReassigned: number;
   uncategorizedRemaining: number;
 };
@@ -41,6 +42,7 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
     standardPackagesEnsured: 0,
     seriesLinkedToBouquets: 0,
     moviesLinkedToBouquets: 0,
+    liveLinkedToBouquets: 0,
     uncategorizedReassigned: 0,
     uncategorizedRemaining: 0,
   };
@@ -259,9 +261,42 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
     result.seriesLinkedToBouquets = await linkOrphansToBouquet("SERIES", vodBouquet.id);
     result.moviesLinkedToBouquets = await linkOrphansToBouquet("MOVIE", vodBouquet.id);
   } else if (bouquets[0]) {
-    // Fallback: first bouquet alphabetically
     result.seriesLinkedToBouquets = await linkOrphansToBouquet("SERIES", bouquets[0].id);
     result.moviesLinkedToBouquets = await linkOrphansToBouquet("MOVIE", bouquets[0].id);
+  }
+
+  const liveOrphans = await prisma.stream.findMany({
+    where: { type: "LIVE", isActive: true, bouquets: { none: {} } },
+    select: { id: true },
+    take: 50_000,
+  });
+  if (liveOrphans.length && bouquets.length) {
+    const empty: { id: string }[] = [];
+    for (const b of bouquets) {
+      const n = await prisma.bouquetStream.count({ where: { bouquetId: b.id } });
+      if (n === 0) empty.push({ id: b.id });
+    }
+    const catchAll = bouquets.filter((b) =>
+      /all|full|imported|complete|\bmain\b/i.test(b.name)
+    );
+    const targets = empty.length ? empty : catchAll.length ? catchAll : [bouquets[0]];
+    const BATCH = 500;
+    let linked = 0;
+    for (const t of targets) {
+      for (let i = 0; i < liveOrphans.length; i += BATCH) {
+        const chunk = liveOrphans.slice(i, i + BATCH);
+        const res = await prisma.bouquetStream.createMany({
+          data: chunk.map((s, idx) => ({
+            bouquetId: t.id,
+            streamId: s.id,
+            sortOrder: i + idx,
+          })),
+          skipDuplicates: true,
+        });
+        linked += res.count;
+      }
+    }
+    result.liveLinkedToBouquets = linked;
   }
 
   return result;

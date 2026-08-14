@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -136,6 +136,20 @@ export function PanelMigrateForm() {
   /** Live status lines shown during upload / scan / import. */
   const [liveLog, setLiveLog] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
+  const [repairing, setRepairing] = useState(false);
+  const [importHealth, setImportHealth] = useState<{
+    streams: number;
+    live: number;
+    movie: number;
+    series: number;
+    uncategorized: number;
+    inactive: number;
+    bouquets: number;
+    categories: number;
+    bouquetLinks: number;
+    liveOrphans: number;
+    noUrl?: number;
+  } | null>(null);
   const [redirectSeconds, setRedirectSeconds] = useState<number | null>(null);
   const redirectTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const router = useRouter();
@@ -145,6 +159,19 @@ export function PanelMigrateForm() {
       if (redirectTimerRef.current) clearInterval(redirectTimerRef.current);
     };
   }, []);
+
+  const loadImportHealth = useCallback(() => {
+    fetch("/api/admin/repair-import")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d && typeof d.streams === "number") setImportHealth(d);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadImportHealth();
+  }, [loadImportHealth]);
 
   function appendLiveLog(line: string) {
     setLiveLog((prev) => {
@@ -1200,6 +1227,25 @@ export function PanelMigrateForm() {
         </div>
       )}
 
+      {importHealth && (
+        <div
+          className="rounded-lg p-3 text-sm"
+          style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+        >
+          <p className="font-medium">What is on this panel now</p>
+          <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+            {importHealth.streams.toLocaleString()} streams ({importHealth.live.toLocaleString()} live,{" "}
+            {importHealth.movie.toLocaleString()} movies, {importHealth.series.toLocaleString()} series) ·{" "}
+            {importHealth.categories.toLocaleString()} categories · {importHealth.bouquets.toLocaleString()} bouquets ·{" "}
+            {importHealth.bouquetLinks.toLocaleString()} bouquet links
+            {importHealth.liveOrphans ? ` · ${importHealth.liveOrphans.toLocaleString()} live streams not in any bouquet` : ""}
+            {importHealth.noUrl ? ` · ${importHealth.noUrl.toLocaleString()} streams with empty URL` : ""}
+            {importHealth.uncategorized ? ` · ${importHealth.uncategorized.toLocaleString()} uncategorized` : ""}
+            {importHealth.inactive ? ` · ${importHealth.inactive.toLocaleString()} inactive` : ""}
+          </p>
+        </div>
+      )}
+
       <div className="flex gap-3">
         <button
           type="button"
@@ -1218,6 +1264,35 @@ export function PanelMigrateForm() {
           disabled={!canRun() || importing || scanning}
         >
           {importing ? "Importing…" : "Run import"}
+        </button>
+        <button
+          type="button"
+          className="px-4 py-2 rounded text-sm"
+          style={{ background: "var(--card)", border: "1px solid var(--border)", opacity: repairing ? 0.5 : 1 }}
+          disabled={repairing || importing}
+          onClick={async () => {
+            setRepairing(true);
+            setResult("Repairing imported streams, categories, and bouquets…");
+            try {
+              const res = await fetch("/api/admin/repair-import", { method: "POST" });
+              const d = await res.json();
+              if (!res.ok) {
+                setResult(d.error ?? "Repair failed");
+              } else {
+                const r = d.result ?? {};
+                setResult(
+                  `Repair done. Activated ${r.streamsActivated ?? 0} streams; linked ${r.liveLinkedToBouquets ?? 0} live, ${r.moviesLinkedToBouquets ?? 0} movies, ${r.seriesLinkedToBouquets ?? 0} series into bouquets; categorized ${r.liveCategorized ?? 0} live / ${r.movieCategorized ?? 0} movies / ${r.seriesCategorized ?? 0} series.`
+                );
+                loadImportHealth();
+              }
+            } catch (e) {
+              setResult(e instanceof Error ? e.message : "Repair failed");
+            } finally {
+              setRepairing(false);
+            }
+          }}
+        >
+          {repairing ? "Repairing…" : "Repair existing import"}
         </button>
       </div>
 

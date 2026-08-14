@@ -8,8 +8,24 @@ export type M3uEntry = {
   channelId?: string;
 };
 
+function attr(line: string, name: string): string | undefined {
+  const dq = line.match(new RegExp(`${name}="([^"]*)"`, "i"));
+  if (dq?.[1] != null) return dq[1];
+  const sq = line.match(new RegExp(`${name}='([^']*)'`, "i"));
+  if (sq?.[1] != null) return sq[1];
+  return undefined;
+}
+
+function isStreamUrlLine(line: string): boolean {
+  if (!line || line.startsWith("#")) return false;
+  if (/^(https?|rtmp|rtmps|rtsp|rtsps|udp|rtp|srt|mms|mmsh|file):\/\//i.test(line)) return true;
+  if (line.startsWith("//")) return true;
+  if (line.startsWith("/")) return true;
+  return false;
+}
+
 export function parseM3u(content: string): M3uEntry[] {
-  const lines = content.split(/\r?\n/);
+  const lines = content.replace(/^\uFEFF/, "").split(/\r?\n/);
   const entries: M3uEntry[] = [];
   let pending: Partial<M3uEntry> | null = null;
 
@@ -19,33 +35,23 @@ export function parseM3u(content: string): M3uEntry[] {
 
     if (line.startsWith("#EXTINF:")) {
       const nameMatch = line.match(/,(.+)$/);
-      const groupMatch = line.match(/group-title="([^"]*)"/i);
-      const logoMatch = line.match(/tvg-logo="([^"]*)"/i);
-      const idMatch = line.match(/tvg-id="([^"]*)"/i);
-      const tvgNameMatch = line.match(/tvg-name="([^"]*)"/i);
-      const channelIdMatch = line.match(/channel-id="([^"]*)"/i) ?? line.match(/channel_id="([^"]*)"/i);
       pending = {
-        name: nameMatch?.[1]?.trim() ?? "Unknown",
-        group: groupMatch?.[1],
-        logo: logoMatch?.[1],
-        tvgId: idMatch?.[1],
-        tvgName: tvgNameMatch?.[1],
-        channelId: channelIdMatch?.[1],
+        name: nameMatch?.[1]?.trim() || attr(line, "tvg-name") || "Unknown",
+        group: attr(line, "group-title"),
+        logo: attr(line, "tvg-logo"),
+        tvgId: attr(line, "tvg-id"),
+        tvgName: attr(line, "tvg-name"),
+        channelId: attr(line, "channel-id") ?? attr(line, "channel_id"),
       };
       continue;
     }
 
+    // Keep pending through VLC/Kodi option lines sitting between EXTINF and the URL.
     if (line.startsWith("#")) continue;
 
-    if (
-      pending &&
-      (line.startsWith("http") ||
-        line.startsWith("file://") ||
-        line.startsWith("/") ||
-        line.startsWith("rtmp"))
-    ) {
+    if (pending && isStreamUrlLine(line)) {
       entries.push({
-        name: pending.name!,
+        name: pending.name || "Unknown",
         url: line,
         group: pending.group,
         logo: pending.logo,
@@ -65,6 +71,8 @@ export function guessStreamType(entry: M3uEntry, forced?: "LIVE" | "MOVIE" | "SE
   const g = (entry.group ?? "").toLowerCase();
   if (g.includes("series") || g.includes("tv show")) return "SERIES" as const;
   if (g.includes("movie") || g.includes("vod")) return "MOVIE" as const;
-  if (g.includes("live") || entry.url.includes(".m3u8")) return "LIVE" as const;
+  if (g.includes("live") || /\.m3u8($|\?)/i.test(entry.url) || /\/live\//i.test(entry.url)) {
+    return "LIVE" as const;
+  }
   return "MOVIE" as const;
 }

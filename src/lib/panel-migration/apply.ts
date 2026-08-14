@@ -3,6 +3,7 @@ import { prisma } from "../prisma";
 import { hashPassword } from "../auth";
 import { applyMigrationPhase2 } from "./phase2";
 import { applyMigrationPhase3 } from "./apply-phase3";
+import { urlsFromPhpSerialized } from "./sql-junctions";
 import type {
   MigrationApplyOptions,
   MigrationApplyResult,
@@ -274,7 +275,10 @@ async function applyMigrationBundleInner(
       bundle.streams,
       async (s, idx) => {
         const name = String(s.name ?? "").trim();
-        const streamUrl = String(s.streamUrl ?? "").trim();
+        let streamUrl = String(s.streamUrl ?? "").trim();
+        if (/^(a|O|C):\d+:\{/.test(streamUrl) || /^s:\d+:"/.test(streamUrl)) {
+          streamUrl = urlsFromPhpSerialized(streamUrl)[0] ?? "";
+        }
         if (!name || !streamUrl || !s.legacyId) return false;
         // Reject XUI empty-source placeholders that slipped through older mappers
         if (
@@ -645,6 +649,21 @@ async function applyMigrationBundleInner(
     } catch (e) {
       pushWarning(result.warnings, `Phase3 error: ${shortErr(e)}`);
     }
+  }
+
+  try {
+    options.onProgress?.("repair", 0, 1);
+    const { repairImportedPanel } = await import("@/lib/repair-imported-panel");
+    const repair = await repairImportedPanel(prisma);
+    if (repair.liveLinkedToBouquets || repair.seriesLinkedToBouquets || repair.moviesLinkedToBouquets) {
+      pushWarning(
+        result.warnings,
+        `Post-import repair: linked ${repair.liveLinkedToBouquets} live, ${repair.moviesLinkedToBouquets} movie, ${repair.seriesLinkedToBouquets} series stream(s) into bouquets; activated ${repair.streamsActivated}.`
+      );
+    }
+    options.onProgress?.("repair", 1, 1);
+  } catch (e) {
+    pushWarning(result.warnings, `Post-import repair: ${shortErr(e)}`);
   }
 
   return result;

@@ -7,7 +7,7 @@
 
 import type { MigrationSource, MigrationStreamRow } from "./types";
 import { mergeSqlTables, rowToRecord, type SqlTableData } from "./sql-parse";
-import { flattenIdList } from "./sql-junctions";
+import { flattenIdList, looksLikePhpSerialized, urlsFromPhpSerialized } from "./sql-junctions";
 
 function findMerged(
   allTables: Map<string, SqlTableData[]>,
@@ -32,12 +32,17 @@ function isUsableStreamUrl(val: unknown): boolean {
   }
   if (s === "[]" || s === "{}" || s === '[""]' || s === "['']") return false;
   if (/^-?\d+(\.\d+)?$/.test(s)) return false;
+  if (looksLikePhpSerialized(s)) return false;
   return true;
 }
 
 function streamUrlsFromSource(val: unknown): { primary: string; backup?: string } {
   if (val == null || val === "") return { primary: "" };
   if (typeof val === "number" && val === 0) return { primary: "" };
+  if (typeof val === "string") {
+    const php = urlsFromPhpSerialized(val);
+    if (php.length) return { primary: php[0], backup: php[1] };
+  }
   const s0 = typeof val === "string" ? val.trim() : null;
   if (s0 && (s0.startsWith("[") || s0.startsWith("{"))) {
     try {
@@ -145,14 +150,38 @@ export function enrichStreamsFromSys(
   if (!sys) return { streams, warnings };
 
   const byStream = new Map<string, string>();
+  const urlByStream = new Map<string, { primary: string; backup?: string }>();
   for (const row of sys.rows) {
     const r = rowToRecord(sys.columns, row);
     const sid = String(r.stream_id ?? r.id ?? "");
     const serverId = String(r.server_id ?? r.streaming_server_id ?? "");
-    if (!sid || !serverId || serverId === "0") continue;
-    if (!byStream.has(sid)) byStream.set(sid, serverId);
+    if (sid && serverId && serverId !== "0" && !byStream.has(sid)) {
+      byStream.set(sid, serverId);
+    }
+    if (!sid || urlByStream.has(sid)) continue;
+    const info =
+      typeof r.stream_info === "string" && r.stream_info.trim().startsWith("{")
+        ? (() => {
+            try {
+              return JSON.parse(String(r.stream_info)) as Record<string, unknown>;
+            } catch {
+              return null;
+            }
+          })()
+        : r.stream_info && typeof r.stream_info === "object"
+          ? (r.stream_info as Record<string, unknown>)
+          : null;
+    const got = streamUrlsFromSource(
+      r.current_source ??
+        r.stream_source ??
+        r.source ??
+        r.url ??
+        info?.current_source ??
+        info?.source ??
+        info?.stream_source
+    );
+    if (got.primary) urlByStream.set(sid, got);
   }
-  if (!byStream.size) return { streams, warnings };
 
   let serverIdx = streams.columns.findIndex((c) => c === "server_id");
   if (serverIdx < 0) {
@@ -160,20 +189,46 @@ export function enrichStreamsFromSys(
     serverIdx = streams.columns.length - 1;
     for (const row of streams.rows) row.push(null);
   }
+  let sourceIdx = streams.columns.findIndex((c) => c === "stream_source");
+  if (sourceIdx < 0 && urlByStream.size) {
+    streams.columns.push("stream_source");
+    sourceIdx = streams.columns.length - 1;
+    for (const row of streams.rows) row.push(null);
+  }
   const idIdx = streams.columns.findIndex((c) => c === "id" || c === "stream_id");
   let filled = 0;
+  let urlsFilled = 0;
   for (const row of streams.rows) {
     const id = idIdx >= 0 ? String(row[idIdx] ?? "") : "";
     const existing = row[serverIdx];
-    if (existing != null && String(existing) !== "" && String(existing) !== "0") continue;
-    const mapped = byStream.get(id);
-    if (!mapped) continue;
-    row[serverIdx] = mapped;
-    filled++;
+    if (!(existing != null && String(existing) !== "" && String(existing) !== "0")) {
+      const mapped = byStream.get(id);
+      if (mapped) {
+        row[serverIdx] = mapped;
+        filled++;
+      }
+    }
+    if (sourceIdx >= 0) {
+      const existingUrl = streamUrlsFromSource(row[sourceIdx]);
+      if (!existingUrl.primary) {
+        const fromSys = urlByStream.get(id);
+        if (fromSys?.primary) {
+          row[sourceIdx] = fromSys.backup
+            ? JSON.stringify([fromSys.primary, fromSys.backup])
+            : fromSys.primary;
+          urlsFilled++;
+        }
+      }
+    }
   }
   if (filled) {
     warnings.push(
       `Applied server_id from streams_servers/sys for ${filled} stream(s) (${byStream.size} mappings).`
+    );
+  }
+  if (urlsFilled) {
+    warnings.push(
+      `Filled ${urlsFilled} missing stream URL(s) from streams_sys current_source.`
     );
   }
   return { streams, warnings };

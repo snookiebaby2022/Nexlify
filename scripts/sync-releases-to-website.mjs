@@ -46,6 +46,9 @@ writeFileSync(out, snippet, "utf8");
 
 const marketingJson = join(root, "marketing-drop-in", "src", "lib", "panel-releases.json");
 writeFileSync(marketingJson, readFileSync(jsonPath, "utf8"), "utf8");
+const marketingPublic = join(root, "marketing-drop-in", "public", "panel-releases.json");
+writeFileSync(marketingPublic, readFileSync(jsonPath, "utf8"), "utf8");
 
 console.log(`Wrote ${out} (${feed.releases.length} releases, latest ${feed.latestVersion})`);
 console.log(`Synced ${marketingJson}`);
+console.log(`Synced ${marketingPublic}`);

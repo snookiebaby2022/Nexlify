@@ -9,7 +9,13 @@ cd "$ROOT"
 source "$ROOT/scripts/nexlify-port-registry.sh"
 nexlify_load_ports_from_env "$ROOT"
 
-DEST="/etc/nginx/conf.d/nexlify-rtmp.conf"
+DEST="/etc/nginx/rtmp.d/nexlify-rtmp.conf"
+LEGACY_DEST="/etc/nginx/conf.d/nexlify-rtmp.conf"
+
+if [ -f /etc/nexlify/production.lock ] && [ "${FORCE_NGINX_UNLOCK:-}" != "1" ]; then
+  echo "[rtmp] production.lock is set — leaving nginx RTMP config unchanged"
+  exit 0
+fi
 HLS_DIR="${NEXLIFY_HLS_DIR:-/var/www/nexlify-hls}"
 RTMP_PORT="$NEXLIFY_PORT_RTMP"
 
@@ -20,7 +26,7 @@ nexlify_read_env_file() {
 RTMP_ENABLED="$(nexlify_read_env_file NEXLIFY_RTMP_ENABLED)"
 if [ "$RTMP_ENABLED" = "0" ] || [ "$RTMP_ENABLED" = "false" ]; then
   echo "[rtmp] RTMP disabled in .env — removing vhost"
-  rm -f "$DEST" 2>/dev/null || true
+  rm -f "$DEST" "$LEGACY_DEST" 2>/dev/null || true
   if command -v nginx >/dev/null 2>&1; then
     nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || true
   fi
@@ -41,13 +47,16 @@ if ! nginx -V 2>&1 | grep -qi rtmp; then
     echo "[rtmp] WARN: install libnginx-mod-rtmp manually for RTMP ingest"
 fi
 
-mkdir -p "$HLS_DIR"
+mkdir -p "$HLS_DIR" /etc/nginx/rtmp.d
+# Legacy installs wrote RTMP into conf.d (inside http{}) which breaks nginx — remove it.
+rm -f "$LEGACY_DEST" 2>/dev/null || true
 chown -R www-data:www-data "$HLS_DIR" 2>/dev/null || true
 
 cat > "$DEST" <<RTMP
 # Nexlify RTMP ingest — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)
 # OBS: rtmp://YOUR_HOST:${RTMP_PORT}/live  stream key: your-stream-name
 # HLS playback: /hls/STREAM-NAME.m3u8 (when nginx-rtmp module is loaded)
+# Placed in rtmp.d (top-level), NOT conf.d (http{}).
 
 rtmp {
     server {
