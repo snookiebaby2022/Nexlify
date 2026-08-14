@@ -80,8 +80,23 @@ chmod +x scripts/*.sh 2>/dev/null || true
 echo "==> Stopping stuck update worker ..."
 pkill -f 'panel-update-background' 2>/dev/null || true
 pkill -f 'npm run build' 2>/dev/null || true
+pkill -f 'next build' 2>/dev/null || true
+pkill -f 'run-panel-build' 2>/dev/null || true
 rm -f .update-progress.pid .update-in-progress
 rm -rf .next.staging 2>/dev/null || true
+
+# If live .next was wiped mid-build, restore backup / .next.old immediately
+if ! bash scripts/has-valid-next-build.sh 2>/dev/null; then
+  if [ -f .next.backup/BUILD_ID ] || [ -f .next.backup/standalone/server.js ]; then
+    echo "==> Restoring .next.backup (panel was wiped at 88% build) ..."
+    rm -rf .next
+    mv .next.backup .next
+  elif [ -f .next.old/BUILD_ID ] || [ -f .next.old/standalone/server.js ]; then
+    echo "==> Restoring .next.old ..."
+    rm -rf .next
+    mv .next.old .next
+  fi
+fi
 
 # Disable auto-apply so page reload doesn't restart a broken update
 if [ -f data/panel.db ]; then

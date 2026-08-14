@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Repair a customer panel so remote-update works: restart Postgres if needed,
-# sync origin/main from GitHub, and rebuild. Does not depend on nexlify.live
-# (which may be stale or Cloudflare-blocked).
+# Repair a customer panel so remote-update works: clear stuck in-panel updates,
+# restart Postgres if needed, sync origin/main from GitHub, and rebuild.
+# Does not depend on nexlify.live (which may be stale or Cloudflare-blocked).
 #
 #   curl -fsSL 'https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main/scripts/fix-remote-update-now.sh' | sudo bash
 set -euo pipefail
@@ -38,6 +38,46 @@ restart_postgres() {
   fi
 }
 
+clear_stuck_in_panel_update() {
+  echo "==> Clearing stuck in-panel update (git pull / progress banner)"
+  # Kill hung background update workers and stuck git fetch/pull
+  if [ -f .update-progress.pid ]; then
+    pid="$(tr -d ' \n' < .update-progress.pid 2>/dev/null || true)"
+    if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
+      echo "Killing update worker pid $pid"
+      kill -TERM "$pid" 2>/dev/null || true
+      sleep 1
+      kill -KILL "$pid" 2>/dev/null || true
+    fi
+  fi
+  pkill -f 'panel-update-background' 2>/dev/null || true
+  pkill -f 'scripts/panel-update' 2>/dev/null || true
+  # Only kill git if it looks like an update fetch — best-effort
+  pkill -f "git fetch origin" 2>/dev/null || true
+  pkill -f "git.*origin/main" 2>/dev/null || true
+  rm -f .update-progress.pid .update-in-progress
+  if [ -f .update-progress.json ]; then
+    node -e "
+      const fs = require('fs');
+      const p = '.update-progress.json';
+      try {
+        const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+        j.status = 'failed';
+        j.currentStep = null;
+        j.finishedAt = new Date().toISOString();
+        j.message = 'Cleared stuck update by fix-remote-update-now.sh — use SSH repair / Update panel again';
+        j.progress = j.progress || 0;
+        fs.writeFileSync(p, JSON.stringify(j, null, 2));
+        console.log('Marked .update-progress.json as failed');
+      } catch (e) {
+        fs.unlinkSync(p);
+        console.log('Removed corrupt .update-progress.json');
+      }
+    " 2>/dev/null || rm -f .update-progress.json
+  fi
+  rm -f .git/index.lock .git/HEAD.lock 2>/dev/null || true
+}
+
 ROOT="$(find_panel)" || {
   echo "ERROR: could not find panel install" >&2
   exit 1
@@ -47,17 +87,36 @@ echo "=== Nexlify remote-update repair ==="
 echo "Dir: $ROOT"
 cd "$ROOT"
 
+clear_stuck_in_panel_update
 restart_postgres
 
+export GIT_TERMINAL_PROMPT=0
+export GIT_ASKPASS=echo
+export GCM_INTERACTIVE=never
+export GIT_HTTP_LOW_SPEED_LIMIT="${GIT_HTTP_LOW_SPEED_LIMIT:-1000}"
+export GIT_HTTP_LOW_SPEED_TIME="${GIT_HTTP_LOW_SPEED_TIME:-45}"
+
 if [ -d .git ]; then
-  echo "==> git fetch origin main"
-  git fetch origin main
+  echo "==> git fetch origin main (90s timeout)"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 90 git fetch origin main || {
+      echo "WARN: git fetch timed out or failed — trying GitHub HTTPS remote"
+      git remote set-url origin https://github.com/snookiebaby2022/Nexlify.git 2>/dev/null || true
+      timeout 90 git fetch origin main
+    }
+  else
+    git fetch origin main
+  fi
   git reset --hard origin/main
   chmod +x scripts/*.sh 2>/dev/null || true
 else
   echo "WARN: not a git checkout — cloning into staging then swapping (keeps .env + data + .git)"
   TMP="$(mktemp -d)"
-  git clone --depth 1 --branch main https://github.com/snookiebaby2022/Nexlify.git "$TMP/nexlify"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 180 git clone --depth 1 --branch main https://github.com/snookiebaby2022/Nexlify.git "$TMP/nexlify"
+  else
+    git clone --depth 1 --branch main https://github.com/snookiebaby2022/Nexlify.git "$TMP/nexlify"
+  fi
   rsync -a --delete \
     --exclude node_modules --exclude .next --exclude .next.backup --exclude .next.staging \
     --exclude .env --exclude '.env.*' --exclude data \
@@ -75,6 +134,10 @@ else
   npm run build
   bash scripts/pm2-start.sh || pm2 restart nexlify --update-env
 fi
+
+# Clear progress after successful repair so UI does not keep "Updating…"
+rm -f .update-progress.pid .update-in-progress
+rm -f .update-progress.json 2>/dev/null || true
 
 VER="$(node -p "require('./package.json').version" 2>/dev/null || echo unknown)"
 echo "=== Done. Panel should be on v${VER} ==="
@@ -99,4 +162,4 @@ for i in 1 2 3 4 5 6; do
 done
 echo
 echo "Remote-update: vendor Admin → Remote Panel Update, force re-sync, URL http://THIS_IP (not https)"
-echo "If this host is 45.88.138.18, confirm /api/panel/version is no longer 1.9.45"
+echo "If this host is 45.88.138.18, confirm package version is current after repair"

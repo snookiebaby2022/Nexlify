@@ -400,13 +400,14 @@ cmd_build_compile() {
   export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
   export NEXT_PRIVATE_WORKER_THREADS=false
   export NEXLIFY_DIST_DIR=".next.staging"
-  if npm run build; then
+  # Call next directly — do not use `npm run build` (that wrapper routes back here).
+  if node ./node_modules/next/dist/bin/next build; then
     return 0
   fi
-  echo "WARN: npm run build failed (webpack?) — clean reinstall + retry once ..." >&2
+  echo "WARN: next build failed (webpack?) — clean reinstall + retry once ..." >&2
   rm -rf node_modules
   npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error
-  npm run build
+  node ./node_modules/next/dist/bin/next build
 }
 
 swap_staging_build() {

@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.59",
+  "latestVersion": "1.9.60",
   "releases": [
+    {
+      "version": "1.9.60",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Stop 88% update outages: npm run build uses .next.staging during in-panel updates even with an old update worker.",
+      "changelog": [
+        "npm run build routes through run-panel-build.mjs — when .update-in-progress exists, builds into .next.staging then swaps",
+        "apply-panel-fast-update build-compile calls next directly (no recursive npm run build)",
+        "Git post-pull build always prefers the on-disk staging script; never wipes live .next as a fallback",
+        "fix-panel-down-now restores .next.backup / .next.old when the live build was wiped at 88%"
+      ],
+      "fixes": [
+        "Server stuck at Updating… 88% (npm run build) with connection reset — old 1.9.53 worker built into live .next after git pull"
+      ]
+    },
     {
       "version": "1.9.59",
       "date": "2026-08-14",

@@ -397,8 +397,18 @@ async function patchUpdateSteps(patchScript: string, repoPath: string): Promise<
 }
 
 async function postPullBuildSteps(repoPath: string): Promise<UpdateStep[]> {
-  // Prefer zero-downtime staging build when the fast-update script is present.
-  const patchScript = await resolvePatchUpdateScript(repoPath);
+  // Always prefer zero-downtime staging build via the on-disk fast-update script
+  // (re-resolved after git pull so the latest script is used).
+  let patchScript = await resolvePatchUpdateScript(repoPath);
+  if (!patchScript) {
+    const bundled = path.join(repoPath, "scripts/apply-panel-fast-update.sh");
+    try {
+      await access(bundled);
+      patchScript = bundled;
+    } catch {
+      /* fall through */
+    }
+  }
   if (patchScript) {
     const steps: UpdateStep[] = [];
     if (await lockfileChanged(repoPath)) {
@@ -427,6 +437,7 @@ async function postPullBuildSteps(repoPath: string): Promise<UpdateStep[]> {
     return steps;
   }
 
+  // Last resort: still build into staging via env (never wipe live .next mid-update).
   const steps: UpdateStep[] = [];
   if (await lockfileChanged(repoPath)) {
     steps.push(await npmInstallStep(repoPath));
@@ -457,7 +468,14 @@ async function postPullBuildSteps(repoPath: string): Promise<UpdateStep[]> {
     }
   }
 
-  steps.push({ name: "npm run build", command: "npm", args: ["run", "build"] });
+  steps.push({
+    name: "npm run build",
+    command: "bash",
+    args: [
+      "-c",
+      'export NEXLIFY_DIST_DIR=.next.staging NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" NEXT_PRIVATE_WORKER_THREADS=false; rm -rf .next.staging; node ./node_modules/next/dist/bin/next build && bash scripts/prepare-standalone.sh && if [ -d .next ]; then mv .next .next.old; fi && mv .next.staging .next && rm -rf .next.old',
+    ],
+  });
   return steps;
 }
 
