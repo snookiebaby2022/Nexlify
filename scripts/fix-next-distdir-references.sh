@@ -57,14 +57,16 @@ if [ -d "$TARGET/.next.staging" ] && [ "$TARGET" != "$ROOT" ]; then
   echo "fix-next-distdir: merged $TARGET/.next.staging → $TARGET/.next"
 fi
 
-# Only touch JS/JSON text under the build — avoid binary assets
+# Only touch JS/JSON text under the build — avoid binary assets and nested NFT junk
 count=0
 while IFS= read -r -d '' f; do
   if grep -q '\.next\.staging' "$f" 2>/dev/null; then
     sed -i 's|\.next\.staging|.next|g' "$f"
     count=$((count + 1))
   fi
-done < <(find "$TARGET" -type f \( -name '*.js' -o -name '*.json' -o -name '*.mjs' -o -name '*.cjs' \) -print0 2>/dev/null)
+done < <(find "$TARGET" \
+  \( -path '*/standalone/.next/standalone' -o -path '*/.next.backup' -o -path '*/node_modules/*' -o -path '*/cache/*' \) -prune -o \
+  -type f \( -name '*.js' -o -name '*.json' -o -name '*.mjs' -o -name '*.cjs' \) -print0 2>/dev/null)
 
 # Force standalone server.js distDir (baked nextConfig) to ./.next
 if [ -f "$STANDALONE/server.js" ]; then
@@ -74,7 +76,7 @@ if [ -f "$STANDALONE/server.js" ]; then
   fi
 fi
 
-# Force required-server-files.json config.distDir
+# Force required-server-files.json config.distDir (skip nested junk trees)
 while IFS= read -r -d '' rsf; do
   python3 - "$rsf" <<'PY' 2>/dev/null || true
 import json, sys
@@ -91,7 +93,9 @@ if cfg.get("distDir") != ".next":
         json.dump(data, f)
 print("fix-next-distdir: distDir=.next in", path)
 PY
-done < <(find "$TARGET" -type f -name 'required-server-files.json' -print0 2>/dev/null)
+done < <(find "$TARGET" \
+  \( -path '*/standalone/.next/standalone' -o -path '*/.next.backup' -o -path '*/node_modules/*' \) -prune -o \
+  -type f -name 'required-server-files.json' -print0 2>/dev/null)
 
 # Sanity: leftover nested staging dir should be gone
 if [ -d "$STANDALONE/.next.staging" ]; then
