@@ -43,11 +43,12 @@ deploy_panel() {
   fi
   git pull origin main || true
   chmod +x scripts/*.sh 2>/dev/null || true
-  npm install --production=false
+  npm install --include=dev --no-audit --no-fund
   if command -v npx >/dev/null 2>&1 && [ -d prisma ]; then
     npx prisma generate || true
     npx prisma migrate deploy || true
   fi
+  # Always stage when a live .next exists (run-panel-build.mjs) — never race PM2.
   npm run build
   if [ -x scripts/pm2-start.sh ]; then
     bash scripts/pm2-start.sh

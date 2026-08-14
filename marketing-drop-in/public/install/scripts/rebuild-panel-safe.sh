@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Safe panel rebuild — never builds into a live .next tree (avoids ENOENT
+# build-manifest / apple-icon collect failures while PM2 is running).
+#
+#   cd /opt/nexlify-panel && bash scripts/rebuild-panel-safe.sh
+#   curl -fsSL 'https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main/scripts/rebuild-panel-safe.sh' | sudo bash
+set -euo pipefail
+
+if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+  exec sudo -E bash "$0" "$@"
+fi
+
+find_panel() {
+  if [ -n "${PANEL_DIR:-}" ] && [ -f "${PANEL_DIR}/package.json" ]; then
+    echo "$PANEL_DIR"
+    return 0
+  fi
+  for d in /opt/nexlify-panel /home/nexlify /home/nexlify-panel; do
+    if [ -f "$d/package.json" ]; then
+      echo "$d"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ROOT="$(find_panel)" || {
+  echo "ERROR: panel not found" >&2
+  exit 1
+}
+cd "$ROOT"
+echo "=== Safe rebuild at $ROOT ==="
+
+pkill -f 'panel-update-background' 2>/dev/null || true
+pkill -f 'next build' 2>/dev/null || true
+rm -f .update-progress.pid .update-in-progress .update-progress.json
+rm -rf .next.staging
+
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
+export NEXT_PRIVATE_WORKER_THREADS=false
+export GIT_TERMINAL_PROMPT=0
+
+if [ -d .git ]; then
+  echo "==> git fetch + reset --hard origin/main"
+  git remote set-url origin https://github.com/snookiebaby2022/Nexlify.git 2>/dev/null || true
+  timeout 90 git fetch origin main || git fetch origin main
+  git reset --hard origin/main
+  chmod +x scripts/*.sh 2>/dev/null || true
+fi
+
+echo "==> deps + prisma"
+npm install --include=dev --no-audit --no-fund
+npx prisma generate || true
+npx prisma migrate deploy || npx prisma db push --accept-data-loss || true
+
+echo "==> staging build + swap"
+if [ -x scripts/apply-panel-fast-update.sh ]; then
+  bash scripts/apply-panel-fast-update.sh build-prep
+  bash scripts/apply-panel-fast-update.sh build-compile
+  bash scripts/apply-panel-fast-update.sh swap
+else
+  # Fallback: build to staging via env
+  export NEXLIFY_DIST_DIR=.next.staging
+  rm -rf .next.staging
+  node ./node_modules/next/dist/bin/next build
+  bash scripts/prepare-standalone.sh 2>/dev/null || true
+  rm -rf .next.old
+  [ -d .next ] && mv .next .next.old
+  mv .next.staging .next
+  rm -rf .next.old
+fi
+
+echo "==> restart"
+bash scripts/pm2-start.sh || bash scripts/panel-restart-safe.sh --nexlify-only || pm2 restart nexlify --update-env
+
+VER="$(node -p "require('./package.json').version" 2>/dev/null || echo unknown)"
+echo "=== Done v${VER} ==="
+for i in 1 2 3 4 5 6; do
+  if curl -sS -m 8 http://127.0.0.1:13000/api/health 2>/dev/null | grep -q '"app":"ok"'; then
+    curl -sS -m 8 http://127.0.0.1:13000/api/health || true
+    echo
+    exit 0
+  fi
+  if curl -sS -m 8 http://127.0.0.1/api/health 2>/dev/null | grep -q '"app":"ok"'; then
+    curl -sS -m 8 http://127.0.0.1/api/health || true
+    echo
+    exit 0
+  fi
+  sleep 4
+done
+echo "WARN: health not ready yet — check: pm2 logs nexlify"
+exit 0

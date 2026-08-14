@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.60",
+  "latestVersion": "1.9.61",
   "releases": [
+    {
+      "version": "1.9.61",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Fix ENOENT build-manifest during rebuild: always stage when a live .next exists; add rebuild-panel-safe.sh.",
+      "changelog": [
+        "run-panel-build.mjs stages+swaps whenever a live .next is present (avoids racing PM2)",
+        "New scripts/rebuild-panel-safe.sh one-shot for customer VPS rebuilds",
+        "Remove invalid top-level middlewareClientMaxBodySize from next.config (keep experimental)"
+      ],
+      "fixes": [
+        "SSH rebuild failed: ENOENT .next/build-manifest.json while collecting page data for /apple-icon.png"
+      ]
+    },
     {
       "version": "1.9.60",
       "date": "2026-08-14",

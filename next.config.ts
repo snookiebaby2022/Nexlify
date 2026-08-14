@@ -51,11 +51,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Raise the middleware request-body clone limit so large migration uploads
-  // aren't truncated to 10MB before reaching Route Handlers (e.g.
-  // /api/admin/migrate). Without this, big .sql exports fail with
-  // "Failed to parse body as FormData".
-  middlewareClientMaxBodySize: "2gb",
+  // middlewareClientMaxBodySize belongs under experimental (Next 15).
   serverExternalPackages: ["ioredis"],
   images: {
     formats: ['image/avif', 'image/webp'],
