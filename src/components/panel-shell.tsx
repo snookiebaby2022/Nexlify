@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { PanelTopNav } from "@/components/panel-top-nav";
 import { AdminPanelSidebar, PanelSidebar, ResellerPanelSidebar } from "@/components/panel-sidebar";
 import { PanelLiveChat } from "@/components/panel-live-chat";
@@ -62,24 +62,28 @@ export function PanelShell({
             />
             <div className="fixed inset-y-0 left-0 z-[250] lg:hidden shadow-2xl">
               {role === "ADMIN" && adminEntries ? (
-                <PanelSidebar
-                  entries={adminEntries}
-                  className="h-full"
-                  brand={title}
-                  brandHref={dashboardHref}
-                  showReport
-                  onNavigate={() => setMobileNav(false)}
-                />
-              ) : (
-                resellerSidebar && (
+                <Suspense fallback={<aside className="panel-sidebar h-full" aria-hidden />}>
                   <PanelSidebar
-                    entries={resellerSidebar}
+                    entries={adminEntries}
                     className="h-full"
                     brand={title}
                     brandHref={dashboardHref}
                     showReport
                     onNavigate={() => setMobileNav(false)}
                   />
+                </Suspense>
+              ) : (
+                resellerSidebar && (
+                  <Suspense fallback={<aside className="panel-sidebar h-full" aria-hidden />}>
+                    <PanelSidebar
+                      entries={resellerSidebar}
+                      className="h-full"
+                      brand={title}
+                      brandHref={dashboardHref}
+                      showReport
+                      onNavigate={() => setMobileNav(false)}
+                    />
+                  </Suspense>
                 )
               )}
             </div>

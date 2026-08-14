@@ -18,7 +18,7 @@ import {
 } from "@/lib/credential-generate";
 import { LineStatus, Prisma } from "@prisma/client";
 
-const DEFAULT_PAGE_SIZE = 500;
+const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 5000;
 
 export async function GET(req: NextRequest) {
@@ -29,11 +29,29 @@ export async function GET(req: NextRequest) {
   ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const where =
+  const url = new URL(req.url);
+  const search = url.searchParams.get("search")?.trim() ?? "";
+
+  const where: Prisma.LineWhereInput =
     session.role === PanelRole.ADMIN ? {} : { ownerId: session.id };
 
+  if (search) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      {
+        OR: [
+          { username: { contains: search, mode: "insensitive" } },
+          { password: { contains: search, mode: "insensitive" } },
+          { id: { contains: search, mode: "insensitive" } },
+          { externalId: { contains: search, mode: "insensitive" } },
+          { notes: { contains: search, mode: "insensitive" } },
+          { owner: { username: { contains: search, mode: "insensitive" } } },
+        ],
+      },
+    ];
+  }
+
   // Pagination
-  const url = new URL(req.url);
   const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(url.searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE)));
   const skip = (page - 1) * pageSize;

@@ -52,33 +52,21 @@ export function StreamsMassEdit({
 
 
   const loadStreams = useCallback(() => {
-
-    const params = new URLSearchParams();
-
+    const params = new URLSearchParams({
+      page: "1",
+      pageSize: "50",
+    });
     if (typeFilter) params.set("type", typeFilter);
-
     if (radioOnly) params.set("radio", "1");
-
-    const q = params.toString() ? `?${params.toString()}` : "";
-
-    fetch(`/api/admin/streams${q}`)
-
+    fetch(`/api/admin/streams?${params}`)
       .then((r) => r.json())
-
       .then((d) => {
-
         let list: Stream[] = d.streams ?? [];
-
         if (episodesOnly) {
-
           list = list.filter((s) => s.episodeNum != null || s.name.match(/S\d+E\d+/i));
-
         }
-
         setStreams(list);
-
       });
-
   }, [typeFilter, episodesOnly, radioOnly]);
 
 

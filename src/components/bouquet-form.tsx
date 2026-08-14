@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Package, Plus, Minus, ChevronUp, ChevronDown } from "lucide-react";
+import { Package, Search } from "lucide-react";
 import type { DualListItem } from "@/components/dual-list-picker";
 import { XuiDualListPicker } from "@/components/xui-dual-list-picker";
+import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/list-page-sizes";
 
 export function BouquetForm({
   bouquetId,
@@ -20,18 +21,37 @@ export function BouquetForm({
   const [name, setName] = useState("");
   const [streamIds, setStreamIds] = useState<string[]>([]);
   const [items, setItems] = useState<DualListItem[]>([]);
+  const [selectedCatalog, setSelectedCatalog] = useState<DualListItem[]>([]);
   const [typeFilter, setTypeFilter] = useState<"" | "LIVE" | "MOVIE" | "SERIES">("");
+  const [availSearch, setAvailSearch] = useState("");
+  const [pickerTotal, setPickerTotal] = useState(0);
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(!!bouquetId);
   const [saving, setSaving] = useState(false);
+  const [loadingPicker, setLoadingPicker] = useState(true);
+
+  const loadPicker = useCallback(() => {
+    setLoadingPicker(true);
+    const params = new URLSearchParams({
+      picker: "1",
+      page: "1",
+      pageSize: String(DEFAULT_LIST_PAGE_SIZE),
+    });
+    if (availSearch.trim()) params.set("search", availSearch.trim());
+    if (typeFilter) params.set("type", typeFilter);
+    fetch(`/api/admin/streams?${params}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setItems(d.items ?? []);
+        setPickerTotal(d.total ?? d.items?.length ?? 0);
+      })
+      .finally(() => setLoadingPicker(false));
+  }, [availSearch, typeFilter]);
 
   useEffect(() => {
-    fetch("/api/admin/streams?picker=1")
-      .then((r) => r.json())
-      .then((d) => setItems(d.items ?? []));
-  }, []);
-
-  const pickerItems = typeFilter ? items.filter((i) => i.sublabel === typeFilter) : items;
+    const t = setTimeout(() => loadPicker(), 250);
+    return () => clearTimeout(t);
+  }, [loadPicker]);
 
   useEffect(() => {
     if (!bouquetId) return;
@@ -40,11 +60,40 @@ export function BouquetForm({
       .then((d) => {
         if (d.bouquet) {
           setName(d.bouquet.name);
-          setStreamIds(d.streamIds ?? []);
+          const ids: string[] = d.streamIds ?? [];
+          setStreamIds(ids);
+          const fromBouquet = (d.streams ?? d.items ?? []) as DualListItem[];
+          if (Array.isArray(fromBouquet) && fromBouquet.length) {
+            setSelectedCatalog(fromBouquet);
+          } else {
+            setSelectedCatalog(
+              ids.map((id) => ({
+                id,
+                label: `Stream ${id.slice(0, 8)}…`,
+                sublabel: "LIVE",
+              }))
+            );
+          }
         }
         setLoading(false);
       });
   }, [bouquetId]);
+
+  // Merge newly loaded available items into selected catalog labels when possible
+  useEffect(() => {
+    if (!items.length || !streamIds.length) return;
+    setSelectedCatalog((prev) => {
+      const map = new Map(prev.map((i) => [i.id, i]));
+      let changed = false;
+      for (const i of items) {
+        if (streamIds.includes(i.id) && map.get(i.id)?.label !== i.label) {
+          map.set(i.id, i);
+          changed = true;
+        }
+      }
+      return changed ? streamIds.map((id) => map.get(id)!).filter(Boolean) : prev;
+    });
+  }, [items, streamIds]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -68,25 +117,39 @@ export function BouquetForm({
     window.location.href = backHref;
   }
 
+  const catalog = useMemo(() => {
+    const map = new Map<string, DualListItem>();
+    for (const i of selectedCatalog) map.set(i.id, i);
+    for (const i of items) map.set(i.id, i);
+    return Array.from(map.values());
+  }, [items, selectedCatalog]);
+
   if (loading) {
-    return <p className="text-sm" style={{ color: "var(--muted)" }}>Loading bouquet…</p>;
+    return (
+      <p className="text-sm" style={{ color: "var(--muted)" }}>
+        Loading bouquet…
+      </p>
+    );
   }
 
-  const liveCount = streamIds.filter((id) => items.find((i) => i.id === id)?.sublabel === "LIVE").length;
-  const movieCount = streamIds.filter((id) => items.find((i) => i.id === id)?.sublabel === "MOVIE").length;
-  const seriesCount = streamIds.filter((id) => items.find((i) => i.id === id)?.sublabel === "SERIES").length;
+  const liveCount = streamIds.filter((id) => catalog.find((i) => i.id === id)?.sublabel === "LIVE").length;
+  const movieCount = streamIds.filter((id) => catalog.find((i) => i.id === id)?.sublabel === "MOVIE").length;
+  const seriesCount = streamIds.filter((id) => catalog.find((i) => i.id === id)?.sublabel === "SERIES").length;
 
   return (
     <div className="max-w-5xl space-y-4">
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "rgba(0,192,239,0.15)" }}>
+          <div
+            className="w-10 h-10 rounded-lg flex items-center justify-center"
+            style={{ background: "rgba(0,192,239,0.15)" }}
+          >
             <Package size={20} style={{ color: "#00c0ef" }} />
           </div>
           <div>
             <h1 className="text-xl font-semibold">
-              {title}{name.trim() ? `: ${name}` : ""}
+              {title}
+              {name.trim() ? `: ${name}` : ""}
             </h1>
             <p className="text-xs" style={{ color: "var(--muted)" }}>
               {bouquetId ? "Edit bouquet contents and order" : "Create a new bouquet and assign streams"}
@@ -103,8 +166,10 @@ export function BouquetForm({
       </div>
 
       <form onSubmit={save} className="space-y-4">
-        {/* Name + Stats */}
-        <div className="rounded-lg border p-4 md:p-5 space-y-4" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
+        <div
+          className="rounded-lg border p-4 md:p-5 space-y-4"
+          style={{ borderColor: "var(--border)", background: "var(--card)" }}
+        >
           <div className="grid md:grid-cols-2 gap-4">
             <label className="block text-sm">
               <span className="font-medium mb-1.5 block">
@@ -117,94 +182,74 @@ export function BouquetForm({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Premium UK, Sports Pack"
-                list="bouquet-name-suggestions"
               />
-              <datalist id="bouquet-name-suggestions">
-                {items.slice(0, 20).map((i) => (
-                  <option key={i.id} value={i.label} />
-                ))}
-              </datalist>
             </label>
-
-            <div className="flex flex-wrap gap-3 items-end">
-              <div className="rounded-lg border px-3 py-2 text-center min-w-[80px]" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.1)" }}>
-                <p className="text-lg font-bold tabular-nums">{streamIds.length}</p>
-                <p className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Total</p>
-              </div>
-              {liveCount > 0 && (
-                <div className="rounded-lg border px-3 py-2 text-center min-w-[80px]" style={{ borderColor: "var(--border)", background: "rgba(34,197,94,0.05)" }}>
-                  <p className="text-lg font-bold tabular-nums text-green-400">{liveCount}</p>
-                  <p className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Live</p>
-                </div>
-              )}
-              {movieCount > 0 && (
-                <div className="rounded-lg border px-3 py-2 text-center min-w-[80px]" style={{ borderColor: "var(--border)", background: "rgba(59,130,246,0.05)" }}>
-                  <p className="text-lg font-bold tabular-nums text-blue-400">{movieCount}</p>
-                  <p className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Movies</p>
-                </div>
-              )}
-              {seriesCount > 0 && (
-                <div className="rounded-lg border px-3 py-2 text-center min-w-[80px]" style={{ borderColor: "var(--border)", background: "rgba(168,85,247,0.05)" }}>
-                  <p className="text-lg font-bold tabular-nums text-purple-400">{seriesCount}</p>
-                  <p className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Series</p>
-                </div>
-              )}
-              <div className="rounded-lg border px-3 py-2 text-center min-w-[80px]" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.1)" }}>
-                <p className="text-lg font-bold tabular-nums">{items.length}</p>
-                <p className="text-[10px] uppercase" style={{ color: "var(--muted)" }}>Catalog</p>
-              </div>
+            <div className="flex flex-wrap items-end gap-3 text-xs" style={{ color: "var(--muted)" }}>
+              <span>
+                Selected: <strong className="text-[var(--fg)]">{streamIds.length}</strong>
+              </span>
+              <span>Live {liveCount}</span>
+              <span>Movies {movieCount}</span>
+              <span>Series {seriesCount}</span>
             </div>
           </div>
         </div>
 
-        {/* Type filter */}
-        <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-xs font-medium mr-1" style={{ color: "var(--muted)" }}>Show:</span>
-          {(["", "LIVE", "MOVIE", "SERIES"] as const).map((t) => (
-            <button
-              key={t || "all"}
-              type="button"
-              className="text-xs px-3 py-1.5 rounded-full cursor-pointer transition-colors"
-              style={{
-                background: typeFilter === t ? "#3c8dbc" : "transparent",
-                color: typeFilter === t ? "#fff" : "var(--muted)",
-                border: `1px solid ${typeFilter === t ? "#3c8dbc" : "var(--border)"}`,
-              }}
-              onClick={() => setTypeFilter(t)}
+        <div
+          className="rounded-lg border p-4 space-y-3"
+          style={{ borderColor: "var(--border)", background: "var(--card)" }}
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm flex-1 min-w-[200px]">
+              <Search size={16} style={{ color: "var(--muted)" }} />
+              <input
+                type="search"
+                className="flex-1 rounded border px-3 py-2 text-sm bg-transparent"
+                style={{ borderColor: "var(--border)" }}
+                placeholder="Search streams (loads 50 at a time)…"
+                value={availSearch}
+                onChange={(e) => setAvailSearch(e.target.value)}
+              />
+            </label>
+            <select
+              className="rounded border px-3 py-2 text-sm bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)}
             >
-              {t === "" ? "All" : t === "LIVE" ? "Channels" : t === "MOVIE" ? "Movies" : "Series"}
-            </button>
-          ))}
-          <span className="text-xs ml-auto" style={{ color: "var(--muted)" }}>
-            {pickerItems.length} available
-          </span>
-        </div>
-
-        {/* Dual list picker */}
-        <XuiDualListPicker
-          items={pickerItems}
-          allItems={items}
-          selectedIds={streamIds}
-          onChange={setStreamIds}
-        />
-
-        {/* Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t" style={{ borderColor: "var(--border)" }}>
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={saving || !name.trim()}
-              className="rounded px-6 py-2.5 font-medium cursor-pointer disabled:opacity-50"
-              style={{ background: "var(--accent)", color: "#fff" }}
-            >
-              {saving ? "Saving…" : bouquetId ? "Save bouquet" : "Add bouquet"}
-            </button>
-            <Link href={backHref} className="rounded px-6 py-2.5 text-sm font-medium inline-flex items-center border" style={{ borderColor: "var(--border)" }}>
-              Cancel
-            </Link>
+              <option value="">All types</option>
+              <option value="LIVE">Live TV</option>
+              <option value="MOVIE">Movies</option>
+              <option value="SERIES">TV Series</option>
+            </select>
           </div>
-          {msg && <p className="text-sm" style={{ color: msg.includes("failed") || msg.includes("error") ? "var(--danger)" : "#22c55e" }}>{msg}</p>}
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            {loadingPicker
+              ? "Loading streams…"
+              : `Showing ${items.length.toLocaleString()} of ${pickerTotal.toLocaleString()} matching streams (max ${DEFAULT_LIST_PAGE_SIZE} per search). Use search to find more.`}
+          </p>
+          <XuiDualListPicker
+            items={items}
+            allItems={catalog}
+            selectedIds={streamIds}
+            onChange={setStreamIds}
+          />
         </div>
+
+        {msg ? (
+          <p className="text-sm" style={{ color: "var(--danger)" }}>
+            {msg}
+          </p>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={saving || !name.trim()}
+          className="rounded px-5 py-2.5 text-sm font-medium disabled:opacity-50"
+          style={{ background: "var(--accent)", color: "#fff" }}
+        >
+          {saving ? "Saving…" : bouquetId ? "Save bouquet" : "Create bouquet"}
+        </button>
       </form>
     </div>
   );

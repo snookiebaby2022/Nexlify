@@ -4,9 +4,9 @@
 
 import Link from "next/link";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 
 import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
@@ -24,13 +24,30 @@ import { PanelSidebarSuggestions } from "@/components/panel-sidebar-suggestions"
 
 
 
-function pathActive(pathname: string, href: string) {
+function pathActive(pathname: string, href: string, search: string = "") {
 
-  // Strip query params from href for comparison
+  const [cleanHref, hrefQuery = ""] = href.split("?");
 
-  const cleanHref = href.split("?")[0];
+  // Query-aware match for links like /admin/categories?type=MOVIE
+  if (hrefQuery) {
+    if (pathname !== cleanHref) return false;
+    const want = new URLSearchParams(hrefQuery);
+    const have = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    for (const [k, v] of want.entries()) {
+      if ((have.get(k) ?? "").toUpperCase() !== v.toUpperCase()) return false;
+    }
+    return true;
+  }
 
-  if (pathname === cleanHref) return true;
+  if (pathname === cleanHref) {
+    // Prefer exact query links when on categories type pages — bare path matches LIVE default only
+    if (pathname === "/admin/categories" || pathname === "/admin/management/categories") {
+      const have = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+      const t = (have.get("type") ?? "LIVE").toUpperCase();
+      return t === "LIVE";
+    }
+    return true;
+  }
 
   if (!pathname.startsWith(`${cleanHref}/`)) return false;
 
@@ -164,9 +181,9 @@ function pathActive(pathname: string, href: string) {
 
 
 
-function groupActive(pathname: string, group: SidebarNavGroup) {
+function groupActive(pathname: string, group: SidebarNavGroup, search: string = "") {
 
-  return group.items.some((i) => pathActive(pathname, i.href));
+  return group.items.some((i) => pathActive(pathname, i.href, search));
 
 }
 
@@ -200,12 +217,17 @@ function groupItemsBySection(items: SidebarNavGroup["items"]) {
 
 
 
-function activeGroupIds(pathname: string, entries: SidebarNavEntry[]): Set<string> {
+function activeGroupIds(pathname: string, entries: SidebarNavEntry[], search: string = ""): Set<string> {
   const next = new Set<string>();
   for (const entry of entries) {
-    if (entry.kind === "group" && groupActive(pathname, entry.group)) {
+    if (entry.kind === "group" && groupActive(pathname, entry.group, search)) {
       next.add(entry.group.id);
     }
+  }
+  // Accordion: at most one open group from route
+  if (next.size > 1) {
+    const first = next.values().next().value as string;
+    return new Set([first]);
   }
   return next;
 }
@@ -257,6 +279,7 @@ function persistCollapsed(collapsed: boolean) {
 function SidebarGroup({
   group,
   pathname,
+  search,
   open,
   collapsed,
   onToggle,
@@ -264,12 +287,13 @@ function SidebarGroup({
 }: {
   group: SidebarNavGroup;
   pathname: string;
+  search: string;
   open: boolean;
   collapsed: boolean;
   onToggle: () => void;
   onNavigate: () => void;
 }) {
-  const active = groupActive(pathname, group);
+  const active = groupActive(pathname, group, search);
   const sections = groupItemsBySection(group.items);
 
   const submenu = (
@@ -281,7 +305,7 @@ function SidebarGroup({
           )}
           <div className="panel-nav-section-items">
             {section.items.map((item) => {
-              const itemActive = pathActive(pathname, item.href);
+              const itemActive = pathActive(pathname, item.href, search);
               return (
                 <Link
                   key={item.href}
@@ -353,27 +377,45 @@ export function PanelSidebar({
 }) {
 
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const search = searchParams?.toString() ? `?${searchParams.toString()}` : "";
+  const navRef = useRef<HTMLElement | null>(null);
+  const scrollPosRef = useRef(0);
 
   const [collapsed, setCollapsed] = useState(false);
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     setCollapsed(readPersistedCollapsed());
+    const active = activeGroupIds(pathname, entries, search);
+    if (active.size > 0) {
+      setOpenIds(active);
+      persistOpenIds(active);
+      return;
+    }
     const persisted = readPersistedOpenIds();
-    const active = activeGroupIds(pathname, entries);
-    setOpenIds(new Set([...persisted, ...active]));
+    // Accordion: restore at most one persisted group
+    const one = persisted.values().next().value;
+    setOpenIds(one ? new Set([one as string]) : new Set());
   }, []);
 
   useEffect(() => {
+    // Preserve scroll position when route changes expand/collapse groups
+    if (navRef.current) scrollPosRef.current = navRef.current.scrollTop;
     setOpenIds((prev) => {
-      const active = activeGroupIds(pathname, entries);
-      if (active.size === 0) return prev;
-      // Replace with active groups (don't merge - collapse others)
-      const next = new Set(active);
-      persistOpenIds(next);
-      return next;
+      const active = activeGroupIds(pathname, entries, search);
+      if (active.size === 0) {
+        if (prev.size <= 1) return prev;
+        const first = prev.values().next().value as string | undefined;
+        return first ? new Set([first]) : new Set();
+      }
+      persistOpenIds(active);
+      return active;
     });
-  }, [pathname, entries]);
+    requestAnimationFrame(() => {
+      if (navRef.current) navRef.current.scrollTop = scrollPosRef.current;
+    });
+  }, [pathname, search, entries]);
 
   useEffect(() => {
     if (!collapsed || openIds.size === 0) return;
@@ -432,10 +474,10 @@ export function PanelSidebar({
           <PanelBrandMark name={brand} href={brandHref} size="sm" />
         </div>
       )}
-      <nav className="panel-sidebar-nav flex-1">
+      <nav ref={navRef} className="panel-sidebar-nav flex-1">
         {entries.map((entry) => {
           if (entry.kind === "link") {
-            const active = pathActive(pathname, entry.link.href);
+            const active = pathActive(pathname, entry.link.href, search);
             return (
               <Link
                 key={entry.link.href}
@@ -457,6 +499,7 @@ export function PanelSidebar({
               key={entry.group.id}
               group={entry.group}
               pathname={pathname}
+              search={search}
               open={displayOpenIds.has(entry.group.id)}
               collapsed={collapsed}
               onToggle={() => toggle(entry.group.id)}
@@ -502,12 +545,14 @@ export function AdminPanelSidebar({
   brandHref?: string;
 } = {}) {
   return (
-    <PanelSidebar
-      entries={withSidebarItemIcons(getAdminSidebarNav())}
-      brand={brand}
-      brandHref={brandHref}
-      showReport
-    />
+    <Suspense fallback={<aside className="panel-sidebar" aria-hidden />}>
+      <PanelSidebar
+        entries={withSidebarItemIcons(getAdminSidebarNav())}
+        brand={brand}
+        brandHref={brandHref}
+        showReport
+      />
+    </Suspense>
   );
 }
 
@@ -519,12 +564,14 @@ export function ResellerPanelSidebar({
   brandHref?: string;
 } = {}) {
   return (
-    <PanelSidebar
-      entries={withSidebarItemIcons(getResellerSidebarNav())}
-      brand={brand}
-      brandHref={brandHref}
-      showReport
-    />
+    <Suspense fallback={<aside className="panel-sidebar" aria-hidden />}>
+      <PanelSidebar
+        entries={withSidebarItemIcons(getResellerSidebarNav())}
+        brand={brand}
+        brandHref={brandHref}
+        showReport
+      />
+    </Suspense>
   );
 }
 

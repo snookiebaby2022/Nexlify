@@ -1,7 +1,29 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.69",
+  "latestVersion": "1.9.70",
   "releases": [
+    {
+      "version": "1.9.70",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Fix admin UI freezes and errors: lines pagination, Add Line crash, sidebar accordion, category type tabs, bouquet/stream pickers.",
+      "changelog": [
+        "Manage/Mass Edit Lines load 50 at a time with Show entries + server search (no more 5000-row fetch)",
+        "Add Line client crash fixed (browser-safe credential generate, no Node crypto)",
+        "Add Server HTTP ports no longer list 8080 twice",
+        "Sidebar opens one category at a time, highlights query-aware links, preserves scroll position",
+        "Categories Live/Movies/Series tabs follow URL ?type= and sidebar clicks",
+        "Add Bouquet / stream pickers default to 50 rows; Manage Streams clarifies live vs movies/series counts"
+      ],
+      "fixes": [
+        "Application error on Add Line",
+        "Manage Lines and Mass Edit Lines delay/freeze",
+        "Duplicate 8080 on Add Server HTTP Ports",
+        "Sidebar multi-open groups and jump on click",
+        "Category type stuck on Live TV",
+        "Add Bouquet freezing with full stream catalog"
+      ]
+    },
     {
       "version": "1.9.69",
       "date": "2026-08-14",

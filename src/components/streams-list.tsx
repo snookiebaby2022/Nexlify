@@ -131,6 +131,23 @@ export function StreamsList({
     }
   }, []);
 
+  const [typeTotals, setTypeTotals] = useState<{ LIVE?: number; MOVIE?: number; SERIES?: number }>({});
+
+  useEffect(() => {
+    fetch("/api/admin/streams?page=1&pageSize=1&type=LIVE")
+      .then((r) => r.json())
+      .then((d) => setTypeTotals((t) => ({ ...t, LIVE: d.total ?? 0 })))
+      .catch(() => {});
+    fetch("/api/admin/streams?page=1&pageSize=1&type=MOVIE")
+      .then((r) => r.json())
+      .then((d) => setTypeTotals((t) => ({ ...t, MOVIE: d.total ?? 0 })))
+      .catch(() => {});
+    fetch("/api/admin/streams?page=1&pageSize=1&type=SERIES")
+      .then((r) => r.json())
+      .then((d) => setTypeTotals((t) => ({ ...t, SERIES: d.total ?? 0 })))
+      .catch(() => {});
+  }, []);
+
   const load = useCallback(() => {
     const params = new URLSearchParams({
       page: String(page),
@@ -194,7 +211,22 @@ export function StreamsList({
   return (
     <div className="xui-streams-page space-y-4">
       <div className="xui-streams-topbar">
-        <h1 className="xui-streams-title">{title === "Manage Streams" ? "Streams" : title}</h1>
+        <div>
+          <h1 className="xui-streams-title">
+            {title === "Manage Streams" || title === "Manage Live Streams" ? "Live Streams" : title}
+          </h1>
+          {type === "LIVE" ? (
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              Live TV only
+              {typeTotals.LIVE != null ? ` · ${typeTotals.LIVE.toLocaleString()} live` : ""}
+              {typeTotals.MOVIE != null ? ` · ${typeTotals.MOVIE.toLocaleString()} movies (Manage Movies)` : ""}
+              {typeTotals.SERIES != null
+                ? ` · ${typeTotals.SERIES.toLocaleString()} series (Manage Series)`
+                : ""}
+              . Movies and TV series are separate pages.
+            </p>
+          ) : null}
+        </div>
         <div className="xui-streams-topbar-actions">
           {importHref && (
             <Link href={importHref} className="xui-streams-btn xui-streams-btn--ghost">

@@ -1,10 +1,23 @@
-import { randomInt } from "crypto";
-
 /** Minimum length for line usernames and passwords (panel-wide). */
 export const MIN_LINE_CREDENTIAL_LENGTH = 6;
 
 const USER_CHARS = "abcdefghijkmnopqrstuvwxyz";
 const PASS_CHARS = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ";
+
+/**
+ * Browser-safe random int in [0, max).
+ * Avoids Node `crypto` so this module can be imported from client components
+ * (Add Line / Edit Line) without causing a client-side Application error.
+ */
+function randomInt(max: number): number {
+  if (max <= 0) return 0;
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    const buf = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(buf);
+    return buf[0] % max;
+  }
+  return Math.floor(Math.random() * max);
+}
 
 /** Strip everything except A–Z / a–z (line passwords are letters only). */
 export function lettersOnly(value: string): string {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FilterX,
   LayoutList,
@@ -18,6 +18,7 @@ import {
   type TextFieldState,
   type TriState,
 } from "@/lib/lines-mass-edit";
+import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
 
 function XuiPill({ value, variant }: { value: string; variant: "yes" | "no" }) {
   return <span className={`xui-pill xui-pill--${variant}`}>{value}</span>;
@@ -116,37 +117,50 @@ const DEFAULT_FORM = {
 export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "reseller" }) {
   const base = panel === "reseller" ? "/reseller" : "/admin";
   const [lines, setLines] = useState<ManageLineRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_LIST_PAGE_SIZE);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState(DEFAULT_FORM);
 
   function load() {
-    fetch("/api/admin/lines")
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    if (search.trim()) params.set("search", search.trim());
+    fetch(`/api/admin/lines?${params}`)
       .then((r) => r.json())
-      .then((d) => setLines(d.lines ?? []));
+      .then((d) => {
+        setLines(d.lines ?? []);
+        setTotal(d.pagination?.total ?? d.lines?.length ?? 0);
+      });
   }
 
   useEffect(() => {
-    load();
-  }, []);
+    const t = setTimeout(() => {
+      setSearch((prev) => {
+        if (prev === searchInput) return prev;
+        setPage(1);
+        return searchInput;
+      });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
-  const filtered = useMemo(() => {
-    let list = lines;
-    const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        (l) =>
-          l.username.toLowerCase().includes(q) ||
-          l.password.toLowerCase().includes(q) ||
-          l.id.toLowerCase().includes(q) ||
-          (l.owner?.username ?? "").toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [lines, search]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on page/size/search
+  }, [page, pageSize, search]);
+
+  const filtered = lines;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(page, totalPages);
 
   function toggleAll(checked: boolean) {
     setSelected(checked ? new Set(filtered.map((l) => l.id)) : new Set());
@@ -250,7 +264,9 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                   className="xui-lines-icon-btn"
                   onClick={() => {
                     setSearch("");
+                    setSearchInput("");
                     setSearchOpen(false);
+                    setPage(1);
                   }}
                   title="Clear filters"
                 >
@@ -274,8 +290,8 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                   type="search"
                   className="flex-1 rounded border px-3 py-1.5 text-sm bg-transparent"
                   style={{ borderColor: "var(--border)" }}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
                   autoFocus={searchOpen}
                 />
               </label>
@@ -352,6 +368,56 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t text-sm"
+            style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.08)" }}
+          >
+            <p style={{ color: "var(--muted)" }}>
+              Total: <strong className="text-[var(--fg)]">{total.toLocaleString()}</strong> · This page:{" "}
+              <strong className="text-[var(--fg)]">{filtered.length.toLocaleString()}</strong>
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-xs" style={{ color: "var(--muted)" }}>
+                Show entries
+                <select
+                  className="xui-lines-select py-1"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(parseInt(e.target.value, 10));
+                    setPage(1);
+                  }}
+                >
+                  {LIST_PAGE_SIZE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                disabled={safePage <= 1}
+                className="rounded px-3 py-1 border disabled:opacity-40 cursor-pointer"
+                style={{ borderColor: "var(--border)" }}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </button>
+              <span className="tabular-nums px-2">
+                {safePage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={safePage >= totalPages}
+                className="rounded px-3 py-1 border disabled:opacity-40 cursor-pointer"
+                style={{ borderColor: "var(--border)" }}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
 

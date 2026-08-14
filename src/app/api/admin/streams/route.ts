@@ -61,7 +61,11 @@ export async function GET(req: NextRequest) {
     200,
     Math.max(1, parseInt(req.nextUrl.searchParams.get("pageSize") ?? "50", 10) || 50)
   );
-  const paginate = req.nextUrl.searchParams.has("page") || req.nextUrl.searchParams.has("pageSize");
+  // Picker UIs must never load the full catalog (can freeze the panel on ~20k streams).
+  const paginate =
+    picker ||
+    req.nextUrl.searchParams.has("page") ||
+    req.nextUrl.searchParams.has("pageSize");
   const withStats = req.nextUrl.searchParams.get("withStats") === "1";
   const search = req.nextUrl.searchParams.get("search")?.trim();
   const categoryId = req.nextUrl.searchParams.get("categoryId")?.trim();
@@ -209,23 +213,18 @@ export async function GET(req: NextRequest) {
 
 
   if (picker) {
-
+    const total = await prisma.stream.count({ where });
     return NextResponse.json({
-
       items: streams.map((s) => ({
-
         id: s.id,
-
         label: s.name,
-
         sublabel: s.type,
-
         group: s.category?.name ?? undefined,
-
       })),
-
+      total,
+      page,
+      pageSize,
     });
-
   }
 
 

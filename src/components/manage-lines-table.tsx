@@ -83,19 +83,35 @@ export function ManageLinesTable({
   editLineId,
   onRefresh,
   panel = "admin",
+  serverTotal,
+  serverPage,
+  serverPageSize,
+  serverSearch,
+  onServerPageChange,
+  onServerPageSizeChange,
+  onServerSearchChange,
 }: {
   lines: ManageLineRow[];
   bouquets: { id: string; name: string }[];
   editLineId?: string | null;
   onRefresh: () => void;
   panel?: "admin" | "reseller";
+  /** When set, pagination/search are server-driven (avoid loading thousands of rows). */
+  serverTotal?: number;
+  serverPage?: number;
+  serverPageSize?: number;
+  serverSearch?: string;
+  onServerPageChange?: (page: number) => void;
+  onServerPageSizeChange?: (size: number) => void;
+  onServerSearchChange?: (q: string) => void;
 }) {
   const router = useRouter();
   const base = panel === "reseller" ? "/reseller" : "/admin";
-  const [search, setSearch] = useState("");
+  const serverMode = typeof serverTotal === "number" && !!onServerPageChange;
+  const [search, setSearch] = useState(serverSearch ?? "");
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [pageSize, setPageSize] = useState(50);
-  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(serverPageSize ?? 50);
+  const [page, setPage] = useState(serverPage ?? 1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const isMdUp = useMediaQuery("(min-width: 768px)");
@@ -105,41 +121,66 @@ export function ManageLinesTable({
   const [createdBanner, setCreatedBanner] = useState("");
 
   useEffect(() => {
+    if (typeof serverSearch === "string") setSearch(serverSearch);
+  }, [serverSearch]);
+  useEffect(() => {
+    if (typeof serverPage === "number") setPage(serverPage);
+  }, [serverPage]);
+  useEffect(() => {
+    if (typeof serverPageSize === "number") setPageSize(serverPageSize);
+  }, [serverPageSize]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const sp = new URLSearchParams(window.location.search);
     const created = sp.get("created")?.trim();
     const q = sp.get("q")?.trim();
     if (created) {
       setSearch(created);
+      onServerSearchChange?.(created);
       setCreatedBanner(`Line “${created}” created — showing at top of search.`);
       setSortKey("createdAt");
       setSortDir("desc");
     } else if (q) {
       setSearch(q);
+      onServerSearchChange?.(q);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot URL bootstrap
   }, []);
+
+  // Debounce server search
+  useEffect(() => {
+    if (!serverMode || !onServerSearchChange) return;
+    const t = setTimeout(() => {
+      if (search !== (serverSearch ?? "")) onServerSearchChange(search);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search, serverMode, onServerSearchChange, serverSearch]);
 
   function closeEdit() {
     router.push(`${base}/lines`);
   }
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    let list = lines;
-    if (q) {
-      list = list.filter(
-        (l) =>
-          (l.username ?? "").toLowerCase().includes(q) ||
-          (l.password ?? "").toLowerCase().includes(q) ||
-          (l.id ?? "").toLowerCase().includes(q) ||
-          (l.owner?.username?.toLowerCase().includes(q) ?? false) ||
-          (l.externalId?.toLowerCase().includes(q) ?? false) ||
-          (l.lastWatchedStream?.name?.toLowerCase().includes(q) ?? false) ||
-          (l.lastWatchedIp?.toLowerCase().includes(q) ?? false) ||
-          (l.bouquets ?? []).some((b) => b.bouquet?.name?.toLowerCase().includes(q))
-      );
+    // Server mode already filtered/paginated — keep sort for current page only.
+    let list = [...lines];
+    if (!serverMode) {
+      const q = search.trim().toLowerCase();
+      if (q) {
+        list = list.filter(
+          (l) =>
+            (l.username ?? "").toLowerCase().includes(q) ||
+            (l.password ?? "").toLowerCase().includes(q) ||
+            (l.id ?? "").toLowerCase().includes(q) ||
+            (l.owner?.username?.toLowerCase().includes(q) ?? false) ||
+            (l.externalId?.toLowerCase().includes(q) ?? false) ||
+            (l.lastWatchedStream?.name?.toLowerCase().includes(q) ?? false) ||
+            (l.lastWatchedIp?.toLowerCase().includes(q) ?? false) ||
+            (l.bouquets ?? []).some((b) => b.bouquet?.name?.toLowerCase().includes(q))
+        );
+      }
     }
-    list = [...list].sort((a, b) => {
+    list.sort((a, b) => {
       let av: string | number = "";
       let bv: string | number = "";
       if (sortKey === "username") {
@@ -160,18 +201,20 @@ export function ManageLinesTable({
       return 0;
     });
     return list;
-  }, [lines, search, sortKey, sortDir]);
+  }, [lines, search, sortKey, sortDir, serverMode]);
 
   useEffect(() => {
     if (!autoRefresh) return;
     const id = window.setInterval(() => onRefresh(), 30_000);
     return () => window.clearInterval(id);
   }, [autoRefresh, onRefresh]);
-  const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const start = (safePage - 1) * pageSize;
-  const pageRows = filtered.slice(start, start + pageSize);
+  const total = serverMode ? serverTotal! : filtered.length;
+  const effectivePageSize = serverMode ? (serverPageSize ?? pageSize) : pageSize;
+  const totalPages = Math.max(1, Math.ceil(total / effectivePageSize));
+  const safePage = Math.min(serverMode ? (serverPage ?? page) : page, totalPages);
+  const pageRows = serverMode
+    ? filtered
+    : filtered.slice((safePage - 1) * effectivePageSize, (safePage - 1) * effectivePageSize + effectivePageSize);
 
   function toggleSort(key: typeof sortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -529,18 +572,32 @@ export function ManageLinesTable({
         style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.08)" }}
       >
         <p style={{ color: "var(--muted)" }}>
-          Total: <strong className="text-[var(--fg)]">{lines.length}</strong> · Filtered:{" "}
-          <strong className="text-[var(--fg)]">{total}</strong>
+          Total: <strong className="text-[var(--fg)]">{total.toLocaleString()}</strong>
+          {!serverMode ? (
+            <>
+              {" "}
+              · Filtered: <strong className="text-[var(--fg)]">{filtered.length.toLocaleString()}</strong>
+            </>
+          ) : (
+            <>
+              {" "}
+              · This page: <strong className="text-[var(--fg)]">{pageRows.length.toLocaleString()}</strong>
+            </>
+          )}
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-xs" style={{ color: "var(--muted)" }}>
             Show entries
             <select
               className="xui-lines-select py-1"
-              value={pageSize}
+              value={effectivePageSize}
               onChange={(e) => {
-                setPageSize(parseInt(e.target.value, 10));
-                setPage(1);
+                const n = parseInt(e.target.value, 10);
+                if (serverMode && onServerPageSizeChange) onServerPageSizeChange(n);
+                else {
+                  setPageSize(n);
+                  setPage(1);
+                }
               }}
             >
               {PAGE_SIZES.map((n) => (
@@ -555,7 +612,11 @@ export function ManageLinesTable({
             disabled={safePage <= 1}
             className="rounded px-3 py-1 border disabled:opacity-40 cursor-pointer"
             style={{ borderColor: "var(--border)" }}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            onClick={() => {
+              const next = Math.max(1, safePage - 1);
+              if (serverMode && onServerPageChange) onServerPageChange(next);
+              else setPage(next);
+            }}
           >
             Previous
           </button>
@@ -567,7 +628,11 @@ export function ManageLinesTable({
             disabled={safePage >= totalPages}
             className="rounded px-3 py-1 border disabled:opacity-40 cursor-pointer"
             style={{ borderColor: "var(--border)" }}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onClick={() => {
+              const next = Math.min(totalPages, safePage + 1);
+              if (serverMode && onServerPageChange) onServerPageChange(next);
+              else setPage(next);
+            }}
           >
             Next
           </button>

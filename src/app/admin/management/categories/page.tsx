@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, memo, useCallback } from "react";
+import { useEffect, useMemo, useState, memo, useCallback, Suspense } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowDown, ArrowUp, ChevronRight, ChevronDown, Folder, FolderOpen, Plus, Zap } from "lucide-react";
 import {
   CategoryTypeTabs,
@@ -518,9 +519,17 @@ const TreeRow = memo(function TreeRow({
   );
 });
 
-export default function ManagementCategoriesPage() {
+function ManagementCategoriesInner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const typeFromUrl = searchParams.get("type")?.toUpperCase();
+  const initialTab: CategoryTab =
+    typeFromUrl === "LIVE" || typeFromUrl === "MOVIE" || typeFromUrl === "SERIES" || typeFromUrl === "RADIO"
+      ? typeFromUrl
+      : "LIVE";
   const [allCategories, setAllCategories] = useState<CategoryRow[]>([]);
-  const [tab, setTab] = useState<CategoryTab>("LIVE");
+  const [tab, setTab] = useState<CategoryTab>(initialTab);
   const [name, setName] = useState("");
   const [parentId, setParentId] = useState("");
   const [isAdult, setIsAdult] = useState(false);
@@ -546,20 +555,20 @@ export default function ManagementCategoriesPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const raw = new URLSearchParams(window.location.search).get("type")?.toUpperCase();
+    const raw = searchParams.get("type")?.toUpperCase();
     if (raw === "LIVE" || raw === "MOVIE" || raw === "SERIES" || raw === "RADIO") {
       setTab(raw);
+    } else if (!raw) {
+      setTab("LIVE");
     }
-  }, []);
+  }, [searchParams]);
 
   function changeTab(next: CategoryTab) {
     setTab(next);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("type", next);
-      window.history.replaceState({}, "", url.toString());
-    }
+    const base = pathname.includes("/management/categories")
+      ? "/admin/management/categories"
+      : "/admin/categories";
+    router.replace(`${base}?type=${next}`);
   }
   const tabCategories = useMemo(
     () => allCategories.filter((c) => (c.categoryType ?? "LIVE") === tab),
@@ -707,7 +716,7 @@ export default function ManagementCategoriesPage() {
             className="mt-1.5 w-full rounded border px-3 py-2 panel-select bg-transparent"
             style={{ borderColor: "var(--border)" }}
             value={tab}
-            onChange={(e) => setTab(e.target.value as CategoryTab)}
+            onChange={(e) => changeTab(e.target.value as CategoryTab)}
           >
             {(Object.keys(CATEGORY_TYPE_LABELS) as CategoryTab[]).map((k) => (
               <option key={k} value={k}>
@@ -795,3 +804,18 @@ export default function ManagementCategoriesPage() {
     </div>
   );
 }
+
+export default function ManagementCategoriesPage() {
+  return (
+    <Suspense
+      fallback={
+        <p className="text-sm p-6" style={{ color: "var(--muted)" }}>
+          Loading categories…
+        </p>
+      }
+    >
+      <ManagementCategoriesInner />
+    </Suspense>
+  );
+}
+
