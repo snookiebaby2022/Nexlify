@@ -1,14 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
-
-function panelApiSecret(): string | null {
-  return (
-    process.env.PANEL_API_SECRET?.trim() ??
-    process.env.NEXLIFY_PANEL_API_SECRET?.trim() ??
-    null
-  );
-}
+import { apiKeyForPanelUrl } from "@/lib/panel-sync";
 
 function normalizePanelUrl(raw: string): string | null {
   const trimmed = raw.trim();
@@ -40,12 +33,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const secret = panelApiSecret();
-  console.log("[remote-unlock-ip] secret available:", secret ? "YES" : "NO");
-  if (!secret) {
-    return NextResponse.json({ error: "PANEL_API_SECRET not configured" }, { status: 500 });
-  }
-
   const body = await req.json().catch(() => ({}));
   const { panelUrls, lineIds, usernames, unlockAll, email } = body as {
     panelUrls: string[];
@@ -75,7 +62,11 @@ export async function POST(req: Request) {
       continue;
     }
     try {
-      console.log("[remote-unlock-ip] calling panel:", url, "unlockAll:", unlockAll);
+      const secret = await apiKeyForPanelUrl(url);
+      if (!secret) {
+        results.push({ url, ok: false, error: "No API secret registered for this panel" });
+        continue;
+      }
       const res = await fetch(`${url}/api/admin/remote-unlock-ip`, {
         method: "POST",
         headers: {
@@ -95,7 +86,6 @@ export async function POST(req: Request) {
       }
 
       const data = await res.json();
-      console.log("[remote-unlock-ip] panel response:", res.status, JSON.stringify(data).slice(0, 200));
       results.push({
         url,
         ok: res.ok && data.ok === true,

@@ -19,9 +19,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Metrics token not configured" }, { status: 503 });
   }
   const auth = req.headers.get("authorization") ?? "";
-  const q = req.nextUrl.searchParams.get("token") ?? "";
   const bearer = auth.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : "";
-  if (!secretsEqual(bearer, token) && !secretsEqual(q, token)) {
+  if (!secretsEqual(bearer, token)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -31,7 +30,9 @@ export async function GET(req: NextRequest) {
       prisma.line.count(),
       prisma.stream.count({ where: { isActive: true } }),
       prisma.stream.count({ where: { isActive: true, lastProbeOk: false } }),
-      prisma.liveConnection.count(),
+      prisma.liveConnection.count({
+        where: { lastSeenAt: { gte: new Date(Date.now() - 2 * 60 * 1000) } },
+      }),
       prisma.streamServer.findMany({
         select: { id: true, name: true, isActive: true, healthStatus: true, maxClients: true },
       }),

@@ -9,6 +9,20 @@ const secret =
   process.env.NEXLIFY_PANEL_API_SECRET?.trim() ??
   "";
 
+async function secretForUrl(panelUrl: string): Promise<string> {
+  try {
+    const row = await prisma.license.findFirst({
+      where: { panelUrl, panelApiSecret: { not: null } },
+      orderBy: { activatedAt: "desc" },
+      select: { panelApiSecret: true },
+    });
+    if (row?.panelApiSecret?.trim()) return row.panelApiSecret.trim();
+  } catch {
+    /* schema may not have panelApiSecret until migrate */
+  }
+  return secret;
+}
+
 function normalizeUrl(raw: string | null | undefined): string {
   return String(raw ?? "")
     .trim()
@@ -16,11 +30,13 @@ function normalizeUrl(raw: string | null | undefined): string {
 }
 
 async function triggerUpdate(panelUrl: string) {
+  const key = await secretForUrl(panelUrl);
+  if (!key) throw new Error("No API secret for panel");
   const res = await fetch(`${panelUrl}/api/internal/panel-update`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-panel-internal-secret": secret,
+      "x-panel-internal-secret": key,
     },
     body: JSON.stringify({ action: "trigger" }),
     signal: AbortSignal.timeout(25_000),
@@ -37,8 +53,7 @@ async function triggerUpdate(panelUrl: string) {
 
 async function main() {
   if (!secret) {
-    console.error("PANEL_API_SECRET not set");
-    process.exit(1);
+    console.warn("PANEL_API_SECRET not set — will use per-panel secrets from licenses only");
   }
 
   const rows = await prisma.license.findMany({

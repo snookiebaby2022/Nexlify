@@ -35,7 +35,7 @@ export default function MonitoringSettingsPage() {
               key: "metricsExportToken",
               label: "Metrics bearer token",
               type: "password",
-              hint: "Required when enabled. Send as Authorization: Bearer <token> or ?token=",
+              hint: "Required when enabled. Scrape with Authorization: Bearer <token> (query-string tokens are not accepted).",
             },
           ],
         },

@@ -1,12 +1,18 @@
 import { PrismaClient, PanelRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { randomBytes } from "crypto";
 
 const prisma = new PrismaClient();
 
-/** Minimal seed — admin + demo reseller + panel name (no demo lines/streams). */
+/** Minimal seed — admin + optional demo reseller. Production uses a random unusable hash until install sets the password. */
 async function main() {
-  const adminHash = await bcrypt.hash("admin123", 10);
-  const resellerHash = await bcrypt.hash("reseller123", 10);
+  const adminPass =
+    process.env.SEED_ADMIN_PASSWORD?.trim() ||
+    process.env.INSTALL_ADMIN_PASSWORD?.trim() ||
+    "";
+  const resellerPass = process.env.SEED_RESELLER_PASSWORD?.trim() || "";
+  const adminHash = await bcrypt.hash(adminPass || randomBytes(32).toString("hex"), 12);
+  const resellerHash = await bcrypt.hash(resellerPass || randomBytes(32).toString("hex"), 12);
 
   const admin = await prisma.panelUser.upsert({
     where: { username: "admin" },
@@ -20,18 +26,20 @@ async function main() {
     },
   });
 
-  await prisma.panelUser.upsert({
-    where: { username: "reseller" },
-    update: { isActive: true, passwordHash: resellerHash },
-    create: {
-      username: "reseller",
-      passwordHash: resellerHash,
-      role: PanelRole.RESELLER,
-      credits: 10000,
-      accessCode: "resellerapi",
-      parentId: admin.id,
-    },
-  });
+  if (resellerPass) {
+    await prisma.panelUser.upsert({
+      where: { username: "reseller" },
+      update: { isActive: true, passwordHash: resellerHash },
+      create: {
+        username: "reseller",
+        passwordHash: resellerHash,
+        role: PanelRole.RESELLER,
+        credits: 10000,
+        accessCode: "resellerapi",
+        parentId: admin.id,
+      },
+    });
+  }
 
   await prisma.panelSetting.upsert({
     where: { key: "panel_name" },
@@ -54,7 +62,7 @@ async function main() {
 
   console.log("Seed complete — Nexlify (minimal, no demo content)");
   if (process.env.QUIET_SEED !== "1") {
-    console.log("Admin default password is set by install script — not logged here.");
+    console.log("Admin password is set by the install script — not logged here.");
   }
 }
 

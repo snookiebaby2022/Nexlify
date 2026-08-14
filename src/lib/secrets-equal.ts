@@ -14,3 +14,15 @@ export function secretsEqual(provided: string | null | undefined, expected: stri
   }
   return timingSafeEqual(a, b);
 }
+
+export const BCRYPT_HASH_RE = /^\$2[aby]\$\d{2}\$/;
+
+/** True only when the admin hash is missing or not bcrypt — never after a valid password is set. */
+export function canRepairAdminHash(opts: {
+  isAdminTarget: boolean;
+  user: { passwordHash: string; isActive: boolean } | null;
+}): boolean {
+  if (!opts.isAdminTarget) return false;
+  if (!opts.user) return true;
+  return !BCRYPT_HASH_RE.test(opts.user.passwordHash);
+}

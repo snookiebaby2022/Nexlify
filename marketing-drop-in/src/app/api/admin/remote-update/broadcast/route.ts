@@ -2,21 +2,12 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
+import { apiKeyForPanelUrl } from "@/lib/panel-sync";
 
 async function requireAdmin() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") return null;
   return user;
-}
-
-function panelApiSecret(override?: unknown): string {
-  const fromBody = typeof override === "string" ? override.trim() : "";
-  if (fromBody) return fromBody;
-  return (
-    process.env.PANEL_API_SECRET?.trim() ??
-    process.env.NEXLIFY_PANEL_API_SECRET?.trim() ??
-    ""
-  );
 }
 
 const BROWSER_UA =
@@ -27,17 +18,8 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
-  const { secret, force } = body as { secret?: string; force?: boolean };
+  const { force } = body as { force?: boolean };
 
-  const apiKey = panelApiSecret(secret);
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "PANEL_API_SECRET not configured (pass secret or set env)" },
-      { status: 400 }
-    );
-  }
-
-  // Get all unique panel URLs from licenses
   const licenses = await prisma.license.findMany({
     where: { panelUrl: { not: null } },
     select: { panelUrl: true },
@@ -58,6 +40,11 @@ export async function POST(req: Request) {
 
   for (const url of panelUrls) {
     const target = `${url}/api/admin/remote-update`;
+    const apiKey = await apiKeyForPanelUrl(url);
+    if (!apiKey) {
+      results.push({ url, ok: false, message: "No API secret registered for this panel" });
+      continue;
+    }
     try {
       const res = await fetch(target, {
         method: "POST",
@@ -82,8 +69,8 @@ export async function POST(req: Request) {
           (typeof data.message === "string" && data.message) ||
           (res.ok ? (started ? "Triggered" : reason || "OK") : `HTTP ${res.status}`),
       });
-    } catch (e: any) {
-      results.push({ url, ok: false, message: e.message || "Connection failed" });
+    } catch (e: unknown) {
+      results.push({ url, ok: false, message: e instanceof Error ? e.message : "Connection failed" });
     }
   }
 

@@ -140,6 +140,7 @@ model License {
   activatedAt     DateTime?
   machineId       String?
   panelUrl        String?
+  panelApiSecret  String?
   pendingSyncAction String?
   pendingSyncKey    String?
   lastSyncAt      DateTime?

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requirePanelApiKey } from "@/lib/auth";
 import { registerPanelActivation } from "@/lib/panel-sync";
 
 const registerSchema = z.object({
@@ -10,15 +9,15 @@ const registerSchema = z.object({
   domain: z.string().min(1),
 });
 
-/** Customer panel registers after activation so admin can push license changes. */
+/** Customer panel registers after activation so admin can push license changes. Auth is the license key. */
 export async function POST(request: Request) {
-  if (!requirePanelApiKey(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
     const body = registerSchema.parse(await request.json());
-    const result = await registerPanelActivation(body);
+    const panelApiSecret =
+      request.headers.get("x-panel-api-key") ??
+      request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
+      "";
+    const result = await registerPanelActivation({ ...body, panelApiSecret });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 404 });
     }

@@ -1,6 +1,6 @@
 import { getSettingGroup } from "@/lib/panel-settings";
 import { pathsFromBinRoot, NEXLIFY_BIN_LAYOUT } from "@/lib/bin-paths-layout";
-import { buildFfmpegStartCmd, buildFfmpegStopCmd, agentPidFile } from "@/lib/ffmpeg-agent";
+import { buildFfmpegArgv, buildFfmpegStartCmd, buildFfmpegStopCmd } from "@/lib/ffmpeg-agent";
 import { buildNginxAgentSnippet } from "@/lib/nginx-agent-snippet";
 
 export type AgentNginxConfig = {
@@ -22,9 +22,12 @@ export type AgentStreamEntry = {
   streamUrl: string;
   autoRestart: boolean;
   type: string;
+  ffmpegPath: string;
+  ffmpegArgs: string[];
+  pidFile: string;
+  logFile: string;
   startCmd: string;
   stopCmd: string;
-  pidFile: string;
   agentPid: number | null;
 };
 
@@ -82,7 +85,7 @@ export async function buildAgentConfigForServer(
   const transcodeSettings = transcodeEnabled ? await getTranscodingPackSettings() : null;
   let transcodeProfile: import("@/lib/gpu-transcode").GpuTranscodeProfile | null = null;
   let transcodeLadder: import("@/lib/gpu-transcode").GpuTranscodeProfile[] = [];
-  if (transcodeEnabled && transcodeSettings?.enabled !== false) {
+  if (transcodeEnabled && transcodeSettings && transcodeSettings.enabled !== false) {
     const ladderId = String(transcodeSettings.ladderProfile ?? "1080p-nvenc");
     transcodeLadder = bitrateLadderForStream(ladderId);
     transcodeProfile = pickAdaptiveProfile(transcodeLadder, {
@@ -131,31 +134,34 @@ export async function buildAgentConfigForServer(
 
   const streams: AgentStreamEntry[] = alwaysOnStreams.map((s) => {
     const transcodeArgs =
-      transcodeProfile && !s.agentStartCmd?.trim()
+      transcodeProfile && transcodeSettings
         ? buildGpuFfmpegArgs(
             transcodeProfile,
             s.streamUrl,
-            String(transcodeSettings?.vaapiDevice ?? "/dev/dri/renderD128")
+            String(transcodeSettings.vaapiDevice ?? "/dev/dri/renderD128")
           )
         : undefined;
+    const spec = buildFfmpegArgv({
+      ffmpegPath,
+      inputUrl: s.streamUrl,
+      streamId: s.id,
+      serverId,
+      preset: transcodeProfile?.preset ?? preset,
+      threads,
+      transcodeArgs,
+    });
     return {
       id: s.id,
       name: s.name,
       streamUrl: s.streamUrl,
       autoRestart: s.autoRestart,
       type: s.type,
-      startCmd: buildFfmpegStartCmd({
-        ffmpegPath,
-        inputUrl: s.streamUrl,
-        streamId: s.id,
-        serverId,
-        preset: transcodeProfile?.preset ?? preset,
-        threads,
-        customCmd: s.agentStartCmd,
-        transcodeArgs,
-      }),
+      ffmpegPath: spec.ffmpegPath,
+      ffmpegArgs: spec.args,
+      pidFile: spec.pidFile,
+      logFile: spec.logFile,
+      startCmd: buildFfmpegStartCmd(spec),
       stopCmd: buildFfmpegStopCmd(serverId, s.id),
-      pidFile: agentPidFile(serverId, s.id),
       agentPid: s.agentPid,
     };
   });

@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { listActiveConnections, countActiveConnections } from "./connections";
+import { countActiveConnections, deleteStaleConnections } from "./connections";
 import { importFromFolder } from "./import-media";
 import { syncEpgSource } from "./epg";
 import { enqueueAgentCommand, generateAgentToken } from "./stream-agent";
@@ -52,8 +52,8 @@ async function dueEvery(key: string, intervalMs: number): Promise<boolean> {
 export async function jobCleanupConnections() {
   const start = Date.now();
   try {
-    await listActiveConnections();
-    await logCron("cleanup_connections", "ok", undefined, Date.now() - start);
+    const r = await deleteStaleConnections();
+    await logCron("cleanup_connections", "ok", `removed ${r.count}`, Date.now() - start);
   } catch (e) {
     await logCron("cleanup_connections", "error", String(e), Date.now() - start);
   }

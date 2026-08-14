@@ -1,6 +1,8 @@
 import { createHash } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { clearLicenseServerBinding, setLicenseServerStatus } from "@/lib/license-server-admin";
+import { secretsEqual } from "@/lib/secrets-equal";
+import { requirePanelApiKey } from "@/lib/auth";
 
 export type PanelSyncAction =
   | "ACTIVATE"
@@ -9,6 +11,50 @@ export type PanelSyncAction =
   | "SUSPEND"
   | "UNSUSPEND"
   | "DELETE";
+
+function providedPanelKey(request: Request): string {
+  return (
+    request.headers.get("x-panel-api-key") ??
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
+    ""
+  ).trim();
+}
+
+export async function requirePanelSyncAuth(
+  request: Request,
+  opts?: { instanceId?: string; licenseId?: string }
+): Promise<boolean> {
+  if (requirePanelApiKey(request)) return true;
+  const provided = providedPanelKey(request);
+  if (!provided) return false;
+  if (opts?.licenseId) {
+    const row = await prisma.license.findUnique({
+      where: { id: opts.licenseId },
+      select: { panelApiSecret: true },
+    });
+    return Boolean(row?.panelApiSecret && secretsEqual(provided, row.panelApiSecret));
+  }
+  if (opts?.instanceId) {
+    const rows = await prisma.license.findMany({
+      where: { machineId: opts.instanceId, panelApiSecret: { not: null } },
+      select: { panelApiSecret: true },
+      take: 20,
+    });
+    return rows.some((r) => r.panelApiSecret && secretsEqual(provided, r.panelApiSecret));
+  }
+  return false;
+}
+
+export async function apiKeyForPanelUrl(panelUrl: string): Promise<string | null> {
+  const url = normalizePanelUrl(panelUrl);
+  const row = await prisma.license.findFirst({
+    where: { panelUrl: url, panelApiSecret: { not: null } },
+    orderBy: { activatedAt: "desc" },
+    select: { panelApiSecret: true },
+  });
+  if (row?.panelApiSecret?.trim()) return row.panelApiSecret.trim();
+  return panelApiSecret();
+}
 
 function panelApiSecret(): string | null {
   return (
@@ -48,9 +94,9 @@ async function pushToPanel(
   panelUrl: string,
   body: { action: string; licenseKey?: string }
 ): Promise<{ ok: boolean; error?: string }> {
-  const secret = panelApiSecret();
+  const secret = await apiKeyForPanelUrl(panelUrl);
   if (!secret) {
-    return { ok: false, error: "PANEL_API_SECRET not configured" };
+    return { ok: false, error: "No API secret registered for this panel" };
   }
 
   let res: Response;
@@ -168,6 +214,7 @@ export async function registerPanelActivation(opts: {
   instanceId: string;
   panelUrl: string;
   domain: string;
+  panelApiSecret?: string | null;
 }) {
   const key = opts.licenseKey.trim();
   const hash = licenseKeyHash(key);
@@ -176,6 +223,7 @@ export async function registerPanelActivation(opts: {
   const license = await prisma.license.findUnique({ where: { key } });
   if (!license) return { ok: false as const, error: "License not found" };
 
+  const incomingSecret = opts.panelApiSecret?.trim() || "";
   await prisma.license.update({
     where: { id: license.id },
     data: {
@@ -186,6 +234,7 @@ export async function registerPanelActivation(opts: {
       pendingSyncAction: null,
       pendingSyncKey: null,
       lastSyncError: null,
+      ...(incomingSecret.length >= 16 ? { panelApiSecret: incomingSecret } : {}),
     },
   });
 

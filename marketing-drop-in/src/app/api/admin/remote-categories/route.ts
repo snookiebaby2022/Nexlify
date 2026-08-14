@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { apiKeyForPanelUrl } from "@/lib/panel-sync";
 
 type IncomingCategory = {
   name: string;
@@ -9,14 +10,6 @@ type IncomingCategory = {
   sortOrder?: number;
   parentId?: string | null;
 };
-
-function panelApiSecret(): string | null {
-  return (
-    process.env.PANEL_API_SECRET?.trim() ??
-    process.env.NEXLIFY_PANEL_API_SECRET?.trim() ??
-    null
-  );
-}
 
 function normalizePanelUrl(raw: string): string {
   return raw.trim().replace(/\/$/, "");
@@ -74,11 +67,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const secret = panelApiSecret();
-  if (!secret) {
-    return NextResponse.json({ error: "PANEL_API_SECRET not configured" }, { status: 500 });
-  }
-
   const body = await req.json().catch(() => ({}));
   const { panelUrls, categories, deleteMissing } = body as {
     panelUrls: string[];
@@ -105,6 +93,11 @@ export async function POST(req: Request) {
 
   for (const rawUrl of panelUrls) {
     const url = normalizePanelUrl(rawUrl);
+    const secret = await apiKeyForPanelUrl(url);
+    if (!secret) {
+      results.push({ url, ok: false, error: "No API secret registered for this panel" });
+      continue;
+    }
     const result = await pushCategoriesToPanel(url, categories, secret, deleteMissing === true);
     results.push({ url, ...result });
   }

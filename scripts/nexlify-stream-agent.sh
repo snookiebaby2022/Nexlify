@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nexlify stream server agent v2 — config, nginx snippet, ffmpeg start/stop
+# Nexlify stream server agent v2.2 — argv ffmpeg start/stop (no eval of panel commands)
 set -euo pipefail
 
 PANEL_URL="${PANEL_URL:?Set PANEL_URL}"
@@ -16,9 +16,42 @@ write_nginx_snippet() {
   if [[ -z "$snippet" ]]; then return 0; fi
   local out="${NGINX_SNIPPET_PATH:-/etc/nexlify-agent/nginx-snippet.conf}"
   printf '%s\n' "$snippet" > "$out"
-  if [[ -n "${NGINX_RELOAD_CMD:-}" ]]; then
-    eval "$NGINX_RELOAD_CMD"
+  if command -v nginx >/dev/null 2>&1; then
+    nginx -s reload 2>/dev/null || true
   fi
+}
+
+stop_stream_pid() {
+  local pid_file="$1"
+  if [[ -n "$pid_file" && "$pid_file" == /var/run/nexlify/* && -f "$pid_file" ]]; then
+    local pid
+    pid="$(tr -dc '0-9' < "$pid_file" | head -c 12)"
+    if [[ -n "$pid" ]]; then
+      kill "$pid" 2>/dev/null || true
+    fi
+    rm -f "$pid_file"
+  fi
+}
+
+start_ffmpeg_argv() {
+  local entry="$1"
+  local ffmpeg pid_file log_file
+  ffmpeg="$(echo "$entry" | jq -r '.ffmpegPath // empty')"
+  pid_file="$(echo "$entry" | jq -r '.pidFile // empty')"
+  log_file="$(echo "$entry" | jq -r '.logFile // empty')"
+  [[ "$ffmpeg" == /* && "$ffmpeg" != *..* ]] || return 1
+  [[ -x "$ffmpeg" ]] || return 1
+  [[ "$pid_file" == /var/run/nexlify/* ]] || return 1
+  [[ "$log_file" == /var/log/nexlify/* ]] || return 1
+  mkdir -p "$(dirname "$pid_file")" "$(dirname "$log_file")"
+  stop_stream_pid "$pid_file"
+  local args=()
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && args+=("$line")
+  done < <(echo "$entry" | jq -r '.ffmpegArgs[]?')
+  [[ ${#args[@]} -gt 0 ]] || return 1
+  nohup "$ffmpeg" "${args[@]}" > "$log_file" 2>&1 &
+  echo $! > "$pid_file"
 }
 
 run_stream_cmd() {
@@ -28,11 +61,10 @@ run_stream_cmd() {
   [[ -z "$entry" ]] && return 1
   case "$action" in
     start_stream|restart_stream)
-      eval "$(echo "$entry" | jq -r '.stopCmd')" 2>/dev/null || true
-      eval "$(echo "$entry" | jq -r '.startCmd')"
+      start_ffmpeg_argv "$entry"
       ;;
     stop_stream)
-      eval "$(echo "$entry" | jq -r '.stopCmd')"
+      stop_stream_pid "$(echo "$entry" | jq -r '.pidFile // empty')"
       ;;
   esac
 }
@@ -56,7 +88,7 @@ poll_commands() {
       result="cache cleared"
     elif [[ "$action" == "reboot_server" ]]; then
       result="reboot scheduled"
-      nohup bash -c 'sleep 3 && /sbin/reboot' >/dev/null 2>&1 &
+      ( /bin/sleep 3; /sbin/reboot ) >/dev/null 2>&1 &
     elif [[ -n "$stream_id" ]]; then
       if run_stream_cmd "$action" "$stream_id"; then ok=1; else ok=0; result="cmd failed"; fi
     else
@@ -115,7 +147,7 @@ report_heartbeat() {
 
   curl -fsS -X POST -H "$auth_hdr" -H "Content-Type: application/json" \
     "${PANEL_URL}/api/agent/heartbeat" \
-    -d "{\"version\":\"2.1.0\",\"processes\":${procs},\"cpu\":${cpu:-0},\"memory\":${mem:-0},\"storage\":${disk:-0},\"upload\":${upload},\"download\":${download}}" >/dev/null || true
+    -d "{\"version\":\"2.2.0\",\"processes\":${procs},\"cpu\":${cpu:-0},\"memory\":${mem:-0},\"storage\":${disk:-0},\"upload\":${upload},\"download\":${download}}" >/dev/null || true
 }
 
 while true; do

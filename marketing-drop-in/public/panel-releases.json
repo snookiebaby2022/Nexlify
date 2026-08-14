@@ -1,7 +1,27 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.47",
+  "latestVersion": "1.9.48",
   "releases": [
+    {
+      "version": "1.9.48",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Finish security follow-up: live session roles, argv agent ffmpeg, per-panel vendor secrets.",
+      "changelog": [
+        "Panel sessions re-read role, credits, and isActive from the database (5s cache) so demote/disable takes effect",
+        "Stream agent starts ffmpeg via argv (no eval); nginx reload is nginx -s reload",
+        "Vendor remote-update/unlock uses the secret registered by each panel; license register stores that key",
+        "Prometheus /api/metrics accepts Authorization Bearer only; stale connections are deleted by cron, not on list",
+        "Seed no longer creates admin123/reseller123; bcrypt tests cover secret compare and admin-hash repair rules"
+      ],
+      "fixes": [
+        "JWT role stayed valid for up to 7 days after a user was demoted or disabled",
+        "Agent eval of startCmd/stopCmd and NGINX_RELOAD_CMD",
+        "Metrics scrape tokens in ?token= leaked in access logs",
+        "New unique PANEL_API_SECRET installs could not register with nexlify.live for remote update"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.48.tar.gz"
+    },
     {
       "version": "1.9.47",
       "date": "2026-08-14",

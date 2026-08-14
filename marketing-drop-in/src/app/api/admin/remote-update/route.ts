@@ -1,21 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { apiKeyForPanelUrl } from "@/lib/panel-sync";
 
 async function requireAdmin() {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") return null;
   return user;
-}
-
-function panelApiSecret(override?: unknown): string {
-  const fromBody = typeof override === "string" ? override.trim() : "";
-  if (fromBody) return fromBody;
-  return (
-    process.env.PANEL_API_SECRET?.trim() ??
-    process.env.NEXLIFY_PANEL_API_SECRET?.trim() ??
-    ""
-  );
 }
 
 const BROWSER_UA =
@@ -26,22 +17,13 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
-  const { panelUrls, secret, force } = body as {
+  const { panelUrls, force } = body as {
     panelUrls?: string[];
-    secret?: string;
     force?: boolean;
   };
 
   if (!Array.isArray(panelUrls) || panelUrls.length === 0) {
     return NextResponse.json({ error: "panelUrls required" }, { status: 400 });
-  }
-
-  const apiKey = panelApiSecret(secret);
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "PANEL_API_SECRET not configured (pass secret or set env)" },
-      { status: 400 }
-    );
   }
 
   const results: { url: string; ok: boolean; message?: string; started?: boolean; reason?: string }[] =
@@ -50,6 +32,11 @@ export async function POST(req: Request) {
   for (const rawUrl of panelUrls) {
     const url = String(rawUrl).replace(/\/$/, "");
     const target = `${url}/api/admin/remote-update`;
+    const apiKey = await apiKeyForPanelUrl(url);
+    if (!apiKey) {
+      results.push({ url, ok: false, message: "No API secret registered for this panel" });
+      continue;
+    }
 
     try {
       const res = await fetch(target, {
@@ -76,8 +63,8 @@ export async function POST(req: Request) {
           (typeof data.message === "string" && data.message) ||
           (res.ok ? (started ? "Triggered" : reason || "OK") : `HTTP ${res.status}`),
       });
-    } catch (e: any) {
-      results.push({ url, ok: false, message: e.message || "Connection failed" });
+    } catch (e: unknown) {
+      results.push({ url, ok: false, message: e instanceof Error ? e.message : "Connection failed" });
     }
   }
 

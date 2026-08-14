@@ -155,11 +155,6 @@ export async function listActiveConnections(ownerId?: string) {
   const cacheKey = ownerId ? `conn:list:${ownerId}` : "conn:list:all";
   return cacheGetOrSet(cacheKey, CONNECTIONS_CACHE_TTL, async () => {
     const staleBefore = new Date(Date.now() - STALE_MS);
-    // Fire-and-forget stale cleanup — don't block the response
-    void prisma.liveConnection.deleteMany({
-      where: { lastSeenAt: { lt: staleBefore } },
-    }).catch(() => {});
-
     return prisma.liveConnection.findMany({
       where: {
         lastSeenAt: { gte: staleBefore },
@@ -169,6 +164,13 @@ export async function listActiveConnections(ownerId?: string) {
       orderBy: { lastSeenAt: "desc" },
       take: 5000, // Safety limit — dashboard should use countActiveConnections() for totals
     });
+  });
+}
+
+export async function deleteStaleConnections() {
+  const staleBefore = new Date(Date.now() - STALE_MS);
+  return prisma.liveConnection.deleteMany({
+    where: { lastSeenAt: { lt: staleBefore } },
   });
 }
 

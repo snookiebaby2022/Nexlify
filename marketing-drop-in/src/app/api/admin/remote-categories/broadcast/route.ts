@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
+import { apiKeyForPanelUrl } from "@/lib/panel-sync";
 
 type IncomingCategory = {
   name: string;
@@ -10,14 +11,6 @@ type IncomingCategory = {
   sortOrder?: number;
   parentId?: string | null;
 };
-
-function panelApiSecret(): string | null {
-  return (
-    process.env.PANEL_API_SECRET?.trim() ??
-    process.env.NEXLIFY_PANEL_API_SECRET?.trim() ??
-    null
-  );
-}
 
 /**
  * POST /api/admin/remote-categories/broadcast
@@ -28,11 +21,6 @@ export async function POST(req: Request) {
   const user = await getSessionUser();
   if (!user || user.role !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  const secret = panelApiSecret();
-  if (!secret) {
-    return NextResponse.json({ error: "PANEL_API_SECRET not configured" }, { status: 500 });
   }
 
   const body = await req.json().catch(() => ({}));
@@ -72,6 +60,11 @@ export async function POST(req: Request) {
 
   for (const url of panelUrls) {
     try {
+      const secret = await apiKeyForPanelUrl(url);
+      if (!secret) {
+        results.push({ url, ok: false, error: "No API secret registered for this panel" });
+        continue;
+      }
       const res = await fetch(`${url}/api/admin/remote-categories`, {
         method: "POST",
         headers: {

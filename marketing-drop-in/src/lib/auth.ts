@@ -3,6 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/generated/prisma/client";
+import { secretsEqual } from "@/lib/secrets-equal";
 
 const COOKIE_NAME = "stream_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
@@ -156,5 +157,5 @@ export function requirePanelApiKey(request: Request): boolean {
   const provided =
     request.headers.get("x-panel-api-key") ??
     request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  return provided === expected;
+  return secretsEqual(provided, expected);
 }

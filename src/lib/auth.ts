@@ -5,11 +5,10 @@ import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
 import { jwtSecretBytes } from "@/lib/jwt-secret";
 import { panelSessionCookieOptions, panelSessionCookieSecure } from "@/lib/session-cookie";
-import { secretsEqual } from "@/lib/secrets-equal";
+import { secretsEqual, BCRYPT_HASH_RE, canRepairAdminHash } from "@/lib/secrets-equal";
 import type { PanelRole } from "@prisma/client";
 
 const COOKIE = "nexlify_session";
-const BCRYPT_RE = /^\$2[aby]\$\d{2}\$/;
 
 export type SessionUser = {
   id: string;
@@ -69,18 +68,31 @@ export async function destroySession() {
   jar.delete(COOKIE);
 }
 
+const SESSION_USER_TTL_MS = 5_000;
+const sessionUserCache = new Map<string, { at: number; user: SessionUser | null }>();
+
 export async function getSession(): Promise<SessionUser | null> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret());
-    return {
-      id: payload.id as string,
-      username: payload.username as string,
-      role: payload.role as PanelRole,
-      credits: payload.credits as number,
-    };
+    const id = String(payload.id ?? "");
+    if (!id) return null;
+    const cached = sessionUserCache.get(id);
+    if (cached && Date.now() - cached.at < SESSION_USER_TTL_MS) return cached.user;
+
+    const row = await prisma.panelUser.findUnique({
+      where: { id },
+      select: { id: true, username: true, role: true, credits: true, isActive: true },
+    });
+    const user =
+      row?.isActive
+        ? { id: row.id, username: row.username, role: row.role, credits: row.credits }
+        : null;
+    sessionUserCache.set(id, { at: Date.now(), user });
+    if (sessionUserCache.size > 2000) sessionUserCache.clear();
+    return user;
   } catch {
     return null;
   }
@@ -122,16 +134,15 @@ export async function verifyPanelLogin(identifier: string, password: string) {
     user?.email === "admin@nexlify.live";
 
   if (!user || !user.isActive) {
-    const hashBroken = !user || !BCRYPT_RE.test(user.passwordHash);
-    if (isAdminTarget && hashBroken) {
+    if (canRepairAdminHash({ isAdminTarget, user })) {
       const repaired = await repairAdminPasswordHash(password);
       if (repaired?.isActive) return repaired;
     }
     return null;
   }
 
-  if (!BCRYPT_RE.test(user.passwordHash)) {
-    if (isAdminTarget) {
+  if (!BCRYPT_HASH_RE.test(user.passwordHash)) {
+    if (canRepairAdminHash({ isAdminTarget, user })) {
       const repaired = await repairAdminPasswordHash(password);
       if (repaired) return repaired;
     }
