@@ -1,7 +1,20 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.51",
+  "latestVersion": "1.9.52",
   "releases": [
+    {
+      "version": "1.9.52",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Stop pm2-start from failing when git leaves helper scripts non-executable.",
+      "changelog": [
+        "pm2-start and panel-restart-safe chmod +x scripts/*.sh and invoke helpers with bash",
+        "Deploy/repair paths restore executable bits after git reset --hard"
+      ],
+      "fixes": [
+        "scripts/pm2-start.sh: Permission denied on ./scripts/verify-panel-upstream.sh after a successful health check"
+      ]
+    },
     {
       "version": "1.9.51",
       "date": "2026-08-14",

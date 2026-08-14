@@ -19,8 +19,9 @@ log() {
 
 load_env() {
   sed -i 's/\r$//' scripts/*.sh 2>/dev/null || true
-  if [ -x scripts/ensure-panel-env.sh ]; then
-    ./scripts/ensure-panel-env.sh
+  chmod +x scripts/*.sh 2>/dev/null || true
+  if [ -f scripts/ensure-panel-env.sh ]; then
+    bash scripts/ensure-panel-env.sh
   fi
   set -a
   [ -f .env ] && . ./.env
@@ -30,7 +31,7 @@ load_env() {
 verify_panel() {
   local attempt
   for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    if ./scripts/verify-panel-upstream.sh >>"$LOG_FILE" 2>&1; then
+    if bash scripts/verify-panel-upstream.sh >>"$LOG_FILE" 2>&1; then
       return 0
     fi
     sleep 3

@@ -42,6 +42,7 @@ deploy_panel() {
     bash scripts/ensure-pg-dump.sh || echo "WARN: pg_dump helper skipped"
   fi
   git pull origin main || true
+  chmod +x scripts/*.sh 2>/dev/null || true
   npm install --production=false
   if command -v npx >/dev/null 2>&1 && [ -d prisma ]; then
     npx prisma generate || true

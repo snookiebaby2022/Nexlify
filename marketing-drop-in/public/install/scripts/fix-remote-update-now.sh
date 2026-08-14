@@ -53,6 +53,7 @@ if [ -d .git ]; then
   echo "==> git fetch origin main"
   git fetch origin main
   git reset --hard origin/main
+  chmod +x scripts/*.sh 2>/dev/null || true
 else
   echo "WARN: not a git checkout — cloning into staging then swapping (keeps .env + data + .git)"
   TMP="$(mktemp -d)"
@@ -62,9 +63,10 @@ else
     --exclude .env --exclude '.env.*' --exclude data \
     "$TMP/nexlify/" "$ROOT/"
   rm -rf "$TMP"
+  chmod +x scripts/*.sh 2>/dev/null || true
 fi
 
-if [ -x scripts/deploy-vps.sh ]; then
+if [ -f scripts/deploy-vps.sh ]; then
   bash scripts/deploy-vps.sh panel
 else
   npm install --include=dev --no-audit --no-fund

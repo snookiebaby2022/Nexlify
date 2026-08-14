@@ -4,6 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 sed -i 's/\r$//' scripts/*.sh 2>/dev/null || true
+# git checkout often leaves scripts without +x (mode 100644) — always restore before ./ or -x checks
+chmod +x scripts/*.sh 2>/dev/null || true
 
 # Ensure local tsx (nexlify-cron + update worker — PM2 uses node_modules, not global)
 bash scripts/ensure-tsx.sh || {
@@ -234,7 +236,7 @@ fi
 
 pm2 save
 
-if ! ./scripts/verify-panel-upstream.sh; then
+if ! bash scripts/verify-panel-upstream.sh; then
   echo "ERROR: PM2 started but upstream check failed — nginx will return 502"
   exit 1
 fi
@@ -244,10 +246,10 @@ echo "Status:"
 pm2 status
 echo ""
 echo "Logs: pm2 logs nexlify"
-if ./scripts/pm2-boot-enabled.sh 2>/dev/null; then
+if bash scripts/pm2-boot-enabled.sh 2>/dev/null; then
   echo "Boot on reboot: enabled (PM2 will restore saved apps)"
 else
   echo ""
   echo ">>> Panel will NOT start after a server reboot until you run:"
-  echo ">>>   ./scripts/pm2-boot-enable.sh"
+  echo ">>>   bash scripts/pm2-boot-enable.sh"
 fi
