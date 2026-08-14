@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
+PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify}"
 MARKETING="${MARKETING_DIR:-/var/www/nexlify}"
 BUNDLE="/root/vps-full-update.sh"
 

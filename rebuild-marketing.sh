@@ -8,8 +8,8 @@
 # With arguments: syncs source to remote, then rebuilds and restarts there
 set -euo pipefail
 
-MARKETING_DIR="/opt/nexlify-panel/marketing-drop-in"
-PANEL_DIR="/opt/nexlify-panel"
+MARKETING_DIR="${MARKETING_DIR:-/var/www/nexlify}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify}"
 REMOTE=""
 PASSWORD=""
 

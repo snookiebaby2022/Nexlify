@@ -15,16 +15,23 @@ if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
 fi
 
 PANEL=""
-for d in /home/nexlify-panel /opt/nexlify-panel; do
-  if [ -f "$d/package.json" ]; then PANEL="$d"; break; fi
+for d in /home/nexlify /home/nexlify-panel /opt/nexlify-panel; do
+  [ -f "$d/package.json" ] || continue
+  grep -q '"name": "nexlify"' "$d/package.json" 2>/dev/null || continue
+  grep -q '"name": "nexlify-marketing"' "$d/package.json" 2>/dev/null && continue
+  PANEL="$d"
+  break
 done
 MARKETING=""
-for d in /var/www/nexlify /home/nexlify /opt/nexlify-web; do
-  if [ -f "$d/package.json" ]; then MARKETING="$d"; break; fi
+for d in /var/www/nexlify /opt/nexlify-web /home/nexlify; do
+  [ -f "$d/package.json" ] || continue
+  [ "$d" = "$PANEL" ] && continue
+  MARKETING="$d"
+  break
 done
 
 if [ -z "$PANEL" ]; then
-  echo "ERROR: panel not found at /home/nexlify-panel or /opt/nexlify-panel" >&2
+  echo "ERROR: panel not found at /home/nexlify, /home/nexlify-panel, or /opt/nexlify-panel" >&2
   exit 1
 fi
 

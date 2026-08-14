@@ -179,7 +179,8 @@ export function PanelInstallInstructions() {
               {[
                 ["--ip / --domain", "Override auto-detected server IP or hostname", "No"],
                 ["--license", "Activate during install instead of in the panel UI", "No"],
-                ["--fresh", "Remove old /opt/nexlify-panel before install", "No"],
+                ["--fresh", "Remove old /home/nexlify before install (keeps bin/)", "No"],
+                ["--dir PATH", "Install folder (default /home/nexlify)", "No"],
                 ["--skip-firewall", "Do not open ufw ports", "No"],
                 ["--monolithic", "Panel + stream engine on this host", "No"],
               ].map(([flag, desc, req]) => (
@@ -246,7 +247,7 @@ export function PanelInstallInstructions() {
             <p className="text-sm text-amber-200/70 mt-1">
               If the login page doesn&apos;t open, SSH in and run{" "}
               <code className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-mono text-amber-200">
-                cd /opt/nexlify-panel && bash scripts/fix-panel-ip-login.sh
+                cd /home/nexlify && bash scripts/fix-panel-ip-login.sh
               </code>{" "}
               — or reinstall with the latest{" "}
               <code className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-mono text-amber-200">

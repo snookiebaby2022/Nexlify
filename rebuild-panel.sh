@@ -11,7 +11,7 @@
 # 4. Restarts PM2 processes
 set -euo pipefail
 
-PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify}"
 SKIP_PRISMA=0
 SKIP_BUILD=0
 SKIP_RESTART=0

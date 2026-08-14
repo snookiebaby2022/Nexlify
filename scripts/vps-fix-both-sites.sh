@@ -16,14 +16,16 @@ fi
 MARKETING_PORT="${MARKETING_PORT:-13001}"
 PANEL_PORT="${PANEL_PORT:-3000}"
 MARKETING_ROOT="${MARKETING_ROOT:-}"
-for d in /home/nexlify /var/www/nexlify ${MARKETING_ROOT:+$MARKETING_ROOT}; do
+for d in /var/www/nexlify /opt/nexlify-web ${MARKETING_ROOT:+$MARKETING_ROOT}; do
   [ -z "$d" ] && continue
   if [ -d "$d" ] && [ -f "$d/package.json" ]; then
+    grep -q '"name": "nexlify"' "$d/package.json" 2>/dev/null && \
+      ! grep -q '"name": "nexlify-marketing"' "$d/package.json" 2>/dev/null && continue
     MARKETING_ROOT="$d"
     break
   fi
 done
-MARKETING_ROOT="${MARKETING_ROOT:-/home/nexlify}"
+MARKETING_ROOT="${MARKETING_ROOT:-/var/www/nexlify}"
 MARKETING_PM2="${MARKETING_PM2:-nexlify-web}"
 
 echo "=== 1) Panel .env (panel subdomain on :${PANEL_PORT}) ==="

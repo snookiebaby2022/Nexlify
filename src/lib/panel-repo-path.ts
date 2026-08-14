@@ -47,8 +47,9 @@ export function panelRepoPathCandidates(settingsRepoPath?: string): string[] {
     add(path.join(cwd, ".."));
   }
 
-  add("/opt/nexlify-panel");
+  add("/home/nexlify");
   add("/home/nexlify-panel");
+  add("/opt/nexlify-panel");
   return candidates;
 }
 

@@ -232,7 +232,7 @@ listen ${streamHttps} ssl;  # HTTPS`}</pre>
         >
           <p className="text-sm" style={{ color: "var(--muted)" }}>
             Example crontab on the VPS:{" "}
-            <code className="font-mono text-xs">0 4 * * * /home/nexlify-panel/scripts/pg-dump-cron.sh</code>
+            <code className="font-mono text-xs">0 4 * * * /home/nexlify/scripts/pg-dump-cron.sh</code>
             . Dumps land in <code className="font-mono text-xs">backups/pg/</code> with configurable retention.
             Configure schedule hints under Settings → Backup.
           </p>

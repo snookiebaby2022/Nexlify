@@ -8,7 +8,12 @@ import { join } from "path";
 const execAsync = promisify(exec);
 
 const SITE_PATH = process.env.MARKETING_SITE_PATH || process.cwd();
-const PANEL_PATH = process.env.NEXLIFY_PANEL_PATH || "/opt/nexlify-panel";
+const PANEL_PATH =
+  process.env.NEXLIFY_PANEL_PATH ||
+  ["/home/nexlify", "/home/nexlify-panel", "/opt/nexlify-panel"].find((p) =>
+    existsSync(join(p, "package.json"))
+  ) ||
+  "/home/nexlify";
 const MARKETING_SOURCE =
   process.env.MARKETING_SOURCE_PATH || join(PANEL_PATH, "marketing-drop-in");
 const PM2_NAME = process.env.MARKETING_PM2_NAME || "nexlify-web";

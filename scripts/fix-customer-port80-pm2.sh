@@ -2,7 +2,7 @@
 # Fix IP-install PM2 crash loop: EADDRINUSE on port 80 from orphan PM2 workers.
 set -euo pipefail
 
-PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify}"
 cd "$PANEL_DIR"
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 

@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
+PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify}"
 
 if [ ! -d "$PANEL/.git" ]; then
   echo "Panel is not a git repo (deployed via WinSCP). Using no-git fix..."

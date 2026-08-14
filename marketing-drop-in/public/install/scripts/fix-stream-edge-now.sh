@@ -7,7 +7,7 @@
 set -euo pipefail
 
 PANEL_DIR=""
-for d in /home/nexlify-panel /opt/nexlify-panel "$(pwd)"; do
+for d in /home/nexlify /home/nexlify-panel /opt/nexlify-panel "$(pwd)"; do
   if [ -f "${d}/package.json" ] && [ -f "${d}/.env" ]; then
     PANEL_DIR="$d"
     break

@@ -13,7 +13,7 @@ if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
   exec sudo -E bash "$0" "$@"
 fi
 
-PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
+PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify}"
 MARKETING="${MARKETING_DIR:-/var/www/nexlify}"
 BRANCH="${NEXLIFY_GIT_BRANCH:-main}"
 STAGE="/tmp/nexlify-github-sync-$$"

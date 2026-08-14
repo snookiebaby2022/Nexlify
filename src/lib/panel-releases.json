@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.39",
+  "latestVersion": "1.9.40",
   "releases": [
+    {
+      "version": "1.9.40",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "New IPTV panel installs go to /home/nexlify (existing /home/nexlify-panel and /opt/nexlify-panel installs stay put).",
+      "changelog": [
+        "curl | bash installer default directory is /home/nexlify",
+        "Existing panels at /home/nexlify-panel or /opt/nexlify-panel are reused, not duplicated",
+        "--fresh keeps /home/nexlify/bin (ffmpeg/nginx) instead of wiping the stack"
+      ],
+      "fixes": [
+        "New installs no longer land in /home/nexlify-panel or /opt/nexlify-panel"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.40.tar.gz"
+    },
     {
       "version": "1.9.39",
       "date": "2026-08-14",

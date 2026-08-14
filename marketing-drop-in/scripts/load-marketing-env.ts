@@ -23,7 +23,7 @@ function readDatabaseUrlFromFile(envPath: string): string | null {
 }
 
 function deriveMarketingUrlFromPanel(): string | null {
-  for (const p of ["/home/nexlify-panel/.env", "/opt/nexlify-panel/.env"]) {
+  for (const p of ["/home/nexlify/.env", "/home/nexlify-panel/.env", "/opt/nexlify-panel/.env"]) {
     const panelUrl = readDatabaseUrlFromFile(p);
     if (!panelUrl?.startsWith("postgresql://")) continue;
     if (panelUrl.includes(`/${MARKETING_DB}`)) return panelUrl;

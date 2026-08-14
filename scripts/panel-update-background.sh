@@ -31,7 +31,7 @@ elif ROOT="$(find_panel_root "$SCRIPT_DIR")"; then
 elif ROOT="$(find_panel_root "$(pwd)")"; then
   :
 else
-  for candidate in /opt/nexlify-panel /home/nexlify-panel; do
+  for candidate in /home/nexlify /home/nexlify-panel /opt/nexlify-panel; do
     if [ -f "$candidate/src/lib/panel-server.ts" ]; then
       ROOT="$candidate"
       break

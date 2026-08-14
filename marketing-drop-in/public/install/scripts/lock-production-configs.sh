@@ -58,7 +58,7 @@ if command -v pm2 >/dev/null 2>&1; then
   cp -a /root/.pm2/dump.pm2 "$BACKUP_ROOT/pm2.dump.pm2" 2>/dev/null || true
 fi
 
-for d in /opt/nexlify-panel /home/nexlify-panel /var/www/nexlify; do
+for d in /home/nexlify /home/nexlify-panel /opt/nexlify-panel /var/www/nexlify; do
   if [ -f "$d/.env" ]; then
     cp -a "$d/.env" "$BACKUP_ROOT/$(basename "$d").env"
     chmod 600 "$BACKUP_ROOT/$(basename "$d").env"

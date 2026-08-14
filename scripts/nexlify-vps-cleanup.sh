@@ -49,7 +49,7 @@ ls -t /root/vps-full-update.sh.bak.* 2>/dev/null | tail -n +2 | while read -r f;
 done
 
 # Panel dist on VPS (rebuilt by publish-panel-release)
-for d in /home/nexlify-panel/dist /opt/nexlify-panel/dist; do
+for d in /home/nexlify/dist /home/nexlify-panel/dist /opt/nexlify-panel/dist; do
   if [ -d "$d" ] && [ -f "$d/nexlify-panel.tar.gz" ]; then
     # tarball is published to marketing public/downloads — dist copy optional
     :

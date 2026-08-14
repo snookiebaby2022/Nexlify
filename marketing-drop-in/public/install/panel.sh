@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.39' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.40' | sudo bash
 #
 # Server IP/hostname is detected automatically. Then open the login URL, sign in
 # with the admin password shown at the end, and paste your license key under Admin → License.
@@ -9,7 +9,8 @@
 # Env overrides: PANEL_DIR, PANEL_ARCHIVE_URL, NEXLIFY_LICENSE_KEY
 set -euo pipefail
 
-PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
+# Empty = auto: reuse an existing panel, otherwise install to /home/nexlify.
+PANEL_DIR="${PANEL_DIR:-}"
 PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz}"
 _SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$_SCRIPT_DIR/panel-version.sh" ]; then
@@ -17,7 +18,7 @@ if [ -f "$_SCRIPT_DIR/panel-version.sh" ]; then
 else
   _PV="0"
 fi
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.39}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.40}"
 CREDS_ROOT="/root/nexlify"
 DOMAIN=""
 EMAIL=""
@@ -33,22 +34,23 @@ usage() {
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.39' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.40' | sudo bash
 
 Options:
   --ip IP                Override auto-detected server IP or hostname
   --domain DOMAIN        Alias for --ip
   --email EMAIL          Email for Let's Encrypt SSL (domain installs only)
   --license KEY          Optional — activate during install (default: enter in panel after login)
-  --fresh                Wipe /home/nexlify-panel before install
+  --dir PATH             Install directory (default: /home/nexlify)
+  --fresh                Wipe the install directory before install (keeps /home/nexlify/bin)
   --skip-firewall        Do not open ufw ports
   --monolithic           Panel + stream engine on this host (main server + local agent)
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.39' | sudo bash
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.39' | sudo bash -s -- --license NXLF1-XXXXX
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.39' | sudo bash -s -- --domain panel.example.com --email admin@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.40' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.40' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.40' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 
@@ -71,6 +73,39 @@ done
 
 log() { echo ""; echo "==> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
+
+is_nexlify_panel_root() {
+  [ -f "$1/package.json" ] || return 1
+  grep -q '"name": "nexlify"' "$1/package.json" 2>/dev/null || return 1
+  grep -q '"name": "nexlify-marketing"' "$1/package.json" 2>/dev/null && return 1
+  return 0
+}
+
+wipe_panel_tree() {
+  local d="${1:-}"
+  [ -n "$d" ] && [ -e "$d" ] || return 0
+  if [ -d "$d/bin" ]; then
+    local hold
+    hold="$(mktemp -d /tmp/nexlify-bin-XXXXXX)"
+    mv "$d/bin" "$hold/bin"
+    rm -rf "$d"
+    mkdir -p "$d"
+    mv "$hold/bin" "$d/bin"
+    rmdir "$hold" 2>/dev/null || true
+  else
+    rm -rf "$d"
+  fi
+}
+
+if [ -z "$PANEL_DIR" ]; then
+  for candidate in /home/nexlify /home/nexlify-panel /opt/nexlify-panel; do
+    if is_nexlify_panel_root "$candidate"; then
+      PANEL_DIR="$candidate"
+      break
+    fi
+  done
+  PANEL_DIR="${PANEL_DIR:-/home/nexlify}"
+fi
 
 detect_server_address() {
   local ip fqdn
@@ -273,14 +308,14 @@ download_panel_archive() {
     rm -f "$tmp"
     die "Panel archive too small (${archive_bytes} bytes) from $PANEL_ARCHIVE_URL — expected ~3MB."
   fi
-  rm -rf "$PANEL_DIR"
+  wipe_panel_tree "$PANEL_DIR"
   mkdir -p "$PANEL_DIR"
   tar -xzf "$tmp" -C "$PANEL_DIR"
   rm -f "$tmp"
 }
 
 if [ "$FORCE_FRESH" -eq 1 ] && [ -e "$PANEL_DIR" ]; then
-  rm -rf "$PANEL_DIR"
+  wipe_panel_tree "$PANEL_DIR"
 fi
 
 # For --fresh, also drop and recreate the PostgreSQL database so migrations deploy cleanly.
@@ -295,7 +330,7 @@ if panel_install_complete; then
   progress_step "Using existing panel copy"
 elif [ -e "$PANEL_DIR" ]; then
   echo "WARN: Incomplete panel at $PANEL_DIR — downloading fresh copy"
-  rm -rf "$PANEL_DIR"
+  wipe_panel_tree "$PANEL_DIR"
 fi
 
 if [ ! -f "$PANEL_DIR/package.json" ]; then

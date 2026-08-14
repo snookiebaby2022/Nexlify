@@ -31,7 +31,7 @@ notepad deploy.config.json
 |-------|---------|
 | `host` | `85.17.162.54` |
 | `username` | `root` |
-| `remotePath` | `/home/nexlify-panel` |
+| `remotePath` | `/home/nexlify` |
 | `privateKey` | `C:/Users/lizzi/Documents/.ssh/nexlify.ppk` (use `/`, not `\`, in JSON) |
 
 `deploy.config.json` is gitignored.
@@ -39,7 +39,7 @@ notepad deploy.config.json
 ### 4. First VPS setup (once)
 
 ```bash
-mkdir -p /home/nexlify-panel
+mkdir -p /home/nexlify
 # After first deploy:
 cd /home/nexlify-panel && cp .env.example .env && nano .env
 ```

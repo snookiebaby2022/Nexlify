@@ -26,7 +26,7 @@ find_panel_root() {
     fi
     dir="$(dirname "$dir")"
   done
-  for candidate in /home/nexlify-panel /opt/nexlify-panel; do
+  for candidate in /home/nexlify /home/nexlify-panel /opt/nexlify-panel; do
     if [ -f "$candidate/src/lib/panel-update.ts" ]; then
       echo "$candidate"
       return 0

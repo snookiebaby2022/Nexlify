@@ -13,7 +13,7 @@ if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
 fi
 
 PANEL=""
-for d in /opt/nexlify-panel /home/nexlify-panel; do
+for d in /home/nexlify /opt/nexlify-panel /home/nexlify-panel; do
   if [ -f "$d/package.json" ]; then PANEL="$d"; break; fi
 done
 [ -n "$PANEL" ] || { echo "ERROR: panel not found" >&2; exit 1; }

@@ -221,7 +221,7 @@ export default function BackupSettingsPage() {
                 placeholder="( add your folder location )"
               />
               <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-                Example: <code className="font-mono">/home/nexlify-panel/backups</code> — leave placeholder empty to use{" "}
+                Example: <code className="font-mono">/home/nexlify/backups</code> — leave placeholder empty to use{" "}
                 <code className="font-mono">./backups</code> under the panel install
               </p>
             </label>

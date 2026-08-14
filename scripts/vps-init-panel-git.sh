@@ -41,7 +41,7 @@ git_fetch_ok() {
 }
 # --- end git auth ---
 
-PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
+PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify}"
 BRANCH="${NEXLIFY_GIT_BRANCH:-main}"
 
 REPO_URL="$(resolve_nexlify_git_url)"

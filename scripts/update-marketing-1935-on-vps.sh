@@ -11,7 +11,7 @@ if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
 fi
 
 MARKETING="${MARKETING_DIR:-/var/www/nexlify}"
-PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
+PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify}"
 REPO_URL="${NEXLIFY_REPO_URL:-https://github.com/snookiebaby2022/Nexlify.git}"
 BRANCH="${NEXLIFY_BRANCH:-main}"
 PORT="${MARKETING_PORT:-13001}"
@@ -29,6 +29,12 @@ fi
 # Prefer local panel git; else shallow clone of marketing-drop-in assets
 SRC=""
 if [ -d "$PANEL/.git" ]; then
+  echo "==> Updating panel checkout at $PANEL ..."
+  git -C "$PANEL" fetch origin "$BRANCH"
+  git -C "$PANEL" reset --hard "origin/$BRANCH"
+  SRC="$PANEL"
+elif [ -d "/home/nexlify-panel/.git" ]; then
+  PANEL="/home/nexlify-panel"
   echo "==> Updating panel checkout at $PANEL ..."
   git -C "$PANEL" fetch origin "$BRANCH"
   git -C "$PANEL" reset --hard "origin/$BRANCH"

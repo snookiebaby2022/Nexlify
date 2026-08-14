@@ -4,9 +4,10 @@
 #
 # Panel path resolution (first match wins):
 #   1. PANEL_DIR env
-#   2. Directory containing this script's repo root (…/scripts/deploy-vps.sh → …)
-#   3. /opt/nexlify-panel
+#   2. Directory containing this script's repo root
+#   3. /home/nexlify (new default)
 #   4. /home/nexlify-panel
+#   5. /opt/nexlify-panel
 
 set -euo pipefail
 
@@ -22,7 +23,7 @@ resolve_panel_dir() {
     echo "$REPO_ROOT"
     return
   fi
-  for candidate in /opt/nexlify-panel /home/nexlify-panel; do
+  for candidate in /home/nexlify /home/nexlify-panel /opt/nexlify-panel; do
     if [ -f "$candidate/package.json" ]; then
       echo "$candidate"
       return

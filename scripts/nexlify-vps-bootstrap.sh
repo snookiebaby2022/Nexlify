@@ -3,7 +3,7 @@
 # Usage: cd /home/nexlify-panel && git fetch origin main && git reset --hard origin/main && bash scripts/nexlify-vps-bootstrap.sh
 
 set -euo pipefail
-PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
+PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify}"
 
 if [ ! -d "$PANEL/.git" ]; then
   echo "ERROR: $PANEL is not a git repo."

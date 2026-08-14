@@ -2,7 +2,7 @@
 # Run everything on vendor VPS after marketing deploy. Called automatically by vps-full-update.sh.
 set -uo pipefail
 
-PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
+PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify}"
 MARKETING="${MARKETING_DIR:-/var/www/nexlify}"
 ENV="$MARKETING/.env"
 

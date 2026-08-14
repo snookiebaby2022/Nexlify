@@ -29,10 +29,10 @@ Run the installer on the VPS (after syncing the panel repo):
 
 ```bash
 # Fix nginx if it is already broken:
-sudo bash /home/nexlify-panel/scripts/install-livestream-rtmp.sh --recover-only
+sudo bash /home/nexlify/scripts/install-livestream-rtmp.sh --recover-only
 
 # Install RTMP + HLS directory (auto: apt module, else standalone nginx on :1935):
-sudo bash /home/nexlify-panel/scripts/install-livestream-rtmp.sh
+sudo bash /home/nexlify/scripts/install-livestream-rtmp.sh
 ```
 
 The installer:
@@ -126,7 +126,7 @@ Target after tuning: within **~10 seconds** on HLS.
 Run on the VPS:
 
 ```bash
-bash /home/nexlify-panel/scripts/diagnose-livestream.sh
+bash /home/nexlify/scripts/diagnose-livestream.sh
 ```
 
 Or paste checks manually:

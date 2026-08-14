@@ -2,7 +2,7 @@
 # One-shot fix: safe panel restart after updates + health watchdog (v1.5.7+).
 #   curl -fsSL 'https://nexlify.live/install/fix-panel-restart.sh?v=160' | sudo bash
 set -euo pipefail
-PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify}"
 VENDOR_URL="${VENDOR_URL:-https://nexlify.live}"
 TARBALL="${VENDOR_URL}/downloads/nexlify-panel.tar.gz?v=160"
 

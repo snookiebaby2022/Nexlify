@@ -67,7 +67,7 @@ export default function AIHubPage() {
 
             <p className="mt-4"><strong className="text-white">Step 3:</strong> Restart the panel</p>
             <pre className="p-2 rounded text-xs" style={{ background: "var(--border)" }}>
-              cd /home/nexlify-panel && pm2 restart nexlify
+              cd /home/nexlify && pm2 restart nexlify
             </pre>
           </div>
 

@@ -8,7 +8,7 @@ if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
 fi
 
 MARKETING="${MARKETING_DIR:-/var/www/nexlify}"
-PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
+PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify}"
 TARBALL="$MARKETING/public/downloads/nexlify-panel.tar.gz"
 NGINX_SITE="/etc/nginx/sites-available/nexlify.live"
 

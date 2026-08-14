@@ -28,7 +28,7 @@ find_panel_dir() {
     echo "$PANEL_DIR"
     return 0
   fi
-  for candidate in /home/nexlify-panel /opt/nexlify-panel; do
+  for candidate in /home/nexlify /home/nexlify-panel /opt/nexlify-panel; do
     if [ -f "$candidate/package.json" ]; then
       echo "$candidate"
       return 0

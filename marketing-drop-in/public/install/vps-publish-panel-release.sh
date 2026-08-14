@@ -44,7 +44,7 @@ git_fetch_ok() {
 
 MARKETING="${MARKETING_DIR:-/var/www/nexlify}"
 BRANCH="${NEXLIFY_GIT_BRANCH:-main}"
-PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify-panel}"
+PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify}"
 
 REPO_URL="$(resolve_nexlify_git_url)"
 

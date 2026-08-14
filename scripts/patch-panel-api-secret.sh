@@ -6,7 +6,7 @@
 # between the marketing site and customer panels.
 set -euo pipefail
 
-PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify}"
 PANEL_API_SECRET="21ea28d45f9d1e1e6d5fd76cd4c078d46d5f3d531f1a6d25"
 
 if [ ! -f "$PANEL_DIR/.env" ]; then

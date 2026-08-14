@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Smarters/Xtream API smoke test on localhost (run on panel VPS).
 set -uo pipefail
-PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
-for d in /opt/nexlify-panel /home/nexlify-panel "$(pwd)"; do
+PANEL_DIR="${PANEL_DIR:-/home/nexlify}"
+for d in /home/nexlify /opt/nexlify-panel /home/nexlify-panel "$(pwd)"; do
   [ -f "${d}/package.json" ] && [ -f "${d}/.env" ] && PANEL_DIR="$d" && break
 done
 cd "$PANEL_DIR"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Clear stuck panel update + apply firewall + restart (customer VPS repair).
 set -euo pipefail
-PANEL_DIR="${PANEL_DIR:-/home/nexlify-panel}"
+PANEL_DIR="${PANEL_DIR:-/home/nexlify}"
 cd "$PANEL_DIR"
 pkill -f 'panel-update-background' 2>/dev/null || true
 pkill -f 'apply-panel-fast-update' 2>/dev/null || true

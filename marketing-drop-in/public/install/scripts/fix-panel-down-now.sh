@@ -20,7 +20,7 @@ INSTALL_BASE="${NEXLIFY_INSTALL_BASE:-https://nexlify.live/install}"
 CACHE="${NEXLIFY_INSTALL_VER:-v$(date +%Y%m%d)}"
 
 find_panel_dir() {
-  for candidate in "${PANEL_DIR:-}" /home/nexlify-panel /opt/nexlify-panel; do
+  for candidate in "${PANEL_DIR:-}" /home/nexlify /home/nexlify-panel /opt/nexlify-panel; do
     [ -n "$candidate" ] && [ -f "$candidate/package.json" ] && echo "$candidate" && return 0
   done
   return 1

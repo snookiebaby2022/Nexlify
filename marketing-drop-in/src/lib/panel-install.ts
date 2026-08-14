@@ -2,7 +2,7 @@
 
 import panelReleases from "./panel-releases.json";
 
-export const PANEL_INSTALL_DIR = "/opt/nexlify-panel";
+export const PANEL_INSTALL_DIR = "/home/nexlify";
 export const CREDENTIALS_ROOT_DIR = "/root/nexlify";
 export const CREDENTIALS_FILE = `${CREDENTIALS_ROOT_DIR}/install-credentials`;
 
