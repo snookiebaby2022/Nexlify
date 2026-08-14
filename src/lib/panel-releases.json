@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.57",
+  "latestVersion": "1.9.58",
   "releases": [
+    {
+      "version": "1.9.58",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Add a top-level Providers sidebar tab so IPTV providers are easy to find.",
+      "changelog": [
+        "New sidebar group: Providers (Manage Providers, Provider URL Tools, Import from Provider M3U, M3U Auto-Sync)",
+        "Renamed buried VOD → Library → VOD Providers entry to Providers",
+        "Providers page title clarified for live + VOD upstream sources"
+      ],
+      "fixes": [
+        "Providers was hard to find — only listed under VOD → Library as VOD Providers"
+      ]
+    },
     {
       "version": "1.9.57",
       "date": "2026-08-14",

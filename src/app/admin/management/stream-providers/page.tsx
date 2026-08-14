@@ -221,16 +221,16 @@ export default function StreamProvidersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Content providers</h1>
+      <h1 className="text-2xl font-semibold">Providers</h1>
       <p className="text-sm" style={{ color: "var(--muted)" }}>
-        Upstream live sources and VOD hosts (generic URL, file host, Xtream VOD). Movies and episodes can reference these by path/ID.
+        IPTV upstream sources and VOD hosts (generic URL, file host, Xtream). Live streams, movies, and episodes can use these by path/ID.
       </p>
 
       <div
         className="rounded-lg border p-4 text-sm space-y-3"
         style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}
       >
-        <h3 className="font-semibold" style={{ color: "var(--accent)" }}>ℹ️ What are content providers?</h3>
+        <h3 className="font-semibold" style={{ color: "var(--accent)" }}>ℹ️ What are providers?</h3>
         <div className="space-y-2 text-[var(--muted)]">
           <p>
             <strong>Live upstream</strong> — A server that provides live TV streams (e.g., http://provider.com:8080/live/username/password/123.m3u8).

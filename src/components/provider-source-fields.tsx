@@ -42,8 +42,8 @@ export function ProviderSourceFields({
       {useProvider ? (
         <>
           <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Pick a configured VOD provider and enter its content path or stream ID. Configure providers under
-            Management → VOD Providers.
+            Pick a configured provider and enter its content path or stream ID. Configure providers under
+            sidebar → Providers → Manage Providers.
           </p>
           <select
             className="w-full rounded border px-3 py-2 bg-transparent text-sm"

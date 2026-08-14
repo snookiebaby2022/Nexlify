@@ -144,6 +144,20 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
     {
       kind: "group",
       group: {
+        id: "providers",
+        label: "Providers",
+        icon: coloredGroupIcon("providers"),
+        items: [
+          { href: "/admin/management/stream-providers", label: "Manage Providers", section: "IPTV Providers" },
+          { href: "/admin/management/tools/provider-urls", label: "Provider URL Tools", section: "Tools" },
+          { href: "/admin/import/m3u", label: "Import from Provider M3U", section: "Import" },
+          { href: "/admin/m3u-sync", label: "M3U Auto-Sync", section: "Import" },
+        ],
+      },
+    },
+    {
+      kind: "group",
+      group: {
         id: "categories",
         label: "Categories",
         icon: coloredGroupIcon("live"),
@@ -204,7 +218,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/content/episodes/add", label: "Add Episode", section: "Episodes" },
           { href: "/admin/content/episodes", label: "Manage Episodes", section: "Episodes" },
           { href: "/admin/content/vod", label: "VOD browser", section: "Library" },
-          { href: "/admin/management/stream-providers", label: "VOD Providers", section: "Library" },
+          { href: "/admin/management/stream-providers", label: "Providers", section: "Library" },
           { href: "/admin/watch-folders", label: "Watch Folders", section: "Library" },
           { href: "/admin/m3u-sync", label: "M3U Auto-Sync", section: "Library" },
           { href: "/admin/import/movies", label: "Import Movies", section: "Import" },
