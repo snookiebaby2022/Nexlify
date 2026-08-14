@@ -465,6 +465,9 @@ export default function PanelUpdatesPage() {
           />
           Auto-apply when a new release is detected
         </label>
+        <span className="text-xs" style={{ color: "var(--muted)" }}>
+          Off by default — updates only when you click Update panel
+        </span>
         {data.canRollback && (
           <button
             type="button"

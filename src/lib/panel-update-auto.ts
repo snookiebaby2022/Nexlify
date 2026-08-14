@@ -1,5 +1,8 @@
 import { getPanelServerSettingsSafe, getResolvedRepoPath } from "@/lib/panel-server";
-import { getSettingGroup } from "@/lib/panel-settings";
+import {
+  ensurePanelUpdateAutoApplyOffByDefault,
+  getSettingGroup,
+} from "@/lib/panel-settings";
 import {
   DEFAULT_RELEASES_FEED_URL,
   fetchNexlifyReleasesFeed,
@@ -33,6 +36,7 @@ export async function getPanelUpdateStatus(): Promise<PanelUpdateStatus> {
   const version = await getPanelVersionInfoWithRelease(repoPath, server.updateCheckUrl || undefined);
   let autoApplyEnabled = false;
   try {
+    await ensurePanelUpdateAutoApplyOffByDefault();
     const settings = await getSettingGroup("server");
     autoApplyEnabled = settings.panelUpdateAutoDownload === true;
   } catch {

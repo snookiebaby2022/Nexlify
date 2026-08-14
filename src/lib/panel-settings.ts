@@ -117,7 +117,13 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     }[],
     rollbackGitRef: null as string | null,
     updateCheckUrl: "",
+    /** Off by default — operators must click Update panel (or explicitly enable auto-apply). */
     panelUpdateAutoDownload: false,
+    /**
+     * One-time flag: after true, we no longer force-clear panelUpdateAutoDownload.
+     * Existing panels that inherited the old default (true) are flipped off once on upgrade.
+     */
+    panelUpdateAutoApplyDefaultOffV1: false,
     streamAgentUpgradeNotes:
       "Upgrade stream agents: Admin → Servers → action menu → Reinstall agent, or SSH to the node and re-run the install command from the server wizard. Match agent version to panel release shown on Updates.",
   },
@@ -726,6 +732,28 @@ export async function getSettingGroup(group: SettingGroup): Promise<Record<strin
   })();
   setCachedSetting(group, result);
   return result;
+}
+
+/**
+ * Ensure "Auto-apply when a new release is detected" is OFF by default.
+ * New installs already default to false. Existing panels that still have the
+ * old baked-in `true` are flipped off once; operators can re-enable afterward.
+ */
+export async function ensurePanelUpdateAutoApplyOffByDefault(): Promise<void> {
+  try {
+    const settings = await getSettingGroup("server");
+    if (settings.panelUpdateAutoApplyDefaultOffV1 === true) return;
+
+    const patch: Record<string, unknown> = {
+      panelUpdateAutoApplyDefaultOffV1: true,
+    };
+    if (settings.panelUpdateAutoDownload === true) {
+      patch.panelUpdateAutoDownload = false;
+    }
+    await setSettingGroup("server", patch);
+  } catch {
+    /* DB unavailable — skip; default remains false in DEFAULTS */
+  }
 }
 
 export async function setSettingGroup(group: SettingGroup, data: Record<string, unknown>) {

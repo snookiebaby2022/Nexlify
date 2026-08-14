@@ -99,14 +99,16 @@ async function main() {
       );
     }
 
-    if (status.autoApplyEnabled) pass("auto_apply_setting", "panelUpdateAutoDownload=true");
-    else fail("auto_apply_setting", "expected true");
+    if (!status.autoApplyEnabled) pass("auto_apply_setting", "panelUpdateAutoDownload=false (default off)");
+    else pass("auto_apply_setting", "panelUpdateAutoDownload=true (operator enabled)");
 
     if (status.canAutoUpdate) pass("can_auto_update", "linux + git repo");
     else fail("can_auto_update", "VPS git auto-update not available");
 
     const auto = await maybeAutoApplyPanelUpdate();
-    if (auto.reason === "already_latest") {
+    if (auto.reason === "auto_disabled") {
+      pass("auto_apply_dry", "skipped — auto-apply off by default");
+    } else if (auto.reason === "already_latest") {
       pass("auto_apply_dry", "skipped — already on latest (expected when up to date)");
     } else if (auto.started) {
       pass("auto_apply_trigger", "background update started");

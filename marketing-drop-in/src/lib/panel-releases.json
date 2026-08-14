@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.55",
+  "latestVersion": "1.9.56",
   "releases": [
+    {
+      "version": "1.9.56",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Auto-apply when a new release is detected is OFF by default (manual Update panel only).",
+      "changelog": [
+        "Default and one-time migration: panelUpdateAutoDownload is false unless the operator enables it",
+        "Updates page notes that auto-apply is off by default",
+        "Existing panels that still had the old baked-in true are flipped off once on boot/update check"
+      ],
+      "fixes": [
+        "Panels that inherited auto-apply=true from the old default could still auto-start updates"
+      ]
+    },
     {
       "version": "1.9.55",
       "date": "2026-08-14",
