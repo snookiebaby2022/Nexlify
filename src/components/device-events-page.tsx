@@ -26,7 +26,7 @@ export function DeviceEventsPage() {
   }, [lineId]);
 
   useEffect(() => {
-    fetch("/api/admin/lines")
+    fetch("/api/admin/lines?page=1&pageSize=50")
       .then((r) => r.json())
       .then((d) => setLines(d.lines ?? []));
   }, []);
