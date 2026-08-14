@@ -1200,7 +1200,7 @@ export function PanelMigrateForm() {
         </label>
         <label>
           <input type="checkbox" checked={skipExisting} onChange={(e) => setSkipExisting(e.target.checked)} />{" "}
-          Skip existing usernames / stream names
+          Skip existing usernames / stream URLs (updates type + category on a match — does not duplicate)
         </label>
         <label>
           <input type="checkbox" checked={clearData} onChange={(e) => setClearData(e.target.checked)} />{" "}
@@ -1243,6 +1243,13 @@ export function PanelMigrateForm() {
           </p>
         </div>
       )}
+
+      <p className="text-xs opacity-80">
+        Already imported this dump? Keep <strong>Skip existing</strong> on and <strong>Clear all data</strong> off,
+        then Run import — that retags live / movies / series in place and adds anything missing.
+        Use <strong>Repair existing import</strong> after that for bouquets, activation, and empty categories.
+        Repair alone does not re-read the SQL file.
+      </p>
 
       <div className="flex gap-3">
         <button

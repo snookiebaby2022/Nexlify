@@ -293,19 +293,50 @@ async function applyMigrationBundleInner(
           if (php) streamUrl = php;
           else return false;
         }
-        if (options.skipExistingStreams) {
-          const dup = await prisma.stream.findFirst({ where: { name, streamUrl } });
-          if (dup) {
-            streamIdByLegacy.set(s.legacyId, dup.id);
-            return false;
-          }
-        }
         const type =
           s.type === "MOVIE" ? StreamType.MOVIE : s.type === "SERIES" ? StreamType.SERIES : StreamType.LIVE;
         const categoryId = s.categoryLegacyId ? categoryIdByLegacy.get(s.categoryLegacyId) : undefined;
         const mappedServerId = s.serverLegacyId
           ? serverIdByLegacy.get(s.serverLegacyId)
           : undefined;
+        const vodMode =
+          type === StreamType.MOVIE || type === StreamType.SERIES ? "ON_DEMAND" : "LIVE";
+
+        // Match by URL so a second import can retag LIVE/MOVIE/SERIES without duplicates
+        // (episode titles often differ from the original stream_display_name).
+        const dup = await prisma.stream.findFirst({
+          where: { streamUrl },
+          select: { id: true },
+        });
+        if (dup) {
+          streamIdByLegacy.set(s.legacyId, dup.id);
+          try {
+            await prisma.stream.update({
+              where: { id: dup.id },
+              data: {
+                name,
+                type,
+                vodMode,
+                isRadio: s.isRadio === true,
+                isAdult: s.isAdult === true,
+                seriesName: s.seriesName?.trim() || null,
+                seasonNum: s.seasonNum ?? null,
+                episodeNum: s.episodeNum ?? null,
+                ...(categoryId ? { categoryId } : {}),
+                ...(mappedServerId ? { serverId: mappedServerId } : {}),
+                ...(s.backupUrl?.trim() ? { backupUrl: s.backupUrl.trim() } : {}),
+                ...(s.streamIcon?.trim() ? { streamIcon: s.streamIcon.trim() } : {}),
+                ...(s.containerExtension?.trim()
+                  ? { containerExtension: s.containerExtension.trim() }
+                  : {}),
+                ...(s.epgChannelId?.trim() ? { epgChannelId: s.epgChannelId.trim() } : {}),
+              },
+            });
+          } catch (e) {
+            pushWarning(result.warnings, `Update existing stream ${name}: ${shortErr(e)}`);
+          }
+          return false;
+        }
         const created = await prisma.stream.create({
           data: {
             name,
@@ -328,10 +359,7 @@ async function applyMigrationBundleInner(
             seriesName: s.seriesName?.trim() || null,
             seasonNum: s.seasonNum ?? null,
             episodeNum: s.episodeNum ?? null,
-            vodMode:
-              type === StreamType.MOVIE || type === StreamType.SERIES
-                ? "ON_DEMAND"
-                : "LIVE",
+            vodMode,
           },
         });
         streamIdByLegacy.set(s.legacyId, created.id);

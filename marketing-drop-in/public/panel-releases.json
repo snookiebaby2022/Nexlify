@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.41",
+  "latestVersion": "1.9.42",
   "releases": [
+    {
+      "version": "1.9.42",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Re-import retags live/movies/series in place; migrate preview notes are not errors.",
+      "changelog": [
+        "Second import matches streams by URL and updates type, category, and episode metadata instead of skipping or duplicating",
+        "Migrate preview lists headerless CREATE TABLE mapping as notes, not parse warnings",
+        "Explain XUI streams_episodes catalog rows vs playable episode streams"
+      ],
+      "fixes": [
+        "Skip existing import left movies/series stuck as live because it never updated type",
+        "Re-import could duplicate episodes when the display name changed after tagging"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.42.tar.gz"
+    },
     {
       "version": "1.9.41",
       "date": "2026-08-14",
