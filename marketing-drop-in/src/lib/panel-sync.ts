@@ -68,6 +68,33 @@ function normalizePanelUrl(raw: string): string {
   return raw.trim().replace(/\/$/, "");
 }
 
+function isPrivateOrLocalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0") return true;
+  if (host.endsWith(".local") || host.endsWith(".internal")) return true;
+  if (/^10\./.test(host) || /^192\.168\./.test(host)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return true;
+  if (/^169\.254\./.test(host)) return true;
+  return false;
+}
+
+function parsePublicPanelUrl(raw: string): { ok: true; url: string } | { ok: false; error: string } {
+  try {
+    const trimmed = normalizePanelUrl(raw);
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const url = new URL(withProto);
+    if (!["http:", "https:"].includes(url.protocol)) {
+      return { ok: false, error: "Invalid panel URL" };
+    }
+    if (isPrivateOrLocalHost(url.hostname)) {
+      return { ok: false, error: "Panel URL not allowed" };
+    }
+    return { ok: true, url: normalizePanelUrl(url.origin) };
+  } catch {
+    return { ok: false, error: "Invalid panel URL" };
+  }
+}
+
 export function licenseKeyHash(key: string): string {
   return createHash("sha256").update(key.trim()).digest("hex");
 }
@@ -218,12 +245,20 @@ export async function registerPanelActivation(opts: {
 }) {
   const key = opts.licenseKey.trim();
   const hash = licenseKeyHash(key);
-  const panelUrl = normalizePanelUrl(opts.panelUrl);
+  const parsedUrl = parsePublicPanelUrl(opts.panelUrl);
+  if (!parsedUrl.ok) return { ok: false as const, error: parsedUrl.error };
+  const panelUrl = parsedUrl.url;
 
   const license = await prisma.license.findUnique({ where: { key } });
   if (!license) return { ok: false as const, error: "License not found" };
 
   const incomingSecret = opts.panelApiSecret?.trim() || "";
+  if (license.machineId && license.machineId !== opts.instanceId) {
+    const stored = license.panelApiSecret?.trim() || "";
+    if (!stored || !incomingSecret || !secretsEqual(incomingSecret, stored)) {
+      return { ok: false as const, error: "License already activated on another panel" };
+    }
+  }
   await prisma.license.update({
     where: { id: license.id },
     data: {

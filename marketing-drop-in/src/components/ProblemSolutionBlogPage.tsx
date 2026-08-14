@@ -8,6 +8,7 @@ import { WebPageJsonLd } from "@/components/WebPageJsonLd";
 import { blogPostMetadata } from "@/lib/blog-metadata";
 import type { ProblemSolutionPost } from "@/lib/problem-solution-posts";
 import { pageUrl } from "@/lib/seo";
+import { safeJsonLd } from "@/lib/json-ld";
 
 type ProblemSolutionBlogPageProps = {
   post: ProblemSolutionPost;
@@ -26,7 +27,7 @@ function ArticleJsonLd({ post }: { post: ProblemSolutionPost }) {
     keywords: post.keywords.join(", "),
   };
   return (
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }} />
   );
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.48' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.49' | sudo bash
 #
 # Server IP/hostname is detected automatically. Then open the login URL, sign in
 # with the admin password shown at the end, and paste your license key under Admin → License.
@@ -18,7 +18,7 @@ if [ -f "$_SCRIPT_DIR/panel-version.sh" ]; then
 else
   _PV="0"
 fi
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.48}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.49}"
 CREDS_ROOT="/root/nexlify"
 DOMAIN=""
 EMAIL=""
@@ -34,7 +34,7 @@ usage() {
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.48' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.49' | sudo bash
 
 Options:
   --ip IP                Override auto-detected server IP or hostname
@@ -48,9 +48,9 @@ Options:
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.48' | sudo bash
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.48' | sudo bash -s -- --license NXLF1-XXXXX
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.48' | sudo bash -s -- --domain panel.example.com --email admin@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.49' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.49' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=1.9.49' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 
@@ -530,14 +530,8 @@ if ! grep -q '^ENCRYPTION_AT_REST_KEY=' .env 2>/dev/null; then
 fi
 
 configure_panel_license_sync() {
-  local vendor="${NEXLIFY_VENDOR_URL:-https://nexlify.live}"
   local secret="${INSTALL_PANEL_SYNC_SECRET:-${PANEL_API_SECRET:-}}"
-  if [ -z "$secret" ] && command -v curl >/dev/null 2>&1; then
-    secret="$(curl -fsSL "${vendor}/install/panel-sync.env?v=167" 2>/dev/null \
-      | grep '^PANEL_API_SECRET=' | cut -d= -f2- | tr -d '\r' || true)"
-  fi
-  # Fetch vendor sync secret when provided; otherwise generate a unique per-install secret.
-  # Do not embed a shared fallback in this script.
+  # Unique per install. Never download a shared secret from the vendor website.
   if [ -z "$secret" ]; then
     secret="$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
     log "Generated unique PANEL_API_SECRET (set INSTALL_PANEL_SYNC_SECRET to use vendor remote-update)"

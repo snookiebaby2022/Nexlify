@@ -63,11 +63,24 @@ export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
 }
 
+/** Valid bcrypt of a random value — never a real password. Used for timing-safe missing-user checks. */
+export const UNUSABLE_PASSWORD_HASH =
+  "$2b$12$QZJl9F0j0MahJe9t7xyhk.DpFTYOxAQurf5iWuwWnHOVJ6R6dV1Hi";
+
 export async function verifyPassword(
   password: string,
   hash: string,
 ): Promise<boolean> {
-  return bcrypt.compare(password, hash);
+  try {
+    return await bcrypt.compare(password, hash);
+  } catch {
+    return false;
+  }
+}
+
+/** Always run a bcrypt compare so missing users take a similar time as real ones. */
+export async function dummyPasswordCheck(password: string): Promise<void> {
+  await verifyPassword(password, UNUSABLE_PASSWORD_HASH);
 }
 
 export async function createSessionToken(user: SessionUser): Promise<string> {

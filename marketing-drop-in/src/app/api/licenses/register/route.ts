@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { registerPanelActivation } from "@/lib/panel-sync";
+import { clientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 const registerSchema = z.object({
   licenseKey: z.string().min(20),
@@ -12,6 +13,10 @@ const registerSchema = z.object({
 /** Customer panel registers after activation so admin can push license changes. Auth is the license key. */
 export async function POST(request: Request) {
   try {
+    const ip = clientIp(request);
+    const limited = rateLimit(`license-register:${ip}`, 20, 60 * 60 * 1000);
+    if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
+
     const body = registerSchema.parse(await request.json());
     const panelApiSecret =
       request.headers.get("x-panel-api-key") ??

@@ -1,6 +1,21 @@
 type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
+const MAX_BUCKETS = 5000;
+
+function pruneBuckets(now: number) {
+  if (buckets.size < MAX_BUCKETS) return;
+  for (const [k, v] of buckets) {
+    if (now >= v.resetAt) buckets.delete(k);
+  }
+  if (buckets.size < MAX_BUCKETS) return;
+  const extra = buckets.size - Math.floor(MAX_BUCKETS / 2);
+  let n = 0;
+  for (const k of buckets.keys()) {
+    buckets.delete(k);
+    if (++n >= extra) break;
+  }
+}
 
 export function rateLimit(
   key: string,
@@ -8,6 +23,7 @@ export function rateLimit(
   windowMs: number,
 ): { ok: true } | { ok: false; retryAfterSec: number } {
   const now = Date.now();
+  pruneBuckets(now);
   const bucket = buckets.get(key);
 
   if (!bucket || now >= bucket.resetAt) {

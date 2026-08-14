@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { getSettingGroup } from "@/lib/panel-settings";
+import { secretsEqual } from "@/lib/secrets-equal";
 
 export async function appendPlaybackToken(
   url: string,
@@ -10,10 +11,11 @@ export async function appendPlaybackToken(
   if (!ttlSec || ttlSec <= 0) return url;
 
   const secret =
-    process.env.PLAYBACK_TOKEN_SECRET ??
-    String((await getSettingGroup("fingerprint")).secret ?? "") ??
-    process.env.JWT_SECRET ??
-    "nexlify-playback";
+    process.env.PLAYBACK_TOKEN_SECRET?.trim() ||
+    String((await getSettingGroup("fingerprint")).secret ?? "").trim() ||
+    process.env.JWT_SECRET?.trim() ||
+    "";
+  if (!secret) return url;
 
   const exp = Math.floor(Date.now() / 1000) + ttlSec;
   const payload = `${ctx.lineId}|${ctx.streamId ?? ""}|${exp}`;
@@ -41,7 +43,7 @@ export function verifyPlaybackToken(
     if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) return false;
     const payload = `${ctx.lineId}|${ctx.streamId ?? ""}|${exp}`;
     const expected = crypto.createHmac("sha256", secret).update(payload).digest("hex").slice(0, 24);
-    return sig === expected;
+    return secretsEqual(sig, expected);
   } catch {
     return false;
   }

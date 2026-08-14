@@ -3,6 +3,7 @@ import {
   buildSoftwareApplicationSchema,
   type SchemaOffer,
 } from "@/lib/software-schema";
+import { safeJsonLd } from "@/lib/json-ld";
 
 type SoftwareProductJsonLdProps = {
   path: string;
@@ -48,7 +49,7 @@ export function SoftwareProductJsonLd({
         <script
           key={index}
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+          dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }}
         />
       ))}
     </>

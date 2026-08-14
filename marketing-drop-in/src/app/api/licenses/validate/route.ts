@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { validateLicenseKey } from "@/lib/licensing";
+import { clientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   key: z.string().min(8).optional(),
@@ -10,6 +11,10 @@ const bodySchema = z.object({
 /** Panel / WHMCS validate a license key against the marketing database. */
 export async function POST(request: Request) {
   try {
+    const ip = clientIp(request);
+    const limited = rateLimit(`license-validate:${ip}`, 30, 15 * 60 * 1000);
+    if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
+
     const body = bodySchema.parse(await request.json());
     const key = body.key ?? body.licenseKey ?? "";
     const result = await validateLicenseKey(key);

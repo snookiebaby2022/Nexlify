@@ -1,5 +1,6 @@
 import { pageUrl } from "@/lib/seo";
 import { site } from "@/lib/site";
+import { safeJsonLd } from "@/lib/json-ld";
 
 type DocsArticleJsonLdProps = {
   path: string;
@@ -59,15 +60,15 @@ export function DocsArticleJsonLd({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(blogPosting) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(blogPosting) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(webPage) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(webPage) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(organization) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(organization) }}
       />
     </>
   );

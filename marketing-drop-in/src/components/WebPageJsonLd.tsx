@@ -1,5 +1,6 @@
 import { pageUrl } from "@/lib/seo";
 import { site } from "@/lib/site";
+import { safeJsonLd } from "@/lib/json-ld";
 
 type WebPageJsonLdProps = {
   path: string;
@@ -43,11 +44,11 @@ export function WebPageJsonLd({ path, name, description, about }: WebPageJsonLdP
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(webPage) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(webPage) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(organization) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(organization) }}
       />
     </>
   );

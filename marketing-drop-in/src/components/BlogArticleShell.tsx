@@ -8,6 +8,7 @@ import { TrialCtaButton } from "@/components/TrialCtaButton";
 import { WebPageJsonLd } from "@/components/WebPageJsonLd";
 import type { BlogPostMeta } from "@/lib/blog-types";
 import { pageUrl } from "@/lib/seo";
+import { safeJsonLd } from "@/lib/json-ld";
 
 export type BlogSection = {
   id?: string;
@@ -44,7 +45,7 @@ function ArticleJsonLd({ post }: { post: BlogPostMeta }) {
   };
 
   return (
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }} />
   );
 }
 
@@ -64,7 +65,7 @@ function HowToJsonLd({ post, steps }: { post: BlogPostMeta; steps: { name: strin
   };
 
   return (
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }} />
   );
 }
 

@@ -1,4 +1,5 @@
 import { pageUrl } from "@/lib/seo";
+import { safeJsonLd } from "@/lib/json-ld";
 
 type Crumb = { name: string; path: string };
 
@@ -17,7 +18,7 @@ export function BreadcrumbJsonLd({ items }: { items: Crumb[] }) {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }}
     />
   );
 }

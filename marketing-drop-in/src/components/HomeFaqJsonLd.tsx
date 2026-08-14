@@ -1,4 +1,5 @@
 import { pageUrl } from "@/lib/seo";
+import { safeJsonLd } from "@/lib/json-ld";
 
 const FAQ_ITEMS = [
   {
@@ -41,7 +42,7 @@ export function HomeFaqJsonLd() {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }}
     />
   );
 }

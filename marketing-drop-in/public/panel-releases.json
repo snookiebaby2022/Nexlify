@@ -1,7 +1,30 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.48",
+  "latestVersion": "1.9.49",
   "releases": [
+    {
+      "version": "1.9.49",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Harden marketing/admin and installer: stop publishing a shared panel API secret, rate-limit auth, block license hijack and private-URL register.",
+      "changelog": [
+        "Installer no longer downloads a shared PANEL_API_SECRET from the marketing site; each install generates a unique key",
+        "Public /install/panel-sync.env is a comment stub and is never written from the vendor .env",
+        "Marketing login, forgot-password, license register, and license validate are rate-limited",
+        "Login compares a dummy bcrypt hash when the email is unknown to reduce user-enumeration timing",
+        "License register rejects private/loopback panel URLs and cannot move an already-activated license to a new instance without the existing panel secret",
+        "JSON-LD scripts escape HTML specials; billing webhooks and playback tokens use constant-time compares; playback tokens are omitted if no secret is configured",
+        "Admin-created billing users get an unusable bcrypt hash instead of the literal string external; admin password changes require 8 characters"
+      ],
+      "fixes": [
+        "Shared installer sync secret was still published at /install/panel-sync.env and fetched by panel.sh",
+        "Marketing /api/auth/login had no rate limit",
+        "Anyone with a license key could re-register a different panel URL (SSRF / hijack of vendor remote-update)",
+        "Hardcoded playback HMAC fallback nexlify-playback; billing webhook used non-constant-time compare",
+        "Admin-created users with passwordHash external could throw on bcrypt compare"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.49.tar.gz"
+    },
     {
       "version": "1.9.48",
       "date": "2026-08-14",

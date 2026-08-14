@@ -1,5 +1,6 @@
 import { FAQ_CATEGORIES } from "@/lib/help-faq";
 import { pageUrl } from "@/lib/seo";
+import { safeJsonLd } from "@/lib/json-ld";
 
 export function FaqJsonLd() {
   const mainEntity = FAQ_CATEGORIES.flatMap((category) =>
@@ -24,7 +25,7 @@ export function FaqJsonLd() {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }}
     />
   );
 }

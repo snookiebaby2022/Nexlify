@@ -1,6 +1,7 @@
 import { pageUrl } from "@/lib/seo";
 import { installerPanelShUrl } from "@/lib/panel-install";
 import { site } from "@/lib/site";
+import { safeJsonLd } from "@/lib/json-ld";
 
 const INSTALL_STEPS = [
   {
@@ -51,7 +52,7 @@ export function HowToJsonLd() {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }}
     />
   );
 }

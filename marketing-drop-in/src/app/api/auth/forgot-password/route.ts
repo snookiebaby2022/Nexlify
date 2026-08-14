@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendMarketingEmail, resolveSmtpConfig } from "@/lib/mail";
 import { randomBytes } from "crypto";
+import { clientIp, rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 function generateToken(): string {
   return randomBytes(32).toString("hex");
@@ -11,6 +12,10 @@ const EMAIL_UNAVAILABLE =
   "We couldn't send a reset email right now. Please try again later or contact support@nexlify.live.";
 
 export async function POST(req: NextRequest) {
+  const ip = clientIp(req);
+  const limited = rateLimit(`forgot-password:${ip}`, 5, 60 * 60 * 1000);
+  if (!limited.ok) return rateLimitResponse(limited.retryAfterSec);
+
   const body = await req.json();
   const email = String(body.email ?? "").trim().toLowerCase();
 

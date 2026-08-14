@@ -1,6 +1,7 @@
 import { LineStatus, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { logActivity } from "./lines";
+import { secretsEqual } from "./secrets-equal";
 
 export type BillingAction =
   | "create"
@@ -23,7 +24,7 @@ export type BillingPayload = {
 function verifySecret(provided: string | null) {
   const expected = process.env.BILLING_WEBHOOK_SECRET;
   if (!expected) return false;
-  return provided === expected;
+  return secretsEqual(provided, expected);
 }
 
 export function billingUnauthorized() {

@@ -6,6 +6,7 @@ import { WebPageJsonLd } from "@/components/WebPageJsonLd";
 import { DEMO_PANEL_URL } from "@/lib/demo";
 import { pageSeo } from "@/lib/seo-pages";
 import { pageUrl } from "@/lib/seo";
+import { safeJsonLd } from "@/lib/json-ld";
 
 const PATH = "/blog/migrate-from-xui-or-1-stream";
 const MIGRATE_DEMO_URL = `${DEMO_PANEL_URL.replace(/\/$/, "")}/admin/import/migrate`;
@@ -161,7 +162,7 @@ function MigrationHowToJsonLd() {
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{ __html: safeJsonLd(schema) }}
     />
   );
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, UNUSABLE_PASSWORD_HASH } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { issueLicenseForOrder } from "@/lib/licensing";
 import {
@@ -197,7 +197,7 @@ export async function POST(request: Request) {
     let user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       user = await prisma.user.create({
-        data: { email, name: email.split("@")[0], role: "USER", passwordHash: "external" },
+        data: { email, name: email.split("@")[0], role: "USER", passwordHash: UNUSABLE_PASSWORD_HASH },
       });
     }
 
