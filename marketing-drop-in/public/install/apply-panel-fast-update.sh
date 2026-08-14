@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.50}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.51}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -74,8 +74,9 @@ curl_vendor() {
       return 0
     fi
   fi
-  # GitHub raw for installer/scripts when vendor origin is stale or unreachable
+  # GitHub source tarball — used when nexlify.live is stale or Cloudflare-blocked.
   local gh="https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main"
+  local gh_archive="https://codeload.github.com/snookiebaby2022/Nexlify/tar.gz/refs/heads/main"
   local gh_path=""
   case "$path" in
     /install/panel.sh) gh_path="scripts/install-linux.sh" ;;
@@ -83,6 +84,11 @@ curl_vendor() {
     /install/apply-prebuilt-update.sh) gh_path="scripts/apply-prebuilt-update.sh" ;;
     /install/scripts/*) gh_path="scripts/${path#/install/scripts/}" ;;
     /install/*) gh_path="marketing-drop-in/public/install/${path#/install/}" ;;
+    /downloads/nexlify-panel.tar.gz|/downloads/next-*.tar.gz)
+      echo "WARN: vendor archive failed — retry GitHub main tarball" >&2
+      curl -fsSL -A "$ua" --max-time 180 -L "$gh_archive" -o "$dest"
+      return $?
+      ;;
   esac
   if [ -n "$gh_path" ]; then
     echo "WARN: vendor origin failed — retry GitHub ${gh_path}" >&2
@@ -245,48 +251,103 @@ verify_downloaded_archive() {
     echo "ERROR: download too small (${size:-0} bytes) — likely a failed or cached response" >&2
     return 1
   fi
-  if ! tar -xOf "$archive" ./package.json >/dev/null 2>&1 && ! tar -xOf "$archive" package.json >/dev/null 2>&1; then
-    echo "ERROR: invalid panel tarball (missing package.json) — aborting" >&2
-    return 1
+  if tar -tzf "$archive" 2>/dev/null | grep -Eq '(^|/)package.json$'; then
+    return 0
   fi
-  return 0
+  echo "ERROR: invalid panel tarball (missing package.json) — aborting" >&2
+  return 1
+}
+
+find_extracted_panel_src() {
+  local extract="$1"
+  if [ -d "$extract/nexlify-panel" ] && [ -f "$extract/nexlify-panel/package.json" ]; then
+    echo "$extract/nexlify-panel"
+    return 0
+  fi
+  if [ -f "$extract/package.json" ]; then
+    echo "$extract"
+    return 0
+  fi
+  local found
+  found="$(find "$extract" -maxdepth 2 -name package.json -print 2>/dev/null | head -1)"
+  if [ -n "$found" ]; then
+    dirname "$found"
+    return 0
+  fi
+  return 1
 }
 
 cmd_bootstrap() {
   bootstrap_patch_scripts
 }
 
-cmd_sync() {
-  bootstrap_patch_scripts
+cmd_sync_git() {
+  echo "Git checkout — syncing origin/main (GitHub is source of truth, not vendor tarball)"
+  if ! git -C "$ROOT" fetch origin main && ! git -C "$ROOT" fetch origin; then
+    echo "WARN: git fetch failed — falling back to tarball" >&2
+    return 1
+  fi
+  local force="${PANEL_UPDATE_FORCE:-}"
+  force="$(printf '%s' "$force" | tr '[:upper:]' '[:lower:]')"
+  if [ "$force" = "1" ] || [ "$force" = "true" ] || [ "$force" = "yes" ]; then
+    git -C "$ROOT" reset --hard origin/main || return 1
+  else
+    git -C "$ROOT" merge --ff-only origin/main || git -C "$ROOT" reset --hard origin/main || return 1
+  fi
+  normalize_scripts
+  local synced_ver
+  synced_ver="$(node -e "try{process.stdout.write(require('./package.json').version||'')}catch{}" 2>/dev/null || true)"
+  echo "Panel files synced from git${synced_ver:+ (v${synced_ver})}."
+  return 0
+}
+
+cmd_sync_tarball() {
   local tmp archive src
   tmp="$(mktemp -d /tmp/nexlify-panel-patch-XXXXXX)"
   archive="$tmp/panel.tar.gz"
   echo "Downloading $PANEL_ARCHIVE_URL ..."
-  curl_vendor "$PANEL_ARCHIVE_URL" "$archive"
+  if ! curl_vendor "$PANEL_ARCHIVE_URL" "$archive"; then
+    echo "WARN: vendor tarball failed — downloading GitHub main archive" >&2
+    if ! curl -fsSL --max-time 180 -L \
+      "https://codeload.github.com/snookiebaby2022/Nexlify/tar.gz/refs/heads/main" \
+      -o "$archive"; then
+      rm -rf "$tmp"
+      echo "ERROR: could not download panel archive from vendor or GitHub" >&2
+      exit 1
+    fi
+  fi
   verify_downloaded_archive "$archive" || { rm -rf "$tmp"; exit 1; }
   mkdir -p "$tmp/extract"
   tar -xzf "$archive" -C "$tmp/extract"
-  if [ -d "$tmp/extract/nexlify-panel" ]; then
-    src="$tmp/extract/nexlify-panel"
-  else
-    src="$tmp/extract"
-  fi
+  src="$(find_extracted_panel_src "$tmp/extract")" || {
+    echo "ERROR: extracted archive has no package.json" >&2
+    rm -rf "$tmp"
+    exit 1
+  }
   if command -v rsync >/dev/null 2>&1; then
     rsync -a --delete \
-      --exclude='.env' --exclude='.env.*' \
+      --exclude='.git/' --exclude='.env' --exclude='.env.*' \
       --exclude='data/' --exclude='node_modules/' \
       --exclude='.next/' --exclude='.next.backup/' --exclude='.next.staging/' \
       --exclude='.panel-update-cache.json' \
       "$src/" "$ROOT/"
   else
-    find "$src" -mindepth 1 -maxdepth 1 ! -name '.env' ! -name 'data' ! -name 'node_modules' ! -name '.next' ! -name '.next.backup' ! -name '.next.staging' \
+    find "$src" -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.env' ! -name 'data' ! -name 'node_modules' ! -name '.next' ! -name '.next.backup' ! -name '.next.staging' \
       -exec cp -a {} "$ROOT/" \;
   fi
   normalize_scripts
   rm -rf "$tmp"
   local synced_ver
   synced_ver="$(node -e "try{process.stdout.write(require('./package.json').version||'')}catch{}" 2>/dev/null || true)"
-  echo "Panel files synced from vendor tarball${synced_ver:+ (v${synced_ver})}."
+  echo "Panel files synced from archive${synced_ver:+ (v${synced_ver})}."
+}
+
+cmd_sync() {
+  bootstrap_patch_scripts
+  if [ -d "$ROOT/.git" ] && cmd_sync_git; then
+    return 0
+  fi
+  cmd_sync_tarball
 }
 
 cmd_deps() {

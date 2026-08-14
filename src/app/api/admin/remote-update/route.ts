@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const force = body?.force === true;
 
-  const server = await import("@/lib/panel-server").then((m) => m.getPanelServerSettings());
+  const server = await import("@/lib/panel-server").then((m) => m.getPanelServerSettingsSafe());
   const repoPath = getResolvedRepoPath(server);
 
   const job = await reconcileStaleUpdateJob(repoPath);
@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const server = await import("@/lib/panel-server").then((m) => m.getPanelServerSettings());
+  const server = await import("@/lib/panel-server").then((m) => m.getPanelServerSettingsSafe());
   const repoPath = getResolvedRepoPath(server);
 
   const job = await reconcileStaleUpdateJob(repoPath);

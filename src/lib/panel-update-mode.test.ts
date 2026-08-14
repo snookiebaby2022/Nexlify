@@ -44,3 +44,15 @@ test("isPanelUpdateForced reads PANEL_UPDATE_FORCE", () => {
   assert.equal(isPanelUpdateForced({ PANEL_UPDATE_FORCE: "true" }), true);
   assert.equal(isPanelUpdateForced({}), false);
 });
+
+test("git still preferred when fetch result is unknown", () => {
+  assert.equal(
+    choosePanelUpdateMode({
+      isGitRepo: true,
+      hasPatchScript: true,
+      hasPrebuiltDownload: false,
+      hasNewerRelease: false,
+    }),
+    "git",
+  );
+});

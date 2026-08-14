@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { logActivity } from "@/lib/lines";
-import { getPanelServerSettings, getResolvedRepoPath } from "@/lib/panel-server";
+import { getPanelServerSettingsSafe, getResolvedRepoPath } from "@/lib/panel-server";
 import {
   DEFAULT_RELEASES_FEED_URL,
   fetchNexlifyReleasesFeed,
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const light = req.nextUrl.searchParams.get("light") === "1";
-    const server = await getPanelServerSettings();
+    const server = await getPanelServerSettingsSafe();
     const repoPath = getResolvedRepoPath(server);
 
     const job = await reconcileStaleUpdateJob(repoPath);
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
           : "update";
 
   if (action === "cancel") {
-    const server = await getPanelServerSettings();
+    const server = await getPanelServerSettingsSafe();
     const repoPath = getResolvedRepoPath(server);
     await reconcileStaleUpdateJob(repoPath);
     await clearUpdateJob(repoPath);
@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "start") {
-    const server = await getPanelServerSettings();
+    const server = await getPanelServerSettingsSafe();
     const repoPath = getResolvedRepoPath(server);
     const { version: fromVersion } = await readInstalledVersion(repoPath);
 

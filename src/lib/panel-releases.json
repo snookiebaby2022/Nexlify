@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.50",
+  "latestVersion": "1.9.51",
   "releases": [
+    {
+      "version": "1.9.51",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Heal remote panel updates when Postgres is down and stop tarball sync from wiping .git or re-applying a stale nexlify.live archive.",
+      "changelog": [
+        "Git checkouts sync origin/main inside apply-panel-fast-update.sh instead of the vendor tarball",
+        "Tarball rsync never deletes .git; GitHub main archive is the fallback when nexlify.live is stale or blocked",
+        "Remote-update and the background worker keep going when Postgres is down (filesystem repo path)",
+        "Repair one-liner restarts PostgreSQL/Redis, then git reset --hard origin/main and rebuilds",
+        "Health wait treats HTTP 503 with app=ok as booted so a brief DB blip does not fail deploy"
+      ],
+      "fixes": [
+        "Customer panel 45.88.138.18 stayed on 1.9.45 because vendor CDN latestVersion and tarball were stale",
+        "rsync --delete of the vendor tarball removed .git so the install could never git-pull again",
+        "getPanelServerSettings() threw when Postgres was down, so remote-update 500'd before git fetch",
+        "wait-panel-ready failed on degraded /api/health (database error) even when Next.js was online"
+      ]
+    },
     {
       "version": "1.9.50",
       "date": "2026-08-14",

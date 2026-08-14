@@ -39,15 +39,26 @@ done
 
 echo "Waiting for ${URL} (up to ${MAX_HEALTH_WAIT}s)..."
 health_deadline=$((SECONDS + MAX_HEALTH_WAIT))
+tmp_health="$(mktemp)"
 while [ "$SECONDS" -lt "$health_deadline" ]; do
-  if curl -fsS "$URL" >/dev/null 2>&1; then
+  code="$(curl -sS -o "$tmp_health" -w '%{http_code}' -m 5 "$URL" 2>/dev/null || echo 000)"
+  if [ "$code" = "200" ]; then
     echo "OK: $URL"
+    rm -f "$tmp_health"
+    exit 0
+  fi
+  # App process is up even when Postgres is degraded (HTTP 503, checks.app=ok).
+  if grep -q '"app":"ok"' "$tmp_health" 2>/dev/null; then
+    echo "WARN: $URL HTTP $code (app up, dependency degraded) — $(tr -d '\n' < "$tmp_health")"
+    rm -f "$tmp_health"
     exit 0
   fi
   sleep 2
 done
 
 echo "ERROR: panel not ready at $URL after ${MAX_HEALTH_WAIT}s"
+cat "$tmp_health" 2>/dev/null || true
+rm -f "$tmp_health"
 pm2 status nexlify 2>/dev/null || true
 pm2 logs nexlify --lines 15 --nostream 2>/dev/null || true
 exit 1

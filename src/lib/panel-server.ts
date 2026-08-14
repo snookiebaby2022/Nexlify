@@ -118,6 +118,20 @@ export async function getPanelServerSettings(): Promise<PanelServerSettings> {
   return parsePanelServerSettings(await getSettingGroup("server"));
 }
 
+/** Filesystem defaults when Postgres is down — remote-update must still be able to git-sync. */
+export function defaultPanelServerSettings(): PanelServerSettings {
+  return parsePanelServerSettings({});
+}
+
+export async function getPanelServerSettingsSafe(): Promise<PanelServerSettings> {
+  try {
+    return await getPanelServerSettings();
+  } catch (err) {
+    console.warn("[panel-server] database unavailable — using filesystem repo path for updates:", err);
+    return defaultPanelServerSettings();
+  }
+}
+
 export async function savePanelServerSettings(
   patch: Partial<PanelServerSettings>
 ): Promise<PanelServerSettings> {

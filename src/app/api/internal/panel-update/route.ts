@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedInternalRequest } from "@/lib/internal-request";
-import { getPanelServerSettings, getResolvedRepoPath } from "@/lib/panel-server";
+import { getPanelServerSettingsSafe, getResolvedRepoPath } from "@/lib/panel-server";
 import {
   isJobRunning,
   reconcileStaleUpdateJob,
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const force = body?.force === true || body?.action === "force";
 
-  const server = await getPanelServerSettings();
+  const server = await getPanelServerSettingsSafe();
   const repoPath = getResolvedRepoPath(server);
   const patchScript = await resolvePatchUpdateScript(repoPath);
   const versionInfo = await getPanelVersionInfo(repoPath);

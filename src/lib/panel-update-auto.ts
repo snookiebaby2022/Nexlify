@@ -1,4 +1,4 @@
-import { getPanelServerSettings, getResolvedRepoPath } from "@/lib/panel-server";
+import { getPanelServerSettingsSafe, getResolvedRepoPath } from "@/lib/panel-server";
 import { getSettingGroup } from "@/lib/panel-settings";
 import {
   DEFAULT_RELEASES_FEED_URL,
@@ -28,10 +28,16 @@ export type PanelUpdateStatus = {
 };
 
 export async function getPanelUpdateStatus(): Promise<PanelUpdateStatus> {
-  const server = await getPanelServerSettings();
+  const server = await getPanelServerSettingsSafe();
   const repoPath = getResolvedRepoPath(server);
   const version = await getPanelVersionInfoWithRelease(repoPath, server.updateCheckUrl || undefined);
-  const settings = await getSettingGroup("server");
+  let autoApplyEnabled = false;
+  try {
+    const settings = await getSettingGroup("server");
+    autoApplyEnabled = settings.panelUpdateAutoDownload === true;
+  } catch {
+    /* Postgres down — still report versions from disk + GitHub feed */
+  }
 
   let latestVersion: string | null = null;
   try {
@@ -56,7 +62,7 @@ export async function getPanelUpdateStatus(): Promise<PanelUpdateStatus> {
     installedVersion: version.installedVersion,
     latestVersion,
     updateAvailable,
-    autoApplyEnabled: settings.panelUpdateAutoDownload === true,
+    autoApplyEnabled,
     canAutoUpdate:
       process.platform === "linux" && (version.isGitRepo || patchScript != null || !!downloadUrl),
     updateRunning: isJobRunning(job),

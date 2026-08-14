@@ -3,8 +3,9 @@ import { spawn } from "child_process";
 import path from "path";
 import {
   appendUpdateHistory,
-  getPanelServerSettings,
+  getPanelServerSettingsSafe,
   savePanelServerSettings,
+  type PanelServerSettings,
 } from "@/lib/panel-server";
 import { lockfileChanged, schemaChanged, writeUpdateCache } from "@/lib/panel-update-cache";
 import {
@@ -169,7 +170,7 @@ export async function resolvePrebuiltDownloadUrl(
   repoPath: string,
 ): Promise<string | null> {
   try {
-    const settings = await getPanelServerSettings();
+    const settings = await getPanelServerSettingsSafe();
     const feedUrl = settings.updateCheckUrl?.trim() || DEFAULT_RELEASES_FEED_URL;
     const feed = await fetchNexlifyReleasesFeed(feedUrl);
     const release = feed.releases.find((r) => r.version === targetVersion);
@@ -254,7 +255,7 @@ async function resolvePanelRestartStep(repoPath: string): Promise<UpdateStep> {
 }
 
 async function recordResult(
-  settings: Awaited<ReturnType<typeof getPanelServerSettings>>,
+  settings: PanelServerSettings,
   ok: boolean,
   message: string,
   fromVersion: string,
@@ -274,7 +275,11 @@ async function recordResult(
   if (rollbackGitRef !== undefined) {
     next = { ...next, rollbackGitRef };
   }
-  await savePanelServerSettings(next);
+  try {
+    await savePanelServerSettings(next);
+  } catch (err) {
+    console.warn("[panel-update] could not persist update history (database down?):", err);
+  }
 }
 
 async function tryRecoverPanel(repoPath: string, steps: PanelUpdateResult["steps"]) {
@@ -413,7 +418,7 @@ async function postPullBuildSteps(repoPath: string): Promise<UpdateStep[]> {
 export async function runPanelUpdateWithProgress(
   onProgress?: UpdateProgressCallback
 ): Promise<PanelUpdateResult> {
-  const settings = await getPanelServerSettings();
+  const settings = await getPanelServerSettingsSafe();
   const repoPath = resolvePanelRepoPathSync(settings.repoPath);
   const { version: fromVersion } = await readInstalledVersion(repoPath);
   /** Initialized up front so failure returns never hit TDZ (shorthand `toVersion` in same scope). */
@@ -626,7 +631,7 @@ export async function runPanelUpdate(): Promise<PanelUpdateResult> {
 }
 
 export async function runPanelRollback(): Promise<PanelUpdateResult> {
-  const settings = await getPanelServerSettings();
+  const settings = await getPanelServerSettingsSafe();
   const repoPath = resolvePanelRepoPathSync(settings.repoPath);
   const { version: fromVersion } = await readInstalledVersion(repoPath);
   let toVersion = fromVersion;

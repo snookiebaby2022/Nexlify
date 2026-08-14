@@ -25,7 +25,7 @@ async function spawnRecover(repoPath: string) {
 }
 
 async function main() {
-  const { getPanelServerSettings } = await import(
+  const { getPanelServerSettingsSafe } = await import(
     path.join(REPO_ROOT, "src/lib/panel-server.ts")
   );
   const { runPanelUpdateWithProgress } = await import(
@@ -38,7 +38,7 @@ async function main() {
     path.join(REPO_ROOT, "src/lib/panel-repo-path.ts")
   );
 
-  const server = await getPanelServerSettings();
+  const server = await getPanelServerSettingsSafe();
   const repoPath = resolvePanelRepoPathSync(server.repoPath);
   let job = await readUpdateJob(repoPath);
 
@@ -78,7 +78,7 @@ async function main() {
 main().catch(async (e) => {
   console.error(e);
   try {
-    const { getPanelServerSettings } = await import(
+    const { getPanelServerSettingsSafe } = await import(
       path.join(REPO_ROOT, "src/lib/panel-server.ts")
     );
     const { readUpdateJob, writeUpdateJob } = await import(
@@ -87,7 +87,7 @@ main().catch(async (e) => {
     const { resolvePanelRepoPathSync } = await import(
       path.join(REPO_ROOT, "src/lib/panel-repo-path.ts")
     );
-    const server = await getPanelServerSettings();
+    const server = await getPanelServerSettingsSafe();
     const repoPath = resolvePanelRepoPathSync(server.repoPath);
     const job = await readUpdateJob(repoPath);
     if (job) {
