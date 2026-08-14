@@ -173,7 +173,7 @@ export async function startMigrateBackgroundJob(input: {
     env: {
       ...process.env,
       PANEL_REPO_PATH: repoPath,
-      NODE_OPTIONS: "--max-old-space-size=8192",
+      NODE_OPTIONS: "--max-old-space-size=16384",
     },
   });
   child.unref();

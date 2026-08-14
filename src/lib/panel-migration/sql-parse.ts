@@ -104,6 +104,32 @@ function extractRowTuples(valuesSection: string): string[] {
   return tuples;
 }
 
+function findUnquotedSemicolon(sql: string, from: number): number {
+  let inQuote: "'" | '"' | null = null;
+  let escape = false;
+  for (let i = from; i < sql.length; i++) {
+    const ch = sql[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === "\\" && inQuote) {
+      escape = true;
+      continue;
+    }
+    if (inQuote) {
+      if (ch === inQuote) inQuote = null;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      inQuote = ch;
+      continue;
+    }
+    if (ch === ";") return i;
+  }
+  return -1;
+}
+
 /** Parse a single INSERT/REPLACE statement (already extracted). */
 function parseSingleInsert(sql: string): { tableName: string; data: SqlTableData } | null {
   // Handles: INSERT INTO t, INSERT IGNORE INTO `db`.`t`, REPLACE INTO t (`a`,`b`) VALUES ...
@@ -124,7 +150,9 @@ function parseSingleInsert(sql: string): { tableName: string; data: SqlTableData
 
   const valuesStart = match.index + match[0].length;
   let valuesEnd = sql.length;
-  const semi = sql.indexOf(";", valuesStart);
+  // Must ignore ';' inside quoted movie plots / notes — naive indexOf truncates mid-row
+  // and drops the rest of large XUI dumps (e.g. 8k live → ~1.6k).
+  const semi = findUnquotedSemicolon(sql, valuesStart);
   if (semi >= 0) valuesEnd = semi;
 
   const valuesSection = sql.slice(valuesStart, valuesEnd);
@@ -324,7 +352,8 @@ export async function parseSqlDumpFile(
     if (/^(?:INSERT(?:\s+\w+)*\s+INTO|REPLACE\s+(?:INTO\s+)?)/i.test(trimmed)) {
       inInsert = true;
       buffer = line + "\n";
-      if (trimmed.endsWith(";")) {
+      // End only on a real statement terminator (; outside quotes), not plot text.
+      if (findUnquotedSemicolon(buffer, 0) >= 0) {
         const parsed = parseSingleInsert(buffer);
         if (parsed) {
           const existing = results.get(parsed.tableName) ?? [];
@@ -336,7 +365,7 @@ export async function parseSqlDumpFile(
       }
     } else if (inInsert) {
       buffer += line + "\n";
-      if (trimmed.endsWith(";")) {
+      if (findUnquotedSemicolon(buffer, Math.max(0, buffer.length - line.length - 2)) >= 0) {
         const parsed = parseSingleInsert(buffer);
         if (parsed) {
           const existing = results.get(parsed.tableName) ?? [];

@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.70",
+  "latestVersion": "1.9.71",
   "releases": [
+    {
+      "version": "1.9.71",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Fix SQL migration truncating streams when movie plots contain semicolons \u2014 restore full live/movie/series counts from large dumps.",
+      "changelog": [
+        "SQL INSERT parser now finds statement-ending semicolons outside quoted strings",
+        "Large XUI dumps no longer lose most streams mid-INSERT (e.g. 8k live parsed as ~1.6k)",
+        "Migrate worker heap raised to 16GB for ~500k-row stream catalogs"
+      ],
+      "fixes": [
+        "Missing majority of live streams and movies after SQL import from ~1GB dump",
+        "Preview/import counts far below streams table row counts in the dump"
+      ]
+    },
     {
       "version": "1.9.70",
       "date": "2026-08-14",
