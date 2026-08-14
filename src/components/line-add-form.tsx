@@ -78,7 +78,7 @@ export function LineAddForm({
     { id: string; label: string; description: string; days: number; maxConnections: number; creditCost: number; isTrial: boolean; lockToIp: boolean; allowedCountries: string; blockedCountries: string; canWatchAdult: boolean }[]
   >([]);
   const [templateId, setTemplateId] = useState("");
-  const [autoGenerate, setAutoGenerate] = useState(true);
+  const [autoGenerate, setAutoGenerate] = useState(false);
   const [creditHint, setCreditHint] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -128,7 +128,6 @@ export function LineAddForm({
       expiresAt: "",
     }));
     setCreditHint(tpl.creditCost);
-    if (autoGenerate) applyGenerated();
   }
 
   function applyDurationPreset(preset: (typeof LINE_DURATION_PRESETS)[number]) {
@@ -143,13 +142,20 @@ export function LineAddForm({
       maxConnections: pkg?.maxLines ?? f.maxConnections,
     }));
     setCreditHint(preset.creditCost);
-    if (autoGenerate) applyGenerated();
   }
 
   useEffect(() => {
     fetch("/api/admin/bouquets")
       .then((r) => r.json())
-      .then((d) => setBouquets(d.bouquets ?? []));
+      .then((d) => {
+        const list = d.bouquets ?? [];
+        setBouquets(list);
+        setForm((f) =>
+          f.bouquetIds.length === 0
+            ? { ...f, bouquetIds: list.map((b: { id: string }) => b.id) }
+            : f
+        );
+      });
     fetch("/api/admin/packages")
       .then((r) => r.json())
       .then((d) => {
@@ -176,9 +182,15 @@ export function LineAddForm({
     fetch("/api/admin/settings?group=security")
       .then((r) => r.json())
       .then((d) => {
-        const on = d.settings?.autoGenerateLineCredentials !== false;
+        const on = d.settings?.autoGenerateLineCredentials === true;
         setAutoGenerate(on);
-        if (on) applyGenerated();
+        if (on) {
+          setForm((f) =>
+            f.username || f.password
+              ? f
+              : { ...f, username: generateLineUsername(), password: generateLinePassword() }
+          );
+        }
       })
       .catch(() => {});
     if (mode === "admin") {
@@ -199,14 +211,24 @@ export function LineAddForm({
     document.getElementById("line-package-select")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [focusPackage, packages.length]);
 
-  useEffect(() => {
-    if (autoGenerate && !form.username && !form.password) applyGenerated();
-  }, [autoGenerate, form.username, form.password]);
+  function goNext() {
+    if (tab === "details") setTab("restrictions");
+    else if (tab === "restrictions") setTab("bouquets");
+  }
+
+  function goBack() {
+    if (tab === "bouquets") setTab("restrictions");
+    else if (tab === "restrictions") setTab("details");
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (tab !== "bouquets") {
+      goNext();
+      return;
+    }
     let username = form.username.trim();
-    let password = form.password.trim();
+    let password = form.password.replace(/[^A-Za-z]/g, "").trim();
     if (autoGenerate) {
       if (!username) username = generateLineUsername();
       if (!password) password = generateLinePassword();
@@ -268,6 +290,7 @@ export function LineAddForm({
       const createdName =
         (data as { line?: { username?: string } }).line?.username?.trim() || username;
       router.push(`${backHref}?created=${encodeURIComponent(createdName)}`);
+      router.refresh();
     } catch (e) {
       setSaving(false);
       alert(e instanceof Error ? e.message : "Network error — could not create line");
@@ -393,8 +416,9 @@ export function LineAddForm({
                   className="flex-1"
                   value={form.password}
                   onChange={(password) => setForm({ ...form, password })}
-                  placeholder={`Min ${MIN_LINE_CREDENTIAL_LENGTH} characters`}
+                  placeholder={`Letters only, min ${MIN_LINE_CREDENTIAL_LENGTH}`}
                   required={!autoGenerate}
+                  lettersOnly
                 />
                 <button
                   type="button"
@@ -414,7 +438,7 @@ export function LineAddForm({
                 onChange={(e) => {
                   const on = e.target.checked;
                   setAutoGenerate(on);
-                  if (on) applyGenerated();
+                  if (on && !form.username && !form.password) applyGenerated();
                 }}
               />
               Auto-generate username & password when empty (panel setting)
@@ -455,7 +479,6 @@ export function LineAddForm({
                             isTrial: p.days <= 2 && p.creditCost === 0,
                           });
                           setCreditHint(p.creditCost);
-                          if (autoGenerate) applyGenerated();
                         }}
                         className="text-xs rounded-full px-3 py-1.5 border cursor-pointer hover:opacity-90"
                         style={{
@@ -656,16 +679,36 @@ export function LineAddForm({
         )}
 
         <div className="flex justify-end gap-3 pt-2">
-          <Link href={backHref} className="btn-cancel rounded px-6 py-2.5 text-sm font-medium">
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            disabled={saving}
-            className="btn-positive rounded px-6 py-2.5 text-sm font-medium cursor-pointer disabled:opacity-60"
-          >
-            {saving ? "Creating…" : "Create line"}
-          </button>
+          {tab !== "details" ? (
+            <button
+              type="button"
+              onClick={goBack}
+              className="btn-cancel rounded px-6 py-2.5 text-sm font-medium cursor-pointer"
+            >
+              Back
+            </button>
+          ) : (
+            <Link href={backHref} className="btn-cancel rounded px-6 py-2.5 text-sm font-medium">
+              Cancel
+            </Link>
+          )}
+          {tab !== "bouquets" ? (
+            <button
+              type="button"
+              onClick={goNext}
+              className="btn-positive rounded px-6 py-2.5 text-sm font-medium cursor-pointer"
+            >
+              Next
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={saving}
+              className="btn-positive rounded px-6 py-2.5 text-sm font-medium cursor-pointer disabled:opacity-60"
+            >
+              {saving ? "Creating…" : "Create line"}
+            </button>
+          )}
         </div>
       </div>
     </form>

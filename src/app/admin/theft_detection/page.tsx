@@ -32,7 +32,7 @@ export default function TheftDetectionPage() {
     fetch("/api/admin/theft-detection")
       .then((r) => r.json())
       .then((d) => {
-        setAlerts(d.alerts ?? []);
+        setAlerts(Array.isArray(d.alerts) ? d.alerts : []);
         if (d.settings) setSettings({ ...defaultSettings, ...d.settings });
       });
   }

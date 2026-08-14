@@ -33,7 +33,11 @@ export default function BouquetBuilderPage() {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error ?? "Failed to generate bouquet");
       }
-      setResult(await res.json());
+      const d = await res.json();
+      setResult({
+        ...d,
+        streams: Array.isArray(d.streams) ? d.streams : [],
+      });
     } catch (e: any) {
       setError(e.message);
     } finally {

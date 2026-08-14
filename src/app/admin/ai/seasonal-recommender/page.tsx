@@ -37,7 +37,14 @@ export default function SeasonalRecommenderPage() {
         if (!r.ok) throw new Error("Failed to load");
         return r.json();
       })
-      .then((d) => setRecommendations(d.recommendations ?? []))
+      .then((d) =>
+        setRecommendations(
+          (Array.isArray(d.recommendations) ? d.recommendations : []).map((r: Recommendation) => ({
+            ...r,
+            suggestedStreams: Array.isArray(r.suggestedStreams) ? r.suggestedStreams : [],
+          }))
+        )
+      )
       .catch(() => setError("Failed to load seasonal recommendations"))
       .finally(() => setLoading(false));
   }, []);

@@ -361,6 +361,43 @@ export function ServerForm({
   const [certbotMsg, setCertbotMsg] = useState("");
   const [certbotBusy, setCertbotBusy] = useState(false);
   const [knownInterfaces, setKnownInterfaces] = useState<{ name: string; servers: string[] }[]>([]);
+  const [detecting, setDetecting] = useState(false);
+
+  async function autoDetectHardware(scope: "network" | "performance" | "all" = "all") {
+    setDetecting(true);
+    try {
+      const res = await fetch("/api/admin/servers/detect");
+      const d = await res.json();
+      if (!res.ok) {
+        alert(d.error ?? "Could not auto-detect this server");
+        return;
+      }
+      setForm((f) => ({
+        ...f,
+        ...(scope !== "performance"
+          ? {
+              netInterface: d.primaryInterface || f.netInterface,
+              netGateway: d.gateway || f.netGateway,
+            }
+          : {}),
+        ...(scope !== "network"
+          ? {
+              perfCpuThreads: d.cpuThreads || f.perfCpuThreads,
+              perfMaxConnections: d.suggestedMaxConnections || f.perfMaxConnections,
+              perfIoReadMbps: d.suggestedIoReadMbps || f.perfIoReadMbps,
+              perfIoWriteMbps: d.suggestedIoWriteMbps || f.perfIoWriteMbps,
+              perfBufferMb: d.suggestedBufferMb || f.perfBufferMb,
+              maxClients: d.suggestedMaxConnections || f.maxClients,
+            }
+          : {}),
+      }));
+      if (d.primaryInterface && !knownInterfaces.some((i) => i.name === d.primaryInterface)) {
+        setKnownInterfaces((list) => [{ name: d.primaryInterface, servers: ["detected"] }, ...list]);
+      }
+    } finally {
+      setDetecting(false);
+    }
+  }
 
   useEffect(() => {
     fetch("/api/admin/proxies")
@@ -407,6 +444,13 @@ export function ServerForm({
         }
       })
       .catch(() => {});
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "create") return;
+    void autoDetectHardware("all");
+    // Detect once when adding a server so Network + Performance start populated.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   function nextTab() {
@@ -524,12 +568,7 @@ export function ServerForm({
     router.push("/admin/servers");
   }
 
-  const viewUrl =
-    form.host && form.isActive
-      ? form.domain
-        ? `https://${form.domain}:${form.httpsPort}`
-        : `${form.protocol}://${form.host}:${form.port}`
-      : null;
+  const viewUrl = mode === "edit" && serverId ? `/admin/servers/${serverId}` : null;
 
   if (loading) {
     return (
@@ -552,14 +591,12 @@ export function ServerForm({
         <h1 className="text-lg font-semibold text-white tracking-wide">{title}</h1>
         <div className="flex items-center gap-2">
           {viewUrl && (
-            <a
+            <Link
               href={viewUrl}
-              target="_blank"
-              rel="noreferrer"
               className="text-sm px-4 py-1.5 rounded border border-white/80 text-white hover:bg-white/10"
             >
               View Server
-            </a>
+            </Link>
           )}
           <Link
             href={manageHref}
@@ -748,6 +785,15 @@ export function ServerForm({
                 Configure how the panel and streaming agent bind to this host. Public and private IPs
                 are set under Details.
               </p>
+              <button
+                type="button"
+                disabled={detecting}
+                onClick={() => void autoDetectHardware("network")}
+                className="text-sm rounded px-3 py-1.5 border cursor-pointer disabled:opacity-50"
+                style={{ borderColor: "var(--border)" }}
+              >
+                {detecting ? "Detecting…" : "Auto-detect primary interface"}
+              </button>
               <FormField label="Primary interface">
                 <input
                   className={formInputClass}
@@ -1007,6 +1053,15 @@ export function ServerForm({
 
           {tab === "performance" && (
             <div className="space-y-4 max-w-2xl">
+              <button
+                type="button"
+                disabled={detecting}
+                onClick={() => void autoDetectHardware("performance")}
+                className="text-sm rounded px-3 py-1.5 border cursor-pointer disabled:opacity-50"
+                style={{ borderColor: "var(--border)" }}
+              >
+                {detecting ? "Detecting…" : "Auto-detect server performance"}
+              </button>
               {mode === "edit" && (
                 <div
                   className="rounded-lg border px-4 py-3 text-sm"

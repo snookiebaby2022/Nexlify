@@ -33,8 +33,8 @@ export default function AnalyticsPage() {
     fetch(`/api/admin/analytics?range=${timeRange}`)
       .then((r) => r.json())
       .then((d) => {
-        setBandwidth(d.bandwidth ?? []);
-        setGeo(d.geo ?? []);
+        setBandwidth(Array.isArray(d.bandwidth) ? d.bandwidth : []);
+        setGeo(Array.isArray(d.geo) ? d.geo : []);
       })
       .catch(() => {});
   }, [timeRange]);

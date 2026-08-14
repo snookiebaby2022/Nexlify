@@ -1,7 +1,29 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.36",
+  "latestVersion": "1.9.37",
   "releases": [
+    {
+      "version": "1.9.37",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Fix Add Line wizard, letter-only passwords, View Server login redirect, unique TV series with episode edit, and harden servers/ops/admin pages.",
+      "changelog": [
+        "Remove duplicate Add Line (with Package); wizard is Next → Restrictions → Bouquets → Create line (all bouquets selected)",
+        "Creating a line keeps the username/password you typed and then opens Manage Lines",
+        "Line passwords are letters only on add and edit",
+        "View Server stays in the panel instead of opening the stream host login page",
+        "Add/Manage Server auto-detects primary NIC and performance",
+        "Manage Series lists unique TV series with Edit episodes",
+        "Resource charts, load balancer, auto-scale, process monitor, analytics, AI, tickets, logs, and related pages no longer crash on empty or malformed API data"
+      ],
+      "fixes": [
+        "Add Line created a random username because auto-generate overwrote typed credentials",
+        "View Server linked to host:port and dumped operators to a login screen",
+        "Manage Series listed every episode instead of TV series titles",
+        "Resource charts / auto-scale / process monitor threw when metrics or process rows were missing"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.37.tar.gz"
+    },
     {
       "version": "1.9.36",
       "date": "2026-08-14",

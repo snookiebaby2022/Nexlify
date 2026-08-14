@@ -34,7 +34,7 @@ export default function HealthPredictorPage() {
         }
         return r.json();
       })
-      .then((d) => setStreams(d.streams ?? []))
+      .then((d) => setStreams(Array.isArray(d.streams) ? d.streams : []))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);

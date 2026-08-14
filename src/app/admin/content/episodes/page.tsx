@@ -6,7 +6,7 @@ import { EpisodesManageTable } from "@/components/episodes-manage-table";
 
 function EpisodesPageInner() {
   const searchParams = useSearchParams();
-  const seriesId = searchParams.get("seriesId") ?? undefined;
+  const seriesId = searchParams.get("seriesId") ?? searchParams.get("series") ?? undefined;
   return <EpisodesManageTable initialSeriesId={seriesId} />;
 }
 

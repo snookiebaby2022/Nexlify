@@ -218,9 +218,9 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
           <h1 className="text-lg font-semibold">Mass Edit Lines</h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={`${base}/lines/add-package`} className="xui-lines-header-btn xui-lines-header-btn--outline">
+          <Link href={`${base}/lines/add`} className="xui-lines-header-btn xui-lines-header-btn--outline">
             <PackagePlus size={16} />
-            Add Line (with Package)
+            Add Line
           </Link>
           <Link href={`${base}/lines`} className="xui-lines-header-btn xui-lines-header-btn--outline">
             <LayoutList size={16} />

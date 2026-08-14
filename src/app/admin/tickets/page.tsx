@@ -17,7 +17,7 @@ export default function TicketsPage() {
   function load() {
     fetch("/api/admin/tickets")
       .then((r) => r.json())
-      .then((d) => setTickets(d.tickets ?? []));
+      .then((d) => setTickets(Array.isArray(d.tickets) ? d.tickets : []));
     fetch("/api/admin/resellers")
       .then((r) => r.json())
       .then((d) => setAdmins((d.users ?? []).filter((u: { role: string }) => u.role === "ADMIN")));

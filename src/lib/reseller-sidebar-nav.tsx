@@ -60,8 +60,6 @@ export function getResellerSidebarNav(): SidebarNavEntry[] {
 
           { href: "/reseller/lines/add", label: "Add Line", section: "Users" },
 
-          { href: "/reseller/lines/add?package=1", label: "Add Line (with Package)", section: "Users" },
-
           { href: "/reseller/lines", label: "Manage Lines", section: "Users" },
 
           { href: "/reseller/lines/mass-edit", label: "Mass Edit Lines", section: "Users" },

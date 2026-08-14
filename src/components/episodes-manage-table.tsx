@@ -24,6 +24,7 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
   const [seriesFilter, setSeriesFilter] = useState(initialSeriesId ?? "");
   const [seasonFilter, setSeasonFilter] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [seriesCatalog, setSeriesCatalog] = useState<{ id: string; name: string }[]>([]);
 
   function load() {
     const params = new URLSearchParams();
@@ -43,11 +44,19 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
     load();
   }, [seriesFilter, page, pageSize]);
 
+  useEffect(() => {
+    fetch("/api/admin/series")
+      .then((r) => r.json())
+      .then((d) => setSeriesCatalog(Array.isArray(d.series) ? d.series : []))
+      .catch(() => {});
+  }, []);
+
   const seriesOptions = useMemo(() => {
     const map = new Map<string, string>();
+    for (const s of seriesCatalog) map.set(s.id, s.name);
     for (const ep of episodes) map.set(ep.series.id, ep.series.name);
     return [...map.entries()].map(([id, name]) => ({ id, name }));
-  }, [episodes]);
+  }, [episodes, seriesCatalog]);
 
   const filtered = useMemo(() => {
     return episodes.filter((ep) => {

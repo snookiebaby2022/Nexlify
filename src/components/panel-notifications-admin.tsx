@@ -41,7 +41,7 @@ export function PanelNotificationsAdmin() {
     fetch("/api/admin/notifications")
       .then((r) => r.json())
       .then((d) => {
-        setNotifications(d.notifications ?? []);
+        setNotifications(Array.isArray(d.notifications) ? d.notifications : []);
         setResellers(d.resellers ?? []);
       })
       .catch(() => setError("Failed to load notifications"));

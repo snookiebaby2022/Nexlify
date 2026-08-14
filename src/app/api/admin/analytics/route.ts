@@ -8,16 +8,20 @@ import { cacheGetOrSet } from "@/lib/cache";
 
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const url = new URL(req.url);
+  const range = url.searchParams.get("range") ?? "24h";
+  const hours = range === "7d" ? 168 : range === "30d" ? 720 : 24;
+
   const scope = ownerScope(session);
-  const cacheKey = scope ? `analytics:${scope}` : "analytics:all";
+  const cacheKey = scope ? `analytics:${scope}:${hours}` : `analytics:all:${hours}`;
 
   const data = await cacheGetOrSet(cacheKey, 15, async () => {
     const watchWhere = scope ? { line: { ownerId: scope } } : undefined;
-    const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const staleBefore = new Date(Date.now() - hours * 60 * 60 * 1000);
 
     let topChannels: unknown[] = [];
     let connections: unknown[] = [];

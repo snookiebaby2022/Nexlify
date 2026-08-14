@@ -129,14 +129,14 @@ export function ManageLinesTable({
     if (q) {
       list = list.filter(
         (l) =>
-          l.username.toLowerCase().includes(q) ||
-          l.password.toLowerCase().includes(q) ||
-          l.id.toLowerCase().includes(q) ||
+          (l.username ?? "").toLowerCase().includes(q) ||
+          (l.password ?? "").toLowerCase().includes(q) ||
+          (l.id ?? "").toLowerCase().includes(q) ||
           (l.owner?.username?.toLowerCase().includes(q) ?? false) ||
           (l.externalId?.toLowerCase().includes(q) ?? false) ||
           (l.lastWatchedStream?.name?.toLowerCase().includes(q) ?? false) ||
           (l.lastWatchedIp?.toLowerCase().includes(q) ?? false) ||
-          l.bouquets.some((b) => b.bouquet.name.toLowerCase().includes(q))
+          (l.bouquets ?? []).some((b) => b.bouquet?.name?.toLowerCase().includes(q))
       );
     }
     list = [...list].sort((a, b) => {
@@ -221,7 +221,7 @@ export function ManageLinesTable({
   function renderRowCells(l: ManageLineRow) {
     const exp = formatExpireXui(l.expiresAt);
     const notes = splitNotes(l.notes);
-    const pkg = l.bouquets[0]?.bouquet.name ?? "—";
+    const pkg = l.bouquets?.[0]?.bouquet?.name ?? "—";
     const activeConn = (l as { activeConnectionCount?: number }).activeConnectionCount ?? l._count?.liveConnections ?? 0;
     const isActive = l.status === "ACTIVE" && new Date(l.expiresAt) > new Date();
 
@@ -327,9 +327,9 @@ export function ManageLinesTable({
               {lines.length.toLocaleString()} loaded · newest first
             </span>
           </div>
-          <Link href={`${base}/lines/add?package=1`} className="xui-lines-header-btn xui-lines-header-btn--primary">
+          <Link href={`${base}/lines/add`} className="xui-lines-header-btn xui-lines-header-btn--primary">
             <PackagePlus size={16} />
-            Add Line (with Package)
+            Add Line
           </Link>
         </div>
 

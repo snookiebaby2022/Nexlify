@@ -60,7 +60,6 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         icon: coloredGroupIcon("subscriptions"),
         items: [
           { href: "/admin/lines/add", label: "Add Line", section: "Lines" },
-          { href: "/admin/lines/add-package", label: "Add Line (with Package)", section: "Lines" },
           { href: "/admin/lines", label: "Manage Lines", section: "Lines" },
           { href: "/admin/lines/mass-edit", label: "Mass Edit Lines", section: "Lines" },
           { href: "/admin/line_activity", label: "Line Activity", section: "Lines" },

@@ -100,8 +100,8 @@ export default function BouquetTemplatesPage() {
 
       <p className="text-xs" style={{ color: "var(--muted)" }}>
         Use templates from{" "}
-        <Link href="/admin/lines/add-package" className="underline" style={{ color: "var(--accent)" }}>
-          Add Line (with Package)
+        <Link href="/admin/lines/add" className="underline" style={{ color: "var(--accent)" }}>
+          Add Line
         </Link>{" "}
         or MAG device package flows.
       </p>

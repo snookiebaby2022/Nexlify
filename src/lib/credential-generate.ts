@@ -1,8 +1,13 @@
 /** Minimum length for line usernames and passwords (panel-wide). */
 export const MIN_LINE_CREDENTIAL_LENGTH = 6;
 
-const USER_CHARS = "abcdefghijkmnopqrstuvwxyz0123456789";
-const PASS_CHARS = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%";
+const USER_CHARS = "abcdefghijkmnopqrstuvwxyz";
+const PASS_CHARS = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ";
+
+/** Strip everything except A–Z / a–z (line passwords are letters only). */
+export function lettersOnly(value: string): string {
+  return String(value ?? "").replace(/[^A-Za-z]/g, "");
+}
 
 function randomFrom(chars: string, length: number): string {
   let out = "";
@@ -83,10 +88,8 @@ export function validateLinePasswordPolicy(
   if (policy.blockCommonPasswords !== false && COMMON_LINE_PASSWORDS.has(pass.toLowerCase())) {
     return "Password is too common — choose a stronger one";
   }
-  if (policy.requireLetterAndDigit) {
-    if (!/[A-Za-z]/.test(pass) || !/\d/.test(pass)) {
-      return "Password must include at least one letter and one digit";
-    }
+  if (/[^A-Za-z]/.test(pass)) {
+    return "Password may only contain letters";
   }
   return null;
 }

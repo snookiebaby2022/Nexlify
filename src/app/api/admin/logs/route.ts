@@ -30,6 +30,6 @@ export async function GET(req: NextRequest) {
       user: { select: { username: true, role: true } },
       line: { select: { username: true } },
     },
-  });
+  }).catch(() => []);
   return NextResponse.json({ logs });
 }

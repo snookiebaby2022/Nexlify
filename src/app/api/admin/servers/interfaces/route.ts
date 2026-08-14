@@ -31,6 +31,16 @@ export async function GET() {
   }
 
   const defaults = ["eth0", "ens3", "enp0s3", "eno1"];
+  try {
+    const { detectServerHardware } = await import("@/lib/server-hardware");
+    const detected = detectServerHardware().primaryInterface;
+    if (detected && !seen.has(detected.toLowerCase())) {
+      interfaces.unshift({ name: detected, servers: ["this host"] });
+      seen.add(detected.toLowerCase());
+    }
+  } catch {
+    /* ignore */
+  }
   for (const d of defaults) {
     if (!seen.has(d.toLowerCase())) {
       interfaces.push({ name: d, servers: [] });

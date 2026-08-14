@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
+import os from "os";
 import { execSync } from "child_process";
+import { sampleCpuPercent } from "@/lib/server-hardware";
 
 type ScaleMetrics = {
   cpu: number;
@@ -12,18 +14,14 @@ type ScaleMetrics = {
 };
 
 function getServerMetrics(): ScaleMetrics {
-  try {
-    const cpuRaw = execSync("top -bn1 | grep 'Cpu(s)' | awk '{print $2}' 2>/dev/null || echo 0", { encoding: "utf8" }).trim();
-    const memRaw = execSync("free | awk '/Mem:/ {printf \"%.0f\", $3/$2*100}' 2>/dev/null || echo 0", { encoding: "utf8" }).trim();
-    return {
-      cpu: parseFloat(cpuRaw) || 0,
-      memory: parseFloat(memRaw) || 0,
-      connections: 0,
-      uptime: parseFloat(execSync("awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0", { encoding: "utf8" }).trim()) || 0,
-    };
-  } catch {
-    return { cpu: 0, memory: 0, connections: 0, uptime: 0 };
-  }
+  const total = os.totalmem();
+  const used = total - os.freemem();
+  return {
+    cpu: sampleCpuPercent(),
+    memory: total ? Math.round((used / total) * 100) : 0,
+    connections: 0,
+    uptime: Math.floor(os.uptime()),
+  };
 }
 
 function getPM2Instances(): number {
@@ -61,6 +59,7 @@ export async function GET() {
   const metrics = getServerMetrics();
   const instances = getPM2Instances();
 
+  try {
   const server = await prisma.streamServer.findFirst({
     where: { isActive: true },
     select: {
@@ -83,6 +82,20 @@ export async function GET() {
       autoScaleCooldownSec: 300,
     },
   });
+  } catch (e) {
+    return NextResponse.json({
+      metrics,
+      instances,
+      config: {
+        autoScaleEnabled: false,
+        autoScaleMinInstances: 1,
+        autoScaleMaxInstances: 4,
+        autoScaleCpuThreshold: 80,
+        autoScaleCooldownSec: 300,
+      },
+      error: e instanceof Error ? e.message : "Auto-scale unavailable",
+    });
+  }
 }
 
 export async function POST(req: NextRequest) {

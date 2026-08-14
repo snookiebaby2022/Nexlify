@@ -69,7 +69,7 @@ export default function AdminServersPage() {
   function load() {
     fetch("/api/admin/servers")
       .then((r) => r.json())
-      .then((d) => setServers(sortServersMainFirst(d.servers ?? [])));
+      .then((d) => setServers(sortServersMainFirst(Array.isArray(d.servers) ? d.servers : [])));
     fetch("/api/admin/proxies")
       .then((r) => r.json())
       .then((d) => setProxies(d.proxies ?? []));

@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const clientIp = req.nextUrl.searchParams.get("testIp") ?? undefined;
+  try {
   const [scores, ranked, streamSettings, lbProSettings, lbProEnabled] = await Promise.all([
     getServerLoadScores(),
     rankServersForClient(clientIp || undefined),
@@ -49,6 +50,13 @@ export async function GET(req: NextRequest) {
       lbPro: lbProSettings,
     },
   });
+  } catch (e) {
+    return NextResponse.json({
+      servers: [],
+      config: null,
+      error: e instanceof Error ? e.message : "Load balancer unavailable",
+    });
+  }
 }
 
 export async function PATCH(req: NextRequest) {

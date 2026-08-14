@@ -20,7 +20,7 @@ export async function GET() {
       assignedTo: { select: { username: true } },
     },
     orderBy: { updatedAt: "desc" },
-  });
+  }).catch(() => []);
   return NextResponse.json({ tickets });
 }
 

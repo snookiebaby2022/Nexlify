@@ -38,6 +38,17 @@ type StreamTestResult = {
   errors: string[];
 };
 
+function asList<T>(v: unknown): T[] {
+  if (Array.isArray(v)) return v as T[];
+  if (v && typeof v === "object") {
+    const obj = v as Record<string, unknown>;
+    for (const key of ["qualities", "streams", "trends", "results", "items"]) {
+      if (Array.isArray(obj[key])) return obj[key] as T[];
+    }
+  }
+  return [];
+}
+
 export default function UniqueFeaturesPage() {
   const [tab, setTab] = useState("quality");
   const [loading, setLoading] = useState(false);
@@ -55,13 +66,13 @@ export default function UniqueFeaturesPage() {
     setLoading(true);
     try {
       const [qualityRes, bwRes, trendsRes] = await Promise.all([
-        fetch("/api/admin/stream-quality?action=all").then(r => r.json()).catch(() => []),
-        fetch("/api/admin/bandwidth-predict?action=predict").then(r => r.json()).catch(() => null),
-        fetch("/api/admin/engagement?action=trends").then(r => r.json()).catch(() => []),
+        fetch("/api/admin/stream-quality?action=all").then((r) => r.json()).catch(() => []),
+        fetch("/api/admin/bandwidth-predict?action=predict").then((r) => r.json()).catch(() => null),
+        fetch("/api/admin/engagement?action=trends").then((r) => r.json()).catch(() => []),
       ]);
-      setQualityData(qualityRes);
-      setBandwidth(bwRes);
-      setTrends(trendsRes);
+      setQualityData(asList<StreamQuality>(qualityRes));
+      setBandwidth(bwRes && !bwRes.error && !Array.isArray(bwRes) ? bwRes : null);
+      setTrends(asList<ChannelTrend>(trendsRes));
     } finally {
       setLoading(false);
     }
@@ -78,7 +89,7 @@ export default function UniqueFeaturesPage() {
         body: JSON.stringify({ action: "test-all" }),
       });
       const data = await res.json();
-      setTestResults(data.results ?? []);
+      setTestResults(asList<StreamTestResult>(data));
     } finally {
       setLoading(false);
     }

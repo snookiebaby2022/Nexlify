@@ -12,6 +12,7 @@ import { getSettingGroup } from "@/lib/panel-settings";
 import {
   generateLinePassword,
   generateLineUsername,
+  lettersOnly,
   MIN_LINE_CREDENTIAL_LENGTH,
   validateLineCredential,
 } from "@/lib/credential-generate";
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
 
   const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
 
+  try {
   const [lines, total, activeConnections] = await Promise.all([
     prisma.line.findMany({
       where,
@@ -93,9 +95,19 @@ export async function GET(req: NextRequest) {
       page,
       pageSize,
       total,
-      totalPages: Math.ceil(total / pageSize),
+      totalPages: Math.ceil(total / pageSize) || 1,
     },
   });
+  } catch (e) {
+    return NextResponse.json(
+      {
+        error: e instanceof Error ? e.message : "Failed to load lines",
+        lines: [],
+        pagination: { page, pageSize, total: 0, totalPages: 1 },
+      },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -118,10 +130,11 @@ export async function POST(req: NextRequest) {
     MIN_LINE_CREDENTIAL_LENGTH,
     Number(security.lineCredentialMinLength ?? MIN_LINE_CREDENTIAL_LENGTH) || MIN_LINE_CREDENTIAL_LENGTH
   );
-  const autoGen = security.autoGenerateLineCredentials !== false;
+  const autoGen = security.autoGenerateLineCredentials === true;
 
   let username = String(body.username ?? "").trim();
-  let password = String(body.password ?? "").trim();
+  let password = lettersOnly(String(body.password ?? "").trim());
+  // Never replace credentials the operator typed — only fill blanks when auto-generate is on.
   if (!username && autoGen) username = generateLineUsername();
   if (!password && autoGen) password = generateLinePassword();
   if (!username || !password) {
@@ -136,7 +149,7 @@ export async function POST(req: NextRequest) {
   const { validateLinePasswordPolicy } = await import("@/lib/credential-generate");
   const passErr = validateLinePasswordPolicy(password, username, {
     minLength: minLen,
-    requireLetterAndDigit: security.linePasswordRequireLetterAndDigit === true,
+    requireLetterAndDigit: false,
     blockCommonPasswords: security.linePasswordBlockCommon !== false,
     disallowUsernameMatch: security.linePasswordDisallowUsername !== false,
   });

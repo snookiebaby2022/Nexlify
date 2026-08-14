@@ -30,7 +30,7 @@ export default function ManagementLogsPage() {
     fetch(`/api/admin/logs?${params}`)
       .then((r) => r.json())
       .then((d) => {
-        setLogs(d.logs ?? []);
+        setLogs(Array.isArray(d.logs) ? d.logs : []);
         setLoading(false);
       });
   }, [action, q]);

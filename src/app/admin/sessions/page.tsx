@@ -29,19 +29,44 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(false);
 
   const loadSessions = useCallback(async () => {
-    if (!lineId) return;
     setLoading(true);
     try {
-      const [sessionsRes, policyRes] = await Promise.all([
-        fetch(`/api/admin/sessions?action=sessions&lineId=${encodeURIComponent(lineId)}`),
-        fetch(`/api/admin/sessions?action=policy&lineId=${encodeURIComponent(lineId)}`),
-      ]);
-      if (sessionsRes.ok) setSessions(await sessionsRes.json());
-      if (policyRes.ok) setPolicy(await policyRes.json());
+      if (lineId) {
+        const [sessionsRes, policyRes] = await Promise.all([
+          fetch(`/api/admin/sessions?action=sessions&lineId=${encodeURIComponent(lineId)}`),
+          fetch(`/api/admin/sessions?action=policy&lineId=${encodeURIComponent(lineId)}`),
+        ]);
+        if (sessionsRes.ok) {
+          const data = await sessionsRes.json();
+          setSessions(Array.isArray(data) ? data : data.sessions ?? []);
+        }
+        if (policyRes.ok) setPolicy(await policyRes.json());
+      } else {
+        const res = await fetch("/api/admin/connections");
+        const data = await res.json().catch(() => ({}));
+        const conns = Array.isArray(data.connections) ? data.connections : [];
+        setSessions(
+          conns.map((c: { line?: { id?: string }; stream?: { id?: string }; ip?: string; userAgent?: string; startedAt?: string; lastSeenAt?: string }) => ({
+            lineId: c.line?.id ?? "",
+            streamId: c.stream?.id ?? "",
+            ip: c.ip ?? "",
+            userAgent: c.userAgent ?? "",
+            deviceId: null,
+            startedAt: c.startedAt ? new Date(c.startedAt).getTime() : Date.now(),
+            lastHeartbeat: c.lastSeenAt ? new Date(c.lastSeenAt).getTime() : Date.now(),
+          }))
+        );
+      }
     } finally {
       setLoading(false);
     }
   }, [lineId]);
+
+  useEffect(() => {
+    void loadSessions();
+    const t = setInterval(() => void loadSessions(), 15000);
+    return () => clearInterval(t);
+  }, [loadSessions]);
 
   const cleanup = async () => {
     if (!lineId) return;

@@ -26,7 +26,7 @@ export default function EPGScraperPage() {
         }
         return r.json();
       })
-      .then((d) => setSuggestions(d.suggestions ?? []))
+      .then((d) => setSuggestions(Array.isArray(d.suggestions) ? d.suggestions : []))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);

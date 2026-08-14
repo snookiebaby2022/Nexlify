@@ -374,6 +374,15 @@ export function StreamsList({
                     >
                       <Pencil size={14} />
                     </Link>
+                    {type === "SERIES" ? (
+                      <Link
+                        href={`/admin/content/episodes?seriesId=${s.id}`}
+                        className="text-xs px-1.5 py-1 rounded hover:bg-white/10"
+                        title="Edit episodes"
+                      >
+                        Episodes
+                      </Link>
+                    ) : null}
                     <StreamRowActionsMenu
                       streamId={s.id}
                       streamType={type}

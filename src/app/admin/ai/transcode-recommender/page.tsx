@@ -26,7 +26,7 @@ export default function TranscodeRecommenderPage() {
         }
         return r.json();
       })
-      .then((d) => setRecommendations(d.recommendations ?? []))
+      .then((d) => setRecommendations(Array.isArray(d.recommendations) ? d.recommendations : []))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);

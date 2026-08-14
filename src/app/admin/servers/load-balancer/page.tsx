@@ -44,8 +44,11 @@ export default function LoadBalancerPage() {
     fetch(`/api/admin/servers/load-balancer${q}`)
       .then((r) => r.json())
       .then((d) => {
-        setServers(d.servers ?? []);
+        setServers(Array.isArray(d.servers) ? d.servers : []);
         setConfig(d.config ?? null);
+      })
+      .catch(() => {
+        setServers([]);
       });
   }, [testIp]);
 
@@ -55,7 +58,7 @@ export default function LoadBalancerPage() {
     return () => clearInterval(t);
   }, [load]);
 
-  const maxConn = useMemo(() => Math.max(...servers.map((s) => s.connections || 0), 1), [servers]);
+  const maxConn = useMemo(() => Math.max(1, ...servers.map((s) => s.connections || 0)), [servers]);
 
   async function saveConfig() {
     if (!config) return;

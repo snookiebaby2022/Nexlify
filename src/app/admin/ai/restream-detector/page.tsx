@@ -42,7 +42,7 @@ export default function RestreamDetectorPage() {
         }
         return r.json();
       })
-      .then((d) => setDetections(d.detections ?? []))
+      .then((d) => setDetections(Array.isArray(d.detections) ? d.detections : []))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);

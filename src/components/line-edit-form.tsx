@@ -6,7 +6,7 @@ import { BouquetPickerTable, type BouquetPickerRow } from "@/components/bouquet-
 import { PasswordInput } from "@/components/password-input";
 import { CopyableCredential } from "@/components/copyable-credential";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
-import { generateLinePassword, MIN_LINE_CREDENTIAL_LENGTH } from "@/lib/credential-generate";
+import { generateLinePassword, lettersOnly, MIN_LINE_CREDENTIAL_LENGTH } from "@/lib/credential-generate";
 import { formatDateTime } from "@/lib/format";
 import { LINE_DURATION_PRESETS } from "@/lib/line-duration-presets";
 
@@ -165,9 +165,12 @@ export function LineEditForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!line) return;
-    if (form.password.length > 0 && form.password.length < MIN_LINE_CREDENTIAL_LENGTH) {
-      alert(`Password must be at least ${MIN_LINE_CREDENTIAL_LENGTH} characters.`);
-      return;
+    if (form.password.length > 0) {
+      const nextPass = lettersOnly(form.password);
+      if (nextPass.length < MIN_LINE_CREDENTIAL_LENGTH) {
+        alert(`Password must be at least ${MIN_LINE_CREDENTIAL_LENGTH} letters.`);
+        return;
+      }
     }
 
     setSaving(true);
@@ -181,7 +184,7 @@ export function LineEditForm({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        password: form.password !== line.password ? form.password : undefined,
+        password: form.password !== line.password ? lettersOnly(form.password) : undefined,
         maxConnections: form.maxConnections,
         days: form.extendDays > 0 ? form.extendDays : undefined,
         externalId: form.externalId || null,
@@ -331,7 +334,8 @@ export function LineEditForm({
                     className="flex-1"
                     value={form.password}
                     onChange={(password) => setForm({ ...form, password })}
-                    placeholder={`Min ${MIN_LINE_CREDENTIAL_LENGTH} characters`}
+                    placeholder={`Letters only, min ${MIN_LINE_CREDENTIAL_LENGTH}`}
+                    lettersOnly
                   />
                   <button
                     type="button"

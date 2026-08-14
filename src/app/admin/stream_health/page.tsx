@@ -48,7 +48,7 @@ export default function StreamHealthPage() {
 
       .then((d) => {
 
-        setRows(d.streams ?? []);
+        setRows(Array.isArray(d.streams) ? d.streams : []);
 
         setSummary(d.summary ?? { total: 0, uptimePct: 100 });
 

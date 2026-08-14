@@ -38,7 +38,7 @@ export default function AnomalyDetectorPage() {
         }
         return r.json();
       })
-      .then((d) => setAnomalies(d.anomalies ?? []))
+      .then((d) => setAnomalies(Array.isArray(d.anomalies) ? d.anomalies : []))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);

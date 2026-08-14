@@ -27,8 +27,8 @@ export default function AnalyticsInsightsPage() {
         return r.json();
       })
       .then((d) => {
-        setInsights(d.insights ?? []);
-        setPeakHours(d.peakHours ?? []);
+        setInsights(Array.isArray(d.insights) ? d.insights : []);
+        setPeakHours(Array.isArray(d.peakHours) ? d.peakHours : []);
       })
       .catch((e) => setError(e.message));
 

@@ -29,7 +29,7 @@ function LineActivityContent() {
   useEffect(() => {
     fetch("/api/admin/lines")
       .then((r) => r.json())
-      .then((d) => setLines(d.lines ?? []));
+      .then((d) => setLines(Array.isArray(d.lines) ? d.lines : []));
   }, []);
 
   const load = useCallback(() => {
@@ -37,7 +37,7 @@ function LineActivityContent() {
     const q = lineId ? `?lineId=${encodeURIComponent(lineId)}` : "";
     fetch(`/api/admin/lines/activity${q}`)
       .then((r) => r.json())
-      .then((d) => setRows(d.connections ?? []))
+      .then((d) => setRows(Array.isArray(d.connections) ? d.connections : []))
       .finally(() => setLoading(false));
   }, [lineId]);
 

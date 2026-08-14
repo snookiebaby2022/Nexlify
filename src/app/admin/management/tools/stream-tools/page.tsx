@@ -21,7 +21,7 @@ export default function StreamToolsPage() {
   const loadServers = useCallback(() => {
     fetch("/api/admin/servers")
       .then((r) => r.json())
-      .then((d) => setServers(d.servers ?? []));
+      .then((d) => setServers(Array.isArray(d.servers) ? d.servers : []));
   }, []);
 
   useEffect(() => {

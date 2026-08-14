@@ -16,7 +16,10 @@ const dateFmt = new Intl.DateTimeFormat("en-GB", {
 });
 
 export function formatDateTime(iso: string) {
-  return dateTimeFmt.format(new Date(iso));
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return dateTimeFmt.format(d);
 }
 
 /** Panel license dates — UK locale, Europe/London timezone. */

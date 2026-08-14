@@ -23,7 +23,7 @@ export default function ProcessMonitorPage() {
   function load() {
     fetch("/api/admin/processes")
       .then((r) => r.json())
-      .then((d) => setRows(d.processes ?? []));
+      .then((d) => setRows(Array.isArray(d.processes) ? d.processes : []));
   }
 
   useEffect(() => {
@@ -72,7 +72,7 @@ export default function ProcessMonitorPage() {
       <DataTable
         headers={["Server", "Stream", "PID", "Status", "CPU %", "RAM MB", "Last seen", ""]}
         rows={rows.map((p) => [
-          p.server.name,
+          p.server?.name ?? "—",
           p.stream?.name ?? "—",
           p.pid ?? "—",
           <span key={`s-${p.id}`} style={{ color: statusColor(p) }}>

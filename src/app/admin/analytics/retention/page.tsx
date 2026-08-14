@@ -32,8 +32,20 @@ export default function RetentionAnalyticsPage() {
         fetch("/api/admin/retention?action=summary"),
         fetch(`/api/admin/retention?action=forecast&metric=${metric}`),
       ]);
-      if (summaryRes.ok) setSummary(await summaryRes.json());
-      if (forecastRes.ok) setForecast(await forecastRes.json());
+      if (summaryRes.ok) {
+        const d = await summaryRes.json();
+        setSummary({
+          ...d,
+          topChannels: Array.isArray(d.topChannels) ? d.topChannels : [],
+        });
+      }
+      if (forecastRes.ok) {
+        const d = await forecastRes.json();
+        setForecast({
+          ...d,
+          historicalData: Array.isArray(d.historicalData) ? d.historicalData : [],
+        });
+      }
     } finally {
       setLoading(false);
     }

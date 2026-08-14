@@ -35,6 +35,7 @@ export function ServerActionsMenu({
   const menuRef = useRef<HTMLDivElement>(null);
 
   const items: MenuItem[] = [
+    { kind: "link", label: "View server", href: `/admin/servers/${serverId}` },
     { kind: "link", label: "Edit server", href: `/admin/servers/${serverId}/edit` },
     { kind: "link", label: "View streams", href: `/admin/content/streams?serverId=${serverId}` },
     { kind: "link", label: "Stream health", href: "/admin/stream_health" },

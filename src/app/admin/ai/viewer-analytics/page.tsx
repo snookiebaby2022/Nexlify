@@ -31,11 +31,11 @@ export default function ViewerAnalyticsPage() {
         return r.json();
       })
       .then((d) => {
-        setPeakHours(d.peakHours ?? []);
-        setCountries(d.countries ?? []);
-        setDevices(d.devices ?? []);
-        setChurnRisks(d.churnRisks ?? []);
-        setBingePatterns(d.bingePatterns ?? []);
+        setPeakHours(Array.isArray(d.peakHours) ? d.peakHours : []);
+        setCountries(Array.isArray(d.countries) ? d.countries : []);
+        setDevices(Array.isArray(d.devices) ? d.devices : []);
+        setChurnRisks(Array.isArray(d.churnRisks) ? d.churnRisks : []);
+        setBingePatterns(Array.isArray(d.bingePatterns) ? d.bingePatterns : []);
         setSummary(d.summary ?? "");
       })
       .catch((e) => setError(e.message))

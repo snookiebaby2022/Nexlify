@@ -11,10 +11,17 @@ export async function GET(
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await ctx.params;
-  const server = await prisma.streamServer.findUnique({
-    where: { id },
-    include: { proxy: true, _count: { select: { streams: true } } },
-  });
-  if (!server) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ server });
+  try {
+    const server = await prisma.streamServer.findUnique({
+      where: { id },
+      include: { proxy: true, _count: { select: { streams: true } } },
+    });
+    if (!server) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return NextResponse.json({ server });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Failed to load server" },
+      { status: 500 }
+    );
+  }
 }
