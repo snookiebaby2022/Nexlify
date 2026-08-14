@@ -405,14 +405,12 @@ async function getTrialExpiringLines(
 
 async function getStreamHealth(): Promise<StreamHealthSummary> {
   const base = { type: StreamType.LIVE, isActive: true };
-  const [totalLive, online, offlineStreams] = await Promise.all([
+  const [totalLive, online, offlineCount, offlineStreams] = await Promise.all([
     prisma.stream.count({ where: base }),
     prisma.stream.count({ where: { ...base, lastProbeOk: true } }),
+    prisma.stream.count({ where: { ...base, lastProbeOk: false } }),
     prisma.stream.findMany({
-      where: {
-        ...base,
-        OR: [{ lastProbeOk: false }, { lastProbeOk: null }],
-      },
+      where: { ...base, lastProbeOk: false },
       orderBy: { name: "asc" },
       take: 10,
       select: { id: true, name: true, lastProbeError: true, lastProbeAt: true },
@@ -422,7 +420,7 @@ async function getStreamHealth(): Promise<StreamHealthSummary> {
   return {
     totalLive,
     online,
-    offline: totalLive - online,
+    offline: offlineCount,
     offlineStreams: offlineStreams.map((s) => ({
       id: s.id,
       name: s.name,

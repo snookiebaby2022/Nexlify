@@ -80,6 +80,16 @@ export async function GET(req: NextRequest) {
 
   if (statusParam === "active") where.isActive = true;
   if (statusParam === "inactive") where.isActive = false;
+  if (statusParam === "offline") {
+    where.isActive = true;
+    where.lastProbeOk = false;
+    if (!where.type) where.type = StreamType.LIVE;
+  }
+  if (statusParam === "online") {
+    where.isActive = true;
+    where.lastProbeOk = true;
+    if (!where.type) where.type = StreamType.LIVE;
+  }
 
   if (vodMode && Object.values(VodMode).includes(vodMode as VodMode)) {
 

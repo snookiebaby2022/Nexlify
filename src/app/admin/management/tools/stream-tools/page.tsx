@@ -143,6 +143,16 @@ export default function StreamToolsPage() {
           </div>
         </button>
         <Link
+          href="/admin/management/tools/remove-duplicates"
+          className="rounded-lg border p-4 block hover:opacity-90"
+          style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+        >
+          <div className="font-medium">Remove duplicates →</div>
+          <div className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+            Review then delete duplicate movies and TV series/episodes
+          </div>
+        </Link>
+        <Link
           href="/admin/management/stream-providers"
           className="rounded-lg border p-4 block hover:opacity-90"
           style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}

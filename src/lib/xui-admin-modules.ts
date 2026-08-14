@@ -36,6 +36,7 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "stream", title: "Add stream", category: "Streams", redirect: "/admin/streams/add" },
   { slug: "stream_mass", title: "Mass edit streams", category: "Streams", redirect: "/admin/management/mass-edit/streams" },
   { slug: "stream_tools", title: "Stream tools", category: "Streams", redirect: "/admin/management/tools/stream-tools" },
+  { slug: "remove_duplicates", title: "Remove duplicates", category: "Streams", redirect: "/admin/management/tools/remove-duplicates" },
   { slug: "stream_view", title: "Stream view", category: "Streams", redirect: "/admin/content/streams" },
   { slug: "stream_categories", title: "Stream categories", category: "Streams", redirect: "/admin/management/categories" },
   { slug: "stream_category", title: "Stream category", category: "Streams", redirect: "/admin/management/categories" },

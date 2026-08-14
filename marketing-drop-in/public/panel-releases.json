@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.42",
+  "latestVersion": "1.9.43",
   "releases": [
+    {
+      "version": "1.9.43",
+      "date": "2026-08-14",
+      "channel": "stable",
+      "summary": "Remove duplicate movies/series after review; Review offline lists failed source probes.",
+      "changelog": [
+        "Streaming Tools → Remove Duplicates scans movies and TV series/episodes, then deletes only the copies you confirm",
+        "Duplicate keep prefers the copy in the most bouquets, then categorized, then oldest",
+        "Dashboard Review offline opens Manage Streams filtered to live channels whose last source probe failed"
+      ],
+      "fixes": [
+        "Review offline opened Verify the Stream with an empty list because it treated missing ffmpeg as offline",
+        "1,547 live streams not online now counted direct/on-demand channels that never run ffmpeg"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-1.9.43.tar.gz"
+    },
     {
       "version": "1.9.42",
       "date": "2026-08-14",

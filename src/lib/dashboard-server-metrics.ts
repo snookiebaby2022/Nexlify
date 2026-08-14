@@ -37,6 +37,7 @@ export type DashboardKpiExtended = {
   inactiveLive: number;
   inactiveMovies: number;
   inactiveSeries: number;
+  offlineStreams: number;
   openTickets: number;
 };
 
@@ -226,6 +227,7 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     inactiveLive,
     inactiveMovies,
     inactiveSeries,
+    offlineStreams: deadStreams + unstableStreams,
     openTickets: openTicketCount,
   };
 }

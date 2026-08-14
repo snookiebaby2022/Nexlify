@@ -3,6 +3,7 @@ import Link from "next/link";
 const items = [
   { href: "/admin/management/tools/channel-order", label: "Channel order", desc: "Reorder live channels in playlists" },
   { href: "/admin/management/tools/stream-tools", label: "Stream tools", desc: "Cache flush and stream utilities" },
+  { href: "/admin/management/tools/remove-duplicates", label: "Remove duplicates", desc: "Review and delete duplicate movies and TV series/episodes" },
   { href: "/admin/management/tools/provider-urls", label: "Provider URL tools", desc: "Bulk update provider and stream URLs" },
   { href: "/admin/management/tools/bulk-backup-urls", label: "Bulk backup sources", desc: "Paste stream→backup URL mappings for failover" },
   { href: "/admin/management/tools/fingerprint", label: "Fingerprint", desc: "Anti-restream signing options" },

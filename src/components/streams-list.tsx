@@ -34,8 +34,19 @@ type Stream = {
   minSpeedKbps?: number | null;
   maxSpeedKbps?: number | null;
   epgChannelId?: string | null;
+  lastProbeOk?: boolean | null;
+  lastProbeError?: string | null;
   liveStats?: StreamLiveStat | null;
 };
+
+function statusFromSearch(): "" | "active" | "inactive" | "online" | "offline" {
+  if (typeof window === "undefined") return "";
+  const status = new URLSearchParams(window.location.search).get("status");
+  if (status === "active" || status === "inactive" || status === "online" || status === "offline") {
+    return status;
+  }
+  return "";
+}
 
 const PAGE_SIZES = LIST_PAGE_SIZE_OPTIONS;
 
@@ -45,12 +56,15 @@ function serverLabel(s: Stream) {
   return { name, host };
 }
 
-function isPlayableStatus(stats: StreamLiveStat | null | undefined) {
-  return stats?.status === "online" || stats?.status === "direct" || stats?.status === "ready";
-}
-
 function StreamInfoCell({ stream }: { stream: Stream }) {
   const st = stream.liveStats;
+  if (stream.lastProbeOk === false && stream.lastProbeError) {
+    return (
+      <span className="xui-stream-info-empty" title={stream.lastProbeError}>
+        {stream.lastProbeError}
+      </span>
+    );
+  }
   if (!st || st.status === "direct" || st.status === "offline") {
     return (
       <span className="xui-stream-info-empty">No information available</span>
@@ -96,7 +110,7 @@ export function StreamsList({
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [serverId, setServerId] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive" | "online" | "offline">("");
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive" | "online" | "offline">(statusFromSearch);
   const [audioFilter, setAudioFilter] = useState("");
   const [videoFilter, setVideoFilter] = useState("");
   const [qualityFilter, setQualityFilter] = useState("");
@@ -127,9 +141,7 @@ export function StreamsList({
     if (categoryId) params.set("categoryId", categoryId);
     if (serverId) params.set("serverId", serverId);
     if (search.trim()) params.set("search", search.trim());
-    if (statusFilter === "active" || statusFilter === "inactive") {
-      params.set("status", statusFilter);
-    }
+    if (statusFilter) params.set("status", statusFilter);
     fetch(`/api/admin/streams?${params}`)
       .then((r) => r.json())
       .then((d) => {
@@ -162,16 +174,12 @@ export function StreamsList({
 
   const filtered = useMemo(() => {
     return streams.filter((s) => {
-      if (statusFilter === "active" && !s.isActive) return false;
-      if (statusFilter === "inactive" && s.isActive) return false;
-      if (statusFilter === "online" && !isPlayableStatus(s.liveStats)) return false;
-      if (statusFilter === "offline" && isPlayableStatus(s.liveStats)) return false;
       if (audioFilter && s.liveStats?.audioCodec !== audioFilter) return false;
       if (videoFilter && s.liveStats?.videoCodec !== videoFilter) return false;
       if (qualityFilter && s.liveStats?.quality !== qualityFilter) return false;
       return true;
     });
-  }, [streams, statusFilter, audioFilter, videoFilter, qualityFilter]);
+  }, [streams, audioFilter, videoFilter, qualityFilter]);
 
   async function remove(id: string) {
     if (!confirm("Delete this stream?")) return;
@@ -208,7 +216,14 @@ export function StreamsList({
         </div>
       </div>
 
-      {type === "LIVE" && <StreamVerifyPanel />}
+      {type === "LIVE" && !statusFilter && <StreamVerifyPanel />}
+
+      {statusFilter === "offline" && (
+        <p className="text-sm rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+          Live streams whose last source probe failed. Direct and on-demand channels without a running
+          ffmpeg process are not listed here unless the probe itself failed.
+        </p>
+      )}
 
       <div className="xui-streams-filters">
         <div className="xui-streams-search-wrap">
@@ -250,7 +265,14 @@ export function StreamsList({
           typeFilter={type ? categoryTypeForStream(type) : null}
           emptyLabel="All Categories"
         />
-        <select className="xui-streams-filter-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
+        <select
+          className="xui-streams-filter-select"
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value as typeof statusFilter);
+            setPage(1);
+          }}
+        >
           <option value="">No Filter</option>
           <option value="online">Online</option>
           <option value="offline">Offline</option>
@@ -409,7 +431,11 @@ export function StreamsList({
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <p className="xui-streams-empty">No streams match your filters.</p>
+          <p className="xui-streams-empty">
+            {statusFilter === "offline"
+              ? "No live streams with a failed source probe."
+              : "No streams match your filters."}
+          </p>
         )}
       </div>
 

@@ -362,6 +362,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/management/tools", label: "Tools Home" },
           { href: "/admin/management/tools/channel-order", label: "Channel Order" },
           { href: "/admin/management/tools/stream-tools", label: "Stream Tools" },
+          { href: "/admin/management/tools/remove-duplicates", label: "Remove Duplicates" },
           { href: "/admin/management/tools/provider-urls", label: "Provider URL Tools" },
           { href: "/admin/management/tools/bulk-backup-urls", label: "Bulk Backup Sources" },
           { href: "/admin/affiliates", label: "Affiliates & Referrals" },

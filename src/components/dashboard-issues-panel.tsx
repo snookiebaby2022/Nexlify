@@ -47,17 +47,14 @@ export function DashboardIssuesPanel({
   const offline = local?.offlineStreams ?? kpi?.offlineStreams ?? 0;
   const tickets = local?.openTickets ?? kpi?.openTickets ?? 0;
 
-  // Count real problem volume (offline live feeds + tickets), not a boolean flag.
-  const totalIssues = inactive + dead + unstable + offline + tickets;
+  // offline already includes dead + unstable (failed source probes).
+  const totalIssues = inactive + offline + tickets;
 
   const refresh = useCallback(() => {
     fetch(statsUrl)
       .then((r) => r.json())
       .then((d) => {
         const k = d.dashboardKpi ?? {};
-        const summary = d.dashboard ?? {};
-        const totalLive = summary.totalLiveStreams ?? 0;
-        const online = summary.onlineStreams ?? 0;
         setLocal({
           inactiveStreams: k.inactiveStreams ?? 0,
           inactiveLive: k.inactiveLive ?? 0,
@@ -65,7 +62,7 @@ export function DashboardIssuesPanel({
           inactiveSeries: k.inactiveSeries ?? 0,
           deadStreams: k.deadStreams ?? 0,
           unstableStreams: k.unstableStreams ?? 0,
-          offlineStreams: Math.max(0, totalLive - online),
+          offlineStreams: k.offlineStreams ?? (k.deadStreams ?? 0) + (k.unstableStreams ?? 0),
           openTickets: d.openTickets ?? k.openTickets ?? 0,
         });
       })
@@ -227,9 +224,9 @@ export function DashboardIssuesPanel({
           <div className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
             <Power size={16} className="text-amber-400 shrink-0" />
             <div className="flex-1 min-w-[160px]">
-              <p className="text-sm font-medium">{offline.toLocaleString()} live streams not online now</p>
+              <p className="text-sm font-medium">{offline.toLocaleString()} live streams with a failed source</p>
               <p className="text-xs" style={{ color: "var(--muted)" }}>
-                Not reporting as online (source/server) — separate from inactive flag
+                last probe failed — not the same as inactive, and not “no ffmpeg running”
               </p>
             </div>
             <Link
