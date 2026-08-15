@@ -224,7 +224,15 @@ async function fetchTable(
   schema: string,
   table: string
 ): Promise<Record<string, unknown>[]> {
-  const res = await client.query(`SELECT * FROM "${schema}"."${table}"`);
+  const cols = await loadColumns(client, schema, table);
+  const orderCol =
+    (["order", "order_num", "bouquet_order", "cat_order", "sort_order", "id"] as const).find((c) =>
+      cols.includes(c)
+    ) ?? null;
+  const sql = orderCol
+    ? `SELECT * FROM "${schema}"."${table}" ORDER BY "${orderCol}" ASC`
+    : `SELECT * FROM "${schema}"."${table}"`;
+  const res = await client.query(sql);
   return res.rows as Record<string, unknown>[];
 }
 

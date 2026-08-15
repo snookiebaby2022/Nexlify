@@ -176,8 +176,7 @@ async function categoryRowsForIds(
     where: { id: { in: allIds } },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
-  // Default player order: alphabetical by name (sortOrder used as secondary when set uniquely).
-  cats.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  // Keep panel/SQL dump sortOrder (do not force A→Z — that breaks XUI cat_order).
   const idSet = new Set(cats.map((c) => c.id));
   for (const c of cats) {
     const parent =

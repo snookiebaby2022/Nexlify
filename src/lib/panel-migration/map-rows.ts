@@ -111,7 +111,8 @@ function mapStreams(
 ): MigrationStreamRow[] {
   if (!data) return [];
   const out: MigrationStreamRow[] = [];
-  for (const row of data.rows) {
+  for (let rowIdx = 0; rowIdx < data.rows.length; rowIdx++) {
+    const row = data.rows[rowIdx];
     const r = rowToRecord(data.columns, row);
     const legacyId = String(r.id ?? r.stream_id ?? "");
     if (!legacyId) continue;
@@ -229,7 +230,8 @@ function mapStreams(
       notes: r.notes ? String(r.notes) : undefined,
       sortOrder: (() => {
         const n = Number(r.order_num ?? r.sort_order ?? r.channel_order ?? r.order ?? r.num ?? NaN);
-        return Number.isFinite(n) ? n : undefined;
+        // Fall back to dump row position so LIVE list matches SQL INSERT order
+        return Number.isFinite(n) ? n : rowIdx + 1;
       })(),
     });
   }
@@ -267,6 +269,12 @@ function mapBouquets(data: SqlTableData | null): MigrationBouquetRow[] {
         Number(r.bouquet_order ?? r.sort_order ?? r.order ?? r.cat_order ?? 0) || 0,
     });
   }
+  out.sort((a, b) => {
+    const ao = Number(a.sortOrder) || 0;
+    const bo = Number(b.sortOrder) || 0;
+    if (ao !== bo) return ao - bo;
+    return String(a.legacyId).localeCompare(String(b.legacyId), undefined, { numeric: true });
+  });
   return out;
 }
 

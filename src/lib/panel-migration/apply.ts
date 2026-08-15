@@ -246,6 +246,13 @@ async function applyMigrationBundleInner(
         const existing = await prisma.bouquet.findFirst({ where: { name } });
         if (existing) {
           bouquetIdByLegacy.set(b.legacyId, existing.id);
+          const nextOrder = Number(b.sortOrder) || 0;
+          if (existing.sortOrder !== nextOrder) {
+            await prisma.bouquet.update({
+              where: { id: existing.id },
+              data: { sortOrder: nextOrder },
+            });
+          }
           return false;
         }
         const created = await prisma.bouquet.create({
@@ -401,6 +408,23 @@ async function applyMigrationBundleInner(
         });
       } catch (e) {
         pushWarning(result.warnings, `Bouquet-stream links batch ${i}: ${shortErr(e)}`);
+      }
+    }
+    // Refresh link sortOrder so bouquet channel lists match the SQL dump order
+    // even when links already existed from a prior import.
+    for (let i = 0; i < linkRows.length; i += LINK_BATCH) {
+      const slice = linkRows.slice(i, i + LINK_BATCH);
+      try {
+        await prisma.$transaction(
+          slice.map((row) =>
+            prisma.bouquetStream.updateMany({
+              where: { bouquetId: row.bouquetId, streamId: row.streamId },
+              data: { sortOrder: row.sortOrder },
+            })
+          )
+        );
+      } catch (e) {
+        pushWarning(result.warnings, `Bouquet-stream order batch ${i}: ${shortErr(e)}`);
       }
     }
   }

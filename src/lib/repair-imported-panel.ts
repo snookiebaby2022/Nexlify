@@ -26,7 +26,8 @@ export type RepairImportedPanelResult = {
 
 /**
  * Post-import repairs so the IPTV panel is usable:
- * activate streams, fix package days, roles/groups, category types, alpha order.
+ * activate streams, fix package days, roles/groups, category types.
+ * Does NOT re-sort bouquets/categories alphabetically — dump order is preserved.
  */
 export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairImportedPanelResult> {
   const result: RepairImportedPanelResult = {
@@ -204,22 +205,15 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
   }
 
   // Alphabetical sortOrder for bouquets & categories (player default).
-  const bouquets = await prisma.bouquet.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
-  for (let i = 0; i < bouquets.length; i++) {
-    await prisma.bouquet.update({ where: { id: bouquets[i].id }, data: { sortOrder: i + 1 } });
-    result.bouquetsAlphaSorted++;
-  }
-  for (const type of ["LIVE", "MOVIE", "SERIES", "RADIO"] as const) {
-    const list = await prisma.category.findMany({
-      where: { categoryType: type },
-      orderBy: { name: "asc" },
-      select: { id: true },
-    });
-    for (let i = 0; i < list.length; i++) {
-      await prisma.category.update({ where: { id: list[i].id }, data: { sortOrder: i + 1 } });
-      result.categoriesAlphaSorted++;
-    }
-  }
+  // DISABLED: wipes dump bouquet_order / cat_order after migrate. Keep SQL dump order.
+  // Operators who want A→Z can sort manually in Manage Bouquets / Categories.
+  const bouquets = await prisma.bouquet.findMany({
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true },
+  });
+  // Leave bouquet/category sortOrder unchanged (preserve migrate/SQL dump order).
+  result.bouquetsAlphaSorted = 0;
+  result.categoriesAlphaSorted = 0;
 
   // Import often maps only live/movie IDs into bouquets — series episodes never appear in players.
   // Attach orphan SERIES (and unlinked MOVIE) streams into VOD-like bouquets.

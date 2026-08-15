@@ -111,6 +111,12 @@ export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[]
       sortOrder: Number(r.sort_order ?? r.order ?? r.cat_order ?? 0) || 0,
     });
   }
+  out.sort((a, b) => {
+    const ao = Number(a.sortOrder) || 0;
+    const bo = Number(b.sortOrder) || 0;
+    if (ao !== bo) return ao - bo;
+    return String(a.legacyId).localeCompare(String(b.legacyId), undefined, { numeric: true });
+  });
   return out;
 }
 
@@ -268,6 +274,13 @@ export async function applyMigrationPhase2(
         const dup = await prisma.category.findFirst({ where: { name, categoryType } });
         if (dup) {
           categoryIdByLegacy.set(c.legacyId, dup.id);
+          const nextOrder = Number(c.sortOrder) || 0;
+          if (dup.sortOrder !== nextOrder) {
+            await prisma.category.update({
+              where: { id: dup.id },
+              data: { sortOrder: nextOrder },
+            });
+          }
           result.categories.skipped++;
           continue;
         }
