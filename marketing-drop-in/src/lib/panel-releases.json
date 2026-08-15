@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.79",
+  "latestVersion": "1.9.80",
   "releases": [
+    {
+      "version": "1.9.80",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Installer targets the Postgres bound to DATABASE_URL (Docker :5432 vs system :5433) and refuses vendor VPS reinstalls.",
+      "changelog": [
+        "panel.sh sets/alters the nexlify DB password on the listener used by DATABASE_URL (Docker publish or matching pg cluster)",
+        "Reuses a working existing DATABASE_URL instead of rotating into a broken password",
+        "Refuses to run on the nexlify.live vendor VPS unless NEXLIFY_ALLOW_VENDOR_REINSTALL=1"
+      ],
+      "fixes": [
+        "P1000 Authentication failed when re-running installer on vendor VPS (password changed on system :5433, app uses Docker :5432)",
+        "panel.sh IP reinstall on vendor forced PORT=80 and broke nginx-backed panel.nexlify.live"
+      ]
+    },
     {
       "version": "1.9.79",
       "date": "2026-08-15",
