@@ -1,7 +1,27 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.73",
+  "latestVersion": "1.9.74",
   "releases": [
+    {
+      "version": "1.9.74",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Cron + addons audit: heal TMDB/streams settings, wire Auto EPG Mapping into cron and M3U import, clear stuck import jobs and dead EPG sources.",
+      "changelog": [
+        "Import TMDB API key from XUI migration settings when panel TMDB key is empty",
+        "Promote legacy settings:streams key into settings.streams (logos / dead-link probe)",
+        "Hourly epg_auto_map job + Auto-map EPG button on EPG channel map",
+        "M3U one-click import and scheduled M3U sync run EPG auto-assign for live",
+        "Import queue heals invalid legacy statuses (e.g. numeric \"3\") so watch-folder jobs do not stick",
+        "EPG sync auto-disables sources that never synced and keep failing"
+      ],
+      "fixes": [
+        "Auto EPG Mapping addon existed but was never called by cron or import",
+        "TMDB Auto-Sync unconfigured after migrate despite tmdb_api_key in XUI settings",
+        "Channel logo / streams settings ignored when stored as settings:streams",
+        "Stuck ImportJob rows with invalid status blocked watch-folder processing"
+      ]
+    },
     {
       "version": "1.9.73",
       "date": "2026-08-15",
