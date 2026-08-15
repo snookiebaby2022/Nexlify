@@ -80,8 +80,10 @@ function publicPortSuffix(proto: string): string {
   if (isInternalUpstreamPort(String(pub))) {
     pub = proto === "https" ? 443 : 80;
   }
+  // Standard ports omit the suffix. Never emit https://host:80 (PANEL_PUBLIC_PORT=80
+  // while forceHttps upgrades the scheme — that produced panel.nexlify.live:80).
   if (proto === "http" && pub === 80) return "";
-  if (proto === "https" && pub === 443) return "";
+  if (proto === "https" && (pub === 443 || pub === 80)) return "";
   return `:${pub}`;
 }
 

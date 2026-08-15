@@ -101,10 +101,14 @@ nexlify_iptv_edge_owned_ports() {
   if [ -n "$stream" ] && [ "$stream" != "80" ] && [ "$stream" != "${NEXLIFY_PORT_HTTP:-80}" ]; then
     ports="$ports $stream"
   fi
-  # :443 only when edge will bind it (not vendor/marketing nginx TLS)
+  # :443 only when edge will bind it (not vendor/marketing/MovieFlix nginx TLS)
   if [ ! -d /var/www/nexlify ] \
+    && [ ! -d /var/www/moviestream ] \
     && [ ! -f /etc/nginx/sites-enabled/nexlify.live ] \
-    && [ ! -f /etc/nginx/sites-enabled/panel.nexlify.live ]; then
+    && [ ! -f /etc/nginx/sites-enabled/panel.nexlify.live ] \
+    && [ ! -f /etc/nginx/sites-enabled/moviestream ] \
+    && [ ! -f /etc/nginx/sites-available/moviestream ] \
+    && [ ! -d /etc/letsencrypt/live/snookiebaby.xyz ]; then
     https="$(nexlify_read_env_file STREAM_HTTPS_PORT "$root/.env")"
     [ -z "$https" ] && https="$(nexlify_read_env_file PANEL_SSL_PORT "$root/.env")"
     [ -z "$https" ] && https="443"

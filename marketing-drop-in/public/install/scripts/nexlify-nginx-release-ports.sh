@@ -106,11 +106,13 @@ for dir in $scan_dirs; do
     # Prefer disabling whole site/conf that only exists for IPTV edge ports
     base="$(basename "$conf")"
     case "$base" in
-      nexlify-stream*|nexlify-https*|nexlify-panel-ssl*|default|moviestream*)
+      nexlify-stream*|nexlify-https*|nexlify-panel-ssl*|default)
         disable_conf "$conf"
         ;;
       *)
-        # Comment out listen lines for released ports only (preserve rest of vhost)
+        # Comment out listen lines for released ports only (preserve rest of vhost).
+        # Critical for MovieFlix/moviestream: may listen on 8080 + 443 — only strip
+        # edge-owned ports; never disable the whole site (would break snookiebaby.xyz).
         tmp="${conf}.nexlify-release.tmp"
         cp -a "$conf" "$tmp"
         for p in $PORT_LIST; do

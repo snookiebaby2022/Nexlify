@@ -188,7 +188,12 @@ export async function middleware(req: NextRequest) {
     const behindNginx =
       process.env.PANEL_BEHIND_NGINX === "1" || process.env.PANEL_BEHIND_NGINX === "true";
     const envPort = process.env.PANEL_PUBLIC_PORT ?? process.env.PANEL_PORT ?? process.env.PORT;
-    if (!behindNginx && envPort && envPort !== "80" && envPort !== "443") url.port = envPort;
+    if (!behindNginx && envPort && envPort !== "80" && envPort !== "443") {
+      url.port = envPort;
+    } else {
+      // Drop nonsensical :80 on https (or leftover origin ports) for standard panel URLs.
+      url.port = "";
+    }
     return NextResponse.redirect(url, 308);
   }
 

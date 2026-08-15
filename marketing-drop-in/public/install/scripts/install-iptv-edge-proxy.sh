@@ -40,10 +40,16 @@ HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
 [ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="$(env_val PANEL_SSL_PORT)"
 [ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="443"
 
-# Vendor / multi-vhost hosts: nginx must own :443 (nexlify.live + panel.nexlify.live).
-# Never steal 443 when marketing or named SSL vhosts are present.
-if [ -d /var/www/nexlify ] || [ -f /etc/nginx/sites-enabled/nexlify.live ] || [ -f /etc/nginx/sites-enabled/panel.nexlify.live ]; then
-  echo "[iptv-edge] Vendor/marketing host detected — leaving :443 to nginx (Let's Encrypt vhosts)"
+# Hosts where nginx must own :443 (marketing TLS, MovieFlix/FlixNova, other LE sites).
+# Never steal 443 when those vhosts are present — IPTV edge keeps :8080/:25461 only.
+if [ -d /var/www/nexlify ] \
+  || [ -d /var/www/moviestream ] \
+  || [ -f /etc/nginx/sites-enabled/nexlify.live ] \
+  || [ -f /etc/nginx/sites-enabled/panel.nexlify.live ] \
+  || [ -f /etc/nginx/sites-enabled/moviestream ] \
+  || [ -f /etc/nginx/sites-available/moviestream ] \
+  || [ -d /etc/letsencrypt/live/snookiebaby.xyz ]; then
+  echo "[iptv-edge] Multi-vhost / MovieFlix / marketing host — leaving :443 to nginx (Let's Encrypt)"
   HTTPS_PORTS=""
   # Restore disk-backed release + installer locations if a previous run removed ssl conf only;
   # do not install nexlify-panel-ssl.conf default_server here (would steal SNI).
