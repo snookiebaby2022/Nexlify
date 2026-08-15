@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.75",
+  "latestVersion": "1.9.76",
   "releases": [
+    {
+      "version": "1.9.76",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Migrate Skip existing: no forced re-upload when dump is on server; fast stream retag skips unchanged rows.",
+      "changelog": [
+        "Skip existing no longer implies re-uploading a ~1GB dump — Run import reuses the server dump when the selected file matches, and Resume last upload is the primary action",
+        "Stream re-import preloads URL matches and only updates rows whose type/category/name/order actually changed (was ~10 streams/sec updating every row)",
+        "Skip-existing reimports skip the mass bouquet-link reorder pass (use a full re-import when dump channel order must be refreshed)"
+      ],
+      "fixes": [
+        "Skip existing still uploaded and rewritten every stream on re-import",
+        "Help text told users to Run import for re-tag which always re-uploaded the SQL dump"
+      ]
+    },
     {
       "version": "1.9.75",
       "date": "2026-08-15",

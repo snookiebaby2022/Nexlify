@@ -266,7 +266,23 @@ async function parseMultipart(req: NextRequest): Promise<
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  return NextResponse.json({ sources: MIGRATION_SOURCES });
+  const lastUpload = await findLatestMigrateUpload();
+  const job = await reconcileMigrateJob();
+  return NextResponse.json({
+    sources: MIGRATION_SOURCES,
+    lastUpload: lastUpload
+      ? { size: lastUpload.size, mtimeMs: lastUpload.mtimeMs }
+      : null,
+    job: job
+      ? {
+          id: job.id,
+          status: job.status,
+          phase: job.progress?.phase ?? null,
+          current: job.progress?.current ?? null,
+          total: job.progress?.total ?? null,
+        }
+      : null,
+  });
 }
 
 export async function POST(req: NextRequest) {

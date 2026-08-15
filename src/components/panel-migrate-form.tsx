@@ -154,6 +154,7 @@ export function PanelMigrateForm() {
     lines?: number;
     linesWithoutBouquets?: number;
   } | null>(null);
+  const [lastUpload, setLastUpload] = useState<{ size: number; mtimeMs: number } | null>(null);
   const [redirectSeconds, setRedirectSeconds] = useState<number | null>(null);
   const redirectTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const router = useRouter();
@@ -173,9 +174,23 @@ export function PanelMigrateForm() {
       .catch(() => {});
   }, []);
 
+  const loadLastUpload = useCallback(() => {
+    fetch("/api/admin/migrate")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.lastUpload && typeof d.lastUpload.size === "number") {
+          setLastUpload({ size: d.lastUpload.size, mtimeMs: d.lastUpload.mtimeMs ?? 0 });
+        } else {
+          setLastUpload(null);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     loadImportHealth();
-  }, [loadImportHealth]);
+    loadLastUpload();
+  }, [loadImportHealth, loadLastUpload]);
 
   function appendLiveLog(line: string) {
     setLiveLog((prev) => {
@@ -437,7 +452,7 @@ export function PanelMigrateForm() {
     if (carry.buf) consumeMigrateSse("\n", carry);
   }
 
-  async function resumeLastUpload(dryRun: boolean) {
+  async function resumeLastUpload(dryRun: boolean, opts?: { preserveLog?: boolean }) {
     clearRedirectCountdown();
     setImporting(true);
     setScanning(true);
@@ -446,7 +461,9 @@ export function PanelMigrateForm() {
     setUploadProgress(null);
     setScanProgress(null);
     setShowAllWarnings(false);
-    setLiveLog([]);
+    if (!opts?.preserveLog) {
+      setLiveLog([]);
+    }
     appendLiveLog(
       dryRun
         ? "Resuming preview from last uploaded dump on server (no re-upload)…"
@@ -504,6 +521,26 @@ export function PanelMigrateForm() {
     const consumeSse = consumeMigrateSse;
 
     try {
+      // Skip existing does NOT skip upload — but if the same-size dump is already
+      // on the server, reuse it (Resume) instead of sending ~1GB again.
+      if (
+        !usePostgres &&
+        skipExisting &&
+        !clearData &&
+        uploadFile &&
+        uploadFile.size > MAX_INLINE_BYTES &&
+        lastUpload &&
+        Math.abs(lastUpload.size - uploadFile.size) <= 4096
+      ) {
+        appendLiveLog(
+          `Dump already on server (${formatBytes(lastUpload.size)}) — skipping re-upload (Skip existing).`
+        );
+        setResult("Using dump already on server — no re-upload…");
+        await resumeLastUpload(dryRun, { preserveLog: true });
+        loadLastUpload();
+        return;
+      }
+
       if (usePostgres) {
         const payload: Record<string, unknown> = {
           ...migrationPayload(dryRun),
@@ -1279,7 +1316,7 @@ export function PanelMigrateForm() {
         </label>
         <label>
           <input type="checkbox" checked={skipExisting} onChange={(e) => setSkipExisting(e.target.checked)} />{" "}
-          Skip existing usernames / stream URLs (updates type + category on a match — does not duplicate)
+          Skip existing usernames / stream URLs (does not skip upload — only avoids duplicates; retags type/category when they differ)
         </label>
         <label>
           <input type="checkbox" checked={clearData} onChange={(e) => setClearData(e.target.checked)} />{" "}
@@ -1325,7 +1362,20 @@ export function PanelMigrateForm() {
 
       <p className="text-xs opacity-80">
         Already imported this dump? Keep <strong>Skip existing</strong> on and <strong>Clear all data</strong> off,
-        then Run import — that retags live / movies / series in place and adds anything missing.
+        then use <strong>Resume last upload</strong> — that reuses the dump already on the server (no ~1GB re-upload),
+        retags live / movies / series only when they differ, and adds anything missing.
+        {lastUpload ? (
+          <>
+            {" "}
+            Server still has a dump ({formatBytes(lastUpload.size)}
+            {uploadFile && Math.abs(lastUpload.size - uploadFile.size) <= 4096
+              ? " — matches your selected file; Run import will skip re-upload"
+              : ""}
+            ).
+          </>
+        ) : (
+          <> If the dump is no longer on the server, Run import will upload it once; after that prefer Resume.</>
+        )}{" "}
         Use <strong>Repair existing import</strong> after that for bouquets, activation, and empty categories.
         Repair alone does not re-read the SQL file.
       </p>
@@ -1343,7 +1393,12 @@ export function PanelMigrateForm() {
         <button
           type="button"
           className="px-4 py-2 rounded text-sm"
-          style={{ background: "var(--accent)", color: "#fff", opacity: importing || scanning ? 0.5 : 1 }}
+          style={{
+            background: lastUpload && (importHealth?.streams ?? 0) > 0 ? "var(--card)" : "var(--accent)",
+            color: lastUpload && (importHealth?.streams ?? 0) > 0 ? "inherit" : "#fff",
+            border: lastUpload && (importHealth?.streams ?? 0) > 0 ? "1px solid var(--border)" : undefined,
+            opacity: importing || scanning ? 0.5 : 1,
+          }}
           onClick={() => setShowBackupModal(true)}
           disabled={!canRun() || importing || scanning}
         >
@@ -1352,9 +1407,18 @@ export function PanelMigrateForm() {
         <button
           type="button"
           className="px-4 py-2 rounded text-sm"
-          style={{ background: "var(--card)", border: "1px solid var(--border)", opacity: importing || scanning ? 0.5 : 1 }}
-          disabled={importing || scanning || usePostgres}
-          title="Re-run preview/import using the last SQL dump already on the server (no re-upload)"
+          style={{
+            background: lastUpload && (importHealth?.streams ?? 0) > 0 ? "var(--accent)" : "var(--card)",
+            color: lastUpload && (importHealth?.streams ?? 0) > 0 ? "#fff" : "inherit",
+            border: lastUpload && (importHealth?.streams ?? 0) > 0 ? undefined : "1px solid var(--border)",
+            opacity: importing || scanning ? 0.5 : 1,
+          }}
+          disabled={importing || scanning || usePostgres || !lastUpload}
+          title={
+            lastUpload
+              ? `Re-run using the dump already on the server (${formatBytes(lastUpload.size)}) — no re-upload`
+              : "No recent SQL dump found on the server — upload once with Run import first"
+          }
           onClick={() => void resumeLastUpload(false)}
         >
           Resume last upload

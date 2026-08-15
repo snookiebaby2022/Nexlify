@@ -1,4 +1,4 @@
-import { LineStatus, PanelRole, StreamType } from "@prisma/client";
+import { LineStatus, PanelRole, StreamType, VodMode } from "@prisma/client";
 import { prisma } from "../prisma";
 import { hashPassword } from "../auth";
 import { extraSourcesToBitrates } from "./stream-source-urls";
@@ -279,6 +279,58 @@ async function applyMigrationBundleInner(
       serverId = first?.id ?? undefined;
     }
 
+    // Preload URL → stream so Skip existing does not run findFirst+update per row
+    // (that path was ~10 streams/sec on large panels).
+    options.onProgress?.("streams", 0, bundle.streams.length);
+    type ExistingStreamRow = {
+      id: string;
+      streamUrl: string;
+      name: string;
+      type: StreamType;
+      categoryId: string | null;
+      sortOrder: number;
+      vodMode: VodMode;
+      isOnDemand: boolean;
+      autoRestart: boolean;
+      isRadio: boolean;
+      isAdult: boolean;
+      seriesName: string | null;
+      seasonNum: number | null;
+      episodeNum: number | null;
+      serverId: string | null;
+      backupUrl: string | null;
+      streamIcon: string | null;
+      containerExtension: string | null;
+      epgChannelId: string | null;
+    };
+    const existingRows = (await prisma.stream.findMany({
+      select: {
+        id: true,
+        streamUrl: true,
+        name: true,
+        type: true,
+        categoryId: true,
+        sortOrder: true,
+        vodMode: true,
+        isOnDemand: true,
+        autoRestart: true,
+        isRadio: true,
+        isAdult: true,
+        seriesName: true,
+        seasonNum: true,
+        episodeNum: true,
+        serverId: true,
+        backupUrl: true,
+        streamIcon: true,
+        containerExtension: true,
+        epgChannelId: true,
+      },
+    })) as ExistingStreamRow[];
+    const byUrl = new Map<string, ExistingStreamRow>();
+    for (const row of existingRows) {
+      if (row.streamUrl) byUrl.set(row.streamUrl, row);
+    }
+
     await runEach(
       bundle.streams,
       async (s, idx) => {
@@ -309,18 +361,52 @@ async function applyMigrationBundleInner(
           : undefined;
         const onDemand = options.importStreamsOnDemand !== false;
         const vodMode = onDemand
-          ? "ON_DEMAND"
+          ? VodMode.ON_DEMAND
           : type === StreamType.MOVIE || type === StreamType.SERIES
-            ? "ON_DEMAND"
-            : "LIVE";
+            ? VodMode.ON_DEMAND
+            : VodMode.LIVE;
+        const isOnDemand = onDemand || type !== StreamType.LIVE;
+        const autoRestart = onDemand || type !== StreamType.LIVE;
+        const isRadio = s.isRadio === true;
+        const isAdult = s.isAdult === true;
+        const seriesName = s.seriesName?.trim() || null;
+        const seasonNum = s.seasonNum ?? null;
+        const episodeNum = s.episodeNum ?? null;
+        const backupUrl = s.backupUrl?.trim() || null;
+        const streamIcon = s.streamIcon?.trim() || null;
+        const containerExtension = s.containerExtension?.trim() || null;
+        const epgChannelId = s.epgChannelId?.trim() || null;
+        const sortOrder = Number.isFinite(s.sortOrder) ? Number(s.sortOrder) : idx;
 
         const bitrates = extraSourcesToBitrates(s.extraSourceUrls);
-        const dup = await prisma.stream.findFirst({
-          where: { streamUrl },
-          select: { id: true },
-        });
+        const dup = byUrl.get(streamUrl);
         if (dup) {
           streamIdByLegacy.set(s.legacyId, dup.id);
+          const nextCategoryId = categoryId ?? dup.categoryId;
+          const nextServerId = mappedServerId ?? dup.serverId;
+          const nextBackup = backupUrl || dup.backupUrl;
+          const nextIcon = streamIcon || dup.streamIcon;
+          const nextExt = containerExtension || dup.containerExtension;
+          const nextEpg = epgChannelId || dup.epgChannelId;
+          const needsUpdate =
+            dup.name !== name ||
+            dup.type !== type ||
+            dup.vodMode !== vodMode ||
+            dup.isOnDemand !== isOnDemand ||
+            dup.autoRestart !== autoRestart ||
+            dup.isRadio !== isRadio ||
+            dup.isAdult !== isAdult ||
+            dup.seriesName !== seriesName ||
+            dup.seasonNum !== seasonNum ||
+            dup.episodeNum !== episodeNum ||
+            dup.categoryId !== nextCategoryId ||
+            dup.serverId !== nextServerId ||
+            dup.backupUrl !== nextBackup ||
+            dup.streamIcon !== nextIcon ||
+            dup.containerExtension !== nextExt ||
+            dup.epgChannelId !== nextEpg ||
+            dup.sortOrder !== sortOrder;
+          if (!needsUpdate) return false;
           try {
             await prisma.stream.update({
               where: { id: dup.id },
@@ -328,24 +414,42 @@ async function applyMigrationBundleInner(
                 name,
                 type,
                 vodMode,
-                isOnDemand: onDemand || type !== StreamType.LIVE,
-                autoRestart: onDemand || type !== StreamType.LIVE,
-                isRadio: s.isRadio === true,
-                isAdult: s.isAdult === true,
-                seriesName: s.seriesName?.trim() || null,
-                seasonNum: s.seasonNum ?? null,
-                episodeNum: s.episodeNum ?? null,
-                ...(categoryId ? { categoryId } : {}),
-                ...(mappedServerId ? { serverId: mappedServerId } : {}),
-                ...(s.backupUrl?.trim() ? { backupUrl: s.backupUrl.trim() } : {}),
+                isOnDemand,
+                autoRestart,
+                isRadio,
+                isAdult,
+                seriesName,
+                seasonNum,
+                episodeNum,
+                categoryId: nextCategoryId,
+                serverId: nextServerId,
+                backupUrl: nextBackup,
                 ...(bitrates ? { bitrates } : {}),
-                ...(s.streamIcon?.trim() ? { streamIcon: s.streamIcon.trim() } : {}),
-                ...(s.containerExtension?.trim()
-                  ? { containerExtension: s.containerExtension.trim() }
-                  : {}),
-                ...(s.epgChannelId?.trim() ? { epgChannelId: s.epgChannelId.trim() } : {}),
-                ...(Number.isFinite(s.sortOrder) ? { sortOrder: Number(s.sortOrder) } : {}),
+                streamIcon: nextIcon,
+                containerExtension: nextExt,
+                epgChannelId: nextEpg,
+                sortOrder,
               },
+            });
+            byUrl.set(streamUrl, {
+              ...dup,
+              name,
+              type,
+              vodMode,
+              isOnDemand,
+              autoRestart,
+              isRadio,
+              isAdult,
+              seriesName,
+              seasonNum,
+              episodeNum,
+              categoryId: nextCategoryId,
+              serverId: nextServerId,
+              backupUrl: nextBackup,
+              streamIcon: nextIcon,
+              containerExtension: nextExt,
+              epgChannelId: nextEpg,
+              sortOrder,
             });
           } catch (e) {
             pushWarning(result.warnings, `Update existing stream ${name}: ${shortErr(e)}`);
@@ -356,31 +460,52 @@ async function applyMigrationBundleInner(
           data: {
             name,
             streamUrl,
-            backupUrl: s.backupUrl?.trim() || null,
-            streamIcon: s.streamIcon?.trim() || null,
+            backupUrl,
+            streamIcon,
             type,
-            sortOrder: Number.isFinite(s.sortOrder) ? Number(s.sortOrder) : idx,
+            sortOrder,
             serverId: mappedServerId ?? serverId ?? null,
             categoryId: categoryId ?? null,
-            epgChannelId: s.epgChannelId?.trim() || null,
+            epgChannelId,
             channelId: s.channelId?.trim() || null,
-            containerExtension: s.containerExtension?.trim() || null,
+            containerExtension,
             isActive:
               options.importStreamsStopped === true
                 ? false
                 : s.isActive !== false,
-            isAdult: s.isAdult === true,
-            isRadio: s.isRadio === true,
-            isOnDemand: onDemand || type !== StreamType.LIVE,
-            autoRestart: onDemand || type !== StreamType.LIVE,
-            seriesName: s.seriesName?.trim() || null,
-            seasonNum: s.seasonNum ?? null,
-            episodeNum: s.episodeNum ?? null,
+            isAdult,
+            isRadio,
+            isOnDemand,
+            autoRestart,
+            seriesName,
+            seasonNum,
+            episodeNum,
             vodMode,
             ...(bitrates ? { bitrates } : {}),
           },
         });
         streamIdByLegacy.set(s.legacyId, created.id);
+        byUrl.set(streamUrl, {
+          id: created.id,
+          streamUrl,
+          name,
+          type,
+          categoryId: categoryId ?? null,
+          sortOrder,
+          vodMode,
+          isOnDemand,
+          autoRestart,
+          isRadio,
+          isAdult,
+          seriesName,
+          seasonNum,
+          episodeNum,
+          serverId: mappedServerId ?? serverId ?? null,
+          backupUrl,
+          streamIcon,
+          containerExtension,
+          epgChannelId,
+        });
         return true;
       },
       (c, t) => options.onProgress?.("streams", c, t),
@@ -410,22 +535,30 @@ async function applyMigrationBundleInner(
         pushWarning(result.warnings, `Bouquet-stream links batch ${i}: ${shortErr(e)}`);
       }
     }
-    // Refresh link sortOrder so bouquet channel lists match the SQL dump order
-    // even when links already existed from a prior import.
-    for (let i = 0; i < linkRows.length; i += LINK_BATCH) {
-      const slice = linkRows.slice(i, i + LINK_BATCH);
-      try {
-        await prisma.$transaction(
-          slice.map((row) =>
-            prisma.bouquetStream.updateMany({
-              where: { bouquetId: row.bouquetId, streamId: row.streamId },
-              data: { sortOrder: row.sortOrder },
-            })
-          )
-        );
-      } catch (e) {
-        pushWarning(result.warnings, `Bouquet-stream order batch ${i}: ${shortErr(e)}`);
+    // Refresh link sortOrder so bouquet channel lists match the SQL dump order.
+    // Skip on Skip-existing reimports — mass updateMany over 100k+ links is very slow
+    // and order is already correct from the first full import.
+    if (options.skipExistingStreams === false) {
+      for (let i = 0; i < linkRows.length; i += LINK_BATCH) {
+        const slice = linkRows.slice(i, i + LINK_BATCH);
+        try {
+          await prisma.$transaction(
+            slice.map((row) =>
+              prisma.bouquetStream.updateMany({
+                where: { bouquetId: row.bouquetId, streamId: row.streamId },
+                data: { sortOrder: row.sortOrder },
+              })
+            )
+          );
+        } catch (e) {
+          pushWarning(result.warnings, `Bouquet-stream order batch ${i}: ${shortErr(e)}`);
+        }
       }
+    } else if (linkRows.length > 0) {
+      pushWarning(
+        result.warnings,
+        "Skipped bouquet-link reorder (Skip existing on). Re-import with Skip existing off, or a fresh Clear+import, to refresh dump channel order."
+      );
     }
   }
 
