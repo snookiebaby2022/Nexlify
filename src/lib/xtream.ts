@@ -6,7 +6,7 @@ import {
   type StreamForLine,
 } from "./lines";
 import { resolveChannelId, resolveEpgId } from "./subscription-export";
-import { resolveStreamPlaybackUrl } from "./resolve-stream-url";
+import { resolveStreamPlaybackUrl, type StreamWithProvider } from "./resolve-stream-url";
 import { exportPlaybackUrl } from "./export-playback-url";
 import { getStreamPlaybackMode } from "./stream-playback-mode";
 import { StreamType } from "@prisma/client";
@@ -273,7 +273,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
       category_id: s.categoryId ?? "0",
       custom_sid: full.parentStreamId ?? "",
       tv_archive: catchup || timeshiftHours > 0 ? 1 : 0,
-      direct_source: direct || exportPlaybackUrl(baseUrl, line, s, full),
+      direct_source: direct || exportPlaybackUrl(baseUrl, line, s, full as StreamWithProvider),
       tv_archive_duration: catchup ? archiveDays || timeshiftHours || 7 : timeshiftHours || 0,
       ...(abrLadder ? { abr_variants: abrLadder } : {}),
     };
@@ -305,7 +305,7 @@ export async function xtreamVodStreams(
       category_id: s.categoryId ?? "0",
       container_extension: (full as { containerExtension?: string | null }).containerExtension ?? "mp4",
       custom_sid: "",
-      direct_source: exportPlaybackUrl(baseUrl, line, s, full),
+      direct_source: exportPlaybackUrl(baseUrl, line, s, full as StreamWithProvider),
     };
   });
 }
@@ -385,7 +385,7 @@ function formatM3uEntries(
           `#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidthKbps ?? 2500000},RESOLUTION=${v.resolution ?? "1280x720"},NAME="${v.label}"`
         );
         const variantFull = { ...full, streamUrl: v.path } as typeof full;
-        lines.push(exportPlaybackUrl(baseUrl, line, s, variantFull, undefined, output));
+        lines.push(exportPlaybackUrl(baseUrl, line, s, variantFull as StreamWithProvider, undefined, output));
       }
       continue;
     }
@@ -393,7 +393,7 @@ function formatM3uEntries(
     const tvgId = isExtended ? resolveEpgId(s) : "";
     const tvgName = s.name.replace(/"/g, "'");
     const group = groupTitle(s);
-    const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, output);
+    const playUrl = exportPlaybackUrl(baseUrl, line, s, full as StreamWithProvider, undefined, output);
     if (isExtended) {
       lines.push(
         `#EXTINF:-1 tvg-id="${tvgId}" tvg-name="${tvgName}" channel-id="${resolveChannelId(s)}"${logo} group-title="${group}",${s.name}`
