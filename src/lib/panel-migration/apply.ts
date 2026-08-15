@@ -875,8 +875,26 @@ async function applyMigrationBundleInner(
 
   if (bundle.phase3) {
     try {
+      // Retag / Skip-existing reimports: do not re-bulk millions of EPG programmes,
+      // activity logs, or stats — that alone can take hours. Use Repair + EPG sync instead.
+      const retagOnly =
+        options.skipExistingStreams !== false && options.clearDataBeforeImport !== true;
+      const phase3Options = retagOnly
+        ? {
+            ...options,
+            importEpgGuide: false,
+            importLogs: false,
+            importStats: false,
+          }
+        : options;
+      if (retagOnly && options.importEpgGuide !== false) {
+        pushWarning(
+          result.warnings,
+          "Skipped EPG programme / logs / stats re-import (Skip existing). Sync EPG from Sources if the guide needs refreshing."
+        );
+      }
       await applyMigrationPhase3(bundle.phase3, {
-        options,
+        options: phase3Options,
         result,
         streamIdByLegacy,
         categoryIdByLegacy,
@@ -891,19 +909,28 @@ async function applyMigrationBundleInner(
     }
   }
 
-  try {
-    options.onProgress?.("repair", 0, 1);
-    const { repairImportedPanel } = await import("@/lib/repair-imported-panel");
-    const repair = await repairImportedPanel(prisma);
-    if (repair.liveLinkedToBouquets || repair.seriesLinkedToBouquets || repair.moviesLinkedToBouquets || repair.linesLinkedToBouquets) {
-      pushWarning(
-        result.warnings,
-        `Post-import repair: linked ${repair.liveLinkedToBouquets} live, ${repair.moviesLinkedToBouquets} movie, ${repair.seriesLinkedToBouquets} series stream(s) into bouquets; attached ${repair.linesLinkedToBouquets} line-bouquet link(s); activated ${repair.streamsActivated}.`
-      );
+  // Full Clear+import runs repair here. Skip-existing retags should use the Repair button
+  // instead — repair walks the whole catalog and can take a long time on large panels.
+  if (options.clearDataBeforeImport === true || options.skipExistingStreams === false) {
+    try {
+      options.onProgress?.("repair", 0, 1);
+      const { repairImportedPanel } = await import("@/lib/repair-imported-panel");
+      const repair = await repairImportedPanel(prisma);
+      if (repair.liveLinkedToBouquets || repair.seriesLinkedToBouquets || repair.moviesLinkedToBouquets || repair.linesLinkedToBouquets) {
+        pushWarning(
+          result.warnings,
+          `Post-import repair: linked ${repair.liveLinkedToBouquets} live, ${repair.moviesLinkedToBouquets} movie, ${repair.seriesLinkedToBouquets} series stream(s) into bouquets; attached ${repair.linesLinkedToBouquets} line-bouquet link(s); activated ${repair.streamsActivated}.`
+        );
+      }
+      options.onProgress?.("repair", 1, 1);
+    } catch (e) {
+      pushWarning(result.warnings, `Post-import repair: ${shortErr(e)}`);
     }
-    options.onProgress?.("repair", 1, 1);
-  } catch (e) {
-    pushWarning(result.warnings, `Post-import repair: ${shortErr(e)}`);
+  } else {
+    pushWarning(
+      result.warnings,
+      "Skipped post-import repair (Skip existing). Click Repair existing import if bouquets/activation still need healing."
+    );
   }
 
   return result;

@@ -2,7 +2,7 @@
  * Detached SQL migration worker — survives `pm2 restart nexlify`.
  * Usage: npx tsx scripts/panel-migrate-background.ts /tmp/nexlify-migrate-job.json
  */
-import { readFile, writeFile, unlink } from "fs/promises";
+import { readFile, writeFile, unlink, rename } from "fs/promises";
 import { bundleFromSqlFile } from "../src/lib/panel-migration/map-rows";
 import { previewMigrationBundle } from "../src/lib/panel-migration";
 import { applyMigrationBundle } from "../src/lib/panel-migration/apply";
@@ -28,8 +28,12 @@ type Job = {
   pid?: number;
 };
 
+/** Atomic replace so UI/pollers never read a half-written empty job file. */
 async function writeJob(job: Job) {
-  await writeFile(jobPath, JSON.stringify(job), "utf8");
+  const tmp = `${jobPath}.${process.pid}.tmp`;
+  const payload = JSON.stringify(job);
+  await writeFile(tmp, payload, "utf8");
+  await rename(tmp, jobPath);
 }
 
 async function main() {
@@ -40,13 +44,40 @@ async function main() {
   await writeJob(job);
   await writeFile(lockPath, `${Date.now()}:${job.id}:${process.pid}`, "utf8");
 
-  const onProgress = (phase: string, current: number, total: number) => {
+  let lastProgressWrite = 0;
+  let pendingProgress: { phase: string; current: number; total: number } | null = null;
+  let progressTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const flushProgress = () => {
+    progressTimer = null;
+    if (!pendingProgress) return;
+    const { phase, current, total } = pendingProgress;
+    pendingProgress = null;
+    lastProgressWrite = Date.now();
     job.progress = { phase, current, total };
     job.message =
       phase === "scanning"
         ? `Scanning SQL dump… ${current}%`
         : `Importing ${phase}: ${current}/${total}`;
     void writeJob(job);
+  };
+
+  const onProgress = (phase: string, current: number, total: number) => {
+    pendingProgress = { phase, current, total };
+    const now = Date.now();
+    // Throttle disk writes — unthrottled progress was rewriting the job file
+    // thousands of times/sec and made status polling look stuck/empty.
+    if (now - lastProgressWrite >= 500 || current >= total || phase === "scanning") {
+      if (progressTimer) {
+        clearTimeout(progressTimer);
+        progressTimer = null;
+      }
+      flushProgress();
+      return;
+    }
+    if (!progressTimer) {
+      progressTimer = setTimeout(flushProgress, 500);
+    }
   };
 
   try {

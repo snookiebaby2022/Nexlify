@@ -142,24 +142,43 @@ export async function applyMigrationPhase3(
         pushWarning(result.warnings, `Provider ${p.name}: ${shortErr(e)}`);
       }
     }
-    // Link streams
-    let linked = 0;
+    // Link streams (batched — per-row update was very slow on large dumps)
+    const linksByProvider = new Map<string, { streamIds: string[]; path: string | null }>();
     for (const link of phase3.providerStreamLinks) {
       const providerId = providerIdByLegacy.get(link.providerLegacyId);
       const streamId = streamIdByLegacy.get(link.streamLegacyId);
       if (!providerId || !streamId) continue;
-      try {
-        await prisma.stream.update({
-          where: { id: streamId },
-          data: {
-            providerId,
-            providerPath: link.providerPath ?? null,
-            hostedExternally: true,
-          },
-        });
-        linked++;
-      } catch {
-        /* skip */
+      const key = `${providerId}\0${link.providerPath ?? ""}`;
+      const row = linksByProvider.get(key) ?? {
+        streamIds: [],
+        path: link.providerPath ?? null,
+      };
+      row.streamIds.push(streamId);
+      linksByProvider.set(key, row);
+    }
+    let linked = 0;
+    const LINK_CHUNK = 500;
+    let linkProgress = 0;
+    const linkTotal = phase3.providerStreamLinks.length;
+    for (const [key, row] of linksByProvider) {
+      const providerId = key.split("\0")[0];
+      for (let i = 0; i < row.streamIds.length; i += LINK_CHUNK) {
+        const ids = row.streamIds.slice(i, i + LINK_CHUNK);
+        try {
+          const res = await prisma.stream.updateMany({
+            where: { id: { in: ids } },
+            data: {
+              providerId,
+              providerPath: row.path,
+              hostedExternally: true,
+            },
+          });
+          linked += res.count;
+        } catch {
+          /* skip */
+        }
+        linkProgress += ids.length;
+        onProgress?.("providerLinks", Math.min(linkProgress, linkTotal), Math.max(linkTotal, 1));
       }
     }
     if (linked) {
@@ -370,7 +389,7 @@ export async function applyMigrationPhase3(
         stop: p.stop,
       });
     }
-    const CHUNK = 500;
+    const CHUNK = 2000;
     for (let i = 0; i < batch.length; i += CHUNK) {
       onProgress?.("epgPrograms", Math.min(i + CHUNK, batch.length), batch.length);
       const slice = batch.slice(i, i + CHUNK);

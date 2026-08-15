@@ -113,8 +113,8 @@ export function PanelMigrateForm() {
   const [importProviders, setImportProviders] = useState(true);
   const [importWatchFolders, setImportWatchFolders] = useState(true);
   const [importTickets, setImportTickets] = useState(true);
-  /** Full EPG guide on by default (large dumps can take longer). */
-  const [importEpgGuide, setImportEpgGuide] = useState(true);
+  /** Full EPG guide — off by default; multi-million programme rows make Skip-existing reimports take hours. */
+  const [importEpgGuide, setImportEpgGuide] = useState(false);
   const [importBlockedAsns, setImportBlockedAsns] = useState(true);
   const [importLogs, setImportLogs] = useState(true);
   const [importStats, setImportStats] = useState(true);
@@ -1280,7 +1280,7 @@ export function PanelMigrateForm() {
             checked={importEpgGuide}
             onChange={(e) => setImportEpgGuide(e.target.checked)}
           />{" "}
-          Full EPG guide (epg_data / epg_channels)
+          Full EPG guide (epg_data — can take hours on large dumps; leave off for re-import)
         </label>
         <label>
           <input

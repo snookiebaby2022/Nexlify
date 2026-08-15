@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.76",
+  "latestVersion": "1.9.77",
   "releases": [
+    {
+      "version": "1.9.77",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Skip-existing migrate no longer re-imports multi-million EPG rows; throttle job status writes.",
+      "changelog": [
+        "Skip existing retags skip EPG programme / logs / stats bulk import and post-import repair (use Repair + EPG sync instead)",
+        "Migration worker writes job status atomically and at most ~2/sec so progress polling stays readable",
+        "Provider-stream linking batched; EPG createMany chunk increased when guide import is enabled",
+        "Full EPG guide checkbox defaults off"
+      ],
+      "fixes": [
+        "Skip-existing reimport hung for hours on EpgProgram inserts after streams finished",
+        "Job status file flickered empty while progress wrote thousands of times per second"
+      ]
+    },
     {
       "version": "1.9.76",
       "date": "2026-08-15",
