@@ -60,7 +60,11 @@ fi
 echo "  Prisma OK"
 
 echo "-> sync admin password (ADMIN_PASSWORD in .env)"
-node "$ROOT/scripts/sync-marketing-admin.cjs"
+if [ -f "$ROOT/scripts/sync-marketing-admin.cjs" ]; then
+  node "$ROOT/scripts/sync-marketing-admin.cjs" || echo "WARN: sync-marketing-admin skipped (no marketing DB or already synced)"
+else
+  echo "WARN: sync-marketing-admin.cjs missing — skip"
+fi
 
 echo "-> next build (clean)"
 rm -rf .next
