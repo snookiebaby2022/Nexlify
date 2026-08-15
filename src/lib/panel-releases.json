@@ -1,7 +1,19 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.78",
+  "latestVersion": "1.9.79",
   "releases": [
+    {
+      "version": "1.9.79",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Expand XUI bouquet_series catalog IDs into episode streams so VOD bouquets match the dump.",
+      "changelog": [
+        "bouquet_series values are streams_series IDs — expand them to episode stream links during migrate/sync"
+      ],
+      "fixes": [
+        "VOD bouquet lost series membership after exact dump sync (movies-only)"
+      ]
+    },
     {
       "version": "1.9.78",
       "date": "2026-08-15",

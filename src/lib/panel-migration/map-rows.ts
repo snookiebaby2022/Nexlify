@@ -35,6 +35,7 @@ import {
 } from "./sql-junctions";
 import {
   enrichStreamsFromSys,
+  expandBouquetSeriesMembership,
   finalizeVodStreamDefaults,
   loadStreamsTypeMap,
   mapSeriesEpisodesFromSql,
@@ -788,6 +789,12 @@ export function bundleFromSql(sql: string, source: MigrationSource): MigrationBu
     bundle.streams.push(...seriesEp.streams);
   }
   warnings.push(...seriesEp.warnings);
+  const seriesExpand = expandBouquetSeriesMembership(
+    allTables,
+    bundle.bouquets,
+    bundle.streams
+  );
+  warnings.push(...seriesExpand.warnings);
   finalizeVodStreamDefaults(bundle.streams);
 
   // Stable sort: respect source order column so lists match the old panel
@@ -1061,6 +1068,12 @@ export async function bundleFromSqlFile(
     bundle.streams.push(...seriesEp.streams);
   }
   warnings.push(...seriesEp.warnings);
+  const seriesExpand = expandBouquetSeriesMembership(
+    allTables,
+    bundle.bouquets,
+    bundle.streams
+  );
+  warnings.push(...seriesExpand.warnings);
   finalizeVodStreamDefaults(bundle.streams);
 
   // Stable sort: respect source order column so lists match the old panel
