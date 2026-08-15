@@ -145,13 +145,18 @@ export async function categoryIdsForLine(
   if (!bouquetIds.length) return { categoryIds: [], hasUncategorized: false };
 
   const types = typeList(options);
+  const typeTexts = types?.map((t) => String(t)) ?? null;
   const rows = await prisma.$queryRaw<{ categoryId: string | null }[]>`
     SELECT DISTINCT s."categoryId" AS "categoryId"
     FROM "BouquetStream" bs
     INNER JOIN "Stream" s ON s.id = bs."streamId"
     WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
     ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
-    ${types && types.length ? Prisma.sql`AND s.type IN (${Prisma.join(types)})` : Prisma.empty}
+    ${
+      typeTexts && typeTexts.length
+        ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
+        : Prisma.empty
+    }
   `;
   const categoryIds: string[] = [];
   let hasUncategorized = false;
