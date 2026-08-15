@@ -35,7 +35,13 @@ export type MigrationStreamRow = {
 export type MigrationBouquetRow = {
   legacyId: string;
   name: string;
+  /** Live / movie / radio stream IDs from bouquet_channels / movies / radios. */
   streamLegacyIds: string[];
+  /**
+   * XUI `bouquet_series` values are streams_series catalog IDs (not streams.id).
+   * Expanded to episode stream IDs during migrate via expandBouquetSeriesMembership.
+   */
+  seriesCatalogLegacyIds?: string[];
   sortOrder?: number;
 };
 

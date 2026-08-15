@@ -259,9 +259,10 @@ function mapBouquets(data: SqlTableData | null): MigrationBouquetRow[] {
         r.bouquet_channels ?? r.bouquet_streams ?? r.channels ?? r.stream_ids ?? r.streams
       ),
       ...idsFromBouquetField(r.bouquet_movies ?? r.movies ?? r.movie_ids),
-      ...idsFromBouquetField(r.bouquet_series ?? r.series ?? r.series_ids),
       ...idsFromBouquetField(r.bouquet_radios ?? r.radios ?? r.radio_ids),
     ];
+    // bouquet_series is streams_series catalog IDs — expand later, never merge as stream IDs.
+    const seriesCatalogLegacyIds = idsFromBouquetField(r.bouquet_series);
     const explicit = r.bouquet_order ?? r.sort_order ?? r.order ?? r.cat_order;
     const hasExplicit =
       explicit != null && String(explicit).trim() !== "" && Number.isFinite(Number(explicit));
@@ -271,6 +272,7 @@ function mapBouquets(data: SqlTableData | null): MigrationBouquetRow[] {
       legacyId,
       name,
       streamLegacyIds: [...new Set(streamLegacyIds.filter(Boolean))],
+      seriesCatalogLegacyIds: [...new Set(seriesCatalogLegacyIds.filter(Boolean))],
       sortOrder,
       dumpIndex,
     });

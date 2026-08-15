@@ -420,8 +420,8 @@ export function mapSeriesEpisodesFromSql(
 
 /**
  * XUI `bouquet_series` stores streams_series.id values, not streams.id.
- * Expand those series catalog IDs into the episode stream legacy IDs so VOD
- * bouquets match the dump (movies + series episodes).
+ * Expand only those catalog IDs into episode stream legacy IDs, then append
+ * them onto streamLegacyIds (live/movie/radio IDs stay untouched).
  */
 export function expandBouquetSeriesMembership(
   allTables: Map<string, SqlTableData[]>,
@@ -434,65 +434,61 @@ export function expandBouquetSeriesMembership(
     "series_episodes",
     "episodes",
   ]);
-  if (!episodes || !bouquets.length) return { expanded: 0, warnings };
+  if (!bouquets.length) return { expanded: 0, warnings };
 
   const seriesToStreamLegacy = new Map<string, string[]>();
   const streamLegacyIds = new Set(streams.map((s) => String(s.legacyId)));
 
-  for (const row of episodes.rows) {
-    const r = rowToRecord(episodes.columns, row);
-    const seriesId = String(r.series_id ?? r.show_id ?? r.seriesid ?? "").trim();
-    if (!seriesId) continue;
-    const linkedStreamId = String(
-      r.stream_id ?? r.episode_stream_id ?? r.movie_stream_id ?? ""
-    ).trim();
-    const epId = String(r.id ?? r.episode_id ?? "").trim();
-    const candidates = [
-      linkedStreamId,
-      epId ? `series_ep_${epId}` : "",
-      linkedStreamId ? `series_ep_stream_${linkedStreamId}` : "",
-    ].filter(Boolean);
-    const list = seriesToStreamLegacy.get(seriesId) ?? [];
-    for (const c of candidates) {
-      if (streamLegacyIds.has(c) && !list.includes(c)) list.push(c);
+  if (episodes) {
+    for (const row of episodes.rows) {
+      const r = rowToRecord(episodes.columns, row);
+      const seriesId = String(r.series_id ?? r.show_id ?? r.seriesid ?? "").trim();
+      if (!seriesId) continue;
+      const linkedStreamId = String(
+        r.stream_id ?? r.episode_stream_id ?? r.movie_stream_id ?? ""
+      ).trim();
+      const epId = String(r.id ?? r.episode_id ?? "").trim();
+      const candidates = [
+        linkedStreamId,
+        epId ? `series_ep_${epId}` : "",
+        linkedStreamId ? `series_ep_stream_${linkedStreamId}` : "",
+      ].filter(Boolean);
+      const list = seriesToStreamLegacy.get(seriesId) ?? [];
+      for (const c of candidates) {
+        if (streamLegacyIds.has(c) && !list.includes(c)) list.push(c);
+      }
+      if (list.length) seriesToStreamLegacy.set(seriesId, list);
     }
-    if (list.length) seriesToStreamLegacy.set(seriesId, list);
-  }
-
-  if (!seriesToStreamLegacy.size) {
-    warnings.push(
-      "bouquet_series present but no series→episode stream map could be built from streams_episodes."
-    );
-    return { expanded: 0, warnings };
   }
 
   let expanded = 0;
   for (const b of bouquets) {
-    if (!b.streamLegacyIds?.length) continue;
-    const next: string[] = [];
-    const seen = new Set<string>();
-    for (const raw of b.streamLegacyIds) {
+    const catalogIds = b.seriesCatalogLegacyIds ?? [];
+    if (!catalogIds.length) continue;
+    if (!seriesToStreamLegacy.size) {
+      continue;
+    }
+    const seen = new Set(b.streamLegacyIds.map(String));
+    for (const raw of catalogIds) {
       const id = String(raw);
       const episodeIds = seriesToStreamLegacy.get(id);
-      if (episodeIds?.length) {
-        for (const ep of episodeIds) {
-          if (seen.has(ep)) continue;
-          seen.add(ep);
-          next.push(ep);
-          expanded++;
-        }
-        continue;
+      if (!episodeIds?.length) continue;
+      for (const ep of episodeIds) {
+        if (seen.has(ep)) continue;
+        seen.add(ep);
+        b.streamLegacyIds.push(ep);
+        expanded++;
       }
-      if (seen.has(id)) continue;
-      seen.add(id);
-      next.push(id);
     }
-    b.streamLegacyIds = next;
   }
 
   if (expanded) {
     warnings.push(
       `Expanded bouquet_series catalog IDs into ${expanded} episode stream link(s) across ${bouquets.length} bouquet(s).`
+    );
+  } else if (bouquets.some((b) => (b.seriesCatalogLegacyIds?.length ?? 0) > 0) && !seriesToStreamLegacy.size) {
+    warnings.push(
+      "bouquet_series present but no series→episode stream map could be built from streams_episodes."
     );
   }
   return { expanded, warnings };
