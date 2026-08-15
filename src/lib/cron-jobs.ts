@@ -4,6 +4,7 @@ import { importFromFolder } from "./import-media";
 import { syncEpgSource } from "./epg";
 import { enqueueAgentCommand, generateAgentToken } from "./stream-agent";
 import { runPanelBackup } from "./backup-run";
+import { getSettingGroup } from "./panel-settings";
 import { reassignStreamsFromOfflineServers } from "./server-load";
 import { jobCheckStreamCerts } from "./cert-monitor";
 import { isRemoteM3uUrl } from "./m3u-watch-sync";
@@ -378,6 +379,44 @@ export async function jobPanelBackup() {
       await logCron("panel_backup", "ok", "skipped (schedule)", Date.now() - start);
       return;
     }
+
+    const backup = await getSettingGroup("backup");
+    if (!backup.enabled) {
+      await logCron("panel_backup", "ok", "disabled", Date.now() - start);
+      return;
+    }
+
+    // Large catalogs: run detached so the hourly cron tick is not blocked for hours.
+    const streamCount = await prisma.stream.count();
+    if (backup.fullExportOnBackup !== false && streamCount >= 10_000) {
+      const { startBackupBackgroundJob, reconcileBackupJob } = await import("./backup-job");
+      const existing = await reconcileBackupJob();
+      if (existing?.status === "running") {
+        await logCron("panel_backup", "ok", "already running", Date.now() - start);
+        return;
+      }
+      const format =
+        backup.exportFormat === "zip" ? "zip" : backup.exportFormat === "gzip" ? "gzip" : "json";
+      const started = await startBackupBackgroundJob({
+        trigger: "cron",
+        format,
+        includePasswords: backup.includePasswords === true,
+        target: backup.target === "remote" ? "remote" : "local",
+      });
+      if (!started.ok) {
+        await logCron("panel_backup", "error", started.error, Date.now() - start);
+        return;
+      }
+      await markBackupLastRun();
+      await logCron(
+        "panel_backup",
+        "ok",
+        `started background ${started.job.id} (${streamCount} streams)`,
+        Date.now() - start
+      );
+      return;
+    }
+
     const result = await runPanelBackup();
     if (result.skipped) {
       await logCron("panel_backup", "ok", "disabled", Date.now() - start);

@@ -87,10 +87,47 @@ export default function BackupSettingsPage() {
 
   async function runNow() {
     setRunning(true);
-    const res = await fetch("/api/admin/backup", { method: "POST" });
-    const j = await res.json();
-    setMsg(res.ok ? `${j.message}${j.path ? ` → ${j.path}` : ""}` : j.error);
-    setRunning(false);
+    setMsg("Starting backup…");
+    try {
+      const res = await fetch("/api/admin/backup?trigger=settings", { method: "POST" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.ok) {
+        setMsg(j.error || `Backup failed (HTTP ${res.status})`);
+        setRunning(false);
+        return;
+      }
+      setMsg(j.message || "Backup started…");
+      for (let i = 0; i < 3600; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const st = await fetch("/api/admin/backup?job=1");
+        const data = await st.json().catch(() => ({}));
+        const job = data.job;
+        if (!job) continue;
+        if (job.status === "running") {
+          const p = job.progress;
+          const pct =
+            p && p.total > 0 ? Math.round((p.current / p.total) * 100) : null;
+          setMsg(
+            `${job.message || "Backing up…"}${pct != null ? ` (${pct}%)` : ""}`
+          );
+          continue;
+        }
+        if (job.status === "done") {
+          setMsg(
+            `${job.message || "Backup complete."}${job.path ? ` → ${job.path}` : ""}`
+          );
+          break;
+        }
+        if (job.status === "failed") {
+          setMsg(job.error || job.message || "Backup failed");
+          break;
+        }
+      }
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRunning(false);
+    }
   }
 
   if (!data) {

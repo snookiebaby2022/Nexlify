@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.72",
+  "latestVersion": "1.9.73",
   "releases": [
+    {
+      "version": "1.9.73",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Backup & Restore: background jobs with live progress, fix Failed to fetch on large catalogs, repair automatic pg_dump cron.",
+      "changelog": [
+        "Create Backup runs as a detached worker with a live progress bar (no browser/proxy timeout)",
+        "Streams and lines are exported in batches with compact JSON for large catalogs",
+        "Settings → Backup Run now polls job status until complete",
+        "Scheduled panel backup spawns the same background worker when the stream catalog is large",
+        "jobPgDump now imports getSettingGroup so automatic SQL dumps can run"
+      ],
+      "fixes": [
+        "Backup failed: Failed to fetch when building a full snapshot of hundreds of thousands of streams",
+        "Automatic pg_dump cron crashing with getSettingGroup is not defined",
+        "Restore confirm button never performed the restore; download action missing"
+      ]
+    },
     {
       "version": "1.9.72",
       "date": "2026-08-14",

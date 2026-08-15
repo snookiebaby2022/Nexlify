@@ -1,12 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { createHash, randomBytes, createCipheriv, createDecipheriv } from "crypto";
-import { gzipSync, gunzipSync } from "zlib";
+import { writeBackupArchive } from "@/lib/backup-archive";
 
 const ALGORITHM = "aes-256-gcm";
 
+export type BackupProgressCb = (phase: string, current: number, total: number) => void;
+
 function deriveKey(password: string, salt: Buffer): Buffer {
-  // Simple key derivation — for production use scrypt/pbkdf2
   return createHash("sha256").update(password).update(salt).digest();
 }
 
@@ -17,7 +18,6 @@ export function encryptBackup(data: string, password: string): Buffer {
   const cipher = createCipheriv(ALGORITHM, key, iv);
   const encrypted = Buffer.concat([cipher.update(data, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
-  // Format: salt(16) + iv(12) + tag(16) + encrypted
   return Buffer.concat([salt, iv, tag, encrypted]);
 }
 
@@ -36,14 +36,68 @@ export function computeChecksum(data: string): string {
   return createHash("sha256").update(data).digest("hex");
 }
 
-export async function buildFullBackupSnapshot(options?: { includePasswords?: boolean }) {
-  const [panelSettings, bouquets, categories, streams, lines, users, packages, coupons, epgSources] =
+const STREAM_BATCH = 2500;
+const LINE_BATCH = 1000;
+
+async function loadStreamsBatched(onProgress?: BackupProgressCb) {
+  const total = await prisma.stream.count();
+  onProgress?.("streams", 0, Math.max(total, 1));
+  if (total === 0) return [];
+
+  const streams: Awaited<ReturnType<typeof prisma.stream.findMany>> = [];
+  let cursor: string | undefined;
+  while (true) {
+    const batch = await prisma.stream.findMany({
+      take: STREAM_BATCH,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: "asc" },
+    });
+    if (!batch.length) break;
+    streams.push(...batch);
+    cursor = batch[batch.length - 1]!.id;
+    onProgress?.("streams", streams.length, total);
+    if (batch.length < STREAM_BATCH) break;
+  }
+  return streams;
+}
+
+async function loadLinesBatched(includePasswords: boolean, onProgress?: BackupProgressCb) {
+  const total = await prisma.line.count();
+  onProgress?.("lines", 0, Math.max(total, 1));
+  if (total === 0) return [];
+
+  const lines: Array<Record<string, unknown>> = [];
+  let cursor: string | undefined;
+  while (true) {
+    const batch = await prisma.line.findMany({
+      take: LINE_BATCH,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: "asc" },
+      include: { bouquets: true },
+    });
+    if (!batch.length) break;
+    for (const l of batch) {
+      lines.push(includePasswords ? l : { ...l, password: "[redacted-export]" });
+    }
+    cursor = batch[batch.length - 1]!.id;
+    onProgress?.("lines", lines.length, total);
+    if (batch.length < LINE_BATCH) break;
+  }
+  return lines;
+}
+
+export async function buildFullBackupSnapshot(options?: {
+  includePasswords?: boolean;
+  onProgress?: BackupProgressCb;
+}) {
+  const onProgress = options?.onProgress;
+  onProgress?.("meta", 0, 8);
+
+  const [panelSettings, bouquets, categories, users, packages, coupons, epgSources] =
     await Promise.all([
       prisma.panelSetting.findMany(),
       prisma.bouquet.findMany({ include: { streams: true } }),
       prisma.category.findMany(),
-      prisma.stream.findMany(),
-      prisma.line.findMany({ include: { bouquets: true } }),
       prisma.panelUser.findMany({
         select: {
           id: true,
@@ -64,6 +118,12 @@ export async function buildFullBackupSnapshot(options?: { includePasswords?: boo
       prisma.coupon.findMany(),
       prisma.epgSource.findMany(),
     ]);
+  onProgress?.("meta", 4, 8);
+
+  const streams = await loadStreamsBatched(onProgress);
+  onProgress?.("meta", 6, 8);
+  const lines = await loadLinesBatched(options?.includePasswords === true, onProgress);
+  onProgress?.("meta", 8, 8);
 
   return {
     version: 3,
@@ -72,9 +132,7 @@ export async function buildFullBackupSnapshot(options?: { includePasswords?: boo
     bouquets,
     categories,
     streams,
-    lines: options?.includePasswords
-      ? lines
-      : lines.map((l) => ({ ...l, password: "[redacted-export]" })),
+    lines,
     users,
     packages,
     coupons,
@@ -88,14 +146,53 @@ export async function buildFullBackupSnapshot(options?: { includePasswords?: boo
   };
 }
 
-export async function runPanelBackup() {
-  const backup = await getSettingGroup("backup");
-  if (!backup.enabled) return { skipped: true as const, reason: "disabled" };
+export type WritePanelBackupResult = {
+  skipped: false;
+  path: string;
+  checksum: string;
+  encrypted: boolean;
+  size: number;
+  format: string;
+};
 
+/**
+ * Build and write a full (or light) panel backup to disk.
+ * Used by cron, the API background worker, and tests.
+ */
+export async function writePanelBackupFile(options?: {
+  includePasswords?: boolean;
+  fullExport?: boolean;
+  format?: "json" | "zip" | "gzip";
+  onProgress?: BackupProgressCb;
+}): Promise<WritePanelBackupResult> {
+  const backup = await getSettingGroup("backup");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const includePasswords = backup.includePasswords === true;
-  const snapshot = backup.fullExportOnBackup
-    ? await buildFullBackupSnapshot({ includePasswords })
+  const includePasswords = options?.includePasswords ?? backup.includePasswords === true;
+  const fullExport = options?.fullExport ?? backup.fullExportOnBackup !== false;
+  const format =
+    options?.format === "zip" || options?.format === "gzip" || options?.format === "json"
+      ? options.format
+      : backup.exportFormat === "zip"
+        ? "zip"
+        : backup.exportFormat === "gzip"
+          ? "gzip"
+          : "json";
+
+  options?.onProgress?.("building", 0, 100);
+
+  const snapshot = fullExport
+    ? await buildFullBackupSnapshot({
+        includePasswords,
+        onProgress: (phase, current, total) => {
+          if (phase === "streams") {
+            options?.onProgress?.("streams", current, total);
+          } else if (phase === "lines") {
+            options?.onProgress?.("lines", current, total);
+          } else {
+            options?.onProgress?.("building", Math.min(90, Math.round((current / Math.max(1, total)) * 40)), 100);
+          }
+        },
+      })
     : {
         createdAt: new Date().toISOString(),
         panelSettings: await prisma.panelSetting.findMany(),
@@ -107,8 +204,9 @@ export async function runPanelBackup() {
         },
       };
 
-  const filename = `nexlify-backup-${stamp}.json`;
-  const payload = JSON.stringify(snapshot, null, 2);
+  options?.onProgress?.("serializing", 92, 100);
+  // Compact JSON — pretty-print balloons multi-hundred-MB backups.
+  const payload = JSON.stringify(snapshot);
   const checksum = computeChecksum(payload);
 
   const { mkdir, writeFile } = await import("fs/promises");
@@ -120,27 +218,65 @@ export async function runPanelBackup() {
   );
   await mkdir(dir, { recursive: true });
 
-  // Encryption
   const encryptionPassword = String(backup.encryptionPassword ?? "").trim();
-  let fileContent: string | Buffer = payload;
-  let ext = "json";
+  const baseName = `nexlify-backup-${stamp}`;
+
+  // Encryption / huge archives: prefer plain or encrypted binary, avoid double-buffering zip of GB payloads.
+  const streamCount =
+    snapshot && typeof snapshot === "object" && "counts" in snapshot
+      ? Number((snapshot as { counts?: { streams?: number } }).counts?.streams ?? 0)
+      : 0;
+  const largeCatalog = streamCount >= 50_000 || Buffer.byteLength(payload) > 80 * 1024 * 1024;
+
+  let filePath: string;
+  let writtenFormat: string;
+  let size: number;
+  let encrypted = false;
 
   if (encryptionPassword) {
-    fileContent = encryptBackup(payload, encryptionPassword);
-    ext = "json.enc";
+    options?.onProgress?.("encrypting", 95, 100);
+    const fileContent = encryptBackup(payload, encryptionPassword);
+    filePath = path.join(dir, `${baseName}.json.enc`);
+    await writeFile(filePath, fileContent);
+    writtenFormat = "json.enc";
+    size = fileContent.length;
+    encrypted = true;
+  } else if (largeCatalog && (format === "zip" || format === "gzip")) {
+    // gzipSync of multi-hundred-MB strings OOMs — write .json for large catalogs.
+    options?.onProgress?.("writing", 96, 100);
+    filePath = path.join(dir, `${baseName}.json`);
+    await writeFile(filePath, payload, "utf8");
+    writtenFormat = "json";
+    size = Buffer.byteLength(payload);
+  } else {
+    options?.onProgress?.("writing", 96, 100);
+    const written = await writeBackupArchive(dir, baseName, payload, format);
+    filePath = written.filePath;
+    writtenFormat = written.format;
+    const { stat } = await import("fs/promises");
+    size = (await stat(filePath)).size;
   }
 
-  const filePath = path.join(dir, filename.replace(".json", `.${ext}`));
-  await writeFile(filePath, fileContent);
-
-  // Write checksum sidecar
   await writeFile(`${filePath}.sha256`, checksum, "utf8");
+  options?.onProgress?.("done", 100, 100);
 
   return {
-    skipped: false as const,
+    skipped: false,
     path: filePath,
     checksum,
-    encrypted: Boolean(encryptionPassword),
-    size: Buffer.isBuffer(fileContent) ? fileContent.length : Buffer.byteLength(fileContent),
+    encrypted,
+    size,
+    format: writtenFormat,
   };
+}
+
+export async function runPanelBackup() {
+  const backup = await getSettingGroup("backup");
+  if (!backup.enabled) return { skipped: true as const, reason: "disabled" };
+
+  const result = await writePanelBackupFile({
+    includePasswords: backup.includePasswords === true,
+    fullExport: backup.fullExportOnBackup !== false,
+  });
+  return result;
 }
