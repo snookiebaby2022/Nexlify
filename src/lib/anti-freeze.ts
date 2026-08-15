@@ -42,23 +42,13 @@ async function liveStreamIdsForLine(lineId: string): Promise<string[]> {
   const line = await prisma.line.findUnique({
     where: { id: lineId },
     include: {
-      bouquets: {
-        include: {
-          bouquet: {
-            include: {
-              streams: { include: { stream: true } },
-            },
-          },
-        },
-      },
+      bouquets: { include: { bouquet: true } },
     },
   });
   if (!line) return [];
   const { streamsForLineExport } = await import("@/lib/lines");
-  const streams = await streamsForLineExport(line);
-  return streams
-    .filter((s) => s.type === StreamType.LIVE && s.isActive)
-    .map((s) => s.id);
+  const streams = await streamsForLineExport(line, { type: StreamType.LIVE });
+  return streams.filter((s) => s.isActive).map((s) => s.id);
 }
 
 export function zapNeighborIds(orderedIds: string[], currentId: string, neighbors: number): string[] {

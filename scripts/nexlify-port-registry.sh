@@ -68,6 +68,7 @@ nexlify_customer_firewall_ports() {
   if [ "${NEXLIFY_USE_STREAM_EDGE_NGINX:-1}" = "1" ] && [ "$NEXLIFY_PORT_STREAM_HTTP" != "$NEXLIFY_PORT_HTTP" ]; then
     ports="$ports $NEXLIFY_PORT_STREAM_HTTP"
   fi
+  # Extra IPTV ports (e.g. 8080 on IP installs) must always be opened for players.
   local extra="${STREAM_HTTP_EXTRA_PORTS:-}"
   extra="${extra//,/ }"
   ports="$ports $extra"

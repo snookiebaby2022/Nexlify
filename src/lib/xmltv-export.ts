@@ -21,7 +21,7 @@ function escXml(s: string): string {
 
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
 export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 48): Promise<string> {
-  const streams = (await streamsForLineExport(line)).filter((s) => s.type === StreamType.LIVE);
+  const streams = await streamsForLineExport(line, { type: StreamType.LIVE });
   const channelMap = new Map<string, string>();
   for (const s of streams) {
     const epgId = resolveEpgId(s);

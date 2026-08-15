@@ -23,7 +23,7 @@ export async function handleStalkerAction(
     return stalkerJsResponse({ error: "Account inactive", authorized: 0 });
   }
 
-  const streams = (await streamsForLineExport(line)).filter((s) => s.type === StreamType.LIVE);
+  const streams = await streamsForLineExport(line, { type: StreamType.LIVE });
 
   switch (action) {
     case "handshake":

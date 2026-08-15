@@ -39,6 +39,7 @@ ALL_PORTS="$(collect_http_ports "$STREAM_PORT" "$STREAM_HTTP_EXTRA")"
 
 write_stream_locations() {
   local fwd_port="$1"
+  local upstream_target="${2:-http://nexlify_panel}"
   cat <<LOC
     location ~ ^/(player_api\.php|get\.php|xmltv\.php|live/|movie/|series/|c/|stalker_portal/) {
         if (\$request_method = OPTIONS) {
@@ -52,7 +53,7 @@ write_stream_locations() {
         add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
         add_header Access-Control-Allow-Headers "Content-Type, User-Agent, Accept, Range" always;
 
-        proxy_pass http://nexlify_panel;
+        proxy_pass ${upstream_target};
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Forwarded-Host \$host;
@@ -73,17 +74,32 @@ LOC
 if [ "${NEXLIFY_USE_STREAM_EDGE_NGINX:-1}" != "1" ] || [ "$STREAM_PORT" = "${NEXLIFY_PORT_HTTP}" ]; then
   echo "[stream-edge] Direct HTTP on :${NEXLIFY_PORT_HTTP} — removing separate stream edge vhost"
   rm -f "$DEST" 2>/dev/null || true
+  # Panel owns :80 — never let the distro default site fight it.
+  rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+  # Legacy RTMP in conf.d breaks nginx -t
+  rm -f /etc/nginx/conf.d/nexlify-rtmp.conf 2>/dev/null || true
+
+  # Ensure upstream matches panel listen port
+  mkdir -p "$(dirname "$UPSTREAM")"
+  cat > "$UPSTREAM" <<UP
+upstream nexlify_panel {
+    least_conn;
+    server 127.0.0.1:${PANEL_LISTEN};
+    keepalive 32;
+}
+UP
 
   # Extra HTTP ports still need nginx → panel upstream in direct mode
   EXTRA_ONLY=""
   for p in $ALL_PORTS; do
     [ "$p" = "${NEXLIFY_PORT_HTTP}" ] && continue
+    [ "$p" = "$PANEL_LISTEN" ] && continue
     EXTRA_ONLY="$EXTRA_ONLY $p"
   done
   EXTRA_ONLY="${EXTRA_ONLY# }"
 
   if [ -n "$EXTRA_ONLY" ] && command -v nginx >/dev/null 2>&1; then
-    echo "[stream-edge] Extra HTTP ports (direct mode): $EXTRA_ONLY"
+    echo "[stream-edge] Extra HTTP ports (direct mode): $EXTRA_ONLY → 127.0.0.1:${PANEL_LISTEN}"
     {
       echo "# Nexlify extra stream HTTP ports — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
       for p in $EXTRA_ONLY; do
@@ -93,7 +109,7 @@ if [ "${NEXLIFY_USE_STREAM_EDGE_NGINX:-1}" != "1" ] || [ "$STREAM_PORT" = "${NEX
         echo "    server_name _;"
         echo "    client_max_body_size 50m;"
         echo "    large_client_header_buffers 8 64k;"
-        write_stream_locations "$p"
+        write_stream_locations "$p" "http://127.0.0.1:${PANEL_LISTEN}"
         echo "}"
         echo ""
       done
@@ -104,15 +120,37 @@ if [ "${NEXLIFY_USE_STREAM_EDGE_NGINX:-1}" != "1" ] || [ "$STREAM_PORT" = "${NEX
 
   if command -v nginx >/dev/null 2>&1; then
     nginx -t
-    systemctl reload nginx
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+      systemctl reload nginx
+    else
+      systemctl start nginx
+    fi
   fi
   bash "$ROOT/scripts/nexlify-firewall-ports.sh" || true
   exit 0
 fi
 
+# Legacy RTMP in conf.d breaks nginx -t
+rm -f /etc/nginx/conf.d/nexlify-rtmp.conf 2>/dev/null || true
+
 if [ ! -f "$UPSTREAM" ]; then
   echo "[stream-edge] Installing nexlify-upstream.conf…"
-  cp "$ROOT/nginx/nexlify-upstream.conf" "$UPSTREAM"
+  cat > "$UPSTREAM" <<UP
+upstream nexlify_panel {
+    least_conn;
+    server 127.0.0.1:${PANEL_LISTEN};
+    keepalive 32;
+}
+UP
+else
+  # Refresh upstream port from .env
+  cat > "$UPSTREAM" <<UP
+upstream nexlify_panel {
+    least_conn;
+    server 127.0.0.1:${PANEL_LISTEN};
+    keepalive 32;
+}
+UP
 fi
 
 {
@@ -135,7 +173,11 @@ fi
 rm -f "$EXTRA_DEST" 2>/dev/null || true
 
 nginx -t
-systemctl reload nginx
+if systemctl is-active --quiet nginx 2>/dev/null; then
+  systemctl reload nginx
+else
+  systemctl start nginx
+fi
 
 bash "$ROOT/scripts/nexlify-firewall-ports.sh" || true
 

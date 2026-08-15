@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.80",
+  "latestVersion": "1.9.81",
   "releases": [
+    {
+      "version": "1.9.81",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Xtream/M3U login no longer loads 100k+ bouquet streams into memory; IP-install port sync opens extra IPTV ports (e.g. 8080).",
+      "changelog": [
+        "getLineByCredentials loads bouquets only \u2014 streams are queried on demand by type",
+        "Xtream live/VOD/series endpoints filter by StreamType so login and category lists stay fast",
+        "sync-panel-ports removes broken conf.d RTMP, points upstream at PORT, disables nginx default on IP installs",
+        "Extra HTTP ports (STREAM_HTTP_EXTRA_PORTS) proxy to the panel listen port for player logins"
+      ],
+      "fixes": [
+        "player_api.php / get.php hung or crashed the panel when a line had large bouquet membership",
+        "Saved, but port sync failed on IP panels (nginx -t failed on legacy RTMP in conf.d)",
+        "Extra server HTTP ports (8080) were not listening so IPTV apps could not connect"
+      ]
+    },
     {
       "version": "1.9.80",
       "date": "2026-08-15",

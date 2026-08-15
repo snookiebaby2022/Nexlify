@@ -192,8 +192,7 @@ async function categoryRowsForIds(
 }
 
 export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
-  const streams = await streamsForLineExport(line);
-  const live = streams.filter((s) => s.type === StreamType.LIVE);
+  const live = await streamsForLineExport(line, { type: StreamType.LIVE });
   const categoryIds = [
     ...new Set(live.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
@@ -201,8 +200,7 @@ export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
 }
 
 export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
-  const streams = await streamsForLineExport(line);
-  let live = streams.filter((s) => s.type === StreamType.LIVE);
+  let live = await streamsForLineExport(line, { type: StreamType.LIVE });
   if (categoryId != null && categoryId !== "") {
     if (categoryId === "0") {
       live = live.filter((s) => !s.categoryId);
@@ -272,8 +270,7 @@ export async function xtreamVodStreams(
   baseUrl: string,
   categoryId?: string | null
 ) {
-  const streams = await streamsForLineExport(line);
-  let movies = streams.filter((s) => s.type === StreamType.MOVIE);
+  let movies = await streamsForLineExport(line, { type: StreamType.MOVIE });
   if (categoryId != null && categoryId !== "") {
     if (categoryId === "0") {
       movies = movies.filter((s) => !s.categoryId);
@@ -307,8 +304,7 @@ export async function xtreamVodStreams(
 }
 
 export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
-  const streams = await streamsForLineExport(line);
-  const movies = streams.filter((s) => s.type === StreamType.MOVIE);
+  const movies = await streamsForLineExport(line, { type: StreamType.MOVIE });
   const categoryIds = [
     ...new Set(movies.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
@@ -316,8 +312,7 @@ export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
 }
 
 export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: string | null) {
-  const streams = await streamsForLineExport(line);
-  let series = streams.filter((s) => s.type === StreamType.SERIES);
+  let series = await streamsForLineExport(line, { type: StreamType.SERIES });
   if (categoryId != null && categoryId !== "") {
     if (categoryId === "0") {
       series = series.filter((s) => !s.categoryId);
@@ -348,8 +343,7 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
 }
 
 export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
-  const streams = await streamsForLineExport(line);
-  const series = streams.filter((s) => s.type === StreamType.SERIES);
+  const series = await streamsForLineExport(line, { type: StreamType.SERIES });
   const categoryIds = [
     ...new Set(series.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
@@ -357,7 +351,19 @@ export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
 }
 
 export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: string, output: "hls" | "ts" = "ts") {
-  const streams = await streamsForLineExport(line);
+  // m3u / m3u_plus = full catalog; live/vod/series restrict by type for speed.
+  const typeFilter =
+    type === "live"
+      ? StreamType.LIVE
+      : type === "movies" || type === "vod"
+        ? StreamType.MOVIE
+        : type === "series"
+          ? StreamType.SERIES
+          : undefined;
+  const streams = await streamsForLineExport(
+    line,
+    typeFilter ? { type: typeFilter } : undefined
+  );
 
   const catIds = [...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[])];
   const allCatIds = catIds.length ? await collectCategoryAncestors(catIds) : [];

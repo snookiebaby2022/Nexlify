@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { streamsForLine } from "@/lib/lines";
+import { streamsFromNestedLineBouquets } from "@/lib/lines";
 import {
   buildEpgMapCsv,
   buildSubscriptionsExportCsv,
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       if (session.role !== PanelRole.ADMIN && line.ownerId !== session.id) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
-      streams = streamsForLine(line).filter((s) =>
+      streams = streamsFromNestedLineBouquets(line).filter((s) =>
         typeFilter === "ALL" ? true : s.type === (typeFilter as StreamType)
       );
     } else if (session.role !== PanelRole.ADMIN) {

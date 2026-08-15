@@ -28,8 +28,8 @@ export async function xtreamVodInfo(
   const streamId = await resolveStreamIdParam(streamIdParam, { lineId: line.id });
   if (!streamId) return null;
 
-  const streams = await streamsForLineExport(line);
-  const movie = streams.find((s) => s.id === streamId && s.type === StreamType.MOVIE);
+  const streams = await streamsForLineExport(line, { type: StreamType.MOVIE });
+  const movie = streams.find((s) => s.id === streamId);
   if (!movie) return null;
 
   const full = await prisma.stream.findUnique({
@@ -80,15 +80,14 @@ export async function xtreamSeriesInfo(
   const streamId = await resolveStreamIdParam(seriesIdParam, { lineId: line.id });
   if (!streamId) return null;
 
-  const streams = await streamsForLineExport(line);
-  const seed = streams.find((s) => s.id === streamId && s.type === StreamType.SERIES);
+  const streams = await streamsForLineExport(line, { type: StreamType.SERIES });
+  const seed = streams.find((s) => s.id === streamId);
   if (!seed) return null;
 
   const seriesKey = seed.seriesName?.trim() || seed.name;
   const episodes = streams.filter(
     (s) =>
-      s.type === StreamType.SERIES &&
-      (s.seriesName?.trim() === seriesKey || s.id === seed.id || s.name === seriesKey)
+      s.seriesName?.trim() === seriesKey || s.id === seed.id || s.name === seriesKey
   );
 
   const fullRows = await prisma.stream.findMany({
