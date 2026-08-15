@@ -22,6 +22,13 @@ fi
 cd "$PANEL_DIR"
 echo "[fix-stream-edge] Panel dir: $PANEL_DIR"
 
+# Prefer the canonical port sync (skips nginx on IPTV-edge ports, keeps nginx on :80).
+if [ -f "$PANEL_DIR/scripts/sync-panel-ports.sh" ]; then
+  echo "[fix-stream-edge] Delegating to sync-panel-ports.sh (nginx ≠ IPTV edge on same TCP port)"
+  bash "$PANEL_DIR/scripts/sync-panel-ports.sh"
+  exit 0
+fi
+
 read_env() {
   grep "^${1}=" .env 2>/dev/null | head -1 | cut -d= -f2- | sed -e 's/^["'\'' ]*//' -e 's/["'\'' ]*$//' || true
 }
@@ -32,10 +39,23 @@ STREAM_PORT="$(read_env STREAM_HTTP_PORT)"
 [ -z "$STREAM_PORT" ] && STREAM_PORT="$(read_env STREAM_EDGE_PORT)"
 [ -z "$STREAM_PORT" ] && STREAM_PORT=8080
 
+# When IPTV edge exists, do not install nginx on 8080 — edge owns it.
+USE_EDGE=0
+if [ -f "$PANEL_DIR/scripts/install-iptv-edge-proxy.sh" ] || [ -f "$PANEL_DIR/scripts/iptv-edge-proxy.mjs" ]; then
+  flag="$(read_env NEXLIFY_USE_IPTV_EDGE)"
+  if [ "$flag" != "0" ] && [ "$flag" != "false" ]; then
+    USE_EDGE=1
+  fi
+fi
+
 if [[ "${PRIMARY:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [ "$BEHIND" = "0" ]; then
   STREAM_PORT=80
-  echo "[fix-stream-edge] IP / direct mode — Xtream on port 80 (no separate :8080 vhost)"
+  echo "[fix-stream-edge] IP / direct mode — Xtream on port 80 (no separate :8080 nginx vhost)"
   rm -f /etc/nginx/conf.d/nexlify-stream-edge.conf 2>/dev/null || true
+elif [ "$USE_EDGE" = "1" ]; then
+  echo "[fix-stream-edge] IPTV edge owns :${STREAM_PORT} — skipping nginx stream-edge vhost"
+  rm -f /etc/nginx/conf.d/nexlify-stream-edge.conf 2>/dev/null || true
+  rm -f /etc/nginx/conf.d/nexlify-stream-extra.conf 2>/dev/null || true
 else
   echo "[fix-stream-edge] Stream edge HTTP port: $STREAM_PORT"
   mkdir -p /etc/nginx/conf.d
@@ -100,6 +120,10 @@ else
   command -v ufw >/dev/null 2>&1 && ufw allow 8080/tcp 2>/dev/null || true
   command -v ufw >/dev/null 2>&1 && ufw allow 80/tcp 2>/dev/null || true
   command -v ufw >/dev/null 2>&1 && ufw allow 443/tcp 2>/dev/null || true
+fi
+
+if [ "$USE_EDGE" = "1" ] && [ -f "$PANEL_DIR/scripts/install-iptv-edge-proxy.sh" ]; then
+  bash "$PANEL_DIR/scripts/install-iptv-edge-proxy.sh" || true
 fi
 
 echo "[fix-stream-edge] nginx: $(systemctl is-active nginx)"

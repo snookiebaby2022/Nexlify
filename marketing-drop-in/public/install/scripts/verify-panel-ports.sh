@@ -64,16 +64,33 @@ else
   check_listen "$NEXLIFY_PORT_HTTPS" "HTTPS" 0
 fi
 
+# Stream / extra HTTP ports may be owned by Node IPTV edge (not nginx) — still must listen.
+EDGE_OWNED="$(nexlify_iptv_edge_owned_ports "$ROOT")"
+edge_label() {
+  local p="$1"
+  case " $EDGE_OWNED " in
+    *" $p "*) echo "IPTV edge" ;;
+    *) echo "nginx/stream" ;;
+  esac
+}
+
 if [ "${NEXLIFY_USE_STREAM_EDGE_NGINX:-1}" = "1" ] && [ "$NEXLIFY_PORT_STREAM_HTTP" != "$NEXLIFY_PORT_HTTP" ]; then
-  check_listen "$NEXLIFY_PORT_STREAM_HTTP" "stream edge"
+  check_listen "$NEXLIFY_PORT_STREAM_HTTP" "$(edge_label "$NEXLIFY_PORT_STREAM_HTTP")"
   check_http "http://127.0.0.1:${NEXLIFY_PORT_STREAM_HTTP}/player_api.php?username=__verify__&password=__verify__" "Xtream API :${NEXLIFY_PORT_STREAM_HTTP}"
+elif [ -z "${HTTP_EXTRAS:-}" ] && nexlify_use_iptv_edge "$ROOT"; then
+  # IP installs: STREAM_HTTP is :80 but extras 8080/25461 still must be up via edge
+  :
 fi
 
 # Every configured extra HTTP port must listen and answer player_api
+# Default extras when unset + IPTV edge enabled
+if [ -z "$HTTP_EXTRAS" ] && nexlify_use_iptv_edge "$ROOT"; then
+  HTTP_EXTRAS="8080,25461"
+fi
 for p in ${HTTP_EXTRAS//,/ }; do
   [ -z "$p" ] && continue
   [ "$p" = "$PANEL_LISTEN" ] && continue
-  check_listen "$p" "extra HTTP"
+  check_listen "$p" "extra HTTP ($(edge_label "$p"))"
   check_http "http://127.0.0.1:${p}/player_api.php?username=__verify__&password=__verify__" "Xtream API :${p}"
   check_http "http://127.0.0.1:${p}/panel_api.php?username=__verify__&password=__verify__" "panel_api :${p}"
 done

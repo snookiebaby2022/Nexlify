@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Permanent port fix: sync .env, nginx stream edge, and UFW from current panel config.
 # Safe to run after install, deploy, or Admin → Settings → Server & port changes.
+#
+# Port ownership:
+#   nginx     → :80 (and marketing TLS :443 when present)
+#   IPTV edge → :8080 / :25461 / optional :443 on IP panels
+# These cannot share a TCP port — install-nginx-stream-edge skips edge-owned ports,
+# then install-iptv-edge-proxy releases any leftover nginx listens before binding.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,13 +42,13 @@ fi
 
 if [ "$BEHIND" = "1" ] || [ "$BEHIND" = "true" ] || [ "$USE_NGINX" = "1" ]; then
   if command -v nginx >/dev/null 2>&1; then
-    echo "[sync-panel-ports] Installing / refreshing nginx stream edge…"
+    echo "[sync-panel-ports] Installing / refreshing nginx stream edge (skips IPTV-edge ports)…"
     bash scripts/install-nginx-stream-edge.sh
   else
     echo "[sync-panel-ports] WARN: nginx not installed — stream edge vhost skipped"
   fi
 else
-  echo "[sync-panel-ports] Direct port ${PANEL_LISTEN} mode — panel owns HTTP; nginx only binds extra IPTV ports"
+  echo "[sync-panel-ports] Direct port ${PANEL_LISTEN} mode — panel owns HTTP; nginx only binds extra IPTV ports not owned by edge"
   rm -f /etc/nginx/conf.d/nexlify-stream-edge.conf 2>/dev/null || true
   # Default site listens on :80 and fights the panel on IP installs.
   rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
@@ -78,6 +84,7 @@ if [[ -f "$ROOT/scripts/enable-nginx-json-gzip.sh" ]]; then
 fi
 
 # https://PANEL_IP + extra IPTV ports with Host sanitization (http:// / https:// in DNS)
+# Runs last so edge can release any nginx listens on 8080/25461/443 and keep nginx on :80.
 if [[ -f "$ROOT/scripts/install-iptv-edge-proxy.sh" ]]; then
   bash "$ROOT/scripts/install-iptv-edge-proxy.sh" || true
 elif [[ -f "$ROOT/scripts/fix-panel-https-default.sh" ]]; then

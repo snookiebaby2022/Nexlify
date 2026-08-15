@@ -38,11 +38,31 @@ if [ ! -f "$UPSTREAM" ] && [ -f "$ROOT/nginx/nexlify-upstream.conf" ]; then
 fi
 
 EXTRA="${EXTRA//,/ }"
+FILTERED=""
+for p in $EXTRA; do
+  [ -z "$p" ] && continue
+  [ "$p" = "$PRIMARY_SSL" ] && continue
+  # Skip ports owned by Node IPTV edge (cannot share TCP port with nginx)
+  if [ -f "$ROOT/scripts/nexlify-port-registry.sh" ]; then
+    # shellcheck source=scripts/nexlify-port-registry.sh
+    source "$ROOT/scripts/nexlify-port-registry.sh"
+    nexlify_load_ports_from_env "$ROOT" 2>/dev/null || true
+    if nexlify_port_owned_by_iptv_edge "$p" "$ROOT"; then
+      echo "[https-extra] Skipping :${p} — owned by IPTV edge"
+      continue
+    fi
+  fi
+  FILTERED="$FILTERED $p"
+done
+EXTRA="${FILTERED# }"
+if [ -z "$EXTRA" ]; then
+  rm -f "$DEST" 2>/dev/null || true
+  echo "[https-extra] No nginx HTTPS extra ports (all owned by IPTV edge or empty)"
+  exit 0
+fi
 {
   echo "# Nexlify extra HTTPS ports — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   for p in $EXTRA; do
-    [ -z "$p" ] && continue
-    [ "$p" = "$PRIMARY_SSL" ] && continue
     cat <<BLOCK
 server {
     listen ${p} ssl;

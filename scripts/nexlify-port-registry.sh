@@ -61,6 +61,71 @@ nexlify_load_ports_from_env() {
   export NEXLIFY_USE_STREAM_EDGE_NGINX
 }
 
+# Whether Node IPTV edge should own Xtream HTTP extras (8080/25461) instead of nginx.
+# Default: yes when install-iptv-edge-proxy.sh is present (modern installs).
+nexlify_use_iptv_edge() {
+  local root="${1:-.}"
+  local flag
+  flag="$(nexlify_read_env_file NEXLIFY_USE_IPTV_EDGE "$root/.env")"
+  if [ "$flag" = "0" ] || [ "$flag" = "false" ]; then
+    return 1
+  fi
+  if [ "$flag" = "1" ] || [ "$flag" = "true" ]; then
+    return 0
+  fi
+  [ -f "$root/scripts/install-iptv-edge-proxy.sh" ] || [ -f "$root/scripts/iptv-edge-proxy.mjs" ]
+}
+
+# Ports the Node IPTV edge binds (nginx must not also listen on these).
+# Never includes :80 — nginx/panel HTTP stays on 80.
+nexlify_iptv_edge_owned_ports() {
+  local root="${1:-.}"
+  local ports="" http https
+  if ! nexlify_use_iptv_edge "$root"; then
+    echo ""
+    return 0
+  fi
+  http="$(nexlify_read_env_file STREAM_HTTP_EXTRA_PORTS "$root/.env")"
+  [ -z "$http" ] && http="$(nexlify_read_env_file PANEL_HTTP_EXTRA_PORTS "$root/.env")"
+  [ -z "$http" ] && http="8080,25461"
+  http="${http//,/ }"
+  for p in $http; do
+    [ -z "$p" ] && continue
+    [ "$p" = "80" ] && continue
+    ports="$ports $p"
+  done
+  # Primary STREAM_HTTP_PORT when it is not :80 (domain installs historically used nginx :8080)
+  local stream
+  stream="$(nexlify_read_env_file STREAM_HTTP_PORT "$root/.env")"
+  [ -z "$stream" ] && stream="$(nexlify_read_env_file STREAM_EDGE_PORT "$root/.env")"
+  if [ -n "$stream" ] && [ "$stream" != "80" ] && [ "$stream" != "${NEXLIFY_PORT_HTTP:-80}" ]; then
+    ports="$ports $stream"
+  fi
+  # :443 only when edge will bind it (not vendor/marketing nginx TLS)
+  if [ ! -d /var/www/nexlify ] \
+    && [ ! -f /etc/nginx/sites-enabled/nexlify.live ] \
+    && [ ! -f /etc/nginx/sites-enabled/panel.nexlify.live ]; then
+    https="$(nexlify_read_env_file STREAM_HTTPS_PORT "$root/.env")"
+    [ -z "$https" ] && https="$(nexlify_read_env_file PANEL_SSL_PORT "$root/.env")"
+    [ -z "$https" ] && https="443"
+    if [ -n "$https" ] && [ "$https" != "80" ]; then
+      ports="$ports $https"
+    fi
+  fi
+  echo "$ports" | tr ' ' '\n' | awk '!seen[$0]++ && $0 != ""' | tr '\n' ' '
+}
+
+# Return 0 if port is owned by IPTV edge (nginx must skip).
+nexlify_port_owned_by_iptv_edge() {
+  local port="$1" root="${2:-.}"
+  local owned p
+  owned="$(nexlify_iptv_edge_owned_ports "$root")"
+  for p in $owned; do
+    [ "$p" = "$port" ] && return 0
+  done
+  return 1
+}
+
 # Space-separated list of TCP ports to allow through UFW for IPTV + panel.
 nexlify_customer_firewall_ports() {
   local ports="$NEXLIFY_PORT_SSH $NEXLIFY_PORT_HTTP $NEXLIFY_PORT_HTTPS"

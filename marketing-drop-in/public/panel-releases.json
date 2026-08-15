@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.92",
+  "latestVersion": "1.9.93",
   "releases": [
+    {
+      "version": "1.9.93",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Nginx and IPTV edge no longer fight over :8080 — edge owns stream ports, nginx keeps :80.",
+      "changelog": [
+        "install-nginx-stream-edge skips ports owned by Node IPTV edge (8080/25461/optional 443)",
+        "nexlify-nginx-release-ports.sh strips nginx listen directives before edge binds",
+        "sync-panel-ports / fix-stream-edge-now / ensure-panel-env encode permanent ownership rules"
+      ],
+      "fixes": [
+        "nginx restart failed with Address already in use on :8080 and took down panel :80",
+        "nginx and IPTV edge cannot share the same TCP port — documented and enforced in install scripts"
+      ]
+    },
     {
       "version": "1.9.92",
       "date": "2026-08-15",

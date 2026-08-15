@@ -39,6 +39,9 @@ set_kv STREAM_HTTP_PORT 8080
 set_kv STREAM_EDGE_PORT 8080
 set_kv STREAM_HTTPS_PORT 443
 set_kv PANEL_SSL_PORT 443
+# IPTV apps often use :8080/:25461; Node edge owns these (nginx cannot share the same TCP port).
+set_kv STREAM_HTTP_EXTRA_PORTS "8080,25461"
+set_kv NEXLIFY_USE_IPTV_EDGE 1
 set_kv PANEL_PRIMARY_DOMAIN "${PRIMARY}"
 set_kv PANEL_COOKIE_SECURE 0
 set_kv NEXLIFY_LICENSE_COOKIE_SECURE 0

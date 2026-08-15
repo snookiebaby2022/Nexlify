@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Install / refresh Nexlify HTTP stream edge (Xtream / M3U / live / MAG).
 # Supports primary + extra HTTP listen ports from .env (STREAM_HTTP_EXTRA_PORTS).
+#
+# IMPORTANT: nginx cannot share TCP ports with the Node IPTV edge. When
+# NEXLIFY_USE_IPTV_EDGE is enabled (default on modern installs), ports such as
+# 8080/25461/(optional 443) are skipped here so edge owns them and nginx keeps :80.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -14,6 +18,7 @@ DEST="/etc/nginx/conf.d/nexlify-stream-edge.conf"
 EXTRA_DEST="/etc/nginx/conf.d/nexlify-stream-extra.conf"
 UPSTREAM="/etc/nginx/conf.d/nexlify-upstream.conf"
 STREAM_PORT="$NEXLIFY_PORT_STREAM_HTTP"
+EDGE_OWNED="$(nexlify_iptv_edge_owned_ports "$ROOT")"
 
 nexlify_read_env_file() {
   grep "^${1}=" "$ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2- | sed -e 's/^["'\'' ]*//' -e 's/["'\'' ]*$//' || true
@@ -22,6 +27,14 @@ nexlify_read_env_file() {
 STREAM_HTTP_EXTRA="$(nexlify_read_env_file STREAM_HTTP_EXTRA_PORTS)"
 PANEL_LISTEN="$(nexlify_read_env_file PORT)"
 [ -z "$PANEL_LISTEN" ] && PANEL_LISTEN="13000"
+
+port_owned_by_edge() {
+  local port="$1" p
+  for p in $EDGE_OWNED; do
+    [ "$p" = "$port" ] && return 0
+  done
+  return 1
+}
 
 collect_http_ports() {
   local ports="$1"
@@ -35,7 +48,21 @@ collect_http_ports() {
   echo "$result" | tr ' ' '\n' | awk '!seen[$0]++ && $0 != ""' | tr '\n' ' '
 }
 
-ALL_PORTS="$(collect_http_ports "$STREAM_PORT" "$STREAM_HTTP_EXTRA")"
+ALL_PORTS_RAW="$(collect_http_ports "$STREAM_PORT" "$STREAM_HTTP_EXTRA")"
+ALL_PORTS=""
+SKIPPED=""
+for p in $ALL_PORTS_RAW; do
+  if port_owned_by_edge "$p"; then
+    SKIPPED="$SKIPPED $p"
+    continue
+  fi
+  ALL_PORTS="$ALL_PORTS $p"
+done
+ALL_PORTS="${ALL_PORTS# }"
+SKIPPED="${SKIPPED# }"
+if [ -n "$SKIPPED" ]; then
+  echo "[stream-edge] Skipping nginx listen on IPTV-edge ports: $SKIPPED (edge owns these; nginx keeps :80)"
+fi
 
 write_stream_locations() {
   local fwd_port="$1"
@@ -92,6 +119,7 @@ upstream nexlify_panel {
 UP
 
   # Extra HTTP ports still need nginx → panel upstream in direct mode
+  # (ports owned by IPTV edge are already filtered out of ALL_PORTS)
   EXTRA_ONLY=""
   for p in $ALL_PORTS; do
     [ "$p" = "${NEXLIFY_PORT_HTTP}" ] && continue
@@ -118,8 +146,34 @@ UP
     } > "$EXTRA_DEST"
   else
     rm -f "$EXTRA_DEST" 2>/dev/null || true
+    # Drop stale disabled leftovers when edge owns extras
+    rm -f "${EXTRA_DEST}.disabled" 2>/dev/null || true
   fi
 
+  if command -v nginx >/dev/null 2>&1; then
+    nginx -t
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+      systemctl reload nginx
+    else
+      systemctl start nginx
+    fi
+  fi
+  bash "$ROOT/scripts/nexlify-firewall-ports.sh" || true
+  exit 0
+fi
+
+# No nginx stream ports left (all owned by IPTV edge) — keep upstream only
+if [ -z "$ALL_PORTS" ]; then
+  echo "[stream-edge] No nginx stream ports to bind — IPTV edge owns stream HTTP"
+  rm -f "$DEST" "$EXTRA_DEST" 2>/dev/null || true
+  mkdir -p "$(dirname "$UPSTREAM")"
+  cat > "$UPSTREAM" <<UP
+upstream nexlify_panel {
+    least_conn;
+    server 127.0.0.1:${PANEL_LISTEN};
+    keepalive 32;
+}
+UP
   if command -v nginx >/dev/null 2>&1; then
     nginx -t
     if systemctl is-active --quiet nginx 2>/dev/null; then
