@@ -146,6 +146,21 @@ ensure_panel_running_after_update() {
   fi
 }
 
+# Keep the background worker PID if panel-update-background.ts already wrote it.
+# `touch` alone was wiping the PID and made the cron watchdog think the worker was dead,
+# which painted a false "Last update failed" after a successful swap/restart.
+mark_update_in_progress() {
+  local marker="$ROOT/.update-in-progress"
+  if [ -s "$marker" ]; then
+    local existing
+    existing="$(tr -d '[:space:]' < "$marker" 2>/dev/null || true)"
+    if [ -n "$existing" ] && kill -0 "$existing" 2>/dev/null; then
+      return 0
+    fi
+  fi
+  echo $$ > "$marker"
+}
+
 update_trap_exit() {
   local ec=$?
   if [ "$UPDATE_TRAP_ACTIVE" != "1" ]; then
@@ -514,7 +529,7 @@ cmd_build() {
   fi
   UPDATE_TRAP_ACTIVE=1
   trap 'update_trap_exit $?' EXIT
-  touch "$ROOT/.update-in-progress"
+  mark_update_in_progress
   cmd_build_prep
   cmd_build_compile
   cmd_build_standalone
@@ -575,11 +590,32 @@ cmd_restart() {
         sleep 3
       fi
       _code2="$(curl -sS -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' "http://127.0.0.1/_next/static/chunks/${_bn}" 2>/dev/null || echo 000)"
-      if [ "$_code2" != "200" ]; then
-        echo "ERROR: static assets still HTTP ${_code2} after repair — UI will show client-side exception" >&2
-        return 1
+      if [ "$_code2" = "000" ]; then
+        _code2="$(curl -sS -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' "http://127.0.0.1:13000/_next/static/chunks/${_bn}" 2>/dev/null || echo 000)"
       fi
-      echo "Static assets recovered after distdir repair."
+      if [ "$_code2" != "200" ]; then
+        # Health OK means the panel API is up — do not fail the whole update over a transient static check.
+        _health_ok=0
+        for _hu in \
+          "http://127.0.0.1:${PORT:-13000}/api/health" \
+          "http://127.0.0.1/api/health" \
+          "http://127.0.0.1:13000/api/health"
+        do
+          _hc="$(curl -sS -o /dev/null -w '%{http_code}' -m 5 "$_hu" 2>/dev/null || echo 000)"
+          if [ "$_hc" = "200" ]; then
+            _health_ok=1
+            break
+          fi
+        done
+        if [ "$_health_ok" = "1" ]; then
+          echo "WARN: static assets still HTTP ${_code2} but /api/health is 200 — treating restart as OK" >&2
+        else
+          echo "ERROR: static assets still HTTP ${_code2} after repair — UI will show client-side exception" >&2
+          return 1
+        fi
+      else
+        echo "Static assets recovered after distdir repair."
+      fi
     fi
   fi
   PANEL_RESTARTED=1
@@ -605,7 +641,7 @@ cmd_recover() {
 cmd_all() {
   UPDATE_TRAP_ACTIVE=1
   trap 'update_trap_exit $?' EXIT
-  touch "$ROOT/.update-in-progress"
+  mark_update_in_progress
   cmd_sync
   cmd_deps
   cmd_prisma

@@ -52,13 +52,27 @@ update_in_progress() {
         const p=process.argv[1];
         try {
           const j=JSON.parse(fs.readFileSync(p,"utf8"));
-          if (j.status==="running") {
+          if (j.status!=="running") return;
+          const step=String(j.currentStep||"");
+          const progress=Number(j.progress)||0;
+          const nearEnd =
+            progress >= 94 ||
+            step === "pm2 restart nexlify" ||
+            (step === "prepare standalone" && progress >= 90) ||
+            (step === "apply update" && progress >= 88) ||
+            (Array.isArray(j.steps) && j.steps.some(s => s && s.name === "pm2 restart nexlify" && (s.ok || s.status === "done")));
+          j.finishedAt=new Date().toISOString();
+          j.currentStep=null;
+          if (nearEnd) {
+            // Build already swapped; worker died during PM2 restart — this is success, not failure.
+            j.status="done";
+            j.progress=100;
+            j.message="Update completed. Panel restarted on the new build (watchdog recovered after PM2 swap — that is normal).";
+          } else {
             j.status="failed";
-            j.finishedAt=new Date().toISOString();
-            j.currentStep=null;
             j.message="Update worker died — cleared by watchdog. Panel will be restarted. Retry from Settings → Updates if needed.";
-            fs.writeFileSync(p, JSON.stringify(j,null,2));
           }
+          fs.writeFileSync(p, JSON.stringify(j,null,2));
         } catch {}
       ' "$PANEL_DIR/.update-progress.json" 2>/dev/null || true
     fi

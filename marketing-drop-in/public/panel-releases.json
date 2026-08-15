@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.93",
+  "latestVersion": "1.9.94",
   "releases": [
+    {
+      "version": "1.9.94",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Panel updates no longer show Failed after a successful restart on customer/demo VPS.",
+      "changelog": [
+        "Watchdog and update reconciler treat PM2 swap/restart worker exit as success, not failure",
+        "apply-panel-fast-update preserves .update-in-progress worker PID (touch no longer wipes it)",
+        "Static-asset check after restart is a warning when /api/health is already 200"
+      ],
+      "fixes": [
+        "Settings → Updates showed Last update failed on 45/75 even though the new version was live",
+        "Cron watchdog CLEAR stale update marked successful late-stage jobs as failed"
+      ]
+    },
     {
       "version": "1.9.93",
       "date": "2026-08-15",
@@ -23,7 +38,7 @@
       "channel": "stable",
       "summary": "Providers sidebar: M3U Auto-Sync; nav search; demo panel nginx recovery.",
       "changelog": [
-        "Providers menu: Auto-Sync section with M3U Auto-Sync first, plus Import M3U and Watch Folders",
+        "Providers sidebar: Auto-Sync section with M3U Auto-Sync first, plus Import M3U and Watch Folders",
         "Admin sidebar search filters groups/items; denser Providers layout (removed VOD duplicates)",
         "Includes 1.9.91 live playback fixes (native upstream proxy, backup failover, geo EPG-id bug)"
       ],

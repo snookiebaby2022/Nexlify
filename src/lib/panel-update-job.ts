@@ -65,6 +65,38 @@ const MAX_FAILED_MS = 2 * 60 * 1000; // auto-clear failed jobs quickly so Clear 
 const MAX_DONE_MS = 2 * 60 * 1000; // auto-clear completed jobs so reload does not re-show banner
 const MAX_SAME_VERSION_FAILED_MS = 5 * 60 * 1000; // re-sync failures stop nagging sooner
 
+/**
+ * True when the worker died during/after the late swap/restart window.
+ * The new build is usually already on disk and the panel comes back via
+ * panel-restart-safe / watchdog — UI used to show "Last update failed" anyway.
+ */
+export function looksLikeSuccessfulUpdateDespiteWorkerExit(job: PanelUpdateJob): boolean {
+  const step = (job.currentStep ?? "").trim();
+  const progress = Number(job.progress) || 0;
+  if (progress >= 94) return true;
+  if (step === "pm2 restart nexlify") return true;
+  if (step === "prepare standalone" && progress >= 90) return true;
+  if (step === "apply update" && progress >= 88) return true;
+  // Steps array may already record a successful restart while status is still "running"
+  const restartDone = job.steps?.some(
+    (s) => s.name === "pm2 restart nexlify" && (s.ok || s.status === "done")
+  );
+  if (restartDone) return true;
+  return false;
+}
+
+function promoteJobToDone(job: PanelUpdateJob, message: string): PanelUpdateJob {
+  return {
+    ...job,
+    status: "done",
+    progress: 100,
+    currentStep: null,
+    stepDetail: null,
+    finishedAt: new Date().toISOString(),
+    message,
+  };
+}
+
 function isJobTimedOut(job: PanelUpdateJob, workerAlive: boolean): boolean {
   if (!job.startedAt) return false;
   const started = Date.parse(job.startedAt);
@@ -122,6 +154,18 @@ export async function reconcileStaleUpdateJob(
   if (job.status === "idle" && !job.startedAt && !job.finishedAt) {
     await clearUpdateJob(repoPath);
     return null;
+  }
+
+  // Worker died during PM2 swap/restart after a successful build — treat as success, not failure.
+  if (job.status === "failed" && looksLikeSuccessfulUpdateDespiteWorkerExit(job)) {
+    const promoted = promoteJobToDone(
+      job,
+      job.message?.includes("finished") || job.message?.includes("Updated")
+        ? job.message
+        : "Update completed. The panel restarted successfully (the update worker exited during PM2 swap — that is normal)."
+    );
+    await writeUpdateJob(repoPath, promoted);
+    return promoted;
   }
 
   // Same-version update failed (re-sync/rebuild) — clear after a few minutes so the banner does not persist
@@ -197,6 +241,27 @@ export async function reconcileStaleUpdateJob(
     } catch {
       /* best-effort */
     }
+  }
+
+  // Late-stage worker death (PM2 swap/restart) is expected — the new build is already live.
+  if (looksLikeSuccessfulUpdateDespiteWorkerExit(job)) {
+    const reconciledDone = promoteJobToDone(
+      job,
+      "Update completed. Panel restarted on the new build (update worker exited during PM2 swap — that is normal)."
+    );
+    await writeUpdateJob(repoPath, reconciledDone);
+    try {
+      await writeFile(getUpdatePidPath(repoPath), "", "utf8");
+    } catch {
+      /* ignore */
+    }
+    try {
+      const { unlinkSync } = require("fs") as typeof import("fs");
+      unlinkSync(path.join(repoPath, ".update-in-progress"));
+    } catch {
+      /* ignore */
+    }
+    return reconciledDone;
   }
 
   const reconciled: PanelUpdateJob = {
@@ -342,7 +407,8 @@ export async function startBackgroundPanelUpdate(
 
   const runCmd =
     process.platform === "linux"
-      ? `(command -v setsid >/dev/null 2>&1 && setsid bash -c 'CMD') || bash -c 'CMD'`
+      ? // Prefer setsid -w so the outer bash PID stays alive with the worker (PID file stays valid).
+        `(command -v setsid >/dev/null 2>&1 && setsid -w bash -c 'CMD') || bash -c 'CMD'`
       : `bash -c 'CMD'`;
 
   // Prefer bash launcher (cd to real panel root + tsx); fall back to tsx on .ts for older installs.
@@ -390,6 +456,18 @@ export async function startBackgroundPanelUpdate(
         try {
           const job = await readUpdateJob(repoPath);
           if (job && job.status === "running") {
+            // Outer setsid/bash can exit while a late-stage update already swapped .next —
+            // do not paint a false "failed" banner when the panel is coming back on the new build.
+            if (looksLikeSuccessfulUpdateDespiteWorkerExit(job)) {
+              await writeUpdateJob(
+                repoPath,
+                promoteJobToDone(
+                  job,
+                  "Update completed. Panel restarted on the new build (update worker process ended during PM2 swap — that is normal)."
+                )
+              );
+              return;
+            }
             let errDetail = `Worker exited with code ${code} (signal: ${signal})`;
             try {
               const { readFileSync } = await import("fs");

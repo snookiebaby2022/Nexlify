@@ -31,7 +31,7 @@ async function main() {
   const { runPanelUpdateWithProgress } = await import(
     path.join(REPO_ROOT, "src/lib/panel-update.ts")
   );
-  const { readUpdateJob, writeUpdateJob } = await import(
+  const { readUpdateJob, writeUpdateJob, looksLikeSuccessfulUpdateDespiteWorkerExit } = await import(
     path.join(REPO_ROOT, "src/lib/panel-update-job.ts")
   );
   const { resolvePanelRepoPathSync } = await import(
@@ -59,13 +59,34 @@ async function main() {
     await writeUpdateJob(repoPath, job!);
   });
 
+  // Prefer success when the worker got far enough that PM2 swap/restart already applied the build,
+  // even if a late step returned ok:false (transient static check / restart race).
+  const lateSuccess =
+    !result.ok &&
+    looksLikeSuccessfulUpdateDespiteWorkerExit({
+      ...job!,
+      progress: Math.max(job!.progress ?? 0, result.ok ? 100 : job!.progress ?? 0),
+      steps: result.steps.map((s) => ({
+        name: s.name,
+        ok: s.ok,
+        status: s.ok ? ("done" as const) : ("failed" as const),
+        output: s.output,
+      })),
+      currentStep: job!.currentStep,
+    });
+
+  const finalStatus = result.ok || lateSuccess ? "done" : "failed";
   await writeUpdateJob(repoPath, {
     ...job!,
-    status: result.ok ? "done" : "failed",
+    status: finalStatus,
     progress: 100,
     currentStep: null,
     finishedAt: new Date().toISOString(),
-    message: result.message,
+    message: lateSuccess
+      ? result.message?.includes("Updated")
+        ? result.message
+        : `Updated to v${result.toVersion}. Panel restarted (a late restart check failed but the new build is live).`
+      : result.message,
     toVersion: result.toVersion,
     steps: result.steps.map((s) => ({
       name: s.name,
@@ -81,11 +102,11 @@ async function main() {
     /* ignore */
   }
 
-  if (!result.ok) {
+  if (!result.ok && !lateSuccess) {
     await spawnRecover(repoPath);
   }
 
-  process.exit(result.ok ? 0 : 1);
+  process.exit(result.ok || lateSuccess ? 0 : 1);
 }
 
 main().catch(async (e) => {

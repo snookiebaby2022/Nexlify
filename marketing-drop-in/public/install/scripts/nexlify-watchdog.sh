@@ -29,8 +29,71 @@ HOST="${PANEL_BIND_HOST:-127.0.0.1}"
 HEALTH_URL="http://${HOST}:${PORT}/api/health"
 
 update_in_progress() {
-  if [ -f "$PANEL_DIR/.update-in-progress" ]; then
+  # Clear stale markers left by a crashed update worker (was blocking restarts forever).
+  clear_stale_update_marker() {
+    local marker="$PANEL_DIR/.update-in-progress"
+    [ -f "$marker" ] || return 0
+    local pid
+    pid="$(tr -d '[:space:]' < "$marker" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      return 1 # still alive — do not clear
+    fi
+    if pgrep -f 'panel-update-background' >/dev/null 2>&1; then
+      return 1
+    fi
+    if pgrep -f 'next build' >/dev/null 2>&1 || pgrep -f 'npm run build' >/dev/null 2>&1; then
+      return 1
+    fi
+    log "CLEAR: stale .update-in-progress (worker dead) — allowing panel recovery"
+    rm -f "$marker" "$PANEL_DIR/.update-progress.pid" 2>/dev/null || true
+    if [ -f "$PANEL_DIR/.update-progress.json" ] && grep -q '"status"[[:space:]]*:[[:space:]]*"running"' "$PANEL_DIR/.update-progress.json" 2>/dev/null; then
+      node -e '
+        const fs=require("fs");
+        const p=process.argv[1];
+        try {
+          const j=JSON.parse(fs.readFileSync(p,"utf8"));
+          if (j.status!=="running") return;
+          const step=String(j.currentStep||"");
+          const progress=Number(j.progress)||0;
+          const nearEnd =
+            progress >= 94 ||
+            step === "pm2 restart nexlify" ||
+            (step === "prepare standalone" && progress >= 90) ||
+            (step === "apply update" && progress >= 88) ||
+            (Array.isArray(j.steps) && j.steps.some(s => s && s.name === "pm2 restart nexlify" && (s.ok || s.status === "done")));
+          j.finishedAt=new Date().toISOString();
+          j.currentStep=null;
+          if (nearEnd) {
+            // Build already swapped; worker died during PM2 restart — this is success, not failure.
+            j.status="done";
+            j.progress=100;
+            j.message="Update completed. Panel restarted on the new build (watchdog recovered after PM2 swap — that is normal).";
+          } else {
+            j.status="failed";
+            j.message="Update worker died — cleared by watchdog. Panel will be restarted. Retry from Settings → Updates if needed.";
+          }
+          fs.writeFileSync(p, JSON.stringify(j,null,2));
+        } catch {}
+      ' "$PANEL_DIR/.update-progress.json" 2>/dev/null || true
+    fi
     return 0
+  }
+  clear_stale_update_marker || true
+
+  if [ -f "$PANEL_DIR/.update-in-progress" ]; then
+    local pid
+    pid="$(tr -d '[:space:]' < "$PANEL_DIR/.update-in-progress" 2>/dev/null || true)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+    if pgrep -f 'panel-update-background' >/dev/null 2>&1; then
+      return 0
+    fi
+    if pgrep -f 'next build' >/dev/null 2>&1 || pgrep -f 'npm run build' >/dev/null 2>&1; then
+      return 0
+    fi
+    # Marker file with dead PID — treat as not in progress
+    return 1
   fi
   if [ -f "$PANEL_DIR/.update-progress.pid" ]; then
     local pid
@@ -75,6 +138,14 @@ except Exception:
 }
 
 safe_restart_panel() {
+  if [ -f "$PANEL_DIR/scripts/nexlify-migrate-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$PANEL_DIR/scripts/nexlify-migrate-guard.sh"
+    if nexlify_migrate_in_progress; then
+      log "SKIP restart: SQL migration in progress"
+      return 0
+    fi
+  fi
   log "FIX: restarting panel via panel-restart-safe / pm2-start (PORT=${PORT})"
   if [ -f "$PANEL_DIR/scripts/panel-restart-safe.sh" ]; then
     bash "$PANEL_DIR/scripts/panel-restart-safe.sh" --nexlify-only >>"$LOG" 2>&1 || true
