@@ -1,15 +1,9 @@
 "use client";
 
-
-
 import Link from "next/link";
-
 import { usePathname, useSearchParams } from "next/navigation";
-
-import { useEffect, useRef, useState, Suspense } from "react";
-
+import { Suspense, useDeferredValue, useEffect, useRef, useState } from "react";
 import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
-
 import {
   getAdminSidebarNav,
   type SidebarNavEntry,
@@ -22,10 +16,7 @@ import { PanelSidebarVersion } from "@/components/panel-sidebar-version";
 import { PanelSidebarReport } from "@/components/panel-sidebar-report";
 import { PanelSidebarSuggestions } from "@/components/panel-sidebar-suggestions";
 
-
-
 function pathActive(pathname: string, href: string, search: string = "") {
-
   const [cleanHref, hrefQuery = ""] = href.split("?");
 
   // Query-aware match for links like /admin/categories?type=MOVIE
@@ -51,171 +42,117 @@ function pathActive(pathname: string, href: string, search: string = "") {
 
   if (!pathname.startsWith(`${cleanHref}/`)) return false;
 
-
-
   // For child paths, only match if the remaining segment looks like an ID
-
   // (not an action word like "add", "edit", "mass-edit", etc.)
-
   const rest = pathname.slice(cleanHref.length + 1);
-
   const firstSegment = rest.split("/")[0];
 
-
-
   // Known action/sibling pages that should NOT match their parent
-
   const actionPages = new Set([
-
     "add", "new", "mass-edit", "bulk", "edit", "settings", "profile",
-
     "resource-charts", "load-balancer", "calendar", "wizard", "install",
-
     "proxies", "analytics", "pdf", "bandwidth", "viewer-heatmap", "sub",
-
     "convert-to-line", "events", "order", "access", "countries", "channels",
-
     "sources", "add-package", "mass", "stream-health", "monitoring",
-
     "theft-detection", "blocked-ips", "blocked-isps", "blocked-asns",
-
     "blocked-user-agents", "fingerprint", "cdn-ips", "security",
-
     "general", "community", "streams", "server", "domains", "binaries",
-
     "player", "cache", "backup", "geo", "tmdb", "notifications", "cron",
-
     "billing", "catchup", "white-label", "server-guard", "performance-core",
-
     "auto-fix", "lb-redirect", "cloud-backup", "server-cleaner", "vod-proxy",
-
     "apps-lock", "stream-analyzer", "source-swap", "source-monitor",
-
     "prefix-manager", "batch-manager", "expiry-videos", "disk-monitor",
-
     "updates", "show", "renew", "addon", "overview", "spotify", "apple-music",
-
     "deezer", "youtube-music", "plex", "emby", "jellyfin", "youtube",
-
     "connections", "line-activity", "credits", "usage", "commission",
-
     "epg-view", "dashboard", "import", "queue", "watch-folders",
-
     "process-monitor", "license", "live-connections", "sub-resellers",
-
     "bouquet-access", "add-bouquet", "manage-bouquets", "order-bouquets",
-
     "import-movies", "import-series", "add-group", "user-groups",
-
     "create-channel", "channel-order", "stream-tools", "provider-urls",
-
     "mass-delete", "panel-migration", "epg-sources", "epg-channel-map",
-
     "all-countries", "epg-guide-browser", "epg-calendar", "add-epg-source",
-
     "add-movie", "manage-movies", "add-series", "manage-series", "add-episode",
-
     "manage-episodes", "vod-browser", "vod-providers", "add-stream",
-
     "manage-streams", "radio-stations", "add-server", "manage-servers",
-
     "server-install", "server-wizard", "balancer", "add-proxy",
-
     "manage-proxies", "rtmp-ips", "add-user", "manage-users", "add-package",
-
     "manage-packages", "tools-home", "content", "series", "movies", "episodes",
-
     "streams", "add-reseller", "manage-resellers", "resellers", "sub",
-
     "add-line", "manage-lines", "add-line-with-package", "mass-edit-lines",
-
     "add-mag-device", "add-mag-device-with-package", "bulk-add-mag-devices",
-
     "manage-mag-devices", "convert-mag-to-line", "add-enigma2-device",
-
     "add-enigma2-device-with-package", "manage-enigma2-devices",
-
     "manage-device-events", "add-line-package", "mass-edit", "import",
-
     "add-reseller", "sub-resellers",
-
     // Content folder names
-
     "created", "video", "archive", "delayed", "playlists", "vod", "epg",
-
   ]);
-
-
 
   if (actionPages.has(firstSegment)) return false;
 
-
-
   // If the remaining segment is all lowercase letters/hyphens and short,
-
   // it's likely an action page, not a detail page
-
   const isActionWord = /^[a-z-]+$/.test(firstSegment) && firstSegment.length < 25;
 
-
-
   // Exceptions: IDs (cuid, uuid, numeric)
-
   const isId =
-
     /^[a-z0-9]{20,}$/i.test(firstSegment) ||
-
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(firstSegment) ||
-
     /^\d+$/.test(firstSegment);
-
-
 
   if (isActionWord && !isId) return false;
 
-
-
   return true;
-
 }
-
-
 
 function groupActive(pathname: string, group: SidebarNavGroup, search: string = "") {
-
   return group.items.some((i) => pathActive(pathname, i.href, search));
-
 }
-
-
 
 function groupItemsBySection(items: SidebarNavGroup["items"]) {
-
   const groups: { section: string | null; items: typeof items }[] = [];
-
   for (const item of items) {
-
     const key = item.section ?? "";
-
     let g = groups.find((x) => (x.section ?? "") === key);
-
     if (!g) {
-
       g = { section: item.section ?? null, items: [] };
-
       groups.push(g);
-
     }
-
     g.items.push(item);
-
   }
-
   return groups;
-
 }
 
+function labelMatches(label: string, query: string) {
+  return label.toLowerCase().includes(query);
+}
 
+function filterNavEntries(entries: SidebarNavEntry[], query: string): SidebarNavEntry[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return entries;
+
+  const result: SidebarNavEntry[] = [];
+  for (const entry of entries) {
+    if (entry.kind === "link") {
+      if (labelMatches(entry.link.label, q)) result.push(entry);
+      continue;
+    }
+
+    const groupLabelMatch = labelMatches(entry.group.label, q);
+    const matchedItems = groupLabelMatch
+      ? entry.group.items
+      : entry.group.items.filter((item) => labelMatches(item.label, q));
+
+    if (matchedItems.length === 0) continue;
+
+    result.push({
+      kind: "group",
+      group: { ...entry.group, items: matchedItems },
+    });
+  }
+  return result;
+}
 
 function activeGroupIds(pathname: string, entries: SidebarNavEntry[], search: string = ""): Set<string> {
   const next = new Set<string>();
@@ -255,8 +192,6 @@ function persistOpenIds(ids: Set<string>) {
     /* ignore */
   }
 }
-
-
 
 function readPersistedCollapsed(): boolean {
   if (typeof window === "undefined") return false;
@@ -358,8 +293,6 @@ function SidebarGroup({
   );
 }
 
-
-
 export function PanelSidebar({
   entries,
   className = "",
@@ -375,7 +308,6 @@ export function PanelSidebar({
   brandHref?: string;
   showReport?: boolean;
 }) {
-
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams?.toString() ? `?${searchParams.toString()}` : "";
@@ -384,6 +316,10 @@ export function PanelSidebar({
 
   const [collapsed, setCollapsed] = useState(false);
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
+  const [navFilter, setNavFilter] = useState("");
+  const deferredFilter = useDeferredValue(navFilter);
+  const isFiltering = deferredFilter.trim().length > 0;
+  const visibleEntries = filterNavEntries(entries, deferredFilter);
 
   useEffect(() => {
     setCollapsed(readPersistedCollapsed());
@@ -431,6 +367,7 @@ export function PanelSidebar({
   }, [collapsed, openIds]);
 
   function toggle(id: string) {
+    if (isFiltering) return;
     setOpenIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -453,19 +390,17 @@ export function PanelSidebar({
     });
   }
 
-
-
   function onChildNavigate() {
-
     onNavigate?.();
-
   }
 
-
-
-  const displayOpenIds = openIds;
-
-
+  const displayOpenIds = isFiltering
+    ? new Set(
+        visibleEntries
+          .filter((e): e is { kind: "group"; group: SidebarNavGroup } => e.kind === "group")
+          .map((e) => e.group.id)
+      )
+    : openIds;
 
   return (
     <aside className={`panel-sidebar ${collapsed ? "panel-sidebar--collapsed" : ""} ${className}`}>
@@ -474,8 +409,20 @@ export function PanelSidebar({
           <PanelBrandMark name={brand} href={brandHref} size="sm" />
         </div>
       )}
+      {!collapsed && (
+        <div className="panel-sidebar-search-wrap">
+          <input
+            type="search"
+            className="panel-sidebar-search"
+            placeholder="Search…"
+            value={navFilter}
+            onChange={(e) => setNavFilter(e.target.value)}
+            aria-label="Search navigation"
+          />
+        </div>
+      )}
       <nav ref={navRef} className="panel-sidebar-nav flex-1">
-        {entries.map((entry) => {
+        {visibleEntries.map((entry) => {
           if (entry.kind === "link") {
             const active = pathActive(pathname, entry.link.href, search);
             return (
@@ -532,10 +479,7 @@ export function PanelSidebar({
       {!collapsed && <PanelSidebarVersion />}
     </aside>
   );
-
 }
-
-
 
 export function AdminPanelSidebar({
   brand,
@@ -574,4 +518,3 @@ export function ResellerPanelSidebar({
     </Suspense>
   );
 }
-
