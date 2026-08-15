@@ -1,6 +1,6 @@
 {
   "name": "nexlify",
-  "version": "1.9.88",
+  "version": "1.9.89",
   "private": true,
   "engines": {
     "node": ">=18.17.0"

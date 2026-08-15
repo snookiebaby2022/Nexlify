@@ -9,6 +9,52 @@ export function isIpHost(host: string): boolean {
   return false;
 }
 
+/**
+ * IPTV apps (XCIPTV etc.) often paste `http://host` / `https://host:port` into the DNS field.
+ * That value can arrive as the HTTP Host header, which breaks `host.split(":")[0]` → `"http"`.
+ */
+export function parseRequestHostHeader(raw: string): {
+  hostname: string;
+  port: string;
+  schemeHint: "" | "http" | "https";
+} {
+  let t = (raw ?? "").trim();
+  if (!t) return { hostname: "", port: "", schemeHint: "" };
+
+  let schemeHint: "" | "http" | "https" = "";
+  if (/^https:\/\//i.test(t)) schemeHint = "https";
+  else if (/^http:\/\//i.test(t)) schemeHint = "http";
+
+  t = t.replace(/^https?:\/\//i, "");
+  // Drop path/query/fragment if a full URL was stuffed into Host
+  t = t.split("/")[0]?.split("?")[0]?.split("#")[0] ?? t;
+  t = t.trim();
+
+  // Bracketed IPv6: [2001:db8::1]:8443
+  if (t.startsWith("[")) {
+    const m = t.match(/^\[([^\]]+)](?::(\d{1,5}))?$/i);
+    if (m) {
+      return {
+        hostname: m[1].toLowerCase(),
+        port: m[2] ?? "",
+        schemeHint,
+      };
+    }
+  }
+
+  // hostname:port or ipv4:port (last colon + digits only)
+  const colon = t.lastIndexOf(":");
+  if (colon > 0 && /^\d{1,5}$/.test(t.slice(colon + 1))) {
+    return {
+      hostname: t.slice(0, colon).toLowerCase(),
+      port: t.slice(colon + 1),
+      schemeHint,
+    };
+  }
+
+  return { hostname: t.toLowerCase(), port: "", schemeHint };
+}
+
 function assumeProxySsl(): boolean {
   return (
     process.env.PANEL_ASSUME_PROXY_SSL !== "0" &&
@@ -54,11 +100,12 @@ export function panelRedirectOriginFromRequest(
   headers?: { get(name: string): string | null }
 ): string {
   const url = new URL(reqUrl);
-  const hostOnly = (
+  const parsed = parseRequestHostHeader(
     headers?.get("x-forwarded-host")?.split(",")[0]?.trim() ||
-    headers?.get("host")?.trim() ||
-    url.host
-  ).split(":")[0];
+      headers?.get("host")?.trim() ||
+      url.host
+  );
+  const hostOnly = parsed.hostname || url.hostname;
 
   let proto =
     headers?.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
@@ -72,7 +119,8 @@ export function panelRedirectOriginFromRequest(
   }
 
   if (isIpHost(hostOnly)) {
-    proto = "http";
+    // IP installs: browser panel stays on http unless TLS was actually terminated
+    if (proto !== "https") proto = "http";
   } else if (
     proto === "http" &&
     assumeProxySsl() &&
@@ -96,12 +144,13 @@ export function publicOriginFromRequest(
   headers?: { get(name: string): string | null }
 ): string {
   const url = new URL(reqUrl);
-  let hostRaw =
+  const hostHeader =
     headers?.get("x-forwarded-host")?.split(",")[0]?.trim() ||
     headers?.get("host")?.trim() ||
     url.host;
-  const hostOnly = hostRaw.split(":")[0];
-  const hostPort = hostRaw.includes(":") ? hostRaw.split(":").pop() : "";
+  const parsed = parseRequestHostHeader(hostHeader);
+  const hostOnly = parsed.hostname || url.hostname;
+  const hostPort = parsed.port || (url.port && !isInternalUpstreamPort(url.port) ? url.port : "");
   const fwdPort =
     headers?.get("x-nexlify-client-port")?.split(",")[0]?.trim() ||
     headers?.get("x-forwarded-port")?.split(",")[0]?.trim();
@@ -115,26 +164,35 @@ export function publicOriginFromRequest(
         ? hostPort
         : "";
 
+  let proto =
+    headers?.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
+    url.protocol.replace(":", "");
+  // Scheme pasted into DNS is only a hint when the proxy did not set proto
+  if (!headers?.get("x-forwarded-proto") && parsed.schemeHint && proto === "http") {
+    // Keep actual socket protocol from reqUrl; do not upgrade to https from Host alone
+    // (that would point apps at :443 when they dialed :80). Hostname sanitizing is enough.
+  }
+
   if (clientPort && Number(clientPort) === streamEdgePort) {
     return `http://${hostOnly}:${streamEdgePort}`;
   }
 
-  let proto =
-    headers?.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
-    url.protocol.replace(":", "");
-
-  // Extra HTTP IPTV ports must stay on the port the app connected to (XCIPTV follows server_info.port).
+  // Extra IPTV ports must stay on the port the app connected to (XCIPTV follows server_info.port).
+  // Allow https on IP when TLS was actually terminated (x-forwarded-proto=https).
   if (clientPort && clientPort !== "80" && clientPort !== "443" && !isInternalUpstreamPort(clientPort)) {
-    const p = proto === "https" && !isIpHost(hostOnly) ? "https" : "http";
+    const p = proto === "https" ? "https" : "http";
     return `${p}://${hostOnly}:${clientPort}`;
   }
 
-  if (proto === "https" && hostRaw.endsWith(":3000")) {
+  let hostRaw = hostOnly;
+  if (proto === "https" && clientPort === "443") {
     hostRaw = hostOnly;
-  }
-  if (proto === "http" && hostRaw.endsWith(":80")) {
+  } else if (proto === "http" && (clientPort === "80" || !clientPort)) {
     hostRaw = hostOnly;
+  } else if (clientPort && clientPort !== "80" && clientPort !== "443") {
+    hostRaw = `${hostOnly}:${clientPort}`;
   }
+
   if (
     proto === "http" &&
     assumeProxySsl() &&
@@ -145,7 +203,7 @@ export function publicOriginFromRequest(
   ) {
     proto = "https";
   }
-  if (behindNginx()) {
+  if (behindNginx() && (!clientPort || clientPort === "80" || clientPort === "443")) {
     hostRaw = `${hostOnly}${publicPortSuffix(proto)}`;
   }
   return `${proto}://${hostRaw}`;

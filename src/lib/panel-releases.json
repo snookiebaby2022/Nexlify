@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.88",
+  "latestVersion": "1.9.89",
   "releases": [
+    {
+      "version": "1.9.89",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "XCIPTV: http:// and https:// in DNS + ports work; enable panel HTTPS :443.",
+      "changelog": [
+        "Sanitize Host headers that include http:// or https:// so server_info.url is the real IP/domain",
+        "HTTPS on PANEL_IP (:443) installs reliably (self-signed IP cert) — fix script no longer exits when PANEL_EXTRA_DOMAINS is empty",
+        "Extra IPTV ports keep https when TLS was terminated; :80 / :8080 / :25461 / :443 verified paths"
+      ],
+      "fixes": [
+        "Pasting http://IP into XCIPTV DNS made Account Info / follow-up API calls use url:\\\"http\\\"",
+        "https://PANEL_IP failed because :443 was never listening (HTTPS setup script aborted early)"
+      ]
+    },
     {
       "version": "1.9.88",
       "date": "2026-08-15",

@@ -21,7 +21,7 @@ import {
 } from "./server-ports";
 import { getPanelServerSettings } from "./panel-server";
 import { getSettingGroup } from "./panel-settings";
-import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
+import { isIpHost, pickPublicOrigin, publicOriginFromRequest, parseRequestHostHeader } from "./public-origin";
 import {
   collectCategoryAncestors,
   expandCategoryFilter,
@@ -125,7 +125,14 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
     const u = new URL(panelOrigin.includes("://") ? panelOrigin : `http://${panelOrigin}`);
     streamHost = u.hostname;
   } catch {
-    streamHost = panelOrigin.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+    streamHost = parseRequestHostHeader(panelOrigin).hostname;
+  }
+  // Guard against Host headers like "http://1.2.3.4" that once became url:"http"
+  if (!streamHost || streamHost === "http" || streamHost === "https") {
+    streamHost =
+      parseRequestHostHeader(panelBaseUrl).hostname ||
+      parseRequestHostHeader(panelOrigin).hostname ||
+      streamHost;
   }
   const useHttps = panelOrigin.startsWith("https");
   const publicPort = portFromPanelBaseUrl(panelOrigin);

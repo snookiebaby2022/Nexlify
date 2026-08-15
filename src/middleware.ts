@@ -22,7 +22,7 @@ import {
   LICENSE_TRIAL_COOKIE,
 } from "@/lib/license/session-cookie";
 import { jwtSecretBytes } from "@/lib/jwt-secret";
-import { isIpHost, panelRedirectOriginFromRequest } from "@/lib/public-origin";
+import { isIpHost, panelRedirectOriginFromRequest, parseRequestHostHeader } from "@/lib/public-origin";
 import { isPanelLicenseExempt } from "@/lib/panel-demo-host";
 import {
   isPanelDemoHost,
@@ -95,8 +95,13 @@ const PUBLIC = [
 ];
 
 function hostName(req: NextRequest): string {
-  const host = req.headers.get("host") ?? "";
-  return host.split(":")[0].toLowerCase();
+  // XCIPTV may put http:// or https:// into DNS → Host header; strip scheme/port.
+  const raw =
+    req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    req.headers.get("host") ||
+    "";
+  const parsed = parseRequestHostHeader(raw);
+  return (parsed.hostname || "").toLowerCase();
 }
 
 function isLocalHost(host: string): boolean {
