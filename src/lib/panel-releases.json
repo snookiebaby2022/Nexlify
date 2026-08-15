@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.82",
+  "latestVersion": "1.9.83",
   "releases": [
+    {
+      "version": "1.9.83",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Any server HTTP port works for IPTV login; XCIPTV/XUI player_api completeness (vod/series info, panel_api).",
+      "changelog": [
+        "Extra HTTP ports each get correct X-Forwarded-Port (server_info.port matches the port apps use)",
+        "Wire get_vod_info / get_series_info for XCIPTV movie and series detail",
+        "Add panel_api.php alias used by XUI-compatible apps",
+        "Resolve numeric stream_id via SQL (no 100k nested bouquet hydrate)",
+        "verify-panel-ports checks every STREAM_HTTP_EXTRA_PORTS listen + player_api"
+      ],
+      "fixes": [
+        "IPTV apps lost the working extra port after login when nginx forwarded the primary port only",
+        "XCIPTV VOD/series detail screens empty (get_vod_info / get_series_info missing)",
+        "EPG actions ignored numeric Xtream stream_id hashes",
+        "Port sync verify failed falsely on IP installs without :443"
+      ]
+    },
     {
       "version": "1.9.82",
       "date": "2026-08-15",

@@ -107,34 +107,11 @@ export async function GET(
   let cleanId = streamId.replace(/\.(ts|m3u8)$/, "");
   const ip = getClientIp(req);
 
-  // If cleanId is purely numeric (Xtream numeric stream_id), map it back to the cuid
+  // Xtream apps often request /live/user/pass/<numeric_hash>.ts — map back to cuid via SQL
   if (/^\d+$/.test(cleanId)) {
-    const numericId = parseInt(cleanId, 10);
-    const { prisma } = await import("@/lib/prisma");
-    const lineWithBouquets = await prisma.line.findUnique({
-      where: { username },
-      include: {
-        bouquets: {
-          include: {
-            bouquet: {
-              include: { streams: { include: { stream: true } } },
-            },
-          },
-        },
-      },
-    });
-    if (lineWithBouquets) {
-      const allStreams = lineWithBouquets.bouquets.flatMap((lb) => lb.bouquet.streams.map((bs) => bs.stream));
-      function mapCuidToNum(id: string): number {
-        let h = 0;
-        for (let i = 0; i < id.length; i++) {
-          h = ((h << 5) - h + id.charCodeAt(i)) | 0;
-        }
-        return Math.abs(h);
-      }
-      const match = allStreams.find((s) => mapCuidToNum(s.id) === numericId);
-      if (match) cleanId = match.id;
-    }
+    const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
+    const resolved = await resolveStreamIdParam(cleanId, { username });
+    if (resolved) cleanId = resolved;
   }
 
   const line = await getLineForPlaybackAuth(username);

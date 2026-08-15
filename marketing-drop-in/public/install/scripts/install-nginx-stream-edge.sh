@@ -41,7 +41,7 @@ write_stream_locations() {
   local fwd_port="$1"
   local upstream_target="${2:-http://nexlify_panel}"
   cat <<LOC
-    location ~ ^/(player_api\.php|get\.php|xmltv\.php|live/|movie/|series/|c/|stalker_portal/) {
+    location ~ ^/(player_api\.php|panel_api\.php|get\.php|xmltv\.php|live/|movie/|series/|c/|stalker_portal/) {
         if (\$request_method = OPTIONS) {
             add_header Access-Control-Allow-Origin "*";
             add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
@@ -155,19 +155,18 @@ fi
 
 {
   echo "# Nexlify stream edge — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "# Ports: $ALL_PORTS"
-  echo "server {"
+  echo "# Ports: $ALL_PORTS (one server block per port so X-Forwarded-Port is correct)"
   for p in $ALL_PORTS; do
+    echo "server {"
     echo "    listen ${p} default_server;"
     echo "    listen [::]:${p} default_server;"
+    echo "    server_name _;"
+    echo "    client_max_body_size 50m;"
+    echo "    large_client_header_buffers 8 64k;"
+    write_stream_locations "$p"
+    echo "}"
+    echo ""
   done
-  echo "    server_name _;"
-  echo ""
-  echo "    client_max_body_size 50m;"
-  echo "    large_client_header_buffers 8 64k;"
-  echo ""
-  write_stream_locations "$STREAM_PORT"
-  echo "}"
 } > "$DEST"
 
 rm -f "$EXTRA_DEST" 2>/dev/null || true

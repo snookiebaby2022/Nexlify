@@ -5,9 +5,11 @@ import { withIptvCors } from "@/lib/iptv-cors";
 const PLAYBACK_PREFIXES = [
   "/live",
   "/movie",
+  "/series",
   "/get.php",
   "/xmltv.php",
   "/player_api.php",
+  "/panel_api.php",
   "/stalker_portal",
   "/c/",
   "/portal.php",

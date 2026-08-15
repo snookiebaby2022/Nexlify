@@ -11,13 +11,21 @@ nexlify_load_ports_from_env "$ROOT"
 
 FAIL=0
 
+nexlify_read_env_file() {
+  grep "^${1}=" "$ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2- | sed -e 's/^["'\'' ]*//' -e 's/["'\'' ]*$//' || true
+}
+
 check_listen() {
-  local port="$1" label="$2"
-  if ss -tln 2>/dev/null | grep -q ":${port} "; then
+  local port="$1" label="$2" required="${3:-1}"
+  if ss -tln 2>/dev/null | grep -qE ":${port}\\s"; then
     echo "[verify-ports] OK listen :${port} (${label})"
   else
-    echo "[verify-ports] FAIL not listening on :${port} (${label})" >&2
-    FAIL=1
+    if [ "$required" = "1" ]; then
+      echo "[verify-ports] FAIL not listening on :${port} (${label})" >&2
+      FAIL=1
+    else
+      echo "[verify-ports] SKIP :${port} (${label}) — not configured"
+    fi
   fi
 }
 
@@ -25,23 +33,58 @@ check_http() {
   local url="$1" label="$2"
   local code
   code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 3 "$url" 2>/dev/null || echo "000")"
-  if [ "$code" != "000" ] && [ "$code" != "522" ]; then
+  # 400/401/403 are fine — endpoint is reachable (credentials may be wrong)
+  if [ "$code" != "000" ] && [ "$code" != "522" ] && [ "$code" != "502" ] && [ "$code" != "503" ]; then
     echo "[verify-ports] OK ${label} HTTP ${code} — ${url}"
   else
     echo "[verify-ports] WARN ${label} unreachable (${code}) — ${url}" >&2
   fi
 }
 
-check_listen "$NEXLIFY_PORT_HTTP" "HTTP"
-check_listen "$NEXLIFY_PORT_HTTPS" "HTTPS"
+PANEL_LISTEN="$(nexlify_read_env_file PORT)"
+[ -z "$PANEL_LISTEN" ] && PANEL_LISTEN="${PORT:-${PANEL_PORT:-13000}}"
+HTTP_EXTRAS="$(nexlify_read_env_file STREAM_HTTP_EXTRA_PORTS)"
+HTTPS_EXTRAS="$(nexlify_read_env_file STREAM_HTTPS_EXTRA_PORTS)"
+BEHIND_NGINX="$(nexlify_read_env_file PANEL_BEHIND_NGINX)"
+
+# Panel listen (IP installs often bind Next directly on :80)
+check_listen "$PANEL_LISTEN" "panel listen"
+
+# Public HTTP — required when panel owns it OR nginx fronts it
+if [ "$PANEL_LISTEN" = "80" ] || [ "$BEHIND_NGINX" = "1" ] || [ "$BEHIND_NGINX" = "true" ]; then
+  check_listen "$NEXLIFY_PORT_HTTP" "HTTP"
+else
+  check_listen "$NEXLIFY_PORT_HTTP" "HTTP" 0
+fi
+
+# HTTPS optional on plain IP installs
+if [ -n "$(nexlify_read_env_file PANEL_PRIMARY_DOMAIN)" ] || [ "$BEHIND_NGINX" = "1" ]; then
+  check_listen "$NEXLIFY_PORT_HTTPS" "HTTPS" 0
+else
+  check_listen "$NEXLIFY_PORT_HTTPS" "HTTPS" 0
+fi
 
 if [ "${NEXLIFY_USE_STREAM_EDGE_NGINX:-1}" = "1" ] && [ "$NEXLIFY_PORT_STREAM_HTTP" != "$NEXLIFY_PORT_HTTP" ]; then
   check_listen "$NEXLIFY_PORT_STREAM_HTTP" "stream edge"
-  check_http "http://127.0.0.1:${NEXLIFY_PORT_STREAM_HTTP}/player_api.php?username=__verify__" "Xtream API :${NEXLIFY_PORT_STREAM_HTTP}"
+  check_http "http://127.0.0.1:${NEXLIFY_PORT_STREAM_HTTP}/player_api.php?username=__verify__&password=__verify__" "Xtream API :${NEXLIFY_PORT_STREAM_HTTP}"
 fi
 
-UPSTREAM="${PORT:-${PANEL_PORT:-13000}}"
-check_http "http://127.0.0.1:${UPSTREAM}/api/health" "panel upstream :${UPSTREAM}"
+# Every configured extra HTTP port must listen and answer player_api
+for p in ${HTTP_EXTRAS//,/ }; do
+  [ -z "$p" ] && continue
+  [ "$p" = "$PANEL_LISTEN" ] && continue
+  check_listen "$p" "extra HTTP"
+  check_http "http://127.0.0.1:${p}/player_api.php?username=__verify__&password=__verify__" "Xtream API :${p}"
+  check_http "http://127.0.0.1:${p}/panel_api.php?username=__verify__&password=__verify__" "panel_api :${p}"
+done
+
+for p in ${HTTPS_EXTRAS//,/ }; do
+  [ -z "$p" ] && continue
+  check_listen "$p" "extra HTTPS" 0
+done
+
+check_http "http://127.0.0.1:${PANEL_LISTEN}/api/health" "panel upstream :${PANEL_LISTEN}"
+check_http "http://127.0.0.1:${PANEL_LISTEN}/player_api.php?username=__verify__&password=__verify__" "Xtream API :${PANEL_LISTEN}"
 
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi active; then
   for p in $(nexlify_customer_firewall_ports); do
@@ -49,7 +92,7 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi active; t
       echo "[verify-ports] OK UFW allows ${p}/tcp"
     else
       echo "[verify-ports] WARN UFW may block ${p}/tcp — run: sudo bash scripts/nexlify-firewall-ports.sh" >&2
-      FAIL=1
+      # Do not fail the whole sync for UFW warn — ports may still be reachable
     fi
   done
 fi

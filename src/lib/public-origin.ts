@@ -101,26 +101,37 @@ export function publicOriginFromRequest(
     headers?.get("host")?.trim() ||
     url.host;
   const hostOnly = hostRaw.split(":")[0];
+  const hostPort = hostRaw.includes(":") ? hostRaw.split(":").pop() : "";
   const fwdPort = headers?.get("x-forwarded-port")?.split(",")[0]?.trim();
   const streamEdgePort = resolveStreamEdgeHttpPort();
-  if (fwdPort && Number(fwdPort) === streamEdgePort) {
+
+  // Prefer explicit non-internal listen port (any extra IPTV port: 8080, 25461, …)
+  const clientPort =
+    fwdPort && !isInternalUpstreamPort(fwdPort)
+      ? fwdPort
+      : hostPort && !isInternalUpstreamPort(hostPort)
+        ? hostPort
+        : "";
+
+  if (clientPort && Number(clientPort) === streamEdgePort) {
     return `http://${hostOnly}:${streamEdgePort}`;
   }
-  if (fwdPort && !hostRaw.includes(":") && !behindNginx() && !isInternalUpstreamPort(fwdPort)) {
-    if (fwdPort !== "443" && fwdPort !== "80") hostRaw = `${hostOnly}:${fwdPort}`;
-  }
+
   let proto =
     headers?.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
     url.protocol.replace(":", "");
+
+  // Extra HTTP IPTV ports must stay on the port the app connected to (XCIPTV follows server_info.port).
+  if (clientPort && clientPort !== "80" && clientPort !== "443" && !isInternalUpstreamPort(clientPort)) {
+    const p = proto === "https" && !isIpHost(hostOnly) ? "https" : "http";
+    return `${p}://${hostOnly}:${clientPort}`;
+  }
+
   if (proto === "https" && hostRaw.endsWith(":3000")) {
     hostRaw = hostOnly;
   }
   if (proto === "http" && hostRaw.endsWith(":80")) {
     hostRaw = hostOnly;
-  }
-  // Dedicated stream edge (:8080) stays HTTP — do not upgrade to HTTPS for playlist URLs.
-  if (proto === "http" && fwdPort && fwdPort !== "80" && fwdPort !== "443" && !behindNginx()) {
-    return `http://${hostRaw.includes(":") ? hostRaw : `${hostOnly}:${fwdPort}`}`;
   }
   if (
     proto === "http" &&

@@ -12,14 +12,16 @@ import {
   xtreamSeriesForLine,
   xtreamSeriesCategoriesForLine,
 } from "@/lib/xtream";
+import { xtreamVodInfo, xtreamSeriesInfo } from "@/lib/xtream-info";
+import { resolveStreamIdParam } from "@/lib/xtream-stream-id";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { checkDdosShield } from "@/lib/ddos-shield";
-import { prisma } from "@/lib/prisma";
 import { cacheGetOrSet } from "@/lib/cache";
 import { getCacheTtls } from "@/lib/cache-ttl";
 import { getShortEpg } from "@/lib/epg";
 import { getAntiFreezeSettings, schedulePlaylistZapWarm } from "@/lib/anti-freeze";
 import { iptvCorsPreflight, iptvJson } from "@/lib/iptv-cors";
+import { prisma } from "@/lib/prisma";
 
 export async function OPTIONS() {
   return iptvCorsPreflight();
@@ -181,22 +183,53 @@ export async function GET(req: NextRequest) {
       );
       return iptvJson(payload);
     }
+    case "get_vod_info": {
+      const vodId =
+        req.nextUrl.searchParams.get("vod_id") ||
+        req.nextUrl.searchParams.get("stream_id") ||
+        "";
+      if (!vodId) return iptvJson({});
+      const info = await xtreamVodInfo(line, baseUrl, vodId);
+      return iptvJson(info ?? {});
+    }
+    case "get_series_info": {
+      const seriesId =
+        req.nextUrl.searchParams.get("series_id") ||
+        req.nextUrl.searchParams.get("stream_id") ||
+        "";
+      if (!seriesId) return iptvJson({});
+      const info = await xtreamSeriesInfo(line, baseUrl, seriesId);
+      return iptvJson(info ?? {});
+    }
     case "get_short_epg": {
       const streamId = req.nextUrl.searchParams.get("stream_id");
-      if (!streamId) return iptvJson([]);
-      const stream = await prisma.stream.findUnique({ where: { id: streamId } });
-      const channelId = stream?.epgChannelId ?? streamId;
+      if (!streamId) return iptvJson({ epg_listings: [] });
+      const resolved = await resolveStreamIdParam(streamId, { lineId: line.id });
+      const stream = resolved
+        ? await prisma.stream.findUnique({
+            where: { id: resolved },
+            select: { epgChannelId: true, id: true },
+          })
+        : null;
+      const channelId = stream?.epgChannelId ?? resolved ?? streamId;
       const epg = await getShortEpg(channelId);
       return iptvJson({ epg_listings: epg });
     }
     case "get_simple_data_table": {
       const streamId = req.nextUrl.searchParams.get("stream_id");
       if (!streamId) return iptvJson([]);
-      const stream = await prisma.stream.findUnique({ where: { id: streamId } });
-      const channelId = stream?.epgChannelId ?? streamId;
+      const resolved = await resolveStreamIdParam(streamId, { lineId: line.id });
+      const stream = resolved
+        ? await prisma.stream.findUnique({
+            where: { id: resolved },
+            select: { epgChannelId: true, id: true },
+          })
+        : null;
+      const channelId = stream?.epgChannelId ?? resolved ?? streamId;
       return iptvJson(await getShortEpg(channelId, 10));
     }
     default:
       return iptvJson(await xtreamUserInfo(line, baseUrl));
   }
 }
+

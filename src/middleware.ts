@@ -34,9 +34,11 @@ function isPlaybackPath(pathname: string): boolean {
   return (
     pathname.startsWith("/live") ||
     pathname.startsWith("/movie") ||
+    pathname.startsWith("/series") ||
     pathname.startsWith("/webrtc") ||
     pathname.startsWith("/get.php") ||
-    pathname.startsWith("/player_api.php")
+    pathname.startsWith("/player_api.php") ||
+    pathname.startsWith("/panel_api.php")
   );
 }
 
@@ -67,6 +69,7 @@ const COOKIE = "nexlify_session";
 const PUBLIC = [
   "/login",
   "/player_api.php",
+  "/panel_api.php",
   "/get.php",
   "/xmltv.php",
   "/live",

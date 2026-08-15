@@ -1,9 +1,13 @@
 import type { LineWithBouquets } from "./lines";
-import { streamsForLineExport } from "./lines";
 import { exportPlaybackUrl } from "./export-playback-url";
 import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
-import { cuidToNum, resolveStreamIdParam } from "./xtream-stream-id";
+import {
+  cuidToNum,
+  lineHasStream,
+  resolveStreamIdParam,
+  seriesEpisodeIdsForLine,
+} from "./xtream-stream-id";
 
 export { cuidToNum, resolveStreamIdParam };
 
@@ -27,16 +31,13 @@ export async function xtreamVodInfo(
 ) {
   const streamId = await resolveStreamIdParam(streamIdParam, { lineId: line.id });
   if (!streamId) return null;
-
-  const streams = await streamsForLineExport(line, { type: StreamType.MOVIE });
-  const movie = streams.find((s) => s.id === streamId);
-  if (!movie) return null;
+  if (!(await lineHasStream(line.id, streamId))) return null;
 
   const full = await prisma.stream.findUnique({
     where: { id: streamId },
     include: { provider: true, category: true },
   });
-  if (!full) return null;
+  if (!full || full.type !== StreamType.MOVIE) return null;
 
   const meta = parseMetaJson(full.agentStartCmd);
   const ext = full.containerExtension ?? "mp4";
@@ -79,80 +80,73 @@ export async function xtreamSeriesInfo(
 ) {
   const streamId = await resolveStreamIdParam(seriesIdParam, { lineId: line.id });
   if (!streamId) return null;
+  if (!(await lineHasStream(line.id, streamId))) return null;
 
-  const streams = await streamsForLineExport(line, { type: StreamType.SERIES });
-  const seed = streams.find((s) => s.id === streamId);
-  if (!seed) return null;
+  const seed = await prisma.stream.findUnique({
+    where: { id: streamId },
+    include: { category: true },
+  });
+  if (!seed || seed.type !== StreamType.SERIES) return null;
 
   const seriesKey = seed.seriesName?.trim() || seed.name;
-  const episodes = streams.filter(
-    (s) =>
-      s.seriesName?.trim() === seriesKey || s.id === seed.id || s.name === seriesKey
-  );
-
-  const fullRows = await prisma.stream.findMany({
-    where: { id: { in: episodes.map((e) => e.id) } },
-    include: { provider: true, category: true },
-  });
+  const episodeIds = await seriesEpisodeIdsForLine(line.id, seed.id, seriesKey);
+  const fullRows = episodeIds.length
+    ? await prisma.stream.findMany({
+        where: { id: { in: episodeIds } },
+        include: { provider: true, category: true },
+      })
+    : [];
   const byId = new Map(fullRows.map((s) => [s.id, s]));
 
   const seasons: Record<string, unknown[]> = {};
-  for (const ep of episodes) {
-    const full = byId.get(ep.id) ?? ep;
-    const season = String(full.seasonNum && full.seasonNum > 0 ? full.seasonNum : 1);
-    if (!seasons[season]) seasons[season] = [];
-    const meta = parseMetaJson(full.agentStartCmd);
-    const ext = full.containerExtension ?? "mkv";
-    seasons[season].push({
-      id: cuidToNum(full.id),
-      episode_num: full.episodeNum ?? seasons[season].length + 1,
-      title: full.name,
+  for (const epId of episodeIds) {
+    const ep = byId.get(epId);
+    if (!ep) continue;
+    const meta = parseMetaJson(ep.agentStartCmd);
+    const seasonNum = Number(meta.season ?? ep.seasonNum ?? 1) || 1;
+    const key = String(seasonNum);
+    if (!seasons[key]) seasons[key] = [];
+    const ext = ep.containerExtension ?? "mkv";
+    seasons[key].push({
+      id: cuidToNum(ep.id),
+      episode_num: Number(meta.episode ?? ep.episodeNum ?? seasons[key].length + 1) || 1,
+      title: ep.name,
       container_extension: ext,
       info: {
-        movie_image: full.streamIcon ?? "",
+        movie_image: ep.streamIcon ?? "",
         plot: typeof meta.plot === "string" ? meta.plot : "",
         releasedate: meta.releaseDate ?? "",
-        rating: meta.rating ?? "",
         duration_secs: meta.durationSecs ?? 0,
         duration: meta.duration ?? "",
+        rating: meta.rating ?? "",
       },
       custom_sid: "",
-      added: Math.floor(full.createdAt.getTime() / 1000).toString(),
-      season: Number(season),
-      direct_source: exportPlaybackUrl(baseUrl, line, full, full),
+      added: Math.floor(ep.createdAt.getTime() / 1000).toString(),
+      season: seasonNum,
+      direct_source: exportPlaybackUrl(baseUrl, line, ep, ep),
     });
   }
 
-  for (const key of Object.keys(seasons)) {
-    seasons[key].sort((a, b) => {
-      const ea = (a as { episode_num?: number }).episode_num ?? 0;
-      const eb = (b as { episode_num?: number }).episode_num ?? 0;
-      return ea - eb;
-    });
-  }
-
-  const cover = seed.streamIcon ?? byId.get(seed.id)?.streamIcon ?? "";
-  const seedMeta = parseMetaJson(byId.get(seed.id)?.agentStartCmd);
-
+  const meta = parseMetaJson(seed.agentStartCmd);
   return {
     seasons: Object.keys(seasons)
       .map(Number)
       .sort((a, b) => a - b)
-      .map((n) => ({ season_number: n, name: `Season ${n}`, cover, cover_big: cover })),
+      .map((n) => ({ season_number: n, name: `Season ${n}`, cover: seed.streamIcon ?? "" })),
     info: {
       name: seriesKey,
-      cover,
-      plot: typeof seedMeta.plot === "string" ? seedMeta.plot : "",
-      cast: seedMeta.cast ?? "",
-      director: seedMeta.director ?? "",
-      genre: seedMeta.genre ?? byId.get(seed.id)?.category?.name ?? "",
-      releaseDate: seedMeta.releaseDate ?? "",
+      cover: seed.streamIcon ?? "",
+      plot: typeof meta.plot === "string" ? meta.plot : "",
+      cast: meta.cast ?? "",
+      director: meta.director ?? "",
+      genre: meta.genre ?? seed.category?.name ?? "",
+      releaseDate: meta.releaseDate ?? "",
       last_modified: Math.floor(seed.updatedAt.getTime() / 1000).toString(),
-      rating: seedMeta.rating ?? "",
+      rating: meta.rating ?? "",
       rating_5based: 0,
-      backdrop_path: [] as string[],
-      youtube_trailer: seedMeta.trailer ?? "",
-      episode_run_time: seedMeta.duration ?? "",
+      backdrop_path: meta.backdrop ? [String(meta.backdrop)] : ([] as string[]),
+      youtube_trailer: meta.trailer ?? "",
+      episode_run_time: meta.duration ?? "",
       category_id: seed.categoryId ?? "0",
     },
     episodes: seasons,
