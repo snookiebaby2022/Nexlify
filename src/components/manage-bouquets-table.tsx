@@ -218,7 +218,16 @@ export function ManageBouquetsTable({
             {pageRows.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
-                  No bouquets found
+                  {bouquets.length === 0
+                    ? "No bouquets found — import Channel bouquets from your SQL dump on Migrate, or add one."
+                    : "No bouquets match this search."}
+                  <span className="block mt-2 text-xs opacity-80">
+                    Bouquets are line packages (from the dump <code>bouquets</code> table). Stream folders live under{" "}
+                    <Link href="/admin/categories" className="underline" style={{ color: "var(--accent)" }}>
+                      Categories
+                    </Link>{" "}
+                    (including sub-categories).
+                  </span>
                 </td>
               </tr>
             ) : (

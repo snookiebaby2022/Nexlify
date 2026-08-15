@@ -3,7 +3,11 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
 import { canAccessBouquet } from "@/lib/bouquet-access";
-import { bouquetContentCounts } from "@/lib/bouquet-counts";
+import {
+  bouquetContentCounts,
+  bouquetContentCountsByBouquetId,
+  emptyBouquetContentCounts,
+} from "@/lib/bouquet-counts";
 import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { redactStream } from "@/lib/stream-redact";
 import { PanelRole, Prisma } from "@prisma/client";
@@ -42,7 +46,10 @@ export async function GET(req: NextRequest) {
       })),
     };
     return NextResponse.json({
-      bouquet: safeBouquet,
+      bouquet: {
+        ...safeBouquet,
+        contentCounts: bouquetContentCounts(bouquet.streams),
+      },
       streamIds: bouquet.streams.sort((a, b) => a.sortOrder - b.sortOrder).map((bs) => bs.streamId),
     });
   }
@@ -52,28 +59,26 @@ export async function GET(req: NextRequest) {
       ? {}
       : { resellerBouquets: { some: { userId: session.id } } };
 
+  // List view must NOT include every BouquetStream row — on large panels that is
+  // 100k+ joins / ~18MB JSON and the Manage Bouquets page shows "No bouquets found".
   const bouquets = await prisma.bouquet.findMany({
     where,
     include: {
-      streams: { include: { stream: true } },
-      _count: { select: { lines: true } },
+      _count: { select: { lines: true, streams: true } },
     },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
-  const safeBouquets =
-    session.role === PanelRole.ADMIN
-      ? bouquets
-      : bouquets.map((b) => ({
-          ...b,
-          streams: b.streams.map((bs) => ({
-            ...bs,
-            stream: redactStream(bs.stream, session.role),
-          })),
-        }));
 
-  const withCounts = safeBouquets.map((b) => ({
+  const countMap = await bouquetContentCountsByBouquetId(
+    prisma,
+    bouquets.map((b) => b.id)
+  );
+
+  const withCounts = bouquets.map((b) => ({
     ...b,
-    contentCounts: bouquetContentCounts(b.streams),
+    // Keep a tiny streams stub so older clients reading streams.length still work.
+    streams: [] as { stream: { type: string } }[],
+    contentCounts: countMap.get(b.id) ?? emptyBouquetContentCounts(),
   }));
 
   return NextResponse.json({ bouquets: withCounts });

@@ -269,32 +269,34 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
     take: 50_000,
   });
   if (liveOrphans.length && bouquets.length) {
-    const empty: { id: string }[] = [];
-    for (const b of bouquets) {
-      const n = await prisma.bouquetStream.count({ where: { bouquetId: b.id } });
-      if (n === 0) empty.push({ id: b.id });
-    }
+    // Do NOT stuff orphans into empty dump bouquets (PPV, Events, etc.) — that
+    // makes Manage Bouquets diverge from the SQL dump. Only use explicit catch-alls.
     const catchAll = bouquets.filter((b) =>
       /all|full|imported|complete|\bmain\b/i.test(b.name)
     );
-    const targets = empty.length ? empty : catchAll.length ? catchAll : [bouquets[0]];
-    const BATCH = 500;
-    let linked = 0;
-    for (const t of targets) {
-      for (let i = 0; i < liveOrphans.length; i += BATCH) {
-        const chunk = liveOrphans.slice(i, i + BATCH);
-        const res = await prisma.bouquetStream.createMany({
-          data: chunk.map((s, idx) => ({
-            bouquetId: t.id,
-            streamId: s.id,
-            sortOrder: i + idx,
-          })),
-          skipDuplicates: true,
-        });
-        linked += res.count;
+    const targets = catchAll.length ? catchAll : [];
+    if (!targets.length) {
+      // Leave empty bouquets empty; orphans stay unlinked until assigned manually.
+      result.liveLinkedToBouquets = 0;
+    } else {
+      const BATCH = 500;
+      let linked = 0;
+      for (const t of targets) {
+        for (let i = 0; i < liveOrphans.length; i += BATCH) {
+          const chunk = liveOrphans.slice(i, i + BATCH);
+          const res = await prisma.bouquetStream.createMany({
+            data: chunk.map((s, idx) => ({
+              bouquetId: t.id,
+              streamId: s.id,
+              sortOrder: i + idx,
+            })),
+            skipDuplicates: true,
+          });
+          linked += res.count;
+        }
       }
+      result.liveLinkedToBouquets = linked;
     }
-    result.liveLinkedToBouquets = linked;
   }
 
   // Lines with no bouquets see zero streams in players even when channels imported.

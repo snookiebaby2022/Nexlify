@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.77",
+  "latestVersion": "1.9.78",
   "releases": [
+    {
+      "version": "1.9.78",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Manage Bouquets loads instantly; dump bouquet order/membership restored exactly from SQL.",
+      "changelog": [
+        "Bouquets list API no longer loads 100k+ stream rows (was ~18MB and showed No bouquets found)",
+        "Migration preserves SQL INSERT order for bouquets and categories when bouquet_order/cat_order is all zeros",
+        "Bouquet import replaces membership from the dump (exact channel lists, empty bouquets stay empty)",
+        "Repair no longer stuffs orphan live streams into empty dump bouquets",
+        "scripts/sync-bouquets-from-dump.ts rebuilds bouquet order + links from an on-server dump"
+      ],
+      "fixes": [
+        "Manage Bouquets showed No bouquets found on large panels",
+        "Bouquet sortOrder all zero alphabetized dump order",
+        "Empty dump bouquets gained junk streams from repair"
+      ]
+    },
     {
       "version": "1.9.77",
       "date": "2026-08-15",

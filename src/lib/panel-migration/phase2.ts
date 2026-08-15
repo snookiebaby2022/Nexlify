@@ -40,17 +40,17 @@ function scoreTable(name: string, kind: keyof typeof PHASE2_TABLE_SCORES): numbe
 
 export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[] {
   if (!data) return [];
-  const out: MigrationCategoryRow[] = [];
-  for (const row of data.rows) {
+  const out: (MigrationCategoryRow & { dumpIndex: number })[] = [];
+  data.rows.forEach((row, dumpIndex) => {
     const r = rowToRecord(data.columns, row);
     const legacyId = String(r.id ?? "");
-    if (!legacyId) continue;
+    if (!legacyId) return;
     const parentRaw = r.parent_id ?? r.parentId ?? r.parent;
     const name = String(
       r.category_name ?? r.name ?? r.title ?? `Category ${legacyId}`
     ).trim() || `Category ${legacyId}`;
     // Skip rows that are clearly bouquet channel JSON dumped into categories.
-    if (name === "[]" || name === "{}" || /^\[.*\]$/.test(name)) continue;
+    if (name === "[]" || name === "{}" || /^\[.*\]$/.test(name)) return;
 
     const typeRaw = String(
       r.category_type ?? r.type ?? r.cat_type ?? r.stream_type ?? ""
@@ -96,8 +96,13 @@ export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[]
     // Type-only placeholder rows (name is just "live"/"movie"/"series") are not real
     // stream categories — skip them so they don't pollute Manage Categories.
     if (["live", "movie", "movies", "series", "radio", "vod", "tv"].includes(nameKey)) {
-      continue;
+      return;
     }
+
+    const explicit = r.sort_order ?? r.order ?? r.cat_order;
+    const hasExplicit =
+      explicit != null && String(explicit).trim() !== "" && Number.isFinite(Number(explicit));
+    const sortOrder = hasExplicit && Number(explicit) !== 0 ? Number(explicit) : dumpIndex;
 
     out.push({
       legacyId,
@@ -108,16 +113,17 @@ export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[]
           : undefined,
       categoryType,
       isAdult: Number(r.is_adult ?? r.adult ?? 0) === 1,
-      sortOrder: Number(r.sort_order ?? r.order ?? r.cat_order ?? 0) || 0,
+      sortOrder,
+      dumpIndex,
     });
-  }
+  });
   out.sort((a, b) => {
     const ao = Number(a.sortOrder) || 0;
     const bo = Number(b.sortOrder) || 0;
     if (ao !== bo) return ao - bo;
-    return String(a.legacyId).localeCompare(String(b.legacyId), undefined, { numeric: true });
+    return a.dumpIndex - b.dumpIndex;
   });
-  return out;
+  return out.map(({ dumpIndex: _dumpIndex, ...rest }, i) => ({ ...rest, sortOrder: i }));
 }
 
 export function mapServers(data: SqlTableData | null): MigrationServerRow[] {

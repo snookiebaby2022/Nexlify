@@ -514,51 +514,42 @@ async function applyMigrationBundleInner(
       "Stream"
     );
 
-    const linkRows: { bouquetId: string; streamId: string; sortOrder: number }[] = [];
+    // Exact dump membership: replace each bouquet's links (add missing, remove extras,
+    // restore channel order). createMany(skipDuplicates) alone left repair junk in empty bouquets.
+    const linksByBouquet = new Map<string, { streamId: string; sortOrder: number }[]>();
     for (const b of bundle.bouquets) {
       const bouquetId = bouquetIdByLegacy.get(b.legacyId);
       if (!bouquetId) continue;
+      const rows: { streamId: string; sortOrder: number }[] = [];
+      const seen = new Set<string>();
       for (let idx = 0; idx < (b.streamLegacyIds?.length ?? 0); idx++) {
         const streamId = streamIdByLegacy.get(String(b.streamLegacyIds[idx]));
-        if (!streamId) continue;
-        linkRows.push({ bouquetId, streamId, sortOrder: idx });
+        if (!streamId || seen.has(streamId)) continue;
+        seen.add(streamId);
+        rows.push({ streamId, sortOrder: rows.length });
       }
+      linksByBouquet.set(bouquetId, rows);
     }
     const LINK_BATCH = 500;
-    for (let i = 0; i < linkRows.length; i += LINK_BATCH) {
+    let bouquetLinkIdx = 0;
+    for (const [bouquetId, rows] of linksByBouquet) {
+      bouquetLinkIdx++;
+      options.onProgress?.("bouquetLinks", bouquetLinkIdx, linksByBouquet.size);
       try {
-        await prisma.bouquetStream.createMany({
-          data: linkRows.slice(i, i + LINK_BATCH),
-          skipDuplicates: true,
-        });
-      } catch (e) {
-        pushWarning(result.warnings, `Bouquet-stream links batch ${i}: ${shortErr(e)}`);
-      }
-    }
-    // Refresh link sortOrder so bouquet channel lists match the SQL dump order.
-    // Skip on Skip-existing reimports — mass updateMany over 100k+ links is very slow
-    // and order is already correct from the first full import.
-    if (options.skipExistingStreams === false) {
-      for (let i = 0; i < linkRows.length; i += LINK_BATCH) {
-        const slice = linkRows.slice(i, i + LINK_BATCH);
-        try {
-          await prisma.$transaction(
-            slice.map((row) =>
-              prisma.bouquetStream.updateMany({
-                where: { bouquetId: row.bouquetId, streamId: row.streamId },
-                data: { sortOrder: row.sortOrder },
-              })
-            )
-          );
-        } catch (e) {
-          pushWarning(result.warnings, `Bouquet-stream order batch ${i}: ${shortErr(e)}`);
+        await prisma.bouquetStream.deleteMany({ where: { bouquetId } });
+        for (let i = 0; i < rows.length; i += LINK_BATCH) {
+          await prisma.bouquetStream.createMany({
+            data: rows.slice(i, i + LINK_BATCH).map((r) => ({
+              bouquetId,
+              streamId: r.streamId,
+              sortOrder: r.sortOrder,
+            })),
+            skipDuplicates: true,
+          });
         }
+      } catch (e) {
+        pushWarning(result.warnings, `Bouquet links ${bouquetId}: ${shortErr(e)}`);
       }
-    } else if (linkRows.length > 0) {
-      pushWarning(
-        result.warnings,
-        "Skipped bouquet-link reorder (Skip existing on). Re-import with Skip existing off, or a fresh Clear+import, to refresh dump channel order."
-      );
     }
   }
 

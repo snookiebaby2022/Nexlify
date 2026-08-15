@@ -240,11 +240,11 @@ function mapStreams(
 
 function mapBouquets(data: SqlTableData | null): MigrationBouquetRow[] {
   if (!data) return [];
-  const out: MigrationBouquetRow[] = [];
-  for (const row of data.rows) {
+  const out: (MigrationBouquetRow & { dumpIndex: number })[] = [];
+  data.rows.forEach((row, dumpIndex) => {
     const r = rowToRecord(data.columns, row);
     const legacyId = String(r.id ?? r.bouquet_id ?? "");
-    if (!legacyId) continue;
+    if (!legacyId) return;
     let name = String(
       r.bouquet_name ?? r.name ?? r.package_name ?? r.title ?? `Bouquet ${legacyId}`
     ).trim();
@@ -261,21 +261,27 @@ function mapBouquets(data: SqlTableData | null): MigrationBouquetRow[] {
       ...idsFromBouquetField(r.bouquet_series ?? r.series ?? r.series_ids),
       ...idsFromBouquetField(r.bouquet_radios ?? r.radios ?? r.radio_ids),
     ];
+    const explicit = r.bouquet_order ?? r.sort_order ?? r.order ?? r.cat_order;
+    const hasExplicit =
+      explicit != null && String(explicit).trim() !== "" && Number.isFinite(Number(explicit));
+    // XUI dumps often store bouquet_order=0 for every row — preserve INSERT order then.
+    const sortOrder = hasExplicit && Number(explicit) !== 0 ? Number(explicit) : dumpIndex;
     out.push({
       legacyId,
       name,
       streamLegacyIds: [...new Set(streamLegacyIds.filter(Boolean))],
-      sortOrder:
-        Number(r.bouquet_order ?? r.sort_order ?? r.order ?? r.cat_order ?? 0) || 0,
+      sortOrder,
+      dumpIndex,
     });
-  }
+  });
   out.sort((a, b) => {
     const ao = Number(a.sortOrder) || 0;
     const bo = Number(b.sortOrder) || 0;
     if (ao !== bo) return ao - bo;
-    return String(a.legacyId).localeCompare(String(b.legacyId), undefined, { numeric: true });
+    return a.dumpIndex - b.dumpIndex;
   });
-  return out;
+  // Normalize to 0..n-1 so Manage Bouquets / players match dump order exactly.
+  return out.map(({ dumpIndex: _dumpIndex, ...rest }, i) => ({ ...rest, sortOrder: i }));
 }
 
 function mapLines(data: SqlTableData | null): MigrationLineRow[] {
