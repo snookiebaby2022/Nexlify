@@ -1,13 +1,24 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LifeBuoy } from "lucide-react";
 import type { TicketRow } from "@/components/ticket-ui";
 
-export default function TicketsPage() {
+function TicketsPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const statusParam = (searchParams.get("status") || "OPEN").toUpperCase();
+  const initialTab =
+    statusParam === "CLOSED" || statusParam === "RESOLVED"
+      ? "CLOSED"
+      : statusParam === "ALL"
+        ? "ALL"
+        : "OPEN";
+
   const [tickets, setTickets] = useState<TicketRow[]>([]);
-  const [filterStatus, setFilterStatus] = useState("ALL");
+  const [tab, setTab] = useState<"OPEN" | "CLOSED" | "ALL">(initialTab);
   const [filterCategory, setFilterCategory] = useState("ALL");
   const [filterAssignee, setFilterAssignee] = useState("ALL");
   const [admins, setAdmins] = useState<{ id: string; username: string }[]>([]);
@@ -27,6 +38,17 @@ export default function TicketsPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
+
+  function setTabAndUrl(next: "OPEN" | "CLOSED" | "ALL") {
+    setTab(next);
+    setSelected(new Set());
+    const q = next === "ALL" ? "" : `?status=${next}`;
+    router.replace(`/admin/tickets${q}`);
+  }
+
   async function setStatus(id: string, status: string) {
     await fetch("/api/admin/tickets", {
       method: "PATCH",
@@ -45,8 +67,12 @@ export default function TicketsPage() {
     load();
   }
 
+  const openCount = tickets.filter((t) => t.status === "OPEN" || t.status === "IN_PROGRESS").length;
+  const closedCount = tickets.filter((t) => t.status === "CLOSED" || t.status === "RESOLVED").length;
+
   const filtered = tickets.filter((t) => {
-    if (filterStatus !== "ALL" && t.status !== filterStatus) return false;
+    if (tab === "OPEN" && t.status !== "OPEN" && t.status !== "IN_PROGRESS") return false;
+    if (tab === "CLOSED" && t.status !== "CLOSED" && t.status !== "RESOLVED") return false;
     if (filterCategory !== "ALL" && t.category !== filterCategory) return false;
     if (filterAssignee !== "ALL" && t.assignedToId !== filterAssignee) return false;
     return true;
@@ -117,23 +143,12 @@ export default function TicketsPage() {
           <div>
             <h1 className="text-2xl font-bold">Support tickets</h1>
             <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-              Manage customer support requests. Select tickets to open, close, or delete in bulk.
+              Reseller and end-user requests (Suggestions / Reports appear here). Open or close tickets —
+              admins do not create tickets.
             </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <select
-            className="rounded border px-3 py-2 text-sm bg-transparent"
-            style={{ borderColor: "var(--border)" }}
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-          >
-            <option value="ALL">All statuses</option>
-            <option value="OPEN">Open</option>
-            <option value="IN_PROGRESS">In Progress</option>
-            <option value="RESOLVED">Resolved</option>
-            <option value="CLOSED">Closed</option>
-          </select>
           <select
             className="rounded border px-3 py-2 text-sm bg-transparent"
             style={{ borderColor: "var(--border)" }}
@@ -162,6 +177,30 @@ export default function TicketsPage() {
             ))}
           </select>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            { id: "OPEN" as const, label: `Open (${openCount})` },
+            { id: "CLOSED" as const, label: `Closed (${closedCount})` },
+            { id: "ALL" as const, label: `All (${tickets.length})` },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTabAndUrl(t.id)}
+            className="rounded-lg px-4 py-2 text-sm font-medium cursor-pointer"
+            style={{
+              background: tab === t.id ? "var(--accent)" : "transparent",
+              color: tab === t.id ? "#fff" : "var(--text)",
+              border: `1px solid ${tab === t.id ? "var(--accent)" : "var(--border)"}`,
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -279,10 +318,18 @@ export default function TicketsPage() {
         ))}
         {!filtered.length && (
           <p className="p-4 text-sm text-center" style={{ color: "var(--muted)" }}>
-            No tickets match your filters.
+            No tickets in this view.
           </p>
         )}
       </div>
     </div>
+  );
+}
+
+export default function TicketsPage() {
+  return (
+    <Suspense fallback={<p className="text-sm p-6">Loading tickets…</p>}>
+      <TicketsPageInner />
+    </Suspense>
   );
 }

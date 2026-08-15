@@ -1079,18 +1079,23 @@ model LeakAuditLog {
 }
 
 model AppBuild {
-  id          String   @id @default(cuid())
-  appName     String
-  packageName String
-  logoUrl     String?
-  primaryColor String   @default("#00c0ef")
-  serverUrl   String?
-  status      String   @default("QUEUED")
-  downloadUrl String?
-  createdBy   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  completedAt DateTime?
+  id            String   @id @default(cuid())
+  appName       String
+  packageName   String
+  logoUrl       String?
+  splashUrl     String?
+  primaryColor  String   @default("#00c0ef")
+  secondaryColor String  @default("#0f172a")
+  accentColor   String   @default("#22c55e")
+  serverUrl     String?
+  /// Extra branding / player options (JSON)
+  config        Json?
+  status        String   @default("QUEUED")
+  downloadUrl   String?
+  createdBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  completedAt   DateTime?
 
   @@index([status, createdAt])
   @@index([createdBy])

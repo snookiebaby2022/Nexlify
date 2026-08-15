@@ -409,18 +409,7 @@ export default function PanelUpdatesPage() {
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
             Installed <strong>v{installed}</strong>
-            {data.version.gitBranch ? (
-              <span className="ml-2 font-mono text-xs">
-                ({data.version.gitBranch}
-                {data.version.gitCommit ? `@${data.version.gitCommit.slice(0, 7)}` : ""})
-              </span>
-            ) : null}
           </p>
-          {data.version.gitDirty && (
-            <p className="text-xs mt-1" style={{ color: "#fbbf24" }}>
-              Local files differ from git — an update will reset them to origin/main.
-            </p>
-          )}
           {data.version.remoteError && (
             <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>
               Git remote: {data.version.remoteError}

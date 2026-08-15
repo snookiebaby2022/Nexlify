@@ -480,6 +480,36 @@ async function applyMigrationBundleInner(
         /* ignore cycle/FK */
       }
     }
+
+    // Grant bouquet access so resellers can create lines immediately after migrate.
+    const allBouquetIds = [...bouquetIdByLegacy.values()];
+    const uniqueBouquetIds = [...new Set(allBouquetIds)];
+    if (!uniqueBouquetIds.length) {
+      const existing = await prisma.bouquet.findMany({
+        where: { isActive: true },
+        select: { id: true },
+      });
+      uniqueBouquetIds.push(...existing.map((b) => b.id));
+    }
+    if (uniqueBouquetIds.length && resellerIdByLegacy.size) {
+      const rows: { userId: string; bouquetId: string }[] = [];
+      for (const userId of new Set(resellerIdByLegacy.values())) {
+        for (const bouquetId of uniqueBouquetIds) {
+          rows.push({ userId, bouquetId });
+        }
+      }
+      const BATCH = 500;
+      for (let i = 0; i < rows.length; i += BATCH) {
+        try {
+          await prisma.resellerBouquet.createMany({
+            data: rows.slice(i, i + BATCH),
+            skipDuplicates: true,
+          });
+        } catch (e) {
+          pushWarning(result.warnings, `Reseller bouquet access batch ${i}: ${shortErr(e)}`);
+        }
+      }
+    }
   }
 
   if (options.importLines !== false) {

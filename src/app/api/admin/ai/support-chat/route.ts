@@ -39,18 +39,30 @@ export async function POST(req: NextRequest) {
     const session = await requireSession([PanelRole.ADMIN]);
     if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    if (!isAiConfigured()) {
-      return NextResponse.json(
-        { error: "AI features require OPENAI_API_KEY. Add it to your .env file and restart the panel." },
-        { status: 503 }
-      );
-    }
-
     const body = await req.json();
     const { message, sessionId } = body as { message: string; sessionId?: string };
 
     if (!message || typeof message !== "string") {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
+    }
+
+    if (!isAiConfigured()) {
+      // Offline FAQ fallback so Support Chat still works without OPENAI_API_KEY
+      const q = message.toLowerCase();
+      let reply =
+        "AI is not configured (missing OPENAI_API_KEY). Quick tips: Bouquets → Manage Bouquets; Live streams under Live / Radio / Channel; Movies/Series under VOD; Tickets → Open/Closed. Add OPENAI_API_KEY to .env for full AI answers.";
+      if (q.includes("bouquet")) {
+        reply =
+          "Bouquets are under the Bouquets sidebar group → Manage Bouquets. Assign them on Create Line (Bouquets step) and under Bouquet Access for resellers.";
+      } else if (q.includes("epg")) {
+        reply = "EPG → Add Source with an XMLTV URL, then Auto-Match or Channel Map.";
+      } else if (q.includes("line") || q.includes("subscription")) {
+        reply = "Subscriptions → Add Line. Choose bouquets before Create line. Resellers need Bouquet Access first.";
+      } else if (q.includes("reseller")) {
+        reply =
+          "If resellers see no bouquets, open Bouquets → Bouquet Access or run Repair import so ResellerBouquet links are created.";
+      }
+      return NextResponse.json({ reply, sessionId: sessionId || randomUUID(), offline: true });
     }
 
     const chatSessionId = sessionId || randomUUID();

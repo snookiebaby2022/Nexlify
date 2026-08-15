@@ -194,7 +194,7 @@ export function DashboardXuiKpiRibbon({
           <span className="text-xl font-bold tabular-nums">{kpi?.reportedChannels ?? 0}</span>
         </Link>
         <Link
-          href="/admin/tickets/new"
+          href="/admin/tickets?status=OPEN"
           className="rounded-lg border px-4 py-3 flex items-center justify-between bg-white dark:bg-slate-800/50 hover:opacity-95"
           style={{ borderColor: "var(--border)" }}
         >

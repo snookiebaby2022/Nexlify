@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function Page() {
-  redirect("/admin/tickets/new");
+export default function AdminTicketAliasPage() {
+  redirect("/admin/tickets?status=OPEN");
 }

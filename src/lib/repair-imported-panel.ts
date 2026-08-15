@@ -20,6 +20,7 @@ export type RepairImportedPanelResult = {
   moviesLinkedToBouquets: number;
   liveLinkedToBouquets: number;
   linesLinkedToBouquets: number;
+  resellerBouquetsGranted: number;
   uncategorizedReassigned: number;
   uncategorizedRemaining: number;
 };
@@ -46,6 +47,7 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
     moviesLinkedToBouquets: 0,
     liveLinkedToBouquets: 0,
     linesLinkedToBouquets: 0,
+    resellerBouquetsGranted: 0,
     uncategorizedReassigned: 0,
     uncategorizedRemaining: 0,
   };
@@ -310,6 +312,32 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
         });
         result.linesLinkedToBouquets += res.count;
       }
+    }
+  }
+
+  // Resellers with zero bouquet access cannot create lines or browse content.
+  // Grant all active bouquets to reseller/sub-reseller accounts that have none.
+  const resellerUsers = await prisma.panelUser.findMany({
+    where: { role: { in: ["RESELLER", "SUB_RESELLER"] }, isActive: true },
+    select: {
+      id: true,
+      _count: { select: { resellerBouquets: true } },
+    },
+  });
+  const activeBouquetIds = (
+    await prisma.bouquet.findMany({
+      where: { isActive: true },
+      select: { id: true },
+    })
+  ).map((b) => b.id);
+  if (activeBouquetIds.length) {
+    for (const u of resellerUsers) {
+      if (u._count.resellerBouquets > 0) continue;
+      const res = await prisma.resellerBouquet.createMany({
+        data: activeBouquetIds.map((bouquetId) => ({ userId: u.id, bouquetId })),
+        skipDuplicates: true,
+      });
+      result.resellerBouquetsGranted += res.count;
     }
   }
 

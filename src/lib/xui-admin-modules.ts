@@ -82,7 +82,9 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "enigma_mass", title: "Enigma bulk", category: "Devices", redirect: "/admin/enigmas" },
 
   { slug: "tickets", title: "Tickets", category: "Support", redirect: "/admin/tickets" },
-  { slug: "ticket", title: "Create ticket", category: "Support", redirect: "/admin/tickets/new" },
+  { slug: "ticket", title: "Open tickets", category: "Support", redirect: "/admin/tickets?status=OPEN" },
+  { slug: "ticket_view", title: "Closed tickets", category: "Support", redirect: "/admin/tickets?status=CLOSED" },
+  { slug: "tickets", title: "All tickets", category: "Support", redirect: "/admin/tickets?status=ALL" },
   { slug: "ticket_view", title: "Ticket view", category: "Support", redirect: "/admin/tickets" },
 
   { slug: "packages", title: "Packages", category: "System", redirect: "/admin/management/packages" },

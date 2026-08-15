@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type StreamRow = {
   id: string;
@@ -21,15 +22,38 @@ export function ResellerStreamsBrowser({
 }) {
   const [streams, setStreams] = useState<StreamRow[]>([]);
   const [error, setError] = useState("");
+  const [emptyBouquets, setEmptyBouquets] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/admin/streams?${query}&lite=1`)
-      .then((r) => {
-        if (!r.ok) throw new Error("load");
-        return r.json();
-      })
-      .then((d) => setStreams((d.streams ?? []).slice(0, 200)))
-      .catch(() => setError("Could not load streams."));
+    let cancelled = false;
+    (async () => {
+      try {
+        const bRes = await fetch("/api/reseller/bouquets");
+        const bData = await bRes.json().catch(() => ({}));
+        const bouquets = Array.isArray(bData.bouquets) ? bData.bouquets : [];
+        if (!bRes.ok) throw new Error("bouquets");
+        if (!bouquets.length) {
+          if (!cancelled) {
+            setEmptyBouquets(true);
+            setStreams([]);
+            setError("");
+          }
+          return;
+        }
+        const res = await fetch(`/api/admin/streams?${query}&lite=1`);
+        if (!res.ok) throw new Error("streams");
+        const d = await res.json();
+        if (!cancelled) {
+          setEmptyBouquets(false);
+          setStreams((d.streams ?? []).slice(0, 200));
+        }
+      } catch {
+        if (!cancelled) setError("Could not load streams.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [query]);
 
   return (
@@ -44,6 +68,18 @@ export function ResellerStreamsBrowser({
         <p className="text-sm" style={{ color: "var(--danger)" }}>
           {error}
         </p>
+      )}
+      {emptyBouquets && (
+        <div
+          className="rounded-lg border px-4 py-3 text-sm"
+          style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+        >
+          No bouquets are assigned to your account yet. Ask an admin to grant bouquet access (
+          <Link href="/reseller/tickets/new" className="underline" style={{ color: "var(--accent)" }}>
+            open a ticket
+          </Link>
+          ).
+        </div>
       )}
       <ul className="rounded-lg border divide-y" style={{ borderColor: "var(--border)" }}>
         {streams.map((s) => (
@@ -61,7 +97,7 @@ export function ResellerStreamsBrowser({
             </span>
           </li>
         ))}
-        {!streams.length && !error && (
+        {!streams.length && !error && !emptyBouquets && (
           <li className="px-3 py-8 text-center text-sm" style={{ color: "var(--muted)" }}>
             No streams in this category
           </li>

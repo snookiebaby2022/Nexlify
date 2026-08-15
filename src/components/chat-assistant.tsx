@@ -4,20 +4,66 @@ import { useState, useRef, useEffect } from "react";
 import { MessageCircle, X, Minimize2, Send } from "lucide-react";
 
 const FAQS = [
-  { q: "How do I add a stream?", a: "Go to Live → Add Stream, enter the stream name and source URL (e.g., http://provider.com/stream.m3u8), select a category and server, then save." },
-  { q: "What is a bouquet?", a: "A bouquet is a collection of channels that you can assign to a line or reseller. Create bouquets in Bouquets → Add Bouquet, then assign them when creating lines." },
-  { q: "How do I create a line?", a: "Go to Subscriptions → Add Line, enter a username and password, select duration (1 month, 3 months, 6 months, 12 months), choose bouquets, and save." },
-  { q: "How do I set up EPG?", a: "Go to EPG → Add EPG Source, enter a name and XMLTV URL (e.g., http://epg.provider.com/guide.xml), set sync interval, and save. The EPG will auto-sync." },
-  { q: "How do I add a server?", a: "Go to Streaming Servers → Add Server, enter the hostname/IP, ports, and select the server role (Main, LB, or Standard)." },
-  { q: "What is catch-up TV?", a: "Catch-up TV allows viewers to replay past broadcasts. Enable it in Settings → Catch-up TV, set duration (7-30 days), and select which channels support it." },
-  { q: "How do I create a MAG device?", a: "Go to Subscriptions → Add MAG Device, enter the MAC address from the box (found in Settings → System Info), and save. The device will auto-connect." },
-  { q: "How do I white-label the panel?", a: "Go to Settings → White-label Portal, upload your logo, set primary/accent colors, add custom CSS, and configure your domain." },
+  {
+    q: "How do I add a stream?",
+    keys: ["add stream", "create stream", "new channel", "live stream"],
+    a: "Go to Live / Radio / Channel → Add Stream. Enter name + source URL (e.g. http://provider/live.m3u8), pick category & server, then save.",
+  },
+  {
+    q: "Where are bouquets?",
+    keys: ["bouquet", "bouquets", "package channels"],
+    a: "Open the Bouquets sidebar group → Manage Bouquets. Categories (Live TV / Movies / Series) are separate under Categories. Assign bouquets to lines when creating subscriptions.",
+  },
+  {
+    q: "How do I create a line?",
+    keys: ["create line", "add line", "subscription", "username password"],
+    a: "Subscriptions → Add Line. Set username/password, duration, then choose bouquets on the Bouquets step before Create line.",
+  },
+  {
+    q: "How do I set up EPG?",
+    keys: ["epg", "xmltv", "tv guide"],
+    a: "EPG → Add EPG Source with an XMLTV URL, set sync interval, then use EPG Auto-Match or Channel Map to link channels.",
+  },
+  {
+    q: "How do I add a server?",
+    keys: ["add server", "load balancer", "streaming server"],
+    a: "Streaming Servers → Add Server. Enter host/IP, ports, and role (Main / LB / Standard). Use Load Balancer for auto-balance live across LBs.",
+  },
+  {
+    q: "Reseller cannot see bouquets",
+    keys: ["reseller bouquet", "empty bouquet", "reseller line"],
+    a: "Admin → Bouquets → Bouquet Access (Resellers), or run Repair import / migrate again so ResellerBouquet rows are granted. Resellers only see assigned bouquets.",
+  },
+  {
+    q: "How do I create a MAG device?",
+    keys: ["mag", "stalker", "mac address"],
+    a: "Subscriptions → Add MAG Device. Enter the MAC from the box (Settings → System Info). Portal URL is your panel DNS.",
+  },
+  {
+    q: "Suggestions and report",
+    keys: ["suggestion", "report", "ticket"],
+    a: "Use Suggestions or Report at the bottom of the sidebar. They create Support tickets (Open). Admins manage them under Tickets → Open / Closed.",
+  },
 ];
+
+function matchFaq(text: string): string | null {
+  const q = text.toLowerCase();
+  for (const f of FAQS) {
+    if (f.keys.some((k) => q.includes(k))) return f.a;
+    const words = f.q.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    const hits = words.filter((w) => q.includes(w)).length;
+    if (hits >= Math.min(2, words.length)) return f.a;
+  }
+  return null;
+}
 
 export default function ChatAssistant() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([
-    { role: "assistant", text: "👋 Hi! I'm your Nexlify assistant. Ask me anything about the panel or click a question below." },
+    {
+      role: "assistant",
+      text: "Hi! I can help with streams, bouquets, lines, EPG, servers, MAG, tickets, and reseller access. Ask a question or tap one below.",
+    },
   ]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -29,14 +75,12 @@ export default function ChatAssistant() {
   function send(text: string) {
     if (!text.trim()) return;
     setMessages((prev) => [...prev, { role: "user", text }]);
-    const q = text.toLowerCase();
-    const match = FAQS.find((f) => q.includes(f.q.toLowerCase().split(" ").slice(0, 3).join(" ")));
+    const answer =
+      matchFaq(text) ||
+      "Try asking about: bouquets location, add stream, create line, EPG, servers, MAG, or reseller bouquet access. For AI chat with your panel data, open AI → Support Chat.";
     setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: match ? match.a : "I can help with: adding streams, creating lines, setting up EPG, managing servers, bouquets, MAG devices, catch-up TV, and white-labeling. Ask me anything!" },
-      ]);
-    }, 500);
+      setMessages((prev) => [...prev, { role: "assistant", text: answer }]);
+    }, 250);
     setInput("");
   }
 
@@ -55,8 +99,14 @@ export default function ChatAssistant() {
   }
 
   return (
-    <div className="fixed bottom-36 right-6 z-50 w-80 rounded-2xl border shadow-2xl overflow-hidden flex flex-col" style={{ borderColor: "var(--border)", background: "var(--bg-card)", height: "480px" }}>
-      <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "var(--border)", background: "linear-gradient(90deg, #00c0ef, #5eb8e8)" }}>
+    <div
+      className="fixed bottom-36 right-6 z-50 w-80 rounded-2xl border shadow-2xl overflow-hidden flex flex-col"
+      style={{ borderColor: "var(--border)", background: "var(--bg-card)", height: "480px" }}
+    >
+      <div
+        className="flex items-center justify-between px-4 py-3 border-b"
+        style={{ borderColor: "var(--border)", background: "linear-gradient(90deg, #00c0ef, #5eb8e8)" }}
+      >
         <span className="text-sm font-semibold text-white">Nexlify Assistant</span>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => setOpen(false)} className="p-1 rounded hover:bg-white/20 text-white">
@@ -71,15 +121,26 @@ export default function ChatAssistant() {
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${m.role === "user" ? "text-white" : ""}`} style={{ background: m.role === "user" ? "var(--accent)" : "rgba(255,255,255,0.08)" }}>
+            <div
+              className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${m.role === "user" ? "text-white" : ""}`}
+              style={{ background: m.role === "user" ? "var(--accent)" : "rgba(255,255,255,0.08)" }}
+            >
               {m.text}
             </div>
           </div>
         ))}
-        <div className="text-xs text-center pt-2" style={{ color: "var(--muted)" }}>Quick questions:</div>
+        <div className="text-xs text-center pt-2" style={{ color: "var(--muted)" }}>
+          Quick questions:
+        </div>
         <div className="flex flex-wrap gap-1">
-          {FAQS.slice(0, 4).map((f) => (
-            <button key={f.q} type="button" onClick={() => send(f.q)} className="text-xs px-2 py-1 rounded border hover:bg-white/10" style={{ borderColor: "var(--border)" }}>
+          {FAQS.slice(0, 5).map((f) => (
+            <button
+              key={f.q}
+              type="button"
+              onClick={() => send(f.q)}
+              className="text-xs px-2 py-1 rounded border hover:bg-white/10"
+              style={{ borderColor: "var(--border)" }}
+            >
               {f.q}
             </button>
           ))}
