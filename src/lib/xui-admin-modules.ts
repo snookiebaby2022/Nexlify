@@ -84,8 +84,7 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "tickets", title: "Tickets", category: "Support", redirect: "/admin/tickets" },
   { slug: "ticket", title: "Open tickets", category: "Support", redirect: "/admin/tickets?status=OPEN" },
   { slug: "ticket_view", title: "Closed tickets", category: "Support", redirect: "/admin/tickets?status=CLOSED" },
-  { slug: "tickets", title: "All tickets", category: "Support", redirect: "/admin/tickets?status=ALL" },
-  { slug: "ticket_view", title: "Ticket view", category: "Support", redirect: "/admin/tickets" },
+  { slug: "ticket_closed", title: "All tickets", category: "Support", redirect: "/admin/tickets?status=ALL" },
 
   { slug: "packages", title: "Packages", category: "System", redirect: "/admin/management/packages" },
   { slug: "package", title: "Package", category: "System", redirect: "/admin/management/packages" },
