@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.87}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.90}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -404,18 +404,30 @@ cmd_build_compile() {
   export NEXT_PRIVATE_WORKER_THREADS=false
   export NEXLIFY_DIST_DIR=".next.staging"
   # Call next directly — do not use `npm run build` (that wrapper routes back here).
+  if [ ! -f ./node_modules/next/dist/bin/next ]; then
+    echo "WARN: next binary missing — reinstalling deps before build ..." >&2
+    npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error || \
+      npm install --include=dev --include=optional --no-audit --no-fund --loglevel=error
+  fi
   if node ./node_modules/next/dist/bin/next build; then
     return 0
   fi
-  echo "WARN: next build failed (webpack?) — clear caches + reinstall optional SWC + retry once ..." >&2
+  echo "WARN: next build failed — clear caches + reinstall next/SWC + retry once ..." >&2
   rm -rf .next.staging node_modules/.cache .next/cache 2>/dev/null || true
-  rm -rf node_modules
-  npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error
-  # Ensure platform SWC binary is present (missing binary → "generate is not a function")
+  # Prefer surgical next reinstall first (faster); full wipe if still broken.
+  npm install next@15.5.19 --include=optional --no-audit --no-fund --loglevel=error || true
   npm install --no-save --include=optional @next/swc-linux-x64-gnu 2>/dev/null || \
     npm install --no-save --include=optional @next/swc-linux-x64-musl 2>/dev/null || true
-  export NEXLIFY_DIST_DIR=".next.staging"
-  node ./node_modules/next/dist/bin/next build
+  if ! node ./node_modules/next/dist/bin/next build; then
+    echo "WARN: retry still failed — full node_modules reinstall ..." >&2
+    rm -rf node_modules
+    npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error || \
+      npm install --include=dev --include=optional --no-audit --no-fund --loglevel=error
+    npm install --no-save --include=optional @next/swc-linux-x64-gnu 2>/dev/null || \
+      npm install --no-save --include=optional @next/swc-linux-x64-musl 2>/dev/null || true
+    export NEXLIFY_DIST_DIR=".next.staging"
+    node ./node_modules/next/dist/bin/next build
+  fi
 }
 
 swap_staging_build() {

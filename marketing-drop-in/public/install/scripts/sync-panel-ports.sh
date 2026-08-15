@@ -71,3 +71,15 @@ if [ -f scripts/verify-panel-ports.sh ]; then
 fi
 
 echo "[sync-panel-ports] Complete."
+
+# Gzip large Xtream JSON (get_series / get_vod_streams) for XCIPTV
+if [[ -f "$ROOT/scripts/enable-nginx-json-gzip.sh" ]]; then
+  bash "$ROOT/scripts/enable-nginx-json-gzip.sh" || true
+fi
+
+# https://PANEL_IP + extra IPTV ports with Host sanitization (http:// / https:// in DNS)
+if [[ -f "$ROOT/scripts/install-iptv-edge-proxy.sh" ]]; then
+  bash "$ROOT/scripts/install-iptv-edge-proxy.sh" || true
+elif [[ -f "$ROOT/scripts/fix-panel-https-default.sh" ]]; then
+  bash "$ROOT/scripts/fix-panel-https-default.sh" || true
+fi

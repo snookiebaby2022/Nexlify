@@ -44,16 +44,44 @@ HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
 [ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="$(env_val PANEL_SSL_PORT)"
 [ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="443"
 
+# Vendor / multi-vhost hosts: nginx must own :443 (nexlify.live + panel.nexlify.live).
+# Never steal 443 when marketing or named SSL vhosts are present.
+if [ -d /var/www/nexlify ] || [ -f /etc/nginx/sites-enabled/nexlify.live ] || [ -f /etc/nginx/sites-enabled/panel.nexlify.live ]; then
+  echo "[iptv-edge] Vendor/marketing host detected — leaving :443 to nginx (Let's Encrypt vhosts)"
+  HTTPS_PORTS=""
+  # Restore disk-backed release + installer locations if a previous run removed ssl conf only;
+  # do not install nexlify-panel-ssl.conf default_server here (would steal SNI).
+  rm -f /etc/nginx/conf.d/nexlify-panel-ssl.conf
+fi
+
 export IPTV_EDGE_BACKEND="127.0.0.1:${PANEL_LISTEN}"
 export IPTV_EDGE_HTTP_PORTS="$HTTP_PORTS"
 export IPTV_EDGE_HTTPS_PORTS="$HTTPS_PORTS"
 export IPTV_EDGE_CERT="$CERT"
 export IPTV_EDGE_KEY="$KEY"
 
-# Wait briefly for nginx to release sockets
+# Wait briefly for previous listeners to release sockets
 sleep 1
-fuser -k 443/tcp 8080/tcp 25461/tcp 2>/dev/null || true
+# Only free ports we will bind (never kill nginx :443 on vendor)
+for p in $(echo "$HTTP_PORTS" | tr ',' ' '); do
+  fuser -k "${p}/tcp" 2>/dev/null || true
+done
+if [ -n "$HTTPS_PORTS" ]; then
+  for p in $(echo "$HTTPS_PORTS" | tr ',' ' '); do
+    fuser -k "${p}/tcp" 2>/dev/null || true
+  done
+fi
 sleep 1
+
+if command -v nginx >/dev/null 2>&1; then
+  nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || systemctl start nginx 2>/dev/null || true
+fi
+
+if [ -z "$HTTP_PORTS" ] && [ -z "$HTTPS_PORTS" ]; then
+  echo "[iptv-edge] Nothing to bind — skipping proxy"
+  pm2 delete nexlify-iptv-edge 2>/dev/null || true
+  exit 0
+fi
 
 if command -v pm2 >/dev/null 2>&1; then
   pm2 delete nexlify-iptv-edge 2>/dev/null || true
@@ -70,4 +98,4 @@ fi
 
 sleep 1
 ss -tlnp | grep -E ':443\b|:8080\b|:25461\b' || echo "[iptv-edge] WARN: expected ports not listening yet"
-echo "[iptv-edge] OK backend=${IPTV_EDGE_BACKEND} http=${HTTP_PORTS} https=${HTTPS_PORTS}"
+echo "[iptv-edge] OK backend=${IPTV_EDGE_BACKEND} http=${HTTP_PORTS:-none} https=${HTTPS_PORTS:-none}"

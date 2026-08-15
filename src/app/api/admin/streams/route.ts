@@ -356,6 +356,29 @@ export async function POST(req: NextRequest) {
 
     await invalidateXtreamCategories();
     await invalidateDashboardStats();
+
+    // LIVE streams: auto-map EPG from guide (tvg-id / name) when possible
+    if (stream.type === StreamType.LIVE) {
+      try {
+        const { autoAssignEpgToStream } = await import("@/lib/epg-auto-match");
+        const match = await autoAssignEpgToStream({
+          streamId: stream.id,
+          name: stream.name,
+          channelId: stream.channelId,
+          epgChannelId: stream.epgChannelId,
+        });
+        if (match?.channelId) {
+          return NextResponse.json({
+            stream: { ...stream, epgChannelId: match.channelId },
+            probe,
+            epgAutoAssigned: match,
+          });
+        }
+      } catch {
+        /* non-fatal */
+      }
+    }
+
     return NextResponse.json({ stream, probe });
 
   } catch (e) {

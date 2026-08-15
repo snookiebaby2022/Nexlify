@@ -56,25 +56,8 @@ clear_stuck_in_panel_update() {
   pkill -f "git fetch origin" 2>/dev/null || true
   pkill -f "git.*origin/main" 2>/dev/null || true
   rm -f .update-progress.pid .update-in-progress
-  if [ -f .update-progress.json ]; then
-    node -e "
-      const fs = require('fs');
-      const p = '.update-progress.json';
-      try {
-        const j = JSON.parse(fs.readFileSync(p, 'utf8'));
-        j.status = 'failed';
-        j.currentStep = null;
-        j.finishedAt = new Date().toISOString();
-        j.message = 'Cleared stuck update by fix-remote-update-now.sh — use SSH repair / Update panel again';
-        j.progress = j.progress || 0;
-        fs.writeFileSync(p, JSON.stringify(j, null, 2));
-        console.log('Marked .update-progress.json as failed');
-      } catch (e) {
-        fs.unlinkSync(p);
-        console.log('Removed corrupt .update-progress.json');
-      }
-    " 2>/dev/null || rm -f .update-progress.json
-  fi
+  rm -f .update-progress.json .update-progress.pid .update-in-progress
+  echo "Removed stuck .update-progress.json (if any)"
   rm -f .git/index.lock .git/HEAD.lock 2>/dev/null || true
 }
 

@@ -83,6 +83,17 @@ export async function syncEpgSource(sourceId: string) {
   const { invalidateEpgCache } = await import("./cache-invalidate");
   await invalidateEpgCache();
 
+  // After a fresh guide lands, auto-link LIVE streams missing (or stale) EPG ids.
+  try {
+    const { autoAssignMissingEpg } = await import("./epg-auto-match");
+    await autoAssignMissingEpg({ limit: 400 });
+  } catch (e) {
+    console.warn(
+      "[epg] auto-assign after sync failed:",
+      e instanceof Error ? e.message : e
+    );
+  }
+
   return programs.length;
 }
 
