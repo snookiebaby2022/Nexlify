@@ -98,9 +98,9 @@ export function openUpstreamLiveStream(
         method: "GET",
         headers,
         timeout: timeoutMs,
-        // Prefer IPv4 when dual-stack hosts flake on AAAA
-        family: 4,
       };
+      // Dual-stack: try IPv4 first via lookup order, but do not force family:4
+      // (some CDNs return empty HTML challenges on forced-v4 paths).
       if (isHttps) {
         (reqOpts as https.RequestOptions).rejectUnauthorized = false;
       }
@@ -121,6 +121,8 @@ export function openUpstreamLiveStream(
             return;
           }
 
+          // Some CDNs return HTTP 200 text/html with a Location-like body or empty page
+          // instead of a proper 302 — treat as failure so backup failover can run.
           const contentType = String(res.headers["content-type"] ?? "application/octet-stream");
           if (status < 200 || status >= 300) {
             res.resume();

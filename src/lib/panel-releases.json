@@ -16,7 +16,8 @@
       "fixes": [
         "UK Entertainment / Sky Sports channels failing or blank via panel while upstream worked",
         "Nickelodeon SD and other dead xplatinmedia hosts had no runtime failover",
-        "Sound with no picture after HLS remux on HEVC / wrong audio BSF"
+        "Sound with no picture after HLS remux on HEVC / wrong audio BSF",
+        "Geo/LB stream swap matched only on shared junk epgChannelId (e.g. 96) and served wrong channels"
       ]
     },
     {

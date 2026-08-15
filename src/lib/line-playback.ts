@@ -18,27 +18,41 @@ async function preferGeoMatchedStream<T extends { id: string; serverId: string |
   clientIp?: string
 ) {
   if (!clientIp) return stream;
+
+  const bouquetFilter = {
+    some: {
+      bouquet: { isActive: true, lines: { some: { lineId } } },
+    },
+  } as const;
+
+  /** Only swap to the same channel on another server — never match on epgChannelId alone.
+   * Migrated catalogs often reuse junk EPG ids (e.g. "96") across hundreds of unrelated streams. */
+  async function findAltOnServer(targetServerId: string) {
+    return prisma.stream.findFirst({
+      where: {
+        isActive: true,
+        serverId: targetServerId,
+        type: stream.type as StreamType,
+        name: stream.name,
+        bouquets: bouquetFilter,
+        // Skip known-dead upstream hosts when selecting an alternate
+        NOT: {
+          OR: [
+            { streamUrl: { contains: "xplatinmedia.com" } },
+            { streamUrl: { equals: "" } },
+          ],
+        },
+      },
+      include: { provider: true, server: true, category: { select: { name: true } } },
+    });
+  }
+
   if (clientIp) {
     const { pickIntelligentServer, isLbProEnabled } = await import("@/lib/intelligent-lb");
     if (await isLbProEnabled()) {
       const targetServerId = await pickIntelligentServer(clientIp);
       if (targetServerId && stream.serverId !== targetServerId) {
-        const orFilters: { epgChannelId?: string; name?: string; type?: StreamType }[] = [];
-        if (stream.epgChannelId) orFilters.push({ epgChannelId: stream.epgChannelId, type: stream.type as StreamType });
-        orFilters.push({ name: stream.name, type: stream.type as StreamType });
-        const alt = await prisma.stream.findFirst({
-          where: {
-            isActive: true,
-            serverId: targetServerId,
-            OR: orFilters,
-            bouquets: {
-              some: {
-                bouquet: { isActive: true, lines: { some: { lineId } } },
-              },
-            },
-          },
-          include: { provider: true, server: true, category: { select: { name: true } } },
-        });
+        const alt = await findAltOnServer(targetServerId);
         if (alt) return alt;
       }
     }
@@ -48,26 +62,7 @@ async function preferGeoMatchedStream<T extends { id: string; serverId: string |
   const targetServerId = await pickServerForClient(clientIp);
   if (!targetServerId || stream.serverId === targetServerId) return stream;
 
-  const orFilters: { epgChannelId?: string; name?: string; type?: StreamType }[] = [];
-  if (stream.epgChannelId) orFilters.push({ epgChannelId: stream.epgChannelId, type: stream.type as StreamType });
-  orFilters.push({ name: stream.name, type: stream.type as StreamType });
-
-  const alt = await prisma.stream.findFirst({
-    where: {
-      isActive: true,
-      serverId: targetServerId,
-      OR: orFilters,
-      bouquets: {
-        some: {
-          bouquet: {
-            isActive: true,
-            lines: { some: { lineId } },
-          },
-        },
-      },
-    },
-    include: { provider: true, server: true, category: { select: { name: true } } },
-  });
+  const alt = await findAltOnServer(targetServerId);
   return alt ?? stream;
 }
 
