@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
 import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { mergeResellerNotes, type MassEditPatch } from "@/lib/lines-mass-edit";
+import { normalizeUserAgentField } from "@/lib/line-restrictions";
 import { LineStatus, PanelRole } from "@prisma/client";
 
 function applyMassEditPatch(patch: MassEditPatch) {
@@ -36,10 +37,10 @@ function applyMassEditPatch(patch: MassEditPatch) {
     data.allowedIps = patch.allowedIps.value.trim() || null;
   }
   if (patch.allowedUserAgents && !patch.allowedUserAgents.unchanged) {
-    data.allowedUserAgents = patch.allowedUserAgents.value.trim() || null;
+    data.allowedUserAgents = normalizeUserAgentField(patch.allowedUserAgents.value);
   }
   if (patch.disallowedUserAgents && !patch.disallowedUserAgents.unchanged) {
-    data.disallowedUserAgents = patch.disallowedUserAgents.value.trim() || null;
+    data.disallowedUserAgents = normalizeUserAgentField(patch.disallowedUserAgents.value);
   }
   if (patch.blockedIsps && !patch.blockedIsps.unchanged) {
     data.blockedIsps = patch.blockedIsps.value.trim() || null;

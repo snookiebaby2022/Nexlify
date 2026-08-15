@@ -5,6 +5,7 @@ import { extraSourcesToBitrates } from "./stream-source-urls";
 import { applyMigrationPhase2 } from "./phase2";
 import { applyMigrationPhase3 } from "./apply-phase3";
 import { urlsFromPhpSerialized, looksLikePlayableUrl } from "./sql-junctions";
+import { normalizeUserAgentField } from "../line-restrictions";
 import type {
   MigrationApplyOptions,
   MigrationApplyResult,
@@ -728,8 +729,8 @@ async function applyMigrationBundleInner(
           allowedOutput: l.allowedOutput?.trim() || "ts,hls,m3u8",
           isTrial: l.isTrial === true,
           isRestreamer: l.isRestreamer === true,
-          allowedUserAgents: l.allowedUserAgents?.trim() || null,
-          disallowedUserAgents: l.disallowedUserAgents?.trim() || null,
+          allowedUserAgents: normalizeUserAgentField(l.allowedUserAgents),
+          disallowedUserAgents: normalizeUserAgentField(l.disallowedUserAgents),
           forcedServerId: l.forcedServerLegacyId
             ? serverIdByLegacy.get(l.forcedServerLegacyId) ?? null
             : null,

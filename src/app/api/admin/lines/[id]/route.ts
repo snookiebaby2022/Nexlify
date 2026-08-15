@@ -5,6 +5,7 @@ import { logActivity } from "@/lib/lines";
 import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { PanelRole } from "@prisma/client";
 import { lettersOnly, MIN_LINE_CREDENTIAL_LENGTH, validateLinePasswordPolicy } from "@/lib/credential-generate";
+import { normalizeUserAgentField } from "@/lib/line-restrictions";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -87,9 +88,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         : undefined,
     allowedUserAgents:
       body.allowedUserAgents !== undefined
-        ? body.allowedUserAgents
-          ? String(body.allowedUserAgents)
-          : null
+        ? normalizeUserAgentField(
+            body.allowedUserAgents == null ? null : String(body.allowedUserAgents)
+          )
         : undefined,
     forcedServerId:
       body.forcedServerId !== undefined
