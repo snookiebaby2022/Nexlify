@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getLineByCredentials, lineIsPlayable } from "@/lib/lines";
-import { buildM3u, serverBaseUrl } from "@/lib/xtream";
+import { buildM3uStream, serverBaseUrl } from "@/lib/xtream";
 import { getClientIp } from "@/lib/client-ip";
 import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
@@ -36,14 +36,13 @@ export async function GET(req: NextRequest) {
   if (deny) return iptvText("Forbidden", { status: deny === "rate" ? 429 : 403 });
 
   const baseUrl = serverBaseUrl(req.url, req.headers);
-  const body = await buildM3u(line, baseUrl, type, output);
-  const bytes = Buffer.byteLength(body, "utf8");
+  const body = buildM3uStream(line, baseUrl, type, output);
 
   return iptvText(body, {
     headers: {
       "Content-Type": "audio/x-mpegurl",
-      "Content-Length": String(bytes),
       "Content-Disposition": `attachment; filename="${username}.m3u"`,
+      "Cache-Control": "no-store",
     },
   });
 }

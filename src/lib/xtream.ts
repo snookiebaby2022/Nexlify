@@ -1,5 +1,10 @@
 import type { LineWithBouquets } from "./lines";
-import { streamsForLineExport, lineIsPlayable } from "./lines";
+import {
+  categoryIdsForLine,
+  streamsForLineExport,
+  lineIsPlayable,
+  type StreamForLine,
+} from "./lines";
 import { resolveChannelId, resolveEpgId } from "./subscription-export";
 import { resolveStreamPlaybackUrl } from "./resolve-stream-url";
 import { exportPlaybackUrl } from "./export-playback-url";
@@ -192,23 +197,33 @@ async function categoryRowsForIds(
 }
 
 export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
-  const live = await streamsForLineExport(line, { type: StreamType.LIVE });
-  const categoryIds = [
-    ...new Set(live.map((s) => s.categoryId).filter(Boolean) as string[]),
-  ];
-  return categoryRowsForIds(categoryIds, live.some((s) => !s.categoryId));
+  const { categoryIds, hasUncategorized } = await categoryIdsForLine(line, {
+    type: StreamType.LIVE,
+  });
+  return categoryRowsForIds(categoryIds, hasUncategorized);
+}
+
+async function streamsForXtreamList(
+  line: LineWithBouquets,
+  type: StreamType,
+  categoryId?: string | null
+): Promise<StreamForLine[]> {
+  if (categoryId != null && categoryId !== "") {
+    if (categoryId === "0") {
+      return streamsForLineExport(line, {
+        type,
+        uncategorizedOnly: true,
+      });
+    }
+    const allowed = await expandCategoryFilter(categoryId);
+    if (!allowed.length) return [];
+    return streamsForLineExport(line, { type, categoryIds: allowed });
+  }
+  return streamsForLineExport(line, { type });
 }
 
 export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
-  let live = await streamsForLineExport(line, { type: StreamType.LIVE });
-  if (categoryId != null && categoryId !== "") {
-    if (categoryId === "0") {
-      live = live.filter((s) => !s.categoryId);
-    } else {
-      const allowed = new Set(await expandCategoryFilter(categoryId));
-      live = live.filter((s) => s.categoryId && allowed.has(s.categoryId));
-    }
-  }
+  let live = await streamsForXtreamList(line, StreamType.LIVE, categoryId);
   live = sortStreamsForXc(live, await xcDefaultOrder());
 
   return live.map((s, i) => {
@@ -270,15 +285,7 @@ export async function xtreamVodStreams(
   baseUrl: string,
   categoryId?: string | null
 ) {
-  let movies = await streamsForLineExport(line, { type: StreamType.MOVIE });
-  if (categoryId != null && categoryId !== "") {
-    if (categoryId === "0") {
-      movies = movies.filter((s) => !s.categoryId);
-    } else {
-      const allowed = new Set(await expandCategoryFilter(categoryId));
-      movies = movies.filter((s) => s.categoryId && allowed.has(s.categoryId));
-    }
-  }
+  let movies = await streamsForXtreamList(line, StreamType.MOVIE, categoryId);
   movies = sortStreamsForXc(movies, await xcDefaultOrder());
 
   return movies.map((s, i) => {
@@ -304,23 +311,14 @@ export async function xtreamVodStreams(
 }
 
 export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
-  const movies = await streamsForLineExport(line, { type: StreamType.MOVIE });
-  const categoryIds = [
-    ...new Set(movies.map((s) => s.categoryId).filter(Boolean) as string[]),
-  ];
-  return categoryRowsForIds(categoryIds, movies.some((s) => !s.categoryId));
+  const { categoryIds, hasUncategorized } = await categoryIdsForLine(line, {
+    type: StreamType.MOVIE,
+  });
+  return categoryRowsForIds(categoryIds, hasUncategorized);
 }
 
 export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: string | null) {
-  let series = await streamsForLineExport(line, { type: StreamType.SERIES });
-  if (categoryId != null && categoryId !== "") {
-    if (categoryId === "0") {
-      series = series.filter((s) => !s.categoryId);
-    } else {
-      const allowed = new Set(await expandCategoryFilter(categoryId));
-      series = series.filter((s) => s.categoryId && allowed.has(s.categoryId));
-    }
-  }
+  let series = await streamsForXtreamList(line, StreamType.SERIES, categoryId);
   series = sortStreamsForXc(series, await xcDefaultOrder());
 
   return series.map((s, i) => ({
@@ -343,40 +341,30 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
 }
 
 export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
-  const series = await streamsForLineExport(line, { type: StreamType.SERIES });
-  const categoryIds = [
-    ...new Set(series.map((s) => s.categoryId).filter(Boolean) as string[]),
-  ];
-  return categoryRowsForIds(categoryIds, series.some((s) => !s.categoryId));
+  const { categoryIds, hasUncategorized } = await categoryIdsForLine(line, {
+    type: StreamType.SERIES,
+  });
+  return categoryRowsForIds(categoryIds, hasUncategorized);
 }
 
-export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: string, output: "hls" | "ts" = "ts") {
-  // m3u / m3u_plus = full catalog; live/vod/series restrict by type for speed.
-  const typeFilter =
-    type === "live"
-      ? StreamType.LIVE
-      : type === "movies" || type === "vod"
-        ? StreamType.MOVIE
-        : type === "series"
-          ? StreamType.SERIES
-          : undefined;
-  const streams = await streamsForLineExport(
-    line,
-    typeFilter ? { type: typeFilter } : undefined
-  );
+function m3uTypeFilter(type: string): StreamType | undefined {
+  if (type === "live") return StreamType.LIVE;
+  if (type === "movies" || type === "vod") return StreamType.MOVIE;
+  if (type === "series") return StreamType.SERIES;
+  return undefined;
+}
 
-  const catIds = [...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[])];
-  const allCatIds = catIds.length ? await collectCategoryAncestors(catIds) : [];
-  const catRows = allCatIds.length
-    ? await prisma.category.findMany({
-        where: { id: { in: allCatIds } },
-        select: { id: true, name: true, parentId: true },
-      })
-    : [];
-  const catById = new Map(catRows.map((c) => [c.id, c]));
+function formatM3uEntries(
+  line: LineWithBouquets,
+  baseUrl: string,
+  streams: StreamForLine[],
+  catById: Map<string, { id: string; name: string; parentId: string | null }>,
+  isExtended: boolean,
+  output: "hls" | "ts"
+): string {
   const fallbackGroup = (t: StreamType) =>
     t === StreamType.LIVE ? "Live" : t === StreamType.MOVIE ? "Movies" : "Series";
-  const groupTitle = (s: (typeof streams)[number]) => {
+  const groupTitle = (s: StreamForLine) => {
     if (!s.categoryId) return fallbackGroup(s.type);
     const cat = catById.get(s.categoryId);
     if (!cat) return fallbackGroup(s.type);
@@ -387,8 +375,7 @@ export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: st
     return cat.name.replace(/"/g, "'");
   };
 
-  const isExtended = type === "m3u_plus";
-  const lines: string[] = ["#EXTM3U"];
+  const lines: string[] = [];
   for (const s of streams) {
     const full = s as typeof s & { bitrates?: unknown; streamUrl: string };
     const variants = parseBitrates(full.bitrates);
@@ -397,9 +384,7 @@ export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: st
         lines.push(
           `#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidthKbps ?? 2500000},RESOLUTION=${v.resolution ?? "1280x720"},NAME="${v.label}"`
         );
-        const variantFull = v.path.startsWith("http")
-          ? ({ ...full, streamUrl: v.path } as typeof full)
-          : ({ ...full, streamUrl: v.path } as typeof full);
+        const variantFull = { ...full, streamUrl: v.path } as typeof full;
         lines.push(exportPlaybackUrl(baseUrl, line, s, variantFull, undefined, output));
       }
       continue;
@@ -419,4 +404,86 @@ export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: st
     lines.push(playUrl);
   }
   return lines.join("\n");
+}
+
+/** Streaming M3U builder — safe for 100k+ catalogs (batches streams, no giant in-RAM join). */
+export function buildM3uStream(
+  line: LineWithBouquets,
+  baseUrl: string,
+  type: string,
+  output: "hls" | "ts" = "ts"
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const typeFilter = m3uTypeFilter(type);
+  const isExtended = type === "m3u_plus";
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        controller.enqueue(encoder.encode("#EXTM3U\n"));
+
+        const { excludeDisabledFromExport } = await import("@/lib/export-policy");
+        const exclude = await excludeDisabledFromExport();
+        const { streamIdsForLine } = await import("./lines");
+        const ids = await streamIdsForLine(line, {
+          excludeDisabled: exclude,
+          type: typeFilter,
+        });
+
+        const catIdSet = new Set<string>();
+        // First pass: we need category names; collect while streaming by loading cats once from distinct IDs query
+        const { categoryIds } = await categoryIdsForLine(line, {
+          excludeDisabled: exclude,
+          type: typeFilter,
+        });
+        for (const id of categoryIds) catIdSet.add(id);
+        const allCatIds = catIdSet.size
+          ? await collectCategoryAncestors([...catIdSet])
+          : [];
+        const catRows = allCatIds.length
+          ? await prisma.category.findMany({
+              where: { id: { in: allCatIds } },
+              select: { id: true, name: true, parentId: true },
+            })
+          : [];
+        const catById = new Map(catRows.map((c) => [c.id, c]));
+
+        const BATCH = 1500;
+        for (let i = 0; i < ids.length; i += BATCH) {
+          const chunkIds = ids.slice(i, i + BATCH);
+          const rows = await prisma.stream.findMany({
+            where: { id: { in: chunkIds } },
+          });
+          const byId = new Map(rows.map((s) => [s.id, s as StreamForLine]));
+          const streams = chunkIds
+            .map((id) => byId.get(id))
+            .filter((s): s is StreamForLine => Boolean(s));
+          const body = formatM3uEntries(line, baseUrl, streams, catById, isExtended, output);
+          if (body) controller.enqueue(encoder.encode(body + "\n"));
+        }
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+  });
+}
+
+export async function buildM3u(
+  line: LineWithBouquets,
+  baseUrl: string,
+  type: string,
+  output: "hls" | "ts" = "ts"
+) {
+  const chunks: string[] = [];
+  const stream = buildM3uStream(line, baseUrl, type, output);
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(decoder.decode(value, { stream: true }));
+  }
+  chunks.push(decoder.decode());
+  return chunks.join("");
 }

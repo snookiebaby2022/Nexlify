@@ -6,15 +6,19 @@
       "version": "1.9.82",
       "date": "2026-08-15",
       "channel": "stable",
-      "summary": "Empty line User-Agent allow-lists (migrated [] ) no longer block IPTV player logins.",
+      "summary": "Empty UA allow-lists no longer block logins; M3U/Xtream scale for 100k+ bouquet streams.",
       "changelog": [
         "Treat null, empty, and JSON [] allowedUserAgents as unrestricted",
         "Parse JSON UA arrays from XUI/OneStream migrations",
-        "Normalize UA fields on line save, mass-edit, and migration apply"
+        "Normalize UA fields on line save, mass-edit, and migration apply",
+        "streamsForLine uses SQL IDs + batched fetches (no Prisma 482k-row crash)",
+        "get.php streams M3U in chunks; Xtream categories use DISTINCT categoryId",
+        "Xtream live/VOD/series filter category_id in SQL"
       ],
       "fixes": [
         "player_api.php returned 403 User-Agent not allowed when allowedUserAgents was []",
-        "M3U / Xtream Codes login failed for ~all migrated lines with empty UA JSON arrays"
+        "M3U / Xtream Codes login failed for migrated lines with empty UA JSON arrays",
+        "get.php m3u_plus / get_series crashed (Prisma napi string / empty reply) on huge catalogs"
       ]
     },
     {

@@ -80,62 +80,123 @@ export type StreamForLine = Stream & {
   server?: { host?: string | null } | null;
 };
 
-/**
- * Load streams for a line via bouquet membership (SQL), without hydrating
- * 100k+ nested rows on the Line include. Optional type filter keeps Xtream
- * live/VOD/series endpoints from pulling the entire catalog.
- */
-export async function streamsForLine(
+export type StreamsForLineOptions = {
+  excludeDisabled?: boolean;
+  type?: StreamType | StreamType[];
+  /** When set, only streams in these category IDs (use null sentinel via uncategorizedOnly). */
+  categoryIds?: string[] | null;
+  /** When true, only streams with categoryId IS NULL. */
+  uncategorizedOnly?: boolean;
+  /** Skip provider/server joins (enough for M3U live paths and listings). */
+  lean?: boolean;
+  /** Process streams in ordered batches without holding the full catalog in RAM. */
+  onBatch?: (streams: StreamForLine[]) => void | Promise<void>;
+};
+
+const STREAM_BATCH = 1500;
+
+function typeList(options?: StreamsForLineOptions): StreamType[] | null {
+  if (!options?.type) return null;
+  return Array.isArray(options.type) ? options.type : [options.type];
+}
+
+/** Distinct stream IDs for a line (ordered), without hydrating Stream rows. */
+export async function streamIdsForLine(
   line: LineWithBouquets,
-  options?: {
-    excludeDisabled?: boolean;
-    type?: StreamType | StreamType[];
-  }
-): Promise<StreamForLine[]> {
+  options?: StreamsForLineOptions
+): Promise<string[]> {
   const excludeDisabled = options?.excludeDisabled !== false;
   const bouquetIds = activeBouquetIds(line, excludeDisabled);
   if (!bouquetIds.length) return [];
 
-  const types = options?.type
-    ? Array.isArray(options.type)
-      ? options.type
-      : [options.type]
-    : null;
+  const types = typeList(options);
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT s.id AS id, MIN(bs."sortOrder" * 1000000 + s."sortOrder") AS ord
+    FROM "BouquetStream" bs
+    INNER JOIN "Stream" s ON s.id = bs."streamId"
+    WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
+    ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
+    ${types && types.length ? Prisma.sql`AND s.type IN (${Prisma.join(types)})` : Prisma.empty}
+    ${
+      options?.uncategorizedOnly
+        ? Prisma.sql`AND s."categoryId" IS NULL`
+        : options?.categoryIds && options.categoryIds.length
+          ? Prisma.sql`AND s."categoryId" IN (${Prisma.join(options.categoryIds)})`
+          : Prisma.empty
+    }
+    GROUP BY s.id
+    ORDER BY ord ASC, s.id ASC
+  `;
+  return rows.map((r) => r.id);
+}
 
-  const rows = await prisma.bouquetStream.findMany({
-    where: {
-      bouquetId: { in: bouquetIds },
-      stream: {
-        ...(excludeDisabled ? { isActive: true } : {}),
-        ...(types && types.length ? { type: { in: types } } : {}),
-      },
-    },
-    select: {
-      sortOrder: true,
-      stream: {
-        include: {
-          provider: { select: { baseUrl: true } },
-          server: { select: { host: true } },
-        },
-      },
-    },
-    orderBy: [{ sortOrder: "asc" }],
-  });
+/** Distinct category IDs used by a line for a stream type (no Stream hydration). */
+export async function categoryIdsForLine(
+  line: LineWithBouquets,
+  options?: { excludeDisabled?: boolean; type?: StreamType | StreamType[] }
+): Promise<{ categoryIds: string[]; hasUncategorized: boolean }> {
+  const excludeDisabled = options?.excludeDisabled !== false;
+  const bouquetIds = activeBouquetIds(line, excludeDisabled);
+  if (!bouquetIds.length) return { categoryIds: [], hasUncategorized: false };
 
-  const byId = new Map<string, { stream: StreamForLine; order: number }>();
-  for (const bs of rows) {
-    const s = bs.stream;
-    if (excludeDisabled && !s.isActive) continue;
-    const order = bs.sortOrder * 1_000_000 + s.sortOrder;
-    const prev = byId.get(s.id);
-    if (!prev || order < prev.order) {
-      byId.set(s.id, { stream: s, order });
+  const types = typeList(options);
+  const rows = await prisma.$queryRaw<{ categoryId: string | null }[]>`
+    SELECT DISTINCT s."categoryId" AS "categoryId"
+    FROM "BouquetStream" bs
+    INNER JOIN "Stream" s ON s.id = bs."streamId"
+    WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
+    ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
+    ${types && types.length ? Prisma.sql`AND s.type IN (${Prisma.join(types)})` : Prisma.empty}
+  `;
+  const categoryIds: string[] = [];
+  let hasUncategorized = false;
+  for (const r of rows) {
+    if (r.categoryId == null || r.categoryId === "") hasUncategorized = true;
+    else categoryIds.push(r.categoryId);
+  }
+  return { categoryIds, hasUncategorized };
+}
+
+/**
+ * Load streams for a line via bouquet membership (SQL), without hydrating
+ * 100k+ nested rows on the Line include. Optional type/category filters keep
+ * Xtream and M3U endpoints from pulling the entire catalog at once.
+ */
+export async function streamsForLine(
+  line: LineWithBouquets,
+  options?: StreamsForLineOptions
+): Promise<StreamForLine[]> {
+  const ids = await streamIdsForLine(line, options);
+  if (!ids.length) return [];
+
+  const lean = options?.lean === true;
+  const out: StreamForLine[] = [];
+
+  for (let i = 0; i < ids.length; i += STREAM_BATCH) {
+    const chunkIds = ids.slice(i, i + STREAM_BATCH);
+    const rows = await prisma.stream.findMany({
+      where: { id: { in: chunkIds } },
+      ...(lean
+        ? {}
+        : {
+            include: {
+              provider: { select: { baseUrl: true } },
+              server: { select: { host: true } },
+            },
+          }),
+    });
+    const byId = new Map(rows.map((s) => [s.id, s as StreamForLine]));
+    const ordered = chunkIds
+      .map((id) => byId.get(id))
+      .filter((s): s is StreamForLine => Boolean(s));
+    if (options?.onBatch) {
+      await options.onBatch(ordered);
+    } else {
+      out.push(...ordered);
     }
   }
 
-  return Array.from(byId.values())
-    .sort((a, b) => a.order - b.order || a.stream.name.localeCompare(b.stream.name))
-    .map((x) => x.stream);
+  return options?.onBatch ? [] : out;
 }
 
 /** Sync helper for admin paths that already nested bouquet.streams in memory. */
@@ -165,11 +226,14 @@ export function streamsFromNestedLineBouquets(
 
 export async function streamsForLineExport(
   line: LineWithBouquets,
-  options?: { type?: StreamType | StreamType[] }
+  options?: StreamsForLineOptions
 ): Promise<StreamForLine[]> {
   const { excludeDisabledFromExport } = await import("@/lib/export-policy");
   const exclude = await excludeDisabledFromExport();
-  return streamsForLine(line, { excludeDisabled: exclude, type: options?.type });
+  return streamsForLine(line, {
+    ...options,
+    excludeDisabled: options?.excludeDisabled ?? exclude,
+  });
 }
 
 export async function logActivity(
