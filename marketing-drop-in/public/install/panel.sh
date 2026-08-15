@@ -18,7 +18,7 @@ if [ -f "$_SCRIPT_DIR/panel-version.sh" ]; then
 else
   _PV="0"
 fi
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.80}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v${_PV}}"
 CREDS_ROOT="/root/nexlify"
 DOMAIN=""
 EMAIL=""
@@ -106,6 +106,79 @@ if [ -z "$PANEL_DIR" ]; then
   done
   PANEL_DIR="${PANEL_DIR:-/home/nexlify}"
 fi
+
+# Refuse to re-run customer installer on the vendor VPS (marketing + panel.nexlify.live).
+# Re-running panel.sh here rotates DB passwords against the wrong Postgres and forces PORT=80.
+refuse_vendor_vps_reinstall() {
+  if [ "${NEXLIFY_ALLOW_VENDOR_REINSTALL:-}" = "1" ]; then
+    return 0
+  fi
+  local vendor=0
+  if [ -d /var/www/nexlify ] && [ -f /var/www/nexlify/package.json ]; then
+    vendor=1
+  fi
+  if [ -f /etc/nginx/sites-enabled/nexlify.live ] || [ -f /etc/nginx/sites-enabled/panel.nexlify.live ]; then
+    vendor=1
+  fi
+  if [ "$vendor" -eq 1 ] && is_nexlify_panel_root "$PANEL_DIR"; then
+    die "This host looks like the Nexlify vendor VPS (nexlify.live / panel.nexlify.live already present).
+Do not run panel.sh here — it overwrites the live panel and can break Postgres auth.
+
+Update vendor panel:  cd /home/nexlify-panel && git fetch origin main && git reset --hard origin/main && bash scripts/deploy-vps.sh panel
+Update marketing:     curl -fsSL https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main/scripts/update-marketing-on-vps.sh | sudo bash
+
+Override only if you really mean it: NEXLIFY_ALLOW_VENDOR_REINSTALL=1"
+  fi
+}
+
+# Apply nexlify role password on the Postgres that actually listens on host:port
+# (vendor VPS: Docker on :5432, system cluster often on :5433 — sudo -u postgres hits 5433).
+pg_exec_on_port() {
+  local port="$1"
+  shift
+  local sql="$*"
+  local cid="" cluster=""
+
+  if command -v docker >/dev/null 2>&1; then
+    cid="$(docker ps -q --filter "publish=${port}" 2>/dev/null | head -1 || true)"
+    if [ -z "$cid" ]; then
+      cid="$(docker ps --format '{{.ID}} {{.Names}}' 2>/dev/null | awk '/postgres/{print $1; exit}' || true)"
+    fi
+    if [ -n "$cid" ]; then
+      if docker exec "$cid" psql -U nexlify -d postgres -v ON_ERROR_STOP=1 -c "$sql" >/dev/null 2>&1; then
+        return 0
+      fi
+      if docker exec "$cid" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "$sql" >/dev/null 2>&1; then
+        return 0
+      fi
+    fi
+  fi
+
+  if command -v pg_lsclusters >/dev/null 2>&1; then
+    cluster="$(pg_lsclusters -h 2>/dev/null | awk -v p="$port" '$3 == p && $4 == "online" { print $1 "/" $2; exit }')"
+    if [ -n "$cluster" ]; then
+      sudo -u postgres psql --cluster "$cluster" -v ON_ERROR_STOP=1 -c "$sql" >/dev/null
+      return $?
+    fi
+  fi
+
+  if sudo -u postgres psql -p "$port" -v ON_ERROR_STOP=1 -c "$sql" >/dev/null 2>&1; then
+    return 0
+  fi
+  sudo -u postgres psql -v ON_ERROR_STOP=1 -c "$sql" >/dev/null
+}
+
+pg_test_url() {
+  local url="$1"
+  command -v psql >/dev/null 2>&1 || return 1
+  PGPASSWORD="$(python3 - "$url" <<'PY'
+import sys, urllib.parse
+u = urllib.parse.urlparse(sys.argv[1])
+print(urllib.parse.unquote(u.password or ""))
+PY
+)" \
+  psql "$url" -v ON_ERROR_STOP=1 -c 'SELECT 1' >/dev/null 2>&1
+}
 
 detect_server_address() {
   local ip fqdn
@@ -314,6 +387,8 @@ download_panel_archive() {
   rm -f "$tmp"
 }
 
+refuse_vendor_vps_reinstall
+
 if [ "$FORCE_FRESH" -eq 1 ] && [ -e "$PANEL_DIR" ]; then
   wipe_panel_tree "$PANEL_DIR"
 fi
@@ -321,9 +396,9 @@ fi
 # For --fresh, also drop and recreate the PostgreSQL database so migrations deploy cleanly.
 if [ "$FORCE_FRESH" -eq 1 ]; then
   log "Fresh install — dropping existing database (if any)"
-  sudo -u postgres psql -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='nexlify';" >/dev/null 2>&1 || true
-  sudo -u postgres psql -c "DROP DATABASE IF EXISTS nexlify WITH (FORCE);" >/dev/null 2>&1 || \
-    sudo -u postgres psql -c "DROP DATABASE IF EXISTS nexlify;" >/dev/null 2>&1 || true
+  pg_exec_on_port 5432 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='nexlify';" || true
+  pg_exec_on_port 5432 "DROP DATABASE IF EXISTS nexlify WITH (FORCE);" || \
+    pg_exec_on_port 5432 "DROP DATABASE IF EXISTS nexlify;" || true
 fi
 
 if panel_install_complete; then
@@ -347,12 +422,46 @@ find scripts -name '*.sh' -exec sed -i 's/\r$//' {} + 2>/dev/null || true
 chmod +x scripts/*.sh 2>/dev/null || true
 
 progress_step "Configuring PostgreSQL"
-PG_PASS="$(openssl rand -hex 16)"
-sudo -u postgres psql -tc "SELECT 1 FROM pg_roles WHERE rolname='nexlify'" | grep -q 1 || \
-  sudo -u postgres psql -c "CREATE USER nexlify WITH PASSWORD '${PG_PASS}';"
-sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname='nexlify'" | grep -q 1 || \
-  sudo -u postgres psql -c "CREATE DATABASE nexlify OWNER nexlify;"
-sudo -u postgres psql -c "ALTER USER nexlify WITH PASSWORD '${PG_PASS}';" >/dev/null
+PG_HOST="127.0.0.1"
+PG_PORT="5432"
+KEEP_EXISTING_DB=0
+EXISTING_DB_URL=""
+if [ -f .env ]; then
+  EXISTING_DB_URL="$(grep -E '^DATABASE_URL=' .env | head -1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")"
+  if [ -n "$EXISTING_DB_URL" ] && pg_test_url "$EXISTING_DB_URL"; then
+    KEEP_EXISTING_DB=1
+    PG_PASS="$(python3 - "$EXISTING_DB_URL" <<'PY'
+import sys, urllib.parse
+u = urllib.parse.urlparse(sys.argv[1])
+print(urllib.parse.unquote(u.password or ""))
+PY
+)"
+    PG_HOST="$(python3 - "$EXISTING_DB_URL" <<'PY'
+import sys, urllib.parse
+u = urllib.parse.urlparse(sys.argv[1])
+print(u.hostname or "127.0.0.1")
+PY
+)"
+    PG_PORT="$(python3 - "$EXISTING_DB_URL" <<'PY'
+import sys, urllib.parse
+u = urllib.parse.urlparse(sys.argv[1])
+print(u.port or 5432)
+PY
+)"
+    echo "NOTE: Keeping existing DATABASE_URL (Postgres auth already works on ${PG_HOST}:${PG_PORT})."
+  fi
+fi
+if [ "$KEEP_EXISTING_DB" -ne 1 ]; then
+  PG_PASS="$(openssl rand -hex 16)"
+  pg_exec_on_port "$PG_PORT" "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='nexlify') THEN CREATE USER nexlify WITH PASSWORD '${PG_PASS}'; END IF; END \$\$;" || \
+    die "Could not ensure Postgres role nexlify on port ${PG_PORT}"
+  pg_exec_on_port "$PG_PORT" "ALTER USER nexlify WITH PASSWORD '${PG_PASS}';" || \
+    die "Could not set Postgres password for role nexlify on port ${PG_PORT}. Check Docker/system Postgres."
+  # CREATE DATABASE cannot run inside DO blocks — create if missing (ignore already-exists).
+  pg_exec_on_port "$PG_PORT" "CREATE DATABASE nexlify OWNER nexlify;" 2>/dev/null || true
+  PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U nexlify -d nexlify -c 'SELECT 1' >/dev/null 2>&1 || \
+    die "Postgres password was set but auth still fails on ${PG_HOST}:${PG_PORT} (is another Postgres bound to that port?)."
+fi
 if [ -x "$PANEL_DIR/scripts/ensure-pg-dump.sh" ]; then
   ENSURE_PG_DUMP_REQUIRED=0 bash "$PANEL_DIR/scripts/ensure-pg-dump.sh" || true
 elif [ -x scripts/ensure-pg-dump.sh ]; then
@@ -489,7 +598,7 @@ set_kv() {
   fi
 }
 
-set_kv DATABASE_URL "postgresql://nexlify:${PG_PASS}@localhost:5432/nexlify"
+set_kv DATABASE_URL "postgresql://nexlify:${PG_PASS}@${PG_HOST}:${PG_PORT}/nexlify"
 set_kv JWT_SECRET "$JWT_SECRET"
 set_kv CRON_SECRET "$CRON_SECRET"
 set_kv BILLING_WEBHOOK_SECRET "$BILLING_SECRET"

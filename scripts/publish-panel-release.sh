@@ -51,9 +51,11 @@ installer_script_ok() {
 
 pick_installer_script() {
   local candidate
+  # Prefer repo scripts/install-linux.sh (source of truth). Stale
+  # marketing-drop-in/public/install/panel.sh must not win publish.
   for candidate in \
-    "$ROOT/marketing-drop-in/public/install/panel.sh" \
-    "$ROOT/scripts/install-linux.sh"; do
+    "$ROOT/scripts/install-linux.sh" \
+    "$ROOT/marketing-drop-in/public/install/panel.sh"; do
     if installer_script_ok "$candidate"; then
       echo "$candidate"
       return 0

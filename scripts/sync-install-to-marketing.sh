@@ -94,8 +94,9 @@ sed -i "s|panel\.sh?v=[0-9.a-zA-Z]*|panel.sh?v=${PANEL_VER}|g" \
   "$INSTALL/panel.sh" \
   "$ROOT/marketing-drop-in/scripts/install-linux.sh" \
   2>/dev/null || true
-# Copy after version rewrite so the marketing duplicate cannot lag.
+# Copy after version rewrite so marketing duplicates cannot lag.
 cp -f "$SCRIPTS/install-linux.sh" "$ROOT/marketing-drop-in/scripts/install-linux.sh"
+cp -f "$SCRIPTS/install-linux.sh" "$INSTALL/panel.sh"
 
 # Runtime install command JSON (uploadable without rebuild)
 cat > "$ROOT/marketing-drop-in/public/install-command.json" << EOF
