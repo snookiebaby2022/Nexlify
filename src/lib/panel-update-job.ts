@@ -291,8 +291,8 @@ const STEP_PROGRESS: Record<string, number> = {
   "prisma generate": 48,
   "prisma (skipped)": 50,
   "prepare build": 52,
-  // End-of-build assigned %; UI climbs 52→88 via stdout while compiling
-  "npm run build": 88,
+  // End-of-build assigned %; UI climbs during compile via stdout + heartbeat
+  "npm run build": 90,
   "prepare standalone": 94,
   "pm2 restart nexlify": 98,
   // Prebuilt path steps (download → extract → apply replaces the old single step)

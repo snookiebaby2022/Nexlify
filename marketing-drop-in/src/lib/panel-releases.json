@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.86",
+  "latestVersion": "1.9.87",
   "releases": [
+    {
+      "version": "1.9.87",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Update bar no longer looks frozen at 88% during long compiles.",
+      "changelog": [
+        "Compile heartbeat slowly advances progress while webpack is silent",
+        "Clearer copy: 5\u201315 min compile is normal, not stuck",
+        "Failed builds no longer leave the bar parked at a fake 88% complete"
+      ],
+      "fixes": [
+        "Users thought Updates were stuck at 88% when Next.js was still compiling"
+      ]
+    },
     {
       "version": "1.9.86",
       "date": "2026-08-15",

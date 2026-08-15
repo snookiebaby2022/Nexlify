@@ -61,8 +61,8 @@ export function PanelUpdateRunningProgress({
           </ul>
         )}
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          Progress climbs during compile (~50–88%). The live panel stays online until the final swap
-          (~15–60s). Typical total: 3–6 minutes.
+          The compile step can sit for several minutes while webpack runs — that is normal, not stuck.
+          The live panel stays online until the final swap (~15–60s). Typical total: 5–15 minutes.
         </p>
       </div>
     );
@@ -96,10 +96,10 @@ export function PanelUpdateRunningProgress({
         </ul>
       )}
       <p className="panel-update-progress-hint">
-        Compile progress moves from ~50% to ~88% while the new build is prepared in the background —
-        the live panel stays up. Around <strong>88–98%</strong> the build is swapped in and PM2
-        restarts (~15–60s brief outage). Typical total time: 3–6 minutes. If this sits unchanged for
-        more than 10 minutes, open Settings → Updates and use Clear stuck update.
+        Compile often takes <strong>5–15 minutes</strong> with little visible movement — that is normal
+        (webpack), not a freeze. The live panel stays up until the final swap/PM2 restart (~15–60s brief
+        outage). Only use Clear stuck update if there is no change for more than 20 minutes or the panel
+        returns 502.
       </p>
     </>
   );

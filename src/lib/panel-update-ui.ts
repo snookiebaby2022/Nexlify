@@ -7,7 +7,7 @@ export const STEP_DURATION_HINTS: Record<string, string> = {
   "prisma db push": "~30s if schema changed",
   "prisma generate": "~20s",
   "prepare build": "~10s",
-  "npm run build": "2–5 min — longest step",
+  "npm run build": "5–15 min — longest step; bar may sit mid-compile while webpack runs",
   "prepare standalone": "~15s",
   "pm2 restart nexlify": "~15s",
   "git pull": "~30s (fails after ~90s if hung)",
@@ -38,7 +38,10 @@ export function parseBuildSubProgress(line: string): { detail: string; ratio: nu
     return { detail: "Starting production build…", ratio: 0.04 };
   }
   if (t.includes("Creating an optimized production build")) {
-    return { detail: "Compiling TypeScript & React (this takes the longest)…", ratio: 0.12 };
+    return {
+      detail: "Compiling TypeScript & React (can take 5–15 min — progress will sit here, not stuck)…",
+      ratio: 0.12,
+    };
   }
   if (t.includes("Compiled successfully")) {
     return { detail: "Compile finished — loading routes…", ratio: 0.38 };
@@ -73,12 +76,21 @@ export function parseBuildSubProgress(line: string): { detail: string; ratio: nu
   return null;
 }
 
-const BUILD_PROGRESS_START = 50;
-const BUILD_PROGRESS_END = 88;
+const BUILD_PROGRESS_START = 52;
+/** End of compile before swap/restart — keep headroom so 88% is not the "failed" lookalike. */
+const BUILD_PROGRESS_END = 90;
 
 export function progressDuringBuild(ratio: number): number {
   const r = Math.min(1, Math.max(0, ratio));
   return Math.round(BUILD_PROGRESS_START + (BUILD_PROGRESS_END - BUILD_PROGRESS_START) * r);
+}
+
+/** Soft time-based climb while webpack is silent (avoids a frozen bar at ~55–88%). */
+export function buildHeartbeatRatio(baseRatio: number, buildStartedAtMs: number): number {
+  const elapsedMin = Math.max(0, (Date.now() - buildStartedAtMs) / 60_000);
+  // Over ~12 minutes of silence, creep up to +0.4 on the 0–1 sub-progress scale
+  const creep = Math.min(0.4, elapsedMin / 12);
+  return Math.min(0.88, Math.max(baseRatio, 0.08) + creep);
 }
 
 export const BUILD_STEP_PROGRESS_START = BUILD_PROGRESS_START;

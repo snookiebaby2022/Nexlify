@@ -13,7 +13,7 @@ import {
   readUpdateJob,
   type PanelUpdateJob,
 } from "@/lib/panel-update-job";
-import { progressDuringBuild, parseBuildSubProgress, BUILD_STEP_PROGRESS_START } from "@/lib/panel-update-ui";
+import { progressDuringBuild, parseBuildSubProgress, BUILD_STEP_PROGRESS_START, buildHeartbeatRatio } from "@/lib/panel-update-ui";
 import {
   buildBootstrapUpdateScriptsShell,
   panelUpdateCacheBust,
@@ -353,15 +353,16 @@ async function runSteps(
     const heartbeat = isBuildStep
       ? setInterval(() => {
           const mins = Math.max(1, Math.round((Date.now() - buildStartedAt) / 60000));
+          const ratio = buildHeartbeatRatio(lastBuildRatio, buildStartedAt);
           void reportProgress(onProgress, {
             currentStep: step.name,
             stepDetail:
               lastBuildDetail ||
-              `Still compiling… (${mins} min elapsed — this step often takes 2–5 minutes)`,
-            progress: progressDuringBuild(Math.max(lastBuildRatio, 0.08)),
+              `Still compiling… (${mins} min elapsed — often 5–15 minutes; not stuck)`,
+            progress: progressDuringBuild(ratio),
             steps: [...jobSteps, { name: step.name, ok: false, status: "running" }],
           });
-        }, 20_000)
+        }, 15_000)
       : null;
 
     try {
@@ -409,7 +410,10 @@ async function runSteps(
       await reportProgress(onProgress, {
         currentStep: result.ok ? null : step.name,
         stepDetail: result.ok ? null : lastBuildDetail || null,
-        progress: progressForStep(step.name),
+        // On failure leave progress below 100 so UI reads as failed mid-step, not "done at 88%"
+        progress: result.ok
+          ? progressForStep(step.name)
+          : Math.min(progressForStep(step.name), progressDuringBuild(Math.max(lastBuildRatio, 0.2))),
         steps: [...jobSteps],
       });
       if (!result.ok) return false;
