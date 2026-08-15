@@ -102,7 +102,9 @@ export function publicOriginFromRequest(
     url.host;
   const hostOnly = hostRaw.split(":")[0];
   const hostPort = hostRaw.includes(":") ? hostRaw.split(":").pop() : "";
-  const fwdPort = headers?.get("x-forwarded-port")?.split(",")[0]?.trim();
+  const fwdPort =
+    headers?.get("x-nexlify-client-port")?.split(",")[0]?.trim() ||
+    headers?.get("x-forwarded-port")?.split(",")[0]?.trim();
   const streamEdgePort = resolveStreamEdgeHttpPort();
 
   // Prefer explicit non-internal listen port (any extra IPTV port: 8080, 25461, …)

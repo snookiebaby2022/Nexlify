@@ -55,9 +55,11 @@ write_stream_locations() {
 
         proxy_pass ${upstream_target};
         proxy_http_version 1.1;
+        # Preserve the listen port IPTV apps used (Next may rewrite x-forwarded-port to upstream).
         proxy_set_header Host \$host;
         proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Forwarded-Port ${fwd_port};
+        proxy_set_header X-Nexlify-Client-Port ${fwd_port};
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto http;

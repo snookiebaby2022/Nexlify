@@ -12,13 +12,15 @@
         "Wire get_vod_info / get_series_info for XCIPTV movie and series detail",
         "Add panel_api.php alias used by XUI-compatible apps",
         "Resolve numeric stream_id via SQL (no 100k nested bouquet hydrate)",
-        "verify-panel-ports checks every STREAM_HTTP_EXTRA_PORTS listen + player_api"
+        "verify-panel-ports checks every STREAM_HTTP_EXTRA_PORTS listen + player_api",
+        "Pass X-Nexlify-Client-Port from nginx so server_info.port survives Next.js forwarded-port rewrite"
       ],
       "fixes": [
         "IPTV apps lost the working extra port after login when nginx forwarded the primary port only",
         "XCIPTV VOD/series detail screens empty (get_vod_info / get_series_info missing)",
         "EPG actions ignored numeric Xtream stream_id hashes",
-        "Port sync verify failed falsely on IP installs without :443"
+        "Port sync verify failed falsely on IP installs without :443",
+        "Extra-port login reported server_info.port=80 when Host omitted the listen port"
       ]
     },
     {
