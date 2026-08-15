@@ -97,15 +97,36 @@ export async function PATCH(req: NextRequest) {
     isActive?: boolean;
     notes?: string | null;
     credits?: number;
+    resellerDns?: string | null;
   } = {};
   if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
   if (body.notes !== undefined) data.notes = body.notes ? String(body.notes) : null;
   if (body.credits != null) data.credits = Number(body.credits);
+  if (body.resellerDns !== undefined) {
+    try {
+      const { normalizeResellerDnsInput } = await import("@/lib/reseller-dns");
+      data.resellerDns = normalizeResellerDnsInput(body.resellerDns);
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Invalid reseller DNS" },
+        { status: 400 }
+      );
+    }
+  }
 
   const user = await prisma.panelUser.update({
     where: { id },
     data,
   });
+
+  if (body.resellerDns !== undefined) {
+    try {
+      const { syncResellerDnsIntoExtraDomains } = await import("@/lib/reseller-dns");
+      await syncResellerDnsIntoExtraDomains();
+    } catch {
+      /* non-fatal */
+    }
+  }
 
   return NextResponse.json({ user: { id: user.id, username: user.username } });
 }
@@ -156,6 +177,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Sub-reseller requires a parent user" }, { status: 400 });
   }
 
+  let resellerDns: string | null = null;
+  try {
+    const { normalizeResellerDnsInput } = await import("@/lib/reseller-dns");
+    resellerDns = normalizeResellerDnsInput(body.resellerDns);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Invalid reseller DNS" },
+      { status: 400 }
+    );
+  }
+
   const reseller = await prisma.panelUser.create({
     data: {
       username: String(body.username).trim(),
@@ -168,13 +200,20 @@ export async function POST(req: NextRequest) {
       credits: Number(body.credits ?? 0),
       maxLines: Number(body.maxLines ?? 500),
       parentId,
-      resellerDns: body.resellerDns ? String(body.resellerDns) : null,
+      resellerDns,
       notes: body.notes ? String(body.notes) : null,
       resellerBouquets: {
         create: (body.bouquetIds ?? []).map((bouquetId: string) => ({ bouquetId })),
       },
     },
   });
+
+  try {
+    const { syncResellerDnsIntoExtraDomains } = await import("@/lib/reseller-dns");
+    await syncResellerDnsIntoExtraDomains();
+  } catch {
+    /* non-fatal */
+  }
 
   return NextResponse.json({ reseller: { id: reseller.id, username: reseller.username }, password });
 }

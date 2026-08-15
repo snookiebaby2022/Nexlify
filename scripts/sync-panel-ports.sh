@@ -71,3 +71,8 @@ if [ -f scripts/verify-panel-ports.sh ]; then
 fi
 
 echo "[sync-panel-ports] Complete."
+
+# Gzip large Xtream JSON (get_series / get_vod_streams) for XCIPTV
+if [[ -f "$ROOT/scripts/enable-nginx-json-gzip.sh" ]]; then
+  bash "$ROOT/scripts/enable-nginx-json-gzip.sh" || true
+fi

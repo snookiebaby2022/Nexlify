@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 /** Stable numeric id for Xtream-compatible APIs (matches historical live/movie routes). */
@@ -7,6 +8,74 @@ export function cuidToNum(id: string): number {
     h = ((h << 5) - h + id.charCodeAt(i)) | 0;
   }
   return Math.abs(h);
+}
+
+/** Xtream category_id: numeric string for XCIPTV / XUI apps (cuid hashed). */
+export function xtreamCategoryId(categoryId: string | null | undefined): string {
+  if (!categoryId) return "0";
+  return String(cuidToNum(categoryId));
+}
+
+/**
+ * Resolve category_id from Xtream clients: accepts cuid or numeric hash.
+ * Categories are few — bounded scan is fine.
+ */
+export async function resolveCategoryIdParam(categoryId: string): Promise<string | null> {
+  const raw = String(categoryId ?? "").trim();
+  if (!raw || raw === "0") return raw === "0" ? "0" : null;
+  if (!/^\d+$/.test(raw)) {
+    const exists = await prisma.category.findUnique({ where: { id: raw }, select: { id: true } });
+    return exists?.id ?? null;
+  }
+  const numericId = parseInt(raw, 10);
+  if (!Number.isFinite(numericId)) return null;
+  const cats = await prisma.category.findMany({ select: { id: true }, take: 50_000 });
+  return cats.find((c) => cuidToNum(c.id) === numericId)?.id ?? null;
+}
+
+export type SeriesSeedRow = {
+  id: string;
+  name: string;
+  streamIcon: string | null;
+  categoryId: string | null;
+  updatedAt: Date;
+};
+
+/**
+ * One Xtream "series" row per show (group episodes by seriesName).
+ * Returning every episode as its own series (~400k) breaks XCIPTV login.
+ */
+export async function seriesSeedsForBouquets(
+  bouquetIds: string[],
+  opts?: { categoryIds?: string[] | null; uncategorizedOnly?: boolean }
+): Promise<SeriesSeedRow[]> {
+  if (!bouquetIds.length) return [];
+
+  let categorySql: Prisma.Sql = Prisma.empty;
+  if (opts?.uncategorizedOnly) {
+    categorySql = Prisma.sql`AND s."categoryId" IS NULL`;
+  } else if (opts?.categoryIds?.length) {
+    categorySql = Prisma.sql`AND s."categoryId" IN (${Prisma.join(opts.categoryIds)})`;
+  }
+
+  return prisma.$queryRaw<SeriesSeedRow[]>`
+    SELECT DISTINCT ON (lower(COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name)))
+      s.id AS id,
+      COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name) AS name,
+      s."streamIcon" AS "streamIcon",
+      s."categoryId" AS "categoryId",
+      s."updatedAt" AS "updatedAt"
+    FROM "BouquetStream" bs
+    INNER JOIN "Stream" s ON s.id = bs."streamId"
+    WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
+      AND s."isActive" = true
+      AND s.type = 'SERIES'::"StreamType"
+      ${categorySql}
+    ORDER BY
+      lower(COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name)),
+      CASE WHEN s."episodeNum" IS NULL OR s."episodeNum" = 0 THEN 0 ELSE 1 END,
+      s.id ASC
+  `;
 }
 
 /**

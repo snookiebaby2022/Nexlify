@@ -196,13 +196,22 @@ export function pickPublicOrigin(requestOrigin: string, configuredOrigin?: strin
 
     if (isIpHost(reqHost) && !isIpHost(cfgHost)) return fromReq;
     if (!isIpHost(reqHost) && isIpHost(cfgHost)) return fromReq;
+    // Prefer the host the IPTV client actually dialed (IP or domain), so XCIPTV
+    // server_info.url matches login DNS and reseller custom domains work.
+    if (isIpHost(reqHost) && isIpHost(cfgHost) && reqHost !== cfgHost) return fromReq;
+    if (!isIpHost(reqHost) && !isIpHost(cfgHost) && reqHost !== cfgHost) return fromReq;
     if (!isIpHost(reqHost) && req.protocol === "https:" && cfg.protocol === "http:") return fromReq;
 
     const primary = process.env.PANEL_PRIMARY_DOMAIN?.trim().toLowerCase();
     if (primary && reqHost === primary) return fromReq;
+    const extras = (process.env.PANEL_EXTRA_DOMAINS ?? "")
+      .split(",")
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean);
+    if (extras.includes(reqHost)) return fromReq;
   } catch {
     return env;
   }
 
-  return env;
+  return fromReq;
 }

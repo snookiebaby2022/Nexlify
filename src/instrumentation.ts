@@ -5,8 +5,8 @@ export async function register() {
     const { warmPanelServerEnv } = await import("@/lib/panel-server");
     await warmPanelServerEnv();
     try {
-      const { getPanelDomainsSettings, syncPanelDomainsEnv } = await import("@/lib/domains");
-      syncPanelDomainsEnv(await getPanelDomainsSettings());
+      const { warmPanelDomainsEnv } = await import("@/lib/domains");
+      await warmPanelDomainsEnv();
     } catch {
       /* DB unavailable during build */
     }

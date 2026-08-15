@@ -210,13 +210,17 @@ export default function AdminAddUserPage() {
 
           {showResellerFields && (
             <>
-              <FormField label="Reseller DNS (Reseller only, not used)">
+              <FormField label="Reseller DNS (IPTV + portal)">
                 <input
                   className={formInputClass}
                   style={formInputStyle}
+                  placeholder="iptv.reseller-domain.com"
                   value={form.resellerDns}
                   onChange={(e) => setForm({ ...form, resellerDns: e.target.value })}
                 />
+                <p className="text-xs text-zinc-500 mt-1">
+                  Point this hostname at the panel IP. Clients can log in with this domain or the panel IP/domain.
+                </p>
               </FormField>
               <FormField label="Credits (Reseller only)">
                 <input

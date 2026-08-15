@@ -1,5 +1,6 @@
 import type { LineWithBouquets } from "./lines";
 import {
+  activeBouquetIds,
   categoryIdsForLine,
   streamsForLineExport,
   lineIsPlayable,
@@ -11,14 +12,6 @@ import { exportPlaybackUrl } from "./export-playback-url";
 import { getStreamPlaybackMode } from "./stream-playback-mode";
 import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
-
-function cuidToNum(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = ((h << 5) - h + id.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h);
-}
 import { parseBitrates, formatTimeshiftLabel } from "./stream-variants";
 import {
   portFromPanelBaseUrl,
@@ -33,6 +26,12 @@ import {
   collectCategoryAncestors,
   expandCategoryFilter,
 } from "./category-tree";
+import {
+  cuidToNum,
+  resolveCategoryIdParam,
+  seriesSeedsForBouquets,
+  xtreamCategoryId,
+} from "./xtream-stream-id";
 
 type XcOrder = "sort_order" | "name" | "name_desc" | "added" | "added_desc";
 
@@ -185,9 +184,9 @@ async function categoryRowsForIds(
   const idSet = new Set(cats.map((c) => c.id));
   for (const c of cats) {
     const parent =
-      c.parentId && idSet.has(c.parentId) ? c.parentId : 0;
+      c.parentId && idSet.has(c.parentId) ? xtreamCategoryId(c.parentId) : 0;
     rows.push({
-      category_id: c.id,
+      category_id: xtreamCategoryId(c.id),
       category_name: c.name,
       parent_id: parent,
       created_at: Math.floor(c.createdAt.getTime() / 1000).toString(),
@@ -215,7 +214,9 @@ async function streamsForXtreamList(
         uncategorizedOnly: true,
       });
     }
-    const allowed = await expandCategoryFilter(categoryId);
+    const resolved = await resolveCategoryIdParam(categoryId);
+    if (!resolved || resolved === "0") return [];
+    const allowed = await expandCategoryFilter(resolved);
     if (!allowed.length) return [];
     return streamsForLineExport(line, { type, categoryIds: allowed });
   }
@@ -270,7 +271,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
       channel_id: resolveChannelId(s),
       added: Math.floor(s.createdAt.getTime() / 1000).toString(),
       updated_at: Math.floor(full.updatedAt.getTime() / 1000),
-      category_id: s.categoryId ?? "0",
+      category_id: xtreamCategoryId(s.categoryId),
       custom_sid: full.parentStreamId ?? "",
       tv_archive: catchup || timeshiftHours > 0 ? 1 : 0,
       direct_source: direct || exportPlaybackUrl(baseUrl, line, s, full as StreamWithProvider),
@@ -302,7 +303,7 @@ export async function xtreamVodStreams(
       stream_icon: s.streamIcon ?? "",
       added: Math.floor(s.createdAt.getTime() / 1000).toString(),
       updated_at: Math.floor(full.updatedAt.getTime() / 1000),
-      category_id: s.categoryId ?? "0",
+      category_id: xtreamCategoryId(s.categoryId),
       container_extension: (full as { containerExtension?: string | null }).containerExtension ?? "mp4",
       custom_sid: "",
       direct_source: exportPlaybackUrl(baseUrl, line, s, full as StreamWithProvider),
@@ -317,11 +318,33 @@ export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
   return categoryRowsForIds(categoryIds, hasUncategorized);
 }
 
+/**
+ * Xtream get_series — one entry per show (grouped by seriesName), not per episode.
+ * Full episode dumps (~400k rows / 100MB+) time out XCIPTV / Smarters login.
+ */
 export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: string | null) {
-  let series = await streamsForXtreamList(line, StreamType.SERIES, categoryId);
-  series = sortStreamsForXc(series, await xcDefaultOrder());
+  const bouquetIds = activeBouquetIds(line, true);
+  if (!bouquetIds.length) return [];
 
-  return series.map((s, i) => ({
+  let categoryIds: string[] | null = null;
+  let uncategorizedOnly = false;
+  if (categoryId != null && categoryId !== "") {
+    if (categoryId === "0") {
+      uncategorizedOnly = true;
+    } else {
+      const resolved = await resolveCategoryIdParam(categoryId);
+      if (!resolved || resolved === "0") return [];
+      categoryIds = await expandCategoryFilter(resolved);
+      if (!categoryIds.length) return [];
+    }
+  }
+
+  const seeds = await seriesSeedsForBouquets(bouquetIds, {
+    categoryIds,
+    uncategorizedOnly,
+  });
+
+  return seeds.map((s, i) => ({
     num: i + 1,
     name: s.name,
     series_id: cuidToNum(s.id),
@@ -336,7 +359,7 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
     rating_5based: 0,
     backdrop_path: [] as string[],
     episode_run_time: "",
-    category_id: s.categoryId ?? "0",
+    category_id: xtreamCategoryId(s.categoryId),
   }));
 }
 

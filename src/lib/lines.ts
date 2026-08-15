@@ -69,7 +69,7 @@ export function lineIsPlayable(line: Pick<Line, "status" | "expiresAt">) {
   return effectiveLineStatus(line) === LineStatus.ACTIVE;
 }
 
-function activeBouquetIds(line: LineWithBouquets, excludeDisabled: boolean): string[] {
+export function activeBouquetIds(line: LineWithBouquets, excludeDisabled = true): string[] {
   return line.bouquets
     .filter((lb) => !excludeDisabled || lb.bouquet.isActive)
     .map((lb) => lb.bouquet.id);

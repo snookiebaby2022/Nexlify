@@ -7,6 +7,7 @@ import {
   lineHasStream,
   resolveStreamIdParam,
   seriesEpisodeIdsForLine,
+  xtreamCategoryId,
 } from "./xtream-stream-id";
 
 export { cuidToNum, resolveStreamIdParam };
@@ -64,7 +65,7 @@ export async function xtreamVodInfo(
       stream_id: cuidToNum(full.id),
       name: full.name,
       added: Math.floor(full.createdAt.getTime() / 1000).toString(),
-      category_id: full.categoryId ?? "0",
+      category_id: xtreamCategoryId(full.categoryId),
       container_extension: ext,
       custom_sid: "",
       direct_source: exportPlaybackUrl(baseUrl, line, full, full),
@@ -147,7 +148,7 @@ export async function xtreamSeriesInfo(
       backdrop_path: meta.backdrop ? [String(meta.backdrop)] : ([] as string[]),
       youtube_trailer: meta.trailer ?? "",
       episode_run_time: meta.duration ?? "",
-      category_id: seed.categoryId ?? "0",
+      category_id: xtreamCategoryId(seed.categoryId),
     },
     episodes: seasons,
   };

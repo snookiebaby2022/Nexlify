@@ -104,7 +104,14 @@ export async function savePanelDomainsSettings(
   }
 
   await setSettingGroup("domains", merged as unknown as Record<string, unknown>);
-  syncPanelDomainsEnv(merged);
+  let resellerHosts: string[] = [];
+  try {
+    const { listResellerDnsHosts } = await import("@/lib/reseller-dns");
+    resellerHosts = await listResellerDnsHosts();
+  } catch {
+    /* ignore */
+  }
+  syncPanelDomainsEnv(merged, resellerHosts);
   return merged;
 }
 
@@ -140,13 +147,17 @@ export function canonicalPanelUrl(
 }
 
 /** Sync runtime env for middleware (restart PM2 after changing .env on VPS). */
-export function syncPanelDomainsEnv(settings: PanelDomainsSettings) {
+export function syncPanelDomainsEnv(settings: PanelDomainsSettings, extraHosts: string[] = []) {
   if (settings.primaryDomain) {
     process.env.PANEL_PRIMARY_DOMAIN = settings.primaryDomain;
   } else {
     delete process.env.PANEL_PRIMARY_DOMAIN;
   }
-  process.env.PANEL_EXTRA_DOMAINS = settings.extraDomains.join(",");
+  const extras = new Set<string>([
+    ...settings.extraDomains,
+    ...extraHosts.map((h) => normalizeDomain(h)).filter(Boolean),
+  ]);
+  process.env.PANEL_EXTRA_DOMAINS = [...extras].join(",");
   const forceHttps = settings.forceHttps || settings.fullSslEncryption;
   const sslOn = settings.sslEnabled || settings.fullSslEncryption;
   process.env.PANEL_FORCE_HTTPS = forceHttps ? "1" : "0";
@@ -168,7 +179,14 @@ export function certbotDomainArgs(settings: PanelDomainsSettings): string[] {
 export async function warmPanelDomainsEnv() {
   try {
     const settings = await getPanelDomainsSettings();
-    syncPanelDomainsEnv(settings);
+    let resellerHosts: string[] = [];
+    try {
+      const { listResellerDnsHosts } = await import("@/lib/reseller-dns");
+      resellerHosts = await listResellerDnsHosts();
+    } catch {
+      /* ignore */
+    }
+    syncPanelDomainsEnv(settings, resellerHosts);
   } catch {
     /* DB may be unavailable during build */
   }
