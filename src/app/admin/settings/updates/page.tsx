@@ -210,10 +210,16 @@ export default function PanelUpdatesPage() {
         try {
           d = JSON.parse(text) as PanelUpdatePayload & { error?: string };
         } catch {
+          const looksGateway =
+            /502 Bad Gateway|503 Service|504 Gateway|nginx\//i.test(text) ||
+            (text.trimStart().startsWith("<") && (r.status === 502 || r.status === 503 || r.status === 500));
           throw new Error(
-            text.startsWith("Internal Server Error")
-              ? "Panel API error (500) — run: bash scripts/panel-update-recover.sh on the server"
-              : text.slice(0, 160) || `Failed to load updates (${r.status})`
+            looksGateway
+              ? "Panel temporarily unavailable (502/nginx). The update may have stopped mid-build — click Clear stuck update, wait ~30s, then Refresh. If it keeps failing, SSH: bash scripts/panel-update-recover.sh"
+              : text.startsWith("Internal Server Error")
+                ? "Panel API error (500) — run: bash scripts/panel-update-recover.sh on the server"
+                : text.replace(/<[^>]+>/g, " ").slice(0, 160).trim() ||
+                  `Failed to load updates (${r.status})`
           );
         }
         if (!r.ok || !d.version) {
@@ -349,6 +355,38 @@ export default function PanelUpdatesPage() {
     });
   }
 
+  async function clearStuckUpdate() {
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/panel-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel" }),
+      });
+      const text = await res.text();
+      let j: { error?: string } = {};
+      try {
+        j = JSON.parse(text) as { error?: string };
+      } catch {
+        if (/502|503|nginx/i.test(text) || text.trimStart().startsWith("<")) {
+          setMsg(
+            "Panel API unreachable (502). Stuck job was likely left on disk — wait for the panel to come back, then click Clear stuck again, or SSH: rm -f /opt/nexlify-panel/.update-progress.json && bash scripts/panel-update-recover.sh"
+          );
+          return;
+        }
+      }
+      if (!res.ok) {
+        setMsg(j.error ?? "Could not clear stuck update");
+        return;
+      }
+      setMsg("Cleared stuck update. You can try Update panel again.");
+      refreshJob();
+      load({ silent: true });
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Could not clear stuck update");
+    }
+  }
+
   if (loading) {
     return <p className="text-sm" style={{ color: "var(--muted)" }}>Loading updates…</p>;
   }
@@ -362,14 +400,29 @@ export default function PanelUpdatesPage() {
         <p className="text-sm rounded-lg border px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--danger)" }}>
           {loadError ?? "Could not load update information."}
         </p>
-        <button
-          type="button"
-          onClick={() => load()}
-          className="rounded-lg border px-4 py-2 text-sm cursor-pointer"
-          style={{ borderColor: "var(--border)" }}
-        >
-          Retry
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => load()}
+            className="rounded-lg border px-4 py-2 text-sm cursor-pointer"
+            style={{ borderColor: "var(--border)" }}
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            onClick={() => void clearStuckUpdate()}
+            className="rounded-lg border px-4 py-2 text-sm cursor-pointer"
+            style={{ borderColor: "var(--border)" }}
+          >
+            Clear stuck update
+          </button>
+        </div>
+        {msg ? (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            {msg}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -382,23 +435,6 @@ export default function PanelUpdatesPage() {
   const jobRunning = liveUpdateRunning;
   const progressJob = liveJob?.status === "running" ? liveJob : null;
   const failedJob = liveJob?.status === "failed" ? liveJob : null;
-
-  async function clearStuckUpdate() {
-    setMsg("");
-    const res = await fetch("/api/admin/panel-update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "cancel" }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setMsg((j as { error?: string }).error ?? "Could not clear stuck update");
-      return;
-    }
-    setMsg("Cleared stuck update. You can try Update panel again.");
-    refreshJob();
-    load({ silent: true });
-  }
 
   return (
     <div className="space-y-6 pb-8 max-w-5xl">

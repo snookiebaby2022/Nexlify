@@ -61,7 +61,7 @@ const MAX_STUCK_AT_START_MS = 3 * 60 * 1000; // if stuck at "Starting update…"
 const MAX_STUCK_GIT_PULL_MS = 150 * 1000;
 /** Build step with a dead worker — fail fast so watchdog can bring the panel back */
 const MAX_STUCK_BUILD_DEAD_MS = 90 * 1000;
-const MAX_FAILED_MS = 30 * 60 * 1000; // auto-clear failed jobs after 30 min
+const MAX_FAILED_MS = 2 * 60 * 1000; // auto-clear failed jobs quickly so Clear stuck / reload works
 const MAX_DONE_MS = 2 * 60 * 1000; // auto-clear completed jobs so reload does not re-show banner
 const MAX_SAME_VERSION_FAILED_MS = 5 * 60 * 1000; // re-sync failures stop nagging sooner
 
@@ -247,20 +247,26 @@ export async function readUpdateJob(repoPath: string): Promise<PanelUpdateJob | 
 }
 
 export async function clearUpdateJob(repoPath: string): Promise<void> {
-  const idle: PanelUpdateJob = {
-    status: "idle",
-    progress: 0,
-    currentStep: null,
-    steps: [],
-    startedAt: null,
-    finishedAt: null,
-    message: null,
-    fromVersion: null,
-    toVersion: null,
-  };
-  await writeUpdateJob(repoPath, idle);
+  // Hard-delete progress files so UI cannot re-read a stuck 88% / failed job.
   try {
-    await writeFile(getUpdatePidPath(repoPath), "", "utf8");
+    const { unlinkSync } = require("fs") as typeof import("fs");
+    for (const f of [
+      getUpdateProgressPath(repoPath),
+      getUpdatePidPath(repoPath),
+      path.join(repoPath, ".update-in-progress"),
+    ]) {
+      try {
+        unlinkSync(f);
+      } catch {
+        /* missing */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const { execSync } = require("child_process") as typeof import("child_process");
+    execSync("pkill -f panel-update-background || true", { stdio: "ignore", timeout: 5000 });
   } catch {
     /* ignore */
   }

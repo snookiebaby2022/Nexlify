@@ -29,24 +29,9 @@ restore_backup() {
 }
 
 clear_stale_update_job() {
-  if [ ! -f .update-progress.json ]; then
-    return 0
-  fi
-  node -e "
-    const fs = require('fs');
-    const p = '.update-progress.json';
-    try {
-      const j = JSON.parse(fs.readFileSync(p, 'utf8'));
-      if (j.status !== 'running') process.exit(0);
-      j.status = 'failed';
-      j.currentStep = null;
-      j.finishedAt = new Date().toISOString();
-      j.message = 'Update interrupted — panel recovered from backup or rebuild.';
-      fs.writeFileSync(p, JSON.stringify(j, null, 2));
-    } catch {
-      fs.unlinkSync(p);
-    }
-  " 2>/dev/null || rm -f .update-progress.json .update-progress.pid
+  # Always wipe progress so Updates UI cannot stay stuck at 88% / failed.
+  rm -f .update-progress.json .update-progress.pid .update-in-progress
+  pkill -f panel-update-background 2>/dev/null || true
 }
 
 restart_panel() {

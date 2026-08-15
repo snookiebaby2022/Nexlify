@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.85",
+  "latestVersion": "1.9.86",
   "releases": [
+    {
+      "version": "1.9.86",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Unstick Updates at 88%% / 502; Clear stuck deletes job; panel HTTPS default.",
+      "changelog": [
+        "Clear stuck update hard-deletes .update-progress.json (no leftover 88%% banner)",
+        "Failed update jobs auto-clear after 2 minutes",
+        "Updates page shows Clear stuck on 502/HTML gateway errors",
+        "Stronger next build retry for missing SWC / generate is not a function",
+        "fix-panel-https-default.sh so https://PANEL_IP hits the panel, not another site SSL vhost"
+      ],
+      "fixes": [
+        "Updates stuck at 88%% after failed build; Clear stuck did nothing while nginx returned 502 HTML",
+        "https://IP /admin hit unrelated SPA (moviestream) causing 500/redirect cycle"
+      ]
+    },
     {
       "version": "1.9.85",
       "date": "2026-08-15",

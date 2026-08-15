@@ -76,3 +76,8 @@ echo "[sync-panel-ports] Complete."
 if [[ -f "$ROOT/scripts/enable-nginx-json-gzip.sh" ]]; then
   bash "$ROOT/scripts/enable-nginx-json-gzip.sh" || true
 fi
+
+# Ensure https://PANEL_IP hits the panel (not another SSL vhost)
+if [[ -f "$ROOT/scripts/fix-panel-https-default.sh" ]]; then
+  bash "$ROOT/scripts/fix-panel-https-default.sh" || true
+fi
