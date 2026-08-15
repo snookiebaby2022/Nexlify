@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.91",
+  "latestVersion": "1.9.92",
   "releases": [
+    {
+      "version": "1.9.92",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Providers sidebar: M3U Auto-Sync; nav search; demo panel nginx recovery.",
+      "changelog": [
+        "Providers menu: Auto-Sync section with M3U Auto-Sync first, plus Import M3U and Watch Folders",
+        "Admin sidebar search filters groups/items; denser Providers layout (removed VOD duplicates)",
+        "Includes 1.9.91 live playback fixes (native upstream proxy, backup failover, geo EPG-id bug)"
+      ],
+      "fixes": [
+        "M3U Auto-Sync hard to find under Import vs Providers",
+        "Demo panel 75.119.137.174 down when nginx failed to bind :80 after IPTV edge took 443/8080"
+      ]
+    },
     {
       "version": "1.9.91",
       "date": "2026-08-15",

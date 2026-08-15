@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.91",
+  "latestVersion": "1.9.92",
   "releases": [
+    {
+      "version": "1.9.92",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Providers sidebar: M3U Auto-Sync; nav search; demo panel nginx recovery.",
+      "changelog": [
+        "Providers menu: Auto-Sync section with M3U Auto-Sync first, plus Import M3U and Watch Folders",
+        "Admin sidebar search filters groups/items; denser Providers layout (removed VOD duplicates)",
+        "Includes 1.9.91 live playback fixes (native upstream proxy, backup failover, geo EPG-id bug)"
+      ],
+      "fixes": [
+        "M3U Auto-Sync hard to find under Import vs Providers",
+        "Demo panel 75.119.137.174 down when nginx failed to bind :80 after IPTV edge took 443/8080"
+      ]
+    },
     {
       "version": "1.9.91",
       "date": "2026-08-15",
@@ -16,7 +31,8 @@
       "fixes": [
         "UK Entertainment / Sky Sports channels failing or blank via panel while upstream worked",
         "Nickelodeon SD and other dead xplatinmedia hosts had no runtime failover",
-        "Sound with no picture after HLS remux on HEVC / wrong audio BSF"
+        "Sound with no picture after HLS remux on HEVC / wrong audio BSF",
+        "Geo/LB stream swap matched only on shared junk epgChannelId (e.g. 96) and served wrong channels"
       ]
     },
     {
