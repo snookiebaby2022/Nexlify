@@ -10,10 +10,10 @@ trap cleanup EXIT
 
 if command -v rsync >/dev/null 2>&1; then
   rsync -a \
-    --exclude=node_modules --exclude=.next --exclude=.git \
+    --exclude=node_modules --exclude=.next --exclude='.next.*' --exclude=.git \
     --exclude=data --exclude=dist \
     --exclude='.env' --exclude='.env.local' --exclude='.env.production' \
-    --exclude='.env.development' --exclude='.env.backup.*' \
+    --exclude='.env.development' --exclude='.env.backup.*' --exclude='.env.broken-install-*' \
     "$ROOT/" "$STAGE/"
 else
   cp -a "$ROOT" "$STAGE/src-root" 2>/dev/null || cp -a "$ROOT/." "$STAGE/"
