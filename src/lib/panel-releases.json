@@ -6,15 +6,17 @@
       "version": "1.9.89",
       "date": "2026-08-15",
       "channel": "stable",
-      "summary": "XCIPTV: http:// and https:// in DNS + ports work; enable panel HTTPS :443.",
+      "summary": "XCIPTV: http:// and https:// in DNS + ports; HTTPS edge accepts scheme-in-Host.",
       "changelog": [
         "Sanitize Host headers that include http:// or https:// so server_info.url is the real IP/domain",
-        "HTTPS on PANEL_IP (:443) installs reliably (self-signed IP cert) — fix script no longer exits when PANEL_EXTRA_DOMAINS is empty",
-        "Extra IPTV ports keep https when TLS was terminated; :80 / :8080 / :25461 / :443 verified paths"
+        "HTTPS on PANEL_IP (:443) installs reliably (self-signed IP cert) \u2014 fix script no longer exits when PANEL_EXTRA_DOMAINS is empty",
+        "Extra IPTV ports keep https when TLS was terminated; :80 / :8080 / :25461 / :443 verified paths",
+        "IPTV edge proxy on :443/:8080/:25461 accepts Host headers with http:// or https:// (nginx returned 400)"
       ],
       "fixes": [
         "Pasting http://IP into XCIPTV DNS made Account Info / follow-up API calls use url:\\\"http\\\"",
-        "https://PANEL_IP failed because :443 was never listening (HTTPS setup script aborted early)"
+        "https://PANEL_IP failed because :443 was never listening (HTTPS setup script aborted early)",
+        "https://IP or http://IP:8080 in XCIPTV DNS caused nginx 400 Bad Request before login"
       ]
     },
     {

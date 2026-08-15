@@ -77,7 +77,9 @@ if [[ -f "$ROOT/scripts/enable-nginx-json-gzip.sh" ]]; then
   bash "$ROOT/scripts/enable-nginx-json-gzip.sh" || true
 fi
 
-# Ensure https://PANEL_IP hits the panel (not another SSL vhost)
-if [[ -f "$ROOT/scripts/fix-panel-https-default.sh" ]]; then
+# https://PANEL_IP + extra IPTV ports with Host sanitization (http:// / https:// in DNS)
+if [[ -f "$ROOT/scripts/install-iptv-edge-proxy.sh" ]]; then
+  bash "$ROOT/scripts/install-iptv-edge-proxy.sh" || true
+elif [[ -f "$ROOT/scripts/fix-panel-https-default.sh" ]]; then
   bash "$ROOT/scripts/fix-panel-https-default.sh" || true
 fi
