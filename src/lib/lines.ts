@@ -110,13 +110,18 @@ export async function streamIdsForLine(
   if (!bouquetIds.length) return [];
 
   const types = typeList(options);
+  const typeTexts = types?.map((t) => String(t)) ?? null;
   const rows = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT s.id AS id, MIN(bs."sortOrder" * 1000000 + s."sortOrder") AS ord
+    SELECT s.id AS id, MIN(bs."sortOrder"::bigint * 1000000 + s."sortOrder"::bigint) AS ord
     FROM "BouquetStream" bs
     INNER JOIN "Stream" s ON s.id = bs."streamId"
     WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
     ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
-    ${types && types.length ? Prisma.sql`AND s.type IN (${Prisma.join(types)})` : Prisma.empty}
+    ${
+      typeTexts && typeTexts.length
+        ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
+        : Prisma.empty
+    }
     ${
       options?.uncategorizedOnly
         ? Prisma.sql`AND s."categoryId" IS NULL`
