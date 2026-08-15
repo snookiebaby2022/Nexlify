@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.83",
+  "latestVersion": "1.9.84",
   "releases": [
+    {
+      "version": "1.9.84",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "M3U m3u_plus login no longer times out on huge catalogs; output=hls honored for live.",
+      "changelog": [
+        "Default get.php m3u / m3u_plus exports LIVE + VOD only (exclude SERIES)",
+        "Full dump via type=all, type=series, or include_series=1",
+        "Honor output=hls / m3u8 → live .m3u8 URLs in playlists"
+      ],
+      "fixes": [
+        "IPTV apps timed out importing m3u_plus when SERIES made the playlist ~200MB",
+        "Recommended m3u_plus HLS URLs still emitted .ts for live channels"
+      ]
+    },
     {
       "version": "1.9.83",
       "date": "2026-08-15",

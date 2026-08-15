@@ -347,11 +347,25 @@ export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
   return categoryRowsForIds(categoryIds, hasUncategorized);
 }
 
-function m3uTypeFilter(type: string): StreamType | undefined {
-  if (type === "live") return StreamType.LIVE;
-  if (type === "movies" || type === "vod") return StreamType.MOVIE;
-  if (type === "series") return StreamType.SERIES;
-  return undefined;
+/**
+ * Which stream types to include in get.php M3U exports.
+ * Default m3u / m3u_plus is LIVE + MOVIE only — full catalogs with SERIES
+ * routinely exceed 100MB and time out XCIPTV / TiviMate / Smarters "login".
+ * Use type=series, type=all, or include_series=1 for the full dump.
+ */
+function m3uTypeFilter(
+  type: string,
+  opts?: { includeSeries?: boolean }
+): StreamType | StreamType[] | undefined {
+  const t = (type || "m3u_plus").toLowerCase();
+  if (t === "live" || t === "m3u_live") return StreamType.LIVE;
+  if (t === "movies" || t === "movie" || t === "vod" || t === "m3u_movie") {
+    return StreamType.MOVIE;
+  }
+  if (t === "series" || t === "m3u_series") return StreamType.SERIES;
+  if (t === "all" || t === "full" || t === "m3u_all") return undefined;
+  if (opts?.includeSeries) return undefined;
+  return [StreamType.LIVE, StreamType.MOVIE];
 }
 
 function formatM3uEntries(
@@ -411,11 +425,13 @@ export function buildM3uStream(
   line: LineWithBouquets,
   baseUrl: string,
   type: string,
-  output: "hls" | "ts" = "ts"
+  output: "hls" | "ts" = "ts",
+  opts?: { includeSeries?: boolean }
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
-  const typeFilter = m3uTypeFilter(type);
-  const isExtended = type === "m3u_plus";
+  const typeNorm = (type || "m3u_plus").toLowerCase();
+  const typeFilter = m3uTypeFilter(typeNorm, opts);
+  const isExtended = typeNorm === "m3u_plus" || typeNorm === "plus";
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -473,10 +489,11 @@ export async function buildM3u(
   line: LineWithBouquets,
   baseUrl: string,
   type: string,
-  output: "hls" | "ts" = "ts"
+  output: "hls" | "ts" = "ts",
+  opts?: { includeSeries?: boolean }
 ) {
   const chunks: string[] = [];
-  const stream = buildM3uStream(line, baseUrl, type, output);
+  const stream = buildM3uStream(line, baseUrl, type, output, opts);
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   for (;;) {

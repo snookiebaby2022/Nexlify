@@ -16,7 +16,12 @@ export async function GET(req: NextRequest) {
   const username = req.nextUrl.searchParams.get("username");
   const password = req.nextUrl.searchParams.get("password");
   const type = req.nextUrl.searchParams.get("type") ?? "m3u_plus";
-  const output = (req.nextUrl.searchParams.get("output") ?? "ts") as "hls" | "ts";
+  const outputRaw = (req.nextUrl.searchParams.get("output") ?? "ts").toLowerCase();
+  const output: "hls" | "ts" =
+    outputRaw === "hls" || outputRaw === "m3u8" ? "hls" : "ts";
+  const includeSeries =
+    req.nextUrl.searchParams.get("include_series") === "1" ||
+    req.nextUrl.searchParams.get("include_series") === "true";
 
   if (!username || !password) {
     return iptvText("Missing credentials", { status: 400 });
@@ -36,7 +41,7 @@ export async function GET(req: NextRequest) {
   if (deny) return iptvText("Forbidden", { status: deny === "rate" ? 429 : 403 });
 
   const baseUrl = serverBaseUrl(req.url, req.headers);
-  const body = buildM3uStream(line, baseUrl, type, output);
+  const body = buildM3uStream(line, baseUrl, type, output, { includeSeries });
 
   return iptvText(body, {
     headers: {
