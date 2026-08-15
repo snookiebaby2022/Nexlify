@@ -84,14 +84,12 @@ export async function findFailoverUrl(
 ): Promise<string | null> {
   const stream = await prisma.stream.findUnique({
     where: { id: streamId },
-    select: { sourceUrl: true, backupUrl: true, failoverUrls: true },
+    select: { sourceUrl: true, backupUrl: true },
   });
   if (!stream) return null;
-  const allUrls = [
-    stream.sourceUrl,
-    stream.backupUrl,
-    ...(Array.isArray(stream.failoverUrls) ? stream.failoverUrls : []),
-  ].filter((u): u is string => !!u && u !== primaryUrl);
+  const allUrls = [stream.sourceUrl, stream.backupUrl].filter(
+    (u): u is string => !!u && u !== primaryUrl
+  );
 
   for (const url of allUrls) {
     const attempts = await getUpstreamAttempts(streamId, url);

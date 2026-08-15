@@ -76,6 +76,8 @@ export async function createHlsToMpegTsStream(opts: {
     opts.userAgent?.trim() ||
     "Mozilla/5.0 (compatible; Nexlify/1.0; +https://nexlify.live)";
 
+  // MPEG-TS output: do NOT use aac_adtstoasc (MP4/FLV only) or a fixed h264_mp4toannexb
+  // (breaks HEVC → audio-only / no picture on VLC & Exo). Let ffmpeg pick bitstream filters.
   const args = [
     "-hide_banner",
     "-loglevel",
@@ -100,10 +102,6 @@ export async function createHlsToMpegTsStream(opts: {
     "0:a:0?",
     "-c",
     "copy",
-    "-bsf:v",
-    "h264_mp4toannexb",
-    "-bsf:a",
-    "aac_adtstoasc",
     "-f",
     "mpegts",
     "pipe:1",

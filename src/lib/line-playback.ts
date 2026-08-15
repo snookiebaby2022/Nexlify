@@ -1,7 +1,11 @@
 import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { lineIsPlayable, type Line } from "@/lib/lines";
-import { resolveStreamPlaybackUrl, type StreamWithProvider } from "@/lib/resolve-stream-url";
+import {
+  listStreamPlaybackUrls,
+  resolveStreamPlaybackUrl,
+  type StreamWithProvider,
+} from "@/lib/resolve-stream-url";
 import { isIntegrationStreamUrl } from "@/lib/integration-stream-url";
 import { resolveIntegrationPlaybackUrl } from "@/lib/integration-playback";
 import { cacheGet, cacheSet } from "@/lib/cache";
@@ -180,6 +184,92 @@ export async function resolvePlaybackUrlForLine(
   });
   await cacheSet(cacheKey, url, ttl);
   return url;
+}
+
+/** Primary + backup playback URLs for live proxy failover (not long-cached as a set). */
+export async function resolvePlaybackUrlCandidatesForLine(
+  lineId: string,
+  streamId: string,
+  ctx?: PlaybackContext,
+  cacheTtlSec?: number
+): Promise<string[]> {
+  let ttl = cacheTtlSec;
+  if (ttl == null) {
+    const { getAntiFreezeSettings } = await import("@/lib/anti-freeze");
+    const { getCacheTtls } = await import("@/lib/cache-ttl");
+    const [settings, cacheTtl] = await Promise.all([getAntiFreezeSettings(), getCacheTtls()]);
+    ttl = Math.min(settings.playbackUrlCacheTtlSec, cacheTtl.playbackUrl);
+  }
+
+  const cacheKey = `playback:urls:${lineId}:${streamId}`;
+  const cached = await cacheGet<string[]>(cacheKey);
+  if (cached?.length) return cached;
+
+  const lineRow = await prisma.line.findUnique({
+    where: { id: lineId },
+    select: { forcedServerId: true, canWatchAdult: true },
+  });
+
+  const stream = await prisma.stream.findFirst({
+    where: {
+      id: streamId,
+      isActive: true,
+      ...(lineRow?.forcedServerId ? { serverId: lineRow.forcedServerId } : {}),
+      bouquets: {
+        some: {
+          bouquet: {
+            isActive: true,
+            lines: { some: { lineId } },
+          },
+        },
+      },
+    },
+    include: { provider: true, server: true, category: { select: { name: true } } },
+  });
+  if (!stream) return [];
+  const effectiveStream = ctx?.clientIp
+    ? await preferGeoMatchedStream(stream, lineId, ctx.clientIp)
+    : stream;
+  if (lineRow && !lineCanWatchStream({ canWatchAdult: lineRow.canWatchAdult }, effectiveStream)) {
+    return [];
+  }
+
+  const { ensureOnDemandStreamStarted } = await import("@/lib/stream-on-demand");
+  void ensureOnDemandStreamStarted(effectiveStream);
+
+  const { assertRestreamAllowedForStream } = await import("@/lib/restream-policy");
+  const restreamBlock = await assertRestreamAllowedForStream(effectiveStream);
+  if (restreamBlock) return [];
+
+  let urls: string[];
+  if (isIntegrationStreamUrl(effectiveStream.streamUrl)) {
+    const resolved =
+      (await resolveIntegrationPlaybackUrl(effectiveStream.streamUrl)) ??
+      effectiveStream.streamUrl;
+    urls = [resolved];
+    const backup = effectiveStream.backupUrl?.trim();
+    if (backup && backup !== resolved) urls.push(backup);
+  } else {
+    urls = listStreamPlaybackUrls(
+      effectiveStream as StreamWithProvider,
+      `${lineId}:${effectiveStream.id}`
+    );
+  }
+
+  const signed: string[] = [];
+  for (const u of urls) {
+    signed.push(
+      await applyPlaybackFingerprint(u, {
+        lineId,
+        clientIp: ctx?.clientIp,
+        userAgent: ctx?.userAgent,
+      })
+    );
+  }
+  await cacheSet(cacheKey, signed, ttl);
+  // Keep single-URL cache in sync for zap prefetch / redirects
+  if (signed[0]) await cacheSet(`playback:url:${lineId}:${streamId}`, signed[0], ttl);
+  return signed;
 }
 
 export async function resolveLivePlaybackRedirect(

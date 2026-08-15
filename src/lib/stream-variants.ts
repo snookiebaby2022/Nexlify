@@ -58,7 +58,9 @@ export function formatTimeshiftLabel(seconds: number | null | undefined): string
 
 export function getPrimaryBitrate(variants: BitrateVariant[]): BitrateVariant | null {
   if (!variants.length) return null;
-  return variants.find((v) => v.isPrimary) ?? variants[0];
+  // Only an explicitly marked primary may replace the stream URL.
+  // Falling back to variants[0] silently swapped many live URLs to ABR extras and broke IPTV clients.
+  return variants.find((v) => v.isPrimary) ?? null;
 }
 
 export function resolveBitratePlayUrl(baseUrl: string, variants: BitrateVariant[]): string {

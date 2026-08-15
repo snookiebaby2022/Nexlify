@@ -427,17 +427,8 @@ function formatM3uEntries(
   const lines: string[] = [];
   for (const s of streams) {
     const full = s as typeof s & { bitrates?: unknown; streamUrl: string };
-    const variants = parseBitrates(full.bitrates);
-    if (s.type === StreamType.LIVE && variants.length > 1) {
-      for (const v of variants) {
-        lines.push(
-          `#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidthKbps ?? 2500000},RESOLUTION=${v.resolution ?? "1280x720"},NAME="${v.label}"`
-        );
-        const variantFull = { ...full, streamUrl: v.path } as typeof full;
-        lines.push(exportPlaybackUrl(baseUrl, line, s, variantFull as StreamWithProvider, undefined, output));
-      }
-      continue;
-    }
+    // Never emit #EXT-X-STREAM-INF in IPTV M3U — VLC/Exo/Smarters treat it as broken ABR.
+    // Multi-bitrate variants stay available via XC player_api / dedicated bitrate fields.
     const logo = isExtended && s.streamIcon ? ` tvg-logo="${s.streamIcon}"` : "";
     const tvgId = isExtended ? resolveEpgId(s) : "";
     const tvgName = s.name.replace(/"/g, "'");

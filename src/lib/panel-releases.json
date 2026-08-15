@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.90",
+  "latestVersion": "1.9.91",
   "releases": [
+    {
+      "version": "1.9.91",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Live playback: native upstream proxy, backup failover, remux/M3U fixes for VLC/Exo.",
+      "changelog": [
+        "Live /live proxy uses Node http(s) instead of Next fetch (Cloudflare/auth CDNs were returning empty text/html)",
+        "On primary failure, automatically try stream backupUrl before 502",
+        "HLS→MPEG-TS remux drops incorrect h264/aac bitstream filters that caused audio-only playback",
+        "M3U no longer emits #EXT-X-STREAM-INF rows; bitrate primary only when marked isPrimary"
+      ],
+      "fixes": [
+        "UK Entertainment / Sky Sports channels failing or blank via panel while upstream worked",
+        "Nickelodeon SD and other dead xplatinmedia hosts had no runtime failover",
+        "Sound with no picture after HLS remux on HEVC / wrong audio BSF"
+      ]
+    },
     {
       "version": "1.9.90",
       "date": "2026-08-15",

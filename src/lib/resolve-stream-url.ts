@@ -7,13 +7,8 @@ export type StreamWithProvider = Stream & {
   server?: StreamServer | null;
 };
 
-/** Effective playback URL for a stream (local, provider-hosted, on-demand, rotator, backup failover, or ABR primary). */
-export function resolveStreamPlaybackUrl(stream: StreamWithProvider, seed?: string): string {
-  const useBackup =
-    stream.lastProbeOk === false && stream.backupUrl?.trim();
-  const effective = useBackup
-    ? { ...stream, streamUrl: stream.backupUrl!.trim() }
-    : stream;
+function resolveEffectiveStreamUrl(stream: StreamWithProvider, streamUrl: string, seed?: string): string {
+  const effective = { ...stream, streamUrl };
 
   if (effective.hostedExternally && effective.provider && effective.providerPath) {
     try {
@@ -30,6 +25,32 @@ export function resolveStreamPlaybackUrl(stream: StreamWithProvider, seed?: stri
   }
 
   return resolveStreamPlayUrl(effective, seed);
+}
+
+/** Effective playback URL for a stream (local, provider-hosted, on-demand, rotator, backup failover, or ABR primary). */
+export function resolveStreamPlaybackUrl(stream: StreamWithProvider, seed?: string): string {
+  const useBackup = stream.lastProbeOk === false && stream.backupUrl?.trim();
+  const url = useBackup ? stream.backupUrl!.trim() : stream.streamUrl;
+  return resolveEffectiveStreamUrl(stream, url, seed);
+}
+
+/** Ordered candidate URLs for live playback (primary then backup). Used when upstream fetch fails at request time. */
+export function listStreamPlaybackUrls(stream: StreamWithProvider, seed?: string): string[] {
+  const primary = resolveEffectiveStreamUrl(stream, stream.streamUrl, seed);
+  const out: string[] = [primary];
+  const backupRaw = stream.backupUrl?.trim();
+  if (backupRaw) {
+    const backup = resolveEffectiveStreamUrl(
+      { ...stream, bitrates: null },
+      backupRaw,
+      seed
+    );
+    if (backup && !out.includes(backup)) out.push(backup);
+  }
+  if (stream.lastProbeOk === false && out.length > 1) {
+    return [out[1]!, out[0]!, ...out.slice(2)];
+  }
+  return out;
 }
 export function vodModeLabel(mode: VodMode | string): string {
   switch (mode) {
