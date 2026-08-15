@@ -381,6 +381,7 @@ export async function importM3uEntries(
     imported,
     skipped,
     reordered: reordered || undefined,
+    updated: reordered || undefined,
     errors: errors.length ? errors : undefined,
   };
 }

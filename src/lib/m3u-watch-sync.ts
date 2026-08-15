@@ -12,6 +12,8 @@ export type M3uSyncOptions = {
   defaultOnDemand?: boolean;
   sortOrderStart?: number;
   reorderExisting?: boolean;
+  /** Refresh name/logo/epg when an existing stream URL matches */
+  updateNamesOnSync?: boolean;
 };
 
 export function isRemoteM3uUrl(source: string): boolean {
@@ -47,6 +49,17 @@ export async function syncM3uFromUrl(url: string, opts: M3uSyncOptions = {}) {
   const forced = opts.defaultType === "MIXED" ? undefined : opts.defaultType;
   const isLive = forced === "LIVE";
 
+  let updateNamesOnSync = opts.updateNamesOnSync;
+  if (updateNamesOnSync === undefined) {
+    try {
+      const { getSettingGroup } = await import("./panel-settings");
+      const streams = await getSettingGroup("streams");
+      updateNamesOnSync = streams.updateNamesOnSync !== false;
+    } catch {
+      updateNamesOnSync = true;
+    }
+  }
+
   return importFromM3uContent(content, {
     defaultType: forced,
     categoryId: opts.categoryId,
@@ -56,7 +69,6 @@ export async function syncM3uFromUrl(url: string, opts: M3uSyncOptions = {}) {
     defaultOnDemand: opts.defaultOnDemand ?? (isLive ? true : undefined),
     sortOrderStart: opts.sortOrderStart ?? 0,
     reorderExisting: opts.reorderExisting ?? true,
-    // Keep live (and VOD) display names in sync with the upstream playlist.
-    updateNamesOnSync: true,
+    updateNamesOnSync,
   });
 }

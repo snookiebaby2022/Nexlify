@@ -46,6 +46,7 @@ export async function GET(req: NextRequest) {
       loadBalancing: streamSettings.loadBalancing,
       geoLoadBalancing: streamSettings.geoLoadBalancing,
       loadBalancingRestriction: streamSettings.loadBalancingRestriction,
+      autoRebalanceLive: streamSettings.autoRebalanceLive ?? "even_spread",
       lbProEnabled,
       lbPro: lbProSettings,
     },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { DataTable } from "@/components/data-table";
 import { formatDateTime } from "@/lib/format";
@@ -15,7 +15,7 @@ type SyncJob = {
   status: string;
   lastSyncAt: string | null;
   nextSyncAt: string | null;
-  lastResult: { imported?: number; skipped?: number; error?: string } | null;
+  lastResult: { imported?: number; skipped?: number; updated?: number; error?: string } | null;
   provider: { id: string; name: string } | null;
 };
 
@@ -35,6 +35,9 @@ export default function AdminM3uSyncPage() {
   });
   const [syncing, setSyncing] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [updateNamesOnSync, setUpdateNamesOnSync] = useState(true);
+  const [namesSaving, setNamesSaving] = useState(false);
+  const [namesMsg, setNamesMsg] = useState("");
 
   function load() {
     fetch("/api/admin/m3u-sync")
@@ -45,12 +48,41 @@ export default function AdminM3uSyncPage() {
       });
   }
 
+  const loadNamesSetting = useCallback(() => {
+    fetch("/api/admin/settings?group=streams")
+      .then((r) => r.json())
+      .then((d) => {
+        const v = d?.settings?.updateNamesOnSync;
+        setUpdateNamesOnSync(v !== false && v !== "false" && v !== 0);
+      })
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     load();
+    loadNamesSetting();
     fetch("/api/admin/categories")
       .then((r) => r.json())
       .then((d) => setCategories(d.categories ?? []));
-  }, []);
+  }, [loadNamesSetting]);
+
+  async function saveNamesSetting(next: boolean) {
+    setUpdateNamesOnSync(next);
+    setNamesSaving(true);
+    setNamesMsg("");
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group: "streams", settings: { updateNamesOnSync: next } }),
+      });
+      setNamesMsg(res.ok ? "Saved — applies on the next M3U auto-sync run." : "Could not save setting");
+    } catch {
+      setNamesMsg("Network error");
+    } finally {
+      setNamesSaving(false);
+    }
+  }
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -123,16 +155,41 @@ export default function AdminM3uSyncPage() {
           M3U auto-sync
         </h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Scheduled re-pull from upstream IPTV provider M3U URLs. New movies, series, and channels are
-          imported automatically; existing URLs are skipped. Runs via{" "}
-          <code className="text-xs">nexlify-cron</code> every minute when due.
+          Scheduled re-pull from upstream IPTV provider M3U URLs (Live TV, Movies, Series). New entries
+          are imported; matching URLs can refresh channel names. Runs via{" "}
+          <code className="text-xs">nexlify-cron</code> when due. Also used by{" "}
+          <Link href="/admin/watch-folders" className="underline" style={{ color: "var(--accent)" }}>
+            Watch folders
+          </Link>
+          .
         </p>
-        <p className="text-sm mt-2">
-          <Link href="/admin/m3u-sync" className="underline" style={{ color: "var(--accent)" }}>
-            M3U auto-sync jobs
-          </Link>{" "}
-          — alternative scheduled sync with per-job intervals.
+      </div>
+
+      <div
+        className="rounded-lg border p-4 space-y-2"
+        style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+      >
+        <h2 className="text-sm font-semibold" style={{ color: "#00c0ef" }}>
+          Auto stream / live names
+        </h2>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          When a sync finds an existing stream by URL, update its display name, logo, and EPG id from the
+          playlist (especially important for Live TV renames).
         </p>
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            checked={updateNamesOnSync}
+            disabled={namesSaving}
+            onChange={(e) => void saveNamesSetting(e.target.checked)}
+          />
+          Update live (and VOD) names on auto-sync
+        </label>
+        {namesMsg && (
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            {namesMsg}
+          </p>
+        )}
       </div>
 
       {error && (
@@ -154,7 +211,9 @@ export default function AdminM3uSyncPage() {
         </h2>
         <div className="grid md:grid-cols-2 gap-4">
           <label className="block space-y-1">
-            <span className="text-sm" style={{ color: "var(--muted)" }}>Label</span>
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              Label
+            </span>
             <input
               required
               className="w-full rounded border px-3 py-2 bg-transparent"
@@ -164,7 +223,9 @@ export default function AdminM3uSyncPage() {
             />
           </label>
           <label className="block space-y-1">
-            <span className="text-sm" style={{ color: "var(--muted)" }}>Content type</span>
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              Content type
+            </span>
             <select
               className="w-full rounded border px-3 py-2 bg-transparent"
               style={{ borderColor: "var(--border)" }}
@@ -179,7 +240,9 @@ export default function AdminM3uSyncPage() {
           </label>
         </div>
         <label className="block space-y-1">
-          <span className="text-sm" style={{ color: "var(--muted)" }}>Provider M3U URL</span>
+          <span className="text-sm" style={{ color: "var(--muted)" }}>
+            Provider M3U URL
+          </span>
           <input
             required
             placeholder="https://provider.example/get.php?username=...&type=m3u_plus"
@@ -191,7 +254,9 @@ export default function AdminM3uSyncPage() {
         </label>
         <div className="grid md:grid-cols-3 gap-4">
           <label className="block space-y-1">
-            <span className="text-sm" style={{ color: "var(--muted)" }}>Sync every (minutes)</span>
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              Sync every (minutes)
+            </span>
             <input
               type="number"
               min={5}
@@ -202,7 +267,9 @@ export default function AdminM3uSyncPage() {
             />
           </label>
           <label className="block space-y-1">
-            <span className="text-sm" style={{ color: "var(--muted)" }}>VOD provider (optional)</span>
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              VOD provider (optional)
+            </span>
             <select
               className="w-full rounded border px-3 py-2 bg-transparent"
               style={{ borderColor: "var(--border)" }}
@@ -211,12 +278,16 @@ export default function AdminM3uSyncPage() {
             >
               <option value="">None</option>
               {providers.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
               ))}
             </select>
           </label>
           <label className="block space-y-1">
-            <span className="text-sm" style={{ color: "var(--muted)" }}>Default category</span>
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              Default category
+            </span>
             <select
               className="w-full rounded border px-3 py-2 bg-transparent"
               style={{ borderColor: "var(--border)" }}
@@ -225,7 +296,9 @@ export default function AdminM3uSyncPage() {
             >
               <option value="">Auto from group-title</option>
               {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
               ))}
             </select>
           </label>
@@ -263,7 +336,9 @@ export default function AdminM3uSyncPage() {
           j.lastResult?.error
             ? `Error: ${j.lastResult.error}`
             : j.lastResult
-              ? `+${j.lastResult.imported ?? 0} / skip ${j.lastResult.skipped ?? 0}`
+              ? `+${j.lastResult.imported ?? 0} / skip ${j.lastResult.skipped ?? 0}${
+                  j.lastResult.updated != null ? ` / names ${j.lastResult.updated}` : ""
+                }`
               : "—",
           <span key={`a-${j.id}`} className="flex gap-2">
             <button

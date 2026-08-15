@@ -21,6 +21,7 @@ type LbConfig = {
   loadBalancing: string;
   geoLoadBalancing: boolean;
   loadBalancingRestriction: string;
+  autoRebalanceLive: string;
   lbProEnabled: boolean;
   lbPro: {
     enabled?: boolean;
@@ -72,6 +73,7 @@ export default function LoadBalancerPage() {
           loadBalancing: config.loadBalancing,
           geoLoadBalancing: config.geoLoadBalancing,
           loadBalancingRestriction: config.loadBalancingRestriction,
+          autoRebalanceLive: config.autoRebalanceLive,
         },
         lbPro: config.lbPro,
       }),
@@ -99,7 +101,7 @@ export default function LoadBalancerPage() {
       </div>
 
       {config && (
-        <div className="rounded-lg border p-4 grid md:grid-cols-2 lg:grid-cols-4 gap-3" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+        <div className="rounded-lg border p-4 grid md:grid-cols-2 lg:grid-cols-3 gap-3" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
           <label className="text-sm block">
             <span className="font-medium">Algorithm</span>
             <select
@@ -126,6 +128,22 @@ export default function LoadBalancerPage() {
               <option value="failover">Failover to next server</option>
             </select>
           </label>
+          <label className="text-sm block md:col-span-2 lg:col-span-1">
+            <span className="font-medium">Auto-balance live across LBs</span>
+            <select
+              className="mt-1 w-full rounded border px-2 py-1.5 panel-select bg-transparent text-sm"
+              style={{ borderColor: "var(--border)" }}
+              value={String(config.autoRebalanceLive || "even_spread")}
+              onChange={(e) => setConfig({ ...config, autoRebalanceLive: e.target.value })}
+            >
+              <option value="even_spread">Even spread (save bandwidth / CPU / RAM)</option>
+              <option value="failover_only">Failover only (move off offline servers)</option>
+              <option value="off">Off</option>
+            </select>
+            <span className="mt-1 block text-xs" style={{ color: "var(--muted)" }}>
+              Cron reassigns live channels across online load balancers so no single box holds most of the catalog.
+            </span>
+          </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer self-end pb-2">
             <input
               type="checkbox"
@@ -144,7 +162,7 @@ export default function LoadBalancerPage() {
               {saving ? "Saving…" : "Save rules"}
             </button>
           </div>
-          {msg && <p className="text-xs md:col-span-4" style={{ color: "var(--muted)" }}>{msg}</p>}
+          {msg && <p className="text-xs md:col-span-3" style={{ color: "var(--muted)" }}>{msg}</p>}
         </div>
       )}
 

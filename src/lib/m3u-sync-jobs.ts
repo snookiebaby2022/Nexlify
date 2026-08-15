@@ -10,6 +10,8 @@ import { ImportKind } from "@prisma/client";
 export type M3uSyncRunResult = {
   imported: number;
   skipped: number;
+  updated?: number;
+  reordered?: number;
   errors?: string[];
 };
 
@@ -108,6 +110,7 @@ export async function runDueM3uSyncJobs(limit = 5): Promise<{
             at: now.toISOString(),
             imported: result.imported,
             skipped: result.skipped,
+            updated: result.updated ?? result.reordered ?? 0,
             errors: result.errors ?? [],
           },
         },
@@ -121,7 +124,9 @@ export async function runDueM3uSyncJobs(limit = 5): Promise<{
           imported: result.imported,
           skipped: result.skipped,
           status: "done",
-          message: `M3U sync "${job.name}": ${result.imported} imported, ${result.skipped} skipped`,
+          message: `M3U sync "${job.name}": ${result.imported} imported, ${result.skipped} skipped${
+            (result.updated ?? result.reordered) ? `, ${result.updated ?? result.reordered} names updated` : ""
+          }`,
         },
       });
     } catch (e) {
