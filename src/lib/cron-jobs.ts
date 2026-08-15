@@ -204,12 +204,30 @@ export async function jobWatchFolders() {
 export async function jobImportQueue() {
   const start = Date.now();
   try {
+    // Heal legacy numeric / unknown statuses left by SQL migrate (e.g. status "3").
+    const stuck = await prisma.importJob.updateMany({
+      where: {
+        status: { notIn: ["queued", "running", "done", "failed", "cancelled"] },
+        completedAt: null,
+      },
+      data: {
+        status: "failed",
+        message: "Invalid legacy import status cleared by cron",
+        completedAt: new Date(),
+      },
+    });
+
     const job = await prisma.importJob.findFirst({
       where: { status: "queued" },
       orderBy: { createdAt: "asc" },
     });
     if (!job) {
-      await logCron("import_queue", "ok", "idle", Date.now() - start);
+      await logCron(
+        "import_queue",
+        "ok",
+        stuck.count ? `idle (healed ${stuck.count})` : "idle",
+        Date.now() - start
+      );
       return;
     }
 
@@ -343,6 +361,7 @@ export async function jobEpgSync() {
     const now = Date.now();
     let ok = 0;
     let skipped = 0;
+    let failed = 0;
     for (const s of sources) {
       const hours = s.syncEveryHours > 0 ? s.syncEveryHours : 24;
       const due =
@@ -359,15 +378,44 @@ export async function jobEpgSync() {
         });
         ok++;
       } catch (e) {
+        failed++;
+        const err = String(e);
+        // Auto-disable sources that have never synced and keep failing (bad migrate URLs).
+        const neverSynced = !s.lastSync;
         await prisma.epgSource.update({
           where: { id: s.id },
-          data: { lastSyncError: String(e) },
+          data: {
+            lastSyncError: err,
+            ...(neverSynced ? { isActive: false } : {}),
+          },
         });
       }
     }
-    await logCron("epg_sync", "ok", `synced ${ok}, skipped ${skipped}`, Date.now() - start);
+    await logCron(
+      "epg_sync",
+      failed && !ok ? "warn" : "ok",
+      `synced ${ok}, skipped ${skipped}, failed ${failed}`,
+      Date.now() - start
+    );
   } catch (e) {
     await logCron("epg_sync", "error", String(e), Date.now() - start);
+  }
+}
+
+/** Built-in Auto EPG Mapping — backfill LIVE streams missing a working epg_id. */
+export async function jobEpgAutoMap() {
+  const start = Date.now();
+  try {
+    const { autoAssignMissingEpg } = await import("./epg-auto-match");
+    const result = await autoAssignMissingEpg({ limit: 300 });
+    await logCron(
+      "epg_auto_map",
+      "ok",
+      `scanned ${result.scanned}, assigned ${result.assigned}`,
+      Date.now() - start
+    );
+  } catch (e) {
+    await logCron("epg_auto_map", "error", String(e), Date.now() - start);
   }
 }
 
@@ -785,7 +833,14 @@ async function jobCloudBackup() {
 }
 
 export async function runHourlyCronJobs() {
+  try {
+    const { ensureAddonSettingsHealed } = await import("./panel-settings");
+    await ensureAddonSettingsHealed();
+  } catch {
+    /* non-fatal */
+  }
   await jobEpgSync();
+  await jobEpgAutoMap();
   await jobPanelBackup();
   await jobAgentTokenRotation();
   await jobPanelAutoUpdate();

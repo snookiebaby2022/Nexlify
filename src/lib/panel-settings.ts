@@ -722,16 +722,143 @@ export async function getSettingGroup(group: SettingGroup): Promise<Record<strin
 
   const row = await prisma.panelSetting.findUnique({ where: { key: settingKey(group) } });
   const base = { ...DEFAULTS[group] };
-  const result = (() => {
-    if (!row?.value) return base;
+  // Legacy XUI migrate wrote `settings:streams` (colon) instead of `settings.streams`.
+  let legacy: Record<string, unknown> | null = null;
+  if (group === "streams" && !row?.value) {
     try {
-      return { ...base, ...(JSON.parse(row.value) as Record<string, unknown>) };
+      const legacyRow = await prisma.panelSetting.findUnique({ where: { key: "settings:streams" } });
+      if (legacyRow?.value) legacy = JSON.parse(legacyRow.value) as Record<string, unknown>;
     } catch {
-      return base;
+      legacy = null;
+    }
+  }
+  const result = (() => {
+    try {
+      const parsed = row?.value ? (JSON.parse(row.value) as Record<string, unknown>) : null;
+      return { ...base, ...(legacy ?? {}), ...(parsed ?? {}) };
+    } catch {
+      return { ...base, ...(legacy ?? {}) };
     }
   })();
   setCachedSetting(group, result);
   return result;
+}
+
+/**
+ * One-shot heal: import TMDB key from XUI migration blob, promote legacy streams
+ * settings key, and persist sensible built-in addon defaults when missing.
+ */
+export async function ensureAddonSettingsHealed(): Promise<{
+  tmdbImported: boolean;
+  streamsPromoted: boolean;
+  groupsTouched: string[];
+}> {
+  const touched: string[] = [];
+  let tmdbImported = false;
+  let streamsPromoted = false;
+
+  try {
+    const tmdb = await getSettingGroup("tmdb");
+    if (!String(tmdb.apiKey ?? "").trim()) {
+      const xui = await prisma.panelSetting.findUnique({ where: { key: "migration.xui_settings" } });
+      if (xui?.value) {
+        try {
+          const parsed = JSON.parse(xui.value) as Record<string, unknown>;
+          const key = String(parsed.tmdb_api_key ?? parsed.tmdbApiKey ?? "").trim();
+          const lang = String(parsed.tmdb_language ?? parsed.tmdbLanguage ?? "").trim();
+          if (key) {
+            await setSettingGroup("tmdb", {
+              apiKey: key,
+              language: lang || tmdb.language || "en-US",
+              autoFetchOnImport: true,
+              enableMovieMeta: true,
+              enableSeriesMeta: true,
+            });
+            tmdbImported = true;
+            touched.push("tmdb");
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const legacy = await prisma.panelSetting.findUnique({ where: { key: "settings:streams" } });
+    const modern = await prisma.panelSetting.findUnique({ where: { key: settingKey("streams") } });
+    if (legacy?.value && !modern?.value) {
+      let parsed: Record<string, unknown> = {};
+      try {
+        parsed = JSON.parse(legacy.value) as Record<string, unknown>;
+      } catch {
+        parsed = {};
+      }
+      await setSettingGroup("streams", {
+        ...parsed,
+        autoChannelLogos: parsed.autoChannelLogos !== false,
+        autoFixDeadLinks: true,
+      });
+      streamsPromoted = true;
+      touched.push("streams");
+    } else if (!modern?.value) {
+      await setSettingGroup("streams", {
+        autoChannelLogos: true,
+        autoChannelLogoSource: "tmdb_then_slug",
+        autoFixDeadLinks: true,
+      });
+      touched.push("streams");
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const prefix = await getSettingGroup("prefix-manager");
+    if (!prefix._healedV1) {
+      await setSettingGroup("prefix-manager", {
+        prefixManagerEnabled: true,
+        prefixManagerBulkApply: true,
+        _healedV1: true,
+      });
+      touched.push("prefix-manager");
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const disk = await getSettingGroup("disk-monitor");
+    if (!disk._healedV1) {
+      await setSettingGroup("disk-monitor", {
+        diskMonitorEnabled: true,
+        _healedV1: true,
+      });
+      touched.push("disk-monitor");
+    }
+  } catch {
+    /* ignore */
+  }
+
+  try {
+    const backup = await getSettingGroup("backup");
+    if (!backup._healedV1) {
+      await setSettingGroup("backup", {
+        enabled: backup.enabled !== false,
+        fullExportOnBackup: backup.fullExportOnBackup !== false,
+        // Keep pg_dump off unless operator enables it — avoids surprise huge dumps.
+        pgDumpCronEnabled: backup.pgDumpCronEnabled === true,
+        _healedV1: true,
+      });
+      touched.push("backup");
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return { tmdbImported, streamsPromoted, groupsTouched: touched };
 }
 
 /**

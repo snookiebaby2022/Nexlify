@@ -50,6 +50,22 @@ export default function AdminEpgChannelsPage() {
     load();
   }
 
+  async function autoMatchEpg() {
+    setBulkMsg("Auto-matching…");
+    const res = await fetch("/api/admin/epg/channels", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autoMatchEpg: true, limit: 500 }),
+    });
+    const data = await res.json();
+    setBulkMsg(
+      res.ok
+        ? data.message ?? `Mapped ${data.assigned ?? 0} stream(s).`
+        : data.error ?? "Auto-match failed"
+    );
+    load();
+  }
+
   async function autoGenerateAll() {
     setBulkMsg("");
     const res = await fetch("/api/admin/epg/channels", {
@@ -82,6 +98,14 @@ export default function AdminEpgChannelsPage() {
       <div className="flex flex-wrap justify-between gap-3">
         <h1 className="text-2xl font-semibold">EPG channel map</h1>
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={autoMatchEpg}
+            className="text-sm px-3 py-2 rounded-md cursor-pointer"
+            style={{ background: "var(--accent)", color: "#fff" }}
+          >
+            Auto-map EPG
+          </button>
           <button
             type="button"
             onClick={autoGenerateAll}

@@ -66,6 +66,18 @@ export async function POST(req: NextRequest) {
       bouquetIds: body.bouquetIds,
     });
 
+    if (streamType === StreamType.LIVE && body.autoAssignEpg !== false && result.imported > 0) {
+      try {
+        const { autoAssignMissingEpg } = await import("@/lib/epg-auto-match");
+        const mapped = await autoAssignMissingEpg({
+          limit: Math.min(1000, Math.max(50, result.imported * 2)),
+        });
+        (result as { epgAssigned?: number }).epgAssigned = mapped.assigned;
+      } catch {
+        /* non-fatal */
+      }
+    }
+
     await prisma.importJob.create({
       data: {
         kind: ImportKind.M3U,

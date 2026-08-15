@@ -89,6 +89,15 @@ export async function runDueM3uSyncJobs(limit = 5): Promise<{
       skipped += result.skipped;
       processed++;
 
+      if (job.autoAssignEpg !== false && result.imported > 0) {
+        try {
+          const { autoAssignMissingEpg } = await import("./epg-auto-match");
+          await autoAssignMissingEpg({ limit: Math.min(500, Math.max(50, result.imported * 2)) });
+        } catch {
+          /* non-fatal */
+        }
+      }
+
       const intervalMs = Math.max(5, job.syncIntervalMins) * 60_000;
       await prisma.m3uSyncJob.update({
         where: { id: job.id },

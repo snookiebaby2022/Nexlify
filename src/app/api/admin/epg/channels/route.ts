@@ -34,8 +34,9 @@ export async function GET(req: NextRequest) {
       category: { select: { name: true } },
     },
     orderBy: { name: "asc" },
+    take: 2000,
   });
-  return NextResponse.json({ streams });
+  return NextResponse.json({ streams, capped: true });
 }
 
 export async function PATCH(req: NextRequest) {
@@ -43,6 +44,18 @@ export async function PATCH(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
+
+  if (body.autoMatchEpg === true) {
+    const { autoAssignMissingEpg } = await import("@/lib/epg-auto-match");
+    const limit = Math.min(2000, Math.max(1, Number(body.limit) || 500));
+    const result = await autoAssignMissingEpg({ limit });
+    return NextResponse.json({
+      ok: true,
+      scanned: result.scanned,
+      assigned: result.assigned,
+      message: `Auto-mapped ${result.assigned} of ${result.scanned} live stream(s).`,
+    });
+  }
 
   if (body.autoGenerateChannelIds === true) {
     const empty = await prisma.stream.findMany({
