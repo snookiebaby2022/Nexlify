@@ -118,6 +118,12 @@ export async function reconcileStaleUpdateJob(
   const job = await readUpdateJob(repoPath);
   if (!job) return job;
 
+  // Orphan idle placeholder left on disk — treat as no job so Clear stuck / reload work
+  if (job.status === "idle" && !job.startedAt && !job.finishedAt) {
+    await clearUpdateJob(repoPath);
+    return null;
+  }
+
   // Same-version update failed (re-sync/rebuild) — clear after a few minutes so the banner does not persist
   if (
     job.status === "failed" &&

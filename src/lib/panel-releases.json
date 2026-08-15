@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.87",
+  "latestVersion": "1.9.88",
   "releases": [
+    {
+      "version": "1.9.88",
+      "date": "2026-08-15",
+      "channel": "stable",
+      "summary": "Fix line delete 500; XCIPTV Account Info fields; clear failed update banner.",
+      "changelog": [
+        "Manage Lines delete logs activity before removing the line (no more FK 500)",
+        "Xtream server_info.time_now uses classic YYYY-MM-DD HH:mm:ss for XCIPTV",
+        "Strip non-Xtream ABR fields from server_info so Account Info parses expire/max connections",
+        "Clear stuck update drops stale failed job from the browser immediately"
+      ],
+      "fixes": [
+        "Delete line returned 500 after ActivityLog write against a deleted lineId",
+        "XCIPTV Account Info showed -- for expire / connections / created",
+        "Failed update banner lingered after Clear stuck when the progress file was already gone"
+      ]
+    },
     {
       "version": "1.9.87",
       "date": "2026-08-15",

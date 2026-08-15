@@ -774,7 +774,7 @@ model ActivityLog {
   userId    String?
   user      PanelUser? @relation(fields: [userId], references: [id])
   lineId    String?
-  line      Line?    @relation(fields: [lineId], references: [id])
+  line      Line?    @relation(fields: [lineId], references: [id], onDelete: SetNull)
   meta      Json?
   createdAt DateTime @default(now())
 

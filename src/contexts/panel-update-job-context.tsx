@@ -15,6 +15,8 @@ type PanelUpdateJobContextValue = {
   job: PanelUpdateJob | null;
   updateRunning: boolean;
   refresh: () => void;
+  /** Drop local snapshot (after Clear stuck / successful cancel). */
+  clearLocal: () => void;
 };
 
 const PanelUpdateJobContext = createContext<PanelUpdateJobContextValue | null>(null);
@@ -25,6 +27,11 @@ export function PanelUpdateJobProvider({ children }: { children: React.ReactNode
   const [updateRunning, setUpdateRunning] = useState(false);
   const [, tick] = useState(0);
   const pollInFlight = useRef(false);
+
+  const clearLocal = useCallback(() => {
+    setJob(null);
+    setUpdateRunning(false);
+  }, []);
 
   const poll = useCallback(() => {
     if (pollInFlight.current) return;
@@ -39,12 +46,24 @@ export function PanelUpdateJobProvider({ children }: { children: React.ReactNode
     })
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { job?: PanelUpdateJob | null; updateRunning?: boolean } | null) => {
-        if (!d) return;
-        setJob(d.job ?? null);
-        setUpdateRunning(Boolean(d.updateRunning || d.job?.status === "running"));
+        if (!d) {
+          // Keep only an in-flight running job across 502s; drop failed banners stuck in memory
+          setJob((prev) => (prev?.status === "running" ? prev : null));
+          setUpdateRunning((prev) => prev);
+          return;
+        }
+        const next = d.job ?? null;
+        // Idle placeholders are not real jobs
+        if (next?.status === "idle" && !next.startedAt) {
+          setJob(null);
+          setUpdateRunning(false);
+          return;
+        }
+        setJob(next);
+        setUpdateRunning(Boolean(d.updateRunning || next?.status === "running"));
       })
       .catch(() => {
-        /* keep last good snapshot */
+        setJob((prev) => (prev?.status === "running" ? prev : null));
       })
       .finally(() => {
         window.clearTimeout(timer);
@@ -66,8 +85,8 @@ export function PanelUpdateJobProvider({ children }: { children: React.ReactNode
   }, [updateRunning, job?.startedAt]);
 
   const value = useMemo(
-    () => ({ job, updateRunning, refresh: poll }),
-    [job, updateRunning, poll]
+    () => ({ job, updateRunning, refresh: poll, clearLocal }),
+    [job, updateRunning, poll, clearLocal]
   );
 
   return (
@@ -81,7 +100,7 @@ export function usePanelUpdateJobContext(enabled = true): PanelUpdateJobContextV
     throw new Error("usePanelUpdateJob must be used within PanelUpdateJobProvider");
   }
   if (!enabled) {
-    return { job: null, updateRunning: false, refresh: () => {} };
+    return { job: null, updateRunning: false, refresh: () => {}, clearLocal: () => {} };
   }
   return ctx;
 }

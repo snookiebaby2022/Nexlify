@@ -154,8 +154,7 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const existing = await prisma.line.findFirst({ where });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  await prisma.line.delete({ where: { id: existing.id } });
-
+  // Log before delete — ActivityLog.lineId FK rejects inserts after the line is gone (P2003 → 500).
   await logActivity("delete_line", {
     userId: session.id,
     lineId: existing.id,
@@ -163,6 +162,8 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
     entityId: existing.id,
     meta: { username: existing.username },
   });
+
+  await prisma.line.delete({ where: { id: existing.id } });
 
   return NextResponse.json({ ok: true });
 }

@@ -190,7 +190,12 @@ export default function PanelUpdatesPage() {
   const [confirmVersion, setConfirmVersion] = useState<string | null>(null);
   const [autoDownload, setAutoDownload] = useState(false);
   const autoStartedRef = useRef(false);
-  const { job: liveJob, updateRunning: liveUpdateRunning, refresh: refreshJob } = usePanelUpdateJob();
+  const {
+    job: liveJob,
+    updateRunning: liveUpdateRunning,
+    refresh: refreshJob,
+    clearLocal: clearLocalJob,
+  } = usePanelUpdateJob();
 
   const load = useCallback((opts?: { silent?: boolean }) => {
     if (!opts?.silent) {
@@ -379,6 +384,7 @@ export default function PanelUpdatesPage() {
         setMsg(j.error ?? "Could not clear stuck update");
         return;
       }
+      clearLocalJob();
       setMsg("Cleared stuck update. You can try Update panel again.");
       refreshJob();
       load({ silent: true });

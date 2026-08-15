@@ -105,13 +105,17 @@ export function websiteBaseUrl(panelBaseUrl?: string): string {
   return `http://127.0.0.1:${resolveWebsiteHttpPort()}`;
 }
 
+/** Xtream Codes / XCIPTV expect `YYYY-MM-DD HH:mm:ss` (not ISO-8601 with T/Z). */
+function xtreamTimeNow(d = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+}
+
 export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: string) {
   const playable = lineIsPlayable(line);
   const { countLineSessions } = await import("@/lib/connections");
   const activeCons = playable ? await countLineSessions(line.id) : 0;
   const atCapacity = playable && line.maxConnections > 0 && activeCons >= line.maxConnections;
-  const streams = await getSettingGroup("streams");
-  const abrAutoSwitch = streams.abrAutoSwitch === true;
   const panelOrigin = pickPublicOrigin(
     panelBaseUrl,
     process.env.NEXT_PUBLIC_WEBSITE_URL || process.env.NEXT_PUBLIC_SERVER_URL
@@ -131,6 +135,7 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
   // HTTPS :443 clients to :8080 — player_api is on 443 and many hosts block 8080 externally.
   const httpPort = useHttps ? String(streamHttpsPort) : publicPort;
   const httpsPort = String(streamHttpsPort);
+  const now = new Date();
   return {
     user_info: {
       username: line.username,
@@ -143,12 +148,14 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
       auth: playable ? 1 : 0,
       status: playable ? "Active" : "Disabled",
       exp_date: Math.floor(line.expiresAt.getTime() / 1000).toString(),
-      is_trial: "0",
+      is_trial: line.isTrial ? "1" : "0",
       active_cons: String(activeCons),
       created_at: Math.floor(line.createdAt.getTime() / 1000).toString(),
-      max_connections: line.maxConnections.toString(),
-      allowed_output_formats: line.allowedOutput.split(","),
+      max_connections: String(line.maxConnections),
+      allowed_output_formats: line.allowedOutput.split(",").map((s) => s.trim()).filter(Boolean),
     },
+    // Keep server_info to classic Xtream keys only — extra fields break fragile XCIPTV parsers
+    // (Account Info shows "--" for expire / connections / created).
     server_info: {
       url: streamHost,
       port: httpPort,
@@ -156,10 +163,8 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
       server_protocol: useHttps ? "https" : "http",
       rtmp_port: "0",
       timezone: "UTC",
-      timestamp_now: Math.floor(Date.now() / 1000),
-      time_now: new Date().toISOString(),
-      abr_auto_switch: abrAutoSwitch ? 1 : 0,
-      abr_hint: abrAutoSwitch ? "client_may_switch_variants" : "",
+      timestamp_now: Math.floor(now.getTime() / 1000),
+      time_now: xtreamTimeNow(now),
     },
   };
 }
