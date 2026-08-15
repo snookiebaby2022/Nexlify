@@ -230,10 +230,10 @@ button {
   min-height: 100vh;
 }
 
-/* 1-Stream / XUI-style density — more rows and nav visible without scrolling (desktop only) */
+/* Slightly denser desktop layout so action menus stay on-screen at 100% browser zoom */
 @media (min-width: 1024px) {
   .panel-shell-inner {
-    zoom: 0.875;
+    zoom: 0.82;
   }
 }
 
@@ -1160,8 +1160,8 @@ button {
 }
 
 .xui-lines-td--actions {
-  width: 7.5rem;
-  min-width: 7.5rem;
+  width: 9.5rem;
+  min-width: 9.5rem;
   text-align: right;
   white-space: nowrap;
   overflow: visible;

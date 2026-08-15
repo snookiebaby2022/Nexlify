@@ -227,6 +227,8 @@ export async function importM3uEntries(
     sortOrderStart?: number;
     /** When true, update sortOrder on existing streams matched by URL. */
     reorderExisting?: boolean;
+    /** When true (default), refresh LIVE stream names/logos/epg ids on sync. */
+    updateNamesOnSync?: boolean;
   }
 ) {
   clearTmdbImportCache();
@@ -244,6 +246,7 @@ export async function importM3uEntries(
       autoBouquetFromGroup: opts.autoBouquetFromGroup,
       sortOrderStart: opts.sortOrderStart,
       reorderExisting: opts.reorderExisting,
+      updateNamesOnSync: opts.updateNamesOnSync,
     });
   }
 
@@ -272,10 +275,25 @@ export async function importM3uEntries(
       where: { streamUrl: entry.url, type },
     });
     if (existing) {
-      if (opts.reorderExisting !== false) {
+      if (opts.reorderExisting !== false || opts.updateNamesOnSync !== false) {
+        const nextName = entry.name?.trim() || existing.name;
         await prisma.stream.update({
           where: { id: existing.id },
-          data: { sortOrder: entrySortOrder },
+          data: {
+            sortOrder: entrySortOrder,
+            ...(opts.updateNamesOnSync !== false
+              ? {
+                  name: nextName.slice(0, 200),
+                  ...(entry.logo?.trim() ? { streamIcon: entry.logo.trim() } : {}),
+                  ...(entry.tvgId || entry.tvgName || entry.channelId
+                    ? {
+                        epgChannelId:
+                          entry.tvgId || entry.tvgName || entry.channelId || existing.epgChannelId,
+                      }
+                    : {}),
+                }
+              : {}),
+          },
         });
         if (bouquetIds.length) {
           for (const bouquetId of bouquetIds) {

@@ -480,8 +480,15 @@ export async function jobPanelBackup() {
 export async function jobServerRebalance() {
   const start = Date.now();
   try {
-    const n = await reassignStreamsFromOfflineServers();
-    await logCron("server_rebalance", "ok", `${n} streams moved`, Date.now() - start);
+    const failover = await reassignStreamsFromOfflineServers();
+    const { rebalanceLiveStreamsAcrossServers } = await import("./server-load");
+    const even = await rebalanceLiveStreamsAcrossServers({ maxMoves: 80 });
+    await logCron(
+      "server_rebalance",
+      "ok",
+      `failover ${failover}; balanced ${even.moved} across ${even.servers} servers`,
+      Date.now() - start
+    );
   } catch (e) {
     await logCron("server_rebalance", "error", String(e), Date.now() - start);
   }

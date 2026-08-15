@@ -9,7 +9,11 @@ const lineInclude = {
       bouquet: {
         include: {
           streams: {
-            include: { stream: true },
+            include: {
+              stream: {
+                include: { provider: true, server: true },
+              },
+            },
             orderBy: { sortOrder: "asc" as const },
           },
         },

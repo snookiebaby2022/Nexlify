@@ -933,9 +933,19 @@ model StreamProvider {
   region        String?
   maxStreams    Int?
   notes         String?
+  /// Remote management / connection details (SSH, panel URL, host login)
+  remotePanelUrl   String?
+  remoteHost       String?
+  remotePort       Int?
+  remoteUsername   String?
+  remotePassword   String?
+  /// ssh | https | http | rdp | other
+  remoteProtocol   String?
+  remoteNotes      String?
   status        String    @default("unknown")
   statusMessage String?
   lastCheckAt   DateTime?
+  lastLatencyMs Int?
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

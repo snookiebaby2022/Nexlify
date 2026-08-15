@@ -56,5 +56,7 @@ export async function syncM3uFromUrl(url: string, opts: M3uSyncOptions = {}) {
     defaultOnDemand: opts.defaultOnDemand ?? (isLive ? true : undefined),
     sortOrderStart: opts.sortOrderStart ?? 0,
     reorderExisting: opts.reorderExisting ?? true,
+    // Keep live (and VOD) display names in sync with the upstream playlist.
+    updateNamesOnSync: true,
   });
 }

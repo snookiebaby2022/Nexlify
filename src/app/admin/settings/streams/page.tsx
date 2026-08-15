@@ -97,6 +97,17 @@ export default function StreamSettingsPage() {
               ],
             },
             {
+              key: "autoRebalanceLive",
+              label: "Auto-balance live streams across LBs",
+              type: "select",
+              options: [
+                { value: "even_spread", label: "Even spread (save bandwidth / CPU / RAM)" },
+                { value: "failover_only", label: "Failover only (move off offline servers)" },
+                { value: "off", label: "Off" },
+              ],
+              hint: "Cron reassigns live channels across online load balancers so no single box holds most of the catalog.",
+            },
+            {
               key: "geoLoadBalancing",
               label: "Geo-aware load balancing",
               type: "yesno",

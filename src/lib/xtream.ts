@@ -213,14 +213,21 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
     }
   }
   live = sortStreamsForXc(live, await xcDefaultOrder());
-  const withProviders = await prisma.stream.findMany({
-    where: { id: { in: live.map((s) => s.id) } },
-    include: { provider: true, server: true },
-  });
-  const byId = new Map(withProviders.map((s) => [s.id, s]));
 
   return live.map((s, i) => {
-    const full = byId.get(s.id) ?? s;
+    const full = s as typeof s & {
+      provider?: { baseUrl?: string | null } | null;
+      server?: { host?: string | null } | null;
+      playlistUrl?: string | null;
+      vodMode?: string | null;
+      isOnDemand?: boolean;
+      isShifted?: boolean;
+      archiveDays?: number | null;
+      timeshiftSeconds?: number | null;
+      parentStreamId?: string | null;
+      bitrates?: unknown;
+      updatedAt: Date;
+    };
     const playbackMode = getStreamPlaybackMode(full);
     const catchup = full.vodMode === "CATCHUP" || full.isOnDemand || full.isShifted;
     const archiveDays = full.archiveDays ?? 0;
@@ -277,14 +284,13 @@ export async function xtreamVodStreams(
     }
   }
   movies = sortStreamsForXc(movies, await xcDefaultOrder());
-  const withProviders = await prisma.stream.findMany({
-    where: { id: { in: movies.map((s) => s.id) } },
-    include: { provider: true },
-  });
-  const byId = new Map(withProviders.map((s) => [s.id, s]));
 
   return movies.map((s, i) => {
-    const full = byId.get(s.id) ?? s;
+    const full = s as typeof s & {
+      provider?: { baseUrl?: string | null } | null;
+      playlistUrl?: string | null;
+      updatedAt: Date;
+    };
     return {
       num: i + 1,
       name: s.name,
@@ -294,7 +300,7 @@ export async function xtreamVodStreams(
       added: Math.floor(s.createdAt.getTime() / 1000).toString(),
       updated_at: Math.floor(full.updatedAt.getTime() / 1000),
       category_id: s.categoryId ?? "0",
-      container_extension: full.containerExtension ?? "mp4",
+      container_extension: (full as { containerExtension?: string | null }).containerExtension ?? "mp4",
       custom_sid: "",
       direct_source: exportPlaybackUrl(baseUrl, line, s, full),
     };
@@ -353,11 +359,6 @@ export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
 
 export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: string, output: "hls" | "ts" = "ts") {
   const streams = await streamsForLineExport(line);
-  const withProviders = await prisma.stream.findMany({
-    where: { id: { in: streams.map((s) => s.id) } },
-    include: { provider: true },
-  });
-  const byId = new Map(withProviders.map((s) => [s.id, s]));
 
   const catIds = [...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[])];
   const allCatIds = catIds.length ? await collectCategoryAncestors(catIds) : [];
@@ -384,7 +385,7 @@ export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: st
   const isExtended = type === "m3u_plus";
   const lines: string[] = ["#EXTM3U"];
   for (const s of streams) {
-    const full = byId.get(s.id) ?? s;
+    const full = s as typeof s & { bitrates?: unknown; streamUrl: string };
     const variants = parseBitrates(full.bitrates);
     if (s.type === StreamType.LIVE && variants.length > 1) {
       for (const v of variants) {

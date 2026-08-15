@@ -24,7 +24,10 @@ export async function GET(req: NextRequest) {
   const vodOnly = req.nextUrl.searchParams.get("vod") === "1";
 
   try {
-    const providers = await prisma.streamProvider.findMany({ orderBy: { name: "asc" } });
+    const providers = await prisma.streamProvider.findMany({
+      orderBy: { name: "asc" },
+      include: { _count: { select: { streams: true, m3uSyncJobs: true } } },
+    });
     const filtered = vodOnly
       ? providers.filter((p) => {
           const t = (p.providerType ?? "").toLowerCase();
@@ -62,6 +65,7 @@ export async function POST(req: NextRequest) {
           status: probe.status,
           statusMessage: probe.message,
           lastCheckAt: new Date(),
+          lastLatencyMs: probe.latencyMs ?? null,
         },
       });
       return NextResponse.json({ provider: updated, probe });
@@ -89,9 +93,20 @@ export async function POST(req: NextRequest) {
         region: body.region ? String(body.region) : null,
         maxStreams: validated.data.maxStreams,
         notes: body.notes ? String(body.notes) : null,
+        remotePanelUrl: body.remotePanelUrl ? String(body.remotePanelUrl).trim() : null,
+        remoteHost: body.remoteHost ? String(body.remoteHost).trim() : null,
+        remotePort:
+          body.remotePort != null && String(body.remotePort).trim() !== ""
+            ? Number(body.remotePort)
+            : null,
+        remoteUsername: body.remoteUsername ? String(body.remoteUsername).trim() : null,
+        remotePassword: body.remotePassword ? String(body.remotePassword) : null,
+        remoteProtocol: body.remoteProtocol ? String(body.remoteProtocol).trim() : null,
+        remoteNotes: body.remoteNotes ? String(body.remoteNotes) : null,
         status: probe.status,
         statusMessage: probe.message,
         lastCheckAt: new Date(),
+        lastLatencyMs: probe.latencyMs ?? null,
       },
     });
     return NextResponse.json({ provider, probe });
@@ -133,12 +148,14 @@ export async function PATCH(req: NextRequest) {
     let status = existing.status;
     let statusMessage = existing.statusMessage;
     let lastCheckAt = existing.lastCheckAt;
+    let lastLatencyMs = existing.lastLatencyMs;
 
     if (urlChanged || body.recheck) {
       const probe = await probeStreamProvider(validated.data.baseUrl);
       status = probe.status;
       statusMessage = probe.message;
       lastCheckAt = new Date();
+      lastLatencyMs = probe.latencyMs ?? null;
     }
 
     const provider = await prisma.streamProvider.update({
@@ -154,9 +171,52 @@ export async function PATCH(req: NextRequest) {
         region: body.region === undefined ? undefined : body.region ? String(body.region) : null,
         maxStreams: validated.data.maxStreams,
         notes: body.notes === undefined ? undefined : body.notes ? String(body.notes) : null,
+        remotePanelUrl:
+          body.remotePanelUrl === undefined
+            ? undefined
+            : body.remotePanelUrl
+              ? String(body.remotePanelUrl).trim()
+              : null,
+        remoteHost:
+          body.remoteHost === undefined
+            ? undefined
+            : body.remoteHost
+              ? String(body.remoteHost).trim()
+              : null,
+        remotePort:
+          body.remotePort === undefined
+            ? undefined
+            : body.remotePort != null && String(body.remotePort).trim() !== ""
+              ? Number(body.remotePort)
+              : null,
+        remoteUsername:
+          body.remoteUsername === undefined
+            ? undefined
+            : body.remoteUsername
+              ? String(body.remoteUsername).trim()
+              : null,
+        remotePassword:
+          body.remotePassword === undefined
+            ? undefined
+            : body.remotePassword
+              ? String(body.remotePassword)
+              : null,
+        remoteProtocol:
+          body.remoteProtocol === undefined
+            ? undefined
+            : body.remoteProtocol
+              ? String(body.remoteProtocol).trim()
+              : null,
+        remoteNotes:
+          body.remoteNotes === undefined
+            ? undefined
+            : body.remoteNotes
+              ? String(body.remoteNotes)
+              : null,
         status,
         statusMessage,
         lastCheckAt,
+        lastLatencyMs,
       },
     });
     return NextResponse.json({ provider });

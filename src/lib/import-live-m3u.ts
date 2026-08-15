@@ -65,6 +65,8 @@ export async function importLiveM3uEntriesFast(
     autoBouquetFromGroup?: boolean;
     sortOrderStart?: number;
     reorderExisting?: boolean;
+    /** When true (default), refresh name/logo/epg_id on existing LIVE URLs during sync. */
+    updateNamesOnSync?: boolean;
   }
 ) {
   const selectedSet = opts.selectedUrls?.length ? new Set(opts.selectedUrls) : null;
@@ -142,15 +144,35 @@ export async function importLiveM3uEntriesFast(
     groupKey: string | null;
   }[] = [];
 
-  const existingUpdates: { id: string; sortOrder: number; groupKey: string | null }[] = [];
+  const existingUpdates: {
+    id: string;
+    sortOrder: number;
+    groupKey: string | null;
+    name: string | null;
+    streamIcon: string | null;
+    epgChannelId: string | null;
+  }[] = [];
+  let renamed = 0;
 
   for (const { entry, index } of unique) {
     const sortOrder = sortOrderStart + index;
     const groupKey = entry.group?.trim() || null;
     const existingId = existingByUrl.get(entry.url);
     if (existingId) {
-      if (opts.reorderExisting !== false) {
-        existingUpdates.push({ id: existingId, sortOrder, groupKey });
+      if (opts.reorderExisting !== false || opts.updateNamesOnSync !== false) {
+        const name = liveStreamDisplayName(entry);
+        existingUpdates.push({
+          id: existingId,
+          sortOrder,
+          groupKey,
+          name: opts.updateNamesOnSync !== false ? name : null,
+          streamIcon:
+            opts.updateNamesOnSync !== false ? entry.logo?.trim() || null : null,
+          epgChannelId:
+            opts.updateNamesOnSync !== false
+              ? entry.tvgId || entry.tvgName || entry.channelId || null
+              : null,
+        });
         reordered++;
       }
       skipped++;
@@ -245,18 +267,24 @@ export async function importLiveM3uEntriesFast(
     }
   }
 
-  // Optional reorder of existing streams (batched updates)
-  if (existingUpdates.length && opts.reorderExisting !== false) {
+  // Optional reorder + name/icon/epg refresh of existing streams (batched updates)
+  if (existingUpdates.length) {
     for (let i = 0; i < existingUpdates.length; i += 50) {
       const slice = existingUpdates.slice(i, i + 50);
       await prisma.$transaction(
         slice.map((u) =>
           prisma.stream.update({
             where: { id: u.id },
-            data: { sortOrder: u.sortOrder },
+            data: {
+              sortOrder: u.sortOrder,
+              ...(u.name ? { name: u.name } : {}),
+              ...(u.streamIcon ? { streamIcon: u.streamIcon } : {}),
+              ...(u.epgChannelId ? { epgChannelId: u.epgChannelId } : {}),
+            },
           })
         )
       );
+      renamed += slice.filter((u) => u.name).length;
     }
   }
 
@@ -264,6 +292,7 @@ export async function importLiveM3uEntriesFast(
     imported,
     skipped,
     reordered: reordered || undefined,
+    updated: renamed || undefined,
     errors: errors.length ? errors : undefined,
   };
 }

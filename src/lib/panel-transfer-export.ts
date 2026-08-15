@@ -75,6 +75,16 @@ export type PanelTransferBundle = {
     providerType?: string;
     description?: string;
     region?: string;
+    contactEmail?: string;
+    maxStreams?: number;
+    notes?: string;
+    remotePanelUrl?: string;
+    remoteHost?: string;
+    remotePort?: number;
+    remoteUsername?: string;
+    remotePassword?: string;
+    remoteProtocol?: string;
+    remoteNotes?: string;
     isActive: boolean;
   }[];
 };
@@ -129,6 +139,16 @@ export async function buildPanelTransferExport(
       providerType: p.providerType ?? undefined,
       description: p.description ?? undefined,
       region: p.region ?? undefined,
+      contactEmail: p.contactEmail ?? undefined,
+      maxStreams: p.maxStreams ?? undefined,
+      notes: p.notes ?? undefined,
+      remotePanelUrl: p.remotePanelUrl ?? undefined,
+      remoteHost: p.remoteHost ?? undefined,
+      remotePort: p.remotePort ?? undefined,
+      remoteUsername: p.remoteUsername ?? undefined,
+      remotePassword: p.remotePassword ?? undefined,
+      remoteProtocol: p.remoteProtocol ?? undefined,
+      remoteNotes: p.remoteNotes ?? undefined,
       isActive: p.isActive,
     }));
   }

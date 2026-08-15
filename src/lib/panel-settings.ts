@@ -138,6 +138,8 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     connectionLimitHandle: "validate_on_connect",
     vodConnectionHandle: "30m_expire",
     loadBalancing: "server_slots",
+    /** even_spread (default with server_slots) | failover_only | off */
+    autoRebalanceLive: "even_spread",
     geoLoadBalancing: true,
     loadBalancingRestriction: "stop_overloaded",
     streamConnectionsOnRestart: "keep",

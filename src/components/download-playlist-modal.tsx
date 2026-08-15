@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Copy, Check, Download, QrCode, X } from "lucide-react";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
 import {
@@ -18,6 +18,13 @@ type FilterKey = "live" | "movies" | "episodes" | "radio";
 
 function formatKey(f: LinePlaylistFormat) {
   return `${f.type}:${f.output ?? ""}:${f.label}`;
+}
+
+function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function DownloadPlaylistModal({
@@ -41,6 +48,22 @@ export function DownloadPlaylistModal({
   });
   const [selectedKey, setSelectedKey] = useState("m3u_plus:hls:m3u With Options - HLS");
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
+  const [dlBusy, setDlBusy] = useState(false);
+  const [dlProgress, setDlProgress] = useState(0);
+  const [dlLabel, setDlLabel] = useState("");
+  const [dlStatus, setDlStatus] = useState("");
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      if (tickRef.current) clearInterval(tickRef.current);
+      tickRef.current = null;
+      setDlBusy(false);
+      setDlProgress(0);
+      setDlLabel("");
+      setDlStatus("");
+    }
+  }, [open]);
 
   const { host, proto, origin } = useMemo(() => {
     if (typeof window === "undefined") return { host: "", proto: "https:", origin: "" };
@@ -80,18 +103,82 @@ export function DownloadPlaylistModal({
   }
 
   async function downloadUrl(url: string, filename: string) {
+    setDlBusy(true);
+    setDlProgress(3);
+    setDlLabel("");
+    setDlStatus("Connecting — Live TV, Movies & Series…");
+    if (tickRef.current) clearInterval(tickRef.current);
+    let soft = 3;
+    tickRef.current = setInterval(() => {
+      soft = Math.min(soft + 1.5, 40);
+      setDlProgress((p) => (p < soft ? soft : p));
+      setDlStatus("Preparing playlist (Live → Movies → Series)…");
+    }, 160);
+
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      const blob = new Blob([text], { type: "application/octet-stream" });
+      if (tickRef.current) {
+        clearInterval(tickRef.current);
+        tickRef.current = null;
+      }
+      setDlStatus("Downloading Live TV, Movies & Series…");
+
+      const totalHeader = Number(res.headers.get("content-length") || 0);
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      let lastUi = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        chunks.push(value);
+        received += value.length;
+        const now = Date.now();
+        if (now - lastUi > 70) {
+          lastUi = now;
+          if (totalHeader > 0) {
+            setDlProgress(Math.max(42, Math.min(97, Math.round((received / totalHeader) * 100))));
+            setDlLabel(`${formatBytes(received)} / ${formatBytes(totalHeader)}`);
+          } else {
+            setDlProgress(Math.min(94, 42 + Math.log10(received + 10) * 14));
+            setDlLabel(formatBytes(received));
+          }
+        }
+      }
+
+      setDlProgress(99);
+      setDlStatus("Finishing…");
+      const blob = new Blob(chunks as BlobPart[], { type: "application/octet-stream" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = filename;
       a.click();
       URL.revokeObjectURL(a.href);
+      setDlProgress(100);
+      setDlLabel(formatBytes(received));
+      setDlStatus("Complete");
     } catch {
+      if (tickRef.current) {
+        clearInterval(tickRef.current);
+        tickRef.current = null;
+      }
+      setDlStatus("Opening in new tab…");
       window.open(url, "_blank", "noopener,noreferrer");
+    } finally {
+      if (tickRef.current) {
+        clearInterval(tickRef.current);
+        tickRef.current = null;
+      }
+      setTimeout(() => {
+        setDlBusy(false);
+        setDlProgress(0);
+        setDlLabel("");
+        setDlStatus("");
+      }, 600);
     }
   }
 
@@ -212,6 +299,26 @@ export function DownloadPlaylistModal({
             />
             <UrlRow label="/play/list?" url={playListUrl} filename={`${username}-list.m3u`} />
           </>
+        )}
+
+        {(dlBusy || dlProgress > 0) && (
+          <section className="download-playlist-card space-y-2">
+            <div className="flex items-center justify-between text-xs" style={{ color: "var(--muted)" }}>
+              <span>{dlStatus || "Downloading…"}</span>
+              <span>
+                {Math.round(dlProgress)}%{dlLabel ? ` · ${dlLabel}` : ""}
+              </span>
+            </div>
+            <div className="h-2.5 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+              <div
+                className="h-full rounded-full transition-[width] duration-150 ease-out"
+                style={{
+                  width: `${Math.max(2, Math.min(100, dlProgress))}%`,
+                  background: "var(--accent)",
+                }}
+              />
+            </div>
+          </section>
         )}
 
         <section className="download-playlist-card">

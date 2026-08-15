@@ -521,11 +521,11 @@ export function PanelSidebar({
           type="button"
           className="panel-sidebar-collapse-btn"
           onClick={toggleCollapsed}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Minimize sidebar"}
+          aria-label={collapsed ? "Expand sidebar" : "Minimize sidebar"}
         >
           {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          {!collapsed && <span>Collapse menu</span>}
+          {!collapsed && <span>Minimize sidebar</span>}
         </button>
       </div>
 

@@ -106,7 +106,11 @@ export async function GET(req: NextRequest) {
     }
     case "get_live_streams": {
       const categoryId = req.nextUrl.searchParams.get("category_id");
-      const payload = await xtreamLiveStreams(line, baseUrl, categoryId);
+      const ttl = await getCacheTtls();
+      const cacheKey = `xtream:live_streams:${line.id}:${categoryId ?? "all"}`;
+      const payload = await cacheGetOrSet(cacheKey, Math.min(ttl.categories || 60, 90), () =>
+        xtreamLiveStreams(line, baseUrl, categoryId)
+      );
       const antiFreeze = await getAntiFreezeSettings();
       if (antiFreeze.zapPrefetchOnPlaylist) {
         const ids = payload.map((s) => String(s.stream_id));
@@ -127,7 +131,12 @@ export async function GET(req: NextRequest) {
     }
     case "get_vod_streams": {
       const vodCategoryId = req.nextUrl.searchParams.get("category_id");
-      const payload = await xtreamVodStreams(line, baseUrl, vodCategoryId);
+      const ttl = await getCacheTtls();
+      const payload = await cacheGetOrSet(
+        `xtream:vod_streams:${line.id}:${vodCategoryId ?? "all"}`,
+        Math.min(ttl.categories || 60, 90),
+        () => xtreamVodStreams(line, baseUrl, vodCategoryId)
+      );
       if (clientTimestamp && clientTimestamp > 0) {
         const filtered = payload.filter(
           (s) => (s.updated_at ?? 0) > clientTimestamp
@@ -164,7 +173,12 @@ export async function GET(req: NextRequest) {
     }
     case "get_series": {
       const seriesCategoryId = req.nextUrl.searchParams.get("category_id");
-      const payload = await xtreamSeriesForLine(line, seriesCategoryId);
+      const ttl = await getCacheTtls();
+      const payload = await cacheGetOrSet(
+        `xtream:series:${line.id}:${seriesCategoryId ?? "all"}`,
+        Math.min(ttl.categories || 60, 90),
+        () => xtreamSeriesForLine(line, seriesCategoryId)
+      );
       return iptvJson(payload);
     }
     case "get_short_epg": {

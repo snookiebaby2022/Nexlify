@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
             totalActiveLines: activeLines,
             networkInMbps,
             networkOutMbps,
-            connections: connections.slice(0, 50).map((c) => ({
+            connections: connections.slice(0, 10).map((c) => ({
               id: c.id,
               line: c.line?.username ?? "unknown",
               stream: c.stream?.name ?? "unknown",

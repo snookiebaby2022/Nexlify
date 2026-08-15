@@ -37,10 +37,12 @@ export async function GET(req: NextRequest) {
 
   const baseUrl = serverBaseUrl(req.url, req.headers);
   const body = await buildM3u(line, baseUrl, type, output);
+  const bytes = Buffer.byteLength(body, "utf8");
 
   return iptvText(body, {
     headers: {
       "Content-Type": "audio/x-mpegurl",
+      "Content-Length": String(bytes),
       "Content-Disposition": `attachment; filename="${username}.m3u"`,
     },
   });

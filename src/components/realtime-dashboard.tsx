@@ -117,8 +117,9 @@ export function RealtimeDashboard() {
       {/* Live connections table */}
       {data?.connections && data.connections.length > 0 && (
         <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)" }}>
-          <div className="px-4 py-3 border-b" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
+          <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
             <h3 className="text-sm font-semibold">Live Connections</h3>
+            <span className="text-xs" style={{ color: "var(--muted)" }}>Latest 10</span>
           </div>
           <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
             <table className="w-full text-sm">
@@ -130,7 +131,7 @@ export function RealtimeDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {data.connections.map((c) => {
+                {data.connections.slice(0, 10).map((c) => {
                   const started = new Date(c.startedAt);
                   const durationSec = Math.max(0, Math.floor((Date.now() - started.getTime()) / 1000));
                   const h = Math.floor(durationSec / 3600);

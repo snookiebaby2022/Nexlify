@@ -150,11 +150,7 @@ export function LineAddForm({
       .then((d) => {
         const list = d.bouquets ?? [];
         setBouquets(list);
-        setForm((f) =>
-          f.bouquetIds.length === 0
-            ? { ...f, bouquetIds: list.map((b: { id: string }) => b.id) }
-            : f
-        );
+        // Do not pre-select every bouquet — operator must choose on the Bouquets step.
       });
     fetch("/api/admin/packages")
       .then((r) => r.json())
@@ -223,8 +219,16 @@ export function LineAddForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    // Never create from Enter/Next on earlier steps — only the Create button on Bouquets.
     if (tab !== "bouquets") {
       goNext();
+      return;
+    }
+  }
+
+  async function createLine() {
+    if (tab !== "bouquets") {
+      setTab("bouquets");
       return;
     }
     let username = form.username.trim();
@@ -236,6 +240,9 @@ export function LineAddForm({
     if (username.length < MIN_LINE_CREDENTIAL_LENGTH || password.length < MIN_LINE_CREDENTIAL_LENGTH) {
       alert(`Username and password must each be at least ${MIN_LINE_CREDENTIAL_LENGTH} characters.`);
       return;
+    }
+    if (form.bouquetIds.length === 0) {
+      if (!confirm("No bouquets selected. Create the line with an empty bouquet list?")) return;
     }
 
     const notes = [form.adminNotes, form.resellerNotes].filter(Boolean).join("\n---\n");
@@ -702,7 +709,8 @@ export function LineAddForm({
             </button>
           ) : (
             <button
-              type="submit"
+              type="button"
+              onClick={() => void createLine()}
               disabled={saving}
               className="btn-positive rounded px-6 py-2.5 text-sm font-medium cursor-pointer disabled:opacity-60"
             >
