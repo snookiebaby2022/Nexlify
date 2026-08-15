@@ -42,6 +42,15 @@ verify_panel() {
 nexlify_only_restart() {
   load_env
 
+  if [ -f "$ROOT/scripts/nexlify-migrate-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-migrate-guard.sh"
+    if ! nexlify_refuse_restart_if_migrating; then
+      log "SKIP: nexlify restart blocked — SQL migration in progress"
+      return 1
+    fi
+  fi
+
   if ! command -v pm2 >/dev/null 2>&1; then
     log "ERROR: pm2 not in PATH"
     return 1

@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v${_PV}}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v1.9.79}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -493,6 +493,13 @@ cmd_swap() {
 }
 
 cmd_build() {
+  if [ -f "$ROOT/scripts/nexlify-migrate-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-migrate-guard.sh"
+    if ! nexlify_refuse_restart_if_migrating; then
+      return 1
+    fi
+  fi
   UPDATE_TRAP_ACTIVE=1
   trap 'update_trap_exit $?' EXIT
   touch "$ROOT/.update-in-progress"
@@ -504,6 +511,13 @@ cmd_build() {
 }
 
 cmd_restart() {
+  if [ -f "$ROOT/scripts/nexlify-migrate-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-migrate-guard.sh"
+    if ! nexlify_refuse_restart_if_migrating; then
+      return 1
+    fi
+  fi
   if [ "$PANEL_RESTARTED" = "1" ]; then
     echo "Panel already restarted after build swap."
     return 0
