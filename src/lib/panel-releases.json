@@ -1,7 +1,20 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.100",
+  "latestVersion": "1.9.101",
   "releases": [
+    {
+      "version": "1.9.101",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Wider left sidebar for easier navigation and longer nav list space.",
+      "changelog": [
+        "Left sidebar width 252px → 300px",
+        "Slightly tighter footer actions so the nav list has more vertical room"
+      ],
+      "fixes": [
+        "Sidebar felt short/cramped after chat moved into the footer"
+      ]
+    },
     {
       "version": "1.9.100",
       "date": "2026-08-16",

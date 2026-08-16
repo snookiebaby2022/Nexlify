@@ -93,7 +93,7 @@ export function PanelLiveChat({
   const panel = open && (
     <div
       className={`w-[min(100vw-2rem,380px)] h-[min(70vh,520px)] rounded-2xl border shadow-2xl flex flex-col overflow-hidden ${
-        variant === "sidebar" ? "fixed bottom-4 left-[max(0.75rem,calc(var(--panel-sidebar-w,252px)+0.75rem))] z-[300]" : ""
+        variant === "sidebar" ? "fixed bottom-4 left-[max(0.75rem,calc(var(--panel-sidebar-w,300px)+0.75rem))] z-[300]" : ""
       }`}
       style={{
         borderColor: "var(--border)",

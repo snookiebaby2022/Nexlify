@@ -92,7 +92,7 @@ export default function ChatAssistant({ variant = "sidebar" }: { variant?: "side
     <div
       className={`w-80 rounded-2xl border shadow-2xl overflow-hidden flex flex-col ${
         variant === "sidebar"
-          ? "fixed bottom-4 left-[max(0.75rem,calc(var(--panel-sidebar-w,252px)+0.75rem))] z-[300]"
+          ? "fixed bottom-4 left-[max(0.75rem,calc(var(--panel-sidebar-w,300px)+0.75rem))] z-[300]"
           : "fixed bottom-36 left-4 z-50"
       }`}
       style={{ borderColor: "var(--border)", background: "var(--bg-card)", height: "480px" }}
