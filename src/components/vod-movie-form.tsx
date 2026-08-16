@@ -131,7 +131,7 @@ export function VodMovieForm({
     location: "remote",
     doNotEncode: false,
     symlinkSource: false,
-    directSource: false,
+    directSource: true,
     removeSubtitles: false,
     nativeFrames: false,
     isAdult: false,
@@ -200,7 +200,7 @@ export function VodMovieForm({
         serverId: meta.serverIds[0] || null,
         containerExtension: meta.outputFormats.split(",")[0]?.trim() || "mp4",
         isOnDemand: true,
-        vodMode: "MOVIE",
+        vodMode: "ON_DEMAND",
         bouquetIds: meta.bouquetIds,
         agentStartCmd: encodeVodMeta({ ...meta, ...tmdb }),
       }),
@@ -267,12 +267,12 @@ export function VodMovieForm({
               <option value="local">Local</option>
             </select>
           </FormField>
-          <FormField label="Source (path)">
+          <FormField label="Direct source URL / path">
             <div className="flex gap-2">
               <input
                 className={`${formInputClass} flex-1 font-mono text-sm`}
                 style={formInputStyle}
-                placeholder="URL or server path"
+                placeholder="https://provider…/movie/user/pass/123.mp4"
                 value={form.streamUrl}
                 onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
                 disabled={useProvider}

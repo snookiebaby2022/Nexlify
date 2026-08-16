@@ -445,24 +445,42 @@ export async function PATCH(req: NextRequest) {
 
   if (body.streamIcon !== undefined) data.streamIcon = body.streamIcon || null;
 
-  if (body.source != null || body.streamUrl != null) {
+  const hostedRequested =
+    body.hostedExternally === true ||
+    (Boolean(body.providerId) && Boolean(String(body.providerPath ?? "").trim()));
 
+  if (hostedRequested) {
+    const providerId = String(body.providerId ?? "").trim();
+    const providerPath = String(body.providerPath ?? "").trim();
+    if (!providerId || !providerPath) {
+      return NextResponse.json({ error: "providerId and providerPath required for hosted source" }, { status: 400 });
+    }
+    const provider = await prisma.streamProvider.findUnique({ where: { id: providerId } });
+    if (!provider) return NextResponse.json({ error: "Selected provider not found" }, { status: 400 });
+    if (!provider.isActive) return NextResponse.json({ error: "Selected provider is disabled" }, { status: 400 });
+    const { resolveProviderUrl } = await import("@/lib/vod-provider-url");
+    data.streamUrl = resolveProviderUrl(provider, providerPath);
+    data.providerId = providerId;
+    data.providerPath = providerPath;
+    data.hostedExternally = true;
+  } else if (body.source != null || body.streamUrl != null) {
     const rawSource = normalizeStreamSource(String(body.source ?? body.streamUrl ?? ""));
-
     if (rawSource) {
-
       const { streamUrl } = resolveSourceToStreamUrl(rawSource, getMediaImportRoot());
-
       data.streamUrl = streamUrl;
       data.providerId = null;
       data.providerPath = null;
       data.hostedExternally = false;
-
     }
-
+  } else if (body.hostedExternally === false) {
+    data.providerId = null;
+    data.providerPath = null;
+    data.hostedExternally = false;
   }
 
-  if (body.type != null) data.type = body.type;
+  if (body.type != null && Object.values(StreamType).includes(body.type as StreamType)) {
+    data.type = body.type;
+  }
 
   if (body.serverId !== undefined) data.serverId = body.serverId || null;
 
@@ -478,7 +496,44 @@ export async function PATCH(req: NextRequest) {
 
   if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
 
+  if (body.backupUrl !== undefined) {
+    data.backupUrl = body.backupUrl ? String(body.backupUrl).trim() || null : null;
+  }
 
+  if (body.playlistUrl !== undefined) {
+    data.playlistUrl = body.playlistUrl ? String(body.playlistUrl).trim() || null : null;
+  }
+
+  if (body.archiveDays !== undefined) {
+    data.archiveDays = body.archiveDays != null && body.archiveDays !== "" ? Number(body.archiveDays) : null;
+  }
+
+  if (body.containerExtension !== undefined) {
+    data.containerExtension = body.containerExtension ? String(body.containerExtension).trim() || "mp4" : "mp4";
+  }
+
+  if (body.seriesName !== undefined) data.seriesName = body.seriesName ? String(body.seriesName) : null;
+  if (body.seasonNum !== undefined) {
+    data.seasonNum = body.seasonNum != null && body.seasonNum !== "" ? Number(body.seasonNum) : null;
+  }
+  if (body.episodeNum !== undefined) {
+    data.episodeNum = body.episodeNum != null && body.episodeNum !== "" ? Number(body.episodeNum) : null;
+  }
+
+  if (body.isAdult !== undefined) data.isAdult = Boolean(body.isAdult);
+  if (body.isRadio !== undefined) data.isRadio = Boolean(body.isRadio);
+  if (body.isCreatedChannel !== undefined) data.isCreatedChannel = Boolean(body.isCreatedChannel);
+  if (body.autoRestart !== undefined) data.autoRestart = Boolean(body.autoRestart);
+
+  if (body.vodMode !== undefined || body.isOnDemand !== undefined) {
+    const { syncVodModeFields } = await import("@/lib/resolve-stream-url");
+    const synced = syncVodModeFields({
+      vodMode: body.vodMode,
+      isOnDemand: body.isOnDemand,
+    });
+    data.vodMode = synced.vodMode;
+    data.isOnDemand = synced.isOnDemand;
+  }
 
   if (
 

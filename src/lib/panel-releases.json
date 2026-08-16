@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.117",
+  "latestVersion": "1.9.118",
   "releases": [
+    {
+      "version": "1.9.118",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Stream/VOD edit: live vs on-demand, direct provider URLs, richer manage for movies/series/episodes.",
+      "changelog": [
+        "Edit stream: switch Live / Movie / Series, Live vs On-demand / Catch-up, hosted provider or direct URL",
+        "Movies, series, and episodes support direct provider URLs or hosted provider paths",
+        "Series manage: enable/disable, delete, add episode; episodes manage: status, provider badge, enable/disable",
+        "Stream list badges for LIVE / ON DEMAND / PROVIDER; stream PATCH saves backupUrl + vod/provider fields",
+        "Fixed invalid vodMode MOVIE/SERIES from VOD forms (now ON_DEMAND)"
+      ],
+      "fixes": [
+        "Editing a stream had no on-demand vs live channel option",
+        "Movies/series/episodes could not clearly use the provider’s direct URL",
+        "Manage series/episodes missing enable, delete, and provider source controls",
+        "Stream edit ignored backup URL and could not change vodMode / provider hosting"
+      ]
+    },
     {
       "version": "1.9.117",
       "date": "2026-08-16",

@@ -22,6 +22,7 @@ import {
 import { StreamBouquetSection } from "@/components/stream-bouquet-section";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
+import { OnDemandStreamFields, ProviderSourceFields } from "@/components/provider-source-fields";
 
 type Stream = {
   id: string;
@@ -39,6 +40,20 @@ type Stream = {
   isShifted?: boolean;
   timeshiftSeconds?: number | null;
   parentStreamId?: string | null;
+  vodMode?: string;
+  isOnDemand?: boolean;
+  archiveDays?: number | null;
+  playlistUrl?: string | null;
+  hostedExternally?: boolean;
+  providerId?: string | null;
+  providerPath?: string | null;
+  seriesName?: string | null;
+  seasonNum?: number | null;
+  episodeNum?: number | null;
+  containerExtension?: string | null;
+  isAdult?: boolean;
+  autoRestart?: boolean;
+  isCreatedChannel?: boolean;
 };
 
 function EditSection({
@@ -79,6 +94,18 @@ function EditSection({
   );
 }
 
+function manageHrefForType(type: string) {
+  if (type === "MOVIE") return "/admin/content/movies";
+  if (type === "SERIES") return "/admin/content/series";
+  return "/admin/content/streams";
+}
+
+function manageLabelForType(type: string) {
+  if (type === "MOVIE") return "Manage movies";
+  if (type === "SERIES") return "Manage series";
+  return "Manage streams";
+}
+
 export function StreamManageEditPage({ streamId }: { streamId: string }) {
   const [stream, setStream] = useState<Stream | null>(null);
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
@@ -94,6 +121,21 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
     epgChannelId: "",
     isActive: true,
     bouquetIds: [] as string[],
+    type: "LIVE",
+    vodMode: "LIVE",
+    archiveDays: "",
+    playlistUrl: "",
+    useProvider: false,
+    providerId: "",
+    providerPath: "",
+    seriesName: "",
+    seasonNum: "",
+    episodeNum: "",
+    containerExtension: "mp4",
+    isAdult: false,
+    isRadio: false,
+    autoRestart: true,
+    isCreatedChannel: false,
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -105,6 +147,12 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
         const s = d.stream as Stream | undefined;
         if (!s) return;
         setStream(s);
+        const vodMode =
+          s.vodMode === "ON_DEMAND" || s.vodMode === "CATCHUP" || s.vodMode === "LIVE"
+            ? s.vodMode
+            : s.isOnDemand
+              ? "ON_DEMAND"
+              : "LIVE";
         setForm({
           name: s.name,
           streamUrl: s.streamUrl,
@@ -114,6 +162,21 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           epgChannelId: s.epgChannelId ?? "",
           isActive: s.isActive !== false,
           bouquetIds: Array.isArray(d.bouquetIds) ? d.bouquetIds : [],
+          type: s.type || "LIVE",
+          vodMode,
+          archiveDays: s.archiveDays != null ? String(s.archiveDays) : "",
+          playlistUrl: s.playlistUrl ?? "",
+          useProvider: Boolean(s.hostedExternally && s.providerId),
+          providerId: s.providerId ?? "",
+          providerPath: s.providerPath ?? "",
+          seriesName: s.seriesName ?? "",
+          seasonNum: s.seasonNum != null ? String(s.seasonNum) : "",
+          episodeNum: s.episodeNum != null ? String(s.episodeNum) : "",
+          containerExtension: s.containerExtension || "mp4",
+          isAdult: Boolean(s.isAdult),
+          isRadio: Boolean(s.isRadio),
+          autoRestart: s.autoRestart !== false,
+          isCreatedChannel: Boolean(s.isCreatedChannel),
         });
         setAdvanced(advancedFromStream(s));
       });
@@ -136,21 +199,46 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (form.useProvider && (!form.providerId || !form.providerPath.trim())) {
+      setMessage("Select a provider and path, or switch off hosted provider.");
+      return;
+    }
+    if (!form.useProvider && !form.streamUrl.trim()) {
+      setMessage("Source URL is required.");
+      return;
+    }
     setSaving(true);
     setMessage("");
+    const isLiveType = form.type === "LIVE";
     const res = await fetch("/api/admin/streams", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: streamId,
         name: form.name,
-        source: form.streamUrl,
+        type: form.type,
+        source: form.useProvider ? undefined : form.streamUrl,
+        hostedExternally: form.useProvider,
+        providerId: form.useProvider ? form.providerId : null,
+        providerPath: form.useProvider ? form.providerPath : null,
         backupUrl: form.backupUrl.trim() || null,
         serverId: form.serverId || null,
         categoryId: form.categoryId || null,
         epgChannelId: form.epgChannelId || null,
         isActive: form.isActive,
         bouquetIds: form.bouquetIds,
+        vodMode: isLiveType ? form.vodMode : "ON_DEMAND",
+        isOnDemand: isLiveType ? form.vodMode !== "LIVE" : true,
+        archiveDays: form.archiveDays ? Number(form.archiveDays) : null,
+        playlistUrl: form.playlistUrl.trim() || null,
+        seriesName: form.type === "SERIES" ? form.seriesName || form.name : form.seriesName || null,
+        seasonNum: form.seasonNum ? Number(form.seasonNum) : null,
+        episodeNum: form.episodeNum ? Number(form.episodeNum) : null,
+        containerExtension: form.containerExtension || "mp4",
+        isAdult: form.isAdult,
+        isRadio: form.type === "LIVE" ? form.isRadio : false,
+        autoRestart: form.autoRestart,
+        isCreatedChannel: form.type === "LIVE" ? form.isCreatedChannel : false,
         ...advancedToPayload(advanced),
       }),
     });
@@ -161,7 +249,12 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
       return;
     }
     setMessage("Saved.");
-    setStream((s) => (s ? { ...s, ...form } : s));
+    if (data.stream) {
+      setStream((s) => (s ? { ...s, ...data.stream } : data.stream));
+      if (data.stream.streamUrl) {
+        setForm((f) => ({ ...f, streamUrl: data.stream.streamUrl }));
+      }
+    }
   }
 
   if (!stream) {
@@ -173,20 +266,24 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
   }
 
   const typeLabel =
-    stream.type === "LIVE"
+    form.type === "LIVE"
       ? "Live channel"
-      : stream.type === "MOVIE"
+      : form.type === "MOVIE"
         ? "Movie (VOD)"
-        : stream.type === "SERIES"
-          ? "TV series"
-          : stream.type;
+        : form.type === "SERIES"
+          ? "TV series / episode"
+          : form.type;
 
   return (
     <div className="space-y-5 max-w-6xl">
       <StreamLiveInfo streamId={streamId} />
 
       <form onSubmit={save}>
-        <FormPageShell title="Edit stream" manageHref="/admin/content/streams" manageLabel="Manage streams">
+        <FormPageShell
+          title="Edit stream"
+          manageHref={manageHrefForType(form.type)}
+          manageLabel={manageLabelForType(form.type)}
+        >
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <span
               className="text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded"
@@ -210,9 +307,28 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           <div className="space-y-4">
             <EditSection
               title="Stream identity"
-              subtitle="Display name and category shown in playlists, bouquets, and the EPG."
+              subtitle="Content type, display name, and category shown in playlists and bouquets."
             >
               <div className="grid md:grid-cols-2 gap-4">
+                <FormField label="Content type" required>
+                  <select
+                    className={formSelectClass}
+                    style={formInputStyle}
+                    value={form.type}
+                    onChange={(e) => {
+                      const type = e.target.value;
+                      setForm({
+                        ...form,
+                        type,
+                        vodMode: type === "LIVE" ? form.vodMode : "ON_DEMAND",
+                      });
+                    }}
+                  >
+                    <option value="LIVE">Live channel</option>
+                    <option value="MOVIE">Movie (VOD)</option>
+                    <option value="SERIES">TV series / episode</option>
+                  </select>
+                </FormField>
                 <FormField label="Stream name" required>
                   <input
                     className={formInputClass}
@@ -230,34 +346,149 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
                     value={form.categoryId}
                     onChange={(categoryId) => setForm({ ...form, categoryId })}
                     categories={categories}
-                    typeFilter={categoryTypeForStream(stream?.type, stream?.isRadio)}
+                    typeFilter={categoryTypeForStream(form.type, form.isRadio)}
                     emptyLabel="— No category —"
                   />
-                  <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
-                    Organize under{" "}
-                    <Link href="/admin/categories" className="underline" style={{ color: "var(--accent)" }}>
-                      Categories
-                    </Link>
-                    .
-                  </p>
                 </FormField>
+                {(form.type === "MOVIE" || form.type === "SERIES") && (
+                  <FormField label="Container / extension">
+                    <input
+                      className={formInputClass}
+                      style={formInputStyle}
+                      value={form.containerExtension}
+                      onChange={(e) => setForm({ ...form, containerExtension: e.target.value })}
+                      placeholder="mp4"
+                    />
+                  </FormField>
+                )}
+              </div>
+              {form.type === "SERIES" && (
+                <div className="grid md:grid-cols-3 gap-4">
+                  <FormField label="Series name">
+                    <input
+                      className={formInputClass}
+                      style={formInputStyle}
+                      value={form.seriesName}
+                      onChange={(e) => setForm({ ...form, seriesName: e.target.value })}
+                      placeholder="Show title"
+                    />
+                  </FormField>
+                  <FormField label="Season">
+                    <input
+                      type="number"
+                      min={1}
+                      className={formInputClass}
+                      style={formInputStyle}
+                      value={form.seasonNum}
+                      onChange={(e) => setForm({ ...form, seasonNum: e.target.value })}
+                    />
+                  </FormField>
+                  <FormField label="Episode">
+                    <input
+                      type="number"
+                      min={1}
+                      className={formInputClass}
+                      style={formInputStyle}
+                      value={form.episodeNum}
+                      onChange={(e) => setForm({ ...form, episodeNum: e.target.value })}
+                    />
+                  </FormField>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-4 text-sm">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.isAdult}
+                    onChange={(e) => setForm({ ...form, isAdult: e.target.checked })}
+                  />
+                  Adult content
+                </label>
+                {form.type === "LIVE" && (
+                  <>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.isRadio}
+                        onChange={(e) => setForm({ ...form, isRadio: e.target.checked })}
+                      />
+                      Radio
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.isCreatedChannel}
+                        onChange={(e) => setForm({ ...form, isCreatedChannel: e.target.checked })}
+                      />
+                      Created channel
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.autoRestart}
+                        onChange={(e) => setForm({ ...form, autoRestart: e.target.checked })}
+                      />
+                      Auto-restart
+                    </label>
+                  </>
+                )}
               </div>
             </EditSection>
 
+            {form.type === "LIVE" && (
+              <EditSection
+                title="Live vs on-demand"
+                subtitle="Live channels restream continuously. On-demand / catch-up uses the source (or playlist URL) only when a viewer plays."
+              >
+                <OnDemandStreamFields
+                  vodMode={form.vodMode}
+                  archiveDays={form.archiveDays}
+                  playlistUrl={form.playlistUrl}
+                  onChange={(next) =>
+                    setForm({
+                      ...form,
+                      vodMode: next.vodMode,
+                      archiveDays: next.archiveDays,
+                      playlistUrl: next.playlistUrl,
+                    })
+                  }
+                />
+              </EditSection>
+            )}
+
             <EditSection
               title="Source URL & server"
-              subtitle="Upstream feed address and which streaming server transcodes or proxies this channel."
+              subtitle="Use a direct provider URL, or host via a configured provider so playback uses that provider’s URL."
             >
-              <FormField label="Source URL (M3U8, TS, RTMP…)" required>
-                <input
-                  className={`${formInputClass} font-mono text-xs`}
-                  style={formInputStyle}
-                  value={form.streamUrl}
-                  onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
-                  placeholder="http://provider.example.com/stream.m3u8"
-                  required
-                />
-              </FormField>
+              <ProviderSourceFields
+                providerId={form.providerId}
+                providerPath={form.providerPath}
+                useProvider={form.useProvider}
+                vodOnly={form.type !== "LIVE"}
+                onChange={(next) =>
+                  setForm({
+                    ...form,
+                    useProvider: next.useProvider,
+                    providerId: next.providerId,
+                    providerPath: next.providerPath,
+                  })
+                }
+              />
+              {!form.useProvider && (
+                <FormField label="Direct source URL (M3U8, TS, MP4, RTMP…)" required>
+                  <input
+                    className={`${formInputClass} font-mono text-xs`}
+                    style={formInputStyle}
+                    value={form.streamUrl}
+                    onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
+                    placeholder="http://provider.example.com/movie/user/pass/123.mp4"
+                    required={!form.useProvider}
+                  />
+                  <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
+                    Paste the provider’s full URL for direct playback (302 / proxy to upstream).
+                  </p>
+                </FormField>
+              )}
               <FormField label="Backup source URL (failover)">
                 <input
                   className={`${formInputClass} font-mono text-xs`}
@@ -266,9 +497,6 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
                   onChange={(e) => setForm({ ...form, backupUrl: e.target.value })}
                   placeholder="http://backup.example.com/stream.m3u8"
                 />
-                <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
-                  Used automatically when the primary source fails health checks.
-                </p>
               </FormField>
               <FormField label="Streaming server">
                 <select
@@ -284,30 +512,26 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
-                  Leave default to let intelligent LB pick the best node for viewers.
-                </p>
               </FormField>
             </EditSection>
 
-            <EditSection
-              title="EPG mapping"
-              subtitle="Links this stream to electronic programme guide data for catch-up and TV guides."
-              defaultOpen={Boolean(form.epgChannelId)}
-            >
-              <FormField label="EPG channel ID">
-                <input
-                  className={formInputClass}
-                  style={formInputStyle}
-                  value={form.epgChannelId}
-                  onChange={(e) => setForm({ ...form, epgChannelId: e.target.value })}
-                  placeholder="e.g. bbc1.uk or provider channel id"
-                />
-                <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
-                  Must match an ID from your EPG source (Admin → EPG → Channel Map).
-                </p>
-              </FormField>
-            </EditSection>
+            {form.type === "LIVE" && (
+              <EditSection
+                title="EPG mapping"
+                subtitle="Links this stream to electronic programme guide data for catch-up and TV guides."
+                defaultOpen={Boolean(form.epgChannelId)}
+              >
+                <FormField label="EPG channel ID">
+                  <input
+                    className={formInputClass}
+                    style={formInputStyle}
+                    value={form.epgChannelId}
+                    onChange={(e) => setForm({ ...form, epgChannelId: e.target.value })}
+                    placeholder="e.g. bbc1.uk or provider channel id"
+                  />
+                </FormField>
+              </EditSection>
+            )}
 
             <EditSection
               title="Bouquets"
@@ -317,9 +541,9 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
                 selectedIds={form.bouquetIds}
                 onChange={(bouquetIds) => setForm({ ...form, bouquetIds })}
                 selectedTitle={
-                  stream.type === "MOVIE"
+                  form.type === "MOVIE"
                     ? "In movie bouquets"
-                    : stream.type === "SERIES"
+                    : form.type === "SERIES"
                       ? "In series bouquets"
                       : "In live bouquets"
                 }
@@ -347,7 +571,10 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
             >
               {saving ? "Saving…" : "Save stream"}
             </button>
-            <Link href="/admin/content/streams" className="btn-cancel rounded px-6 py-2.5 text-sm font-medium inline-flex items-center">
+            <Link
+              href={manageHrefForType(form.type)}
+              className="btn-cancel rounded px-6 py-2.5 text-sm font-medium inline-flex items-center"
+            >
               Cancel
             </Link>
             {message && (

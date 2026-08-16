@@ -36,6 +36,9 @@ type Stream = {
   lastProbeOk?: boolean | null;
   lastProbeError?: string | null;
   liveStats?: StreamLiveStat | null;
+  isOnDemand?: boolean;
+  vodMode?: string;
+  hostedExternally?: boolean;
 };
 
 function statusFromSearch(): "" | "active" | "inactive" | "online" | "offline" {
@@ -394,6 +397,18 @@ export function StreamsList({
                     <Link href={`/admin/servers/streams?edit=${s.id}`} className="xui-stream-name">
                       {s.name}
                     </Link>
+                    <span className="flex flex-wrap gap-1 mt-0.5">
+                      {s.hostedExternally ? (
+                        <span className="xui-uptime-badge xui-uptime-badge--direct text-[10px]">PROVIDER</span>
+                      ) : null}
+                      {s.isOnDemand || s.vodMode === "ON_DEMAND" ? (
+                        <span className="xui-uptime-badge xui-uptime-badge--idle text-[10px]">ON DEMAND</span>
+                      ) : s.vodMode === "CATCHUP" ? (
+                        <span className="xui-uptime-badge xui-uptime-badge--idle text-[10px]">CATCHUP</span>
+                      ) : type === "LIVE" ? (
+                        <span className="xui-uptime-badge xui-uptime-badge--ok text-[10px]">LIVE</span>
+                      ) : null}
+                    </span>
                     {s.category?.name && (
                       <span className="xui-stream-category">{s.category.name}</span>
                     )}

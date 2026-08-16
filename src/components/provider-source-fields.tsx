@@ -37,13 +37,13 @@ export function ProviderSourceFields({
           checked={useProvider}
           onChange={(e) => onChange({ providerId, providerPath, useProvider: e.target.checked })}
         />
-        Hosted by external provider
+          Hosted by external provider (use provider’s URL)
       </label>
       {useProvider ? (
         <>
           <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Pick a configured provider and enter its content path or stream ID. Configure providers under
-            sidebar → Providers → Manage Providers.
+            Playback resolves through the selected provider so viewers hit the provider URL directly. Configure
+            providers under sidebar → Providers → Manage Providers.
           </p>
           <select
             className="w-full rounded border px-3 py-2 bg-transparent text-sm"

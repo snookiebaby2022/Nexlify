@@ -67,13 +67,21 @@ export function syncVodModeFields(input: {
   isOnDemand?: boolean;
   vodMode?: VodMode | string;
 }): { isOnDemand: boolean; vodMode: VodMode } {
-  let vodMode = (input.vodMode ?? "LIVE") as VodMode;
-  if (input.isOnDemand && vodMode === "LIVE") {
+  const raw = String(input.vodMode ?? "").trim().toUpperCase();
+  let vodMode: VodMode =
+    raw === "ON_DEMAND" || raw === "CATCHUP" || raw === "LIVE"
+      ? (raw as VodMode)
+      : // Movie/series forms historically sent "MOVIE"/"SERIES" — map to on-demand.
+        raw === "MOVIE" || raw === "SERIES" || raw === "VOD"
+        ? "ON_DEMAND"
+        : "LIVE";
+
+  if (input.isOnDemand === true && vodMode === "LIVE") {
     vodMode = "ON_DEMAND";
   }
-  if (!input.isOnDemand && vodMode === "ON_DEMAND" && input.vodMode === undefined) {
+  if (input.isOnDemand === false && (vodMode === "ON_DEMAND" || vodMode === "CATCHUP") && input.vodMode === undefined) {
     vodMode = "LIVE";
   }
-  const isOnDemand = input.isOnDemand ?? vodMode !== "LIVE";
+  const isOnDemand = vodMode !== "LIVE";
   return { isOnDemand, vodMode };
 }

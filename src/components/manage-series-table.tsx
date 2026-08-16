@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Pencil, RefreshCw, Search, Tv } from "lucide-react";
+import { Pencil, RefreshCw, Search, Tv, Trash2, Power } from "lucide-react";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
 
 type SeriesRow = {
@@ -24,6 +24,7 @@ export function ManageSeriesTable() {
   const [categoryId, setCategoryId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -59,6 +60,25 @@ export function ManageSeriesTable() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function toggleActive(row: SeriesRow) {
+    setBusyId(row.id);
+    await fetch("/api/admin/series", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: row.id, isActive: !row.isActive }),
+    });
+    setBusyId(null);
+    load();
+  }
+
+  async function removeSeries(row: SeriesRow) {
+    if (!confirm(`Delete series “${row.name}” and all ${row.episodeCount} episode(s)?`)) return;
+    setBusyId(row.id);
+    await fetch(`/api/admin/series?id=${encodeURIComponent(row.id)}`, { method: "DELETE" });
+    setBusyId(null);
+    load();
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -168,12 +188,37 @@ export function ManageSeriesTable() {
                       Edit episodes
                     </Link>
                     <Link
+                      href={`/admin/content/episodes/add?seriesId=${encodeURIComponent(s.id)}`}
+                      className="text-xs px-2 py-1 rounded border"
+                      style={{ borderColor: "var(--border)" }}
+                    >
+                      Add episode
+                    </Link>
+                    <Link
                       href={`/admin/servers/streams?edit=${s.id}`}
                       className="p-1.5 rounded hover:bg-white/10"
                       title="Edit series"
                     >
                       <Pencil size={14} />
                     </Link>
+                    <button
+                      type="button"
+                      className="p-1.5 rounded hover:bg-white/10 disabled:opacity-50"
+                      title={s.isActive ? "Disable" : "Enable"}
+                      disabled={busyId === s.id}
+                      onClick={() => void toggleActive(s)}
+                    >
+                      <Power size={14} style={{ color: s.isActive ? "var(--success)" : "var(--muted)" }} />
+                    </button>
+                    <button
+                      type="button"
+                      className="p-1.5 rounded hover:bg-white/10 disabled:opacity-50"
+                      title="Delete series"
+                      disabled={busyId === s.id}
+                      onClick={() => void removeSeries(s)}
+                    >
+                      <Trash2 size={14} style={{ color: "var(--danger)" }} />
+                    </button>
                   </div>
                 </td>
               </tr>

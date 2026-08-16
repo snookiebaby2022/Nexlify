@@ -156,3 +156,60 @@ export async function GET(req: NextRequest) {
     }
   }
 }
+
+/** Enable/disable all streams belonging to a series label. */
+export async function PATCH(req: NextRequest) {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const body = await req.json();
+  const id = String(body.id ?? "").trim();
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const parent = await prisma.stream.findUnique({ where: { id } });
+  if (!parent || parent.type !== StreamType.SERIES) {
+    return NextResponse.json({ error: "Series not found" }, { status: 404 });
+  }
+  const seriesName = parent.seriesName ?? parent.name;
+  const data: Prisma.StreamUpdateManyMutationInput = {};
+  if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
+  if (body.categoryId !== undefined) data.categoryId = body.categoryId || null;
+
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: "No changes" }, { status: 400 });
+  }
+
+  const result = await prisma.stream.updateMany({
+    where: {
+      type: StreamType.SERIES,
+      OR: [{ seriesName }, { seriesName: null, name: seriesName }],
+    },
+    data,
+  });
+
+  return NextResponse.json({ ok: true, updated: result.count });
+}
+
+/** Delete an entire series (parent + all episodes with the same seriesName). */
+export async function DELETE(req: NextRequest) {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const id = req.nextUrl.searchParams.get("id")?.trim();
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+  const parent = await prisma.stream.findUnique({ where: { id } });
+  if (!parent || parent.type !== StreamType.SERIES) {
+    return NextResponse.json({ error: "Series not found" }, { status: 404 });
+  }
+  const seriesName = parent.seriesName ?? parent.name;
+
+  const result = await prisma.stream.deleteMany({
+    where: {
+      type: StreamType.SERIES,
+      OR: [{ id }, { seriesName }, { seriesName: null, name: seriesName }],
+    },
+  });
+
+  return NextResponse.json({ ok: true, deleted: result.count });
+}

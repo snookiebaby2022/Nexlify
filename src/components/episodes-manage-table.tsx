@@ -10,6 +10,8 @@ type Episode = {
   season: number;
   episode: number;
   streamUrl: string;
+  isActive?: boolean;
+  hostedExternally?: boolean;
   series: { id: string; name: string };
 };
 
@@ -72,6 +74,15 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
   async function remove(id: string) {
     if (!confirm("Delete this episode?")) return;
     await fetch(`/api/admin/episodes?id=${id}`, { method: "DELETE" });
+    load();
+  }
+
+  async function toggleActive(ep: Episode) {
+    await fetch("/api/admin/episodes", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: ep.id, isActive: !(ep.isActive !== false) }),
+    });
     load();
   }
 
@@ -175,7 +186,8 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
               <th className="xui-lines-th">Season</th>
               <th className="xui-lines-th">Ep</th>
               <th className="xui-lines-th">Title</th>
-              <th className="xui-lines-th">Stream URL</th>
+              <th className="xui-lines-th">Source</th>
+              <th className="xui-lines-th">Status</th>
               <th className="xui-lines-th xui-lines-td--actions">Actions</th>
             </tr>
           </thead>
@@ -203,8 +215,12 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
                 <td className="xui-lines-td">E{ep.episode}</td>
                 <td className="xui-lines-td font-medium">{ep.title}</td>
                 <td className="xui-lines-td text-xs max-w-[220px] truncate font-mono" style={{ color: "var(--muted)" }}>
+                  {ep.hostedExternally ? (
+                    <span className="xui-uptime-badge xui-uptime-badge--direct mr-1">PROVIDER</span>
+                  ) : null}
                   {ep.streamUrl}
                 </td>
+                <td className="xui-lines-td">{ep.isActive === false ? "Disabled" : "Active"}</td>
                 <td className="xui-lines-td xui-lines-td--actions">
                   <Link
                     href={`/admin/servers/streams?edit=${ep.id}`}
@@ -213,6 +229,14 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
                   >
                     Edit
                   </Link>
+                  <button
+                    type="button"
+                    className="text-xs mr-2 underline"
+                    style={{ color: "var(--muted)" }}
+                    onClick={() => void toggleActive(ep)}
+                  >
+                    {ep.isActive === false ? "Enable" : "Disable"}
+                  </button>
                   <button type="button" className="text-xs mr-2" style={{ color: "var(--danger)" }} onClick={() => remove(ep.id)}>
                     Delete
                   </button>

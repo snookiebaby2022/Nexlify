@@ -13,6 +13,7 @@ import { TmdbMetadataSection, emptyTmdbMeta, type TmdbMetaFields } from "@/compo
 import { ServerTreePicker } from "@/components/server-tree-picker";
 import { StreamBouquetSection } from "@/components/stream-bouquet-section";
 import { VodFormSection, VodYesNo } from "@/components/vod-form-section";
+import { ProviderSourceFields } from "@/components/provider-source-fields";
 import { CategorySelect } from "@/components/category-select";
 import type { CategoryOptionInput } from "@/lib/category-options";
 
@@ -30,6 +31,7 @@ export function VodSeriesForm({
   const router = useRouter();
   const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [saving, setSaving] = useState(false);
+  const [useProvider, setUseProvider] = useState(false);
   const [form, setForm] = useState({
     name: "",
     categoryId: "",
@@ -38,6 +40,8 @@ export function VodSeriesForm({
     isAdult: false,
     serverIds: [] as string[],
     bouquetIds: [] as string[],
+    providerId: "",
+    providerPath: "",
   });
   const [tmdb, setTmdb] = useState<TmdbMetaFields>(emptyTmdbMeta());
 
@@ -51,6 +55,10 @@ export function VodSeriesForm({
       alert("Series name is required.");
       return;
     }
+    if (useProvider && (!form.providerId || !form.providerPath.trim())) {
+      alert("Select provider and path, or paste a direct URL.");
+      return;
+    }
     setSaving(true);
     const res = await fetch("/api/admin/streams", {
       method: "POST",
@@ -61,14 +69,18 @@ export function VodSeriesForm({
         seriesName: form.name,
         seasonNum: 1,
         episodeNum: 1,
-        source:
-          form.streamUrl.trim() ||
-          `https://panel.local/vod/series/${encodeURIComponent(form.name.trim())}`,
+        source: useProvider
+          ? undefined
+          : form.streamUrl.trim() ||
+            `https://panel.local/vod/series/${encodeURIComponent(form.name.trim())}`,
+        hostedExternally: useProvider,
+        providerId: useProvider ? form.providerId : null,
+        providerPath: useProvider ? form.providerPath : null,
         categoryId: form.categoryId || null,
         streamIcon: form.streamIcon || tmdb.tmdbPoster || null,
         serverId: form.serverIds[0] || null,
         isOnDemand: true,
-        vodMode: "SERIES",
+        vodMode: "ON_DEMAND",
         bouquetIds: form.bouquetIds,
         agentStartCmd: encodeSeriesMeta({
           isAdult: form.isAdult,
@@ -148,15 +160,30 @@ export function VodSeriesForm({
         </VodFormSection>
 
         <VodFormSection title="Source & delivery">
-        <FormField label="First episode source (optional)">
-          <input
-            className={formInputClass}
-            style={formInputStyle}
-            placeholder="URL or path for S01E01"
-            value={form.streamUrl}
-            onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
-          />
-        </FormField>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          Use a <strong>direct provider URL</strong> for the first episode, or host via a configured provider so
+          playback uses that provider’s URL.
+        </p>
+        <ProviderSourceFields
+          providerId={form.providerId}
+          providerPath={form.providerPath}
+          useProvider={useProvider}
+          onChange={(next) => {
+            setUseProvider(next.useProvider);
+            setForm({ ...form, providerId: next.providerId, providerPath: next.providerPath });
+          }}
+        />
+        {!useProvider && (
+          <FormField label="Direct source URL (first episode, optional)">
+            <input
+              className={`${formInputClass} font-mono text-sm`}
+              style={formInputStyle}
+              placeholder="https://provider…/series/user/pass/1/1.mp4"
+              value={form.streamUrl}
+              onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
+            />
+          </FormField>
+        )}
 
         <ServerTreePicker
           selectedIds={form.serverIds}

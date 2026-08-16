@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { VodFormSection } from "@/components/vod-form-section";
 import { StreamBouquetSection } from "@/components/stream-bouquet-section";
+import { ProviderSourceFields } from "@/components/provider-source-fields";
 
 export function VodEpisodeForm({
   backHref = "/admin/content/episodes",
@@ -17,6 +18,7 @@ export function VodEpisodeForm({
   const router = useRouter();
   const [series, setSeries] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [useProvider, setUseProvider] = useState(false);
   const [form, setForm] = useState({
     seriesId: initialSeriesId ?? "",
     season: 1,
@@ -24,6 +26,8 @@ export function VodEpisodeForm({
     title: "",
     streamUrl: "",
     bouquetIds: [] as string[],
+    providerId: "",
+    providerPath: "",
   });
 
   useEffect(() => {
@@ -41,15 +45,33 @@ export function VodEpisodeForm({
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.seriesId || !form.title.trim() || !form.streamUrl.trim()) {
-      alert("Series, title, and stream URL are required.");
+    if (!form.seriesId || !form.title.trim()) {
+      alert("Series and title are required.");
+      return;
+    }
+    if (useProvider && (!form.providerId || !form.providerPath.trim())) {
+      alert("Select provider and path, or paste a direct URL.");
+      return;
+    }
+    if (!useProvider && !form.streamUrl.trim()) {
+      alert("Stream URL is required (or enable hosted provider).");
       return;
     }
     setSaving(true);
     const res = await fetch("/api/admin/episodes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({
+        seriesId: form.seriesId,
+        season: form.season,
+        episode: form.episode,
+        title: form.title,
+        streamUrl: useProvider ? undefined : form.streamUrl,
+        hostedExternally: useProvider,
+        providerId: useProvider ? form.providerId : null,
+        providerPath: useProvider ? form.providerPath : null,
+        bouquetIds: form.bouquetIds,
+      }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -124,17 +146,30 @@ export function VodEpisodeForm({
           </FormField>
         </VodFormSection>
         <VodFormSection title="Source">
-          <FormField label="Stream URL" required>
-            <input
-              required
-              type="url"
-              className={`${formInputClass} font-mono`}
-              style={formInputStyle}
-              placeholder="https://…/episode.mp4"
-              value={form.streamUrl}
-              onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
-            />
-          </FormField>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Paste the provider’s direct episode URL, or host via a configured provider.
+          </p>
+          <ProviderSourceFields
+            providerId={form.providerId}
+            providerPath={form.providerPath}
+            useProvider={useProvider}
+            onChange={(next) => {
+              setUseProvider(next.useProvider);
+              setForm({ ...form, providerId: next.providerId, providerPath: next.providerPath });
+            }}
+          />
+          {!useProvider && (
+            <FormField label="Direct stream URL" required>
+              <input
+                required={!useProvider}
+                className={`${formInputClass} font-mono`}
+                style={formInputStyle}
+                placeholder="https://provider…/series/user/pass/1/5.mp4"
+                value={form.streamUrl}
+                onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
+              />
+            </FormField>
+          )}
         </VodFormSection>
         <VodFormSection title="Bouquets">
           <StreamBouquetSection
