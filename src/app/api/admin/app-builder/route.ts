@@ -111,9 +111,32 @@ export async function POST(req: Request) {
       accentColor: build.accentColor,
       serverUrl,
       config,
-      note: "Import this config into the Nexlify branded APK builder or CI pipeline.",
+      note: "Import this config into your branded APK/IPA builder or CI. This file is not an APK/IPA.",
+      howToUse: [
+        "1. Download this JSON from the panel App Builder history.",
+        "2. Pass it to your Android/iOS branded build pipeline (Gradle/Xcode/CI) with signing keys.",
+        "3. When the binary is published, PATCH /api/admin/app-builder with { id, status: \"COMPLETED\", downloadUrl } so the panel Download button points at the APK/IPA.",
+      ],
+      buildId: build.id,
     };
     await writeFile(join(dir, fileName), JSON.stringify(payload, null, 2), "utf8");
+    const readme = [
+      "Nexlify branded app config",
+      "==========================",
+      "",
+      `Build ID: ${build.id}`,
+      `App: ${appName}`,
+      `Package: ${packageName}`,
+      "",
+      "This package is configuration only (nexlify-app-config/v1).",
+      "Native APK/IPA still needs an external builder with signing keys.",
+      "",
+      "After your CI produces a binary, update the panel build:",
+      '  PATCH /api/admin/app-builder',
+      `  { "id": "${build.id}", "status": "COMPLETED", "downloadUrl": "https://cdn.example.com/app.apk" }`,
+      "",
+    ].join("\n");
+    await writeFile(join(dir, `${build.id}.README.txt`), readme, "utf8");
     const downloadUrl = `/app-builds/${fileName}`;
     const completed = await prisma.appBuild.update({
       where: { id: build.id },
@@ -125,8 +148,9 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({
       build: completed,
+      readmeUrl: `/app-builds/${build.id}.README.txt`,
       message:
-        "Branded app config package ready for download. Native APK/IPA still requires the connected build pipeline.",
+        "Config package ready. Native APK/IPA still requires an external builder — use the README next to this JSON.",
     });
   } catch {
     return NextResponse.json({

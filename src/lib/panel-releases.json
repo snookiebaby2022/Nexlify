@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.105",
+  "latestVersion": "1.9.106",
   "releases": [
+    {
+      "version": "1.9.106",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "App Builder clarifies config JSON vs native APK/IPA: steps, README next to downloads, external CI PATCH hook.",
+      "changelog": [
+        "App Builder explains that config packages are ready now; APK/IPA still needs an external signed builder",
+        "Build history Download button labels Config JSON vs APK/IPA",
+        "Each build writes a README with PATCH instructions for attaching a finished binary URL"
+      ],
+      "fixes": [
+        "App Builder could be read as shipping native APKs when only config JSON was produced"
+      ]
+    },
     {
       "version": "1.9.105",
       "date": "2026-08-16",

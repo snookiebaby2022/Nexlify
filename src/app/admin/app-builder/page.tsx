@@ -261,14 +261,29 @@ export default function AppBuilderPage() {
       </div>
 
       <div
-        className="rounded-lg border p-4 text-sm"
+        className="rounded-lg border p-4 text-sm space-y-2"
         style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}
       >
         <p style={{ color: "var(--muted)" }}>
-          Live preview uses your primary / secondary / accent colors. Saving a build creates a
-          downloadable <strong>config JSON</strong> immediately. Native APK/IPA still needs your
-          connected build pipeline (or an external CI that consumes the config).
+          <strong style={{ color: "var(--text)" }}>Config package is ready now.</strong> Saving a
+          build downloads branded settings (colors, DNS, package name, logos, player options) as{" "}
+          <code className="text-xs">nexlify-app-config/v1</code> JSON.
         </p>
+        <p style={{ color: "var(--muted)" }}>
+          <strong style={{ color: "var(--text)" }}>Native APK/IPA still needs an external builder</strong>{" "}
+          (Android Studio / Xcode / your CI with signing keys). This panel does not compile binaries
+          on the server. Feed the config JSON into your builder, then optionally PATCH the build with
+          the finished APK/IPA URL so Download points at the binary.
+        </p>
+        <ol className="list-decimal pl-5 text-xs space-y-1" style={{ color: "var(--muted)" }}>
+          <li>Save build → Download config JSON</li>
+          <li>Import into your branded APK/IPA pipeline</li>
+          <li>
+            When the binary is hosted, call{" "}
+            <code>PATCH /api/admin/app-builder</code> with{" "}
+            <code>{`{ id, status: "COMPLETED", downloadUrl: "https://…/app.apk" }`}</code>
+          </li>
+        </ol>
       </div>
 
       {error && (
@@ -532,9 +547,18 @@ export default function AppBuilderPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {b.downloadUrl ? (
-                    <a href={b.downloadUrl} className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded" style={{ background: "var(--accent)", color: "#fff" }}>
+                    <a
+                      href={b.downloadUrl}
+                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded"
+                      style={{ background: "var(--accent)", color: "#fff" }}
+                      title={
+                        b.downloadUrl.endsWith(".json")
+                          ? "Branded config package (not a native APK)"
+                          : "Build artifact download"
+                      }
+                    >
                       <Download size={12} />
-                      Download
+                      {b.downloadUrl.endsWith(".json") ? "Config JSON" : "Download APK/IPA"}
                     </a>
                   ) : (
                     <span className="text-xs px-2 py-1 rounded border" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
