@@ -427,6 +427,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         items: [
           { href: "/admin/tickets", label: "Open Tickets" },
           { href: "/admin/tickets?status=CLOSED", label: "Closed Tickets" },
+          { href: "/admin/tickets?status=ALL", label: "All Tickets" },
         ],
       },
     },

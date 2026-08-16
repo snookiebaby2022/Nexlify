@@ -206,14 +206,14 @@ export function PanelTopNav({
         {onMenuToggle && (
           <button
             type="button"
-            className="lg:hidden p-1.5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
+            className="md:hidden p-1.5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
             onClick={onMenuToggle}
             aria-label="Open menu"
           >
             <Menu size={20} />
           </button>
         )}
-        <div className="lg:hidden shrink-0">
+        <div className="md:hidden shrink-0">
           <PanelBrandMark name={brand} href={homeHref} size="sm" logoUrl={brandLogoUrl} />
         </div>
 

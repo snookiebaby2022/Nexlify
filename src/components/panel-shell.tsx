@@ -42,7 +42,7 @@ export function PanelShell({
     <PanelUpdateJobProvider>
     <div className="panel-shell" style={accent ? ({ ["--accent" as string]: accent } as React.CSSProperties) : undefined}>
       <div className="panel-shell-inner">
-        <div className="panel-sidebar-column hidden lg:block shrink-0">
+        <div className="panel-sidebar-column hidden md:block shrink-0">
           {role === "ADMIN" ? (
             <AdminPanelSidebar brand={title} brandHref={dashboardHref} username={username} />
           ) : (
@@ -54,16 +54,16 @@ export function PanelShell({
           <>
             <button
               type="button"
-              className="fixed inset-0 z-[240] bg-black/60 backdrop-blur-sm lg:hidden cursor-pointer"
+              className="fixed inset-0 z-[240] bg-black/60 backdrop-blur-sm md:hidden cursor-pointer"
               aria-label="Close menu"
               onClick={() => setMobileNav(false)}
             />
-            <div className="fixed inset-y-0 left-0 z-[250] lg:hidden shadow-2xl">
+            <div className="fixed inset-y-0 left-0 z-[250] md:hidden shadow-2xl max-w-[92vw]">
               {role === "ADMIN" && adminEntries ? (
-                <Suspense fallback={<aside className="panel-sidebar h-full" aria-hidden />}>
+                <Suspense fallback={<aside className="panel-sidebar h-full min-h-[100dvh]" aria-hidden />}>
                   <PanelSidebar
                     entries={adminEntries}
-                    className="h-full"
+                    className="h-full min-h-[100dvh]"
                     brand={title}
                     brandHref={dashboardHref}
                     showReport
@@ -73,10 +73,10 @@ export function PanelShell({
                 </Suspense>
               ) : (
                 resellerSidebar && (
-                  <Suspense fallback={<aside className="panel-sidebar h-full" aria-hidden />}>
+                  <Suspense fallback={<aside className="panel-sidebar h-full min-h-[100dvh]" aria-hidden />}>
                     <PanelSidebar
                       entries={resellerSidebar}
-                      className="h-full"
+                      className="h-full min-h-[100dvh]"
                       brand={title}
                       brandHref={dashboardHref}
                       showReport
@@ -103,7 +103,7 @@ export function PanelShell({
             username={username}
             onMenuToggle={() => setMobileNav((o) => !o)}
           />
-          <main className="panel-main-content flex-1 p-4 md:p-6 pb-24 overflow-auto min-w-0 flex flex-col">
+          <main className="panel-main-content flex-1 p-3 sm:p-4 md:p-6 pb-24 overflow-x-auto overflow-y-auto min-w-0 flex flex-col">
             {isDemo && <PanelDemoBanner />}
           {role === "ADMIN" && <PanelUpdateBanner />}
           {role === "ADMIN" && <PanelUpdateProgress />}

@@ -122,14 +122,141 @@ export default function AppBuilderPage() {
     { id: "release" as const, label: "Release" },
   ];
 
+  const STYLE_PRESETS = [
+    {
+      id: "xciptv",
+      label: "XCIPTV+",
+      desc: "Classic XCIPTV-style dark blue, sharper contrast",
+      patch: {
+        primaryColor: "#1e88e5",
+        secondaryColor: "#0d1b2a",
+        accentColor: "#29b6f6",
+        theme: "dark",
+        loginBgUrl:
+          "https://images.unsplash.com/photo-1574375927938-d5a98e8ffe85?auto=format&fit=crop&w=1600&q=80",
+        playerType: "exo",
+        welcomeText: "Sign in with your Xtream codes — Live · VOD · Series",
+        showEpg: true,
+        showCatchup: true,
+        allowCast: true,
+        allowPip: true,
+      },
+    },
+    {
+      id: "tivimate",
+      label: "TiviMate+",
+      desc: "TiviMate-inspired teal/purple, EPG-first",
+      patch: {
+        primaryColor: "#14b8a6",
+        secondaryColor: "#111827",
+        accentColor: "#a78bfa",
+        theme: "dark",
+        loginBgUrl:
+          "https://images.unsplash.com/photo-1598899134739-24c46f7583b0?auto=format&fit=crop&w=1600&q=80",
+        playerType: "media3",
+        welcomeText: "TV guide ready — enter your line credentials",
+        showEpg: true,
+        showCatchup: true,
+        allowPip: true,
+        allowCast: true,
+      },
+    },
+    {
+      id: "modded-neon",
+      label: "Modded Neon",
+      desc: "Cyber neon glass, high-energy background",
+      patch: {
+        primaryColor: "#22d3ee",
+        secondaryColor: "#020617",
+        accentColor: "#f472b6",
+        theme: "dark",
+        loginBgUrl:
+          "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1600&q=80",
+        playerType: "vlc",
+        welcomeText: "Modded IPTV — dual DNS · cast · PiP",
+        showEpg: true,
+        showCatchup: true,
+        adultPinRequired: true,
+      },
+    },
+    {
+      id: "cinema",
+      label: "Cinema Gold",
+      desc: "Warm cinema lobby look for VOD-heavy apps",
+      patch: {
+        primaryColor: "#f59e0b",
+        secondaryColor: "#1c1917",
+        accentColor: "#ef4444",
+        theme: "dark",
+        loginBgUrl:
+          "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1600&q=80",
+        playerType: "exo",
+        welcomeText: "Movies & series — your private cinema",
+        showEpg: false,
+        showCatchup: false,
+      },
+    },
+    {
+      id: "arctic",
+      label: "Arctic Light",
+      desc: "Clean light UI with soft sky background",
+      patch: {
+        primaryColor: "#0284c7",
+        secondaryColor: "#f8fafc",
+        accentColor: "#0ea5e9",
+        theme: "light",
+        loginBgUrl:
+          "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=1600&q=80",
+        playerType: "exo",
+        welcomeText: "Welcome — sign in to watch",
+        showEpg: true,
+      },
+    },
+  ] as const;
+
+  function applyPreset(id: string) {
+    const preset = STYLE_PRESETS.find((p) => p.id === id);
+    if (!preset) return;
+    setForm((f) => ({ ...f, ...preset.patch }));
+    setPreviewTab("brand");
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="text-2xl font-semibold">App Builder</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Design a branded IPTV app (Android / iOS config): logos, theme, DNS failover, player options,
-          EPG/catch-up, adult PIN, and release metadata. Builds queue for the APK pipeline.
+          Design a branded IPTV app inspired by XCIPTV / TiviMate — with modded themes, custom
+          backgrounds, dual DNS, EPG, cast, and PiP. Builds queue for the APK pipeline.
         </p>
+      </div>
+
+      <div className="rounded-lg border p-4 space-y-3" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+        <div className="text-sm font-medium">Style presets</div>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          One tap fills colors, login background, player defaults, and welcome text. Tweak anything after.
+        </p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {STYLE_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => applyPreset(p.id)}
+              className="text-left rounded-lg border px-3 py-2.5 cursor-pointer hover:opacity-90 transition-opacity"
+              style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--bg) 70%, transparent)" }}
+            >
+              <div className="text-sm font-semibold">{p.label}</div>
+              <div className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                {p.desc}
+              </div>
+              <div className="flex gap-1 mt-2">
+                <span className="w-4 h-4 rounded-full border" style={{ background: p.patch.primaryColor, borderColor: "var(--border)" }} />
+                <span className="w-4 h-4 rounded-full border" style={{ background: p.patch.secondaryColor, borderColor: "var(--border)" }} />
+                <span className="w-4 h-4 rounded-full border" style={{ background: p.patch.accentColor, borderColor: "var(--border)" }} />
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div
@@ -352,21 +479,28 @@ export default function AppBuilderPage() {
           <p className="text-[10px] uppercase tracking-wider mb-3" style={{ color: "rgba(255,255,255,0.7)" }}>
             Preview
           </p>
-          <div className="rounded-xl overflow-hidden border" style={{ borderColor: "rgba(255,255,255,0.15)", background: form.theme === "light" ? "#f8fafc" : "#0b1220" }}>
-            <div className="h-16 flex items-center justify-center" style={{ background: form.primaryColor }}>
+          <div
+            className="rounded-xl overflow-hidden border"
+            style={{
+              borderColor: "rgba(255,255,255,0.15)",
+              background: form.theme === "light" ? "#f8fafc" : "#0b1220",
+              backgroundImage: form.loginBgUrl ? `linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.75)), url(${form.loginBgUrl})` : undefined,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }}
+          >
+            <div className="h-16 flex items-center justify-center" style={{ background: form.loginBgUrl ? "transparent" : form.primaryColor }}>
               {form.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={form.logoUrl} alt="" className="h-10 max-w-[80%] object-contain" />
               ) : (
-                <span className="text-white text-sm font-semibold">{form.appName || "App name"}</span>
+                <span className="text-white text-sm font-semibold drop-shadow">{form.appName || "App name"}</span>
               )}
             </div>
             <div className="p-3 space-y-2">
-              <p className="text-xs" style={{ color: form.theme === "light" ? "#334155" : "#cbd5e1" }}>
-                {form.welcomeText || "Login"}
-              </p>
-              <div className="h-8 rounded" style={{ background: form.theme === "light" ? "#e2e8f0" : "rgba(255,255,255,0.08)" }} />
-              <div className="h-8 rounded" style={{ background: form.theme === "light" ? "#e2e8f0" : "rgba(255,255,255,0.08)" }} />
+              <p className="text-xs text-white/90 drop-shadow">{form.welcomeText || "Login"}</p>
+              <div className="h-8 rounded backdrop-blur-sm" style={{ background: "rgba(255,255,255,0.18)" }} />
+              <div className="h-8 rounded backdrop-blur-sm" style={{ background: "rgba(255,255,255,0.18)" }} />
               <div className="h-9 rounded flex items-center justify-center text-xs font-semibold text-white" style={{ background: form.accentColor }}>
                 Sign in
               </div>

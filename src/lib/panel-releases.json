@@ -1,7 +1,27 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.101",
+  "latestVersion": "1.9.102",
   "releases": [
+    {
+      "version": "1.9.102",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Full-height sidebar, mobile/tablet layout, Control Center on top, All Tickets, faster channel order with tabs, App Builder presets, clearer search/theme contrast.",
+      "changelog": [
+        "Left sidebar stretches with the full page height",
+        "Tablet: persistent sidebar from md; phones keep drawer menu",
+        "Dashboard Control Center moved to the top",
+        "Tickets sidebar: All Tickets link",
+        "Channel order: Streams/Movies/Series tabs, UK Entertainment default, Show 50 entries",
+        "App Builder: XCIPTV+ / TiviMate+ / Modded Neon / Cinema / Arctic presets with backgrounds",
+        "Search bars and form inputs higher contrast in dark and light"
+      ],
+      "fixes": [
+        "Sidebar stopped short of long dashboard pages",
+        "Channel order loaded all live categories slowly",
+        "Search fields hard to read on dark/light themes"
+      ]
+    },
     {
       "version": "1.9.101",
       "date": "2026-08-16",

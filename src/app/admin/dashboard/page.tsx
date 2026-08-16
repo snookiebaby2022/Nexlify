@@ -6,7 +6,6 @@ import { RealtimeDashboard } from "@/components/realtime-dashboard";
 export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
-      <RealtimeDashboard />
       <PanelDashboard
         statsUrl="/api/admin/stats"
         widgetsUrl="/api/admin/dashboard-widgets"
@@ -17,6 +16,7 @@ export default function AdminDashboardPage() {
         addServerHref="/admin/servers/add"
         showActivity
       />
+      <RealtimeDashboard />
     </div>
   );
 }
