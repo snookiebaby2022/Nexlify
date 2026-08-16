@@ -66,6 +66,35 @@ export default function SmartCdnPage() {
     }
   }
 
+  async function importCloudflare() {
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/cdn-switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "import-cloudflare" }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(typeof j.error === "string" ? j.error : "Import failed");
+        return;
+      }
+      load();
+      setMsg(
+        typeof j.note === "string"
+          ? j.note
+          : `Imported ${j.created ?? 0} Cloudflare endpoint(s).`
+      );
+      if ((j.created ?? 0) > 0) {
+        await fetch("/api/admin/cdn-switch?action=probe");
+        load();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function toggleActive(ep: Endpoint) {
     await fetch("/api/admin/cdn-switch", {
       method: "PATCH",
@@ -87,7 +116,7 @@ export default function SmartCdnPage() {
     try {
       await fetch("/api/admin/cdn-switch?action=probe");
       load();
-      setMsg("Probe finished — scores updated.");
+      setMsg("Probe finished — scores updated. Disable any endpoint with ~9999ms / CF 521.");
     } finally {
       setBusy(false);
     }
@@ -105,6 +134,12 @@ export default function SmartCdnPage() {
           CDN helps failover — it does <strong>not</strong> guarantee unblock-everywhere. ISP or
           country blocks of your domains, IPs, or providers can still fail until you change DNS,
           edges, or upstream sources.
+        </p>
+        <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>
+          <strong>Cloudflare:</strong> add your orange-cloud stream hostnames here (or use Import).
+          HTTPS needs a working origin cert — CF <code className="text-xs">521</code> means use
+          HTTP on a Cloudflare port (2052, 2082, …) or fix SSL. This is separate from edge{" "}
+          <em>agents</em> (Servers → install agent for Ops “agents online”).
         </p>
         <p className="text-xs mt-1">
           <Link href="/admin/settings/cdn-ips" style={{ color: "var(--accent)" }}>
@@ -129,7 +164,7 @@ export default function SmartCdnPage() {
               style={{ borderColor: "var(--border)" }}
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="EU Edge 1"
+              placeholder="Cloudflare EU"
             />
           </label>
           <label className="text-xs space-y-1">
@@ -174,6 +209,16 @@ export default function SmartCdnPage() {
           </button>
           <button
             type="button"
+            disabled={busy}
+            onClick={() => void importCloudflare()}
+            className="rounded border px-3 py-2 text-sm cursor-pointer disabled:opacity-50"
+            style={{ borderColor: "var(--border)" }}
+            title="Pull Cloudflare hostnames from Manage Servers domain/protocol fields"
+          >
+            Import Cloudflare from servers
+          </button>
+          <button
+            type="button"
             disabled={busy || endpoints.length === 0}
             onClick={() => void probeAll()}
             className="rounded border px-3 py-2 text-sm cursor-pointer disabled:opacity-50"
@@ -197,7 +242,9 @@ export default function SmartCdnPage() {
         )}
         {!loading && endpoints.length === 0 && (
           <div className="px-4 py-6 text-sm" style={{ color: "var(--muted)" }}>
-            No CDN endpoints yet — playback uses origin URLs until you add one.
+            No CDN endpoints yet — playback uses origin URLs until you add one. Use{" "}
+            <strong>Import Cloudflare from servers</strong> if your stream domains are already on
+            Cloudflare.
           </div>
         )}
         {endpoints.map((ep) => (

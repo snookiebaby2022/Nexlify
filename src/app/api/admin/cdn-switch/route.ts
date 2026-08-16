@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { probeAllCdns, selectBestCdn, getCdnMetrics } from "@/lib/smart-cdn";
+import { suggestCloudflareCdnEndpoints } from "@/lib/smart-cdn-suggest";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { iptvCorsPreflight } from "@/lib/iptv-cors";
@@ -23,6 +24,10 @@ export async function GET(req: NextRequest) {
     if (action === "probe") {
       const results = await probeAllCdns();
       return NextResponse.json(results);
+    }
+    if (action === "suggest-cloudflare") {
+      const suggestions = await suggestCloudflareCdnEndpoints();
+      return NextResponse.json({ suggestions });
     }
     const cdnId = sp.get("cdnId");
     if (cdnId) return NextResponse.json(await getCdnMetrics(cdnId));
@@ -48,6 +53,33 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   try {
+    if (body.action === "import-cloudflare") {
+      const suggestions = await suggestCloudflareCdnEndpoints();
+      const created = [];
+      for (const s of suggestions) {
+        const ep = await prisma.cdnEndpoint.create({
+          data: {
+            name: s.name.slice(0, 100),
+            url: s.url.slice(0, 500),
+            priority: Math.max(0, Math.min(100, s.priority)),
+            isActive: true,
+            region: s.region.slice(0, 50),
+            maxBandwidthMbps: 5000,
+          },
+        });
+        created.push(ep);
+      }
+      return NextResponse.json({
+        ok: true,
+        created: created.length,
+        endpoints: created,
+        note:
+          created.length === 0
+            ? "No new Cloudflare hostnames found on stream servers (or they are already added)."
+            : "Imported Cloudflare hostnames from stream servers. Probe to drop 521/unreachable URLs.",
+      });
+    }
+
     if (body.action === "add" || !body.action) {
       const name = String(body.name ?? "").trim().slice(0, 100);
       const url = String(body.url ?? "").trim().slice(0, 500);

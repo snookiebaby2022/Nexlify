@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.109",
+  "latestVersion": "1.9.110",
   "releases": [
+    {
+      "version": "1.9.110",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Smart CDN: import Cloudflare hostnames from stream servers; clearer CF/agent guidance.",
+      "changelog": [
+        "Import Cloudflare from servers on Streaming → Smart CDN (domain/protocol hostnames)",
+        "Ops glance links Agents separately from CDN",
+        "Notes for CF 521 / alternate ports vs edge agent heartbeats"
+      ],
+      "fixes": [
+        "No guided path to register existing Cloudflare stream domains as Smart CDN endpoints"
+      ]
+    },
     {
       "version": "1.9.109",
       "date": "2026-08-16",
