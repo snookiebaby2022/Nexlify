@@ -183,25 +183,36 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
   const groups = await ensureStandardUserGroups(prisma);
   result.groupsEnsured = [...groups.keys()];
 
-  // Assign users to Reseller / Sub-reseller groups when missing.
+  // Assign users to Reseller / Sub-reseller / Administrators groups by role.
+  // Always realign role→group (not only null groupId) so XUI imports and
+  // reseller-created subs land in the correct group.
   const resellerGroupId = groups.get("Resellers");
   const subGroupId = groups.get("Sub-resellers");
   const adminGroupId = groups.get("Administrators");
   if (resellerGroupId) {
     await prisma.panelUser.updateMany({
-      where: { role: "RESELLER", groupId: null },
+      where: {
+        role: "RESELLER",
+        OR: [{ groupId: null }, { groupId: { not: resellerGroupId } }],
+      },
       data: { groupId: resellerGroupId },
     });
   }
   if (subGroupId) {
     await prisma.panelUser.updateMany({
-      where: { role: "SUB_RESELLER", groupId: null },
+      where: {
+        role: "SUB_RESELLER",
+        OR: [{ groupId: null }, { groupId: { not: subGroupId } }],
+      },
       data: { groupId: subGroupId },
     });
   }
   if (adminGroupId) {
     await prisma.panelUser.updateMany({
-      where: { role: "ADMIN", groupId: null },
+      where: {
+        role: "ADMIN",
+        OR: [{ groupId: null }, { groupId: { not: adminGroupId } }],
+      },
       data: { groupId: adminGroupId },
     });
   }

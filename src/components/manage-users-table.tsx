@@ -156,6 +156,101 @@ export function ManageUsersTable({
     setOpenAction(null);
   }
 
+  async function promoteToAdmin(u: ManageUserRow) {
+    if (u.role === "ADMIN") return;
+    if (!confirm(`Promote "${u.username}" to Admin? They will get full panel access.`)) return;
+    const res = await fetch(usersApi, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: u.id, role: "ADMIN" }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) alert(j.error ?? "Promote failed");
+    else onRefresh();
+    setOpenAction(null);
+  }
+
+  async function promptAddCredits(u: ManageUserRow) {
+    const raw = prompt(`Add credits to ${u.username}:`, "10");
+    if (!raw) return;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    await quickAddCredits(u, amount);
+  }
+
+  function actionMenu(u: ManageUserRow) {
+    return (
+      <div
+        className="absolute right-3 top-full z-20 mt-1 py-1 rounded shadow-xl min-w-[12rem] border text-sm"
+        style={{ background: "#252a2f", borderColor: "var(--border)" }}
+      >
+        {panel === "admin" && (
+          <Link
+            href={`/admin/resellers/${u.id}/edit`}
+            className="block px-3 py-2 hover:bg-white/10"
+            onClick={() => setOpenAction(null)}
+          >
+            Edit user
+          </Link>
+        )}
+        <button
+          type="button"
+          className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
+          onClick={() => toggleActive(u)}
+        >
+          {u.isActive ? "Disable user" : "Enable user"}
+        </button>
+        <button
+          type="button"
+          className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
+          onClick={() => void promptAddCredits(u)}
+        >
+          Add credits…
+        </button>
+        <button
+          type="button"
+          className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
+          onClick={() => void quickAddCredits(u, 10)}
+        >
+          +10 credits
+        </button>
+        <button
+          type="button"
+          className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
+          onClick={() => void quickAddCredits(u, 50)}
+        >
+          +50 credits
+        </button>
+        <Link
+          href={`${creditsHref}?userId=${u.id}`}
+          className="block px-3 py-2 hover:bg-white/10"
+          onClick={() => setOpenAction(null)}
+        >
+          Credit history
+        </Link>
+        {panel === "admin" && u.role !== "ADMIN" && (
+          <button
+            type="button"
+            className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
+            onClick={() => void promoteToAdmin(u)}
+          >
+            Promote to admin
+          </button>
+        )}
+        {(panel === "reseller" || u.role !== "ADMIN") && (
+          <button
+            type="button"
+            className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
+            style={{ color: "var(--danger)" }}
+            onClick={() => deleteUser(u.id, u.username)}
+          >
+            Delete
+          </button>
+        )}
+      </div>
+    );
+  }
+
   const thClass =
     "text-left px-3 py-3 font-normal text-xs whitespace-nowrap cursor-pointer select-none";
   const SortHead = ({ label, col }: { label: string; col: SortKey }) => (
@@ -314,55 +409,7 @@ export function ManageUsersTable({
                   </div>
                 ) : null}
               </dl>
-              {openAction === u.id && (
-                <div
-                  className="absolute right-4 top-12 z-20 py-1 rounded shadow-xl min-w-[10rem] border text-sm"
-                  style={{ background: "#252a2f", borderColor: "var(--border)" }}
-                >
-                  <button
-                    type="button"
-                    className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-                    onClick={() => toggleActive(u)}
-                  >
-                    {u.isActive ? "Disable user" : "Enable user"}
-                  </button>
-                  <Link
-                    href={`${creditsHref}?userId=${u.id}`}
-                    className="block px-3 py-2 hover:bg-white/10"
-                    onClick={() => setOpenAction(null)}
-                  >
-                    {panel === "reseller" ? "Add credits" : "Credit log"}
-                  </Link>
-                  {panel === "reseller" && (
-                    <>
-                      <button
-                        type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-                        onClick={() => void quickAddCredits(u, 10)}
-                      >
-                        +10 credits
-                      </button>
-                      <button
-                        type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-                        onClick={() => void quickAddCredits(u, 50)}
-                      >
-                        +50 credits
-                      </button>
-                    </>
-                  )}
-                  {u.role !== "ADMIN" && (
-                    <button
-                      type="button"
-                      className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-                      style={{ color: "var(--danger)" }}
-                      onClick={() => deleteUser(u.id, u.username)}
-                    >
-                      Delete
-                    </button>
-                  )}
-                </div>
-              )}
+              {openAction === u.id && actionMenu(u)}
             </article>
           ))
         )}
@@ -453,55 +500,7 @@ export function ManageUsersTable({
                     >
                       <List size={16} />
                     </button>
-                    {openAction === u.id && (
-                      <div
-                        className="absolute right-3 top-full z-20 mt-1 py-1 rounded shadow-xl min-w-[10rem] border text-sm"
-                        style={{ background: "#252a2f", borderColor: "var(--border)" }}
-                      >
-                        <button
-                          type="button"
-                          className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-                          onClick={() => toggleActive(u)}
-                        >
-                          {u.isActive ? "Disable user" : "Enable user"}
-                        </button>
-                        <Link
-                          href={`${creditsHref}?userId=${u.id}`}
-                          className="block px-3 py-2 hover:bg-white/10"
-                          onClick={() => setOpenAction(null)}
-                        >
-                          {panel === "reseller" ? "Add credits" : "Credit log"}
-                        </Link>
-                        {panel === "reseller" && (
-                          <>
-                            <button
-                              type="button"
-                              className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-                              onClick={() => void quickAddCredits(u, 10)}
-                            >
-                              +10 credits
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-                              onClick={() => void quickAddCredits(u, 50)}
-                            >
-                              +50 credits
-                            </button>
-                          </>
-                        )}
-                        {(panel === "reseller" || u.role !== "ADMIN") && (
-                          <button
-                            type="button"
-                            className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-                            style={{ color: "var(--danger)" }}
-                            onClick={() => deleteUser(u.id, u.username)}
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    {openAction === u.id && actionMenu(u)}
                   </td>
                 </tr>
               ))

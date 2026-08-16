@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Pencil, RefreshCw, Search, Tv } from "lucide-react";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
@@ -16,42 +16,54 @@ type SeriesRow = {
 
 export function ManageSeriesTable() {
   const [series, setSeries] = useState<SeriesRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const [searchDebounced, setSearchDebounced] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_LIST_PAGE_SIZE);
+  const [categoryId, setCategoryId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const cat = new URLSearchParams(window.location.search).get("categoryId");
+    if (cat) setCategoryId(cat);
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(search.trim()), 250);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const load = useCallback(() => {
     setLoading(true);
     setError("");
-    fetch("/api/admin/series")
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    if (searchDebounced) params.set("search", searchDebounced);
+    if (categoryId) params.set("categoryId", categoryId);
+    fetch(`/api/admin/series?${params}`)
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(d.error || `Failed to load series (${r.status})`);
         setSeries(Array.isArray(d.series) ? d.series : []);
+        setTotal(Number(d.total ?? d.series?.length ?? 0));
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load series"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, pageSize, searchDebounced, categoryId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return series;
-    return series.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        (s.categoryName ?? "").toLowerCase().includes(q)
-    );
-  }, [series, search]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
-  const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const from = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const to = Math.min(safePage * pageSize, total);
 
   return (
     <div className="space-y-4">
@@ -130,7 +142,7 @@ export function ManageSeriesTable() {
             </tr>
           </thead>
           <tbody>
-            {pageRows.map((s) => (
+            {series.map((s) => (
               <tr key={s.id}>
                 <td className="xui-lines-td">
                   <div className="flex items-center gap-2">
@@ -166,10 +178,17 @@ export function ManageSeriesTable() {
                 </td>
               </tr>
             ))}
-            {!pageRows.length && !loading ? (
+            {!series.length && !loading ? (
               <tr>
                 <td colSpan={5} className="xui-lines-td text-center" style={{ color: "var(--muted)" }}>
                   No TV series yet.
+                </td>
+              </tr>
+            ) : null}
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="xui-lines-td text-center" style={{ color: "var(--muted)" }}>
+                  Loading…
                 </td>
               </tr>
             ) : null}
@@ -179,19 +198,14 @@ export function ManageSeriesTable() {
 
       <div className="xui-streams-footer">
         <span>
-          Showing {filtered.length ? (safePage - 1) * pageSize + 1 : 0} to{" "}
-          {Math.min(safePage * pageSize, filtered.length)} of {filtered.length} series
+          Showing {from} to {to} of {total} series
         </span>
         <div className="xui-streams-pagination">
           <button type="button" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
             ‹
           </button>
           <span className="xui-streams-page-num">{safePage}</span>
-          <button
-            type="button"
-            disabled={safePage >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-          >
+          <button type="button" disabled={safePage >= totalPages} onClick={() => setPage((p) => p + 1)}>
             ›
           </button>
         </div>

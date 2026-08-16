@@ -261,7 +261,7 @@ export function PanelDashboard({
 
     load();
 
-    const t = setInterval(load, 5000);
+    const t = setInterval(load, 15000);
 
     return () => clearInterval(t);
 

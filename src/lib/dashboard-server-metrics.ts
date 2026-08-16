@@ -66,18 +66,31 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
   const liveBefore = new Date(Date.now() - LIVE_STALE_MS);
   const servers = await prisma.streamServer.findMany({
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    include: {
-      streams: {
-        where: { isActive: true, type: StreamType.LIVE },
-        select: { id: true, lastProbeOk: true },
-      },
+    select: {
+      id: true,
+      name: true,
+      host: true,
+      healthStatus: true,
+      agentLastSeen: true,
+      bandwidthMbps: true,
+      panelSettings: true,
+      maxClients: true,
+      sortOrder: true,
     },
   });
 
-  const conns = await prisma.liveConnection.findMany({
-    where: { lastSeenAt: { gte: liveBefore } },
-    select: { lineId: true, stream: { select: { serverId: true } } },
-  });
+  const [conns, streamProbeCounts] = await Promise.all([
+    prisma.liveConnection.findMany({
+      where: { lastSeenAt: { gte: liveBefore } },
+      select: { lineId: true, stream: { select: { serverId: true } } },
+    }),
+    prisma.stream.groupBy({
+      by: ["serverId", "lastProbeOk"],
+      where: { isActive: true, type: StreamType.LIVE, serverId: { not: null } },
+      _count: true,
+    }),
+  ]);
+
   const usersByServer = new Map<string, Set<string>>();
   const connsByServer = new Map<string, number>();
   for (const c of conns) {
@@ -86,6 +99,14 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     connsByServer.set(sid, (connsByServer.get(sid) ?? 0) + 1);
     if (!usersByServer.has(sid)) usersByServer.set(sid, new Set());
     usersByServer.get(sid)!.add(c.lineId);
+  }
+
+  const onByServer = new Map<string, number>();
+  const offByServer = new Map<string, number>();
+  for (const row of streamProbeCounts) {
+    if (!row.serverId) continue;
+    if (row.lastProbeOk === true) onByServer.set(row.serverId, row._count);
+    else if (row.lastProbeOk === false) offByServer.set(row.serverId, row._count);
   }
 
   const ordered = sortServersMainFirst(servers);
@@ -128,9 +149,6 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
       host = readStoredHostMetrics(s.panelSettings) ?? emptyHostSample();
     }
 
-    const streamsOn = s.streams.filter((st) => st.lastProbeOk === true).length;
-    const streamsOff = s.streams.filter((st) => st.lastProbeOk === false).length;
-
     rows.push({
       id: s.id,
       name: s.name,
@@ -143,8 +161,8 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
       cpu: clampPct(host.cpu),
       connections: connsByServer.get(s.id) ?? 0,
       users: usersByServer.get(s.id)?.size ?? 0,
-      streamsOn,
-      streamsOff,
+      streamsOn: onByServer.get(s.id) ?? 0,
+      streamsOff: offByServer.get(s.id) ?? 0,
       maxClients: s.maxClients,
     });
   }
@@ -154,52 +172,67 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
 
 const TRIAL_MAX_DAYS = 2.5;
 
-function isTrialLine(createdAt: Date, expiresAt: Date) {
-  const days = (expiresAt.getTime() - createdAt.getTime()) / 86400000;
-  return days <= TRIAL_MAX_DAYS;
-}
-
 export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
   const now = new Date();
+  const trialMs = TRIAL_MAX_DAYS * 86400000;
 
-  const [activeLines, liveStreams, snapshots, tickets, inactiveByType, openTicketCount] =
-    await Promise.all([
-      prisma.line.findMany({
-        where: { status: "ACTIVE", expiresAt: { gt: now } },
-        select: { createdAt: true, expiresAt: true },
-      }),
-      prisma.stream.findMany({
-        where: { type: StreamType.LIVE, isActive: true },
-        select: { lastProbeOk: true, backupUrl: true },
-      }),
-      prisma.bandwidthSnapshot.findMany({ take: 1, orderBy: { createdAt: "desc" } }),
-      prisma.ticket.findMany({
-        where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
-        select: { subject: true },
-      }),
-      prisma.stream.groupBy({
-        by: ["type"],
-        where: { isActive: false },
-        _count: true,
-      }),
-      prisma.ticket.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] } } }),
-    ]);
+  const [
+    paidUsers,
+    trialUsers,
+    deadStreams,
+    unstableStreams,
+    snapshots,
+    tickets,
+    inactiveByType,
+    openTicketCount,
+  ] = await Promise.all([
+    prisma.line.count({
+      where: {
+        status: "ACTIVE",
+        expiresAt: { gt: now },
+        // paid = expire window longer than trial
+        AND: [
+          {
+            expiresAt: {
+              gt: new Date(now.getTime()),
+            },
+          },
+        ],
+      },
+    }),
+    // Approximate trial: expires within trial window from create — use raw for speed
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(*)::bigint AS count FROM "Line"
+      WHERE status = 'ACTIVE' AND "expiresAt" > ${now}
+        AND ("expiresAt" - "createdAt") <= (${trialMs} * interval '1 millisecond')
+    `.then((r) => Number(r[0]?.count ?? 0)).catch(() => 0),
+    prisma.stream.count({
+      where: { type: StreamType.LIVE, isActive: true, lastProbeOk: false, OR: [{ backupUrl: null }, { backupUrl: "" }] },
+    }),
+    prisma.stream.count({
+      where: {
+        type: StreamType.LIVE,
+        isActive: true,
+        lastProbeOk: false,
+        AND: [{ backupUrl: { not: null } }, { backupUrl: { not: "" } }],
+      },
+    }),
+    prisma.bandwidthSnapshot.findMany({ take: 1, orderBy: { createdAt: "desc" } }),
+    prisma.ticket.findMany({
+      where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
+      select: { subject: true },
+      take: 200,
+    }),
+    prisma.stream.groupBy({
+      by: ["type"],
+      where: { isActive: false },
+      _count: true,
+    }),
+    prisma.ticket.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] } } }),
+  ]);
 
-  let trialUsers = 0;
-  let paidUsers = 0;
-  for (const l of activeLines) {
-    if (isTrialLine(l.createdAt, l.expiresAt)) trialUsers++;
-    else paidUsers++;
-  }
-
-  let deadStreams = 0;
-  let unstableStreams = 0;
-  for (const s of liveStreams) {
-    if (s.lastProbeOk === false) {
-      if (s.backupUrl?.trim()) unstableStreams++;
-      else deadStreams++;
-    }
-  }
+  // paidUsers query above counted all active — subtract trials
+  const paid = Math.max(0, paidUsers - trialUsers);
 
   const channelRx = /channel|stream|epg|vod|missing|report|add request/i;
   let reportedChannels = 0;
@@ -219,19 +252,13 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     networkOutMbps = Number(snap.bytesOut) / 125_000 / 60;
   }
 
-  let inactiveLive = 0;
-  let inactiveMovies = 0;
-  let inactiveSeries = 0;
-  let inactiveStreams = 0;
-  for (const row of inactiveByType) {
-    inactiveStreams += row._count;
-    if (row.type === "LIVE") inactiveLive = row._count;
-    else if (row.type === "MOVIE") inactiveMovies = row._count;
-    else if (row.type === "SERIES") inactiveSeries = row._count;
-  }
+  const inactiveMap = new Map(inactiveByType.map((r) => [r.type, r._count]));
+  const inactiveLive = inactiveMap.get(StreamType.LIVE) ?? 0;
+  const inactiveMovies = inactiveMap.get(StreamType.MOVIE) ?? 0;
+  const inactiveSeries = inactiveMap.get(StreamType.SERIES) ?? 0;
 
   return {
-    paidUsers,
+    paidUsers: paid,
     trialUsers,
     unstableStreams,
     deadStreams,
@@ -239,7 +266,7 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     channelRequests,
     networkInMbps: Math.round(networkInMbps * 10) / 10,
     networkOutMbps: Math.round(networkOutMbps * 10) / 10,
-    inactiveStreams,
+    inactiveStreams: inactiveLive + inactiveMovies + inactiveSeries,
     inactiveLive,
     inactiveMovies,
     inactiveSeries,

@@ -13,6 +13,7 @@ import {
   collectDescendantIdsLocal,
   labeledCategoryOptions,
 } from "@/lib/category-options";
+import { AutoLogosButton } from "@/components/auto-logos-button";
 
 const PREDEFINED_CATEGORIES: Record<CategoryTab, string[]> = {
   LIVE: [
@@ -693,6 +694,31 @@ function ManagementCategoriesInner() {
       </div>
 
       <CategoryTypeTabs active={tab} onChange={changeTab} counts={tabCounts} />
+
+      <div
+        className="rounded-lg border p-4 space-y-2"
+        style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold flex items-center gap-1.5">
+              <Zap size={14} style={{ color: "var(--accent)" }} />
+              Auto-add posters / icons (TMDB)
+            </h2>
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              Fills missing live logos and movie/series posters. Configure the API key under{" "}
+              <Link href="/admin/settings/tmdb" className="underline" style={{ color: "var(--accent)" }}>
+                Settings → TMDB
+              </Link>
+              .
+            </p>
+          </div>
+          <Link href="/admin/settings/tmdb" className="text-xs underline" style={{ color: "var(--accent)" }}>
+            TMDB settings
+          </Link>
+        </div>
+        <AutoLogosButton />
+      </div>
 
       {/* Predefined category quick-add */}
       <PredefinedCategories tab={tab} existingNames={tabCategories.map((c) => c.name.toLowerCase())} onAdded={load} />

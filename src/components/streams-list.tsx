@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   ChevronDown,
   Filter,
-  Pencil,
   RefreshCw,
   Search,
   Square,
@@ -152,8 +151,13 @@ export function StreamsList({
     const params = new URLSearchParams({
       page: String(page),
       pageSize: String(pageSize),
-      withStats: "1",
     });
+    // Movies/series lists don't need live probe stats polling — use lite payload.
+    if (type === "MOVIE" || type === "SERIES") {
+      params.set("lite", "1");
+    } else {
+      params.set("withStats", "1");
+    }
     if (type) params.set("type", type);
     if (categoryId) params.set("categoryId", categoryId);
     if (serverId) params.set("serverId", serverId);
@@ -179,9 +183,13 @@ export function StreamsList({
 
   useEffect(() => {
     load();
+    // Live streams refresh often; VOD lists only on filter/page change.
+    if (type === "MOVIE" || type === "SERIES") {
+      return;
+    }
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, type]);
 
   // Tick every second for real-time uptime updates
   useEffect(() => {
@@ -421,13 +429,6 @@ export function StreamsList({
                     )}
                   </td>
                   <td className="xui-streams-td-actions">
-                    <Link
-                      href={`/admin/servers/streams?edit=${s.id}`}
-                      className="p-1.5 rounded hover:bg-white/10 transition-colors"
-                      title="Edit stream"
-                    >
-                      <Pencil size={14} />
-                    </Link>
                     {type === "SERIES" ? (
                       <Link
                         href={`/admin/content/episodes?seriesId=${s.id}`}

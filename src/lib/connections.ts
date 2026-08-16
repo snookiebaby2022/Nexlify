@@ -175,7 +175,7 @@ export async function deleteStaleConnections() {
 }
 
 /** List connections that are actually live right now (refreshed within last 2 minutes) */
-export async function listLiveConnections(ownerId?: string) {
+export async function listLiveConnections(ownerId?: string, take = 5000) {
   const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
   return prisma.liveConnection.findMany({
     where: {
@@ -184,7 +184,7 @@ export async function listLiveConnections(ownerId?: string) {
     },
     include: connectionInclude,
     orderBy: { lastSeenAt: "desc" },
-    take: 5000,
+    take: Math.min(Math.max(1, take), 5000),
   });
 }
 

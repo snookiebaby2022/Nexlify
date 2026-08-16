@@ -3,6 +3,7 @@ import { requireSession, hashPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { randomBytes } from "crypto";
+import { ensureStandardUserGroups } from "@/lib/ensure-user-groups";
 
 function roleLabel(role: PanelRole) {
   if (role === PanelRole.ADMIN) return "admin";
@@ -47,9 +48,42 @@ function serializeUser(
   };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const singleId = req.nextUrl.searchParams.get("id");
+  if (singleId) {
+    const r = await prisma.panelUser.findUnique({
+      where: { id: singleId },
+      include: {
+        _count: { select: { lines: true, children: true } },
+        group: { select: { id: true, name: true } },
+        parent: { select: { id: true, username: true } },
+      },
+    });
+    if (!r) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    return NextResponse.json({
+      user: {
+        id: r.id,
+        username: r.username,
+        email: r.email ?? "",
+        role: r.role,
+        isActive: r.isActive,
+        credits: r.credits,
+        maxLines: r.maxLines,
+        notes: r.notes ?? "",
+        resellerDns: r.resellerDns ?? "",
+        defaultLanguage: r.defaultLanguage,
+        groupId: r.groupId,
+        groupName: r.group?.name ?? roleLabel(r.role),
+        parentId: r.parentId,
+        parentUsername: r.parent?.username ?? null,
+        lines: r._count.lines,
+        subUsers: r._count.children,
+      },
+    });
+  }
 
   const rows = await prisma.panelUser.findMany({
     include: {
@@ -93,15 +127,41 @@ export async function PATCH(req: NextRequest) {
   const id = String(body.id ?? "");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
+  const existing = await prisma.panelUser.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
   const data: {
     isActive?: boolean;
     notes?: string | null;
     credits?: number;
     resellerDns?: string | null;
+    email?: string | null;
+    username?: string;
+    passwordHash?: string;
+    role?: PanelRole;
+    groupId?: string | null;
+    parentId?: string | null;
+    maxLines?: number;
+    defaultLanguage?: string;
   } = {};
+
   if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
   if (body.notes !== undefined) data.notes = body.notes ? String(body.notes) : null;
   if (body.credits != null) data.credits = Number(body.credits);
+  if (body.email !== undefined) data.email = body.email ? String(body.email).trim() : null;
+  if (body.username !== undefined) {
+    const username = String(body.username).trim();
+    if (!username) return NextResponse.json({ error: "Username required" }, { status: 400 });
+    data.username = username;
+  }
+  if (typeof body.password === "string" && body.password.trim()) {
+    data.passwordHash = await hashPassword(body.password.trim());
+  }
+  if (body.maxLines != null) data.maxLines = Math.max(0, Number(body.maxLines) || 0);
+  if (body.defaultLanguage !== undefined) data.defaultLanguage = String(body.defaultLanguage || "en");
+  if (body.groupId !== undefined) data.groupId = body.groupId ? String(body.groupId) : null;
+  if (body.parentId !== undefined) data.parentId = body.parentId ? String(body.parentId) : null;
+
   if (body.resellerDns !== undefined) {
     try {
       const { normalizeResellerDnsInput } = await import("@/lib/reseller-dns");
@@ -114,21 +174,60 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  const user = await prisma.panelUser.update({
-    where: { id },
-    data,
-  });
-
-  if (body.resellerDns !== undefined) {
-    try {
-      const { syncResellerDnsIntoExtraDomains } = await import("@/lib/reseller-dns");
-      await syncResellerDnsIntoExtraDomains();
-    } catch {
-      /* non-fatal */
+  if (body.role !== undefined) {
+    const roleRaw = String(body.role).toUpperCase();
+    if (roleRaw === "ADMIN") {
+      if (id === session.id) {
+        return NextResponse.json({ error: "Cannot change your own role this way" }, { status: 400 });
+      }
+      data.role = PanelRole.ADMIN;
+      data.parentId = null;
+      const groups = await ensureStandardUserGroups(prisma);
+      data.groupId = groups.get("Administrators") ?? data.groupId ?? null;
+    } else if (roleRaw === "SUB_RESELLER") {
+      data.role = PanelRole.SUB_RESELLER;
+      const groups = await ensureStandardUserGroups(prisma);
+      if (!data.groupId) data.groupId = groups.get("Sub-resellers") ?? null;
+      const parentId = body.parentId ? String(body.parentId) : existing.parentId;
+      if (!parentId) {
+        return NextResponse.json({ error: "Sub-reseller requires a parent user" }, { status: 400 });
+      }
+      data.parentId = parentId;
+    } else if (roleRaw === "RESELLER") {
+      data.role = PanelRole.RESELLER;
+      const groups = await ensureStandardUserGroups(prisma);
+      if (!data.groupId) data.groupId = groups.get("Resellers") ?? null;
+      if (body.parentId === null || body.parentId === "") data.parentId = null;
+    } else {
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
   }
 
-  return NextResponse.json({ user: { id: user.id, username: user.username } });
+  try {
+    const user = await prisma.panelUser.update({
+      where: { id },
+      data,
+    });
+
+    if (body.resellerDns !== undefined) {
+      try {
+        const { syncResellerDnsIntoExtraDomains } = await import("@/lib/reseller-dns");
+        await syncResellerDnsIntoExtraDomains();
+      } catch {
+        /* non-fatal */
+      }
+    }
+
+    return NextResponse.json({
+      user: { id: user.id, username: user.username, role: user.role, groupId: user.groupId },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Update failed";
+    if (msg.includes("Unique constraint") || msg.includes("username")) {
+      return NextResponse.json({ error: "Username already taken" }, { status: 400 });
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 export async function DELETE(req: NextRequest) {
@@ -164,14 +263,28 @@ export async function POST(req: NextRequest) {
     : randomBytes(12).toString("hex");
 
   const role =
-    body.role === "SUB_RESELLER" ? PanelRole.SUB_RESELLER : PanelRole.RESELLER;
+    body.role === "ADMIN"
+      ? PanelRole.ADMIN
+      : body.role === "SUB_RESELLER"
+        ? PanelRole.SUB_RESELLER
+        : PanelRole.RESELLER;
+
+  const groups = await ensureStandardUserGroups(prisma);
+  const defaultGroup =
+    role === PanelRole.ADMIN
+      ? groups.get("Administrators")
+      : role === PanelRole.SUB_RESELLER
+        ? groups.get("Sub-resellers")
+        : groups.get("Resellers");
 
   const parentId =
     body.parentId && String(body.parentId).trim()
       ? String(body.parentId)
       : role === PanelRole.SUB_RESELLER
         ? null
-        : session.id;
+        : role === PanelRole.ADMIN
+          ? null
+          : session.id;
 
   if (role === PanelRole.SUB_RESELLER && !parentId) {
     return NextResponse.json({ error: "Sub-reseller requires a parent user" }, { status: 400 });
@@ -196,7 +309,7 @@ export async function POST(req: NextRequest) {
       email: body.email ? String(body.email) : null,
       isActive: body.isActive !== false,
       defaultLanguage: body.defaultLanguage ? String(body.defaultLanguage) : "en",
-      groupId: body.groupId ? String(body.groupId) : null,
+      groupId: body.groupId ? String(body.groupId) : defaultGroup ?? null,
       credits: Number(body.credits ?? 0),
       maxLines: Number(body.maxLines ?? 500),
       parentId,

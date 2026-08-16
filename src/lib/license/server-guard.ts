@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 
 const STARTUP_VALIDATED_KEY = "license.startup_validated_at";
 const HEARTBEAT_FAIL_KEY = "license.heartbeat_failures";
+/** Hard vendor rejections before wiping a stored license (network never counts). */
+const HARD_FAIL_WIPE_THRESHOLD = 5;
 
 export async function startupValidationOk(): Promise<boolean> {
   if (process.env.NEXLIFY_LICENSE_REQUIRE === "0") return true;
@@ -67,7 +69,7 @@ export async function startupLicenseValidation(): Promise<{ ok: boolean; reason?
   return { ok: true };
 }
 
-export async function heartbeatCheck(): Promise<{ ok: boolean; reason?: string }> {
+export async function heartbeatCheck(): Promise<{ ok: boolean; reason?: string; soft?: boolean }> {
   if (process.env.NEXLIFY_LICENSE_REQUIRE === "0") {
     return { ok: true };
   }
@@ -75,6 +77,16 @@ export async function heartbeatCheck(): Promise<{ ok: boolean; reason?: string }
   const host = process.env.PANEL_PRIMARY_DOMAIN ?? "localhost";
 
   try {
+    const { getStoredLicense } = await import("@/lib/license");
+    const stored = await getStoredLicense();
+    if (!stored) {
+      // Already cleared — do not increment forever or re-clear (cron spam).
+      return { ok: false, soft: true, reason: "no_license" };
+    }
+    if (stored.exp * 1000 < Date.now()) {
+      return { ok: false, reason: "expired" };
+    }
+
     const { pollVendorLicenseSync } = await import("@/lib/license/remote-sync");
     const { revalidateStoredLicense } = await import("@/lib/license");
     await pollVendorLicenseSync(host);
@@ -82,23 +94,35 @@ export async function heartbeatCheck(): Promise<{ ok: boolean; reason?: string }
 
     if (ok) {
       await resetHeartbeatFailures();
+      await markStartupValidated();
       return { ok: true };
     }
 
+    // Re-check: revalidate may have wiped on hard REVOKED.
+    const still = await getStoredLicense();
+    if (!still) {
+      await resetHeartbeatFailures();
+      return { ok: false, reason: "revoked_or_cleared" };
+    }
+
     const failures = await incrementHeartbeatFailures();
-    if (failures >= 3) {
+    if (failures >= HARD_FAIL_WIPE_THRESHOLD) {
       const { clearStoredLicense } = await import("@/lib/license");
       await clearStoredLicense();
+      await resetHeartbeatFailures();
       return { ok: false, reason: `license_invalidated_after_${failures}_failures` };
     }
 
-    return { ok: false, reason: `validation_failed_attempt_${failures}` };
+    return { ok: false, soft: true, reason: `validation_failed_attempt_${failures}` };
   } catch (e) {
     // Network errors are transient — do NOT permanently clear the license.
-    // Only increment the failure counter and report the error.
     const failures = await incrementHeartbeatFailures();
-    console.warn(`[license] Heartbeat network error (attempt ${failures}/3):`, e instanceof Error ? e.message : e);
-    return { ok: false, reason: `network_error_attempt_${failures}` };
+    console.warn(`[license] Heartbeat network error (attempt ${failures}):`, e instanceof Error ? e.message : e);
+    return {
+      ok: false,
+      soft: true,
+      reason: `network_error_attempt_${failures}`,
+    };
   }
 }
 

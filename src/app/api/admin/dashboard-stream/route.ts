@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
-import { listLiveConnections } from "@/lib/connections";
+import { countActiveConnections, listLiveConnections } from "@/lib/connections";
 import { sampleLocalHostMetrics } from "@/lib/host-metrics";
 
 export async function GET(req: NextRequest) {
@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   if (!session) return new Response("Unauthorized", { status: 401 });
 
   const encoder = new TextEncoder();
+  const ownerId = session.role === "ADMIN" ? undefined : session.id;
 
   const stream = new ReadableStream({
     start(controller) {
@@ -21,10 +22,11 @@ export async function GET(req: NextRequest) {
         try {
           const now = new Date();
 
-          const [connections, bandwidthSnap, activeLines] = await Promise.all([
-            listLiveConnections(session.role === "ADMIN" ? undefined : session.id),
+          const [onlineConnections, bandwidthSnap, activeLines, sampleConns] = await Promise.all([
+            countActiveConnections(ownerId),
             prisma.bandwidthSnapshot.findFirst({ orderBy: { createdAt: "desc" } }),
             prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
+            listLiveConnections(ownerId, 10),
           ]);
 
           const nic = sampleLocalHostMetrics();
@@ -35,15 +37,18 @@ export async function GET(req: NextRequest) {
             networkInMbps = Math.round((Number(bandwidthSnap.bytesIn) / 125000 / 60) * 10) / 10;
           }
 
+          // Approximate distinct users/streams from the small sample when connection volume is high.
+          const onlineUsersApprox =
+            new Set(sampleConns.map((c) => c.lineId)).size || Math.min(onlineConnections, sampleConns.length);
           send({
             timestamp: now.toISOString(),
-            onlineConnections: connections.length,
-            onlineUsers: new Set(connections.map((c) => c.lineId)).size,
-            onlineStreams: new Set(connections.map((c) => c.streamId).filter(Boolean)).size,
+            onlineConnections,
+            onlineUsers: onlineUsersApprox,
+            onlineStreams: new Set(sampleConns.map((c) => c.streamId).filter(Boolean)).size,
             totalActiveLines: activeLines,
             networkInMbps,
             networkOutMbps,
-            connections: connections.slice(0, 10).map((c) => ({
+            connections: sampleConns.map((c) => ({
               id: c.id,
               line: c.line?.username ?? "unknown",
               stream: c.stream?.name ?? "unknown",
@@ -56,13 +61,9 @@ export async function GET(req: NextRequest) {
         }
       };
 
-      // Send initial data
       update();
+      const interval = setInterval(update, 10000);
 
-      // Send updates every 5 seconds
-      const interval = setInterval(update, 5000);
-
-      // Cleanup on disconnect
       req.signal.addEventListener("abort", () => {
         clearInterval(interval);
         controller.close();

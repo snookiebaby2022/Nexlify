@@ -609,14 +609,18 @@ export async function jobLicenseRevalidate() {
   try {
     const { heartbeatCheck } = await import("@/lib/license/server-guard");
     const result = await heartbeatCheck();
+    const soft = Boolean(result.soft) || result.reason === "no_license" || result.reason?.startsWith("network_");
+    const status = result.ok ? "ok" : soft ? "warn" : "invalid";
     await logCron(
       "license_revalidate",
-      result.ok ? "ok" : "invalid",
+      status,
       result.reason,
       Date.now() - start,
     );
-    if (!result.ok) {
+    if (!result.ok && !soft) {
       console.error(`[LICENSE] Heartbeat failed: ${result.reason}`);
+    } else if (!result.ok && result.reason !== "no_license") {
+      console.warn(`[LICENSE] Heartbeat soft fail: ${result.reason}`);
     }
   } catch (e) {
     await logCron("license_revalidate", "error", String(e), Date.now() - start);

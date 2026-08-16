@@ -95,7 +95,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Username already taken" }, { status: 400 });
   }
 
-  const groupId = body.groupId ? String(body.groupId) : parent.groupId;
+  const groupId =
+    body.groupId
+      ? String(body.groupId)
+      : (
+          await (async () => {
+            try {
+              const { ensureStandardUserGroups } = await import("@/lib/ensure-user-groups");
+              const groups = await ensureStandardUserGroups(prisma);
+              return groups.get("Sub-resellers") ?? parent.groupId;
+            } catch {
+              return parent.groupId;
+            }
+          })()
+        );
 
   const user = await prisma.$transaction(async (tx) => {
     if (credits > 0) {

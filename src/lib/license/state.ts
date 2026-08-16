@@ -190,7 +190,7 @@ export async function activateLicenseKey(
 async function validateWithVendor(
   key: string,
   instanceId: string
-): Promise<{ ok: boolean; status?: string; error?: string }> {
+): Promise<{ ok: boolean; status?: string; error?: string; transient?: boolean }> {
   const api = licenseApiUrl();
   if (!api) return { ok: true };
 
@@ -203,16 +203,23 @@ async function validateWithVendor(
     });
     const contentType = res.headers.get("content-type") ?? "";
     if (!contentType.includes("application/json")) {
-      return { ok: false, error: "Invalid license server response" };
+      // Marketing HTML / gateway errors — do not wipe a valid local license.
+      return { ok: false, transient: true, error: "Invalid license server response" };
     }
     const data = (await res.json()) as { ok?: boolean; status?: string; error?: string };
     if (!data.ok) {
-      return { ok: false, status: data.status, error: data.error ?? "License validation failed" };
+      const status = (data.status ?? "").toUpperCase();
+      const err = (data.error ?? "").toLowerCase();
+      // Endpoint missing / not routed on vendor host is transient, not a revoke.
+      if (res.status === 404 || err.includes("not found") || err.includes("cannot post")) {
+        return { ok: false, transient: true, status: data.status, error: data.error ?? "License endpoint unavailable" };
+      }
+      return { ok: false, status: data.status ?? status, error: data.error ?? "License validation failed" };
     }
     return { ok: true, status: data.status ?? "ACTIVE" };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Network error";
-    return { ok: false, error: message };
+    return { ok: false, transient: true, error: message };
   }
 }
 
@@ -343,6 +350,10 @@ export async function revalidateStoredLicense(panelHost: string): Promise<boolea
     if (key) {
       const validated = await validateWithVendor(key, instanceId);
       if (!validated.ok) {
+        if (validated.transient) {
+          // Keep local license; vendor/API was unreachable or misconfigured.
+          return true;
+        }
         if (validated.status === "REVOKED") {
           await clearStoredLicense();
         } else if (validated.status === "SUSPENDED") {
@@ -356,7 +367,10 @@ export async function revalidateStoredLicense(panelHost: string): Promise<boolea
       }
       await setRemoteAdminStatus(null);
       const online = await verifyOnlineIfRequired(key, instanceId, panelHost);
-      if (!online.ok) return false;
+      if (!online.ok) {
+        // Online check failures are usually network / wrong API URL — keep license.
+        return true;
+      }
     }
   }
 

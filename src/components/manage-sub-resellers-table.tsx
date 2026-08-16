@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowUpDown, ChevronDown, Plus, RefreshCw, Search } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
+import { computePortalMenuPosition } from "@/lib/portal-menu-position";
 
 export type ManageSubResellerRow = {
   id: string;
@@ -37,6 +39,10 @@ export function ManageSubResellersTable({
   const [sortKey, setSortKey] = useState<"displayId" | "username" | "credits" | "lines">("displayId");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const [flipped, setFlipped] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -70,6 +76,41 @@ export function ManageSubResellersTable({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const openRow = pageRows.find((r) => r.id === openMenuId) ?? null;
+
+  const reposition = useCallback(() => {
+    if (!btnRef.current) return;
+    const anchor = btnRef.current.getBoundingClientRect();
+    const size = {
+      width: menuRef.current?.offsetWidth || 220,
+      height: menuRef.current?.offsetHeight || 260,
+    };
+    const pos = computePortalMenuPosition(anchor, size);
+    setMenuPos({ top: pos.top, left: pos.left });
+    setFlipped(pos.flipped);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!openMenuId) return;
+    reposition();
+  }, [openMenuId, reposition]);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const onScroll = () => reposition();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenMenuId(null);
+    };
+    window.addEventListener("resize", onScroll);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [openMenuId, reposition]);
 
   function toggleSort(key: typeof sortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -128,11 +169,11 @@ export function ManageSubResellersTable({
 
   return (
     <div
-      className="rounded-lg overflow-hidden border"
+      className="rounded-lg border"
       style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
     >
       <div
-        className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+        className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-t-lg"
         style={{ background: "linear-gradient(90deg, #00c0ef 0%, #3c8dbc 100%)" }}
       >
         <h1 className="text-lg font-semibold text-white">Sub-resellers</h1>
@@ -269,46 +310,16 @@ export function ManageSubResellersTable({
                   <td className="px-3 py-3 text-xs whitespace-nowrap" style={{ color: "var(--muted)" }}>
                     {formatDateTime(r.createdAt)}
                   </td>
-                  <td className="px-3 py-3 relative overflow-visible">
-                    <div className="xui-lines-action-wrap">
-                      <button
-                        type="button"
-                        className={`xui-lines-action-btn ${openMenuId === r.id ? "xui-lines-action-btn--open" : ""}`}
-                        onClick={() => setOpenMenuId(openMenuId === r.id ? null : r.id)}
-                      >
-                        <span>Actions</span>
-                        <ChevronDown size={14} className="xui-lines-action-chevron" />
-                      </button>
-                      {openMenuId === r.id && (
-                        <>
-                          <button type="button" className="xui-lines-action-backdrop" onClick={() => setOpenMenuId(null)} />
-                          <div className="xui-lines-action-menu" role="menu">
-                            <Link href={`/admin/resellers`} className="xui-lines-action-menu-item" onClick={() => setOpenMenuId(null)}>
-                              Manage in users
-                            </Link>
-                            <Link href={`/admin/lines?owner=${r.id}`} className="xui-lines-action-menu-item" onClick={() => setOpenMenuId(null)}>
-                              View lines ({r.lines})
-                            </Link>
-                            <button type="button" className="xui-lines-action-menu-item" onClick={() => void addCredits(r)}>
-                              Add credits
-                            </button>
-                            <button type="button" className="xui-lines-action-menu-item" onClick={() => void toggleActive(r)}>
-                              {r.isActive ? "Disable" : "Enable"}
-                            </button>
-                            <Link href={`/admin/resellers/credits?userId=${r.id}`} className="xui-lines-action-menu-item" onClick={() => setOpenMenuId(null)}>
-                              Credit history
-                            </Link>
-                            <button
-                              type="button"
-                              className="xui-lines-action-menu-item xui-lines-action-menu-item--danger"
-                              onClick={() => void remove(r)}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                  <td className="px-3 py-3">
+                    <button
+                      type="button"
+                      ref={openMenuId === r.id ? btnRef : undefined}
+                      className={`xui-lines-action-btn ${openMenuId === r.id ? "xui-lines-action-btn--open" : ""}`}
+                      onClick={() => setOpenMenuId(openMenuId === r.id ? null : r.id)}
+                    >
+                      <span>Actions</span>
+                      <ChevronDown size={14} className="xui-lines-action-chevron" />
+                    </button>
                   </td>
                 </tr>
               ))
@@ -316,6 +327,55 @@ export function ManageSubResellersTable({
           </tbody>
         </table>
       </div>
+
+      {openRow &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <>
+            <button type="button" className="xui-lines-action-backdrop" aria-label="Close menu" onClick={() => setOpenMenuId(null)} />
+            <div
+              ref={menuRef}
+              className={`xui-lines-action-menu xui-lines-action-menu--portal ${flipped ? "xui-lines-action-menu--up" : ""}`}
+              role="menu"
+              style={{ top: menuPos.top, left: menuPos.left }}
+            >
+              <Link
+                href={`/admin/resellers/${openRow.id}/edit`}
+                className="xui-lines-action-menu-item"
+                onClick={() => setOpenMenuId(null)}
+              >
+                Edit user
+              </Link>
+              <Link href={`/admin/resellers`} className="xui-lines-action-menu-item" onClick={() => setOpenMenuId(null)}>
+                Manage in users
+              </Link>
+              <Link href={`/admin/lines?owner=${openRow.id}`} className="xui-lines-action-menu-item" onClick={() => setOpenMenuId(null)}>
+                View lines ({openRow.lines})
+              </Link>
+              <button type="button" className="xui-lines-action-menu-item" onClick={() => void addCredits(openRow)}>
+                Add credits
+              </button>
+              <button type="button" className="xui-lines-action-menu-item" onClick={() => void toggleActive(openRow)}>
+                {openRow.isActive ? "Disable" : "Enable"}
+              </button>
+              <Link
+                href={`/admin/resellers/credits?userId=${openRow.id}`}
+                className="xui-lines-action-menu-item"
+                onClick={() => setOpenMenuId(null)}
+              >
+                Credit history
+              </Link>
+              <button
+                type="button"
+                className="xui-lines-action-menu-item xui-lines-action-menu-item--danger"
+                onClick={() => void remove(openRow)}
+              >
+                Delete
+              </button>
+            </div>
+          </>,
+          document.body
+        )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t text-sm" style={{ borderColor: "var(--border)" }}>
         <span style={{ color: "var(--muted)" }}>
