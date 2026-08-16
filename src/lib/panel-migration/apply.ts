@@ -564,15 +564,30 @@ async function applyMigrationBundleInner(
         const exists = await prisma.panelUser.findUnique({ where: { username } });
         if (exists) {
           if (r.legacyId) resellerIdByLegacy.set(r.legacyId, exists.id);
+          // Restore XUI crypt hashes that were mistakenly bcrypt'd on an earlier import.
+          try {
+            const { isPrehashedPassword } = await import("@/lib/password-verify");
+            const { BCRYPT_HASH_RE } = await import("@/lib/secrets-equal");
+            if (isPrehashedPassword(password) && password.startsWith("$6$") && BCRYPT_HASH_RE.test(exists.passwordHash)) {
+              await prisma.panelUser.update({
+                where: { id: exists.id },
+                data: { passwordHash: password, passwordPlain: null },
+              });
+            }
+          } catch {
+            /* non-fatal */
+          }
           return false;
         }
-        const pw = await hashPassword(password);
+        const { isPrehashedPassword } = await import("@/lib/password-verify");
+        const prehashed = isPrehashedPassword(password);
+        const pw = prehashed ? password : await hashPassword(password);
         const role = r.parentLegacyId ? PanelRole.SUB_RESELLER : PanelRole.RESELLER;
         const created = await prisma.panelUser.create({
           data: {
             username,
             passwordHash: pw,
-            passwordPlain: password,
+            passwordPlain: prehashed ? null : password,
             role,
             credits: Number(r.credits) || 0,
             isActive: r.isActive !== false,

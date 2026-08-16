@@ -6,6 +6,7 @@ import { prisma } from "./prisma";
 import { jwtSecretBytes } from "@/lib/jwt-secret";
 import { panelSessionCookieOptions, panelSessionCookieSecure } from "@/lib/session-cookie";
 import { secretsEqual, BCRYPT_HASH_RE, canRepairAdminHash } from "@/lib/secrets-equal";
+import { verifyStoredPassword } from "@/lib/password-verify";
 import type { PanelRole } from "@prisma/client";
 
 const COOKIE = "nexlify_session";
@@ -51,10 +52,7 @@ export async function createSession(user: SessionUser, opts?: SessionCookieOptio
   const maxDays = opts?.maxAgeDays ?? 7;
   const token = await createSessionToken(user, opts);
   const jar = await cookies();
-  const cookieOpts = panelSessionCookieOptions(
-    opts?.req,
-    maxDays
-  );
+  const cookieOpts = panelSessionCookieOptions(opts?.req, maxDays);
   if (opts?.secure !== undefined) {
     cookieOpts.secure = opts.secure;
   } else if (!opts?.req) {
@@ -122,6 +120,20 @@ async function repairAdminPasswordHash(password: string) {
 
 const ADMIN_IDENTIFIERS = new Set(["admin", "admin@nexlify.live"]);
 
+/** After a successful legacy ($6$) login, upgrade to bcrypt + passwordPlain for UI reveal. */
+async function upgradeLegacyPasswordHash(userId: string, password: string, storedHash: string) {
+  if (BCRYPT_HASH_RE.test(storedHash)) return;
+  try {
+    const hash = await bcrypt.hash(password, 12);
+    await prisma.panelUser.update({
+      where: { id: userId },
+      data: { passwordHash: hash, passwordPlain: password },
+    });
+  } catch (err) {
+    console.error("[auth] password upgrade failed:", err);
+  }
+}
+
 export async function verifyPanelLogin(identifier: string, password: string) {
   const id = identifier.trim();
   // Prefer exact match, then case-insensitive — usernames like "Iconic" failed for "iconic".
@@ -153,7 +165,9 @@ export async function verifyPanelLogin(identifier: string, password: string) {
     return null;
   }
 
-  if (!BCRYPT_HASH_RE.test(user.passwordHash)) {
+  const hash = user.passwordHash ?? "";
+  const hashLooksValid = BCRYPT_HASH_RE.test(hash) || hash.startsWith("$6$");
+  if (!hashLooksValid) {
     if (canRepairAdminHash({ isAdminTarget, user })) {
       const repaired = await repairAdminPasswordHash(password);
       if (repaired) return repaired;
@@ -161,10 +175,15 @@ export async function verifyPanelLogin(identifier: string, password: string) {
     return null;
   }
 
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (ok) return user;
+  const ok = await verifyStoredPassword(password, hash);
+  if (!ok) return null;
 
-  return null;
+  // Transparent upgrade: XUI $6$ → bcrypt + passwordPlain so Manage Users can reveal it.
+  if (hash.startsWith("$6$")) {
+    void upgradeLegacyPasswordHash(user.id, password, hash);
+  }
+
+  return user;
 }
 
 export async function hashPassword(password: string) {

@@ -599,7 +599,7 @@ export function ManageUsersTable({
                     {u.password ? (
                       <CopyableCredential value={u.password} masked />
                     ) : (
-                      <span className="text-xs" style={{ color: "var(--muted)" }} title="Shown after next password set/reset">
+                      <span className="text-xs" style={{ color: "var(--muted)" }} title="Shown after next password set/reset or first login (XUI crypt upgrade)">
                         —
                       </span>
                     )}
