@@ -29,7 +29,7 @@ export function useLiveInstallCommand(): LiveInstallCommand {
     let cancelled = false;
 
     async function load() {
-      for (const endpoint of ["/install-command.json", "/api/install-command"]) {
+      for (const endpoint of ["/api/install-command", "/install-command.json"]) {
         try {
           const res = await fetch(endpoint, { cache: "no-store" });
           if (!res.ok) continue;

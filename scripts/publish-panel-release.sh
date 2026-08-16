@@ -126,4 +126,18 @@ echo "  $INSTALL_DEST/apply-panel-fast-update.sh"
 echo "  $INSTALL_DEST/fix-stream-edge-now.sh"
 echo "  port scripts → $INSTALL_DEST/scripts/"
 fi
+
+# Always refresh static install-command.json so the marketing UI never shows a stale ?v=
+MARKETING_ROOT="$(dirname "$(dirname "$DEST")")"
+if [ -d "$MARKETING_ROOT" ]; then
+  cat > "$MARKETING_ROOT/install-command.json" << EOF
+{
+  "version": "${PANEL_VER}",
+  "label": "v${PANEL_VER}",
+  "url": "https://nexlify.live/install/panel.sh?v=${PANEL_VER}",
+  "command": "curl -fsSL 'https://nexlify.live/install/panel.sh?v=${PANEL_VER}' | sudo bash"
+}
+EOF
+  echo "  $MARKETING_ROOT/install-command.json → v${PANEL_VER}"
+fi
 echo "Release feed: sync panel-releases.json to marketing and redeploy nexlify-web."

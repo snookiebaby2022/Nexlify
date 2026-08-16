@@ -57,18 +57,47 @@ rsync -a --delete \
   --exclude node_modules --exclude .next --exclude .env --exclude src/generated \
   "$SRC/marketing-drop-in/" "$MARKETING/"
 
-# Ensure release metadata + installer version match package
+# Ensure release metadata + installer version match the panel package (never leave stale install-command.json)
+PANEL_VER="$(node -p "try{require('$SRC/package.json').version}catch(e){''}" 2>/dev/null || true)"
+if [ -z "${PANEL_VER:-}" ] && [ -f "$SRC/src/lib/panel-releases.json" ]; then
+  PANEL_VER="$(node -p "try{require('$SRC/src/lib/panel-releases.json').latestVersion}catch(e){''}" 2>/dev/null || true)"
+fi
+if [ -z "${PANEL_VER:-}" ]; then
+  PANEL_VER="0.0.0"
+fi
+
+if [ -f "$SRC/scripts/sync-install-to-marketing.sh" ]; then
+  echo "==> Syncing installer scripts to panel v${PANEL_VER} ..."
+  (cd "$SRC" && bash scripts/sync-install-to-marketing.sh) || true
+  mkdir -p "$MARKETING/public/install"
+  rsync -a "$SRC/marketing-drop-in/public/install/" "$MARKETING/public/install/" 2>/dev/null || true
+fi
+
 if [ -f "$SRC/src/lib/panel-releases.json" ]; then
   mkdir -p "$MARKETING/src/lib" "$MARKETING/public"
   cp -f "$SRC/src/lib/panel-releases.json" "$MARKETING/src/lib/panel-releases.json"
   cp -f "$SRC/src/lib/panel-releases.json" "$MARKETING/public/panel-releases.json"
 fi
-if [ -f "$SRC/marketing-drop-in/public/install-command.json" ]; then
-  cp -f "$SRC/marketing-drop-in/public/install-command.json" "$MARKETING/public/install-command.json"
+
+# Always rewrite install-command.json from panel version (static JSON is what the site UI loads first)
+mkdir -p "$MARKETING/public"
+cat > "$MARKETING/public/install-command.json" << EOF
+{
+  "version": "${PANEL_VER}",
+  "label": "v${PANEL_VER}",
+  "url": "https://nexlify.live/install/panel.sh?v=${PANEL_VER}",
+  "command": "curl -fsSL 'https://nexlify.live/install/panel.sh?v=${PANEL_VER}' | sudo bash"
+}
+EOF
+if [ -f "$MARKETING/public/install/panel.sh" ]; then
+  sed -i "s|panel\.sh?v=[0-9.a-zA-Z]*|panel.sh?v=${PANEL_VER}|g" "$MARKETING/public/install/panel.sh" 2>/dev/null || true
+  sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \
+    "$MARKETING/public/install/panel.sh" \
+    "$MARKETING/public/install/apply-panel-fast-update.sh" 2>/dev/null || true
 fi
-if [ -f "$SRC/marketing-drop-in/public/install/panel.sh" ]; then
-  mkdir -p "$MARKETING/public/install"
-  cp -f "$SRC/marketing-drop-in/public/install/panel.sh" "$MARKETING/public/install/panel.sh"
+# Keep marketing package.json version aligned with panel release
+if [ -f "$MARKETING/package.json" ] && [ -n "${PANEL_VER}" ] && [ "${PANEL_VER}" != "0.0.0" ]; then
+  node -e "const fs=require('fs');const p='$MARKETING/package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version='$PANEL_VER';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')"
 fi
 
 cd "$MARKETING"
