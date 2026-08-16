@@ -21,6 +21,7 @@ export async function GET() {
     id: r.id,
     displayId: i + 1,
     username: r.username,
+    password: r.passwordPlain ?? "",
     email: r.email ?? "",
     isActive: r.isActive,
     credits: r.credits,

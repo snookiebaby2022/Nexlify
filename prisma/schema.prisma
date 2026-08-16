@@ -210,6 +210,8 @@ model PanelUser {
   id           String    @id @default(cuid())
   username     String    @unique
   passwordHash String
+  /// Plaintext copy for panel UI reveal (login still uses passwordHash). Null until next set/reset.
+  passwordPlain String?
   displayName  String?
   email        String?
   avatarUrl    String?

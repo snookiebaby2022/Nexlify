@@ -115,7 +115,7 @@ async function repairAdminPasswordHash(password: string) {
   const hash = await bcrypt.hash(password, 12);
   await prisma.panelUser.update({
     where: { username: "admin" },
-    data: { passwordHash: hash, isActive: true, role: "ADMIN" },
+    data: { passwordHash: hash, passwordPlain: password, isActive: true, role: "ADMIN" },
   });
   return prisma.panelUser.findUnique({ where: { username: "admin" } });
 }

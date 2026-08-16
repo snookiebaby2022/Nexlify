@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { FormPageShell, FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { PasswordInput } from "@/components/password-input";
+import { CopyableCredential } from "@/components/copyable-credential";
 
 const LANGUAGES = [
   { value: "en", label: "English" },
@@ -28,6 +29,7 @@ export default function AdminEditUserPage() {
     username: "",
     password: "",
     confirmPassword: "",
+    currentPassword: "",
     email: "",
     isActive: true,
     defaultLanguage: "en",
@@ -67,6 +69,7 @@ export default function AdminEditUserPage() {
           username: u.username ?? "",
           password: "",
           confirmPassword: "",
+          currentPassword: u.password ?? "",
           email: u.email ?? "",
           isActive: Boolean(u.isActive),
           defaultLanguage: u.defaultLanguage || "en",
@@ -154,6 +157,18 @@ export default function AdminEditUserPage() {
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
           />
+        </FormField>
+
+        <FormField label="Current password">
+          {form.currentPassword ? (
+            <div className="py-1">
+              <CopyableCredential value={form.currentPassword} masked />
+            </div>
+          ) : (
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Not stored yet — set a new password below to enable reveal in Manage Users.
+            </p>
+          )}
         </FormField>
 
         <FormField label="New password">

@@ -41,6 +41,7 @@ export async function PATCH(req: NextRequest) {
     avatarUrl?: string | null;
     avatarConfig?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
     passwordHash?: string;
+    passwordPlain?: string;
   } = {};
 
   if (body.displayName !== undefined) data.displayName = body.displayName || null;
@@ -66,7 +67,9 @@ export async function PATCH(req: NextRequest) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const ok = await bcrypt.compare(body.currentPassword, existing.passwordHash);
     if (!ok) return NextResponse.json({ error: "Current password incorrect" }, { status: 400 });
-    data.passwordHash = await bcrypt.hash(String(body.newPassword).trim(), 12);
+    const plain = String(body.newPassword).trim();
+    data.passwordHash = await bcrypt.hash(plain, 12);
+    data.passwordPlain = plain;
   }
 
   const user = await prisma.panelUser.update({

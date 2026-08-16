@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.104",
+  "latestVersion": "1.9.105",
   "releases": [
+    {
+      "version": "1.9.105",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Show passwords for admins, resellers, and sub-resellers in Manage Users (masked reveal/copy), same idea as line credentials.",
+      "changelog": [
+        "Panel users store a display password copy when created or reset (login still uses bcrypt hash)",
+        "Manage Users and Sub-resellers tables: Password column with eye reveal + copy",
+        "Edit user shows current password when available",
+        "Reseller Manage Users also shows sub-user passwords"
+      ],
+      "fixes": [
+        "Could not reveal panel user passwords after create (hash-only)"
+      ]
+    },
     {
       "version": "1.9.104",
       "date": "2026-08-16",

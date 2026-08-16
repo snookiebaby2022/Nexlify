@@ -327,6 +327,7 @@ export async function importPanelTransfer(
           data: {
             username: r.username,
             passwordHash: await hashPassword(password),
+            passwordPlain: password,
             role,
             credits: r.credits ?? 0,
             maxLines: r.maxLines ?? 500,

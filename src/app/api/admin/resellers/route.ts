@@ -22,6 +22,7 @@ function serializeUser(
     notes: string | null;
     updatedAt: Date;
     createdAt: Date;
+    passwordPlain?: string | null;
     parent: { username: string } | null;
     group: { id: string; name: string } | null;
     _count: { lines: number };
@@ -32,6 +33,7 @@ function serializeUser(
     id: u.id,
     displayId,
     username: u.username,
+    password: u.passwordPlain ?? "",
     email: u.email ?? "",
     role: u.role,
     roleLabel: roleLabel(u.role),
@@ -67,6 +69,7 @@ export async function GET(req: NextRequest) {
       user: {
         id: r.id,
         username: r.username,
+        password: r.passwordPlain ?? "",
         email: r.email ?? "",
         role: r.role,
         isActive: r.isActive,
@@ -107,6 +110,7 @@ export async function GET(req: NextRequest) {
         notes: r.notes,
         updatedAt: r.updatedAt,
         createdAt: r.createdAt,
+        passwordPlain: r.passwordPlain,
         parent: r.parent,
         group: r.group,
         _count: r._count,
@@ -138,6 +142,7 @@ export async function PATCH(req: NextRequest) {
     email?: string | null;
     username?: string;
     passwordHash?: string;
+    passwordPlain?: string | null;
     role?: PanelRole;
     groupId?: string | null;
     parentId?: string | null;
@@ -155,7 +160,9 @@ export async function PATCH(req: NextRequest) {
     data.username = username;
   }
   if (typeof body.password === "string" && body.password.trim()) {
-    data.passwordHash = await hashPassword(body.password.trim());
+    const plain = body.password.trim();
+    data.passwordHash = await hashPassword(plain);
+    data.passwordPlain = plain;
   }
   if (body.maxLines != null) data.maxLines = Math.max(0, Number(body.maxLines) || 0);
   if (body.defaultLanguage !== undefined) data.defaultLanguage = String(body.defaultLanguage || "en");
@@ -305,6 +312,7 @@ export async function POST(req: NextRequest) {
     data: {
       username: String(body.username).trim(),
       passwordHash: await hashPassword(password),
+      passwordPlain: password,
       role,
       email: body.email ? String(body.email) : null,
       isActive: body.isActive !== false,

@@ -21,6 +21,7 @@ function serializeUser(
     notes: string | null;
     createdAt: Date;
     updatedAt: Date;
+    passwordPlain?: string | null;
     parent: { username: string } | null;
     group: { id: string; name: string } | null;
     _count: { lines: number; children: number };
@@ -31,6 +32,7 @@ function serializeUser(
     id: u.id,
     displayId,
     username: u.username,
+    password: u.passwordPlain ?? "",
     email: u.email ?? "",
     role: u.role,
     roleLabel: roleLabel(u.role),
@@ -129,6 +131,7 @@ export async function POST(req: NextRequest) {
       data: {
         username,
         passwordHash: await bcrypt.hash(password, 12),
+        passwordPlain: password,
         email: body.email ? String(body.email).trim() : null,
         role: PanelRole.SUB_RESELLER,
         parentId: session.id,
@@ -172,10 +175,17 @@ export async function PATCH(req: NextRequest) {
     notes?: string | null;
     email?: string | null;
     groupId?: string | null;
+    passwordHash?: string;
+    passwordPlain?: string | null;
   } = {};
   if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
   if (body.notes !== undefined) data.notes = body.notes ? String(body.notes) : null;
   if (body.email !== undefined) data.email = body.email ? String(body.email).trim() : null;
+  if (typeof body.password === "string" && body.password.trim()) {
+    const plain = body.password.trim();
+    data.passwordHash = await bcrypt.hash(plain, 12);
+    data.passwordPlain = plain;
+  }
   if (body.groupId !== undefined) {
     const groupId =
       body.groupId === null || body.groupId === "" ? null : String(body.groupId);
@@ -196,6 +206,7 @@ export async function PATCH(req: NextRequest) {
       username: user.username,
       isActive: user.isActive,
       groupId: user.groupId,
+      password: user.passwordPlain ?? "",
     },
   });
 }

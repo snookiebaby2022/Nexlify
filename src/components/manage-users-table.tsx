@@ -5,12 +5,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 import { ArrowUpDown, ChevronDown, ExternalLink, List } from "lucide-react";
 import { IpWithFlag } from "@/components/ip-with-flag";
+import { CopyableCredential } from "@/components/copyable-credential";
 import { computePortalMenuPosition } from "@/lib/portal-menu-position";
 
 export type ManageUserRow = {
   id: string;
   displayId: number;
   username: string;
+  password?: string;
   email: string;
   role: string;
   roleLabel: string;
@@ -501,6 +503,11 @@ export function ManageUsersTable({
                     <p className="text-xs mt-0.5 truncate" style={{ color: "var(--muted)" }}>
                       {u.email || "No email"} · {u.groupName}
                     </p>
+                    {u.password ? (
+                      <div className="mt-1">
+                        <CopyableCredential value={u.password} masked label="Pass" />
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <ActionTrigger u={u} />
@@ -542,6 +549,7 @@ export function ManageUsersTable({
               <th className="px-3 py-3 text-left font-normal text-xs">Status</th>
               <SortHead label="Owner" col="owner" />
               <SortHead label="Name" col="username" />
+              <th className="px-3 py-3 text-left font-normal text-xs">Password</th>
               <SortHead label="Role" col="role" />
               <SortHead label="Email" col="email" />
               <SortHead label="Group" col="groupName" />
@@ -556,7 +564,7 @@ export function ManageUsersTable({
           <tbody>
             {pageRows.length === 0 ? (
               <tr>
-                <td colSpan={canBulk ? 14 : 13} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
+                <td colSpan={canBulk ? 15 : 14} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
                   No users found
                 </td>
               </tr>
@@ -587,6 +595,15 @@ export function ManageUsersTable({
                     {u.owner ?? "—"}
                   </td>
                   <td className="px-3 py-2.5 font-medium">{u.username}</td>
+                  <td className="px-3 py-2.5">
+                    {u.password ? (
+                      <CopyableCredential value={u.password} masked />
+                    ) : (
+                      <span className="text-xs" style={{ color: "var(--muted)" }} title="Shown after next password set/reset">
+                        —
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 text-xs uppercase" style={{ color: "var(--muted)" }}>
                     {u.roleLabel || u.role}
                   </td>

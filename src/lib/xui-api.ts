@@ -287,6 +287,7 @@ export async function handleXuiAction(
         data: {
           username,
           passwordHash: await hashPassword(password),
+          passwordPlain: password,
           role: PanelRole.RESELLER,
           credits,
           parentId: adminId,

@@ -45,6 +45,7 @@ async function ensureImportBotUser(): Promise<string> {
     data: {
       username: "xui-import-bot",
       passwordHash: await hashPassword(`xui-import-${Date.now()}`),
+      passwordPlain: null,
       role: PanelRole.ADMIN,
       credits: 0,
       isActive: true,

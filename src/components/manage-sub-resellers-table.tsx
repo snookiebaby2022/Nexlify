@@ -6,11 +6,13 @@ import { createPortal } from "react-dom";
 import { ArrowUpDown, ChevronDown, Plus, RefreshCw, Search } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { computePortalMenuPosition } from "@/lib/portal-menu-position";
+import { CopyableCredential } from "@/components/copyable-credential";
 
 export type ManageSubResellerRow = {
   id: string;
   displayId: number;
   username: string;
+  password?: string;
   email: string;
   isActive: boolean;
   credits: number;
@@ -366,6 +368,7 @@ export function ManageSubResellersTable({
                   Username <ArrowUpDown size={12} className="opacity-50" />
                 </span>
               </th>
+              <th className={thClass.replace("cursor-pointer", "")}>Password</th>
               <th className={thClass.replace("cursor-pointer", "")}>Parent</th>
               <th className={thClass.replace("cursor-pointer", "")}>Group</th>
               <th className={thClass.replace("cursor-pointer", "")}>Status</th>
@@ -415,6 +418,15 @@ export function ManageSubResellersTable({
                       <p className="text-xs mt-0.5 truncate max-w-[180px]" style={{ color: "var(--muted)" }}>
                         {r.email}
                       </p>
+                    )}
+                  </td>
+                  <td className="px-3 py-3">
+                    {r.password ? (
+                      <CopyableCredential value={r.password} masked />
+                    ) : (
+                      <span className="text-xs" style={{ color: "var(--muted)" }}>
+                        —
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-3">{r.parentUsername ?? "—"}</td>
