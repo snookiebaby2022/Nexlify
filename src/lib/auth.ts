@@ -123,15 +123,27 @@ async function repairAdminPasswordHash(password: string) {
 const ADMIN_IDENTIFIERS = new Set(["admin", "admin@nexlify.live"]);
 
 export async function verifyPanelLogin(identifier: string, password: string) {
-  const user = await prisma.panelUser.findFirst({
-    where: {
-      OR: [{ username: identifier }, { email: identifier }],
-    },
-  });
+  const id = identifier.trim();
+  // Prefer exact match, then case-insensitive — usernames like "Iconic" failed for "iconic".
+  const user =
+    (await prisma.panelUser.findFirst({
+      where: {
+        OR: [{ username: id }, { email: id }],
+      },
+    })) ??
+    (await prisma.panelUser.findFirst({
+      where: {
+        OR: [
+          { username: { equals: id, mode: "insensitive" } },
+          { email: { equals: id, mode: "insensitive" } },
+        ],
+      },
+    }));
+  const idLower = id.toLowerCase();
   const isAdminTarget =
-    ADMIN_IDENTIFIERS.has(identifier) ||
-    user?.username === "admin" ||
-    user?.email === "admin@nexlify.live";
+    ADMIN_IDENTIFIERS.has(idLower) ||
+    user?.username?.toLowerCase() === "admin" ||
+    user?.email?.toLowerCase() === "admin@nexlify.live";
 
   if (!user || !user.isActive) {
     if (canRepairAdminHash({ isAdminTarget, user })) {

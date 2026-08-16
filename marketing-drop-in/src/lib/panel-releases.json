@@ -1,7 +1,19 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.108",
+  "latestVersion": "1.9.109",
   "releases": [
+    {
+      "version": "1.9.109",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Panel login accepts username/email case-insensitively (e.g. iconic → Iconic).",
+      "changelog": [
+        "verifyPanelLogin matches username and email with case-insensitive fallback"
+      ],
+      "fixes": [
+        "Promoted admins / migrated users with mixed-case usernames could not sign in when casing differed"
+      ]
+    },
     {
       "version": "1.9.108",
       "date": "2026-08-16",
