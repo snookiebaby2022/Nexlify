@@ -31,7 +31,7 @@ async function main() {
   const { runPanelUpdateWithProgress } = await import(
     path.join(REPO_ROOT, "src/lib/panel-update.ts")
   );
-  const { readUpdateJob, writeUpdateJob, looksLikeSuccessfulUpdateDespiteWorkerExit } = await import(
+  const { readUpdateJob, writeUpdateJob, looksLikeSuccessfulUpdateDespiteWorkerExit, installedVersionImpliesUpdateSuccess } = await import(
     path.join(REPO_ROOT, "src/lib/panel-update-job.ts")
   );
   const { resolvePanelRepoPathSync } = await import(
@@ -61,9 +61,19 @@ async function main() {
 
   // Prefer success when the worker got far enough that PM2 swap/restart already applied the build,
   // even if a late step returned ok:false (transient static check / restart race).
+  const { readFile } = await import("fs/promises");
+  let installedVersion: string | null = null;
+  try {
+    const pkg = JSON.parse(await readFile(path.join(repoPath, "package.json"), "utf8")) as {
+      version?: string;
+    };
+    installedVersion = pkg.version?.trim() || null;
+  } catch {
+    /* ignore */
+  }
   const lateSuccess =
     !result.ok &&
-    looksLikeSuccessfulUpdateDespiteWorkerExit({
+    (looksLikeSuccessfulUpdateDespiteWorkerExit({
       ...job!,
       progress: Math.max(job!.progress ?? 0, result.ok ? 100 : job!.progress ?? 0),
       steps: result.steps.map((s) => ({
@@ -73,7 +83,14 @@ async function main() {
         output: s.output,
       })),
       currentStep: job!.currentStep,
-    });
+    }) ||
+      installedVersionImpliesUpdateSuccess(
+        {
+          ...job!,
+          toVersion: result.toVersion || job!.toVersion,
+        },
+        installedVersion
+      ));
 
   const finalStatus = result.ok || lateSuccess ? "done" : "failed";
   await writeUpdateJob(repoPath, {
