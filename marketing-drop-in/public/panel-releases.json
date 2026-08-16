@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.2",
+  "latestVersion": "2.0.3",
   "releases": [
+    {
+      "version": "2.0.3",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Clean Manage Bouquets: remove category-named orphans; add Live TV / Movies / TV Series / XXX / International packages; stop M3U recreating category bouquets.",
+      "changelog": [
+        "Removed hundreds of category-named orphan bouquets (UK | Entertainment, US | Locals, …) from Manage Bouquets",
+        "Package bouquets now include Live TV, Movies, TV Series, XXX, USA, International (plus existing UK/VOD/country packages)",
+        "Streams assigned by type: LIVE → Live TV, MOVIE → Movies, SERIES → TV Series; adult → XXX; country packages → International",
+        "M3U import no longer auto-creates bouquets from group-title by default (that was recreating the 200+ fake bouquets)",
+        "Fix category bouquets repair maps orphans into the new package names"
+      ],
+      "fixes": [
+        "Manage Bouquets listed ~206 category folders instead of real packages",
+        "LIVE M3U sync recreated category-named bouquets after repair"
+      ]
+    },
     {
       "version": "2.0.2",
       "date": "2026-08-16",

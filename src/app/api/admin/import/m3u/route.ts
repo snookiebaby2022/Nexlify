@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       autoCategory: body.autoCategory !== false,
       autoTmdb: body.autoTmdb !== false,
       autoBouquetFromGroup:
-        streamType === StreamType.LIVE ? body.autoBouquetFromGroup !== false : false,
+        streamType === StreamType.LIVE ? body.autoBouquetFromGroup === true : false,
       importMeta: body.importMeta,
       bouquetIds: body.bouquetIds,
     });

@@ -139,7 +139,7 @@ export async function importLiveM3uEntriesFast(
     selectedUrls?: string[];
     autoCategory?: boolean;
     bouquetIds?: string[];
-    /** Create/attach a bouquet named after each stream's group-title (default true). */
+    /** Create/attach a bouquet named after each stream's group-title (default false — group-titles are categories, not packages). */
     autoBouquetFromGroup?: boolean;
     sortOrderStart?: number;
     reorderExisting?: boolean;
@@ -187,7 +187,7 @@ export async function importLiveM3uEntriesFast(
   const categoryCache = new Map<string, string>();
   const bouquetCache = new Map<string, string>();
   const autoCategory = opts.autoCategory !== false;
-  const autoBouquet = opts.autoBouquetFromGroup !== false;
+  const autoBouquet = opts.autoBouquetFromGroup === true;
   const fixedCategoryId = opts.categoryId ?? null;
   const onDemand = opts.defaultOnDemand === true;
   const liveAgentStartCmd = !onDemand

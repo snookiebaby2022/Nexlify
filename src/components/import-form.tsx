@@ -37,7 +37,7 @@ export function ImportForm({
   const [serversList, setServersList] = useState<{ id: string; name: string }[]>([]);
   const [result, setResult] = useState("");
   const [onDemandDefault, setOnDemandDefault] = useState(false);
-  const [autoBouquetFromGroup, setAutoBouquetFromGroup] = useState(true);
+  const [autoBouquetFromGroup, setAutoBouquetFromGroup] = useState(false);
   const [serverIds, setServerIds] = useState<string[]>([]);
   const [fileName, setFileName] = useState("");
   const [dragOver, setDragOver] = useState(false);
@@ -388,7 +388,8 @@ export function ImportForm({
                 onChange={(e) => setAutoBouquetFromGroup(e.target.checked)}
               />
               <span>
-                Auto-create bouquets from <code>group-title</code> and assign each channel
+                Auto-create package bouquets from <code>group-title</code> (off by default — group-titles
+                belong in Categories; turning this on recreates hundreds of category-named bouquets)
               </span>
             </label>
             <label className="flex items-center gap-2 text-sm cursor-pointer">

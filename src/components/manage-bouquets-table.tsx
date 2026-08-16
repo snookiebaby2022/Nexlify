@@ -36,7 +36,7 @@ export function ManageBouquetsTable({
   async function repairCategoryBouquets() {
     if (
       !confirm(
-        "Merge category-named bouquets (e.g. “UK | Entertainment”) into package bouquets (UK, USA, VOD, ADULT…)?\n\n" +
+        "Merge category-named bouquets (e.g. “UK | Entertainment”) into package bouquets (Live TV, Movies, TV Series, XXX, USA, International…)?\n\n" +
           "IPTV apps show Categories, not bouquets. Orphan category-bouquets hide channels from the app.\n\n" +
           "This also merges duplicate categories and fixes sort order."
       )
@@ -197,7 +197,7 @@ export function ManageBouquetsTable({
       <div className="px-4 py-3 text-sm border-b space-y-1" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
         <p>
           <strong style={{ color: "var(--text)" }}>Bouquets</strong> are packages you assign to lines
-          (e.g. UK, USA, VOD, ADULT).{" "}
+          (e.g. Live TV, Movies, TV Series, XXX, USA, International, UK, VOD).{" "}
           <strong style={{ color: "var(--text)" }}>Categories</strong> (Management → Categories) are the
           Live / Movies / Series folders the IPTV app shows. Use Order to match package order; use
           Categories → arrows for app folder order.

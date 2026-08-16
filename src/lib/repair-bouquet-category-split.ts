@@ -41,9 +41,11 @@ function preferCategoryName(a: string, b: string): string {
 }
 
 const PACKAGE_RULES: { re: RegExp; packageName: RegExp | string }[] = [
-  { re: /adult|xxx/i, packageName: /^ADULT$/i },
+  { re: /adult|xxx/i, packageName: /^(XXX|ADULT)$/i },
   { re: /^247\b|24\/7|xmas/i, packageName: /^24\/7$/i },
-  { re: /^vod\b|movie|series/i, packageName: /^VOD$/i },
+  { re: /^vod\b|movie|series|tv series/i, packageName: /^(Movies|TV Series|VOD)$/i },
+  { re: /^live\s*tv\b/i, packageName: /^Live TV$/i },
+  { re: /^international\b/i, packageName: /^International$/i },
   { re: /^in(dian)?\b/i, packageName: /^INDIAN$/i },
   { re: /^uk\b|^ie\b|premier sports|football events|uefa|ppv|sky sports|tnt sports|bbc|efa\b|spfl|national league|dazn|discovery\+|hbo max|regionals|asian|religion|shopping|documentar/i, packageName: /UK no XXX/i },
   { re: /^us\b|^ca\b|big 10|fanduel|nhl|nba|mlb|espn|hulu|fubo|amazon events|paramount|ah l\b|ohl\b|sportsnet|cbc regional|flow rush/i, packageName: /^USA$/i },
@@ -61,10 +63,32 @@ const PACKAGE_RULES: { re: RegExp; packageName: RegExp | string }[] = [
   { re: /^ar\b|arabic/i, packageName: /^ARABIC$/i },
   { re: /^al\b|alban/i, packageName: /^ALBANIAN$/i },
   { re: /^ir\b|iran/i, packageName: /^IRAN$/i },
-  { re: /^afri/i, packageName: /^AFRICA$/i },
+  { re: /^afri|za\b|dstv|supersport/i, packageName: /^AFRICA$/i },
   { re: /^ch\b|switzerland/i, packageName: /UK no XXX/i }, // often bundled with UK packages
   { re: /^no\b|norway/i, packageName: /UK no XXX/i },
+  { re: /^jp\b|^hk\b|^id\b|^my\b|^nz\b|coupang|star\+|monomax|now hk/i, packageName: /^International$/i },
 ];
+
+/** Prefer these when resolving movie/series orphans into type packages. */
+function resolvePackageIdPrefer(
+  orphanName: string,
+  packages: { id: string; name: string }[]
+): string | null {
+  const lower = orphanName.toLowerCase();
+  if (/movie/i.test(lower)) {
+    const hit = packages.find((p) => /^Movies$/i.test(p.name)) ?? packages.find((p) => /^VOD$/i.test(p.name));
+    if (hit) return hit.id;
+  }
+  if (/series|tv series/i.test(lower)) {
+    const hit = packages.find((p) => /^TV Series$/i.test(p.name)) ?? packages.find((p) => /^VOD$/i.test(p.name));
+    if (hit) return hit.id;
+  }
+  if (/^live\s*tv$/i.test(lower) || (/^247\b|24\/7/i.test(lower) && !/adult|xxx/i.test(lower))) {
+    const hit = packages.find((p) => /^Live TV$/i.test(p.name));
+    if (hit) return hit.id;
+  }
+  return resolvePackageId(orphanName, packages);
+}
 
 function resolvePackageId(
   orphanName: string,
@@ -116,7 +140,12 @@ export async function repairBouquetCategorySplit(
 
   const BATCH = 400;
   for (const orphan of orphans) {
-    const packageId = resolvePackageId(orphan.name, packages) ?? packages.find((p) => /UK no XXX/i.test(p.name))?.id ?? packages[0]?.id ?? null;
+    const packageId =
+      resolvePackageIdPrefer(orphan.name, packages) ??
+      packages.find((p) => /^Live TV$/i.test(p.name))?.id ??
+      packages.find((p) => /UK no XXX/i.test(p.name))?.id ??
+      packages[0]?.id ??
+      null;
     if (!packageId) {
       result.unmatchedOrphanBouquets.push({ name: orphan.name, streams: orphan._count.streams });
       continue;
@@ -145,14 +174,23 @@ export async function repairBouquetCategorySplit(
     result.orphanBouquetsDeleted++;
   }
 
-  // Empty category-named orphans with no streams — delete
+  // Empty leftovers — keep known dump empty packages; delete category-like names
   for (const empty of emptyOrphans) {
-    // Keep "test" and anything that looks like a real empty package name
-    if (/^(test|ppv|events|irish)/i.test(empty.name) && empty.name.length < 40) continue;
-    if (!/[|]/.test(empty.name) && empty.name === empty.name.toUpperCase() && empty.name.length < 20) {
-      continue; // likely a real empty package acronym
-    }
+    const name = empty.name.trim();
+    const looksLikeCategory =
+      /[|]/.test(name) ||
+      /\b(UK|US|AU|CA|DE|FR|IT|ES|PL|TR|NL|PT|BG|RO|AR|IE|ZA|JP|HK|MY|NZ)\s*\|/i.test(name) ||
+      name.length > 48;
+    const keepEmptyPackage =
+      !looksLikeCategory &&
+      (/^(test|ppv|btsports)$/i.test(name) ||
+        /^(IRISH AND RADIO|US SPORT|EVENTS\b)/i.test(name) ||
+        (!/[|]/.test(name) && name === name.toUpperCase() && name.length < 24));
+    if (keepEmptyPackage) continue;
     try {
+      await prisma.lineBouquet.deleteMany({ where: { bouquetId: empty.id } });
+      await prisma.resellerBouquet.deleteMany({ where: { bouquetId: empty.id } });
+      await prisma.bouquetStream.deleteMany({ where: { bouquetId: empty.id } });
       await prisma.bouquet.delete({ where: { id: empty.id } });
       result.orphanBouquetsDeleted++;
     } catch {
