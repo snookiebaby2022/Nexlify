@@ -1,7 +1,28 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.102",
+  "latestVersion": "1.9.103",
   "releases": [
+    {
+      "version": "1.9.103",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Smart CDN playback failover, dead-link auto-disable with agent probe, live duplicate scan, Missing EPG queue, ops status glance, App Builder config download, XCIPTV setup guide, richer audit labels.",
+      "changelog": [
+        "Live playback rewrites through the best Smart CDN endpoint when configured",
+        "Dead-link monitor: second consecutive fail auto-disables the stream; agents can probe_stream from the stream server",
+        "Remove duplicates: Scan live streams (URL + title)",
+        "New Missing EPG page under EPG with live filter",
+        "Dashboard Ops status glance (DB / Redis / cron / edge agents / CDN count)",
+        "App Builder completes with downloadable branded config JSON package",
+        "Portal setup: expanded XCIPTV Xtream guide",
+        "Audit log labels for mass user actions, create/edit stream, remove duplicates"
+      ],
+      "fixes": [
+        "Missing EPG filter no longer clashes with search/video OR clauses",
+        "Agent probe_stream prefers payload URL from the panel",
+        "Mass user edits and stream create/edit write audit activity"
+      ]
+    },
     {
       "version": "1.9.102",
       "date": "2026-08-16",

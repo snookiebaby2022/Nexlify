@@ -14,7 +14,7 @@ import {
 } from "@/lib/cache-invalidate";
 
 function parseKind(value: string | null): DuplicateKind | null {
-  if (value === "movies" || value === "series") return value;
+  if (value === "movies" || value === "series" || value === "live") return value;
   return null;
 }
 
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const kind = parseKind(req.nextUrl.searchParams.get("kind"));
   if (!kind) {
-    return NextResponse.json({ error: "kind must be movies or series" }, { status: 400 });
+    return NextResponse.json({ error: "kind must be movies, series, or live" }, { status: 400 });
   }
 
   const result = await findDuplicateGroups(kind);

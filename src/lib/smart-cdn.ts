@@ -124,3 +124,34 @@ export async function getCdnForStream(streamId: string): Promise<string | null> 
   }
   return null;
 }
+
+/** Rewrite an upstream stream URL onto the best CDN edge host (path + query preserved). */
+export function rewriteUrlThroughCdn(streamUrl: string, cdnBase: string): string {
+  try {
+    const src = new URL(streamUrl);
+    const cdn = new URL(cdnBase);
+    if (!/^https?:$/i.test(cdn.protocol)) return streamUrl;
+    src.protocol = cdn.protocol;
+    src.host = cdn.host;
+    const basePath = cdn.pathname.replace(/\/$/, "");
+    if (basePath && basePath !== "/") {
+      src.pathname = `${basePath}${src.pathname.startsWith("/") ? src.pathname : `/${src.pathname}`}`;
+    }
+    return src.toString();
+  } catch {
+    return streamUrl;
+  }
+}
+
+/** Resolve stream URL then optionally front it with the best Smart CDN endpoint. */
+export async function applySmartCdnToUrl(streamId: string, streamUrl: string): Promise<string> {
+  if (!streamUrl || !/^https?:\/\//i.test(streamUrl)) return streamUrl;
+  try {
+    const cdn = await getCdnForStream(streamId);
+    if (!cdn) return streamUrl;
+    const rewritten = rewriteUrlThroughCdn(streamUrl, cdn);
+    return rewritten || streamUrl;
+  } catch {
+    return streamUrl;
+  }
+}

@@ -172,6 +172,12 @@ export async function resolvePlaybackUrlForLine(
       `${lineId}:${effectiveStream.id}`
     );
   }
+  try {
+    const { applySmartCdnToUrl } = await import("@/lib/smart-cdn");
+    url = await applySmartCdnToUrl(effectiveStream.id, url);
+  } catch {
+    /* CDN optional */
+  }
   url = await applyPlaybackFingerprint(url, {
     lineId,
     clientIp: ctx?.clientIp,
@@ -252,6 +258,16 @@ export async function resolvePlaybackUrlCandidatesForLine(
   }
 
   const signed: string[] = [];
+  try {
+    const { applySmartCdnToUrl } = await import("@/lib/smart-cdn");
+    const withCdn: string[] = [];
+    for (const u of urls) {
+      withCdn.push(await applySmartCdnToUrl(effectiveStream.id, u));
+    }
+    urls = withCdn;
+  } catch {
+    /* CDN optional */
+  }
   for (const u of urls) {
     signed.push(
       await applyPlaybackFingerprint(u, {

@@ -2,10 +2,12 @@
 
 import { PanelDashboard } from "@/components/panel-dashboard";
 import { RealtimeDashboard } from "@/components/realtime-dashboard";
+import { OpsStatusGlance } from "@/components/ops-status-glance";
 
 export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
+      <OpsStatusGlance />
       <PanelDashboard
         statsUrl="/api/admin/stats"
         widgetsUrl="/api/admin/dashboard-widgets"

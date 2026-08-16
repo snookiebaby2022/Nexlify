@@ -207,6 +207,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         items: [
           { href: "/admin/epg/manage", label: "Manage EPG" },
           { href: "/admin/epg/auto-match", label: "EPG Auto-Match" },
+          { href: "/admin/epg/missing", label: "Missing EPG" },
           { href: "/admin/epg/sources", label: "EPG Sources" },
           { href: "/admin/epg/add", label: "Add EPG Source" },
           { href: "/admin/epg/channels", label: "EPG Channel Map" },

@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 
-type DuplicateKind = "movies" | "series";
+type DuplicateKind = "movies" | "series" | "live";
 type DuplicateReason = "url" | "title" | "episode";
 
 type DuplicateMember = {
@@ -116,7 +116,12 @@ export default function RemoveDuplicatesPage() {
 
   async function removeSelected() {
     if (!selected.size) return;
-    const noun = scannedKind === "series" ? "series/episode" : "movie";
+    const noun =
+      scannedKind === "series"
+        ? "series/episode"
+        : scannedKind === "live"
+          ? "live stream"
+          : "movie";
     if (
       !confirm(
         `Permanently delete ${selected.size.toLocaleString()} duplicate ${noun} stream(s)?\n\nThe copy marked Keep in each group will stay.`
@@ -151,7 +156,8 @@ export default function RemoveDuplicatesPage() {
 
   const summary = useMemo(() => {
     if (!scannedKind) return null;
-    const label = scannedKind === "movies" ? "movies" : "series and episodes";
+    const label =
+      scannedKind === "movies" ? "movies" : scannedKind === "live" ? "live streams" : "series and episodes";
     return `${scanned.toLocaleString()} ${label} scanned · ${groups.length.toLocaleString()} duplicate groups · ${extraCopies.toLocaleString()} extra copies`;
   }, [scannedKind, scanned, groups.length, extraCopies]);
 
@@ -161,8 +167,8 @@ export default function RemoveDuplicatesPage() {
         <div className="flex-1 min-w-[200px]">
           <h1 className="text-2xl font-semibold">Remove duplicates</h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            Scan movies or TV series/episodes, review each group, then delete extras. Live streams are
-            not included. Suggested keep is the copy in the most bouquets, then categorized, then oldest.
+            Scan movies, TV series/episodes, or live streams by URL/title, review each group, then delete
+            extras. Suggested keep is the copy in the most bouquets, then categorized, then oldest.
           </p>
         </div>
         <Link href="/admin/management/tools" className="text-sm" style={{ color: "var(--accent)" }}>
@@ -196,6 +202,19 @@ export default function RemoveDuplicatesPage() {
           }}
         >
           {loading && kind === "series" ? "Scanning…" : "Scan TV series / episodes"}
+        </button>
+        <button
+          type="button"
+          onClick={() => scan("live")}
+          disabled={loading || deleting}
+          className="rounded px-4 py-2 text-sm font-medium cursor-pointer disabled:opacity-50"
+          style={{
+            background: kind === "live" ? "var(--accent)" : "transparent",
+            color: kind === "live" ? "#fff" : "inherit",
+            border: "1px solid var(--border)",
+          }}
+        >
+          {loading && kind === "live" ? "Scanning…" : "Scan live streams"}
         </button>
       </div>
 

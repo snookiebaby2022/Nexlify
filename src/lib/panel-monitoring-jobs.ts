@@ -7,7 +7,7 @@ import { enqueueAgentCommand } from "@/lib/stream-agent";
 
 export async function runDeadLinkProbeJob() {
   const settings = await getSettingGroup("streams");
-  if (!settings.autoFixDeadLinks) return { probed: 0, failed: 0, restarted: 0 };
+  if (!settings.autoFixDeadLinks) return { probed: 0, failed: 0, restarted: 0, disabled: 0 };
 
   const streams = await prisma.stream.findMany({
     where: { isActive: true, type: "LIVE" },
@@ -18,11 +18,13 @@ export async function runDeadLinkProbeJob() {
 
   let failed = 0;
   let restarted = 0;
+  let disabled = 0;
 
   for (const stream of streams) {
     const primaryUrl = resolveStreamPlaybackUrl(stream);
     const probe = await probeStreamUrl(primaryUrl, { fast: true });
     const ok = probe.status === "online";
+    const wasAlreadyFailing = stream.lastProbeOk === false;
 
     if (!ok && stream.backupUrl?.trim()) {
       const backupProbe = await probeStreamUrl(stream.backupUrl.trim(), { fast: true });
@@ -37,6 +39,22 @@ export async function runDeadLinkProbeJob() {
         });
         continue;
       }
+    }
+
+    if (!ok && wasAlreadyFailing) {
+      // Second consecutive failure → auto-disable so playlists stop offering dead channels
+      await prisma.stream.update({
+        where: { id: stream.id },
+        data: {
+          isActive: false,
+          lastProbeAt: new Date(),
+          lastProbeOk: false,
+          lastProbeError: `Auto-disabled: ${probe.message ?? "dead link"}`,
+        },
+      });
+      failed++;
+      disabled++;
+      continue;
     }
 
     await prisma.stream.update({
@@ -54,10 +72,17 @@ export async function runDeadLinkProbeJob() {
         await enqueueAgentCommand(stream.serverId, "restart_stream", { streamId: stream.id });
         restarted++;
       }
+      // Prefer probe from the assigned stream server when an agent is present
+      if (stream.serverId && stream.server?.agentToken) {
+        await enqueueAgentCommand(stream.serverId, "probe_stream", {
+          streamId: stream.id,
+          url: primaryUrl,
+        }).catch(() => undefined);
+      }
     }
   }
 
-  return { probed: streams.length, failed, restarted };
+  return { probed: streams.length, failed, restarted, disabled };
 }
 
 export async function runTelegramMonitoringJob() {

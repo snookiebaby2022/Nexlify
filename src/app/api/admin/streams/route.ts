@@ -71,6 +71,7 @@ export async function GET(req: NextRequest) {
   const categoryId = req.nextUrl.searchParams.get("categoryId")?.trim();
   const serverId = req.nextUrl.searchParams.get("serverId")?.trim();
   const statusParam = req.nextUrl.searchParams.get("status")?.trim()?.toLowerCase();
+  const missingEpg = req.nextUrl.searchParams.get("missingEpg") === "1";
 
   const where: Prisma.StreamWhereInput = {};
 
@@ -93,6 +94,15 @@ export async function GET(req: NextRequest) {
     where.isActive = true;
     where.lastProbeOk = true;
     if (!where.type) where.type = StreamType.LIVE;
+  }
+  if (missingEpg) {
+    // Use AND so this does not clash with video/search OR filters
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      { OR: [{ epgChannelId: null }, { epgChannelId: "" }] },
+    ];
+    if (!where.type) where.type = StreamType.LIVE;
+    where.isRadio = false;
   }
 
   if (vodMode && Object.values(VodMode).includes(vodMode as VodMode)) {
@@ -355,6 +365,18 @@ export async function POST(req: NextRequest) {
     await invalidateXtreamCategories();
     await invalidateDashboardStats();
 
+    try {
+      const { logActivity } = await import("@/lib/lines");
+      await logActivity("create_stream", {
+        userId: session.id,
+        entity: "stream",
+        entityId: stream.id,
+        meta: { name: stream.name, type: stream.type },
+      });
+    } catch {
+      /* non-fatal */
+    }
+
     // LIVE streams: auto-map EPG from guide (tvg-id / name) when possible
     if (stream.type === StreamType.LIVE) {
       try {
@@ -365,9 +387,9 @@ export async function POST(req: NextRequest) {
           channelId: stream.channelId,
           epgChannelId: stream.epgChannelId,
         });
-        if (match?.channelId) {
+        if (match?.epgChannelId) {
           return NextResponse.json({
-            stream: { ...stream, epgChannelId: match.channelId },
+            stream: { ...stream, epgChannelId: match.epgChannelId },
             probe,
             epgAutoAssigned: match,
           });
@@ -505,6 +527,17 @@ export async function PATCH(req: NextRequest) {
   await invalidatePlaybackUrls(id);
   await invalidateXtreamCategories();
   await invalidateDashboardStats();
+  try {
+    const { logActivity } = await import("@/lib/lines");
+    await logActivity("edit_stream", {
+      userId: session.id,
+      entity: "stream",
+      entityId: id,
+      meta: { name: stream.name },
+    });
+  } catch {
+    /* non-fatal */
+  }
   return NextResponse.json({ stream });
 
 }

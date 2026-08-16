@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
+import { logActivity } from "@/lib/lines";
 
 export async function POST(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
@@ -69,6 +70,11 @@ export async function POST(req: NextRequest) {
   } else {
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   }
+
+  await logActivity(`mass_users_${action}`, {
+    userId: session.id,
+    meta: { count, ids: ids.slice(0, 50), action, groupId: body.groupId ?? null },
+  });
 
   return NextResponse.json({ ok: true, count });
 }

@@ -92,10 +92,48 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json({
-    build,
-    message: "Branded app build queued with full config. Processed when the build pipeline is connected.",
-  });
+  // Immediately produce a downloadable branded config package (APK binary still needs external builder).
+  try {
+    const { writeFile, mkdir } = await import("fs/promises");
+    const { join } = await import("path");
+    const dir = join(process.cwd(), "public", "app-builds");
+    await mkdir(dir, { recursive: true });
+    const fileName = `${build.id}.json`;
+    const payload = {
+      format: "nexlify-app-config/v1",
+      generatedAt: new Date().toISOString(),
+      appName,
+      packageName,
+      logoUrl: build.logoUrl,
+      splashUrl: build.splashUrl,
+      primaryColor: build.primaryColor,
+      secondaryColor: build.secondaryColor,
+      accentColor: build.accentColor,
+      serverUrl,
+      config,
+      note: "Import this config into the Nexlify branded APK builder or CI pipeline.",
+    };
+    await writeFile(join(dir, fileName), JSON.stringify(payload, null, 2), "utf8");
+    const downloadUrl = `/app-builds/${fileName}`;
+    const completed = await prisma.appBuild.update({
+      where: { id: build.id },
+      data: {
+        status: "COMPLETED",
+        downloadUrl,
+        completedAt: new Date(),
+      },
+    });
+    return NextResponse.json({
+      build: completed,
+      message:
+        "Branded app config package ready for download. Native APK/IPA still requires the connected build pipeline.",
+    });
+  } catch {
+    return NextResponse.json({
+      build,
+      message: "Build queued; config package write failed — retry or use external pipeline.",
+    });
+  }
 }
 
 export async function PATCH(req: Request) {

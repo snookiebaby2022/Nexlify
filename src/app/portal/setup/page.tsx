@@ -4,11 +4,24 @@ import Link from "next/link";
 
 const PLAYERS = [
   {
+    name: "XCIPTV (Xtream Codes)",
+    steps: [
+      "Open XCIPTV → Add user / Xtream Codes login.",
+      "Any Name: your service name (optional).",
+      "Username + Password: from your Subscriber Portal dashboard (line credentials).",
+      "Host / URL: your panel DNS only — e.g. http://dns.example.com:80 (no /player_api.php path).",
+      "Port: usually 80 (HTTP) or 443 (HTTPS). Match what your provider gave you.",
+      "Save → XCIPTV loads Live, Movies, and Series from the Xtream API.",
+      "If EPG is empty: Settings → EPG and wait for the first guide sync, or ask your provider.",
+    ],
+  },
+  {
     name: "TiviMate",
     steps: [
       "Open TiviMate → Add playlist → Xtream Codes API",
       "Enter server URL (host from your Xtream API link), username, and password from the portal dashboard.",
       "EPG URL is optional if included in Xtream response.",
+      "Tip: enable Catch-up / Archive only if your package includes it.",
     ],
   },
   {
@@ -24,6 +37,7 @@ const PLAYERS = [
     steps: [
       "Login with Xtream Codes API",
       "Use credentials from Subscriber Portal dashboard.",
+      "Host = panel DNS, Username/Password = line login.",
     ],
   },
   {
@@ -39,19 +53,19 @@ export default function PortalSetupPage() {
   return (
     <div className="min-h-screen text-white" style={{ background: "#0a1628" }}>
       <header
-        className="border-b px-6 py-4 flex items-center gap-4"
+        className="border-b px-4 sm:px-6 py-4 flex flex-wrap items-center gap-3 sm:gap-4"
         style={{ borderColor: "#1e3a5f", background: "#111b2e" }}
       >
         <Link href="/portal/dashboard" className="text-sm" style={{ color: "#22d3ee" }}>
           ← Dashboard
         </Link>
-        <h1 className="text-xl font-semibold">Player setup guide</h1>
+        <h1 className="text-lg sm:text-xl font-semibold">Player setup guide</h1>
       </header>
-      <main className="max-w-3xl mx-auto p-6 space-y-6">
+      <main className="max-w-3xl mx-auto p-4 sm:p-6 space-y-6">
         {PLAYERS.map((p) => (
           <section
             key={p.name}
-            className="rounded-xl border p-5"
+            className="rounded-xl border p-4 sm:p-5"
             style={{ borderColor: "#1e3a5f", background: "#111b2e" }}
           >
             <h2 className="font-semibold text-lg mb-3">{p.name}</h2>

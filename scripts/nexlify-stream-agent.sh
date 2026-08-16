@@ -66,6 +66,20 @@ run_stream_cmd() {
     stop_stream)
       stop_stream_pid "$(echo "$entry" | jq -r '.pidFile // empty')"
       ;;
+    probe_stream)
+      # Reachability check from this stream server (not the panel host)
+      local probe_url
+      probe_url="${PROBE_URL:-}"
+      if [[ -z "$probe_url" ]]; then
+        probe_url="$(echo "$entry" | jq -r '.streamUrl // .url // empty')"
+      fi
+      [[ -z "$probe_url" ]] && return 1
+      if curl -fsSI --max-time 8 -A "Nexlify-Agent-Probe/1.0" "$probe_url" >/dev/null 2>&1 \
+        || curl -fsS --max-time 8 -A "Nexlify-Agent-Probe/1.0" -o /dev/null -w "" "$probe_url" >/dev/null 2>&1; then
+        return 0
+      fi
+      return 1
+      ;;
   esac
 }
 
@@ -90,7 +104,12 @@ poll_commands() {
       result="reboot scheduled"
       ( /bin/sleep 3; /sbin/reboot ) >/dev/null 2>&1 &
     elif [[ -n "$stream_id" ]]; then
+      if [[ "$action" == "probe_stream" ]]; then
+        PROBE_URL="$(echo "$cmd" | jq -r '.payload.url // empty')"
+        export PROBE_URL
+      fi
       if run_stream_cmd "$action" "$stream_id"; then ok=1; else ok=0; result="cmd failed"; fi
+      unset PROBE_URL 2>/dev/null || true
     else
       ok=1
       result="ignored (unknown action)"

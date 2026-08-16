@@ -1,7 +1,7 @@
 import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
-export type DuplicateKind = "movies" | "series";
+export type DuplicateKind = "movies" | "series" | "live";
 export type DuplicateReason = "url" | "title" | "episode";
 
 export type DuplicateScanRow = {
@@ -161,6 +161,17 @@ export function buildDuplicateGroups(rows: DuplicateScanRow[], kind: DuplicateKi
       byTitle.set(key, list);
     }
     pushGroups(groups, used, byTitle, "title", (members) => members[0]!.name);
+  } else if (kind === "live") {
+    const byTitle = new Map<string, DuplicateScanRow[]>();
+    for (const row of rows) {
+      if (used.has(row.id)) continue;
+      const key = normalizeDuplicateTitle(row.name);
+      if (!key) continue;
+      const list = byTitle.get(key) ?? [];
+      list.push(row);
+      byTitle.set(key, list);
+    }
+    pushGroups(groups, used, byTitle, "title", (members) => members[0]!.name);
   } else {
     const byEpisode = new Map<string, DuplicateScanRow[]>();
     const parents: DuplicateScanRow[] = [];
@@ -204,9 +215,13 @@ export async function findDuplicateGroups(kind: DuplicateKind): Promise<{
   scanned: number;
   extraCopies: number;
 }> {
-  const type = kind === "movies" ? StreamType.MOVIE : StreamType.SERIES;
+  const type =
+    kind === "movies" ? StreamType.MOVIE : kind === "live" ? StreamType.LIVE : StreamType.SERIES;
   const rows = await prisma.stream.findMany({
-    where: { type },
+    where: {
+      type,
+      ...(kind === "live" ? { isRadio: false } : {}),
+    },
     select: {
       id: true,
       name: true,
@@ -248,7 +263,7 @@ export async function deleteDuplicateStreams(ids: string[]): Promise<{ deleted: 
   if (!unique.length) return { deleted: 0, skipped: 0 };
 
   const allowed = await prisma.stream.findMany({
-    where: { id: { in: unique }, type: { in: [StreamType.MOVIE, StreamType.SERIES] } },
+    where: { id: { in: unique }, type: { in: [StreamType.MOVIE, StreamType.SERIES, StreamType.LIVE] } },
     select: { id: true },
   });
   const okIds = allowed.map((s) => s.id);
