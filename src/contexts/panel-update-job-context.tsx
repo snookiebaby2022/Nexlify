@@ -47,9 +47,9 @@ export function PanelUpdateJobProvider({ children }: { children: React.ReactNode
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { job?: PanelUpdateJob | null; updateRunning?: boolean } | null) => {
         if (!d) {
-          // Keep only an in-flight running job across 502s; drop failed banners stuck in memory
+          // Keep in-flight running job across 502s during PM2/nginx swap
           setJob((prev) => (prev?.status === "running" ? prev : null));
-          setUpdateRunning((prev) => prev);
+          setUpdateRunning((prev) => prev || false);
           return;
         }
         const next = d.job ?? null;

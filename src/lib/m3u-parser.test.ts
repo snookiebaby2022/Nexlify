@@ -1,7 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseM3u } from "./m3u-parser";
+import { parseM3u, guessStreamType } from "./m3u-parser";
 import { liveStreamDisplayName } from "./import-live-m3u";
+
+test("guessStreamType treats Xtream short mpegts paths as LIVE", () => {
+  assert.equal(
+    guessStreamType({
+      name: "BBC One",
+      url: "https://junki3monk3y.com:443/Blade2nd/pass/1",
+      group: "UK | Entertainment",
+    }),
+    "LIVE"
+  );
+});
 
 test("parseM3u prefers tvg-name over comma title", () => {
   const entries = parseM3u(`#EXTM3U

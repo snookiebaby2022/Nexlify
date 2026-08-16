@@ -336,8 +336,10 @@ export default function AdminM3uSyncPage() {
           j.lastResult?.error
             ? `Error: ${j.lastResult.error}`
             : j.lastResult
-              ? `+${j.lastResult.imported ?? 0} / skip ${j.lastResult.skipped ?? 0}${
-                  j.lastResult.updated != null ? ` / names ${j.lastResult.updated}` : ""
+              ? `+${j.lastResult.imported ?? 0} new / ${j.lastResult.skipped ?? 0} existing${
+                  (j.lastResult.updated ?? 0) > 0
+                    ? ` / ${j.lastResult.updated} renamed`
+                    : ""
                 }`
               : "—",
           <span key={`a-${j.id}`} className="flex gap-2">

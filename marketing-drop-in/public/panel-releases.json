@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.114",
+  "latestVersion": "1.9.115",
   "releases": [
+    {
+      "version": "1.9.115",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "M3U auto-sync matches URL variants correctly; panel update no longer false-fails mid-build.",
+      "changelog": [
+        "M3U LIVE sync matches streams across :443/:80 and /live/ vs short Xtream paths",
+        "Sync result shows real renames only (not every existing channel as “names”)",
+        "Panel update treats next build / apply-panel-fast-update as still running when the outer worker exits",
+        "Softer Updates messaging when nginx briefly returns 502 during restart"
+      ],
+      "fixes": [
+        "M3U auto-sync reported +9999 / skip N / names N with names always equaling skip",
+        "Re-sync could re-import the same channels when playlist URLs differed only by port or /live/ prefix",
+        "Updates UI showed Update failed while the build was still compiling or after a successful swap"
+      ]
+    },
     {
       "version": "1.9.114",
       "date": "2026-08-16",

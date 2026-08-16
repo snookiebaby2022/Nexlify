@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "fs/promises";
+import { readFile, writeFile, stat } from "fs/promises";
 import { spawn, execSync } from "child_process";
 import path from "path";
 import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
@@ -56,6 +56,61 @@ function findUpdateWorkerPid(): number | null {
   }
 }
 
+/** True when next build / apply-panel-fast-update is still running (outer worker may already be gone). */
+export function isPanelUpdateChildWorkAlive(): boolean {
+  if (process.platform === "win32") return false;
+  try {
+    const out = execSync(
+      "pgrep -f 'apply-panel-fast-update|next/dist/bin/next build|run-panel-build|panel-update-background' 2>/dev/null || true",
+      { encoding: "utf8", timeout: 5000 }
+    ).trim();
+    return out.split("\n").some((line) => {
+      const pid = parseInt(line.trim(), 10);
+      return Number.isFinite(pid) && pid > 0;
+    });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Update is still in flight if the background worker, a build/apply child, or a
+ * fresh .update-in-progress marker is present. Outer worker PID often dies while
+ * `next build` continues — that must not flip the UI to "Update failed".
+ */
+export async function isPanelUpdateWorkAlive(repoPath: string): Promise<boolean> {
+  if (findUpdateWorkerPid() != null) return true;
+  if (isPanelUpdateChildWorkAlive()) return true;
+  try {
+    const marker = path.join(repoPath, ".update-in-progress");
+    const st = await stat(marker);
+    const ageMs = Date.now() - st.mtimeMs;
+    if (ageMs > 45 * 60 * 1000) return false;
+    try {
+      const raw = (await readFile(marker, "utf8")).trim();
+      const pid = parseInt(raw, 10);
+      if (Number.isFinite(pid) && pid > 0 && isUpdateWorkerAlive(pid)) return true;
+    } catch {
+      /* empty / touch marker */
+    }
+    // Fresh marker (apply-panel-fast-update often `touch`es without a PID) — trust briefly
+    if (ageMs < 3 * 60 * 1000) return true;
+    // Marker present + recent enough during build window — keep waiting if children alive
+    // (children already checked above; here allow slightly stale marker while staging exists)
+    if (ageMs < 40 * 60 * 1000) {
+      try {
+        const staging = await stat(path.join(repoPath, ".next.staging"));
+        if (Date.now() - staging.mtimeMs < 10 * 60 * 1000) return true;
+      } catch {
+        /* no staging */
+      }
+    }
+  } catch {
+    /* no marker */
+  }
+  return false;
+}
+
 const MAX_RUNNING_MS = 35 * 60 * 1000; // must exceed build timeout (~25 min) + swap/restart
 const MAX_STUCK_AT_START_MS = 3 * 60 * 1000; // if stuck at "Starting update…" for 3 min, mark failed
 /** git fetch/pull should finish in ~30s; treat >2.5 min as hung even if the worker PID is still alive */
@@ -109,6 +164,10 @@ export function looksLikeSuccessfulUpdateDespiteWorkerExit(job: PanelUpdateJob):
   if (step === "pm2 restart nexlify") return true;
   if (step === "prepare standalone" && progress >= 90) return true;
   if (step === "apply update" && progress >= 88) return true;
+  // Staging swap / standalone often kills the outer worker around 88–92%
+  if (progress >= 88 && (step === "npm run build" || step === "prepare standalone" || step === "apply update")) {
+    return true;
+  }
   // Steps array may already record a successful restart while status is still "running"
   const restartDone = job.steps?.some(
     (s) => s.name === "pm2 restart nexlify" && (s.ok || s.status === "done")
@@ -286,11 +345,12 @@ export async function reconcileStaleUpdateJob(
   const pidAlive =
     workerPid != null && Number.isFinite(workerPid) && isUpdateWorkerAlive(workerPid);
   const scriptAlive = findUpdateWorkerPid() != null;
-  const alive = pidAlive || scriptAlive;
+  const childAlive = await isPanelUpdateWorkAlive(repoPath);
+  const alive = pidAlive || scriptAlive || childAlive;
   const started = job.startedAt ? Date.parse(job.startedAt) : NaN;
   const elapsed = Number.isFinite(started) ? Date.now() - started : 0;
 
-  // Still healthy
+  // Still healthy — including when outer worker died but next build / apply is alive
   if (alive && !isJobTimedOut(job, true)) return job;
 
   // Worker not up yet (just spawned)
@@ -298,6 +358,11 @@ export async function reconcileStaleUpdateJob(
 
   // Dead worker but not timed out yet — only keep waiting early in the job
   if (!alive && !isJobTimedOut(job, false) && elapsed < MAX_STUCK_AT_START_MS) {
+    return job;
+  }
+
+  // Build/apply still running: never mark failed (outer PID death is common mid-compile)
+  if (childAlive || isPanelUpdateChildWorkAlive()) {
     return job;
   }
 
@@ -466,7 +531,7 @@ export async function startBackgroundPanelUpdate(
 ): Promise<{ ok: boolean; error?: string }> {
   repoPath = resolvePanelRepoPathSync(repoPath);
   const existing = await reconcileStaleUpdateJob(repoPath);
-  if (isJobRunning(existing)) {
+  if (isJobRunning(existing) || (await isPanelUpdateWorkAlive(repoPath))) {
     return { ok: false, error: "An update is already running" };
   }
 

@@ -110,12 +110,14 @@ export async function runDueM3uSyncJobs(limit = 5): Promise<{
             at: now.toISOString(),
             imported: result.imported,
             skipped: result.skipped,
-            updated: result.updated ?? result.reordered ?? 0,
+            // Only real name/logo/epg changes — not "touched existing" / reorder count
+            updated: result.updated ?? 0,
             errors: result.errors ?? [],
           },
         },
       });
 
+      const renamed = result.updated ?? 0;
       await prisma.importJob.create({
         data: {
           kind: ImportKind.M3U,
@@ -124,8 +126,8 @@ export async function runDueM3uSyncJobs(limit = 5): Promise<{
           imported: result.imported,
           skipped: result.skipped,
           status: "done",
-          message: `M3U sync "${job.name}": ${result.imported} imported, ${result.skipped} skipped${
-            (result.updated ?? result.reordered) ? `, ${result.updated ?? result.reordered} names updated` : ""
+          message: `M3U sync "${job.name}": ${result.imported} new, ${result.skipped} existing${
+            renamed > 0 ? `, ${renamed} renamed` : ""
           }`,
         },
       });

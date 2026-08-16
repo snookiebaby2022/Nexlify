@@ -39,6 +39,14 @@ assert.equal(
   true
 );
 assert.equal(
+  looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 88, currentStep: "npm run build" })),
+  true
+);
+assert.equal(
+  looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 90, currentStep: "prepare standalone" })),
+  true
+);
+assert.equal(
   looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 48, currentStep: "npm run build" })),
   false
 );

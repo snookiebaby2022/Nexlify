@@ -76,7 +76,13 @@ export function guessStreamType(entry: M3uEntry, forced?: "LIVE" | "MOVIE" | "SE
   const g = (entry.group ?? "").toLowerCase();
   if (g.includes("series") || g.includes("tv show")) return "SERIES" as const;
   if (g.includes("movie") || g.includes("vod")) return "MOVIE" as const;
-  if (g.includes("live") || /\.m3u8($|\?)/i.test(entry.url) || /\/live\//i.test(entry.url)) {
+  // Xtream m3u_plus mpegts live lines are often /user/pass/id (no /live/ segment).
+  if (
+    g.includes("live") ||
+    /\.m3u8($|\?)/i.test(entry.url) ||
+    /\/live\//i.test(entry.url) ||
+    /\/[^/]+\/[^/]+\/\d+(\.(ts|m3u8))?($|\?)/i.test(entry.url)
+  ) {
     return "LIVE" as const;
   }
   return "MOVIE" as const;

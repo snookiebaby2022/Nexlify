@@ -220,7 +220,7 @@ export default function PanelUpdatesPage() {
             (text.trimStart().startsWith("<") && (r.status === 502 || r.status === 503 || r.status === 500));
           throw new Error(
             looksGateway
-              ? "Panel temporarily unavailable (502/nginx). The update may have stopped mid-build — click Clear stuck update, wait ~30s, then Refresh. If it keeps failing, SSH: bash scripts/panel-update-recover.sh"
+              ? "Panel briefly unavailable while the update restarts services (502/nginx). Keep this page open — the update is often still running. Wait ~30–60s and Refresh. Only use Clear stuck if progress has not moved for several minutes."
               : text.startsWith("Internal Server Error")
                 ? "Panel API error (500) — run: bash scripts/panel-update-recover.sh on the server"
                 : text.replace(/<[^>]+>/g, " ").slice(0, 160).trim() ||

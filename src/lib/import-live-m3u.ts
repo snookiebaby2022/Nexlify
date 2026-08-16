@@ -4,6 +4,10 @@ import type { M3uEntry } from "./m3u-parser";
 import { categoryFromGroupName } from "./vod-category";
 import { encodeLiveStreamMeta } from "./stream-live-meta";
 import { maxStreamSortOrder } from "./stream-order";
+import {
+  normalizeStreamMatchKey,
+  streamUrlHosts,
+} from "./stream-url-match";
 
 const CHUNK = 400;
 
@@ -35,17 +39,91 @@ async function findOrCreateBouquetCached(
   return created.id;
 }
 
-async function chunkedFindExisting(urls: string[]): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
+type ExistingLive = {
+  id: string;
+  streamUrl: string;
+  name: string;
+  streamIcon: string | null;
+  epgChannelId: string | null;
+};
+
+/**
+ * Load LIVE streams that could match this playlist: exact URLs first, then
+ * same-host rows keyed by normalized URL (port / /live/ path variants).
+ */
+async function loadExistingLiveForPlaylist(
+  urls: string[]
+): Promise<{
+  byExact: Map<string, ExistingLive>;
+  byNorm: Map<string, ExistingLive>;
+}> {
+  const byExact = new Map<string, ExistingLive>();
+  const byNorm = new Map<string, ExistingLive>();
+
+  const remember = (row: ExistingLive, preferExactUrl?: string) => {
+    byExact.set(row.streamUrl, row);
+    const key = normalizeStreamMatchKey(row.streamUrl);
+    if (!key) return;
+    const prev = byNorm.get(key);
+    if (!prev) {
+      byNorm.set(key, row);
+      return;
+    }
+    // Prefer the row whose URL equals the playlist URL when both exist.
+    if (preferExactUrl && row.streamUrl === preferExactUrl) {
+      byNorm.set(key, row);
+    }
+  };
+
   for (let i = 0; i < urls.length; i += CHUNK) {
     const slice = urls.slice(i, i + CHUNK);
     const rows = await prisma.stream.findMany({
       where: { type: StreamType.LIVE, streamUrl: { in: slice } },
-      select: { id: true, streamUrl: true },
+      select: {
+        id: true,
+        streamUrl: true,
+        name: true,
+        streamIcon: true,
+        epgChannelId: true,
+      },
     });
-    for (const row of rows) map.set(row.streamUrl, row.id);
+    for (const row of rows) remember(row);
   }
-  return map;
+
+  for (const host of streamUrlHosts(urls)) {
+    const rows = await prisma.stream.findMany({
+      where: {
+        type: StreamType.LIVE,
+        streamUrl: { contains: host, mode: "insensitive" },
+      },
+      select: {
+        id: true,
+        streamUrl: true,
+        name: true,
+        streamIcon: true,
+        epgChannelId: true,
+      },
+    });
+    for (const row of rows) remember(row);
+  }
+
+  // Re-prefer exact playlist URLs in the norm map when both variants exist.
+  for (const url of urls) {
+    const exact = byExact.get(url);
+    if (!exact) continue;
+    const key = normalizeStreamMatchKey(url);
+    if (key) byNorm.set(key, exact);
+  }
+
+  return { byExact, byNorm };
+}
+
+function resolveExisting(
+  url: string,
+  byExact: Map<string, ExistingLive>,
+  byNorm: Map<string, ExistingLive>
+): ExistingLive | undefined {
+  return byExact.get(url) ?? byNorm.get(normalizeStreamMatchKey(url));
 }
 
 /**
@@ -79,10 +157,16 @@ export async function importLiveM3uEntriesFast(
   let imported = 0;
   let skipped = 0;
   let reordered = 0;
+  let updated = 0;
   const errors: string[] = [];
 
   if (!filtered.length) {
-    return { imported: 0, skipped: 0, errors: undefined as string[] | undefined };
+    return {
+      imported: 0,
+      skipped: 0,
+      updated: 0,
+      errors: undefined as string[] | undefined,
+    };
   }
 
   // Dedupe by URL (last wins) so createMany doesn't insert duplicates in one run.
@@ -96,7 +180,9 @@ export async function importLiveM3uEntriesFast(
     opts.sortOrderStart ??
     (opts.reorderExisting === false ? (await maxStreamSortOrder()) + 1 : 0);
 
-  const existingByUrl = await chunkedFindExisting(unique.map((u) => u.entry.url));
+  const { byExact, byNorm } = await loadExistingLiveForPlaylist(
+    unique.map((u) => u.entry.url)
+  );
 
   const categoryCache = new Map<string, string>();
   const bouquetCache = new Map<string, string>();
@@ -112,7 +198,7 @@ export async function importLiveM3uEntriesFast(
   // Resolve categories + group bouquets for new streams only (unique groups).
   const groupsNeeded = new Set<string>();
   for (const { entry } of unique) {
-    if (existingByUrl.has(entry.url)) continue;
+    if (resolveExisting(entry.url, byExact, byNorm)) continue;
     const g = entry.group?.trim();
     if (g) groupsNeeded.add(g);
   }
@@ -147,34 +233,53 @@ export async function importLiveM3uEntriesFast(
   const existingUpdates: {
     id: string;
     sortOrder: number;
-    groupKey: string | null;
+    streamUrl: string | null;
     name: string | null;
     streamIcon: string | null;
     epgChannelId: string | null;
   }[] = [];
-  let renamed = 0;
+
+  /** Playlist URL → already-known stream id (exact or normalized match). */
+  const matchedExistingIds = new Map<string, string>();
 
   for (const { entry, index } of unique) {
     const sortOrder = sortOrderStart + index;
     const groupKey = entry.group?.trim() || null;
-    const existingId = existingByUrl.get(entry.url);
-    if (existingId) {
-      if (opts.reorderExisting !== false || opts.updateNamesOnSync !== false) {
-        const name = liveStreamDisplayName(entry);
+    const existing = resolveExisting(entry.url, byExact, byNorm);
+    if (existing) {
+      matchedExistingIds.set(entry.url, existing.id);
+      const wantNames = opts.updateNamesOnSync !== false;
+      const nextName = wantNames ? liveStreamDisplayName(entry) : null;
+      const nextIcon = wantNames ? entry.logo?.trim() || null : null;
+      const nextEpg = wantNames
+        ? entry.tvgId || entry.tvgName || entry.channelId || null
+        : null;
+      const urlChanged = existing.streamUrl !== entry.url;
+      const nameChanged = Boolean(nextName && nextName !== existing.name);
+      const iconChanged = Boolean(
+        nextIcon && nextIcon !== (existing.streamIcon ?? null)
+      );
+      const epgChanged = Boolean(
+        nextEpg && nextEpg !== (existing.epgChannelId ?? null)
+      );
+      const metaChanged = nameChanged || iconChanged || epgChanged;
+
+      if (
+        opts.reorderExisting !== false ||
+        metaChanged ||
+        urlChanged
+      ) {
         existingUpdates.push({
-          id: existingId,
+          id: existing.id,
           sortOrder,
-          groupKey,
-          name: opts.updateNamesOnSync !== false ? name : null,
-          streamIcon:
-            opts.updateNamesOnSync !== false ? entry.logo?.trim() || null : null,
-          epgChannelId:
-            opts.updateNamesOnSync !== false
-              ? entry.tvgId || entry.tvgName || entry.channelId || null
-              : null,
+          streamUrl: urlChanged ? entry.url : null,
+          name: nameChanged ? nextName : null,
+          streamIcon: iconChanged ? nextIcon : null,
+          epgChannelId: epgChanged ? nextEpg : null,
         });
         reordered++;
       }
+      if (metaChanged) updated++;
       skipped++;
       continue;
     }
@@ -231,14 +336,17 @@ export async function importLiveM3uEntriesFast(
   }
 
   // Resolve IDs for bouquet links (new + existing)
-  const createdByUrl = await chunkedFindExisting(unique.map((u) => u.entry.url));
+  const afterCreate = await loadExistingLiveForPlaylist(
+    unique.map((u) => u.entry.url)
+  );
 
   const bouquetLinks: { bouquetId: string; streamId: string; sortOrder: number }[] = [];
   for (const { entry, index } of unique) {
-    const streamId = createdByUrl.get(entry.url);
+    const streamId =
+      matchedExistingIds.get(entry.url) ||
+      resolveExisting(entry.url, afterCreate.byExact, afterCreate.byNorm)?.id;
     if (!streamId) continue;
-    // Only attach bouquets for newly imported streams, or when reordering existing
-    const isNew = !existingByUrl.has(entry.url);
+    const isNew = !matchedExistingIds.has(entry.url);
     if (!isNew && opts.reorderExisting === false) continue;
     const sortOrder = sortOrderStart + index;
     const ids = new Set(baseBouquetIds);
@@ -267,7 +375,7 @@ export async function importLiveM3uEntriesFast(
     }
   }
 
-  // Optional reorder + name/icon/epg refresh of existing streams (batched updates)
+  // Optional reorder + name/icon/epg/url refresh of existing streams (batched updates)
   if (existingUpdates.length) {
     for (let i = 0; i < existingUpdates.length; i += 50) {
       const slice = existingUpdates.slice(i, i + 50);
@@ -277,6 +385,7 @@ export async function importLiveM3uEntriesFast(
             where: { id: u.id },
             data: {
               sortOrder: u.sortOrder,
+              ...(u.streamUrl ? { streamUrl: u.streamUrl } : {}),
               ...(u.name ? { name: u.name } : {}),
               ...(u.streamIcon ? { streamIcon: u.streamIcon } : {}),
               ...(u.epgChannelId ? { epgChannelId: u.epgChannelId } : {}),
@@ -284,7 +393,6 @@ export async function importLiveM3uEntriesFast(
           })
         )
       );
-      renamed += slice.filter((u) => u.name).length;
     }
   }
 
@@ -292,7 +400,7 @@ export async function importLiveM3uEntriesFast(
     imported,
     skipped,
     reordered: reordered || undefined,
-    updated: renamed || undefined,
+    updated,
     errors: errors.length ? errors : undefined,
   };
 }
