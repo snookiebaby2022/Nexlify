@@ -390,7 +390,7 @@ export function ManageSubResellersTable({
           <tbody>
             {pageRows.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
+                <td colSpan={12} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
                   No sub-resellers yet
                 </td>
               </tr>
