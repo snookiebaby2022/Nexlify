@@ -76,20 +76,25 @@ export function ManageUsersTable({
   const [bulkGroupId, setBulkGroupId] = useState("");
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
-  const canBulk = panel === "admin";
+  const canBulk = panel === "admin" || panel === "reseller";
+  const massApi = panel === "admin" ? "/api/admin/users/mass" : "/api/reseller/users/mass";
+  const groupsApi = panel === "admin" ? "/api/admin/groups" : "/api/reseller/groups";
 
   useEffect(() => {
     if (!canBulk) return;
-    fetch("/api/admin/groups")
+    fetch(groupsApi)
       .then((r) => r.json())
       .then((d) => {
         const list = (d.groups ?? []) as { id: string; name: string }[];
         setGroups(list);
-        const preferred = list.find((g) => g.name === "Resellers") ?? list[0];
+        const preferred =
+          list.find((g) => /sub-?reseller/i.test(g.name)) ??
+          list.find((g) => /reseller/i.test(g.name)) ??
+          list[0];
         if (preferred) setBulkGroupId(preferred.id);
       })
       .catch(() => {});
-  }, [canBulk]);
+  }, [canBulk, groupsApi]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -309,7 +314,7 @@ export function ManageUsersTable({
     }
     setBulkBusy(true);
     try {
-      const res = await fetch("/api/admin/users/mass", {
+      const res = await fetch(massApi, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -435,11 +440,15 @@ export function ManageUsersTable({
                 Apply{selected.size ? ` (${selected.size})` : ""}
               </button>
               <Link
-                href="/admin/management/mass-edit/users"
+                href={
+                  panel === "admin"
+                    ? "/admin/management/mass-edit/users"
+                    : "/reseller/users"
+                }
                 className="text-xs underline"
                 style={{ color: "var(--accent)" }}
               >
-                Mass edit users
+                {panel === "admin" ? "Mass edit users" : "Refresh list"}
               </Link>
             </>
           )}

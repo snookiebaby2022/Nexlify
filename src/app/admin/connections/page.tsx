@@ -91,10 +91,11 @@ export default function AdminConnectionsPage() {
       <div className="xui-streams-topbar">
         <h1 className="xui-streams-title">Live Connections</h1>
         <button type="button" className="xui-streams-btn xui-streams-btn--ghost" onClick={kickAll}>
-          {paths.isReseller ? "Clear mine" : "Clear all"}
+          {paths.isReseller ? "Kick mine" : "Kick all"}
         </button>
       </div>
       <p className="text-sm px-1" style={{ color: "var(--muted)" }}>
+        Kick ends the live HTTP session (blocks reconnect briefly) and clears the connection row.
         Active plays in the last 5 minutes. Refreshes every 15s.
         {paths.isReseller ? " Showing your lines only." : ""}
       </p>
@@ -158,7 +159,7 @@ export default function AdminConnectionsPage() {
                 </td>
                 <td>
                   <div className="xui-clients-actions">
-                    <button type="button" className="xui-icon-action" title="Kick" onClick={() => kick(c.id)}>
+                    <button type="button" className="xui-icon-action" title="Kick — ends live session" onClick={() => kick(c.id)}>
                       <Hammer size={14} />
                     </button>
                     {c.stream && paths.streamEdit(c.stream.id) ? (

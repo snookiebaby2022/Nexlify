@@ -1,9 +1,75 @@
 import { prisma } from "./prisma";
-import { cacheGetOrSet, cacheDel } from "./cache";
+import { cacheGetOrSet, cacheDel, cacheGet, cacheSet } from "./cache";
 
 export const STALE_MS = 5 * 60 * 1000; // 5 minutes — connections expire quickly if not refreshed
 export const LIVE_STALE_MS = 2 * 60 * 1000; // 2 minutes — for "live" connections display (shows who is actually watching now)
 const CONNECTIONS_CACHE_TTL = 5; // 5 seconds — short TTL for dashboard responsiveness
+/** After Kick, block reconnect / track refresh for this long (covers multi-worker via Redis). */
+export const KICK_DENY_TTL_SEC = 120;
+
+type LiveProxyHandle = { abort: () => void };
+const liveProxies = new Map<string, Set<LiveProxyHandle>>();
+
+export function liveSessionKey(lineId: string, ip?: string | null, streamId?: string | null) {
+  return `${lineId}|${ip ?? ""}|${streamId ?? ""}`;
+}
+
+function kickDenyCacheKey(lineId: string, ip?: string | null) {
+  return `kick:deny:${lineId}:${ip ?? "*"}`;
+}
+
+/** Register an in-process live proxy so Kick can abort the HTTP body on this worker. */
+export function registerLiveProxy(
+  lineId: string,
+  ip: string | null | undefined,
+  streamId: string | null | undefined,
+  handle: LiveProxyHandle
+) {
+  const key = liveSessionKey(lineId, ip, streamId);
+  let set = liveProxies.get(key);
+  if (!set) {
+    set = new Set();
+    liveProxies.set(key, set);
+  }
+  set.add(handle);
+  return () => {
+    set!.delete(handle);
+    if (set!.size === 0) liveProxies.delete(key);
+  };
+}
+
+function abortLocalProxies(lineId: string, ip?: string | null, streamId?: string | null) {
+  const matches = (key: string) => {
+    if (streamId) return key === liveSessionKey(lineId, ip, streamId);
+    if (ip != null && ip !== "") return key.startsWith(`${lineId}|${ip}|`);
+    return key.startsWith(`${lineId}|`);
+  };
+  for (const [key, set] of [...liveProxies.entries()]) {
+    if (!matches(key)) continue;
+    for (const h of [...set]) {
+      try {
+        h.abort();
+      } catch {
+        /* ignore */
+      }
+    }
+    liveProxies.delete(key);
+  }
+}
+
+/** True if this line/IP was kicked recently and must not keep streaming. */
+export async function isSessionKicked(lineId: string, ip?: string | null): Promise<boolean> {
+  if (!lineId) return false;
+  const specific = await cacheGet<boolean>(kickDenyCacheKey(lineId, ip));
+  if (specific) return true;
+  const allIp = await cacheGet<boolean>(kickDenyCacheKey(lineId, "*"));
+  return Boolean(allIp);
+}
+
+async function markSessionKicked(lineId: string, ip?: string | null) {
+  await cacheSet(kickDenyCacheKey(lineId, ip ?? null), true, KICK_DENY_TTL_SEC);
+  abortLocalProxies(lineId, ip ?? null, null);
+}
 
 export async function countActiveConnectionsForLine(lineId: string) {
   const staleBefore = new Date(Date.now() - STALE_MS);
@@ -64,7 +130,12 @@ export async function trackConnection(opts: {
   streamId?: string;
   ip?: string;
   userAgent?: string;
-}) {
+}): Promise<string | null> {
+  // Hard kick: do not revive a session that was just kicked
+  if (await isSessionKicked(opts.lineId, opts.ip)) {
+    return null;
+  }
+
   const staleBefore = new Date(Date.now() - STALE_MS);
 
   // When a user switches channels, remove their previous active connection
@@ -189,22 +260,151 @@ export async function listLiveConnections(ownerId?: string, take = 5000) {
 }
 
 export async function deleteActiveConnection(id: string, ownerId?: string) {
-  if (ownerId) {
-    const conn = await prisma.liveConnection.findFirst({
-      where: { id, line: { ownerId } },
-      select: { id: true },
-    });
-    if (!conn) throw new Error("Connection not found");
-  }
-  await prisma.liveConnection.delete({ where: { id } });
+  const conn = await prisma.liveConnection.findFirst({
+    where: ownerId ? { id, line: { ownerId } } : { id },
+    select: { id: true, lineId: true, ip: true, streamId: true },
+  });
+  if (!conn) throw new Error("Connection not found");
+
+  await markSessionKicked(conn.lineId, conn.ip);
+  abortLocalProxies(conn.lineId, conn.ip, conn.streamId);
+  await prisma.liveConnection.delete({ where: { id: conn.id } }).catch(() => undefined);
+  void cacheDel("conn:*").catch(() => {});
 }
 
 export async function clearActiveConnections(ownerId?: string) {
   const staleBefore = new Date(Date.now() - STALE_MS);
-  await prisma.liveConnection.deleteMany({
+  const rows = await prisma.liveConnection.findMany({
     where: {
       lastSeenAt: { gte: staleBefore },
       ...(ownerId ? { line: { ownerId } } : {}),
     },
+    select: { id: true, lineId: true, ip: true, streamId: true },
+    take: 5000,
+  });
+  for (const row of rows) {
+    await markSessionKicked(row.lineId, row.ip);
+    abortLocalProxies(row.lineId, row.ip, row.streamId);
+  }
+  if (rows.length) {
+    await prisma.liveConnection.deleteMany({
+      where: { id: { in: rows.map((r) => r.id) } },
+    });
+  }
+  void cacheDel("conn:*").catch(() => {});
+}
+
+/** Wrap a live proxy body so Kick aborts mid-stream and 30s refresh respects deny TTL. */
+export function attachKickAwareProxyBody(opts: {
+  body: ReadableStream<Uint8Array>;
+  lineId: string;
+  streamId: string;
+  ip: string;
+  userAgent?: string;
+}): ReadableStream<Uint8Array> {
+  const { body, lineId, streamId, ip, userAgent } = opts;
+  let closed = false;
+  let lastTrackAt = Date.now();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  let unregister: (() => void) | null = null;
+
+  const finish = () => {
+    if (closed) return;
+    closed = true;
+    unregister?.();
+    unregister = null;
+    void removeConnection(lineId, streamId, ip);
+  };
+
+  const abort = () => {
+    try {
+      reader?.cancel().catch(() => undefined);
+    } catch {
+      /* ignore */
+    }
+    finish();
+  };
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      reader = body.getReader();
+      unregister = registerLiveProxy(lineId, ip, streamId, { abort });
+      const pump = () => {
+        if (closed) return;
+        void (async () => {
+          if (await isSessionKicked(lineId, ip)) {
+            try {
+              controller.error(new Error("Session kicked"));
+            } catch {
+              /* ignore */
+            }
+            abort();
+            return;
+          }
+          try {
+            const { done, value } = await reader!.read();
+            if (done) {
+              if (!closed) {
+                closed = true;
+                unregister?.();
+                controller.close();
+                void removeConnection(lineId, streamId, ip);
+              }
+              return;
+            }
+            if (Date.now() - lastTrackAt > 30_000) {
+              lastTrackAt = Date.now();
+              const id = await trackConnection({ lineId, streamId, ip, userAgent });
+              if (!id) {
+                try {
+                  controller.error(new Error("Session kicked"));
+                } catch {
+                  /* ignore */
+                }
+                abort();
+                return;
+              }
+            }
+            controller.enqueue(value);
+            pump();
+          } catch {
+            if (!closed) {
+              try {
+                controller.close();
+              } catch {
+                /* ignore */
+              }
+              finish();
+            }
+          }
+        })();
+      };
+      pump();
+    },
+    cancel() {
+      abort();
+    },
   });
 }
+
+/** Kick every active session on a line (used by line “Kill connections”). */
+export async function kickLineConnections(lineId: string, ownerId?: string) {
+  const where = ownerId
+    ? { lineId, line: { ownerId } }
+    : { lineId };
+  const rows = await prisma.liveConnection.findMany({
+    where,
+    select: { id: true, lineId: true, ip: true, streamId: true },
+    take: 5000,
+  });
+  await cacheSet(kickDenyCacheKey(lineId, "*"), true, KICK_DENY_TTL_SEC);
+  abortLocalProxies(lineId, null, null);
+  for (const row of rows) {
+    await markSessionKicked(row.lineId, row.ip);
+    abortLocalProxies(row.lineId, row.ip, row.streamId);
+  }
+  const result = await prisma.liveConnection.deleteMany({ where });
+  void cacheDel("conn:*").catch(() => {});
+  return result.count;
+}
+

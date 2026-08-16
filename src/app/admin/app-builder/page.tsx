@@ -227,7 +227,8 @@ export default function AppBuilderPage() {
         <h1 className="text-2xl font-semibold">App Builder</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
           Design a branded IPTV app inspired by XCIPTV / TiviMate — with modded themes, custom
-          backgrounds, dual DNS, EPG, cast, and PiP. Builds queue for the APK pipeline.
+          backgrounds, dual DNS, EPG, cast, and PiP. Each build produces a downloadable config
+          package for your APK/IPA pipeline.
         </p>
       </div>
 
@@ -264,8 +265,9 @@ export default function AppBuilderPage() {
         style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}
       >
         <p style={{ color: "var(--muted)" }}>
-          Live preview uses your primary / secondary / accent colors. Full APK output needs the build
-          server; until then builds stay <strong>QUEUED</strong> with the full config saved for the pipeline.
+          Live preview uses your primary / secondary / accent colors. Saving a build creates a
+          downloadable <strong>config JSON</strong> immediately. Native APK/IPA still needs your
+          connected build pipeline (or an external CI that consumes the config).
         </p>
       </div>
 

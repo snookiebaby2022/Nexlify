@@ -173,20 +173,30 @@ export default function UniqueFeaturesPage() {
         <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
           <h3 className="text-sm font-semibold mb-3">Smart CDN Switching</h3>
           <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
-            Automatically switch between CDNs based on real-time performance. Add CDN endpoints in server settings.
+            Automatically switch between CDNs based on real-time performance. Manage endpoints on the
+            Smart CDN page, then probe here.
           </p>
-          <button
-            onClick={async () => {
-              setLoading(true);
-              await fetch("/api/admin/cdn-switch?action=probe");
-              setLoading(false);
-            }}
-            disabled={loading}
-            className="flex items-center gap-1 text-xs px-3 py-1.5 rounded border"
-            style={{ borderColor: "var(--border)" }}
-          >
-            <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Probe All CDNs
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/admin/streaming/smart-cdn"
+              className="flex items-center gap-1 text-xs px-3 py-1.5 rounded border"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Manage CDN endpoints
+            </a>
+            <button
+              onClick={async () => {
+                setLoading(true);
+                await fetch("/api/admin/cdn-switch?action=probe");
+                setLoading(false);
+              }}
+              disabled={loading}
+              className="flex items-center gap-1 text-xs px-3 py-1.5 rounded border"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <RefreshCw size={12} className={loading ? "animate-spin" : ""} /> Probe All CDNs
+            </button>
+          </div>
         </div>
       )}
 

@@ -3,7 +3,7 @@ import { getClientIp } from "@/lib/client-ip";
 
 // Allow upstream fetches to sources with expired/self-signed TLS certs (common for IPTV CDNs)
 if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-import { trackConnection, removeConnection } from "@/lib/connections";
+import { trackConnection, isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import {
   buildLiveRedirectHeaders,
   getAntiFreezeSettings,
@@ -148,44 +148,15 @@ export async function GET(
           continue;
         }
         void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
-        let closed = false;
-        let lastTrackAt2 = Date.now();
-        const remuxBody = new ReadableStream({
-          start(controller) {
-            const reader = (remux.stream as ReadableStream).getReader();
-            const pump = () => {
-              reader
-                .read()
-                .then(({ done, value }) => {
-                  if (done) {
-                    if (!closed) {
-                      closed = true;
-                      controller.close();
-                    }
-                    void removeConnection(line.id, cleanId, ip);
-                    return;
-                  }
-                  if (Date.now() - lastTrackAt2 > 30_000) {
-                    lastTrackAt2 = Date.now();
-                    void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
-                  }
-                  controller.enqueue(value);
-                  pump();
-                })
-                .catch(() => {
-                  if (!closed) {
-                    closed = true;
-                    controller.close();
-                  }
-                  void removeConnection(line.id, cleanId, ip);
-                });
-            };
-            pump();
-          },
-          cancel() {
-            if (!closed) closed = true;
-            void removeConnection(line.id, cleanId, ip);
-          },
+        if (await isSessionKicked(line.id, ip)) {
+          return withIptvCors(iptvText("Session kicked", { status: 403 }));
+        }
+        const remuxBody = attachKickAwareProxyBody({
+          body: remux.stream as ReadableStream<Uint8Array>,
+          lineId: line.id,
+          streamId: cleanId,
+          ip,
+          userAgent: ua,
         });
         return withIptvCors(
           new NextResponse(remuxBody, {
@@ -252,48 +223,19 @@ export async function GET(
     }
 
     const response = proxied.response;
+    if (await isSessionKicked(line.id, ip)) {
+      return withIptvCors(iptvText("Session kicked", { status: 403 }));
+    }
     void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
 
     const originalBody = response.body;
     if (originalBody) {
-      let closed2 = false;
-      let lastTrackAt = Date.now();
-      const trackedBody = new ReadableStream({
-        start(controller) {
-          const reader = originalBody.getReader();
-          const pump = () => {
-            reader
-              .read()
-              .then(({ done, value }) => {
-                if (done) {
-                  if (!closed2) {
-                    closed2 = true;
-                    controller.close();
-                  }
-                  void removeConnection(line.id, cleanId, ip);
-                  return;
-                }
-                if (Date.now() - lastTrackAt > 30_000) {
-                  lastTrackAt = Date.now();
-                  void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
-                }
-                controller.enqueue(value);
-                pump();
-              })
-              .catch(() => {
-                if (!closed2) {
-                  closed2 = true;
-                  controller.close();
-                }
-                void removeConnection(line.id, cleanId, ip);
-              });
-          };
-          pump();
-        },
-        cancel() {
-          if (!closed2) closed2 = true;
-          void removeConnection(line.id, cleanId, ip);
-        },
+      const trackedBody = attachKickAwareProxyBody({
+        body: originalBody,
+        lineId: line.id,
+        streamId: cleanId,
+        ip,
+        userAgent: ua,
       });
 
       return withIptvCors(

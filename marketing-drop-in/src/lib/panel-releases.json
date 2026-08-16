@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.103",
+  "latestVersion": "1.9.104",
   "releases": [
+    {
+      "version": "1.9.104",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Hard connection kick, Smart CDN endpoint manager, reseller mass group/enable, App Builder config copy clarity.",
+      "changelog": [
+        "Kick ends live HTTP proxy sessions and blocks reconnect for 2 minutes (Redis/memory deny + in-process abort)",
+        "Smart CDN admin page: add/toggle/delete endpoints + probe; linked from ops glance and Unique Features",
+        "Resellers: bulk Change group / Enable / Disable on Manage Users (own sub-users only)",
+        "Reseller PATCH users can set groupId; read-only /api/reseller/groups",
+        "App Builder copy clarifies downloadable config JSON vs native APK pipeline"
+      ],
+      "fixes": [
+        "Soft kick no longer left active proxies streaming after dashboard Kick",
+        "CDN count stayed 0 with no UI to add endpoints",
+        "Reseller Manage Users lacked bulk group actions"
+      ]
+    },
     {
       "version": "1.9.103",
       "date": "2026-08-16",

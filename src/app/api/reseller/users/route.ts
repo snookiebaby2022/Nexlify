@@ -167,13 +167,37 @@ export async function PATCH(req: NextRequest) {
   });
   if (!child) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  const data: { isActive?: boolean; notes?: string | null; email?: string | null } = {};
+  const data: {
+    isActive?: boolean;
+    notes?: string | null;
+    email?: string | null;
+    groupId?: string | null;
+  } = {};
   if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
   if (body.notes !== undefined) data.notes = body.notes ? String(body.notes) : null;
   if (body.email !== undefined) data.email = body.email ? String(body.email).trim() : null;
+  if (body.groupId !== undefined) {
+    const groupId =
+      body.groupId === null || body.groupId === "" ? null : String(body.groupId);
+    if (groupId) {
+      const group = await prisma.userGroup.findUnique({
+        where: { id: groupId },
+        select: { id: true },
+      });
+      if (!group) return NextResponse.json({ error: "Group not found" }, { status: 400 });
+    }
+    data.groupId = groupId;
+  }
 
   const user = await prisma.panelUser.update({ where: { id }, data });
-  return NextResponse.json({ user: { id: user.id, username: user.username, isActive: user.isActive } });
+  return NextResponse.json({
+    user: {
+      id: user.id,
+      username: user.username,
+      isActive: user.isActive,
+      groupId: user.groupId,
+    },
+  });
 }
 
 export async function DELETE(req: NextRequest) {

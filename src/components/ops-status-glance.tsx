@@ -84,6 +84,9 @@ export function OpsStatusGlance() {
             : ""}
         </span>
       )}
+      <Link href="/admin/streaming/smart-cdn" className="text-xs underline" style={{ color: "var(--accent)" }}>
+        CDN
+      </Link>
       <Link href="/admin/streaming/health" className="text-xs underline" style={{ color: "var(--accent)" }}>
         Health
       </Link>

@@ -96,6 +96,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/streaming/engine", label: "Streaming Engine" },
           { href: "/admin/streaming/transcoding", label: "Transcoding Studio" },
           { href: "/admin/streaming/health", label: "Streaming Health" },
+          { href: "/admin/streaming/smart-cdn", label: "Smart CDN" },
         ],
       },
     },
