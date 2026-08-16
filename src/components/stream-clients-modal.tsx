@@ -98,7 +98,7 @@ export function StreamClientsModal({
                     </td>
                     <td>
                       <div className="xui-clients-actions">
-                        <button type="button" className="xui-icon-action" title="Kick" onClick={() => kick(c.id)}>
+                        <button type="button" className="xui-icon-action" title="Kick — ends live session" onClick={() => kick(c.id)}>
                           <Hammer size={14} />
                         </button>
                         <button type="button" className="xui-icon-action" title="Details" disabled>
