@@ -65,6 +65,10 @@ export default function AdminAddUserPage() {
       setMsg("Password and confirm password do not match.");
       return;
     }
+    if (form.username.trim().length < 6 || (form.password && form.password.length < 6)) {
+      setMsg("Username and password must each be at least 6 characters.");
+      return;
+    }
     if (!form.groupId) {
       setMsg("Please select a user group.");
       return;

@@ -34,12 +34,12 @@ export function exportPlaybackUrl(
     // Default MPEG-TS (.ts) for broad player compatibility. Honor output=hls
     // when apps request the recommended m3u_plus HLS playlist URL.
     const ext = output === "hls" ? "m3u8" : "ts";
-    return `${trimBase(baseUrl)}/live/${line.username}/${line.password}/${stream.id}.${ext}`;
+    return `${trimBase(baseUrl)}/live/${encodeURIComponent(line.username)}/${encodeURIComponent(line.password)}/${stream.id}.${ext}`;
   }
 
   if (isIntegrationStreamUrl(stream.streamUrl)) {
     const ext = vodExtension(stream);
-    return `${trimBase(baseUrl)}/movie/${line.username}/${line.password}/${stream.id}.${ext}`;
+    return `${trimBase(baseUrl)}/movie/${encodeURIComponent(line.username)}/${encodeURIComponent(line.password)}/${stream.id}.${ext}`;
   }
 
   return resolveStreamPlaybackUrl(resolved, seed);

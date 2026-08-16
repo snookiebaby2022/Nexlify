@@ -1,8 +1,11 @@
-/** Minimum length for line usernames and passwords (panel-wide). */
+/** Minimum length for line / reseller / sub-reseller usernames and passwords. */
 export const MIN_LINE_CREDENTIAL_LENGTH = 6;
+/** Alias used for panel users (resellers / sub-resellers). */
+export const MIN_PANEL_CREDENTIAL_LENGTH = MIN_LINE_CREDENTIAL_LENGTH;
 
-const USER_CHARS = "abcdefghijkmnopqrstuvwxyz";
-const PASS_CHARS = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ";
+const USER_CHARS = "abcdefghijkmnopqrstuvwxyz0123456789";
+const PASS_CHARS =
+  "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ0123456789";
 
 /**
  * Browser-safe random int in [0, max).
@@ -19,9 +22,17 @@ function randomInt(max: number): number {
   return Math.floor(Math.random() * max);
 }
 
-/** Strip everything except A–Z / a–z (line passwords are letters only). */
+/**
+ * @deprecated Line credentials now allow letters and numbers.
+ * Kept for older imports — prefer not stripping typed passwords.
+ */
 export function lettersOnly(value: string): string {
-  return String(value ?? "").replace(/[^A-Za-z]/g, "");
+  return String(value ?? "").replace(/[^A-Za-z0-9]/g, "");
+}
+
+/** Keep letters, numbers, and common safe symbols (no spaces / path breakers). */
+export function sanitizeCredentialInput(value: string): string {
+  return String(value ?? "").replace(/\s+/g, "");
 }
 
 function randomFrom(chars: string, length: number): string {
@@ -32,13 +43,13 @@ function randomFrom(chars: string, length: number): string {
   return out;
 }
 
-/** Random line username (min 6 chars). */
+/** Random line username (letters + digits, min 6). */
 export function generateLineUsername(): string {
   const len = 8 + randomInt(4);
   return randomFrom(USER_CHARS, Math.max(MIN_LINE_CREDENTIAL_LENGTH, len));
 }
 
-/** Random line password (min 6 chars). */
+/** Random line password (letters + digits, min 6). */
 export function generateLinePassword(length = 12): string {
   return randomFrom(PASS_CHARS, Math.max(MIN_LINE_CREDENTIAL_LENGTH, length));
 }
@@ -48,11 +59,32 @@ export function validateLineCredential(
   field: "username" | "password",
   minLength = MIN_LINE_CREDENTIAL_LENGTH
 ): string | null {
-  const v = value.trim();
-  if (!v) return `${field === "username" ? "Username" : "Password"} is required`;
+  const v = sanitizeCredentialInput(value);
+  const label = field === "username" ? "Username" : "Password";
+  if (!v) return `${label} is required`;
   if (v.length < minLength) {
-    return `${field === "username" ? "Username" : "Password"} must be at least ${minLength} characters`;
+    return `${label} must be at least ${minLength} characters`;
   }
+  if (/\s/.test(String(value ?? ""))) {
+    return `${label} cannot contain spaces`;
+  }
+  // Path-safe for /live/{user}/{pass}/… — allow letters, numbers, and common symbols.
+  if (/[\/\\?#%]/.test(v)) {
+    return `${label} cannot contain / \\ ? # or %`;
+  }
+  return null;
+}
+
+/** Validate reseller / sub-reseller username + password (min 6, letters & numbers allowed). */
+export function validatePanelAccountCredentials(
+  username: string,
+  password: string,
+  minLength = MIN_PANEL_CREDENTIAL_LENGTH
+): string | null {
+  const userErr = validateLineCredential(username, "username", minLength);
+  if (userErr) return userErr;
+  const passErr = validateLineCredential(password, "password", minLength);
+  if (passErr) return passErr;
   return null;
 }
 
@@ -83,14 +115,14 @@ export type LinePasswordPolicy = {
   disallowUsernameMatch?: boolean;
 };
 
-/** Extra line-password rules (1-stream-style restrictions). */
+/** Extra line-password rules (optional letter+digit / common-password checks). */
 export function validateLinePasswordPolicy(
   password: string,
   username: string,
   policy: LinePasswordPolicy = {}
 ): string | null {
-  const pass = password.trim();
-  const user = username.trim();
+  const pass = sanitizeCredentialInput(password);
+  const user = sanitizeCredentialInput(username);
   const minLength = Math.max(
     MIN_LINE_CREDENTIAL_LENGTH,
     Number(policy.minLength) || MIN_LINE_CREDENTIAL_LENGTH
@@ -103,8 +135,10 @@ export function validateLinePasswordPolicy(
   if (policy.blockCommonPasswords !== false && COMMON_LINE_PASSWORDS.has(pass.toLowerCase())) {
     return "Password is too common — choose a stronger one";
   }
-  if (/[^A-Za-z]/.test(pass)) {
-    return "Password may only contain letters";
+  if (policy.requireLetterAndDigit) {
+    if (!/[A-Za-z]/.test(pass) || !/[0-9]/.test(pass)) {
+      return "Password must include at least one letter and one number";
+    }
   }
   return null;
 }

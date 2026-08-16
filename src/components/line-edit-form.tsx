@@ -6,7 +6,7 @@ import { BouquetPickerTable, type BouquetPickerRow } from "@/components/bouquet-
 import { PasswordInput } from "@/components/password-input";
 import { CopyableCredential } from "@/components/copyable-credential";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
-import { generateLinePassword, lettersOnly, MIN_LINE_CREDENTIAL_LENGTH } from "@/lib/credential-generate";
+import { generateLinePassword, MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput } from "@/lib/credential-generate";
 import { formatDateTime } from "@/lib/format";
 import { LINE_DURATION_PRESETS } from "@/lib/line-duration-presets";
 
@@ -166,9 +166,9 @@ export function LineEditForm({
     e.preventDefault();
     if (!line) return;
     if (form.password.length > 0) {
-      const nextPass = lettersOnly(form.password);
+      const nextPass = sanitizeCredentialInput(form.password);
       if (nextPass.length < MIN_LINE_CREDENTIAL_LENGTH) {
-        alert(`Password must be at least ${MIN_LINE_CREDENTIAL_LENGTH} letters.`);
+        alert(`Password must be at least ${MIN_LINE_CREDENTIAL_LENGTH} characters.`);
         return;
       }
     }
@@ -184,7 +184,7 @@ export function LineEditForm({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        password: form.password !== line.password ? lettersOnly(form.password) : undefined,
+        password: form.password !== line.password ? sanitizeCredentialInput(form.password) : undefined,
         maxConnections: form.maxConnections,
         days: form.extendDays > 0 ? form.extendDays : undefined,
         externalId: form.externalId || null,
@@ -334,8 +334,8 @@ export function LineEditForm({
                     className="flex-1"
                     value={form.password}
                     onChange={(password) => setForm({ ...form, password })}
-                    placeholder={`Letters only, min ${MIN_LINE_CREDENTIAL_LENGTH}`}
-                    lettersOnly
+                    placeholder={`Letters & numbers, min ${MIN_LINE_CREDENTIAL_LENGTH}`}
+                    minLength={MIN_LINE_CREDENTIAL_LENGTH}
                   />
                   <button
                     type="button"

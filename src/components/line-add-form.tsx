@@ -232,7 +232,7 @@ export function LineAddForm({
       return;
     }
     let username = form.username.trim();
-    let password = form.password.replace(/[^A-Za-z]/g, "").trim();
+    let password = form.password.trim();
     if (autoGenerate) {
       if (!username) username = generateLineUsername();
       if (!password) password = generateLinePassword();
@@ -423,9 +423,9 @@ export function LineAddForm({
                   className="flex-1"
                   value={form.password}
                   onChange={(password) => setForm({ ...form, password })}
-                  placeholder={`Letters only, min ${MIN_LINE_CREDENTIAL_LENGTH}`}
+                  placeholder={`Letters & numbers, min ${MIN_LINE_CREDENTIAL_LENGTH}`}
                   required={!autoGenerate}
-                  lettersOnly
+                  minLength={MIN_LINE_CREDENTIAL_LENGTH}
                 />
                 <button
                   type="button"

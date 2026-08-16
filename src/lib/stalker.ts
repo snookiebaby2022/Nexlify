@@ -139,7 +139,7 @@ export async function handleStalkerAction(
       if (!stream) {
         return stalkerJsResponse({ error: "Stream not found" });
       }
-      const url = `${baseUrl}/live/${line.username}/${line.password}/${stream.id}.ts`;
+      const url = `${baseUrl}/live/${encodeURIComponent(line.username)}/${encodeURIComponent(line.password)}/${stream.id}.ts`;
       return stalkerJsResponse({ cmd: url, id: stream.id });
     }
 

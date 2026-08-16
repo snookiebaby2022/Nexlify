@@ -12,6 +12,7 @@ export function PasswordInput({
   className = "",
   showCopy = true,
   lettersOnly = false,
+  minLength,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -19,8 +20,12 @@ export function PasswordInput({
   required?: boolean;
   className?: string;
   showCopy?: boolean;
-  /** Restrict input to A–Z / a–z (line passwords). */
+  /**
+   * When true, restrict to letters + numbers (legacy prop name kept for
+   * compatibility — digits are allowed).
+   */
   lettersOnly?: boolean;
+  minLength?: number;
 }) {
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -50,6 +55,7 @@ export function PasswordInput({
         type={show ? "text" : "password"}
         required={required}
         placeholder={placeholder}
+        minLength={minLength}
         className={`w-full rounded border pl-10 bg-transparent text-sm ${
           showCopy ? "pr-16" : "pr-3"
         } py-2.5`}
@@ -57,10 +63,10 @@ export function PasswordInput({
         value={value}
         autoComplete="off"
         spellCheck={false}
-        pattern={lettersOnly ? "[A-Za-z]+" : undefined}
-        title={lettersOnly ? "Letters only" : undefined}
+        pattern={lettersOnly ? "[A-Za-z0-9]+" : undefined}
+        title={lettersOnly ? "Letters and numbers" : undefined}
         onChange={(e) =>
-          onChange(lettersOnly ? e.target.value.replace(/[^A-Za-z]/g, "") : e.target.value)
+          onChange(lettersOnly ? e.target.value.replace(/[^A-Za-z0-9]/g, "") : e.target.value)
         }
       />
       {showCopy && value ? (

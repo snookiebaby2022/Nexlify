@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
 import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { PanelRole } from "@prisma/client";
-import { lettersOnly, MIN_LINE_CREDENTIAL_LENGTH, validateLinePasswordPolicy } from "@/lib/credential-generate";
+import { MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput, validateLinePasswordPolicy } from "@/lib/credential-generate";
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -51,7 +51,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const existing = await prisma.line.findFirst({ where });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const nextPassword = body.password ? lettersOnly(String(body.password)) : "";
+  const nextPassword = body.password ? sanitizeCredentialInput(String(body.password)) : "";
   if (body.password) {
     const passErr = validateLinePasswordPolicy(nextPassword, existing.username, {
       minLength: MIN_LINE_CREDENTIAL_LENGTH,

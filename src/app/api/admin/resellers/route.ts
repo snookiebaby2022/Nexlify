@@ -157,10 +157,16 @@ export async function PATCH(req: NextRequest) {
   if (body.username !== undefined) {
     const username = String(body.username).trim();
     if (!username) return NextResponse.json({ error: "Username required" }, { status: 400 });
+    const { validateLineCredential } = await import("@/lib/credential-generate");
+    const userErr = validateLineCredential(username, "username");
+    if (userErr) return NextResponse.json({ error: userErr }, { status: 400 });
     data.username = username;
   }
   if (typeof body.password === "string" && body.password.trim()) {
     const plain = body.password.trim();
+    const { validateLineCredential } = await import("@/lib/credential-generate");
+    const passErr = validateLineCredential(plain, "password");
+    if (passErr) return NextResponse.json({ error: passErr }, { status: 400 });
     data.passwordHash = await hashPassword(plain);
     data.passwordPlain = plain;
   }
@@ -266,8 +272,15 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const password = typeof body.password === "string" && body.password.trim()
-    ? body.password
+    ? body.password.trim()
     : randomBytes(12).toString("hex");
+  const username = String(body.username ?? "").trim();
+
+  const { validatePanelAccountCredentials } = await import("@/lib/credential-generate");
+  const credErr = validatePanelAccountCredentials(username, password);
+  if (credErr) {
+    return NextResponse.json({ error: credErr }, { status: 400 });
+  }
 
   const role =
     body.role === "ADMIN"
@@ -320,7 +333,7 @@ export async function POST(req: NextRequest) {
 
   const reseller = await prisma.panelUser.create({
     data: {
-      username: String(body.username).trim(),
+      username,
       passwordHash: await hashPassword(password),
       passwordPlain: password,
       role,

@@ -81,6 +81,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "username and password required" }, { status: 400 });
   }
 
+  const { validatePanelAccountCredentials } = await import("@/lib/credential-generate");
+  const credErr = validatePanelAccountCredentials(username, password);
+  if (credErr) {
+    return NextResponse.json({ error: credErr }, { status: 400 });
+  }
+
   const parent = await prisma.panelUser.findUnique({
     where: { id: session.id },
     select: { credits: true, groupId: true },
@@ -201,6 +207,9 @@ export async function PATCH(req: NextRequest) {
   if (body.email !== undefined) data.email = body.email ? String(body.email).trim() : null;
   if (typeof body.password === "string" && body.password.trim()) {
     const plain = body.password.trim();
+    const { validateLineCredential } = await import("@/lib/credential-generate");
+    const passErr = validateLineCredential(plain, "password");
+    if (passErr) return NextResponse.json({ error: passErr }, { status: 400 });
     data.passwordHash = await bcrypt.hash(plain, 12);
     data.passwordPlain = plain;
   }

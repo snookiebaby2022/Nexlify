@@ -12,8 +12,8 @@ import { getSettingGroup } from "@/lib/panel-settings";
 import {
   generateLinePassword,
   generateLineUsername,
-  lettersOnly,
   MIN_LINE_CREDENTIAL_LENGTH,
+  sanitizeCredentialInput,
   validateLineCredential,
 } from "@/lib/credential-generate";
 import { LineStatus, Prisma } from "@prisma/client";
@@ -162,8 +162,8 @@ export async function POST(req: NextRequest) {
   );
   const autoGen = security.autoGenerateLineCredentials === true;
 
-  let username = String(body.username ?? "").trim();
-  let password = lettersOnly(String(body.password ?? "").trim());
+  let username = sanitizeCredentialInput(String(body.username ?? ""));
+  let password = sanitizeCredentialInput(String(body.password ?? ""));
   // Never replace credentials the operator typed — only fill blanks when auto-generate is on.
   if (!username && autoGen) username = generateLineUsername();
   if (!password && autoGen) password = generateLinePassword();
@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
   const { validateLinePasswordPolicy } = await import("@/lib/credential-generate");
   const passErr = validateLinePasswordPolicy(password, username, {
     minLength: minLen,
-    requireLetterAndDigit: false,
+    requireLetterAndDigit: security.linePasswordRequireLetterAndDigit === true,
     blockCommonPasswords: security.linePasswordBlockCommon !== false,
     disallowUsernameMatch: security.linePasswordDisallowUsername !== false,
   });

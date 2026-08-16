@@ -1,6 +1,6 @@
 {
   "name": "nexlify-marketing",
-  "version": "1.9.113",
+  "version": "1.9.114",
   "private": true,
   "scripts": {
     "dev": "next dev",

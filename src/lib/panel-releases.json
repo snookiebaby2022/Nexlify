@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.113",
+  "latestVersion": "1.9.114",
   "releases": [
+    {
+      "version": "1.9.114",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Line/reseller usernames & passwords allow letters+numbers; minimum length 6.",
+      "changelog": [
+        "Line passwords no longer restricted to letters-only — numbers allowed",
+        "Auto-generated credentials include digits",
+        "Resellers and sub-resellers require username/password of at least 6 characters",
+        "Playback export URLs encode username/password path segments"
+      ],
+      "fixes": [
+        "Could not use numbers in line passwords when creating subscriptions",
+        "Reseller/sub-reseller create had no minimum credential length"
+      ]
+    },
     {
       "version": "1.9.113",
       "date": "2026-08-16",
