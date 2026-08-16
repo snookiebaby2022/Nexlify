@@ -74,6 +74,7 @@ const PUBLIC = [
   "/xmltv.php",
   "/live",
   "/movie",
+  "/series",
   "/api/v1",
   "/api/auth",
   "/api/billing",
