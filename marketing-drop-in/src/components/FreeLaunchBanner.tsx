@@ -32,7 +32,7 @@ export function FreeLaunchBanner() {
 
   return (
     <div
-      className="fixed inset-x-0 top-0 z-[70] border-b border-amber-500/40 bg-gradient-to-r from-amber-950 via-[#1a0f00] to-orange-950 shadow-lg shadow-black/40"
+      className="relative z-[70] border-b border-amber-500/40 bg-gradient-to-r from-amber-950 via-[#1a0f00] to-orange-950 shadow-lg shadow-black/40"
       role="region"
       aria-label="Free launch promotion"
       data-nx-free-banner

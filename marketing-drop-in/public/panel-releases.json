@@ -1,7 +1,178 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.98",
+  "latestVersion": "1.9.108",
   "releases": [
+    {
+      "version": "1.9.108",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Mobile fixes: marketing hero/copy-first + banners no longer cover nav; panel phone drawer always full-width with leaner top bar.",
+      "changelog": [
+        "Marketing home: brand + headline + CTA before carousel on phones; shorter carousel height",
+        "Launch banners scroll in-flow (no longer fixed over sticky nav)",
+        "Features page: removed duplicate sticky header (uses site Navbar)",
+        "Panel mobile drawer ignores desktop collapsed rail; hide minimize on phones",
+        "Panel top bar: theme only on xs; accent/language from sm/md up",
+        "Mobile drawer fills phone width; larger hamburger hit target; nav menu scrolls under banners"
+      ],
+      "fixes": [
+        "Website first viewport buried under carousel/banners on mobile",
+        "Phone menu opened as a 72px icon rail when sidebar was minimized on desktop"
+      ]
+    },
+    {
+      "version": "1.9.107",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Hard kick is real for panel-proxied live: deny TTL in playback guard + HLS segment abort; clearer Connections copy.",
+      "changelog": [
+        "Playback guard returns kicked after Kick (movie/series/HLS/WebRTC reconnect blocked)",
+        "Live HLS relay checks kick and aborts kick-aware segment bodies",
+        "Live Connections page documents hard stop vs redirect/direct-upstream limits"
+      ],
+      "fixes": [
+        "Outdated soft-kick caveat; reconnect via HLS/movie could continue after Kick"
+      ]
+    },
+    {
+      "version": "1.9.106",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "App Builder clarifies config JSON vs native APK/IPA: steps, README next to downloads, external CI PATCH hook.",
+      "changelog": [
+        "App Builder explains that config packages are ready now; APK/IPA still needs an external signed builder",
+        "Build history Download button labels Config JSON vs APK/IPA",
+        "Each build writes a README with PATCH instructions for attaching a finished binary URL"
+      ],
+      "fixes": [
+        "App Builder could be read as shipping native APKs when only config JSON was produced"
+      ]
+    },
+    {
+      "version": "1.9.105",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Show passwords for admins, resellers, and sub-resellers in Manage Users (masked reveal/copy), same idea as line credentials.",
+      "changelog": [
+        "Panel users store a display password copy when created or reset (login still uses bcrypt hash)",
+        "Manage Users and Sub-resellers tables: Password column with eye reveal + copy",
+        "Edit user shows current password when available",
+        "Reseller Manage Users also shows sub-user passwords"
+      ],
+      "fixes": [
+        "Could not reveal panel user passwords after create (hash-only)"
+      ]
+    },
+    {
+      "version": "1.9.104",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Hard connection kick, Smart CDN endpoint manager, reseller mass group/enable, App Builder config copy clarity.",
+      "changelog": [
+        "Kick ends live HTTP proxy sessions and blocks reconnect for 2 minutes (Redis/memory deny + in-process abort)",
+        "Smart CDN admin page: add/toggle/delete endpoints + probe; linked from ops glance and Unique Features",
+        "Resellers: bulk Change group / Enable / Disable on Manage Users (own sub-users only)",
+        "Reseller PATCH users can set groupId; read-only /api/reseller/groups",
+        "App Builder copy clarifies downloadable config JSON vs native APK pipeline"
+      ],
+      "fixes": [
+        "Soft kick no longer left active proxies streaming after dashboard Kick",
+        "CDN count stayed 0 with no UI to add endpoints",
+        "Reseller Manage Users lacked bulk group actions"
+      ]
+    },
+    {
+      "version": "1.9.103",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Smart CDN playback failover, dead-link auto-disable with agent probe, live duplicate scan, Missing EPG queue, ops status glance, App Builder config download, XCIPTV setup guide, richer audit labels.",
+      "changelog": [
+        "Live playback rewrites through the best Smart CDN endpoint when configured",
+        "Dead-link monitor: second consecutive fail auto-disables the stream; agents can probe_stream from the stream server",
+        "Remove duplicates: Scan live streams (URL + title)",
+        "New Missing EPG page under EPG with live filter",
+        "Dashboard Ops status glance (DB / Redis / cron / edge agents / CDN count)",
+        "App Builder completes with downloadable branded config JSON package",
+        "Portal setup: expanded XCIPTV Xtream guide",
+        "Audit log labels for mass user actions, create/edit stream, remove duplicates"
+      ],
+      "fixes": [
+        "Missing EPG filter no longer clashes with search/video OR clauses",
+        "Agent probe_stream prefers payload URL from the panel",
+        "Mass user edits and stream create/edit write audit activity"
+      ]
+    },
+    {
+      "version": "1.9.102",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Full-height sidebar, mobile/tablet layout, Control Center on top, All Tickets, faster channel order with tabs, App Builder presets, clearer search/theme contrast.",
+      "changelog": [
+        "Left sidebar stretches with the full page height",
+        "Tablet: persistent sidebar from md; phones keep drawer menu",
+        "Dashboard Control Center moved to the top",
+        "Tickets sidebar: All Tickets link",
+        "Channel order: Streams/Movies/Series tabs, UK Entertainment default, Show 50 entries",
+        "App Builder: XCIPTV+ / TiviMate+ / Modded Neon / Cinema / Arctic presets with backgrounds",
+        "Search bars and form inputs higher contrast in dark and light"
+      ],
+      "fixes": [
+        "Sidebar stopped short of long dashboard pages",
+        "Channel order loaded all live categories slowly",
+        "Search fields hard to read on dark/light themes"
+      ]
+    },
+    {
+      "version": "1.9.101",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Wider left sidebar for easier navigation and longer nav list space.",
+      "changelog": [
+        "Left sidebar width 252px → 300px",
+        "Slightly tighter footer actions so the nav list has more vertical room"
+      ],
+      "fixes": [
+        "Sidebar felt short/cramped after chat moved into the footer"
+      ]
+    },
+    {
+      "version": "1.9.100",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Watch-folder live channels, sidebar chat, Manage Users role order, mass-edit line sorts, bouquet A→Z, better XUI EPG import, honest probes + browser play proxy.",
+      "changelog": [
+        "Watch Folders: Live channels type (auto-add + rename from remote M3U)",
+        "Live chat + Chat support moved under the left sidebar footer",
+        "Manage Users sorts Admins → Resellers → Sub-resellers",
+        "Mass Edit Lines: sort by Username, Owner, Expire, Ban",
+        "Manage Bouquets defaults to alphabetical name order",
+        "XUI migrate: stronger EPG source detection (epg_api, data blob URLs)",
+        "Online/fast probe no longer marks unreachable URLs as degraded",
+        "Play in browser always uses the panel proxy path"
+      ],
+      "fixes": [
+        "Live M3U could not be watched from Watch Folders (VOD-only types)",
+        "Chat floated on the right over content",
+        "Mass edit lines had no Owner/Expire sort",
+        "XUI SQL EPG sources often skipped when URL lived in data/epg_file",
+        "Fast probe false positives on unreachable 'playable format' URLs"
+      ]
+    },
+    {
+      "version": "1.9.99",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Mass edit resellers and sub-resellers: change which group they belong to in bulk.",
+      "changelog": [
+        "Mass Edit Users: Change group action with group picker and role filter (resellers / sub-resellers)",
+        "Manage Users: bulk select + Change group / Enable / Disable",
+        "Sub-resellers: bulk select + Change group / Enable / Disable",
+        "POST /api/admin/users/mass supports setGroup"
+      ],
+      "fixes": [
+        "No way to move many resellers/sub-resellers into a different group at once"
+      ]
+    },
     {
       "version": "1.9.98",
       "date": "2026-08-16",

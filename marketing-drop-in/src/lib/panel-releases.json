@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.107",
+  "latestVersion": "1.9.108",
   "releases": [
+    {
+      "version": "1.9.108",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Mobile fixes: marketing hero/copy-first + banners no longer cover nav; panel phone drawer always full-width with leaner top bar.",
+      "changelog": [
+        "Marketing home: brand + headline + CTA before carousel on phones; shorter carousel height",
+        "Launch banners scroll in-flow (no longer fixed over sticky nav)",
+        "Features page: removed duplicate sticky header (uses site Navbar)",
+        "Panel mobile drawer ignores desktop collapsed rail; hide minimize on phones",
+        "Panel top bar: theme only on xs; accent/language from sm/md up",
+        "Mobile drawer fills phone width; larger hamburger hit target; nav menu scrolls under banners"
+      ],
+      "fixes": [
+        "Website first viewport buried under carousel/banners on mobile",
+        "Phone menu opened as a 72px icon rail when sidebar was minimized on desktop"
+      ]
+    },
     {
       "version": "1.9.107",
       "date": "2026-08-16",

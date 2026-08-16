@@ -14,7 +14,7 @@ const HeroPanelCarousel = dynamic(
   {
     loading: () => (
       <div
-        className="skeleton-block min-h-[440px] w-full max-w-lg rounded-2xl lg:max-w-xl"
+        className="skeleton-block min-h-[220px] w-full max-w-lg rounded-2xl sm:min-h-[320px] lg:min-h-[440px] lg:max-w-xl"
         aria-hidden
       />
     ),
@@ -31,37 +31,32 @@ export function Hero() {
       <div className="pointer-events-none absolute -left-16 bottom-10 h-56 w-56 rounded-full bg-orange-500/10 blur-3xl hero-orb" />
       <div className="pointer-events-none absolute right-1/3 top-1/2 h-40 w-40 rounded-full bg-cyan-500/8 blur-3xl hero-orb" />
 
-      <div className="relative mx-auto max-w-6xl px-4 pb-20 pt-6 md:pb-32 md:pt-16 lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:gap-12 lg:pt-20">
-        <div className="order-1 min-h-[440px] lg:order-2">
-          <HeroPanelCarousel />
-        </div>
+      <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-6 md:pb-28 md:pt-16 lg:grid lg:grid-cols-[1fr_auto] lg:items-center lg:gap-12 lg:pt-20">
+        {/* Copy first on phones so brand + CTA are in the first viewport */}
+        <div className="order-1 lg:order-1">
+          <p className="font-display text-sm font-semibold tracking-wide text-violet-300 sm:text-base">
+            {site.name}
+          </p>
 
-        <div className="order-2 mt-10 lg:order-1 lg:mt-0">
-          <div className="inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-violet-400/20 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 sm:px-4">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-composited-pulse" />
-            IPTV reseller software · WHMCS billing · Live demo
-          </div>
-
-          {isFreePeriod() && (
-            <p className="mt-4 inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200">
-              <span className="font-bold text-amber-300">All licenses free</span>
-              until {FREE_PERIOD_END_LABEL} — no coupon needed
-            </p>
-          )}
-
-          <h1 className="font-display mt-6 max-w-4xl text-3xl font-bold leading-[1.1] tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl">
+          <h1 className="font-display mt-3 max-w-4xl text-3xl font-bold leading-[1.1] tracking-tight text-white sm:text-4xl md:text-5xl lg:text-6xl">
             IPTV reseller panel —{" "}
             <span className="text-gradient">management software</span> with live demo
           </h1>
 
-          <p className="mt-6 max-w-2xl text-base leading-relaxed text-[var(--muted)] md:text-lg lg:text-xl">
-            {site.name} is {SOFTWARE_POSITIONING} for businesses worldwide. Start a free trial,
-            explore the live demo, and deploy on your own VPS in one command.
+          <p className="mt-4 max-w-2xl text-base leading-relaxed text-[var(--muted)] md:mt-6 md:text-lg lg:text-xl">
+            {SOFTWARE_POSITIONING} for businesses worldwide. Start a free trial, explore the live
+            demo, and deploy on your own VPS.
           </p>
+
+          {isFreePeriod() && (
+            <p className="mt-4 text-sm font-medium text-amber-200">
+              All licenses free until {FREE_PERIOD_END_LABEL} — no coupon needed
+            </p>
+          )}
 
           <ContentDisclaimer className="mt-4 max-w-2xl" />
 
-          <div className="mt-8">
+          <div className="mt-6 md:mt-8">
             <TrialCtaButton trackLabel="hero_trial" />
 
             <p className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--muted)]">
@@ -88,23 +83,28 @@ export function Hero() {
               </Link>
             </p>
           </div>
-
-          <dl className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-4 sm:gap-6">
-            {[
-              { label: "AI Tools", value: "15 Built-in" },
-              { label: "Features", value: "100+" },
-              { label: "Zapping", value: "< 1s" },
-              { label: "Billing", value: "WHMCS" },
-            ].map((s) => (
-              <div key={s.label} className="glass rounded-2xl px-4 py-4 sm:py-5">
-                <dt className="text-xs uppercase tracking-wider text-[var(--muted)]">{s.label}</dt>
-                <dd className="font-display mt-1 text-base font-semibold text-white sm:text-lg">
-                  {s.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
         </div>
+
+        <div className="order-2 mt-10 lg:order-2 lg:mt-0">
+          <HeroPanelCarousel />
+        </div>
+
+        {/* Stats below first viewport on mobile; full-width under hero on desktop */}
+        <dl className="order-3 mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-6 lg:col-span-2 lg:mt-12">
+          {[
+            { label: "AI Tools", value: "15 Built-in" },
+            { label: "Features", value: "100+" },
+            { label: "Zapping", value: "< 1s" },
+            { label: "Billing", value: "WHMCS" },
+          ].map((s) => (
+            <div key={s.label} className="rounded-xl px-3 py-3 sm:px-4 sm:py-5" style={{ background: "rgba(255,255,255,0.04)" }}>
+              <dt className="text-xs uppercase tracking-wider text-[var(--muted)]">{s.label}</dt>
+              <dd className="font-display mt-1 text-base font-semibold text-white sm:text-lg">
+                {s.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </section>
   );

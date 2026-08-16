@@ -81,7 +81,7 @@ export function HeroPanelCarousel({ showDemoLink = true }: HeroPanelCarouselProp
 
   return (
     <div
-      className="relative w-full min-h-[440px] max-w-lg lg:max-w-xl"
+      className="relative w-full min-h-[220px] max-w-lg sm:min-h-[320px] lg:min-h-[440px] lg:max-w-xl"
       data-panel-carousel
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}

@@ -206,11 +206,11 @@ export function PanelTopNav({
         {onMenuToggle && (
           <button
             type="button"
-            className="md:hidden p-1.5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
+            className="md:hidden inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
             onClick={onMenuToggle}
             aria-label="Open menu"
           >
-            <Menu size={20} />
+            <Menu size={22} />
           </button>
         )}
         <div className="md:hidden shrink-0">
@@ -251,7 +251,7 @@ export function PanelTopNav({
 
         <div className="panel-header-controls flex items-center gap-1.5 sm:gap-2 ml-auto">
           <div
-            className="panel-header-toggle-bar flex items-center gap-2 rounded-lg px-2 py-1 shrink-0"
+            className="panel-header-toggle-bar hidden sm:flex items-center gap-2 rounded-lg px-2 py-1 shrink-0"
             title="Logo accent and theme"
           >
             <span className="hidden md:inline text-[10px] font-semibold uppercase tracking-wider text-slate-400">
@@ -260,7 +260,12 @@ export function PanelTopNav({
             <LogoAccentToggle />
             <span className="hidden sm:block w-px h-5 bg-white/10" aria-hidden />
             <ThemeToggle />
-            <PanelLanguageSwitcher />
+            <div className="hidden md:block">
+              <PanelLanguageSwitcher />
+            </div>
+          </div>
+          <div className="sm:hidden shrink-0">
+            <ThemeToggle />
           </div>
           <button
             type="button"

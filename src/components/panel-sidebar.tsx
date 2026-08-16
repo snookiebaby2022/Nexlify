@@ -324,9 +324,16 @@ export function PanelSidebar({
   const deferredFilter = useDeferredValue(navFilter);
   const isFiltering = deferredFilter.trim().length > 0;
   const visibleEntries = filterNavEntries(entries, deferredFilter);
+  /** Mobile drawer: never use the desktop collapsed (72px) rail. */
+  const isMobileDrawer = Boolean(onNavigate);
+  const effectiveCollapsed = isMobileDrawer ? false : collapsed;
 
   useEffect(() => {
-    setCollapsed(readPersistedCollapsed());
+    if (!isMobileDrawer) {
+      setCollapsed(readPersistedCollapsed());
+    } else {
+      setCollapsed(false);
+    }
     const active = activeGroupIds(pathname, entries, search);
     if (active.size > 0) {
       setOpenIds(active);
@@ -337,7 +344,7 @@ export function PanelSidebar({
     // Accordion: restore at most one persisted group
     const one = persisted.values().next().value;
     setOpenIds(one ? new Set([one as string]) : new Set());
-  }, []);
+  }, [isMobileDrawer]);
 
   useEffect(() => {
     // Preserve scroll position when route changes expand/collapse groups
@@ -358,7 +365,7 @@ export function PanelSidebar({
   }, [pathname, search, entries]);
 
   useEffect(() => {
-    if (!collapsed || openIds.size === 0) return;
+    if (!effectiveCollapsed || openIds.size === 0) return;
     function handlePointerDown(e: PointerEvent) {
       const target = e.target;
       if (!(target instanceof Element)) return;
@@ -368,7 +375,7 @@ export function PanelSidebar({
     }
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [collapsed, openIds]);
+  }, [effectiveCollapsed, openIds]);
 
   function toggle(id: string) {
     if (isFiltering) return;
@@ -407,13 +414,13 @@ export function PanelSidebar({
     : openIds;
 
   return (
-    <aside className={`panel-sidebar ${collapsed ? "panel-sidebar--collapsed" : ""} ${className}`}>
+    <aside className={`panel-sidebar ${effectiveCollapsed ? "panel-sidebar--collapsed" : ""} ${className}`}>
       {brand && (
         <div className="panel-sidebar-brand">
           <PanelBrandMark name={brand} href={brandHref} size="sm" />
         </div>
       )}
-      {!collapsed && (
+      {!effectiveCollapsed && (
         <div className="panel-sidebar-search-wrap">
           <input
             type="search"
@@ -440,7 +447,7 @@ export function PanelSidebar({
                 className={`panel-nav-link ${active ? "panel-nav-link--active" : ""}`}
               >
                 <span className="panel-nav-link-icon shrink-0">{entry.link.icon}</span>
-                {!collapsed && <span className="panel-nav-link-label truncate">{entry.link.label}</span>}
+                {!effectiveCollapsed && <span className="panel-nav-link-label truncate">{entry.link.label}</span>}
               </Link>
             );
           }
@@ -452,7 +459,7 @@ export function PanelSidebar({
               pathname={pathname}
               search={search}
               open={displayOpenIds.has(entry.group.id)}
-              collapsed={collapsed}
+              collapsed={effectiveCollapsed}
               onToggle={() => toggle(entry.group.id)}
               onNavigate={onChildNavigate}
             />
@@ -460,7 +467,7 @@ export function PanelSidebar({
         })}
       </nav>
 
-      {showReport && !collapsed && (
+      {showReport && !effectiveCollapsed && (
         <div className="panel-sidebar-footer-actions space-y-1">
           {username && <PanelLiveChat username={username} variant="sidebar" />}
           <ChatAssistant variant="sidebar" />
@@ -469,20 +476,22 @@ export function PanelSidebar({
         </div>
       )}
 
-      <div className="panel-sidebar-collapse-row">
-        <button
-          type="button"
-          className="panel-sidebar-collapse-btn"
-          onClick={toggleCollapsed}
-          title={collapsed ? "Expand sidebar" : "Minimize sidebar"}
-          aria-label={collapsed ? "Expand sidebar" : "Minimize sidebar"}
-        >
-          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-          {!collapsed && <span>Minimize sidebar</span>}
-        </button>
-      </div>
+      {!isMobileDrawer && (
+        <div className="panel-sidebar-collapse-row">
+          <button
+            type="button"
+            className="panel-sidebar-collapse-btn"
+            onClick={toggleCollapsed}
+            title={collapsed ? "Expand sidebar" : "Minimize sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Minimize sidebar"}
+          >
+            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            {!collapsed && <span>Minimize sidebar</span>}
+          </button>
+        </div>
+      )}
 
-      {!collapsed && <PanelSidebarVersion />}
+      {!effectiveCollapsed && <PanelSidebarVersion />}
     </aside>
   );
 }

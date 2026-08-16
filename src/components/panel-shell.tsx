@@ -58,12 +58,12 @@ export function PanelShell({
               aria-label="Close menu"
               onClick={() => setMobileNav(false)}
             />
-            <div className="fixed inset-y-0 left-0 z-[250] md:hidden shadow-2xl max-w-[92vw]">
+            <div className="fixed inset-y-0 left-0 z-[250] flex w-[min(300px,92vw)] flex-col overflow-hidden bg-[#0d111c] shadow-2xl md:hidden">
               {role === "ADMIN" && adminEntries ? (
-                <Suspense fallback={<aside className="panel-sidebar h-full min-h-[100dvh]" aria-hidden />}>
+                <Suspense fallback={<aside className="panel-sidebar !w-full h-full min-h-[100dvh]" aria-hidden />}>
                   <PanelSidebar
                     entries={adminEntries}
-                    className="h-full min-h-[100dvh]"
+                    className="!w-full h-full min-h-[100dvh]"
                     brand={title}
                     brandHref={dashboardHref}
                     showReport
@@ -73,10 +73,10 @@ export function PanelShell({
                 </Suspense>
               ) : (
                 resellerSidebar && (
-                  <Suspense fallback={<aside className="panel-sidebar h-full min-h-[100dvh]" aria-hidden />}>
+                  <Suspense fallback={<aside className="panel-sidebar !w-full h-full min-h-[100dvh]" aria-hidden />}>
                     <PanelSidebar
                       entries={resellerSidebar}
-                      className="h-full min-h-[100dvh]"
+                      className="!w-full h-full min-h-[100dvh]"
                       brand={title}
                       brandHref={dashboardHref}
                       showReport

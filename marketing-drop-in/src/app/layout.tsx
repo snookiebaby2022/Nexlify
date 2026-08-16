@@ -6,7 +6,6 @@ import { ConditionalShell } from "@/components/ConditionalShell";
 import { DeferredMarketingScripts } from "@/components/DeferredMarketingScripts";
 import { OrganizationJsonLd } from "@/components/JsonLd";
 import { LivestreamAnalyticsGate, MarketingOverlays } from "@/components/MarketingOverlays";
-import { FreeLaunchBanner } from "@/components/FreeLaunchBanner";
 import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 
 import { getSessionUser } from "@/lib/auth";
@@ -118,7 +117,6 @@ export default async function RootLayout({
         </LivestreamAnalyticsGate>
         <AnnouncementBanner />
         <ConditionalShell user={user}>{children}</ConditionalShell>
-        <FreeLaunchBanner />
         <MarketingOverlays isLoggedIn={!!user} />
       </body>
     </html>

@@ -81,7 +81,7 @@ export function CouponLaunchBanner({ isLoggedIn = false }: CouponLaunchBannerPro
 
   return (
     <div
-      className="fixed inset-x-0 top-0 z-[60] border-b border-cyan-500/30 bg-gradient-to-r from-cyan-950 via-[#0c1830] to-violet-950 shadow-lg shadow-black/30"
+      className="relative z-[60] border-b border-cyan-500/30 bg-gradient-to-r from-cyan-950 via-[#0c1830] to-violet-950 shadow-lg shadow-black/30"
       role="region"
       aria-label="Launch offer"
       data-nx-offer-banner

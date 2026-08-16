@@ -86,7 +86,7 @@ export function Navbar({ user }: { user: SessionUser | null }) {
 
       {open && (
         <nav
-          className="md:hidden max-h-[calc(100dvh-4rem)] overflow-y-auto border-t border-white/10 bg-[#0c0818]/98 px-4 py-4"
+          className="md:hidden max-h-[min(70dvh,calc(100dvh-5.5rem))] overflow-y-auto overscroll-contain border-t border-white/10 bg-[#0c0818]/98 px-4 py-4"
           aria-label="Mobile site menu"
         >
           <div className="flex flex-col gap-1 text-sm">
