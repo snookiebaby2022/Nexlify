@@ -742,7 +742,7 @@ async function applyMigrationBundleInner(
           canWatchAdult: l.canWatchAdult !== false,
           allowedCountries: l.allowedCountries?.trim() || null,
           blockedCountries: l.blockedCountries?.trim() || null,
-          allowedOutput: l.allowedOutput?.trim() || "ts,hls,m3u8",
+          allowedOutput: l.allowedOutput?.trim() || "hls,m3u8,ts,rtmp",
           isTrial: l.isTrial === true,
           isRestreamer: l.isRestreamer === true,
           allowedUserAgents: normalizeUserAgentField(l.allowedUserAgents),

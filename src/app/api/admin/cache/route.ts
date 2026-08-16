@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { invalidateAllCache } from "@/lib/cache-invalidate";
-import { redisPing, redisModeFromEnv } from "@/lib/redis";
+import { redisPing, redisModeFromEnv, redisMemoryHealth } from "@/lib/redis";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { PanelRole } from "@prisma/client";
 
@@ -10,6 +10,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const redis = await redisPing();
+  const memory = await redisMemoryHealth();
   const cacheSettings = await getSettingGroup("cache");
   return NextResponse.json({
     redis,
@@ -20,6 +21,7 @@ export async function GET() {
       : process.env.REDIS_CLUSTER_NODES
         ? "cluster nodes configured"
         : "not set (using memory cache)",
+    memory,
   });
 }
 

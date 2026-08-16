@@ -10,6 +10,14 @@ function CacheRedisPanel() {
     redisUrl: string;
     redisMode?: string;
     recommendedMode?: string;
+    memory?: {
+      ok: boolean;
+      maxmemory: string;
+      maxmemoryPolicy: string;
+      usedMemory: string;
+      healthy: boolean;
+      hint: string;
+    } | null;
   } | null>(null);
   const [flushing, setFlushing] = useState(false);
   const [flushResult, setFlushResult] = useState<string | null>(null);
@@ -61,6 +69,24 @@ function CacheRedisPanel() {
                 ? "N/A (in-memory fallback)"
                 : "Unreachable — check REDIS_URL and firewall"}
         </p>
+        {status?.memory ? (
+          <div
+            className="rounded-lg border px-3 py-2 text-xs space-y-1"
+            style={{
+              borderColor: status.memory.healthy ? "rgba(34,197,94,0.45)" : "rgba(245,158,11,0.55)",
+              background: status.memory.healthy ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
+            }}
+          >
+            <p>
+              Memory used: <code className="font-mono">{status.memory.usedMemory}</code>
+              {" · "}
+              maxmemory: <code className="font-mono">{status.memory.maxmemory}</code>
+              {" · "}
+              policy: <code className="font-mono">{status.memory.maxmemoryPolicy}</code>
+            </p>
+            <p style={{ color: "var(--muted)" }}>{status.memory.hint}</p>
+          </div>
+        ) : null}
         <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
           <strong>Single instance:</strong> set <code className="font-mono">REDIS_URL=redis://127.0.0.1:6379</code> on
           the panel VPS. <strong>Cluster:</strong> use <code className="font-mono">REDIS_CLUSTER_NODES</code> when
@@ -121,7 +147,7 @@ export default function CacheSettingsPage() {
               label: "Suggested maxmemory policy",
               type: "text",
               placeholder: "256mb allkeys-lru",
-              hint: "Example redis.conf: maxmemory 256mb + maxmemory-policy allkeys-lru.",
+              hint: "Example redis.conf: maxmemory 512mb + maxmemory-policy allkeys-lru.",
             },
             {
               key: "redisKeyPrefix",

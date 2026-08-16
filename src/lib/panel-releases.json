@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.116",
+  "latestVersion": "1.9.117",
   "releases": [
+    {
+      "version": "1.9.117",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Faster Settings binaries, Redis memory health, XUI-style Access Output, mobile panel layout.",
+      "changelog": [
+        "Settings → Server binaries no longer auto-installs PHP/FFmpeg on every page load (was freezing Settings)",
+        "PHP marked optional — Nexlify is Node; system FFmpeg 6.x is sufficient",
+        "Cache & Redis shows live maxmemory / LRU health",
+        "Line Access Output: HLS + MPEGTS + RTMP multi-checkboxes, all on by default (like XUI)",
+        "Mobile: settings chip nav, less horizontal scroll, tighter viewport"
+      ],
+      "fixes": [
+        "Server binaries page hung while trying to download PHP on every visit",
+        "Redis had unlimited maxmemory / noeviction (now 512mb allkeys-lru on panel VPS)",
+        "Access output was single-choice / missing from line forms",
+        "Phone UI still required Request Desktop Website for usable layout"
+      ]
+    },
     {
       "version": "1.9.116",
       "date": "2026-08-16",

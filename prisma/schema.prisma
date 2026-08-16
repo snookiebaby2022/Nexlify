@@ -615,7 +615,7 @@ model Line {
   owner           PanelUser? @relation(fields: [ownerId], references: [id])
   externalId      String?    @unique
   notes           String?
-  allowedOutput   String     @default("ts,hls,m3u8")
+  allowedOutput   String     @default("hls,m3u8,ts,rtmp")
   lockToIp        Boolean    @default(false)
   allowedIps      String?
   /// Comma-separated ISO country codes (e.g. US,GB). Empty = no restriction.

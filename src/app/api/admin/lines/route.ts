@@ -17,6 +17,7 @@ import {
   validateLineCredential,
 } from "@/lib/credential-generate";
 import { LineStatus, Prisma } from "@prisma/client";
+import { normalizeAllowedOutputInput, DEFAULT_ALLOWED_OUTPUT } from "@/lib/line-access-output";
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 5000;
@@ -324,6 +325,7 @@ export async function POST(req: NextRequest) {
           isRestreamer: Boolean(body.isRestreamer),
           isTrial: Boolean(body.isTrial),
           forcedServerId: body.forcedServerId ? String(body.forcedServerId) : null,
+          allowedOutput: normalizeAllowedOutputInput(body.allowedOutput) ?? DEFAULT_ALLOWED_OUTPUT,
           bouquets: { create: bouquetIds.map((bouquetId: string) => ({ bouquetId })) },
         },
         include: { bouquets: { include: { bouquet: true } } },

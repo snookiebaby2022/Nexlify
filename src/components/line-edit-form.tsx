@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { RefreshCw, X } from "lucide-react";
+import { AccessOutputCheckboxes } from "@/components/access-output-checkboxes";
+import {
+  defaultAccessOutputSelection,
+  parseAccessOutput,
+  serializeAccessOutput,
+  type AccessOutputId,
+} from "@/lib/line-access-output";
 import { BouquetPickerTable, type BouquetPickerRow } from "@/components/bouquet-picker-table";
 import { PasswordInput } from "@/components/password-input";
 import { CopyableCredential } from "@/components/copyable-credential";
@@ -28,6 +35,7 @@ type LineDetail = {
   isRestreamer: boolean;
   isTrial: boolean;
   forcedServerId?: string | null;
+  allowedOutput?: string | null;
   owner?: { id: string; username: string } | null;
   bouquets: { bouquet: { id: string; name: string } }[];
 };
@@ -115,6 +123,7 @@ export function LineEditForm({
     forcedServerId: "",
     adminNotes: "",
     resellerNotes: "",
+    accessOutputs: defaultAccessOutputSelection(),
   });
 
   useEffect(() => {
@@ -147,6 +156,10 @@ export function LineEditForm({
           forcedServerId: row.forcedServerId ?? "",
           adminNotes: notes.admin,
           resellerNotes: notes.reseller,
+          accessOutputs: (() => {
+            const selected = parseAccessOutput(row.allowedOutput);
+            return selected.size ? selected : defaultAccessOutputSelection();
+          })(),
         });
         setBouquets(bouquetRes.bouquets ?? []);
         setServers((serverRes.servers ?? []).map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })));
@@ -199,6 +212,7 @@ export function LineEditForm({
         isTrial: form.isTrial,
         forcedServerId: form.forcedServerId || null,
         notes: notes || null,
+        allowedOutput: serializeAccessOutput(form.accessOutputs),
       }),
     });
     setSaving(false);
@@ -516,6 +530,12 @@ export function LineEditForm({
                 label="Activate lock to IP"
                 value={form.lockToIp}
                 onChange={(v) => setForm({ ...form, lockToIp: v })}
+              />
+              <AccessOutputCheckboxes
+                selected={form.accessOutputs}
+                onChange={(accessOutputs: Set<AccessOutputId>) =>
+                  setForm({ ...form, accessOutputs })
+                }
               />
             </Card>
           </div>

@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
+import { AccessOutputCheckboxes } from "@/components/access-output-checkboxes";
+import {
+  defaultAccessOutputSelection,
+  serializeAccessOutput,
+  type AccessOutputId,
+} from "@/lib/line-access-output";
 import { BouquetPickerTable, type BouquetPickerRow } from "@/components/bouquet-picker-table";
 import { PasswordInput } from "@/components/password-input";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
@@ -102,6 +108,7 @@ export function LineAddForm({
     allowedUserAgents: "",
     lockToIp: false,
     packageId: "",
+    accessOutputs: defaultAccessOutputSelection(),
   });
 
   function applyGenerated() {
@@ -281,6 +288,7 @@ export function LineAddForm({
           status: form.isEnabled ? "ACTIVE" : "DISABLED",
           isTrial: form.isTrial,
           isRestreamer: form.isRestreamer,
+          allowedOutput: serializeAccessOutput(form.accessOutputs),
         }),
       });
       const text = await res.text();
@@ -672,6 +680,12 @@ export function LineAddForm({
               label="Activate lock to IP"
               value={form.lockToIp}
               onChange={(v) => setForm({ ...form, lockToIp: v })}
+            />
+            <AccessOutputCheckboxes
+              selected={form.accessOutputs}
+              onChange={(accessOutputs: Set<AccessOutputId>) =>
+                setForm({ ...form, accessOutputs })
+              }
             />
           </Card>
         </div>

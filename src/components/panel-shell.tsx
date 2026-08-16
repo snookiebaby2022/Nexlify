@@ -103,7 +103,7 @@ export function PanelShell({
             username={username}
             onMenuToggle={() => setMobileNav((o) => !o)}
           />
-          <main className="panel-main-content flex-1 p-3 sm:p-4 md:p-6 pb-24 overflow-x-auto overflow-y-auto min-w-0 flex flex-col">
+          <main className="panel-main-content flex-1 p-3 sm:p-4 md:p-6 pb-24 overflow-x-hidden md:overflow-x-auto overflow-y-auto min-w-0 flex flex-col">
             {isDemo && <PanelDemoBanner />}
           {role === "ADMIN" && <PanelUpdateBanner />}
           {role === "ADMIN" && <PanelUpdateProgress />}

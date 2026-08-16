@@ -167,52 +167,17 @@ export default function BinariesSettingsPage() {
   }, []);
 
   const runDiscover = useCallback(
-    async (base?: BinSettings, opts?: { autoInstallLatest?: boolean }) => {
+    async (base?: BinSettings) => {
       setDiscovering(true);
       const res = await fetch("/api/admin/binaries/discover");
       const j = await res.json();
       setDiscovering(false);
       if (!res.ok) return;
 
-      let merged!: BinSettings;
       setData((prev) => {
         const p = base ?? prev ?? pathsFromBinRoot(NEXLIFY_BIN_ROOT);
-        merged = applyVersions(j.ffmpegVersions ?? [], j.phpVersions ?? [], p as BinSettings);
-        return merged;
+        return applyVersions(j.ffmpegVersions ?? [], j.phpVersions ?? [], p as BinSettings);
       });
-
-      if (!opts?.autoInstallLatest) return;
-
-      const ff = (merged.ffmpegVersions as BinVersionOption[]) ?? [];
-      const php = (merged.phpVersions as BinVersionOption[]) ?? [];
-      let installed = false;
-      if (!ff.some((v) => v.exists)) {
-        await fetch("/api/admin/binaries/install", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tool: "ffmpeg", installLatest: true }),
-        });
-        installed = true;
-      }
-      if (!php.some((v) => v.exists)) {
-        await fetch("/api/admin/binaries/install", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tool: "php", installLatest: true }),
-        });
-        installed = true;
-      }
-      if (installed) {
-        const res2 = await fetch("/api/admin/binaries/discover");
-        const j2 = await res2.json();
-        if (res2.ok) {
-          setData((prev) => {
-            const p = prev ?? pathsFromBinRoot(NEXLIFY_BIN_ROOT);
-            return applyVersions(j2.ffmpegVersions ?? [], j2.phpVersions ?? [], p as BinSettings);
-          });
-          setInstallMsg("Installed latest FFmpeg/PHP where possible.");
-        }
-      }
     },
     [applyVersions]
   );
@@ -243,7 +208,9 @@ export default function BinariesSettingsPage() {
           binRoot: NEXLIFY_BIN_ROOT,
         } as BinSettings;
         setData(settings);
-        void runDiscover(settings, { autoInstallLatest: true });
+        // Discover only — never auto-install on page load (PHP/FFmpeg installs were
+        // blocking Settings → Server binaries for minutes when nothing was bundled).
+        void runDiscover(settings);
       });
   }, [runDiscover]);
 
@@ -310,6 +277,7 @@ export default function BinariesSettingsPage() {
         <h1 className="text-2xl font-semibold">Server binaries</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
           Tools under <code className="font-mono">{NEXLIFY_BIN_ROOT}</code> — nginx, FFmpeg, PHP, Redis, certbot.
+          System packages (e.g. <code className="font-mono">/usr/bin/ffmpeg</code>) count as installed.
         </p>
       </div>
 
@@ -323,7 +291,7 @@ export default function BinariesSettingsPage() {
 
       <SettingsPanel
         title="FFmpeg versions"
-        info="All known FFmpeg builds (catalog + scan). Pick the newest installed build for best codec support."
+        info="Ubuntu/system FFmpeg (6.x) is enough for the panel. Use Install latest only if you need a bundled build under the Nexlify bin root."
       >
         <div className="w-full space-y-4">
           <div className="flex flex-wrap gap-2">
@@ -347,7 +315,7 @@ export default function BinariesSettingsPage() {
           )}
           <VersionSelect
             label="Active FFmpeg"
-            hint="Used for stream probe and transcoding on this panel. Latest is auto-installed when none are present."
+            hint="Used for stream probe and transcoding. System /usr/bin/ffmpeg is fine — install a catalog build only when you need it."
             versions={ffmpegVersions}
             activeId={String(data.activeFfmpegId ?? "")}
             onSelect={selectFfmpeg}
@@ -372,11 +340,14 @@ export default function BinariesSettingsPage() {
         </div>
       </SettingsPanel>
 
-      <SettingsPanel title="PHP versions" info="PHP CLI for scripts and cron. Prefer PHP 8.4+ when available.">
+      <SettingsPanel
+        title="PHP versions"
+        info="Optional. Nexlify runs on Node.js — PHP is not required for the panel, Xtream API, or playback. Install only if you use legacy PHP scripts."
+      >
         <div className="w-full space-y-4">
           <VersionSelect
-            label="Active PHP"
-            hint="CLI binary used by panel jobs on this server. Latest is auto-installed when none are present."
+            label="Active PHP (optional)"
+            hint="Not required for Nexlify. Leave unset unless you need PHP CLI for custom scripts."
             versions={phpVersions}
             activeId={String(data.activePhpId ?? "")}
             onSelect={selectPhp}

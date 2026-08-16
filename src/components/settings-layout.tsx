@@ -12,11 +12,11 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="space-y-0 min-h-[calc(100vh-8rem)]">
+    <div className="space-y-0 min-h-[calc(100vh-8rem)] panel-settings-layout">
       <SettingsProfileHeader />
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
       <aside
-        className="shrink-0 w-full lg:w-56 rounded-lg border overflow-hidden"
+        className="panel-settings-aside shrink-0 w-full lg:w-56 rounded-lg border overflow-hidden"
         style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
       >
         <div
@@ -25,14 +25,14 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
         >
           Settings
         </div>
-        <nav className="p-2 space-y-0.5 max-h-[70vh] overflow-y-auto">
+        <nav className="panel-settings-nav p-2 space-y-0.5 max-h-[40vh] lg:max-h-[70vh] overflow-y-auto overflow-x-auto">
           {SETTINGS_NAV.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className="flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors"
+                className="panel-settings-nav-link flex items-center gap-2 px-3 py-2 rounded text-sm transition-colors whitespace-nowrap"
                 style={{
                   background: active ? "rgba(94,184,232,0.2)" : "transparent",
                   color: active ? "#fff" : "var(--muted)",
@@ -45,10 +45,12 @@ export function SettingsLayout({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <SettingsCommunityLinks />
-        <PanelSidebarVersion variant="settings" />
+        <div className="hidden lg:block">
+          <SettingsCommunityLinks />
+          <PanelSidebarVersion variant="settings" />
+        </div>
       </aside>
-      <div className="flex-1 min-w-0">{children}</div>
+      <div className="flex-1 min-w-0 panel-settings-main">{children}</div>
       </div>
     </div>
   );

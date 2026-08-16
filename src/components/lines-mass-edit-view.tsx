@@ -18,6 +18,13 @@ import {
   type TextFieldState,
   type TriState,
 } from "@/lib/lines-mass-edit";
+import { AccessOutputCheckboxes } from "@/components/access-output-checkboxes";
+import {
+  DEFAULT_ALLOWED_OUTPUT,
+  defaultAccessOutputSelection,
+  serializeAccessOutput,
+  type AccessOutputId,
+} from "@/lib/line-access-output";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
 
 function XuiPill({ value, variant }: { value: string; variant: "yes" | "no" }) {
@@ -111,6 +118,8 @@ const DEFAULT_FORM = {
   disallowedUserAgents: { unchanged: true } as TextFieldState,
   blockedIsps: { unchanged: true } as TextFieldState,
   allowedOutputs: { unchanged: true } as TextFieldState,
+  accessOutputsSelected: defaultAccessOutputSelection() as Set<AccessOutputId>,
+  accessOutputsTouched: false,
   lockToIp: "unchanged" as TriState,
 };
 
@@ -197,7 +206,14 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
     if (!form.allowedUserAgents.unchanged) patch.allowedUserAgents = form.allowedUserAgents;
     if (!form.disallowedUserAgents.unchanged) patch.disallowedUserAgents = form.disallowedUserAgents;
     if (!form.blockedIsps.unchanged) patch.blockedIsps = form.blockedIsps;
-    if (!form.allowedOutputs.unchanged) patch.allowedOutputs = form.allowedOutputs;
+    if (form.accessOutputsTouched) {
+      patch.allowedOutputs = {
+        unchanged: false,
+        value: serializeAccessOutput(form.accessOutputsSelected),
+      };
+    } else if (!form.allowedOutputs.unchanged) {
+      patch.allowedOutputs = form.allowedOutputs;
+    }
     if (form.lockToIp !== "unchanged") patch.lockToIp = form.lockToIp;
     return patch;
   }
@@ -513,12 +529,58 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
             onChange={(v) => setForm({ ...form, blockedIsps: v })}
             placeholder="Verizon,AT&T"
           />
-          <MassEditTextField
-            label="Allowed Outputs"
-            value={form.allowedOutputs}
-            onChange={(v) => setForm({ ...form, allowedOutputs: v })}
-            placeholder="ts,hls,m3u8"
-          />
+          <fieldset className="xui-mass-field">
+            <legend className="xui-mass-field-label">Access Output</legend>
+            <label className="flex items-center gap-2 text-xs mb-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!form.accessOutputsTouched}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    accessOutputsTouched: !e.target.checked,
+                    accessOutputsSelected: e.target.checked
+                      ? defaultAccessOutputSelection()
+                      : form.accessOutputsSelected,
+                  })
+                }
+              />
+              Leave unchanged
+            </label>
+            {form.accessOutputsTouched ? (
+              <AccessOutputCheckboxes
+                selected={form.accessOutputsSelected}
+                onChange={(accessOutputsSelected) =>
+                  setForm({
+                    ...form,
+                    accessOutputsTouched: true,
+                    accessOutputsSelected,
+                    allowedOutputs: {
+                      unchanged: false,
+                      value: serializeAccessOutput(accessOutputsSelected) || DEFAULT_ALLOWED_OUTPUT,
+                    },
+                  })
+                }
+                legend=""
+                hint="Apply these formats to all selected lines."
+              />
+            ) : (
+              <button
+                type="button"
+                className="text-xs underline"
+                style={{ color: "var(--accent)" }}
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    accessOutputsTouched: true,
+                    accessOutputsSelected: defaultAccessOutputSelection(),
+                  })
+                }
+              >
+                Edit Access Output (HLS / MPEGTS / RTMP)
+              </button>
+            )}
+          </fieldset>
           <MassEditTriStateField
             label="Activate lock to"
             value={form.lockToIp}

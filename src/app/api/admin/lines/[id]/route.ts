@@ -6,6 +6,7 @@ import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { PanelRole } from "@prisma/client";
 import { MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput, validateLinePasswordPolicy } from "@/lib/credential-generate";
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
+import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -106,6 +107,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     password: nextPassword || undefined,
     externalId:
       body.externalId !== undefined ? (body.externalId ? String(body.externalId) : null) : undefined,
+    allowedOutput:
+      body.allowedOutput !== undefined
+        ? normalizeAllowedOutputInput(body.allowedOutput)
+        : undefined,
   };
 
   if (body.days && Number(body.days) > 0) {

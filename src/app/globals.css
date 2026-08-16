@@ -1057,10 +1057,49 @@ button {
   .panel-main-content {
     padding-left: 0.75rem !important;
     padding-right: 0.75rem !important;
+    overflow-x: hidden !important;
   }
 
   .panel-main-content table {
     font-size: 0.8rem;
+  }
+
+  /* Settings: horizontal chip nav instead of a tall desktop sidebar */
+  .panel-settings-nav {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    max-height: none !important;
+    padding: 0.65rem 0.75rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .panel-settings-nav-link {
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+  }
+
+  .panel-settings-main {
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  .panel-settings-layout {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* Prefer stacked forms / cards over wide grids */
+  .panel-settings-main .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .panel-main-content .min-w-\[1100px\],
+  .panel-main-content .min-w-\[1400px\],
+  .panel-main-content table.min-w-\[1100px\],
+  .panel-main-content table.min-w-\[1400px\] {
+    min-width: 0 !important;
   }
 }
 

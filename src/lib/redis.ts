@@ -69,3 +69,47 @@ export async function redisPing() {
     return false;
   }
 }
+
+/** Live Redis memory settings for Cache & Redis health UI. */
+export async function redisMemoryHealth(): Promise<{
+  ok: boolean;
+  maxmemory: string;
+  maxmemoryPolicy: string;
+  usedMemory: string;
+  healthy: boolean;
+  hint: string;
+} | null> {
+  const r = getRedis();
+  if (!r) return null;
+  try {
+    if (r.status !== "ready") await r.connect();
+    const [maxmemoryRaw, policy, info] = await Promise.all([
+      r.config("GET", "maxmemory") as Promise<string[]>,
+      r.config("GET", "maxmemory-policy") as Promise<string[]>,
+      r.info("memory"),
+    ]);
+    const maxBytes = Number(maxmemoryRaw?.[1] ?? 0);
+    const maxmemoryPolicy = String(policy?.[1] ?? "unknown");
+    const usedMatch = info.match(/used_memory_human:(\S+)/);
+    const usedMemory = usedMatch?.[1] ?? "?";
+    const maxmemory =
+      maxBytes <= 0
+        ? "0 (unlimited)"
+        : maxBytes >= 1024 * 1024 * 1024
+          ? `${(maxBytes / (1024 * 1024 * 1024)).toFixed(1)}gb`
+          : `${Math.round(maxBytes / (1024 * 1024))}mb`;
+    const healthy = maxBytes > 0 && maxmemoryPolicy.includes("lru");
+    return {
+      ok: true,
+      maxmemory,
+      maxmemoryPolicy,
+      usedMemory,
+      healthy,
+      hint: healthy
+        ? "maxmemory + LRU eviction look correct."
+        : "Set redis.conf maxmemory (e.g. 512mb) and maxmemory-policy allkeys-lru, then CONFIG REWRITE.",
+    };
+  } catch {
+    return null;
+  }
+}
