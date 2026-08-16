@@ -1,6 +1,6 @@
 {
   "name": "nexlify",
-  "version": "1.9.111",
+  "version": "1.9.112",
   "private": true,
   "engines": {
     "node": ">=18.17.0"
@@ -14,7 +14,7 @@
     "pm2:start": "bash scripts/pm2-start.sh",
     "pm2:boot": "bash scripts/pm2-boot-enable.sh",
     "test": "tsx --test src/lib/secrets-equal.test.ts src/lib/line-restrictions.test.ts src/lib/ffmpeg-agent.test.ts src/lib/playback-token.test.ts src/lib/panel-update-mode.test.ts src/lib/panel-server.test.ts src/lib/backup-schedule.test.ts src/lib/backup-run.test.ts src/lib/epg-auto-match.test.ts src/lib/live-playback-fix.test.ts src/lib/m3u-parser.test.ts src/lib/smart-cdn.test.ts src/lib/smart-cdn-suggest.test.ts src/lib/password-verify.test.ts src/lib/connections-kick.test.ts src/lib/panel-migration/xui-migration.test.ts marketing-drop-in/src/lib/rate-limit.test.ts marketing-drop-in/src/lib/json-ld.test.ts marketing-drop-in/src/lib/panel-url-variants.test.ts",
-  "lint": "next lint",
+    "lint": "next lint",
     "releases:sync": "node scripts/sync-releases-to-website.mjs",
     "sync:all": "bash scripts/nexlify-sync-all.sh",
     "sync:install": "bash scripts/sync-install-to-marketing.sh",

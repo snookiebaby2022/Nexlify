@@ -172,6 +172,7 @@ export async function resolvePlaybackUrlForLine(
       `${lineId}:${effectiveStream.id}`
     );
   }
+  if (!url || /^pending:\/\//i.test(url)) return null;
   try {
     const { applySmartCdnToUrl } = await import("@/lib/smart-cdn");
     url = await applySmartCdnToUrl(effectiveStream.id, url);
@@ -256,6 +257,8 @@ export async function resolvePlaybackUrlCandidatesForLine(
       `${lineId}:${effectiveStream.id}`
     );
   }
+  urls = urls.filter((u) => u && !/^pending:\/\//i.test(u) && /^https?:\/\//i.test(u));
+  if (!urls.length) return [];
 
   const signed: string[] = [];
   try {

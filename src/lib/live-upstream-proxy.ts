@@ -5,6 +5,7 @@ import { ReadableStream } from "node:stream/web";
 
 const MAX_REDIRECTS = 5;
 const DEFAULT_TIMEOUT_MS = 30_000;
+const PEEK_BYTES = 512;
 
 export type UpstreamOpenResult = {
   status: number;
@@ -26,6 +27,45 @@ export function isPlayableUpstreamContentType(contentType: string | undefined | 
   if (c.includes("application/x-mpegurl") || c.includes("application/vnd.apple.mpegurl")) return true;
   if (c.startsWith("text/") || c.includes("json") || c.includes("xml") || c.includes("html")) return false;
   return true;
+}
+
+/** MPEG-TS sync (0x47) at packet boundaries, or common container magic — even when CT lies. */
+export function looksLikePlayableMediaPayload(buf: Buffer): boolean {
+  if (!buf.length) return false;
+  // MPEG-TS: sync byte 0x47 every 188 bytes
+  if (buf[0] === 0x47) {
+    let syncHits = 1;
+    for (let i = 188; i + 1 < buf.length; i += 188) {
+      if (buf[i] === 0x47) syncHits++;
+      else break;
+    }
+    if (syncHits >= 2 || buf.length < 188) return true;
+  }
+  // ISO BMFF / MP4 / fMP4
+  if (buf.length >= 8) {
+    const box = buf.subarray(4, 8).toString("ascii");
+    if (box === "ftyp" || box === "moof" || box === "styp" || box === "mdat") return true;
+  }
+  // Matroska / WebM
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return true;
+  // ID3-tagged audio or MPEG ADTS
+  if (buf.subarray(0, 3).toString("ascii") === "ID3") return true;
+  if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) return true;
+  // HLS playlist text
+  const head = buf.subarray(0, Math.min(buf.length, 64)).toString("utf8");
+  if (head.includes("#EXTM3U")) return true;
+  return false;
+}
+
+export function looksLikeHtmlErrorPayload(buf: Buffer): boolean {
+  const head = buf.subarray(0, Math.min(buf.length, 256)).toString("utf8").trimStart().toLowerCase();
+  return (
+    head.startsWith("<!doctype") ||
+    head.startsWith("<html") ||
+    head.startsWith("<head") ||
+    head.includes("<html") ||
+    head.startsWith("{") // JSON error bodies
+  );
 }
 
 function nodeToWebStream(nodeStream: Readable, cleanup?: () => void): ReadableStream<Uint8Array> {
@@ -58,9 +98,59 @@ function nodeToWebStream(nodeStream: Readable, cleanup?: () => void): ReadableSt
   });
 }
 
+function prependBuffer(prefix: Buffer, stream: Readable): Readable {
+  if (!prefix.length) return stream;
+  return Readable.from(
+    (async function* () {
+      yield prefix;
+      for await (const chunk of stream) {
+        yield chunk;
+      }
+    })()
+  );
+}
+
+function peekResponseBody(
+  res: http.IncomingMessage,
+  maxBytes: number
+): Promise<{ prefix: Buffer; rest: Readable }> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let settled = false;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      res.removeListener("data", onData);
+      res.removeListener("end", onEnd);
+      res.removeListener("error", onError);
+      const prefix = Buffer.concat(chunks, total);
+      resolve({ prefix, rest: res });
+    };
+
+    const onData = (chunk: Buffer) => {
+      chunks.push(chunk);
+      total += chunk.length;
+      if (total >= maxBytes) finish();
+    };
+    const onEnd = () => finish();
+    const onError = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
+    res.on("data", onData);
+    res.once("end", onEnd);
+    res.once("error", onError);
+  });
+}
+
 /**
  * Open an upstream live URL with Node http(s) (not Next.js patched fetch).
  * Cloudflare/auth CDNs often return empty HTML via undici/fetch inside Next route handlers.
+ * Some providers also label MPEG-TS as text/html — we sniff the payload before rejecting.
  */
 export function openUpstreamLiveStream(
   url: string,
@@ -106,43 +196,61 @@ export function openUpstreamLiveStream(
       }
 
       const req = lib.request(current, reqOpts, (res) => {
-          const status = res.statusCode ?? 0;
-          const location = res.headers.location;
-          if (isRedirect(status) && location && redirectsLeft > 0) {
-            res.resume();
-            let nextUrl: string;
-            try {
-              nextUrl = new URL(location, current).toString();
-            } catch {
-              reject(new Error("Invalid redirect location"));
-              return;
-            }
-            resolve(visit(nextUrl, redirectsLeft - 1));
+        const status = res.statusCode ?? 0;
+        const location = res.headers.location;
+        if (isRedirect(status) && location && redirectsLeft > 0) {
+          res.resume();
+          let nextUrl: string;
+          try {
+            nextUrl = new URL(location, current).toString();
+          } catch {
+            reject(new Error("Invalid redirect location"));
             return;
           }
+          resolve(visit(nextUrl, redirectsLeft - 1));
+          return;
+        }
 
-          // Some CDNs return HTTP 200 text/html with a Location-like body or empty page
-          // instead of a proper 302 — treat as failure so backup failover can run.
-          const contentType = String(res.headers["content-type"] ?? "application/octet-stream");
-          if (status < 200 || status >= 300) {
-            res.resume();
-            reject(new Error(`Upstream HTTP ${status}`));
-            return;
-          }
-          if (!isPlayableUpstreamContentType(contentType)) {
-            res.resume();
-            reject(new Error(`Non-playable content-type: ${contentType}`));
-            return;
-          }
+        // Some CDNs return HTTP 200 text/html with a Location-like body or empty page
+        // instead of a proper 302 — treat as failure so backup failover can run.
+        const contentType = String(res.headers["content-type"] ?? "application/octet-stream");
+        if (status < 200 || status >= 300) {
+          res.resume();
+          reject(new Error(`Upstream HTTP ${status}`));
+          return;
+        }
 
+        if (isPlayableUpstreamContentType(contentType)) {
           resolve({
             status,
             contentType,
             body: res,
             finalUrl: current,
           });
+          return;
         }
-      );
+
+        // Suspicious CT (text/html etc.): sniff first bytes — many IPTV CDNs lie.
+        void peekResponseBody(res, PEEK_BYTES)
+          .then(({ prefix, rest }) => {
+            if (looksLikePlayableMediaPayload(prefix)) {
+              resolve({
+                status,
+                contentType: "application/octet-stream",
+                body: prependBuffer(prefix, rest),
+                finalUrl: current,
+              });
+              return;
+            }
+            rest.resume();
+            if (looksLikeHtmlErrorPayload(prefix) || prefix.length === 0) {
+              reject(new Error(`Non-playable content-type: ${contentType}`));
+              return;
+            }
+            reject(new Error(`Non-playable content-type: ${contentType}`));
+          })
+          .catch(reject);
+      });
 
       req.on("timeout", () => {
         req.destroy(new Error("Upstream timeout"));

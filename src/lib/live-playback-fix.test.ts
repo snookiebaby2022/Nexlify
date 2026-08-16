@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isPlayableUpstreamContentType } from "./live-upstream-proxy";
+import {
+  isPlayableUpstreamContentType,
+  looksLikePlayableMediaPayload,
+  looksLikeHtmlErrorPayload,
+} from "./live-upstream-proxy";
 import { getPrimaryBitrate, type BitrateVariant } from "./stream-variants";
 
 describe("isPlayableUpstreamContentType", () => {
@@ -9,9 +13,22 @@ describe("isPlayableUpstreamContentType", () => {
     assert.equal(isPlayableUpstreamContentType("application/octet-stream"), true);
     assert.equal(isPlayableUpstreamContentType(null), true);
   });
-  it("rejects html and json error pages", () => {
+  it("rejects html and json error pages by header", () => {
     assert.equal(isPlayableUpstreamContentType("text/html; charset=UTF-8"), false);
     assert.equal(isPlayableUpstreamContentType("application/json"), false);
+  });
+});
+
+describe("looksLikePlayableMediaPayload", () => {
+  it("detects MPEG-TS sync bytes", () => {
+    const pkt = Buffer.alloc(188, 0);
+    pkt[0] = 0x47;
+    const buf = Buffer.concat([pkt, pkt]);
+    assert.equal(looksLikePlayableMediaPayload(buf), true);
+  });
+  it("rejects HTML bodies", () => {
+    assert.equal(looksLikePlayableMediaPayload(Buffer.from("<!DOCTYPE html><html>")), false);
+    assert.equal(looksLikeHtmlErrorPayload(Buffer.from("<html><body>deny</body></html>")), true);
   });
 });
 

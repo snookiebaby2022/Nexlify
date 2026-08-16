@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { cacheGet, cacheSet } from "@/lib/cache";
+import { allowedHostsFromEnv, normalizeDomain } from "@/lib/domains-host";
+import { isLocalPanelHost } from "@/lib/panel-local-server";
 
 const CDN_PREFIX = "cdn:status:";
 const CDN_METRICS_PREFIX = "cdn:metrics:";
+const OWNED_HOSTS_CACHE_KEY = "cdn:owned-hosts";
+const OWNED_HOSTS_TTL_SEC = 120;
 
 export type CdnEndpoint = {
   id: string;
@@ -143,12 +147,83 @@ export function rewriteUrlThroughCdn(streamUrl: string, cdnBase: string): string
   }
 }
 
-/** Resolve stream URL then optionally front it with the best Smart CDN endpoint. */
+function addHostToken(hosts: Set<string>, raw?: string | null) {
+  const t = raw?.trim();
+  if (!t) return;
+  try {
+    const h = new URL(t.includes("://") ? t : `https://${t}`).hostname.toLowerCase();
+    if (h) hosts.add(normalizeDomain(h));
+  } catch {
+    const d = normalizeDomain(t);
+    if (d) hosts.add(d);
+  }
+}
+
+/**
+ * Hosts we are allowed to front with Smart CDN (panel DNS / NIC / StreamServer domain).
+ * Never includes arbitrary provider origins — rewriting those breaks live proxy + VOD redirects.
+ */
+export async function getOwnedPlaybackHosts(): Promise<Set<string>> {
+  const cached = await cacheGet<string[]>(OWNED_HOSTS_CACHE_KEY);
+  if (cached?.length) return new Set(cached);
+
+  const hosts = new Set<string>(allowedHostsFromEnv().map((h) => normalizeDomain(h)));
+  try {
+    const servers = await prisma.streamServer.findMany({
+      select: { host: true, domain: true },
+      take: 500,
+    });
+    for (const s of servers) {
+      addHostToken(hosts, s.host);
+      addHostToken(hosts, s.domain);
+    }
+  } catch {
+    /* DB optional during early boot */
+  }
+
+  const list = [...hosts].filter(Boolean);
+  await cacheSet(OWNED_HOSTS_CACHE_KEY, list, OWNED_HOSTS_TTL_SEC);
+  return new Set(list);
+}
+
+/** True when the stream URL host is this panel / an owned stream server (not a provider CDN). */
+export function isOwnedPlaybackUrl(streamUrl: string, ownedHosts: Set<string>): boolean {
+  try {
+    const u = new URL(streamUrl);
+    if (!/^https?:$/i.test(u.protocol)) return false;
+    const host = u.hostname.toLowerCase();
+    if (isLocalPanelHost(host)) return true;
+    const norm = normalizeDomain(host);
+    if (ownedHosts.has(norm) || ownedHosts.has(host)) return true;
+    for (const owned of ownedHosts) {
+      if (owned && (host === owned || host.endsWith(`.${owned}`))) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Optionally front a stream URL with the best Smart CDN endpoint.
+ * Only rewrites URLs whose host is owned by this panel — never provider/upstream hosts
+ * (that previously rewrote pending:// and plex/provider IPs onto CF and broke apps).
+ */
 export async function applySmartCdnToUrl(streamId: string, streamUrl: string): Promise<string> {
   if (!streamUrl || !/^https?:\/\//i.test(streamUrl)) return streamUrl;
   try {
+    const owned = await getOwnedPlaybackHosts();
+    if (!isOwnedPlaybackUrl(streamUrl, owned)) return streamUrl;
     const cdn = await getCdnForStream(streamId);
     if (!cdn) return streamUrl;
+    // Already on a CDN edge — leave alone
+    try {
+      const cdnHost = new URL(cdn).hostname.toLowerCase();
+      const srcHost = new URL(streamUrl).hostname.toLowerCase();
+      if (cdnHost && srcHost === cdnHost) return streamUrl;
+    } catch {
+      /* continue */
+    }
     const rewritten = rewriteUrlThroughCdn(streamUrl, cdn);
     return rewritten || streamUrl;
   } catch {

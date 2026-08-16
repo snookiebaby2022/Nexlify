@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { rewriteUrlThroughCdn } from "./smart-cdn";
+import { isOwnedPlaybackUrl, rewriteUrlThroughCdn } from "./smart-cdn";
 
 describe("rewriteUrlThroughCdn", () => {
   it("rewrites host onto CDN base while keeping path and query", () => {
@@ -22,5 +22,15 @@ describe("rewriteUrlThroughCdn", () => {
   it("returns original URL when CDN base is invalid", () => {
     const src = "http://origin.example/live/ch1.ts";
     assert.equal(rewriteUrlThroughCdn(src, "not-a-url"), src);
+  });
+});
+
+describe("isOwnedPlaybackUrl", () => {
+  it("allows panel-owned hosts only", () => {
+    const owned = new Set(["panel.example.com", "edge.example.com"]);
+    assert.equal(isOwnedPlaybackUrl("https://panel.example.com/live/1.ts", owned), true);
+    assert.equal(isOwnedPlaybackUrl("https://cdn.edge.example.com/x", owned), true);
+    assert.equal(isOwnedPlaybackUrl("http://95.217.58.49:42400/file.mkv", owned), false);
+    assert.equal(isOwnedPlaybackUrl("https://provider.cdn.net/live/1", owned), false);
   });
 });

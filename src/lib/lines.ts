@@ -111,12 +111,27 @@ export async function streamIdsForLine(
 
   const types = typeList(options);
   const typeTexts = types?.map((t) => String(t)) ?? null;
+  // Exclude pending:// placeholders (empty XUI sources) from Xtream/M3U exports —
+  // they 502 in apps and slow playlist load with dead channels.
   const rows = await prisma.$queryRaw<{ id: string }[]>`
     SELECT s.id AS id, MIN(bs."sortOrder"::bigint * 1000000 + s."sortOrder"::bigint) AS ord
     FROM "BouquetStream" bs
     INNER JOIN "Stream" s ON s.id = bs."streamId"
     WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
     ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
+    AND s."streamUrl" NOT LIKE 'pending://%'
+    AND (
+      s."streamUrl" LIKE 'http://%'
+      OR s."streamUrl" LIKE 'https://%'
+      OR s."streamUrl" LIKE 'nexlify://%'
+      OR (
+        s."playlistUrl" IS NOT NULL
+        AND (
+          s."playlistUrl" LIKE 'http://%'
+          OR s."playlistUrl" LIKE 'https://%'
+        )
+      )
+    )
     ${
       typeTexts && typeTexts.length
         ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`

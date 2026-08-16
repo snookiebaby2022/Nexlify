@@ -31,10 +31,14 @@ export async function GET(req: NextRequest) {
   const demoBlock = rejectDemoIptvPlayback(req);
   if (demoBlock) return demoBlock;
 
+  /** Gzip large Xtream catalog JSON when clients send Accept-Encoding: gzip. */
+  const j = (data: unknown, init?: ResponseInit) =>
+    iptvJson(data, { ...init, compressFor: req });
+
   const ip = getClientIp(req);
   const ddos = await checkDdosShield(ip);
   if (!ddos.ok) {
-    return iptvJson({ error: ddos.reason }, { status: 429 });
+    return j({ error: ddos.reason }, { status: 429 });
   }
 
   const username = req.nextUrl.searchParams.get("username");
@@ -44,12 +48,12 @@ export async function GET(req: NextRequest) {
   const clientTimestamp = timestampParam ? Number(timestampParam) : null;
 
   if (!username || !password) {
-    return iptvJson({ error: "credentials required" }, { status: 400 });
+    return j({ error: "credentials required" }, { status: 400 });
   }
 
   const line = await getLineByCredentials(username, password);
   if (!line) {
-    return iptvJson(
+    return j(
       { user_info: { auth: 0, message: "Invalid credentials" } },
       { status: 401 }
     );
@@ -80,7 +84,7 @@ export async function GET(req: NextRequest) {
                     : deny === "ddos"
                       ? "Access temporarily blocked (DDoS shield)"
                     : "Playback denied";
-    return iptvJson(
+    return j(
       { user_info: { auth: 0, message: msg } },
       { status: deny === "rate" || deny === "ddos" ? 429 : 403 }
     );
@@ -89,7 +93,7 @@ export async function GET(req: NextRequest) {
   const baseUrl = serverBaseUrl(req.url, req.headers);
 
   if (!action) {
-    return iptvJson(await xtreamUserInfo(line, baseUrl));
+    return j(await xtreamUserInfo(line, baseUrl));
   }
 
   switch (action) {
@@ -102,9 +106,9 @@ export async function GET(req: NextRequest) {
         const filtered = payload.filter(
           (c) => Number(c.created_at || 0) > clientTimestamp
         );
-        return iptvJson({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
+        return j({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
       }
-      return iptvJson(payload);
+      return j(payload);
     }
     case "get_live_streams": {
       const categoryId = req.nextUrl.searchParams.get("category_id");
@@ -127,9 +131,9 @@ export async function GET(req: NextRequest) {
         const filtered = payload.filter(
           (s) => (s.updated_at ?? 0) > clientTimestamp
         );
-        return iptvJson({ streams: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
+        return j({ streams: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
       }
-      return iptvJson(payload);
+      return j(payload);
     }
     case "get_vod_streams": {
       const vodCategoryId = req.nextUrl.searchParams.get("category_id");
@@ -143,9 +147,9 @@ export async function GET(req: NextRequest) {
         const filtered = payload.filter(
           (s) => (s.updated_at ?? 0) > clientTimestamp
         );
-        return iptvJson({ streams: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
+        return j({ streams: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
       }
-      return iptvJson(payload);
+      return j(payload);
     }
     case "get_vod_categories": {
       const ttl = await getCacheTtls();
@@ -156,9 +160,9 @@ export async function GET(req: NextRequest) {
         const filtered = payload.filter(
           (c) => Number(c.created_at || 0) > clientTimestamp
         );
-        return iptvJson({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
+        return j({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
       }
-      return iptvJson(payload);
+      return j(payload);
     }
     case "get_series_categories": {
       const ttl = await getCacheTtls();
@@ -169,9 +173,9 @@ export async function GET(req: NextRequest) {
         const filtered = payload.filter(
           (c) => Number(c.created_at || 0) > clientTimestamp
         );
-        return iptvJson({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
+        return j({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
       }
-      return iptvJson(payload);
+      return j(payload);
     }
     case "get_series": {
       const seriesCategoryId = req.nextUrl.searchParams.get("category_id");
@@ -181,29 +185,29 @@ export async function GET(req: NextRequest) {
         Math.min(ttl.categories || 60, 90),
         () => xtreamSeriesForLine(line, seriesCategoryId)
       );
-      return iptvJson(payload);
+      return j(payload);
     }
     case "get_vod_info": {
       const vodId =
         req.nextUrl.searchParams.get("vod_id") ||
         req.nextUrl.searchParams.get("stream_id") ||
         "";
-      if (!vodId) return iptvJson({});
+      if (!vodId) return j({});
       const info = await xtreamVodInfo(line, baseUrl, vodId);
-      return iptvJson(info ?? {});
+      return j(info ?? {});
     }
     case "get_series_info": {
       const seriesId =
         req.nextUrl.searchParams.get("series_id") ||
         req.nextUrl.searchParams.get("stream_id") ||
         "";
-      if (!seriesId) return iptvJson({});
+      if (!seriesId) return j({});
       const info = await xtreamSeriesInfo(line, baseUrl, seriesId);
-      return iptvJson(info ?? {});
+      return j(info ?? {});
     }
     case "get_short_epg": {
       const streamId = req.nextUrl.searchParams.get("stream_id");
-      if (!streamId) return iptvJson({ epg_listings: [] });
+      if (!streamId) return j({ epg_listings: [] });
       const resolved = await resolveStreamIdParam(streamId, { lineId: line.id });
       const stream = resolved
         ? await prisma.stream.findUnique({
@@ -213,11 +217,11 @@ export async function GET(req: NextRequest) {
         : null;
       const channelId = stream?.epgChannelId ?? resolved ?? streamId;
       const epg = await getShortEpg(channelId);
-      return iptvJson({ epg_listings: epg });
+      return j({ epg_listings: epg });
     }
     case "get_simple_data_table": {
       const streamId = req.nextUrl.searchParams.get("stream_id");
-      if (!streamId) return iptvJson([]);
+      if (!streamId) return j([]);
       const resolved = await resolveStreamIdParam(streamId, { lineId: line.id });
       const stream = resolved
         ? await prisma.stream.findUnique({
@@ -226,10 +230,10 @@ export async function GET(req: NextRequest) {
           })
         : null;
       const channelId = stream?.epgChannelId ?? resolved ?? streamId;
-      return iptvJson(await getShortEpg(channelId, 10));
+      return j(await getShortEpg(channelId, 10));
     }
     default:
-      return iptvJson(await xtreamUserInfo(line, baseUrl));
+      return j(await xtreamUserInfo(line, baseUrl));
   }
 }
 

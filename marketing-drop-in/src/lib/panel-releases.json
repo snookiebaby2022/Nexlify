@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.111",
+  "latestVersion": "1.9.112",
   "releases": [
+    {
+      "version": "1.9.112",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Faster Xtream playlists + fix Smarters/XCIPTV playback (Smart CDN + pending streams + HTML-labeled TS).",
+      "changelog": [
+        "Gzip large player_api.php JSON when clients send Accept-Encoding: gzip",
+        "Exclude pending:// placeholder streams from Xtream/M3U catalogs",
+        "Smart CDN only rewrites owned panel/server hosts — never provider upstream URLs",
+        "Live proxy sniffs MPEG-TS payloads mislabeled as text/html"
+      ],
+      "fixes": [
+        "Xtream playlist download was multi-MB uncompressed (slow on mobile apps)",
+        "Smart CDN rewrote provider/pending URLs and broke IPTV Smarters / XCIPTV playback",
+        "pending:// channels appeared first in live lists and 502d in apps"
+      ]
+    },
     {
       "version": "1.9.111",
       "date": "2026-08-16",
