@@ -61,6 +61,16 @@ export async function POST(req: NextRequest) {
         autoTmdb: job.autoTmdb,
         autoCategory: job.autoCategory,
       });
+      if (job.autoAssignEpg !== false && result.imported > 0) {
+        try {
+          const { autoAssignMissingEpg } = await import("@/lib/epg-auto-match");
+          await autoAssignMissingEpg({
+            limit: Math.min(500, Math.max(50, result.imported * 2)),
+          });
+        } catch {
+          /* EPG assign is best-effort */
+        }
+      }
       const now = new Date();
       const intervalMs = Math.max(5, job.syncIntervalMins) * 60_000;
       await prisma.m3uSyncJob.update({

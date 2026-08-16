@@ -14,6 +14,47 @@ test("guessStreamType treats Xtream short mpegts paths as LIVE", () => {
   );
 });
 
+test("guessStreamType prefers /movie/ and /series/ path over group", () => {
+  assert.equal(
+    guessStreamType({
+      name: "Film",
+      url: "https://prov.example/movie/u/p/99.mp4",
+      group: "UK Live",
+    }),
+    "MOVIE"
+  );
+  assert.equal(
+    guessStreamType({
+      name: "Show S01E01",
+      url: "https://prov.example/series/u/p/1.mkv",
+      group: "Entertainment",
+    }),
+    "SERIES"
+  );
+});
+
+test("guessStreamType does not treat live groups containing vod word as MOVIE", () => {
+  assert.equal(
+    guessStreamType({
+      name: "Sky Sports",
+      url: "https://prov.example:443/u/p/12",
+      group: "Live | Sports",
+    }),
+    "LIVE"
+  );
+});
+
+test("guessStreamType defaults ambiguous IPTV entries to LIVE", () => {
+  assert.equal(
+    guessStreamType({
+      name: "Channel X",
+      url: "https://cdn.example/stream/abc",
+      group: "General",
+    }),
+    "LIVE"
+  );
+});
+
 test("parseM3u prefers tvg-name over comma title", () => {
   const entries = parseM3u(`#EXTM3U
 #EXTINF:-1 tvg-id="bbc1.uk" tvg-name="BBC One HD" tvg-logo="https://cdn.example/bbc.png" group-title="UK",BBC 1

@@ -236,8 +236,14 @@ export async function jobImportQueue() {
       data: { status: "running", startedAt: new Date() },
     });
 
-    let mode: "MOVIE" | "SERIES" | "MIXED" =
-      job.streamType === "SERIES" ? "SERIES" : job.streamType === "MOVIE" ? "MOVIE" : "MIXED";
+    let mode: "MOVIE" | "SERIES" | "MIXED" | "LIVE" =
+      job.streamType === "SERIES"
+        ? "SERIES"
+        : job.streamType === "MOVIE"
+          ? "MOVIE"
+          : job.streamType === "LIVE"
+            ? "LIVE"
+            : "MIXED";
 
     let watchFolder: { type: string; path: string } | null = null;
     if (job.watchFolderId) {
@@ -245,9 +251,10 @@ export async function jobImportQueue() {
         where: { id: job.watchFolderId },
         select: { type: true, path: true },
       });
-      if (watchFolder?.type === "MIXED") mode = "MIXED";
+      if (watchFolder?.type === "MIXED" || watchFolder?.type === "M3U") mode = "MIXED";
       else if (watchFolder?.type === "SERIES") mode = "SERIES";
       else if (watchFolder?.type === "MOVIE") mode = "MOVIE";
+      else if (watchFolder?.type === "LIVE") mode = "LIVE";
     }
 
     let result = { imported: 0, skipped: 0 };
@@ -257,13 +264,22 @@ export async function jobImportQueue() {
           id: job.watchFolderId!,
           name: "",
           path: job.source,
-          type: watchFolder.type,
+          type: watchFolder.type === "M3U" ? "MIXED" : watchFolder.type,
+          categoryId: job.categoryId,
+          serverId: job.serverId,
+        });
+      } else if (mode === "LIVE" && isRemoteM3uUrl(job.source)) {
+        result = await runWatchFolderM3uSync({
+          id: job.watchFolderId ?? job.id,
+          name: "",
+          path: job.source,
+          type: "LIVE",
           categoryId: job.categoryId,
           serverId: job.serverId,
         });
       } else {
         result = await importFromFolder(job.source, {
-          mode,
+          mode: mode === "LIVE" ? "MIXED" : mode,
           categoryId: job.categoryId,
           serverId: job.serverId,
           allowedRoot: process.env.MEDIA_IMPORT_ROOT,

@@ -14,6 +14,10 @@ import { clearTmdbImportCache, enrichVodFromTmdb } from "./vod-tmdb-enrich";
 import { encodeImportVodMeta, type VodImportMetaInput } from "./vod-import-meta";
 import { getSettingGroup } from "./panel-settings";
 import { maxStreamSortOrder } from "./stream-order";
+import {
+  normalizeStreamMatchKey,
+  streamUrlHosts,
+} from "./stream-url-match";
 
 const VIDEO_EXT = new Set([
   ".mp4",
@@ -208,29 +212,137 @@ async function resolveVodCategoryAndMeta(opts: {
   return { categoryId, streamIcon, agentStartCmd };
 }
 
-export async function importM3uEntries(
-  entries: M3uEntry[],
-  opts: {
-    defaultType?: "LIVE" | "MOVIE" | "SERIES";
-    categoryId?: string | null;
-    serverId?: string | null;
-    /** When true, LIVE channels import as on-demand (default for panel imports). */
-    defaultOnDemand?: boolean;
-    selectedUrls?: string[];
-    autoCategory?: boolean;
-    autoTmdb?: boolean;
-    importMeta?: VodImportMetaInput;
-    bouquetIds?: string[];
-    /** Create/attach bouquets from group-title on LIVE imports (default true). */
-    autoBouquetFromGroup?: boolean;
-    /** First sortOrder for M3U entry index 0 (default 0). */
-    sortOrderStart?: number;
-    /** When true, update sortOrder on existing streams matched by URL. */
-    reorderExisting?: boolean;
-    /** When true (default), refresh LIVE stream names/logos/epg ids on sync. */
-    updateNamesOnSync?: boolean;
+type ImportM3uOpts = {
+  defaultType?: "LIVE" | "MOVIE" | "SERIES";
+  categoryId?: string | null;
+  serverId?: string | null;
+  /** When true, LIVE channels import as on-demand (default for panel imports). */
+  defaultOnDemand?: boolean;
+  selectedUrls?: string[];
+  autoCategory?: boolean;
+  autoTmdb?: boolean;
+  importMeta?: VodImportMetaInput;
+  bouquetIds?: string[];
+  /** Create/attach bouquets from group-title on LIVE imports (default true). */
+  autoBouquetFromGroup?: boolean;
+  /** First sortOrder for M3U entry index 0 (default 0). */
+  sortOrderStart?: number;
+  /** When true, update sortOrder on existing streams matched by URL. */
+  reorderExisting?: boolean;
+  /** When true (default), refresh LIVE stream names/logos/epg ids on sync. */
+  updateNamesOnSync?: boolean;
+};
+
+type ExistingTyped = {
+  id: string;
+  streamUrl: string;
+  name: string;
+  streamIcon: string | null;
+  epgChannelId: string | null;
+  type: StreamType;
+};
+
+const EXISTING_CHUNK = 400;
+
+async function loadExistingByTypeAndUrls(
+  type: StreamType,
+  urls: string[]
+): Promise<{ byExact: Map<string, ExistingTyped>; byNorm: Map<string, ExistingTyped> }> {
+  const byExact = new Map<string, ExistingTyped>();
+  const byNorm = new Map<string, ExistingTyped>();
+  const remember = (row: ExistingTyped) => {
+    byExact.set(row.streamUrl, row);
+    const key = normalizeStreamMatchKey(row.streamUrl);
+    if (key && !byNorm.has(key)) byNorm.set(key, row);
+  };
+
+  for (let i = 0; i < urls.length; i += EXISTING_CHUNK) {
+    const slice = urls.slice(i, i + EXISTING_CHUNK);
+    const rows = await prisma.stream.findMany({
+      where: { type, streamUrl: { in: slice } },
+      select: {
+        id: true,
+        streamUrl: true,
+        name: true,
+        streamIcon: true,
+        epgChannelId: true,
+        type: true,
+      },
+    });
+    for (const row of rows) remember(row);
   }
+
+  for (const host of streamUrlHosts(urls)) {
+    const rows = await prisma.stream.findMany({
+      where: {
+        type,
+        streamUrl: { contains: host, mode: "insensitive" },
+      },
+      select: {
+        id: true,
+        streamUrl: true,
+        name: true,
+        streamIcon: true,
+        epgChannelId: true,
+        type: true,
+      },
+    });
+    for (const row of rows) remember(row);
+  }
+
+  for (const url of urls) {
+    const exact = byExact.get(url);
+    if (!exact) continue;
+    const key = normalizeStreamMatchKey(url);
+    if (key) byNorm.set(key, exact);
+  }
+
+  return { byExact, byNorm };
+}
+
+function resolveTypedExisting(
+  url: string,
+  byExact: Map<string, ExistingTyped>,
+  byNorm: Map<string, ExistingTyped>
+): ExistingTyped | undefined {
+  return byExact.get(url) ?? byNorm.get(normalizeStreamMatchKey(url));
+}
+
+function emptyImportResult() {
+  return {
+    imported: 0,
+    skipped: 0,
+    updated: 0,
+    reordered: undefined as number | undefined,
+    errors: undefined as string[] | undefined,
+  };
+}
+
+function mergeImportResults(
+  ...parts: Array<{
+    imported: number;
+    skipped: number;
+    updated?: number;
+    reordered?: number;
+    errors?: string[];
+  }>
 ) {
+  const out = emptyImportResult();
+  const errors: string[] = [];
+  let reordered = 0;
+  for (const p of parts) {
+    out.imported += p.imported;
+    out.skipped += p.skipped;
+    out.updated += p.updated ?? 0;
+    reordered += p.reordered ?? 0;
+    if (p.errors?.length) errors.push(...p.errors);
+  }
+  out.reordered = reordered || undefined;
+  out.errors = errors.length ? errors : undefined;
+  return out;
+}
+
+export async function importM3uEntries(entries: M3uEntry[], opts: ImportM3uOpts) {
   clearTmdbImportCache();
 
   // Fast path for live IPTV playlists (provider get.php / m3u_plus).
@@ -250,9 +362,48 @@ export async function importM3uEntries(
     });
   }
 
+  // MIXED playlists: route live-looking rows through the normalized LIVE fast path
+  // so other providers get the same :443 / /live/ matching as LIVE jobs.
+  if (!opts.defaultType) {
+    const selectedSet = opts.selectedUrls?.length ? new Set(opts.selectedUrls) : null;
+    const liveEntries: M3uEntry[] = [];
+    const vodEntries: M3uEntry[] = [];
+    for (const entry of entries) {
+      if (!entry.url) continue;
+      if (selectedSet && !selectedSet.has(entry.url)) continue;
+      const kind = guessStreamType(entry);
+      if (kind === "LIVE") liveEntries.push(entry);
+      else vodEntries.push(entry);
+    }
+    const { importLiveM3uEntriesFast } = await import("./import-live-m3u");
+    const liveResult = liveEntries.length
+      ? await importLiveM3uEntriesFast(liveEntries, {
+          categoryId: opts.categoryId,
+          serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
+          defaultOnDemand: opts.defaultOnDemand ?? true,
+          autoCategory: opts.autoCategory,
+          bouquetIds: opts.bouquetIds ?? opts.importMeta?.bouquetIds,
+          autoBouquetFromGroup: opts.autoBouquetFromGroup,
+          sortOrderStart: opts.sortOrderStart,
+          reorderExisting: opts.reorderExisting,
+          updateNamesOnSync: opts.updateNamesOnSync,
+        })
+      : emptyImportResult();
+    const vodResult = vodEntries.length
+      ? await importM3uEntriesTyped(vodEntries, { ...opts, selectedUrls: undefined })
+      : emptyImportResult();
+    return mergeImportResults(liveResult, vodResult);
+  }
+
+  return importM3uEntriesTyped(entries, opts);
+}
+
+/** MOVIE / SERIES (or remaining VOD rows from MIXED) — normalized URL match + accurate rename counts. */
+async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
   let imported = 0;
   let skipped = 0;
   let reordered = 0;
+  let updated = 0;
   const errors: string[] = [];
   const selectedSet = opts.selectedUrls?.length ? new Set(opts.selectedUrls) : null;
   const bouquetIds = opts.bouquetIds ?? opts.importMeta?.bouquetIds ?? [];
@@ -260,120 +411,151 @@ export async function importM3uEntries(
     opts.sortOrderStart ??
     (opts.reorderExisting === false ? (await maxStreamSortOrder()) + 1 : 0);
 
-  for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
-    const entry = entries[entryIndex];
-    if (!entry.url) {
-      skipped++;
-      continue;
-    }
-    if (selectedSet && !selectedSet.has(entry.url)) {
-      continue;
-    }
+  const filtered = entries.filter((entry) => {
+    if (!entry.url) return false;
+    if (selectedSet && !selectedSet.has(entry.url)) return false;
+    return true;
+  });
+
+  // Group by guessed/forced type so we can batch-load existing rows.
+  const byType = new Map<StreamType, { entry: M3uEntry; index: number }[]>();
+  filtered.forEach((entry, index) => {
     const type = guessStreamType(entry, opts.defaultType) as StreamType;
-    const entrySortOrder = sortOrderStart + entryIndex;
-    const existing = await prisma.stream.findFirst({
-      where: { streamUrl: entry.url, type },
-    });
-    if (existing) {
-      if (opts.reorderExisting !== false || opts.updateNamesOnSync !== false) {
-        const nextName = entry.name?.trim() || existing.name;
-        await prisma.stream.update({
-          where: { id: existing.id },
+    const list = byType.get(type) ?? [];
+    list.push({ entry, index });
+    byType.set(type, list);
+  });
+
+  const existingMaps = new Map<
+    StreamType,
+    { byExact: Map<string, ExistingTyped>; byNorm: Map<string, ExistingTyped> }
+  >();
+  for (const [type, rows] of byType) {
+    existingMaps.set(
+      type,
+      await loadExistingByTypeAndUrls(
+        type,
+        rows.map((r) => r.entry.url)
+      )
+    );
+  }
+
+  for (const [type, rows] of byType) {
+    const maps = existingMaps.get(type)!;
+    for (const { entry, index } of rows) {
+      const entrySortOrder = sortOrderStart + index;
+      const existing = resolveTypedExisting(entry.url, maps.byExact, maps.byNorm);
+      if (existing) {
+        const wantNames = opts.updateNamesOnSync !== false;
+        const nextName = wantNames
+          ? (entry.name?.trim() || existing.name).slice(0, 200)
+          : null;
+        const nextIcon = wantNames ? entry.logo?.trim() || null : null;
+        const nextEpg = wantNames
+          ? entry.tvgId || entry.tvgName || entry.channelId || null
+          : null;
+        const urlChanged = existing.streamUrl !== entry.url;
+        const nameChanged = Boolean(nextName && nextName !== existing.name);
+        const iconChanged = Boolean(
+          nextIcon && nextIcon !== (existing.streamIcon ?? null)
+        );
+        const epgChanged = Boolean(
+          nextEpg && nextEpg !== (existing.epgChannelId ?? null)
+        );
+        const metaChanged = nameChanged || iconChanged || epgChanged;
+
+        if (opts.reorderExisting !== false || metaChanged || urlChanged) {
+          await prisma.stream.update({
+            where: { id: existing.id },
+            data: {
+              sortOrder: entrySortOrder,
+              ...(urlChanged ? { streamUrl: entry.url } : {}),
+              ...(nameChanged && nextName ? { name: nextName } : {}),
+              ...(iconChanged && nextIcon ? { streamIcon: nextIcon } : {}),
+              ...(epgChanged && nextEpg ? { epgChannelId: nextEpg } : {}),
+            },
+          });
+          if (bouquetIds.length) {
+            for (const bouquetId of bouquetIds) {
+              await prisma.bouquetStream.upsert({
+                where: { bouquetId_streamId: { bouquetId, streamId: existing.id } },
+                create: { bouquetId, streamId: existing.id, sortOrder: entrySortOrder },
+                update: { sortOrder: entrySortOrder },
+              });
+            }
+          }
+          reordered++;
+        }
+        if (metaChanged) updated++;
+        skipped++;
+        continue;
+      }
+
+      const meta =
+        type === "MOVIE" || type === "SERIES"
+          ? await resolveVodCategoryAndMeta({
+              type,
+              explicitCategoryId: opts.categoryId,
+              groupOrCategory: entry.group,
+              seriesName: type === "SERIES" ? entry.name : null,
+              displayName: entry.name,
+              autoCategory: opts.autoCategory,
+              autoTmdb: opts.autoTmdb,
+            })
+          : {
+              categoryId:
+                opts.categoryId ??
+                (entry.group ? await categoryFromGroupName(entry.group, type) : null),
+              streamIcon: entry.logo ?? null,
+              agentStartCmd: null,
+            };
+
+      const agentStartCmd =
+        type === "MOVIE" || type === "SERIES"
+          ? encodeImportVodMeta(opts.importMeta ?? {}, meta.agentStartCmd)
+          : meta.agentStartCmd;
+
+      const onDemand = type === "LIVE" ? opts.defaultOnDemand === true : true;
+      const liveAgentStartCmd =
+        type === "LIVE" && !onDemand
+          ? (await import("@/lib/stream-live-meta")).encodeLiveStreamMeta({
+              redirectStream: false,
+            })
+          : meta.agentStartCmd;
+      try {
+        const stream = await prisma.stream.create({
           data: {
+            name: entry.name,
+            streamUrl: entry.url,
+            streamIcon: meta.streamIcon ?? entry.logo ?? null,
+            type,
             sortOrder: entrySortOrder,
-            ...(opts.updateNamesOnSync !== false
-              ? {
-                  name: nextName.slice(0, 200),
-                  ...(entry.logo?.trim() ? { streamIcon: entry.logo.trim() } : {}),
-                  ...(entry.tvgId || entry.tvgName || entry.channelId
-                    ? {
-                        epgChannelId:
-                          entry.tvgId || entry.tvgName || entry.channelId || existing.epgChannelId,
-                      }
-                    : {}),
-                }
-              : {}),
+            categoryId: meta.categoryId,
+            serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
+            epgChannelId: entry.tvgId || entry.tvgName || entry.channelId || null,
+            seriesName: type === "SERIES" ? entry.name : null,
+            agentStartCmd: type === "LIVE" ? liveAgentStartCmd : agentStartCmd,
+            isOnDemand: onDemand,
+            vodMode: onDemand ? VodMode.ON_DEMAND : VodMode.LIVE,
+            autoRestart: onDemand,
+            isAdult: opts.importMeta?.isAdult === true,
           },
         });
         if (bouquetIds.length) {
-          for (const bouquetId of bouquetIds) {
-            await prisma.bouquetStream.upsert({
-              where: { bouquetId_streamId: { bouquetId, streamId: existing.id } },
-              create: { bouquetId, streamId: existing.id, sortOrder: entrySortOrder },
-              update: { sortOrder: entrySortOrder },
-            });
-          }
+          await prisma.bouquetStream.createMany({
+            data: bouquetIds.map((bouquetId) => ({
+              bouquetId,
+              streamId: stream.id,
+              sortOrder: entrySortOrder,
+            })),
+            skipDuplicates: true,
+          });
         }
-        reordered++;
+        imported++;
+      } catch (e) {
+        errors.push(`${entry.name}: ${e instanceof Error ? e.message : "failed"}`);
+        skipped++;
       }
-      skipped++;
-      continue;
-    }
-
-    const meta =
-      type === "MOVIE" || type === "SERIES"
-        ? await resolveVodCategoryAndMeta({
-            type,
-            explicitCategoryId: opts.categoryId,
-            groupOrCategory: entry.group,
-            seriesName: type === "SERIES" ? entry.name : null,
-            displayName: entry.name,
-            autoCategory: opts.autoCategory,
-            autoTmdb: opts.autoTmdb,
-          })
-        : {
-            categoryId:
-              opts.categoryId ??
-              (entry.group
-                ? (await categoryFromGroupName(entry.group, type))
-                : null),
-            streamIcon: entry.logo ?? null,
-            agentStartCmd: null,
-          };
-
-    const agentStartCmd =
-      type === "MOVIE" || type === "SERIES"
-        ? encodeImportVodMeta(opts.importMeta ?? {}, meta.agentStartCmd)
-        : meta.agentStartCmd;
-
-    const onDemand = type === "LIVE" ? opts.defaultOnDemand === true : true;
-    const liveAgentStartCmd =
-      type === "LIVE" && !onDemand
-        ? (await import("@/lib/stream-live-meta")).encodeLiveStreamMeta({ redirectStream: false })
-        : meta.agentStartCmd;
-    try {
-      const stream = await prisma.stream.create({
-        data: {
-          name: entry.name,
-          streamUrl: entry.url,
-          streamIcon: meta.streamIcon ?? entry.logo ?? null,
-          type,
-          sortOrder: entrySortOrder,
-          categoryId: meta.categoryId,
-          serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
-          epgChannelId: entry.tvgId || entry.tvgName || entry.channelId || null,
-          seriesName: type === "SERIES" ? entry.name : null,
-          agentStartCmd: type === "LIVE" ? liveAgentStartCmd : agentStartCmd,
-          isOnDemand: onDemand,
-          vodMode: onDemand ? VodMode.ON_DEMAND : VodMode.LIVE,
-          autoRestart: onDemand,
-          isAdult: opts.importMeta?.isAdult === true,
-        },
-      });
-      if (bouquetIds.length) {
-        await prisma.bouquetStream.createMany({
-          data: bouquetIds.map((bouquetId) => ({
-            bouquetId,
-            streamId: stream.id,
-            sortOrder: entrySortOrder,
-          })),
-          skipDuplicates: true,
-        });
-      }
-      imported++;
-    } catch (e) {
-      errors.push(`${entry.name}: ${e instanceof Error ? e.message : "failed"}`);
-      skipped++;
     }
   }
 
@@ -381,7 +563,7 @@ export async function importM3uEntries(
     imported,
     skipped,
     reordered: reordered || undefined,
-    updated: reordered || undefined,
+    updated,
     errors: errors.length ? errors : undefined,
   };
 }

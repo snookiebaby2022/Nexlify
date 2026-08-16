@@ -232,7 +232,7 @@ export default function AdminM3uSyncPage() {
               value={form.streamType}
               onChange={(e) => setForm({ ...form, streamType: e.target.value })}
             >
-              <option value="MIXED">Mixed (movies + series)</option>
+              <option value="MIXED">Mixed (auto-detect live / movies / series)</option>
               <option value="MOVIE">Movies only</option>
               <option value="SERIES">TV series only</option>
               <option value="LIVE">Live channels</option>

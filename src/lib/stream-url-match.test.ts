@@ -34,6 +34,13 @@ test("canonicalizeStreamPath keeps movie/series prefixes", () => {
   );
 });
 
+test("normalizeStreamMatchKey equates movie URLs with default HTTPS port", () => {
+  assert.equal(
+    normalizeStreamMatchKey("https://cdn.example:443/movie/u/p/9.mp4"),
+    normalizeStreamMatchKey("https://cdn.example/movie/u/p/9.mp4")
+  );
+});
+
 test("streamUrlHosts extracts unique hosts", () => {
   const hosts = streamUrlHosts([
     "https://a.example:443/x",

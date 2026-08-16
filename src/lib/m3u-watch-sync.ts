@@ -33,13 +33,21 @@ export function resolveM3uDefaultType(
 export async function fetchM3uContent(url: string, timeoutMs = 120_000): Promise<string> {
   const res = await fetch(url.trim(), {
     signal: AbortSignal.timeout(timeoutMs),
-    headers: { "User-Agent": "Nexlify-M3U-Sync/1.0" },
+    redirect: "follow",
+    headers: {
+      "User-Agent": "Nexlify-M3U-Sync/1.0",
+      Accept: "application/x-mpegURL, audio/mpegurl, application/vnd.apple.mpegurl, text/plain, */*",
+      "Accept-Encoding": "gzip, deflate, br",
+    },
   });
   if (!res.ok) throw new Error(`Failed to fetch M3U: HTTP ${res.status}`);
   const content = await res.text();
   if (!content.trim()) throw new Error("M3U response was empty");
   if (!content.includes("#EXTM3U") && !content.includes("#EXTINF:")) {
-    throw new Error("Response does not look like an M3U playlist");
+    const snip = content.replace(/\s+/g, " ").slice(0, 120);
+    throw new Error(
+      `Response does not look like an M3U playlist${snip ? ` (got: ${snip})` : ""}`
+    );
   }
   return content;
 }
@@ -47,7 +55,6 @@ export async function fetchM3uContent(url: string, timeoutMs = 120_000): Promise
 export async function syncM3uFromUrl(url: string, opts: M3uSyncOptions = {}) {
   const content = await fetchM3uContent(url);
   const forced = opts.defaultType === "MIXED" ? undefined : opts.defaultType;
-  const isLive = forced === "LIVE";
 
   let updateNamesOnSync = opts.updateNamesOnSync;
   if (updateNamesOnSync === undefined) {
@@ -66,7 +73,8 @@ export async function syncM3uFromUrl(url: string, opts: M3uSyncOptions = {}) {
     serverId: opts.serverId,
     autoCategory: opts.autoCategory !== false,
     autoTmdb: opts.autoTmdb !== false,
-    defaultOnDemand: opts.defaultOnDemand ?? (isLive ? true : undefined),
+    // LIVE rows (including inside MIXED playlists) default to on-demand
+    defaultOnDemand: opts.defaultOnDemand ?? (forced === "MOVIE" || forced === "SERIES" ? undefined : true),
     sortOrderStart: opts.sortOrderStart ?? 0,
     reorderExisting: opts.reorderExisting ?? true,
     updateNamesOnSync,

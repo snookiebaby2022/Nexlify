@@ -73,17 +73,33 @@ export function parseM3u(content: string): M3uEntry[] {
 
 export function guessStreamType(entry: M3uEntry, forced?: "LIVE" | "MOVIE" | "SERIES") {
   if (forced) return forced;
+  const url = entry.url ?? "";
   const g = (entry.group ?? "").toLowerCase();
-  if (g.includes("series") || g.includes("tv show")) return "SERIES" as const;
-  if (g.includes("movie") || g.includes("vod")) return "MOVIE" as const;
+
+  // Xtream / provider path segments win over group-title wording
+  if (/\/series\//i.test(url)) return "SERIES" as const;
+  if (/\/movie\//i.test(url)) return "MOVIE" as const;
+  if (/\/live\//i.test(url)) return "LIVE" as const;
+
+  if (g.includes("series") || g.includes("tv show") || g.includes("tvshows")) {
+    return "SERIES" as const;
+  }
+  // Require movie/vod as a group token — avoid matching "Live VOD Catchup" style titles as MOVIE
+  if (/(^|[|\s/_-])(movies?|films?|vod|cinema)($|[|\s/_-])/i.test(g) && !/\blive\b/i.test(g)) {
+    return "MOVIE" as const;
+  }
+
   // Xtream m3u_plus mpegts live lines are often /user/pass/id (no /live/ segment).
   if (
-    g.includes("live") ||
-    /\.m3u8($|\?)/i.test(entry.url) ||
-    /\/live\//i.test(entry.url) ||
-    /\/[^/]+\/[^/]+\/\d+(\.(ts|m3u8))?($|\?)/i.test(entry.url)
+    /\blive\b/i.test(g) ||
+    /\.m3u8($|\?)/i.test(url) ||
+    /\/[^/]+\/[^/]+\/\d+(\.(ts|m3u8))?($|\?)/i.test(url)
   ) {
     return "LIVE" as const;
   }
-  return "MOVIE" as const;
+
+  if (/\.(mp4|mkv|avi|mov|m4v)($|\?)/i.test(url)) return "MOVIE" as const;
+
+  // IPTV playlists are live-first; defaulting to MOVIE created false VOD rows.
+  return "LIVE" as const;
 }
