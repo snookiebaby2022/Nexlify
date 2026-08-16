@@ -97,6 +97,10 @@ export async function GET(
   const { checkLineIpAccess } = await import("@/lib/line-ip-lock");
   if (!checkLineIpAccess(line, ip)) return iptvText("IP not allowed", { status: 403 });
 
+  if (await isSessionKicked(line.id, ip)) {
+    return withIptvCors(iptvText("Session kicked", { status: 403 }));
+  }
+
   const { lineHasConnectionCapacity } = await import("@/lib/connections");
   const hasCapacity = await lineHasConnectionCapacity(line.id, line.maxConnections, {
     streamId: cleanId,

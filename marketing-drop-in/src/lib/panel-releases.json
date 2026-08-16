@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.106",
+  "latestVersion": "1.9.107",
   "releases": [
+    {
+      "version": "1.9.107",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Hard kick is real for panel-proxied live: deny TTL in playback guard + HLS segment abort; clearer Connections copy.",
+      "changelog": [
+        "Playback guard returns kicked after Kick (movie/series/HLS/WebRTC reconnect blocked)",
+        "Live HLS relay checks kick and aborts kick-aware segment bodies",
+        "Live Connections page documents hard stop vs redirect/direct-upstream limits"
+      ],
+      "fixes": [
+        "Outdated soft-kick caveat; reconnect via HLS/movie could continue after Kick"
+      ]
+    },
     {
       "version": "1.9.106",
       "date": "2026-08-16",

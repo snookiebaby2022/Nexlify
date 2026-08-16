@@ -40,8 +40,12 @@ export async function authorizeHlsLiveRequest(
   const deny = await assertPlaybackAllowed(asPlaybackGuardLine(line), ip, ua);
   if (deny) {
     const status =
-      deny === "rate" || deny === "ddos" ? 429 : deny === "connections" || deny === "ip" ? 403 : 403;
-    return { ok: false, status, message: deny };
+      deny === "rate" || deny === "ddos" ? 429 : deny === "connections" || deny === "ip" || deny === "kicked" ? 403 : 403;
+    return {
+      ok: false,
+      status,
+      message: deny === "kicked" ? "Session kicked" : deny,
+    };
   }
 
   const cacheKey = hlsRelayCacheKey(line.id, cleanId);

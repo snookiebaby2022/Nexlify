@@ -60,6 +60,7 @@ export async function GET(
   if (deny === "country") return iptvText("Country not allowed", { status: 403 });
   if (deny === "vpn") return iptvText("VPN or hosting not allowed", { status: 403 });
   if (deny === "user_agent") return iptvText("User-Agent not allowed for this line", { status: 403 });
+  if (deny === "kicked") return iptvText("Session kicked", { status: 403 });
 
   const playbackUrl = await resolvePlaybackUrlForLine(line.id, cleanId, { clientIp: ip, userAgent: ua });
   if (!playbackUrl) return iptvText("Not found", { status: 404 });

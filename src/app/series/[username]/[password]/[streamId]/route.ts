@@ -51,6 +51,7 @@ export async function GET(
   if (deny === "vpn") return iptvText("VPN or hosting not allowed", { status: 403 });
   if (deny === "user_agent") return iptvText("User-Agent not allowed for this line", { status: 403 });
   if (deny === "ddos") return iptvText("Access temporarily blocked", { status: 429 });
+  if (deny === "kicked") return iptvText("Session kicked", { status: 403 });
   if (deny) return iptvText("Playback denied", { status: 403 });
 
   const playbackUrl = await resolvePlaybackUrlForLine(line.id, cleanId, { clientIp: ip, userAgent: ua });

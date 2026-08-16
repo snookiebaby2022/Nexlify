@@ -95,8 +95,9 @@ export default function AdminConnectionsPage() {
         </button>
       </div>
       <p className="text-sm px-1" style={{ color: "var(--muted)" }}>
-        Kick ends the live HTTP session (blocks reconnect briefly) and clears the connection row.
-        Active plays in the last 5 minutes. Refreshes every 15s.
+        Kick hard-stops panel-proxied live HTTP (aborts the stream body) and blocks reconnect for
+        ~2 minutes. Movie/series redirects and clients already holding a direct upstream URL are
+        outside that path — they fail on the next panel request. Active plays refresh every 15s.
         {paths.isReseller ? " Showing your lines only." : ""}
       </p>
 

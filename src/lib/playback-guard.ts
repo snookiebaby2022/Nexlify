@@ -19,7 +19,8 @@ export type PlaybackDenyReason =
   | "user_agent"
   | "ddos"
   | "reputation"
-  | "isp";
+  | "isp"
+  | "kicked";
 
 export type PlaybackGuardLine = {
   id: string;
@@ -82,6 +83,10 @@ async function assertPlaybackAllowedInner(
   userAgent?: string,
   options?: PlaybackGuardOptions
 ): Promise<PlaybackDenyReason | null> {
+  // Hard kick deny TTL — block reconnect after admin/reseller Kick
+  const { isSessionKicked } = await import("@/lib/connections");
+  if (await isSessionKicked(line.id, clientIp)) return "kicked";
+
   if (clientIp) {
     const ddos = await checkDdosShield(clientIp);
     if (!ddos.ok) return "ddos";
@@ -179,6 +184,8 @@ export function playbackDenyMessage(reason: PlaybackDenyReason): string {
       return "Access temporarily blocked (DDoS shield)";
     case "reputation":
       return "Access blocked (security policy)";
+    case "kicked":
+      return "Session kicked — reconnect blocked briefly";
     default:
       return "Playback denied";
   }
