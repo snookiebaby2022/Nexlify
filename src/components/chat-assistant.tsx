@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { MessageCircle, X, Minimize2, Send } from "lucide-react";
 
 const FAQS = [
@@ -57,8 +58,9 @@ function matchFaq(text: string): string | null {
   return null;
 }
 
-export default function ChatAssistant() {
+export default function ChatAssistant({ variant = "sidebar" }: { variant?: "sidebar" | "float" }) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [messages, setMessages] = useState<{ role: "user" | "assistant"; text: string }[]>([
     {
       role: "assistant",
@@ -68,9 +70,11 @@ export default function ChatAssistant() {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
+  }, [messages, open]);
 
   function send(text: string) {
     if (!text.trim()) return;
@@ -84,30 +88,20 @@ export default function ChatAssistant() {
     setInput("");
   }
 
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="fixed bottom-36 right-6 z-50 w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
-        style={{ background: "var(--accent)" }}
-        title="Chat support"
-      >
-        <MessageCircle size={22} color="#fff" />
-      </button>
-    );
-  }
-
-  return (
+  const panel = (
     <div
-      className="fixed bottom-36 right-6 z-50 w-80 rounded-2xl border shadow-2xl overflow-hidden flex flex-col"
+      className={`w-80 rounded-2xl border shadow-2xl overflow-hidden flex flex-col ${
+        variant === "sidebar"
+          ? "fixed bottom-4 left-[max(0.75rem,calc(var(--panel-sidebar-w,252px)+0.75rem))] z-[300]"
+          : "fixed bottom-36 left-4 z-50"
+      }`}
       style={{ borderColor: "var(--border)", background: "var(--bg-card)", height: "480px" }}
     >
       <div
         className="flex items-center justify-between px-4 py-3 border-b"
         style={{ borderColor: "var(--border)", background: "linear-gradient(90deg, #00c0ef, #5eb8e8)" }}
       >
-        <span className="text-sm font-semibold text-white">Nexlify Assistant</span>
+        <span className="text-sm font-semibold text-white">Chat support</span>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => setOpen(false)} className="p-1 rounded hover:bg-white/20 text-white">
             <Minimize2 size={14} />
@@ -163,4 +157,37 @@ export default function ChatAssistant() {
       </div>
     </div>
   );
+
+  if (variant === "sidebar") {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="panel-sidebar-report-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer"
+          title="Chat support"
+        >
+          <MessageCircle size={18} className="shrink-0" style={{ color: "#00c0ef" }} />
+          <span className="truncate">Chat support</span>
+        </button>
+        {mounted && open && createPortal(panel, document.body)}
+      </>
+    );
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="fixed bottom-36 left-4 z-50 w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+        style={{ background: "var(--accent)" }}
+        title="Chat support"
+      >
+        <MessageCircle size={22} color="#fff" />
+      </button>
+    );
+  }
+
+  return panel;
 }

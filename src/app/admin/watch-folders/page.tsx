@@ -138,8 +138,8 @@ export default function AdminWatchFoldersPage() {
           Watch folders
         </h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Auto-import movies and TV series from a local directory or upstream IPTV provider M3U URL.
-          Set auto-scan interval to re-pull new content from the provider on a schedule (requires nexlify-cron).
+          Auto-import movies, TV series, or live channels from a local directory or upstream M3U URL.
+          Live M3U watches pull new channels and refresh stream names on each scan (requires nexlify-cron).
         </p>
         <p className="text-sm mt-2">
           <Link href="/admin/m3u-sync" className="underline" style={{ color: "var(--accent)" }}>
@@ -190,6 +190,9 @@ export default function AdminWatchFoldersPage() {
               <option value="MIXED">Mixed (movies + series)</option>
               <option value="MOVIE">Movies only</option>
               <option value="SERIES">TV series only</option>
+              {form.sourceKind === "m3u" && (
+                <option value="LIVE">Live channels (auto-add + rename)</option>
+              )}
               {form.sourceKind === "local" && <option value="M3U">Local M3U file in folder</option>}
             </select>
           </label>
@@ -200,7 +203,13 @@ export default function AdminWatchFoldersPage() {
             <input
               type="radio"
               checked={form.sourceKind === "local"}
-              onChange={() => setForm({ ...form, sourceKind: "local" })}
+              onChange={() =>
+                setForm({
+                  ...form,
+                  sourceKind: "local",
+                  type: form.type === "LIVE" ? "MIXED" : form.type,
+                })
+              }
             />
             Local folder (on server)
           </label>
@@ -208,7 +217,13 @@ export default function AdminWatchFoldersPage() {
             <input
               type="radio"
               checked={form.sourceKind === "m3u"}
-              onChange={() => setForm({ ...form, sourceKind: "m3u" })}
+              onChange={() =>
+                setForm({
+                  ...form,
+                  sourceKind: "m3u",
+                  type: form.type === "M3U" ? "LIVE" : form.type,
+                })
+              }
             />
             Remote M3U URL (provider playlist)
           </label>

@@ -41,7 +41,9 @@ export async function POST(req: NextRequest) {
                 ? "SERIES"
                 : folder.type === "MOVIE"
                   ? "MOVIE"
-                  : "LIVE",
+                  : folder.type === "LIVE"
+                    ? "LIVE"
+                    : "LIVE",
             imported: result.imported,
             skipped: result.skipped,
             status: "done",

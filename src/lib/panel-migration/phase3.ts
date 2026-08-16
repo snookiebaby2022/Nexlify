@@ -83,11 +83,12 @@ function mapTicketStatus(val: unknown): "OPEN" | "IN_PROGRESS" | "RESOLVED" | "C
   return "OPEN";
 }
 
-function mapWatchType(val: unknown): "MOVIE" | "SERIES" | "M3U" | "MIXED" {
-  const s = String(val ?? "").toLowerCase();
-  if (s.includes("movie") || s === "vod" || s === "1") return "MOVIE";
-  if (s.includes("series") || s === "2") return "SERIES";
-  if (s.includes("m3u")) return "M3U";
+function mapWatchType(val: unknown): "MOVIE" | "SERIES" | "M3U" | "MIXED" | "LIVE" {
+  const s = String(val ?? "").toUpperCase();
+  if (s.includes("LIVE") || s.includes("CHANNEL") || s.includes("TV")) return "LIVE";
+  if (s.includes("MOVIE") || s.includes("VOD") || s === "1") return "MOVIE";
+  if (s.includes("SERIES") || s.includes("SHOW") || s === "2") return "SERIES";
+  if (s.includes("M3U")) return "M3U";
   return "MIXED";
 }
 

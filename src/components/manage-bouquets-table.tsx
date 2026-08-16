@@ -27,7 +27,7 @@ export function ManageBouquetsTable({
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState<"displayId" | "name" | "streamCount" | "lineCount">("displayId");
+  const [sortKey, setSortKey] = useState<"displayId" | "name" | "streamCount" | "lineCount">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [busyId, setBusyId] = useState<string | null>(null);
 

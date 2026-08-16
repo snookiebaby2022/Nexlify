@@ -3,7 +3,6 @@
 import { useState, Suspense } from "react";
 import { PanelTopNav } from "@/components/panel-top-nav";
 import { AdminPanelSidebar, PanelSidebar, ResellerPanelSidebar } from "@/components/panel-sidebar";
-import { PanelLiveChat } from "@/components/panel-live-chat";
 import { ResellerNotificationsWidget } from "@/components/reseller-notifications-widget";
 import { PanelCommunityBar } from "@/components/panel-community-bar";
 import { PanelUpdateBanner } from "@/components/panel-update-banner";
@@ -11,7 +10,6 @@ import { PanelUpdateProgress } from "@/components/panel-update-progress";
 import { PanelUpdateJobProvider } from "@/contexts/panel-update-job-context";
 import { PanelReleaseNotesModal } from "@/components/panel-release-notes-modal";
 import { PanelDemoBanner } from "@/components/panel-demo-banner";
-import ChatAssistant from "@/components/chat-assistant";
 import { withSidebarItemIcons } from "@/lib/panel-nav-bridge";
 import { getResellerSidebarNav } from "@/lib/reseller-sidebar-nav";
 import { getAdminSidebarNav } from "@/lib/admin-sidebar-nav";
@@ -46,9 +44,9 @@ export function PanelShell({
       <div className="panel-shell-inner">
         <div className="panel-sidebar-column hidden lg:block shrink-0">
           {role === "ADMIN" ? (
-            <AdminPanelSidebar brand={title} brandHref={dashboardHref} />
+            <AdminPanelSidebar brand={title} brandHref={dashboardHref} username={username} />
           ) : (
-            <ResellerPanelSidebar brand={title} brandHref={dashboardHref} />
+            <ResellerPanelSidebar brand={title} brandHref={dashboardHref} username={username} />
           )}
         </div>
 
@@ -69,6 +67,7 @@ export function PanelShell({
                     brand={title}
                     brandHref={dashboardHref}
                     showReport
+                    username={username}
                     onNavigate={() => setMobileNav(false)}
                   />
                 </Suspense>
@@ -81,6 +80,7 @@ export function PanelShell({
                       brand={title}
                       brandHref={dashboardHref}
                       showReport
+                      username={username}
                       onNavigate={() => setMobileNav(false)}
                     />
                   </Suspense>
@@ -110,10 +110,8 @@ export function PanelShell({
           <div className="flex-1">{children}</div>
             <PanelCommunityBar />
           </main>
-          {username && <PanelLiveChat username={username} />}
           {role === "RESELLER" && <ResellerNotificationsWidget />}
           {role === "ADMIN" && <PanelReleaseNotesModal />}
-          <ChatAssistant />
         </div>
       </div>
     </div>

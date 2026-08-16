@@ -50,6 +50,7 @@ enum WatchFolderType {
   SERIES
   M3U
   MIXED
+  LIVE
 }
 
 enum ImportKind {

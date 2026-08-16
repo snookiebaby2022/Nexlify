@@ -1,7 +1,30 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.99",
+  "latestVersion": "1.9.100",
   "releases": [
+    {
+      "version": "1.9.100",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Watch-folder live channels, sidebar chat, Manage Users role order, mass-edit line sorts, bouquet A→Z, better XUI EPG import, honest probes + browser play proxy.",
+      "changelog": [
+        "Watch Folders: Live channels type (auto-add + rename from remote M3U)",
+        "Live chat + Chat support moved under the left sidebar footer",
+        "Manage Users sorts Admins → Resellers → Sub-resellers",
+        "Mass Edit Lines: sort by Username, Owner, Expire, Ban",
+        "Manage Bouquets defaults to alphabetical name order",
+        "XUI migrate: stronger EPG source detection (epg_api, data blob URLs)",
+        "Online/fast probe no longer marks unreachable URLs as degraded",
+        "Play in browser always uses the panel proxy path"
+      ],
+      "fixes": [
+        "Live M3U could not be watched from Watch Folders (VOD-only types)",
+        "Chat floated on the right over content",
+        "Mass edit lines had no Owner/Expire sort",
+        "XUI SQL EPG sources often skipped when URL lived in data/epg_file",
+        "Fast probe false positives on unreachable 'playable format' URLs"
+      ]
+    },
     {
       "version": "1.9.99",
       "date": "2026-08-16",

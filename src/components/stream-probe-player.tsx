@@ -153,14 +153,14 @@ export function StreamProbePlayer({
     let cleanup: (() => void) | undefined;
 
     void (async () => {
-      const url = resolvedUrl || streamUrl;
-      if (playFirst && streamId) {
+      let url = resolvedUrl || streamUrl;
+      // Prefer panel proxy for browser playback (CORS / TLS).
+      if (!url.includes("/api/admin/streams/proxy")) {
         const resolved = await resolvePlaybackUrl();
         if (cancelled) return;
-        cleanup = attachMedia(resolved || url);
-      } else {
-        cleanup = attachMedia(url);
+        if (resolved) url = resolved;
       }
+      cleanup = attachMedia(url);
     })();
 
     return () => {
@@ -174,7 +174,8 @@ export function StreamProbePlayer({
         videoRef.current.load();
       }
     };
-  }, [showPlayer, resolvedUrl, streamUrl, streamId, playFirst, attachMedia]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- attach when player opens / URL changes
+  }, [showPlayer, resolvedUrl, streamUrl, streamId, attachMedia]);
 
   useEffect(() => {
     if (!playFirst) return;
@@ -243,7 +244,18 @@ export function StreamProbePlayer({
           <button
             type="button"
             disabled={resolving}
-            onClick={() => setShowPlayer((v) => !v)}
+            onClick={() => {
+              void (async () => {
+                if (showPlayer) {
+                  setShowPlayer(false);
+                  return;
+                }
+                // Always play through panel proxy to avoid CORS / TLS issues in-browser.
+                const proxied = await resolvePlaybackUrl();
+                if (proxied) setResolvedUrl(proxied);
+                setShowPlayer(true);
+              })();
+            }}
             className="rounded px-3 py-1.5 text-xs cursor-pointer border disabled:opacity-50"
             style={{ borderColor: "var(--border)" }}
           >

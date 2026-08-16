@@ -155,7 +155,7 @@ export type MigrationWatchFolderRow = {
   legacyId: string;
   name: string;
   path: string;
-  type?: "MOVIE" | "SERIES" | "M3U" | "MIXED";
+  type?: "MOVIE" | "SERIES" | "M3U" | "MIXED" | "LIVE";
   categoryLegacyId?: string;
   serverLegacyId?: string;
   isActive?: boolean;

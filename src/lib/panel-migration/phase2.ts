@@ -17,7 +17,7 @@ const PHASE2_TABLE_SCORES = {
     patterns: [/^streaming_servers?$/i, /^servers?$/i, /^stream_servers?$/i],
     penalty: /log|panel/i,
   },
-  epg: { patterns: [/^epg_sources?$/i, /^epg$/i], penalty: /program|data/i },
+  epg: { patterns: [/^epg_sources?$/i, /^epgs$/i, /^epg$/i, /^epg_api$/i], penalty: /program|channel|data_cache/i },
   packages: {
     patterns: [
       /^credit_packages?$/i,
@@ -173,33 +173,92 @@ export function mapServers(data: SqlTableData | null): MigrationServerRow[] {
 export function mapEpgSources(data: SqlTableData | null): MigrationEpgRow[] {
   if (!data) return [];
   const out: MigrationEpgRow[] = [];
+  const seen = new Set<string>();
+
+  function pushSource(legacyId: string | undefined, name: string, url: string, country?: string) {
+    const clean = url.trim();
+    if (!clean) return;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({
+      legacyId,
+      name: name.trim() || "EPG",
+      url: clean,
+      country: country?.trim() || undefined,
+    });
+  }
+
+  function extractUrlFromBlob(raw: unknown): string | null {
+    if (raw == null) return null;
+    const s = typeof raw === "string" ? raw : JSON.stringify(raw);
+    const https = s.match(/https?:\/\/[^\s"'<>\\]+/i);
+    if (https?.[0]) return https[0].replace(/[),;]+$/, "");
+    return null;
+  }
+
   for (const row of data.rows) {
     const r = rowToRecord(data.columns, row);
-    const url = String(
-      r.url ??
-        r.epg_url ??
-        r.xmltv_url ??
-        r.epg_file ??
-        r.filename ??
-        r.source ??
-        r.path ??
-        ""
-    ).trim();
-    if (!url) continue;
-    // Skip relative/local-only paths that aren't fetchable URLs unless they look like http(s)
-    const usable =
-      /^https?:\/\//i.test(url) ||
-      url.includes("://") ||
-      url.endsWith(".xml") ||
-      url.endsWith(".gz") ||
-      url.endsWith(".xmltv");
-    if (!usable && !url.includes("/")) continue;
-    out.push({
-      legacyId: r.id != null ? String(r.id) : undefined,
-      name: String(r.name ?? r.epg_name ?? r.title ?? "EPG"),
-      url,
-      country: r.country ? String(r.country) : r.lang ? String(r.lang) : undefined,
-    });
+    const legacyId = r.id != null ? String(r.id) : undefined;
+    const name = String(r.name ?? r.epg_name ?? r.title ?? r.source_name ?? "EPG");
+    const country = r.country
+      ? String(r.country)
+      : r.lang
+        ? String(r.lang)
+        : r.language
+          ? String(r.language)
+          : undefined;
+
+    const candidates = [
+      r.url,
+      r.epg_url,
+      r.xmltv_url,
+      r.epg_file,
+      r.filename,
+      r.source,
+      r.path,
+      r.location,
+      r.link,
+    ]
+      .map((v) => (v == null ? "" : String(v).trim()))
+      .filter(Boolean);
+
+    // XUI often stores feed metadata in a `data` blob — pull any http(s) URL out of it.
+    const fromData = extractUrlFromBlob(r.data ?? r.epg_data ?? r.xml);
+    if (fromData) candidates.push(fromData);
+
+    let chosen = "";
+    for (const c of candidates) {
+      if (/^https?:\/\//i.test(c)) {
+        chosen = c;
+        break;
+      }
+    }
+    if (!chosen) {
+      for (const c of candidates) {
+        const usable =
+          c.includes("://") ||
+          /\.xml(\.gz)?$/i.test(c) ||
+          /\.gz$/i.test(c) ||
+          /\.xmltv$/i.test(c) ||
+          /xmltv|epg/i.test(c);
+        if (usable) {
+          chosen = /^https?:\/\//i.test(c) || c.includes("://") ? c : c;
+          break;
+        }
+      }
+    }
+    // Last resort: absolute path that looks like an XMLTV file on disk (still import so admin can fix URL)
+    if (!chosen) {
+      for (const c of candidates) {
+        if (c.startsWith("/") && /\.(xml|gz|xmltv)$/i.test(c)) {
+          chosen = c;
+          break;
+        }
+      }
+    }
+    if (!chosen) continue;
+    pushSource(legacyId, name, chosen, country);
   }
   return out;
 }

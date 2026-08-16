@@ -55,6 +55,18 @@ export async function GET(req: NextRequest) {
   const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(url.searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE)));
   const skip = (page - 1) * pageSize;
+  const sortRaw = (url.searchParams.get("sort") ?? "createdAt").trim();
+  const sortDir = url.searchParams.get("sortDir") === "asc" ? "asc" : "desc";
+  const orderBy =
+    sortRaw === "username"
+      ? { username: sortDir as "asc" | "desc" }
+      : sortRaw === "expiresAt"
+        ? { expiresAt: sortDir as "asc" | "desc" }
+        : sortRaw === "owner"
+          ? { owner: { username: sortDir as "asc" | "desc" } }
+          : sortRaw === "status"
+            ? { status: sortDir as "asc" | "desc" }
+            : { createdAt: sortDir as "asc" | "desc" };
 
   const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
 
@@ -68,7 +80,7 @@ export async function GET(req: NextRequest) {
         lastWatchedStream: { select: { id: true, name: true } },
         _count: { select: { channelWatches: true, liveConnections: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy,
       skip,
       take: pageSize,
     }),

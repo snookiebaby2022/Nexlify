@@ -64,8 +64,8 @@ export function ManageUsersTable({
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
-  const [sortKey, setSortKey] = useState<SortKey>("createdAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState<SortKey>("role");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [openAction, setOpenAction] = useState<string | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -106,6 +106,23 @@ export function ManageUsersTable({
     }
     if (sortKey) {
       list = [...list].sort((a, b) => {
+        if (sortKey === "role" || sortKey === "roleLabel") {
+          const rank = (role: string) => {
+            const r = String(role).toUpperCase();
+            if (r === "ADMIN") return 0;
+            if (r === "RESELLER") return 1;
+            if (r === "SUB_RESELLER") return 2;
+            return 3;
+          };
+          const ra = rank(a.role);
+          const rb = rank(b.role);
+          if (ra !== rb) return sortDir === "asc" ? ra - rb : rb - ra;
+          const sa = a.username.toLowerCase();
+          const sb = b.username.toLowerCase();
+          if (sa < sb) return -1;
+          if (sa > sb) return 1;
+          return 0;
+        }
         const av = a[sortKey as keyof ManageUserRow];
         const bv = b[sortKey as keyof ManageUserRow];
         if (av == null && bv == null) return 0;
@@ -516,6 +533,7 @@ export function ManageUsersTable({
               <th className="px-3 py-3 text-left font-normal text-xs">Status</th>
               <SortHead label="Owner" col="owner" />
               <SortHead label="Name" col="username" />
+              <SortHead label="Role" col="role" />
               <SortHead label="Email" col="email" />
               <SortHead label="Group" col="groupName" />
               <SortHead label="Lines" col="lines" />
@@ -529,7 +547,7 @@ export function ManageUsersTable({
           <tbody>
             {pageRows.length === 0 ? (
               <tr>
-                <td colSpan={canBulk ? 13 : 12} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
+                <td colSpan={canBulk ? 14 : 13} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
                   No users found
                 </td>
               </tr>
@@ -560,6 +578,9 @@ export function ManageUsersTable({
                     {u.owner ?? "—"}
                   </td>
                   <td className="px-3 py-2.5 font-medium">{u.username}</td>
+                  <td className="px-3 py-2.5 text-xs uppercase" style={{ color: "var(--muted)" }}>
+                    {u.roleLabel || u.role}
+                  </td>
                   <td className="px-3 py-2.5" style={{ color: "var(--muted)" }}>
                     {u.email || "—"}
                   </td>

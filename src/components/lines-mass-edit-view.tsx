@@ -127,11 +127,15 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState(DEFAULT_FORM);
+  const [sort, setSort] = useState<"username" | "expiresAt" | "owner" | "createdAt" | "status">("expiresAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   function load() {
     const params = new URLSearchParams({
       page: String(page),
       pageSize: String(pageSize),
+      sort,
+      sortDir,
     });
     if (search.trim()) params.set("search", search.trim());
     fetch(`/api/admin/lines?${params}`)
@@ -155,8 +159,17 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on page/size/search
-  }, [page, pageSize, search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on page/size/search/sort
+  }, [page, pageSize, search, sort, sortDir]);
+
+  function toggleSort(key: typeof sort) {
+    if (sort === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSort(key);
+      setSortDir(key === "expiresAt" || key === "createdAt" ? "asc" : "asc");
+      setPage(1);
+    }
+  }
 
   const filtered = lines;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -310,11 +323,33 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                     />
                   </th>
                   <th className="xui-lines-th w-8">Sta</th>
-                  <th className="xui-lines-th">Username</th>
+                  <th
+                    className="xui-lines-th cursor-pointer select-none"
+                    onClick={() => toggleSort("username")}
+                  >
+                    Username{sort === "username" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </th>
                   <th className="xui-lines-th">Password</th>
-                  {panel === "admin" ? <th className="xui-lines-th">Owner</th> : null}
-                  <th className="xui-lines-th">Expire</th>
-                  <th className="xui-lines-th">Ban</th>
+                  {panel === "admin" ? (
+                    <th
+                      className="xui-lines-th cursor-pointer select-none"
+                      onClick={() => toggleSort("owner")}
+                    >
+                      Owner{sort === "owner" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                    </th>
+                  ) : null}
+                  <th
+                    className="xui-lines-th cursor-pointer select-none"
+                    onClick={() => toggleSort("expiresAt")}
+                  >
+                    Expire{sort === "expiresAt" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </th>
+                  <th
+                    className="xui-lines-th cursor-pointer select-none"
+                    onClick={() => toggleSort("status")}
+                  >
+                    Ban{sort === "status" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                  </th>
                 </tr>
               </thead>
               <tbody>

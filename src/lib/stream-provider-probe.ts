@@ -82,9 +82,10 @@ export async function probeStreamProvider(
         };
       }
     } catch {
+      // Fast probe must not claim "online/degraded" just because the URL looks playable.
       return {
-        status: "degraded",
-        message: "Fast probe: direct URL (HEAD skipped, try playback)",
+        status: "offline",
+        message: "Fast probe: HEAD failed (try Full probe)",
         latencyMs: 0,
       };
     }
@@ -95,9 +96,6 @@ export async function probeStreamProvider(
     try {
       result = await fetchProbe(url, "HEAD", timeout);
     } catch (headErr) {
-      if (fast && direct) {
-        return { status: "degraded", message: "Fast probe: playable URL format", latencyMs: 0 };
-      }
       try {
         result = await fetchProbe(url, "GET", timeout);
       } catch (getErr) {

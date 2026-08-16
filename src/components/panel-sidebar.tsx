@@ -15,6 +15,8 @@ import { PanelBrandMark } from "@/components/panel-brand-mark";
 import { PanelSidebarVersion } from "@/components/panel-sidebar-version";
 import { PanelSidebarReport } from "@/components/panel-sidebar-report";
 import { PanelSidebarSuggestions } from "@/components/panel-sidebar-suggestions";
+import { PanelLiveChat } from "@/components/panel-live-chat";
+import ChatAssistant from "@/components/chat-assistant";
 
 function pathActive(pathname: string, href: string, search: string = "") {
   const [cleanHref, hrefQuery = ""] = href.split("?");
@@ -300,6 +302,7 @@ export function PanelSidebar({
   brand,
   brandHref = "/admin/dashboard",
   showReport = false,
+  username,
 }: {
   entries: SidebarNavEntry[];
   className?: string;
@@ -307,6 +310,7 @@ export function PanelSidebar({
   brand?: string;
   brandHref?: string;
   showReport?: boolean;
+  username?: string;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -458,6 +462,8 @@ export function PanelSidebar({
 
       {showReport && !collapsed && (
         <div className="panel-sidebar-footer-actions space-y-1">
+          {username && <PanelLiveChat username={username} variant="sidebar" />}
+          <ChatAssistant variant="sidebar" />
           <PanelSidebarSuggestions />
           <PanelSidebarReport />
         </div>
@@ -484,9 +490,11 @@ export function PanelSidebar({
 export function AdminPanelSidebar({
   brand,
   brandHref = "/admin/dashboard",
+  username,
 }: {
   brand?: string;
   brandHref?: string;
+  username?: string;
 } = {}) {
   return (
     <Suspense fallback={<aside className="panel-sidebar" aria-hidden />}>
@@ -495,6 +503,7 @@ export function AdminPanelSidebar({
         brand={brand}
         brandHref={brandHref}
         showReport
+        username={username}
       />
     </Suspense>
   );
@@ -503,9 +512,11 @@ export function AdminPanelSidebar({
 export function ResellerPanelSidebar({
   brand,
   brandHref = "/reseller/dashboard",
+  username,
 }: {
   brand?: string;
   brandHref?: string;
+  username?: string;
 } = {}) {
   return (
     <Suspense fallback={<aside className="panel-sidebar" aria-hidden />}>
@@ -514,6 +525,7 @@ export function ResellerPanelSidebar({
         brand={brand}
         brandHref={brandHref}
         showReport
+        username={username}
       />
     </Suspense>
   );

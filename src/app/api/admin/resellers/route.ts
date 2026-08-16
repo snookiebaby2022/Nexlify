@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
       group: { select: { id: true, name: true } },
       parent: { select: { username: true } },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ role: "asc" }, { username: "asc" }],
   });
 
   const users = rows.map((r, i) =>

@@ -208,7 +208,9 @@ export async function applyMigrationPhase3(
               ? WatchFolderType.SERIES
               : f.type === "M3U"
                 ? WatchFolderType.M3U
-                : WatchFolderType.MIXED;
+                : f.type === "LIVE"
+                  ? WatchFolderType.LIVE
+                  : WatchFolderType.MIXED;
         const created = await prisma.watchFolder.create({
           data: {
             name: f.name,

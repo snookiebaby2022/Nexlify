@@ -30,7 +30,7 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
     categories: ["streams_categories", "stream_categories", "categories", "channel_categories"],
     // Prefer real streaming servers — never streams_servers (that's a junction).
     servers: ["streaming_servers", "servers"],
-    epg: ["epg_sources", "epgs", "epg"],
+    epg: ["epg_sources", "epgs", "epg", "epg_api"],
     packages: [
       "users_packages",
       "packages",
@@ -61,7 +61,7 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
     enigma: ["enigma_devices", "enigma", "enigma2_devices"],
     categories: ["stream_categories", "categories", "streams_categories", "channel_categories"],
     servers: ["streaming_servers", "servers", "streams_servers", "stream_servers"],
-    epg: ["epg_sources", "epgs", "epg"],
+    epg: ["epg_sources", "epgs", "epg", "epg_api"],
     packages: ["packages", "user_packages", "plans"],
   },
   /** StreamCreed — same MySQL lineage as XUI / XC; default DB streamcreed_db */
@@ -74,7 +74,7 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
     enigma: ["enigma_devices", "enigma", "enigma2_devices"],
     categories: ["stream_categories", "categories", "streams_categories", "channel_categories"],
     servers: ["streaming_servers", "servers", "streams_servers", "stream_servers"],
-    epg: ["epg_sources", "epgs", "epg"],
+    epg: ["epg_sources", "epgs", "epg", "epg_api"],
     packages: ["packages", "user_packages", "line_packages", "credit_packages", "plans"],
   },
   /** NXT-DASH — default DB nxt; best-effort XUI-lineage table names */
@@ -87,7 +87,7 @@ export const PANEL_PROFILES: Record<MigrationSource, PanelTableProfile> = {
     enigma: ["enigma_devices", "enigma", "enigma2_devices"],
     categories: ["stream_categories", "categories", "streams_categories", "channel_categories"],
     servers: ["streaming_servers", "servers", "streams_servers", "stream_servers"],
-    epg: ["epg_sources", "epgs", "epg"],
+    epg: ["epg_sources", "epgs", "epg", "epg_api"],
     packages: ["packages", "user_packages", "plans", "credit_packages"],
   },
   midnight: {
