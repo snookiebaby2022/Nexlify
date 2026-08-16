@@ -724,11 +724,32 @@ function ManagementCategoriesInner() {
       <PredefinedCategories tab={tab} existingNames={tabCategories.map((c) => c.name.toLowerCase())} onAdded={load} />
 
       <div
-        className="rounded-lg border p-4 text-sm"
+        className="rounded-lg border p-4 text-sm space-y-2"
         style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}
       >
-        <strong style={{ color: "var(--accent)" }}>{CATEGORY_TYPE_LABELS[tab]}</strong> categories — used to
-        organize {tab === "LIVE" ? "live channels" : tab === "MOVIE" ? "movies" : tab === "SERIES" ? "TV series" : "radio stations"} in playlists and Xtream API.
+        <p>
+          <strong style={{ color: "var(--accent)" }}>{CATEGORY_TYPE_LABELS[tab]}</strong> categories — these are
+          the folders the IPTV app and site player show (same order: use ↑↓ arrows). Bouquets only control which
+          packages a line can access.
+        </p>
+        <ul className="list-disc pl-5 space-y-1" style={{ color: "var(--muted)" }}>
+          <li>
+            <strong style={{ color: "var(--text)" }}>Show in app:</strong> put the stream in a category, keep it
+            online, and include it in a bouquet assigned to the line.
+          </li>
+          <li>
+            <strong style={{ color: "var(--text)" }}>Hide from app:</strong> open the category →{" "}
+            <em>Set offline</em> (disables its streams), or remove those streams from the line’s bouquets, or
+            delete the category.
+          </li>
+          <li>
+            Missing folders usually mean streams are only in category-named bouquets — run{" "}
+            <Link href="/admin/bouquets" className="underline" style={{ color: "var(--accent)" }}>
+              Bouquets → Fix category bouquets
+            </Link>
+            .
+          </li>
+        </ul>
       </div>
 
       <form

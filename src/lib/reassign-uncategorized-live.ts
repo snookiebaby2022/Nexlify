@@ -22,8 +22,11 @@ async function ensureLiveCategory(prisma: PrismaClient, name: string, cache: Map
 
 function findCat(cats: CatRef[], ...needles: string[]): string | null {
   for (const needle of needles) {
-    const n = needle.toLowerCase();
-    const hit = cats.find((c) => c.name.toLowerCase() === n || c.name.toLowerCase().includes(n));
+    const n = needle.toLowerCase().replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim();
+    const hit = cats.find((c) => {
+      const cn = c.name.toLowerCase().replace(/\s*\|\s*/g, " ").replace(/\s+/g, " ").trim();
+      return cn === n || cn.includes(n) || n.includes(cn);
+    });
     if (hit) return hit.id;
   }
   return null;
@@ -70,7 +73,8 @@ export async function reassignUncategorizedLiveStreams(
   const usaDoc =
     findCat(cats, "USA Documentary") || (await ensureLiveCategory(prisma, "USA Documentary", cache));
   const ukEnt =
-    findCat(cats, "UK Entertainment") || (await ensureLiveCategory(prisma, "UK Entertainment", cache));
+    findCat(cats, "UK | Entertainment", "UK Entertainment") ||
+    (await ensureLiveCategory(prisma, "UK | Entertainment", cache));
   const news =
     findCat(cats, "World News") || (await ensureLiveCategory(prisma, "World News", cache));
   const australian =

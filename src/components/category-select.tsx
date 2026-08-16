@@ -33,10 +33,20 @@ export function CategorySelect({
   id,
   required,
 }: Props) {
-  const options = useMemo(
-    () => labeledCategoryOptions(categories, typeFilter),
-    [categories, typeFilter]
-  );
+  const options = useMemo(() => {
+    const labeled = labeledCategoryOptions(categories, typeFilter);
+    // Always keep the currently selected category visible (prevents silent
+    // reset to "No category" when type filter / async load would hide it).
+    if (value && !labeled.some((o) => o.id === value)) {
+      const current = categories.find((c) => c.id === value);
+      if (current) {
+        labeled.unshift({ id: current.id, label: `${current.name} (current)` });
+      } else {
+        labeled.unshift({ id: value, label: `Current category (${value.slice(0, 8)}…)` });
+      }
+    }
+    return labeled;
+  }, [categories, typeFilter, value]);
 
   return (
     <select

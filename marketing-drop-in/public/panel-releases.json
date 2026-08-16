@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.0",
+  "latestVersion": "2.0.1",
   "releases": [
+    {
+      "version": "2.0.1",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Fix category-named bouquets hiding channels from IPTV apps; preserve stream category on save; align category order.",
+      "changelog": [
+        "Repair: merge orphan category-named bouquets into package bouquets (UK/USA/VOD/ADULT…)",
+        "Merge duplicate categories (UK Entertainment → UK | Entertainment) and fix sortOrder for apps",
+        "Stream edit keeps the existing category unless you change it; category picker always shows current",
+        "Bouquets vs Categories help text + Fix category bouquets button",
+        "How to show/hide categories in the IPTV app documented on Categories page"
+      ],
+      "fixes": [
+        "Categories appeared as bouquets; many folders missing from IPTV apps",
+        "Saving a stream could move it into a new UK Entertainment category",
+        "Category order mismatched between panel and IPTV apps (sortOrder 0)"
+      ]
+    },
     {
       "version": "2.0.0",
       "date": "2026-08-16",

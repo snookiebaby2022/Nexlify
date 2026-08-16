@@ -488,7 +488,12 @@ export async function PATCH(req: NextRequest) {
 
   if (body.serverId !== undefined) data.serverId = body.serverId || null;
 
-  if (body.categoryId !== undefined) data.categoryId = body.categoryId || null;
+  if (body.categoryId !== undefined) {
+    const next = body.categoryId ? String(body.categoryId).trim() : "";
+    // Do not wipe category when client sends empty (common select race). Explicit clear only.
+    if (next) data.categoryId = next;
+    else if (body.clearCategory === true) data.categoryId = null;
+  }
 
   if (body.epgChannelId !== undefined) data.epgChannelId = body.epgChannelId || null;
 

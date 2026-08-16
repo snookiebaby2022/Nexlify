@@ -228,7 +228,7 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           providerPath: form.useProvider ? form.providerPath : null,
           backupUrl: form.backupUrl.trim() || null,
           serverId: form.serverId || null,
-          categoryId: form.categoryId || null,
+          categoryId: form.categoryId.trim() || stream?.categoryId || null,
           epgChannelId: form.epgChannelId || null,
           isActive: form.isActive,
           bouquetIds: form.bouquetIds,
@@ -363,7 +363,7 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           <div className="space-y-4">
             <EditSection
               title="Stream identity"
-              subtitle="Content type, display name, and category shown in playlists and bouquets."
+              subtitle="Content type, display name, and category (IPTV app folder). Saving keeps the current category unless you pick a different one."
             >
               <div className="grid md:grid-cols-2 gap-4">
                 <FormField label="Content type" required>

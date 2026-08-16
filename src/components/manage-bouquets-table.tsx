@@ -30,6 +30,42 @@ export function ManageBouquetsTable({
   const [sortKey, setSortKey] = useState<"displayId" | "name" | "streamCount" | "lineCount">("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [repairBusy, setRepairBusy] = useState(false);
+  const [repairMsg, setRepairMsg] = useState("");
+
+  async function repairCategoryBouquets() {
+    if (
+      !confirm(
+        "Merge category-named bouquets (e.g. “UK | Entertainment”) into package bouquets (UK, USA, VOD, ADULT…)?\n\n" +
+          "IPTV apps show Categories, not bouquets. Orphan category-bouquets hide channels from the app.\n\n" +
+          "This also merges duplicate categories and fixes sort order."
+      )
+    ) {
+      return;
+    }
+    setRepairBusy(true);
+    setRepairMsg("");
+    try {
+      const res = await fetch("/api/admin/bouquets/repair-categories", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setRepairMsg(typeof data.error === "string" ? data.error : "Repair failed");
+        return;
+      }
+      const r = data.result ?? {};
+      setRepairMsg(
+        `Done: merged ${r.streamLinksMerged ?? 0} stream links, removed ${r.orphanBouquetsDeleted ?? 0} orphan bouquets, merged ${r.categoriesMerged ?? 0} duplicate categories, fixed ${r.sortOrdersFixed ?? 0} sort orders.` +
+          (r.unmatchedOrphanBouquets?.length
+            ? ` ${r.unmatchedOrphanBouquets.length} orphan bouquets need manual package mapping.`
+            : "")
+      );
+      onRefresh();
+    } catch (e) {
+      setRepairMsg(e instanceof Error ? e.message : "Repair failed");
+    } finally {
+      setRepairBusy(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -134,6 +170,14 @@ export function ManageBouquetsTable({
       >
         <h1 className="text-lg font-semibold text-white">Manage Bouquets</h1>
         <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={repairBusy}
+            onClick={() => void repairCategoryBouquets()}
+            className="text-sm px-3 py-1.5 rounded font-medium text-white border border-white/70 hover:bg-white/10 disabled:opacity-60"
+          >
+            {repairBusy ? "Repairing…" : "Fix category bouquets"}
+          </button>
           <Link
             href="/admin/bouquets/order"
             className="text-sm px-3 py-1.5 rounded font-medium text-white border border-white/70 hover:bg-white/10"
@@ -148,6 +192,17 @@ export function ManageBouquetsTable({
             Add Bouquet
           </Link>
         </div>
+      </div>
+
+      <div className="px-4 py-3 text-sm border-b space-y-1" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+        <p>
+          <strong style={{ color: "var(--text)" }}>Bouquets</strong> are packages you assign to lines
+          (e.g. UK, USA, VOD, ADULT).{" "}
+          <strong style={{ color: "var(--text)" }}>Categories</strong> (Management → Categories) are the
+          Live / Movies / Series folders the IPTV app shows. Use Order to match package order; use
+          Categories → arrows for app folder order.
+        </p>
+        {repairMsg ? <p style={{ color: "var(--text)" }}>{repairMsg}</p> : null}
       </div>
 
       <div
