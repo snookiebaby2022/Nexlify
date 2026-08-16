@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.3",
+  "latestVersion": "2.0.4",
   "releases": [
+    {
+      "version": "2.0.4",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Reseller tickets: Report Channels, New Channels, Movies, TV Series — counted on admin dashboard KPIs.",
+      "changelog": [
+        "Reseller Create Ticket: Report Channels, New Channels, Movies, TV Series / Episodes",
+        "Movies and TV Series ask Report a problem vs Request new content",
+        "Admin dashboard User Reported Channels and New Channels Add Request show Channels / Movies / TV Series breakdowns",
+        "Tickets use structured subjects ([Report Channels], [New Movies], …) so KPIs stay accurate"
+      ],
+      "fixes": [
+        "Dashboard channel report/request tiles only matched loose subject keywords and ignored Movies/Series"
+      ]
+    },
     {
       "version": "2.0.3",
       "date": "2026-08-16",

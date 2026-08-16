@@ -9,6 +9,12 @@ import {
   sampleLocalHostMetrics,
   type HostMetricsSample,
 } from "@/lib/host-metrics";
+import {
+  classifyTicketSubject,
+  emptyBreakdown,
+  sumBreakdown,
+  type TicketContentBreakdown,
+} from "@/lib/ticket-content-types";
 
 export type ServerMetricsRow = {
   id: string;
@@ -34,6 +40,10 @@ export type DashboardKpiExtended = {
   deadStreams: number;
   reportedChannels: number;
   channelRequests: number;
+  /** Breakdown under User Reported Channels (live + movies + series). */
+  reportedBreakdown: TicketContentBreakdown;
+  /** Breakdown under New Channels Add Request (live + movies + series). */
+  requestBreakdown: TicketContentBreakdown;
   networkInMbps: number;
   networkOutMbps: number;
   inactiveStreams: number;
@@ -234,14 +244,16 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
   // paidUsers query above counted all active — subtract trials
   const paid = Math.max(0, paidUsers - trialUsers);
 
-  const channelRx = /channel|stream|epg|vod|missing|report|add request/i;
-  let reportedChannels = 0;
-  let channelRequests = 0;
+  const reportedBreakdown = emptyBreakdown();
+  const requestBreakdown = emptyBreakdown();
   for (const t of tickets) {
-    if (!channelRx.test(t.subject)) continue;
-    if (/request|add|new/i.test(t.subject)) channelRequests++;
-    else reportedChannels++;
+    const classified = classifyTicketSubject(t.subject);
+    if (!classified) continue;
+    const bucket = classified.intent === "request" ? requestBreakdown : reportedBreakdown;
+    bucket[classified.content] += 1;
   }
+  const reportedChannels = sumBreakdown(reportedBreakdown);
+  const channelRequests = sumBreakdown(requestBreakdown);
 
   const liveNic = sampleLocalHostMetrics();
   let networkInMbps = liveNic.downloadMbps;
@@ -264,6 +276,8 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     deadStreams,
     reportedChannels,
     channelRequests,
+    reportedBreakdown,
+    requestBreakdown,
     networkInMbps: Math.round(networkInMbps * 10) / 10,
     networkOutMbps: Math.round(networkOutMbps * 10) / 10,
     inactiveStreams: inactiveLive + inactiveMovies + inactiveSeries,

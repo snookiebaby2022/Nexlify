@@ -186,20 +186,64 @@ export function DashboardXuiKpiRibbon({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Link
-          href="/admin/tickets"
-          className="rounded-lg border px-4 py-3 flex items-center justify-between bg-white dark:bg-slate-800/50 hover:opacity-95"
+          href="/admin/tickets?status=OPEN"
+          className="rounded-lg border px-4 py-3 flex flex-col gap-2 bg-white dark:bg-slate-800/50 hover:opacity-95"
           style={{ borderColor: "var(--border)" }}
         >
-          <span className="text-sm font-medium">User Reported Channels</span>
-          <span className="text-xl font-bold tabular-nums">{kpi?.reportedChannels ?? 0}</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium">User Reported Channels</span>
+            <span className="text-xl font-bold tabular-nums">{kpi?.reportedChannels ?? 0}</span>
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs" style={{ color: "var(--muted)" }}>
+            <span>
+              Channels{" "}
+              <strong className="tabular-nums" style={{ color: "var(--text)" }}>
+                {kpi?.reportedBreakdown?.channels ?? 0}
+              </strong>
+            </span>
+            <span>
+              Movies{" "}
+              <strong className="tabular-nums" style={{ color: "var(--text)" }}>
+                {kpi?.reportedBreakdown?.movies ?? 0}
+              </strong>
+            </span>
+            <span>
+              TV Series / Episodes{" "}
+              <strong className="tabular-nums" style={{ color: "var(--text)" }}>
+                {kpi?.reportedBreakdown?.series ?? 0}
+              </strong>
+            </span>
+          </div>
         </Link>
         <Link
           href="/admin/tickets?status=OPEN"
-          className="rounded-lg border px-4 py-3 flex items-center justify-between bg-white dark:bg-slate-800/50 hover:opacity-95"
+          className="rounded-lg border px-4 py-3 flex flex-col gap-2 bg-white dark:bg-slate-800/50 hover:opacity-95"
           style={{ borderColor: "var(--border)" }}
         >
-          <span className="text-sm font-medium">New Channels Add Request</span>
-          <span className="text-xl font-bold tabular-nums">{kpi?.channelRequests ?? 0}</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium">New Channels Add Request</span>
+            <span className="text-xl font-bold tabular-nums">{kpi?.channelRequests ?? 0}</span>
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs" style={{ color: "var(--muted)" }}>
+            <span>
+              Channels{" "}
+              <strong className="tabular-nums" style={{ color: "var(--text)" }}>
+                {kpi?.requestBreakdown?.channels ?? 0}
+              </strong>
+            </span>
+            <span>
+              Movies{" "}
+              <strong className="tabular-nums" style={{ color: "var(--text)" }}>
+                {kpi?.requestBreakdown?.movies ?? 0}
+              </strong>
+            </span>
+            <span>
+              TV Series / Episodes{" "}
+              <strong className="tabular-nums" style={{ color: "var(--text)" }}>
+                {kpi?.requestBreakdown?.series ?? 0}
+              </strong>
+            </span>
+          </div>
         </Link>
       </div>
     </section>

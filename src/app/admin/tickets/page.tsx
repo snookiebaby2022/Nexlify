@@ -143,8 +143,9 @@ function TicketsPageInner() {
           <div>
             <h1 className="text-2xl font-bold">Support tickets</h1>
             <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-              Reseller and end-user requests (Suggestions / Reports appear here). Open or close tickets —
-              admins do not create tickets.
+              Reseller and end-user tickets (Suggestions / Reports / channel &amp; VOD requests). Open or
+              close tickets — admins do not create tickets. Reseller types Report Channels, New Channels,
+              Movies, and TV Series / Episodes feed the dashboard KPIs.
             </p>
           </div>
         </div>

@@ -80,12 +80,15 @@ async function loadStats() {
     deadStreams: 0,
     reportedChannels: 0,
     channelRequests: 0,
+    reportedBreakdown: { channels: 0, movies: 0, series: 0 },
+    requestBreakdown: { channels: 0, movies: 0, series: 0 },
     networkInMbps: 0,
     networkOutMbps: 0,
     inactiveStreams: 0,
     inactiveLive: 0,
     inactiveMovies: 0,
     inactiveSeries: 0,
+    offlineStreams: 0,
     openTickets: 0,
   };
   try { dashboardKpi = await getDashboardKpiExtended(); } catch (e) { console.error("[stats] getDashboardKpiExtended error:", e); }
