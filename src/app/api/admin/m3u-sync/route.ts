@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
             at: now.toISOString(),
             imported: result.imported,
             skipped: result.skipped,
-            updated: result.updated ?? result.reordered ?? 0,
+            updated: result.updated ?? 0,
             errors: result.errors ?? [],
           },
         },
