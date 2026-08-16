@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ArrowUpDown, ExternalLink, List } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ArrowUpDown, ChevronDown, ExternalLink, List } from "lucide-react";
 import { IpWithFlag } from "@/components/ip-with-flag";
+import { computePortalMenuPosition } from "@/lib/portal-menu-position";
 
 export type ManageUserRow = {
   id: string;
@@ -58,12 +60,17 @@ export function ManageUsersTable({
   const creditsApi = panel === "reseller" ? "/api/reseller/users/credits" : "/api/admin/credits";
   const addUserHref = panel === "reseller" ? "/reseller/users/add" : "/admin/resellers/add";
   const creditsHref = panel === "reseller" ? "/reseller/users/credits" : "/admin/resellers/credits";
+  const linesHref = panel === "reseller" ? "/reseller/lines" : "/admin/lines";
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [openAction, setOpenAction] = useState<string | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const [flipped, setFlipped] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -103,6 +110,40 @@ export function ManageUsersTable({
   const safePage = Math.min(page, totalPages);
   const start = (safePage - 1) * pageSize;
   const pageRows = filtered.slice(start, start + pageSize);
+  const openRow = pageRows.find((u) => u.id === openAction) ?? null;
+
+  const reposition = useCallback(() => {
+    if (!btnRef.current) return;
+    const anchor = btnRef.current.getBoundingClientRect();
+    const size = {
+      width: menuRef.current?.offsetWidth || 220,
+      height: menuRef.current?.offsetHeight || 320,
+    };
+    const pos = computePortalMenuPosition(anchor, size);
+    setMenuPos({ top: pos.top, left: pos.left });
+    setFlipped(pos.flipped);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!openAction) return;
+    reposition();
+  }, [openAction, reposition]);
+
+  useEffect(() => {
+    if (!openAction) return;
+    const onScroll = () => reposition();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenAction(null);
+    };
+    window.addEventListener("resize", onScroll);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [openAction, reposition]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -121,21 +162,25 @@ export function ManageUsersTable({
     try {
       const res = await fetch(url, { method: "DELETE" });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) console.error("Delete failed:", j.error ?? "Unknown error");
+      if (!res.ok) alert(j.error ?? "Delete failed");
       else onRefresh();
     } catch (e) {
       console.error("Delete user network error:", e);
+      alert("Delete failed (network)");
     }
     setOpenAction(null);
   }
 
   async function toggleActive(u: ManageUserRow) {
-    await fetch(usersApi, {
+    const res = await fetch(usersApi, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: u.id, isActive: !u.isActive }),
     });
-    onRefresh();
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(j.error ?? "Update failed");
+    } else onRefresh();
     setOpenAction(null);
   }
 
@@ -170,85 +215,29 @@ export function ManageUsersTable({
     setOpenAction(null);
   }
 
+  async function demoteToReseller(u: ManageUserRow) {
+    if (u.role !== "ADMIN") return;
+    if (!confirm(`Demote "${u.username}" from Admin to Reseller?`)) return;
+    const res = await fetch(usersApi, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: u.id, role: "RESELLER" }),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) alert(j.error ?? "Demote failed");
+    else onRefresh();
+    setOpenAction(null);
+  }
+
   async function promptAddCredits(u: ManageUserRow) {
     const raw = prompt(`Add credits to ${u.username}:`, "10");
     if (!raw) return;
     const amount = Number(raw);
-    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      alert("Enter a positive number");
+      return;
+    }
     await quickAddCredits(u, amount);
-  }
-
-  function actionMenu(u: ManageUserRow) {
-    return (
-      <div
-        className="absolute right-3 top-full z-20 mt-1 py-1 rounded shadow-xl min-w-[12rem] border text-sm"
-        style={{ background: "#252a2f", borderColor: "var(--border)" }}
-      >
-        {panel === "admin" && (
-          <Link
-            href={`/admin/resellers/${u.id}/edit`}
-            className="block px-3 py-2 hover:bg-white/10"
-            onClick={() => setOpenAction(null)}
-          >
-            Edit user
-          </Link>
-        )}
-        <button
-          type="button"
-          className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-          onClick={() => toggleActive(u)}
-        >
-          {u.isActive ? "Disable user" : "Enable user"}
-        </button>
-        <button
-          type="button"
-          className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-          onClick={() => void promptAddCredits(u)}
-        >
-          Add credits…
-        </button>
-        <button
-          type="button"
-          className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-          onClick={() => void quickAddCredits(u, 10)}
-        >
-          +10 credits
-        </button>
-        <button
-          type="button"
-          className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-          onClick={() => void quickAddCredits(u, 50)}
-        >
-          +50 credits
-        </button>
-        <Link
-          href={`${creditsHref}?userId=${u.id}`}
-          className="block px-3 py-2 hover:bg-white/10"
-          onClick={() => setOpenAction(null)}
-        >
-          Credit history
-        </Link>
-        {panel === "admin" && u.role !== "ADMIN" && (
-          <button
-            type="button"
-            className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-            onClick={() => void promoteToAdmin(u)}
-          >
-            Promote to admin
-          </button>
-        )}
-        {(panel === "reseller" || u.role !== "ADMIN") && (
-          <button
-            type="button"
-            className="w-full text-left px-3 py-2 hover:bg-white/10 cursor-pointer"
-            style={{ color: "var(--danger)" }}
-            onClick={() => deleteUser(u.id, u.username)}
-          >
-            Delete
-          </button>
-        )}
-      </div>
-    );
   }
 
   const thClass =
@@ -262,16 +251,28 @@ export function ManageUsersTable({
     </th>
   );
 
+  function ActionTrigger({ u }: { u: ManageUserRow }) {
+    const open = openAction === u.id;
+    return (
+      <button
+        type="button"
+        ref={open ? btnRef : undefined}
+        className={`xui-lines-action-btn ${open ? "xui-lines-action-btn--open" : ""}`}
+        onClick={() => setOpenAction(open ? null : u.id)}
+        aria-label="Actions"
+      >
+        <span className="hidden sm:inline">Actions</span>
+        <List size={16} className="sm:hidden" />
+        <ChevronDown size={14} className="xui-lines-action-chevron hidden sm:inline" />
+      </button>
+    );
+  }
+
   return (
-    <div
-      className="rounded-lg overflow-hidden border"
-      style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
-    >
+    <div className="rounded-lg border" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
       <div
-        className="flex items-center justify-between px-4 py-3"
-        style={{
-          background: "linear-gradient(90deg, #00c0ef 0%, #3c8dbc 100%)",
-        }}
+        className="flex items-center justify-between px-4 py-3 rounded-t-lg"
+        style={{ background: "linear-gradient(90deg, #00c0ef 0%, #3c8dbc 100%)" }}
       >
         <h1 className="text-lg font-semibold text-white">Manage Users</h1>
         <Link
@@ -327,7 +328,7 @@ export function ManageUsersTable({
           </p>
         ) : (
           pageRows.map((u) => (
-            <article key={u.id} className="panel-mobile-card p-4 space-y-2.5 relative">
+            <article key={u.id} className="panel-mobile-card p-4 space-y-2.5">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -342,28 +343,12 @@ export function ManageUsersTable({
                     </span>
                   </div>
                   <p className="text-xs mt-0.5 truncate" style={{ color: "var(--muted)" }}>
-                    {u.email || "No email"}
+                    {u.email || "No email"} · {u.groupName}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="rounded px-2 py-1.5 border cursor-pointer hover:bg-white/10 shrink-0"
-                  style={{ borderColor: "var(--border)" }}
-                  onClick={() => setOpenAction(openAction === u.id ? null : u.id)}
-                  aria-label="Actions"
-                >
-                  <List size={16} />
-                </button>
+                <ActionTrigger u={u} />
               </div>
               <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-sm">
-                <div>
-                  <dt className="text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-                    Role / group
-                  </dt>
-                  <dd className="font-medium truncate" style={groupStyle(u.roleLabel)}>
-                    {u.groupName}
-                  </dd>
-                </div>
                 <div>
                   <dt className="text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
                     Credits
@@ -376,40 +361,7 @@ export function ManageUsersTable({
                   </dt>
                   <dd className="tabular-nums">{u.lines}</dd>
                 </div>
-                {typeof u.subUsers === "number" ? (
-                  <div>
-                    <dt className="text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-                      Sub-users
-                    </dt>
-                    <dd className="tabular-nums">{u.subUsers}</dd>
-                  </div>
-                ) : null}
-                <div>
-                  <dt className="text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-                    Owner
-                  </dt>
-                  <dd className="truncate">{u.owner ?? "—"}</dd>
-                </div>
-                {u.lastLogin ? (
-                  <div className="col-span-2">
-                    <dt className="text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-                      Last login
-                    </dt>
-                    <dd className="text-xs tabular-nums">{formatLastLogin(u.lastLogin)}</dd>
-                  </div>
-                ) : null}
-                {u.ip ? (
-                  <div className="col-span-2">
-                    <dt className="text-[10px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>
-                      IP
-                    </dt>
-                    <dd>
-                      <IpWithFlag ip={u.ip} />
-                    </dd>
-                  </div>
-                ) : null}
               </dl>
-              {openAction === u.id && actionMenu(u)}
             </article>
           ))
         )}
@@ -442,11 +394,7 @@ export function ManageUsersTable({
               </tr>
             ) : (
               pageRows.map((u) => (
-                <tr
-                  key={u.id}
-                  className="border-b hover:bg-white/[0.03]"
-                  style={{ borderColor: "var(--border)" }}
-                >
+                <tr key={u.id} className="border-b hover:bg-white/[0.03]" style={{ borderColor: "var(--border)" }}>
                   <td className="px-3 py-2.5 tabular-nums">{u.displayId}</td>
                   <td className="px-3 py-2.5">
                     <span
@@ -473,9 +421,8 @@ export function ManageUsersTable({
                         <ExternalLink size={12} />
                       </Link>
                     ) : (
-                      <span className="inline-flex items-center gap-1 font-medium" style={groupStyle(u.roleLabel)}>
+                      <span className="font-medium" style={groupStyle(u.roleLabel)}>
                         {u.groupName}
-                        <ExternalLink size={12} className="opacity-40" />
                       </span>
                     )}
                   </td>
@@ -490,17 +437,8 @@ export function ManageUsersTable({
                   <td className="px-3 py-2.5 max-w-[8rem] truncate" style={{ color: "var(--muted)" }} title={u.notes}>
                     {u.notes}
                   </td>
-                  <td className="px-3 py-2.5 relative">
-                    <button
-                      type="button"
-                      className="rounded px-2 py-1.5 border cursor-pointer hover:bg-white/10"
-                      style={{ borderColor: "var(--border)" }}
-                      onClick={() => setOpenAction(openAction === u.id ? null : u.id)}
-                      aria-label="Actions"
-                    >
-                      <List size={16} />
-                    </button>
-                    {openAction === u.id && actionMenu(u)}
+                  <td className="px-3 py-2.5">
+                    <ActionTrigger u={u} />
                   </td>
                 </tr>
               ))
@@ -508,6 +446,85 @@ export function ManageUsersTable({
           </tbody>
         </table>
       </div>
+
+      {openRow &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <>
+            <button type="button" className="xui-lines-action-backdrop" aria-label="Close menu" onClick={() => setOpenAction(null)} />
+            <div
+              ref={menuRef}
+              className={`xui-lines-action-menu xui-lines-action-menu--portal ${flipped ? "xui-lines-action-menu--up" : ""}`}
+              role="menu"
+              style={{ top: menuPos.top, left: menuPos.left }}
+            >
+              {panel === "admin" && (
+                <Link
+                  href={`/admin/resellers/${openRow.id}/edit`}
+                  className="xui-lines-action-menu-item"
+                  onClick={() => setOpenAction(null)}
+                >
+                  Edit user
+                </Link>
+              )}
+              <Link
+                href={`${linesHref}?owner=${encodeURIComponent(openRow.id)}`}
+                className="xui-lines-action-menu-item"
+                onClick={() => setOpenAction(null)}
+              >
+                View lines ({openRow.lines})
+              </Link>
+              {panel === "admin" && (
+                <Link
+                  href={`/admin/resellers/bouquets?userId=${encodeURIComponent(openRow.id)}`}
+                  className="xui-lines-action-menu-item"
+                  onClick={() => setOpenAction(null)}
+                >
+                  Manage bouquets
+                </Link>
+              )}
+              <button type="button" className="xui-lines-action-menu-item" onClick={() => void toggleActive(openRow)}>
+                {openRow.isActive ? "Disable user" : "Enable user"}
+              </button>
+              <button type="button" className="xui-lines-action-menu-item" onClick={() => void promptAddCredits(openRow)}>
+                Add credits…
+              </button>
+              <button type="button" className="xui-lines-action-menu-item" onClick={() => void quickAddCredits(openRow, 10)}>
+                +10 credits
+              </button>
+              <button type="button" className="xui-lines-action-menu-item" onClick={() => void quickAddCredits(openRow, 50)}>
+                +50 credits
+              </button>
+              <Link
+                href={`${creditsHref}?userId=${encodeURIComponent(openRow.id)}`}
+                className="xui-lines-action-menu-item"
+                onClick={() => setOpenAction(null)}
+              >
+                Credit history
+              </Link>
+              {panel === "admin" && openRow.role !== "ADMIN" && (
+                <button type="button" className="xui-lines-action-menu-item" onClick={() => void promoteToAdmin(openRow)}>
+                  Promote to admin
+                </button>
+              )}
+              {panel === "admin" && openRow.role === "ADMIN" && (
+                <button type="button" className="xui-lines-action-menu-item" onClick={() => void demoteToReseller(openRow)}>
+                  Demote to reseller
+                </button>
+              )}
+              {(panel === "reseller" || openRow.role !== "ADMIN") && (
+                <button
+                  type="button"
+                  className="xui-lines-action-menu-item xui-lines-action-menu-item--danger"
+                  onClick={() => void deleteUser(openRow.id, openRow.username)}
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          </>,
+          document.body
+        )}
 
       <div
         className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t text-sm"
@@ -528,28 +545,9 @@ export function ManageUsersTable({
           >
             Previous
           </button>
-          {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-            let n = i + 1;
-            if (totalPages > 7) {
-              if (safePage <= 4) n = i + 1;
-              else if (safePage >= totalPages - 3) n = totalPages - 6 + i;
-              else n = safePage - 3 + i;
-            }
-            return (
-              <button
-                key={n}
-                type="button"
-                className="rounded px-3 py-1 border min-w-[2rem] cursor-pointer"
-                style={{
-                  borderColor: "var(--border)",
-                  background: n === safePage ? "rgba(0,192,239,0.35)" : "transparent",
-                }}
-                onClick={() => setPage(n)}
-              >
-                {n}
-              </button>
-            );
-          })}
+          <span className="tabular-nums">
+            {safePage} / {totalPages}
+          </span>
           <button
             type="button"
             disabled={safePage >= totalPages}

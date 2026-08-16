@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.97",
+  "latestVersion": "1.9.98",
   "releases": [
+    {
+      "version": "1.9.98",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Manage Users Actions menu: Edit, credits, promote/demote, lines, bouquets — and deploy so the live panel shows them.",
+      "changelog": [
+        "Manage Users Actions: Edit user, View lines, Manage bouquets, Add credits, Promote to admin, Demote to reseller, Enable/Disable, Delete",
+        "Actions menu uses portal so items are not clipped",
+        "Live panel builds must include this UI (source-only updates were invisible)"
+      ],
+      "fixes": [
+        "Manage Users Actions still showed the old short menu on servers that pulled source without rebuilding .next"
+      ]
+    },
     {
       "version": "1.9.97",
       "date": "2026-08-16",
