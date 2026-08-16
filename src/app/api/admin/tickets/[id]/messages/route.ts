@@ -31,5 +31,18 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   await prisma.ticket.update({ where: { id: ticketId }, data: { updatedAt: new Date() } });
 
+  void import("@/lib/panel-chat-notify").then(({ notifyTicketReply }) =>
+    notifyTicketReply({
+      ticketId,
+      subject: ticket.subject,
+      authorId: session.id,
+      authorUsername: session.username,
+      authorRole: session.role,
+      body: text,
+      ticketCreatedById: ticket.createdById,
+      assignedToId: ticket.assignedToId,
+    })
+  );
+
   return NextResponse.json({ message });
 }

@@ -154,7 +154,25 @@ export async function POST(req: NextRequest) {
     return created;
   });
 
-  return NextResponse.json({ user: { id: user.id, username: user.username } });
+  // Inherit parent bouquets (or all active if parent has none) so sub-resellers can create lines.
+  let bouquetCount = 0;
+  try {
+    const { resolveBouquetsForNewReseller, grantBouquetsToReseller } = await import(
+      "@/lib/reseller-bouquets"
+    );
+    const bouquetIds = await resolveBouquetsForNewReseller({
+      role: PanelRole.SUB_RESELLER,
+      parentId: session.id,
+    });
+    bouquetCount = await grantBouquetsToReseller(user.id, bouquetIds);
+  } catch (err) {
+    console.error("[reseller/users] bouquet grant failed:", err);
+  }
+
+  return NextResponse.json({
+    user: { id: user.id, username: user.username },
+    bouquetCount,
+  });
 }
 
 export async function PATCH(req: NextRequest) {

@@ -74,7 +74,7 @@ export default function ResellerAddUserPage() {
       <form onSubmit={create} className="space-y-4 max-w-xl">
         <p className="text-sm" style={{ color: "var(--muted)" }}>
           Your balance: <strong>{myCredits}</strong> credits. Allocated credits are deducted from your account.
-          Resellers and sub-resellers can each create their own sub-users under this panel.
+          Sub-users inherit your bouquet access automatically so they can create lines.
         </p>
         <FormField label="Username" required>
           <input

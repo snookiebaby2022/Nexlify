@@ -9,11 +9,27 @@ export async function GET(req: NextRequest) {
   const session = await requireSession(CHAT_ROLES);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const since = req.nextUrl.searchParams.get("since");
-  const where = since ? { createdAt: { gt: new Date(since) } } : undefined;
+  const sinceRaw = req.nextUrl.searchParams.get("since");
+  const since = sinceRaw ? new Date(sinceRaw) : null;
+  const countOnly = req.nextUrl.searchParams.get("count") === "1";
+
+  if (countOnly) {
+    const unread = await prisma.panelChatMessage.count({
+      where: {
+        userId: { not: session.id },
+        ...(since && !Number.isNaN(since.getTime())
+          ? { createdAt: { gt: since } }
+          : {}),
+      },
+    });
+    return NextResponse.json({ unread });
+  }
 
   const messages = await prisma.panelChatMessage.findMany({
-    where,
+    where:
+      since && !Number.isNaN(since.getTime())
+        ? { createdAt: { gt: since } }
+        : undefined,
     take: 200,
     orderBy: { createdAt: "asc" },
     include: {
@@ -40,6 +56,15 @@ export async function POST(req: NextRequest) {
       user: { select: { id: true, username: true, displayName: true, role: true, avatarUrl: true } },
     },
   });
+
+  void import("@/lib/panel-chat-notify").then(({ notifyLiveChatMessage }) =>
+    notifyLiveChatMessage({
+      fromUserId: session.id,
+      fromUsername: session.username,
+      fromRole: session.role,
+      body: text,
+    })
+  );
 
   return NextResponse.json({ message });
 }

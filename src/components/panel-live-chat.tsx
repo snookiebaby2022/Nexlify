@@ -26,6 +26,37 @@ const ROLE_COLORS: Record<string, string> = {
   SUB_RESELLER: "#a78bfa",
 };
 
+const LAST_SEEN_KEY = "nexlify-chat-last-seen";
+
+function readLastSeen(): string {
+  try {
+    return localStorage.getItem(LAST_SEEN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeLastSeen(iso: string) {
+  try {
+    localStorage.setItem(LAST_SEEN_KEY, iso);
+  } catch {
+    /* ignore */
+  }
+}
+
+function UnreadBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className="ml-auto inline-flex min-w-[1.25rem] h-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white"
+      style={{ background: "#ff4500" }}
+      aria-label={`${count} unread chat messages`}
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 export function PanelLiveChat({
   username,
   variant = "sidebar",
@@ -40,6 +71,7 @@ export function PanelLiveChat({
   const [sending, setSending] = useState(false);
   const [emojiTab, setEmojiTab] = useState(CHAT_EMOJI_CATEGORIES[0].id);
   const [mounted, setMounted] = useState(false);
+  const [unread, setUnread] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
@@ -51,12 +83,35 @@ export function PanelLiveChat({
     setMessages(data.messages ?? []);
   }, []);
 
+  const loadUnread = useCallback(async () => {
+    const since = readLastSeen();
+    const qs = new URLSearchParams({ count: "1" });
+    if (since) qs.set("since", since);
+    const res = await fetch(`/api/panel/chat?${qs}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setUnread(Number(data.unread ?? 0));
+  }, []);
+
+  const markSeen = useCallback(() => {
+    writeLastSeen(new Date().toISOString());
+    setUnread(0);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     load();
+    markSeen();
     const t = setInterval(load, 3000);
     return () => clearInterval(t);
-  }, [open, load]);
+  }, [open, load, markSeen]);
+
+  useEffect(() => {
+    if (open) return;
+    loadUnread();
+    const t = setInterval(loadUnread, 15000);
+    return () => clearInterval(t);
+  }, [open, loadUnread]);
 
   useEffect(() => {
     if (open && scrollRef.current) {
@@ -77,7 +132,13 @@ export function PanelLiveChat({
       if (res.ok) {
         setDraft("");
         setEmojiOpen(false);
+        markSeen();
         await load();
+        try {
+          window.dispatchEvent(new Event("nexlify-notifications-updated"));
+        } catch {
+          /* ignore */
+        }
       }
     } catch {
       /* ignore */
@@ -88,6 +149,14 @@ export function PanelLiveChat({
 
   function appendEmoji(e: string) {
     setDraft((d) => `${d}${e}`);
+  }
+
+  function toggleOpen() {
+    setOpen((v) => {
+      const next = !v;
+      if (next) markSeen();
+      return next;
+    });
   }
 
   const panel = open && (
@@ -109,7 +178,7 @@ export function PanelLiveChat({
       >
         <div>
           <div className="font-semibold text-sm">Live chat</div>
-          <div className="text-xs opacity-90">Admins & resellers</div>
+          <div className="text-xs opacity-90">Admins & resellers · notifications on</div>
         </div>
         <button
           type="button"
@@ -238,12 +307,13 @@ export function PanelLiveChat({
       <>
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={toggleOpen}
           className="panel-sidebar-report-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium cursor-pointer"
-          title="Live chat"
+          title={unread ? `${unread} unread chat messages` : "Live chat"}
         >
           <MessageCircle size={18} className="shrink-0" style={{ color: "#ff4500" }} />
           <span className="truncate">Live chat</span>
+          <UnreadBadge count={unread} />
         </button>
         {mounted && open && createPortal(panel, document.body)}
       </>
@@ -255,12 +325,17 @@ export function PanelLiveChat({
       {panel}
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-full px-4 py-3 shadow-lg font-semibold text-sm cursor-pointer"
+        onClick={toggleOpen}
+        className="relative flex items-center gap-2 rounded-full px-4 py-3 shadow-lg font-semibold text-sm cursor-pointer"
         style={{ background: "#ff4500", color: "#fff" }}
       >
         <MessageCircle size={20} />
         {open ? "Hide chat" : "Live chat"}
+        {unread > 0 && !open && (
+          <span className="absolute -top-1 -right-1 min-w-[1.25rem] h-5 rounded-full bg-white text-[#ff4500] text-[10px] font-bold flex items-center justify-center px-1">
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
       </button>
     </div>
   );

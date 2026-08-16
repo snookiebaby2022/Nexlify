@@ -106,6 +106,10 @@ export default function AdminAddUserPage() {
   return (
     <FormPageShell title="Add User" manageHref="/admin/resellers" manageLabel="Manage Users">
       <form onSubmit={create} className="space-y-4">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          New resellers automatically receive all active bouquets. Sub-resellers inherit their parent&apos;s
+          bouquet access (or all active bouquets if the parent has none). Adjust later under Reseller Bouquets.
+        </p>
         <div className="grid md:grid-cols-2 gap-4">
           <FormField label="Username" required>
             <input

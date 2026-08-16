@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.112",
+  "latestVersion": "1.9.113",
   "releases": [
+    {
+      "version": "1.9.113",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Auto-grant bouquets to new resellers/sub-resellers; chat & ticket notifications.",
+      "changelog": [
+        "New resellers get all active bouquets; sub-resellers inherit parent bouquets (or all if parent empty)",
+        "Live chat unread badge + in-panel MESSAGE notifications (throttled)",
+        "Support tickets notify admins on create and both sides on replies (notifyTicketReply)"
+      ],
+      "fixes": [
+        "New resellers/sub-resellers started with zero bouquet access and could not create lines",
+        "Live chat and ticket support had no unread/notification feedback"
+      ]
+    },
     {
       "version": "1.9.112",
       "date": "2026-08-16",

@@ -308,6 +308,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const explicitBouquetIds = Array.isArray(body.bouquetIds)
+    ? body.bouquetIds.map(String)
+    : [];
+  const { resolveBouquetsForNewReseller } = await import("@/lib/reseller-bouquets");
+  const bouquetIds = await resolveBouquetsForNewReseller({
+    role,
+    parentId,
+    explicitIds: explicitBouquetIds,
+  });
+
   const reseller = await prisma.panelUser.create({
     data: {
       username: String(body.username).trim(),
@@ -324,7 +334,7 @@ export async function POST(req: NextRequest) {
       resellerDns,
       notes: body.notes ? String(body.notes) : null,
       resellerBouquets: {
-        create: (body.bouquetIds ?? []).map((bouquetId: string) => ({ bouquetId })),
+        create: bouquetIds.map((bouquetId: string) => ({ bouquetId })),
       },
     },
   });
@@ -336,5 +346,9 @@ export async function POST(req: NextRequest) {
     /* non-fatal */
   }
 
-  return NextResponse.json({ reseller: { id: reseller.id, username: reseller.username }, password });
+  return NextResponse.json({
+    reseller: { id: reseller.id, username: reseller.username },
+    password,
+    bouquetCount: bouquetIds.length,
+  });
 }

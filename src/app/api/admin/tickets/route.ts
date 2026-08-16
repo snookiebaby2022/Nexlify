@@ -56,6 +56,15 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  void import("@/lib/panel-chat-notify").then(({ notifyTicketCreated }) =>
+    notifyTicketCreated({
+      ticketId: ticket.id,
+      subject: String(body.subject ?? ""),
+      createdById: session.id,
+      createdByUsername: session.username,
+    })
+  );
+
   return NextResponse.json({ ticket });
 }
 
