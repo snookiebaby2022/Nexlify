@@ -58,8 +58,8 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 const emptyLiveMeta = (): LiveMeta => ({
   redirectStream: false,
   isAdult: false,
-  generateTimestamps: false,
-  streamAllCodecs: false,
+  generateTimestamps: true,
+  streamAllCodecs: true,
   nativeFrames: false,
   rtmpOutput: false,
   onDemandProbesize: "512000",
@@ -313,6 +313,7 @@ function LiveStreamForm({
         streamIcon: form.streamIcon || null,
         categoryId: form.categoryId || null,
         epgChannelId: form.epgChannelId || null,
+        autoEpg: !form.epgChannelId.trim(),
         playlistUrl: form.playlistUrl || form.notes || null,
         serverId: meta.serverIds[0] || null,
         bouquetIds: meta.bouquetIds,
@@ -741,13 +742,39 @@ function LiveStreamForm({
               </select>
             </FormField>
             <FormField label="EPG channel ID">
-              <input
-                className={formInputClass}
-                style={formInputStyle}
-                placeholder="Channel ID in EPG source"
-                value={form.epgChannelId}
-                onChange={(e) => setForm({ ...form, epgChannelId: e.target.value })}
-              />
+              <div className="flex flex-wrap gap-2">
+                <input
+                  className={`${formInputClass} flex-1 min-w-[12rem]`}
+                  style={formInputStyle}
+                  placeholder="Channel ID in EPG source"
+                  value={form.epgChannelId}
+                  onChange={(e) => setForm({ ...form, epgChannelId: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50"
+                  style={{ background: "var(--accent)", color: "#fff" }}
+                  disabled={!form.name.trim()}
+                  onClick={async () => {
+                    const res = await fetch("/api/admin/epg/auto-assign", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ name: form.name }),
+                    });
+                    const data = await res.json();
+                    if (!data.ok) {
+                      alert(data.error ?? "Auto EPG failed");
+                      return;
+                    }
+                    setForm((f) => ({ ...f, epgChannelId: String(data.match?.epgChannelId ?? "") }));
+                  }}
+                >
+                  Auto EPG
+                </button>
+              </div>
+              <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
+                Matches this channel name against your imported EPG (from providers/XMLTV). Leave blank to auto-assign on save.
+              </p>
             </FormField>
           </Section>
         </div>

@@ -138,6 +138,7 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
     isCreatedChannel: false,
   });
   const [saving, setSaving] = useState(false);
+  const [epgBusy, setEpgBusy] = useState(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -186,7 +187,7 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
     fetch("/api/admin/categories")
       .then((r) => r.json())
       .then((d) => setCategories(d.categories ?? []));
-    fetch("/api/admin/streams?type=LIVE&lite=1")
+    fetch("/api/admin/streams?type=LIVE&lite=1&picker=1&pageSize=200")
       .then((r) => r.json())
       .then((d) =>
         setParentStreams(
@@ -210,50 +211,105 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
     setSaving(true);
     setMessage("");
     const isLiveType = form.type === "LIVE";
-    const res = await fetch("/api/admin/streams", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: streamId,
-        name: form.name,
-        type: form.type,
-        source: form.useProvider ? undefined : form.streamUrl,
-        hostedExternally: form.useProvider,
-        providerId: form.useProvider ? form.providerId : null,
-        providerPath: form.useProvider ? form.providerPath : null,
-        backupUrl: form.backupUrl.trim() || null,
-        serverId: form.serverId || null,
-        categoryId: form.categoryId || null,
-        epgChannelId: form.epgChannelId || null,
-        isActive: form.isActive,
-        bouquetIds: form.bouquetIds,
-        vodMode: isLiveType ? form.vodMode : "ON_DEMAND",
-        isOnDemand: isLiveType ? form.vodMode !== "LIVE" : true,
-        archiveDays: form.archiveDays ? Number(form.archiveDays) : null,
-        playlistUrl: form.playlistUrl.trim() || null,
-        seriesName: form.type === "SERIES" ? form.seriesName || form.name : form.seriesName || null,
-        seasonNum: form.seasonNum ? Number(form.seasonNum) : null,
-        episodeNum: form.episodeNum ? Number(form.episodeNum) : null,
-        containerExtension: form.containerExtension || "mp4",
-        isAdult: form.isAdult,
-        isRadio: form.type === "LIVE" ? form.isRadio : false,
-        autoRestart: form.autoRestart,
-        isCreatedChannel: form.type === "LIVE" ? form.isCreatedChannel : false,
-        ...advancedToPayload(advanced),
-      }),
-    });
-    setSaving(false);
-    const data = await res.json();
-    if (!res.ok) {
-      setMessage(data.error ?? "Save failed");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 45000);
+    try {
+      const res = await fetch("/api/admin/streams", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          id: streamId,
+          name: form.name,
+          type: form.type,
+          source: form.useProvider ? undefined : form.streamUrl,
+          hostedExternally: form.useProvider,
+          providerId: form.useProvider ? form.providerId : null,
+          providerPath: form.useProvider ? form.providerPath : null,
+          backupUrl: form.backupUrl.trim() || null,
+          serverId: form.serverId || null,
+          categoryId: form.categoryId || null,
+          epgChannelId: form.epgChannelId || null,
+          isActive: form.isActive,
+          bouquetIds: form.bouquetIds,
+          vodMode: isLiveType ? form.vodMode : "ON_DEMAND",
+          isOnDemand: isLiveType ? form.vodMode !== "LIVE" : true,
+          archiveDays: form.archiveDays ? Number(form.archiveDays) : null,
+          playlistUrl: form.playlistUrl.trim() || null,
+          seriesName: form.type === "SERIES" ? form.seriesName || form.name : form.seriesName || null,
+          seasonNum: form.seasonNum ? Number(form.seasonNum) : null,
+          episodeNum: form.episodeNum ? Number(form.episodeNum) : null,
+          containerExtension: form.containerExtension || "mp4",
+          isAdult: form.isAdult,
+          isRadio: form.type === "LIVE" ? form.isRadio : false,
+          autoRestart: form.autoRestart,
+          isCreatedChannel: form.type === "LIVE" ? form.isCreatedChannel : false,
+          autoEpg: isLiveType && !form.epgChannelId.trim(),
+          ...advancedToPayload(advanced),
+        }),
+      });
+      const text = await res.text();
+      let data: { error?: string; stream?: Stream; epgAutoAssigned?: { epgChannelId: string; epgChannelName: string } } = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { error: text?.slice(0, 200) || `Server error (${res.status})` };
+      }
+      if (!res.ok) {
+        setMessage(data.error ?? `Save failed (${res.status})`);
+        return;
+      }
+      setMessage(
+        data.epgAutoAssigned
+          ? `Saved. Auto EPG → ${data.epgAutoAssigned.epgChannelName || data.epgAutoAssigned.epgChannelId}`
+          : "Saved."
+      );
+      if (data.stream) {
+        setStream((s) => (s ? { ...s, ...data.stream } : (data.stream as Stream)));
+        setForm((f) => ({
+          ...f,
+          streamUrl: data.stream?.streamUrl ?? f.streamUrl,
+          epgChannelId: data.stream?.epgChannelId ?? f.epgChannelId,
+        }));
+      }
+    } catch (err) {
+      const aborted = err instanceof Error && err.name === "AbortError";
+      setMessage(aborted ? "Save timed out — try again." : err instanceof Error ? err.message : "Save failed");
+    } finally {
+      clearTimeout(timer);
+      setSaving(false);
+    }
+  }
+
+  async function autoAssignEpg() {
+    if (form.type !== "LIVE") {
+      setMessage("Auto EPG is for live channels.");
       return;
     }
-    setMessage("Saved.");
-    if (data.stream) {
-      setStream((s) => (s ? { ...s, ...data.stream } : data.stream));
-      if (data.stream.streamUrl) {
-        setForm((f) => ({ ...f, streamUrl: data.stream.streamUrl }));
+    setEpgBusy(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/admin/epg/auto-assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          streamId,
+          name: form.name,
+          force: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setMessage(data.error ?? "Auto EPG failed");
+        return;
       }
+      const id = String(data.match?.epgChannelId ?? "");
+      setForm((f) => ({ ...f, epgChannelId: id }));
+      setMessage(`Auto EPG matched: ${data.match?.epgChannelName || id}`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Auto EPG failed");
+    } finally {
+      setEpgBusy(false);
     }
   }
 
@@ -518,17 +574,31 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
             {form.type === "LIVE" && (
               <EditSection
                 title="EPG mapping"
-                subtitle="Links this stream to electronic programme guide data for catch-up and TV guides."
+                subtitle="Links this stream to electronic programme guide data. Auto EPG matches from your imported provider/XMLTV guide."
                 defaultOpen={Boolean(form.epgChannelId)}
               >
                 <FormField label="EPG channel ID">
-                  <input
-                    className={formInputClass}
-                    style={formInputStyle}
-                    value={form.epgChannelId}
-                    onChange={(e) => setForm({ ...form, epgChannelId: e.target.value })}
-                    placeholder="e.g. bbc1.uk or provider channel id"
-                  />
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      className={`${formInputClass} flex-1 min-w-[12rem]`}
+                      style={formInputStyle}
+                      value={form.epgChannelId}
+                      onChange={(e) => setForm({ ...form, epgChannelId: e.target.value })}
+                      placeholder="e.g. bbc1.uk or provider channel id"
+                    />
+                    <button
+                      type="button"
+                      disabled={epgBusy || !form.name.trim()}
+                      onClick={() => void autoAssignEpg()}
+                      className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50"
+                      style={{ background: "var(--accent)", color: "#fff" }}
+                    >
+                      {epgBusy ? "Matching…" : "Auto EPG"}
+                    </button>
+                  </div>
+                  <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
+                    Auto EPG uses channel names from your EPG sources (Admin → EPG). Sync provider EPG there first.
+                  </p>
                 </FormField>
               </EditSection>
             )}
@@ -578,7 +648,12 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
               Cancel
             </Link>
             {message && (
-              <span className="text-sm" style={{ color: message === "Saved." ? "var(--success)" : "var(--danger)" }}>
+              <span
+                className="text-sm"
+                style={{
+                  color: message.startsWith("Saved") ? "var(--success)" : "var(--danger)",
+                }}
+              >
                 {message}
               </span>
             )}

@@ -1,4 +1,5 @@
 import type { LineWithBouquets } from "./lines";
+import { toXtreamAllowedOutputFormats } from "./line-access-output";
 import {
   activeBouquetIds,
   categoryIdsForLine,
@@ -159,7 +160,7 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
       active_cons: String(activeCons),
       created_at: Math.floor(line.createdAt.getTime() / 1000).toString(),
       max_connections: String(line.maxConnections),
-      allowed_output_formats: line.allowedOutput.split(",").map((s) => s.trim()).filter(Boolean),
+      allowed_output_formats: toXtreamAllowedOutputFormats(line.allowedOutput),
     },
     // Keep server_info to classic Xtream keys only — extra fields break fragile XCIPTV parsers
     // (Account Info shows "--" for expire / connections / created).

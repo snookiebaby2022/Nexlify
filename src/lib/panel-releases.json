@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.119",
+  "latestVersion": "2.0.0",
   "releases": [
+    {
+      "version": "2.0.0",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Stream save no longer sticks; Auto EPG from providers; Access Output on lines (XUI [1,2,3] fixed); Add Stream codec defaults.",
+      "changelog": [
+        "Edit stream Save: hardened PATCH, 45s client timeout, cache invalidation never blocks the response",
+        "Auto EPG on Add Stream and Manage Stream (matches imported provider/XMLTV guide; timed so save cannot hang)",
+        "Add Stream defaults: Generate timestamps and Stream all codecs found on the video are ON",
+        "Access Output: shown on Line Details + Restrictions & Access; mass edit under Lines → Mass Edit",
+        "XUI migrated lines with allowedOutput [1,2,3] now map to HLS / MPEGTS / RTMP for panel UI and Xtream players",
+        "New lines default to all Access Output formats (hls,m3u8,ts,rtmp)"
+      ],
+      "fixes": [
+        "Editing a stream stuck on Saving…",
+        "Could not find Access Output / migrated lines showed blank checkboxes",
+        "Xtream allowed_output_formats returned broken [1 / 2 / 3] tokens after XUI import"
+      ]
+    },
     {
       "version": "1.9.119",
       "date": "2026-08-16",

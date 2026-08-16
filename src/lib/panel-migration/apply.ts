@@ -6,6 +6,7 @@ import { applyMigrationPhase2 } from "./phase2";
 import { applyMigrationPhase3 } from "./apply-phase3";
 import { urlsFromPhpSerialized, looksLikePlayableUrl } from "./sql-junctions";
 import { normalizeUserAgentField } from "../line-restrictions";
+import { normalizeAllowedOutputInput } from "../line-access-output";
 import type {
   MigrationApplyOptions,
   MigrationApplyResult,
@@ -742,7 +743,7 @@ async function applyMigrationBundleInner(
           canWatchAdult: l.canWatchAdult !== false,
           allowedCountries: l.allowedCountries?.trim() || null,
           blockedCountries: l.blockedCountries?.trim() || null,
-          allowedOutput: l.allowedOutput?.trim() || "hls,m3u8,ts,rtmp",
+          allowedOutput: normalizeAllowedOutputInput(l.allowedOutput) || "hls,m3u8,ts,rtmp",
           isTrial: l.isTrial === true,
           isRestreamer: l.isRestreamer === true,
           allowedUserAgents: normalizeUserAgentField(l.allowedUserAgents),

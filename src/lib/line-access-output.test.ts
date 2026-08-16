@@ -6,6 +6,7 @@ import {
   normalizeAllowedOutputInput,
   parseAccessOutput,
   serializeAccessOutput,
+  toXtreamAllowedOutputFormats,
 } from "./line-access-output";
 
 describe("line-access-output", () => {
@@ -34,5 +35,17 @@ describe("line-access-output", () => {
   it("normalizes empty input to default", () => {
     assert.equal(normalizeAllowedOutputInput(""), DEFAULT_ALLOWED_OUTPUT);
     assert.equal(normalizeAllowedOutputInput("hls,ts,rtmp"), "hls,m3u8,ts,rtmp");
+  });
+
+  it("parses XUI numeric allowed_outputs [1,2,3]", () => {
+    const selected = parseAccessOutput("[1,2,3]");
+    assert.equal(selected.size, 3);
+    assert.equal(normalizeAllowedOutputInput("[1,2,3]"), DEFAULT_ALLOWED_OUTPUT);
+    assert.equal(normalizeAllowedOutputInput("[1,2]"), "hls,m3u8,ts");
+  });
+
+  it("expands XUI ids for Xtream player payloads", () => {
+    const formats = toXtreamAllowedOutputFormats("[1,2,3]");
+    assert.deepEqual(formats, DEFAULT_ALLOWED_OUTPUT.split(","));
   });
 });

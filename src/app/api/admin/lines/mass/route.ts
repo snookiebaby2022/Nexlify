@@ -5,6 +5,7 @@ import { logActivity } from "@/lib/lines";
 import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { mergeResellerNotes, type MassEditPatch } from "@/lib/lines-mass-edit";
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
+import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
 import { LineStatus, PanelRole } from "@prisma/client";
 
 function applyMassEditPatch(patch: MassEditPatch) {
@@ -48,7 +49,8 @@ function applyMassEditPatch(patch: MassEditPatch) {
   if (patch.canWatchAdult === "yes") data.canWatchAdult = true;
   if (patch.canWatchAdult === "no") data.canWatchAdult = false;
   if (patch.allowedOutputs && !patch.allowedOutputs.unchanged && patch.allowedOutputs.value.trim()) {
-    data.allowedOutput = patch.allowedOutputs.value.trim();
+    data.allowedOutput =
+      normalizeAllowedOutputInput(patch.allowedOutputs.value) ?? patch.allowedOutputs.value.trim();
   }
   if (patch.lockToIp === "yes") data.lockToIp = true;
   if (patch.lockToIp === "no") data.lockToIp = false;

@@ -314,7 +314,7 @@ export function LineEditForm({
           {(
             [
               { id: "details", label: "Details" },
-              { id: "restrictions", label: "Restrictions" },
+              { id: "restrictions", label: "Restrictions & Access" },
               { id: "bouquets", label: "Bouquets" },
             ] as const
           ).map((t) => (
@@ -473,6 +473,16 @@ export function LineEditForm({
                 label="Is restreamer"
                 value={form.isRestreamer}
                 onChange={(v) => setForm({ ...form, isRestreamer: v })}
+              />
+            </Card>
+
+            <Card title="Access Output">
+              <AccessOutputCheckboxes
+                selected={form.accessOutputs}
+                onChange={(accessOutputs: Set<AccessOutputId>) =>
+                  setForm({ ...form, accessOutputs })
+                }
+                hint="Xtream output formats this line may use. HLS + MPEGTS + RTMP are all on by default (like XUI)."
               />
             </Card>
           </div>

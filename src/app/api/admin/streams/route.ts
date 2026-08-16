@@ -362,8 +362,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    await invalidateXtreamCategories();
-    await invalidateDashboardStats();
+    void Promise.allSettled([invalidateXtreamCategories(), invalidateDashboardStats()]);
 
     try {
       const { logActivity } = await import("@/lib/lines");
@@ -377,17 +376,22 @@ export async function POST(req: NextRequest) {
       /* non-fatal */
     }
 
-    // LIVE streams: auto-map EPG from guide (tvg-id / name) when possible
-    if (stream.type === StreamType.LIVE) {
+    // LIVE streams: auto-map EPG from guide (tvg-id / name) when possible — never block create >3s
+    let epgAutoAssigned: { epgChannelId: string; epgChannelName: string; score: number } | null = null;
+    if (stream.type === StreamType.LIVE && !String(stream.epgChannelId ?? "").trim()) {
       try {
         const { autoAssignEpgToStream } = await import("@/lib/epg-auto-match");
-        const match = await autoAssignEpgToStream({
-          streamId: stream.id,
-          name: stream.name,
-          channelId: stream.channelId,
-          epgChannelId: stream.epgChannelId,
-        });
+        const match = await Promise.race([
+          autoAssignEpgToStream({
+            streamId: stream.id,
+            name: stream.name,
+            channelId: stream.channelId,
+            epgChannelId: stream.epgChannelId,
+          }),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]);
         if (match?.epgChannelId) {
+          epgAutoAssigned = match;
           return NextResponse.json({
             stream: { ...stream, epgChannelId: match.epgChannelId },
             probe,
@@ -399,7 +403,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ stream, probe });
+    return NextResponse.json({ stream, probe, epgAutoAssigned });
 
   } catch (e) {
 
@@ -553,47 +557,97 @@ export async function PATCH(req: NextRequest) {
 
   }
 
-
-
-  const stream = await prisma.stream.update({
-
-    where: { id },
-
-    data,
-
-    include: {
-
-      category: true,
-
-      server: true,
-
-      parentStream: { select: { id: true, name: true } },
-
-    },
-
-  });
-
-
-
-  if (body.bouquetIds !== undefined) {
-    await syncStreamBouquets(id, Array.isArray(body.bouquetIds) ? body.bouquetIds : []);
+  // Drop undefined keys — Prisma rejects unknown/undefined mixes on some versions
+  for (const key of Object.keys(data)) {
+    if (data[key] === undefined) delete data[key];
   }
+  if (Number.isNaN(data.archiveDays as number)) data.archiveDays = null;
+  if (Number.isNaN(data.timeshiftSeconds as number)) data.timeshiftSeconds = null;
+  if (Number.isNaN(data.seasonNum as number)) data.seasonNum = null;
+  if (Number.isNaN(data.episodeNum as number)) data.episodeNum = null;
 
-  await invalidatePlaybackUrls(id);
-  await invalidateXtreamCategories();
-  await invalidateDashboardStats();
   try {
-    const { logActivity } = await import("@/lib/lines");
-    await logActivity("edit_stream", {
-      userId: session.id,
-      entity: "stream",
-      entityId: id,
-      meta: { name: stream.name },
-    });
-  } catch {
-    /* non-fatal */
+    if (Object.keys(data).length === 0 && body.bouquetIds === undefined && body.autoEpg !== true) {
+      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+    }
+
+    const stream =
+      Object.keys(data).length > 0
+        ? await prisma.stream.update({
+            where: { id },
+            data,
+            include: {
+              category: true,
+              server: true,
+              parentStream: { select: { id: true, name: true } },
+            },
+          })
+        : await prisma.stream.findUniqueOrThrow({
+            where: { id },
+            include: {
+              category: true,
+              server: true,
+              parentStream: { select: { id: true, name: true } },
+            },
+          });
+
+    if (body.bouquetIds !== undefined) {
+      await syncStreamBouquets(id, Array.isArray(body.bouquetIds) ? body.bouquetIds : []);
+    }
+
+    // Cache invalidation must never block the save response
+    void Promise.allSettled([
+      invalidatePlaybackUrls(id),
+      invalidateXtreamCategories(),
+      invalidateDashboardStats(),
+    ]);
+
+    // Auto-map EPG when live and still empty (or when client asks). Cap at 3s so Save never hangs.
+    let epgAutoAssigned: { epgChannelId: string; epgChannelName: string; score: number } | null = null;
+    const wantAutoEpg =
+      stream.type === StreamType.LIVE &&
+      (body.autoEpg === true || !String(stream.epgChannelId ?? "").trim());
+    if (wantAutoEpg) {
+      try {
+        const { autoAssignEpgToStream } = await import("@/lib/epg-auto-match");
+        const match = await Promise.race([
+          autoAssignEpgToStream({
+            streamId: stream.id,
+            name: stream.name,
+            channelId: stream.channelId,
+            epgChannelId: stream.epgChannelId,
+            forceRematch: body.autoEpg === true,
+          }),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+        ]);
+        if (match?.epgChannelId) {
+          epgAutoAssigned = match;
+          (stream as { epgChannelId?: string | null }).epgChannelId = match.epgChannelId;
+        }
+      } catch {
+        /* non-fatal — save already succeeded */
+      }
+    }
+
+    try {
+      const { logActivity } = await import("@/lib/lines");
+      await logActivity("edit_stream", {
+        userId: session.id,
+        entity: "stream",
+        entityId: id,
+        meta: { name: stream.name },
+      });
+    } catch {
+      /* non-fatal */
+    }
+    return NextResponse.json({ stream, epgAutoAssigned });
+  } catch (e) {
+    console.error("[PATCH /api/admin/streams]", e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Failed to save stream" },
+      { status: 500 }
+    );
   }
-  return NextResponse.json({ stream });
 
 }
 
