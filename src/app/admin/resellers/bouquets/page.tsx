@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { XuiDualListPicker } from "@/components/xui-dual-list-picker";
 import type { DualListItem } from "@/components/dual-list-picker";
 
@@ -22,6 +23,7 @@ type BouquetRow = {
 type MassAction = "set" | "add" | "remove" | "clear";
 
 export default function AdminResellerBouquetsPage() {
+  const searchParams = useSearchParams();
   const [resellers, setResellers] = useState<ResellerRow[]>([]);
   const [bouquets, setBouquets] = useState<BouquetRow[]>([]);
   const [selected, setSelected] = useState("");
@@ -46,6 +48,11 @@ export default function AdminResellerBouquetsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("userId")?.trim();
+    if (fromUrl) setSelected(fromUrl);
+  }, [searchParams]);
 
   useEffect(() => {
     const r = resellers.find((x) => x.id === selected);
