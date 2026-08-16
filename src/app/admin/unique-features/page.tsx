@@ -173,8 +173,9 @@ export default function UniqueFeaturesPage() {
         <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
           <h3 className="text-sm font-semibold mb-3">Smart CDN Switching</h3>
           <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
-            Automatically switch between CDNs based on real-time performance. Manage endpoints on the
-            Smart CDN page, then probe here.
+            Switch between CDN edges by real-time score for failover and latency. This does not
+            guarantee unblock-everywhere — blocked domains/IPs still need DNS, edge, or source
+            changes. Manage endpoints on the Smart CDN page, then probe here.
           </p>
           <div className="flex flex-wrap gap-2">
             <a

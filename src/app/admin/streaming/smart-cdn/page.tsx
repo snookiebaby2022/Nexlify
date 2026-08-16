@@ -98,8 +98,13 @@ export default function SmartCdnPage() {
       <div>
         <h1 className="text-2xl font-semibold">Smart CDN</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Active endpoints are used to rewrite live playback URLs onto the best-scoring edge.
-          Add your CDN / edge base URLs below (https://cdn.example.com).
+          Active endpoints rewrite live playback onto the best-scoring edge for failover and
+          lower latency when an origin is slow or down.
+        </p>
+        <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>
+          CDN helps failover — it does <strong>not</strong> guarantee unblock-everywhere. ISP or
+          country blocks of your domains, IPs, or providers can still fail until you change DNS,
+          edges, or upstream sources.
         </p>
         <p className="text-xs mt-1">
           <Link href="/admin/settings/cdn-ips" style={{ color: "var(--accent)" }}>
