@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const ip = getClientIp(req);
+  const ip = getClientIp(req) ?? "unknown";
   await removeConnection(line.id, body.streamId, ip);
   return NextResponse.json({ ok: true });
 }

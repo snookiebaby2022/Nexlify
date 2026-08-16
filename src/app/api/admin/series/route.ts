@@ -171,7 +171,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Series not found" }, { status: 404 });
   }
   const seriesName = parent.seriesName ?? parent.name;
-  const data: Prisma.StreamUpdateManyMutationInput = {};
+  const data: Prisma.StreamUncheckedUpdateManyInput = {};
   if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
   if (body.categoryId !== undefined) data.categoryId = body.categoryId || null;
 

@@ -248,9 +248,20 @@ export function PanelDashboard({
           .catch(() => ({}));
 
     Promise.all([statsPromise, analyticsPromise]).then(([statsData, analytics]) => {
+      const a = (analytics ?? {}) as {
+        topChannels?: { streamId?: string; name?: string; viewers?: number; type?: string; watchCount?: number }[];
+      };
+      const topChannels: TopChannel[] = Array.isArray(a.topChannels)
+        ? a.topChannels.map((ch) => ({
+            streamId: String(ch.streamId ?? ""),
+            name: String(ch.name ?? "Unknown"),
+            type: String(ch.type ?? "LIVE"),
+            watchCount: Number(ch.watchCount ?? ch.viewers ?? 0),
+          }))
+        : [];
       setStats({
         ...statsData,
-        topChannels: analytics.topChannels ?? [],
+        topChannels,
       });
     });
   }, [statsUrl, isReseller]);

@@ -100,7 +100,6 @@ export async function runCloudBackup(): Promise<CloudBackupJob> {
       filePath,
       fileSizeBytes: stats.size,
       encrypted,
-      checksum,
       uploadProvider: provider,
       retentionDays: Number(cloudSettings.cloudBackupRetentionDays ?? 30),
       expiresAt: new Date(Date.now() + Number(cloudSettings.cloudBackupRetentionDays ?? 30) * 86400000),

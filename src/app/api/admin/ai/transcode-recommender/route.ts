@@ -46,7 +46,7 @@ export async function GET() {
       name: s.name,
       lastProbeOk: s.lastProbeOk,
       viewerCount: s.liveConnections.length,
-      recentHealth: s.healthChecks.map((h) => ({
+      recentHealth: s.healthChecks.map((h: { status: string; bitrateKbps: number | null; hasLoop: boolean; hasFreeze: boolean; hasAudioLoss: boolean; checkedAt: Date }) => ({
         status: h.status,
         bitrateKbps: h.bitrateKbps,
         hasLoop: h.hasLoop,

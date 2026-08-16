@@ -79,24 +79,22 @@ export async function heartbeatSession(
 }
 
 export async function getSessionPolicy(lineId: string): Promise<SessionPolicy> {
+  // Line schema currently exposes maxConnections only; other policy knobs use safe defaults
+  // (legacy/planned fields are not on the Prisma model and must not be selected).
   const line = await prisma.line.findUnique({
     where: { id: lineId },
     select: {
       maxConnections: true,
-      maxDevices: true,
-      allowIpChange: true,
-      ipChangeWindowSec: true,
-      deviceBindMode: true,
-      enforceConcurrentStreams: true,
+      lockToIp: true,
     },
   });
   return {
     maxConnections: line?.maxConnections ?? 1,
-    maxDevices: line?.maxDevices ?? 1,
-    allowIpChange: line?.allowIpChange ?? true,
-    ipChangeWindowSec: line?.ipChangeWindowSec ?? 300,
-    deviceBindMode: (line?.deviceBindMode as SessionPolicy["deviceBindMode"]) ?? "none",
-    enforceConcurrentStreams: line?.enforceConcurrentStreams ?? false,
+    maxDevices: line?.maxConnections ?? 1,
+    allowIpChange: line ? !line.lockToIp : true,
+    ipChangeWindowSec: 300,
+    deviceBindMode: "none",
+    enforceConcurrentStreams: false,
   };
 }
 

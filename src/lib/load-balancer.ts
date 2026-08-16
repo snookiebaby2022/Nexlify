@@ -58,12 +58,12 @@ export function calculateLoadScore(metrics: ServerMetrics): number {
 }
 
 export async function getAllServerMetrics(): Promise<ServerMetrics[]> {
-  const servers = await prisma.server.findMany({
+  const servers = await prisma.streamServer.findMany({
     where: { isActive: true },
     select: { id: true },
   });
   const metrics = await Promise.all(
-    servers.map((s) => getServerMetrics(s.id))
+    servers.map((s: { id: string }) => getServerMetrics(s.id))
   );
   return metrics.filter((m): m is ServerMetrics => m !== null);
 }
@@ -78,15 +78,18 @@ export async function selectBestServer(
 
   if (available.length === 0) return null;
   const best = available[0];
-  const server = await prisma.server.findUnique({
+  const server = await prisma.streamServer.findUnique({
     where: { id: best.serverId },
-    select: { id: true, url: true },
+    select: { id: true, host: true, port: true, protocol: true, domain: true },
   });
   if (!server) return null;
 
+  const host = server.domain?.trim() || server.host;
+  const serverUrl = `${server.protocol || "http"}://${host}:${server.port}`;
+
   return {
     serverId: server.id,
-    serverUrl: server.url,
+    serverUrl,
     reason: `Lowest load score: ${best.loadScore}%`,
     score: best.loadScore,
   };

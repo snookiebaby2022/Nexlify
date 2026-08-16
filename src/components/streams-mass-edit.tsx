@@ -405,7 +405,7 @@ export function StreamsMassEdit({
 
       {msg && <p className="text-sm">{msg}</p>}
 
-      <ProgressBar progress={progress} />
+      <ProgressBar progress={progress.progress} />
 
       <div className="flex flex-wrap items-center gap-3">
         <input

@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.1",
+  "latestVersion": "2.0.2",
   "releases": [
+    {
+      "version": "2.0.2",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Fix high-priority TypeScript/runtime bugs: schema mismatches, broken imports, unsafe null handling.",
+      "changelog": [
+        "Cleared all tsc errors (68 → 0) with smallest safe fixes",
+        "session-management no longer queries non-existent Line columns (runtime crash)",
+        "load-balancer uses streamServer; source-failover uses streamUrl",
+        "Removed invalid lucide Sync import on EPG manage page",
+        "Fixed mass-edit status/entity, watch-output/restream-logs includes without fake relations",
+        "Portal login / disconnect tolerate missing client IP"
+      ],
+      "fixes": [
+        "TypeScript build blocked by 68 errors across panel APIs and libs",
+        "getSessionPolicy Prisma select of missing Line fields",
+        "prisma.server / Stream.sourceUrl schema mismatches"
+      ]
+    },
     {
       "version": "2.0.1",
       "date": "2026-08-16",

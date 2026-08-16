@@ -21,11 +21,20 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const job = await prisma.massEditJob.create({
     data: {
-      entityType: body.entityType ?? "stream",
+      entity: (body.entity ?? body.entityType ?? "STREAMS") as
+        | "LINES"
+        | "STREAMS"
+        | "CHANNELS"
+        | "MOVIES"
+        | "SERIES"
+        | "BOUQUETS"
+        | "RESELLERS"
+        | "MAG_DEVICES"
+        | "ENIGMA_DEVICES",
       action: body.action ?? "update",
       filter: body.filter ?? {},
       changes: body.changes ?? {},
-      status: "PENDING",
+      status: "QUEUED",
       createdById: session.id,
     },
   });

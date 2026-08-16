@@ -60,7 +60,7 @@ async function loadStats() {
     networkOutPerMin = Number(latest.bytesOut) / 60;
   }
 
-  let cronLogs: { job: string; status: string; createdAt: Date; fixHref: string }[] = [];
+  let cronLogs: { job: string; status: string; createdAt: Date; fixHref: string | null }[] = [];
   try {
     cronLogs = (await prisma.cronRunLog.findMany({ take: 5, orderBy: { createdAt: "desc" } })).map((log) => ({
       job: log.job,

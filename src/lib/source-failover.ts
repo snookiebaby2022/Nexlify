@@ -84,10 +84,10 @@ export async function findFailoverUrl(
 ): Promise<string | null> {
   const stream = await prisma.stream.findUnique({
     where: { id: streamId },
-    select: { sourceUrl: true, backupUrl: true },
+    select: { streamUrl: true, backupUrl: true },
   });
   if (!stream) return null;
-  const allUrls = [stream.sourceUrl, stream.backupUrl].filter(
+  const allUrls = [stream.streamUrl, stream.backupUrl].filter(
     (u): u is string => !!u && u !== primaryUrl
   );
 

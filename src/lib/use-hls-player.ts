@@ -29,7 +29,9 @@ export type UseHlsPlayerReturn = {
   destroy: () => void;
 };
 
-const HLS_CONFIG: Partial<Hls.Config> = {
+type HlsPlayerConfig = NonNullable<ConstructorParameters<typeof Hls>[0]>;
+
+const HLS_CONFIG: Partial<HlsPlayerConfig> = {
   enableWorker: true,
   lowLatencyMode: false,
 

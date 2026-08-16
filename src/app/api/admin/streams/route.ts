@@ -245,8 +245,8 @@ export async function GET(req: NextRequest) {
       vodMode: s.vodMode,
       isOnDemand: s.isOnDemand,
       isCreatedChannel: s.isCreatedChannel ?? false,
-      agentStartCmd: "agentStartCmd" in s ? s.agentStartCmd : null,
-      autoRestart: "autoRestart" in s ? s.autoRestart : true,
+      agentStartCmd: ("agentStartCmd" in s ? (s.agentStartCmd as string | null) : null),
+      autoRestart: "autoRestart" in s ? Boolean(s.autoRestart) : true,
       streamUrl: s.streamUrl,
       hostedExternally: s.hostedExternally ?? false,
     }));

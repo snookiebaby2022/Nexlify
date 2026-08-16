@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Edit2, RefreshCw, Sync, Trash2, CheckCircle2, XCircle, AlertTriangle, Zap } from "lucide-react";
+import { Edit2, RefreshCw, Trash2, CheckCircle2, XCircle, AlertTriangle, Zap } from "lucide-react";
 
 type EpgSource = {
   id: string;

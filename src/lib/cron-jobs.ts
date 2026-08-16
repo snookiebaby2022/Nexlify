@@ -170,11 +170,7 @@ export async function jobWatchFolders() {
           ? "SERIES"
           : folder.type === "MOVIE"
             ? "MOVIE"
-            : folder.type === "LIVE"
-              ? "LIVE"
-              : isRemoteM3uUrl(folder.path)
-                ? "MIXED"
-                : "MIXED";
+            : "LIVE";
 
       await prisma.importJob.create({
         data: {

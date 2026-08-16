@@ -74,7 +74,7 @@ export async function GET() {
     const seenPoints = new Set<string>();
     const points = geoPoints
       .filter((g) => {
-        const key = `${g.ip || ""}:${g.streamId || ""}`;
+        const key = `${g.city || ""}:${g.streamId || ""}`;
         if (seenPoints.has(key)) return false;
         seenPoints.add(key);
         return true;

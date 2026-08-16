@@ -193,7 +193,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Episode not found" }, { status: 404 });
   }
 
-  const data: Prisma.StreamUpdateInput = {};
+  const data: Prisma.StreamUncheckedUpdateInput = {};
   if (body.title != null || body.name != null) data.name = String(body.title ?? body.name).trim();
   if (body.season != null || body.seasonNum != null) {
     data.seasonNum = Math.max(1, parseInt(String(body.season ?? body.seasonNum), 10) || 1);

@@ -41,7 +41,7 @@ async function proxyUpstreamNative(
     const { stream, headers } = upstreamToWebResponse(open);
     return {
       ok: true,
-      response: new NextResponse(stream, { status: 200, headers }),
+      response: new NextResponse(stream as unknown as BodyInit, { status: 200, headers }),
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Stream fetch failed";
@@ -159,11 +159,11 @@ export async function GET(
           body: remux.stream as ReadableStream<Uint8Array>,
           lineId: line.id,
           streamId: cleanId,
-          ip,
+          ip: ip ?? "",
           userAgent: ua,
         });
         return withIptvCors(
-          new NextResponse(remuxBody, {
+          new NextResponse(remuxBody as unknown as BodyInit, {
             status: 200,
             headers: {
               ...buildLiveRedirectHeaders(antiFreeze),
@@ -238,12 +238,12 @@ export async function GET(
         body: originalBody,
         lineId: line.id,
         streamId: cleanId,
-        ip,
+        ip: ip ?? "",
         userAgent: ua,
       });
 
       return withIptvCors(
-        new NextResponse(trackedBody, {
+        new NextResponse(trackedBody as unknown as BodyInit, {
           status: 200,
           headers: {
             ...buildLiveRedirectHeaders(antiFreeze),

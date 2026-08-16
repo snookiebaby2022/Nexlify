@@ -83,9 +83,9 @@ export async function GET(
 
   const rawBody = upstream.body;
   const kickedBody =
-    rawBody && typeof (rawBody as ReadableStream<Uint8Array>).getReader === "function"
+    rawBody && typeof (rawBody as { getReader?: unknown }).getReader === "function"
       ? attachKickAwareProxyBody({
-          body: rawBody as ReadableStream<Uint8Array>,
+          body: rawBody as unknown as ReadableStream<Uint8Array>,
           lineId: auth.lineId,
           streamId: auth.streamId,
           ip: clientIp || "",
@@ -94,7 +94,7 @@ export async function GET(
       : rawBody;
 
   return withIptvCors(
-    new NextResponse(kickedBody, {
+    new NextResponse(kickedBody as unknown as BodyInit, {
       status: range ? 206 : 200,
       headers: {
         ...buildLiveRedirectHeaders(antiFreeze),

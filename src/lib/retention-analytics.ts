@@ -166,6 +166,7 @@ export async function getDashboardRetentionSummary(): Promise<{
   });
   const channelCounts = new Map<string, { name: string; count: number }>();
   for (const conn of connections) {
+    if (!conn.streamId) continue;
     const existing = channelCounts.get(conn.streamId) ?? { name: conn.stream?.name ?? "Unknown", count: 0 };
     existing.count++;
     channelCounts.set(conn.streamId, existing);

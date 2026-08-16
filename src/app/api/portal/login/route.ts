@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing credentials" }, { status: 400 });
   }
 
-  const rl = await checkLoginRateLimit(ip);
+  const rl = await checkLoginRateLimit(ip ?? "unknown");
   if (!rl.ok) {
     return NextResponse.json({ error: rl.error }, { status: 429 });
   }
@@ -37,11 +37,11 @@ export async function POST(req: NextRequest) {
   });
 
   if (!line || line.password !== password) {
-    await recordLoginFailure(ip);
+    await recordLoginFailure(ip ?? "unknown");
     return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
   }
 
-  await clearLoginFailures(ip);
+  await clearLoginFailures(ip ?? "unknown");
   await createPortalSession({ id: line.id, username: line.username });
 
   return NextResponse.json({

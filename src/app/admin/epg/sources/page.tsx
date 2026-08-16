@@ -19,7 +19,12 @@ export default function EpgSourcesPage() {
   const [sources, setSources] = useState<EpgSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [newSource, setNewSource] = useState({ name: "", url: "", type: "xmltv" as const, priority: 1 });
+  const [newSource, setNewSource] = useState<{
+    name: string;
+    url: string;
+    type: "xmltv" | "xtream" | "custom";
+    priority: number;
+  }>({ name: "", url: "", type: "xmltv", priority: 1 });
 
   const load = useCallback(async () => {
     setLoading(true);

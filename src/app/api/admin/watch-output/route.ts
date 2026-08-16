@@ -23,8 +23,16 @@ export async function GET(req: NextRequest) {
     where,
     orderBy: { createdAt: "desc" },
     take: limit,
-    include: { watchFolder: { select: { name: true } } },
   });
+
+  const folderIds = [...new Set(jobs.map((j) => j.watchFolderId).filter(Boolean))] as string[];
+  const folders = folderIds.length
+    ? await prisma.watchFolder.findMany({
+        where: { id: { in: folderIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const folderName = new Map(folders.map((f) => [f.id, f.name]));
 
   return NextResponse.json({
     jobs: jobs.map((j) => ({
@@ -36,7 +44,7 @@ export async function GET(req: NextRequest) {
       imported: j.imported,
       skipped: j.skipped,
       message: j.message,
-      watchFolderName: j.watchFolder?.name ?? null,
+      watchFolderName: j.watchFolderId ? folderName.get(j.watchFolderId) ?? null : null,
       createdAt: j.createdAt.toISOString(),
       startedAt: j.startedAt?.toISOString() ?? null,
       completedAt: j.completedAt?.toISOString() ?? null,

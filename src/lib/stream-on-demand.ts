@@ -1,15 +1,35 @@
 import { prisma } from "@/lib/prisma";
 import { enqueueAgentCommand } from "@/lib/stream-agent";
-import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
+import { getStreamPlaybackMode, type StreamForPlaybackMode } from "@/lib/stream-playback-mode";
+import type { VodMode } from "@prisma/client";
 
 const START_COOLDOWN_MS = 15_000;
 const startInflight = new Map<string, number>();
 
 /** XUI-style: start ffmpeg on the streaming server when a viewer opens an on-demand channel. */
 export async function ensureOnDemandStreamStarted(
-  stream: { id: string; serverId: string | null; vodMode: string; isOnDemand: boolean; isCreatedChannel: boolean; agentStartCmd: string | null; autoRestart: boolean; streamUrl: string; hostedExternally: boolean }
+  stream: {
+    id: string;
+    serverId: string | null;
+    vodMode: string | VodMode;
+    isOnDemand: boolean;
+    isCreatedChannel: boolean;
+    agentStartCmd: string | null;
+    autoRestart: boolean;
+    streamUrl: string;
+    hostedExternally: boolean;
+  }
 ): Promise<void> {
-  const mode = getStreamPlaybackMode(stream);
+  const forMode: StreamForPlaybackMode = {
+    vodMode: stream.vodMode as VodMode,
+    isOnDemand: stream.isOnDemand,
+    isCreatedChannel: stream.isCreatedChannel,
+    agentStartCmd: stream.agentStartCmd,
+    autoRestart: stream.autoRestart,
+    streamUrl: stream.streamUrl,
+    hostedExternally: stream.hostedExternally,
+  };
+  const mode = getStreamPlaybackMode(forMode);
   if (mode !== "on_demand" && mode !== "created" && mode !== "catchup") return;
   if (!stream.serverId) return;
 

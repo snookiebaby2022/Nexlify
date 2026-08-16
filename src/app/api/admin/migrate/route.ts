@@ -230,9 +230,9 @@ async function parseMultipart(req: NextRequest): Promise<
 
   try {
     const nodeStream = Readable.fromWeb(
-      req.body as unknown as ReadableStream<Uint8Array>,
+      req.body as unknown as import("stream/web").ReadableStream,
     );
-    nodeStream.pipe(busboy);
+    nodeStream.pipe(busboy as unknown as NodeJS.WritableStream);
     await parsed;
     if (fileWriteDone) await fileWriteDone;
   } catch (e) {

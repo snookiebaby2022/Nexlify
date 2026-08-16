@@ -206,9 +206,9 @@ export async function importPanelTransfer(
               const created = await prisma.category.create({ data: { name: s.categoryName } });
               cat = created.id;
             }
-            categoryIdByName.set(s.categoryName, cat);
+            categoryIdByName.set(s.categoryName, cat!);
           }
-          categoryId = cat;
+          categoryId = cat ?? null;
         }
 
         let providerId: string | null = null;

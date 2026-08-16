@@ -35,7 +35,7 @@ export type MergedEpg = {
 };
 
 export async function getEpgSources(): Promise<EpgSource[]> {
-  return cacheGet<EpgSource[]>(`${EPG_CACHE_PREFIX}sources`) ?? [];
+  return (await cacheGet<EpgSource[]>(`${EPG_CACHE_PREFIX}sources`)) ?? [];
 }
 
 export async function addEpgSource(
@@ -53,7 +53,7 @@ export async function addEpgSource(
   const sources = await getEpgSources();
   sources.push(newSource);
   await cacheSet(`${EPG_CACHE_PREFIX}sources`, sources, 86400);
-  void logActivity("epg_source_added", { sourceId: id, name: source.name });
+  void logActivity("epg_source_added", { entity: "epg_source", entityId: id, meta: { name: source.name } });
   return newSource;
 }
 
@@ -75,7 +75,7 @@ export async function removeEpgSource(id: string): Promise<boolean> {
   if (filtered.length === sources.length) return false;
   await cacheSet(`${EPG_CACHE_PREFIX}sources`, filtered, 86400);
   await cacheDel(`${EPG_CACHE_PREFIX}programs:${id}`);
-  void logActivity("epg_source_removed", { sourceId: id });
+  void logActivity("epg_source_removed", { entity: "epg_source", entityId: id });
   return true;
 }
 

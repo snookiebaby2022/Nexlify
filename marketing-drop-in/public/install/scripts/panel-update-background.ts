@@ -54,7 +54,7 @@ async function main() {
     /* ignore */
   }
 
-  const result = await runPanelUpdateWithProgress(async (update) => {
+  const result = await runPanelUpdateWithProgress(async (update: Record<string, unknown>) => {
     job = { ...job!, ...update } as typeof job;
     await writeUpdateJob(repoPath, job!);
   });
@@ -76,7 +76,7 @@ async function main() {
     (looksLikeSuccessfulUpdateDespiteWorkerExit({
       ...job!,
       progress: Math.max(job!.progress ?? 0, result.ok ? 100 : job!.progress ?? 0),
-      steps: result.steps.map((s) => ({
+      steps: result.steps.map((s: { name: string; ok: boolean; output?: string }) => ({
         name: s.name,
         ok: s.ok,
         status: s.ok ? ("done" as const) : ("failed" as const),
@@ -105,7 +105,7 @@ async function main() {
         : `Updated to v${result.toVersion}. Panel restarted (a late restart check failed but the new build is live).`
       : result.message,
     toVersion: result.toVersion,
-    steps: result.steps.map((s) => ({
+    steps: result.steps.map((s: { name: string; ok: boolean; output?: string }) => ({
       name: s.name,
       ok: s.ok,
       status: s.ok ? ("done" as const) : ("failed" as const),

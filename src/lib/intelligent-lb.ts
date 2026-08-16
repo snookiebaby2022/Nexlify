@@ -48,9 +48,9 @@ export async function pickIntelligentServer(
       new Promise<null>((r) => setTimeout(() => r(null), 1000)),
     ]);
     if (geo) {
-      const geoMatched = pool.filter((x) =>
-        serverMatchesGeo(x.server, geo.countryCode ?? null, geo.isp ?? null)
-      );
+      const country = geo.countryCode ?? null;
+      const isp = geo.isp ?? null;
+      const geoMatched = pool.filter((x) => serverMatchesGeo(x.server, country, isp));
       if (geoMatched.length) pool = geoMatched;
     }
   }

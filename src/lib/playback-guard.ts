@@ -117,7 +117,7 @@ async function assertPlaybackAllowedInner(
   if (!checkLineIpAccess(line, clientIp)) return "ip";
   if (!checkLineUserAgent(line, userAgent)) return "user_agent";
 
-  let geo = null;
+  let geo: Awaited<ReturnType<typeof lookupGeo>> | null = null;
   if (clientIp) {
     geo = await lookupGeo(clientIp);
     const block = await checkPlaybackBlocklist(
@@ -133,7 +133,8 @@ async function assertPlaybackAllowedInner(
     // Per-line ISP blocking
     if (line.blockedIsps && geo?.isp) {
       const blockedIsps = line.blockedIsps.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-      if (blockedIsps.some(blocked => geo.isp.toLowerCase().includes(blocked))) return "isp";
+      const isp = geo.isp.toLowerCase();
+      if (blockedIsps.some(blocked => isp.includes(blocked))) return "isp";
     }
 
     const geoSettings = await getSettingGroup("geo");

@@ -2,7 +2,7 @@
 
 export type PanelUpdateMode = "git" | "prebuilt" | "patch";
 
-export function isPanelUpdateForced(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isPanelUpdateForced(env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env): boolean {
   const v = env.PANEL_UPDATE_FORCE?.trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
 }

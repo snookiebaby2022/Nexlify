@@ -11,5 +11,5 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const job = await prisma.massEditJob.findUnique({ where: { id } });
   if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  return NextResponse.json({ job, results: job.results ?? null });
+  return NextResponse.json({ job, results: job.errors ?? null });
 }

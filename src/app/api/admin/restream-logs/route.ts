@@ -23,11 +23,20 @@ export async function GET(req: NextRequest) {
     where,
     orderBy: { createdAt: "desc" },
     take: limit,
-    include: {
-      line: { select: { username: true } },
-      stream: { select: { name: true } },
-    },
   });
+
+  const lineIds = [...new Set(logs.map((l) => l.lineId).filter(Boolean))] as string[];
+  const streamIds = [...new Set(logs.map((l) => l.streamId).filter(Boolean))] as string[];
+  const [lines, streams] = await Promise.all([
+    lineIds.length
+      ? prisma.line.findMany({ where: { id: { in: lineIds } }, select: { id: true, username: true } })
+      : Promise.resolve([] as { id: string; username: string }[]),
+    streamIds.length
+      ? prisma.stream.findMany({ where: { id: { in: streamIds } }, select: { id: true, name: true } })
+      : Promise.resolve([] as { id: string; name: string }[]),
+  ]);
+  const lineName = new Map(lines.map((l) => [l.id, l.username]));
+  const streamName = new Map(streams.map((s) => [s.id, s.name]));
 
   return NextResponse.json({
     logs: logs.map((l) => ({
@@ -40,8 +49,8 @@ export async function GET(req: NextRequest) {
       action: l.action,
       meta: l.meta,
       createdAt: l.createdAt,
-      lineUsername: l.line?.username ?? null,
-      streamName: l.stream?.name ?? null,
+      lineUsername: l.lineId ? lineName.get(l.lineId) ?? null : null,
+      streamName: l.streamId ? streamName.get(l.streamId) ?? null : null,
     })),
   });
 }

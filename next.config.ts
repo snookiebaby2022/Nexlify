@@ -77,7 +77,8 @@ const nextConfig: NextConfig = {
     // large migration uploads ("Only the first 10MB will be available"). Raise it.
     middlewareClientMaxBodySize: "2gb",
     // Next 15.5+ standalone proxy defaults to ~1MB and can drop multipart bodies.
-    proxyClientMaxBodySize: "2gb",
+    // Typed ExperimentalConfig in this Next version omits the key; keep runtime option.
+    ...({ proxyClientMaxBodySize: "2gb" } as Record<string, string>),
   },
 };
 
