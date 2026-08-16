@@ -11,7 +11,7 @@
         "Panel login verifies XUI $6$ crypt hashes (python3 crypt) as well as bcrypt",
         "Migration stores pre-hashed reseller passwords as-is (no double-hash)",
         "Successful $6$ login upgrades to bcrypt + passwordPlain for UI reveal",
-        "restore-xui-crypt-passwords.mjs recovers crypt hashes from dump map"
+        "restore-xui-crypt-passwords.cjs recovers crypt hashes from dump map"
       ],
       "fixes": [
         "Resellers/sub-resellers imported from XUI could not login with their real passwords (bcrypt of crypt string)"
