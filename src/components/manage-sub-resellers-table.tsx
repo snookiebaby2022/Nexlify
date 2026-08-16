@@ -19,6 +19,7 @@ export type ManageSubResellerRow = {
   lines: number;
   subUsers: number;
   parentUsername: string | null;
+  groupId?: string | null;
   groupName: string;
   createdAt: string;
   lastLogin: string;
@@ -43,6 +44,23 @@ export function ManageSubResellersTable({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const [flipped, setFlipped] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkGroupId, setBulkGroupId] = useState("");
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/groups")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.groups ?? []) as { id: string; name: string }[];
+        setGroups(list);
+        const preferred = list.find((g) => g.name === "Sub-resellers") ?? list[0];
+        if (preferred) setBulkGroupId(preferred.id);
+      })
+      .catch(() => {});
+  }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -165,6 +183,55 @@ export function ManageSubResellersTable({
     setOpenMenuId(null);
   }
 
+  const allPageSelected = pageRows.length > 0 && pageRows.every((r) => selected.has(r.id));
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
+  function toggleAllPage(checked: boolean) {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (checked) pageRows.forEach((r) => n.add(r.id));
+      else pageRows.forEach((r) => n.delete(r.id));
+      return n;
+    });
+  }
+
+  async function runBulk() {
+    if (!bulkAction || selected.size === 0 || bulkBusy) return;
+    if (bulkAction === "setGroup" && !bulkGroupId) {
+      alert("Choose a group");
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const res = await fetch("/api/admin/users/mass", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: [...selected],
+          action: bulkAction,
+          groupId: bulkAction === "setGroup" ? bulkGroupId : undefined,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) alert(typeof j.error === "string" ? j.error : "Bulk update failed");
+      else {
+        setSelected(new Set());
+        setBulkAction("");
+        onRefresh();
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   const thClass = "text-left px-3 py-3 font-normal text-xs whitespace-nowrap cursor-pointer select-none";
 
   return (
@@ -198,25 +265,62 @@ export function ManageSubResellersTable({
         className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 px-4 py-3 border-b text-sm"
         style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.2)" }}
       >
-        <label className="flex items-center gap-2" style={{ color: "var(--muted)" }}>
-          Show
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2" style={{ color: "var(--muted)" }}>
+            Show
+            <select
+              className="panel-select rounded border px-2 py-1 text-sm"
+              style={{ borderColor: "var(--border)", background: "#fff", color: "#111" }}
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(parseInt(e.target.value, 10));
+                setPage(1);
+              }}
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            entries
+          </label>
           <select
-            className="panel-select rounded border px-2 py-1 text-sm"
-            style={{ borderColor: "var(--border)", background: "#fff", color: "#111" }}
-            value={pageSize}
-            onChange={(e) => {
-              setPageSize(parseInt(e.target.value, 10));
-              setPage(1);
-            }}
+            className="rounded border px-2 py-1.5 text-sm bg-transparent"
+            style={{ borderColor: "var(--border)", color: "inherit" }}
+            value={bulkAction}
+            onChange={(e) => setBulkAction(e.target.value)}
           >
-            {PAGE_SIZES.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
+            <option value="">Bulk actions</option>
+            <option value="setGroup">Change group</option>
+            <option value="enable">Enable</option>
+            <option value="disable">Disable</option>
           </select>
-          entries
-        </label>
+          {bulkAction === "setGroup" && (
+            <select
+              className="rounded border px-2 py-1.5 text-sm bg-transparent min-w-[10rem]"
+              style={{ borderColor: "var(--border)", color: "inherit" }}
+              value={bulkGroupId}
+              onChange={(e) => setBulkGroupId(e.target.value)}
+            >
+              <option value="">Select group…</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            type="button"
+            className="rounded border px-3 py-1.5 text-sm cursor-pointer disabled:opacity-40"
+            style={{ borderColor: "var(--border)" }}
+            disabled={!bulkAction || selected.size === 0 || bulkBusy}
+            onClick={() => void runBulk()}
+          >
+            Apply{selected.size ? ` (${selected.size})` : ""}
+          </button>
+        </div>
         <div className="flex items-center gap-2">
           <button type="button" className="rounded border px-2 py-1.5" style={{ borderColor: "var(--border)" }} onClick={onRefresh}>
             <RefreshCw size={14} />
@@ -244,6 +348,14 @@ export function ManageSubResellersTable({
         <table className="w-full text-sm">
           <thead style={{ background: "rgba(0,0,0,0.25)" }}>
             <tr>
+              <th className="px-3 py-3 w-10">
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  onChange={(e) => toggleAllPage(e.target.checked)}
+                  aria-label="Select all on page"
+                />
+              </th>
               <th className={thClass} onClick={() => toggleSort("displayId")}>
                 <span className="inline-flex items-center gap-1">
                   ID <ArrowUpDown size={12} className="opacity-50" />
@@ -275,13 +387,21 @@ export function ManageSubResellersTable({
           <tbody>
             {pageRows.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
+                <td colSpan={11} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
                   No sub-resellers yet
                 </td>
               </tr>
             ) : (
               pageRows.map((r) => (
                 <tr key={r.id} className="border-t hover:bg-white/[0.02]" style={{ borderColor: "var(--border)" }}>
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(r.id)}
+                      onChange={() => toggleSelected(r.id)}
+                      aria-label={`Select ${r.username}`}
+                    />
+                  </td>
                   <td className="px-3 py-3 tabular-nums">{r.displayId}</td>
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-2">

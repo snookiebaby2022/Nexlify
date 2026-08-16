@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.98",
+  "latestVersion": "1.9.99",
   "releases": [
+    {
+      "version": "1.9.99",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Mass edit resellers and sub-resellers: change which group they belong to in bulk.",
+      "changelog": [
+        "Mass Edit Users: Change group action with group picker and role filter (resellers / sub-resellers)",
+        "Manage Users: bulk select + Change group / Enable / Disable",
+        "Sub-resellers: bulk select + Change group / Enable / Disable",
+        "POST /api/admin/users/mass supports setGroup"
+      ],
+      "fixes": [
+        "No way to move many resellers/sub-resellers into a different group at once"
+      ]
+    },
     {
       "version": "1.9.98",
       "date": "2026-08-16",

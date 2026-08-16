@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 const items = [
-  { href: "/admin/management/mass-edit/users", label: "Users & resellers", desc: "Enable, disable, add credits" },
+  { href: "/admin/management/mass-edit/users", label: "Users & resellers", desc: "Change group, enable, disable, add credits" },
   { href: "/admin/management/mass-edit/lines", label: "Lines", desc: "Status, extend, bouquets, delete" },
   { href: "/admin/resellers/bouquets", label: "Bouquet access", desc: "Bulk assign bouquets to resellers" },
   { href: "/admin/management/mass-edit/streams", label: "Live streams", desc: "Bulk actions on live TV" },

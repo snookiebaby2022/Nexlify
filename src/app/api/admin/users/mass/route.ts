@@ -44,6 +44,28 @@ export async function POST(req: NextRequest) {
         count = users.length;
       }
     }
+  } else if (action === "setGroup") {
+    const raw = body.groupId;
+    const groupId =
+      raw === null || raw === undefined || raw === ""
+        ? null
+        : String(raw);
+
+    if (groupId) {
+      const group = await prisma.userGroup.findUnique({
+        where: { id: groupId },
+        select: { id: true },
+      });
+      if (!group) {
+        return NextResponse.json({ error: "Group not found" }, { status: 400 });
+      }
+    }
+
+    const r = await prisma.panelUser.updateMany({
+      where: { id: { in: ids }, role: { not: PanelRole.ADMIN } },
+      data: { groupId },
+    });
+    count = r.count;
   } else {
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   }

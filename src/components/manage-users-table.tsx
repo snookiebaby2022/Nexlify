@@ -71,6 +71,25 @@ export function ManageUsersTable({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const [flipped, setFlipped] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState("");
+  const [bulkGroupId, setBulkGroupId] = useState("");
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const canBulk = panel === "admin";
+
+  useEffect(() => {
+    if (!canBulk) return;
+    fetch("/api/admin/groups")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.groups ?? []) as { id: string; name: string }[];
+        setGroups(list);
+        const preferred = list.find((g) => g.name === "Resellers") ?? list[0];
+        if (preferred) setBulkGroupId(preferred.id);
+      })
+      .catch(() => {});
+  }, [canBulk]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -240,6 +259,60 @@ export function ManageUsersTable({
     await quickAddCredits(u, amount);
   }
 
+  const selectableRows = useMemo(
+    () => pageRows.filter((u) => u.role !== "ADMIN"),
+    [pageRows]
+  );
+  const allPageSelected =
+    selectableRows.length > 0 && selectableRows.every((u) => selected.has(u.id));
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
+  function toggleAllPage(checked: boolean) {
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (checked) selectableRows.forEach((u) => n.add(u.id));
+      else selectableRows.forEach((u) => n.delete(u.id));
+      return n;
+    });
+  }
+
+  async function runBulk() {
+    if (!canBulk || !bulkAction || selected.size === 0 || bulkBusy) return;
+    if (bulkAction === "setGroup" && !bulkGroupId) {
+      alert("Choose a group");
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const res = await fetch("/api/admin/users/mass", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: [...selected],
+          action: bulkAction,
+          groupId: bulkAction === "setGroup" ? bulkGroupId : undefined,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) alert(typeof j.error === "string" ? j.error : "Bulk update failed");
+      else {
+        setSelected(new Set());
+        setBulkAction("");
+        onRefresh();
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   const thClass =
     "text-left px-3 py-3 font-normal text-xs whitespace-nowrap cursor-pointer select-none";
   const SortHead = ({ label, col }: { label: string; col: SortKey }) => (
@@ -287,25 +360,73 @@ export function ManageUsersTable({
         className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 px-4 py-3 border-b text-sm"
         style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.2)" }}
       >
-        <label className="flex items-center gap-2" style={{ color: "var(--muted)" }}>
-          Show
-          <select
-            className="panel-select rounded border px-2 py-1 text-sm"
-            style={{ borderColor: "var(--border)", background: "#fff", color: "#111" }}
-            value={pageSize}
-            onChange={(e) => {
-              setPageSize(parseInt(e.target.value, 10));
-              setPage(1);
-            }}
-          >
-            {PAGE_SIZES.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-          entries
-        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2" style={{ color: "var(--muted)" }}>
+            Show
+            <select
+              className="panel-select rounded border px-2 py-1 text-sm"
+              style={{ borderColor: "var(--border)", background: "#fff", color: "#111" }}
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(parseInt(e.target.value, 10));
+                setPage(1);
+              }}
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            entries
+          </label>
+          {canBulk && (
+            <>
+              <select
+                className="rounded border px-2 py-1.5 text-sm bg-transparent"
+                style={{ borderColor: "var(--border)", color: "inherit" }}
+                value={bulkAction}
+                onChange={(e) => setBulkAction(e.target.value)}
+              >
+                <option value="">Bulk actions</option>
+                <option value="setGroup">Change group</option>
+                <option value="enable">Enable</option>
+                <option value="disable">Disable</option>
+              </select>
+              {bulkAction === "setGroup" && (
+                <select
+                  className="rounded border px-2 py-1.5 text-sm bg-transparent min-w-[10rem]"
+                  style={{ borderColor: "var(--border)", color: "inherit" }}
+                  value={bulkGroupId}
+                  onChange={(e) => setBulkGroupId(e.target.value)}
+                >
+                  <option value="">Select group…</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                type="button"
+                className="rounded border px-3 py-1.5 text-sm cursor-pointer disabled:opacity-40"
+                style={{ borderColor: "var(--border)" }}
+                disabled={!bulkAction || selected.size === 0 || bulkBusy}
+                onClick={() => void runBulk()}
+              >
+                Apply{selected.size ? ` (${selected.size})` : ""}
+              </button>
+              <Link
+                href="/admin/management/mass-edit/users"
+                className="text-xs underline"
+                style={{ color: "var(--accent)" }}
+              >
+                Mass edit users
+              </Link>
+            </>
+          )}
+        </div>
         <label className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
           <span style={{ color: "var(--muted)" }}>Search</span>
           <input
@@ -330,21 +451,31 @@ export function ManageUsersTable({
           pageRows.map((u) => (
             <article key={u.id} className="panel-mobile-card p-4 space-y-2.5">
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                      title={u.isActive ? "Enabled" : "Disabled"}
-                      style={{ background: u.isActive ? "#22c55e" : "#6b7280" }}
+                <div className="min-w-0 flex items-start gap-2">
+                  {canBulk && u.role !== "ADMIN" && (
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={selected.has(u.id)}
+                      onChange={() => toggleSelected(u.id)}
                     />
-                    <span className="font-semibold truncate">{u.username}</span>
-                    <span className="text-xs tabular-nums shrink-0" style={{ color: "var(--muted)" }}>
-                      #{u.displayId}
-                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                        title={u.isActive ? "Enabled" : "Disabled"}
+                        style={{ background: u.isActive ? "#22c55e" : "#6b7280" }}
+                      />
+                      <span className="font-semibold truncate">{u.username}</span>
+                      <span className="text-xs tabular-nums shrink-0" style={{ color: "var(--muted)" }}>
+                        #{u.displayId}
+                      </span>
+                    </div>
+                    <p className="text-xs mt-0.5 truncate" style={{ color: "var(--muted)" }}>
+                      {u.email || "No email"} · {u.groupName}
+                    </p>
                   </div>
-                  <p className="text-xs mt-0.5 truncate" style={{ color: "var(--muted)" }}>
-                    {u.email || "No email"} · {u.groupName}
-                  </p>
                 </div>
                 <ActionTrigger u={u} />
               </div>
@@ -371,6 +502,16 @@ export function ManageUsersTable({
         <table className="w-full text-sm min-w-[1100px]">
           <thead>
             <tr className="border-b" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+              {canBulk && (
+                <th className="px-3 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allPageSelected}
+                    onChange={(e) => toggleAllPage(e.target.checked)}
+                    aria-label="Select all on page"
+                  />
+                </th>
+              )}
               <SortHead label="ID" col="displayId" />
               <th className="px-3 py-3 text-left font-normal text-xs">Status</th>
               <SortHead label="Owner" col="owner" />
@@ -388,13 +529,25 @@ export function ManageUsersTable({
           <tbody>
             {pageRows.length === 0 ? (
               <tr>
-                <td colSpan={12} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
+                <td colSpan={canBulk ? 13 : 12} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
                   No users found
                 </td>
               </tr>
             ) : (
               pageRows.map((u) => (
                 <tr key={u.id} className="border-b hover:bg-white/[0.03]" style={{ borderColor: "var(--border)" }}>
+                  {canBulk && (
+                    <td className="px-3 py-2.5">
+                      {u.role !== "ADMIN" ? (
+                        <input
+                          type="checkbox"
+                          checked={selected.has(u.id)}
+                          onChange={() => toggleSelected(u.id)}
+                          aria-label={`Select ${u.username}`}
+                        />
+                      ) : null}
+                    </td>
+                  )}
                   <td className="px-3 py-2.5 tabular-nums">{u.displayId}</td>
                   <td className="px-3 py-2.5">
                     <span
