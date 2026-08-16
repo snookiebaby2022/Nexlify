@@ -96,8 +96,9 @@ export function PanelUpdateRunningProgress({
         </ul>
       )}
       <p className="panel-update-progress-hint">
-        Compile often takes <strong>5–15 minutes</strong> with little visible movement — that is normal
-        (webpack), not a freeze. The live panel stays up until the final swap/PM2 restart (~15–60s brief
+        Compile often takes <strong>5–15 minutes</strong> with little visible movement around 55–70% —
+        that is normal (webpack), not a freeze. If the panel already restarted on the new version, the
+        bar clears automatically. The live panel stays up until the final swap/PM2 restart (~15–60s brief
         outage). Only use Clear stuck update if there is no change for more than 20 minutes or the panel
         returns 502.
       </p>

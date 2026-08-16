@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "1.9.96",
+  "latestVersion": "1.9.97",
   "releases": [
+    {
+      "version": "1.9.97",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Panel updates stuck at ~60% after a successful restart now auto-clear as completed.",
+      "changelog": [
+        "Reconcile update jobs by installed package.json version when the worker dies mid-build",
+        "Clear stuck ~60% progress when the panel is already on the new version",
+        "Worker exit handler promotes mid-progress jobs to done when version already bumped"
+      ],
+      "fixes": [
+        "Updates page sat at 60% until Clear stuck even though the panel had already updated",
+        "False stuck/failed update banner after PM2 swap killed the update worker mid-compile"
+      ]
+    },
     {
       "version": "1.9.96",
       "date": "2026-08-16",

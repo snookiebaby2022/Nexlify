@@ -2,6 +2,7 @@ import { readFile, writeFile } from "fs/promises";
 import { spawn, execSync } from "child_process";
 import path from "path";
 import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
+import { compareVersions } from "@/lib/panel-releases-feed";
 
 export type PanelUpdateJobStep = {
   name: string;
@@ -65,6 +66,37 @@ const MAX_FAILED_MS = 2 * 60 * 1000; // auto-clear failed jobs quickly so Clear 
 const MAX_DONE_MS = 2 * 60 * 1000; // auto-clear completed jobs so reload does not re-show banner
 const MAX_SAME_VERSION_FAILED_MS = 5 * 60 * 1000; // re-sync failures stop nagging sooner
 
+async function readInstalledPackageVersion(repoPath: string): Promise<string | null> {
+  try {
+    const raw = await readFile(path.join(repoPath, "package.json"), "utf8");
+    const v = (JSON.parse(raw) as { version?: unknown }).version;
+    return typeof v === "string" && v.trim() ? v.trim().replace(/^v/i, "") : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when package.json already reflects a successful update even if the
+ * progress bar never reached the late swap/restart steps (common when PM2
+ * restarts kill the worker around mid-build ~55–70%).
+ */
+export function installedVersionImpliesUpdateSuccess(
+  job: PanelUpdateJob,
+  installedVersion: string | null | undefined
+): boolean {
+  if (!installedVersion) return false;
+  const installed = installedVersion.replace(/^v/i, "").trim();
+  if (!installed) return false;
+
+  const from = (job.fromVersion ?? "").replace(/^v/i, "").trim();
+  const to = (job.toVersion ?? "").replace(/^v/i, "").trim();
+
+  if (to && compareVersions(installed, to) >= 0) return true;
+  if (from && compareVersions(installed, from) > 0) return true;
+  return false;
+}
+
 /**
  * True when the worker died during/after the late swap/restart window.
  * The new build is usually already on disk and the panel comes back via
@@ -97,6 +129,38 @@ function promoteJobToDone(job: PanelUpdateJob, message: string): PanelUpdateJob 
   };
 }
 
+async function promoteIfInstalledVersionSucceeded(
+  repoPath: string,
+  job: PanelUpdateJob
+): Promise<PanelUpdateJob | null> {
+  const installed = await readInstalledPackageVersion(repoPath);
+  if (!installedVersionImpliesUpdateSuccess(job, installed)) return null;
+  const to = (job.toVersion ?? installed ?? "").replace(/^v/i, "");
+  const from = (job.fromVersion ?? "").replace(/^v/i, "");
+  const promoted = promoteJobToDone(
+    {
+      ...job,
+      toVersion: to || job.toVersion,
+    },
+    from && to && from !== to
+      ? `Updated from v${from} to v${to}. Panel is already on the new build (progress UI was stuck after the restart — that is normal).`
+      : `Update completed — panel is on v${installed}. Progress UI cleared after a mid-update restart.`
+  );
+  await writeUpdateJob(repoPath, promoted);
+  try {
+    await writeFile(getUpdatePidPath(repoPath), "", "utf8");
+  } catch {
+    /* ignore */
+  }
+  try {
+    const { unlinkSync } = require("fs") as typeof import("fs");
+    unlinkSync(path.join(repoPath, ".update-in-progress"));
+  } catch {
+    /* ignore */
+  }
+  return promoted;
+}
+
 function isJobTimedOut(job: PanelUpdateJob, workerAlive: boolean): boolean {
   if (!job.startedAt) return false;
   const started = Date.parse(job.startedAt);
@@ -122,8 +186,15 @@ function isJobTimedOut(job: PanelUpdateJob, workerAlive: boolean): boolean {
     (job.currentStep === "npm run build" ||
       job.currentStep === "prepare build" ||
       job.currentStep === "prepare standalone" ||
-      job.currentStep === "pm2 restart nexlify")
+      job.currentStep === "pm2 restart nexlify" ||
+      job.currentStep === "apply update" ||
+      job.currentStep === "download update" ||
+      job.currentStep === "extract update")
   ) {
+    return true;
+  }
+  // Worker dead with mid progress and no heartbeat for a few minutes — unstick UI
+  if (!workerAlive && elapsed > 3 * 60 * 1000 && job.progress >= 20 && job.progress < 94) {
     return true;
   }
   return false;
@@ -154,6 +225,13 @@ export async function reconcileStaleUpdateJob(
   if (job.status === "idle" && !job.startedAt && !job.finishedAt) {
     await clearUpdateJob(repoPath);
     return null;
+  }
+
+  // Package.json already on the target (or newer than fromVersion) — progress UI was
+  // stranded mid-build (~60%) after PM2 swap killed the worker. Treat as success.
+  if (job.status === "running" || job.status === "failed") {
+    const versionDone = await promoteIfInstalledVersionSucceeded(repoPath, job);
+    if (versionDone) return versionDone;
   }
 
   // Worker died during PM2 swap/restart after a successful build — treat as success, not failure.
@@ -263,6 +341,10 @@ export async function reconcileStaleUpdateJob(
     }
     return reconciledDone;
   }
+
+  // Mid-progress stranding (e.g. 60% compile) but package.json already newer — success.
+  const versionDoneLate = await promoteIfInstalledVersionSucceeded(repoPath, job);
+  if (versionDoneLate) return versionDoneLate;
 
   const reconciled: PanelUpdateJob = {
     ...job,
@@ -468,6 +550,8 @@ export async function startBackgroundPanelUpdate(
               );
               return;
             }
+            const versionDone = await promoteIfInstalledVersionSucceeded(repoPath, job);
+            if (versionDone) return;
             let errDetail = `Worker exited with code ${code} (signal: ${signal})`;
             try {
               const { readFileSync } = await import("fs");

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { looksLikeSuccessfulUpdateDespiteWorkerExit, type PanelUpdateJob } from "@/lib/panel-update-job";
+import {
+  installedVersionImpliesUpdateSuccess,
+  looksLikeSuccessfulUpdateDespiteWorkerExit,
+  type PanelUpdateJob,
+} from "@/lib/panel-update-job";
 
 function base(partial: Partial<PanelUpdateJob>): PanelUpdateJob {
   return {
@@ -41,6 +45,31 @@ assert.equal(
 assert.equal(
   looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 14, currentStep: "git pull" })),
   false
+);
+assert.equal(
+  looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 60, currentStep: "npm run build" })),
+  false
+);
+
+// Progress stuck at ~60% but package.json already on the new version → success
+assert.equal(
+  installedVersionImpliesUpdateSuccess(base({ progress: 60, currentStep: "npm run build" }), "1.9.94"),
+  true
+);
+assert.equal(
+  installedVersionImpliesUpdateSuccess(base({ progress: 60, currentStep: "npm run build" }), "1.9.96"),
+  true
+);
+assert.equal(
+  installedVersionImpliesUpdateSuccess(base({ progress: 60, currentStep: "npm run build" }), "1.9.92"),
+  false
+);
+assert.equal(
+  installedVersionImpliesUpdateSuccess(
+    base({ progress: 60, toVersion: null, fromVersion: "1.9.90" }),
+    "1.9.93"
+  ),
+  true
 );
 
 console.log("panel-update-job-success.test.ts: ok");
