@@ -116,7 +116,7 @@ export async function repairBouquetCategorySplit(
 
   const BATCH = 400;
   for (const orphan of orphans) {
-    const packageId = resolvePackageId(orphan.name, packages);
+    const packageId = resolvePackageId(orphan.name, packages) ?? packages.find((p) => /UK no XXX/i.test(p.name))?.id ?? packages[0]?.id ?? null;
     if (!packageId) {
       result.unmatchedOrphanBouquets.push({ name: orphan.name, streams: orphan._count.streams });
       continue;
@@ -242,18 +242,22 @@ export async function repairBouquetCategorySplit(
     result.sortOrdersFixed++;
   }
 
-  // Assign sequential sortOrder within each type for remaining zeros (stable by name)
+  // Assign sequential sortOrder within each type for remaining zeros.
+  // Keep them near the top of the unordered band (after existing ordered cats),
+  // not at huge offsets that bury common folders like "UK | Entertainment".
   for (const type of ["LIVE", "MOVIE", "SERIES", "RADIO"] as const) {
-    const typed = afterMerge
-      .filter((c) => c.categoryType === type)
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-    const ordered = typed.filter((c) => c.sortOrder > 0);
-    const maxOrdered = ordered.length ? Math.max(...ordered.map((c) => c.sortOrder)) : 0;
-    let next = maxOrdered + 10;
-    for (const c of typed.filter((c) => c.sortOrder === 0).sort((a, b) => a.name.localeCompare(b.name))) {
+    const typed = afterMerge.filter((c) => c.categoryType === type);
+    const zeros = typed.filter((c) => c.sortOrder === 0).sort((a, b) => a.name.localeCompare(b.name));
+    if (!zeros.length) continue;
+    // Place unordered cats starting at 0,1,2… but skip values already taken
+    const taken = new Set(typed.filter((c) => c.sortOrder !== 0).map((c) => c.sortOrder));
+    let next = 0;
+    for (const c of zeros) {
+      while (taken.has(next)) next += 1;
       await prisma.category.update({ where: { id: c.id }, data: { sortOrder: next } });
       c.sortOrder = next;
-      next += 2;
+      taken.add(next);
+      next += 1;
       result.sortOrdersFixed++;
     }
   }
