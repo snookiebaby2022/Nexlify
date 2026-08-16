@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.4",
+  "latestVersion": "2.0.5",
   "releases": [
+    {
+      "version": "2.0.5",
+      "date": "2026-08-16",
+      "channel": "stable",
+      "summary": "Movie posters: TMDB title cleaning + backfill for movies missing streamIcon; auto-logos batches larger.",
+      "changelog": [
+        "TMDB title cleaner strips quality tags (1080p, WEB-DL, …) so more movies match posters",
+        "TMDB enrich no longer caches failures (429/timeouts) as permanent misses",
+        "Auto-add icons API batch limit raised (up to 5000)",
+        "Added scripts/backfill-movie-posters.cjs for bulk movie poster fill"
+      ],
+      "fixes": [
+        "All migrated movies had empty posters while series had TMDB covers"
+      ]
+    },
     {
       "version": "2.0.4",
       "date": "2026-08-16",

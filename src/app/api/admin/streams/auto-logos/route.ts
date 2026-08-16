@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const typeRaw = String(body.type ?? "ALL").toUpperCase();
-  const limit = Math.min(1000, Math.max(1, Number(body.limit ?? 300) || 300));
+  const limit = Math.min(5000, Math.max(1, Number(body.limit ?? 500) || 500));
 
   const types: StreamType[] =
     typeRaw === "LIVE"

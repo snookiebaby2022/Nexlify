@@ -19,6 +19,12 @@ export function cleanTitleForTmdb(name: string): string {
     .replace(/\s*S\d{1,2}E\d{1,2}\s*/gi, " ")
     .replace(/\s*\d{1,2}x\d{1,2}\s*/gi, " ")
     .replace(/\s*-\s*Season\s*\d+/gi, "")
+    // Strip common release / quality tags that break TMDB search
+    .replace(
+      /\b(1080p|720p|480p|2160p|4k|uhd|hdr|hdr10|dv|dolby\s*vision|web-?dl|webrip|bluray|blu-?ray|x264|x265|h\.?264|h\.?265|hevc|aac|dts|truehd|remux|proper|repack|extended|unrated|directors?\s*cut|multi|dual\s*audio|nf|amzn|dsnp|hulu|itunes)\b/gi,
+      " "
+    )
+    .replace(/\b(COMPLETE|PACK|BOXSET|COLLECTION)\b/gi, " ")
     .replace(/[._]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -114,7 +120,7 @@ export async function enrichVodFromTmdb(
     tmdbCache.set(cacheKey, enrichment);
     return enrichment;
   } catch {
-    tmdbCache.set(cacheKey, null);
+    // Do not cache failures — a transient 429/timeout must not blank future lookups.
     return null;
   }
 }
