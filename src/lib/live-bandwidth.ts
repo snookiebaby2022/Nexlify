@@ -1,5 +1,8 @@
 import { getSettingGroup } from "@/lib/panel-settings";
-import type { PackagerTranscode } from "@/lib/ts-hls-packager";
+import { type LiveTranscodeProfile } from "@/lib/live-transcode";
+
+export type { LiveTranscodeProfile } from "@/lib/live-transcode";
+export { liveTranscodeCodecArgs } from "@/lib/live-transcode";
 
 export type LiveBandwidthSettings = {
   instantStart: boolean;
@@ -27,7 +30,7 @@ export async function getLiveBandwidthSettings(): Promise<LiveBandwidthSettings>
   };
 }
 
-export function ecoLiveProfile(settings: LiveBandwidthSettings): NonNullable<PackagerTranscode> {
+export function ecoLiveProfile(settings: LiveBandwidthSettings): LiveTranscodeProfile {
   return {
     resolution: settings.resolution,
     bitrate: settings.kbps,
@@ -76,37 +79,4 @@ export function pickLowestBandwidthHlsVariant(body: string): string {
   while (out.length && out[out.length - 1] === "") out.pop();
   out.push(best.inf, best.uri, "");
   return out.join("\n");
-}
-
-export function liveTranscodeCodecArgs(profile: NonNullable<PackagerTranscode>): string[] {
-  const vcodec =
-    profile.gpuAcceleration && profile.codec !== "h265"
-      ? "h264_nvenc"
-      : profile.codec === "h265"
-        ? "libx265"
-        : "libx264";
-  const videoKbps = Math.max(300, Number(profile.bitrate) || 1000);
-  const audioKbps = videoKbps < 1500 ? 64 : 96;
-  const tune = vcodec === "libx264" ? ["-tune", "zerolatency"] : [];
-  return [
-    "-c:v",
-    vcodec,
-    "-b:v",
-    `${videoKbps}k`,
-    "-maxrate",
-    `${videoKbps}k`,
-    "-bufsize",
-    `${videoKbps * 2}k`,
-    "-s",
-    profile.resolution || "854x480",
-    "-preset",
-    "veryfast",
-    ...tune,
-    "-c:a",
-    "aac",
-    "-b:a",
-    `${audioKbps}k`,
-    "-ac",
-    "2",
-  ];
 }

@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "child_process";
 import { Readable } from "stream";
 import { ReadableStream } from "stream/web";
-import { liveTranscodeCodecArgs } from "@/lib/live-bandwidth";
+import { liveTranscodeCodecArgs } from "@/lib/live-transcode";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 
 const remuxProcs = new Map<string, ChildProcess>();

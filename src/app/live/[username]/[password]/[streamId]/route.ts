@@ -34,7 +34,8 @@ import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstre
 import { isHlsDaemonHealthy, openDaemonMpegTs } from "@/lib/hls-restream-client";
 import { getActiveTranscodingProfile, getTranscodingProfiles } from "@/lib/transcoding-profiles";
 import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
-import { localHlsIndexPath, readLocalPackagerPlaylist } from "@/lib/ts-hls-packager";
+import { localHlsIndexPath } from "@/lib/hls-disk";
+import { readLocalPackagerPlaylist } from "@/lib/ts-hls-packager";
 import { prisma } from "@/lib/prisma";
 import {
   matchTranscodingProfile,
@@ -55,6 +56,22 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const PROXY_TIMEOUT_MS = 30_000;
+
+function safeLocalHlsIndex(streamId: string): string | null {
+  try {
+    return localHlsIndexPath(streamId);
+  } catch {
+    return null;
+  }
+}
+
+function safeReadLocalPackagerPlaylist(streamId: string): string | null {
+  try {
+    return readLocalPackagerPlaylist(streamId);
+  } catch {
+    return null;
+  }
+}
 
 async function proxyUpstreamNative(
   url: string,
@@ -224,7 +241,7 @@ export async function GET(
 
   if (wantsM3u8) {
     const panelOrigin = serverBaseUrl(req.url, req.headers);
-    const packedNow = readLocalPackagerPlaylist(diskStreamId);
+    const packedNow = safeReadLocalPackagerPlaylist(diskStreamId);
     if (packedNow) {
       return hlsHeaders(
         rewritePackagerPlaylist(packedNow, panelOrigin, username, password, requestStreamKey)
@@ -255,7 +272,7 @@ export async function GET(
   for (let i = 0; i < candidates.length; i++) {
     const playbackUrl = candidates[i]!;
     const localIndex =
-      localHlsIndexPath(diskStreamId) || (!ecoRequested ? localHlsIndexPath(cleanId) : null);
+      safeLocalHlsIndex(diskStreamId) || (!ecoRequested ? safeLocalHlsIndex(cleanId) : null);
     const useHlsRemux = Boolean(localIndex) || isHlsPlaybackUrl(playbackUrl);
     const mpegtsUrl = localIndex || playbackUrl;
     const daemonTranscode = localIndex ? null : transcodeOpts;

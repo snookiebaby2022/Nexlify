@@ -3,7 +3,9 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { join } from "path";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 import { hlsStreamDir } from "@/lib/hls-disk";
-import { liveTranscodeCodecArgs } from "@/lib/live-bandwidth";
+import { liveTranscodeCodecArgs, type LiveTranscodeProfile } from "@/lib/live-transcode";
+
+export { localHlsIndexPath } from "@/lib/hls-disk";
 
 /** Match XUI/NXT default segment length. Do not use hls_init_time / split_by_time with -c copy. */
 const HLS_TIME_SEC = 2;
@@ -180,12 +182,7 @@ function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number): Pr
   });
 }
 
-export type PackagerTranscode = {
-  resolution: string;
-  bitrate: number;
-  codec: string;
-  gpuAcceleration: boolean;
-} | null;
+export type PackagerTranscode = LiveTranscodeProfile | null;
 
 function packagerFingerprint(
   upstreamUrl: string,
@@ -379,17 +376,6 @@ export async function ensureTsHlsPackager(opts: {
   return { ok: false, error: "Invalid HLS playlist" };
 }
 
-/** Absolute path to an on-disk index.m3u8 if the packager/daemon already produced one. */
-export function localHlsIndexPath(streamId: string): string | null {
-  const dir = hlsStreamDir(streamId);
-  const indexPath = join(dir, "index.m3u8");
-  try {
-    if (existsSync(indexPath) && statSync(indexPath).size > 24) return indexPath;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
 
 /** Serve an already-packed playlist immediately (fast zap / VOD resume). */
 export function readLocalPackagerPlaylist(streamId: string, lineId = "daemon"): string | null {

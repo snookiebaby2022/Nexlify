@@ -1,7 +1,20 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.18",
+  "latestVersion": "2.0.19",
   "releases": [
+    {
+      "version": "2.0.19",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Fix live MPEGTS 500 so instant start and bandwidth saver actually play.",
+      "changelog": [
+        "Break the HLS packager / bandwidth-saver circular import that left hlsStreamDir unbound",
+        "On-disk playlist lookup lives in hls-disk so MPEGTS can start even if the packager module is still loading"
+      ],
+      "fixes": [
+        "Live /live/user/pass/id.ts returned HTTP 500 (hlsStreamDir is not defined) so Smarters got no picture"
+      ]
+    },
     {
       "version": "2.0.18",
       "date": "2026-08-17",

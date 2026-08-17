@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, statSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -22,6 +22,18 @@ export function hlsDiskRoot(): string {
 export function hlsStreamDir(streamId: string): string {
   const safe = String(streamId).replace(/[^a-zA-Z0-9_-]/g, "");
   return join(hlsDiskRoot(), safe || "unknown");
+}
+
+/** Absolute path to an on-disk index.m3u8 if the packager/daemon already produced one. */
+export function localHlsIndexPath(streamId: string): string | null {
+  const dir = hlsStreamDir(streamId);
+  const indexPath = join(dir, "index.m3u8");
+  try {
+    if (existsSync(indexPath) && statSync(indexPath).size > 24) return indexPath;
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 export const HLS_DAEMON_HOST = "127.0.0.1";
