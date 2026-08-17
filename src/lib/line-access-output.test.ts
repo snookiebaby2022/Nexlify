@@ -46,6 +46,7 @@ describe("line-access-output", () => {
 
   it("expands XUI ids for Xtream player payloads", () => {
     const formats = toXtreamAllowedOutputFormats("[1,2,3]");
-    assert.deepEqual(formats, DEFAULT_ALLOWED_OUTPUT.split(","));
+    assert.deepEqual(formats, ["m3u8", "ts", "rtmp"]);
+    assert.equal(formats.includes("hls"), false);
   });
 });

@@ -287,7 +287,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
       category_id: xtreamCategoryId(s.categoryId),
       custom_sid: full.parentStreamId ?? "",
       tv_archive: catchup || timeshiftHours > 0 ? 1 : 0,
-      direct_source: direct || exportPlaybackUrl(baseUrl, line, s, full as StreamWithProvider),
+      direct_source: direct,
       tv_archive_duration: catchup ? archiveDays || timeshiftHours || 7 : timeshiftHours || 0,
       ...(abrLadder ? { abr_variants: abrLadder } : {}),
     };

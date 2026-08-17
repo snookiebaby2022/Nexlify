@@ -3,7 +3,7 @@ import { getClientIp } from "@/lib/client-ip";
 
 // Allow upstream fetches to sources with expired/self-signed TLS certs (common for IPTV CDNs)
 if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-import { trackConnection, isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
+import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import {
   buildLiveRedirectHeaders,
   getAntiFreezeSettings,
@@ -17,10 +17,13 @@ import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import {
   fetchHlsManifestForClient,
   isHlsPlaybackUrl,
+  isHlsClientPath,
+  stripLiveStreamExtension,
   buildHlsRelayUrl,
   rewriteHlsManifestForRelay,
   hlsRelayCacheKey,
-  buildNativeTsHlsManifest,
+  HLS_PLAYLIST_CONTENT_TYPE,
+  rewritePackagerPlaylist,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
@@ -28,6 +31,7 @@ import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
 import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
+import { ensureTsHlsPackager } from "@/lib/ts-hls-packager";
 
 export const runtime = "nodejs";
 
@@ -66,7 +70,7 @@ export async function GET(
   if (demoBlock) return demoBlock;
 
   const { username, password, streamId } = await ctx.params;
-  const requestStreamKey = streamId.replace(/\.(ts|m3u8)$/i, "");
+  const requestStreamKey = stripLiveStreamExtension(streamId);
   let cleanId = requestStreamKey;
   const ip = getClientIp(req);
 
@@ -133,7 +137,7 @@ export async function GET(
 
   scheduleZapPrefetch(line.id, cleanId, { clientIp: ip, userAgent: ua }, antiFreeze);
 
-  const wantsM3u8 = /\.m3u8$/i.test(streamId);
+  const wantsM3u8 = isHlsClientPath(streamId);
 
   let lastError = "Stream fetch failed";
   for (let i = 0; i < candidates.length; i++) {
@@ -203,7 +207,7 @@ export async function GET(
           status: 200,
           headers: {
             ...buildLiveRedirectHeaders(antiFreeze),
-            "Content-Type": "application/vnd.apple.mpegurl",
+            "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
             "Cache-Control": "no-cache, no-store",
           },
         })
@@ -211,26 +215,35 @@ export async function GET(
     }
 
     if (wantsM3u8) {
-      const panelOrigin = serverBaseUrl(req.url, req.headers);
-      const body = buildNativeTsHlsManifest(
-        panelOrigin,
-        username,
-        password,
-        requestStreamKey
-      );
-      if (antiFreeze.fastZapEnabled) {
-        schedulePlaybackUpstreamWarm(playbackUrl, ua);
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
+      const packed = await ensureTsHlsPackager({
+        upstreamUrl: playbackUrl,
+        lineId: line.id,
+        streamId: cleanId,
+        userAgent: ua,
+      });
+      if (packed.ok) {
+        const panelOrigin = serverBaseUrl(req.url, req.headers);
+        const body = rewritePackagerPlaylist(
+          packed.playlist,
+          panelOrigin,
+          username,
+          password,
+          requestStreamKey
+        );
+        return withIptvCors(
+          new NextResponse(body, {
+            status: 200,
+            headers: {
+              ...buildLiveRedirectHeaders(antiFreeze),
+              "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
+              "Cache-Control": "no-cache, no-store",
+            },
+          })
+        );
       }
-      return withIptvCors(
-        new NextResponse(body, {
-          status: 200,
-          headers: {
-            ...buildLiveRedirectHeaders(antiFreeze),
-            "Content-Type": "application/vnd.apple.mpegurl",
-            "Cache-Control": "no-cache, no-store",
-          },
-        })
-      );
+      lastError = packed.error;
+      continue;
     }
 
     const proxied = await proxyUpstreamNative(playbackUrl, ua);

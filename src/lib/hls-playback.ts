@@ -1,4 +1,19 @@
+import { Readable } from "node:stream";
+import { openUpstreamLiveStream } from "@/lib/live-upstream-proxy";
+import { isPackagerSegmentName } from "@/lib/ts-hls-packager";
+
 const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
+
+/** Xtream/nginx HLS playlist type — Smarters ExoPlayer accepts this more reliably than vnd.apple.mpegurl. */
+export const HLS_PLAYLIST_CONTENT_TYPE = "application/x-mpegURL";
+
+export function isHlsClientPath(streamId: string): boolean {
+  return /\.(m3u8|hls)$/i.test(streamId);
+}
+
+export function stripLiveStreamExtension(streamId: string): string {
+  return streamId.replace(/\.(ts|m3u8|hls)$/i, "");
+}
 
 export function isHlsPlaybackUrl(url: string): boolean {
   const u = url.trim();
@@ -25,7 +40,29 @@ export function buildHlsRelayUrl(
 ): string {
   const token = Buffer.from(upstreamUrl, "utf8").toString("base64url");
   const origin = panelOrigin.replace(/\/+$/, "");
-  return `${origin}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls?u=${encodeURIComponent(token)}`;
+  // Path-based (no query string) — IPTV Smarters often drops `?u=` on HLS segment URIs.
+  return `${origin}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/${token}`;
+}
+
+export function rewritePackagerPlaylist(
+  body: string,
+  panelOrigin: string,
+  username: string,
+  password: string,
+  streamId: string
+): string {
+  const origin = panelOrigin.replace(/\/+$/, "");
+  const prefix = `${origin}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/`;
+  return body
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) return line;
+      const name = trimmed.split(/[\\/]/).pop() ?? trimmed;
+      if (!isPackagerSegmentName(name)) return line;
+      return `${prefix}${name}`;
+    })
+    .join("\n");
 }
 
 /** Block SSRF — only public http(s) targets. */
@@ -106,52 +143,55 @@ export type HlsFetchResult =
   | { ok: true; kind: "segment"; body: ArrayBuffer; contentType: string; finalUrl: string }
   | { ok: false; status: number; detail?: string };
 
+async function readReadableLimited(stream: Readable, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    for await (const chunk of stream) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      chunks.push(buf);
+      total += buf.length;
+      if (total >= maxBytes) break;
+    }
+  } finally {
+    stream.destroy();
+  }
+  return Buffer.concat(chunks, total);
+}
+
 export async function fetchHlsUpstream(
   upstreamUrl: string,
   userAgent?: string,
   range?: string | null
 ): Promise<HlsFetchResult> {
-  const headers: Record<string, string> = {
-    "User-Agent":
-      userAgent?.trim() ||
-      "Mozilla/5.0 (compatible; Nexlify/1.0; +https://nexlify.live)",
-    Accept: "*/*",
-  };
-  if (range) headers.Range = range;
-
-  const res = await fetch(upstreamUrl, {
-    headers,
-    redirect: "follow",
-    signal: AbortSignal.timeout(20_000),
-  });
-
-  if (!res.ok) {
-    return { ok: false, status: res.status, detail: res.statusText };
-  }
-
-  const contentType = res.headers.get("content-type") ?? "";
-  const finalUrl = res.url || upstreamUrl;
-
-  if (
-    contentType.includes("mpegurl") ||
-    contentType.includes("x-mpegURL") ||
-    finalUrl.toLowerCase().includes(".m3u8")
-  ) {
-    const body = await res.text();
-    if (!body.trim().startsWith("#EXT")) {
-      return { ok: false, status: 502, detail: "Invalid HLS manifest" };
+  try {
+    const extra: Record<string, string> = {};
+    if (range) extra.Range = range;
+    const open = await openUpstreamLiveStream(upstreamUrl, {
+      userAgent,
+      timeoutMs: 20_000,
+      headers: extra,
+    });
+    const finalUrl = open.finalUrl || upstreamUrl;
+    const contentType = open.contentType ?? "";
+    const buf = await readReadableLimited(open.body, 16_000_000);
+    const head = buf.subarray(0, Math.min(buf.length, 16)).toString("utf8").trimStart();
+    if (head.startsWith("#EXT")) {
+      return { ok: true, kind: "manifest", body: buf.toString("utf8"), finalUrl };
     }
-    return { ok: true, kind: "manifest", body, finalUrl };
-  }
 
-  const body = await res.arrayBuffer();
-  return {
-    ok: true,
-    kind: "segment",
-    body,
-    contentType: contentType || "video/mp2t",
-    finalUrl,
-  };
+    return {
+      ok: true,
+      kind: "segment",
+      body: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+      contentType: contentType || "video/mp2t",
+      finalUrl,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "fetch failed";
+    const status = /timeout/i.test(msg) ? 504 : /HTTP (\d+)/.test(msg) ? Number(RegExp.$1) : 502;
+    return { ok: false, status, detail: msg };
+  }
 }
 
 export async function fetchHlsManifestForClient(

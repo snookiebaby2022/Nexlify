@@ -6,7 +6,7 @@ import { lineIsPlayable } from "@/lib/lines";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { getAntiFreezeSettings } from "@/lib/anti-freeze";
-import { hlsRelayCacheKey, isAllowedHlsRelayTarget, isSafeUpstreamUrl } from "@/lib/hls-playback";
+import { hlsRelayCacheKey, isAllowedHlsRelayTarget, isSafeUpstreamUrl, stripLiveStreamExtension } from "@/lib/hls-playback";
 
 export type HlsLiveAuth =
   | {
@@ -30,7 +30,7 @@ export async function authorizeHlsLiveRequest(
   const demoBlock = rejectDemoIptvPlayback(req);
   if (demoBlock) return { ok: false, status: demoBlock.status, message: "Demo blocked" };
 
-  const cleanId = streamId.replace(/\.(ts|m3u8)$/i, "");
+  const cleanId = stripLiveStreamExtension(streamId);
   const requestStreamKey = cleanId;
   let resolvedStreamId = cleanId;
   if (/^\d+$/.test(cleanId)) {

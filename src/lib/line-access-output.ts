@@ -83,9 +83,15 @@ export function normalizeAllowedOutputInput(raw: unknown): string | undefined {
   return serializeAccessOutput(selected);
 }
 
-/** Formats for Xtream `user_info.allowed_output_formats` (never leave XUI `[1,2,3]` raw). */
+/** Formats for Xtream `user_info.allowed_output_formats` (never leave XUI `[1,2,3]` raw).
+ *  Xtream Codes / IPTV Smarters expect `m3u8`, `ts`, `rtmp` — not a `hls` token.
+ */
 export function toXtreamAllowedOutputFormats(raw: string | null | undefined): string[] {
   const selected = parseAccessOutput(raw);
-  if (!selected.size) return DEFAULT_ALLOWED_OUTPUT.split(",");
-  return serializeAccessOutput(selected).split(",").filter(Boolean);
+  const effective = selected.size ? selected : defaultAccessOutputSelection();
+  const out: string[] = [];
+  if (effective.has("hls")) out.push("m3u8");
+  if (effective.has("mpegts")) out.push("ts");
+  if (effective.has("rtmp")) out.push("rtmp");
+  return out.length ? out : ["m3u8", "ts", "rtmp"];
 }

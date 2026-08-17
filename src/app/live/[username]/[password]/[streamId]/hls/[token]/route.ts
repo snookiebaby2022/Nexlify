@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import { getClientIp } from "@/lib/client-ip";
 
-// Allow upstream fetches to sources with expired/self-signed TLS certs (common for IPTV CDNs)
 if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { buildLiveRedirectHeaders, getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { authorizeHlsLiveRequest, decodeRelayTarget } from "@/lib/hls-live-auth";
@@ -14,6 +13,7 @@ import {
 } from "@/lib/hls-playback";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { logActivity } from "@/lib/lines";
+import { ensureTsHlsPackager, isPackagerSegmentName, readTsHlsSegment } from "@/lib/ts-hls-packager";
 
 export const runtime = "nodejs";
 
@@ -21,11 +21,20 @@ export async function OPTIONS() {
   return iptvCorsPreflight();
 }
 
+function bufferToStream(buf: Buffer): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(buf));
+      controller.close();
+    },
+  });
+}
+
 export async function GET(
   req: NextRequest,
-  ctx: { params: Promise<{ username: string; password: string; streamId: string }> }
+  ctx: { params: Promise<{ username: string; password: string; streamId: string; token: string }> }
 ) {
-  const { username, password, streamId } = await ctx.params;
+  const { username, password, streamId, token } = await ctx.params;
   const auth = await authorizeHlsLiveRequest(req, username, password, streamId);
   if (!auth.ok) {
     const msg = auth.message === "kicked" ? "Session kicked" : auth.message;
@@ -33,10 +42,46 @@ export async function GET(
   }
 
   const clientIp = getClientIp(req);
-  const target = decodeRelayTarget(req.nextUrl.searchParams.get("u"), auth.rootUpstream);
+  const antiFreeze = await getAntiFreezeSettings();
+
+  if (isPackagerSegmentName(token)) {
+    const packed = await ensureTsHlsPackager({
+      upstreamUrl: auth.rootUpstream,
+      lineId: auth.lineId,
+      streamId: auth.streamId,
+      userAgent: auth.userAgent,
+    });
+    if (!packed.ok) {
+      return iptvText("Segment unavailable", { status: 502 });
+    }
+    const buf = readTsHlsSegment(auth.lineId, auth.streamId, token);
+    if (!buf?.length) return iptvText("Segment not found", { status: 404 });
+    if (await isSessionKicked(auth.lineId, clientIp)) {
+      return iptvText("Session kicked", { status: 403 });
+    }
+    const body = attachKickAwareProxyBody({
+      body: bufferToStream(buf),
+      lineId: auth.lineId,
+      streamId: auth.streamId,
+      ip: clientIp || "",
+      userAgent: auth.userAgent,
+    });
+    return withIptvCors(
+      new NextResponse(body as unknown as BodyInit, {
+        status: 200,
+        headers: {
+          ...buildLiveRedirectHeaders(antiFreeze),
+          "Content-Type": "video/mp2t",
+          "Content-Length": String(buf.length),
+          "Cache-Control": "no-cache, no-store",
+        },
+      })
+    );
+  }
+
+  const target = decodeRelayTarget(token, auth.rootUpstream);
   if (!target) return iptvText("Bad relay target", { status: 400 });
 
-  const antiFreeze = await getAntiFreezeSettings();
   const range = req.headers.get("range");
   const upstream = await fetchHlsUpstream(target, auth.userAgent, range);
 
@@ -82,17 +127,14 @@ export async function GET(
     return iptvText("Session kicked", { status: 403 });
   }
 
-  const rawBody = upstream.body;
-  const kickedBody =
-    rawBody && typeof (rawBody as { getReader?: unknown }).getReader === "function"
-      ? attachKickAwareProxyBody({
-          body: rawBody as unknown as ReadableStream<Uint8Array>,
-          lineId: auth.lineId,
-          streamId: auth.streamId,
-          ip: clientIp || "",
-          userAgent: auth.userAgent,
-        })
-      : rawBody;
+  const segmentBuf = Buffer.from(upstream.body);
+  const kickedBody = attachKickAwareProxyBody({
+    body: bufferToStream(segmentBuf),
+    lineId: auth.lineId,
+    streamId: auth.streamId,
+    ip: clientIp || "",
+    userAgent: auth.userAgent,
+  });
 
   return withIptvCors(
     new NextResponse(kickedBody as unknown as BodyInit, {
@@ -101,6 +143,7 @@ export async function GET(
         ...buildLiveRedirectHeaders(antiFreeze),
         "Content-Type": upstream.contentType,
         "Cache-Control": "no-cache, no-store",
+        "Content-Length": String(segmentBuf.length),
         ...(range ? { "Accept-Ranges": "bytes" } : {}),
       },
     })

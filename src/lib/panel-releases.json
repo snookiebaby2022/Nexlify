@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.10",
+  "latestVersion": "2.0.11",
   "releases": [
+    {
+      "version": "2.0.11",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Real HLS segments for IPTV Smarters — MPEG-TS is packaged into playable m3u8.",
+      "changelog": [
+        "Live .m3u8 now ffmpeg-packages MPEG-TS into real HLS segments (seg0.ts, seg1.ts) instead of wrapping an infinite .ts URL",
+        "Xtream allowed_output_formats is m3u8/ts/rtmp (no hls token) so Smarters requests .m3u8",
+        "Live get_live_streams direct_source is empty so Smarters builds HLS URLs from stream_id",
+        "HLS relay segment URLs are path-based (no query string) for Smarters compatibility"
+      ],
+      "fixes": [
+        "IPTV Smarters HLS output failed on every channel (PC and phone) — ExoPlayer cannot play a live MPEG-TS as one HLS segment",
+        "direct_source always pointed at .ts so HLS mode still used MPEG-TS URLs"
+      ]
+    },
     {
       "version": "2.0.10",
       "date": "2026-08-17",
