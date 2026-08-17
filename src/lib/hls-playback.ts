@@ -398,3 +398,25 @@ export async function buildClientVodHlsPlaylist(opts: {
     ),
   };
 }
+
+/**
+ * When ffmpeg packaging is too slow (large mkv/mp4), still give HLS clients a
+ * valid playlist instead of raw video bytes on a .m3u8 URL.
+ */
+export function buildVodProgressiveHlsManifest(
+  kind: "movie" | "series",
+  username: string,
+  password: string,
+  streamId: string
+): string {
+  const path = `/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}.mp4`;
+  return [
+    "#EXTM3U",
+    "#EXT-X-VERSION:3",
+    "#EXT-X-PLAYLIST-TYPE:VOD",
+    "#EXTINF:-1,",
+    path,
+    "#EXT-X-ENDLIST",
+    "",
+  ].join("\n");
+}

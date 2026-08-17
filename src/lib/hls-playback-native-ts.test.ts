@@ -94,6 +94,15 @@ test("markHlsPlaylistAsVod tags movies/series playlists for ExoPlayer", async ()
   assert.match(out, /#EXT-X-VERSION:3/);
 });
 
+test("buildVodProgressiveHlsManifest never returns raw video on a .m3u8 URL", async () => {
+  const { buildVodProgressiveHlsManifest } = await import("./hls-playback");
+  const body = buildVodProgressiveHlsManifest("movie", "user1", "pass1", "123");
+  assert.match(body, /#EXTM3U/);
+  assert.match(body, /#EXT-X-PLAYLIST-TYPE:VOD/);
+  assert.match(body, /^\/movie\/user1\/pass1\/123\.mp4$/m);
+  assert.match(body, /#EXT-X-ENDLIST/);
+});
+
 test("isPackagerSegmentName accepts ffmpeg segment files only", () => {
   assert.equal(isPackagerSegmentName("seg3.ts"), true);
   assert.equal(isPackagerSegmentName("../etc/passwd"), false);

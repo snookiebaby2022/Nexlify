@@ -11,7 +11,7 @@ import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { resolveStreamIdParam } from "@/lib/xtream-stream-id";
 import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
-import { isHlsClientPath, HLS_PLAYLIST_CONTENT_TYPE, buildClientVodHlsPlaylist, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
+import { isHlsClientPath, HLS_PLAYLIST_CONTENT_TYPE, buildClientVodHlsPlaylist, buildVodProgressiveHlsManifest, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
 
 export const runtime = "nodejs";
@@ -71,14 +71,15 @@ export async function GET(
       streamKey,
       diskStreamId: cleanId,
     });
-    if (packed.ok) {
-      return withIptvCors(
-        new NextResponse(packed.body, {
-          status: 200,
-          headers: { "Content-Type": HLS_PLAYLIST_CONTENT_TYPE, "Cache-Control": "no-cache" },
-        })
-      );
-    }
+    const body = packed.ok
+      ? packed.body
+      : buildVodProgressiveHlsManifest("series", username, password, streamKey);
+    return withIptvCors(
+      new NextResponse(body, {
+        status: 200,
+        headers: { "Content-Type": HLS_PLAYLIST_CONTENT_TYPE, "Cache-Control": "no-cache" },
+      })
+    );
   }
 
   const range = req.headers.get("range");
