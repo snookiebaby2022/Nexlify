@@ -99,3 +99,23 @@ export function schedulePlaylistZapWarm(
     targets.map((id) => resolvePlaybackUrlForLine(lineId, id, ctx, ttl))
   );
 }
+
+/** Open upstream briefly after m3u8 so the follow-up .ts request starts faster (Smarters HLS). */
+export function schedulePlaybackUpstreamWarm(upstreamUrl: string, userAgent?: string): void {
+  if (!upstreamUrl || /^pending:\/\//i.test(upstreamUrl)) return;
+  void (async () => {
+    try {
+      const { openUpstreamLiveStream } = await import("@/lib/live-upstream-proxy");
+      const open = await openUpstreamLiveStream(upstreamUrl, {
+        userAgent,
+        timeoutMs: 12_000,
+      });
+      open.body.once("data", () => {
+        open.body.destroy();
+      });
+      setTimeout(() => open.body.destroy(), 2500);
+    } catch {
+      /* background warm */
+    }
+  })();
+}

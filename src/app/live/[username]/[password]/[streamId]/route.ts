@@ -8,6 +8,7 @@ import {
   buildLiveRedirectHeaders,
   getAntiFreezeSettings,
   scheduleZapPrefetch,
+  schedulePlaybackUpstreamWarm,
 } from "@/lib/anti-freeze";
 import { getLineForPlaybackAuth, resolvePlaybackUrlCandidatesForLine } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
@@ -192,6 +193,10 @@ export async function GET(
         buildHlsRelayUrl(panelOrigin, username, password, cleanId, url);
       const body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
 
+      if (antiFreeze.fastZapEnabled) {
+        schedulePlaybackUpstreamWarm(playbackUrl, ua);
+      }
+
       return withIptvCors(
         new NextResponse(body, {
           status: 200,
@@ -207,6 +212,9 @@ export async function GET(
     if (wantsM3u8) {
       const panelOrigin = serverBaseUrl(req.url, req.headers);
       const body = buildNativeTsHlsManifest(panelOrigin, username, password, cleanId);
+      if (antiFreeze.fastZapEnabled) {
+        schedulePlaybackUpstreamWarm(playbackUrl, ua);
+      }
       return withIptvCors(
         new NextResponse(body, {
           status: 200,

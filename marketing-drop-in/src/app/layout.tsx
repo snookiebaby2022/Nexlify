@@ -15,6 +15,7 @@ import { DEFAULT_OG_IMAGE_ABSOLUTE } from "@/lib/geo";
 import { DEFAULT_DESCRIPTION, DEFAULT_KEYWORDS, hreflangAlternates } from "@/lib/seo";
 
 import { site } from "@/lib/site";
+import { brandAssetUrl } from "@/lib/brand-assets";
 
 import "./globals.css";
 
@@ -54,10 +55,11 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon.png", type: "image/png" },
+      { url: brandAssetUrl("/nexlify-favicon.ico"), sizes: "any" },
+      { url: brandAssetUrl("/icon.png"), type: "image/png" },
     ],
-    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
+    apple: [{ url: brandAssetUrl("/apple-icon.png"), type: "image/png", sizes: "180x180" }],
+    shortcut: [{ url: brandAssetUrl("/nexlify-favicon.ico") }],
   },
   openGraph: {
     siteName: site.name,
@@ -109,6 +111,9 @@ export default async function RootLayout({
       className={`${sora.variable} ${dmSans.variable} h-full antialiased`}
     >
       <head>
+        <link rel="icon" href={brandAssetUrl("/nexlify-favicon.ico")} sizes="any" />
+        <link rel="icon" href={brandAssetUrl("/icon.png")} type="image/png" />
+        <link rel="apple-touch-icon" href={brandAssetUrl("/apple-icon.png")} />
         <OrganizationJsonLd />
       </head>
       <body className="min-h-full flex flex-col overflow-x-hidden bg-black">

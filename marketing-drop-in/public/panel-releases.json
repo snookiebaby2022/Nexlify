@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.8",
+  "latestVersion": "2.0.9",
   "releases": [
+    {
+      "version": "2.0.9",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Smarters faster HLS channel start + marketing favicon cache-bust fix.",
+      "changelog": [
+        "HLS manifest for native MPEG-TS channels uses EXT-X-VERSION 3 + finite EXTINF for Smarters PC/phone compatibility",
+        "Panel pre-warms upstream when clients fetch .m3u8 so the follow-up .ts segment connects faster",
+        "Marketing site favicon moved to /nexlify-favicon.ico with version query to bypass Cloudflare stale cache"
+      ],
+      "fixes": [
+        "Slow channel loading in IPTV Smarters HLS mode (two-step m3u8 then ts)",
+        "nexlify.live favicon stuck on old gradient icon due to 10-year Cloudflare edge cache on /favicon.ico"
+      ]
+    },
     {
       "version": "2.0.8",
       "date": "2026-08-17",

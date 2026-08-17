@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { brandAssetUrl } from "@/lib/brand-assets";
 
 export const metadata: Metadata = {
   title: "Free EPG Sources - Nexlify",
   description: "Free EPG (Electronic Program Guide) sources for LEGAL use. Stay informed about incoming programs with our curated EPG feeds.",
   icons: {
     icon: [
-      { url: "/favicon.ico", sizes: "any" },
-      { url: "/icon.png", type: "image/png" },
+      { url: brandAssetUrl("/nexlify-favicon.ico"), sizes: "any" },
+      { url: brandAssetUrl("/icon.png"), type: "image/png" },
     ],
-    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
+    apple: [{ url: brandAssetUrl("/apple-icon.png"), type: "image/png", sizes: "180x180" }],
   },
 };
 
