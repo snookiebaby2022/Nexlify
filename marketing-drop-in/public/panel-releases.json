@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.13",
+  "latestVersion": "2.0.14",
   "releases": [
+    {
+      "version": "2.0.14",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Smarters HLS v3 playlists + MPEGTS VLC UA so PC/phone stop erroring.",
+      "changelog": [
+        "HLS playlists are HLS v3 with TARGETDURATION >= ceil(EXTINF) — ffmpeg v6/independent_segments and TD 2 with EXTINF 2.04 broke ExoPlayer",
+        "Segment URIs are path-absolute /live/user/pass/id/hls/segN.ts like XUI/NXT (absolute http://IP URLs failed when Smarters used hostname or :8080)",
+        "Local packager uses 4s segments, no independent_segments, unread ffmpeg stderr is discarded so Next does not freeze",
+        "MPEGTS /live/*.ts now fetches upstream with VLC user-agent — Smarters UA is blocked by many providers"
+      ],
+      "fixes": [
+        "IPTV Smarters PC/mobile HLS playback error (invalid playlist + wrong segment host)",
+        "Panel crash/restart after the first HLS zap (ffmpeg stderr pipe filled the event loop)",
+        "MPEGTS channels that failed only because the provider blocked the Smarters user-agent"
+      ]
+    },
     {
       "version": "2.0.13",
       "date": "2026-08-17",

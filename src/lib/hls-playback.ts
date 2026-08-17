@@ -78,29 +78,68 @@ export function hlsRelayCacheKey(lineId: string, streamId: string): string {
 }
 
 export function buildHlsRelayUrl(
-  panelOrigin: string,
+  _panelOrigin: string,
   username: string,
   password: string,
   streamId: string,
   upstreamUrl: string
 ): string {
   const token = Buffer.from(upstreamUrl, "utf8").toString("base64url");
-  const origin = panelOrigin.replace(/\/+$/, "");
-  // Path-based (no query string) — IPTV Smarters often drops `?u=` on HLS segment URIs.
-  return `${origin}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/${token}`;
+  // Path-absolute (XUI/NXT style). Absolute http://IP:... URLs break Smarters when
+  // the app logged in via hostname or :8080.
+  return `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/${token}`;
 }
 
-/** Drop tags that freeze ExoPlayer / IPTV Smarters (ffmpeg append_list + timestamp jumps). */
+function ceilExtinf(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  return Math.max(1, Math.ceil(value));
+}
+
+/**
+ * Drop tags that freeze ExoPlayer / IPTV Smarters, force HLS v3, and keep
+ * TARGETDURATION >= ceil(max EXTINF) (ffmpeg often writes TD 2 with EXTINF 2.04).
+ */
 export function sanitizeHlsPlaylist(body: string): string {
-  return body
-    .split("\n")
-    .filter((line) => {
-      const t = line.trim();
-      if (t.startsWith("#EXT-X-DISCONTINUITY")) return false;
-      if (t.startsWith("#EXT-X-DISCONTINUITY-SEQUENCE")) return false;
-      return true;
-    })
-    .join("\n");
+  const kept: string[] = [];
+  let maxExtinf = 0;
+  let sawVersion = false;
+  for (const line of body.split("\n")) {
+    const t = line.trim();
+    if (t.startsWith("#EXT-X-DISCONTINUITY")) continue;
+    if (t.startsWith("#EXT-X-INDEPENDENT-SEGMENTS")) continue;
+    if (t.startsWith("#EXT-X-VERSION")) {
+      if (sawVersion) continue;
+      sawVersion = true;
+      kept.push("#EXT-X-VERSION:3");
+      continue;
+    }
+    const inf = t.match(/^#EXTINF:(-?[0-9.]+)/i);
+    if (inf) {
+      const n = Number(inf[1]);
+      if (Number.isFinite(n) && n > 0 && n > maxExtinf) maxExtinf = n;
+    }
+    kept.push(line);
+  }
+  const minTd = ceilExtinf(maxExtinf);
+  let hasTd = false;
+  const out = kept.map((line) => {
+    const t = line.trim();
+    if (!t.startsWith("#EXT-X-TARGETDURATION")) return line;
+    hasTd = true;
+    const cur = Number(t.split(":")[1]);
+    const td = Number.isFinite(cur) ? Math.max(cur, minTd) : minTd;
+    return `#EXT-X-TARGETDURATION:${td}`;
+  });
+  if (!sawVersion) {
+    const i = out.findIndex((l) => l.trim() === "#EXTM3U");
+    if (i >= 0) out.splice(i + 1, 0, "#EXT-X-VERSION:3");
+    else out.unshift("#EXTM3U", "#EXT-X-VERSION:3");
+  }
+  if (!hasTd && maxExtinf > 0) {
+    const i = out.findIndex((l) => l.trim().startsWith("#EXT-X-VERSION"));
+    out.splice(i >= 0 ? i + 1 : 1, 0, `#EXT-X-TARGETDURATION:${minTd}`);
+  }
+  return out.join("\n");
 }
 
 /**
@@ -112,7 +151,6 @@ export function buildClientDirectHlsMaster(hlsUrl: string): string {
   return [
     "#EXTM3U",
     "#EXT-X-VERSION:3",
-    "#EXT-X-INDEPENDENT-SEGMENTS",
     "#EXT-X-STREAM-INF:BANDWIDTH=8000000",
     url,
     "",
@@ -129,13 +167,12 @@ export function shouldOfferClientDirectHls(status: number, detail?: string): boo
 
 export function rewritePackagerPlaylist(
   body: string,
-  panelOrigin: string,
+  _panelOrigin: string,
   username: string,
   password: string,
   streamId: string
 ): string {
-  const origin = panelOrigin.replace(/\/+$/, "");
-  const prefix = `${origin}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/`;
+  const prefix = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/`;
   return sanitizeHlsPlaylist(body)
     .split("\n")
     .map((line) => {
@@ -303,13 +340,12 @@ export async function fetchHlsManifestForClient(
  * Uses EXTINF:-1 (continuous live TS). Finite EXTINF breaks Smarters HLS mode entirely.
  */
 export function buildNativeTsHlsManifest(
-  panelOrigin: string,
+  _panelOrigin: string,
   username: string,
   password: string,
   streamId: string
 ): string {
-  const origin = panelOrigin.replace(/\/+$/, "");
-  const tsUrl = `${origin}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}.ts`;
+  const tsUrl = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}.ts`;
   return [
     "#EXTM3U",
     "#EXT-X-VERSION:3",

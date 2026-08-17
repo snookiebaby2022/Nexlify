@@ -276,7 +276,7 @@ export async function GET(
       );
     }
 
-    const proxied = await proxyUpstreamNative(playbackUrl, ua);
+    const proxied = await proxyUpstreamNative(playbackUrl, UPSTREAM_HLS_UA);
     if (!proxied.ok) {
       lastError = proxied.error;
       if (i === 0 && candidates.length > 1) {

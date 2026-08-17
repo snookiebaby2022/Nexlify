@@ -18,7 +18,7 @@ test("buildNativeTsHlsManifest points .m3u8 clients at panel .ts URL", () => {
   assert.match(body, /#EXT-X-VERSION:3/);
   assert.match(body, /#EXT-X-PLAYLIST-TYPE:EVENT/);
   assert.match(body, /#EXTINF:-1,/);
-  assert.match(body, /http:\/\/45\.88\.138\.18\/live\/user1\/pass1\/stream123\.ts$/m);
+  assert.match(body, /^\/live\/user1\/pass1\/stream123\.ts$/m);
 });
 
 test("buildHlsRelayUrl uses path token without query string", () => {
@@ -49,8 +49,17 @@ test("sanitizeHlsPlaylist drops DISCONTINUITY tags that freeze Smarters", async 
   ].join("\n");
   const out = sanitizeHlsPlaylist(src);
   assert.equal(out.includes("DISCONTINUITY"), false);
+  assert.match(out, /#EXT-X-VERSION:3/);
+  assert.match(out, /#EXT-X-TARGETDURATION:4/);
   assert.match(out, /seg0\.ts/);
   assert.match(out, /seg1\.ts/);
+
+  const overTd = sanitizeHlsPlaylist(
+    ["#EXTM3U", "#EXT-X-VERSION:6", "#EXT-X-INDEPENDENT-SEGMENTS", "#EXT-X-TARGETDURATION:2", "#EXTINF:2.04,", "seg0.ts", ""].join("\n")
+  );
+  assert.match(overTd, /#EXT-X-VERSION:3/);
+  assert.equal(overTd.includes("INDEPENDENT-SEGMENTS"), false);
+  assert.match(overTd, /#EXT-X-TARGETDURATION:3/);
 
   const master = buildClientDirectHlsMaster("https://cdn.example/live/12.m3u8");
   assert.match(master, /#EXT-X-STREAM-INF:/);
@@ -72,10 +81,8 @@ test("rewritePackagerPlaylist strips DISCONTINUITY before rewriting segments", (
     "1862838169"
   );
   assert.equal(body.includes("DISCONTINUITY"), false);
-  assert.match(
-    body,
-    /http:\/\/45\.88\.138\.18\/live\/user1\/pass1\/1862838169\/hls\/seg3\.ts/
-  );
+  assert.match(body, /^\/live\/user1\/pass1\/1862838169\/hls\/seg3\.ts$/m);
+  assert.equal(body.includes("http://"), false);
 });
 
 test("isPackagerSegmentName accepts ffmpeg segment files only", () => {

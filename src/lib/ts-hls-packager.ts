@@ -4,10 +4,11 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 
-/** ~GOP length. Do not use hls_init_time / split_by_time with -c copy (mid-GOP freeze). */
-const HLS_TIME_SEC = 2;
+/** Match XUI/NXT default segment length. Do not use hls_init_time / split_by_time with -c copy. */
+const HLS_TIME_SEC = 4;
 const HLS_LIST_SIZE = 8;
-const READY_TIMEOUT_MS = 8_000;
+const READY_TIMEOUT_MS = 12_000;
+const MAX_SESSIONS = 32;
 const IDLE_MS = 10 * 60 * 1000;
 const REAP_EVERY_MS = 30_000;
 
@@ -72,6 +73,15 @@ function startReaper() {
   }, REAP_EVERY_MS).unref();
 }
 
+function evictOldestIfNeeded() {
+  if (sessions.size < MAX_SESSIONS) return;
+  let oldest: PackagerSession | undefined;
+  for (const session of sessions.values()) {
+    if (!oldest || session.lastAccess < oldest.lastAccess) oldest = session;
+  }
+  if (oldest) stopSession(oldest.key);
+}
+
 function stopSession(key: string) {
   const session = sessions.get(key);
   if (!session) return;
@@ -101,7 +111,8 @@ function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number): Pr
         if (existsSync(indexPath) && statSync(indexPath).size > 24) {
           const body = readFileSync(indexPath, "utf8");
           const segs = body.match(/seg\d+\.ts/gi) ?? [];
-          if (body.includes("#EXTINF") && segs.length >= 1) {
+          // ExoPlayer / Smarters often errors on a 1-segment live window.
+          if (body.includes("#EXTINF") && segs.length >= 2) {
             resolve(true);
             return;
           }
@@ -180,12 +191,13 @@ async function spawnPackager(
       "-hls_segment_type",
       "mpegts",
       "-hls_flags",
-      "omit_endlist+independent_segments+temp_file",
+      "omit_endlist+temp_file",
       "-hls_segment_filename",
       join(dir, "seg%d.ts"),
       join(dir, "index.m3u8"),
     ],
-    { stdio: ["ignore", "ignore", "pipe"], windowsHide: true }
+    // Never pipe stderr — unread ffmpeg logs fill the buffer and freeze Next.
+    { stdio: ["ignore", "ignore", "ignore"], windowsHide: true }
   );
 
   proc.on("exit", () => {
@@ -225,6 +237,7 @@ export async function ensureTsHlsPackager(opts: {
   }
 
   if (!session) {
+    evictOldestIfNeeded();
     const created = await spawnPackager(key, dir, opts.upstreamUrl, opts.userAgent);
     if (!created) return { ok: false, error: "ffmpeg not available for HLS packaging" };
     session = created;
