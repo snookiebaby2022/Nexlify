@@ -45,6 +45,7 @@ type PackagerSession = {
   proc: ChildProcess;
   lastAccess: number;
   ready: Promise<boolean>;
+  upstreamUrl: string;
 };
 
 const globalKey = "__nexlifyTsHlsSessions";
@@ -139,6 +140,7 @@ async function spawnPackager(
   const proc = spawn(
     ffmpegPath,
     [
+      "-y",
       "-hide_banner",
       "-loglevel",
       "error",
@@ -196,6 +198,7 @@ async function spawnPackager(
     proc,
     lastAccess: Date.now(),
     ready: waitForPlaylist(dir, proc, READY_TIMEOUT_MS),
+    upstreamUrl,
   };
   sessions.set(key, session);
   startReaper();
@@ -213,6 +216,10 @@ export async function ensureTsHlsPackager(opts: {
   let session = sessions.get(key);
 
   if (session && session.proc.exitCode != null) {
+    stopSession(key);
+    session = undefined;
+  }
+  if (session && session.upstreamUrl !== opts.upstreamUrl) {
     stopSession(key);
     session = undefined;
   }

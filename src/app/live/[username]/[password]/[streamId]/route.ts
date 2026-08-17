@@ -27,6 +27,7 @@ import {
   expandHlsPlaybackCandidates,
   buildClientDirectHlsMaster,
   shouldOfferClientDirectHls,
+  xtreamHlsSourceUrl,
   UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
@@ -34,7 +35,7 @@ import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
-import { openUpstreamLiveStream, probeUpstreamPlayable, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
+import { openUpstreamLiveStream, resolvePlayableUpstreamUrl, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
 import { ensureTsHlsPackager } from "@/lib/ts-hls-packager";
 
 export const runtime = "nodejs";
@@ -193,17 +194,17 @@ export async function GET(
     for (let i = 0; i < candidates.length; i++) {
       const playbackUrl = candidates[i]!;
       if (isHlsPlaybackUrl(playbackUrl)) continue;
-      const kind = await probeUpstreamPlayable(playbackUrl, {
+      const resolved = await resolvePlayableUpstreamUrl(playbackUrl, {
         userAgent: UPSTREAM_HLS_UA,
-        timeoutMs: 4_000,
+        timeoutMs: 8_000,
       });
-      if (kind !== "media") {
+      if (!resolved) {
         lastError = "Upstream is not MPEG-TS";
         continue;
       }
-      await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), resolved, 3600);
       const packed = await ensureTsHlsPackager({
-        upstreamUrl: playbackUrl,
+        upstreamUrl: resolved,
         lineId: line.id,
         streamId: cleanId,
         userAgent: UPSTREAM_HLS_UA,
@@ -221,10 +222,14 @@ export async function GET(
       lastError = packed.error;
     }
 
-    // Last resort: XUI .m3u8 on the same stream_source — player uses its own IP/UA.
-    if (clientDirectHls) {
-      await cacheSet(hlsRelayCacheKey(line.id, cleanId), clientDirectHls, 3600);
-      return hlsHeaders(buildClientDirectHlsMaster(clientDirectHls));
+    const directHls =
+      clientDirectHls ??
+      candidates.map((u) => xtreamHlsSourceUrl(u)).find((u): u is string => Boolean(u)) ??
+      candidates.find((u) => isHlsPlaybackUrl(u)) ??
+      null;
+    if (directHls) {
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), directHls, 3600);
+      return hlsHeaders(buildClientDirectHlsMaster(directHls));
     }
 
     const status = /timeout/i.test(lastError) ? 504 : 502;
