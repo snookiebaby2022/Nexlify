@@ -81,6 +81,7 @@ export async function GET(
           ...buildLiveRedirectHeaders(antiFreeze),
           "Content-Type": "video/mp2t",
           "Content-Length": String(buf.length),
+          "Accept-Ranges": "bytes",
           "Cache-Control": "no-cache, no-store",
         },
       })
@@ -152,7 +153,7 @@ export async function GET(
         "Content-Type": upstream.contentType,
         "Cache-Control": "no-cache, no-store",
         "Content-Length": String(segmentBuf.length),
-        ...(range ? { "Accept-Ranges": "bytes" } : {}),
+        "Accept-Ranges": "bytes",
       },
     })
   );

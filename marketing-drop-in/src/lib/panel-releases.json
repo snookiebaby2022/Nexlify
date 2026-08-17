@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.21",
+  "latestVersion": "2.0.22",
   "releases": [
+    {
+      "version": "2.0.22",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Smarters HLS: accept text/plain playlists, always send Accept-Ranges, remux fallback.",
+      "changelog": [
+        "Treat #EXTM3U bodies as HLS even when the provider sends text/plain or octet-stream",
+        "HLS segment responses always include Accept-Ranges: bytes so Smarters can probe range support",
+        "If MPEGTS remux fails, fall back to a rewritten HLS playlist instead of a hard 502",
+        "Non-HLS proxy path rewrites accidental .m3u8 manifests so relative segment URLs resolve"
+      ],
+      "fixes": [
+        "IPTV Smarters received garbage when providers served .m3u8 as text/plain",
+        "Smarters stalled when the first segment response omitted Accept-Ranges",
+        "Remux failure returned 502 with no HLS fallback"
+      ]
+    },
     {
       "version": "2.0.21",
       "date": "2026-08-17",

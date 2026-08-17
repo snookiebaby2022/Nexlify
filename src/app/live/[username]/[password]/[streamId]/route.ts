@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Readable } from "node:stream";
 import { getClientIp } from "@/lib/client-ip";
 
 import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
@@ -31,7 +32,13 @@ import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
-import { openUpstreamLiveStream, resolvePlayableUpstreamUrl, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
+import {
+  openUpstreamLiveStream,
+  resolvePlayableUpstreamUrl,
+  upstreamToWebResponse,
+  looksLikeHlsManifestPayload,
+  shouldSniffAccidentalHlsManifest,
+} from "@/lib/live-upstream-proxy";
 import { ensureDiskHls, isHlsDaemonHealthy, openDaemonMpegTs } from "@/lib/hls-restream-client";
 import { getActiveTranscodingProfile, getTranscodingProfiles } from "@/lib/transcoding-profiles";
 import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
@@ -65,15 +72,105 @@ function safeLocalHlsIndex(streamId: string): string | null {
   }
 }
 
+async function readNodeStreamLimited(stream: Readable, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    for await (const chunk of stream) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      chunks.push(buf);
+      total += buf.length;
+      if (total >= maxBytes) break;
+    }
+  } finally {
+    stream.destroy();
+  }
+  return Buffer.concat(chunks, total);
+}
+
+function prependReadable(prefix: Buffer, stream: Readable): Readable {
+  if (!prefix.length) return stream;
+  return Readable.from(
+    (async function* () {
+      yield prefix;
+      for await (const chunk of stream) {
+        yield chunk;
+      }
+    })()
+  );
+}
+
+function peekReadable(stream: Readable, maxBytes: number): Promise<{ prefix: Buffer; rest: Readable }> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      stream.pause();
+      stream.removeListener("data", onData);
+      stream.removeListener("end", onEnd);
+      stream.removeListener("error", onError);
+      resolve({ prefix: Buffer.concat(chunks, total), rest: stream });
+    };
+    const onData = (chunk: Buffer) => {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      chunks.push(buf);
+      total += buf.length;
+      if (total >= maxBytes) finish();
+    };
+    const onEnd = () => finish();
+    const onError = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+    stream.on("data", onData);
+    stream.once("end", onEnd);
+    stream.once("error", onError);
+    if (stream.isPaused()) stream.resume();
+  });
+}
+
 async function proxyUpstreamNative(
   url: string,
-  ua: string | undefined
+  ua: string | undefined,
+  rewrite?: {
+    panelOrigin: string;
+    username: string;
+    password: string;
+    streamKey: string;
+    saverEnabled: boolean;
+  }
 ): Promise<{ ok: true; response: NextResponse } | { ok: false; error: string }> {
   try {
     const open = await openUpstreamLiveStream(url, {
       userAgent: ua,
       timeoutMs: PROXY_TIMEOUT_MS,
     });
+    if (rewrite && shouldSniffAccidentalHlsManifest(open.contentType)) {
+      const { prefix, rest } = await peekReadable(open.body, 512);
+      if (looksLikeHlsManifestPayload(prefix)) {
+        const more = await readNodeStreamLimited(rest, 2_000_000);
+        const text = Buffer.concat([prefix, more]).toString("utf8");
+        const relay = (target: string) =>
+          buildHlsRelayUrl(rewrite.panelOrigin, rewrite.username, rewrite.password, rewrite.streamKey, target);
+        let body = rewriteHlsManifestForRelay(text, open.finalUrl, relay);
+        if (rewrite.saverEnabled) body = pickLowestBandwidthHlsVariant(body);
+        return {
+          ok: true,
+          response: new NextResponse(body, {
+            status: 200,
+            headers: {
+              "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
+              "Cache-Control": "no-cache, no-store",
+            },
+          }),
+        };
+      }
+      open.body = prependReadable(prefix, rest);
+    }
     const { stream, headers } = upstreamToWebResponse(open);
     return {
       ok: true,
@@ -226,11 +323,24 @@ export async function GET(
         }
       : null;
   const transcodeOpts = profileOpts(mpegtsProfile);
+  const panelOrigin = serverBaseUrl(req.url, req.headers);
+  const serveHlsFallback = async (upstreamUrl: string): Promise<NextResponse | null> => {
+    const packed = await ensureDiskHls({
+      upstreamUrl,
+      streamId: hlsDiskStreamId,
+      userAgent: UPSTREAM_HLS_UA,
+      loop: mode === "created" || Boolean(streamMeta?.isCreatedChannel),
+      transcode: profileOpts(hlsProfile),
+    });
+    if (!packed.ok) return null;
+    return hlsHeaders(
+      rewritePackagerPlaylist(packed.playlist, panelOrigin, username, password, requestStreamKey)
+    );
+  };
 
   let lastError = "Stream fetch failed";
 
   if (wantsM3u8) {
-    const panelOrigin = serverBaseUrl(req.url, req.headers);
     let clientDirectHls: string | null = null;
     const hlsProbeMs = bw.instantStart ? 1_500 : 8_000;
     for (const playbackUrl of candidates) {
@@ -350,6 +460,8 @@ export async function GET(
     }
     if (await isHlsDaemonHealthy()) {
       lastError = daemonMpegts?.error || "MPEGTS daemon failed";
+      const packedFallback = await serveHlsFallback(mpegtsUrl);
+      if (packedFallback) return packedFallback;
       continue;
     }
 
@@ -370,6 +482,8 @@ export async function GET(
           entityId: cleanId,
           meta: { mode: "mpegts_remux", error: remux.error, candidate: i },
         });
+        const packedFallback = await serveHlsFallback(mpegtsUrl);
+        if (packedFallback) return packedFallback;
         continue;
       }
       if (await isSessionKicked(line.id, ip)) {
@@ -395,7 +509,13 @@ export async function GET(
       );
     }
 
-    const proxied = await proxyUpstreamNative(playbackUrl, UPSTREAM_HLS_UA);
+    const proxied = await proxyUpstreamNative(playbackUrl, UPSTREAM_HLS_UA, {
+      panelOrigin,
+      username,
+      password,
+      streamKey: requestStreamKey,
+      saverEnabled: bw.saverEnabled,
+    });
     if (!proxied.ok) {
       lastError = proxied.error;
       if (i === 0 && candidates.length > 1) {

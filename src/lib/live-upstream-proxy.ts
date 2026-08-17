@@ -52,10 +52,27 @@ export function looksLikePlayableMediaPayload(buf: Buffer): boolean {
   // ID3-tagged audio or MPEG ADTS
   if (buf.subarray(0, 3).toString("ascii") === "ID3") return true;
   if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) return true;
-  // HLS playlist text
-  const head = buf.subarray(0, Math.min(buf.length, 64)).toString("utf8");
-  if (head.includes("#EXTM3U")) return true;
-  return false;
+  // HLS playlist text (often served as text/plain or octet-stream)
+  return looksLikeHlsManifestPayload(buf);
+}
+
+/** Providers often serve .m3u8 as text/plain or octet-stream; body still starts with #EXT. */
+export function looksLikeHlsManifestPayload(buf: Buffer): boolean {
+  const head = buf.subarray(0, Math.min(buf.length, 64)).toString("utf8").trimStart();
+  return head.startsWith("#EXTM3U") || head.startsWith("#EXT");
+}
+
+export function isHlsManifestContentType(contentType: string | undefined | null): boolean {
+  const c = (contentType ?? "").toLowerCase();
+  return c.includes("mpegurl") || c.includes("m3u8");
+}
+
+/** Providers often serve accidental .m3u8 as text/plain or octet-stream on the MPEGTS path. */
+export function shouldSniffAccidentalHlsManifest(contentType: string | undefined | null): boolean {
+  const c = (contentType ?? "").toLowerCase();
+  if (isHlsManifestContentType(c)) return true;
+  if (c.includes("text/plain") || c.includes("octet-stream")) return true;
+  return !c.trim();
 }
 
 export function looksLikeHtmlErrorPayload(buf: Buffer): boolean {
@@ -251,6 +268,16 @@ export function openUpstreamLiveStream(
         // Suspicious CT (text/html etc.): sniff first bytes — many IPTV CDNs lie.
         void peekResponseBody(res, PEEK_BYTES)
           .then(({ prefix, rest }) => {
+            if (looksLikeHlsManifestPayload(prefix)) {
+              resolve({
+                status,
+                contentType: "application/x-mpegURL",
+                body: prependBuffer(prefix, rest),
+                finalUrl: current,
+                headers: {},
+              });
+              return;
+            }
             if (looksLikePlayableMediaPayload(prefix)) {
               resolve({
                 status,

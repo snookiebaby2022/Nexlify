@@ -100,7 +100,7 @@ export async function GET(
         ...buildLiveRedirectHeaders(antiFreeze),
         "Content-Type": upstream.contentType,
         "Cache-Control": "no-cache, no-store",
-        ...(range ? { "Accept-Ranges": "bytes" } : {}),
+        "Accept-Ranges": "bytes",
       },
     })
   );

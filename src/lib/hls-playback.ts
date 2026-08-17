@@ -310,6 +310,7 @@ export async function fetchHlsUpstream(
       return { ok: false, status: 502, detail: "html error page" };
     }
     const head = buf.subarray(0, Math.min(buf.length, 16)).toString("utf8").trimStart();
+    // mpegurl, text/plain, and octet-stream are all valid for IPTV .m3u8; #EXT rejects binary.
     if (head.startsWith("#EXT")) {
       return { ok: true, kind: "manifest", body: buf.toString("utf8"), finalUrl };
     }
