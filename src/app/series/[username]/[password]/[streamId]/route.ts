@@ -4,14 +4,16 @@ import { getClientIp } from "@/lib/client-ip";
 if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
-import { trackConnection } from "@/lib/connections";
+import { trackConnection, isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import { getLineForPlaybackAuth, resolvePlaybackUrlForLine } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { resolveStreamIdParam } from "@/lib/xtream-stream-id";
+import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
 
 export const runtime = "nodejs";
+const PROXY_TIMEOUT_MS = 30_000;
 
 export async function OPTIONS() {
   return iptvCorsPreflight();
@@ -57,6 +59,24 @@ export async function GET(
   const playbackUrl = await resolvePlaybackUrlForLine(line.id, cleanId, { clientIp: ip, userAgent: ua });
   if (!playbackUrl) return iptvText("Not found", { status: 404 });
 
+  const range = req.headers.get("range");
+  let open;
+  try {
+    open = await openUpstreamLiveStream(playbackUrl, {
+      userAgent: ua,
+      timeoutMs: PROXY_TIMEOUT_MS,
+      headers: range ? { Range: range } : undefined,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Playback fetch failed";
+    const status = /timeout/i.test(msg) ? 504 : 502;
+    return iptvText(msg.slice(0, 200), { status });
+  }
+
+  if (await isSessionKicked(line.id, ip)) {
+    return withIptvCors(iptvText("Session kicked", { status: 403 }));
+  }
+
   void trackConnection({
     lineId: line.id,
     streamId: cleanId,
@@ -64,10 +84,19 @@ export async function GET(
     userAgent: ua,
   });
 
+  const { stream, headers } = upstreamToWebResponse(open, range ? { "Accept-Ranges": "bytes" } : undefined);
+  const trackedBody = attachKickAwareProxyBody({
+    body: stream as unknown as ReadableStream<Uint8Array>,
+    lineId: line.id,
+    streamId: cleanId,
+    ip: ip ?? "",
+    userAgent: ua,
+  });
+
   return withIptvCors(
-    NextResponse.redirect(playbackUrl, {
-      status: 302,
-      headers: { "Cache-Control": "private, no-cache" },
+    new NextResponse(trackedBody as unknown as BodyInit, {
+      status: range ? 206 : 200,
+      headers,
     })
   );
 }

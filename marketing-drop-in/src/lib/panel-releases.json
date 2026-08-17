@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.5",
+  "latestVersion": "2.0.6",
   "releases": [
+    {
+      "version": "2.0.6",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Proxy Movies/Series through the panel to improve IPTV Smarters playback and clear online status on close.",
+      "changelog": [
+        "Movies and TV Series now stream through Nexlify instead of a bare upstream redirect",
+        "Playback supports upstream Range headers/seek while staying observable by the panel",
+        "Closing Movie/Series playback now clears dashboard online state when the stream body ends/cancels",
+        "Xtream/M3U VOD export URLs always use panel /movie and /series routes for consistent app behavior"
+      ],
+      "fixes": [
+        "IPTV Smarters playback was less reliable than XCIPTV on Movies/Series",
+        "Dashboard could still show a user online after closing VOD/Series playback"
+      ]
+    },
     {
       "version": "2.0.5",
       "date": "2026-08-16",

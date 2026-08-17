@@ -37,10 +37,16 @@ export function exportPlaybackUrl(
     return `${trimBase(baseUrl)}/live/${encodeURIComponent(line.username)}/${encodeURIComponent(line.password)}/${stream.id}.${ext}`;
   }
 
+  const ext = vodExtension(stream);
+  const route = stream.type === StreamType.SERIES ? "series" : "movie";
+  // Always route VOD/series through the panel so clients see consistent Xtream-style
+  // URLs and playback stays observable/kickable like live sessions.
   if (isIntegrationStreamUrl(stream.streamUrl)) {
-    const ext = vodExtension(stream);
-    return `${trimBase(baseUrl)}/movie/${encodeURIComponent(line.username)}/${encodeURIComponent(line.password)}/${stream.id}.${ext}`;
+    return `${trimBase(baseUrl)}/${route}/${encodeURIComponent(line.username)}/${encodeURIComponent(line.password)}/${stream.id}.${ext}`;
   }
 
-  return resolveStreamPlaybackUrl(resolved, seed);
+  const direct = resolveStreamPlaybackUrl(resolved, seed);
+  return direct
+    ? `${trimBase(baseUrl)}/${route}/${encodeURIComponent(line.username)}/${encodeURIComponent(line.password)}/${stream.id}.${ext}`
+    : direct;
 }

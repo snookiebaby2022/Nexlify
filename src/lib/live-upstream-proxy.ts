@@ -12,6 +12,7 @@ export type UpstreamOpenResult = {
   contentType: string;
   body: Readable;
   finalUrl: string;
+  headers: Record<string, string>;
 };
 
 function isRedirect(status: number): boolean {
@@ -221,11 +222,17 @@ export function openUpstreamLiveStream(
         }
 
         if (isPlayableUpstreamContentType(contentType)) {
+          const passHeaders: Record<string, string> = {};
+          for (const key of ["content-length", "content-range", "accept-ranges", "last-modified", "etag"]) {
+            const value = res.headers[key];
+            if (typeof value === "string" && value) passHeaders[key] = value;
+          }
           resolve({
             status,
             contentType,
             body: res,
             finalUrl: current,
+            headers: passHeaders,
           });
           return;
         }
@@ -239,6 +246,7 @@ export function openUpstreamLiveStream(
                 contentType: "application/octet-stream",
                 body: prependBuffer(prefix, rest),
                 finalUrl: current,
+                headers: {},
               });
               return;
             }
@@ -271,6 +279,7 @@ export function upstreamToWebResponse(
     "Cache-Control": "no-cache, no-store",
     "Access-Control-Allow-Origin": "*",
     Connection: "keep-alive",
+    ...(open.headers ?? {}),
     ...(extraHeaders ?? {}),
   };
   return {
