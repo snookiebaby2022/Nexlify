@@ -29,7 +29,7 @@ export async function isHlsDaemonHealthy(): Promise<boolean> {
 
 async function daemonEnsure(opts: HlsEnsureOpts): Promise<HlsEnsureResult | null> {
   const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), 16_000);
+  const t = setTimeout(() => ac.abort(), 22_000);
   try {
     const res = await fetch(`${hlsDaemonOrigin()}/ensure`, {
       method: "POST",

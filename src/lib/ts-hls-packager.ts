@@ -78,7 +78,7 @@ export function filterPackagerPlaylistToExisting(playlist: string, lineId: strin
   }
   // Only drop the newest segment while ffmpeg is still flushing it — not every young file.
   const dropLast = (() => {
-    if (!pendingSegs.length) return null;
+    if (pendingSegs.length <= LIVE_MIN_SEGMENTS) return null;
     const last = pendingSegs[pendingSegs.length - 1]!;
     const segPath = join(dir, last);
     try {
