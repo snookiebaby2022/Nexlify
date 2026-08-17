@@ -10,11 +10,22 @@ async function binariesSettings() {
   return getSettingGroup("binaries");
 }
 
+const FFMPEG_FALLBACKS = ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"];
+
 export async function getFfmpegPath(): Promise<string> {
   const paths = await getBinPaths();
   const settings = await binariesSettings();
   const versions = settings.ffmpegVersions as BinVersionOption[] | undefined;
-  return resolveActivePath(versions, String(settings.activeFfmpegId ?? ""), paths.ffmpegPath);
+  const configured = resolveActivePath(
+    versions,
+    String(settings.activeFfmpegId ?? ""),
+    paths.ffmpegPath
+  );
+  if (await binExists(configured)) return configured;
+  for (const fallback of FFMPEG_FALLBACKS) {
+    if (await binExists(fallback)) return fallback;
+  }
+  return configured;
 }
 
 export async function getPhpPath(): Promise<string> {

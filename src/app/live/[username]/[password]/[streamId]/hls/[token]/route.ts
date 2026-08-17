@@ -16,6 +16,7 @@ import { logActivity } from "@/lib/lines";
 import { ensureTsHlsPackager, isPackagerSegmentName, readTsHlsSegment } from "@/lib/ts-hls-packager";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function OPTIONS() {
   return iptvCorsPreflight();
@@ -34,7 +35,8 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ username: string; password: string; streamId: string; token: string }> }
 ) {
-  const { username, password, streamId, token } = await ctx.params;
+  const { username, password, streamId, token: rawToken } = await ctx.params;
+  const token = decodeURIComponent(rawToken).split("/").pop() ?? rawToken;
   const auth = await authorizeHlsLiveRequest(req, username, password, streamId);
   if (!auth.ok) {
     const msg = auth.message === "kicked" ? "Session kicked" : auth.message;
@@ -45,16 +47,19 @@ export async function GET(
   const antiFreeze = await getAntiFreezeSettings();
 
   if (isPackagerSegmentName(token)) {
-    const packed = await ensureTsHlsPackager({
-      upstreamUrl: auth.rootUpstream,
-      lineId: auth.lineId,
-      streamId: auth.streamId,
-      userAgent: auth.userAgent,
-    });
-    if (!packed.ok) {
-      return iptvText("Segment unavailable", { status: 502 });
+    let buf = readTsHlsSegment(auth.lineId, auth.streamId, token);
+    if (!buf?.length) {
+      const packed = await ensureTsHlsPackager({
+        upstreamUrl: auth.rootUpstream,
+        lineId: auth.lineId,
+        streamId: auth.streamId,
+        userAgent: auth.userAgent,
+      });
+      if (!packed.ok) {
+        return iptvText("Segment unavailable", { status: 502 });
+      }
+      buf = readTsHlsSegment(auth.lineId, auth.streamId, token);
     }
-    const buf = readTsHlsSegment(auth.lineId, auth.streamId, token);
     if (!buf?.length) return iptvText("Segment not found", { status: 404 });
     if (await isSessionKicked(auth.lineId, clientIp)) {
       return iptvText("Session kicked", { status: 403 });

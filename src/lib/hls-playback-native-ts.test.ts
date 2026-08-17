@@ -46,6 +46,9 @@ test("rewritePackagerPlaylist rewrites segN.ts to panel HLS paths", () => {
     body,
     /http:\/\/45\.88\.138\.18\/live\/user1\/pass1\/1862838169\/hls\/seg3\.ts/
   );
+});
+
+test("isPackagerSegmentName accepts ffmpeg segment files only", () => {
   assert.equal(isPackagerSegmentName("seg3.ts"), true);
   assert.equal(isPackagerSegmentName("../etc/passwd"), false);
 });

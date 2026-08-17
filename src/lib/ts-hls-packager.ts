@@ -5,13 +5,30 @@ import { join } from "path";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 
 const HLS_TIME_SEC = 2;
-const HLS_LIST_SIZE = 6;
-const READY_TIMEOUT_MS = 12_000;
+const HLS_LIST_SIZE = 10;
+const READY_TIMEOUT_MS = 18_000;
 const IDLE_MS = 45_000;
 const REAP_EVERY_MS = 10_000;
 
 export function isPackagerSegmentName(name: string): boolean {
   return /^seg\d+\.ts$/i.test(name.trim());
+}
+
+export function filterPackagerPlaylistToExisting(playlist: string, lineId: string, streamId: string): string {
+  const dir = packagerDir(lineId, streamId);
+  const lines = playlist.split("\n");
+  const out: string[] = [];
+  for (const line of lines) {
+    const name = line.trim().split(/[\\/]/).pop() ?? "";
+    if (isPackagerSegmentName(name)) {
+      if (!existsSync(join(dir, name))) {
+        if (out.length && out[out.length - 1]!.startsWith("#EXTINF")) out.pop();
+        continue;
+      }
+    }
+    out.push(line);
+  }
+  return out.join("\n");
 }
 
 export function packagerDir(lineId: string, streamId: string): string {
@@ -27,7 +44,11 @@ type PackagerSession = {
   ready: Promise<boolean>;
 };
 
-const sessions = new Map<string, PackagerSession>();
+const globalKey = "__nexlifyTsHlsSessions";
+const sessions: Map<string, PackagerSession> = ((globalThis as Record<string, unknown>)[globalKey] as
+  | Map<string, PackagerSession>
+  | undefined) ?? new Map();
+(globalThis as Record<string, unknown>)[globalKey] = sessions;
 let reaperStarted = false;
 
 function sessionKey(lineId: string, streamId: string): string {
@@ -74,7 +95,8 @@ function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number): Pr
       try {
         if (existsSync(indexPath) && statSync(indexPath).size > 24) {
           const body = readFileSync(indexPath, "utf8");
-          if (body.includes("#EXTINF") && /seg\d+\.ts/i.test(body)) {
+          const segs = body.match(/seg\d+\.ts/gi) ?? [];
+          if (body.includes("#EXTINF") && segs.length >= 3) {
             resolve(true);
             return;
           }
@@ -200,8 +222,14 @@ export async function ensureTsHlsPackager(opts: {
   }
 
   try {
-    const playlist = readFileSync(join(session.dir, "index.m3u8"), "utf8");
-    if (!playlist.includes("#EXTM3U")) return { ok: false, error: "Invalid HLS playlist" };
+    const playlist = filterPackagerPlaylistToExisting(
+      readFileSync(join(session.dir, "index.m3u8"), "utf8"),
+      opts.lineId,
+      opts.streamId
+    );
+    if (!playlist.includes("#EXTM3U") || !/seg\d+\.ts/i.test(playlist)) {
+      return { ok: false, error: "Invalid HLS playlist" };
+    }
     return { ok: true, playlist };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Failed to read HLS playlist" };
@@ -212,10 +240,10 @@ export function readTsHlsSegment(lineId: string, streamId: string, name: string)
   if (!isPackagerSegmentName(name)) return null;
   const key = sessionKey(lineId, streamId);
   const session = sessions.get(key);
-  if (!session) return null;
-  session.lastAccess = Date.now();
-  const path = join(session.dir, name);
-  if (!path.startsWith(session.dir)) return null;
+  if (session) session.lastAccess = Date.now();
+  const dir = session?.dir ?? packagerDir(lineId, streamId);
+  const path = join(dir, name);
+  if (!path.startsWith(dir)) return null;
   try {
     if (!existsSync(path)) return null;
     return readFileSync(path);

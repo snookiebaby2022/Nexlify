@@ -34,6 +34,8 @@ import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstre
 import { ensureTsHlsPackager } from "@/lib/ts-hls-packager";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const PROXY_TIMEOUT_MS = 30_000;
 
