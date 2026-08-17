@@ -35,7 +35,10 @@ import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
 import { openUpstreamLiveStream, resolvePlayableUpstreamUrl, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
-import { ensureTsHlsPackager } from "@/lib/ts-hls-packager";
+import { ensureDiskHls } from "@/lib/hls-restream-client";
+import { getActiveTranscodingProfile } from "@/lib/transcoding-profiles";
+import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
+import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -208,11 +211,34 @@ export async function GET(
         continue;
       }
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), resolved, 3600);
-      const packed = await ensureTsHlsPackager({
+      const streamMeta = await prisma.stream.findUnique({
+        where: { id: cleanId },
+        select: {
+          isCreatedChannel: true,
+          vodMode: true,
+          isOnDemand: true,
+          agentStartCmd: true,
+          autoRestart: true,
+          streamUrl: true,
+          hostedExternally: true,
+        },
+      });
+      const mode = streamMeta ? getStreamPlaybackMode(streamMeta) : "direct";
+      const transcode =
+        mode === "transcode" ? await getActiveTranscodingProfile() : null;
+      const packed = await ensureDiskHls({
         upstreamUrl: resolved,
-        lineId: line.id,
         streamId: cleanId,
         userAgent: UPSTREAM_HLS_UA,
+        loop: mode === "created" || Boolean(streamMeta?.isCreatedChannel),
+        transcode: transcode
+          ? {
+              resolution: transcode.resolution,
+              bitrate: transcode.bitrate,
+              codec: transcode.codec,
+              gpuAcceleration: transcode.gpuAcceleration,
+            }
+          : null,
       });
       if (packed.ok) {
         const body = rewritePackagerPlaylist(

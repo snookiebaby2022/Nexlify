@@ -1,13 +1,13 @@
 import { spawn, type ChildProcess } from "child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "fs";
-import { tmpdir } from "os";
 import { join } from "path";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
+import { hlsStreamDir } from "@/lib/hls-disk";
 
 /** Match XUI/NXT default segment length. Do not use hls_init_time / split_by_time with -c copy. */
 const HLS_TIME_SEC = 4;
-const HLS_LIST_SIZE = 8;
-const READY_TIMEOUT_MS = 12_000;
+const HLS_LIST_SIZE = 6;
+const READY_TIMEOUT_MS = 8_000;
 const MAX_SESSIONS = 32;
 const IDLE_MS = 10 * 60 * 1000;
 const REAP_EVERY_MS = 30_000;
@@ -36,8 +36,7 @@ export function filterPackagerPlaylistToExisting(playlist: string, lineId: strin
 }
 
 export function packagerDir(_lineId: string, streamId: string): string {
-  const safe = String(streamId).replace(/[^a-zA-Z0-9_-]/g, "");
-  return join(tmpdir(), "nexlify-hls", safe);
+  return hlsStreamDir(streamId);
 }
 
 type PackagerSession = {
@@ -47,6 +46,7 @@ type PackagerSession = {
   lastAccess: number;
   ready: Promise<boolean>;
   upstreamUrl: string;
+  fingerprint: string;
 };
 
 const globalKey = "__nexlifyTsHlsSessions";
@@ -87,7 +87,14 @@ function stopSession(key: string) {
   if (!session) return;
   sessions.delete(key);
   try {
-    session.proc.kill("SIGTERM");
+    const pid = session.proc.pid;
+    if (pid) {
+      try {
+        process.kill(-pid, "SIGTERM");
+      } catch {
+        session.proc.kill("SIGTERM");
+      }
+    }
   } catch {
     /* ignore */
   }
@@ -111,8 +118,7 @@ function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number): Pr
         if (existsSync(indexPath) && statSync(indexPath).size > 24) {
           const body = readFileSync(indexPath, "utf8");
           const segs = body.match(/seg\d+\.ts/gi) ?? [];
-          // ExoPlayer / Smarters often errors on a 1-segment live window.
-          if (body.includes("#EXTINF") && segs.length >= 2) {
+          if (body.includes("#EXTINF") && segs.length >= 1) {
             resolve(true);
             return;
           }
@@ -130,11 +136,60 @@ function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number): Pr
   });
 }
 
+export type PackagerTranscode = {
+  resolution: string;
+  bitrate: number;
+  codec: string;
+  gpuAcceleration: boolean;
+} | null;
+
+function packagerFingerprint(
+  upstreamUrl: string,
+  transcode: PackagerTranscode,
+  loop?: boolean,
+  vod?: boolean
+) {
+  return JSON.stringify({
+    u: upstreamUrl,
+    t: transcode
+      ? `${transcode.codec}:${transcode.resolution}:${transcode.bitrate}:${transcode.gpuAcceleration}`
+      : "copy",
+    loop: Boolean(loop),
+    vod: Boolean(vod),
+  });
+}
+
+function transcodeArgs(profile: PackagerTranscode): string[] {
+  if (!profile) return ["-c", "copy"];
+  const vcodec =
+    profile.gpuAcceleration && profile.codec !== "h265"
+      ? "h264_nvenc"
+      : profile.codec === "h265"
+        ? "libx265"
+        : "libx264";
+  return [
+    "-c:v",
+    vcodec,
+    "-b:v",
+    `${Math.max(300, Number(profile.bitrate) || 2500)}k`,
+    "-s",
+    profile.resolution || "1280x720",
+    "-preset",
+    "veryfast",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-ac",
+    "2",
+  ];
+}
+
 async function spawnPackager(
   key: string,
   dir: string,
   upstreamUrl: string,
-  _userAgent?: string
+  opts?: { userAgent?: string; loop?: boolean; transcode?: PackagerTranscode; vod?: boolean }
 ): Promise<PackagerSession | null> {
   const ffmpegPath = await getFfmpegPath();
   if (!(await binExists(ffmpegPath))) return null;
@@ -146,7 +201,11 @@ async function spawnPackager(
   }
   mkdirSync(dir, { recursive: true });
 
-  const ua = "VLC/3.0.20 LibVLC/3.0.20";
+  const ua = opts?.userAgent?.trim() || "VLC/3.0.20 LibVLC/3.0.20";
+  const inputPrefix = opts?.loop ? ["-re", "-stream_loop", "-1"] : ["-re"];
+  const hlsFlags = opts?.vod ? "temp_file" : "omit_endlist+temp_file";
+  const listSize = opts?.vod ? "0" : String(HLS_LIST_SIZE);
+  const fingerprint = packagerFingerprint(upstreamUrl, opts?.transcode ?? null, opts?.loop, opts?.vod);
 
   const proc = spawn(
     ffmpegPath,
@@ -176,29 +235,33 @@ async function spawnPackager(
       "+genpts+discardcorrupt",
       "-avoid_negative_ts",
       "make_zero",
+      ...inputPrefix,
       "-i",
       upstreamUrl,
-      "-c",
-      "copy",
+      ...transcodeArgs(opts?.transcode ?? null),
       "-f",
       "hls",
       "-hls_time",
       String(HLS_TIME_SEC),
       "-hls_list_size",
-      String(HLS_LIST_SIZE),
+      listSize,
       "-hls_allow_cache",
-      "0",
+      opts?.vod ? "1" : "0",
       "-hls_segment_type",
       "mpegts",
       "-hls_flags",
-      "omit_endlist+temp_file",
+      hlsFlags,
       "-hls_segment_filename",
       join(dir, "seg%d.ts"),
       join(dir, "index.m3u8"),
     ],
-    // Never pipe stderr — unread ffmpeg logs fill the buffer and freeze Next.
-    { stdio: ["ignore", "ignore", "ignore"], windowsHide: true }
+    { stdio: ["ignore", "ignore", "ignore"], windowsHide: true, detached: true }
   );
+  try {
+    proc.unref();
+  } catch {
+    /* ignore */
+  }
 
   proc.on("exit", () => {
     if (sessions.get(key)?.proc === proc) sessions.delete(key);
@@ -211,6 +274,7 @@ async function spawnPackager(
     lastAccess: Date.now(),
     ready: waitForPlaylist(dir, proc, READY_TIMEOUT_MS),
     upstreamUrl,
+    fingerprint,
   };
   sessions.set(key, session);
   startReaper();
@@ -222,23 +286,32 @@ export async function ensureTsHlsPackager(opts: {
   lineId: string;
   streamId: string;
   userAgent?: string;
+  loop?: boolean;
+  transcode?: PackagerTranscode;
+  vod?: boolean;
 }): Promise<{ ok: true; playlist: string } | { ok: false; error: string }> {
   const key = sessionKey(opts.lineId, opts.streamId);
   const dir = packagerDir(opts.lineId, opts.streamId);
+  const fingerprint = packagerFingerprint(opts.upstreamUrl, opts.transcode ?? null, opts.loop, opts.vod);
   let session = sessions.get(key);
 
   if (session && session.proc.exitCode != null) {
     stopSession(key);
     session = undefined;
   }
-  if (session && session.upstreamUrl !== opts.upstreamUrl) {
+  if (session && session.fingerprint !== fingerprint) {
     stopSession(key);
     session = undefined;
   }
 
   if (!session) {
     evictOldestIfNeeded();
-    const created = await spawnPackager(key, dir, opts.upstreamUrl, opts.userAgent);
+    const created = await spawnPackager(key, dir, opts.upstreamUrl, {
+      userAgent: opts.userAgent,
+      loop: opts.loop,
+      transcode: opts.transcode,
+      vod: opts.vod,
+    });
     if (!created) return { ok: false, error: "ffmpeg not available for HLS packaging" };
     session = created;
   }

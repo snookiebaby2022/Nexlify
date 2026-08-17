@@ -1,5 +1,5 @@
-import { AdminModulePage } from "@/components/admin-module-page";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return <AdminModulePage slug="settings_plex" />;
+export default function PlexSettingsPage() {
+  redirect("/admin/integrations/plex");
 }

@@ -50,9 +50,15 @@ ${snippet}
 # }
 #
 # location /hls/ {
-#     alias /var/www/nexlify-hls/;
+#     alias /var/lib/nexlify/hls/;
 #     types { application/vnd.apple.mpegurl m3u8; video/mp2t ts; }
 #     add_header Cache-Control no-cache;
+# }
+#
+# location /timeshift/ {
+#     proxy_pass PANEL_ORIGIN;
+#     proxy_buffering off;
+#     proxy_read_timeout 300s;
 # }
 #
 # Full template: nginx/nexlify-stream-server.conf in the Nexlify panel repo.

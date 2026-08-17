@@ -1,7 +1,28 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.14",
+  "latestVersion": "2.0.15",
   "releases": [
+    {
+      "version": "2.0.15",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "XUI/NXT on-disk HLS daemon, timeshift playback, faster VOD, Updates no longer stuck at 60%.",
+      "changelog": [
+        "ffmpeg HLS restream runs in a PM2 nexlify-hls daemon writing /var/lib/nexlify/hls — outside the Next process like XUI/NXT",
+        "On-demand and created channels start that restream; transcode profiles persist and apply to live transcode mode",
+        "Xtream /timeshift/user/pass/duration/start/id.ts catch-up delivery (local archive or provider timeshift URL)",
+        "Movies/series fetch with VLC UA; .m3u8 VOD is packaged to real HLS segments",
+        "Stream review, DVR record rules, logo resize, Plex settings, MAG events, and player modules are real pages",
+        "Updates: leftover .next.staging no longer keeps the bar running at 60% after PM2 swap"
+      ],
+      "fixes": [
+        "Panel Updates stuck at 60% after a successful restart",
+        "HLS packager inside Next could restart the whole panel",
+        "No timeshift/catch-up playback route for MAG/Smarters",
+        "Movie/series playback failed when providers blocked the app user-agent",
+        "Transcode profiles were Redis-only and vanished after restart"
+      ]
+    },
     {
       "version": "2.0.14",
       "date": "2026-08-17",

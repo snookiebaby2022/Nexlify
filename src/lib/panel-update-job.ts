@@ -95,16 +95,7 @@ export async function isPanelUpdateWorkAlive(repoPath: string): Promise<boolean>
     }
     // Fresh marker (apply-panel-fast-update often `touch`es without a PID) — trust briefly
     if (ageMs < 3 * 60 * 1000) return true;
-    // Marker present + recent enough during build window — keep waiting if children alive
-    // (children already checked above; here allow slightly stale marker while staging exists)
-    if (ageMs < 40 * 60 * 1000) {
-      try {
-        const staging = await stat(path.join(repoPath, ".next.staging"));
-        if (Date.now() - staging.mtimeMs < 10 * 60 * 1000) return true;
-      } catch {
-        /* no staging */
-      }
-    }
+    return false;
   } catch {
     /* no marker */
   }
@@ -122,13 +113,20 @@ const MAX_DONE_MS = 2 * 60 * 1000; // auto-clear completed jobs so reload does n
 const MAX_SAME_VERSION_FAILED_MS = 5 * 60 * 1000; // re-sync failures stop nagging sooner
 
 async function readInstalledPackageVersion(repoPath: string): Promise<string | null> {
-  try {
-    const raw = await readFile(path.join(repoPath, "package.json"), "utf8");
-    const v = (JSON.parse(raw) as { version?: unknown }).version;
-    return typeof v === "string" && v.trim() ? v.trim().replace(/^v/i, "") : null;
-  } catch {
-    return null;
+  const files = [
+    path.join(repoPath, "package.json"),
+    path.join(repoPath, ".next", "standalone", "package.json"),
+  ];
+  for (const file of files) {
+    try {
+      const raw = await readFile(file, "utf8");
+      const v = (JSON.parse(raw) as { version?: unknown }).version;
+      if (typeof v === "string" && v.trim()) return v.trim().replace(/^v/i, "");
+    } catch {
+      /* try next */
+    }
   }
+  return null;
 }
 
 /**
@@ -164,8 +162,12 @@ export function looksLikeSuccessfulUpdateDespiteWorkerExit(job: PanelUpdateJob):
   if (step === "pm2 restart nexlify") return true;
   if (step === "prepare standalone" && progress >= 90) return true;
   if (step === "apply update" && progress >= 88) return true;
-  // Staging swap / standalone often kills the outer worker around 88–92%
-  if (progress >= 88 && (step === "npm run build" || step === "prepare standalone" || step === "apply update")) {
+  // Compile often sits at ~52–70% when PM2 swap kills the worker. Treat as success
+  // so Updates cannot remain stuck at 60% after the new build is already live.
+  if (
+    progress >= 50 &&
+    (step === "npm run build" || step === "prepare build" || step === "prepare standalone" || step === "apply update")
+  ) {
     return true;
   }
   // Steps array may already record a successful restart while status is still "running"

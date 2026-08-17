@@ -1,0 +1,65 @@
+import { hlsDaemonOrigin, hlsDaemonToken } from "@/lib/hls-disk";
+import type { TranscodingProfile } from "@/lib/transcoding-profiles";
+
+export type HlsEnsureOpts = {
+  streamId: string;
+  upstreamUrl: string;
+  userAgent?: string;
+  loop?: boolean;
+  transcode?: Pick<TranscodingProfile, "resolution" | "bitrate" | "codec" | "gpuAcceleration"> | null;
+  vod?: boolean;
+};
+
+export type HlsEnsureResult =
+  | { ok: true; playlist: string; via: "daemon" | "local" }
+  | { ok: false; error: string };
+
+async function daemonEnsure(opts: HlsEnsureOpts): Promise<HlsEnsureResult | null> {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 14_000);
+  try {
+    const res = await fetch(`${hlsDaemonOrigin()}/ensure`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${hlsDaemonToken()}`,
+      },
+      body: JSON.stringify(opts),
+      signal: ac.signal,
+    });
+    if (!res.ok) {
+      try {
+        const data = (await res.json()) as { error?: string };
+        if (data?.error) return { ok: false, error: data.error };
+      } catch {
+        /* ignore */
+      }
+      return null;
+    }
+    const data = (await res.json()) as { ok?: boolean; playlist?: string; error?: string };
+    if (data.ok && data.playlist) return { ok: true, playlist: data.playlist, via: "daemon" };
+    return data.error ? { ok: false, error: data.error } : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/** Prefer the HLS daemon (ffmpeg outside Next). Fall back to in-process packager. */
+export async function ensureDiskHls(opts: HlsEnsureOpts): Promise<HlsEnsureResult> {
+  const remote = await daemonEnsure(opts);
+  if (remote) return remote;
+  const { ensureTsHlsPackager } = await import("@/lib/ts-hls-packager");
+  const packed = await ensureTsHlsPackager({
+    upstreamUrl: opts.upstreamUrl,
+    lineId: "daemon",
+    streamId: opts.streamId,
+    userAgent: opts.userAgent,
+    loop: opts.loop,
+    transcode: opts.transcode ?? null,
+    vod: opts.vod,
+  });
+  if (!packed.ok) return packed;
+  return { ok: true, playlist: packed.playlist, via: "local" };
+}
