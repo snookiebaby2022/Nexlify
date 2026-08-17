@@ -176,14 +176,5 @@ export function buildNativeTsHlsManifest(
 ): string {
   const origin = panelOrigin.replace(/\/+$/, "");
   const tsUrl = `${origin}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}.ts`;
-  return [
-    "#EXTM3U",
-    "#EXT-X-VERSION:3",
-    "#EXT-X-TARGETDURATION:3600",
-    "#EXT-X-MEDIA-SEQUENCE:0",
-    "#EXT-X-PLAYLIST-TYPE:EVENT",
-    "#EXTINF:3600.0,",
-    tsUrl,
-    "",
-  ].join("\n");
+  return ["#EXTM3U", "#EXTINF:-1,", tsUrl, ""].join("\n");
 }

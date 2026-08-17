@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { computeConnectionQuality } from "@/lib/connection-quality";
+import { computeConnectionQualityWithLive, getLiveQualitySample } from "@/lib/connection-quality-live";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 
-const STALE_MS = 5 * 60 * 1000;
+import { LIVE_STALE_MS } from "@/lib/connections";
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
 
 function inferOutput(userAgent: string | null): string {
@@ -36,7 +36,7 @@ export async function GET(
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id: streamId } = await ctx.params;
-  const staleBefore = new Date(Date.now() - STALE_MS);
+  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
   const scope = ownerScope(session);
 
   const stream = await prisma.stream.findUnique({
@@ -63,25 +63,29 @@ export async function GET(
 
   return NextResponse.json({
     stream,
-    clients: rows.map((c) => {
-      const dur = durationSeconds(c.startedAt, c.lastSeenAt);
-      const quality = computeConnectionQuality({
-        startedAt: c.startedAt,
-        lastSeenAt: c.lastSeenAt,
-      });
-      return {
-        id: c.id,
-        line: c.line.username,
-        server: stream.server?.name ?? "Main Server",
-        ip: c.ip,
-        duration: formatDuration(dur),
-        durationSeconds: dur,
-        output: inferOutput(c.userAgent),
-        restreamer: c.line.isRestreamer,
-        userAgent: c.userAgent,
-        lastSeenAt: c.lastSeenAt.toISOString(),
-        quality,
-      };
-    }),
+    clients: await Promise.all(
+      rows.map(async (c) => {
+        const dur = durationSeconds(c.startedAt, c.lastSeenAt);
+        const live = await getLiveQualitySample(c.lineId, streamId, c.ip);
+        const quality = computeConnectionQualityWithLive({
+          startedAt: c.startedAt,
+          lastSeenAt: c.lastSeenAt,
+          live,
+        });
+        return {
+          id: c.id,
+          line: c.line.username,
+          server: stream.server?.name ?? "Main Server",
+          ip: c.ip,
+          duration: formatDuration(dur),
+          durationSeconds: dur,
+          output: inferOutput(c.userAgent),
+          restreamer: c.line.isRestreamer,
+          userAgent: c.userAgent,
+          lastSeenAt: c.lastSeenAt.toISOString(),
+          quality,
+        };
+      })
+    ),
   });
 }

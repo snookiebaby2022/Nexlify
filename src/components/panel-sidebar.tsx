@@ -8,6 +8,7 @@ import {
   getAdminSidebarNav,
   type SidebarNavEntry,
   type SidebarNavGroup,
+  type SidebarNavLink,
 } from "@/lib/admin-sidebar-nav";
 import { getResellerSidebarNav } from "@/lib/reseller-sidebar-nav";
 import { withSidebarItemIcons } from "@/lib/panel-nav-bridge";
@@ -157,6 +158,14 @@ function filterNavEntries(entries: SidebarNavEntry[], query: string): SidebarNav
 }
 
 function activeGroupIds(pathname: string, entries: SidebarNavEntry[], search: string = ""): Set<string> {
+  const topLevelHrefs = new Set(
+    entries
+      .filter((e): e is { kind: "link"; link: SidebarNavLink } => e.kind === "link")
+      .map((e) => e.link.href.split("?")[0] ?? e.link.href)
+  );
+  // Dedicated top-level links (e.g. Live Connections) must not auto-open a group with the same href.
+  if (topLevelHrefs.has(pathname)) return new Set();
+
   const next = new Set<string>();
   for (const entry of entries) {
     if (entry.kind === "group" && groupActive(pathname, entry.group, search)) {

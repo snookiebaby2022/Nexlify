@@ -85,13 +85,6 @@ export async function GET(
     return withIptvCors(iptvText("Session kicked", { status: 403 }));
   }
 
-  void trackConnection({
-    lineId: line.id,
-    streamId: cleanId,
-    ip,
-    userAgent: req.headers.get("user-agent") ?? undefined,
-  });
-
   const { stream, headers } = upstreamToWebResponse(open, range ? { "Accept-Ranges": "bytes" } : undefined);
   const trackedBody = attachKickAwareProxyBody({
     body: stream as unknown as ReadableStream<Uint8Array>,

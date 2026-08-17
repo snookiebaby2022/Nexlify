@@ -158,7 +158,6 @@ export async function GET(
           });
           continue;
         }
-        void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
         if (await isSessionKicked(line.id, ip)) {
           return withIptvCors(iptvText("Session kicked", { status: 403 }));
         }
@@ -193,7 +192,6 @@ export async function GET(
         buildHlsRelayUrl(panelOrigin, username, password, cleanId, url);
       const body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
 
-      void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
       return withIptvCors(
         new NextResponse(body, {
           status: 200,
@@ -209,7 +207,6 @@ export async function GET(
     if (wantsM3u8) {
       const panelOrigin = serverBaseUrl(req.url, req.headers);
       const body = buildNativeTsHlsManifest(panelOrigin, username, password, cleanId);
-      void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
       return withIptvCors(
         new NextResponse(body, {
           status: 200,
@@ -253,7 +250,6 @@ export async function GET(
     if (await isSessionKicked(line.id, ip)) {
       return withIptvCors(iptvText("Session kicked", { status: 403 }));
     }
-    void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
 
     const originalBody = response.body;
     if (originalBody) {

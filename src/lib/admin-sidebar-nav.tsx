@@ -271,7 +271,6 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         label: "Statistics",
         icon: coloredGroupIcon("statistics"),
         items: [
-          { href: "/admin/connections", label: "Live Connections" },
           { href: "/admin/videolog", label: "VideoLog" },
           { href: "/admin/stream_rank", label: "Top Channels" },
           { href: "/admin/line_activity", label: "Line Activity" },

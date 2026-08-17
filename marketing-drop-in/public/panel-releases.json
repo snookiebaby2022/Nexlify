@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.7",
+  "latestVersion": "2.0.8",
   "releases": [
+    {
+      "version": "2.0.8",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Real live connection quality from throughput, faster disconnect cleanup, Smarters stability fixes.",
+      "changelog": [
+        "Live Connections quality % now measures actual bytes/sec throughput and stall time during playback",
+        "Connections only register when media bytes flow — m3u8 manifest polls no longer create ghost sessions",
+        "Closed streams drop from Live Connections within ~45s (was up to 2 min); max-connection slots free in ~60s",
+        "12s idle timeout on live proxies clears zombie sessions when clients stop reading",
+        "Smarters HLS wrapper uses simpler EXTINF:-1 playlist for better app compatibility",
+        "Sidebar Live Connections no longer auto-opens the Statistics group"
+      ],
+      "fixes": [
+        "IPTV Smarters intermittent 'something wrong' from ghost m3u8 connections hitting max connections",
+        "Major delay before Live Connections cleared after closing a stream",
+        "Clicking Live Connections in sidebar opened Statistics accordion"
+      ]
+    },
     {
       "version": "2.0.7",
       "date": "2026-08-17",

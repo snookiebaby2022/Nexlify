@@ -8,10 +8,10 @@ export type ConnectionQuality = {
   label: string;
 };
 
-/** Panel live proxies refresh lastSeenAt about every 30s while bytes flow. */
-const HEARTBEAT_INTERVAL_SEC = 30;
-/** Connections list uses LIVE_STALE_MS (2 min) — quality drops as we approach expiry. */
-const LIVE_STALE_SEC = 120;
+/** Panel live proxies refresh lastSeenAt about every 10s while bytes flow. */
+const HEARTBEAT_INTERVAL_SEC = 10;
+/** Connections list uses LIVE_STALE_MS (45s) — quality drops as we approach expiry. */
+const LIVE_STALE_SEC = 45;
 
 export function computeConnectionQuality(opts: {
   startedAt: Date | string;

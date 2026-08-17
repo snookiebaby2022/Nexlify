@@ -5,7 +5,7 @@ import {
   deleteActiveConnection,
   listLiveConnections,
 } from "@/lib/connections";
-import { computeConnectionQuality } from "@/lib/connection-quality";
+import { computeConnectionQualityWithLive, getLiveQualitySample } from "@/lib/connection-quality-live";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 
@@ -17,20 +17,26 @@ export async function GET() {
 
   const connections = await listLiveConnections(ownerScope(session));
   const now = Date.now();
-  const mapped = connections.map((c) => {
-    const quality = computeConnectionQuality({
-      startedAt: c.startedAt,
-      lastSeenAt: c.lastSeenAt,
-      now,
-    });
-    return {
-      ...c,
-      startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
-      lastSeenAt: c.lastSeenAt instanceof Date ? c.lastSeenAt.toISOString() : String(c.lastSeenAt),
-      serverName: c.stream?.server?.name ?? "Main Server",
-      quality,
-    };
-  });
+  const mapped = await Promise.all(
+    connections.map(async (c) => {
+      const live = c.streamId
+        ? await getLiveQualitySample(c.lineId, c.streamId, c.ip, now)
+        : null;
+      const quality = computeConnectionQualityWithLive({
+        startedAt: c.startedAt,
+        lastSeenAt: c.lastSeenAt,
+        now,
+        live,
+      });
+      return {
+        ...c,
+        startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
+        lastSeenAt: c.lastSeenAt instanceof Date ? c.lastSeenAt.toISOString() : String(c.lastSeenAt),
+        serverName: c.stream?.server?.name ?? "Main Server",
+        quality,
+      };
+    })
+  );
   return NextResponse.json({ connections: mapped });
 }
 

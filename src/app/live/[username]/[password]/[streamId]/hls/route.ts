@@ -57,12 +57,6 @@ export async function GET(
     if (await isSessionKicked(auth.lineId, clientIp)) {
       return iptvText("Session kicked", { status: 403 });
     }
-    void trackConnection({
-      lineId: auth.lineId,
-      streamId: auth.streamId,
-      ip: clientIp,
-      userAgent: auth.userAgent,
-    });
 
     const body = rewriteHlsManifestForRelay(upstream.body, upstream.finalUrl, relay);
     return withIptvCors(

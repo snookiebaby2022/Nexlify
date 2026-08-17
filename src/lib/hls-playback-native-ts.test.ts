@@ -10,5 +10,6 @@ test("buildNativeTsHlsManifest points .m3u8 clients at panel .ts URL", () => {
     "stream123"
   );
   assert.ok(body.startsWith("#EXTM3U"));
+  assert.match(body, /#EXTINF:-1,/);
   assert.match(body, /http:\/\/45\.88\.138\.18\/live\/user1\/pass1\/stream123\.ts$/m);
 });

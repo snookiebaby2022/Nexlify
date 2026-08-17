@@ -1,8 +1,11 @@
 import { prisma } from "./prisma";
 import { cacheGetOrSet, cacheDel, cacheGet, cacheSet } from "./cache";
+import { clearConnectionQuality, recordConnectionMediaBytes } from "./connection-quality-live";
 
-export const STALE_MS = 5 * 60 * 1000; // 5 minutes — connections expire quickly if not refreshed
-export const LIVE_STALE_MS = 2 * 60 * 1000; // 2 minutes — for "live" connections display (shows who is actually watching now)
+export const STALE_MS = 5 * 60 * 1000; // 5 minutes — DB cleanup for orphaned rows
+export const LIVE_STALE_MS = 45 * 1000; // 45s — live connections display (who is watching now)
+/** Max-connection checks use a shorter window so closed/zombie sessions free slots quickly. */
+export const PLAYBACK_STALE_MS = 60 * 1000;
 const CONNECTIONS_CACHE_TTL = 5; // 5 seconds — short TTL for dashboard responsiveness
 /** After Kick, block reconnect / track refresh for this long (covers multi-worker via Redis). */
 export const KICK_DENY_TTL_SEC = 120;
@@ -91,7 +94,7 @@ export async function countActiveConnections(ownerId?: string): Promise<number> 
 
 /** Distinct active sessions: use groupBy instead of loading all rows */
 export async function countLineSessions(lineId: string) {
-  const staleBefore = new Date(Date.now() - STALE_MS);
+  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
   const result = await prisma.liveConnection.groupBy({
     by: ["ip", "streamId"],
     where: { lineId, lastSeenAt: { gte: staleBefore } },
@@ -111,7 +114,7 @@ export async function lineHasConnectionCapacity(
   // Same IP can always reconnect — allows channel switching from same device
   // and handles stale connections from the same IP gracefully
   if (opts?.clientIp) {
-    const staleBefore = new Date(Date.now() - STALE_MS);
+    const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
     const sameIpConns = await prisma.liveConnection.count({
       where: {
         lineId,
@@ -206,6 +209,7 @@ export async function removeConnection(lineId: string, streamId: string, ip: str
   await prisma.liveConnection.deleteMany({
     where: { lineId, streamId, ip },
   });
+  void clearConnectionQuality(lineId, streamId, ip);
   // Invalidate connection caches
   void cacheDel("conn:*").catch(() => {});
 }
@@ -294,7 +298,7 @@ export async function clearActiveConnections(ownerId?: string) {
   void cacheDel("conn:*").catch(() => {});
 }
 
-/** Wrap a live proxy body so Kick aborts mid-stream and 30s refresh respects deny TTL. */
+/** Wrap a live proxy body so Kick aborts mid-stream and heartbeat respects deny TTL. */
 export function attachKickAwareProxyBody(opts: {
   body: ReadableStream<Uint8Array>;
   lineId: string;
@@ -304,7 +308,9 @@ export function attachKickAwareProxyBody(opts: {
 }): ReadableStream<Uint8Array> {
   const { body, lineId, streamId, ip, userAgent } = opts;
   let closed = false;
-  let lastTrackAt = Date.now();
+  let tracked = false;
+  let lastTrackAt = 0;
+  let lastByteAt = Date.now();
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   let unregister: (() => void) | null = null;
 
@@ -325,6 +331,9 @@ export function attachKickAwareProxyBody(opts: {
     finish();
   };
 
+  const IDLE_MS = 12_000;
+  const HEARTBEAT_MS = 10_000;
+
   return new ReadableStream<Uint8Array>({
     start(controller) {
       reader = body.getReader();
@@ -341,6 +350,10 @@ export function attachKickAwareProxyBody(opts: {
             abort();
             return;
           }
+          if (Date.now() - lastByteAt > IDLE_MS) {
+            abort();
+            return;
+          }
           try {
             const { done, value } = await reader!.read();
             if (done) {
@@ -352,7 +365,25 @@ export function attachKickAwareProxyBody(opts: {
               }
               return;
             }
-            if (Date.now() - lastTrackAt > 30_000) {
+            lastByteAt = Date.now();
+            const byteLen = value?.byteLength ?? 0;
+            if (byteLen > 0) {
+              void recordConnectionMediaBytes(lineId, streamId, ip, byteLen);
+            }
+            if (!tracked) {
+              tracked = true;
+              lastTrackAt = Date.now();
+              const id = await trackConnection({ lineId, streamId, ip, userAgent });
+              if (!id) {
+                try {
+                  controller.error(new Error("Session kicked"));
+                } catch {
+                  /* ignore */
+                }
+                abort();
+                return;
+              }
+            } else if (Date.now() - lastTrackAt > HEARTBEAT_MS) {
               lastTrackAt = Date.now();
               const id = await trackConnection({ lineId, streamId, ip, userAgent });
               if (!id) {

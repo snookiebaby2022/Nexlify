@@ -17,7 +17,7 @@ test("computeConnectionQuality — ok when heartbeat is aging", () => {
   const now = Date.now();
   const q = computeConnectionQuality({
     startedAt: new Date(now - 300_000),
-    lastSeenAt: new Date(now - 40_000),
+    lastSeenAt: new Date(now - 18_000),
     now,
   });
   assert.equal(q.level, "ok");
