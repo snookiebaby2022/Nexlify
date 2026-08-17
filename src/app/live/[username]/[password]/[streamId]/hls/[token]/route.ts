@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import { getClientIp } from "@/lib/client-ip";
 
-if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { buildLiveRedirectHeaders, getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { authorizeHlsLiveRequest, decodeRelayTarget } from "@/lib/hls-live-auth";
 import {
@@ -49,17 +48,20 @@ export async function GET(
   const antiFreeze = await getAntiFreezeSettings();
 
   if (isPackagerSegmentName(token)) {
-    let buf = readTsHlsSegment(auth.lineId, auth.streamId, token);
+    let buf = readTsHlsSegment(auth.lineId, auth.diskStreamId, token);
+    if (!buf?.length && auth.diskStreamId !== auth.streamId) {
+      buf = readTsHlsSegment(auth.lineId, auth.streamId, token);
+    }
     if (!buf?.length) {
       const packed = await ensureDiskHls({
         upstreamUrl: auth.rootUpstream,
-        streamId: auth.streamId,
+        streamId: auth.diskStreamId,
         userAgent: auth.userAgent,
       });
       if (!packed.ok) {
         return iptvText("Segment unavailable", { status: 502 });
       }
-      buf = readTsHlsSegment(auth.lineId, auth.streamId, token);
+      buf = readTsHlsSegment(auth.lineId, auth.diskStreamId, token);
     }
     if (!buf?.length) return iptvText("Segment not found", { status: 404 });
     if (await isSessionKicked(auth.lineId, clientIp)) {

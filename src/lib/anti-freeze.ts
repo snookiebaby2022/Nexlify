@@ -1,7 +1,6 @@
 import { getSettingGroup } from "@/lib/panel-settings";
 import { resolvePlaybackUrlForLine, type PlaybackContext } from "@/lib/line-playback";
 import { prisma } from "@/lib/prisma";
-import { StreamType } from "@prisma/client";
 
 export type AntiFreezeSettings = {
   antiFreezeEnabled: boolean;
@@ -38,17 +37,41 @@ export function buildLiveRedirectHeaders(settings: AntiFreezeSettings): Record<s
   return headers;
 }
 
-async function liveStreamIdsForLine(lineId: string): Promise<string[]> {
-  const line = await prisma.line.findUnique({
-    where: { id: lineId },
-    include: {
-      bouquets: { include: { bouquet: true } },
-    },
-  });
-  if (!line) return [];
-  const { streamsForLineExport } = await import("@/lib/lines");
-  const streams = await streamsForLineExport(line, { type: StreamType.LIVE });
-  return streams.filter((s) => s.isActive).map((s) => s.id);
+/** Neighbors in the current bouquet only — never load the full live catalog on zap. */
+export async function zapNeighborIdsForLine(
+  lineId: string,
+  streamId: string,
+  neighbors: number
+): Promise<string[]> {
+  if (neighbors <= 0) return [];
+  const n = Math.max(1, Math.min(8, Math.floor(neighbors)));
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    WITH bouquets AS (
+      SELECT bs."bouquetId"
+      FROM "LineBouquet" lb
+      INNER JOIN "BouquetStream" bs ON bs."bouquetId" = lb."bouquetId"
+      WHERE lb."lineId" = ${lineId} AND bs."streamId" = ${streamId}
+      ORDER BY bs."sortOrder" ASC
+      LIMIT 1
+    ),
+    ordered AS (
+      SELECT s.id AS id,
+             ROW_NUMBER() OVER (ORDER BY bs."sortOrder" ASC, s.id ASC) AS rn
+      FROM "BouquetStream" bs
+      INNER JOIN bouquets b ON b."bouquetId" = bs."bouquetId"
+      INNER JOIN "Stream" s ON s.id = bs."streamId"
+      WHERE s."isActive" = true AND s.type = 'LIVE'::"StreamType"
+    ),
+    cur AS (
+      SELECT rn FROM ordered WHERE id = ${streamId} LIMIT 1
+    )
+    SELECT o.id
+    FROM ordered o
+    INNER JOIN cur ON true
+    WHERE o.rn BETWEEN cur.rn - ${n} AND cur.rn + ${n}
+      AND o.id <> ${streamId}
+  `;
+  return rows.map((r) => r.id);
 }
 
 export function zapNeighborIds(orderedIds: string[], currentId: string, neighbors: number): string[] {
@@ -73,12 +96,9 @@ export function scheduleZapPrefetch(
 
   void (async () => {
     try {
-      const ids = await liveStreamIdsForLine(lineId);
-      const targets = zapNeighborIds(ids, streamId, settings.zapPrefetchNeighbors);
+      const targets = await zapNeighborIdsForLine(lineId, streamId, settings.zapPrefetchNeighbors);
       const ttl = settings.playbackUrlCacheTtlSec;
-      await Promise.allSettled(
-        targets.map((id) => resolvePlaybackUrlForLine(lineId, id, ctx, ttl))
-      );
+      await Promise.allSettled(targets.map((id) => resolvePlaybackUrlForLine(lineId, id, ctx, ttl)));
     } catch {
       /* background warm */
     }
@@ -95,27 +115,13 @@ export function schedulePlaylistZapWarm(
   if (!settings.fastZapEnabled || !settings.zapPrefetchOnPlaylist) return;
   const ttl = settings.playbackUrlCacheTtlSec;
   const targets = streamIds.slice(0, limit);
-  void Promise.allSettled(
-    targets.map((id) => resolvePlaybackUrlForLine(lineId, id, ctx, ttl))
-  );
+  void Promise.allSettled(targets.map((id) => resolvePlaybackUrlForLine(lineId, id, ctx, ttl)));
 }
 
-/** Open upstream briefly after m3u8 so the follow-up .ts request starts faster (Smarters HLS). */
-export function schedulePlaybackUpstreamWarm(upstreamUrl: string, userAgent?: string): void {
-  if (!upstreamUrl || /^pending:\/\//i.test(upstreamUrl)) return;
-  void (async () => {
-    try {
-      const { openUpstreamLiveStream } = await import("@/lib/live-upstream-proxy");
-      const open = await openUpstreamLiveStream(upstreamUrl, {
-        userAgent,
-        timeoutMs: 12_000,
-      });
-      open.body.once("data", () => {
-        open.body.destroy();
-      });
-      setTimeout(() => open.body.destroy(), 2500);
-    } catch {
-      /* background warm */
-    }
-  })();
+/**
+ * Do not open extra upstream sockets during zap — that raced MPEGTS ffmpeg in Next
+ * and crashed IPTV Smarters. URL cache + on-disk HLS is enough.
+ */
+export function schedulePlaybackUpstreamWarm(_upstreamUrl?: string, _userAgent?: string): void {
+  /* no-op: extra upstream probes during channel change overload the panel */
 }

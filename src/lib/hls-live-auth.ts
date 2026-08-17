@@ -7,12 +7,20 @@ import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { hlsRelayCacheKey, isAllowedHlsRelayTarget, isSafeUpstreamUrl, stripLiveStreamExtension } from "@/lib/hls-playback";
+import {
+  matchTranscodingProfile,
+  packagerDiskStreamId,
+  parseLivePlaybackStreamKey,
+  resolveTranscodeVariantNumeric,
+} from "@/lib/transcode-live-urls";
+import { getTranscodingProfiles } from "@/lib/transcoding-profiles";
 
 export type HlsLiveAuth =
   | {
       ok: true;
       lineId: string;
       streamId: string;
+      diskStreamId: string;
       requestStreamKey: string;
       username: string;
       password: string;
@@ -30,14 +38,26 @@ export async function authorizeHlsLiveRequest(
   const demoBlock = rejectDemoIptvPlayback(req);
   if (demoBlock) return { ok: false, status: demoBlock.status, message: "Demo blocked" };
 
-  const cleanId = stripLiveStreamExtension(streamId);
-  const requestStreamKey = cleanId;
-  let resolvedStreamId = cleanId;
-  if (/^\d+$/.test(cleanId)) {
-    const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
-    const resolved = await resolveStreamIdParam(cleanId, { username });
-    if (resolved) resolvedStreamId = resolved;
+  const requestStreamKey = stripLiveStreamExtension(streamId);
+  const parsed = parseLivePlaybackStreamKey(streamId);
+  let resolvedStreamId = parsed.token;
+  let transcodeHint = parsed.profileHint;
+  if (/^\d+$/.test(resolvedStreamId)) {
+    const variant = await resolveTranscodeVariantNumeric(parseInt(resolvedStreamId, 10), { username });
+    if (variant) {
+      resolvedStreamId = variant.streamId;
+      transcodeHint = transcodeHint || variant.profileId;
+    } else {
+      const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
+      const resolved = await resolveStreamIdParam(resolvedStreamId, { username });
+      if (resolved) resolvedStreamId = resolved;
+    }
   }
+  const profiles = await getTranscodingProfiles();
+  const diskStreamId = packagerDiskStreamId(
+    resolvedStreamId,
+    matchTranscodingProfile(transcodeHint, profiles)
+  );
 
   const ip = getClientIp(req);
   const line = await getLineForPlaybackAuth(username);
@@ -81,6 +101,7 @@ export async function authorizeHlsLiveRequest(
     ok: true,
     lineId: line.id,
     streamId: resolvedStreamId,
+    diskStreamId,
     requestStreamKey,
     username,
     password,

@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
 
-// Allow upstream fetches to sources with expired/self-signed TLS certs (common for IPTV CDNs)
-if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import {
   buildLiveRedirectHeaders,
   getAntiFreezeSettings,
   scheduleZapPrefetch,
-  schedulePlaybackUpstreamWarm,
 } from "@/lib/anti-freeze";
 import { getLineForPlaybackAuth, resolvePlaybackUrlCandidatesForLine } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
@@ -35,11 +32,17 @@ import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
 import { openUpstreamLiveStream, resolvePlayableUpstreamUrl, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
-import { ensureDiskHls } from "@/lib/hls-restream-client";
-import { getActiveTranscodingProfile } from "@/lib/transcoding-profiles";
+import { ensureDiskHls, isHlsDaemonHealthy, openDaemonMpegTs } from "@/lib/hls-restream-client";
+import { getActiveTranscodingProfile, getTranscodingProfiles } from "@/lib/transcoding-profiles";
 import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
-import { localHlsIndexPath } from "@/lib/ts-hls-packager";
+import { localHlsIndexPath, readLocalPackagerPlaylist } from "@/lib/ts-hls-packager";
 import { prisma } from "@/lib/prisma";
+import {
+  matchTranscodingProfile,
+  packagerDiskStreamId,
+  parseLivePlaybackStreamKey,
+  resolveTranscodeVariantNumeric,
+} from "@/lib/transcode-live-urls";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,14 +84,22 @@ export async function GET(
 
   const { username, password, streamId } = await ctx.params;
   const requestStreamKey = stripLiveStreamExtension(streamId);
-  let cleanId = requestStreamKey;
+  const parsedKey = parseLivePlaybackStreamKey(streamId);
+  let cleanId = parsedKey.token;
+  let transcodeHint = parsedKey.profileHint;
   const ip = getClientIp(req);
 
   // Xtream apps often request /live/user/pass/<numeric_hash>.ts — map back to cuid via SQL
   if (/^\d+$/.test(cleanId)) {
-    const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
-    const resolved = await resolveStreamIdParam(cleanId, { username });
-    if (resolved) cleanId = resolved;
+    const variant = await resolveTranscodeVariantNumeric(parseInt(cleanId, 10), { username });
+    if (variant) {
+      cleanId = variant.streamId;
+      transcodeHint = transcodeHint || variant.profileId;
+    } else {
+      const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
+      const resolved = await resolveStreamIdParam(cleanId, { username });
+      if (resolved) cleanId = resolved;
+    }
   }
 
   const line = await getLineForPlaybackAuth(username);
@@ -165,11 +176,44 @@ export async function GET(
       })
     );
 
+  const profiles = await getTranscodingProfiles();
+  const hintedProfile = matchTranscodingProfile(transcodeHint, profiles);
+  const streamMeta = await prisma.stream.findUnique({
+    where: { id: cleanId },
+    select: {
+      isCreatedChannel: true,
+      vodMode: true,
+      isOnDemand: true,
+      agentStartCmd: true,
+      autoRestart: true,
+      streamUrl: true,
+      hostedExternally: true,
+    },
+  });
+  const mode = streamMeta ? getStreamPlaybackMode(streamMeta) : "direct";
+  const transcode =
+    hintedProfile ?? (mode === "transcode" ? await getActiveTranscodingProfile() : null);
+  const diskStreamId = packagerDiskStreamId(cleanId, hintedProfile);
+  const transcodeOpts = transcode
+    ? {
+        resolution: transcode.resolution,
+        bitrate: transcode.bitrate,
+        codec: transcode.codec,
+        gpuAcceleration: transcode.gpuAcceleration,
+      }
+    : null;
+
   let lastError = "Stream fetch failed";
   let clientDirectHls: string | null = null;
 
   if (wantsM3u8) {
     const panelOrigin = serverBaseUrl(req.url, req.headers);
+    const packedNow = readLocalPackagerPlaylist(diskStreamId);
+    if (packedNow) {
+      return hlsHeaders(
+        rewritePackagerPlaylist(packedNow, panelOrigin, username, password, requestStreamKey)
+      );
+    }
     for (let i = 0; i < candidates.length; i++) {
       const playbackUrl = candidates[i]!;
       if (!isHlsPlaybackUrl(playbackUrl)) continue;
@@ -194,9 +238,6 @@ export async function GET(
       const relay = (url: string) =>
         buildHlsRelayUrl(panelOrigin, username, password, requestStreamKey, url);
       const body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
-      if (antiFreeze.fastZapEnabled) {
-        schedulePlaybackUpstreamWarm(playbackUrl, UPSTREAM_HLS_UA);
-      }
       return hlsHeaders(body);
     }
 
@@ -212,34 +253,12 @@ export async function GET(
         continue;
       }
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), resolved, 3600);
-      const streamMeta = await prisma.stream.findUnique({
-        where: { id: cleanId },
-        select: {
-          isCreatedChannel: true,
-          vodMode: true,
-          isOnDemand: true,
-          agentStartCmd: true,
-          autoRestart: true,
-          streamUrl: true,
-          hostedExternally: true,
-        },
-      });
-      const mode = streamMeta ? getStreamPlaybackMode(streamMeta) : "direct";
-      const transcode =
-        mode === "transcode" ? await getActiveTranscodingProfile() : null;
       const packed = await ensureDiskHls({
         upstreamUrl: resolved,
-        streamId: cleanId,
+        streamId: diskStreamId,
         userAgent: UPSTREAM_HLS_UA,
         loop: mode === "created" || Boolean(streamMeta?.isCreatedChannel),
-        transcode: transcode
-          ? {
-              resolution: transcode.resolution,
-              bitrate: transcode.bitrate,
-              codec: transcode.codec,
-              gpuAcceleration: transcode.gpuAcceleration,
-            }
-          : null,
+        transcode: transcodeOpts,
       });
       if (packed.ok) {
         const body = rewritePackagerPlaylist(
@@ -266,14 +285,53 @@ export async function GET(
 
   for (let i = 0; i < candidates.length; i++) {
     const playbackUrl = candidates[i]!;
+    const localIndex = localHlsIndexPath(diskStreamId) || localHlsIndexPath(cleanId);
+    const useHlsRemux = Boolean(localIndex) || isHlsPlaybackUrl(playbackUrl);
+    const mpegtsUrl = localIndex || playbackUrl;
+    await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
 
-    if (isHlsPlaybackUrl(playbackUrl)) {
-      await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
-      const localIndex = localHlsIndexPath(cleanId);
-      const remux = await createHlsToMpegTsStream({
-        hlsUrl: localIndex || playbackUrl,
+    const daemonMpegts = await openDaemonMpegTs({
+      streamId: diskStreamId,
+      upstreamUrl: mpegtsUrl,
+      lineId: line.id,
+      clientIp: ip,
+      userAgent: UPSTREAM_HLS_UA,
+      hls: useHlsRemux,
+      signal: req.signal,
+    });
+    if (daemonMpegts?.ok) {
+      if (await isSessionKicked(line.id, ip)) {
+        return withIptvCors(iptvText("Session kicked", { status: 403 }));
+      }
+      const tracked = attachKickAwareProxyBody({
+        body: daemonMpegts.body,
         lineId: line.id,
         streamId: cleanId,
+        ip: ip ?? "",
+        userAgent: ua,
+      });
+      return withIptvCors(
+        new NextResponse(tracked as unknown as BodyInit, {
+          status: 200,
+          headers: {
+            ...buildLiveRedirectHeaders(antiFreeze),
+            "Content-Type": daemonMpegts.contentType,
+            "Cache-Control": "no-cache, no-store",
+            Connection: "keep-alive",
+          },
+        })
+      );
+    }
+    if (await isHlsDaemonHealthy()) {
+      lastError = daemonMpegts?.error || "MPEGTS daemon failed";
+      continue;
+    }
+
+    if (useHlsRemux) {
+      const remux = await createHlsToMpegTsStream({
+        hlsUrl: mpegtsUrl,
+        lineId: line.id,
+        streamId: diskStreamId,
         clientIp: ip,
         userAgent: UPSTREAM_HLS_UA,
       });
@@ -321,7 +379,6 @@ export async function GET(
           meta: { error: proxied.error },
         });
         try {
-          const { prisma } = await import("@/lib/prisma");
           await prisma.stream.update({
             where: { id: cleanId },
             data: {

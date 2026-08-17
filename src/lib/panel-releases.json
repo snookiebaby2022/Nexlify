@@ -1,7 +1,29 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.16",
+  "latestVersion": "2.0.17",
   "releases": [
+    {
+      "version": "2.0.17",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "IPTV Smarters fast zap, daemon MPEGTS, true VOD HLS, timeshift without catch-up gate.",
+      "changelog": [
+        "MPEGTS remux and native TS proxy run in the nexlify-hls daemon — Next only relays localhost (HLS isolation is no longer HLS-only)",
+        "Zapping replaces the previous viewer ffmpeg instead of stacking processes; neighbor prefetch no longer loads the full live catalog",
+        "Huge VOD HLS packages faster than realtime (no ffmpeg -re); progressive playlist remains the fallback until the first segment exists",
+        "Timeshift plays from local archive or the provider URL even when catch-up is not enabled on the channel",
+        "XUI-style extra live URLs for streams with an explicit transcode profile (hash stream_id and /live/u/p/{id}_{profile}.ts)",
+        "Bad IPTV CDN certificates use per-request TLS (rejectUnauthorized: false), not process-wide NODE_TLS_REJECT_UNAUTHORIZED=0"
+      ],
+      "fixes": [
+        "IPTV Smarters crash when zapping — overlapping MPEGTS ffmpeg inside Next plus 18k-stream zap prefetch",
+        "MPEGTS still proxied through Next after HLS was moved to the daemon",
+        "True ffmpeg HLS for multi-hour VOD ran in realtime because of -re",
+        "Timeshift 404 unless catch-up was enabled on the channel",
+        "No extra live outputs per transcode profile",
+        "Playback routes disabled TLS verification for the entire Node process"
+      ]
+    },
     {
       "version": "2.0.16",
       "date": "2026-08-17",

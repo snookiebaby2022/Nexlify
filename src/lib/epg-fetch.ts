@@ -1,9 +1,7 @@
 import { gunzipSync } from "zlib";
 import type { StreamProxy } from "@prisma/client";
 import { fetchWithOptionalProxy } from "@/lib/proxy";
-
-// Allow upstream fetches to sources with expired/self-signed TLS certs
-if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+import { fetchAllowingBadCerts } from "@/lib/insecure-tls";
 
 const EPG_HEADERS = {
   "User-Agent":
@@ -22,12 +20,19 @@ async function fetchOnce(
   url: string,
   proxy: Pick<StreamProxy, "type" | "host" | "port" | "username" | "password"> | null
 ): Promise<string> {
-  const res = await fetchWithOptionalProxy(url, proxy, {
-    headers: EPG_HEADERS,
-    redirect: "follow",
-    signal: AbortSignal.timeout(120_000),
-    cache: "no-store",
-  });
+  const res = await (proxy
+    ? fetchWithOptionalProxy(url, proxy, {
+        headers: EPG_HEADERS,
+        redirect: "follow",
+        signal: AbortSignal.timeout(120_000),
+        cache: "no-store",
+      })
+    : fetchAllowingBadCerts(url, {
+        headers: EPG_HEADERS,
+        redirect: "follow",
+        signal: AbortSignal.timeout(120_000),
+        cache: "no-store",
+      }));
 
   if (!res.ok) {
     const hint =

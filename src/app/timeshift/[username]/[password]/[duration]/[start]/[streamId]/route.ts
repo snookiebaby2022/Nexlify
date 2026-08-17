@@ -8,9 +8,8 @@ import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
 import { parseTimeshiftStart, xtreamTimeshiftSourceUrl } from "@/lib/timeshift-url";
-import { stripLiveStreamExtension } from "@/lib/hls-playback";
+import { parseLivePlaybackStreamKey, resolveTranscodeVariantNumeric } from "@/lib/transcode-live-urls";
 import { getSettingGroup } from "@/lib/panel-settings";
-import { prisma } from "@/lib/prisma";
 import { createReadStream, existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { Readable } from "node:stream";
@@ -43,13 +42,19 @@ export async function GET(
   if (demoBlock) return demoBlock;
 
   const { username, password, duration, start, streamId } = await ctx.params;
-  let cleanId = stripLiveStreamExtension(streamId);
+  const parsedKey = parseLivePlaybackStreamKey(streamId);
+  let cleanId = parsedKey.token;
   const ip = getClientIp(req);
 
   if (/^\d+$/.test(cleanId)) {
-    const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
-    const resolved = await resolveStreamIdParam(cleanId, { username });
-    if (resolved) cleanId = resolved;
+    const variant = await resolveTranscodeVariantNumeric(parseInt(cleanId, 10), { username });
+    if (variant) {
+      cleanId = variant.streamId;
+    } else {
+      const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
+      const resolved = await resolveStreamIdParam(cleanId, { username });
+      if (resolved) cleanId = resolved;
+    }
   }
 
   const line = await getLineForPlaybackAuth(username);
@@ -63,20 +68,6 @@ export async function GET(
   const catchup = await getSettingGroup("catchup");
   const durationMin = Math.max(1, Math.min(Number(duration) || 1, 24 * 60));
   const startAt = parseTimeshiftStart(start);
-
-  const stream = await prisma.stream.findUnique({
-    where: { id: cleanId },
-    select: { archiveDays: true, timeshiftSeconds: true, vodMode: true, isShifted: true },
-  });
-  const allowed =
-    catchup.catchupEnabled === true ||
-    (stream?.archiveDays ?? 0) > 0 ||
-    (stream?.timeshiftSeconds ?? 0) > 0 ||
-    stream?.vodMode === "CATCHUP" ||
-    stream?.isShifted === true;
-  if (!allowed) {
-    return iptvText("Catch-up is not enabled for this channel", { status: 404 });
-  }
 
   const storage = String(catchup.catchupStoragePath || "/var/catchup");
   const local = findLocalArchive(storage, cleanId, startAt);

@@ -73,7 +73,15 @@ function nodeToWebStream(nodeStream: Readable, cleanup?: () => void): ReadableSt
   return new ReadableStream({
     start(controller) {
       nodeStream.on("data", (chunk: Buffer) => {
-        controller.enqueue(new Uint8Array(chunk));
+        try {
+          controller.enqueue(new Uint8Array(chunk));
+        } catch {
+          nodeStream.destroy();
+          return;
+        }
+        if (controller.desiredSize !== null && controller.desiredSize <= 0) {
+          nodeStream.pause();
+        }
       });
       nodeStream.on("end", () => {
         cleanup?.();
@@ -91,6 +99,9 @@ function nodeToWebStream(nodeStream: Readable, cleanup?: () => void): ReadableSt
           /* ignore */
         }
       });
+    },
+    pull() {
+      nodeStream.resume();
     },
     cancel() {
       cleanup?.();

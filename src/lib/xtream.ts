@@ -11,6 +11,9 @@ import { resolveChannelId, resolveEpgId } from "./subscription-export";
 import { resolveStreamPlaybackUrl, type StreamWithProvider } from "./resolve-stream-url";
 import { exportPlaybackUrl } from "./export-playback-url";
 import { getStreamPlaybackMode } from "./stream-playback-mode";
+import { xtreamTimeshiftSourceUrl } from "./timeshift-url";
+import { buildTranscodeVariantLiveRows } from "./transcode-live-urls";
+import { getTranscodingProfiles } from "./transcoding-profiles";
 import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
 import { parseBitrates, formatTimeshiftLabel } from "./stream-variants";
@@ -240,7 +243,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
   let live = await streamsForXtreamList(line, StreamType.LIVE, categoryId);
   live = sortStreamsForXc(live, await xcDefaultOrder());
 
-  return live.map((s, i) => {
+  const rows = live.map((s, i) => {
     const full = s as typeof s & {
       provider?: { baseUrl?: string | null } | null;
       server?: { host?: string | null } | null;
@@ -258,6 +261,9 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
     const catchup = full.vodMode === "CATCHUP" || full.isOnDemand || full.isShifted;
     const archiveDays = full.archiveDays ?? 0;
     const timeshiftHours = full.timeshiftSeconds ? Math.ceil(full.timeshiftSeconds / 3600) : 0;
+    const sourceUrl = full.playlistUrl?.trim() || full.streamUrl?.trim() || "";
+    const providerTimeshift = Boolean(sourceUrl && xtreamTimeshiftSourceUrl(sourceUrl, 1, "2020-01-01:00-00"));
+    const tvArchive = catchup || timeshiftHours > 0 || providerTimeshift;
     const direct =
       playbackMode === "on_demand" && full.playlistUrl?.trim()
         ? full.playlistUrl.trim()
@@ -286,12 +292,14 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
       updated_at: Math.floor(full.updatedAt.getTime() / 1000),
       category_id: xtreamCategoryId(s.categoryId),
       custom_sid: full.parentStreamId ?? "",
-      tv_archive: catchup || timeshiftHours > 0 ? 1 : 0,
+      tv_archive: tvArchive ? 1 : 0,
       direct_source: direct,
-      tv_archive_duration: catchup ? archiveDays || timeshiftHours || 7 : timeshiftHours || 0,
+      tv_archive_duration: catchup ? archiveDays || timeshiftHours || 7 : timeshiftHours || (providerTimeshift ? 7 : 0),
       ...(abrLadder ? { abr_variants: abrLadder } : {}),
     };
   });
+  const profiles = await getTranscodingProfiles();
+  return buildTranscodeVariantLiveRows(live, rows, profiles);
 }
 
 export async function xtreamVodStreams(

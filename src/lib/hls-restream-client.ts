@@ -82,3 +82,61 @@ export async function ensureDiskHls(opts: HlsEnsureOpts): Promise<HlsEnsureResul
   if (!packed.ok) return packed;
   return { ok: true, playlist: packed.playlist, via: "local" };
 }
+
+export type MpegTsDaemonOpts = {
+  streamId: string;
+  upstreamUrl: string;
+  lineId: string;
+  clientIp?: string;
+  userAgent?: string;
+  hls?: boolean;
+  signal?: AbortSignal;
+};
+
+export type MpegTsDaemonResult =
+  | { ok: true; body: ReadableStream<Uint8Array>; contentType: string }
+  | { ok: false; error: string };
+
+/**
+ * MPEGTS ffmpeg/proxy in the HLS daemon (outside Next). null = daemon unreachable.
+ */
+export async function openDaemonMpegTs(opts: MpegTsDaemonOpts): Promise<MpegTsDaemonResult | null> {
+  try {
+    const res = await fetch(`${hlsDaemonOrigin()}/mpegts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${hlsDaemonToken()}`,
+      },
+      body: JSON.stringify({
+        streamId: opts.streamId,
+        upstreamUrl: opts.upstreamUrl,
+        lineId: opts.lineId,
+        clientIp: opts.clientIp ?? "",
+        userAgent: opts.userAgent,
+        hls: Boolean(opts.hls),
+      }),
+      signal: opts.signal,
+    });
+    if (!res.ok) {
+      let error = `MPEGTS daemon HTTP ${res.status}`;
+      try {
+        const data = (await res.json()) as { error?: string };
+        if (data?.error) error = data.error;
+      } catch {
+        /* ignore */
+      }
+      return { ok: false, error };
+    }
+    if (!res.body) return { ok: false, error: "MPEGTS daemon returned empty body" };
+    return {
+      ok: true,
+      body: res.body as unknown as ReadableStream<Uint8Array>,
+      contentType: res.headers.get("content-type") || "video/mp2t",
+    };
+  } catch {
+    if (opts.signal?.aborted) return { ok: false, error: "aborted" };
+    return null;
+  }
+}
+

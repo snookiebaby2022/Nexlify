@@ -6,9 +6,10 @@ import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 const remuxProcs = new Map<string, ChildProcess>();
 const MAX_REMUX = 24;
 
-function remuxKey(streamId: string, lineId: string, clientIp?: string): string {
+/** One MPEGTS ffmpeg per viewer (line+IP). Zapping must replace the previous process. */
+function remuxKey(_streamId: string, lineId: string, clientIp?: string): string {
   const ip = clientIp?.trim() || "unknown";
-  return `${lineId}:${streamId}:${ip}`;
+  return `${lineId}:${ip}`;
 }
 
 function stopRemux(key: string) {
@@ -88,6 +89,7 @@ export async function createHlsToMpegTsStream(opts: {
     "Mozilla/5.0 (compatible; Nexlify/1.0; +https://nexlify.live)";
 
   const isLocalFile = opts.hlsUrl.startsWith("/") || opts.hlsUrl.startsWith("file:");
+  const tlsArgs = !isLocalFile && /^https:/i.test(opts.hlsUrl) ? ["-tls_verify", "0"] : [];
   const inputArgs = isLocalFile
     ? ["-i", opts.hlsUrl]
     : [
@@ -99,6 +101,7 @@ export async function createHlsToMpegTsStream(opts: {
         "1",
         "-reconnect_delay_max",
         "5",
+        ...tlsArgs,
         "-i",
         opts.hlsUrl,
       ];
