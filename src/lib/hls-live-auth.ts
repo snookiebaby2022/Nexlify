@@ -14,6 +14,7 @@ import {
   resolveTranscodeVariantNumeric,
 } from "@/lib/transcode-live-urls";
 import { getTranscodingProfiles } from "@/lib/transcoding-profiles";
+import { ECO_DISK_PROFILE, getLiveBandwidthSettings, isEcoProfileHint } from "@/lib/live-bandwidth";
 
 export type HlsLiveAuth =
   | {
@@ -54,9 +55,11 @@ export async function authorizeHlsLiveRequest(
     }
   }
   const profiles = await getTranscodingProfiles();
+  const bw = await getLiveBandwidthSettings();
+  const eco = isEcoProfileHint(transcodeHint) || bw.saverEnabled;
   const diskStreamId = packagerDiskStreamId(
     resolvedStreamId,
-    matchTranscodingProfile(transcodeHint, profiles)
+    eco ? ECO_DISK_PROFILE : matchTranscodingProfile(transcodeHint, profiles)
   );
 
   const ip = getClientIp(req);

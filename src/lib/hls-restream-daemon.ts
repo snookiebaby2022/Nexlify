@@ -121,14 +121,25 @@ const server = http.createServer(async (req, res) => {
         "X-Accel-Buffering": "no",
       };
 
+      const transcode =
+        body.transcode && typeof body.transcode === "object"
+          ? (body.transcode as {
+              resolution: string;
+              bitrate: number;
+              codec: string;
+              gpuAcceleration: boolean;
+            })
+          : null;
+
       let source: Readable;
-      if (hls || upstreamUrl.startsWith("/") || /\.m3u8(?:[?#]|$)/i.test(upstreamUrl)) {
+      if (transcode || hls || upstreamUrl.startsWith("/") || /\.m3u8(?:[?#]|$)/i.test(upstreamUrl)) {
         const remux = await createHlsToMpegTsStream({
           hlsUrl: upstreamUrl,
           lineId,
           streamId,
           clientIp,
           userAgent,
+          transcode,
         });
         if ("error" in remux) {
           jsonError(res, 502, remux.error);
@@ -138,7 +149,7 @@ const server = http.createServer(async (req, res) => {
       } else {
         const open = await openUpstreamLiveStream(upstreamUrl, {
           userAgent,
-          timeoutMs: 20_000,
+          timeoutMs: 8_000,
         });
         source = open.body;
       }
@@ -159,7 +170,7 @@ const server = http.createServer(async (req, res) => {
       res.on("close", drop);
       res.writeHead(200, mpegtsHeaders);
       source.pipe(res);
-      console.log(`hls-daemon mpegts ${streamId} ${hls ? "hls-remux" : "native"}`);
+      console.log(`hls-daemon mpegts ${streamId} ${transcode ? "eco" : hls ? "hls-remux" : "native"}`);
       return;
     }
 

@@ -2,12 +2,12 @@ import { spawn, type ChildProcess } from "child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
-import { hlsStreamDir } from "@/lib/hls-disk";
+import { liveTranscodeCodecArgs } from "@/lib/live-bandwidth";
 
 /** Match XUI/NXT default segment length. Do not use hls_init_time / split_by_time with -c copy. */
-const HLS_TIME_SEC = 4;
-const HLS_LIST_SIZE = 6;
-const READY_TIMEOUT_MS = 8_000;
+const HLS_TIME_SEC = 2;
+const HLS_LIST_SIZE = 4;
+const READY_TIMEOUT_MS = 4_000;
 const MAX_SESSIONS = 32;
 const IDLE_MS = 10 * 60 * 1000;
 const REAP_EVERY_MS = 30_000;
@@ -210,28 +210,7 @@ export function packagerFfmpegInputPrefix(opts: { loop?: boolean; vod?: boolean 
 
 function transcodeArgs(profile: PackagerTranscode): string[] {
   if (!profile) return ["-c", "copy"];
-  const vcodec =
-    profile.gpuAcceleration && profile.codec !== "h265"
-      ? "h264_nvenc"
-      : profile.codec === "h265"
-        ? "libx265"
-        : "libx264";
-  return [
-    "-c:v",
-    vcodec,
-    "-b:v",
-    `${Math.max(300, Number(profile.bitrate) || 2500)}k`,
-    "-s",
-    profile.resolution || "1280x720",
-    "-preset",
-    "veryfast",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "128k",
-    "-ac",
-    "2",
-  ];
+  return liveTranscodeCodecArgs(profile);
 }
 
 async function spawnPackager(
@@ -279,11 +258,13 @@ async function spawnPackager(
       "-rw_timeout",
       "15000000",
       "-probesize",
-      "500000",
+      opts?.vod ? "500000" : "32768",
       "-analyzeduration",
-      "500000",
+      opts?.vod ? "500000" : "200000",
       "-fflags",
-      "+genpts+discardcorrupt",
+      opts?.vod ? "+genpts+discardcorrupt" : "+nobuffer+flush_packets+genpts+discardcorrupt",
+      "-flags",
+      "low_delay",
       "-avoid_negative_ts",
       "make_zero",
       ...tlsArgs,

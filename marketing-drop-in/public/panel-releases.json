@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.17",
+  "latestVersion": "2.0.18",
   "releases": [
+    {
+      "version": "2.0.18",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Instant live start and live bandwidth saver for IPTV Smarters.",
+      "changelog": [
+        "Live .m3u8 no longer waits on guessed provider HLS probes — playlist is returned immediately and points at the panel .ts URL",
+        "Bandwidth saver (on by default): pick the lowest HLS ladder rung when present, otherwise transcode the current viewer to ~1000 kbps 480p",
+        "Optional /live/user/pass/{id}_eco.ts URL for low-bandwidth without changing the whole catalog",
+        "Live HLS packager uses 2s segments, smaller probesize, and low_delay so the first picture is faster"
+      ],
+      "fixes": [
+        "Live zapping felt slow because each channel probed provider .m3u8 URLs for up to 8 seconds",
+        "High-bitrate source streams used several Mbps per device with no economy output"
+      ]
+    },
     {
       "version": "2.0.17",
       "date": "2026-08-17",

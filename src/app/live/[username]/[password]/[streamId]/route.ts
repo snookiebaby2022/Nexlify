@@ -24,6 +24,7 @@ import {
   expandHlsPlaybackCandidates,
   buildClientDirectHlsMaster,
   shouldOfferClientDirectHls,
+  buildNativeTsHlsManifest,
   UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
@@ -43,6 +44,13 @@ import {
   parseLivePlaybackStreamKey,
   resolveTranscodeVariantNumeric,
 } from "@/lib/transcode-live-urls";
+import {
+  ECO_DISK_PROFILE,
+  ecoLiveProfile,
+  getLiveBandwidthSettings,
+  isEcoProfileHint,
+  pickLowestBandwidthHlsVariant,
+} from "@/lib/live-bandwidth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -160,7 +168,8 @@ export async function GET(
 
   const wantsM3u8 = isHlsClientPath(streamId);
   const originalCandidates = new Set(candidates);
-  if (wantsM3u8) {
+  const bw = await getLiveBandwidthSettings();
+  if (wantsM3u8 && !bw.instantStart) {
     candidates = expandHlsPlaybackCandidates(candidates);
   }
 
@@ -178,6 +187,7 @@ export async function GET(
 
   const profiles = await getTranscodingProfiles();
   const hintedProfile = matchTranscodingProfile(transcodeHint, profiles);
+  const ecoRequested = isEcoProfileHint(transcodeHint) || bw.saverEnabled;
   const streamMeta = await prisma.stream.findUnique({
     where: { id: cleanId },
     select: {
@@ -192,8 +202,17 @@ export async function GET(
   });
   const mode = streamMeta ? getStreamPlaybackMode(streamMeta) : "direct";
   const transcode =
-    hintedProfile ?? (mode === "transcode" ? await getActiveTranscodingProfile() : null);
-  const diskStreamId = packagerDiskStreamId(cleanId, hintedProfile);
+    hintedProfile && !isEcoProfileHint(transcodeHint)
+      ? hintedProfile
+      : ecoRequested
+        ? ecoLiveProfile(bw)
+        : mode === "transcode"
+          ? await getActiveTranscodingProfile()
+          : null;
+  const diskStreamId = packagerDiskStreamId(
+    cleanId,
+    ecoRequested ? ECO_DISK_PROFILE : hintedProfile
+  );
   const transcodeOpts = transcode
     ? {
         resolution: transcode.resolution,
@@ -214,31 +233,28 @@ export async function GET(
         rewritePackagerPlaylist(packedNow, panelOrigin, username, password, requestStreamKey)
       );
     }
-    for (let i = 0; i < candidates.length; i++) {
-      const playbackUrl = candidates[i]!;
-      if (!isHlsPlaybackUrl(playbackUrl)) continue;
 
-      const probeTimeoutMs = originalCandidates.has(playbackUrl) ? 8_000 : 3_000;
-      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, probeTimeoutMs);
+    for (const playbackUrl of candidates) {
+      if (!originalCandidates.has(playbackUrl) || !isHlsPlaybackUrl(playbackUrl)) continue;
+      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, 1_000);
       if (!manifest.ok) {
         lastError = manifest.detail || "Stream unavailable";
-        // Only send the player to a URL XUI actually stored as HLS — guessed .m3u8
-        // suffixes often 404/HTML and Smarters reports "playback error".
-        if (
-          !clientDirectHls &&
-          originalCandidates.has(playbackUrl) &&
-          shouldOfferClientDirectHls(manifest.status, manifest.detail)
-        ) {
+        if (shouldOfferClientDirectHls(manifest.status, manifest.detail)) {
           clientDirectHls = playbackUrl;
         }
         continue;
       }
-
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
       const relay = (url: string) =>
         buildHlsRelayUrl(panelOrigin, username, password, requestStreamKey, url);
-      const body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
+      let body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
+      if (bw.saverEnabled) body = pickLowestBandwidthHlsVariant(body);
       return hlsHeaders(body);
+    }
+
+    if (bw.instantStart) {
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), candidates[0]!, 3600);
+      return hlsHeaders(buildNativeTsHlsManifest(panelOrigin, username, password, requestStreamKey));
     }
 
     for (let i = 0; i < candidates.length; i++) {
@@ -285,20 +301,35 @@ export async function GET(
 
   for (let i = 0; i < candidates.length; i++) {
     const playbackUrl = candidates[i]!;
-    const localIndex = localHlsIndexPath(diskStreamId) || localHlsIndexPath(cleanId);
+    const localIndex =
+      localHlsIndexPath(diskStreamId) || (!ecoRequested ? localHlsIndexPath(cleanId) : null);
     const useHlsRemux = Boolean(localIndex) || isHlsPlaybackUrl(playbackUrl);
     const mpegtsUrl = localIndex || playbackUrl;
+    const daemonTranscode = localIndex ? null : transcodeOpts;
     await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
 
-    const daemonMpegts = await openDaemonMpegTs({
+    let daemonMpegts = await openDaemonMpegTs({
       streamId: diskStreamId,
       upstreamUrl: mpegtsUrl,
       lineId: line.id,
       clientIp: ip,
       userAgent: UPSTREAM_HLS_UA,
       hls: useHlsRemux,
+      transcode: daemonTranscode,
       signal: req.signal,
     });
+    if (!daemonMpegts?.ok && daemonTranscode) {
+      daemonMpegts = await openDaemonMpegTs({
+        streamId: diskStreamId,
+        upstreamUrl: mpegtsUrl,
+        lineId: line.id,
+        clientIp: ip,
+        userAgent: UPSTREAM_HLS_UA,
+        hls: useHlsRemux,
+        transcode: null,
+        signal: req.signal,
+      });
+    }
     if (daemonMpegts?.ok) {
       if (await isSessionKicked(line.id, ip)) {
         return withIptvCors(iptvText("Session kicked", { status: 403 }));
@@ -334,6 +365,7 @@ export async function GET(
         streamId: diskStreamId,
         clientIp: ip,
         userAgent: UPSTREAM_HLS_UA,
+        transcode: daemonTranscode,
       });
       if ("error" in remux) {
         lastError = remux.error;

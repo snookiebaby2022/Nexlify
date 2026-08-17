@@ -178,6 +178,48 @@ export default function StreamSettingsPage() {
           ],
         },
         {
+          title: "Instant live & bandwidth saver",
+          description:
+            "Live channels return a playlist immediately (no multi-second HLS probes). Bandwidth saver downscales the active stream so phones and weak links use far less data.",
+          info: "Saver is per watching connection — it does not transcode the whole catalog. Turn it off for full source quality. Apps can also request /live/user/pass/{id}_eco.ts without enabling it globally.",
+          fields: [
+            {
+              key: "liveInstantStart",
+              label: "Instant live start",
+              type: "yesno",
+              hint: "Skip guessed provider .m3u8 probes and hand HLS apps a playlist that points at the panel .ts URL so picture starts with the MPEGTS path.",
+            },
+            {
+              key: "liveBandwidthSaver",
+              label: "Live bandwidth saver",
+              type: "yesno",
+              hint: "When the provider has multiple HLS rungs, keep the lowest. Otherwise transcode the current viewer to the bitrate below (veryfast / zerolatency).",
+            },
+            {
+              key: "liveBandwidthSaverKbps",
+              label: "Saver video bitrate (kbps)",
+              type: "number",
+              hint: "350–2500. 1000 kbps at 854x480 is typically 5–8× less than source IPTV.",
+            },
+            {
+              key: "liveBandwidthSaverResolution",
+              label: "Saver resolution",
+              type: "select",
+              options: [
+                { value: "640x360", label: "360p (640×360)" },
+                { value: "854x480", label: "480p (854×480)" },
+                { value: "1280x720", label: "720p (1280×720)" },
+              ],
+            },
+            {
+              key: "liveBandwidthSaverGpu",
+              label: "Saver GPU encode (NVENC)",
+              type: "yesno",
+              hint: "Use when the VPS has NVIDIA NVENC. CPU veryfast is the default.",
+            },
+          ],
+        },
+        {
           title: "On-demand probing",
           description: "FFmpeg probesize for live channels imported or created as on-demand.",
           info: "128000 bytes (128 KB) is the recommended default for most IPTV sources — enough to detect codecs without long startup delay. Disable auto to set a custom value.",

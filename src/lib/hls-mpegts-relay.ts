@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "child_process";
 import { Readable } from "stream";
 import { ReadableStream } from "stream/web";
+import { liveTranscodeCodecArgs } from "@/lib/live-bandwidth";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 
 const remuxProcs = new Map<string, ChildProcess>();
@@ -69,6 +70,12 @@ export async function createHlsToMpegTsStream(opts: {
   streamId: string;
   clientIp?: string;
   userAgent?: string;
+  transcode?: {
+    resolution: string;
+    bitrate: number;
+    codec: string;
+    gpuAcceleration: boolean;
+  } | null;
 }): Promise<{ stream: ReadableStream<Uint8Array>; contentType: string } | { error: string }> {
   const key = remuxKey(opts.streamId, opts.lineId, opts.clientIp);
 
@@ -120,14 +127,13 @@ export async function createHlsToMpegTsStream(opts: {
     "-probesize",
     "32768",
     "-analyzeduration",
-    "500000",
+    opts.transcode ? "200000" : "200000",
     ...inputArgs,
     "-map",
     "0:v:0?",
     "-map",
     "0:a:0?",
-    "-c",
-    "copy",
+    ...(opts.transcode ? liveTranscodeCodecArgs(opts.transcode) : ["-c", "copy"]),
     "-f",
     "mpegts",
     "pipe:1",
