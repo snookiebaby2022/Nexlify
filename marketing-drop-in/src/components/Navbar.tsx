@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { NexlifyLogo } from "@/components/NexlifyLogo";
 import { SUPPORT_NAV_LINKS } from "@/components/SupportNav";
 import type { SessionUser } from "@/lib/auth";
 import { DEMO_PANEL_URL } from "@/lib/demo";
 import { FACEBOOK_URL, TELEGRAM_CHANNEL_URL } from "@/lib/marketing-constants";
-import { site } from "@/lib/site";
 
 const NAV_LINKS = [
   { href: "/epg", label: "EPG" },
@@ -46,12 +46,7 @@ export function Navbar({ user }: { user: SessionUser | null }) {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 glass">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 md:h-16 md:py-0">
-        <Link href="/" className="flex min-w-0 items-center gap-2.5 font-display font-semibold tracking-tight">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-amber-500 text-sm font-bold text-white shadow-lg shadow-violet-500/25">
-            NX
-          </span>
-          <span className="truncate text-white">{site.name}</span>
-        </Link>
+        <NexlifyLogo priority className="min-w-0" />
 
         <nav className="hidden md:flex items-center gap-5 text-sm text-[var(--muted)]">
           <a

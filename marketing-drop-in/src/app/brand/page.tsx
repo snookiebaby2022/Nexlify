@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { BreadcrumbJsonLd } from "@/components/BreadcrumbJsonLd";
 import { WebPageJsonLd } from "@/components/WebPageJsonLd";
 import { pageMetadata, pageUrl } from "@/lib/seo";
@@ -30,6 +31,35 @@ export default function BrandPage() {
           Assets and copy for partners, affiliates, and media covering IPTV panel software worldwide.
         </p>
         <section className="mt-10 space-y-6">
+          <div className="glass rounded-2xl p-6">
+            <h2 className="font-semibold text-white">Logo</h2>
+            <div className="mt-4 flex flex-col items-start gap-4">
+              <Image
+                src="/logo-full.png"
+                alt="Nexlify logo"
+                width={280}
+                height={80}
+                className="h-auto w-full max-w-[280px] rounded-lg bg-white/5 p-4"
+              />
+              <ul className="space-y-2 text-sm text-violet-300">
+                <li>
+                  <a href="/logo-full.png" download className="underline">
+                    Full logo (PNG)
+                  </a>
+                </li>
+                <li>
+                  <a href="/logo-mark.png" download className="underline">
+                    Icon mark (PNG)
+                  </a>
+                </li>
+                <li>
+                  <a href="/icon-512.png" download className="underline">
+                    App icon 512×512 (PNG)
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
           <div className="glass rounded-2xl p-6">
             <h2 className="font-semibold text-white">Product name</h2>
             <p className="mt-2 text-sm text-slate-300">{site.name} IPTV Panel</p>

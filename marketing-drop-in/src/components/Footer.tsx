@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { NexlifyLogo } from "@/components/NexlifyLogo";
 import { FacebookIcon } from "@/components/FacebookIcon";
 import { TelegramIcon } from "@/components/TelegramIcon";
 import { SupportFooterLinks } from "@/components/SupportNav";
@@ -121,8 +122,8 @@ export function Footer() {
       <div className="mx-auto max-w-6xl px-4 py-14">
         <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-6">
           <div className="md:col-span-2">
-            <p className="font-display text-xl font-semibold text-white">{site.name}</p>
-            <p className="mt-1 text-sm text-violet-300">{site.domain}</p>
+            <NexlifyLogo href="/" className="max-w-[150px]" />
+            <p className="mt-2 text-sm text-violet-300">{site.domain}</p>
             <p className="mt-3 max-w-sm text-sm text-[var(--muted)]">
               {SOFTWARE_POSITIONING}. WHMCS billing with automated keys and built-in support
               tickets. {CONTENT_DISCLAIMER}

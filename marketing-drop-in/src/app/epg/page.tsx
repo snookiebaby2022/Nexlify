@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 
 export const metadata: Metadata = {
   title: "Free EPG Sources - Nexlify",
@@ -72,10 +73,15 @@ export default function EpgPage() {
         {/* Header */}
         <div className="text-center mb-12">
           <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center text-white font-bold text-xl">
-              NX
-            </div>
-            <h1 className="text-3xl font-bold">Nexlify EPG Sources</h1>
+            <Image
+              src="/logo-full.png"
+              alt="Nexlify"
+              width={160}
+              height={48}
+              className="h-10 w-auto object-contain"
+              priority
+            />
+            <h1 className="text-3xl font-bold">EPG Sources</h1>
           </div>
           <p className="text-neutral-400 max-w-2xl mx-auto">
             Free EPG (Electronic Program Guide) sources for LEGAL use only. Stay informed about incoming programs with our curated EPG feeds. Updated daily.
