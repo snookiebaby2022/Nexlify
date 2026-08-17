@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { join } from "path";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
+import { hlsStreamDir } from "@/lib/hls-disk";
 import { liveTranscodeCodecArgs } from "@/lib/live-bandwidth";
 
 /** Match XUI/NXT default segment length. Do not use hls_init_time / split_by_time with -c copy. */
