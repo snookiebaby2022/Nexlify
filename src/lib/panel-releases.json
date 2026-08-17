@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.19",
+  "latestVersion": "2.0.20",
   "releases": [
+    {
+      "version": "2.0.20",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Fix IPTV Smarters HLS — real segments again, not a fake MPEGTS playlist.",
+      "changelog": [
+        "Live .m3u8 packages or relays real HLS (TARGETDURATION + segN.ts) so Smarters ExoPlayer can play",
+        "Instant start still skips guessed provider .m3u8 probes; it no longer returns EXTINF:-1 pointing at an infinite .ts pipe",
+        "Bandwidth saver still picks the lowest HLS rung and eco-transcodes MPEGTS viewers"
+      ],
+      "fixes": [
+        "IPTV Smarters Pro HLS mode showed no picture after instant-start returned a playlist that pointed at /live/u/p/id.ts"
+      ]
+    },
     {
       "version": "2.0.19",
       "date": "2026-08-17",

@@ -180,14 +180,14 @@ export default function StreamSettingsPage() {
         {
           title: "Instant live & bandwidth saver",
           description:
-            "Live channels return a playlist immediately (no multi-second HLS probes). Bandwidth saver downscales the active stream so phones and weak links use far less data.",
+            "Skip guessed provider HLS probes. IPTV Smarters HLS still gets real segments (native HLS or the panel packager). Bandwidth saver downscales MPEGTS viewers and keeps the lowest HLS rung when the provider has one.",
           info: "Saver is per watching connection — it does not transcode the whole catalog. Turn it off for full source quality. Apps can also request /live/user/pass/{id}_eco.ts without enabling it globally.",
           fields: [
             {
               key: "liveInstantStart",
               label: "Instant live start",
               type: "yesno",
-              hint: "Skip guessed provider .m3u8 probes and hand HLS apps a playlist that points at the panel .ts URL so picture starts with the MPEGTS path.",
+              hint: "Skip guessed provider .m3u8 probes. HLS apps still get real segments (packager or native HLS), not a fake playlist pointing at MPEGTS.",
             },
             {
               key: "liveBandwidthSaver",

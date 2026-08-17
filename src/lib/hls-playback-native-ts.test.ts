@@ -72,6 +72,26 @@ test("sanitizeHlsPlaylist drops DISCONTINUITY tags that freeze Smarters", async 
   assert.equal(shouldOfferClientDirectHls(502, "html error page"), true);
 });
 
+test("rewritePackagerPlaylist exposes finite HLS segments Smarters can fetch", () => {
+  const src = [
+    "#EXTM3U",
+    "#EXT-X-VERSION:3",
+    "#EXT-X-TARGETDURATION:2",
+    "#EXT-X-MEDIA-SEQUENCE:3",
+    "#EXTINF:2.0,",
+    "seg3.ts",
+    "#EXTINF:2.0,",
+    "seg4.ts",
+    "",
+  ].join("\n");
+  const body = rewritePackagerPlaylist(src, "http://45.88.138.18", "user1", "pass1", "1862838169");
+  assert.match(body, /#EXT-X-TARGETDURATION:2/);
+  assert.match(body, /\/live\/user1\/pass1\/1862838169\/hls\/seg3\.ts/);
+  assert.match(body, /\/live\/user1\/pass1\/1862838169\/hls\/seg4\.ts/);
+  assert.equal(body.includes("1862838169.ts"), false);
+  assert.equal(body.includes("#EXTINF:-1"), false);
+});
+
 test("rewritePackagerPlaylist strips DISCONTINUITY before rewriting segments", () => {
   const src = ["#EXTM3U", "#EXT-X-DISCONTINUITY", "#EXTINF:2.0,", "seg3.ts", ""].join("\n");
   const body = rewritePackagerPlaylist(

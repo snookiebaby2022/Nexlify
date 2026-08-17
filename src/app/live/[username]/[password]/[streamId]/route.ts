@@ -22,7 +22,8 @@ import {
   HLS_PLAYLIST_CONTENT_TYPE,
   rewritePackagerPlaylist,
   expandHlsPlaybackCandidates,
-  buildNativeTsHlsManifest,
+  buildClientDirectHlsMaster,
+  shouldOfferClientDirectHls,
   UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
@@ -30,8 +31,8 @@ import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
-import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
-import { isHlsDaemonHealthy, openDaemonMpegTs } from "@/lib/hls-restream-client";
+import { openUpstreamLiveStream, resolvePlayableUpstreamUrl, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
+import { ensureDiskHls, isHlsDaemonHealthy, openDaemonMpegTs } from "@/lib/hls-restream-client";
 import { getActiveTranscodingProfile, getTranscodingProfiles } from "@/lib/transcoding-profiles";
 import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
 import { localHlsIndexPath } from "@/lib/hls-disk";
@@ -202,7 +203,8 @@ export async function GET(
 
   const profiles = await getTranscodingProfiles();
   const hintedProfile = matchTranscodingProfile(transcodeHint, profiles);
-  const ecoRequested = isEcoProfileHint(transcodeHint) || bw.saverEnabled;
+  const explicitEco = isEcoProfileHint(transcodeHint);
+  const ecoRequested = explicitEco || bw.saverEnabled;
   const streamMeta = await prisma.stream.findUnique({
     where: { id: cleanId },
     select: {
@@ -216,57 +218,96 @@ export async function GET(
     },
   });
   const mode = streamMeta ? getStreamPlaybackMode(streamMeta) : "direct";
-  const transcode =
-    hintedProfile && !isEcoProfileHint(transcodeHint)
-      ? hintedProfile
-      : ecoRequested
-        ? ecoLiveProfile(bw)
-        : mode === "transcode"
-          ? await getActiveTranscodingProfile()
-          : null;
-  const diskStreamId = packagerDiskStreamId(
-    cleanId,
-    ecoRequested ? ECO_DISK_PROFILE : hintedProfile
-  );
-  const transcodeOpts = transcode
-    ? {
-        resolution: transcode.resolution,
-        bitrate: transcode.bitrate,
-        codec: transcode.codec,
-        gpuAcceleration: transcode.gpuAcceleration,
-      }
-    : null;
+  const modeTranscode = mode === "transcode" ? await getActiveTranscodingProfile() : null;
+  const hlsProfile = explicitEco ? ecoLiveProfile(bw) : hintedProfile ?? modeTranscode;
+  const mpegtsProfile = ecoRequested ? ecoLiveProfile(bw) : hintedProfile ?? modeTranscode;
+  const hlsDiskStreamId = packagerDiskStreamId(cleanId, explicitEco ? ECO_DISK_PROFILE : hintedProfile);
+  const diskStreamId = packagerDiskStreamId(cleanId, ecoRequested ? ECO_DISK_PROFILE : hintedProfile);
+  const profileOpts = (
+    profile: { resolution: string; bitrate: number; codec: string; gpuAcceleration: boolean } | null
+  ) =>
+    profile
+      ? {
+          resolution: profile.resolution,
+          bitrate: profile.bitrate,
+          codec: profile.codec,
+          gpuAcceleration: profile.gpuAcceleration,
+        }
+      : null;
+  const transcodeOpts = profileOpts(mpegtsProfile);
 
   let lastError = "Stream fetch failed";
 
   if (wantsM3u8) {
     const panelOrigin = serverBaseUrl(req.url, req.headers);
-    const packedNow = safeReadLocalPackagerPlaylist(diskStreamId);
+    const packedNow =
+      safeReadLocalPackagerPlaylist(hlsDiskStreamId) ||
+      (!explicitEco ? safeReadLocalPackagerPlaylist(cleanId) : null);
     if (packedNow) {
       return hlsHeaders(
         rewritePackagerPlaylist(packedNow, panelOrigin, username, password, requestStreamKey)
       );
     }
 
-    if (!bw.instantStart) {
-      for (const playbackUrl of candidates) {
-        if (!originalCandidates.has(playbackUrl) || !isHlsPlaybackUrl(playbackUrl)) continue;
-        const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, 1_000);
-        if (!manifest.ok) {
-          lastError = manifest.detail || "Stream unavailable";
-          continue;
+    let clientDirectHls: string | null = null;
+    const hlsProbeMs = bw.instantStart ? 1_500 : 8_000;
+    for (const playbackUrl of candidates) {
+      if (!isHlsPlaybackUrl(playbackUrl)) continue;
+      if (bw.instantStart && !originalCandidates.has(playbackUrl)) continue;
+      const probeTimeoutMs = originalCandidates.has(playbackUrl) ? hlsProbeMs : 3_000;
+      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, probeTimeoutMs);
+      if (!manifest.ok) {
+        lastError = manifest.detail || "Stream unavailable";
+        if (
+          !clientDirectHls &&
+          originalCandidates.has(playbackUrl) &&
+          shouldOfferClientDirectHls(manifest.status, manifest.detail)
+        ) {
+          clientDirectHls = playbackUrl;
         }
-        await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
-        const relay = (url: string) =>
-          buildHlsRelayUrl(panelOrigin, username, password, requestStreamKey, url);
-        let body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
-        if (bw.saverEnabled) body = pickLowestBandwidthHlsVariant(body);
-        return hlsHeaders(body);
+        continue;
       }
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
+      const relay = (url: string) =>
+        buildHlsRelayUrl(panelOrigin, username, password, requestStreamKey, url);
+      let body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
+      if (bw.saverEnabled) body = pickLowestBandwidthHlsVariant(body);
+      return hlsHeaders(body);
     }
 
-    await cacheSet(hlsRelayCacheKey(line.id, cleanId), candidates[0]!, 3600);
-    return hlsHeaders(buildNativeTsHlsManifest(panelOrigin, username, password, requestStreamKey));
+    for (const playbackUrl of candidates) {
+      if (isHlsPlaybackUrl(playbackUrl)) continue;
+      const resolved = await resolvePlayableUpstreamUrl(playbackUrl, {
+        userAgent: UPSTREAM_HLS_UA,
+        timeoutMs: bw.instantStart ? 2_000 : 8_000,
+      });
+      if (!resolved) {
+        lastError = "Upstream is not MPEG-TS";
+        continue;
+      }
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), resolved, 3600);
+      const packed = await ensureDiskHls({
+        upstreamUrl: resolved,
+        streamId: hlsDiskStreamId,
+        userAgent: UPSTREAM_HLS_UA,
+        loop: mode === "created" || Boolean(streamMeta?.isCreatedChannel),
+        transcode: profileOpts(hlsProfile),
+      });
+      if (packed.ok) {
+        return hlsHeaders(
+          rewritePackagerPlaylist(packed.playlist, panelOrigin, username, password, requestStreamKey)
+        );
+      }
+      lastError = packed.error;
+    }
+
+    if (clientDirectHls) {
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), clientDirectHls, 3600);
+      return hlsHeaders(buildClientDirectHlsMaster(clientDirectHls));
+    }
+
+    const status = /timeout/i.test(lastError) ? 504 : 502;
+    return withIptvCors(iptvText(lastError.slice(0, 200) || "Stream fetch failed", { status }));
   }
 
   for (let i = 0; i < candidates.length; i++) {

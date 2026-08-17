@@ -342,9 +342,9 @@ export async function fetchHlsManifestForClient(
 }
 
 /**
- * When upstream is native MPEG-TS but the app requests `.m3u8` (Smarters HLS output),
- * serve an event-style playlist that points at the panel `.ts` URL — not raw TS bytes.
- * Uses EXTINF:-1 (continuous live TS). Finite EXTINF breaks Smarters HLS mode entirely.
+ * Last-resort wrapper when upstream is native MPEG-TS but the app requested `.m3u8`.
+ * Do not use this as the primary Smarters HLS path — ExoPlayer needs real
+ * `#EXT-X-TARGETDURATION` + finite `segN.ts` segments, not an infinite `.ts` pipe.
  */
 export function buildNativeTsHlsManifest(
   _panelOrigin: string,
