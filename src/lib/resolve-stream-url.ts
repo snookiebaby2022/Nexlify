@@ -12,8 +12,22 @@ function resolveEffectiveStreamUrl(stream: StreamWithProvider, streamUrl: string
 
   if (effective.hostedExternally && effective.provider && effective.providerPath) {
     try {
-      const url = resolveProviderUrl(effective.provider, effective.providerPath);
-      return resolveStreamPlayUrl({ ...effective, streamUrl: url }, seed);
+      const providerUrl = resolveProviderUrl(effective.provider, effective.providerPath);
+      const raw = streamUrl.trim();
+      // Migrated XUI rows often have both a provider id path and a real stream_source URL.
+      // Prefer stream_source when it is already http(s) on a different host.
+      if (/^https?:\/\//i.test(raw)) {
+        try {
+          const rawHost = new URL(raw).hostname.toLowerCase();
+          const provHost = new URL(providerUrl).hostname.toLowerCase();
+          if (rawHost && provHost && rawHost !== provHost) {
+            return resolveStreamPlayUrl(effective, seed);
+          }
+        } catch {
+          /* fall through to provider URL */
+        }
+      }
+      return resolveStreamPlayUrl({ ...effective, streamUrl: providerUrl }, seed);
     } catch {
       return resolveStreamPlayUrl(effective, seed);
     }
@@ -36,21 +50,35 @@ export function resolveStreamPlaybackUrl(stream: StreamWithProvider, seed?: stri
 
 /** Ordered candidate URLs for live playback (primary then backup). Used when upstream fetch fails at request time. */
 export function listStreamPlaybackUrls(stream: StreamWithProvider, seed?: string): string[] {
-  const primary = resolveEffectiveStreamUrl(stream, stream.streamUrl, seed);
-  const out: string[] = [primary];
+  const out: string[] = [];
+  const add = (u: string | null | undefined) => {
+    const t = String(u ?? "").trim();
+    if (!t || !/^https?:\/\//i.test(t) || out.includes(t)) return;
+    out.push(t);
+  };
+
+  add(resolveEffectiveStreamUrl(stream, stream.streamUrl, seed));
+  add(stream.streamUrl);
   const backupRaw = stream.backupUrl?.trim();
   if (backupRaw) {
-    const backup = resolveEffectiveStreamUrl(
-      { ...stream, bitrates: null },
-      backupRaw,
-      seed
+    add(
+      resolveEffectiveStreamUrl(
+        { ...stream, bitrates: null, hostedExternally: false },
+        backupRaw,
+        seed
+      )
     );
-    if (backup && !out.includes(backup)) out.push(backup);
+    add(backupRaw);
+  }
+  if (stream.hostedExternally && stream.provider && stream.providerPath) {
+    try {
+      add(resolveProviderUrl(stream.provider, stream.providerPath));
+    } catch {
+      /* ignore invalid provider path */
+    }
   }
   for (const variant of parseBitrates(stream.bitrates)) {
-    const extra = variant.path.trim();
-    if (!/^https?:\/\//i.test(extra) || out.includes(extra)) continue;
-    out.push(extra);
+    add(variant.path);
   }
   if (stream.lastProbeOk === false && out.length > 1) {
     return [out[1]!, out[0]!, ...out.slice(2)];

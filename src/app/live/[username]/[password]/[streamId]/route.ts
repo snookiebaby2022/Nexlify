@@ -27,7 +27,6 @@ import {
   expandHlsPlaybackCandidates,
   buildClientDirectHlsMaster,
   shouldOfferClientDirectHls,
-  xtreamHlsSourceUrl,
   UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
@@ -222,11 +221,7 @@ export async function GET(
       lastError = packed.error;
     }
 
-    const directHls =
-      clientDirectHls ??
-      candidates.map((u) => xtreamHlsSourceUrl(u)).find((u): u is string => Boolean(u)) ??
-      candidates.find((u) => isHlsPlaybackUrl(u)) ??
-      null;
+    const directHls = clientDirectHls;
     if (directHls) {
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), directHls, 3600);
       return hlsHeaders(buildClientDirectHlsMaster(directHls));
