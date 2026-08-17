@@ -452,6 +452,11 @@ export default function PanelUpdatesPage() {
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
             Installed <strong>v{installed}</strong>
           </p>
+          <p className="text-xs mt-2 max-w-xl" style={{ color: "var(--muted)" }}>
+            Updates build in the background first, then swap the new build and restart the panel (~15–60s).
+            Live streams proxied through Nexlify will briefly interrupt during restart; clients on direct upstream
+            URLs keep playing until they reconnect. Schedule updates during low-traffic windows when possible.
+          </p>
           {data.version.remoteError && (
             <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>
               Git remote: {data.version.remoteError}

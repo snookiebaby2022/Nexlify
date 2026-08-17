@@ -3209,6 +3209,30 @@ a.btn-back:hover,
   background: #00a7d0;
 }
 
+.xui-quality-badge {
+  display: inline-block;
+  min-width: 2.75rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.xui-quality-badge--excellent {
+  background: #00a65a;
+}
+
+.xui-quality-badge--ok {
+  background: #f39c12;
+}
+
+.xui-quality-badge--poor {
+  background: #dd4b39;
+}
+
 .xui-duration-badge {
   display: inline-block;
   padding: 0.2rem 0.55rem;

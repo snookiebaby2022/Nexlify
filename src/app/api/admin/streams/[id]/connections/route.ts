@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { computeConnectionQuality } from "@/lib/connection-quality";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 
@@ -64,6 +65,10 @@ export async function GET(
     stream,
     clients: rows.map((c) => {
       const dur = durationSeconds(c.startedAt, c.lastSeenAt);
+      const quality = computeConnectionQuality({
+        startedAt: c.startedAt,
+        lastSeenAt: c.lastSeenAt,
+      });
       return {
         id: c.id,
         line: c.line.username,
@@ -75,6 +80,7 @@ export async function GET(
         restreamer: c.line.isRestreamer,
         userAgent: c.userAgent,
         lastSeenAt: c.lastSeenAt.toISOString(),
+        quality,
       };
     }),
   });

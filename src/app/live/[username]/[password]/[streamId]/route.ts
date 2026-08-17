@@ -19,7 +19,10 @@ import {
   buildHlsRelayUrl,
   rewriteHlsManifestForRelay,
   hlsRelayCacheKey,
+  buildNativeTsHlsManifest,
 } from "@/lib/hls-playback";
+import { serverBaseUrl } from "@/lib/xtream";
+import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
@@ -96,6 +99,10 @@ export async function GET(
 
   const { checkLineIpAccess } = await import("@/lib/line-ip-lock");
   if (!checkLineIpAccess(line, ip)) return iptvText("IP not allowed", { status: 403 });
+
+  if (!checkLineUserAgent(line, ua)) {
+    return iptvText("User-Agent not allowed for this line", { status: 403 });
+  }
 
   if (await isSessionKicked(line.id, ip)) {
     return withIptvCors(iptvText("Session kicked", { status: 403 }));
@@ -181,11 +188,27 @@ export async function GET(
         continue;
       }
 
-      const panelOrigin = req.nextUrl.origin;
+      const panelOrigin = serverBaseUrl(req.url, req.headers);
       const relay = (url: string) =>
         buildHlsRelayUrl(panelOrigin, username, password, cleanId, url);
       const body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
 
+      void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
+      return withIptvCors(
+        new NextResponse(body, {
+          status: 200,
+          headers: {
+            ...buildLiveRedirectHeaders(antiFreeze),
+            "Content-Type": "application/vnd.apple.mpegurl",
+            "Cache-Control": "no-cache, no-store",
+          },
+        })
+      );
+    }
+
+    if (wantsM3u8) {
+      const panelOrigin = serverBaseUrl(req.url, req.headers);
+      const body = buildNativeTsHlsManifest(panelOrigin, username, password, cleanId);
       void trackConnection({ lineId: line.id, streamId: cleanId, ip, userAgent: ua });
       return withIptvCors(
         new NextResponse(body, {

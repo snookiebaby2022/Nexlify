@@ -6,6 +6,10 @@ import { usePathname } from "next/navigation";
 import { Hammer, Fingerprint } from "lucide-react";
 import { IpWithFlag } from "@/components/ip-with-flag";
 import { subscriptionPaths } from "@/lib/panel-paths";
+import {
+  connectionQualityClass,
+  type ConnectionQuality,
+} from "@/lib/connection-quality";
 
 function formatConnDuration(startedAt: string | Date): string {
   const sec = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
@@ -37,6 +41,7 @@ export default function AdminConnectionsPage() {
       serverName: string;
       line: { username: string; maxConnections: number; isRestreamer?: boolean };
       stream: { id: string; name: string; type: string } | null;
+      quality: ConnectionQuality;
     }[]
   >([]);
   const [search, setSearch] = useState("");
@@ -130,6 +135,7 @@ export default function AdminConnectionsPage() {
             <tr>
               <th>Quality</th>
               <th>Line</th>
+              <th>Watching</th>
               <th>Server</th>
               <th>IP</th>
               <th>Duration</th>
@@ -142,9 +148,17 @@ export default function AdminConnectionsPage() {
             {shown.map((c) => (
               <tr key={c.id}>
                 <td>
-                  <span className="xui-quality-dot" />
+                  <span
+                    className={connectionQualityClass(c.quality.level)}
+                    title={`Connection quality ${c.quality.label}`}
+                  >
+                    {c.quality.label}
+                  </span>
                 </td>
                 <td className="font-semibold">{c.line.username}</td>
+                <td className="max-w-[220px] truncate" title={c.stream?.name ?? undefined}>
+                  {c.stream?.name ?? "—"}
+                </td>
                 <td>{c.serverName ?? "Main Server"}</td>
                 <td>{c.ip ? <IpWithFlag ip={c.ip} /> : "—"}</td>
                 <td>

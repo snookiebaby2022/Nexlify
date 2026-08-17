@@ -238,6 +238,15 @@ export function pickPublicOrigin(requestOrigin: string, configuredOrigin?: strin
     const cfg = new URL(env);
     const reqHost = req.hostname.toLowerCase();
     const cfgHost = cfg.hostname.toLowerCase();
+
+    // Health checks / local curls must not publish 127.0.0.1 in server_info for IPTV apps.
+    if (
+      (reqHost === "127.0.0.1" || reqHost === "localhost" || reqHost === "::1") &&
+      cfgHost &&
+      cfgHost !== reqHost
+    ) {
+      return env;
+    }
     const reqPort = req.port || (req.protocol === "https:" ? "443" : "80");
 
     // IPTV apps on extra ports (8080, 25461, …) must keep that port in server_info / M3U URLs.

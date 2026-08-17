@@ -163,3 +163,27 @@ export async function fetchHlsManifestForClient(
   if (res.kind !== "manifest") return { ok: false, status: 502 };
   return { ok: true, body: res.body, finalUrl: res.finalUrl };
 }
+
+/**
+ * When upstream is native MPEG-TS but the app requests `.m3u8` (Smarters HLS output),
+ * serve an event-style playlist that points at the panel `.ts` URL — not raw TS bytes.
+ */
+export function buildNativeTsHlsManifest(
+  panelOrigin: string,
+  username: string,
+  password: string,
+  streamId: string
+): string {
+  const origin = panelOrigin.replace(/\/+$/, "");
+  const tsUrl = `${origin}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}.ts`;
+  return [
+    "#EXTM3U",
+    "#EXT-X-VERSION:3",
+    "#EXT-X-TARGETDURATION:3600",
+    "#EXT-X-MEDIA-SEQUENCE:0",
+    "#EXT-X-PLAYLIST-TYPE:EVENT",
+    "#EXTINF:3600.0,",
+    tsUrl,
+    "",
+  ].join("\n");
+}

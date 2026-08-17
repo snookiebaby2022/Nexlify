@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import { Hammer, Fingerprint, X } from "lucide-react";
 import { IpWithFlag } from "@/components/ip-with-flag";
+import {
+  connectionQualityClass,
+  type ConnectionQuality,
+} from "@/lib/connection-quality";
 
 type ClientRow = {
   id: string;
@@ -12,6 +16,7 @@ type ClientRow = {
   duration: string;
   output: string;
   restreamer: boolean;
+  quality: ConnectionQuality;
 };
 
 export function StreamClientsModal({
@@ -81,7 +86,12 @@ export function StreamClientsModal({
                 {clients.map((c) => (
                   <tr key={c.id}>
                     <td>
-                      <span className="xui-quality-dot" title="Active" />
+                      <span
+                        className={connectionQualityClass(c.quality.level)}
+                        title={`Connection quality ${c.quality.label}`}
+                      >
+                        {c.quality.label}
+                      </span>
                     </td>
                     <td className="font-medium">{c.line}</td>
                     <td>{c.server}</td>

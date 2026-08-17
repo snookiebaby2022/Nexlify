@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.6",
+  "latestVersion": "2.0.7",
   "releases": [
+    {
+      "version": "2.0.7",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Smarters HLS fix for MPEG-TS channels, live connection quality + watching column, update guidance.",
+      "changelog": [
+        "Live `.m3u8` on native MPEG-TS upstreams now returns a real HLS playlist (points at `.ts`) instead of raw TS bytes",
+        "Live Connections shows the channel being watched and a realistic quality % (green / orange / red)",
+        "server_info no longer advertises 127.0.0.1 when env has the public panel IP",
+        "Live playback enforces per-line User-Agent allow/deny lists",
+        "Updates page explains that panel-proxied streams briefly interrupt on restart"
+      ],
+      "fixes": [
+        "IPTV Smarters HLS mode failed on MPEG-TS-only channels (got video/mp2t on .m3u8 URLs)",
+        "Live Connections quality column was a static placeholder dot"
+      ]
+    },
     {
       "version": "2.0.6",
       "date": "2026-08-17",

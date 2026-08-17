@@ -5,6 +5,7 @@ import {
   deleteActiveConnection,
   listLiveConnections,
 } from "@/lib/connections";
+import { computeConnectionQuality } from "@/lib/connection-quality";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 
@@ -15,12 +16,21 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const connections = await listLiveConnections(ownerScope(session));
-  const mapped = connections.map((c) => ({
-    ...c,
-    startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
-    lastSeenAt: c.lastSeenAt instanceof Date ? c.lastSeenAt.toISOString() : String(c.lastSeenAt),
-    serverName: c.stream?.server?.name ?? "Main Server",
-  }));
+  const now = Date.now();
+  const mapped = connections.map((c) => {
+    const quality = computeConnectionQuality({
+      startedAt: c.startedAt,
+      lastSeenAt: c.lastSeenAt,
+      now,
+    });
+    return {
+      ...c,
+      startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
+      lastSeenAt: c.lastSeenAt instanceof Date ? c.lastSeenAt.toISOString() : String(c.lastSeenAt),
+      serverName: c.stream?.server?.name ?? "Main Server",
+      quality,
+    };
+  });
   return NextResponse.json({ connections: mapped });
 }
 
