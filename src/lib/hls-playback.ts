@@ -134,7 +134,7 @@ export function sanitizeHlsPlaylist(body: string): string {
     if (!t.startsWith("#EXT-X-TARGETDURATION")) return line;
     hasTd = true;
     const cur = Number(t.split(":")[1]);
-    const td = Number.isFinite(cur) ? Math.max(cur, minTd) : minTd;
+    const td = maxExtinf > 0 ? minTd : Number.isFinite(cur) && cur > 0 ? cur : 2;
     return `#EXT-X-TARGETDURATION:${td}`;
   });
   if (!sawVersion) {

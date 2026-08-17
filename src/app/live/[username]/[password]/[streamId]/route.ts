@@ -36,7 +36,6 @@ import { ensureDiskHls, isHlsDaemonHealthy, openDaemonMpegTs } from "@/lib/hls-r
 import { getActiveTranscodingProfile, getTranscodingProfiles } from "@/lib/transcoding-profiles";
 import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
 import { localHlsIndexPath } from "@/lib/hls-disk";
-import { readLocalPackagerPlaylist } from "@/lib/ts-hls-packager";
 import { prisma } from "@/lib/prisma";
 import {
   matchTranscodingProfile,
@@ -61,14 +60,6 @@ const PROXY_TIMEOUT_MS = 30_000;
 function safeLocalHlsIndex(streamId: string): string | null {
   try {
     return localHlsIndexPath(streamId);
-  } catch {
-    return null;
-  }
-}
-
-function safeReadLocalPackagerPlaylist(streamId: string): string | null {
-  try {
-    return readLocalPackagerPlaylist(streamId);
   } catch {
     return null;
   }
@@ -240,15 +231,6 @@ export async function GET(
 
   if (wantsM3u8) {
     const panelOrigin = serverBaseUrl(req.url, req.headers);
-    const packedNow =
-      safeReadLocalPackagerPlaylist(hlsDiskStreamId) ||
-      (!explicitEco ? safeReadLocalPackagerPlaylist(cleanId) : null);
-    if (packedNow) {
-      return hlsHeaders(
-        rewritePackagerPlaylist(packedNow, panelOrigin, username, password, requestStreamKey)
-      );
-    }
-
     let clientDirectHls: string | null = null;
     const hlsProbeMs = bw.instantStart ? 1_500 : 8_000;
     for (const playbackUrl of candidates) {

@@ -5,7 +5,7 @@ import {
   buildNativeTsHlsManifest,
   rewritePackagerPlaylist,
 } from "./hls-playback";
-import { isPackagerSegmentName } from "./ts-hls-packager";
+import { alignPackagerMediaSequence, isPackagerSegmentName } from "./ts-hls-packager";
 
 test("buildNativeTsHlsManifest points .m3u8 clients at panel .ts URL", () => {
   const body = buildNativeTsHlsManifest(
@@ -50,7 +50,7 @@ test("sanitizeHlsPlaylist drops DISCONTINUITY tags that freeze Smarters", async 
   const out = sanitizeHlsPlaylist(src);
   assert.equal(out.includes("DISCONTINUITY"), false);
   assert.match(out, /#EXT-X-VERSION:3/);
-  assert.match(out, /#EXT-X-TARGETDURATION:4/);
+  assert.match(out, /#EXT-X-TARGETDURATION:2/);
   assert.match(out, /seg0\.ts/);
   assert.match(out, /seg1\.ts/);
 
@@ -70,6 +70,12 @@ test("sanitizeHlsPlaylist drops DISCONTINUITY tags that freeze Smarters", async 
   assert.equal(shouldOfferClientDirectHls(504, "Upstream timeout"), true);
   assert.equal(shouldOfferClientDirectHls(502, "Upstream HTTP 404"), false);
   assert.equal(shouldOfferClientDirectHls(502, "html error page"), true);
+
+  const inflatedTd = sanitizeHlsPlaylist(
+    ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:4", "#EXTINF:1.8,", "seg156.ts", ""].join("\n")
+  );
+  assert.match(inflatedTd, /#EXT-X-TARGETDURATION:2/);
+  assert.equal(inflatedTd.includes("TARGETDURATION:4"), false);
 });
 
 test("rewritePackagerPlaylist exposes finite HLS segments Smarters can fetch", () => {
@@ -126,6 +132,22 @@ test("buildVodProgressiveHlsManifest never returns raw video on a .m3u8 URL", as
 test("isPackagerSegmentName accepts ffmpeg segment files only", () => {
   assert.equal(isPackagerSegmentName("seg3.ts"), true);
   assert.equal(isPackagerSegmentName("../etc/passwd"), false);
+});
+
+test("alignPackagerMediaSequence matches the first remaining segment", () => {
+  const src = [
+    "#EXTM3U",
+    "#EXT-X-TARGETDURATION:4",
+    "#EXT-X-MEDIA-SEQUENCE:151",
+    "#EXTINF:1.8,",
+    "seg156.ts",
+    "#EXTINF:1.8,",
+    "seg157.ts",
+    "",
+  ].join("\n");
+  const out = alignPackagerMediaSequence(src);
+  assert.match(out, /#EXT-X-MEDIA-SEQUENCE:156/);
+  assert.equal(out.includes("MEDIA-SEQUENCE:151"), false);
 });
 
 test("xtreamHlsSourceUrl matches XUI stream_source container swap", async () => {

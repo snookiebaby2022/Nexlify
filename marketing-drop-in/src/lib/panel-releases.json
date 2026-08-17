@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.20",
+  "latestVersion": "2.0.21",
   "releases": [
+    {
+      "version": "2.0.21",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Smarters HLS starts from a fresh 3-segment window, not a stale leftover file.",
+      "changelog": [
+        "Do not serve hours-old on-disk HLS playlists — start the packager and wait until 3 segments exist",
+        "Fix MEDIA-SEQUENCE when missing files are dropped; TARGETDURATION matches real EXTINF so ExoPlayer live offset is ~6s not 12s",
+        "Live packager keeps a 6-segment window and deletes old files"
+      ],
+      "fixes": [
+        "IPTV Smarters HLS still showed no picture because the panel returned a 1-segment playlist from a dead packager (MEDIA-SEQUENCE 151, only seg156 on disk)"
+      ]
+    },
     {
       "version": "2.0.20",
       "date": "2026-08-17",
