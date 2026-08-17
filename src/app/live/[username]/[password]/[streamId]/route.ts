@@ -259,10 +259,12 @@ export async function GET(
 
     for (const playbackUrl of candidates) {
       if (isHlsPlaybackUrl(playbackUrl)) continue;
-      const resolved = await resolvePlayableUpstreamUrl(playbackUrl, {
-        userAgent: UPSTREAM_HLS_UA,
-        timeoutMs: bw.instantStart ? 2_000 : 8_000,
-      });
+      const resolved = bw.instantStart
+        ? playbackUrl
+        : await resolvePlayableUpstreamUrl(playbackUrl, {
+            userAgent: UPSTREAM_HLS_UA,
+            timeoutMs: 8_000,
+          });
       if (!resolved) {
         lastError = "Upstream is not MPEG-TS";
         continue;
