@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.25",
+  "latestVersion": "2.0.26",
   "releases": [
+    {
+      "version": "2.0.26",
+      "date": "2026-08-18",
+      "channel": "stable",
+      "summary": "XUI-style direct MPEG-TS — instant live start for XCIPTV/Smarters without eco transcode.",
+      "changelog": [
+        "MPEG-TS (.ts) requests proxy upstream directly for direct-mode channels — no ffmpeg roundtrip",
+        "Bandwidth saver no longer forces eco transcode on every .ts request (HLS variant pick only)",
+        "Stale on-disk HLS packager no longer hijacks .ts into HLS→TS remux after switching container",
+        "Never return .m3u8 fallback on .ts failures — MPEGTS clients get proper errors instead",
+        "Normalize live MPEG-TS Content-Type to video/mp2t for XCIPTV VLC mode"
+      ],
+      "fixes": [
+        "XCIPTV MPEGTS ExoPlayer heavy buffering on BBC One / ITV — eco transcode removed from default path",
+        "XCIPTV HLS ExoPlayer slow start and 2s stop when stale HLS index forced remux on .ts",
+        "XCIPTV MPEGTS VLC player not playing — octet-stream replaced with video/mp2t"
+      ]
+    },
     {
       "version": "2.0.25",
       "date": "2026-08-18",

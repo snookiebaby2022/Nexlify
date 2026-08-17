@@ -308,12 +308,23 @@ export function openUpstreamLiveStream(
   return visit(url, MAX_REDIRECTS);
 }
 
+/** IPTV apps (XCIPTV VLC mode, Smarters) expect MPEG-TS as video/mp2t, not octet-stream. */
+export function normalizeLiveMpegTsContentType(contentType: string): string {
+  const c = (contentType ?? "").toLowerCase().split(";")[0]?.trim() ?? "";
+  if (c.includes("mpegurl") || c.includes("m3u8")) return contentType;
+  if (c.includes("html")) return "video/mp2t";
+  if (!c || c.includes("octet-stream") || c.includes("binary") || c.includes("mp2t") || c.includes("mpegts")) {
+    return "video/mp2t";
+  }
+  return contentType;
+}
+
 export function upstreamToWebResponse(
   open: UpstreamOpenResult,
   extraHeaders?: Record<string, string>
 ): { stream: ReadableStream<Uint8Array>; headers: Record<string, string> } {
   const headers: Record<string, string> = {
-    "Content-Type": open.contentType.includes("html") ? "video/mp2t" : open.contentType,
+    "Content-Type": normalizeLiveMpegTsContentType(open.contentType),
     "Cache-Control": "no-cache, no-store",
     "Access-Control-Allow-Origin": "*",
     Connection: "keep-alive",

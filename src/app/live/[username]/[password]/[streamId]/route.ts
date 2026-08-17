@@ -45,7 +45,6 @@ import {
 import { ensureDiskHls, isHlsDaemonHealthy, openDaemonMpegTs } from "@/lib/hls-restream-client";
 import { getActiveTranscodingProfile, getTranscodingProfiles } from "@/lib/transcoding-profiles";
 import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
-import { localHlsIndexPath } from "@/lib/hls-disk";
 import { prisma } from "@/lib/prisma";
 import {
   matchTranscodingProfile,
@@ -66,14 +65,6 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const PROXY_TIMEOUT_MS = 30_000;
-
-function safeLocalHlsIndex(streamId: string): string | null {
-  try {
-    return localHlsIndexPath(streamId);
-  } catch {
-    return null;
-  }
-}
 
 async function readNodeStreamLimited(stream: Readable, maxBytes: number): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -320,7 +311,6 @@ export async function GET(
   const profiles = await getTranscodingProfiles();
   const hintedProfile = matchTranscodingProfile(transcodeHint, profiles);
   const explicitEco = isEcoProfileHint(transcodeHint);
-  const ecoRequested = explicitEco || bw.saverEnabled;
   const streamMeta = await prisma.stream.findUnique({
     where: { id: cleanId },
     select: {
@@ -336,9 +326,9 @@ export async function GET(
   const mode = streamMeta ? getStreamPlaybackMode(streamMeta) : "direct";
   const modeTranscode = mode === "transcode" ? await getActiveTranscodingProfile() : null;
   const hlsProfile = explicitEco ? ecoLiveProfile(bw) : hintedProfile ?? modeTranscode;
-  const mpegtsProfile = ecoRequested ? ecoLiveProfile(bw) : hintedProfile ?? modeTranscode;
+  const mpegtsProfile = explicitEco ? ecoLiveProfile(bw) : hintedProfile ?? modeTranscode;
   const hlsDiskStreamId = packagerDiskStreamId(cleanId, explicitEco ? ECO_DISK_PROFILE : hintedProfile);
-  const diskStreamId = packagerDiskStreamId(cleanId, ecoRequested ? ECO_DISK_PROFILE : hintedProfile);
+  const diskStreamId = packagerDiskStreamId(cleanId, explicitEco ? ECO_DISK_PROFILE : hintedProfile);
   const profileOpts = (
     profile: { resolution: string; bitrate: number; codec: string; gpuAcceleration: boolean } | null
   ) =>
@@ -350,27 +340,7 @@ export async function GET(
           gpuAcceleration: profile.gpuAcceleration,
         }
       : null;
-  const transcodeOpts = profileOpts(mpegtsProfile);
   const panelOrigin = serverBaseUrl(req.url, req.headers);
-  const serveHlsFallback = async (upstreamUrl: string): Promise<NextResponse | null> => {
-    const packed = await ensureDiskHls({
-      upstreamUrl,
-      streamId: hlsDiskStreamId,
-      userAgent: UPSTREAM_HLS_UA,
-      loop: mode === "created" || Boolean(streamMeta?.isCreatedChannel),
-      transcode: profileOpts(hlsProfile),
-    });
-    if (!packed.ok) return null;
-    return hlsHeaders(
-      rewritePackagerPlaylist(
-        freshPackagerPlaylistBody(hlsDiskStreamId, packed.playlist),
-        panelOrigin,
-        username,
-        password,
-        requestStreamKey
-      )
-    );
-  };
 
   let lastError = "Stream fetch failed";
 
@@ -446,16 +416,93 @@ export async function GET(
 
   for (let i = 0; i < candidates.length; i++) {
     const playbackUrl = candidates[i]!;
-    const localIndex =
-      safeLocalHlsIndex(diskStreamId) || (!ecoRequested ? safeLocalHlsIndex(cleanId) : null);
-    const useHlsRemux = Boolean(localIndex) || isHlsPlaybackUrl(playbackUrl);
-    const mpegtsUrl = localIndex || playbackUrl;
-    const daemonTranscode = localIndex ? null : transcodeOpts;
     await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
 
+    const useHlsRemux = isHlsPlaybackUrl(playbackUrl);
+    const transcodeOpts = profileOpts(mpegtsProfile);
+    const preferDirect =
+      mode === "direct" && !useHlsRemux && !transcodeOpts && !explicitEco && !hintedProfile;
+
+    const returnTrackedMpegTs = (
+      body: ReadableStream<Uint8Array> | Readable,
+      contentType: string
+    ): NextResponse =>
+      withIptvCors(
+        new NextResponse(body as unknown as BodyInit, {
+          status: 200,
+          headers: {
+            ...buildLiveRedirectHeaders(antiFreeze),
+            "Content-Type": contentType.includes("mpegurl") || contentType.includes("m3u8")
+              ? contentType
+              : "video/mp2t",
+            "Cache-Control": "no-cache, no-store",
+            Connection: "keep-alive",
+          },
+        })
+      );
+
+    if (preferDirect) {
+      const proxied = await proxyUpstreamNative(playbackUrl, UPSTREAM_HLS_UA, {
+        panelOrigin,
+        username,
+        password,
+        streamKey: requestStreamKey,
+        saverEnabled: bw.saverEnabled,
+      });
+      if (proxied.ok) {
+        if (await isSessionKicked(line.id, ip)) {
+          return withIptvCors(iptvText("Session kicked", { status: 403 }));
+        }
+        const response = proxied.response;
+        const originalBody = response.body;
+        if (originalBody) {
+          const trackedBody = attachKickAwareProxyBody({
+            body: originalBody,
+            lineId: line.id,
+            streamId: cleanId,
+            ip: ip ?? "",
+            userAgent: ua,
+          });
+          return withIptvCors(
+            new NextResponse(trackedBody as unknown as BodyInit, {
+              status: 200,
+              headers: {
+                ...buildLiveRedirectHeaders(antiFreeze),
+                ...Object.fromEntries(response.headers.entries()),
+              },
+            })
+          );
+        }
+        return withIptvCors(response);
+      }
+      lastError = proxied.error;
+      if (i === 0 && candidates.length > 1) {
+        void logActivity("stream_primary_failover", {
+          lineId: line.id,
+          entity: "stream",
+          entityId: cleanId,
+          meta: { error: proxied.error },
+        });
+        try {
+          await prisma.stream.update({
+            where: { id: cleanId },
+            data: {
+              lastProbeOk: false,
+              lastProbeError: proxied.error.slice(0, 500),
+              lastProbeAt: new Date(),
+            },
+          });
+        } catch {
+          /* ignore probe bookkeeping */
+        }
+      }
+      continue;
+    }
+
+    const daemonTranscode = transcodeOpts;
     let daemonMpegts = await openDaemonMpegTs({
       streamId: diskStreamId,
-      upstreamUrl: mpegtsUrl,
+      upstreamUrl: playbackUrl,
       lineId: line.id,
       clientIp: ip,
       userAgent: UPSTREAM_HLS_UA,
@@ -466,7 +513,7 @@ export async function GET(
     if (!daemonMpegts?.ok && daemonTranscode) {
       daemonMpegts = await openDaemonMpegTs({
         streamId: diskStreamId,
-        upstreamUrl: mpegtsUrl,
+        upstreamUrl: playbackUrl,
         lineId: line.id,
         clientIp: ip,
         userAgent: UPSTREAM_HLS_UA,
@@ -486,28 +533,16 @@ export async function GET(
         ip: ip ?? "",
         userAgent: ua,
       });
-      return withIptvCors(
-        new NextResponse(tracked as unknown as BodyInit, {
-          status: 200,
-          headers: {
-            ...buildLiveRedirectHeaders(antiFreeze),
-            "Content-Type": daemonMpegts.contentType,
-            "Cache-Control": "no-cache, no-store",
-            Connection: "keep-alive",
-          },
-        })
-      );
+      return returnTrackedMpegTs(tracked, daemonMpegts.contentType);
     }
     if (await isHlsDaemonHealthy()) {
       lastError = daemonMpegts?.error || "MPEGTS daemon failed";
-      const packedFallback = await serveHlsFallback(mpegtsUrl);
-      if (packedFallback) return packedFallback;
       continue;
     }
 
     if (useHlsRemux) {
       const remux = await createHlsToMpegTsStream({
-        hlsUrl: mpegtsUrl,
+        hlsUrl: playbackUrl,
         lineId: line.id,
         streamId: diskStreamId,
         clientIp: ip,
@@ -522,8 +557,6 @@ export async function GET(
           entityId: cleanId,
           meta: { mode: "mpegts_remux", error: remux.error, candidate: i },
         });
-        const packedFallback = await serveHlsFallback(mpegtsUrl);
-        if (packedFallback) return packedFallback;
         continue;
       }
       if (await isSessionKicked(line.id, ip)) {
@@ -536,17 +569,7 @@ export async function GET(
         ip: ip ?? "",
         userAgent: ua,
       });
-      return withIptvCors(
-        new NextResponse(remuxBody as unknown as BodyInit, {
-          status: 200,
-          headers: {
-            ...buildLiveRedirectHeaders(antiFreeze),
-            "Content-Type": remux.contentType,
-            "Cache-Control": "no-cache, no-store",
-            Connection: "keep-alive",
-          },
-        })
-      );
+      return returnTrackedMpegTs(remuxBody, remux.contentType);
     }
 
     const proxied = await proxyUpstreamNative(playbackUrl, UPSTREAM_HLS_UA, {
