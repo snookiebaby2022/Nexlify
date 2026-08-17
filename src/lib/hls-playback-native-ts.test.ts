@@ -52,3 +52,21 @@ test("isPackagerSegmentName accepts ffmpeg segment files only", () => {
   assert.equal(isPackagerSegmentName("seg3.ts"), true);
   assert.equal(isPackagerSegmentName("../etc/passwd"), false);
 });
+
+test("xtreamHlsSourceUrl matches XUI stream_source container swap", async () => {
+  const { xtreamHlsSourceUrl, expandHlsPlaybackCandidates } = await import("./hls-playback");
+  assert.equal(
+    xtreamHlsSourceUrl("http://x96.pro:8880/live/Ghostfacee/Ghostfac12/136058.ts"),
+    "http://x96.pro:8880/live/Ghostfacee/Ghostfac12/136058.m3u8"
+  );
+  assert.equal(
+    xtreamHlsSourceUrl("https://junki3monk3y.com:443/Blade2nd/PaaJhvNbqX/51498"),
+    "https://junki3monk3y.com/Blade2nd/PaaJhvNbqX/51498.m3u8"
+  );
+  assert.equal(xtreamHlsSourceUrl("http://cdn.example/live/index.m3u8"), null);
+  const expanded = expandHlsPlaybackCandidates([
+    "https://junki3monk3y.com:443/Blade2nd/PaaJhvNbqX/51498",
+  ]);
+  assert.equal(expanded[0], "https://junki3monk3y.com/Blade2nd/PaaJhvNbqX/51498.m3u8");
+  assert.equal(expanded[1], "https://junki3monk3y.com:443/Blade2nd/PaaJhvNbqX/51498");
+});

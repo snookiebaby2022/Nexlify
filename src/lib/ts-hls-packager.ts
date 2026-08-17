@@ -4,11 +4,11 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 
-const HLS_TIME_SEC = 2;
+const HLS_TIME_SEC = 4;
 const HLS_LIST_SIZE = 10;
-const READY_TIMEOUT_MS = 18_000;
-const IDLE_MS = 45_000;
-const REAP_EVERY_MS = 10_000;
+const READY_TIMEOUT_MS = 10_000;
+const IDLE_MS = 10 * 60 * 1000;
+const REAP_EVERY_MS = 30_000;
 
 export function isPackagerSegmentName(name: string): boolean {
   return /^seg\d+\.ts$/i.test(name.trim());
@@ -31,8 +31,8 @@ export function filterPackagerPlaylistToExisting(playlist: string, lineId: strin
   return out.join("\n");
 }
 
-export function packagerDir(lineId: string, streamId: string): string {
-  const safe = `${lineId}_${streamId}`.replace(/[^a-zA-Z0-9_-]/g, "");
+export function packagerDir(_lineId: string, streamId: string): string {
+  const safe = String(streamId).replace(/[^a-zA-Z0-9_-]/g, "");
   return join(tmpdir(), "nexlify-hls", safe);
 }
 
@@ -51,8 +51,9 @@ const sessions: Map<string, PackagerSession> = ((globalThis as Record<string, un
 (globalThis as Record<string, unknown>)[globalKey] = sessions;
 let reaperStarted = false;
 
-function sessionKey(lineId: string, streamId: string): string {
-  return `${lineId}:${streamId}`;
+function sessionKey(_lineId: string, streamId: string): string {
+  // XUI on-demand: one ffmpeg per stream, shared by every line/device.
+  return streamId;
 }
 
 function startReaper() {
@@ -96,7 +97,7 @@ function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number): Pr
         if (existsSync(indexPath) && statSync(indexPath).size > 24) {
           const body = readFileSync(indexPath, "utf8");
           const segs = body.match(/seg\d+\.ts/gi) ?? [];
-          if (body.includes("#EXTINF") && segs.length >= 3) {
+          if (body.includes("#EXTINF") && segs.length >= 1) {
             resolve(true);
             return;
           }
@@ -118,7 +119,7 @@ async function spawnPackager(
   key: string,
   dir: string,
   upstreamUrl: string,
-  userAgent?: string
+  _userAgent?: string
 ): Promise<PackagerSession | null> {
   const ffmpegPath = await getFfmpegPath();
   if (!(await binExists(ffmpegPath))) return null;
@@ -130,8 +131,7 @@ async function spawnPackager(
   }
   mkdirSync(dir, { recursive: true });
 
-  const ua =
-    userAgent?.trim() || "Mozilla/5.0 (compatible; Nexlify/1.0; +https://nexlify.live)";
+  const ua = "VLC/3.0.20 LibVLC/3.0.20";
 
   const proc = spawn(
     ffmpegPath,
@@ -146,30 +146,34 @@ async function spawnPackager(
       "1",
       "-reconnect_streamed",
       "1",
+      "-reconnect_at_eof",
+      "1",
       "-reconnect_delay_max",
       "2",
       "-rw_timeout",
-      "15000000",
+      "30000000",
+      "-probesize",
+      "1000000",
+      "-analyzeduration",
+      "1000000",
       "-fflags",
       "+genpts+discardcorrupt",
       "-i",
       upstreamUrl,
-      "-map",
-      "0:v:0?",
-      "-map",
-      "0:a:0?",
       "-c",
       "copy",
       "-f",
       "hls",
       "-hls_time",
       String(HLS_TIME_SEC),
+      "-hls_init_time",
+      "1",
       "-hls_list_size",
       String(HLS_LIST_SIZE),
       "-hls_allow_cache",
       "0",
       "-hls_flags",
-      "delete_segments+omit_endlist",
+      "delete_segments+append_list+omit_endlist",
       "-hls_segment_filename",
       join(dir, "seg%d.ts"),
       join(dir, "index.m3u8"),

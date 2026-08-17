@@ -1,6 +1,6 @@
 import type { Stream, StreamProvider, StreamServer, VodMode } from "@prisma/client";
 import { resolveProviderUrl } from "./vod-provider-url";
-import { resolveStreamPlayUrl } from "./stream-variants";
+import { parseBitrates, resolveStreamPlayUrl } from "./stream-variants";
 
 export type StreamWithProvider = Stream & {
   provider?: StreamProvider | null;
@@ -46,6 +46,11 @@ export function listStreamPlaybackUrls(stream: StreamWithProvider, seed?: string
       seed
     );
     if (backup && !out.includes(backup)) out.push(backup);
+  }
+  for (const variant of parseBitrates(stream.bitrates)) {
+    const extra = variant.path.trim();
+    if (!/^https?:\/\//i.test(extra) || out.includes(extra)) continue;
+    out.push(extra);
   }
   if (stream.lastProbeOk === false && out.length > 1) {
     return [out[1]!, out[0]!, ...out.slice(2)];

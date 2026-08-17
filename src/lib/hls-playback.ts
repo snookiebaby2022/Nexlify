@@ -15,6 +15,52 @@ export function stripLiveStreamExtension(streamId: string): string {
   return streamId.replace(/\.(ts|m3u8|hls)$/i, "");
 }
 
+/** Upstream fetches must not use IPTV Smarters UA — many providers block it (empty/hang). */
+export const UPSTREAM_HLS_UA = "VLC/3.0.20 LibVLC/3.0.20";
+
+/**
+ * XUI/Xtream: same stream_source, HLS vs MPEGTS is the container suffix.
+ * `http://host/live/user/pass/123.ts` → `.m3u8`; extensionless Xtream IDs get `.m3u8` appended.
+ */
+export function xtreamHlsSourceUrl(url: string): string | null {
+  try {
+    const u = new URL(url.trim());
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    const path = u.pathname;
+    if (/\.m3u8$/i.test(path)) return null;
+    if (/\.ts$/i.test(path)) {
+      u.pathname = path.replace(/\.ts$/i, ".m3u8");
+    } else {
+      u.pathname = `${path.replace(/\/+$/, "")}.m3u8`;
+    }
+    const next = u.toString();
+    return next === url ? null : next;
+  } catch {
+    return null;
+  }
+}
+
+/** Prefer native provider HLS URLs (XUI stream_source + .m3u8) before local TS remux. */
+export function expandHlsPlaybackCandidates(urls: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (u: string) => {
+    const t = u.trim();
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  };
+  for (const url of urls) {
+    if (isHlsPlaybackUrl(url)) add(url);
+  }
+  for (const url of urls) {
+    const hls = xtreamHlsSourceUrl(url);
+    if (hls) add(hls);
+  }
+  for (const url of urls) add(url);
+  return out;
+}
+
 export function isHlsPlaybackUrl(url: string): boolean {
   const u = url.trim();
   if (!u) return false;
@@ -162,14 +208,15 @@ async function readReadableLimited(stream: Readable, maxBytes: number): Promise<
 export async function fetchHlsUpstream(
   upstreamUrl: string,
   userAgent?: string,
-  range?: string | null
+  range?: string | null,
+  timeoutMs = 20_000
 ): Promise<HlsFetchResult> {
   try {
     const extra: Record<string, string> = {};
     if (range) extra.Range = range;
     const open = await openUpstreamLiveStream(upstreamUrl, {
-      userAgent,
-      timeoutMs: 20_000,
+      userAgent: userAgent?.trim() || UPSTREAM_HLS_UA,
+      timeoutMs,
       headers: extra,
     });
     const finalUrl = open.finalUrl || upstreamUrl;
@@ -196,9 +243,10 @@ export async function fetchHlsUpstream(
 
 export async function fetchHlsManifestForClient(
   upstreamUrl: string,
-  userAgent?: string
+  userAgent?: string,
+  timeoutMs = 20_000
 ): Promise<{ ok: true; body: string; finalUrl: string } | { ok: false; status: number }> {
-  const res = await fetchHlsUpstream(upstreamUrl, userAgent);
+  const res = await fetchHlsUpstream(upstreamUrl, userAgent?.trim() || UPSTREAM_HLS_UA, null, timeoutMs);
   if (!res.ok) return { ok: false, status: res.status };
   if (res.kind !== "manifest") return { ok: false, status: 502 };
   return { ok: true, body: res.body, finalUrl: res.finalUrl };

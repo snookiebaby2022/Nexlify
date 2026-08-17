@@ -11,6 +11,7 @@ import {
   fetchHlsUpstream,
   rewriteHlsManifestForRelay,
   HLS_PLAYLIST_CONTENT_TYPE,
+  UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { logActivity } from "@/lib/lines";
@@ -38,7 +39,7 @@ export async function GET(
 
   const antiFreeze = await getAntiFreezeSettings();
   const range = req.headers.get("range");
-  const upstream = await fetchHlsUpstream(target, auth.userAgent, range);
+  const upstream = await fetchHlsUpstream(target, UPSTREAM_HLS_UA, range);
 
   if (!upstream.ok) {
     void logActivity("stream_hls_relay_error", {

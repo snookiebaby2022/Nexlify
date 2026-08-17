@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.11",
+  "latestVersion": "2.0.12",
   "releases": [
+    {
+      "version": "2.0.12",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Smarters HLS uses provider .m3u8 like XUI — faster start, no freeze.",
+      "changelog": [
+        "HLS output requests the XUI/Xtream .m3u8 container on the same stream_source before local remux",
+        "Upstream HLS is fetched with a VLC user-agent — Smarters UA is blocked by many providers",
+        "Shared on-demand ffmpeg packager per stream (not per line) with 10-minute idle and 1-segment start",
+        "Extra XUI stream_source URLs stored in bitrates are tried as failover"
+      ],
+      "fixes": [
+        "IPTV Smarters HLS slow channel load (waited for local TS remux instead of provider HLS)",
+        "HLS freeze when packager was killed after 45s or when providers blocked the Smarters user-agent",
+        "Some channels failed in HLS because only the MPEG-TS source URL was used"
+      ]
+    },
     {
       "version": "2.0.11",
       "date": "2026-08-17",

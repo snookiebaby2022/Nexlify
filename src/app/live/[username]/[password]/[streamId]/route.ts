@@ -24,6 +24,8 @@ import {
   hlsRelayCacheKey,
   HLS_PLAYLIST_CONTENT_TYPE,
   rewritePackagerPlaylist,
+  expandHlsPlaybackCandidates,
+  UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
@@ -129,7 +131,7 @@ export async function GET(
   }
 
   const antiFreeze = await getAntiFreezeSettings();
-  const candidates = await resolvePlaybackUrlCandidatesForLine(
+  let candidates = await resolvePlaybackUrlCandidatesForLine(
     line.id,
     cleanId,
     { clientIp: ip, userAgent: ua },
@@ -140,6 +142,10 @@ export async function GET(
   scheduleZapPrefetch(line.id, cleanId, { clientIp: ip, userAgent: ua }, antiFreeze);
 
   const wantsM3u8 = isHlsClientPath(streamId);
+  const originalCandidates = new Set(candidates);
+  if (wantsM3u8) {
+    candidates = expandHlsPlaybackCandidates(candidates);
+  }
 
   let lastError = "Stream fetch failed";
   for (let i = 0; i < candidates.length; i++) {
@@ -154,7 +160,7 @@ export async function GET(
           lineId: line.id,
           streamId: cleanId,
           clientIp: ip,
-          userAgent: ua,
+          userAgent: UPSTREAM_HLS_UA,
         });
         if ("error" in remux) {
           lastError = remux.error;
@@ -189,7 +195,8 @@ export async function GET(
         );
       }
 
-      const manifest = await fetchHlsManifestForClient(playbackUrl, ua);
+      const probeTimeoutMs = originalCandidates.has(playbackUrl) ? 12_000 : 5_000;
+      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, probeTimeoutMs);
       if (!manifest.ok) {
         lastError = "Stream unavailable";
         continue;
@@ -201,7 +208,7 @@ export async function GET(
       const body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
 
       if (antiFreeze.fastZapEnabled) {
-        schedulePlaybackUpstreamWarm(playbackUrl, ua);
+        schedulePlaybackUpstreamWarm(playbackUrl, UPSTREAM_HLS_UA);
       }
 
       return withIptvCors(
@@ -222,7 +229,7 @@ export async function GET(
         upstreamUrl: playbackUrl,
         lineId: line.id,
         streamId: cleanId,
-        userAgent: ua,
+        userAgent: UPSTREAM_HLS_UA,
       });
       if (packed.ok) {
         const panelOrigin = serverBaseUrl(req.url, req.headers);
