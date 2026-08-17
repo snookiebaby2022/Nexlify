@@ -1,5 +1,5 @@
 import { Readable } from "node:stream";
-import { openUpstreamLiveStream } from "@/lib/live-upstream-proxy";
+import { looksLikeHtmlErrorPayload, openUpstreamLiveStream } from "@/lib/live-upstream-proxy";
 import { isPackagerSegmentName } from "@/lib/ts-hls-packager";
 
 const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
@@ -90,6 +90,43 @@ export function buildHlsRelayUrl(
   return `${origin}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/${token}`;
 }
 
+/** Drop tags that freeze ExoPlayer / IPTV Smarters (ffmpeg append_list + timestamp jumps). */
+export function sanitizeHlsPlaylist(body: string): string {
+  return body
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      if (t.startsWith("#EXT-X-DISCONTINUITY")) return false;
+      if (t.startsWith("#EXT-X-DISCONTINUITY-SEQUENCE")) return false;
+      return true;
+    })
+    .join("\n");
+}
+
+/**
+ * When the panel IP is blocked (empty HTML 200) but XUI stored a real .m3u8,
+ * hand the provider playlist URL to the player so it fetches from the client IP.
+ */
+export function buildClientDirectHlsMaster(hlsUrl: string): string {
+  const url = hlsUrl.trim();
+  return [
+    "#EXTM3U",
+    "#EXT-X-VERSION:3",
+    "#EXT-X-INDEPENDENT-SEGMENTS",
+    "#EXT-X-STREAM-INF:BANDWIDTH=8000000",
+    url,
+    "",
+  ].join("\n");
+}
+
+/** 404 means this host has no HLS container — do not send the player there. */
+export function shouldOfferClientDirectHls(status: number, detail?: string): boolean {
+  if (status === 404 || status === 410 || status === 405) return false;
+  const d = (detail ?? "").toLowerCase();
+  if (/\bhttp 404\b/.test(d) || /\bhttp 410\b/.test(d)) return false;
+  return true;
+}
+
 export function rewritePackagerPlaylist(
   body: string,
   panelOrigin: string,
@@ -99,7 +136,7 @@ export function rewritePackagerPlaylist(
 ): string {
   const origin = panelOrigin.replace(/\/+$/, "");
   const prefix = `${origin}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/`;
-  return body
+  return sanitizeHlsPlaylist(body)
     .split("\n")
     .map((line) => {
       const trimmed = line.trim();
@@ -146,7 +183,7 @@ export function rewriteHlsManifestForRelay(
   relay: (absoluteUrl: string) => string
 ): string {
   const base = new URL(manifestUrl);
-  return body
+  return sanitizeHlsPlaylist(body)
     .split("\n")
     .map((line) => {
       const out = line.replace(/URI="([^"]+)"/gi, (_match: string, uri: string) => {
@@ -222,6 +259,12 @@ export async function fetchHlsUpstream(
     const finalUrl = open.finalUrl || upstreamUrl;
     const contentType = open.contentType ?? "";
     const buf = await readReadableLimited(open.body, 16_000_000);
+    if (!buf.length) {
+      return { ok: false, status: 502, detail: "empty upstream body" };
+    }
+    if (looksLikeHtmlErrorPayload(buf)) {
+      return { ok: false, status: 502, detail: "html error page" };
+    }
     const head = buf.subarray(0, Math.min(buf.length, 16)).toString("utf8").trimStart();
     if (head.startsWith("#EXT")) {
       return { ok: true, kind: "manifest", body: buf.toString("utf8"), finalUrl };
@@ -245,10 +288,12 @@ export async function fetchHlsManifestForClient(
   upstreamUrl: string,
   userAgent?: string,
   timeoutMs = 20_000
-): Promise<{ ok: true; body: string; finalUrl: string } | { ok: false; status: number }> {
+): Promise<
+  { ok: true; body: string; finalUrl: string } | { ok: false; status: number; detail?: string }
+> {
   const res = await fetchHlsUpstream(upstreamUrl, userAgent?.trim() || UPSTREAM_HLS_UA, null, timeoutMs);
-  if (!res.ok) return { ok: false, status: res.status };
-  if (res.kind !== "manifest") return { ok: false, status: 502 };
+  if (!res.ok) return { ok: false, status: res.status, detail: res.detail };
+  if (res.kind !== "manifest") return { ok: false, status: 502, detail: "not an HLS playlist" };
   return { ok: true, body: res.body, finalUrl: res.finalUrl };
 }
 

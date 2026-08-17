@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.12",
+  "latestVersion": "2.0.13",
   "releases": [
+    {
+      "version": "2.0.13",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Smarters HLS: no freeze, faster start, XUI .m3u8 when the panel IP is blocked.",
+      "changelog": [
+        "Local TS→HLS packager no longer uses append_list/delete_segments (those wrote EXT-X-DISCONTINUITY and 404'd old segments)",
+        "First HLS segment is 2s, independent, and DISCONTINUITY tags are stripped before they reach IPTV Smarters",
+        "Provider .m3u8 from XUI stream_source is still preferred; if this server gets empty HTML, the player is given the provider playlist so the phone/PC IP can fetch it",
+        "ffmpeg is not started on empty HTML/404 pages — those sources fail over in milliseconds instead of an 8–10s packager timeout"
+      ],
+      "fixes": [
+        "IPTV Smarters PC/mobile HLS freeze (EXT-X-DISCONTINUITY + deleted segments)",
+        "Slow HLS channel start while waiting on a broken ffmpeg remux",
+        "Channels whose provider blocks the panel datacenter IP but serve native HLS to the client"
+      ]
+    },
     {
       "version": "2.0.12",
       "date": "2026-08-17",

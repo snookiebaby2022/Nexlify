@@ -33,8 +33,37 @@ test("buildHlsRelayUrl uses path token without query string", () => {
   assert.equal(url.includes("?u="), false);
 });
 
-test("rewritePackagerPlaylist rewrites segN.ts to panel HLS paths", () => {
-  const src = ["#EXTM3U", "#EXTINF:2.0,", "seg3.ts", ""].join("\n");
+test("sanitizeHlsPlaylist drops DISCONTINUITY tags that freeze Smarters", async () => {
+  const { sanitizeHlsPlaylist, buildClientDirectHlsMaster, shouldOfferClientDirectHls } =
+    await import("./hls-playback");
+  const src = [
+    "#EXTM3U",
+    "#EXT-X-TARGETDURATION:4",
+    "#EXT-X-DISCONTINUITY",
+    "#EXTINF:2.0,",
+    "seg0.ts",
+    "#EXT-X-DISCONTINUITY-SEQUENCE:1",
+    "#EXTINF:2.0,",
+    "seg1.ts",
+    "",
+  ].join("\n");
+  const out = sanitizeHlsPlaylist(src);
+  assert.equal(out.includes("DISCONTINUITY"), false);
+  assert.match(out, /seg0\.ts/);
+  assert.match(out, /seg1\.ts/);
+
+  const master = buildClientDirectHlsMaster("https://cdn.example/live/12.m3u8");
+  assert.match(master, /#EXT-X-STREAM-INF:/);
+  assert.match(master, /https:\/\/cdn\.example\/live\/12\.m3u8/);
+
+  assert.equal(shouldOfferClientDirectHls(404), false);
+  assert.equal(shouldOfferClientDirectHls(502, "Non-playable content-type: text/html"), true);
+  assert.equal(shouldOfferClientDirectHls(504, "Upstream timeout"), true);
+  assert.equal(shouldOfferClientDirectHls(502, "Upstream HTTP 404"), false);
+});
+
+test("rewritePackagerPlaylist strips DISCONTINUITY before rewriting segments", () => {
+  const src = ["#EXTM3U", "#EXT-X-DISCONTINUITY", "#EXTINF:2.0,", "seg3.ts", ""].join("\n");
   const body = rewritePackagerPlaylist(
     src,
     "http://45.88.138.18",
@@ -42,6 +71,7 @@ test("rewritePackagerPlaylist rewrites segN.ts to panel HLS paths", () => {
     "pass1",
     "1862838169"
   );
+  assert.equal(body.includes("DISCONTINUITY"), false);
   assert.match(
     body,
     /http:\/\/45\.88\.138\.18\/live\/user1\/pass1\/1862838169\/hls\/seg3\.ts/

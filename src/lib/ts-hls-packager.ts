@@ -4,9 +4,10 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 
-const HLS_TIME_SEC = 4;
-const HLS_LIST_SIZE = 10;
-const READY_TIMEOUT_MS = 10_000;
+/** ~GOP length. Do not use hls_init_time / split_by_time with -c copy (mid-GOP freeze). */
+const HLS_TIME_SEC = 2;
+const HLS_LIST_SIZE = 8;
+const READY_TIMEOUT_MS = 8_000;
 const IDLE_MS = 10 * 60 * 1000;
 const REAP_EVERY_MS = 30_000;
 
@@ -19,7 +20,9 @@ export function filterPackagerPlaylistToExisting(playlist: string, lineId: strin
   const lines = playlist.split("\n");
   const out: string[] = [];
   for (const line of lines) {
-    const name = line.trim().split(/[\\/]/).pop() ?? "";
+    const trimmed = line.trim();
+    if (trimmed.startsWith("#EXT-X-DISCONTINUITY")) continue;
+    const name = trimmed.split(/[\\/]/).pop() ?? "";
     if (isPackagerSegmentName(name)) {
       if (!existsSync(join(dir, name))) {
         if (out.length && out[out.length - 1]!.startsWith("#EXTINF")) out.pop();
@@ -151,13 +154,15 @@ async function spawnPackager(
       "-reconnect_delay_max",
       "2",
       "-rw_timeout",
-      "30000000",
+      "15000000",
       "-probesize",
-      "1000000",
+      "500000",
       "-analyzeduration",
-      "1000000",
+      "500000",
       "-fflags",
       "+genpts+discardcorrupt",
+      "-avoid_negative_ts",
+      "make_zero",
       "-i",
       upstreamUrl,
       "-c",
@@ -166,14 +171,14 @@ async function spawnPackager(
       "hls",
       "-hls_time",
       String(HLS_TIME_SEC),
-      "-hls_init_time",
-      "1",
       "-hls_list_size",
       String(HLS_LIST_SIZE),
       "-hls_allow_cache",
       "0",
+      "-hls_segment_type",
+      "mpegts",
       "-hls_flags",
-      "delete_segments+append_list+omit_endlist",
+      "omit_endlist+independent_segments+temp_file",
       "-hls_segment_filename",
       join(dir, "seg%d.ts"),
       join(dir, "index.m3u8"),

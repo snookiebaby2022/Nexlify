@@ -287,3 +287,38 @@ export function upstreamToWebResponse(
     headers,
   };
 }
+
+export type UpstreamMediaKind = "hls" | "media" | "none";
+
+/** Cheap GET+sniff so we do not spawn ffmpeg on empty HTML / 404 pages. */
+export async function probeUpstreamPlayable(
+  url: string,
+  opts?: { userAgent?: string; timeoutMs?: number }
+): Promise<UpstreamMediaKind> {
+  let body: Readable | undefined;
+  try {
+    const open = await openUpstreamLiveStream(url, {
+      userAgent: opts?.userAgent,
+      timeoutMs: opts?.timeoutMs ?? 4_000,
+    });
+    body = open.body;
+    const ct = open.contentType.toLowerCase();
+    if (ct.includes("mpegurl") || ct.includes("m3u8")) {
+      open.body.destroy();
+      return "hls";
+    }
+    const { prefix } = await peekResponseBody(open.body, PEEK_BYTES);
+    open.body.destroy();
+    const head = prefix.subarray(0, Math.min(prefix.length, 64)).toString("utf8");
+    if (head.includes("#EXTM3U")) return "hls";
+    if (looksLikePlayableMediaPayload(prefix)) return "media";
+    return "none";
+  } catch {
+    try {
+      body?.destroy();
+    } catch {
+      /* ignore */
+    }
+    return "none";
+  }
+}

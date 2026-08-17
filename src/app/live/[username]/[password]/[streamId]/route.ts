@@ -25,6 +25,8 @@ import {
   HLS_PLAYLIST_CONTENT_TYPE,
   rewritePackagerPlaylist,
   expandHlsPlaybackCandidates,
+  buildClientDirectHlsMaster,
+  shouldOfferClientDirectHls,
   UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
@@ -32,7 +34,7 @@ import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
-import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
+import { openUpstreamLiveStream, probeUpstreamPlayable, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
 import { ensureTsHlsPackager } from "@/lib/ts-hls-packager";
 
 export const runtime = "nodejs";
@@ -147,83 +149,58 @@ export async function GET(
     candidates = expandHlsPlaybackCandidates(candidates);
   }
 
+  const hlsHeaders = (body: string) =>
+    withIptvCors(
+      new NextResponse(body, {
+        status: 200,
+        headers: {
+          ...buildLiveRedirectHeaders(antiFreeze),
+          "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
+          "Cache-Control": "no-cache, no-store",
+        },
+      })
+    );
+
   let lastError = "Stream fetch failed";
-  for (let i = 0; i < candidates.length; i++) {
-    const playbackUrl = candidates[i]!;
+  let clientDirectHls: string | null = null;
 
-    if (isHlsPlaybackUrl(playbackUrl)) {
+  if (wantsM3u8) {
+    const panelOrigin = serverBaseUrl(req.url, req.headers);
+    for (let i = 0; i < candidates.length; i++) {
+      const playbackUrl = candidates[i]!;
+      if (!isHlsPlaybackUrl(playbackUrl)) continue;
+
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
-
-      if (!wantsM3u8) {
-        const remux = await createHlsToMpegTsStream({
-          hlsUrl: playbackUrl,
-          lineId: line.id,
-          streamId: cleanId,
-          clientIp: ip,
-          userAgent: UPSTREAM_HLS_UA,
-        });
-        if ("error" in remux) {
-          lastError = remux.error;
-          void logActivity("stream_hls_relay_error", {
-            lineId: line.id,
-            entity: "stream",
-            entityId: cleanId,
-            meta: { mode: "mpegts_remux", error: remux.error, candidate: i },
-          });
-          continue;
-        }
-        if (await isSessionKicked(line.id, ip)) {
-          return withIptvCors(iptvText("Session kicked", { status: 403 }));
-        }
-        const remuxBody = attachKickAwareProxyBody({
-          body: remux.stream as ReadableStream<Uint8Array>,
-          lineId: line.id,
-          streamId: cleanId,
-          ip: ip ?? "",
-          userAgent: ua,
-        });
-        return withIptvCors(
-          new NextResponse(remuxBody as unknown as BodyInit, {
-            status: 200,
-            headers: {
-              ...buildLiveRedirectHeaders(antiFreeze),
-              "Content-Type": remux.contentType,
-              "Cache-Control": "no-cache, no-store",
-              Connection: "keep-alive",
-            },
-          })
-        );
-      }
-
-      const probeTimeoutMs = originalCandidates.has(playbackUrl) ? 12_000 : 5_000;
+      const probeTimeoutMs = originalCandidates.has(playbackUrl) ? 8_000 : 3_000;
       const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, probeTimeoutMs);
       if (!manifest.ok) {
-        lastError = "Stream unavailable";
+        lastError = manifest.detail || "Stream unavailable";
+        if (!clientDirectHls && shouldOfferClientDirectHls(manifest.status, manifest.detail)) {
+          clientDirectHls = playbackUrl;
+        }
         continue;
       }
 
-      const panelOrigin = serverBaseUrl(req.url, req.headers);
       const relay = (url: string) =>
         buildHlsRelayUrl(panelOrigin, username, password, requestStreamKey, url);
       const body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
-
       if (antiFreeze.fastZapEnabled) {
         schedulePlaybackUpstreamWarm(playbackUrl, UPSTREAM_HLS_UA);
       }
-
-      return withIptvCors(
-        new NextResponse(body, {
-          status: 200,
-          headers: {
-            ...buildLiveRedirectHeaders(antiFreeze),
-            "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
-            "Cache-Control": "no-cache, no-store",
-          },
-        })
-      );
+      return hlsHeaders(body);
     }
 
-    if (wantsM3u8) {
+    for (let i = 0; i < candidates.length; i++) {
+      const playbackUrl = candidates[i]!;
+      if (isHlsPlaybackUrl(playbackUrl)) continue;
+      const kind = await probeUpstreamPlayable(playbackUrl, {
+        userAgent: UPSTREAM_HLS_UA,
+        timeoutMs: 4_000,
+      });
+      if (kind !== "media") {
+        lastError = "Upstream is not MPEG-TS";
+        continue;
+      }
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
       const packed = await ensureTsHlsPackager({
         upstreamUrl: playbackUrl,
@@ -232,7 +209,6 @@ export async function GET(
         userAgent: UPSTREAM_HLS_UA,
       });
       if (packed.ok) {
-        const panelOrigin = serverBaseUrl(req.url, req.headers);
         const body = rewritePackagerPlaylist(
           packed.playlist,
           panelOrigin,
@@ -240,19 +216,64 @@ export async function GET(
           password,
           requestStreamKey
         );
-        return withIptvCors(
-          new NextResponse(body, {
-            status: 200,
-            headers: {
-              ...buildLiveRedirectHeaders(antiFreeze),
-              "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
-              "Cache-Control": "no-cache, no-store",
-            },
-          })
-        );
+        return hlsHeaders(body);
       }
       lastError = packed.error;
-      continue;
+    }
+
+    // Last resort: XUI .m3u8 on the same stream_source — player uses its own IP/UA.
+    if (clientDirectHls) {
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), clientDirectHls, 3600);
+      return hlsHeaders(buildClientDirectHlsMaster(clientDirectHls));
+    }
+
+    const status = /timeout/i.test(lastError) ? 504 : 502;
+    return withIptvCors(iptvText(lastError.slice(0, 200) || "Stream fetch failed", { status }));
+  }
+
+  for (let i = 0; i < candidates.length; i++) {
+    const playbackUrl = candidates[i]!;
+
+    if (isHlsPlaybackUrl(playbackUrl)) {
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
+      const remux = await createHlsToMpegTsStream({
+        hlsUrl: playbackUrl,
+        lineId: line.id,
+        streamId: cleanId,
+        clientIp: ip,
+        userAgent: UPSTREAM_HLS_UA,
+      });
+      if ("error" in remux) {
+        lastError = remux.error;
+        void logActivity("stream_hls_relay_error", {
+          lineId: line.id,
+          entity: "stream",
+          entityId: cleanId,
+          meta: { mode: "mpegts_remux", error: remux.error, candidate: i },
+        });
+        continue;
+      }
+      if (await isSessionKicked(line.id, ip)) {
+        return withIptvCors(iptvText("Session kicked", { status: 403 }));
+      }
+      const remuxBody = attachKickAwareProxyBody({
+        body: remux.stream as ReadableStream<Uint8Array>,
+        lineId: line.id,
+        streamId: cleanId,
+        ip: ip ?? "",
+        userAgent: ua,
+      });
+      return withIptvCors(
+        new NextResponse(remuxBody as unknown as BodyInit, {
+          status: 200,
+          headers: {
+            ...buildLiveRedirectHeaders(antiFreeze),
+            "Content-Type": remux.contentType,
+            "Cache-Control": "no-cache, no-store",
+            Connection: "keep-alive",
+          },
+        })
+      );
     }
 
     const proxied = await proxyUpstreamNative(playbackUrl, ua);
