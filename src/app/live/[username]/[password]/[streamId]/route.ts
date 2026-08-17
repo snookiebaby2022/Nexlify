@@ -170,17 +170,23 @@ export async function GET(
       const playbackUrl = candidates[i]!;
       if (!isHlsPlaybackUrl(playbackUrl)) continue;
 
-      await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
       const probeTimeoutMs = originalCandidates.has(playbackUrl) ? 8_000 : 3_000;
       const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, probeTimeoutMs);
       if (!manifest.ok) {
         lastError = manifest.detail || "Stream unavailable";
-        if (!clientDirectHls && shouldOfferClientDirectHls(manifest.status, manifest.detail)) {
+        // Only send the player to a URL XUI actually stored as HLS — guessed .m3u8
+        // suffixes often 404/HTML and Smarters reports "playback error".
+        if (
+          !clientDirectHls &&
+          originalCandidates.has(playbackUrl) &&
+          shouldOfferClientDirectHls(manifest.status, manifest.detail)
+        ) {
           clientDirectHls = playbackUrl;
         }
         continue;
       }
 
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
       const relay = (url: string) =>
         buildHlsRelayUrl(panelOrigin, username, password, requestStreamKey, url);
       const body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);

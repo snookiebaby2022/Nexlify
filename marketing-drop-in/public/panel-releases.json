@@ -11,7 +11,8 @@
         "HLS playlists are HLS v3 with TARGETDURATION >= ceil(EXTINF) — ffmpeg v6/independent_segments and TD 2 with EXTINF 2.04 broke ExoPlayer",
         "Segment URIs are path-absolute /live/user/pass/id/hls/segN.ts like XUI/NXT (absolute http://IP URLs failed when Smarters used hostname or :8080)",
         "Local packager uses 4s segments, no independent_segments, unread ffmpeg stderr is discarded so Next does not freeze",
-        "MPEGTS /live/*.ts now fetches upstream with VLC user-agent — Smarters UA is blocked by many providers"
+        "MPEGTS /live/*.ts now fetches upstream with VLC user-agent — Smarters UA is blocked by many providers",
+        "Client-direct HLS fallback is only used for real XUI .m3u8 sources, not guessed .m3u8 suffixes that 404"
       ],
       "fixes": [
         "IPTV Smarters PC/mobile HLS playback error (invalid playlist + wrong segment host)",

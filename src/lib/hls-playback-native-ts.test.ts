@@ -69,6 +69,7 @@ test("sanitizeHlsPlaylist drops DISCONTINUITY tags that freeze Smarters", async 
   assert.equal(shouldOfferClientDirectHls(502, "Non-playable content-type: text/html"), true);
   assert.equal(shouldOfferClientDirectHls(504, "Upstream timeout"), true);
   assert.equal(shouldOfferClientDirectHls(502, "Upstream HTTP 404"), false);
+  assert.equal(shouldOfferClientDirectHls(502, "html error page"), true);
 });
 
 test("rewritePackagerPlaylist strips DISCONTINUITY before rewriting segments", () => {
