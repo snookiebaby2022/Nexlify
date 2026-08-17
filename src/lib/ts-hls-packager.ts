@@ -14,7 +14,7 @@ const HLS_LIST_SIZE = 10;
 const SEGMENT_FLUSH_MS = 500;
 /** ExoPlayer live starts after ~3× TARGETDURATION; wait for a real window, not one leftover file. */
 const LIVE_MIN_SEGMENTS = 3;
-const READY_TIMEOUT_MS = 10_000;
+const READY_TIMEOUT_MS = 18_000;
 const LIVE_PLAYLIST_MAX_AGE_MS = 15_000;
 const MAX_SESSIONS = 32;
 const IDLE_MS = 10 * 60 * 1000;
@@ -68,30 +68,45 @@ export function filterPackagerPlaylistToExisting(playlist: string, lineId: strin
   const dir = packagerDir(lineId, streamId);
   const lines = playlist.split("\n");
   const out: string[] = [];
+  const pendingSegs: string[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith("#EXT-X-DISCONTINUITY")) continue;
     const name = trimmed.split(/[\\/]/).pop() ?? "";
+    if (isPackagerSegmentName(name)) pendingSegs.push(name);
+    out.push(line);
+  }
+  // Only drop the newest segment while ffmpeg is still flushing it — not every young file.
+  const dropLast = (() => {
+    if (!pendingSegs.length) return null;
+    const last = pendingSegs[pendingSegs.length - 1]!;
+    const segPath = join(dir, last);
+    try {
+      if (existsSync(segPath) && Date.now() - statSync(segPath).mtimeMs < SEGMENT_FLUSH_MS) return last;
+    } catch {
+      return last;
+    }
+    return null;
+  })();
+
+  const filtered: string[] = [];
+  for (const line of out) {
+    const trimmed = line.trim();
+    const name = trimmed.split(/[\\/]/).pop() ?? "";
     if (isPackagerSegmentName(name)) {
       const segPath = join(dir, name);
       if (!existsSync(segPath)) {
-        if (out.length && out[out.length - 1]!.startsWith("#EXTINF")) out.pop();
+        if (filtered.length && filtered[filtered.length - 1]!.startsWith("#EXTINF")) filtered.pop();
         continue;
       }
-      try {
-        const ageMs = Date.now() - statSync(segPath).mtimeMs;
-        if (ageMs < SEGMENT_FLUSH_MS) {
-          if (out.length && out[out.length - 1]!.startsWith("#EXTINF")) out.pop();
-          continue;
-        }
-      } catch {
-        if (out.length && out[out.length - 1]!.startsWith("#EXTINF")) out.pop();
+      if (name === dropLast) {
+        if (filtered.length && filtered[filtered.length - 1]!.startsWith("#EXTINF")) filtered.pop();
         continue;
       }
     }
-    out.push(line);
+    filtered.push(line);
   }
-  return alignPackagerMediaSequence(out.join("\n"));
+  return alignPackagerMediaSequence(filtered.join("\n"));
 }
 
 export function packagerDir(_lineId: string, streamId: string): string {
@@ -187,7 +202,16 @@ function tryReadReadyPlaylist(
     if (!playlist.includes("#EXTM3U") || !/seg\d+\.ts/i.test(playlist)) return null;
     const segs = packagerPlaylistSegmentNames(playlist);
     const minSegs = opts?.vod ? 1 : LIVE_MIN_SEGMENTS;
-    if (segs.length < minSegs) return null;
+    if (segs.length < minSegs) {
+      if (!opts?.vod) {
+        try {
+          rmSync(indexPath, { force: true });
+        } catch {
+          /* ignore */
+        }
+      }
+      return null;
+    }
     return playlist;
   } catch {
     return null;

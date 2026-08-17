@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.24",
+  "latestVersion": "2.0.25",
   "releases": [
+    {
+      "version": "2.0.25",
+      "date": "2026-08-18",
+      "channel": "stable",
+      "summary": "Fix HLS packager dropping all new segments during startup flush.",
+      "changelog": [
+        "Only omit the trailing segment while ffmpeg flushes it — not every segment under 500ms old",
+        "Remove stale index.m3u8 when fewer than 3 segments remain on disk",
+        "Extend packager ready timeout to 18s for slow redirect upstreams"
+      ],
+      "fixes": [
+        "HLS packager timed out / 502 after 2.0.24 because the flush filter stripped every new segment"
+      ]
+    },
     {
       "version": "2.0.24",
       "date": "2026-08-17",
