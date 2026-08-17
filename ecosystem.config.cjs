@@ -93,6 +93,8 @@ const sharedPanelEnv = {
   NEXLIFY_PANEL_API_SECRET: fileEnv.NEXLIFY_PANEL_API_SECRET || "",
   PANEL_INTERNAL_SECRET: fileEnv.PANEL_INTERNAL_SECRET || "",
   NEXLIFY_LICENSE_SKIP_HOST_CHECK: fileEnv.NEXLIFY_LICENSE_SKIP_HOST_CHECK || "",
+  NEXLIFY_HLS_DIR: fileEnv.NEXLIFY_HLS_DIR || "/var/lib/nexlify/hls",
+  NEXLIFY_HLS_DAEMON_PORT: fileEnv.NEXLIFY_HLS_DAEMON_PORT || "13081",
   PATH: pgBinPath(),
   // Large SQL migration uploads (~1GB+) need headroom for parse + preview.
   // Override via NODE_OPTIONS in .env when a box is memory-constrained.
