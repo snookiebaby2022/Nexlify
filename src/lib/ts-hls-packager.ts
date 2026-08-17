@@ -9,7 +9,9 @@ export { localHlsIndexPath } from "@/lib/hls-disk";
 
 /** 2s segments — copy mode splits on keyframes; 1s often still yields ~2s GOPs. */
 const HLS_TIME_SEC = 2;
-const HLS_LIST_SIZE = 6;
+const HLS_LIST_SIZE = 10;
+/** Ignore segments ffmpeg is still flushing to disk (temp_file rename). */
+const SEGMENT_FLUSH_MS = 500;
 /** ExoPlayer live starts after ~3× TARGETDURATION; wait for a real window, not one leftover file. */
 const LIVE_MIN_SEGMENTS = 3;
 const READY_TIMEOUT_MS = 10_000;
@@ -20,6 +22,17 @@ const REAP_EVERY_MS = 30_000;
 
 export function isPackagerSegmentName(name: string): boolean {
   return /^seg\d+\.ts$/i.test(name.trim());
+}
+
+export function packagerSegmentNameForIndex(index: number): string {
+  return `seg${index}.ts`;
+}
+
+export function segmentIndexFromPackagerName(name: string): number | null {
+  const m = /^seg(\d+)\.ts$/i.exec(name.trim());
+  if (!m) return null;
+  const n = parseInt(m[1]!, 10);
+  return Number.isFinite(n) ? n : null;
 }
 
 export function packagerPlaylistSegmentNames(playlist: string): string[] {
@@ -60,7 +73,18 @@ export function filterPackagerPlaylistToExisting(playlist: string, lineId: strin
     if (trimmed.startsWith("#EXT-X-DISCONTINUITY")) continue;
     const name = trimmed.split(/[\\/]/).pop() ?? "";
     if (isPackagerSegmentName(name)) {
-      if (!existsSync(join(dir, name))) {
+      const segPath = join(dir, name);
+      if (!existsSync(segPath)) {
+        if (out.length && out[out.length - 1]!.startsWith("#EXTINF")) out.pop();
+        continue;
+      }
+      try {
+        const ageMs = Date.now() - statSync(segPath).mtimeMs;
+        if (ageMs < SEGMENT_FLUSH_MS) {
+          if (out.length && out[out.length - 1]!.startsWith("#EXTINF")) out.pop();
+          continue;
+        }
+      } catch {
         if (out.length && out[out.length - 1]!.startsWith("#EXTINF")) out.pop();
         continue;
       }

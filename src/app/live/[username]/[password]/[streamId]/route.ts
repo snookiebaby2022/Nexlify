@@ -26,11 +26,14 @@ import {
   buildClientDirectHlsMaster,
   shouldOfferClientDirectHls,
   UPSTREAM_HLS_UA,
+  freshPackagerPlaylistBody,
+  readPackagerHlsSegmentBuffer,
+  servePackagerHlsSegmentResponse,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
-import { cacheSet } from "@/lib/cache";
+import { cacheGet, cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
 import {
   openUpstreamLiveStream,
@@ -199,6 +202,7 @@ export async function GET(
   const parsedKey = parseLivePlaybackStreamKey(streamId);
   let cleanId = parsedKey.token;
   let transcodeHint = parsedKey.profileHint;
+  const hlsSegmentIndex = parsedKey.hlsSegmentIndex;
   const ip = getClientIp(req);
 
   // Xtream apps often request /live/user/pass/<numeric_hash>.ts — map back to cuid via SQL
@@ -260,6 +264,30 @@ export async function GET(
   }
 
   const antiFreeze = await getAntiFreezeSettings();
+
+  if (hlsSegmentIndex != null) {
+    const profiles = await getTranscodingProfiles();
+    const hintedProfile = matchTranscodingProfile(transcodeHint, profiles);
+    const explicitEco = isEcoProfileHint(transcodeHint);
+    const hlsDiskStreamId = packagerDiskStreamId(cleanId, explicitEco ? ECO_DISK_PROFILE : hintedProfile);
+    let segBuf = readPackagerHlsSegmentBuffer(hlsDiskStreamId, cleanId, hlsSegmentIndex);
+    if (!segBuf?.length) {
+      const cachedUpstream = await cacheGet<string>(hlsRelayCacheKey(line.id, cleanId));
+      if (cachedUpstream) {
+        await ensureDiskHls({
+          upstreamUrl: cachedUpstream,
+          streamId: hlsDiskStreamId,
+          userAgent: UPSTREAM_HLS_UA,
+        });
+        segBuf = readPackagerHlsSegmentBuffer(hlsDiskStreamId, cleanId, hlsSegmentIndex);
+      }
+    }
+    if (segBuf?.length) {
+      return servePackagerHlsSegmentResponse(segBuf, antiFreeze);
+    }
+    return withIptvCors(iptvText("Segment not found", { status: 404 }));
+  }
+
   let candidates = await resolvePlaybackUrlCandidatesForLine(
     line.id,
     cleanId,
@@ -273,7 +301,7 @@ export async function GET(
   const wantsM3u8 = isHlsClientPath(streamId);
   const originalCandidates = new Set(candidates);
   const bw = await getLiveBandwidthSettings();
-  if (wantsM3u8 && !bw.instantStart) {
+  if (wantsM3u8) {
     candidates = expandHlsPlaybackCandidates(candidates);
   }
 
@@ -334,7 +362,13 @@ export async function GET(
     });
     if (!packed.ok) return null;
     return hlsHeaders(
-      rewritePackagerPlaylist(packed.playlist, panelOrigin, username, password, requestStreamKey)
+      rewritePackagerPlaylist(
+        freshPackagerPlaylistBody(hlsDiskStreamId, packed.playlist),
+        panelOrigin,
+        username,
+        password,
+        requestStreamKey
+      )
     );
   };
 
@@ -389,7 +423,13 @@ export async function GET(
       });
       if (packed.ok) {
         return hlsHeaders(
-          rewritePackagerPlaylist(packed.playlist, panelOrigin, username, password, requestStreamKey)
+          rewritePackagerPlaylist(
+            freshPackagerPlaylistBody(hlsDiskStreamId, packed.playlist),
+            panelOrigin,
+            username,
+            password,
+            requestStreamKey
+          )
         );
       }
       lastError = packed.error;

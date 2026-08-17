@@ -1,6 +1,15 @@
 import { Readable } from "node:stream";
 import { looksLikeHtmlErrorPayload, openUpstreamLiveStream } from "@/lib/live-upstream-proxy";
-import { isPackagerSegmentName } from "@/lib/ts-hls-packager";
+import {
+  isPackagerSegmentName,
+  packagerSegmentNameForIndex,
+  readLocalPackagerPlaylist,
+  readTsHlsSegment,
+  segmentIndexFromPackagerName,
+} from "@/lib/ts-hls-packager";
+import { buildLiveRedirectHeaders, type AntiFreezeSettings } from "@/lib/anti-freeze";
+import { withIptvCors } from "@/lib/iptv-cors";
+import { NextResponse } from "next/server";
 
 const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
 
@@ -172,6 +181,21 @@ export function shouldOfferClientDirectHls(status: number, detail?: string): boo
   return true;
 }
 
+/** XUI-style flat segment beside the .m3u8: /live/u/p/{streamId}_{n}.ts */
+export function buildXuiHlsSegmentUrl(
+  username: string,
+  password: string,
+  streamId: string,
+  segmentIndex: number
+): string {
+  return `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}_${segmentIndex}.ts`;
+}
+
+/** Prefer a playlist re-read from disk so deleted segments never appear in the manifest. */
+export function freshPackagerPlaylistBody(diskStreamId: string, fallback: string): string {
+  return readLocalPackagerPlaylist(diskStreamId) ?? fallback;
+}
+
 export function rewritePackagerPlaylist(
   body: string,
   _panelOrigin: string,
@@ -179,7 +203,7 @@ export function rewritePackagerPlaylist(
   password: string,
   streamId: string
 ): string {
-  const prefix = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/`;
+  const legacyPrefix = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/`;
   return sanitizeHlsPlaylist(body)
     .split("\n")
     .map((line) => {
@@ -187,9 +211,38 @@ export function rewritePackagerPlaylist(
       if (!trimmed || trimmed.startsWith("#")) return line;
       const name = trimmed.split(/[\\/]/).pop() ?? trimmed;
       if (!isPackagerSegmentName(name)) return line;
-      return `${prefix}${name}`;
+      const idx = segmentIndexFromPackagerName(name);
+      if (idx != null) return buildXuiHlsSegmentUrl(username, password, streamId, idx);
+      return `${legacyPrefix}${name}`;
     })
     .join("\n");
+}
+
+export function servePackagerHlsSegmentResponse(
+  buf: Buffer,
+  antiFreeze: AntiFreezeSettings
+): NextResponse {
+  return withIptvCors(
+    new NextResponse(buf, {
+      status: 200,
+      headers: {
+        ...buildLiveRedirectHeaders(antiFreeze),
+        "Content-Type": "video/mp2t",
+        "Content-Length": String(buf.length),
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-cache, no-store",
+      },
+    })
+  );
+}
+
+export function readPackagerHlsSegmentBuffer(diskStreamId: string, streamId: string, segmentIndex: number): Buffer | null {
+  const name = packagerSegmentNameForIndex(segmentIndex);
+  let buf = readTsHlsSegment("daemon", diskStreamId, name);
+  if (!buf?.length && diskStreamId !== streamId) {
+    buf = readTsHlsSegment("daemon", streamId, name);
+  }
+  return buf?.length ? buf : null;
 }
 
 /** Block SSRF — only public http(s) targets. */

@@ -17,10 +17,22 @@ test("parseLivePlaybackStreamKey splits XUI profile suffix", () => {
   assert.deepEqual(parseLivePlaybackStreamKey("1862838169_720p.ts"), {
     token: "1862838169",
     profileHint: "720p",
+    hlsSegmentIndex: null,
   });
   assert.deepEqual(parseLivePlaybackStreamKey("1862838169.m3u8"), {
     token: "1862838169",
     profileHint: null,
+    hlsSegmentIndex: null,
+  });
+  assert.deepEqual(parseLivePlaybackStreamKey("1862838169_0.ts"), {
+    token: "1862838169",
+    profileHint: null,
+    hlsSegmentIndex: 0,
+  });
+  assert.deepEqual(parseLivePlaybackStreamKey("1862838169_12.ts"), {
+    token: "1862838169",
+    profileHint: null,
+    hlsSegmentIndex: 12,
   });
 });
 

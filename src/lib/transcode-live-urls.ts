@@ -17,13 +17,30 @@ export function transcodeProfileSlug(profile: Pick<TranscodingProfile, "id" | "n
   return slug || profile.id.replace(/[^a-zA-Z0-9]/g, "").slice(-12) || "tc";
 }
 
-export function parseLivePlaybackStreamKey(raw: string): { token: string; profileHint: string | null } {
+export type LivePlaybackStreamKey = {
+  token: string;
+  profileHint: string | null;
+  /** XUI HLS segment index when the path is `{stream_id}_{n}.ts` (not a transcode profile). */
+  hlsSegmentIndex: number | null;
+};
+
+export function parseLivePlaybackStreamKey(raw: string): LivePlaybackStreamKey {
   const cleaned = String(raw ?? "")
     .replace(/\.(ts|m3u8|mp4|mkv|avi|mov|webm|hls)$/i, "")
     .trim();
+  const seg = cleaned.match(/^(\d+)_(\d+)$/);
+  if (seg) {
+    return {
+      token: seg[1]!,
+      profileHint: null,
+      hlsSegmentIndex: parseInt(seg[2]!, 10),
+    };
+  }
   const m = cleaned.match(/^(\d+)[_-]([A-Za-z0-9][A-Za-z0-9._-]{0,40})$/);
-  if (m) return { token: m[1]!, profileHint: m[2]! };
-  return { token: cleaned, profileHint: null };
+  if (m && !/^\d+$/.test(m[2]!)) {
+    return { token: m[1]!, profileHint: m[2]!, hlsSegmentIndex: null };
+  }
+  return { token: cleaned, profileHint: null, hlsSegmentIndex: null };
 }
 
 export function streamHasExplicitTranscodeProfile(agentStartCmd: string | null | undefined): boolean {

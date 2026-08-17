@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildHlsRelayUrl,
   buildNativeTsHlsManifest,
+  buildXuiHlsSegmentUrl,
   rewritePackagerPlaylist,
 } from "./hls-playback";
 import { alignPackagerMediaSequence, isPackagerSegmentName } from "./ts-hls-packager";
@@ -78,7 +79,7 @@ test("sanitizeHlsPlaylist drops DISCONTINUITY tags that freeze Smarters", async 
   assert.equal(inflatedTd.includes("TARGETDURATION:4"), false);
 });
 
-test("rewritePackagerPlaylist exposes finite HLS segments Smarters can fetch", () => {
+test("rewritePackagerPlaylist exposes XUI-style flat segments Smarters can fetch", () => {
   const src = [
     "#EXTM3U",
     "#EXT-X-VERSION:3",
@@ -92,10 +93,15 @@ test("rewritePackagerPlaylist exposes finite HLS segments Smarters can fetch", (
   ].join("\n");
   const body = rewritePackagerPlaylist(src, "http://45.88.138.18", "user1", "pass1", "1862838169");
   assert.match(body, /#EXT-X-TARGETDURATION:2/);
-  assert.match(body, /\/live\/user1\/pass1\/1862838169\/hls\/seg3\.ts/);
-  assert.match(body, /\/live\/user1\/pass1\/1862838169\/hls\/seg4\.ts/);
+  assert.match(body, /\/live\/user1\/pass1\/1862838169_3\.ts/);
+  assert.match(body, /\/live\/user1\/pass1\/1862838169_4\.ts/);
+  assert.equal(body.includes("/hls/seg"), false);
   assert.equal(body.includes("1862838169.ts"), false);
   assert.equal(body.includes("#EXTINF:-1"), false);
+  assert.equal(
+    buildXuiHlsSegmentUrl("user1", "pass1", "1862838169", 7),
+    "/live/user1/pass1/1862838169_7.ts"
+  );
 });
 
 test("rewritePackagerPlaylist strips DISCONTINUITY before rewriting segments", () => {
@@ -108,7 +114,7 @@ test("rewritePackagerPlaylist strips DISCONTINUITY before rewriting segments", (
     "1862838169"
   );
   assert.equal(body.includes("DISCONTINUITY"), false);
-  assert.match(body, /^\/live\/user1\/pass1\/1862838169\/hls\/seg3\.ts$/m);
+  assert.match(body, /^\/live\/user1\/pass1\/1862838169_3\.ts$/m);
   assert.equal(body.includes("http://"), false);
 });
 

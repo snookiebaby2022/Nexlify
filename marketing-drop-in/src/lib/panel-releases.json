@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.23",
+  "latestVersion": "2.0.24",
   "releases": [
+    {
+      "version": "2.0.24",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "XUI-style HLS segment URLs — Smarters/XCIPTV flat id_N.ts paths, no stale 404s.",
+      "changelog": [
+        "HLS playlists now list /live/user/pass/{stream_id}_{n}.ts like XUI instead of nested /hls/segN.ts",
+        "Main live route serves packager segments on {stream_id}_{n}.ts before MPEGTS remux",
+        "Re-read and filter the on-disk playlist on every .m3u8 so deleted segments never 404",
+        "Drop segments still flushing to disk; widen live window to 10 segments",
+        "Always try provider .m3u8 (ts→m3u8 swap) before local remux even with instant start"
+      ],
+      "fixes": [
+        "IPTV Smarters HLS showed no picture — ExoPlayer mishandled nested /hls/segN.ts paths",
+        "XCIPTV HLS buffered after ~2s when playlists referenced segments ffmpeg had already deleted",
+        "1862838169_0.ts was treated as a transcode profile instead of HLS segment 0"
+      ]
+    },
     {
       "version": "2.0.23",
       "date": "2026-08-17",
