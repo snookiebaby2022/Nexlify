@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
 
 import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
-import { trackConnection, isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
+import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import { getLineForPlaybackAuth, resolvePlaybackUrlForLine } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";

@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.22",
+  "latestVersion": "2.0.23",
   "releases": [
+    {
+      "version": "2.0.23",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Faster Smarters start, throttled connection DB writes, 2m capacity window.",
+      "changelog": [
+        "Throttle trackConnection heartbeats to once every 25s so HLS segment requests stop hammering Postgres",
+        "Max-connection checks only count sessions active in the last 2 minutes — channel switches free slots quickly",
+        "HLS→MPEGTS remux: smaller ffmpeg probe buffer, low_delay, no AAC ADTS filter on TS output",
+        "Stream pump heartbeats align to 30s; connection cache skips redundant first-chunk DB writes"
+      ],
+      "fixes": [
+        "Panel felt slow under HLS load because every 2s segment triggered multiple DB queries",
+        "Channel zapping blocked by stale connections counting against max connections for hours",
+        "Smarters silent or broken AAC audio from aac_adtstoasc on MPEG-TS remux output"
+      ]
+    },
     {
       "version": "2.0.22",
       "date": "2026-08-17",

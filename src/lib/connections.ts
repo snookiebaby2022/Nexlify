@@ -4,8 +4,12 @@ import { clearConnectionQuality, recordConnectionMediaBytes } from "./connection
 
 export const STALE_MS = 5 * 60 * 1000; // 5 minutes — DB cleanup for orphaned rows
 export const LIVE_STALE_MS = 45 * 1000; // 45s — live connections display (who is watching now)
-/** Max-connection checks use a shorter window so closed/zombie sessions free slots quickly. */
-export const PLAYBACK_STALE_MS = 60 * 1000;
+/** Max-connection checks — only sessions refreshed in the last 2 minutes count. */
+export const CAPACITY_STALE_MS = 2 * 60 * 1000;
+/** @deprecated Use CAPACITY_STALE_MS */
+export const PLAYBACK_STALE_MS = CAPACITY_STALE_MS;
+/** Throttle live heartbeat DB writes (HLS serves a segment every ~2s). */
+export const TRACK_HEARTBEAT_MS = 25_000;
 const CONNECTIONS_CACHE_TTL = 5; // 5 seconds — short TTL for dashboard responsiveness
 /** After Kick, block reconnect / track refresh for this long (covers multi-worker via Redis). */
 export const KICK_DENY_TTL_SEC = 120;
@@ -93,8 +97,12 @@ export async function countActiveConnections(ownerId?: string): Promise<number> 
 }
 
 /** Distinct active sessions: use groupBy instead of loading all rows */
+function trackCacheKey(lineId: string, ip?: string | null, streamId?: string | null) {
+  return `conn:hb:${lineId}:${ip ?? ""}:${streamId ?? ""}`;
+}
+
 export async function countLineSessions(lineId: string) {
-  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
+  const staleBefore = new Date(Date.now() - CAPACITY_STALE_MS);
   const result = await prisma.liveConnection.groupBy({
     by: ["ip", "streamId"],
     where: { lineId, lastSeenAt: { gte: staleBefore } },
@@ -114,7 +122,7 @@ export async function lineHasConnectionCapacity(
   // Same IP can always reconnect — allows channel switching from same device
   // and handles stale connections from the same IP gracefully
   if (opts?.clientIp) {
-    const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
+    const staleBefore = new Date(Date.now() - CAPACITY_STALE_MS);
     const sameIpConns = await prisma.liveConnection.count({
       where: {
         lineId,
@@ -137,6 +145,12 @@ export async function trackConnection(opts: {
   // Hard kick: do not revive a session that was just kicked
   if (await isSessionKicked(opts.lineId, opts.ip)) {
     return null;
+  }
+
+  const cacheKey = trackCacheKey(opts.lineId, opts.ip, opts.streamId);
+  const cached = await cacheGet<{ id: string; at: number }>(cacheKey);
+  if (cached?.id && Date.now() - cached.at < TRACK_HEARTBEAT_MS) {
+    return cached.id;
   }
 
   const staleBefore = new Date(Date.now() - STALE_MS);
@@ -165,7 +179,16 @@ export async function trackConnection(opts: {
     },
   });
 
+  const now = Date.now();
+  const touchCache = async (id: string) => {
+    await cacheSet(cacheKey, { id, at: now }, Math.ceil(TRACK_HEARTBEAT_MS / 1000) + 30);
+  };
+
   if (existing) {
+    if (now - existing.lastSeenAt.getTime() < TRACK_HEARTBEAT_MS) {
+      await touchCache(existing.id);
+      return existing.id;
+    }
     await prisma.liveConnection.update({
       where: { id: existing.id },
       data: { lastSeenAt: new Date() },
@@ -180,6 +203,7 @@ export async function trackConnection(opts: {
       streamId: opts.streamId,
       ip: opts.ip,
     });
+    await touchCache(existing.id);
     return existing.id;
   }
 
@@ -201,6 +225,7 @@ export async function trackConnection(opts: {
     streamId: opts.streamId,
     ip: opts.ip,
   });
+  await touchCache(conn.id);
   return conn.id;
 }
 
@@ -210,6 +235,7 @@ export async function removeConnection(lineId: string, streamId: string, ip: str
     where: { lineId, streamId, ip },
   });
   void clearConnectionQuality(lineId, streamId, ip);
+  void cacheDel(trackCacheKey(lineId, ip, streamId)).catch(() => {});
   // Invalidate connection caches
   void cacheDel("conn:*").catch(() => {});
 }
@@ -332,7 +358,7 @@ export function attachKickAwareProxyBody(opts: {
   };
 
   const IDLE_MS = 12_000;
-  const HEARTBEAT_MS = 10_000;
+  const HEARTBEAT_MS = 30_000;
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
