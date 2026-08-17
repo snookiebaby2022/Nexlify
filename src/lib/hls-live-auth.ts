@@ -13,6 +13,7 @@ export type HlsLiveAuth =
       ok: true;
       lineId: string;
       streamId: string;
+      requestStreamKey: string;
       username: string;
       password: string;
       rootUpstream: string;
@@ -29,7 +30,15 @@ export async function authorizeHlsLiveRequest(
   const demoBlock = rejectDemoIptvPlayback(req);
   if (demoBlock) return { ok: false, status: demoBlock.status, message: "Demo blocked" };
 
-  const cleanId = streamId.replace(/\.(ts|m3u8)$/, "");
+  const cleanId = streamId.replace(/\.(ts|m3u8)$/i, "");
+  const requestStreamKey = cleanId;
+  let resolvedStreamId = cleanId;
+  if (/^\d+$/.test(cleanId)) {
+    const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
+    const resolved = await resolveStreamIdParam(cleanId, { username });
+    if (resolved) resolvedStreamId = resolved;
+  }
+
   const ip = getClientIp(req);
   const line = await getLineForPlaybackAuth(username);
   if (!line || line.password !== password || !lineIsPlayable(line)) {
@@ -48,14 +57,14 @@ export async function authorizeHlsLiveRequest(
     };
   }
 
-  const cacheKey = hlsRelayCacheKey(line.id, cleanId);
+  const cacheKey = hlsRelayCacheKey(line.id, resolvedStreamId);
   let rootUpstream = await cacheGet<string>(cacheKey);
   if (!rootUpstream) {
     const antiFreeze = await getAntiFreezeSettings();
     rootUpstream =
       (await resolvePlaybackUrlForLine(
         line.id,
-        cleanId,
+        resolvedStreamId,
         { clientIp: ip, userAgent: ua },
         antiFreeze.playbackUrlCacheTtlSec
       )) ?? "";
@@ -71,7 +80,8 @@ export async function authorizeHlsLiveRequest(
   return {
     ok: true,
     lineId: line.id,
-    streamId: cleanId,
+    streamId: resolvedStreamId,
+    requestStreamKey,
     username,
     password,
     rootUpstream,

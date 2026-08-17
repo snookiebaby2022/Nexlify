@@ -66,7 +66,8 @@ export async function GET(
   if (demoBlock) return demoBlock;
 
   const { username, password, streamId } = await ctx.params;
-  let cleanId = streamId.replace(/\.(ts|m3u8)$/, "");
+  const requestStreamKey = streamId.replace(/\.(ts|m3u8)$/i, "");
+  let cleanId = requestStreamKey;
   const ip = getClientIp(req);
 
   // Xtream apps often request /live/user/pass/<numeric_hash>.ts — map back to cuid via SQL
@@ -190,7 +191,7 @@ export async function GET(
 
       const panelOrigin = serverBaseUrl(req.url, req.headers);
       const relay = (url: string) =>
-        buildHlsRelayUrl(panelOrigin, username, password, cleanId, url);
+        buildHlsRelayUrl(panelOrigin, username, password, requestStreamKey, url);
       const body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
 
       if (antiFreeze.fastZapEnabled) {
@@ -211,7 +212,12 @@ export async function GET(
 
     if (wantsM3u8) {
       const panelOrigin = serverBaseUrl(req.url, req.headers);
-      const body = buildNativeTsHlsManifest(panelOrigin, username, password, cleanId);
+      const body = buildNativeTsHlsManifest(
+        panelOrigin,
+        username,
+        password,
+        requestStreamKey
+      );
       if (antiFreeze.fastZapEnabled) {
         schedulePlaybackUpstreamWarm(playbackUrl, ua);
       }

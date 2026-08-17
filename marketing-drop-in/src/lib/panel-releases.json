@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.9",
+  "latestVersion": "2.0.10",
   "releases": [
+    {
+      "version": "2.0.10",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Fix IPTV Smarters HLS playback — event playlist + numeric stream IDs.",
+      "changelog": [
+        "Native TS HLS wrapper reverts to EXTINF:-1 event playlist (finite EXTINF broke Smarters HLS mode)",
+        "HLS manifests and relay URLs now use the numeric stream_id Smarters sends (not internal cuid)",
+        "HLS segment relay resolves numeric stream IDs for cache lookup"
+      ],
+      "fixes": [
+        "IPTV Smarters HLS output not playing any channels after 2.0.9 EXTINF:10.0 change",
+        "HLS relay segment URLs used cuid paths while Smarters requests numeric stream_id"
+      ]
+    },
     {
       "version": "2.0.9",
       "date": "2026-08-17",

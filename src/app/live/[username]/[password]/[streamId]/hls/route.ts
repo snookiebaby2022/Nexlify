@@ -51,7 +51,13 @@ export async function GET(
 
   const panelOrigin = req.nextUrl.origin;
   const relay = (url: string) =>
-    buildHlsRelayUrl(panelOrigin, auth.username, auth.password, auth.streamId, url);
+    buildHlsRelayUrl(
+      panelOrigin,
+      auth.username,
+      auth.password,
+      auth.requestStreamKey,
+      url
+    );
 
   if (upstream.kind === "manifest") {
     if (await isSessionKicked(auth.lineId, clientIp)) {
