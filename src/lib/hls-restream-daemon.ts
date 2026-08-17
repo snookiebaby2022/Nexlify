@@ -67,6 +67,7 @@ const server = http.createServer(async (req, res) => {
               })
             : null,
       });
+      console.log(`hls-daemon ensure ${streamId} ${packed.ok ? "ok" : packed.error}`);
       res.writeHead(packed.ok ? 200 : 502, { "Content-Type": "application/json" });
       res.end(JSON.stringify(packed));
       return;

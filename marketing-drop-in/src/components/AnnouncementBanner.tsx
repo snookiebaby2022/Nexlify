@@ -14,22 +14,22 @@ const TYPE_CONFIG: Record<string, { bg: string; border: string; icon: React.Reac
   info: {
     bg: "bg-blue-900/60",
     border: "border-blue-500/30",
-    icon: <Info size={28} className="text-blue-400" />,
+    icon: <Info size={40} className="text-blue-400" />,
   },
   warning: {
     bg: "bg-yellow-900/60",
     border: "border-yellow-500/30",
-    icon: <AlertTriangle size={28} className="text-yellow-400" />,
+    icon: <AlertTriangle size={40} className="text-yellow-400" />,
   },
   success: {
     bg: "bg-green-900/60",
     border: "border-green-500/30",
-    icon: <CheckCircle size={28} className="text-green-400" />,
+    icon: <CheckCircle size={40} className="text-green-400" />,
   },
   error: {
     bg: "bg-red-900/60",
     border: "border-red-500/30",
-    icon: <AlertCircle size={28} className="text-red-400" />,
+    icon: <AlertCircle size={40} className="text-red-400" />,
   },
 };
 
@@ -54,21 +54,21 @@ export function AnnouncementBanner() {
         return (
           <div
             key={a.id}
-            className={`${config.bg} ${config.border} border-b px-5 py-5 md:px-8 md:py-6 flex items-center justify-between gap-4`}
+            className={`${config.bg} ${config.border} border-b px-6 py-8 md:px-12 md:py-10 flex items-center justify-between gap-5`}
           >
-            <div className="flex items-center gap-4 min-w-0">
-              <span className="shrink-0 [&_svg]:w-7 [&_svg]:h-7">{config.icon}</span>
+            <div className="flex items-center gap-5 min-w-0">
+              <span className="shrink-0 [&_svg]:w-10 [&_svg]:h-10">{config.icon}</span>
               <div className="min-w-0">
-                <span className="block text-base md:text-lg font-bold text-white leading-snug">{a.title}</span>
-                <span className="block text-sm md:text-base text-gray-200 mt-1 leading-relaxed">{a.message}</span>
+                <span className="block text-xl md:text-2xl font-bold text-white leading-snug">{a.title}</span>
+                <span className="block text-base md:text-lg text-gray-100 mt-2 leading-relaxed">{a.message}</span>
               </div>
             </div>
             <button
               onClick={() => setDismissed((prev) => new Set(prev).add(a.id))}
-              className="text-gray-300 hover:text-white shrink-0 p-2"
+              className="text-gray-300 hover:text-white shrink-0 p-3"
               aria-label="Dismiss announcement"
             >
-              <X size={22} />
+              <X size={28} />
             </button>
           </div>
         );

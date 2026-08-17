@@ -11,8 +11,7 @@ import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { resolveStreamIdParam } from "@/lib/xtream-stream-id";
 import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
-import { isHlsClientPath, HLS_PLAYLIST_CONTENT_TYPE, rewritePackagerPlaylist, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
-import { ensureDiskHls } from "@/lib/hls-restream-client";
+import { isHlsClientPath, HLS_PLAYLIST_CONTENT_TYPE, buildClientVodHlsPlaylist, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
 
 export const runtime = "nodejs";
@@ -63,22 +62,18 @@ export async function GET(
   if (!playbackUrl) return iptvText("Not found", { status: 404 });
 
   if (isHlsClientPath(streamId) || /\.m3u8$/i.test(streamId)) {
-    const packed = await ensureDiskHls({
-      streamId: cleanId,
-      upstreamUrl: playbackUrl,
-      userAgent: UPSTREAM_HLS_UA,
-      vod: true,
+    const streamKey = streamId.replace(/\.(m3u8|hls)$/i, "");
+    const packed = await buildClientVodHlsPlaylist({
+      playbackUrl,
+      panelOrigin: serverBaseUrl(req.url, req.headers),
+      username,
+      password,
+      streamKey,
+      diskStreamId: cleanId,
     });
     if (packed.ok) {
-      const body = rewritePackagerPlaylist(
-        packed.playlist,
-        serverBaseUrl(req.url, req.headers),
-        username,
-        password,
-        streamId.replace(/\.(m3u8|hls)$/i, "")
-      );
       return withIptvCors(
-        new NextResponse(body, {
+        new NextResponse(packed.body, {
           status: 200,
           headers: { "Content-Type": HLS_PLAYLIST_CONTENT_TYPE, "Cache-Control": "no-cache" },
         })

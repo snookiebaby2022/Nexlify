@@ -338,6 +338,18 @@ export async function ensureTsHlsPackager(opts: {
   }
 }
 
+/** Absolute path to an on-disk index.m3u8 if the packager/daemon already produced one. */
+export function localHlsIndexPath(streamId: string): string | null {
+  const dir = hlsStreamDir(streamId);
+  const indexPath = join(dir, "index.m3u8");
+  try {
+    if (existsSync(indexPath) && statSync(indexPath).size > 24) return indexPath;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 export function readTsHlsSegment(lineId: string, streamId: string, name: string): Buffer | null {
   if (!isPackagerSegmentName(name)) return null;
   const key = sessionKey(lineId, streamId);

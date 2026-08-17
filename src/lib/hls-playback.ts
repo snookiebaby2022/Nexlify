@@ -99,6 +99,13 @@ function ceilExtinf(value: number): number {
  * Drop tags that freeze ExoPlayer / IPTV Smarters, force HLS v3, and keep
  * TARGETDURATION >= ceil(max EXTINF) (ffmpeg often writes TD 2 with EXTINF 2.04).
  */
+/** VOD playlists start faster in ExoPlayer/VLC when tagged as VOD (do not use on live). */
+export function markHlsPlaylistAsVod(body: string): string {
+  const sanitized = sanitizeHlsPlaylist(body);
+  if (/#EXT-X-PLAYLIST-TYPE:/i.test(sanitized)) return sanitized;
+  return sanitized.replace(/#EXT-X-VERSION:3/, "#EXT-X-VERSION:3\n#EXT-X-PLAYLIST-TYPE:VOD");
+}
+
 export function sanitizeHlsPlaylist(body: string): string {
   const kept: string[] = [];
   let maxExtinf = 0;
@@ -354,4 +361,40 @@ export function buildNativeTsHlsManifest(
     tsUrl,
     "",
   ].join("\n");
+}
+
+/** Fast VOD HLS: rewrite a native provider playlist; otherwise package via the HLS daemon. */
+export async function buildClientVodHlsPlaylist(opts: {
+  playbackUrl: string;
+  panelOrigin: string;
+  username: string;
+  password: string;
+  streamKey: string;
+  diskStreamId: string;
+}): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
+  if (isHlsPlaybackUrl(opts.playbackUrl)) {
+    const manifest = await fetchHlsManifestForClient(opts.playbackUrl, UPSTREAM_HLS_UA, 10_000);
+    if (manifest.ok) {
+      const relay = (url: string) =>
+        buildHlsRelayUrl(opts.panelOrigin, opts.username, opts.password, opts.streamKey, url);
+      return {
+        ok: true,
+        body: markHlsPlaylistAsVod(rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay)),
+      };
+    }
+  }
+  const { ensureDiskHls } = await import("@/lib/hls-restream-client");
+  const packed = await ensureDiskHls({
+    streamId: opts.diskStreamId,
+    upstreamUrl: opts.playbackUrl,
+    userAgent: UPSTREAM_HLS_UA,
+    vod: true,
+  });
+  if (!packed.ok) return packed;
+  return {
+    ok: true,
+    body: markHlsPlaylistAsVod(
+      rewritePackagerPlaylist(packed.playlist, opts.panelOrigin, opts.username, opts.password, opts.streamKey)
+    ),
+  };
 }

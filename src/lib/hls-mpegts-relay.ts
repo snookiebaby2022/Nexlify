@@ -4,6 +4,7 @@ import { ReadableStream } from "stream/web";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 
 const remuxProcs = new Map<string, ChildProcess>();
+const MAX_REMUX = 24;
 
 function remuxKey(streamId: string, lineId: string, clientIp?: string): string {
   const ip = clientIp?.trim() || "unknown";
@@ -30,6 +31,9 @@ function nodeStreamToWeb(
     start(controller) {
       nodeStream.on("data", (chunk: Buffer) => {
         controller.enqueue(new Uint8Array(chunk));
+        if (controller.desiredSize !== null && controller.desiredSize <= 0) {
+          nodeStream.pause();
+        }
       });
       nodeStream.on("end", () => {
         cleanup();
@@ -39,6 +43,9 @@ function nodeStreamToWeb(
         cleanup();
         controller.error(err);
       });
+    },
+    pull() {
+      nodeStream.resume();
     },
     cancel() {
       cleanup();
@@ -66,6 +73,10 @@ export async function createHlsToMpegTsStream(opts: {
 
   // Replace any prior remux for this viewer — apps often reopen the same channel without closing first.
   stopRemux(key);
+  if (remuxProcs.size >= MAX_REMUX) {
+    const oldest = remuxProcs.keys().next().value;
+    if (typeof oldest === "string") stopRemux(oldest);
+  }
 
   const ffmpegPath = await getFfmpegPath();
   if (!(await binExists(ffmpegPath))) {
@@ -76,26 +87,38 @@ export async function createHlsToMpegTsStream(opts: {
     opts.userAgent?.trim() ||
     "Mozilla/5.0 (compatible; Nexlify/1.0; +https://nexlify.live)";
 
+  const isLocalFile = opts.hlsUrl.startsWith("/") || opts.hlsUrl.startsWith("file:");
+  const inputArgs = isLocalFile
+    ? ["-i", opts.hlsUrl]
+    : [
+        "-user_agent",
+        ua,
+        "-reconnect",
+        "1",
+        "-reconnect_streamed",
+        "1",
+        "-reconnect_delay_max",
+        "5",
+        "-i",
+        opts.hlsUrl,
+      ];
+
   // MPEG-TS output: do NOT use aac_adtstoasc (MP4/FLV only) or a fixed h264_mp4toannexb
   // (breaks HEVC → audio-only / no picture on VLC & Exo). Let ffmpeg pick bitstream filters.
+  // Small probesize so VLC/Exo get the first 0x47 sync bytes in <1s.
   const args = [
     "-hide_banner",
     "-loglevel",
     "error",
-    "-user_agent",
-    ua,
-    "-reconnect",
-    "1",
-    "-reconnect_streamed",
-    "1",
-    "-reconnect_delay_max",
-    "5",
+    "-fflags",
+    "+nobuffer+discardcorrupt",
+    "-flags",
+    "low_delay",
     "-probesize",
-    "5000000",
+    "32768",
     "-analyzeduration",
-    "5000000",
-    "-i",
-    opts.hlsUrl,
+    "500000",
+    ...inputArgs,
     "-map",
     "0:v:0?",
     "-map",

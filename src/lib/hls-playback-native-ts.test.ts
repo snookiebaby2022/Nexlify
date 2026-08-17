@@ -86,6 +86,14 @@ test("rewritePackagerPlaylist strips DISCONTINUITY before rewriting segments", (
   assert.equal(body.includes("http://"), false);
 });
 
+test("markHlsPlaylistAsVod tags movies/series playlists for ExoPlayer", async () => {
+  const { markHlsPlaylistAsVod } = await import("./hls-playback");
+  const src = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:4", "#EXTINF:4.0,", "seg0.ts", ""].join("\n");
+  const out = markHlsPlaylistAsVod(src);
+  assert.match(out, /#EXT-X-PLAYLIST-TYPE:VOD/);
+  assert.match(out, /#EXT-X-VERSION:3/);
+});
+
 test("isPackagerSegmentName accepts ffmpeg segment files only", () => {
   assert.equal(isPackagerSegmentName("seg3.ts"), true);
   assert.equal(isPackagerSegmentName("../etc/passwd"), false);

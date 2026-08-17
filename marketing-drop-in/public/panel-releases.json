@@ -1,7 +1,28 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.15",
+  "latestVersion": "2.0.16",
   "releases": [
+    {
+      "version": "2.0.16",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Faster Exo/VLC MPEGTS+HLS, HLS daemon never crashes Next, bigger marketing banner.",
+      "changelog": [
+        "HLS ffmpeg stays in the nexlify-hls daemon — Next no longer falls back to in-process packager when the daemon is healthy",
+        "Movies/series .m3u8 rewrite native provider HLS immediately instead of waiting on ffmpeg",
+        "MPEGTS remux starts with a tiny probesize and reuses on-disk HLS when already packed (VLC/Exo get 0x47 bytes faster)",
+        "Nginx /hls/ is localhost-only; apps keep using authenticated /live/user/pass/id.m3u8",
+        "Marketing announcement bar is larger (title + message, bigger padding)",
+        "Remaining XUI stub modules redirect to real pages (archive, review, HMAC, video log)"
+      ],
+      "fixes": [
+        "Panel restart when HLS and MPEGTS were requested together (in-process ffmpeg)",
+        "Slow movie/series HLS start because every VOD was remuxed through ffmpeg",
+        "MPEGTS took several seconds to show picture (5s analyzeduration)",
+        "Unauthenticated nginx /hls/ alias could leak segments",
+        "Marketing announcement bar too small to read"
+      ]
+    },
     {
       "version": "2.0.15",
       "date": "2026-08-17",

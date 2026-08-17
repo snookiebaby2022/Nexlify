@@ -38,6 +38,7 @@ import { openUpstreamLiveStream, resolvePlayableUpstreamUrl, upstreamToWebRespon
 import { ensureDiskHls } from "@/lib/hls-restream-client";
 import { getActiveTranscodingProfile } from "@/lib/transcoding-profiles";
 import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
+import { localHlsIndexPath } from "@/lib/ts-hls-packager";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -268,8 +269,9 @@ export async function GET(
 
     if (isHlsPlaybackUrl(playbackUrl)) {
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
+      const localIndex = localHlsIndexPath(cleanId);
       const remux = await createHlsToMpegTsStream({
-        hlsUrl: playbackUrl,
+        hlsUrl: localIndex || playbackUrl,
         lineId: line.id,
         streamId: cleanId,
         clientIp: ip,

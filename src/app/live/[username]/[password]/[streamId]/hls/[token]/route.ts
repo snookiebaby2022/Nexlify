@@ -14,7 +14,8 @@ import {
 } from "@/lib/hls-playback";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { logActivity } from "@/lib/lines";
-import { ensureTsHlsPackager, isPackagerSegmentName, readTsHlsSegment } from "@/lib/ts-hls-packager";
+import { ensureDiskHls } from "@/lib/hls-restream-client";
+import { isPackagerSegmentName, readTsHlsSegment } from "@/lib/ts-hls-packager";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,9 +51,8 @@ export async function GET(
   if (isPackagerSegmentName(token)) {
     let buf = readTsHlsSegment(auth.lineId, auth.streamId, token);
     if (!buf?.length) {
-      const packed = await ensureTsHlsPackager({
+      const packed = await ensureDiskHls({
         upstreamUrl: auth.rootUpstream,
-        lineId: auth.lineId,
         streamId: auth.streamId,
         userAgent: auth.userAgent,
       });
