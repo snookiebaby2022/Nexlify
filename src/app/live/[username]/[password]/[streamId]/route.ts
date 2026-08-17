@@ -22,8 +22,6 @@ import {
   HLS_PLAYLIST_CONTENT_TYPE,
   rewritePackagerPlaylist,
   expandHlsPlaybackCandidates,
-  buildClientDirectHlsMaster,
-  shouldOfferClientDirectHls,
   buildNativeTsHlsManifest,
   UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
@@ -32,8 +30,8 @@ import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
-import { openUpstreamLiveStream, resolvePlayableUpstreamUrl, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
-import { ensureDiskHls, isHlsDaemonHealthy, openDaemonMpegTs } from "@/lib/hls-restream-client";
+import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
+import { isHlsDaemonHealthy, openDaemonMpegTs } from "@/lib/hls-restream-client";
 import { getActiveTranscodingProfile, getTranscodingProfiles } from "@/lib/transcoding-profiles";
 import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
 import { localHlsIndexPath, readLocalPackagerPlaylist } from "@/lib/ts-hls-packager";
@@ -223,7 +221,6 @@ export async function GET(
     : null;
 
   let lastError = "Stream fetch failed";
-  let clientDirectHls: string | null = null;
 
   if (wantsM3u8) {
     const panelOrigin = serverBaseUrl(req.url, req.headers);
@@ -234,69 +231,25 @@ export async function GET(
       );
     }
 
-    for (const playbackUrl of candidates) {
-      if (!originalCandidates.has(playbackUrl) || !isHlsPlaybackUrl(playbackUrl)) continue;
-      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, 1_000);
-      if (!manifest.ok) {
-        lastError = manifest.detail || "Stream unavailable";
-        if (shouldOfferClientDirectHls(manifest.status, manifest.detail)) {
-          clientDirectHls = playbackUrl;
+    if (!bw.instantStart) {
+      for (const playbackUrl of candidates) {
+        if (!originalCandidates.has(playbackUrl) || !isHlsPlaybackUrl(playbackUrl)) continue;
+        const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, 1_000);
+        if (!manifest.ok) {
+          lastError = manifest.detail || "Stream unavailable";
+          continue;
         }
-        continue;
-      }
-      await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
-      const relay = (url: string) =>
-        buildHlsRelayUrl(panelOrigin, username, password, requestStreamKey, url);
-      let body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
-      if (bw.saverEnabled) body = pickLowestBandwidthHlsVariant(body);
-      return hlsHeaders(body);
-    }
-
-    if (bw.instantStart) {
-      await cacheSet(hlsRelayCacheKey(line.id, cleanId), candidates[0]!, 3600);
-      return hlsHeaders(buildNativeTsHlsManifest(panelOrigin, username, password, requestStreamKey));
-    }
-
-    for (let i = 0; i < candidates.length; i++) {
-      const playbackUrl = candidates[i]!;
-      if (isHlsPlaybackUrl(playbackUrl)) continue;
-      const resolved = await resolvePlayableUpstreamUrl(playbackUrl, {
-        userAgent: UPSTREAM_HLS_UA,
-        timeoutMs: 8_000,
-      });
-      if (!resolved) {
-        lastError = "Upstream is not MPEG-TS";
-        continue;
-      }
-      await cacheSet(hlsRelayCacheKey(line.id, cleanId), resolved, 3600);
-      const packed = await ensureDiskHls({
-        upstreamUrl: resolved,
-        streamId: diskStreamId,
-        userAgent: UPSTREAM_HLS_UA,
-        loop: mode === "created" || Boolean(streamMeta?.isCreatedChannel),
-        transcode: transcodeOpts,
-      });
-      if (packed.ok) {
-        const body = rewritePackagerPlaylist(
-          packed.playlist,
-          panelOrigin,
-          username,
-          password,
-          requestStreamKey
-        );
+        await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
+        const relay = (url: string) =>
+          buildHlsRelayUrl(panelOrigin, username, password, requestStreamKey, url);
+        let body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
+        if (bw.saverEnabled) body = pickLowestBandwidthHlsVariant(body);
         return hlsHeaders(body);
       }
-      lastError = packed.error;
     }
 
-    const directHls = clientDirectHls;
-    if (directHls) {
-      await cacheSet(hlsRelayCacheKey(line.id, cleanId), directHls, 3600);
-      return hlsHeaders(buildClientDirectHlsMaster(directHls));
-    }
-
-    const status = /timeout/i.test(lastError) ? 504 : 502;
-    return withIptvCors(iptvText(lastError.slice(0, 200) || "Stream fetch failed", { status }));
+    await cacheSet(hlsRelayCacheKey(line.id, cleanId), candidates[0]!, 3600);
+    return hlsHeaders(buildNativeTsHlsManifest(panelOrigin, username, password, requestStreamKey));
   }
 
   for (let i = 0; i < candidates.length; i++) {

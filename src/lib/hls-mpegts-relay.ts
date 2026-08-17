@@ -32,18 +32,31 @@ function nodeStreamToWeb(
   return new ReadableStream({
     start(controller) {
       nodeStream.on("data", (chunk: Buffer) => {
-        controller.enqueue(new Uint8Array(chunk));
+        try {
+          controller.enqueue(new Uint8Array(chunk));
+        } catch {
+          nodeStream.destroy();
+          return;
+        }
         if (controller.desiredSize !== null && controller.desiredSize <= 0) {
           nodeStream.pause();
         }
       });
       nodeStream.on("end", () => {
         cleanup();
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          /* ignore */
+        }
       });
       nodeStream.on("error", (err) => {
         cleanup();
-        controller.error(err);
+        try {
+          controller.error(err);
+        } catch {
+          /* ignore */
+        }
       });
     },
     pull() {
