@@ -1,9 +1,20 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.26",
+  "latestVersion": "2.0.27",
   "releases": [
     {
-      "version": "2.0.26",
+      "version": "2.0.27",
+      "date": "2026-08-18",
+      "channel": "stable",
+      "summary": "Fix HLS segment 404 for cuid stream IDs — XUI {cuid}_{n}.ts paths.",
+      "changelog": [
+        "parseLivePlaybackStreamKey now resolves cuid-style HLS segment URLs like cmsw4zujo00eivhee75j1406c_0.ts",
+        "Transcode profile suffixes (_eco, _720p) still parsed before segment index"
+      ],
+      "fixes": [
+        "XCIPTV/Smarters HLS returned playlist but every {stream_id}_{n}.ts segment 404'd on cuid streams"
+      ]
+    },
       "date": "2026-08-18",
       "channel": "stable",
       "summary": "XUI-style direct MPEG-TS — instant live start for XCIPTV/Smarters without eco transcode.",

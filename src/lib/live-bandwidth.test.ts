@@ -17,6 +17,7 @@ test("parseLivePlaybackStreamKey keeps _eco suffix as hint", () => {
   assert.deepEqual(parseLivePlaybackStreamKey("1862838169_eco.ts"), {
     token: "1862838169",
     profileHint: "eco",
+    hlsSegmentIndex: null,
   });
 });
 

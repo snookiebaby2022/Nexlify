@@ -28,17 +28,25 @@ export function parseLivePlaybackStreamKey(raw: string): LivePlaybackStreamKey {
   const cleaned = String(raw ?? "")
     .replace(/\.(ts|m3u8|mp4|mkv|avi|mov|webm|hls)$/i, "")
     .trim();
-  const seg = cleaned.match(/^(\d+)_(\d+)$/);
-  if (seg) {
+  const numericSeg = cleaned.match(/^(\d+)_(\d+)$/);
+  if (numericSeg) {
     return {
-      token: seg[1]!,
+      token: numericSeg[1]!,
       profileHint: null,
-      hlsSegmentIndex: parseInt(seg[2]!, 10),
+      hlsSegmentIndex: parseInt(numericSeg[2]!, 10),
     };
   }
-  const m = cleaned.match(/^(\d+)[_-]([A-Za-z0-9][A-Za-z0-9._-]{0,40})$/);
-  if (m && !/^\d+$/.test(m[2]!)) {
-    return { token: m[1]!, profileHint: m[2]!, hlsSegmentIndex: null };
+  const profile = cleaned.match(/^(.+)[_-]([A-Za-z0-9][A-Za-z0-9._-]{0,40})$/);
+  if (profile && !/^\d+$/.test(profile[2]!)) {
+    return { token: profile[1]!, profileHint: profile[2]!, hlsSegmentIndex: null };
+  }
+  const xuiSeg = cleaned.match(/^(.+)_(\d+)$/);
+  if (xuiSeg) {
+    return {
+      token: xuiSeg[1]!,
+      profileHint: null,
+      hlsSegmentIndex: parseInt(xuiSeg[2]!, 10),
+    };
   }
   return { token: cleaned, profileHint: null, hlsSegmentIndex: null };
 }

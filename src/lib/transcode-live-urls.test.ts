@@ -34,6 +34,21 @@ test("parseLivePlaybackStreamKey splits XUI profile suffix", () => {
     profileHint: null,
     hlsSegmentIndex: 12,
   });
+  assert.deepEqual(parseLivePlaybackStreamKey("cmsw4zujo00eivhee75j1406c_0.ts"), {
+    token: "cmsw4zujo00eivhee75j1406c",
+    profileHint: null,
+    hlsSegmentIndex: 0,
+  });
+  assert.deepEqual(parseLivePlaybackStreamKey("cmsw4zujo00eivhee75j1406c_12.ts"), {
+    token: "cmsw4zujo00eivhee75j1406c",
+    profileHint: null,
+    hlsSegmentIndex: 12,
+  });
+  assert.deepEqual(parseLivePlaybackStreamKey("cmsw4zujo00eivhee75j1406c_eco.ts"), {
+    token: "cmsw4zujo00eivhee75j1406c",
+    profileHint: "eco",
+    hlsSegmentIndex: null,
+  });
 });
 
 test("transcode variant numeric ids are stable and distinct", () => {
