@@ -126,15 +126,15 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
 }
 
 export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
-  const streams = await streamsForLineExport(line);
-  const live = streams.filter((s) => s.type === StreamType.LIVE);
+  // Only query LIVE streams for categories
+  const streams = await streamsForLineExport(line, { type: StreamType.LIVE });
   const categoryIds = [
-    ...new Set(live.map((s) => s.categoryId).filter(Boolean) as string[]),
+    ...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
 
   const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
 
-  if (live.some((s) => !s.categoryId)) {
+  if (streams.some((s) => !s.categoryId)) {
     rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
   }
 
@@ -152,8 +152,9 @@ export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
 }
 
 export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
-  const streams = await streamsForLineExport(line);
-  let live = streams.filter((s) => s.type === StreamType.LIVE);
+  // Only query LIVE streams from the database (not movies/series)
+  const streams = await streamsForLineExport(line, { type: StreamType.LIVE });
+  let live = streams;
   if (categoryId != null && categoryId !== "") {
     if (categoryId === "0") {
       live = live.filter((s) => !s.categoryId);
@@ -210,17 +211,17 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
 }
 
 export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string) {
-  const streams = await streamsForLineExport(line);
-  const movies = streams.filter((s) => s.type === StreamType.MOVIE);
+  // Only query MOVIE streams from the database
+  const streams = await streamsForLineExport(line, { type: StreamType.MOVIE });
   const withProviders = await prisma.stream.findMany({
-    where: { id: { in: movies.map((s) => s.id) } },
+    where: { id: { in: streams.map((s) => s.id) } },
     include: { provider: true },
   });
   const byId = new Map(withProviders.map((s) => [s.id, s]));
   const streamSettings = await getSettingGroup("streams");
   const directPlay = streamSettings.vodDirectPlay !== false;
 
-    return movies.map((s, i) => {
+  return streams.map((s, i) => {
     const full = byId.get(s.id) ?? s;
     const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, "auto", directPlay);
     return {
@@ -240,15 +241,15 @@ export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string) 
 }
 
 export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
-  const streams = await streamsForLineExport(line);
-  const movies = streams.filter((s) => s.type === StreamType.MOVIE);
+  // Only query MOVIE streams for categories
+  const streams = await streamsForLineExport(line, { type: StreamType.MOVIE });
   const categoryIds = [
-    ...new Set(movies.map((s) => s.categoryId).filter(Boolean) as string[]),
+    ...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
 
   const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
 
-  if (movies.some((s) => !s.categoryId)) {
+  if (streams.some((s) => !s.categoryId)) {
     rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
   }
 
@@ -266,8 +267,9 @@ export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
 }
 
 export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: string | null) {
-  const streams = await streamsForLineExport(line);
-  let series = streams.filter((s) => s.type === StreamType.SERIES);
+  // Only query SERIES streams from the database
+  const streams = await streamsForLineExport(line, { type: StreamType.SERIES });
+  let series = streams;
   if (categoryId != null && categoryId !== "") {
     if (categoryId === "0") {
       series = series.filter((s) => !s.categoryId);
@@ -296,15 +298,15 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
 }
 
 export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
-  const streams = await streamsForLineExport(line);
-  const series = streams.filter((s) => s.type === StreamType.SERIES);
+  // Only query SERIES streams for categories
+  const streams = await streamsForLineExport(line, { type: StreamType.SERIES });
   const categoryIds = [
-    ...new Set(series.map((s) => s.categoryId).filter(Boolean) as string[]),
+    ...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
 
   const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
 
-  if (series.some((s) => !s.categoryId)) {
+  if (streams.some((s) => !s.categoryId)) {
     rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
   }
 
@@ -344,7 +346,7 @@ export function buildM3uStream(
   baseUrl: string,
   type: string,
   output: "hls" | "ts" | "auto" = "auto",
-  opts?: { includeSeries?: boolean }
+  _opts?: { includeSeries?: boolean }
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const isExtended = type === "m3u_plus";
