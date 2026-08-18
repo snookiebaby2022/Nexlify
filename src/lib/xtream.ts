@@ -322,52 +322,22 @@ export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
 }
 
 export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: string, output: "hls" | "ts" | "auto" = "auto") {
-  const streams = await streamsForLineExport(line);
-  const withProviders = await prisma.stream.findMany({
-    where: { id: { in: streams.map((s) => s.id) } },
-    include: { provider: true },
-  });
-  const byId = new Map(withProviders.map((s) => [s.id, s]));
-  const streamSettings = await getSettingGroup("streams");
-  const directPlay = streamSettings.vodDirectPlay !== false;
-
-  const isExtended = type === "m3u_plus";
-  const lines: string[] = ["#EXTM3U"];
-  for (const s of streams) {
-    const full = byId.get(s.id) ?? s;
-    const variants = parseBitrates(full.bitrates);
-    if (s.type === StreamType.LIVE && variants.length > 1) {
-      for (const v of variants) {
-        lines.push(
-          `#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidthKbps ?? 2500000},RESOLUTION=${v.resolution ?? "1280x720"},NAME="${v.label}"`
-        );
-        const variantFull = v.path.startsWith("http")
-          ? ({ ...full, streamUrl: v.path } as typeof full)
-          : ({ ...full, streamUrl: v.path } as typeof full);
-        lines.push(exportPlaybackUrl(baseUrl, line, s, variantFull, undefined, output, directPlay));
-      }
-      continue;
-    }
-    const logo = isExtended && s.streamIcon ? ` tvg-logo="${s.streamIcon}"` : "";
-    const tvgId = isExtended ? resolveEpgId(s) : "";
-    const tvgName = s.name.replace(/"/g, "'");
-    const group = s.type === StreamType.LIVE ? "Live" : s.type === StreamType.MOVIE ? "Movies" : "Series";
-    const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, output, directPlay);
-    if (isExtended) {
-      lines.push(
-        `#EXTINF:-1 tvg-id="${tvgId}" tvg-name="${tvgName}" channel-id="${resolveChannelId(s)}"${logo} group-title="${group}",${s.name}`
-      );
-    } else {
-      lines.push(`#EXTINF:-1,${s.name}`);
-    }
-    lines.push(playUrl);
+  const chunks: string[] = [];
+  const stream = buildM3uStream(line, baseUrl, type, output);
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(decoder.decode(value, { stream: true }));
   }
-  return lines.join("\n");
+  chunks.push(decoder.decode());
+  return chunks.join("");
 }
 
 /**
- * Streaming M3U builder for v2.0.28 compatibility.
- * Returns a ReadableStream instead of a string so large playlists don't block.
+ * Streaming M3U builder — processes streams in batches of 1500.
+ * Never loads the entire playlist into memory (XUI/1-stream model).
  */
 export function buildM3uStream(
   line: LineWithBouquets,
@@ -377,11 +347,71 @@ export function buildM3uStream(
   opts?: { includeSeries?: boolean }
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
+  const isExtended = type === "m3u_plus";
+
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        const body = await buildM3u(line, baseUrl, type, output);
-        controller.enqueue(encoder.encode(body));
+        controller.enqueue(encoder.encode("#EXTM3U\n"));
+
+        const streamSettings = await getSettingGroup("streams");
+        const directPlay = streamSettings.vodDirectPlay !== false;
+        const excludeDisabled = streamSettings.excludeDisabledFromExport === true;
+
+        // Get all stream IDs for this line
+        const { streamsForLineExport } = await import("./lines");
+        const allStreams = await streamsForLineExport(line);
+
+        const filtered = allStreams;
+
+        const BATCH = 1500;
+        for (let i = 0; i < filtered.length; i += BATCH) {
+          const chunk = filtered.slice(i, i + BATCH);
+          const withProviders = await prisma.stream.findMany({
+            where: { id: { in: chunk.map((s) => s.id) } },
+            include: { provider: true },
+          });
+          const byId = new Map(withProviders.map((s) => [s.id, s]));
+
+          const batchLines: string[] = [];
+          for (const s of chunk) {
+            const full = byId.get(s.id) ?? s;
+
+            if (excludeDisabled && !full.isActive) continue;
+
+            const variants = parseBitrates(full.bitrates);
+            if (s.type === StreamType.LIVE && variants.length > 1) {
+              for (const v of variants) {
+                batchLines.push(
+                  `#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidthKbps ?? 2500000},RESOLUTION=${v.resolution ?? "1280x720"},NAME="${v.label}"`
+                );
+                const variantFull = { ...full, streamUrl: v.path } as typeof full;
+                batchLines.push(exportPlaybackUrl(baseUrl, line, s, variantFull, undefined, output, directPlay));
+              }
+              continue;
+            }
+
+            const logo = isExtended && s.streamIcon ? ` tvg-logo="${s.streamIcon}"` : "";
+            const tvgId = isExtended ? resolveEpgId(s) : "";
+            const tvgName = s.name.replace(/"/g, "'");
+            const group = s.type === StreamType.LIVE ? "Live" : s.type === StreamType.MOVIE ? "Movies" : "Series";
+            const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, output, directPlay);
+
+            if (isExtended) {
+              batchLines.push(
+                `#EXTINF:-1 tvg-id="${tvgId}" tvg-name="${tvgName}" channel-id="${resolveChannelId(s)}"${logo} group-title="${group}",${s.name}`
+              );
+            } else {
+              batchLines.push(`#EXTINF:-1,${s.name}`);
+            }
+            batchLines.push(playUrl);
+          }
+
+          if (batchLines.length) {
+            controller.enqueue(encoder.encode(batchLines.join("\n") + "\n"));
+          }
+        }
+
         controller.close();
       } catch (err) {
         controller.error(err);
