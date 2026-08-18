@@ -126,8 +126,8 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
 }
 
 export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
-  // Only query LIVE streams for categories
-  const streams = await streamsForLineExport(line, { type: StreamType.LIVE });
+  // Only query LIVE streams for categories (lean mode)
+  const streams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
   const categoryIds = [
     ...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
@@ -153,7 +153,8 @@ export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
 
 export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
   // Only query LIVE streams from the database (not movies/series)
-  const streams = await streamsForLineExport(line, { type: StreamType.LIVE });
+  // Use lean mode to skip provider/server joins (faster for large catalogs)
+  const streams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
   let live = streams;
   if (categoryId != null && categoryId !== "") {
     if (categoryId === "0") {
@@ -162,14 +163,9 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
       live = live.filter((s) => s.categoryId === categoryId);
     }
   }
-  const withProviders = await prisma.stream.findMany({
-    where: { id: { in: live.map((s) => s.id) } },
-    include: { provider: true, server: true },
-  });
-  const byId = new Map(withProviders.map((s) => [s.id, s]));
 
   return live.map((s, i) => {
-    const full = byId.get(s.id) ?? s;
+    const full = s;
     const playbackMode = getStreamPlaybackMode(full);
     const catchup = full.vodMode === "CATCHUP" || full.isOnDemand || full.isShifted;
     const archiveDays = full.archiveDays ?? 0;
@@ -212,17 +208,13 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
 
 export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string) {
   // Only query MOVIE streams from the database
-  const streams = await streamsForLineExport(line, { type: StreamType.MOVIE });
-  const withProviders = await prisma.stream.findMany({
-    where: { id: { in: streams.map((s) => s.id) } },
-    include: { provider: true },
-  });
-  const byId = new Map(withProviders.map((s) => [s.id, s]));
+  // Use lean mode to skip provider/server joins (faster for large catalogs)
+  const streams = await streamsForLineExport(line, { type: StreamType.MOVIE, lean: true });
   const streamSettings = await getSettingGroup("streams");
   const directPlay = streamSettings.vodDirectPlay !== false;
 
   return streams.map((s, i) => {
-    const full = byId.get(s.id) ?? s;
+    const full = s;
     const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, "auto", directPlay);
     return {
       num: i + 1,
@@ -241,8 +233,8 @@ export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string) 
 }
 
 export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
-  // Only query MOVIE streams for categories
-  const streams = await streamsForLineExport(line, { type: StreamType.MOVIE });
+  // Only query MOVIE streams for categories (lean mode)
+  const streams = await streamsForLineExport(line, { type: StreamType.MOVIE, lean: true });
   const categoryIds = [
     ...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
@@ -268,7 +260,8 @@ export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
 
 export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: string | null) {
   // Only query SERIES streams from the database
-  const streams = await streamsForLineExport(line, { type: StreamType.SERIES });
+  // Use lean mode to skip provider/server joins (faster for large catalogs)
+  const streams = await streamsForLineExport(line, { type: StreamType.SERIES, lean: true });
   let series = streams;
   if (categoryId != null && categoryId !== "") {
     if (categoryId === "0") {
@@ -298,8 +291,8 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
 }
 
 export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
-  // Only query SERIES streams for categories
-  const streams = await streamsForLineExport(line, { type: StreamType.SERIES });
+  // Only query SERIES streams for categories (lean mode)
+  const streams = await streamsForLineExport(line, { type: StreamType.SERIES, lean: true });
   const categoryIds = [
     ...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[]),
   ];
