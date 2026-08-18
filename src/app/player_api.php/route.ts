@@ -185,6 +185,14 @@ export async function GET(req: NextRequest) {
         Math.min(ttl.categories || 60, 90),
         () => xtreamSeriesForLine(line, seriesCategoryId)
       );
+      if (clientTimestamp && clientTimestamp > 0) {
+        const filtered = payload.filter((s) => Number(s.last_modified) > clientTimestamp);
+        return j({
+          episodes: filtered,
+          changed: filtered.length,
+          server_timestamp: Math.floor(Date.now() / 1000),
+        });
+      }
       return j(payload);
     }
     case "get_vod_info": {

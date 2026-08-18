@@ -196,32 +196,55 @@ export async function streamsForLine(
 
   const lean = options?.lean === true;
   const out: StreamForLine[] = [];
+  const include = lean
+    ? undefined
+    : {
+        provider: { select: { baseUrl: true } },
+        server: { select: { host: true } },
+      };
 
+  const batches: string[][] = [];
   for (let i = 0; i < ids.length; i += STREAM_BATCH) {
-    const chunkIds = ids.slice(i, i + STREAM_BATCH);
-    const rows = await prisma.stream.findMany({
-      where: { id: { in: chunkIds } },
-      ...(lean
-        ? {}
-        : {
-            include: {
-              provider: { select: { baseUrl: true } },
-              server: { select: { host: true } },
-            },
-          }),
-    });
-    const byId = new Map(rows.map((s) => [s.id, s as StreamForLine]));
-    const ordered = chunkIds
-      .map((id) => byId.get(id))
-      .filter((s): s is StreamForLine => Boolean(s));
-    if (options?.onBatch) {
+    batches.push(ids.slice(i, i + STREAM_BATCH));
+  }
+  console.log(`streamsForLine ${ids.length} ids in ${batches.length} batches`);
+
+  if (options?.onBatch) {
+    for (const chunkIds of batches) {
+      const rows = await prisma.stream.findMany({
+        where: { id: { in: chunkIds } },
+        ...(include ? { include } : {}),
+      });
+      const byId = new Map(rows.map((s) => [s.id, s as StreamForLine]));
+      const ordered = chunkIds
+        .map((id) => byId.get(id))
+        .filter((s): s is StreamForLine => Boolean(s));
       await options.onBatch(ordered);
-    } else {
-      out.push(...ordered);
     }
+    return [];
   }
 
-  return options?.onBatch ? [] : out;
+  // Export/playlist paths: fetch batches concurrently (bounded) while keeping
+  // deterministic sort order; sequential 1500-row round trips dominate latency.
+  const PARALLEL = 4;
+  for (let i = 0; i < batches.length; i += PARALLEL) {
+    const group = batches.slice(i, i + PARALLEL);
+    const loaded = await Promise.all(
+      group.map(async (chunkIds) => {
+        const rows = await prisma.stream.findMany({
+          where: { id: { in: chunkIds } },
+          ...(include ? { include } : {}),
+        });
+        const byId = new Map(rows.map((s) => [s.id, s as StreamForLine]));
+        return chunkIds
+          .map((id) => byId.get(id))
+          .filter((s): s is StreamForLine => Boolean(s));
+      })
+    );
+    for (const ordered of loaded) out.push(...ordered);
+  }
+
+  return out;
 }
 
 /** Sync helper for admin paths that already nested bouquet.streams in memory. */

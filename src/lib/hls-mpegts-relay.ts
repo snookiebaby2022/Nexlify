@@ -166,7 +166,18 @@ export async function createHlsToMpegTsStream(opts: {
       ? opts.forceUniversal
         ? universalMpegTsTranscodeArgs()
         : liveTranscodeCodecArgs(opts.transcode!)
-      : ["-c", "copy", "-bsf:v", "h264_mp4toannexb"];
+      : [
+          "-c:v",
+          "copy",
+          "-bsf:v",
+          "h264_mp4toannexb",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-ac",
+          "2",
+        ];
 
   // MPEG-TS output: never use aac_adtstoasc (MP4-only — breaks ADTS audio in TS).
   const args = [
