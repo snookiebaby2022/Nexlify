@@ -18,6 +18,11 @@ const MPEGTS_MUX_ARGS = [
   "resend_headers+pat_pmt_at_frames",
   "-mpegts_pcr_period",
   "20",
+  // Ensure audio is included in MPEGTS output
+  "-map",
+  "0:v:0?",
+  "-map",
+  "0:a:0?",
 ];
 
 /** One MPEGTS ffmpeg per viewer (line+IP). Zapping must replace the previous process. */

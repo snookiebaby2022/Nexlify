@@ -4,7 +4,7 @@ import { resolveChannelId, resolveEpgId } from "./subscription-export";
 
 import { exportPlaybackUrl } from "./export-playback-url";
 import { getStreamPlaybackMode } from "./stream-playback-mode";
-import { StreamType } from "@prisma/client";
+import { StreamType, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 
 function cuidToNum(id: string): number {
@@ -288,6 +288,88 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
     episode_run_time: "",
     category_id: s.categoryId ?? "0",
   }));
+}
+
+/**
+ * Streaming series builder — processes series in batches using raw SQL.
+ * Returns a ReadableStream of JSON array for large catalogs (avoids Prisma OOM).
+ */
+export function xtreamSeriesStream(
+  line: LineWithBouquets,
+  categoryId?: string | null
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        controller.enqueue(encoder.encode("["));
+
+        // Get bouquet IDs for this line
+        const lbs = await prisma.lineBouquet.findMany({
+          where: { lineId: line.id, bouquet: { isActive: true } },
+          select: { bouquetId: true },
+        });
+        const bouquetIds = lbs.map(lb => lb.bouquetId);
+
+        if (!bouquetIds.length) {
+          controller.enqueue(encoder.encode("]"));
+          controller.close();
+          return;
+        }
+
+        // Raw SQL to get series IDs directly (avoids Prisma OOM with large catalogs)
+        const catFilter = categoryId != null && categoryId !== ""
+          ? categoryId === "0"
+            ? Prisma.sql`AND s."categoryId" IS NULL`
+            : Prisma.sql`AND s."categoryId" = ${categoryId}`
+          : Prisma.empty;
+
+        const rows = await prisma.$queryRaw<{ id: string; name: string; streamIcon: string | null; categoryId: string | null; updatedAt: Date }[]>`
+          SELECT s.id, s.name, s."streamIcon", s."categoryId", s."updatedAt"
+          FROM "BouquetStream" bs
+          INNER JOIN "Stream" s ON s.id = bs."streamId"
+          WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
+          AND s."isActive" = true
+          AND s.type::text = 'SERIES'
+          AND s."streamUrl" NOT LIKE 'pending://%'
+          AND (s."streamUrl" LIKE 'http://%' OR s."streamUrl" LIKE 'https://%')
+          ${catFilter}
+          ORDER BY s.id
+        `;
+
+        // Stream as JSON array
+        let first = true;
+        for (let i = 0; i < rows.length; i++) {
+          const s = rows[i];
+          const item = {
+            num: i + 1,
+            name: s.name,
+            series_id: cuidToNum(s.id),
+            cover: s.streamIcon ?? "",
+            plot: "",
+            cast: "",
+            director: "",
+            genre: "",
+            releaseDate: "",
+            last_modified: Math.floor(s.updatedAt.getTime() / 1000).toString(),
+            rating: "",
+            rating_5based: 0,
+            backdrop_path: [] as string[],
+            episode_run_time: "",
+            category_id: s.categoryId ?? "0",
+          };
+          if (!first) controller.enqueue(encoder.encode(","));
+          controller.enqueue(encoder.encode(JSON.stringify(item)));
+          first = false;
+        }
+
+        controller.enqueue(encoder.encode("]"));
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+  });
 }
 
 export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {

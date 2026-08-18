@@ -134,12 +134,34 @@ export async function proxyVodUpstream(target: VodProxyTarget): Promise<NextResp
 export function pickVodExtension(url: string): string {
   const lower = url.toLowerCase();
   if (lower.includes(".m3u8")) return "m3u8";
-  if (lower.endsWith(".ts")) return "ts";
-  if (lower.endsWith(".mp4")) return "mp4";
-  if (lower.endsWith(".mkv")) return "mkv";
-  if (lower.endsWith(".avi")) return "avi";
-  if (lower.endsWith(".mov")) return "mov";
-  if (lower.endsWith(".webm")) return "webm";
+
+  // Parse URL to get pathname without query params
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.toLowerCase();
+    if (path.endsWith(".ts")) return "ts";
+    if (path.endsWith(".mp4")) return "mp4";
+    if (path.endsWith(".mkv")) return "mkv";
+    if (path.endsWith(".avi")) return "avi";
+    if (path.endsWith(".mov")) return "mov";
+    if (path.endsWith(".webm")) return "webm";
+    if (path.endsWith(".flv")) return "flv";
+    if (path.endsWith(".wmv")) return "wmv";
+  } catch {
+    // Not a valid URL, try simple string matching
+    if (lower.endsWith(".ts")) return "ts";
+    if (lower.endsWith(".mp4")) return "mp4";
+    if (lower.endsWith(".mkv")) return "mkv";
+    if (lower.endsWith(".avi")) return "avi";
+    if (lower.endsWith(".mov")) return "mov";
+    if (lower.endsWith(".webm")) return "webm";
+  }
+
   if (isHlsPlaybackUrl(url)) return "m3u8";
+
+  // Check content-type hints in URL
+  if (lower.includes("mkv") || lower.includes("matroska")) return "mkv";
+  if (lower.includes("webm")) return "webm";
+
   return "mp4";
 }
