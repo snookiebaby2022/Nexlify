@@ -6,6 +6,29 @@ export type LiveTranscodeProfile = {
   gpuAcceleration: boolean;
 };
 
+export function universalMpegTsTranscodeArgs(): string[] {
+  return [
+    "-c:v",
+    "libx264",
+    "-profile:v",
+    "high",
+    "-level",
+    "4.1",
+    "-preset",
+    "veryfast",
+    "-tune",
+    "zerolatency",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-ar",
+    "48000",
+    "-ac",
+    "2",
+  ];
+}
+
 export function liveTranscodeCodecArgs(profile: LiveTranscodeProfile): string[] {
   const vcodec =
     profile.gpuAcceleration && profile.codec !== "h265"

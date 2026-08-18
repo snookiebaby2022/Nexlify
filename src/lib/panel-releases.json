@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.27",
+  "latestVersion": "2.0.28",
   "releases": [
+    {
+      "version": "2.0.28",
+      "date": "2026-08-18",
+      "channel": "stable",
+      "summary": "Fix HLS→MPEG-TS remux audio, universal transcode toggle, faster RTMP HLS zapping.",
+      "changelog": [
+        "Remove aac_adtstoasc from MPEG-TS remux — keeps AAC in ADTS form (playable on all IPTV apps)",
+        "Add h264_mp4toannexb + proper MPEG-TS mux flags (genpts, PAT/PMT, PCR period)",
+        "New setting: Force universal MPEG-TS output (H.264 High@L4.1 + AAC 48 kHz) for HEVC/AC3 sources",
+        "Normalize live Content-Type: .m3u8 → application/vnd.apple.mpegurl, MPEG-TS → video/mp2t",
+        "RTMP/nginx HLS playlist shortened to 6s with cleanup for faster channel zapping"
+      ],
+      "fixes": [
+        "XCIPTV/Smarters/VLC no audio or no playback from HLS→TS remux with aac_adtstoasc",
+        "HEVC/AC3 upstreams failing on ExoPlayer when copy remux was used",
+        "Slow RTMP HLS zapping from 30s playlist length"
+      ]
+    },
     {
       "version": "2.0.27",
       "date": "2026-08-18",

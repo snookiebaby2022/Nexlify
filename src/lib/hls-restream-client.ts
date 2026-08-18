@@ -90,6 +90,7 @@ export type MpegTsDaemonOpts = {
   clientIp?: string;
   userAgent?: string;
   hls?: boolean;
+  forceUniversal?: boolean;
   transcode?: Pick<TranscodingProfile, "resolution" | "bitrate" | "codec" | "gpuAcceleration"> | null;
   signal?: AbortSignal;
 };
@@ -116,6 +117,7 @@ export async function openDaemonMpegTs(opts: MpegTsDaemonOpts): Promise<MpegTsDa
         clientIp: opts.clientIp ?? "",
         userAgent: opts.userAgent,
         hls: Boolean(opts.hls),
+        forceUniversal: Boolean(opts.forceUniversal),
         transcode: opts.transcode ?? null,
       }),
       signal: opts.signal,

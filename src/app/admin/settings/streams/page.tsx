@@ -271,6 +271,12 @@ export default function StreamSettingsPage() {
               hint: "Adaptive profiles for new live streams and agent transcodes. Use stream bitrates JSON for multi-bitrate ABR.",
             },
             { key: "antiBufferNotes", label: "Notes", type: "textarea", colSpan: 3 },
+            {
+              key: "forceUniversalMpegTs",
+              label: "Force universal MPEG-TS output",
+              type: "yesno",
+              hint: "HLS→MPEG-TS relay transcodes to H.264 High@L4.1 + AAC stereo 48 kHz. Use when HEVC/AC3 sources fail on ExoPlayer/VLC. Uses more CPU; default OFF (fast copy remux).",
+            },
           ],
         },
         {

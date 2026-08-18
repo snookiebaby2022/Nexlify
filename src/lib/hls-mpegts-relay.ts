@@ -1,11 +1,24 @@
 import { spawn, type ChildProcess } from "child_process";
 import { Readable } from "stream";
 import { ReadableStream } from "stream/web";
-import { liveTranscodeCodecArgs } from "@/lib/live-transcode";
+import { liveTranscodeCodecArgs, universalMpegTsTranscodeArgs } from "@/lib/live-transcode";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 
 const remuxProcs = new Map<string, ChildProcess>();
 const MAX_REMUX = 24;
+
+const MPEGTS_MUX_ARGS = [
+  "-fflags",
+  "+genpts",
+  "-muxdelay",
+  "0.7",
+  "-muxpreload",
+  "0.5",
+  "-mpegts_flags",
+  "initial_discontinuity+resend_headers+pat_pmt_at_frames",
+  "-mpegts_pcr_period",
+  "20",
+];
 
 /** One MPEGTS ffmpeg per viewer (line+IP). Zapping must replace the previous process. */
 function remuxKey(_streamId: string, lineId: string, clientIp?: string): string {
@@ -83,6 +96,7 @@ export async function createHlsToMpegTsStream(opts: {
   streamId: string;
   clientIp?: string;
   userAgent?: string;
+  forceUniversal?: boolean;
   transcode?: {
     resolution: string;
     bitrate: number;
@@ -126,9 +140,14 @@ export async function createHlsToMpegTsStream(opts: {
         opts.hlsUrl,
       ];
 
-  // MPEG-TS output: do NOT use aac_adtstoasc (MP4/FLV only) or a fixed h264_mp4toannexb
-  // (breaks HEVC → audio-only / no picture on VLC & Exo). Let ffmpeg pick bitstream filters.
-  // Small probesize so VLC/Exo get the first 0x47 sync bytes in <1s.
+  const transcode =
+    opts.forceUniversal || opts.transcode
+      ? opts.forceUniversal
+        ? universalMpegTsTranscodeArgs()
+        : liveTranscodeCodecArgs(opts.transcode!)
+      : ["-c", "copy", "-bsf:v", "h264_mp4toannexb"];
+
+  // MPEG-TS output: never use aac_adtstoasc (MP4-only — breaks ADTS audio in TS).
   const args = [
     "-hide_banner",
     "-loglevel",
@@ -140,13 +159,14 @@ export async function createHlsToMpegTsStream(opts: {
     "-probesize",
     "512000",
     "-analyzeduration",
-    opts.transcode ? "500000" : "500000",
+    opts.transcode || opts.forceUniversal ? "500000" : "500000",
     ...inputArgs,
     "-map",
     "0:v:0?",
     "-map",
     "0:a:0?",
-    ...(opts.transcode ? liveTranscodeCodecArgs(opts.transcode) : ["-c", "copy"]),
+    ...transcode,
+    ...MPEGTS_MUX_ARGS,
     "-f",
     "mpegts",
     "pipe:1",

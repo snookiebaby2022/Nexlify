@@ -319,6 +319,15 @@ export function normalizeLiveMpegTsContentType(contentType: string): string {
   return contentType;
 }
 
+/** Normalize HLS manifest Content-Type for IPTV players. */
+export function normalizeHlsManifestContentType(contentType: string): string {
+  const c = (contentType ?? "").toLowerCase();
+  if (c.includes("mpegurl") || c.includes("m3u8") || c.includes("text/plain") || c.includes("octet-stream")) {
+    return "application/vnd.apple.mpegurl";
+  }
+  return contentType;
+}
+
 export function upstreamToWebResponse(
   open: UpstreamOpenResult,
   extraHeaders?: Record<string, string>

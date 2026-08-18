@@ -169,6 +169,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     liveBandwidthSaverKbps: 1000,
     liveBandwidthSaverResolution: "854x480",
     liveBandwidthSaverGpu: false,
+    forceUniversalMpegTs: false,
     fastZapEnabled: true,
     playbackUrlCacheTtlSec: 60,
     zapPrefetchNeighbors: 3,

@@ -41,6 +41,8 @@ import {
   upstreamToWebResponse,
   looksLikeHlsManifestPayload,
   shouldSniffAccidentalHlsManifest,
+  normalizeHlsManifestContentType,
+  normalizeLiveMpegTsContentType,
 } from "@/lib/live-upstream-proxy";
 import { ensureDiskHls, isHlsDaemonHealthy, openDaemonMpegTs } from "@/lib/hls-restream-client";
 import { getActiveTranscodingProfile, getTranscodingProfiles } from "@/lib/transcoding-profiles";
@@ -157,7 +159,7 @@ async function proxyUpstreamNative(
           response: new NextResponse(body, {
             status: 200,
             headers: {
-              "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
+              "Content-Type": normalizeHlsManifestContentType(HLS_PLAYLIST_CONTENT_TYPE),
               "Cache-Control": "no-cache, no-store",
             },
           }),
@@ -302,7 +304,7 @@ export async function GET(
         status: 200,
         headers: {
           ...buildLiveRedirectHeaders(antiFreeze),
-          "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
+          "Content-Type": normalizeHlsManifestContentType(HLS_PLAYLIST_CONTENT_TYPE),
           "Cache-Control": "no-cache, no-store",
         },
       })
@@ -432,9 +434,10 @@ export async function GET(
           status: 200,
           headers: {
             ...buildLiveRedirectHeaders(antiFreeze),
-            "Content-Type": contentType.includes("mpegurl") || contentType.includes("m3u8")
-              ? contentType
-              : "video/mp2t",
+            "Content-Type":
+              contentType.includes("mpegurl") || contentType.includes("m3u8")
+                ? normalizeHlsManifestContentType(contentType)
+                : normalizeLiveMpegTsContentType(contentType),
             "Cache-Control": "no-cache, no-store",
             Connection: "keep-alive",
           },
@@ -469,6 +472,9 @@ export async function GET(
               headers: {
                 ...buildLiveRedirectHeaders(antiFreeze),
                 ...Object.fromEntries(response.headers.entries()),
+                "Content-Type": normalizeLiveMpegTsContentType(
+                  response.headers.get("content-type") ?? "video/mp2t"
+                ),
               },
             })
           );
@@ -499,6 +505,7 @@ export async function GET(
       continue;
     }
 
+    const forceUniversal = bw.forceUniversalMpegTs && useHlsRemux;
     const daemonTranscode = transcodeOpts;
     let daemonMpegts = await openDaemonMpegTs({
       streamId: diskStreamId,
@@ -507,6 +514,7 @@ export async function GET(
       clientIp: ip,
       userAgent: UPSTREAM_HLS_UA,
       hls: useHlsRemux,
+      forceUniversal,
       transcode: daemonTranscode,
       signal: req.signal,
     });
@@ -518,6 +526,7 @@ export async function GET(
         clientIp: ip,
         userAgent: UPSTREAM_HLS_UA,
         hls: useHlsRemux,
+        forceUniversal,
         transcode: null,
         signal: req.signal,
       });
@@ -547,6 +556,7 @@ export async function GET(
         streamId: diskStreamId,
         clientIp: ip,
         userAgent: UPSTREAM_HLS_UA,
+        forceUniversal,
         transcode: daemonTranscode,
       });
       if ("error" in remux) {
@@ -625,6 +635,9 @@ export async function GET(
           headers: {
             ...buildLiveRedirectHeaders(antiFreeze),
             ...Object.fromEntries(response.headers.entries()),
+            "Content-Type": normalizeLiveMpegTsContentType(
+              response.headers.get("content-type") ?? "video/mp2t"
+            ),
           },
         })
       );

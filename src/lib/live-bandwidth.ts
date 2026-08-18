@@ -10,6 +10,7 @@ export type LiveBandwidthSettings = {
   kbps: number;
   resolution: string;
   gpu: boolean;
+  forceUniversalMpegTs: boolean;
 };
 
 export function isEcoProfileHint(hint: string | null | undefined): boolean {
@@ -27,6 +28,7 @@ export async function getLiveBandwidthSettings(): Promise<LiveBandwidthSettings>
     kbps,
     resolution,
     gpu: s.liveBandwidthSaverGpu === true,
+    forceUniversalMpegTs: s.forceUniversalMpegTs === true,
   };
 }
 

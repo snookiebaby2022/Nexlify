@@ -130,15 +130,17 @@ const server = http.createServer(async (req, res) => {
               gpuAcceleration: boolean;
             })
           : null;
+      const forceUniversal = Boolean(body.forceUniversal);
 
       let source: Readable;
-      if (transcode || hls || upstreamUrl.startsWith("/") || /\.m3u8(?:[?#]|$)/i.test(upstreamUrl)) {
+      if (forceUniversal || transcode || hls || upstreamUrl.startsWith("/") || /\.m3u8(?:[?#]|$)/i.test(upstreamUrl)) {
         const remux = await createHlsToMpegTsStream({
           hlsUrl: upstreamUrl,
           lineId,
           streamId,
           clientIp,
           userAgent,
+          forceUniversal,
           transcode,
         });
         if ("error" in remux) {
@@ -170,7 +172,9 @@ const server = http.createServer(async (req, res) => {
       res.on("close", drop);
       res.writeHead(200, mpegtsHeaders);
       source.pipe(res);
-      console.log(`hls-daemon mpegts ${streamId} ${transcode ? "eco" : hls ? "hls-remux" : "native"}`);
+      console.log(
+        `hls-daemon mpegts ${streamId} ${forceUniversal ? "universal" : transcode ? "eco" : hls ? "hls-remux" : "native"}`
+      );
       return;
     }
 
