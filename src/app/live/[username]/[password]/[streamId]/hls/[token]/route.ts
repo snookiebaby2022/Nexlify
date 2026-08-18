@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import { getClientIp } from "@/lib/client-ip";
 
-if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { buildLiveRedirectHeaders, getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { authorizeHlsLiveRequest, decodeRelayTarget } from "@/lib/hls-live-auth";
 import {
@@ -11,10 +10,12 @@ import {
   rewriteHlsManifestForRelay,
   HLS_PLAYLIST_CONTENT_TYPE,
   UPSTREAM_HLS_UA,
+  servePackagerHlsSegmentResponse,
 } from "@/lib/hls-playback";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { logActivity } from "@/lib/lines";
-import { ensureTsHlsPackager, isPackagerSegmentName, readTsHlsSegment } from "@/lib/ts-hls-packager";
+import { ensureDiskHls } from "@/lib/hls-restream-client";
+import { isPackagerSegmentName, readTsHlsSegment } from "@/lib/ts-hls-packager";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,41 +49,26 @@ export async function GET(
   const antiFreeze = await getAntiFreezeSettings();
 
   if (isPackagerSegmentName(token)) {
-    let buf = readTsHlsSegment(auth.lineId, auth.streamId, token);
+    let buf = readTsHlsSegment(auth.lineId, auth.diskStreamId, token);
+    if (!buf?.length && auth.diskStreamId !== auth.streamId) {
+      buf = readTsHlsSegment(auth.lineId, auth.streamId, token);
+    }
     if (!buf?.length) {
-      const packed = await ensureTsHlsPackager({
+      const packed = await ensureDiskHls({
         upstreamUrl: auth.rootUpstream,
-        lineId: auth.lineId,
-        streamId: auth.streamId,
+        streamId: auth.diskStreamId,
         userAgent: auth.userAgent,
       });
       if (!packed.ok) {
         return iptvText("Segment unavailable", { status: 502 });
       }
-      buf = readTsHlsSegment(auth.lineId, auth.streamId, token);
+      buf = readTsHlsSegment(auth.lineId, auth.diskStreamId, token);
     }
     if (!buf?.length) return iptvText("Segment not found", { status: 404 });
     if (await isSessionKicked(auth.lineId, clientIp)) {
       return iptvText("Session kicked", { status: 403 });
     }
-    const body = attachKickAwareProxyBody({
-      body: bufferToStream(buf),
-      lineId: auth.lineId,
-      streamId: auth.streamId,
-      ip: clientIp || "",
-      userAgent: auth.userAgent,
-    });
-    return withIptvCors(
-      new NextResponse(body as unknown as BodyInit, {
-        status: 200,
-        headers: {
-          ...buildLiveRedirectHeaders(antiFreeze),
-          "Content-Type": "video/mp2t",
-          "Content-Length": String(buf.length),
-          "Cache-Control": "no-cache, no-store",
-        },
-      })
-    );
+    return servePackagerHlsSegmentResponse(buf, antiFreeze);
   }
 
   const target = decodeRelayTarget(token, auth.rootUpstream);
@@ -150,7 +136,7 @@ export async function GET(
         "Content-Type": upstream.contentType,
         "Cache-Control": "no-cache, no-store",
         "Content-Length": String(segmentBuf.length),
-        ...(range ? { "Accept-Ranges": "bytes" } : {}),
+        "Accept-Ranges": "bytes",
       },
     })
   );

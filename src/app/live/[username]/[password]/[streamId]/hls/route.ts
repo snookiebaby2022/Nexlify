@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import { getClientIp } from "@/lib/client-ip";
 
-// Allow upstream fetches to sources with expired/self-signed TLS certs (common for IPTV CDNs)
-if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 import { buildLiveRedirectHeaders, getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { authorizeHlsLiveRequest, decodeRelayTarget } from "@/lib/hls-live-auth";
 import {
@@ -102,7 +100,7 @@ export async function GET(
         ...buildLiveRedirectHeaders(antiFreeze),
         "Content-Type": upstream.contentType,
         "Cache-Control": "no-cache, no-store",
-        ...(range ? { "Accept-Ranges": "bytes" } : {}),
+        "Accept-Ranges": "bytes",
       },
     })
   );

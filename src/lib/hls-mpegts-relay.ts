@@ -1,13 +1,29 @@
 import { spawn, type ChildProcess } from "child_process";
 import { Readable } from "stream";
 import { ReadableStream } from "stream/web";
+import { liveTranscodeCodecArgs, universalMpegTsTranscodeArgs } from "@/lib/live-transcode";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 
 const remuxProcs = new Map<string, ChildProcess>();
+const MAX_REMUX = 24;
 
-function remuxKey(streamId: string, lineId: string, clientIp?: string): string {
+const MPEGTS_MUX_ARGS = [
+  "-fflags",
+  "+genpts",
+  "-muxdelay",
+  "0.7",
+  "-muxpreload",
+  "0.5",
+  "-mpegts_flags",
+  "resend_headers+pat_pmt_at_frames",
+  "-mpegts_pcr_period",
+  "20",
+];
+
+/** One MPEGTS ffmpeg per viewer (line+IP). Zapping must replace the previous process. */
+function remuxKey(_streamId: string, lineId: string, clientIp?: string): string {
   const ip = clientIp?.trim() || "unknown";
-  return `${lineId}:${streamId}:${ip}`;
+  return `${lineId}:${ip}`;
 }
 
 function stopRemux(key: string) {
@@ -26,21 +42,56 @@ function nodeStreamToWeb(
   nodeStream: Readable,
   cleanup: () => void
 ): ReadableStream<Uint8Array> {
+  let closed = false;
   return new ReadableStream({
     start(controller) {
       nodeStream.on("data", (chunk: Buffer) => {
-        controller.enqueue(new Uint8Array(chunk));
+        if (closed) {
+          nodeStream.destroy();
+          return;
+        }
+        try {
+          if (controller.desiredSize === null) {
+            closed = true;
+            nodeStream.destroy();
+            return;
+          }
+          controller.enqueue(new Uint8Array(chunk));
+        } catch {
+          closed = true;
+          nodeStream.destroy();
+          return;
+        }
+        if (controller.desiredSize !== null && controller.desiredSize <= 0) {
+          nodeStream.pause();
+        }
       });
       nodeStream.on("end", () => {
+        if (closed) return;
+        closed = true;
         cleanup();
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          /* ignore */
+        }
       });
       nodeStream.on("error", (err) => {
+        if (closed) return;
+        closed = true;
         cleanup();
-        controller.error(err);
+        try {
+          controller.error(err);
+        } catch {
+          /* ignore */
+        }
       });
     },
+    pull() {
+      nodeStream.resume();
+    },
     cancel() {
+      closed = true;
       cleanup();
     },
   });
@@ -61,11 +112,22 @@ export async function createHlsToMpegTsStream(opts: {
   streamId: string;
   clientIp?: string;
   userAgent?: string;
+  forceUniversal?: boolean;
+  transcode?: {
+    resolution: string;
+    bitrate: number;
+    codec: string;
+    gpuAcceleration: boolean;
+  } | null;
 }): Promise<{ stream: ReadableStream<Uint8Array>; contentType: string } | { error: string }> {
   const key = remuxKey(opts.streamId, opts.lineId, opts.clientIp);
 
   // Replace any prior remux for this viewer — apps often reopen the same channel without closing first.
   stopRemux(key);
+  if (remuxProcs.size >= MAX_REMUX) {
+    const oldest = remuxProcs.keys().next().value;
+    if (typeof oldest === "string") stopRemux(oldest);
+  }
 
   const ffmpegPath = await getFfmpegPath();
   if (!(await binExists(ffmpegPath))) {
@@ -76,32 +138,51 @@ export async function createHlsToMpegTsStream(opts: {
     opts.userAgent?.trim() ||
     "Mozilla/5.0 (compatible; Nexlify/1.0; +https://nexlify.live)";
 
-  // MPEG-TS output: do NOT use aac_adtstoasc (MP4/FLV only) or a fixed h264_mp4toannexb
-  // (breaks HEVC → audio-only / no picture on VLC & Exo). Let ffmpeg pick bitstream filters.
+  const isLocalFile = opts.hlsUrl.startsWith("/") || opts.hlsUrl.startsWith("file:");
+  const tlsArgs = !isLocalFile && /^https:/i.test(opts.hlsUrl) ? ["-tls_verify", "0"] : [];
+  const inputArgs = isLocalFile
+    ? ["-i", opts.hlsUrl]
+    : [
+        "-user_agent",
+        ua,
+        "-reconnect",
+        "1",
+        "-reconnect_streamed",
+        "1",
+        "-reconnect_delay_max",
+        "3",
+        ...tlsArgs,
+        "-i",
+        opts.hlsUrl,
+      ];
+
+  const transcode =
+    opts.forceUniversal || opts.transcode
+      ? opts.forceUniversal
+        ? universalMpegTsTranscodeArgs()
+        : liveTranscodeCodecArgs(opts.transcode!)
+      : ["-c", "copy", "-bsf:v", "h264_mp4toannexb"];
+
+  // MPEG-TS output: never use aac_adtstoasc (MP4-only — breaks ADTS audio in TS).
   const args = [
     "-hide_banner",
     "-loglevel",
     "error",
-    "-user_agent",
-    ua,
-    "-reconnect",
-    "1",
-    "-reconnect_streamed",
-    "1",
-    "-reconnect_delay_max",
-    "5",
+    "-fflags",
+    "+nobuffer+discardcorrupt",
+    "-flags",
+    "low_delay",
     "-probesize",
-    "5000000",
+    "512000",
     "-analyzeduration",
-    "5000000",
-    "-i",
-    opts.hlsUrl,
+    opts.transcode || opts.forceUniversal ? "500000" : "500000",
+    ...inputArgs,
     "-map",
     "0:v:0?",
     "-map",
     "0:a:0?",
-    "-c",
-    "copy",
+    ...transcode,
+    ...MPEGTS_MUX_ARGS,
     "-f",
     "mpegts",
     "pipe:1",

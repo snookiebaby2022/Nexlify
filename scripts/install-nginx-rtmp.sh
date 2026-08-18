@@ -75,9 +75,11 @@ rtmp {
             hls_path ${HLS_DIR};
             wait_key on;
             hls_fragment 2s;
-            hls_playlist_length 30s;
+            hls_playlist_length 6s;
             hls_nested off;
-            hls_sync 200ms;
+            hls_sync 100ms;
+            hls_cleanup on;
+            hls_continuous off;
         }
     }
 }

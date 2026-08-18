@@ -1,60 +1,33 @@
 import { prisma } from "./prisma";
-import { countActiveConnections, deleteStaleConnections } from "./connections";
+import { listActiveConnections, countActiveConnections } from "./connections";
 import { importFromFolder } from "./import-media";
 import { syncEpgSource } from "./epg";
 import { enqueueAgentCommand, generateAgentToken } from "./stream-agent";
 import { runPanelBackup } from "./backup-run";
-import { getSettingGroup } from "./panel-settings";
 import { reassignStreamsFromOfflineServers } from "./server-load";
 import { jobCheckStreamCerts } from "./cert-monitor";
 import { isRemoteM3uUrl } from "./m3u-watch-sync";
 import { runDueM3uSyncJobs, runWatchFolderM3uSync } from "./m3u-sync-jobs";
-import { snapshotNicTrafficForCron } from "./host-metrics";
+import { getSettingGroup } from "./panel-settings";
+
+const ESTIMATED_MBPS_PER_STREAM = Number(process.env.ESTIMATED_MBPS_PER_STREAM ?? "4");
 
 async function logCron(job: string, status: string, message?: string, durationMs?: number) {
-  // Persist errors/warnings always; skip trivial idle "ok" noise to keep CronRunLog small.
-  const trivialOk =
-    status === "ok" &&
-    (!message ||
-      /^(idle|0 |disabled|skipped)/i.test(message) ||
-      message === "disabled" ||
-      /^synced 0/.test(message) ||
-      /^processed 0/.test(message) ||
-      /^queued 0/.test(message) ||
-      /^probed 0/.test(message) ||
-      /^0 alerts/.test(message) ||
-      /^0 expired/.test(message) ||
-      /^0 streams/.test(message) ||
-      /^0 removed/.test(message) ||
-      /^stopped 0/.test(message) ||
-      /^rotated 0/.test(message) ||
-      message.includes("skipped (schedule)"));
-  if (!trivialOk || status !== "ok") {
-    await prisma.cronRunLog.create({
-      data: { job, status, message, durationMs },
-    });
-  }
-}
-
-/** Avoid running heavy notify/probe jobs every single minute. */
-async function dueEvery(key: string, intervalMs: number): Promise<boolean> {
-  const settingKey = `cron_due_${key}`;
-  const row = await prisma.panelSetting.findUnique({ where: { key: settingKey } });
-  const last = row?.value ? Date.parse(row.value) : 0;
-  if (Number.isFinite(last) && Date.now() - last < intervalMs) return false;
-  await prisma.panelSetting.upsert({
-    where: { key: settingKey },
-    update: { value: new Date().toISOString() },
-    create: { key: settingKey, value: new Date().toISOString() },
+  await prisma.cronRunLog.create({
+    data: { job, status, message, durationMs },
   });
-  return true;
+  await prisma.panelSetting.upsert({
+    where: { key: "cron_last_run" },
+    update: { value: new Date().toISOString() },
+    create: { key: "cron_last_run", value: new Date().toISOString() },
+  });
 }
 
 export async function jobCleanupConnections() {
   const start = Date.now();
   try {
-    const r = await deleteStaleConnections();
-    await logCron("cleanup_connections", "ok", `removed ${r.count}`, Date.now() - start);
+    await listActiveConnections();
+    await logCron("cleanup_connections", "ok", undefined, Date.now() - start);
   } catch (e) {
     await logCron("cleanup_connections", "error", String(e), Date.now() - start);
   }
@@ -107,10 +80,11 @@ export async function jobStopIdleStreams() {
 export async function jobBandwidthSnapshot() {
   const start = Date.now();
   try {
+    // Use count instead of loading all rows into memory
     const count = await countActiveConnections();
-    const nic = await snapshotNicTrafficForCron();
-    const bytesOut = nic?.bytesOut ?? BigInt(0);
-    const bytesIn = nic?.bytesIn ?? BigInt(0);
+    const bytesOutPerSec = (count * ESTIMATED_MBPS_PER_STREAM * 1_000_000) / 8;
+    const bytesOut = BigInt(Math.floor(bytesOutPerSec * 60));
+    const bytesIn = BigInt(Math.floor(Number(bytesOut) / 10));
 
     await prisma.bandwidthSnapshot.create({
       data: {
@@ -141,7 +115,7 @@ export async function jobBandwidthSnapshot() {
     const old = new Date(Date.now() - 48 * 3600 * 1000);
     await prisma.bandwidthSnapshot.deleteMany({ where: { createdAt: { lt: old } } });
 
-    await logCron("bandwidth_snapshot", "ok", `${count} conns nic=${nic ? "yes" : "init"}`, Date.now() - start);
+    await logCron("bandwidth_snapshot", "ok", `${count} streams`, Date.now() - start);
   } catch (e) {
     await logCron("bandwidth_snapshot", "error", String(e), Date.now() - start);
   }
@@ -170,7 +144,11 @@ export async function jobWatchFolders() {
           ? "SERIES"
           : folder.type === "MOVIE"
             ? "MOVIE"
-            : "LIVE";
+            : folder.type === "LIVE"
+              ? "LIVE"
+              : isRemoteM3uUrl(folder.path)
+                ? "MIXED"
+                : "MIXED";
 
       await prisma.importJob.create({
         data: {
@@ -200,30 +178,12 @@ export async function jobWatchFolders() {
 export async function jobImportQueue() {
   const start = Date.now();
   try {
-    // Heal legacy numeric / unknown statuses left by SQL migrate (e.g. status "3").
-    const stuck = await prisma.importJob.updateMany({
-      where: {
-        status: { notIn: ["queued", "running", "done", "failed", "cancelled"] },
-        completedAt: null,
-      },
-      data: {
-        status: "failed",
-        message: "Invalid legacy import status cleared by cron",
-        completedAt: new Date(),
-      },
-    });
-
     const job = await prisma.importJob.findFirst({
       where: { status: "queued" },
       orderBy: { createdAt: "asc" },
     });
     if (!job) {
-      await logCron(
-        "import_queue",
-        "ok",
-        stuck.count ? `idle (healed ${stuck.count})` : "idle",
-        Date.now() - start
-      );
+      await logCron("import_queue", "ok", "idle", Date.now() - start);
       return;
     }
 
@@ -232,14 +192,8 @@ export async function jobImportQueue() {
       data: { status: "running", startedAt: new Date() },
     });
 
-    let mode: "MOVIE" | "SERIES" | "MIXED" | "LIVE" =
-      job.streamType === "SERIES"
-        ? "SERIES"
-        : job.streamType === "MOVIE"
-          ? "MOVIE"
-          : job.streamType === "LIVE"
-            ? "LIVE"
-            : "MIXED";
+    let mode: "MOVIE" | "SERIES" | "MIXED" =
+      job.streamType === "SERIES" ? "SERIES" : job.streamType === "MOVIE" ? "MOVIE" : "MIXED";
 
     let watchFolder: { type: string; path: string } | null = null;
     if (job.watchFolderId) {
@@ -247,10 +201,9 @@ export async function jobImportQueue() {
         where: { id: job.watchFolderId },
         select: { type: true, path: true },
       });
-      if (watchFolder?.type === "MIXED" || watchFolder?.type === "M3U") mode = "MIXED";
+      if (watchFolder?.type === "MIXED") mode = "MIXED";
       else if (watchFolder?.type === "SERIES") mode = "SERIES";
       else if (watchFolder?.type === "MOVIE") mode = "MOVIE";
-      else if (watchFolder?.type === "LIVE") mode = "LIVE";
     }
 
     let result = { imported: 0, skipped: 0 };
@@ -260,22 +213,13 @@ export async function jobImportQueue() {
           id: job.watchFolderId!,
           name: "",
           path: job.source,
-          type: watchFolder.type === "M3U" ? "MIXED" : watchFolder.type,
-          categoryId: job.categoryId,
-          serverId: job.serverId,
-        });
-      } else if (mode === "LIVE" && isRemoteM3uUrl(job.source)) {
-        result = await runWatchFolderM3uSync({
-          id: job.watchFolderId ?? job.id,
-          name: "",
-          path: job.source,
-          type: "LIVE",
+          type: watchFolder.type,
           categoryId: job.categoryId,
           serverId: job.serverId,
         });
       } else {
         result = await importFromFolder(job.source, {
-          mode: mode === "LIVE" ? "MIXED" : mode,
+          mode,
           categoryId: job.categoryId,
           serverId: job.serverId,
           allowedRoot: process.env.MEDIA_IMPORT_ROOT,
@@ -373,7 +317,6 @@ export async function jobEpgSync() {
     const now = Date.now();
     let ok = 0;
     let skipped = 0;
-    let failed = 0;
     for (const s of sources) {
       const hours = s.syncEveryHours > 0 ? s.syncEveryHours : 24;
       const due =
@@ -390,31 +333,19 @@ export async function jobEpgSync() {
         });
         ok++;
       } catch (e) {
-        failed++;
-        const err = String(e);
-        // Auto-disable sources that have never synced and keep failing (bad migrate URLs).
-        const neverSynced = !s.lastSync;
         await prisma.epgSource.update({
           where: { id: s.id },
-          data: {
-            lastSyncError: err,
-            ...(neverSynced ? { isActive: false } : {}),
-          },
+          data: { lastSyncError: String(e) },
         });
       }
     }
-    await logCron(
-      "epg_sync",
-      failed && !ok ? "warn" : "ok",
-      `synced ${ok}, skipped ${skipped}, failed ${failed}`,
-      Date.now() - start
-    );
+    await logCron("epg_sync", "ok", `synced ${ok}, skipped ${skipped}`, Date.now() - start);
   } catch (e) {
     await logCron("epg_sync", "error", String(e), Date.now() - start);
   }
 }
 
-/** Built-in Auto EPG Mapping — backfill LIVE streams missing a working epg_id. */
+/** Auto EPG Mapping — backfill LIVE streams missing a working epgChannelId. */
 export async function jobEpgAutoMap() {
   const start = Date.now();
   try {
@@ -431,6 +362,85 @@ export async function jobEpgAutoMap() {
   }
 }
 
+/** Enrich existing VOD streams (movies/series) with TMDB poster and metadata. */
+export async function jobVodEnrich() {
+  const start = Date.now();
+  try {
+    const { enrichVodFromTmdb, isTmdbConfigured } = await import("./vod-tmdb-enrich");
+    if (!(await isTmdbConfigured())) {
+      await logCron("vod_enrich", "ok", "tmdb not configured", Date.now() - start);
+      return;
+    }
+
+    const tmdbSettings = await getSettingGroup("tmdb");
+    const doMovies = tmdbSettings.enableMovieMeta !== false;
+    const doSeries = tmdbSettings.enableSeriesMeta !== false;
+
+    let enriched = 0;
+    let skipped = 0;
+
+    if (doMovies) {
+      const movies = await prisma.stream.findMany({
+        where: { type: "MOVIE", isActive: true, streamIcon: null },
+        select: { id: true, name: true },
+        take: 200,
+        orderBy: { updatedAt: "desc" },
+      });
+      for (const m of movies) {
+        try {
+          const result = await enrichVodFromTmdb(m.name, "MOVIE");
+          if (result?.streamIcon) {
+            await prisma.stream.update({
+              where: { id: m.id },
+              data: {
+                streamIcon: result.streamIcon,
+                agentStartCmd: result.agentStartCmd || undefined,
+              },
+            });
+            enriched++;
+          } else {
+            skipped++;
+          }
+        } catch {
+          skipped++;
+        }
+      }
+    }
+
+    if (doSeries) {
+      const series = await prisma.stream.findMany({
+        where: { type: "SERIES", isActive: true, streamIcon: null },
+        select: { id: true, name: true },
+        take: 200,
+        orderBy: { updatedAt: "desc" },
+      });
+      for (const s of series) {
+        try {
+          const result = await enrichVodFromTmdb(s.name, "SERIES");
+          if (result?.streamIcon) {
+            await prisma.stream.update({
+              where: { id: s.id },
+              data: {
+                streamIcon: result.streamIcon,
+                agentStartCmd: result.agentStartCmd || undefined,
+              },
+            });
+            enriched++;
+          } else {
+            skipped++;
+          }
+        } catch {
+          skipped++;
+        }
+      }
+    }
+
+    await logCron("vod_enrich", "ok", `enriched ${enriched}, skipped ${skipped}`, Date.now() - start);
+  } catch (e) {
+    await logCron("vod_enrich", "error", String(e), Date.now() - start);
+  }
+}
+
 export async function jobPanelBackup() {
   const start = Date.now();
   try {
@@ -439,44 +449,6 @@ export async function jobPanelBackup() {
       await logCron("panel_backup", "ok", "skipped (schedule)", Date.now() - start);
       return;
     }
-
-    const backup = await getSettingGroup("backup");
-    if (!backup.enabled) {
-      await logCron("panel_backup", "ok", "disabled", Date.now() - start);
-      return;
-    }
-
-    // Large catalogs: run detached so the hourly cron tick is not blocked for hours.
-    const streamCount = await prisma.stream.count();
-    if (backup.fullExportOnBackup !== false && streamCount >= 10_000) {
-      const { startBackupBackgroundJob, reconcileBackupJob } = await import("./backup-job");
-      const existing = await reconcileBackupJob();
-      if (existing?.status === "running") {
-        await logCron("panel_backup", "ok", "already running", Date.now() - start);
-        return;
-      }
-      const format =
-        backup.exportFormat === "zip" ? "zip" : backup.exportFormat === "gzip" ? "gzip" : "json";
-      const started = await startBackupBackgroundJob({
-        trigger: "cron",
-        format,
-        includePasswords: backup.includePasswords === true,
-        target: backup.target === "remote" ? "remote" : "local",
-      });
-      if (!started.ok) {
-        await logCron("panel_backup", "error", started.error, Date.now() - start);
-        return;
-      }
-      await markBackupLastRun();
-      await logCron(
-        "panel_backup",
-        "ok",
-        `started background ${started.job.id} (${streamCount} streams)`,
-        Date.now() - start
-      );
-      return;
-    }
-
     const result = await runPanelBackup();
     if (result.skipped) {
       await logCron("panel_backup", "ok", "disabled", Date.now() - start);
@@ -492,22 +464,14 @@ export async function jobPanelBackup() {
 export async function jobServerRebalance() {
   const start = Date.now();
   try {
-    const failover = await reassignStreamsFromOfflineServers();
-    const { rebalanceLiveStreamsAcrossServers } = await import("./server-load");
-    const even = await rebalanceLiveStreamsAcrossServers({ maxMoves: 80 });
-    await logCron(
-      "server_rebalance",
-      "ok",
-      `failover ${failover}; balanced ${even.moved} across ${even.servers} servers`,
-      Date.now() - start
-    );
+    const n = await reassignStreamsFromOfflineServers();
+    await logCron("server_rebalance", "ok", `${n} streams moved`, Date.now() - start);
   } catch (e) {
     await logCron("server_rebalance", "error", String(e), Date.now() - start);
   }
 }
 
 export async function jobTheftDetection() {
-  if (!(await dueEvery("theft_detection", 15 * 60_000))) return;
   const start = Date.now();
   try {
     const { loadTheftSettings, runLineTheftJob, runVodTheftJob, runStreamTheftJob } =
@@ -570,7 +534,6 @@ export async function jobExpireLines() {
 }
 
 export async function jobDeadLinkProbe() {
-  if (!(await dueEvery("dead_link_probe", 15 * 60_000))) return;
   const start = Date.now();
   try {
     const { runDeadLinkProbeJob } = await import("@/lib/panel-monitoring-jobs");
@@ -587,8 +550,6 @@ export async function jobDeadLinkProbe() {
 }
 
 export async function jobSubscriptionNotify() {
-  // Expiry/low-credit checks are expensive after large imports — run every 30 min.
-  if (!(await dueEvery("subscription_notify", 30 * 60_000))) return;
   const start = Date.now();
   try {
     const { runSubscriptionNotificationJob } = await import("@/lib/panel-notification-events");
@@ -605,7 +566,6 @@ export async function jobSubscriptionNotify() {
 }
 
 export async function jobTelegramMonitoring() {
-  if (!(await dueEvery("telegram_monitoring", 15 * 60_000))) return;
   const start = Date.now();
   try {
     const { runTelegramMonitoringJob } = await import("@/lib/panel-monitoring-jobs");
@@ -621,18 +581,14 @@ export async function jobLicenseRevalidate() {
   try {
     const { heartbeatCheck } = await import("@/lib/license/server-guard");
     const result = await heartbeatCheck();
-    const soft = Boolean(result.soft) || result.reason === "no_license" || result.reason?.startsWith("network_");
-    const status = result.ok ? "ok" : soft ? "warn" : "invalid";
     await logCron(
       "license_revalidate",
-      status,
+      result.ok ? "ok" : "invalid",
       result.reason,
       Date.now() - start,
     );
-    if (!result.ok && !soft) {
+    if (!result.ok) {
       console.error(`[LICENSE] Heartbeat failed: ${result.reason}`);
-    } else if (!result.ok && result.reason !== "no_license") {
-      console.warn(`[LICENSE] Heartbeat soft fail: ${result.reason}`);
     }
   } catch (e) {
     await logCron("license_revalidate", "error", String(e), Date.now() - start);
@@ -669,40 +625,6 @@ async function jobM3uSync() {
   }
 }
 
-export async function jobCleanupCronLogs() {
-  const start = Date.now();
-  try {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const r = await prisma.cronRunLog.deleteMany({ where: { createdAt: { lt: cutoff } } });
-    let trimmed = 0;
-    const total = await prisma.cronRunLog.count();
-    if (total > 8000) {
-      const excess = await prisma.cronRunLog.findMany({
-        orderBy: { createdAt: "asc" },
-        take: total - 5000,
-        select: { id: true },
-      });
-      for (let i = 0; i < excess.length; i += 1000) {
-        const chunk = excess.slice(i, i + 1000).map((x) => x.id);
-        const del = await prisma.cronRunLog.deleteMany({ where: { id: { in: chunk } } });
-        trimmed += del.count;
-      }
-    }
-    const notifCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const n = await prisma.panelNotification.deleteMany({
-      where: { createdAt: { lt: notifCutoff }, kind: "ALERT" },
-    });
-    await logCron(
-      "cleanup_cron_logs",
-      "ok",
-      `logs ${r.count + trimmed}, alerts ${n.count}`,
-      Date.now() - start
-    );
-  } catch (e) {
-    await logCron("cleanup_cron_logs", "error", String(e), Date.now() - start);
-  }
-}
-
 export async function runAllCronJobs() {
   await jobPanelHealthWatchdog();
   await jobCleanupConnections();
@@ -720,12 +642,6 @@ export async function runAllCronJobs() {
   await jobDeadLinkProbe();
   await jobSubscriptionNotify();
   await jobTelegramMonitoring();
-  await jobCleanupCronLogs();
-  await prisma.panelSetting.upsert({
-    where: { key: "cron_last_run" },
-    update: { value: new Date().toISOString() },
-    create: { key: "cron_last_run", value: new Date().toISOString() },
-  });
 }
 
 export async function jobAgentTokenRotation() {
@@ -778,68 +694,48 @@ async function jobPgDump() {
   const start = Date.now();
   try {
     const backup = await getSettingGroup("backup");
-    const dumpOn =
-      backup.pgDumpCronEnabled === true ||
-      backup.pgDumpCronEnabled === "true" ||
-      backup.pgDumpCronEnabled === 1 ||
-      backup.pgDumpCronEnabled === "1";
-    if (!dumpOn) {
+    if (!backup.pgDumpCronEnabled) {
+      await logCron("pg_dump", "skipped", "disabled", Date.now() - start);
       return;
     }
 
-    const { cronMatchesThisHour } = await import("./backup-schedule");
-    const expr = String(backup.pgDumpCronSchedule || "0 4 * * *").trim();
-    if (!cronMatchesThisHour(expr)) {
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      await logCron("pg_dump", "error", "DATABASE_URL not set", Date.now() - start);
       return;
     }
 
-    const last = await prisma.panelSetting.findUnique({ where: { key: "pg_dump_last_run" } });
-    if (last?.value) {
-      const elapsed = Date.now() - new Date(last.value).getTime();
-      const hourField = expr.split(/\s+/)[1] ?? "4";
-      const minGapMs = hourField === "*" ? 50 * 60_000 : 23 * 60 * 60 * 1000;
-      if (elapsed < minGapMs) return;
-    }
+    const { mkdir, writeFile } = await import("fs/promises");
+    const { execSync } = await import("child_process");
+    const path = await import("path");
 
-    const { runPgDumpToGzip, cleanupOldPgDumps, sanitizePgDumpError } = await import("./pg-dump");
-    let result: Awaited<ReturnType<typeof runPgDumpToGzip>> | null = null;
-    let lastErr: unknown = null;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        result = await runPgDumpToGzip({ timeoutMs: 2 * 60 * 60 * 1000 });
-        lastErr = null;
-        break;
-      } catch (e) {
-        lastErr = e;
-        const msg = sanitizePgDumpError(e).toLowerCase();
-        const transient =
-          msg.includes("connection refused") ||
-          msg.includes("could not connect") ||
-          msg.includes("the database system is starting") ||
-          msg.includes("the database system is shutting down") ||
-          msg.includes("server closed the connection") ||
-          msg.includes("timeout expired") ||
-          msg.includes("pg_dump already running");
-        if (!transient || attempt === 2) break;
-        await new Promise((r) => setTimeout(r, 15_000));
-      }
-    }
-    if (!result) throw lastErr ?? new Error("pg_dump failed");
-    cleanupOldPgDumps(result.dir, Number(backup.pgDumpKeepDays ?? 14));
-    await prisma.panelSetting.upsert({
-      where: { key: "pg_dump_last_run" },
-      create: { key: "pg_dump_last_run", value: new Date().toISOString() },
-      update: { value: new Date().toISOString() },
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const dir = path.resolve(process.cwd(), "./backups/pg");
+    await mkdir(dir, { recursive: true });
+    const outPath = path.join(dir, `nexlify-pg-${stamp}.sql.gz`);
+
+    execSync(`pg_dump "${databaseUrl}" | gzip -9 > "${outPath}"`, {
+      timeout: 300_000,
+      env: { ...process.env },
     });
-    await logCron(
-      "pg_dump",
-      "ok",
-      `wrote ${result.outPath} (${result.bytes} bytes via ${result.pgDumpPath})`,
-      Date.now() - start
-    );
+
+    // Cleanup old dumps
+    const keepDays = Number(backup.pgDumpKeepDays ?? 14);
+    try {
+      const { readdirSync, statSync, unlinkSync } = await import("fs");
+      const files = readdirSync(dir).filter((f) => f.startsWith("nexlify-pg-") && f.endsWith(".sql.gz"));
+      const cutoff = Date.now() - keepDays * 86400000;
+      for (const f of files) {
+        const st = statSync(path.join(dir, f));
+        if (st.mtimeMs < cutoff) {
+          unlinkSync(path.join(dir, f));
+        }
+      }
+    } catch { /* best effort cleanup */ }
+
+    await logCron("pg_dump", "ok", `wrote ${outPath}`, Date.now() - start);
   } catch (e) {
-    const { sanitizePgDumpError } = await import("./pg-dump");
-    await logCron("pg_dump", "error", sanitizePgDumpError(e), Date.now() - start);
+    await logCron("pg_dump", "error", String(e), Date.now() - start);
   }
 }
 
@@ -856,14 +752,9 @@ async function jobCloudBackup() {
 }
 
 export async function runHourlyCronJobs() {
-  try {
-    const { ensureAddonSettingsHealed } = await import("./panel-settings");
-    await ensureAddonSettingsHealed();
-  } catch {
-    /* non-fatal */
-  }
   await jobEpgSync();
   await jobEpgAutoMap();
+  await jobVodEnrich();
   await jobPanelBackup();
   await jobAgentTokenRotation();
   await jobPanelAutoUpdate();

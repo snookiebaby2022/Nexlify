@@ -35,6 +35,7 @@ function isPlaybackPath(pathname: string): boolean {
     pathname.startsWith("/live") ||
     pathname.startsWith("/movie") ||
     pathname.startsWith("/series") ||
+    pathname.startsWith("/timeshift") ||
     pathname.startsWith("/webrtc") ||
     pathname.startsWith("/get.php") ||
     pathname.startsWith("/player_api.php") ||
@@ -75,6 +76,8 @@ const PUBLIC = [
   "/live",
   "/movie",
   "/series",
+  "/timeshift",
+  "/hls-segment",
   "/api/v1",
   "/api/auth",
   "/api/billing",

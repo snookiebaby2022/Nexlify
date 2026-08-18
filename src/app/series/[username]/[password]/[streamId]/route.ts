@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
 
-if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
 import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
-import { trackConnection, isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
+import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import { getLineForPlaybackAuth, resolvePlaybackUrlForLine } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { resolveStreamIdParam } from "@/lib/xtream-stream-id";
 import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
+import { isHlsClientPath, HLS_PLAYLIST_CONTENT_TYPE, buildClientVodHlsPlaylist, buildVodProgressiveHlsManifest, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
+import { serverBaseUrl } from "@/lib/xtream";
 
 export const runtime = "nodejs";
 const PROXY_TIMEOUT_MS = 30_000;
@@ -59,11 +59,32 @@ export async function GET(
   const playbackUrl = await resolvePlaybackUrlForLine(line.id, cleanId, { clientIp: ip, userAgent: ua });
   if (!playbackUrl) return iptvText("Not found", { status: 404 });
 
+  if (isHlsClientPath(streamId) || /\.m3u8$/i.test(streamId)) {
+    const streamKey = streamId.replace(/\.(m3u8|hls)$/i, "");
+    const packed = await buildClientVodHlsPlaylist({
+      playbackUrl,
+      panelOrigin: serverBaseUrl(req.url, req.headers),
+      username,
+      password,
+      streamKey,
+      diskStreamId: cleanId,
+    });
+    const body = packed.ok
+      ? packed.body
+      : buildVodProgressiveHlsManifest("series", username, password, streamKey);
+    return withIptvCors(
+      new NextResponse(body, {
+        status: 200,
+        headers: { "Content-Type": HLS_PLAYLIST_CONTENT_TYPE, "Cache-Control": "no-cache" },
+      })
+    );
+  }
+
   const range = req.headers.get("range");
   let open;
   try {
     open = await openUpstreamLiveStream(playbackUrl, {
-      userAgent: ua,
+      userAgent: UPSTREAM_HLS_UA,
       timeoutMs: PROXY_TIMEOUT_MS,
       headers: range ? { Range: range } : undefined,
     });

@@ -1,14 +1,18 @@
 import type { Stream } from "@prisma/client";
 import { StreamType } from "@prisma/client";
 import { resolveStreamPlaybackUrl, type StreamWithProvider } from "./resolve-stream-url";
-import { isIntegrationStreamUrl } from "./integration-stream-url";
+import { isHlsPlaybackUrl } from "./hls-playback";
+import { pickVodExtension } from "./vod-proxy";
 
 type LineCreds = { username: string; password: string };
 
-function vodExtension(stream: Pick<Stream, "containerExtension" | "type">): string {
-  const ext = stream.containerExtension?.trim();
-  if (ext) return ext.replace(/^\./, "");
-  return stream.type === StreamType.SERIES ? "mkv" : "mp4";
+function isHlsUpstream(stream: StreamWithProvider, seed?: string): boolean {
+  try {
+    const url = resolveStreamPlaybackUrl(stream, seed);
+    return isHlsPlaybackUrl(url);
+  } catch {
+    return false;
+  }
 }
 
 function trimBase(baseUrl: string): string {
@@ -17,8 +21,9 @@ function trimBase(baseUrl: string): string {
 
 /**
  * URL placed in M3U / Xtream exports.
- * Plugin imports (nexlify://…) are proxied through /movie/… so playback resolves like /live/.
- * @param output - "hls" for .m3u8 URLs, "ts" (default) for .ts URLs
+ * @param output - "hls" forces .m3u8, "ts" forces .ts, "auto" matches the upstream format.
+ * @param directPlay - when true, VOD returns the raw provider URL (faster, source exposed).
+ *                     when false, VOD goes through the panel proxy (source hidden, Range support).
  */
 export function exportPlaybackUrl(
   baseUrl: string,
@@ -26,27 +31,33 @@ export function exportPlaybackUrl(
   stream: Pick<Stream, "id" | "type" | "streamUrl" | "containerExtension">,
   full?: StreamWithProvider,
   seed?: string,
-  output: "hls" | "ts" = "ts"
+  output: "hls" | "ts" | "auto" = "auto",
+  directPlay: boolean = true
 ): string {
   const resolved = (full ?? stream) as StreamWithProvider;
+  const base = trimBase(baseUrl);
 
   if (stream.type === StreamType.LIVE) {
-    // Default MPEG-TS (.ts) for broad player compatibility. Honor output=hls
-    // when apps request the recommended m3u_plus HLS playlist URL.
-    const ext = output === "hls" ? "m3u8" : "ts";
-    return `${trimBase(baseUrl)}/live/${encodeURIComponent(line.username)}/${encodeURIComponent(line.password)}/${stream.id}.${ext}`;
+    // Serve HLS sources as HLS when possible. Players handle native HLS far
+    // better than a forced HLS->TS remux (faster zapping, no buffering).
+    // output=hls forces HLS; output=auto picks HLS for HLS upstreams, TS otherwise.
+    if ((output === "hls" || output === "auto") && isHlsUpstream(resolved, seed)) {
+      return `${base}/live/${line.username}/${line.password}/${stream.id}.m3u8`;
+    }
+    return `${base}/live/${line.username}/${line.password}/${stream.id}.ts`;
   }
 
-  const ext = vodExtension(stream);
-  const route = stream.type === StreamType.SERIES ? "series" : "movie";
-  // Always route VOD/series through the panel so clients see consistent Xtream-style
-  // URLs and playback stays observable/kickable like live sessions.
-  if (isIntegrationStreamUrl(stream.streamUrl)) {
-    return `${trimBase(baseUrl)}/${route}/${encodeURIComponent(line.username)}/${encodeURIComponent(line.password)}/${stream.id}.${ext}`;
+  // Direct play: return the raw provider URL (fastest, no panel overhead).
+  if (directPlay) {
+    const directUrl = resolveStreamPlaybackUrl(resolved, seed);
+    if (directUrl) return directUrl;
   }
 
-  const direct = resolveStreamPlaybackUrl(resolved, seed);
-  return direct
-    ? `${trimBase(baseUrl)}/${route}/${encodeURIComponent(line.username)}/${encodeURIComponent(line.password)}/${stream.id}.${ext}`
-    : direct;
+  // Proxy through panel: hides source URL, handles Range requests and HLS.
+  const resolvedUrl = resolveStreamPlaybackUrl(resolved, seed);
+  const ext = pickVodExtension(resolvedUrl);
+  if (stream.type === StreamType.SERIES) {
+    return `${base}/series/${line.username}/${line.password}/${stream.id}.${ext}`;
+  }
+  return `${base}/movie/${line.username}/${line.password}/${stream.id}.${ext}`;
 }
