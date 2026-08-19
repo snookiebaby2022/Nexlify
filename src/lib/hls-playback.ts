@@ -7,6 +7,29 @@ const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
 /** Xtream/nginx HLS playlist type — Smarters ExoPlayer accepts this more reliably than vnd.apple.mpegurl. */
 export const HLS_PLAYLIST_CONTENT_TYPE = "application/x-mpegURL";
 
+/** Real provider .m3u8 (BBC One FHD). Guessed Xtream suffixes get a much shorter probe. */
+export const HLS_NATIVE_PROBE_MS = 5_000;
+export const HLS_GUESSED_PROBE_MS = 800;
+
+/**
+ * Finite HLS segments: never 206 without Content-Range. VLC refuses that combo;
+ * ExoPlayer is lenient which is why MPEG-TS/HLS looked "fine" only on Exo.
+ */
+export function hlsMediaSegmentHttp(byteLength: number): {
+  status: number;
+  headers: Record<string, string>;
+} {
+  return {
+    status: 200,
+    headers: {
+      "Content-Type": "video/mp2t",
+      "Content-Length": String(byteLength),
+      "Cache-Control": "no-cache, no-store",
+      "Accept-Ranges": "none",
+    },
+  };
+}
+
 export function isHlsClientPath(streamId: string): boolean {
   return /\.(m3u8|hls)$/i.test(streamId);
 }

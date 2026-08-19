@@ -4,10 +4,10 @@ import { join } from "path";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 import { hlsStreamDir } from "@/lib/hls-disk";
 
-/** Match XUI/NXT default segment length. Do not use hls_init_time / split_by_time with -c copy. */
-const HLS_TIME_SEC = 4;
+/** Short segments so the first playlist is ready before XCIPTV's ~10s HLS timeout. */
+const HLS_TIME_SEC = 2;
 const HLS_LIST_SIZE = 6;
-const READY_TIMEOUT_MS = 8_000;
+const READY_TIMEOUT_MS = 12_000;
 const MAX_SESSIONS = 32;
 const IDLE_MS = 10 * 60 * 1000;
 const REAP_EVERY_MS = 30_000;
@@ -105,8 +105,31 @@ function stopSession(key: string) {
   }
 }
 
-function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number): Promise<boolean> {
+/** Live HTTP input is already realtime — `-re` delays the first HLS segment by a full GOP. */
+export function packagerLiveInputPrefix(opts?: { loop?: boolean; vod?: boolean }): string[] {
+  if (opts?.loop) return ["-re", "-stream_loop", "-1"];
+  if (opts?.vod) return ["-re"];
+  return [];
+}
+
+export function packagerPlaylistIsReady(dir: string): boolean {
   const indexPath = join(dir, "index.m3u8");
+  try {
+    if (!existsSync(indexPath) || statSync(indexPath).size <= 24) return false;
+    const body = readFileSync(indexPath, "utf8");
+    if (!body.includes("#EXTINF")) return false;
+    const segs = body.match(/seg\d+\.ts/gi) ?? [];
+    for (const name of segs) {
+      const path = join(dir, name);
+      if (existsSync(path) && statSync(path).size >= 188) return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number): Promise<boolean> {
   const started = Date.now();
   return new Promise((resolve) => {
     const tick = () => {
@@ -114,17 +137,9 @@ function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number): Pr
         resolve(false);
         return;
       }
-      try {
-        if (existsSync(indexPath) && statSync(indexPath).size > 24) {
-          const body = readFileSync(indexPath, "utf8");
-          const segs = body.match(/seg\d+\.ts/gi) ?? [];
-          if (body.includes("#EXTINF") && segs.length >= 1) {
-            resolve(true);
-            return;
-          }
-        }
-      } catch {
-        /* retry */
+      if (packagerPlaylistIsReady(dir)) {
+        resolve(true);
+        return;
       }
       if (Date.now() - started >= timeoutMs) {
         resolve(false);
@@ -202,10 +217,11 @@ async function spawnPackager(
   mkdirSync(dir, { recursive: true });
 
   const ua = opts?.userAgent?.trim() || "VLC/3.0.20 LibVLC/3.0.20";
-  const inputPrefix = opts?.loop ? ["-re", "-stream_loop", "-1"] : ["-re"];
+  const inputPrefix = packagerLiveInputPrefix(opts);
   const hlsFlags = opts?.vod ? "temp_file" : "omit_endlist+temp_file";
   const listSize = opts?.vod ? "0" : String(HLS_LIST_SIZE);
   const fingerprint = packagerFingerprint(upstreamUrl, opts?.transcode ?? null, opts?.loop, opts?.vod);
+  const liveTune = opts?.vod ? [] : ["-flags", "low_delay"];
 
   const proc = spawn(
     ffmpegPath,
@@ -228,7 +244,7 @@ async function spawnPackager(
       "-rw_timeout",
       "15000000",
       "-probesize",
-      "500000",
+      "327680",
       "-analyzeduration",
       "500000",
       "-fflags",
@@ -239,6 +255,7 @@ async function spawnPackager(
       "-i",
       upstreamUrl,
       ...transcodeArgs(opts?.transcode ?? null),
+      ...liveTune,
       "-f",
       "hls",
       "-hls_time",

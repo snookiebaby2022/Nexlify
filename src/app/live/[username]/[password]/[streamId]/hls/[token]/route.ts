@@ -10,6 +10,7 @@ import {
   rewriteHlsManifestForRelay,
   HLS_PLAYLIST_CONTENT_TYPE,
   UPSTREAM_HLS_UA,
+  hlsMediaSegmentHttp,
 } from "@/lib/hls-playback";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { logActivity } from "@/lib/lines";
@@ -67,14 +68,13 @@ export async function GET(
     if (await isSessionKicked(auth.lineId, clientIp)) {
       return iptvText("Session kicked", { status: 403 });
     }
+    const seg = hlsMediaSegmentHttp(buf.length);
     return withIptvCors(
       new NextResponse(buf, {
-        status: 200,
+        status: seg.status,
         headers: {
           ...buildLiveRedirectHeaders(antiFreeze),
-          "Content-Type": "video/mp2t",
-          "Cache-Control": "no-cache, no-store",
-          "Content-Length": String(buf.length),
+          ...seg.headers,
         },
       })
     );
@@ -83,8 +83,7 @@ export async function GET(
   const target = decodeRelayTarget(token, auth.rootUpstream);
   if (!target) return iptvText("Bad relay target", { status: 400 });
 
-  const range = req.headers.get("range");
-  const upstream = await fetchHlsUpstream(target, UPSTREAM_HLS_UA, range);
+  const upstream = await fetchHlsUpstream(target, UPSTREAM_HLS_UA, null);
 
   if (!upstream.ok) {
     void logActivity("stream_hls_relay_error", {
@@ -119,6 +118,7 @@ export async function GET(
           ...buildLiveRedirectHeaders(antiFreeze),
           "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
           "Cache-Control": "no-cache, no-store",
+          "Accept-Ranges": "none",
         },
       })
     );
@@ -137,15 +137,13 @@ export async function GET(
     userAgent: auth.userAgent,
   });
 
+  const seg = hlsMediaSegmentHttp(segmentBuf.length);
   return withIptvCors(
     new NextResponse(kickedBody as unknown as BodyInit, {
-      status: range ? 206 : 200,
+      status: seg.status,
       headers: {
         ...buildLiveRedirectHeaders(antiFreeze),
-        "Content-Type": upstream.contentType,
-        "Cache-Control": "no-cache, no-store",
-        "Content-Length": String(segmentBuf.length),
-        "Accept-Ranges": "bytes",
+        ...seg.headers,
       },
     })
   );

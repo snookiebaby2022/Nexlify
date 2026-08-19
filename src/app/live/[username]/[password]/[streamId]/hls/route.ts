@@ -10,6 +10,7 @@ import {
   rewriteHlsManifestForRelay,
   HLS_PLAYLIST_CONTENT_TYPE,
   UPSTREAM_HLS_UA,
+  hlsMediaSegmentHttp,
 } from "@/lib/hls-playback";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { logActivity } from "@/lib/lines";
@@ -36,8 +37,7 @@ export async function GET(
   if (!target) return iptvText("Bad relay target", { status: 400 });
 
   const antiFreeze = await getAntiFreezeSettings();
-  const range = req.headers.get("range");
-  const upstream = await fetchHlsUpstream(target, UPSTREAM_HLS_UA, range);
+  const upstream = await fetchHlsUpstream(target, UPSTREAM_HLS_UA, null);
 
   if (!upstream.ok) {
     void logActivity("stream_hls_relay_error", {
@@ -72,6 +72,7 @@ export async function GET(
           ...buildLiveRedirectHeaders(antiFreeze),
           "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
           "Cache-Control": "no-cache, no-store",
+          "Accept-Ranges": "none",
         },
       })
     );
@@ -81,26 +82,26 @@ export async function GET(
     return iptvText("Session kicked", { status: 403 });
   }
 
-  const rawBody = upstream.body;
-  const kickedBody =
-    rawBody && typeof (rawBody as { getReader?: unknown }).getReader === "function"
-      ? attachKickAwareProxyBody({
-          body: rawBody as unknown as ReadableStream<Uint8Array>,
-          lineId: auth.lineId,
-          streamId: auth.streamId,
-          ip: clientIp || "",
-          userAgent: auth.userAgent,
-        })
-      : rawBody;
-
+  const segmentBuf = Buffer.from(upstream.body);
+  const kickedBody = attachKickAwareProxyBody({
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(segmentBuf));
+        controller.close();
+      },
+    }),
+    lineId: auth.lineId,
+    streamId: auth.streamId,
+    ip: clientIp || "",
+    userAgent: auth.userAgent,
+  });
+  const seg = hlsMediaSegmentHttp(segmentBuf.length);
   return withIptvCors(
     new NextResponse(kickedBody as unknown as BodyInit, {
-      status: range ? 206 : 200,
+      status: seg.status,
       headers: {
         ...buildLiveRedirectHeaders(antiFreeze),
-        "Content-Type": upstream.contentType,
-        "Cache-Control": "no-cache, no-store",
-        "Accept-Ranges": "bytes",
+        ...seg.headers,
       },
     })
   );

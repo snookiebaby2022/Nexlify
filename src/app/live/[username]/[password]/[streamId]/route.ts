@@ -21,6 +21,8 @@ import {
   rewriteHlsManifestForRelay,
   hlsRelayCacheKey,
   HLS_PLAYLIST_CONTENT_TYPE,
+  HLS_NATIVE_PROBE_MS,
+  HLS_GUESSED_PROBE_MS,
   rewritePackagerPlaylist,
   expandHlsPlaybackCandidates,
   buildClientDirectHlsMaster,
@@ -32,7 +34,7 @@ import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
-import { openUpstreamLiveStream, resolvePlayableUpstreamUrl, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
+import { openUpstreamLiveStream, liveMpegTsResponseHeaders, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
 import { ensureDiskHls } from "@/lib/hls-restream-client";
 import { getActiveTranscodingProfile } from "@/lib/transcoding-profiles";
 import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
@@ -54,7 +56,7 @@ async function proxyUpstreamNative(
       userAgent: ua,
       timeoutMs: PROXY_TIMEOUT_MS,
     });
-    const { stream, headers } = upstreamToWebResponse(open);
+    const { stream, headers } = upstreamToWebResponse(open, undefined, { liveUnbounded: true });
     return {
       ok: true,
       response: new NextResponse(stream as unknown as BodyInit, { status: 200, headers }),
@@ -159,6 +161,7 @@ export async function GET(
           ...buildLiveRedirectHeaders(antiFreeze),
           "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
           "Cache-Control": "no-cache, no-store",
+          "Accept-Ranges": "none",
         },
       })
     );
@@ -168,26 +171,7 @@ export async function GET(
 
   if (wantsM3u8) {
     const panelOrigin = serverBaseUrl(req.url, req.headers);
-    for (let i = 0; i < candidates.length; i++) {
-      const playbackUrl = candidates[i]!;
-      if (!isHlsPlaybackUrl(playbackUrl)) continue;
-
-      const probeTimeoutMs = originalCandidates.has(playbackUrl) ? 8_000 : 3_000;
-      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, probeTimeoutMs);
-      if (!manifest.ok) {
-        lastError = manifest.detail || "Stream unavailable";
-        // Only send the player to a URL XUI actually stored as HLS — guessed .m3u8
-        // suffixes often 404/HTML and Smarters reports "playback error".
-        if (
-          !clientDirectHls &&
-          originalCandidates.has(playbackUrl) &&
-          shouldOfferClientDirectHls(manifest.status, manifest.detail)
-        ) {
-          clientDirectHls = playbackUrl;
-        }
-        continue;
-      }
-
+    const returnNativeHls = async (playbackUrl: string, manifest: { body: string; finalUrl: string }) => {
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
       const relay = (url: string) =>
         buildHlsRelayUrl(panelOrigin, username, password, requestStreamKey, url);
@@ -196,37 +180,45 @@ export async function GET(
         schedulePlaybackUpstreamWarm(playbackUrl, UPSTREAM_HLS_UA);
       }
       return hlsHeaders(body);
-    }
+    };
 
-    for (let i = 0; i < candidates.length; i++) {
-      const playbackUrl = candidates[i]!;
-      if (isHlsPlaybackUrl(playbackUrl)) continue;
-      const resolved = await resolvePlayableUpstreamUrl(playbackUrl, {
-        userAgent: UPSTREAM_HLS_UA,
-        timeoutMs: 8_000,
-      });
-      if (!resolved) {
-        lastError = "Upstream is not MPEG-TS";
+    for (const playbackUrl of candidates) {
+      if (!isHlsPlaybackUrl(playbackUrl) || !originalCandidates.has(playbackUrl)) continue;
+      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, HLS_NATIVE_PROBE_MS);
+      if (!manifest.ok) {
+        lastError = manifest.detail || "Stream unavailable";
+        if (
+          !clientDirectHls &&
+          shouldOfferClientDirectHls(manifest.status, manifest.detail)
+        ) {
+          clientDirectHls = playbackUrl;
+        }
         continue;
       }
-      await cacheSet(hlsRelayCacheKey(line.id, cleanId), resolved, 3600);
-      const streamMeta = await prisma.stream.findUnique({
-        where: { id: cleanId },
-        select: {
-          isCreatedChannel: true,
-          vodMode: true,
-          isOnDemand: true,
-          agentStartCmd: true,
-          autoRestart: true,
-          streamUrl: true,
-          hostedExternally: true,
-        },
-      });
+      return returnNativeHls(playbackUrl, manifest);
+    }
+
+    const tsUrls = [...originalCandidates].filter((u) => !isHlsPlaybackUrl(u));
+    const streamMetaPromise = prisma.stream.findUnique({
+      where: { id: cleanId },
+      select: {
+        isCreatedChannel: true,
+        vodMode: true,
+        isOnDemand: true,
+        agentStartCmd: true,
+        autoRestart: true,
+        streamUrl: true,
+        hostedExternally: true,
+      },
+    });
+
+    const packageTs = async (upstreamUrl: string) => {
+      const streamMeta = await streamMetaPromise;
       const mode = streamMeta ? getStreamPlaybackMode(streamMeta) : "direct";
-      const transcode =
-        mode === "transcode" ? await getActiveTranscodingProfile() : null;
-      const packed = await ensureDiskHls({
-        upstreamUrl: resolved,
+      const transcode = mode === "transcode" ? await getActiveTranscodingProfile() : null;
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), upstreamUrl, 3600);
+      return ensureDiskHls({
+        upstreamUrl,
         streamId: cleanId,
         userAgent: UPSTREAM_HLS_UA,
         loop: mode === "created" || Boolean(streamMeta?.isCreatedChannel),
@@ -239,6 +231,22 @@ export async function GET(
             }
           : null,
       });
+    };
+
+    const packagerPromise = tsUrls[0] ? packageTs(tsUrls[0]!) : null;
+
+    for (const playbackUrl of candidates) {
+      if (!isHlsPlaybackUrl(playbackUrl) || originalCandidates.has(playbackUrl)) continue;
+      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, HLS_GUESSED_PROBE_MS);
+      if (!manifest.ok) {
+        lastError = manifest.detail || "Stream unavailable";
+        continue;
+      }
+      return returnNativeHls(playbackUrl, manifest);
+    }
+
+    for (let i = 0; i < tsUrls.length; i++) {
+      const packed = i === 0 && packagerPromise ? await packagerPromise : await packageTs(tsUrls[i]!);
       if (packed.ok) {
         const body = rewritePackagerPlaylist(
           packed.playlist,
@@ -299,10 +307,8 @@ export async function GET(
         new NextResponse(remuxBody as unknown as BodyInit, {
           status: 200,
           headers: {
+            ...liveMpegTsResponseHeaders(remux.contentType),
             ...buildLiveRedirectHeaders(antiFreeze),
-            "Content-Type": remux.contentType,
-            "Cache-Control": "no-cache, no-store",
-            Connection: "keep-alive",
           },
         })
       );
@@ -354,8 +360,8 @@ export async function GET(
         new NextResponse(trackedBody as unknown as BodyInit, {
           status: 200,
           headers: {
+            ...liveMpegTsResponseHeaders(response.headers.get("content-type")),
             ...buildLiveRedirectHeaders(antiFreeze),
-            ...Object.fromEntries(response.headers.entries()),
           },
         })
       );

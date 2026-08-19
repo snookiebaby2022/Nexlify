@@ -85,6 +85,42 @@ export function normalizeHlsManifestContentType(_contentType?: string | null): s
   return "application/x-mpegURL";
 }
 
+const LIVE_TS_STRIP_HEADERS = new Set([
+  "content-length",
+  "content-range",
+  "accept-ranges",
+  "etag",
+  "last-modified",
+]);
+
+/**
+ * VLC (and XCIPTV's VLC decoder) stalls or refuses live MPEG-TS when the
+ * response advertises byte ranges or a finite Content-Length. ExoPlayer ignores
+ * those headers; VLC sends Range: bytes=0- and then fails on 200/206 mismatch.
+ */
+export function liveMpegTsResponseHeaders(
+  contentType?: string | null,
+  extra?: Record<string, string>
+): Record<string, string> {
+  const normalized = normalizeLiveMpegTsContentType(contentType);
+  const headers: Record<string, string> = {
+    "Content-Type": normalized.includes("mpegurl") ? "video/mp2t" : normalized,
+    "Cache-Control": "no-cache, no-store, no-transform",
+    "Access-Control-Allow-Origin": "*",
+    Connection: "keep-alive",
+    "Accept-Ranges": "none",
+    "X-Accel-Buffering": "no",
+  };
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) {
+      if (LIVE_TS_STRIP_HEADERS.has(key.toLowerCase())) continue;
+      if (key.toLowerCase() === "content-type") continue;
+      headers[key] = value;
+    }
+  }
+  return headers;
+}
+
 export function looksLikeHtmlErrorPayload(buf: Buffer): boolean {
   const head = buf.subarray(0, Math.min(buf.length, 256)).toString("utf8").trimStart().toLowerCase();
   return (
@@ -299,8 +335,15 @@ export function openUpstreamLiveStream(
 
 export function upstreamToWebResponse(
   open: UpstreamOpenResult,
-  extraHeaders?: Record<string, string>
+  extraHeaders?: Record<string, string>,
+  opts?: { liveUnbounded?: boolean }
 ): { stream: ReadableStream<Uint8Array>; headers: Record<string, string> } {
+  if (opts?.liveUnbounded) {
+    return {
+      stream: nodeToWebStream(open.body),
+      headers: liveMpegTsResponseHeaders(open.contentType, extraHeaders),
+    };
+  }
   const headers: Record<string, string> = {
     "Content-Type": normalizeLiveMpegTsContentType(open.contentType),
     "Cache-Control": "no-cache, no-store",
