@@ -2,6 +2,8 @@ import http from "node:http";
 import https from "node:https";
 import { Readable } from "node:stream";
 import { ReadableStream } from "node:stream/web";
+import type { OutboundProxy } from "@/lib/outbound-proxy";
+import { requestOrigin } from "@/lib/http-via-proxy";
 
 const MAX_REDIRECTS = 5;
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -218,7 +220,12 @@ function peekResponseBody(
  */
 export function openUpstreamLiveStream(
   url: string,
-  opts?: { userAgent?: string; timeoutMs?: number; headers?: Record<string, string> }
+  opts?: {
+    userAgent?: string;
+    timeoutMs?: number;
+    headers?: Record<string, string>;
+    proxy?: OutboundProxy | null;
+  }
 ): Promise<UpstreamOpenResult> {
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const ua =
@@ -239,8 +246,6 @@ export function openUpstreamLiveStream(
         return;
       }
 
-      const isHttps = parsed.protocol === "https:";
-      const lib = isHttps ? https : http;
       const headers: Record<string, string> = {
         "User-Agent": ua,
         Accept: "*/*",
@@ -251,18 +256,15 @@ export function openUpstreamLiveStream(
       delete headers.Range;
       delete headers.range;
 
-      const reqOpts: http.RequestOptions & https.RequestOptions = {
-        method: "GET",
-        headers,
-        timeout: timeoutMs,
-      };
-      // Dual-stack: try IPv4 first via lookup order, but do not force family:4
-      // (some CDNs return empty HTML challenges on forced-v4 paths).
-      if (isHttps) {
-        (reqOpts as https.RequestOptions).rejectUnauthorized = false;
-      }
-
-      const req = lib.request(current, reqOpts, (res) => {
+      const req = requestOrigin(
+        {
+          targetUrl: current,
+          proxy: opts?.proxy ?? null,
+          headers,
+          timeoutMs,
+          method: "GET",
+        },
+        (res) => {
         const status = res.statusCode ?? 0;
         const location = res.headers.location;
         if (isRedirect(status) && location && redirectsLeft > 0) {
@@ -278,8 +280,6 @@ export function openUpstreamLiveStream(
           return;
         }
 
-        // Some CDNs return HTTP 200 text/html with a Location-like body or empty page
-        // instead of a proper 302 — treat as failure so backup failover can run.
         const contentType = String(res.headers["content-type"] ?? "application/octet-stream");
         if (status < 200 || status >= 300) {
           res.resume();
@@ -303,7 +303,6 @@ export function openUpstreamLiveStream(
           return;
         }
 
-        // Suspicious CT (text/html etc.): sniff first bytes — many IPTV CDNs lie.
         void peekResponseBody(res, PEEK_BYTES)
           .then(({ prefix, rest }) => {
             if (looksLikePlayableMediaPayload(prefix)) {
@@ -324,11 +323,9 @@ export function openUpstreamLiveStream(
             reject(new Error(`Non-playable content-type: ${contentType}`));
           })
           .catch(reject);
-      });
+      }
+      );
 
-      req.on("timeout", () => {
-        req.destroy(new Error("Upstream timeout"));
-      });
       req.on("error", reject);
       req.end();
     });

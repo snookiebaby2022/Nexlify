@@ -4,6 +4,8 @@ import { join } from "path";
 import { Readable } from "stream";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 import { hlsStreamDir } from "@/lib/hls-disk";
+import type { OutboundProxy } from "@/lib/outbound-proxy";
+import { ffmpegHttpProxyArg } from "@/lib/outbound-proxy";
 
 /** Short segments so the first playlist is ready before XCIPTV's ~10s HLS timeout. */
 const HLS_TIME_SEC = 1;
@@ -205,7 +207,13 @@ async function spawnPackager(
   key: string,
   dir: string,
   upstreamUrl: string,
-  opts?: { userAgent?: string; loop?: boolean; transcode?: PackagerTranscode; vod?: boolean }
+  opts?: {
+    userAgent?: string;
+    loop?: boolean;
+    transcode?: PackagerTranscode;
+    vod?: boolean;
+    outboundProxy?: OutboundProxy | null;
+  }
 ): Promise<PackagerSession | null> {
   const ffmpegPath = await getFfmpegPath();
   if (!(await binExists(ffmpegPath))) return null;
@@ -223,6 +231,8 @@ async function spawnPackager(
   const listSize = opts?.vod ? "0" : String(HLS_LIST_SIZE);
   const fingerprint = packagerFingerprint(upstreamUrl, opts?.transcode ?? null, opts?.loop, opts?.vod);
   const liveTune = opts?.vod ? [] : ["-flags", "low_delay"];
+  const httpProxy = ffmpegHttpProxyArg(opts?.outboundProxy ?? null);
+  const proxyArgs = httpProxy ? ["-http_proxy", httpProxy] : [];
 
   const proc = spawn(
     ffmpegPath,
@@ -234,6 +244,7 @@ async function spawnPackager(
       "-nostdin",
       "-user_agent",
       ua,
+      ...proxyArgs,
       "-reconnect",
       "1",
       "-reconnect_streamed",
@@ -307,6 +318,7 @@ async function getOrStartPackagerSession(opts: {
   loop?: boolean;
   transcode?: PackagerTranscode;
   vod?: boolean;
+  outboundProxy?: OutboundProxy | null;
 }): Promise<PackagerSession | { error: string }> {
   const key = sessionKey(opts.lineId, opts.streamId);
   const fingerprint = packagerFingerprint(opts.upstreamUrl, opts.transcode ?? null, opts.loop, opts.vod);
@@ -328,6 +340,7 @@ async function getOrStartPackagerSession(opts: {
       loop: opts.loop,
       transcode: opts.transcode,
       vod: opts.vod,
+      outboundProxy: opts.outboundProxy,
     });
     if (!created) return { error: "ffmpeg not available for HLS packaging" };
     session = created;
@@ -335,6 +348,15 @@ async function getOrStartPackagerSession(opts: {
 
   session.lastAccess = Date.now();
   return session;
+}
+
+/** Keep ffmpeg alive when edge serves disk HLS without hitting Next /ensure. */
+export function touchPackagerSession(lineId: string, streamId: string): boolean {
+  const key = sessionKey(lineId, streamId);
+  const session = sessions.get(key);
+  if (!session || session.proc.exitCode != null) return false;
+  session.lastAccess = Date.now();
+  return true;
 }
 
 /** Spawn ffmpeg immediately; do not wait for the first segment. */
@@ -346,6 +368,7 @@ export async function startTsHlsPackager(opts: {
   loop?: boolean;
   transcode?: PackagerTranscode;
   vod?: boolean;
+  outboundProxy?: OutboundProxy | null;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const session = await getOrStartPackagerSession(opts);
   if ("error" in session) return { ok: false, error: session.error };
@@ -426,6 +449,7 @@ export async function ensureTsHlsPackager(opts: {
   loop?: boolean;
   transcode?: PackagerTranscode;
   vod?: boolean;
+  outboundProxy?: OutboundProxy | null;
 }): Promise<{ ok: true; playlist: string } | { ok: false; error: string }> {
   const session = await getOrStartPackagerSession(opts);
   if ("error" in session) return { ok: false, error: session.error };

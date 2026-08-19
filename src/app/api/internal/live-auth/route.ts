@@ -8,6 +8,7 @@ import { stripLiveStreamExtension, isHlsPlaybackUrl, isSafeUpstreamUrl, UPSTREAM
 import { getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { isSessionKicked, trackConnection } from "@/lib/connections";
+import { outboundProxyHeaderValue, resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,15 @@ function originalPath(req: NextRequest): string {
     /* use as path */
   }
   return raw.split("?")[0] || "";
+}
+
+async function resolveStreamOutboundProxy(streamId: string) {
+  return resolveOutboundProxyForStream(streamId);
+}
+
+function proxyAuthHeaders(proxy: Awaited<ReturnType<typeof resolveStreamOutboundProxy>>): Record<string, string> {
+  const value = outboundProxyHeaderValue(proxy);
+  return value ? { "X-Nexlify-Outbound-Proxy": value } : {};
 }
 
 /**
@@ -84,9 +94,15 @@ export async function GET(req: NextRequest) {
       antiFreeze.playbackUrlCacheTtlSec
     );
     const tsUrl = candidates.find((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
+    const outboundProxy = await resolveStreamOutboundProxy(cleanId);
     if (tsUrl) {
       const { startDiskHls } = await import("@/lib/hls-restream-client");
-      startDiskHls({ streamId: cleanId, upstreamUrl: tsUrl, userAgent: UPSTREAM_HLS_UA });
+      startDiskHls({
+        streamId: cleanId,
+        upstreamUrl: tsUrl,
+        userAgent: UPSTREAM_HLS_UA,
+        outboundProxy,
+      });
     }
     if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD" && !isHlsSegment) {
       void trackConnection({
@@ -103,10 +119,12 @@ export async function GET(req: NextRequest) {
         "X-Nexlify-Live": "1",
         "X-Nexlify-Hls": "1",
         "Cache-Control": "no-store",
-      },
+        ...proxyAuthHeaders(outboundProxy),
+      } as Record<string, string>,
     });
   }
 
+  const outboundProxy = await resolveStreamOutboundProxy(cleanId);
   const antiFreeze = await getAntiFreezeSettings();
   const ctx = { clientIp: ip, userAgent: ua, skipGeo: true };
 
@@ -150,6 +168,7 @@ export async function GET(req: NextRequest) {
       "X-Nexlify-Upstream": upstream,
       "X-Nexlify-Live": parsed.spliceLiveTs ? "1" : "0",
       "Cache-Control": "no-store",
-    },
+      ...proxyAuthHeaders(outboundProxy),
+    } as Record<string, string>,
   });
 }

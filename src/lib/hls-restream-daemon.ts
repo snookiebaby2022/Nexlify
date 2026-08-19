@@ -1,6 +1,7 @@
 import http from "node:http";
 import { HLS_DAEMON_HOST, HLS_DAEMON_PORT, hlsDaemonToken } from "./hls-disk";
-import { ensureTsHlsPackager, isPackagerSegmentName, readTsHlsSegment, startTsHlsPackager } from "./ts-hls-packager";
+import { ensureTsHlsPackager, isPackagerSegmentName, readTsHlsSegment, startTsHlsPackager, touchPackagerSession } from "./ts-hls-packager";
+import type { OutboundProxy } from "./outbound-proxy";
 
 function unauthorized(res: http.ServerResponse) {
   res.writeHead(401, { "Content-Type": "text/plain" });
@@ -26,6 +27,23 @@ function authed(req: http.IncomingMessage): boolean {
   const hdr = req.headers.authorization ?? "";
   const token = hdr.replace(/^Bearer\s+/i, "").trim();
   return token.length > 0 && token === hlsDaemonToken();
+}
+
+function parseOutboundProxy(body: Record<string, unknown>): OutboundProxy | null | undefined {
+  const raw = body.outboundProxy;
+  if (raw == null) return undefined;
+  if (typeof raw !== "object") return null;
+  const p = raw as Record<string, unknown>;
+  const host = String(p.host ?? "").trim();
+  const port = Number(p.port ?? 0);
+  if (!host || !port) return null;
+  return {
+    type: (String(p.type ?? "HTTP").toUpperCase() === "HTTPS" ? "HTTPS" : "HTTP") as OutboundProxy["type"],
+    host,
+    port,
+    username: p.username != null ? String(p.username) : null,
+    password: p.password != null ? String(p.password) : null,
+  };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -55,6 +73,7 @@ const server = http.createServer(async (req, res) => {
         lineId: "daemon",
         streamId,
         userAgent: typeof body.userAgent === "string" ? body.userAgent : undefined,
+        outboundProxy: parseOutboundProxy(body),
         loop: Boolean(body.loop),
         vod: Boolean(body.vod),
         transcode:
@@ -86,6 +105,7 @@ const server = http.createServer(async (req, res) => {
         lineId: "daemon",
         streamId,
         userAgent: typeof body.userAgent === "string" ? body.userAgent : undefined,
+        outboundProxy: parseOutboundProxy(body),
         loop: Boolean(body.loop),
         vod: Boolean(body.vod),
         transcode:
@@ -101,6 +121,20 @@ const server = http.createServer(async (req, res) => {
       console.log(`hls-daemon ensure ${streamId} ${packed.ok ? "ok" : packed.error}`);
       res.writeHead(packed.ok ? 200 : 502, { "Content-Type": "application/json" });
       res.end(JSON.stringify(packed));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/touch") {
+      const body = await readJson(req);
+      const streamId = String(body.streamId ?? "").replace(/[^a-zA-Z0-9_-]/g, "");
+      if (!streamId) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "invalid stream" }));
+        return;
+      }
+      const touched = touchPackagerSession("daemon", streamId);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, touched }));
       return;
     }
 

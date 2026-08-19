@@ -1,18 +1,21 @@
 #!/usr/bin/env node
 /**
- * IPTV edge — Host sanitizer + XUI-style live/VOD byte pipe.
+ * IPTV edge — Host sanitizer + XUI-style live/VOD byte pipe + disk HLS.
  *
  * Xtream apps hit :80/:8080/:25461. Auth stays on the panel; MPEG-TS/MP4 is
  * fetched from stream_source with a VLC UA so the origin sees the panel IP.
+ * HLS segments are served directly from /var/lib/nexlify/hls (no Next.js hop).
  *
  * Env:
  *   IPTV_EDGE_BACKEND=127.0.0.1:13000
  *   IPTV_EDGE_HTTP_PORTS=80,8080,25461
  *   IPTV_EDGE_HTTPS_PORTS=
  *   PANEL_INTERNAL_SECRET=...
+ *   NEXLIFY_HLS_DIR=/var/lib/nexlify/hls
  */
 import http from "node:http";
 import https from "node:https";
+import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,17 +39,24 @@ function loadDotEnv() {
 }
 loadDotEnv();
 
-const BACKEND = process.env.IPTV_EDGE_BACKEND || "127.0.0.1:80";
+const BACKEND = process.env.IPTV_EDGE_BACKEND || "127.0.0.1:13000";
 const [backendHost, backendPortRaw] = BACKEND.split(":");
-const backendPort = Number(backendPortRaw || 80);
+const backendPort = Number(backendPortRaw || 13000);
 const INTERNAL_SECRET =
   process.env.PANEL_INTERNAL_SECRET ||
   process.env.NEXLIFY_PANEL_API_SECRET ||
   process.env.PANEL_API_SECRET ||
   "";
+const HLS_DIR = (process.env.NEXLIFY_HLS_DIR || "/var/lib/nexlify/hls").replace(/\/+$/, "");
+/** Live HLS must be written within this window or we forward to Next (starts ffmpeg). */
+const HLS_LIVE_MAX_AGE_MS = Number(process.env.NEXLIFY_HLS_LIVE_MAX_AGE_MS || 6000);
+const HLS_DAEMON_PORT = Number(process.env.NEXLIFY_HLS_DAEMON_PORT || 13081);
 const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
+const LIVE_TS_PEEK_BYTES = 376;
 const PLAYBACK_RE = /^\/(live|movie|series)\//;
 const HLS_RE = /\.m3u8(?:[?#]|$)/i;
+const HLS_SEG_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\/hls\/(seg\d+\.ts)$/i;
+const LIVE_M3U8_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\.m3u8$/i;
 
 function parsePorts(raw, fallback) {
   const s = (raw ?? fallback ?? "").trim();
@@ -72,11 +82,153 @@ function clientIp(req) {
   return fwd || req.socket.remoteAddress || "";
 }
 
+function parseOutboundProxyHeader(raw) {
+  const s = String(raw || "").trim();
+  if (!s || /^socks5:/i.test(s)) return null;
+  try {
+    const u = new URL(s);
+    return {
+      type: u.protocol === "https:" ? "HTTPS" : "HTTP",
+      host: u.hostname,
+      port: Number(u.port || (u.protocol === "https:" ? 443 : 80)),
+      username: u.username ? decodeURIComponent(u.username) : "",
+      password: u.password ? decodeURIComponent(u.password) : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function connectOriginSocket(targetUrl, proxy, timeoutMs) {
+  const target = new URL(targetUrl);
+  if (!proxy) {
+    return new Promise((resolve, reject) => {
+      const port = Number(target.port || (target.protocol === "https:" ? 443 : 80));
+      const socket = net.connect({ host: target.hostname, port, timeout: timeoutMs });
+      socket.once("connect", () => {
+        socket.setTimeout(0);
+        resolve(socket);
+      });
+      socket.once("error", reject);
+      socket.once("timeout", () => {
+        socket.destroy();
+        reject(new Error("Direct connect timeout"));
+      });
+    });
+  }
+
+  const connectHost = target.hostname;
+  const connectPort = target.port || (target.protocol === "https:" ? "443" : "80");
+  const proxyPort = proxy.port || (proxy.type === "HTTPS" ? 443 : 80);
+  const headers = { Host: `${connectHost}:${connectPort}` };
+  if (proxy.username || proxy.password) {
+    headers["Proxy-Authorization"] = `Basic ${Buffer.from(`${proxy.username}:${proxy.password}`).toString("base64")}`;
+  }
+
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      host: proxy.host,
+      port: proxyPort,
+      method: "CONNECT",
+      path: `${connectHost}:${connectPort}`,
+      headers,
+      timeout: timeoutMs,
+    });
+    req.on("connect", (res, socket) => {
+      if (res.statusCode !== 200) {
+        socket.destroy();
+        reject(new Error(`Proxy CONNECT HTTP ${res.statusCode}`));
+        return;
+      }
+      socket.setTimeout(0);
+      resolve(socket);
+    });
+    req.on("timeout", () => req.destroy(new Error("Proxy CONNECT timeout")));
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+function shouldSniffLiveTs(upRes, clientReq) {
+  const ct = String(upRes.headers["content-type"] || "").toLowerCase();
+  const ua = String(clientReq.headers["user-agent"] || "").toLowerCase();
+  if (/vlc|libvlc/.test(ua)) return true;
+  if (ct.includes("html") || ct.includes("json") || ct.includes("xml") || ct.startsWith("text/")) return true;
+  if (!ct || ct.includes("octet-stream") || ct.includes("mp2t") || ct.startsWith("video/") || ct.startsWith("audio/")) {
+    return false;
+  }
+  return true;
+}
+
+function looksLikeMpegTs(buf) {
+  if (!buf?.length || buf[0] !== 0x47) return false;
+  if (buf.length >= 376 && buf[188] === 0x47) return true;
+  return buf.length >= 188;
+}
+
+function touchHlsDaemon(streamId) {
+  if (!INTERNAL_SECRET || !streamId) return;
+  const body = JSON.stringify({ streamId });
+  const req = http.request(
+    {
+      hostname: "127.0.0.1",
+      port: HLS_DAEMON_PORT,
+      path: "/touch",
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${INTERNAL_SECRET}`,
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+      },
+      timeout: 800,
+    },
+    (res) => res.resume()
+  );
+  req.on("error", () => undefined);
+  req.on("timeout", () => req.destroy());
+  req.write(body);
+  req.end();
+}
+
 function shouldSplice(req) {
   const pathOnly = String(req.url || "/").split("?")[0];
   if (!PLAYBACK_RE.test(pathOnly)) return false;
   if (HLS_RE.test(pathOnly) || /\/hls\//i.test(pathOnly)) return false;
   return true;
+}
+
+function liveTsHeaders() {
+  return {
+    "Content-Type": "video/mp2t",
+    "Cache-Control": "no-cache, no-store, no-transform",
+    Connection: "close",
+    "Accept-Ranges": "none",
+    "Access-Control-Allow-Origin": "*",
+    "X-Accel-Buffering": "no",
+  };
+}
+
+function hlsPlaylistHeaders() {
+  return {
+    "Content-Type": "application/x-mpegURL",
+    "Cache-Control": "no-cache, no-store",
+    Connection: "keep-alive",
+    "Accept-Ranges": "none",
+    "Access-Control-Allow-Origin": "*",
+    "X-Accel-Buffering": "no",
+  };
+}
+
+function hlsSegHeaders(len) {
+  return {
+    "Content-Type": "video/mp2t",
+    "Content-Length": String(len),
+    "Cache-Control": "no-cache, no-store",
+    Connection: "keep-alive",
+    "Accept-Ranges": "none",
+    "Access-Control-Allow-Origin": "*",
+    "X-Accel-Buffering": "no",
+  };
 }
 
 function forward(clientReq, clientRes, { listenPort, proto }) {
@@ -98,7 +250,15 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
       timeout: 300_000,
     },
     (proxyRes) => {
-      clientRes.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+      const hdrs = { ...proxyRes.headers };
+      delete hdrs["vary"];
+      delete hdrs["x-frame-options"];
+      delete hdrs["x-content-type-options"];
+      delete hdrs["referrer-policy"];
+      delete hdrs["permissions-policy"];
+      delete hdrs["x-robots-tag"];
+      delete hdrs["strict-transport-security"];
+      clientRes.writeHead(proxyRes.statusCode || 502, hdrs);
       proxyRes.pipe(clientRes);
     }
   );
@@ -109,17 +269,6 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
     clientRes.end(`iptv-edge proxy error: ${err.message}`);
   });
   clientReq.pipe(proxyReq);
-}
-
-function liveTsHeaders() {
-  return {
-    "Content-Type": "video/mp2t",
-    "Cache-Control": "no-cache, no-store, no-transform",
-    Connection: "close",
-    "Accept-Ranges": "none",
-    "Access-Control-Allow-Origin": "*",
-    "X-Accel-Buffering": "no",
-  };
 }
 
 function authLive(clientReq) {
@@ -149,6 +298,8 @@ function authLive(clientReq) {
           upstream: String(res.headers["x-nexlify-upstream"] || ""),
           live: String(res.headers["x-nexlify-live"] || "") === "1",
           passthrough: String(res.headers["x-nexlify-passthrough"] || "") === "1" || res.statusCode === 204,
+          streamId: String(res.headers["x-nexlify-stream-id"] || ""),
+          outboundProxy: parseOutboundProxyHeader(res.headers["x-nexlify-outbound-proxy"]),
         });
       }
     );
@@ -158,7 +309,150 @@ function authLive(clientReq) {
   });
 }
 
-function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, listenPort, proto }) {
+function hlsStreamDir(streamId) {
+  const safe = String(streamId).replace(/[^a-zA-Z0-9_-]/g, "");
+  return path.join(HLS_DIR, safe || "unknown");
+}
+
+/** True when ffmpeg is actively writing this stream (not leftover files from a dead session). */
+function hlsDirFresh(streamId) {
+  const dir = hlsStreamDir(streamId);
+  const indexPath = path.join(dir, "index.m3u8");
+  try {
+    if (!fs.existsSync(indexPath)) return false;
+    if (Date.now() - fs.statSync(indexPath).mtimeMs > HLS_LIVE_MAX_AGE_MS) return false;
+    const body = fs.readFileSync(indexPath, "utf8");
+    if (!body.includes("#EXTM3U") || !body.includes("#EXTINF")) return false;
+    const segs = body.match(/seg\d+\.ts/gi);
+    if (!segs?.length) return false;
+    const last = segs[segs.length - 1];
+    const segPath = path.join(dir, last);
+    if (!fs.existsSync(segPath)) return false;
+    return Date.now() - fs.statSync(segPath).mtimeMs <= HLS_LIVE_MAX_AGE_MS;
+  } catch {
+    return false;
+  }
+}
+
+function filterPlaylistToExisting(body, dir) {
+  const lines = body.split("\n");
+  const out = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (t.startsWith("#EXT-X-DISCONTINUITY")) continue;
+    const name = t.split(/[\\/]/).pop() ?? t;
+    if (/^seg\d+\.ts$/i.test(name)) {
+      if (!fs.existsSync(path.join(dir, name))) {
+        if (out.length && out[out.length - 1].trim().startsWith("#EXTINF")) out.pop();
+        continue;
+      }
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+function hlsSegPath(streamId, segName) {
+  if (!/^seg\d+\.ts$/i.test(segName)) return null;
+  return path.join(hlsStreamDir(streamId), segName);
+}
+
+function serveHlsSegment(streamId, segName, clientRes) {
+  const segPath = hlsSegPath(streamId, segName);
+  if (!segPath) return false;
+  try {
+    if (!fs.existsSync(segPath)) return false;
+    const buf = fs.readFileSync(segPath);
+    if (!buf.length) return false;
+    clientRes.writeHead(200, hlsSegHeaders(buf.length));
+    clientRes.end(buf);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function serveHlsPlaylist(streamId, clientReq, clientRes) {
+  const dir = hlsStreamDir(streamId);
+  const indexPath = path.join(dir, "index.m3u8");
+  try {
+    if (!fs.existsSync(indexPath)) return false;
+    let body = filterPlaylistToExisting(fs.readFileSync(indexPath, "utf8"), dir);
+    if (!body.includes("#EXTM3U") || !body.includes("#EXTINF") || !/seg\d+\.ts/i.test(body)) return false;
+    const urlPath = String(clientReq.url || "/").split("?")[0];
+    const base = urlPath.replace(/\.m3u8$/i, "");
+    const lines = body.split("\n").map((line) => {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) return line;
+      const name = t.split(/[\\/]/).pop() ?? t;
+      if (/^seg\d+\.ts$/i.test(name)) {
+        return `${base}/hls/${name}`;
+      }
+      return line;
+    });
+    const out = lines.join("\n");
+    clientRes.writeHead(200, hlsPlaylistHeaders());
+    clientRes.end(out);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function pipeLiveMpegTs(upRes, clientReq, clientRes) {
+  const chunks = [];
+  let total = 0;
+  let headersSent = false;
+
+  const fail = (msg) => {
+    upRes.destroy();
+    if (!clientRes.headersSent) {
+      clientRes.writeHead(502, { "content-type": "text/plain" });
+      clientRes.end(msg);
+    } else {
+      clientRes.end();
+    }
+  };
+
+  const onData = (chunk) => {
+    if (headersSent) return;
+    chunks.push(chunk);
+    total += chunk.length;
+    if (total < LIVE_TS_PEEK_BYTES) return;
+    upRes.removeListener("data", onData);
+    upRes.removeListener("error", onError);
+    const prefix = Buffer.concat(chunks);
+    if (!looksLikeMpegTs(prefix)) {
+      fail("Upstream is not MPEG-TS");
+      return;
+    }
+    clientRes.writeHead(200, liveTsHeaders());
+    headersSent = true;
+    clientRes.write(prefix);
+    upRes.pipe(clientRes);
+  };
+
+  const onError = (err) => {
+    if (!headersSent) fail(`upstream error: ${err.message}`);
+  };
+
+  upRes.on("data", onData);
+  upRes.once("error", onError);
+  upRes.once("end", () => {
+    if (headersSent) return;
+    upRes.removeListener("data", onData);
+    const prefix = Buffer.concat(chunks);
+    if (looksLikeMpegTs(prefix)) {
+      clientRes.writeHead(200, liveTsHeaders());
+      clientRes.write(prefix);
+      clientRes.end();
+      return;
+    }
+    fail("Upstream closed before MPEG-TS data");
+  });
+}
+
+function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, listenPort, proto, proxy }) {
   let parsed;
   try {
     parsed = new URL(targetUrl);
@@ -180,14 +474,29 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
     "Icy-MetaData": "0",
   };
   if (!live && clientReq.headers.range) headers.Range = clientReq.headers.range;
-  const opts = {
+  delete headers.range;
+
+  const reqOpts = {
+    hostname: parsed.hostname,
+    port: Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80)),
     method: "GET",
-    headers,
+    path: `${parsed.pathname}${parsed.search}`,
+    headers: {
+      ...headers,
+      Host: parsed.host,
+    },
     timeout: 300_000,
   };
-  if (parsed.protocol === "https:") opts.rejectUnauthorized = false;
+  if (parsed.protocol === "https:") reqOpts.rejectUnauthorized = false;
+  if (proxy) {
+    reqOpts.createConnection = (_opts, cb) => {
+      connectOriginSocket(parsed.toString(), proxy, 30_000)
+        .then((socket) => cb(null, socket))
+        .catch((err) => cb(err, undefined));
+    };
+  }
 
-  const up = lib.request(parsed, opts, (upRes) => {
+  const up = lib.request(reqOpts, (upRes) => {
     const status = upRes.statusCode || 0;
     const loc = upRes.headers.location;
     if (status >= 300 && status < 400 && loc && redirectsLeft > 0) {
@@ -200,22 +509,32 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         clientRes.end("Bad upstream redirect");
         return;
       }
-      pipeUpstream(next, clientReq, clientRes, { live, redirectsLeft: redirectsLeft - 1, listenPort, proto });
+      pipeUpstream(next, clientReq, clientRes, { live, redirectsLeft: redirectsLeft - 1, listenPort, proto, proxy });
+      return;
+    }
+    if (status < 200 || status >= 300) {
+      upRes.resume();
+      if (!clientRes.headersSent) {
+        clientRes.writeHead(status || 502, { "content-type": "text/plain" });
+      }
+      clientRes.end(`upstream HTTP ${status}`);
       return;
     }
     if (live) {
       const ct = String(upRes.headers["content-type"] || "").toLowerCase();
-      const loc = String(upRes.headers.location || "");
-      if (/mpegurl|x-mpegurl/.test(ct) || /\.m3u8/i.test(loc)) {
+      const loc2 = String(upRes.headers.location || "");
+      if (/mpegurl|x-mpegurl/.test(ct) || /\.m3u8/i.test(loc2)) {
         upRes.resume();
         up.destroy();
         forward(clientReq, clientRes, { listenPort, proto });
         return;
       }
-      // Send MPEG-TS headers immediately. Waiting to sniff the body stalls VLC
-      // (it aborts if 0x47 is not preceded by a fast 200 video/mp2t).
-      clientRes.writeHead(200, liveTsHeaders());
-      upRes.pipe(clientRes);
+      if (shouldSniffLiveTs(upRes, clientReq)) {
+        pipeLiveMpegTs(upRes, clientReq, clientRes);
+      } else {
+        clientRes.writeHead(200, liveTsHeaders());
+        upRes.pipe(clientRes);
+      }
       return;
     }
     clientRes.writeHead(status || 502, upRes.headers);
@@ -232,8 +551,78 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
   up.end();
 }
 
+function denyAuth(clientRes, status) {
+  clientRes.writeHead(status, { "content-type": "text/plain" });
+  clientRes.end(status === 401 ? "Unauthorized" : "Forbidden");
+}
+
+/**
+ * XUI-style disk HLS: auth first, then serve from /var/lib/nexlify/hls/<cuid>/.
+ * URL stream keys are often numeric Xtream IDs; the packager directory is the cuid.
+ * Disk miss forwards to Next so ensureDiskHls can start ffmpeg.
+ */
+async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
+  if (!INTERNAL_SECRET) {
+    forward(clientReq, clientRes, ctx);
+    return;
+  }
+  let auth;
+  try {
+    auth = await authLive(clientReq);
+  } catch {
+    forward(clientReq, clientRes, ctx);
+    return;
+  }
+  if (auth.status === 401 || auth.status === 403 || auth.status === 429) {
+    denyAuth(clientRes, auth.status);
+    return;
+  }
+  if (auth.passthrough || auth.status !== 200 || !auth.streamId) {
+    forward(clientReq, clientRes, ctx);
+    return;
+  }
+  const streamId = auth.streamId;
+  touchHlsDaemon(streamId);
+  const fresh = hlsDirFresh(streamId);
+  if (!fresh) {
+    forward(clientReq, clientRes, ctx);
+    return;
+  }
+  if (kind === "seg") {
+    if (clientReq.method === "HEAD") {
+      const segPath = hlsSegPath(streamId, segName);
+      try {
+        if (segPath) {
+          const st = fs.statSync(segPath);
+          if (st.isFile() && st.size > 0) {
+            clientRes.writeHead(200, hlsSegHeaders(st.size));
+            clientRes.end();
+            return;
+          }
+        }
+      } catch {
+        /* miss → Next */
+      }
+      forward(clientReq, clientRes, ctx);
+      return;
+    }
+    if (serveHlsSegment(streamId, segName, clientRes)) return;
+    forward(clientReq, clientRes, ctx);
+    return;
+  }
+  if (clientReq.method === "HEAD") {
+    clientRes.writeHead(200, hlsPlaylistHeaders());
+    clientRes.end();
+    return;
+  }
+  if (serveHlsPlaylist(streamId, clientReq, clientRes)) return;
+  forward(clientReq, clientRes, ctx);
+}
+
 async function onRequest(clientReq, clientRes, ctx) {
-  if (clientReq.method === "OPTIONS" && shouldSplice(clientReq)) {
+  const pathOnly = String(clientReq.url || "/").split("?")[0];
+
+  if (clientReq.method === "OPTIONS") {
     clientRes.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
@@ -242,6 +631,18 @@ async function onRequest(clientReq, clientRes, ctx) {
     clientRes.end();
     return;
   }
+
+  const segMatch = pathOnly.match(HLS_SEG_RE);
+  if (segMatch) {
+    await handleDiskHls(clientReq, clientRes, ctx, "seg", segMatch[4]);
+    return;
+  }
+
+  if (LIVE_M3U8_RE.test(pathOnly) && PLAYBACK_RE.test(pathOnly)) {
+    await handleDiskHls(clientReq, clientRes, ctx, "playlist", "");
+    return;
+  }
+
   if (!shouldSplice(clientReq)) {
     forward(clientReq, clientRes, ctx);
     return;
@@ -270,7 +671,12 @@ async function onRequest(clientReq, clientRes, ctx) {
       clientRes.end();
       return;
     }
-    pipeUpstream(auth.upstream, clientReq, clientRes, { live: auth.live, redirectsLeft: 5, ...ctx });
+    pipeUpstream(auth.upstream, clientReq, clientRes, {
+      live: auth.live,
+      redirectsLeft: 5,
+      proxy: auth.outboundProxy,
+      ...ctx,
+    });
   } catch {
     forward(clientReq, clientRes, ctx);
   }
@@ -281,7 +687,7 @@ function listenHttp(port) {
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 70_000;
   server.listen(port, "0.0.0.0", () => {
-    console.log(`[iptv-edge] http://0.0.0.0:${port} → ${BACKEND} (live splice on)`);
+    console.log(`[iptv-edge] http://0.0.0.0:${port} → ${BACKEND} (live splice + disk HLS)`);
   });
   server.on("error", (err) => {
     console.error(`[iptv-edge] http :${port} failed:`, err.message);
@@ -297,7 +703,7 @@ function listenHttps(port, cert, key) {
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 70_000;
   server.listen(port, "0.0.0.0", () => {
-    console.log(`[iptv-edge] https://0.0.0.0:${port} → ${BACKEND} (live splice on)`);
+    console.log(`[iptv-edge] https://0.0.0.0:${port} → ${BACKEND} (live splice + disk HLS)`);
   });
   server.on("error", (err) => {
     console.error(`[iptv-edge] https :${port} failed:`, err.message);
@@ -306,7 +712,7 @@ function listenHttps(port, cert, key) {
   return server;
 }
 
-const httpPorts = parsePorts(process.env.IPTV_EDGE_HTTP_PORTS, "8080,25461");
+const httpPorts = parsePorts(process.env.IPTV_EDGE_HTTP_PORTS, "80,8080,25461");
 const httpsPorts = parsePorts(process.env.IPTV_EDGE_HTTPS_PORTS, "443");
 const certPath = process.env.IPTV_EDGE_CERT || "/etc/nginx/ssl/nexlify-panel/fullchain.pem";
 const keyPath = process.env.IPTV_EDGE_KEY || "/etc/nginx/ssl/nexlify-panel/privkey.pem";

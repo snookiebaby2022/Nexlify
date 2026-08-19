@@ -35,6 +35,8 @@ import { openUpstreamLiveStream, liveMpegTsResponseHeaders, upstreamToWebRespons
 import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { readReadyPackagerPlaylist } from "@/lib/ts-hls-packager";
 import { ensureDiskHls } from "@/lib/hls-restream-client";
+import { resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
+import type { OutboundProxy } from "@/lib/outbound-proxy";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -45,12 +47,14 @@ const PROXY_TIMEOUT_MS = 15_000;
 
 async function proxyUpstreamNative(
   url: string,
-  ua: string | undefined
+  ua: string | undefined,
+  proxy?: OutboundProxy | null
 ): Promise<{ ok: true; response: NextResponse } | { ok: false; error: string }> {
   try {
     const open = await openUpstreamLiveStream(url, {
       userAgent: ua,
       timeoutMs: PROXY_TIMEOUT_MS,
+      proxy,
     });
     const { stream, headers } = upstreamToWebResponse(open, undefined, { liveUnbounded: true });
     return {
@@ -192,6 +196,7 @@ export async function GET(
   const auth = await authorizeLivePlayback(req, ctx);
   if (!auth.ok) return auth.response;
   const { username, password, streamId, requestStreamKey, cleanId, line, ip, ua } = auth;
+  const outboundProxy = await resolveOutboundProxyForStream(cleanId);
 
   const antiFreeze = await getAntiFreezeSettings();
   let candidates = await resolvePlaybackUrlCandidatesForLine(
@@ -250,6 +255,7 @@ export async function GET(
         streamId: cleanId,
         upstreamUrl: tsUrls[0],
         userAgent: UPSTREAM_HLS_UA,
+        outboundProxy,
       });
       if (packed.ok) {
         return hlsHeaders(
@@ -315,7 +321,7 @@ export async function GET(
       );
     }
 
-    const proxied = await proxyUpstreamNative(playbackUrl, UPSTREAM_HLS_UA);
+    const proxied = await proxyUpstreamNative(playbackUrl, UPSTREAM_HLS_UA, outboundProxy);
     if (!proxied.ok) {
       lastError = proxied.error;
       if (i === 0 && candidates.length > 1) {

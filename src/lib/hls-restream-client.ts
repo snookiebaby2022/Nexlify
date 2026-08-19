@@ -1,4 +1,5 @@
 import { hlsDaemonOrigin, hlsDaemonToken } from "@/lib/hls-disk";
+import type { OutboundProxy } from "@/lib/outbound-proxy";
 import type { TranscodingProfile } from "@/lib/transcoding-profiles";
 import { startTsHlsPackager } from "@/lib/ts-hls-packager";
 
@@ -6,6 +7,7 @@ export type HlsEnsureOpts = {
   streamId: string;
   upstreamUrl: string;
   userAgent?: string;
+  outboundProxy?: OutboundProxy | null;
   loop?: boolean;
   transcode?: Pick<TranscodingProfile, "resolution" | "bitrate" | "codec" | "gpuAcceleration"> | null;
   vod?: boolean;
@@ -48,6 +50,7 @@ export function startDiskHls(opts: HlsEnsureOpts): void {
         lineId: "daemon",
         streamId: opts.streamId,
         userAgent: opts.userAgent,
+        outboundProxy: opts.outboundProxy,
         loop: opts.loop,
         transcode: opts.transcode ?? null,
         vod: opts.vod,
@@ -59,11 +62,29 @@ export function startDiskHls(opts: HlsEnsureOpts): void {
         lineId: "daemon",
         streamId: opts.streamId,
         userAgent: opts.userAgent,
+        outboundProxy: opts.outboundProxy,
         loop: opts.loop,
         transcode: opts.transcode ?? null,
         vod: opts.vod,
       })
     )
+    .finally(() => clearTimeout(t));
+}
+
+/** Bump packager lastAccess so edge disk HLS does not go stale while viewers poll playlists. */
+export function touchDiskHls(streamId: string): void {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 800);
+  void fetch(`${hlsDaemonOrigin()}/touch`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${hlsDaemonToken()}`,
+    },
+    body: JSON.stringify({ streamId }),
+    signal: ac.signal,
+  })
+    .catch(() => undefined)
     .finally(() => clearTimeout(t));
 }
 
@@ -115,6 +136,7 @@ export async function ensureDiskHls(opts: HlsEnsureOpts): Promise<HlsEnsureResul
     lineId: "daemon",
     streamId: opts.streamId,
     userAgent: opts.userAgent,
+    outboundProxy: opts.outboundProxy,
     loop: opts.loop,
     transcode: opts.transcode ?? null,
     vod: opts.vod,
