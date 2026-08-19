@@ -334,3 +334,68 @@ export function upstreamToWebResponse(
     headers,
   };
 }
+
+export async function resolvePlayableUpstreamUrl(
+  url: string,
+  opts?: { userAgent?: string; timeoutMs?: number }
+): Promise<string | null> {
+  let body: Readable | undefined;
+  try {
+    const open = await openUpstreamLiveStream(url, {
+      userAgent: opts?.userAgent,
+      timeoutMs: opts?.timeoutMs ?? 8_000,
+    });
+    body = open.body;
+    const ct = open.contentType.toLowerCase();
+    open.body.destroy();
+    if (ct.includes("html") && !ct.includes("mpegurl")) return null;
+    if (ct.includes("json") || ct.includes("xml")) return null;
+    return open.finalUrl || url;
+  } catch {
+    try {
+      body?.destroy();
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+}
+
+export type UpstreamMediaKind = "hls" | "media" | "none";
+
+/** Cheap GET+sniff so we do not spawn ffmpeg on empty HTML / 404 pages. */
+export async function probeUpstreamPlayable(
+  url: string,
+  opts?: { userAgent?: string; timeoutMs?: number }
+): Promise<UpstreamMediaKind> {
+  let body: Readable | undefined;
+  try {
+    const open = await openUpstreamLiveStream(url, {
+      userAgent: opts?.userAgent,
+      timeoutMs: opts?.timeoutMs ?? 4_000,
+    });
+    body = open.body;
+    const ct = open.contentType.toLowerCase();
+    if (ct.includes("mpegurl") || ct.includes("m3u8")) {
+      open.body.destroy();
+      return "hls";
+    }
+    if (ct.includes("video/") || ct.includes("mp2t") || ct.includes("mpegts") || ct.includes("octet-stream")) {
+      open.body.destroy();
+      return "media";
+    }
+    const { prefix } = await peekResponseBody(open.body, PEEK_BYTES);
+    open.body.destroy();
+    const head = prefix.subarray(0, Math.min(prefix.length, 64)).toString("utf8");
+    if (head.includes("#EXTM3U")) return "hls";
+    if (looksLikePlayableMediaPayload(prefix)) return "media";
+    return "none";
+  } catch {
+    try {
+      body?.destroy();
+    } catch {
+      /* ignore */
+    }
+    return "none";
+  }
+}

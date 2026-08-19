@@ -18,7 +18,7 @@ test("buildNativeTsHlsManifest points .m3u8 clients at panel .ts URL", () => {
   assert.match(body, /#EXT-X-VERSION:3/);
   assert.match(body, /#EXT-X-PLAYLIST-TYPE:EVENT/);
   assert.match(body, /#EXTINF:-1,/);
-  assert.match(body, /\/live\/user1\/pass1\/stream123\.ts$/m);
+  assert.match(body, /^\/live\/user1\/pass1\/stream123\.ts$/m);
 });
 
 test("buildHlsRelayUrl uses path token without query string", () => {
@@ -33,8 +33,47 @@ test("buildHlsRelayUrl uses path token without query string", () => {
   assert.equal(url.includes("?u="), false);
 });
 
-test("rewritePackagerPlaylist rewrites segN.ts to panel HLS paths", () => {
-  const src = ["#EXTM3U", "#EXTINF:2.0,", "seg3.ts", ""].join("\n");
+test("sanitizeHlsPlaylist drops DISCONTINUITY tags that freeze Smarters", async () => {
+  const { sanitizeHlsPlaylist, buildClientDirectHlsMaster, shouldOfferClientDirectHls } =
+    await import("./hls-playback");
+  const src = [
+    "#EXTM3U",
+    "#EXT-X-TARGETDURATION:4",
+    "#EXT-X-DISCONTINUITY",
+    "#EXTINF:2.0,",
+    "seg0.ts",
+    "#EXT-X-DISCONTINUITY-SEQUENCE:1",
+    "#EXTINF:2.0,",
+    "seg1.ts",
+    "",
+  ].join("\n");
+  const out = sanitizeHlsPlaylist(src);
+  assert.equal(out.includes("DISCONTINUITY"), false);
+  assert.match(out, /#EXT-X-VERSION:3/);
+  assert.match(out, /#EXT-X-TARGETDURATION:4/);
+  assert.match(out, /seg0\.ts/);
+  assert.match(out, /seg1\.ts/);
+
+  const overTd = sanitizeHlsPlaylist(
+    ["#EXTM3U", "#EXT-X-VERSION:6", "#EXT-X-INDEPENDENT-SEGMENTS", "#EXT-X-TARGETDURATION:2", "#EXTINF:2.04,", "seg0.ts", ""].join("\n")
+  );
+  assert.match(overTd, /#EXT-X-VERSION:3/);
+  assert.equal(overTd.includes("INDEPENDENT-SEGMENTS"), false);
+  assert.match(overTd, /#EXT-X-TARGETDURATION:3/);
+
+  const master = buildClientDirectHlsMaster("https://cdn.example/live/12.m3u8");
+  assert.match(master, /#EXT-X-STREAM-INF:/);
+  assert.match(master, /https:\/\/cdn\.example\/live\/12\.m3u8/);
+
+  assert.equal(shouldOfferClientDirectHls(404), false);
+  assert.equal(shouldOfferClientDirectHls(502, "Non-playable content-type: text/html"), true);
+  assert.equal(shouldOfferClientDirectHls(504, "Upstream timeout"), true);
+  assert.equal(shouldOfferClientDirectHls(502, "Upstream HTTP 404"), false);
+  assert.equal(shouldOfferClientDirectHls(502, "html error page"), true);
+});
+
+test("rewritePackagerPlaylist strips DISCONTINUITY before rewriting segments", () => {
+  const src = ["#EXTM3U", "#EXT-X-DISCONTINUITY", "#EXTINF:2.0,", "seg3.ts", ""].join("\n");
   const body = rewritePackagerPlaylist(
     src,
     "http://45.88.138.18",
@@ -42,7 +81,17 @@ test("rewritePackagerPlaylist rewrites segN.ts to panel HLS paths", () => {
     "pass1",
     "1862838169"
   );
-  assert.match(body, /\/live\/user1\/pass1\/1862838169_3\.ts/);
+  assert.equal(body.includes("DISCONTINUITY"), false);
+  assert.match(body, /^\/live\/user1\/pass1\/1862838169\/hls\/seg3\.ts$/m);
+  assert.equal(body.includes("http://"), false);
+});
+
+test("markHlsPlaylistAsVod tags movies/series playlists for ExoPlayer", async () => {
+  const { markHlsPlaylistAsVod } = await import("./hls-playback");
+  const src = ["#EXTM3U", "#EXT-X-VERSION:3", "#EXT-X-TARGETDURATION:4", "#EXTINF:4.0,", "seg0.ts", ""].join("\n");
+  const out = markHlsPlaylistAsVod(src);
+  assert.match(out, /#EXT-X-PLAYLIST-TYPE:VOD/);
+  assert.match(out, /#EXT-X-VERSION:3/);
 });
 
 test("isPackagerSegmentName accepts ffmpeg segment files only", () => {

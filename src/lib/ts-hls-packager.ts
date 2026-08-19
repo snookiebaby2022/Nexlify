@@ -1,21 +1,13 @@
 import { spawn, type ChildProcess } from "child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "fs";
 import { join } from "path";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 import { hlsStreamDir } from "@/lib/hls-disk";
-import { liveTranscodeCodecArgs, type LiveTranscodeProfile } from "@/lib/live-transcode";
 
-export { localHlsIndexPath } from "@/lib/hls-disk";
-
-/** 2s segments — copy mode splits on keyframes; 1s often still yields ~2s GOPs. */
-const HLS_TIME_SEC = 2;
-const HLS_LIST_SIZE = 30;
-/** Ignore segments ffmpeg is still flushing to disk (temp_file rename). */
-const SEGMENT_FLUSH_MS = 500;
-/** ExoPlayer live starts after ~3× TARGETDURATION; wait for a real window, not one leftover file. */
-const LIVE_MIN_SEGMENTS = 3;
-const READY_TIMEOUT_MS = 18_000;
-const LIVE_PLAYLIST_MAX_AGE_MS = 30_000;
+/** Match XUI/NXT default segment length. Do not use hls_init_time / split_by_time with -c copy. */
+const HLS_TIME_SEC = 4;
+const HLS_LIST_SIZE = 6;
+const READY_TIMEOUT_MS = 8_000;
 const MAX_SESSIONS = 32;
 const IDLE_MS = 10 * 60 * 1000;
 const REAP_EVERY_MS = 30_000;
@@ -24,89 +16,23 @@ export function isPackagerSegmentName(name: string): boolean {
   return /^seg\d+\.ts$/i.test(name.trim());
 }
 
-export function packagerSegmentNameForIndex(index: number): string {
-  return `seg${index}.ts`;
-}
-
-export function segmentIndexFromPackagerName(name: string): number | null {
-  const m = /^seg(\d+)\.ts$/i.exec(name.trim());
-  if (!m) return null;
-  const n = parseInt(m[1]!, 10);
-  return Number.isFinite(n) ? n : null;
-}
-
-export function packagerPlaylistSegmentNames(playlist: string): string[] {
-  const names: string[] = [];
-  for (const line of playlist.split("\n")) {
-    const name = line.trim().split(/[\\/]/).pop() ?? "";
-    if (isPackagerSegmentName(name)) names.push(name);
-  }
-  return names;
-}
-
-/** After dropping missing files, MEDIA-SEQUENCE must match the first remaining segN.ts. */
-export function alignPackagerMediaSequence(playlist: string): string {
-  const names = packagerPlaylistSegmentNames(playlist);
-  if (!names.length) return playlist;
-  const num = Number(/^seg(\d+)\.ts$/i.exec(names[0]!)?.[1]);
-  if (!Number.isFinite(num)) return playlist;
-  const lines = playlist.split("\n");
-  let replaced = false;
-  const out = lines.map((line) => {
-    if (!line.trim().startsWith("#EXT-X-MEDIA-SEQUENCE:")) return line;
-    replaced = true;
-    return `#EXT-X-MEDIA-SEQUENCE:${num}`;
-  });
-  if (!replaced) {
-    const i = out.findIndex((l) => l.trim().startsWith("#EXT-X-TARGETDURATION"));
-    out.splice(i >= 0 ? i + 1 : 1, 0, `#EXT-X-MEDIA-SEQUENCE:${num}`);
-  }
-  return out.join("\n");
-}
-
 export function filterPackagerPlaylistToExisting(playlist: string, lineId: string, streamId: string): string {
   const dir = packagerDir(lineId, streamId);
   const lines = playlist.split("\n");
   const out: string[] = [];
-  const pendingSegs: string[] = [];
   for (const line of lines) {
     const trimmed = line.trim();
     if (trimmed.startsWith("#EXT-X-DISCONTINUITY")) continue;
     const name = trimmed.split(/[\\/]/).pop() ?? "";
-    if (isPackagerSegmentName(name)) pendingSegs.push(name);
+    if (isPackagerSegmentName(name)) {
+      if (!existsSync(join(dir, name))) {
+        if (out.length && out[out.length - 1]!.startsWith("#EXTINF")) out.pop();
+        continue;
+      }
+    }
     out.push(line);
   }
-  // Only drop the newest segment while ffmpeg is still flushing it — not every young file.
-  const dropLast = (() => {
-    if (pendingSegs.length <= LIVE_MIN_SEGMENTS) return null;
-    const last = pendingSegs[pendingSegs.length - 1]!;
-    const segPath = join(dir, last);
-    try {
-      if (existsSync(segPath) && Date.now() - statSync(segPath).mtimeMs < SEGMENT_FLUSH_MS) return last;
-    } catch {
-      return last;
-    }
-    return null;
-  })();
-
-  const filtered: string[] = [];
-  for (const line of out) {
-    const trimmed = line.trim();
-    const name = trimmed.split(/[\\/]/).pop() ?? "";
-    if (isPackagerSegmentName(name)) {
-      const segPath = join(dir, name);
-      if (!existsSync(segPath)) {
-        if (filtered.length && filtered[filtered.length - 1]!.startsWith("#EXTINF")) filtered.pop();
-        continue;
-      }
-      if (name === dropLast) {
-        if (filtered.length && filtered[filtered.length - 1]!.startsWith("#EXTINF")) filtered.pop();
-        continue;
-      }
-    }
-    filtered.push(line);
-  }
-  return alignPackagerMediaSequence(filtered.join("\n"));
+  return out.join("\n");
 }
 
 export function packagerDir(_lineId: string, streamId: string): string {
@@ -121,7 +47,6 @@ type PackagerSession = {
   ready: Promise<boolean>;
   upstreamUrl: string;
   fingerprint: string;
-  vod: boolean;
 };
 
 const globalKey = "__nexlifyTsHlsSessions";
@@ -142,15 +67,8 @@ function startReaper() {
   setInterval(() => {
     const now = Date.now();
     for (const [key, session] of [...sessions.entries()]) {
-      if (session.vod) {
-        const finished = tryReadReadyPlaylist("daemon", session.key, { vod: true });
-        if (finished?.includes("#EXT-X-ENDLIST")) {
-          stopSession(key, true);
-          continue;
-        }
-      }
       if (now - session.lastAccess < IDLE_MS) continue;
-      stopSession(key, Boolean(session.vod));
+      stopSession(key);
     }
   }, REAP_EVERY_MS).unref();
 }
@@ -164,61 +82,7 @@ function evictOldestIfNeeded() {
   if (oldest) stopSession(oldest.key);
 }
 
-function fingerprintPath(dir: string): string {
-  return join(dir, ".nexlify-fingerprint");
-}
-
-function writeFingerprint(dir: string, fingerprint: string) {
-  try {
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(fingerprintPath(dir), fingerprint, "utf8");
-  } catch {
-    /* ignore */
-  }
-}
-
-function readFingerprint(dir: string): string | null {
-  try {
-    return readFileSync(fingerprintPath(dir), "utf8");
-  } catch {
-    return null;
-  }
-}
-
-function tryReadReadyPlaylist(
-  lineId: string,
-  streamId: string,
-  opts?: { vod?: boolean; sessionAlive?: boolean }
-): string | null {
-  try {
-    const dir = packagerDir(lineId, streamId);
-    const indexPath = join(dir, "index.m3u8");
-    if (!existsSync(indexPath) || statSync(indexPath).size <= 24) return null;
-    if (!opts?.vod && !opts?.sessionAlive) {
-      const ageMs = Date.now() - statSync(indexPath).mtimeMs;
-      if (ageMs > LIVE_PLAYLIST_MAX_AGE_MS) return null;
-    }
-    const playlist = filterPackagerPlaylistToExisting(readFileSync(indexPath, "utf8"), lineId, streamId);
-    if (!playlist.includes("#EXTM3U") || !/seg\d+\.ts/i.test(playlist)) return null;
-    const segs = packagerPlaylistSegmentNames(playlist);
-    const minSegs = opts?.vod ? 1 : LIVE_MIN_SEGMENTS;
-    if (segs.length < minSegs) {
-      if (!opts?.vod) {
-        try {
-          rmSync(indexPath, { force: true });
-        } catch {
-          /* ignore */
-        }
-      }
-      return null;
-    }
-    return playlist;
-  } catch {
-    return null;
-  }
-}
-
-function stopSession(key: string, keepDir = false) {
+function stopSession(key: string) {
   const session = sessions.get(key);
   if (!session) return;
   sessions.delete(key);
@@ -234,7 +98,6 @@ function stopSession(key: string, keepDir = false) {
   } catch {
     /* ignore */
   }
-  if (keepDir) return;
   try {
     rmSync(session.dir, { recursive: true, force: true });
   } catch {
@@ -242,7 +105,7 @@ function stopSession(key: string, keepDir = false) {
   }
 }
 
-function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number, minSegs: number): Promise<boolean> {
+function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number): Promise<boolean> {
   const indexPath = join(dir, "index.m3u8");
   const started = Date.now();
   return new Promise((resolve) => {
@@ -255,8 +118,7 @@ function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number, min
         if (existsSync(indexPath) && statSync(indexPath).size > 24) {
           const body = readFileSync(indexPath, "utf8");
           const segs = body.match(/seg\d+\.ts/gi) ?? [];
-          const onDisk = segs.filter((name) => existsSync(join(dir, name)));
-          if (body.includes("#EXTINF") && onDisk.length >= minSegs) {
+          if (body.includes("#EXTINF") && segs.length >= 1) {
             resolve(true);
             return;
           }
@@ -274,7 +136,12 @@ function waitForPlaylist(dir: string, proc: ChildProcess, timeoutMs: number, min
   });
 }
 
-export type PackagerTranscode = LiveTranscodeProfile | null;
+export type PackagerTranscode = {
+  resolution: string;
+  bitrate: number;
+  codec: string;
+  gpuAcceleration: boolean;
+} | null;
 
 function packagerFingerprint(
   upstreamUrl: string,
@@ -292,21 +159,30 @@ function packagerFingerprint(
   });
 }
 
-/** Live HTTP and VOD copy as fast as the source allows. `-re` only for looping created-channel files. */
-export function packagerFfmpegInputPrefix(opts: { loop?: boolean; vod?: boolean }): string[] {
-  if (opts.loop) return ["-re", "-stream_loop", "-1"];
-  return [];
-}
-
-function transcodeArgs(profile: PackagerTranscode, vod?: boolean): string[] {
-  if (!profile) {
-    // VOD: keep the raw codecs (local players decode MP2/AC-3 fine).
-    if (vod) return ["-c", "copy"];
-    // Live: normalize audio to AAC-LC so ExoPlayer apps (Smarters/XCIPTV) have sound.
-    // MP2/AC-3 DVB upstreams (BBC, etc.) otherwise play video-only (no decoder in app).
-    return ["-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-ac", "2"];
-  }
-  return liveTranscodeCodecArgs(profile);
+function transcodeArgs(profile: PackagerTranscode): string[] {
+  if (!profile) return ["-c", "copy"];
+  const vcodec =
+    profile.gpuAcceleration && profile.codec !== "h265"
+      ? "h264_nvenc"
+      : profile.codec === "h265"
+        ? "libx265"
+        : "libx264";
+  return [
+    "-c:v",
+    vcodec,
+    "-b:v",
+    `${Math.max(300, Number(profile.bitrate) || 2500)}k`,
+    "-s",
+    profile.resolution || "1280x720",
+    "-preset",
+    "veryfast",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "128k",
+    "-ac",
+    "2",
+  ];
 }
 
 async function spawnPackager(
@@ -326,12 +202,10 @@ async function spawnPackager(
   mkdirSync(dir, { recursive: true });
 
   const ua = opts?.userAgent?.trim() || "VLC/3.0.20 LibVLC/3.0.20";
-  const inputPrefix = packagerFfmpegInputPrefix({ loop: opts?.loop, vod: opts?.vod });
-  const hlsFlags = opts?.vod ? "independent_segments+temp_file" : "delete_segments+omit_endlist+temp_file";
+  const inputPrefix = opts?.loop ? ["-re", "-stream_loop", "-1"] : ["-re"];
+  const hlsFlags = opts?.vod ? "temp_file" : "omit_endlist+temp_file";
   const listSize = opts?.vod ? "0" : String(HLS_LIST_SIZE);
   const fingerprint = packagerFingerprint(upstreamUrl, opts?.transcode ?? null, opts?.loop, opts?.vod);
-  const tlsArgs = /^https:/i.test(upstreamUrl) ? ["-tls_verify", "0"] : [];
-  writeFingerprint(dir, fingerprint);
 
   const proc = spawn(
     ffmpegPath,
@@ -354,20 +228,17 @@ async function spawnPackager(
       "-rw_timeout",
       "15000000",
       "-probesize",
-      opts?.vod ? "500000" : "32768",
+      "500000",
       "-analyzeduration",
-      opts?.vod ? "500000" : "200000",
+      "500000",
       "-fflags",
-      opts?.vod ? "+genpts+discardcorrupt" : "+nobuffer+flush_packets+genpts+discardcorrupt",
-      "-flags",
-      "low_delay",
+      "+genpts+discardcorrupt",
       "-avoid_negative_ts",
       "make_zero",
-      ...tlsArgs,
       ...inputPrefix,
       "-i",
       upstreamUrl,
-      ...transcodeArgs(opts?.transcode ?? null, opts?.vod),
+      ...transcodeArgs(opts?.transcode ?? null),
       "-f",
       "hls",
       "-hls_time",
@@ -392,8 +263,6 @@ async function spawnPackager(
     /* ignore */
   }
 
-  console.log(`hls-packager ${key} policy=${opts?.vod ? "copy" : "aac-normalize"}`);
-
   proc.on("exit", () => {
     if (sessions.get(key)?.proc === proc) sessions.delete(key);
   });
@@ -403,10 +272,9 @@ async function spawnPackager(
     dir,
     proc,
     lastAccess: Date.now(),
-    ready: waitForPlaylist(dir, proc, READY_TIMEOUT_MS, opts?.vod ? 1 : LIVE_MIN_SEGMENTS),
+    ready: waitForPlaylist(dir, proc, READY_TIMEOUT_MS),
     upstreamUrl,
     fingerprint,
-    vod: Boolean(opts?.vod),
   };
   sessions.set(key, session);
   startReaper();
@@ -428,25 +296,12 @@ export async function ensureTsHlsPackager(opts: {
   let session = sessions.get(key);
 
   if (session && session.proc.exitCode != null) {
-    stopSession(key, Boolean(opts.vod));
+    stopSession(key);
     session = undefined;
   }
   if (session && session.fingerprint !== fingerprint) {
     stopSession(key);
     session = undefined;
-  }
-
-  const existing = tryReadReadyPlaylist(opts.lineId, opts.streamId, {
-    vod: opts.vod,
-    sessionAlive: Boolean(session),
-  });
-  const sameFingerprint = readFingerprint(dir) === fingerprint;
-  if (opts.vod && existing && sameFingerprint && existing.includes("#EXT-X-ENDLIST")) {
-    return { ok: true, playlist: existing };
-  }
-  if (existing && sameFingerprint && session) {
-    session.lastAccess = Date.now();
-    return { ok: true, playlist: existing };
   }
 
   if (!session) {
@@ -462,33 +317,37 @@ export async function ensureTsHlsPackager(opts: {
   }
 
   session.lastAccess = Date.now();
-  const already = tryReadReadyPlaylist(opts.lineId, opts.streamId, {
-    vod: opts.vod,
-    sessionAlive: true,
-  });
-  if (already) return { ok: true, playlist: already };
-
   const ready = await session.ready;
-  const afterWait = tryReadReadyPlaylist(opts.lineId, opts.streamId, {
-    vod: opts.vod,
-    sessionAlive: true,
-  });
-  if (afterWait) return { ok: true, playlist: afterWait };
   if (!ready) {
-    if (opts.vod) {
-      return { ok: false, error: "HLS packager still warming" };
-    }
     stopSession(key);
     return { ok: false, error: "HLS packager timed out" };
   }
 
-  return { ok: false, error: "Invalid HLS playlist" };
+  try {
+    const playlist = filterPackagerPlaylistToExisting(
+      readFileSync(join(session.dir, "index.m3u8"), "utf8"),
+      opts.lineId,
+      opts.streamId
+    );
+    if (!playlist.includes("#EXTM3U") || !/seg\d+\.ts/i.test(playlist)) {
+      return { ok: false, error: "Invalid HLS playlist" };
+    }
+    return { ok: true, playlist };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Failed to read HLS playlist" };
+  }
 }
 
-
-/** Serve an already-packed playlist immediately (fast zap / VOD resume). */
-export function readLocalPackagerPlaylist(streamId: string, lineId = "daemon"): string | null {
-  return tryReadReadyPlaylist(lineId, streamId);
+/** Absolute path to an on-disk index.m3u8 if the packager/daemon already produced one. */
+export function localHlsIndexPath(streamId: string): string | null {
+  const dir = hlsStreamDir(streamId);
+  const indexPath = join(dir, "index.m3u8");
+  try {
+    if (existsSync(indexPath) && statSync(indexPath).size > 24) return indexPath;
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 export function readTsHlsSegment(lineId: string, streamId: string, name: string): Buffer | null {

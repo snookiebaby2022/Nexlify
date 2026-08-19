@@ -221,6 +221,7 @@ ensure_pm2_app() {
 
 ensure_pm2_app nexlify
 ensure_pm2_app nexlify-cron
+ensure_pm2_app nexlify-hls
 
 if [ -f .license-keys/private.pem ] || [ -n "${LICENSE_SERVER_PRIVATE_PEM:-}" ]; then
   if needs_reregister nexlify-license; then

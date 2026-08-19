@@ -37,10 +37,12 @@ export function parseBuildSubProgress(line: string): { detail: string; ratio: nu
   if (/Building panel|Starting production/i.test(t)) {
     return { detail: "Starting production build…", ratio: 0.04 };
   }
-  if (t.includes("Creating an optimized production build")) {
+  if (t.includes("Creating an optimized production build") || /✓ Compiled/.test(t)) {
     return {
-      detail: "Compiling TypeScript & React (can take 5–15 min — progress will sit here, not stuck)…",
-      ratio: 0.12,
+      detail: /✓ Compiled/.test(t)
+        ? "Compile finished — loading routes…"
+        : "Compiling TypeScript & React (can take 5–15 min — progress will sit here, not stuck)…",
+      ratio: /✓ Compiled/.test(t) ? 0.38 : 0.12,
     };
   }
   if (t.includes("Compiled successfully")) {

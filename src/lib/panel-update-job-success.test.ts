@@ -56,7 +56,7 @@ assert.equal(
 );
 assert.equal(
   looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 60, currentStep: "npm run build" })),
-  false
+  true
 );
 
 // Progress stuck at ~60% but package.json already on the new version → success

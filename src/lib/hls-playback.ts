@@ -1,18 +1,6 @@
-import { existsSync, readdirSync } from "fs";
-import { join } from "path";
 import { Readable } from "node:stream";
 import { looksLikeHtmlErrorPayload, openUpstreamLiveStream } from "@/lib/live-upstream-proxy";
-import {
-  isPackagerSegmentName,
-  packagerSegmentNameForIndex,
-  readLocalPackagerPlaylist,
-  readTsHlsSegment,
-  segmentIndexFromPackagerName,
-  packagerDir,
-} from "@/lib/ts-hls-packager";
-import { buildLiveRedirectHeaders, type AntiFreezeSettings } from "@/lib/anti-freeze";
-import { withIptvCors } from "@/lib/iptv-cors";
-import { NextResponse } from "next/server";
+import { isPackagerSegmentName } from "@/lib/ts-hls-packager";
 
 const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
 
@@ -97,6 +85,8 @@ export function buildHlsRelayUrl(
   upstreamUrl: string
 ): string {
   const token = Buffer.from(upstreamUrl, "utf8").toString("base64url");
+  // Path-absolute (XUI/NXT style). Absolute http://IP:... URLs break Smarters when
+  // the app logged in via hostname or :8080.
   return `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/${token}`;
 }
 
@@ -144,7 +134,7 @@ export function sanitizeHlsPlaylist(body: string): string {
     if (!t.startsWith("#EXT-X-TARGETDURATION")) return line;
     hasTd = true;
     const cur = Number(t.split(":")[1]);
-    const td = maxExtinf > 0 ? minTd : Number.isFinite(cur) && cur > 0 ? cur : 2;
+    const td = Number.isFinite(cur) ? Math.max(cur, minTd) : minTd;
     return `#EXT-X-TARGETDURATION:${td}`;
   });
   if (!sawVersion) {
@@ -182,43 +172,14 @@ export function shouldOfferClientDirectHls(status: number, detail?: string): boo
   return true;
 }
 
-/**
- * Fast segment URL — served directly by the lightweight /hls-segment/ route.
- * No auth, no DB queries, just disk read. ~10ms vs ~3s for the full live route.
- */
-export function buildFastSegmentUrl(diskStreamId: string, segName: string): string {
-  return `/hls-segment/${encodeURIComponent(diskStreamId)}/${encodeURIComponent(segName)}`;
-}
-
-/** XUI-style flat segment beside the .m3u8: /live/u/p/{stream_id}_{n}.ts */
-export function buildXuiHlsSegmentUrl(
-  username: string,
-  password: string,
-  streamId: string,
-  segmentIndex: number
-): string {
-  return `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}_${segmentIndex}.ts`;
-}
-
-/** Prefer a playlist re-read from disk so deleted segments never appear in the manifest. */
-export function freshPackagerPlaylistBody(diskStreamId: string, fallback: string): string {
-  return readLocalPackagerPlaylist(diskStreamId) ?? fallback;
-}
-
-/**
- * Rewrite packager playlist segments to panel URLs.
- * When diskStreamId is provided, uses the fast /hls-segment/ route (no auth overhead).
- * Otherwise falls back to XUI-style /live/ URLs.
- */
 export function rewritePackagerPlaylist(
   body: string,
   _panelOrigin: string,
   username: string,
   password: string,
-  streamId: string,
-  diskStreamId?: string
+  streamId: string
 ): string {
-  const legacyPrefix = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/`;
+  const prefix = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}/hls/`;
   return sanitizeHlsPlaylist(body)
     .split("\n")
     .map((line) => {
@@ -226,73 +187,9 @@ export function rewritePackagerPlaylist(
       if (!trimmed || trimmed.startsWith("#")) return line;
       const name = trimmed.split(/[\\/]/).pop() ?? trimmed;
       if (!isPackagerSegmentName(name)) return line;
-      // Use fast segment route when diskStreamId is available
-      if (diskStreamId) return buildFastSegmentUrl(diskStreamId, name);
-      // Fallback to XUI-style URLs
-      const idx = segmentIndexFromPackagerName(name);
-      if (idx != null) return buildXuiHlsSegmentUrl(username, password, streamId, idx);
-      return `${legacyPrefix}${name}`;
+      return `${prefix}${name}`;
     })
     .join("\n");
-}
-
-export function servePackagerHlsSegmentResponse(
-  buf: Buffer,
-  antiFreeze: AntiFreezeSettings
-): NextResponse {
-  return withIptvCors(
-    new NextResponse(buf, {
-      status: 200,
-      headers: {
-        ...buildLiveRedirectHeaders(antiFreeze),
-        "Content-Type": "video/mp2t",
-        "Content-Length": String(buf.length),
-        "Accept-Ranges": "bytes",
-        "Cache-Control": "no-cache, no-store",
-      },
-    })
-  );
-}
-
-/** Find the closest available segment when the exact one has been deleted. */
-function findClosestSegment(dir: string, requestedIndex: number): Buffer | null {
-  try {
-    if (!existsSync(dir)) return null;
-    const files = readdirSync(dir);
-    let bestIdx = -1;
-    let bestDiff = Infinity;
-    for (const f of files) {
-      if (!isPackagerSegmentName(f)) continue;
-      const idx = segmentIndexFromPackagerName(f);
-      if (idx == null) continue;
-      const diff = Math.abs(idx - requestedIndex);
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        bestIdx = idx;
-      }
-    }
-    if (bestIdx < 0) return null;
-    const name = packagerSegmentNameForIndex(bestIdx);
-    const path = join(dir, name);
-    if (!existsSync(path)) return null;
-    const { readFileSync } = require("fs");
-    return readFileSync(path);
-  } catch {
-    return null;
-  }
-}
-
-export function readPackagerHlsSegmentBuffer(diskStreamId: string, streamId: string, segmentIndex: number): Buffer | null {
-  const name = packagerSegmentNameForIndex(segmentIndex);
-  let buf = readTsHlsSegment("daemon", diskStreamId, name);
-  if (!buf?.length && diskStreamId !== streamId) {
-    buf = readTsHlsSegment("daemon", streamId, name);
-  }
-  if (buf?.length) return buf;
-
-  // Exact segment was deleted (rolling window). Find the closest available segment.
-  const dir = packagerDir("daemon", diskStreamId);
-  return findClosestSegment(dir, segmentIndex);
 }
 
 /** Block SSRF — only public http(s) targets. */
@@ -319,6 +216,7 @@ export function isSafeUpstreamUrl(url: string): boolean {
 }
 
 export function isAllowedHlsRelayTarget(target: string, _rootUpstream = ""): boolean {
+  // Line auth is required to hit the relay; block only private/local SSRF targets.
   return isSafeUpstreamUrl(target);
 }
 
@@ -416,12 +314,10 @@ export async function fetchHlsUpstream(
       return { ok: true, kind: "manifest", body: buf.toString("utf8"), finalUrl };
     }
 
-    const copy = new ArrayBuffer(buf.byteLength);
-    new Uint8Array(copy).set(buf);
     return {
       ok: true,
       kind: "segment",
-      body: copy,
+      body: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
       contentType: contentType || "video/mp2t",
       finalUrl,
     };
@@ -446,9 +342,9 @@ export async function fetchHlsManifestForClient(
 }
 
 /**
- * Last-resort wrapper when upstream is native MPEG-TS but the app requested `.m3u8`.
- * Do not use this as the primary Smarters HLS path — ExoPlayer needs real
- * `#EXT-X-TARGETDURATION` + finite `segN.ts` segments, not an infinite `.ts` pipe.
+ * When upstream is native MPEG-TS but the app requests `.m3u8` (Smarters HLS output),
+ * serve an event-style playlist that points at the panel `.ts` URL — not raw TS bytes.
+ * Uses EXTINF:-1 (continuous live TS). Finite EXTINF breaks Smarters HLS mode entirely.
  */
 export function buildNativeTsHlsManifest(
   _panelOrigin: string,
@@ -494,33 +390,11 @@ export async function buildClientVodHlsPlaylist(opts: {
     userAgent: UPSTREAM_HLS_UA,
     vod: true,
   });
-  if (!packed.ok) return { ok: false, error: packed.error };
+  if (!packed.ok) return packed;
   return {
     ok: true,
     body: markHlsPlaylistAsVod(
-      rewritePackagerPlaylist(packed.playlist, opts.panelOrigin, opts.username, opts.password, opts.streamKey, opts.diskStreamId)
+      rewritePackagerPlaylist(packed.playlist, opts.panelOrigin, opts.username, opts.password, opts.streamKey)
     ),
   };
-}
-
-/**
- * When ffmpeg packaging is too slow (large mkv/mp4), still give HLS clients a
- * valid playlist instead of raw video bytes on a .m3u8 URL.
- */
-export function buildVodProgressiveHlsManifest(
-  kind: "movie" | "series",
-  username: string,
-  password: string,
-  streamId: string
-): string {
-  const path = `/${kind}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}.mp4`;
-  return [
-    "#EXTM3U",
-    "#EXT-X-VERSION:3",
-    "#EXT-X-PLAYLIST-TYPE:VOD",
-    "#EXTINF:-1,",
-    path,
-    "#EXT-X-ENDLIST",
-    "",
-  ].join("\n");
 }

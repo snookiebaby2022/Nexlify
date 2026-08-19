@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
 
 import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
-import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
+import { trackConnection, isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import { getLineForPlaybackAuth, resolvePlaybackUrlForLine } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { resolveStreamIdParam } from "@/lib/xtream-stream-id";
 import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
-import { isHlsClientPath, HLS_PLAYLIST_CONTENT_TYPE, buildClientVodHlsPlaylist, buildVodProgressiveHlsManifest, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
+import { isHlsClientPath, HLS_PLAYLIST_CONTENT_TYPE, buildClientVodHlsPlaylist, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
 
 export const runtime = "nodejs";
@@ -69,15 +69,14 @@ export async function GET(
       streamKey,
       diskStreamId: cleanId,
     });
-    const body = packed.ok
-      ? packed.body
-      : buildVodProgressiveHlsManifest("series", username, password, streamKey);
-    return withIptvCors(
-      new NextResponse(body, {
-        status: 200,
-        headers: { "Content-Type": HLS_PLAYLIST_CONTENT_TYPE, "Cache-Control": "no-cache" },
-      })
-    );
+    if (packed.ok) {
+      return withIptvCors(
+        new NextResponse(packed.body, {
+          status: 200,
+          headers: { "Content-Type": HLS_PLAYLIST_CONTENT_TYPE, "Cache-Control": "no-cache" },
+        })
+      );
+    }
   }
 
   const range = req.headers.get("range");

@@ -6,7 +6,7 @@
       "version": "2.0.16",
       "date": "2026-08-19",
       "channel": "stable",
-      "summary": "Security lockdown, Next 15.5.21, MPEG-TS/HLS playback for Exo/VLC/Smarters/XCIPTV, provider VOD URLs.",
+      "summary": "Security lockdown + HLS daemon: Next 15.5.21, MPEG-TS/HLS for Exo/VLC/Smarters, provider VOD URLs.",
       "changelog": [
         "Natural-language Prisma is allowlisted with secret-field denylist and forced take<=50",
         "Next 15.5.21 with Server Action body cap 100mb and middleware/proxy 512mb",
@@ -14,6 +14,9 @@
         "PanelUser.passwordPlain is no longer persisted; nodemailer 7.0.11",
         "Exclusive wx job locks and atomic JSON for update/migrate/backup; stale LiveConnection rows are deleted",
         "Mutation routes parse JSON safely; builds fail on tsc (ignoreBuildErrors false)",
+        "HLS ffmpeg stays in the nexlify-hls daemon — Next no longer falls back to in-process packager when the daemon is healthy",
+        "Movies/series .m3u8 rewrite native provider HLS immediately instead of waiting on ffmpeg",
+        "MPEGTS remux starts with a tiny probesize and reuses on-disk HLS when already packed (VLC/Exo get 0x47 bytes faster)",
         "Live MPEG-TS/HLS play with VLC UA, video/mp2t and application/x-mpegURL for Exo/VLC/Smarters/XCIPTV",
         "Movies/series direct_source defaults to the provider URL; panel /movie and /series still proxy with Range when direct play is off",
         "Xtream catalogs expose updated_at / last_modified so XCIPTV and IPTV Smarters refresh quickly"
@@ -22,7 +25,9 @@
         "Open Prisma AI queries, SSRF stream proxy, plaintext panel passwords, and unbounded upload bodies",
         "Update/migrate/backup job files could be truncated or double-run",
         "Stale live connections never deleted; NODE_TLS_REJECT_UNAUTHORIZED=0 set process-wide",
-        "MPEG-TS/HLS mismatch for ExoPlayer and VLC; VOD went through a slow panel proxy by default",
+        "Panel restart when HLS and MPEGTS were requested together (in-process ffmpeg)",
+        "Slow movie/series HLS start because every VOD was remuxed through ffmpeg",
+        "MPEGTS took several seconds to show picture (5s analyzeduration)",
         "Smarters/XCIPTV catalogs did not delta-update because live streams lacked updated_at"
       ]
     },
@@ -36,13 +41,15 @@
         "On-demand and created channels start that restream; transcode profiles persist and apply to live transcode mode",
         "Xtream /timeshift/user/pass/duration/start/id.ts catch-up delivery (local archive or provider timeshift URL)",
         "Movies/series fetch with VLC UA; .m3u8 VOD is packaged to real HLS segments",
+        "Stream review, DVR record rules, logo resize, Plex settings, MAG events, and player modules are real pages",
         "Updates: leftover .next.staging no longer keeps the bar running at 60% after PM2 swap"
       ],
       "fixes": [
         "Panel Updates stuck at 60% after a successful restart",
         "HLS packager inside Next could restart the whole panel",
         "No timeshift/catch-up playback route for MAG/Smarters",
-        "Movie/series playback failed when providers blocked the app user-agent"
+        "Movie/series playback failed when providers blocked the app user-agent",
+        "Transcode profiles were Redis-only and vanished after restart"
       ]
     },
     {
@@ -51,10 +58,11 @@
       "channel": "stable",
       "summary": "Smarters HLS v3 playlists + MPEGTS VLC UA so PC/phone stop erroring.",
       "changelog": [
-        "HLS playlists are HLS v3 with TARGETDURATION >= ceil(EXTINF)",
-        "Segment URIs are path-absolute /live/user/pass/id/hls/segN.ts like XUI/NXT",
-        "Local packager uses 4s segments; unread ffmpeg stderr is discarded so Next does not freeze",
-        "MPEGTS /live/*.ts now fetches upstream with VLC user-agent"
+        "HLS playlists are HLS v3 with TARGETDURATION >= ceil(EXTINF) — ffmpeg v6/independent_segments and TD 2 with EXTINF 2.04 broke ExoPlayer",
+        "Segment URIs are path-absolute /live/user/pass/id/hls/segN.ts like XUI/NXT (absolute http://IP URLs failed when Smarters used hostname or :8080)",
+        "Local packager uses 4s segments, no independent_segments, unread ffmpeg stderr is discarded so Next does not freeze",
+        "MPEGTS /live/*.ts now fetches upstream with VLC user-agent — Smarters UA is blocked by many providers",
+        "Client-direct HLS fallback is only used for real XUI .m3u8 sources, not guessed .m3u8 suffixes that 404"
       ],
       "fixes": [
         "IPTV Smarters PC/mobile HLS playback error (invalid playlist + wrong segment host)",
@@ -64,19 +72,23 @@
     },
     {
       "version": "2.0.13",
-      "date": "2026-08-19",
+      "date": "2026-08-17",
       "channel": "stable",
-      "summary": "Fix panel update worker crash: missing tsx on PATH and getPanelServerSettingsSafe CJS import.",
+      "summary": "Smarters HLS: no freeze, faster start; panel update worker no longer crashes on tsx/CJS.",
       "changelog": [
+        "Local TS→HLS packager no longer uses append_list/delete_segments (those wrote EXT-X-DISCONTINUITY and 404'd old segments)",
+        "First HLS segment is 2s, independent, and DISCONTINUITY tags are stripped before they reach IPTV Smarters",
+        "Provider .m3u8 from XUI stream_source is still preferred; if this server gets empty HTML, the player is given the provider playlist so the phone/PC IP can fetch it",
+        "ffmpeg is not started on empty HTML/404 pages — those sources fail over in milliseconds instead of an 8–10s packager timeout",
         "Update worker resolves tsx from node_modules first so PM2's thin PATH no longer exits 127",
-        "Background worker no longer calls getPanelServerSettingsSafe (CJS dynamic import left it undefined)",
-        "Named exports from tsx-loaded panel libs are unwrapped from CJS default",
-        "Worker locale forced to C.UTF-8 to silence en_US.UTF-8 setlocale warnings"
+        "Background worker no longer calls getPanelServerSettingsSafe (CJS dynamic import left it undefined)"
       ],
       "fixes": [
+        "IPTV Smarters PC/mobile HLS freeze (EXT-X-DISCONTINUITY + deleted segments)",
+        "Slow HLS channel start while waiting on a broken ffmpeg remux",
+        "Channels whose provider blocks the panel datacenter IP but serve native HLS to the client",
         "Update worker crashed: getPanelServerSettingsSafe is not a function",
-        "Update worker exited with code 127 when npx/tsx were not on PATH",
-        "Stuck 'Starting update…' banner after worker crash on customer VPS"
+        "Update worker exited with code 127 when npx/tsx were not on PATH"
       ]
     },
     {
