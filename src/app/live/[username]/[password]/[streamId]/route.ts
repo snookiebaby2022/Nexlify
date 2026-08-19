@@ -22,7 +22,6 @@ import {
   hlsRelayCacheKey,
   HLS_PLAYLIST_CONTENT_TYPE,
   HLS_NATIVE_PROBE_MS,
-  HLS_GUESSED_PROBE_MS,
   rewritePackagerPlaylist,
   expandHlsPlaybackCandidates,
   buildClientDirectHlsMaster,
@@ -234,16 +233,6 @@ export async function GET(
     };
 
     const packagerPromise = tsUrls[0] ? packageTs(tsUrls[0]!) : null;
-
-    for (const playbackUrl of candidates) {
-      if (!isHlsPlaybackUrl(playbackUrl) || originalCandidates.has(playbackUrl)) continue;
-      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, HLS_GUESSED_PROBE_MS);
-      if (!manifest.ok) {
-        lastError = manifest.detail || "Stream unavailable";
-        continue;
-      }
-      return returnNativeHls(playbackUrl, manifest);
-    }
 
     for (let i = 0; i < tsUrls.length; i++) {
       const packed = i === 0 && packagerPromise ? await packagerPromise : await packageTs(tsUrls[i]!);

@@ -203,6 +203,23 @@ export async function GET(req: NextRequest) {
       const channelId = stream?.epgChannelId ?? resolved ?? streamId;
       return j({ epg_listings: await getShortEpg(channelId, 10) });
     }
+    case "get_user_info":
+      return j(await xtreamUserInfo(line, baseUrl));
+    case "get_server_info": {
+      const payload = await xtreamUserInfo(line, baseUrl);
+      return j(payload);
+    }
+    case "get_bouquets": {
+      const rows = (line.bouquets ?? []).map((lb) => ({
+        bouquet_id: String(
+          Math.abs(
+            [...String(lb.bouquet.id)].reduce((h, ch) => ((h << 5) - h + ch.charCodeAt(0)) | 0, 0)
+          )
+        ),
+        bouquet_name: lb.bouquet.name,
+      }));
+      return j(rows);
+    }
     default:
       return j(await xtreamUserInfo(line, baseUrl));
   }

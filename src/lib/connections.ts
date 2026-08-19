@@ -341,19 +341,6 @@ export function attachKickAwareProxyBody(opts: {
       const pump = () => {
         if (closed) return;
         void (async () => {
-          if (await isSessionKicked(lineId, ip)) {
-            try {
-              controller.error(new Error("Session kicked"));
-            } catch {
-              /* ignore */
-            }
-            abort();
-            return;
-          }
-          if (Date.now() - lastByteAt > IDLE_MS) {
-            abort();
-            return;
-          }
           try {
             const { done, value } = await reader!.read();
             if (done) {
@@ -367,36 +354,27 @@ export function attachKickAwareProxyBody(opts: {
             }
             lastByteAt = Date.now();
             const byteLen = value?.byteLength ?? 0;
+            // Enqueue before any DB work — VLC aborts if the first 0x47 is delayed.
+            controller.enqueue(value);
             if (byteLen > 0) {
               void recordConnectionMediaBytes(lineId, streamId, ip, byteLen);
             }
             if (!tracked) {
               tracked = true;
               lastTrackAt = Date.now();
-              const id = await trackConnection({ lineId, streamId, ip, userAgent });
-              if (!id) {
-                try {
-                  controller.error(new Error("Session kicked"));
-                } catch {
-                  /* ignore */
-                }
-                abort();
-                return;
-              }
+              void trackConnection({ lineId, streamId, ip, userAgent }).then((id) => {
+                if (!id) abort();
+              });
             } else if (Date.now() - lastTrackAt > HEARTBEAT_MS) {
               lastTrackAt = Date.now();
-              const id = await trackConnection({ lineId, streamId, ip, userAgent });
-              if (!id) {
-                try {
-                  controller.error(new Error("Session kicked"));
-                } catch {
-                  /* ignore */
-                }
-                abort();
-                return;
-              }
+              void trackConnection({ lineId, streamId, ip, userAgent }).then((id) => {
+                if (!id) abort();
+              });
             }
-            controller.enqueue(value);
+            if (Date.now() - lastByteAt > IDLE_MS) {
+              abort();
+              return;
+            }
             pump();
           } catch {
             if (!closed) {

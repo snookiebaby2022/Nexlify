@@ -312,7 +312,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     sessionDays: 7,
     ipWhitelist: "",
     logoutOnIpChange: false,
-    maxLoginAttempts: 10,
+    maxLoginAttempts: 5,
     lockoutMinutes: 15,
     loginFloodPerMin: 30,
     requireStrongPasswords: false,

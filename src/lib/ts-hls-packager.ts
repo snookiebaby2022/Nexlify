@@ -5,7 +5,7 @@ import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 import { hlsStreamDir } from "@/lib/hls-disk";
 
 /** Short segments so the first playlist is ready before XCIPTV's ~10s HLS timeout. */
-const HLS_TIME_SEC = 2;
+const HLS_TIME_SEC = 1;
 const HLS_LIST_SIZE = 6;
 const READY_TIMEOUT_MS = 12_000;
 const MAX_SESSIONS = 32;

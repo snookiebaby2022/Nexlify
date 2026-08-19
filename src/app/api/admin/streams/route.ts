@@ -55,18 +55,16 @@ export async function GET(req: NextRequest) {
   const radio = req.nextUrl.searchParams.get("radio");
   const video = req.nextUrl.searchParams.get("video");
 
-  const picker = req.nextUrl.searchParams.get("picker") === "1";
-  const lite = req.nextUrl.searchParams.get("lite") === "1";
   const page = Math.max(1, parseInt(req.nextUrl.searchParams.get("page") ?? "1", 10) || 1);
   const pageSize = Math.min(
-    200,
-    Math.max(1, parseInt(req.nextUrl.searchParams.get("pageSize") ?? "50", 10) || 50)
+    500,
+    Math.max(1, parseInt(req.nextUrl.searchParams.get("pageSize") ?? "100", 10) || 100)
   );
-  // Picker UIs must never load the full catalog (can freeze the panel on ~20k streams).
-  const paginate =
-    picker ||
-    req.nextUrl.searchParams.has("page") ||
-    req.nextUrl.searchParams.has("pageSize");
+  const picker = req.nextUrl.searchParams.get("picker") === "1";
+  const lite =
+    req.nextUrl.searchParams.get("lite") === "1" ||
+    (!req.nextUrl.searchParams.has("lite") && req.nextUrl.searchParams.get("withStats") !== "1");
+  const paginate = true;
   const withStats = req.nextUrl.searchParams.get("withStats") === "1";
   const search = req.nextUrl.searchParams.get("search")?.trim();
   const categoryId = req.nextUrl.searchParams.get("categoryId")?.trim();

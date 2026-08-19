@@ -111,7 +111,13 @@ export async function POST(req: NextRequest) {
     const user = await verifyPanelLogin(username, password);
     if (!user) {
       try {
-        await recordLoginFailure(ip);
+        const fail = await recordLoginFailure(ip);
+        if (fail.locked) {
+          return NextResponse.json(
+            { error: "Too many attempts. Try again later." },
+            { status: 429 }
+          );
+        }
       } catch (err) {
         console.error("[auth/login] recordLoginFailure failed:", err);
       }

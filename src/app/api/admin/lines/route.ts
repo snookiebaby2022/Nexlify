@@ -73,30 +73,33 @@ export async function GET(req: NextRequest) {
   const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
 
   try {
-  const [lines, total, activeConnections] = await Promise.all([
+  const [lines, total] = await Promise.all([
     prisma.line.findMany({
       where,
       include: {
         bouquets: { include: { bouquet: true } },
         owner: { select: { id: true, username: true } },
         lastWatchedStream: { select: { id: true, name: true } },
-        _count: { select: { channelWatches: true, liveConnections: true } },
+        _count: { select: { liveConnections: true } },
       },
       orderBy,
       skip,
       take: pageSize,
     }),
     prisma.line.count({ where }),
-    prisma.liveConnection.findMany({
-      where: {
-        lastSeenAt: { gte: staleBefore },
-        line: where,
-      },
-      select: { lineId: true, ip: true, stream: { select: { name: true } }, userAgent: true, lastSeenAt: true },
-      orderBy: { lastSeenAt: "desc" },
-      take: 5000, // Safety limit
-    }),
   ]);
+  const lineIds = lines.map((l) => l.id);
+  const activeConnections = lineIds.length
+    ? await prisma.liveConnection.findMany({
+        where: {
+          lastSeenAt: { gte: staleBefore },
+          lineId: { in: lineIds },
+        },
+        select: { lineId: true, ip: true, stream: { select: { name: true } }, userAgent: true, lastSeenAt: true },
+        orderBy: { lastSeenAt: "desc" },
+        take: 2000,
+      })
+    : [];
 
   const activeConnByLineId = new Map<string, (typeof activeConnections)[number]>();
   const activeConnCountByLineId = new Map<string, number>();

@@ -36,8 +36,7 @@ export async function GET(req: NextRequest) {
     "Content-Type": "application/xml; charset=utf-8",
     "Cache-Control": "private, max-age=300",
   });
-  const accept = req.headers.get("accept-encoding") ?? "";
-  if (xml.length >= 2048 && /\bgzip\b/i.test(accept)) {
+  if (xml.length >= 2048) {
     const compressed = gzipSync(Buffer.from(xml, "utf8"), { level: 6 });
     headers.set("Content-Encoding", "gzip");
     headers.set("Content-Length", String(compressed.length));

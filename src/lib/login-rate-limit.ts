@@ -94,23 +94,26 @@ export async function checkLoginRateLimit(
   return { ok: true };
 }
 
-export async function recordLoginFailure(ip: string) {
+export async function recordLoginFailure(ip: string): Promise<{ locked: boolean }> {
   const security = await getSettingGroup("security");
-  const max = Number(security.maxLoginAttempts ?? 10);
+  const max = Math.max(1, Number(security.maxLoginAttempts ?? 5) || 5);
   const lockMin = Number(security.lockoutMinutes ?? 15);
   const key = ip || "unknown";
   const now = Date.now();
   const entry = await readEntry(key);
 
-  if (entry.lockedUntil > now) return;
+  if (entry.lockedUntil > now) return { locked: true };
 
   entry.count += 1;
+  let locked = false;
   if (entry.count >= max) {
     entry.lockedUntil = now + lockMin * 60_000;
     entry.count = 0;
+    locked = true;
   }
 
   await writeEntry(key, entry);
+  return { locked };
 }
 
 export async function clearLoginFailures(ip: string) {

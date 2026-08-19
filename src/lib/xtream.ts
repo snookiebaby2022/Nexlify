@@ -45,6 +45,12 @@ import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-or
 
 type RequestHeaders = { get(name: string): string | null };
 
+function xtreamClockNow(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+}
+
 /** Panel + IPTV base URL (M3U live links, Xtream when served from same host). */
 export function serverBaseUrl(reqUrl: string, headers?: RequestHeaders): string {
   const fromReq = publicOriginFromRequest(reqUrl, headers);
@@ -109,6 +115,8 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
   // HTTPS :443 clients to :8080 — player_api is on 443 and many hosts block 8080 externally.
   const httpPort = useHttps ? String(streamHttpsPort) : publicPort;
   const httpsPort = String(streamHttpsPort);
+  const formats = xtreamOutputFormats(line.allowedOutput);
+  const clock = xtreamClockNow();
   return {
     user_info: {
       username: line.username,
@@ -125,7 +133,8 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
       active_cons: String(activeCons),
       created_at: Math.floor(line.createdAt.getTime() / 1000).toString(),
       max_connections: line.maxConnections.toString(),
-      allowed_output_formats: xtreamOutputFormats(line.allowedOutput),
+      allowed_output_formats: formats,
+      allowed_outputs: formats,
     },
     server_info: {
       url: streamHost,
@@ -135,7 +144,9 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
       rtmp_port: "0",
       timezone: "UTC",
       timestamp_now: Math.floor(Date.now() / 1000),
-      time_now: new Date().toISOString(),
+      time_now: clock,
+      time: clock,
+      allowed_output_formats: formats,
       abr_auto_switch: abrAutoSwitch ? 1 : 0,
       abr_hint: abrAutoSwitch ? "client_may_switch_variants" : "",
     },
