@@ -70,26 +70,6 @@ export function shouldSniffAccidentalHlsManifest(contentType: string | undefined
   return true;
 }
 
-/** Follow redirects and confirm the URL is playable MPEG-TS (not an HLS playlist). */
-export async function resolvePlayableUpstreamUrl(
-  url: string,
-  opts?: { userAgent?: string; timeoutMs?: number }
-): Promise<string | null> {
-  try {
-    const open = await openUpstreamLiveStream(url, opts);
-    const ct = open.contentType.toLowerCase();
-    try {
-      open.body.destroy();
-    } catch {
-      /* ignore */
-    }
-    if (ct.includes("mpegurl") || ct.includes("m3u8")) return null;
-    return open.finalUrl || url;
-  } catch {
-    return null;
-  }
-}
-
 /** ExoPlayer / VLC / Smarters: live .ts must be MPEG-TS, not text/html from a lying CDN. */
 export function normalizeLiveMpegTsContentType(contentType: string | undefined | null): string {
   const c = (contentType ?? "").toLowerCase();
@@ -159,7 +139,7 @@ function prependBuffer(prefix: Buffer, stream: Readable): Readable {
 }
 
 function peekResponseBody(
-  res: http.IncomingMessage,
+  res: Readable,
   maxBytes: number
 ): Promise<{ prefix: Buffer; rest: Readable }> {
   return new Promise((resolve, reject) => {

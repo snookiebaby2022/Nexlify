@@ -64,11 +64,6 @@ export async function getTranscodingProfiles(): Promise<TranscodingProfile[]> {
   return [];
 }
 
-export async function getActiveTranscodingProfile(): Promise<TranscodingProfile | null> {
-  const profiles = await getTranscodingProfiles();
-  return profiles.find((p) => p.isActive) ?? null;
-}
-
 export async function deleteTranscodingProfile(profileId: string): Promise<boolean> {
   const profiles = (await getTranscodingProfiles()).filter((p) => p.id !== profileId);
   await persist(profiles);

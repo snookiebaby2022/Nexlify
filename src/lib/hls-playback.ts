@@ -317,7 +317,7 @@ export async function fetchHlsUpstream(
     return {
       ok: true,
       kind: "segment",
-      body: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+      body: Uint8Array.from(buf).buffer,
       contentType: contentType || "video/mp2t",
       finalUrl,
     };

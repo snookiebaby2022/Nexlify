@@ -10,7 +10,6 @@ import {
   rewriteHlsManifestForRelay,
   HLS_PLAYLIST_CONTENT_TYPE,
   UPSTREAM_HLS_UA,
-  servePackagerHlsSegmentResponse,
 } from "@/lib/hls-playback";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { logActivity } from "@/lib/lines";
@@ -68,7 +67,17 @@ export async function GET(
     if (await isSessionKicked(auth.lineId, clientIp)) {
       return iptvText("Session kicked", { status: 403 });
     }
-    return servePackagerHlsSegmentResponse(buf, antiFreeze);
+    return withIptvCors(
+      new NextResponse(buf, {
+        status: 200,
+        headers: {
+          ...buildLiveRedirectHeaders(antiFreeze),
+          "Content-Type": "video/mp2t",
+          "Cache-Control": "no-cache, no-store",
+          "Content-Length": String(buf.length),
+        },
+      })
+    );
   }
 
   const target = decodeRelayTarget(token, auth.rootUpstream);
