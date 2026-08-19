@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
   switch (action) {
     case "get_live_categories": {
       const ttl = await getCacheTtls();
-      const payload = await cacheGetOrSet(`xtream:live_categories:v2:${line.id}`, ttl.categories, () =>
+      const payload = await cacheGetOrSet(`xtream:live_categories:v3:${line.id}`, ttl.categories, () =>
         xtreamLiveCategoriesForLine(line)
       );
       return j(xtreamDeltaArray(payload, clientTimestamp, (c) => Number(c.created_at || 0)));
@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
     case "get_live_streams": {
       const categoryId = req.nextUrl.searchParams.get("category_id");
       const ttl = await getCacheTtls();
-      const cacheKey = `xtream:live_streams:v2:${line.id}:${categoryId ?? "all"}`;
+      const cacheKey = `xtream:live_streams:v3:${line.id}:${categoryId ?? "all"}`;
       const payload = await cacheGetOrSet(cacheKey, Math.min(ttl.categories || 60, 90), () =>
         xtreamLiveStreams(line, baseUrl, categoryId)
       );

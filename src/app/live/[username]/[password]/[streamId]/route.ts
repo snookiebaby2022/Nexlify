@@ -37,7 +37,7 @@ import { openUpstreamLiveStream, liveMpegTsResponseHeaders, upstreamToWebRespons
 import { ensureDiskHls, startDiskHls } from "@/lib/hls-restream-client";
 import { getActiveTranscodingProfile } from "@/lib/transcoding-profiles";
 import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
-import { readReadyPackagerPlaylist, waitForReadyPackagerPlaylist } from "@/lib/ts-hls-packager";
+import { readReadyPackagerPlaylist, waitForReadyPackagerPlaylist, createPackagerMpegTsReadable } from "@/lib/ts-hls-packager";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -328,6 +328,26 @@ export async function GET(
   }
 
   void trackConnection({ lineId: line.id, streamId: cleanId, ip: ip ?? "", userAgent: ua });
+
+  const tsUrl = candidates.find((u) => !isHlsPlaybackUrl(u));
+  if (tsUrl) {
+    void packageOpts(tsUrl).then((opts) => startDiskHls(opts));
+    const ready = await waitForReadyPackagerPlaylist(cleanId, 2_000);
+    if (ready) {
+      const cached = createPackagerMpegTsReadable(cleanId);
+      if (cached) {
+        return withIptvCors(
+          new NextResponse(cached as unknown as BodyInit, {
+            status: 200,
+            headers: {
+              ...liveMpegTsResponseHeaders("video/mp2t"),
+              ...buildLiveRedirectHeaders(antiFreeze),
+            },
+          })
+        );
+      }
+    }
+  }
 
   for (let i = 0; i < candidates.length; i++) {
     const playbackUrl = candidates[i]!;

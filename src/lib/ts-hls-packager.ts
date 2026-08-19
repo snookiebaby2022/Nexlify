@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "fs";
 import { join } from "path";
+import { Readable } from "stream";
 import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 import { hlsStreamDir } from "@/lib/hls-disk";
 
@@ -8,7 +9,7 @@ import { hlsStreamDir } from "@/lib/hls-disk";
 const HLS_TIME_SEC = 1;
 const HLS_LIST_SIZE = 6;
 const READY_TIMEOUT_MS = 8_000;
-const MAX_SESSIONS = 32;
+const MAX_SESSIONS = Math.max(8, Number(process.env.HLS_MAX_SESSIONS || 128) || 128);
 const IDLE_MS = 10 * 60 * 1000;
 const REAP_EVERY_MS = 30_000;
 
@@ -365,6 +366,43 @@ export function readReadyPackagerPlaylist(streamId: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Shared restream: many viewers read the same ffmpeg HLS segments as MPEG-TS. */
+export function createPackagerMpegTsReadable(streamId: string): Readable | null {
+  if (!readReadyPackagerPlaylist(streamId)) return null;
+  const dir = hlsStreamDir(streamId);
+  let lastSent = "";
+  const gen = async function* () {
+    const deadline = Date.now() + 6 * 60 * 60 * 1000;
+    while (Date.now() < deadline) {
+      let playlist = "";
+      try {
+        playlist = readFileSync(join(dir, "index.m3u8"), "utf8");
+      } catch {
+        await new Promise((r) => setTimeout(r, 300));
+        continue;
+      }
+      const names = playlist
+        .split("\n")
+        .map((line) => (line.trim().split(/[\\/]/).pop() ?? "").trim())
+        .filter((name) => isPackagerSegmentName(name));
+      let start = lastSent ? names.indexOf(lastSent) + 1 : 0;
+      if (start < 0) start = 0;
+      for (const name of names.slice(start)) {
+        const file = join(dir, name);
+        if (!existsSync(file)) continue;
+        try {
+          yield readFileSync(file);
+          lastSent = name;
+        } catch {
+          /* rotated */
+        }
+      }
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  };
+  return Readable.from(gen());
 }
 
 export async function waitForReadyPackagerPlaylist(

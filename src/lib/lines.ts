@@ -119,16 +119,22 @@ export async function streamIdsForLine(
     INNER JOIN "Stream" s ON s.id = bs."streamId"
     WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
     ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
-    AND s."streamUrl" NOT LIKE 'pending://%'
     AND (
-      s."streamUrl" LIKE 'http://%'
-      OR s."streamUrl" LIKE 'https://%'
-      OR s."streamUrl" LIKE 'nexlify://%'
+      s."backupUrl" LIKE 'http://%'
+      OR s."backupUrl" LIKE 'https://%'
       OR (
-        s."playlistUrl" IS NOT NULL
+        s."streamUrl" NOT LIKE 'pending://%'
         AND (
-          s."playlistUrl" LIKE 'http://%'
-          OR s."playlistUrl" LIKE 'https://%'
+          s."streamUrl" LIKE 'http://%'
+          OR s."streamUrl" LIKE 'https://%'
+          OR s."streamUrl" LIKE 'nexlify://%'
+          OR (
+            s."playlistUrl" IS NOT NULL
+            AND (
+              s."playlistUrl" LIKE 'http://%'
+              OR s."playlistUrl" LIKE 'https://%'
+            )
+          )
         )
       )
     )

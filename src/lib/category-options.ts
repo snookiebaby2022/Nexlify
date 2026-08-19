@@ -1,5 +1,14 @@
 /** Client-safe category helpers (no Prisma). */
 
+/** "UK | Entertainment" and "UK Entertainment" are the same folder to IPTV apps. */
+export function normalizeCategoryName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s*\|\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export type CategoryOptionInput = {
   id: string;
   name: string;
