@@ -315,7 +315,7 @@ export default function BinariesSettingsPage() {
           )}
           <VersionSelect
             label="Active FFmpeg"
-            hint="Used for stream probe and transcoding. System /usr/bin/ffmpeg is fine — install a catalog build only when you need it."
+            hint="Used for stream probe (ffprobe next to this binary) and transcoding. System /usr/bin/ffmpeg is fine — install a catalog build only when you need it."
             versions={ffmpegVersions}
             activeId={String(data.activeFfmpegId ?? "")}
             onSelect={selectFfmpeg}

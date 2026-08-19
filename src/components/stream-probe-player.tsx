@@ -7,6 +7,12 @@ type ProbeResult = {
   status: string;
   message: string;
   latencyMs?: number;
+  videoCodec?: string;
+  audioCodec?: string;
+  resolution?: string;
+  fps?: number;
+  bitrateKbps?: number;
+  format?: string;
 };
 
 export function StreamProbePlayer({
@@ -279,9 +285,25 @@ export function StreamProbePlayer({
         </a>
       </div>
       {probe && (
-        <p className="text-sm" style={{ color: statusColor }}>
-          {probe.status.toUpperCase()}: {probe.message}
-        </p>
+        <div className="space-y-1">
+          <p className="text-sm" style={{ color: statusColor }}>
+            {probe.status.toUpperCase()}: {probe.message}
+          </p>
+          {(probe.videoCodec || probe.audioCodec || probe.resolution) && (
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              {[
+                probe.format,
+                probe.videoCodec,
+                probe.resolution,
+                probe.fps ? `${probe.fps} fps` : null,
+                probe.audioCodec,
+                probe.bitrateKbps ? `${probe.bitrateKbps} kbps` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
+        </div>
       )}
       {showPlayer && canPlay && (
         <div className="space-y-2">

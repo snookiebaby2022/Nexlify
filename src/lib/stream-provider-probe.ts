@@ -3,6 +3,13 @@ export type ProbeResult = {
   message: string;
   httpStatus?: number;
   latencyMs?: number;
+  videoCodec?: string;
+  audioCodec?: string;
+  resolution?: string;
+  fps?: number;
+  bitrateKbps?: number;
+  durationSec?: number;
+  format?: string;
 };
 
 export function normalizeProviderUrl(raw: string): { ok: true; url: string } | { ok: false; error: string } {

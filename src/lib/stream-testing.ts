@@ -74,6 +74,8 @@ export async function testStream(streamId: string): Promise<StreamTestResult> {
   }
 
   const test = await testStreamSource(stream.streamUrl);
+  const { probeStreamUrl } = await import("@/lib/stream-probe-server");
+  const media = test.accessible ? await probeStreamUrl(stream.streamUrl) : null;
   
   // Calculate score
   let score = 100;
@@ -90,9 +92,9 @@ export async function testStream(streamId: string): Promise<StreamTestResult> {
     sourceUrl: stream.streamUrl,
     accessible: test.accessible,
     latencyMs: test.latencyMs,
-    bitrateKbps: 0,
-    resolution: "",
-    codec: "",
+    bitrateKbps: media?.bitrateKbps ?? 0,
+    resolution: media?.resolution ?? "",
+    codec: media?.videoCodec ?? "",
     bufferingEvents: 0,
     score: Math.max(0, score),
     errors: test.errors,

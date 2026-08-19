@@ -1,8 +1,10 @@
 import { probeStreamProvider, type ProbeResult } from "@/lib/stream-provider-probe";
-import { binExists, getFfprobePath, runCommand } from "@/lib/bin-tools";
-import { isLikelyDirectPlayUrl } from "@/lib/stream-probe-fast";
+import { getFfprobePath, runCommand } from "@/lib/bin-tools";
+import { formatFfprobeSummary, parseFfprobeJson } from "@/lib/ffprobe-media";
 
 export type { ProbeResult };
+
+const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
 
 /** Probe any stream URL (live, VOD, provider base). Server/API only. */
 export async function probeStreamUrl(
@@ -28,45 +30,54 @@ export async function probeStreamUrl(
 }
 
 async function probeStreamWithFfprobe(url: string): Promise<ProbeResult | null> {
-  if (!isLikelyDirectPlayUrl(url)) return null;
+  if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) return null;
 
   const ffprobe = await getFfprobePath();
-  if (!(await binExists(ffprobe))) return null;
+  const isRemote = /^https?:\/\//i.test(url);
+  const args = [
+    "-v",
+    "error",
+    "-hide_banner",
+    "-print_format",
+    "json",
+    "-show_format",
+    "-show_streams",
+    "-analyzeduration",
+    "2000000",
+    "-probesize",
+    "2000000",
+  ];
+  if (isRemote) {
+    args.push("-user_agent", UPSTREAM_UA, "-timeout", "8000000");
+  }
+  args.push(url);
 
   try {
     const start = Date.now();
-    const { stdout, stderr, code } = await runCommand(
-      ffprobe,
-      [
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration,format_name",
-        "-of",
-        "default=noprint_wrappers=1",
-        "-timeout",
-        "8000000",
-        url,
-      ],
-      20_000
-    );
+    const { stdout, stderr, code } = await runCommand(ffprobe, args, 18_000);
     const latencyMs = Date.now() - start;
-    const out = `${stdout}\n${stderr}`;
-
-    if (code === 0 || out.includes("format_name=")) {
-      const format = out.match(/format_name=(.+)/)?.[1]?.trim();
+    const info = parseFfprobeJson(stdout);
+    if (info) {
+      const summary = formatFfprobeSummary(info);
       return {
         status: "online",
-        message: `Full probe (ffprobe)${format ? ` · ${format}` : ""} · ${latencyMs}ms`,
+        message: `ffprobe${summary ? ` · ${summary}` : ""} · ${latencyMs}ms`,
         latencyMs,
+        videoCodec: info.videoCodec,
+        audioCodec: info.audioCodec,
+        resolution: info.resolution,
+        fps: info.fps,
+        bitrateKbps: info.bitrateKbps,
+        durationSec: info.durationSec,
+        format: info.format,
       };
     }
 
     const err = stderr.trim() || stdout.trim();
-    if (err) {
+    if (code !== 0 && err) {
       return {
         status: "degraded",
-        message: `Full probe: ffprobe · ${err.slice(0, 160)}`,
+        message: `ffprobe · ${err.slice(0, 180)}`,
         latencyMs,
       };
     }

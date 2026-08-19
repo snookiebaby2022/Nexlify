@@ -11,6 +11,7 @@ async function binariesSettings() {
 }
 
 const FFMPEG_FALLBACKS = ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"];
+const FFPROBE_FALLBACKS = ["/usr/bin/ffprobe", "/usr/local/bin/ffprobe"];
 
 export async function getFfmpegPath(): Promise<string> {
   const paths = await getBinPaths();
@@ -37,8 +38,12 @@ export async function getPhpPath(): Promise<string> {
 
 export async function getFfprobePath(): Promise<string> {
   const ffmpeg = await getFfmpegPath();
-  if (/ffmpeg$/i.test(ffmpeg)) return ffmpeg.replace(/ffmpeg$/i, "ffprobe");
-  return "ffprobe";
+  const sibling = /ffmpeg$/i.test(ffmpeg) ? ffmpeg.replace(/ffmpeg$/i, "ffprobe") : "";
+  if (sibling && (await binExists(sibling))) return sibling;
+  for (const fallback of FFPROBE_FALLBACKS) {
+    if (await binExists(fallback)) return fallback;
+  }
+  return sibling || "ffprobe";
 }
 
 export async function binExists(binPath: string): Promise<boolean> {
