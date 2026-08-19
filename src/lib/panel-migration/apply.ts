@@ -516,8 +516,8 @@ async function applyMigrationBundleInner(
       "Stream"
     );
 
-    // Exact dump membership: replace each bouquet's links (add missing, remove extras,
-    // restore channel order). createMany(skipDuplicates) alone left repair junk in empty bouquets.
+    // Skip-existing reimport: add missing bouquet membership only (keep panel extras).
+    // Full replace when Clear data or Skip existing is off.
     const linksByBouquet = new Map<string, { streamId: string; sortOrder: number }[]>();
     for (const b of bundle.bouquets) {
       const bouquetId = bouquetIdByLegacy.get(b.legacyId);
@@ -534,20 +534,41 @@ async function applyMigrationBundleInner(
     }
     const LINK_BATCH = 500;
     let bouquetLinkIdx = 0;
+    const additiveLinks =
+      options.skipExistingStreams !== false && options.clearDataBeforeImport !== true;
     for (const [bouquetId, rows] of linksByBouquet) {
       bouquetLinkIdx++;
       options.onProgress?.("bouquetLinks", bouquetLinkIdx, linksByBouquet.size);
       try {
-        await prisma.bouquetStream.deleteMany({ where: { bouquetId } });
-        for (let i = 0; i < rows.length; i += LINK_BATCH) {
-          await prisma.bouquetStream.createMany({
-            data: rows.slice(i, i + LINK_BATCH).map((r) => ({
-              bouquetId,
-              streamId: r.streamId,
-              sortOrder: r.sortOrder,
-            })),
-            skipDuplicates: true,
+        if (additiveLinks) {
+          const existing = await prisma.bouquetStream.findMany({
+            where: { bouquetId },
+            select: { streamId: true, sortOrder: true },
           });
+          const have = new Set(existing.map((e) => e.streamId));
+          let nextOrder = existing.reduce((m, e) => Math.max(m, e.sortOrder), -1);
+          const toAdd = rows.filter((r) => !have.has(r.streamId)).map((r) => {
+            nextOrder += 1;
+            return { bouquetId, streamId: r.streamId, sortOrder: nextOrder };
+          });
+          for (let i = 0; i < toAdd.length; i += LINK_BATCH) {
+            await prisma.bouquetStream.createMany({
+              data: toAdd.slice(i, i + LINK_BATCH),
+              skipDuplicates: true,
+            });
+          }
+        } else {
+          await prisma.bouquetStream.deleteMany({ where: { bouquetId } });
+          for (let i = 0; i < rows.length; i += LINK_BATCH) {
+            await prisma.bouquetStream.createMany({
+              data: rows.slice(i, i + LINK_BATCH).map((r) => ({
+                bouquetId,
+                streamId: r.streamId,
+                sortOrder: r.sortOrder,
+              })),
+              skipDuplicates: true,
+            });
+          }
         }
       } catch (e) {
         pushWarning(result.warnings, `Bouquet links ${bouquetId}: ${shortErr(e)}`);
@@ -852,7 +873,6 @@ async function applyMigrationBundleInner(
         if (!name || !p.legacyId || seen.has(name)) return false;
         seen.add(name);
         const existing = await prisma.package.findFirst({ where: { name } });
-        if (existing) return false;
         const bouquetIds = [
           ...new Set(
             (p.bouquetLegacyIds ?? [])
@@ -860,6 +880,21 @@ async function applyMigrationBundleInner(
               .filter((id): id is string => Boolean(id))
           ),
         ];
+        if (existing) {
+          if (
+            options.skipExistingStreams !== false &&
+            options.clearDataBeforeImport !== true &&
+            Array.isArray(existing.bouquetIds) &&
+            existing.bouquetIds.length === 0 &&
+            bouquetIds.length
+          ) {
+            await prisma.package.update({
+              where: { id: existing.id },
+              data: { bouquetIds },
+            });
+          }
+          return false;
+        }
         await prisma.package.create({
           data: {
             name,

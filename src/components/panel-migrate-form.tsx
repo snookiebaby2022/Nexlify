@@ -1316,7 +1316,7 @@ export function PanelMigrateForm() {
         </label>
         <label>
           <input type="checkbox" checked={skipExisting} onChange={(e) => setSkipExisting(e.target.checked)} />{" "}
-          Skip existing usernames / stream URLs (does not skip upload — only avoids duplicates; retags type/category when they differ)
+          Skip existing usernames / stream URLs (add missing only — does not wipe the panel or replace bouquet membership)
         </label>
         <label>
           <input type="checkbox" checked={clearData} onChange={(e) => setClearData(e.target.checked)} />{" "}

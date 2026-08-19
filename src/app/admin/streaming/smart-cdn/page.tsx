@@ -127,8 +127,9 @@ export default function SmartCdnPage() {
       <div>
         <h1 className="text-2xl font-semibold">Smart CDN</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Active endpoints rewrite live playback onto the best-scoring edge for failover and
-          lower latency when an origin is slow or down.
+          Smart CDN only rewrites URLs whose host is this panel or an owned stream server. Provider
+          live/movie/series URLs are left unchanged, so playback is not broken when CDN is on or empty.
+          With no active endpoints, nothing is rewritten.
         </p>
         <p className="text-sm mt-2" style={{ color: "var(--muted)" }}>
           CDN helps failover — it does <strong>not</strong> guarantee unblock-everywhere. ISP or

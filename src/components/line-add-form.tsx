@@ -78,7 +78,7 @@ export function LineAddForm({
   const [bouquets, setBouquets] = useState<BouquetPickerRow[]>([]);
   const [owners, setOwners] = useState<{ id: string; username: string }[]>([]);
   const [packages, setPackages] = useState<
-    { id: string; name: string; creditCost: number; days: number; maxLines: number }[]
+    { id: string; name: string; creditCost: number; days: number; maxLines: number; bouquetIds: string[] }[]
   >([]);
   const [templates, setTemplates] = useState<
     { id: string; label: string; description: string; days: number; maxConnections: number; creditCost: number; isTrial: boolean; lockToIp: boolean; allowedCountries: string; blockedCountries: string; canWatchAdult: boolean }[]
@@ -137,17 +137,43 @@ export function LineAddForm({
     setCreditHint(tpl.creditCost);
   }
 
+  function applyPackageFields(
+    f: typeof form,
+    pkg:
+      | { id: string; name: string; days: number; maxLines: number; creditCost: number; bouquetIds: string[] }
+      | undefined
+  ) {
+    if (!pkg) return f;
+    const named = bouquets
+      .filter((b) => b.name.trim().toLowerCase() === pkg.name.trim().toLowerCase())
+      .map((b) => b.id);
+    const nextBouquets = pkg.bouquetIds.length ? [...pkg.bouquetIds] : named;
+    return {
+      ...f,
+      packageId: pkg.id,
+      days: pkg.days,
+      maxConnections: pkg.maxLines,
+      unlimited: false,
+      expiresAt: "",
+      isTrial: pkg.days <= 2 && pkg.creditCost === 0,
+      bouquetIds: nextBouquets.length ? nextBouquets : f.bouquetIds,
+    };
+  }
+
   function applyDurationPreset(preset: (typeof LINE_DURATION_PRESETS)[number]) {
     const pkg = packages.find((p) => p.days === preset.days);
-    setForm((f) => ({
-      ...f,
-      days: preset.days,
-      isTrial: preset.isTrial,
-      unlimited: false,
-      expiresAt: "", // recompute from days
-      packageId: pkg?.id ?? f.packageId,
-      maxConnections: pkg?.maxLines ?? f.maxConnections,
-    }));
+    setForm((f) => {
+      const next = applyPackageFields(f, pkg);
+      return {
+        ...next,
+        days: preset.days,
+        isTrial: preset.isTrial,
+        unlimited: false,
+        expiresAt: "",
+        packageId: pkg?.id ?? f.packageId,
+        maxConnections: pkg?.maxLines ?? next.maxConnections,
+      };
+    });
     setCreditHint(preset.creditCost);
   }
 
@@ -168,9 +194,11 @@ export function LineAddForm({
           days: number;
           creditCost: number;
           maxLines: number;
+          bouquetIds?: string[];
         }[]).map((p) => ({
           ...p,
           days: inferPackageDaysFromName(p.name, p.days) ?? p.days,
+          bouquetIds: Array.isArray(p.bouquetIds) ? p.bouquetIds : [],
         }));
         list.sort(
           (a, b) =>
@@ -484,15 +512,7 @@ export function LineAddForm({
                         key={p.id}
                         type="button"
                         onClick={() => {
-                          setForm({
-                            ...form,
-                            packageId: p.id,
-                            days: p.days,
-                            maxConnections: p.maxLines,
-                            unlimited: false,
-                            expiresAt: "",
-                            isTrial: p.days <= 2 && p.creditCost === 0,
-                          });
+                          setForm((f) => applyPackageFields(f, p));
                           setCreditHint(p.creditCost);
                         }}
                         className="text-xs rounded-full px-3 py-1.5 border cursor-pointer hover:opacity-90"
@@ -514,17 +534,12 @@ export function LineAddForm({
                     value={form.packageId}
                     onChange={(e) => {
                       const pkg = packages.find((p) => p.id === e.target.value);
-                      const days = pkg?.days ?? form.days;
-                      setForm({
-                        ...form,
-                        packageId: e.target.value,
-                        days,
-                        maxConnections: pkg?.maxLines ?? form.maxConnections,
-                        unlimited: false,
-                        expiresAt: "",
-                        isTrial: pkg ? pkg.days <= 2 && (pkg.creditCost ?? 0) === 0 : false,
-                      });
-                      setCreditHint(pkg ? pkg.creditCost : creditCostForDays(days));
+                      setForm((f) =>
+                        pkg
+                          ? applyPackageFields(f, pkg)
+                          : { ...f, packageId: "" }
+                      );
+                      setCreditHint(pkg ? pkg.creditCost : creditCostForDays(form.days));
                     }}
                   >
                     <option value="">Package (optional)</option>
@@ -702,11 +717,18 @@ export function LineAddForm({
         )}
 
         {tab === "bouquets" && (
-          <BouquetPickerTable
-            bouquets={bouquets}
-            selectedIds={form.bouquetIds}
-            onChange={(bouquetIds) => setForm({ ...form, bouquetIds })}
-          />
+          <div className="space-y-3">
+            {form.packageId ? (
+              <p className="text-sm" style={{ color: "var(--muted)" }}>
+                Bouquets from the selected package are ticked. You can add or remove more before creating the line.
+              </p>
+            ) : null}
+            <BouquetPickerTable
+              bouquets={bouquets}
+              selectedIds={form.bouquetIds}
+              onChange={(bouquetIds) => setForm({ ...form, bouquetIds })}
+            />
+          </div>
         )}
 
         <div className="flex justify-end gap-3 pt-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search } from "lucide-react";
 import type { DualListItem } from "@/components/dual-list-picker";
 
@@ -24,12 +24,14 @@ export function XuiDualListPicker({
   selectedIds,
   onChange,
   emptySelectedLabel = "Empty list",
+  onVisibleSelectedIds,
 }: {
   items: DualListItem[];
   allItems?: DualListItem[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   emptySelectedLabel?: string;
+  onVisibleSelectedIds?: (ids: string[]) => void;
 }) {
   const [qAvail, setQAvail] = useState("");
   const [qSel, setQSel] = useState("");
@@ -41,6 +43,8 @@ export function XuiDualListPicker({
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const catalog = allItems ?? items;
   const itemMap = useMemo(() => new Map(catalog.map((i) => [i.id, i])), [catalog]);
+  const SELECTED_PAGE_SIZE = 50;
+  const [selPage, setSelPage] = useState(1);
 
   const available = useMemo(() => {
     const ql = qAvail.trim().toLowerCase();
@@ -51,20 +55,37 @@ export function XuiDualListPicker({
     });
   }, [items, selectedSet, qAvail]);
 
-  const selectedOrdered = useMemo(() => {
-    return selectedIds
-      .map((id) => itemMap.get(id))
-      .filter((i): i is DualListItem => !!i);
-  }, [selectedIds, itemMap]);
-
-  const selectedDisplayed = useMemo(() => {
+  const filteredSelectedIds = useMemo(() => {
     const ql = qSel.trim().toLowerCase();
-    return selectedOrdered.filter((i) => {
+    if (!ql && selectedFilter === "all") return selectedIds;
+    return selectedIds.filter((id) => {
+      const i = itemMap.get(id);
+      if (!i) return !ql && selectedFilter === "all";
       if (selectedFilter !== "all" && i.sublabel !== selectedFilter) return false;
       if (!ql) return true;
       return formatRowLabel(i).toLowerCase().includes(ql);
     });
-  }, [selectedOrdered, qSel, selectedFilter]);
+  }, [selectedIds, itemMap, qSel, selectedFilter]);
+
+  const selectedTotalPages = Math.max(1, Math.ceil(filteredSelectedIds.length / SELECTED_PAGE_SIZE));
+  const selectedPageSafe = Math.min(Math.max(1, selPage), selectedTotalPages);
+  const selectedPageIds = filteredSelectedIds.slice(
+    (selectedPageSafe - 1) * SELECTED_PAGE_SIZE,
+    selectedPageSafe * SELECTED_PAGE_SIZE
+  );
+  const selectedPageRows = selectedPageIds.map(
+    (id) =>
+      itemMap.get(id) ?? {
+        id,
+        label: `Stream ${id.slice(0, 8)}…`,
+        sublabel: "LIVE",
+      }
+  );
+
+  const selectedPageIdsKey = selectedPageIds.join(",");
+  useEffect(() => {
+    onVisibleSelectedIds?.(selectedPageIdsKey ? selectedPageIdsKey.split(",") : []);
+  }, [selectedPageIdsKey, onVisibleSelectedIds]);
 
   function moveToSelected(ids: string[]) {
     const next = [...selectedIds];
@@ -256,9 +277,9 @@ export function XuiDualListPicker({
               style={{ borderColor: "#e5e7eb", background: "#f9fafb" }}
             >
               <span>
-                {selectedDisplayed.length === 0 && selectedIds.length === 0
+                {selectedIds.length === 0
                   ? emptySelectedLabel
-                  : `${selectedDisplayed.length} shown`}
+                  : `Page ${selectedPageSafe}/${selectedTotalPages} · ${filteredSelectedIds.length} match`}
               </span>
             </div>
             <p className="xui-dual-list-hint text-[11px] px-2 pt-2 pb-0">
@@ -300,14 +321,14 @@ export function XuiDualListPicker({
               className="flex-1 overflow-y-auto min-h-[140px] max-h-80 text-sm m-0 p-1 list-none"
               onDragOver={(e) => e.preventDefault()}
             >
-              {selectedDisplayed.length === 0 ? (
+              {selectedPageRows.length === 0 ? (
                 <li className="xui-dual-list-hint px-2 py-6 text-center text-xs">
                   {selectedIds.length === 0
                     ? emptySelectedLabel
                     : "No streams match the filter — try Show all."}
                 </li>
               ) : (
-                selectedDisplayed.map((row) => (
+                selectedPageRows.map((row) => (
                   <li
                     key={row.id}
                     draggable={selectedFilter === "all" && !qSel.trim()}
@@ -340,7 +361,26 @@ export function XuiDualListPicker({
             </ul>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center justify-between gap-2 px-2 py-2 border-t text-xs" style={{ borderColor: "#e5e7eb" }}>
+              <button
+                type="button"
+                className={transferBtnClass}
+                disabled={selectedPageSafe <= 1}
+                onClick={() => setSelPage((p) => Math.max(1, p - 1))}
+              >
+                Prev
+              </button>
+              <span style={{ color: "#6b7280" }}>50 per page</span>
+              <button
+                type="button"
+                className={transferBtnClass}
+                disabled={selectedPageSafe >= selectedTotalPages}
+                onClick={() => setSelPage((p) => p + 1)}
+              >
+                Next
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               title="Move up in bouquet order"

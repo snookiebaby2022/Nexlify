@@ -4,12 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
 import { canAccessBouquet } from "@/lib/bouquet-access";
 import {
-  bouquetContentCounts,
   bouquetContentCountsByBouquetId,
   emptyBouquetContentCounts,
 } from "@/lib/bouquet-counts";
 import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
-import { redactStream } from "@/lib/stream-redact";
 import { PanelRole, Prisma } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
@@ -25,33 +23,57 @@ export async function GET(req: NextRequest) {
   if (id) {
     const bouquet = await prisma.bouquet.findUnique({
       where: { id },
-      include: {
-        streams: {
-          orderBy: { sortOrder: "asc" },
-          include: {
-            stream: { include: { category: { select: { name: true } } } },
-          },
-        },
-        _count: { select: { lines: true } },
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        sortOrder: true,
+        _count: { select: { lines: true, streams: true } },
       },
     });
     if (!bouquet) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (!(await canAccessBouquet(session, id))) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    const safeBouquet = {
-      ...bouquet,
-      streams: bouquet.streams.map((bs) => ({
-        ...bs,
-        stream: redactStream(bs.stream, session.role),
-      })),
-    };
+
+    const memberRows = await prisma.bouquetStream.findMany({
+      where: { bouquetId: id },
+      select: { streamId: true },
+      orderBy: { sortOrder: "asc" },
+    });
+    const streamIds = memberRows.map((r) => r.streamId);
+    const previewIds = streamIds.slice(0, 50);
+    const previewStreams = previewIds.length
+      ? await prisma.stream.findMany({
+          where: { id: { in: previewIds } },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            isRadio: true,
+            category: { select: { name: true } },
+          },
+        })
+      : [];
+    const previewMap = new Map(previewStreams.map((s) => [s.id, s]));
+    const countMap = await bouquetContentCountsByBouquetId(prisma, [id]);
+
     return NextResponse.json({
       bouquet: {
-        ...safeBouquet,
-        contentCounts: bouquetContentCounts(bouquet.streams),
+        ...bouquet,
+        streams: [] as unknown[],
+        contentCounts: countMap.get(id) ?? emptyBouquetContentCounts(),
       },
-      streamIds: bouquet.streams.sort((a, b) => a.sortOrder - b.sortOrder).map((bs) => bs.streamId),
+      streamIds,
+      items: previewIds.map((sid) => {
+        const s = previewMap.get(sid);
+        return {
+          id: sid,
+          label: s?.name ?? `Stream ${sid.slice(0, 8)}…`,
+          sublabel: s?.isRadio ? "LIVE" : (s?.type ?? "LIVE"),
+          group: s?.category?.name,
+        };
+      }),
     });
   }
 
@@ -125,24 +147,25 @@ export async function PATCH(req: NextRequest) {
       isActive: body.isActive,
       sortOrder: body.sortOrder != null ? Number(body.sortOrder) : undefined,
     },
-    include: {
-      streams: { include: { stream: true } },
-      _count: { select: { lines: true } },
-    },
+    select: { id: true, name: true, isActive: true, sortOrder: true },
   });
+
+  const streamCount = Array.isArray(body.streamIds)
+    ? (body.streamIds as string[]).length
+    : await prisma.bouquetStream.count({ where: { bouquetId: id } });
 
   await logActivity("edit_bouquet", {
     userId: session.id,
     entity: "bouquet",
     entityId: id,
-    meta: { streamCount: bouquet.streams.length },
+    meta: { streamCount },
   });
 
   await invalidateXtreamCategories();
 
   return NextResponse.json({
     bouquet,
-    streamIds: bouquet.streams.map((bs) => bs.streamId),
+    streamIds: Array.isArray(body.streamIds) ? body.streamIds : undefined,
   });
   } catch (e) {
     return apiMutationErrorResponse(e);
@@ -177,7 +200,7 @@ export async function POST(req: NextRequest) {
           })),
         },
       },
-      include: { streams: { include: { stream: true } } },
+      include: { streams: { select: { streamId: true } } },
     });
 
     await logActivity("duplicate_bouquet", {
@@ -204,7 +227,7 @@ export async function POST(req: NextRequest) {
         })),
       },
     },
-    include: { streams: { include: { stream: true } } },
+    include: { streams: { select: { streamId: true } } },
   });
 
   await logActivity("create_bouquet", {

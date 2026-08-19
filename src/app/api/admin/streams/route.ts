@@ -68,6 +68,8 @@ export async function GET(req: NextRequest) {
   const withStats = req.nextUrl.searchParams.get("withStats") === "1";
   const search = req.nextUrl.searchParams.get("search")?.trim();
   const categoryId = req.nextUrl.searchParams.get("categoryId")?.trim();
+  const bouquetId = req.nextUrl.searchParams.get("bouquetId")?.trim();
+  const idsParam = req.nextUrl.searchParams.get("ids")?.trim();
   const serverId = req.nextUrl.searchParams.get("serverId")?.trim();
   const statusParam = req.nextUrl.searchParams.get("status")?.trim()?.toLowerCase();
   const missingEpg = req.nextUrl.searchParams.get("missingEpg") === "1";
@@ -134,6 +136,17 @@ export async function GET(req: NextRequest) {
     ];
   }
 
+  if (idsParam) {
+    const ids = idsParam
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 50);
+    if (ids.length) where.id = { in: ids };
+  }
+  if (bouquetId) {
+    where.bouquets = { some: { bouquetId } };
+  }
   if (categoryId) {
     if (categoryId === "0" || categoryId.toLowerCase() === "uncategorized") {
       where.categoryId = null;

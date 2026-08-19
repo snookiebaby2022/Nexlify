@@ -25,6 +25,7 @@ export function BouquetForm({
   const [typeFilter, setTypeFilter] = useState<"" | "LIVE" | "MOVIE" | "SERIES">("");
   const [availSearch, setAvailSearch] = useState("");
   const [pickerTotal, setPickerTotal] = useState(0);
+  const [contentCounts, setContentCounts] = useState({ streams: 0, movies: 0, series: 0, stations: 0, total: 0 });
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(!!bouquetId);
   const [saving, setSaving] = useState(false);
@@ -62,38 +63,62 @@ export function BouquetForm({
           setName(d.bouquet.name);
           const ids: string[] = d.streamIds ?? [];
           setStreamIds(ids);
-          const fromBouquet = (d.streams ?? d.items ?? []) as DualListItem[];
+          if (d.bouquet.contentCounts) setContentCounts(d.bouquet.contentCounts);
+          const fromBouquet = (d.items ?? []) as DualListItem[];
           if (Array.isArray(fromBouquet) && fromBouquet.length) {
             setSelectedCatalog(fromBouquet);
-          } else {
-            setSelectedCatalog(
-              ids.map((id) => ({
-                id,
-                label: `Stream ${id.slice(0, 8)}…`,
-                sublabel: "LIVE",
-              }))
-            );
           }
         }
         setLoading(false);
       });
   }, [bouquetId]);
 
+  const hydrateSelectedLabels = useCallback((ids: string[]) => {
+    if (!ids.length) return;
+    const params = new URLSearchParams({
+      picker: "1",
+      lite: "1",
+      page: "1",
+      pageSize: "50",
+      ids: ids.slice(0, 50).join(","),
+    });
+    fetch(`/api/admin/streams?${params}`)
+      .then((r) => r.json())
+      .then((d) => {
+        const extra = (d.items ?? []) as DualListItem[];
+        if (!extra.length) return;
+        setSelectedCatalog((prev) => {
+          const map = new Map(prev.map((i) => [i.id, i]));
+          let changed = false;
+          for (const i of extra) {
+            const cur = map.get(i.id);
+            if (!cur || cur.label !== i.label) {
+              map.set(i.id, i);
+              changed = true;
+            }
+          }
+          return changed ? Array.from(map.values()) : prev;
+        });
+      })
+      .catch(() => undefined);
+  }, []);
+
   // Merge newly loaded available items into selected catalog labels when possible
   useEffect(() => {
-    if (!items.length || !streamIds.length) return;
+    if (!items.length) return;
     setSelectedCatalog((prev) => {
       const map = new Map(prev.map((i) => [i.id, i]));
       let changed = false;
       for (const i of items) {
-        if (streamIds.includes(i.id) && map.get(i.id)?.label !== i.label) {
+        const cur = map.get(i.id);
+        if (cur && cur.label !== i.label) {
           map.set(i.id, i);
           changed = true;
         }
       }
-      return changed ? streamIds.map((id) => map.get(id)!).filter(Boolean) : prev;
+      return changed ? Array.from(map.values()) : prev;
     });
-  }, [items, streamIds]);
+  }, [items]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -132,9 +157,9 @@ export function BouquetForm({
     );
   }
 
-  const liveCount = streamIds.filter((id) => catalog.find((i) => i.id === id)?.sublabel === "LIVE").length;
-  const movieCount = streamIds.filter((id) => catalog.find((i) => i.id === id)?.sublabel === "MOVIE").length;
-  const seriesCount = streamIds.filter((id) => catalog.find((i) => i.id === id)?.sublabel === "SERIES").length;
+  const liveCount = contentCounts.streams;
+  const movieCount = contentCounts.movies;
+  const seriesCount = contentCounts.series;
 
   return (
     <div className="max-w-5xl space-y-4">
@@ -233,6 +258,7 @@ export function BouquetForm({
             allItems={catalog}
             selectedIds={streamIds}
             onChange={setStreamIds}
+            onVisibleSelectedIds={hydrateSelectedLabels}
           />
         </div>
 
