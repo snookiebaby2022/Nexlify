@@ -4,7 +4,7 @@ import { getClientIp } from "@/lib/client-ip";
 import { getLineForPlaybackAuth, resolvePlaybackUrlCandidatesForLine, resolvePlaybackUrlForLine } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
 import { parseXtreamPlaybackPath } from "@/lib/xtream-playback-path";
-import { stripLiveStreamExtension, isHlsPlaybackUrl, isSafeUpstreamUrl } from "@/lib/hls-playback";
+import { stripLiveStreamExtension, isHlsPlaybackUrl, isSafeUpstreamUrl, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
 import { getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { isSessionKicked, trackConnection } from "@/lib/connections";
@@ -75,6 +75,19 @@ export async function GET(req: NextRequest) {
   }
 
   if (parsed.wantsHls) {
+    const antiFreeze = await getAntiFreezeSettings();
+    const ctx = { clientIp: ip, userAgent: ua, skipGeo: true };
+    const candidates = await resolvePlaybackUrlCandidatesForLine(
+      line.id,
+      cleanId,
+      ctx,
+      antiFreeze.playbackUrlCacheTtlSec
+    );
+    const tsUrl = candidates.find((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
+    if (tsUrl) {
+      const { startDiskHls } = await import("@/lib/hls-restream-client");
+      startDiskHls({ streamId: cleanId, upstreamUrl: tsUrl, userAgent: UPSTREAM_HLS_UA });
+    }
     if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD" && !isHlsSegment) {
       void trackConnection({
         lineId: line.id,

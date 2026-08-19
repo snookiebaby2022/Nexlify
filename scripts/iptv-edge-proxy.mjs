@@ -47,6 +47,8 @@ const INTERNAL_SECRET =
   process.env.PANEL_API_SECRET ||
   "";
 const HLS_DIR = (process.env.NEXLIFY_HLS_DIR || "/var/lib/nexlify/hls").replace(/\/+$/, "");
+/** Live HLS must be written within this window or we forward to Next (starts ffmpeg). */
+const HLS_LIVE_MAX_AGE_MS = Number(process.env.NEXLIFY_HLS_LIVE_MAX_AGE_MS || 6000);
 const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
 const PLAYBACK_RE = /^\/(live|movie|series)\//;
 const HLS_RE = /\.m3u8(?:[?#]|$)/i;
@@ -88,7 +90,7 @@ function liveTsHeaders() {
   return {
     "Content-Type": "video/mp2t",
     "Cache-Control": "no-cache, no-store, no-transform",
-    Connection: "keep-alive",
+    Connection: "close",
     "Accept-Ranges": "none",
     "Access-Control-Allow-Origin": "*",
     "X-Accel-Buffering": "no",
@@ -200,6 +202,44 @@ function hlsStreamDir(streamId) {
   return path.join(HLS_DIR, safe || "unknown");
 }
 
+/** True when ffmpeg is actively writing this stream (not leftover files from a dead session). */
+function hlsDirFresh(streamId) {
+  const dir = hlsStreamDir(streamId);
+  const indexPath = path.join(dir, "index.m3u8");
+  try {
+    if (!fs.existsSync(indexPath)) return false;
+    if (Date.now() - fs.statSync(indexPath).mtimeMs > HLS_LIVE_MAX_AGE_MS) return false;
+    const body = fs.readFileSync(indexPath, "utf8");
+    if (!body.includes("#EXTM3U") || !body.includes("#EXTINF")) return false;
+    const segs = body.match(/seg\d+\.ts/gi);
+    if (!segs?.length) return false;
+    const last = segs[segs.length - 1];
+    const segPath = path.join(dir, last);
+    if (!fs.existsSync(segPath)) return false;
+    return Date.now() - fs.statSync(segPath).mtimeMs <= HLS_LIVE_MAX_AGE_MS;
+  } catch {
+    return false;
+  }
+}
+
+function filterPlaylistToExisting(body, dir) {
+  const lines = body.split("\n");
+  const out = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (t.startsWith("#EXT-X-DISCONTINUITY")) continue;
+    const name = t.split(/[\\/]/).pop() ?? t;
+    if (/^seg\d+\.ts$/i.test(name)) {
+      if (!fs.existsSync(path.join(dir, name))) {
+        if (out.length && out[out.length - 1].trim().startsWith("#EXTINF")) out.pop();
+        continue;
+      }
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
 function hlsSegPath(streamId, segName) {
   if (!/^seg\d+\.ts$/i.test(segName)) return null;
   return path.join(hlsStreamDir(streamId), segName);
@@ -225,8 +265,8 @@ function serveHlsPlaylist(streamId, clientReq, clientRes) {
   const indexPath = path.join(dir, "index.m3u8");
   try {
     if (!fs.existsSync(indexPath)) return false;
-    let body = fs.readFileSync(indexPath, "utf8");
-    if (!body.includes("#EXTM3U") || !body.includes("#EXTINF")) return false;
+    let body = filterPlaylistToExisting(fs.readFileSync(indexPath, "utf8"), dir);
+    if (!body.includes("#EXTM3U") || !body.includes("#EXTINF") || !/seg\d+\.ts/i.test(body)) return false;
     const urlPath = String(clientReq.url || "/").split("?")[0];
     const base = urlPath.replace(/\.m3u8$/i, "");
     const lines = body.split("\n").map((line) => {
@@ -350,6 +390,11 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     return;
   }
   const streamId = auth.streamId;
+  const fresh = hlsDirFresh(streamId);
+  if (!fresh) {
+    forward(clientReq, clientRes, ctx);
+    return;
+  }
   if (kind === "seg") {
     if (clientReq.method === "HEAD") {
       const segPath = hlsSegPath(streamId, segName);
@@ -373,13 +418,8 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     return;
   }
   if (clientReq.method === "HEAD") {
-    const indexPath = path.join(hlsStreamDir(streamId), "index.m3u8");
-    if (fs.existsSync(indexPath)) {
-      clientRes.writeHead(200, hlsPlaylistHeaders());
-      clientRes.end();
-      return;
-    }
-    forward(clientReq, clientRes, ctx);
+    clientRes.writeHead(200, hlsPlaylistHeaders());
+    clientRes.end();
     return;
   }
   if (serveHlsPlaylist(streamId, clientReq, clientRes)) return;
