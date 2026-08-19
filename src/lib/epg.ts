@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { xtreamBase64, xtreamSafeText, xtreamUnix } from "./xtream-safe";
 
 /** Parse XMLTV datetime: 20240603120000 +0000 */
 export function parseXmltvDate(raw: string): Date {
@@ -116,16 +117,16 @@ async function loadShortEpg(channelId: string, limit: number) {
   });
 
   return programs.map((p, i) => ({
-    id: p.id,
-    epg_id: channelId,
-    title: p.title,
+    id: String(xtreamUnix(p.start) || i + 1),
+    epg_id: xtreamSafeText(channelId),
+    title: xtreamBase64(p.title),
     lang: "en",
-    start: p.start.toISOString(),
-    end: p.stop.toISOString(),
-    description: p.description ?? "",
-    channel_id: channelId,
-    start_timestamp: Math.floor(p.start.getTime() / 1000),
-    stop_timestamp: Math.floor(p.stop.getTime() / 1000),
+    start: p.start.toISOString().replace("T", " ").replace(/\.\d+Z$/, ""),
+    end: p.stop.toISOString().replace("T", " ").replace(/\.\d+Z$/, ""),
+    description: xtreamBase64(p.description ?? ""),
+    channel_id: xtreamSafeText(channelId),
+    start_timestamp: String(xtreamUnix(p.start)),
+    stop_timestamp: String(xtreamUnix(p.stop)),
     now_playing: i === 0 ? 1 : 0,
     has_archive: 0,
   }));

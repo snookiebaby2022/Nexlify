@@ -21,6 +21,7 @@ import { getCacheTtls } from "@/lib/cache-ttl";
 import { getShortEpg } from "@/lib/epg";
 import { getAntiFreezeSettings, schedulePlaylistZapWarm } from "@/lib/anti-freeze";
 import { iptvCorsPreflight, iptvJson } from "@/lib/iptv-cors";
+import { xtreamDeltaArray } from "@/lib/xtream-safe";
 import { prisma } from "@/lib/prisma";
 
 export async function OPTIONS() {
@@ -99,21 +100,15 @@ export async function GET(req: NextRequest) {
   switch (action) {
     case "get_live_categories": {
       const ttl = await getCacheTtls();
-      const payload = await cacheGetOrSet(`xtream:live_categories:${line.id}`, ttl.categories, () =>
+      const payload = await cacheGetOrSet(`xtream:live_categories:v2:${line.id}`, ttl.categories, () =>
         xtreamLiveCategoriesForLine(line)
       );
-      if (clientTimestamp && clientTimestamp > 0) {
-        const filtered = payload.filter(
-          (c) => Number(c.created_at || 0) > clientTimestamp
-        );
-        return j({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
-      }
-      return j(payload);
+      return j(xtreamDeltaArray(payload, clientTimestamp, (c) => Number(c.created_at || 0)));
     }
     case "get_live_streams": {
       const categoryId = req.nextUrl.searchParams.get("category_id");
       const ttl = await getCacheTtls();
-      const cacheKey = `xtream:live_streams:${line.id}:${categoryId ?? "all"}`;
+      const cacheKey = `xtream:live_streams:v2:${line.id}:${categoryId ?? "all"}`;
       const payload = await cacheGetOrSet(cacheKey, Math.min(ttl.categories || 60, 90), () =>
         xtreamLiveStreams(line, baseUrl, categoryId)
       );
@@ -127,73 +122,41 @@ export async function GET(req: NextRequest) {
           antiFreeze
         );
       }
-      if (clientTimestamp && clientTimestamp > 0) {
-        const filtered = payload.filter(
-          (s) => (s.updated_at ?? 0) > clientTimestamp
-        );
-        return j({ streams: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
-      }
-      return j(payload);
+      return j(xtreamDeltaArray(payload, clientTimestamp, (s) => s.updated_at ?? 0));
     }
     case "get_vod_streams": {
       const vodCategoryId = req.nextUrl.searchParams.get("category_id");
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(
-        `xtream:vod_streams:${line.id}:${vodCategoryId ?? "all"}`,
+        `xtream:vod_streams:v2:${line.id}:${vodCategoryId ?? "all"}`,
         Math.min(ttl.categories || 60, 90),
         () => xtreamVodStreams(line, baseUrl, vodCategoryId)
       );
-      if (clientTimestamp && clientTimestamp > 0) {
-        const filtered = payload.filter(
-          (s) => (s.updated_at ?? 0) > clientTimestamp
-        );
-        return j({ streams: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
-      }
-      return j(payload);
+      return j(xtreamDeltaArray(payload, clientTimestamp, (s) => s.updated_at ?? 0));
     }
     case "get_vod_categories": {
       const ttl = await getCacheTtls();
-      const payload = await cacheGetOrSet(`xtream:vod_categories:${line.id}`, ttl.categories, () =>
+      const payload = await cacheGetOrSet(`xtream:vod_categories:v2:${line.id}`, ttl.categories, () =>
         xtreamVodCategoriesForLine(line)
       );
-      if (clientTimestamp && clientTimestamp > 0) {
-        const filtered = payload.filter(
-          (c) => Number(c.created_at || 0) > clientTimestamp
-        );
-        return j({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
-      }
-      return j(payload);
+      return j(xtreamDeltaArray(payload, clientTimestamp, (c) => Number(c.created_at || 0)));
     }
     case "get_series_categories": {
       const ttl = await getCacheTtls();
-      const payload = await cacheGetOrSet(`xtream:series_categories:${line.id}`, ttl.categories, () =>
+      const payload = await cacheGetOrSet(`xtream:series_categories:v2:${line.id}`, ttl.categories, () =>
         xtreamSeriesCategoriesForLine(line)
       );
-      if (clientTimestamp && clientTimestamp > 0) {
-        const filtered = payload.filter(
-          (c) => Number(c.created_at || 0) > clientTimestamp
-        );
-        return j({ categories: filtered, changed: filtered.length, server_timestamp: Math.floor(Date.now() / 1000) });
-      }
-      return j(payload);
+      return j(xtreamDeltaArray(payload, clientTimestamp, (c) => Number(c.created_at || 0)));
     }
     case "get_series": {
       const seriesCategoryId = req.nextUrl.searchParams.get("category_id");
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(
-        `xtream:series:${line.id}:${seriesCategoryId ?? "all"}`,
+        `xtream:series:v2:${line.id}:${seriesCategoryId ?? "all"}`,
         Math.min(ttl.categories || 60, 90),
         () => xtreamSeriesForLine(line, seriesCategoryId)
       );
-      if (clientTimestamp && clientTimestamp > 0) {
-        const filtered = payload.filter((s) => Number(s.last_modified) > clientTimestamp);
-        return j({
-          episodes: filtered,
-          changed: filtered.length,
-          server_timestamp: Math.floor(Date.now() / 1000),
-        });
-      }
-      return j(payload);
+      return j(xtreamDeltaArray(payload, clientTimestamp, (s) => Number(s.last_modified) || 0));
     }
     case "get_vod_info": {
       const vodId =
@@ -229,7 +192,7 @@ export async function GET(req: NextRequest) {
     }
     case "get_simple_data_table": {
       const streamId = req.nextUrl.searchParams.get("stream_id");
-      if (!streamId) return j([]);
+      if (!streamId) return j({ epg_listings: [] });
       const resolved = await resolveStreamIdParam(streamId, { lineId: line.id });
       const stream = resolved
         ? await prisma.stream.findUnique({
@@ -238,7 +201,7 @@ export async function GET(req: NextRequest) {
           })
         : null;
       const channelId = stream?.epgChannelId ?? resolved ?? streamId;
-      return j(await getShortEpg(channelId, 10));
+      return j({ epg_listings: await getShortEpg(channelId, 10) });
     }
     default:
       return j(await xtreamUserInfo(line, baseUrl));

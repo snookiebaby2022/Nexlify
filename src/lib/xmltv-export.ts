@@ -1,31 +1,26 @@
 import { prisma } from "@/lib/prisma";
 import { streamsForLineExport, type LineWithBouquets } from "@/lib/lines";
 import { resolveEpgId } from "@/lib/subscription-export";
-import { StreamType } from "@prisma/client";
+import { Prisma, StreamType } from "@prisma/client";
+import { xmltvSafeText } from "@/lib/xtream-safe";
 
 function formatXmltvDate(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
+  const t = Number.isFinite(d.getTime()) ? d : new Date();
   return (
-    `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
-    `${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())} +0000`
+    `${t.getUTCFullYear()}${p(t.getUTCMonth() + 1)}${p(t.getUTCDate())}` +
+    `${p(t.getUTCHours())}${p(t.getUTCMinutes())}${p(t.getUTCSeconds())} +0000`
   );
 }
 
-function escXml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
-export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 48): Promise<string> {
-  const streams = await streamsForLineExport(line, { type: StreamType.LIVE });
+export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 24): Promise<string> {
+  const streams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
   const channelMap = new Map<string, string>();
   for (const s of streams) {
-    const epgId = resolveEpgId(s);
-    if (!channelMap.has(epgId)) channelMap.set(epgId, s.name);
+    const epgId = String(resolveEpgId(s) || s.id).trim();
+    if (!epgId) continue;
+    if (!channelMap.has(epgId)) channelMap.set(epgId, s.name || "Live");
   }
 
   const now = new Date();
@@ -34,27 +29,42 @@ export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 48): P
 
   const programs =
     channelIds.length > 0
-      ? await prisma.epgProgram.findMany({
-          where: {
-            channelId: { in: channelIds },
-            stop: { gte: now },
-            start: { lte: until },
-          },
-          orderBy: [{ channelId: "asc" }, { start: "asc" }],
-          take: 5000,
-        })
+      ? await prisma.$queryRaw<
+          { channelId: string; title: string; description: string | null; start: Date; stop: Date }[]
+        >`
+          SELECT "channelId", title, description, start, stop
+          FROM (
+            SELECT
+              p."channelId",
+              p.title,
+              p.description,
+              p.start,
+              p.stop,
+              ROW_NUMBER() OVER (PARTITION BY p."channelId" ORDER BY p.start ASC) AS rn
+            FROM "EpgProgram" p
+            WHERE p."channelId" IN (${Prisma.join(channelIds)})
+              AND p.stop >= ${now}
+              AND p.start <= ${until}
+          ) ranked
+          WHERE rn <= 24
+          ORDER BY "channelId" ASC, start ASC
+        `
       : [];
 
   const lines: string[] = ['<?xml version="1.0" encoding="UTF-8"?>', "<tv>"];
   for (const [id, name] of channelMap) {
-    lines.push(`  <channel id="${escXml(id)}"><display-name>${escXml(name)}</display-name></channel>`);
+    lines.push(
+      `  <channel id="${xmltvSafeText(id)}"><display-name>${xmltvSafeText(name) || "Live"}</display-name></channel>`
+    );
   }
   for (const p of programs) {
+    const ch = xmltvSafeText(p.channelId);
+    if (!ch) continue;
     lines.push(
-      `  <programme start="${formatXmltvDate(p.start)}" stop="${formatXmltvDate(p.stop)}" channel="${escXml(p.channelId)}">`,
-      `    <title>${escXml(p.title)}</title>`
+      `  <programme start="${formatXmltvDate(p.start)}" stop="${formatXmltvDate(p.stop)}" channel="${ch}">`,
+      `    <title>${xmltvSafeText(p.title) || "Programme"}</title>`
     );
-    if (p.description) lines.push(`    <desc>${escXml(p.description)}</desc>`);
+    if (p.description) lines.push(`    <desc>${xmltvSafeText(p.description)}</desc>`);
     lines.push("  </programme>");
   }
   lines.push("</tv>");

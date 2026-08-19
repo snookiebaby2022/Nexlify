@@ -1,10 +1,9 @@
 import type { LineWithBouquets } from "./lines";
-import { streamsForLineExport, lineIsPlayable } from "./lines";
+import { streamsForLineExport, lineIsPlayable, categoryIdsForLine, activeBouquetIds } from "./lines";
 import { resolveChannelId, resolveEpgId } from "./subscription-export";
 
 import { exportPlaybackUrl } from "./export-playback-url";
-import { getStreamPlaybackMode } from "./stream-playback-mode";
-import { StreamType, Prisma } from "@prisma/client";
+import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
 
 function cuidToNum(id: string): number {
@@ -25,6 +24,14 @@ function numericCategoryId(cuid?: string | null): string {
 }
 
 import { parseBitrates, formatTimeshiftLabel } from "./stream-variants";
+import {
+  xtreamSafeText,
+  xtreamUnix,
+  xtreamUnixString,
+  xtreamOutputFormats,
+  xtreamCategoryIds,
+} from "./xtream-safe";
+import { seriesSeedsForBouquets } from "./xtream-stream-id";
 import { pickVodExtension } from "./vod-proxy";
 import {
   portFromPanelBaseUrl,
@@ -118,7 +125,7 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
       active_cons: String(activeCons),
       created_at: Math.floor(line.createdAt.getTime() / 1000).toString(),
       max_connections: line.maxConnections.toString(),
-      allowed_output_formats: line.allowedOutput.split(","),
+      allowed_output_formats: xtreamOutputFormats(line.allowedOutput),
     },
     server_info: {
       url: streamHost,
@@ -135,30 +142,31 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
   };
 }
 
-export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
-  // Only query LIVE streams for categories (lean mode)
-  const streams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
-  const categoryIds = [
-    ...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[]),
-  ];
-
+async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType) {
+  const { categoryIds, hasUncategorized } = await categoryIdsForLine(line, { type });
   const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
-
-  if (streams.some((s) => !s.categoryId)) {
+  if (hasUncategorized) {
     rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
   }
-
   if (categoryIds.length) {
     const cats = await prisma.category.findMany({
       where: { id: { in: categoryIds } },
       orderBy: { sortOrder: "asc" },
     });
     for (const c of cats) {
-      rows.push({ category_id: numericCategoryId(c.id), category_name: c.name, parent_id: 0, created_at: Math.floor(c.createdAt.getTime() / 1000).toString() });
+      rows.push({
+        category_id: numericCategoryId(c.id),
+        category_name: xtreamSafeText(c.name) || "Category",
+        parent_id: 0,
+        created_at: xtreamUnixString(c.createdAt),
+      });
     }
   }
-
   return rows;
+}
+
+export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
+  return xtreamCategoriesForType(line, StreamType.LIVE);
 }
 
 export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
@@ -175,44 +183,29 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
   }
 
   return live.map((s, i) => {
-    const full = s;
-    const playbackMode = getStreamPlaybackMode(full);
-    const catchup = full.vodMode === "CATCHUP" || full.isOnDemand || full.isShifted;
-    const archiveDays = full.archiveDays ?? 0;
-    const timeshiftHours = full.timeshiftSeconds ? Math.ceil(full.timeshiftSeconds / 3600) : 0;
-    const direct =
-      playbackMode === "on_demand" && full.playlistUrl?.trim()
-        ? full.playlistUrl.trim()
-        : "";
-    const shiftLabel = formatTimeshiftLabel(full.timeshiftSeconds);
-    const variants = parseBitrates(full.bitrates);
-    const abrLadder =
-      variants.length > 1
-        ? variants.map((v) => ({
-            label: v.label,
-            bandwidth_kbps: v.bandwidthKbps ?? 0,
-            resolution: v.resolution ?? "",
-          }))
-        : undefined;
-    const isCreatedLive =
-      playbackMode === "on_demand" || playbackMode === "created" || playbackMode === "catchup";
+    const catchup = s.vodMode === "CATCHUP" || s.isShifted;
+    const archiveDays = s.archiveDays ?? 0;
+    const timeshiftHours = s.timeshiftSeconds ? Math.ceil(s.timeshiftSeconds / 3600) : 0;
+    const shiftLabel = formatTimeshiftLabel(s.timeshiftSeconds);
     const numCategoryId = numericCategoryId(s.categoryId);
+    const name = xtreamSafeText(shiftLabel ? `${s.name} (${shiftLabel})` : s.name) || "Live";
     return {
       num: i + 1,
-      name: shiftLabel ? `${s.name} (${shiftLabel})` : s.name,
-      stream_type: isCreatedLive ? "created_live" : "live",
+      name,
+      stream_type: "live",
       stream_id: cuidToNum(s.id),
-      stream_icon: s.streamIcon ?? "",
-      epg_channel_id: resolveEpgId(s),
-      added: Math.floor(s.createdAt.getTime() / 1000).toString(),
+      stream_icon: xtreamSafeText(s.streamIcon),
+      epg_channel_id: xtreamSafeText(resolveEpgId(s)),
+      added: xtreamUnixString(s.createdAt),
       category_id: numCategoryId,
-      category_ids: [numCategoryId],
-      custom_sid: full.parentStreamId ?? "",
+      category_ids: xtreamCategoryIds(numCategoryId),
+      custom_sid: "",
       tv_archive: catchup || timeshiftHours > 0 ? 1 : 0,
-      direct_source: direct || exportPlaybackUrl(baseUrl, line, s, full),
+      // XCIPTV builds /live/user/pass/{stream_id}.ts from stream_id. A filled
+      // direct_source makes it HTTP-probe every channel during "Update media".
+      direct_source: "",
       tv_archive_duration: catchup ? archiveDays || timeshiftHours || 7 : timeshiftHours || 0,
-      updated_at: Math.floor(s.updatedAt.getTime() / 1000),
-      ...(abrLadder ? { abr_variants: abrLadder } : {}),
+      updated_at: xtreamUnix(s.updatedAt),
     };
   });
 }
@@ -238,15 +231,15 @@ export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string, 
     const numCategoryId = numericCategoryId(s.categoryId);
     return {
       num: i + 1,
-      name: s.name,
+      name: xtreamSafeText(s.name) || "Movie",
       stream_type: "movie",
       stream_id: cuidToNum(s.id),
-      stream_icon: s.streamIcon ?? "",
-      added: Math.floor(s.createdAt.getTime() / 1000).toString(),
-      updated_at: Math.floor(full.updatedAt.getTime() / 1000),
+      stream_icon: xtreamSafeText(s.streamIcon),
+      added: xtreamUnixString(s.createdAt),
+      updated_at: xtreamUnix(full.updatedAt),
       category_id: numCategoryId,
-      category_ids: [numCategoryId],
-      container_extension: pickVodExtension(playUrl),
+      category_ids: xtreamCategoryIds(numCategoryId),
+      container_extension: pickVodExtension(playUrl) || "mp4",
       custom_sid: "",
       direct_source: playUrl,
     };
@@ -254,117 +247,56 @@ export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string, 
 }
 
 export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
-  // Only query MOVIE streams for categories (lean mode)
-  const streams = await streamsForLineExport(line, { type: StreamType.MOVIE, lean: true });
-  const categoryIds = [
-    ...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[]),
-  ];
-
-  const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
-
-  if (streams.some((s) => !s.categoryId)) {
-    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
-  }
-
-  if (categoryIds.length) {
-    const cats = await prisma.category.findMany({
-      where: { id: { in: categoryIds } },
-      orderBy: { sortOrder: "asc" },
-    });
-    for (const c of cats) {
-      rows.push({ category_id: numericCategoryId(c.id), category_name: c.name, parent_id: 0, created_at: Math.floor(c.createdAt.getTime() / 1000).toString() });
-    }
-  }
-
-  return rows;
+  return xtreamCategoriesForType(line, StreamType.MOVIE);
 }
 
 export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: string | null) {
-  // Single raw-SQL pass (dedup per stream) — replaces the 292-batch ORM hydration
-  // that made get_series take ~110s on the full ~437k series catalog.
-  const lbs = await prisma.lineBouquet.findMany({
-    where: { lineId: line.id, bouquet: { isActive: true } },
-    select: { bouquetId: true },
-  });
-  const bouquetIds = lbs.map((lb) => lb.bouquetId);
+  const bouquetIds = activeBouquetIds(line);
   if (!bouquetIds.length) return [];
 
-  // For category filtering: convert numeric categoryId back to CUID
-  // The client sends the numeric ID we returned in categories, so we need to
-  // reverse-map it. We build a mapping of all CUIDs → numeric IDs for this line.
-  let catFilter = Prisma.empty;
+  let seeds;
   if (categoryId != null && categoryId !== "") {
-    // Fetch all series category IDs for this line to build the mapping
-    const allCats = await prisma.$queryRaw<{ id: string }[]>`
-      SELECT DISTINCT s."categoryId"
-      FROM "BouquetStream" bs
-      INNER JOIN "Stream" s ON s.id = bs."streamId"
-      WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
-      AND s."isActive" = true
-      AND s.type::text = 'SERIES'
-      AND s."categoryId" IS NOT NULL
-    `;
-    const matchedCuid = allCats.find((c) => numericCategoryId(c.id) === categoryId)?.id;
     if (categoryId === "0") {
-      catFilter = Prisma.sql`AND s."categoryId" IS NULL`;
-    } else if (matchedCuid) {
-      catFilter = Prisma.sql`AND s."categoryId" = ${matchedCuid}`;
+      seeds = await seriesSeedsForBouquets(bouquetIds, { uncategorizedOnly: true });
     } else {
-      return [];
+      const { categoryIds } = await categoryIdsForLine(line, { type: StreamType.SERIES });
+      const matched = categoryIds.filter((id) => numericCategoryId(id) === categoryId);
+      if (!matched.length) return [];
+      seeds = await seriesSeedsForBouquets(bouquetIds, { categoryIds: matched });
     }
+  } else {
+    seeds = await seriesSeedsForBouquets(bouquetIds);
   }
 
-  const rows = await prisma.$queryRaw<{ id: string; name: string; streamIcon: string | null; categoryId: string | null; updatedAt: Date }[]>`
-    SELECT s.id, s.name, s."streamIcon", s."categoryId", s."updatedAt"
-    FROM "BouquetStream" bs
-    INNER JOIN "Stream" s ON s.id = bs."streamId"
-    WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
-    AND s."isActive" = true
-    AND s.type::text = 'SERIES'
-    AND s."streamUrl" NOT LIKE 'pending://%'
-    AND (s."streamUrl" LIKE 'http://%' OR s."streamUrl" LIKE 'https://%')
-    ${catFilter}
-    GROUP BY s.id, s.name, s."streamIcon", s."categoryId", s."updatedAt"
-    ORDER BY s.id
-  `;
-
-  console.log(`xtream series ${line.username} rows=${rows.length}`);
-
-  return rows.map((s, i) => ({
-    num: i + 1,
-    name: s.name,
-    series_id: cuidToNum(s.id),
-    cover: s.streamIcon ?? "",
-    last_modified: Math.floor(s.updatedAt.getTime() / 1000).toString(),
-    updated_at: Math.floor(s.updatedAt.getTime() / 1000),
-    category_id: numericCategoryId(s.categoryId),
-  }));
+  return seeds.map((s, i) => {
+    const numCategoryId = numericCategoryId(s.categoryId);
+    const cover = xtreamSafeText(s.streamIcon);
+    const modified = xtreamUnix(s.updatedAt);
+    return {
+      num: i + 1,
+      name: xtreamSafeText(s.name) || "Series",
+      series_id: cuidToNum(s.id),
+      cover,
+      cover_big: cover,
+      plot: "",
+      cast: "",
+      director: "",
+      genre: "",
+      releaseDate: "",
+      last_modified: String(modified),
+      rating: "0",
+      rating_5based: 0,
+      backdrop_path: [] as string[],
+      youtube_trailer: "",
+      episode_run_time: "0",
+      category_id: numCategoryId,
+      category_ids: xtreamCategoryIds(numCategoryId),
+    };
+  });
 }
 
 export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
-  // Only query SERIES streams for categories (lean mode)
-  const streams = await streamsForLineExport(line, { type: StreamType.SERIES, lean: true });
-  const categoryIds = [
-    ...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[]),
-  ];
-
-  const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
-
-  if (streams.some((s) => !s.categoryId)) {
-    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
-  }
-
-  if (categoryIds.length) {
-    const cats = await prisma.category.findMany({
-      where: { id: { in: categoryIds } },
-      orderBy: { sortOrder: "asc" },
-    });
-    for (const c of cats) {
-      rows.push({ category_id: numericCategoryId(c.id), category_name: c.name, parent_id: 0, created_at: Math.floor(c.createdAt.getTime() / 1000).toString() });
-    }
-  }
-
-  return rows;
+  return xtreamCategoriesForType(line, StreamType.SERIES);
 }
 
 export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: string, output: "hls" | "ts" | "auto" = "auto") {
