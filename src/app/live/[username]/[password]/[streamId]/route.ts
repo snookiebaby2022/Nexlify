@@ -28,7 +28,6 @@ import {
   shouldOfferClientDirectHls,
   UPSTREAM_HLS_UA,
   rewriteLivePathToHls,
-  xuiDirectSourceLocation,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
@@ -47,21 +46,6 @@ export const revalidate = 0;
 
 const PROXY_TIMEOUT_MS = 30_000;
 const HLS_PACKAGER_WAIT_MS = 3_500;
-
-function xuiDirectRedirect(url: string, extra?: Record<string, string>) {
-  const location = xuiDirectSourceLocation(url);
-  if (!location) return null;
-  return withIptvCors(
-    new NextResponse(null, {
-      status: 302,
-      headers: {
-        Location: location,
-        "Cache-Control": "no-store",
-        ...(extra ?? {}),
-      },
-    })
-  );
-}
 
 async function proxyUpstreamNative(
   url: string,
@@ -187,8 +171,8 @@ function liveHeadHeaders(wantsM3u8: boolean, extra: Record<string, string>) {
 }
 
 /**
- * VLC/XCIPTV sends HEAD before GET. A 200 here plus a 302 on GET breaks VLC.
- * Match XUI.one direct-source: HEAD 302 to stream_source when the URL is public.
+ * VLC/XCIPTV sends HEAD before GET. Do not open upstream here — the IPTV edge
+ * (or GET) serves MPEG-TS. A 302 on GET after a 200 HEAD also breaks VLC.
  */
 export async function HEAD(
   req: NextRequest,
@@ -197,22 +181,10 @@ export async function HEAD(
   const auth = await authorizeLivePlayback(req, ctx);
   if (!auth.ok) return auth.response;
   const antiFreeze = await getAntiFreezeSettings();
-  const extra = buildLiveRedirectHeaders(antiFreeze);
-  const candidates = await resolvePlaybackUrlCandidatesForLine(
-    auth.line.id,
-    auth.cleanId,
-    { clientIp: auth.ip, userAgent: auth.ua },
-    antiFreeze.playbackUrlCacheTtlSec
-  );
-  const first = candidates[0];
-  if (first) {
-    const direct = xuiDirectRedirect(first, extra);
-    if (direct) return direct;
-  }
   return withIptvCors(
     new NextResponse(null, {
       status: 200,
-      headers: liveHeadHeaders(isHlsClientPath(auth.streamId), extra),
+      headers: liveHeadHeaders(isHlsClientPath(auth.streamId), buildLiveRedirectHeaders(antiFreeze)),
     })
   );
 }
@@ -306,14 +278,6 @@ export async function GET(
 
     for (const playbackUrl of candidates) {
       if (!isHlsPlaybackUrl(playbackUrl) || !originalCandidates.has(playbackUrl)) continue;
-      const direct = xuiDirectRedirect(playbackUrl, buildLiveRedirectHeaders(antiFreeze));
-      if (direct) {
-        await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
-        if (antiFreeze.fastZapEnabled) {
-          schedulePlaybackUpstreamWarm(playbackUrl, UPSTREAM_HLS_UA);
-        }
-        return direct;
-      }
       const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, HLS_NATIVE_PROBE_MS);
       if (!manifest.ok) {
         lastError = manifest.detail || "Stream unavailable";
@@ -342,8 +306,6 @@ export async function GET(
       if (waited) {
         return hlsHeaders(rewritePackagerPlaylist(waited, panelOrigin, username, password, requestStreamKey));
       }
-      const directTs = xuiDirectRedirect(tsUrls[0], buildLiveRedirectHeaders(antiFreeze));
-      if (directTs) return directTs;
     }
 
     for (const tsUrl of tsUrls) {
@@ -372,13 +334,8 @@ export async function GET(
 
     if (isHlsPlaybackUrl(playbackUrl)) {
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
-      const directHls = xuiDirectRedirect(playbackUrl, buildLiveRedirectHeaders(antiFreeze));
-      if (directHls) return directHls;
       return withIptvCors(NextResponse.redirect(rewriteLivePathToHls(req.url), 302));
     }
-
-    const direct = xuiDirectRedirect(playbackUrl, buildLiveRedirectHeaders(antiFreeze));
-    if (direct) return direct;
 
     const proxied = await proxyUpstreamNative(playbackUrl, UPSTREAM_HLS_UA);
     if (!proxied.ok) {

@@ -54,17 +54,19 @@ case "$PANEL_PUB" in
 esac
 
 if is_ip_host "$PRIMARY"; then
-  set_kv PORT 80
-  set_kv PANEL_PORT 80
-  set_kv PANEL_BIND_HOST 0.0.0.0
+  # Next stays on localhost; IPTV edge owns :80 like XUI nginx (origin sees panel IP).
+  set_kv PORT 13000
+  set_kv PANEL_PORT 13000
+  set_kv PANEL_BIND_HOST 127.0.0.1
   set_kv PANEL_BEHIND_NGINX 0
   set_kv PANEL_ASSUME_PROXY_SSL 0
   set_kv PANEL_PUBLIC_PORT 80
   set_kv STREAM_HTTP_PORT 80
   set_kv STREAM_EDGE_PORT 80
+  set_kv STREAM_HTTP_EXTRA_PORTS "80,8080,25461"
   set_kv NEXT_PUBLIC_SERVER_URL "http://${PRIMARY}"
   set_kv NEXT_PUBLIC_WEBSITE_URL "http://${PRIMARY}"
-  echo "Panel env: HTTP IP=${PRIMARY} — direct on port 80 (Xtream on :80, not :8080)"
+  echo "Panel env: HTTP IP=${PRIMARY} — Xtream edge on :80, panel Node on :13000"
 elif panel_https_active "$PRIMARY"; then
   set_kv PORT 13000
   set_kv PANEL_PORT 13000
