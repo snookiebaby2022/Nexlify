@@ -4,6 +4,7 @@ import {
   buildHlsRelayUrl,
   buildNativeTsHlsManifest,
   rewritePackagerPlaylist,
+  xuiDirectSourceLocation,
 } from "./hls-playback";
 import { isPackagerSegmentName } from "./ts-hls-packager";
 
@@ -115,4 +116,16 @@ test("xtreamHlsSourceUrl matches XUI stream_source container swap", async () => 
   ]);
   assert.equal(expanded[0], "https://junki3monk3y.com/Blade2nd/PaaJhvNbqX/51498.m3u8");
   assert.equal(expanded[1], "https://junki3monk3y.com:443/Blade2nd/PaaJhvNbqX/51498");
+});
+
+test("xuiDirectSourceLocation only returns public http(s) stream_source URLs", () => {
+  assert.equal(
+    xuiDirectSourceLocation("https://cdn.example/live/1.ts"),
+    "https://cdn.example/live/1.ts"
+  );
+  assert.equal(xuiDirectSourceLocation("  http://origin.example:8080/ch "), "http://origin.example:8080/ch");
+  assert.equal(xuiDirectSourceLocation("http://127.0.0.1/live.ts"), null);
+  assert.equal(xuiDirectSourceLocation("http://192.168.1.10/live.ts"), null);
+  assert.equal(xuiDirectSourceLocation("udp://@239.0.0.1:1234"), null);
+  assert.equal(xuiDirectSourceLocation(""), null);
 });

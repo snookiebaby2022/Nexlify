@@ -250,6 +250,16 @@ export function isSafeUpstreamUrl(url: string): boolean {
   }
 }
 
+/**
+ * XUI.one "direct" playback: after line auth, send the player to stream_source.
+ * VLC/XCIPTV follow 302; Node must not carry the live bitrate.
+ */
+export function xuiDirectSourceLocation(url: string): string | null {
+  const t = url.trim();
+  if (!t || !isSafeUpstreamUrl(t)) return null;
+  return t;
+}
+
 export function isAllowedHlsRelayTarget(target: string, _rootUpstream = ""): boolean {
   // Line auth is required to hit the relay; block only private/local SSRF targets.
   return isSafeUpstreamUrl(target);
