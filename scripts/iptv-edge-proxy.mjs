@@ -649,6 +649,12 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     return;
   }
   const streamId = auth.streamId;
+  // Live .m3u8 on MPEG-TS sources: panel serves instant XUI EVENT playlist (→ .ts).
+  // Skip stale disk ffmpeg playlists so HLS clients start immediately.
+  if (kind === "playlist") {
+    forward(clientReq, clientRes, ctx);
+    return;
+  }
   touchHlsDaemon(streamId);
   const fresh = hlsDirFresh(streamId);
   if (!fresh) {
