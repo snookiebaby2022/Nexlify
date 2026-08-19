@@ -7,8 +7,28 @@ export type StreamWithProvider = Stream & {
   server?: StreamServer | null;
 };
 
+/** Some XUI providers break on explicit :443 in https URLs (empty 200 body from Cloudflare). */
+export function normalizeUpstreamStreamUrl(url: string): string {
+  const t = url.trim();
+  if (!t) return t;
+  try {
+    const u = new URL(t);
+    if (u.protocol === "https:" && u.port === "443") {
+      u.port = "";
+      return u.toString();
+    }
+    if (u.protocol === "http:" && u.port === "80") {
+      u.port = "";
+      return u.toString();
+    }
+    return t;
+  } catch {
+    return t;
+  }
+}
+
 function resolveEffectiveStreamUrl(stream: StreamWithProvider, streamUrl: string, seed?: string): string {
-  const effective = { ...stream, streamUrl };
+  const effective = { ...stream, streamUrl: normalizeUpstreamStreamUrl(streamUrl) };
 
   if (effective.hostedExternally && effective.provider && effective.providerPath) {
     try {
@@ -58,7 +78,7 @@ export function listStreamPlaybackUrls(stream: StreamWithProvider, seed?: string
   };
 
   add(resolveEffectiveStreamUrl(stream, stream.streamUrl, seed));
-  add(stream.streamUrl);
+  add(normalizeUpstreamStreamUrl(stream.streamUrl));
   const backupRaw = stream.backupUrl?.trim();
   if (backupRaw) {
     add(

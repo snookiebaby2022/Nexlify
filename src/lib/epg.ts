@@ -1,21 +1,36 @@
 import { prisma } from "./prisma";
 import { xtreamBase64, xtreamSafeText, xtreamUnix } from "./xtream-safe";
 
-/** Parse XMLTV datetime: 20240603120000 +0000 */
+/** Parse XMLTV datetime: 20240603120000 +0000 (offset required for correct EPG times). */
 export function parseXmltvDate(raw: string): Date {
-  const clean = raw.trim().replace(/\s+/g, "");
-  const m = clean.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+  const clean = raw.trim().replace(/\s+/g, " ");
+  const m = clean.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\s*([+-]\d{4}))?/);
   if (!m) return new Date();
-  return new Date(
-    Date.UTC(
-      parseInt(m[1], 10),
-      parseInt(m[2], 10) - 1,
-      parseInt(m[3], 10),
-      parseInt(m[4], 10),
-      parseInt(m[5], 10),
-      parseInt(m[6], 10)
-    )
-  );
+  const y = parseInt(m[1]!, 10);
+  const mo = parseInt(m[2]!, 10);
+  const d = parseInt(m[3]!, 10);
+  const h = parseInt(m[4]!, 10);
+  const mi = parseInt(m[5]!, 10);
+  const s = parseInt(m[6]!, 10);
+  const tz = m[7];
+  if (tz) {
+    const sign = tz[0] === "-" ? -1 : 1;
+    const tzh = parseInt(tz.slice(1, 3), 10);
+    const tzm = parseInt(tz.slice(3, 5), 10);
+    const offsetMin = sign * (tzh * 60 + tzm);
+    const utcMs = Date.UTC(y, mo - 1, d, h, mi, s) - offsetMin * 60_000;
+    return new Date(utcMs);
+  }
+  return new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+}
+
+function decodeXmltvText(raw: string): string {
+  return raw
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
 export function parseXmltvPrograms(xml: string, sourceId: string) {
@@ -43,8 +58,8 @@ export function parseXmltvPrograms(xml: string, sourceId: string) {
     programs.push({
       sourceId,
       channelId: channelM[1],
-      title: titleM[1].trim(),
-      description: descM?.[1]?.trim() ?? null,
+      title: decodeXmltvText(titleM[1].trim()),
+      description: descM?.[1] ? decodeXmltvText(descM[1].trim()) : null,
       start: parseXmltvDate(startM[1]),
       stop: parseXmltvDate(stopM[1]),
     });

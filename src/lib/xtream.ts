@@ -47,10 +47,19 @@ import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-or
 
 type RequestHeaders = { get(name: string): string | null };
 
-function xtreamClockNow(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
+function xtreamClockNow(timezone: string): string {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(new Date()).map((p) => [p.type, p.value]));
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 /** Panel + IPTV base URL (M3U live links, Xtream when served from same host). */
@@ -97,6 +106,8 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
   const activeCons = playable ? await countLineSessions(line.id) : 0;
   const atCapacity = playable && line.maxConnections > 0 && activeCons >= line.maxConnections;
   const streams = await getSettingGroup("streams");
+  const general = await getSettingGroup("general");
+  const panelTimezone = String(general.timezone || "Europe/London");
   const abrAutoSwitch = streams.abrAutoSwitch === true;
   const panelOrigin = pickPublicOrigin(
     panelBaseUrl,
@@ -118,7 +129,7 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
   const httpPort = useHttps ? String(streamHttpsPort) : publicPort;
   const httpsPort = String(streamHttpsPort);
   const formats = xtreamOutputFormats(line.allowedOutput);
-  const clock = xtreamClockNow();
+  const clock = xtreamClockNow(panelTimezone);
   return {
     user_info: {
       username: line.username,
@@ -144,7 +155,7 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
       https_port: httpsPort,
       server_protocol: useHttps ? "https" : "http",
       rtmp_port: "0",
-      timezone: "UTC",
+      timezone: panelTimezone,
       timestamp_now: Math.floor(Date.now() / 1000),
       time_now: clock,
       time: clock,

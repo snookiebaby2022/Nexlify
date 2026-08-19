@@ -52,7 +52,8 @@ const HLS_DIR = (process.env.NEXLIFY_HLS_DIR || "/var/lib/nexlify/hls").replace(
 const HLS_LIVE_MAX_AGE_MS = Number(process.env.NEXLIFY_HLS_LIVE_MAX_AGE_MS || 6000);
 const HLS_DAEMON_PORT = Number(process.env.NEXLIFY_HLS_DAEMON_PORT || 13081);
 const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
-const LIVE_TS_PEEK_BYTES = 376;
+const LIVE_TS_PEEK_BYTES = 188;
+const LIVE_TS_OPEN_MS = 12_000;
 const PLAYBACK_RE = /^\/(live|movie|series)\//;
 const HLS_RE = /\.m3u8(?:[?#]|$)/i;
 const HLS_SEG_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\/hls\/(seg\d+\.ts)$/i;
@@ -324,7 +325,9 @@ function hlsDirFresh(streamId) {
     const body = fs.readFileSync(indexPath, "utf8");
     if (!body.includes("#EXTM3U") || !body.includes("#EXTINF")) return false;
     const segs = body.match(/seg\d+\.ts/gi);
-    if (!segs?.length) return false;
+    if (!segs?.length || segs.length < 2) return false;
+    const seqM = body.match(/#EXT-X-MEDIA-SEQUENCE:(\d+)/i);
+    if (seqM && Number(seqM[1]) < 1) return false;
     const last = segs[segs.length - 1];
     const segPath = path.join(dir, last);
     if (!fs.existsSync(segPath)) return false;
@@ -403,6 +406,7 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes) {
   const chunks = [];
   let total = 0;
   let headersSent = false;
+  const started = Date.now();
 
   const fail = (msg) => {
     upRes.destroy();
@@ -414,13 +418,11 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes) {
     }
   };
 
-  const onData = (chunk) => {
+  const flush = () => {
     if (headersSent) return;
-    chunks.push(chunk);
-    total += chunk.length;
-    if (total < LIVE_TS_PEEK_BYTES) return;
     upRes.removeListener("data", onData);
     upRes.removeListener("error", onError);
+    clearTimeout(openTimer);
     const prefix = Buffer.concat(chunks);
     if (!looksLikeMpegTs(prefix)) {
       fail("Upstream is not MPEG-TS");
@@ -432,14 +434,28 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes) {
     upRes.pipe(clientRes);
   };
 
+  const onData = (chunk) => {
+    if (headersSent) return;
+    chunks.push(chunk);
+    total += chunk.length;
+    if (total < LIVE_TS_PEEK_BYTES) return;
+    flush();
+  };
+
   const onError = (err) => {
     if (!headersSent) fail(`upstream error: ${err.message}`);
   };
+
+  const openTimer = setTimeout(() => {
+    if (headersSent) return;
+    fail("Upstream timeout before MPEG-TS data");
+  }, LIVE_TS_OPEN_MS);
 
   upRes.on("data", onData);
   upRes.once("error", onError);
   upRes.once("end", () => {
     if (headersSent) return;
+    clearTimeout(openTimer);
     upRes.removeListener("data", onData);
     const prefix = Buffer.concat(chunks);
     if (looksLikeMpegTs(prefix)) {
@@ -529,12 +545,7 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         forward(clientReq, clientRes, { listenPort, proto });
         return;
       }
-      if (shouldSniffLiveTs(upRes, clientReq)) {
-        pipeLiveMpegTs(upRes, clientReq, clientRes);
-      } else {
-        clientRes.writeHead(200, liveTsHeaders());
-        upRes.pipe(clientRes);
-      }
+      pipeLiveMpegTs(upRes, clientReq, clientRes);
       return;
     }
     clientRes.writeHead(status || 502, upRes.headers);
