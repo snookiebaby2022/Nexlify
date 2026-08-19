@@ -3,7 +3,9 @@ import { getPortalSession } from "@/lib/portal-session";
 import { sendPanelEmail, panelReportRecipient } from "@/lib/panel-email";
 import { prisma } from "@/lib/prisma";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const session = await getPortalSession();
   if (!session) {
     return NextResponse.json({ error: "Not logged in" }, { status: 401 });
@@ -46,5 +48,8 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Email failed";
     return NextResponse.json({ error: msg }, { status: 500 });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

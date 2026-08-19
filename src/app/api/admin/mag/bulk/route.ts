@@ -5,13 +5,20 @@ import { prisma } from "@/lib/prisma";
 import { assertOwnedLine } from "@/lib/device-access";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const lineId = String(body.lineId ?? "");
   const model = body.model ?? null;
   const macs: string[] = body.macs ?? [];
@@ -53,4 +60,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ imported, skipped });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

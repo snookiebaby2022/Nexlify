@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -47,11 +48,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
+
     const sessionKey = String(body.sessionKey ?? "").trim();
     const lineId = String(body.lineId ?? "").trim();
 
@@ -110,9 +115,13 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -146,5 +155,8 @@ export async function DELETE(req: NextRequest) {
       { error: e instanceof Error ? e.message : "Failed to end session" },
       { status: 500 }
     );
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

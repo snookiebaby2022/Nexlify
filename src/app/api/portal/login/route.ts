@@ -5,7 +5,9 @@ import { lineIsPlayable } from "@/lib/lines";
 import { checkLoginRateLimit, recordLoginFailure, clearLoginFailures } from "@/lib/login-rate-limit";
 import { getClientIp } from "@/lib/client-ip";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -55,4 +57,7 @@ export async function POST(req: NextRequest) {
       bouquets: line.bouquets.map((b) => b.bouquet.name),
     },
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

@@ -8,6 +8,7 @@ import {
   markStreamAsPirated,
 } from "@/lib/stream-fingerprinting";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -21,10 +22,15 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { action, streamId } = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const { action, streamId } = parsed.data;
 
   if (action === "generate") {
     const fp = await generateStreamFingerprint(streamId);
@@ -37,4 +43,7 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

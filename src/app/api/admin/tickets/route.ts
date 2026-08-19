@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole, TicketCategory, TicketPriority, TicketStatus } from "@prisma/client";
 import { forwardPanelFeedbackToVendor } from "@/lib/vendor-feedback";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([
     PanelRole.ADMIN,
@@ -25,6 +26,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
@@ -32,7 +34,12 @@ export async function POST(req: NextRequest) {
   ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const category = (body.category as TicketCategory) ?? TicketCategory.SUPPORT;
   const ticket = await prisma.ticket.create({
     data: {
@@ -66,13 +73,22 @@ export async function POST(req: NextRequest) {
   );
 
   return NextResponse.json({ ticket });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const ids: string[] = Array.isArray(body.ids)
     ? body.ids.map(String)
     : body.id
@@ -96,9 +112,13 @@ export async function PATCH(req: NextRequest) {
 
   await prisma.ticket.updateMany({ where: { id: { in: ids } }, data });
   return NextResponse.json({ ok: true, updated: ids.length });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -113,4 +133,7 @@ export async function DELETE(req: NextRequest) {
   await prisma.ticketMessage.deleteMany({ where: { ticketId: { in: ids } } }).catch(() => {});
   await prisma.ticket.deleteMany({ where: { id: { in: ids } } });
   return NextResponse.json({ ok: true, deleted: ids.length });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

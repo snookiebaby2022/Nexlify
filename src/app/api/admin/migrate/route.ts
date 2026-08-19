@@ -19,6 +19,7 @@ import {
   type MigrateJob,
 } from "@/lib/panel-migrate-job";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const SOURCES = new Set(MIGRATION_SOURCES.map((s) => s.id));
 
 /** Large SQL dumps are uploaded as multipart/form-data to avoid loading them in the browser. */
@@ -286,6 +287,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -434,5 +436,8 @@ export async function POST(req: NextRequest) {
       { error: e instanceof Error ? e.message : String(e) },
       { status: 400 }
     );
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

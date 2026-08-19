@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -30,10 +31,16 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { userId, bouquetIds } = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const { userId, bouquetIds } = parsed.data;
+
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 
   await prisma.resellerBouquet.deleteMany({ where: { userId } });
@@ -42,4 +49,7 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

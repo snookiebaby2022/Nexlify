@@ -211,6 +211,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
       tv_archive: catchup || timeshiftHours > 0 ? 1 : 0,
       direct_source: direct || exportPlaybackUrl(baseUrl, line, s, full),
       tv_archive_duration: catchup ? archiveDays || timeshiftHours || 7 : timeshiftHours || 0,
+      updated_at: Math.floor(s.updatedAt.getTime() / 1000),
       ...(abrLadder ? { abr_variants: abrLadder } : {}),
     };
   });
@@ -227,12 +228,13 @@ export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string, 
         ? vod.filter((s) => !s.categoryId)
         : vod.filter((s) => numericCategoryId(s.categoryId) === categoryId);
   }
-  console.log(`xtream vod ${line.username} cat=${categoryId ?? "all"} rows=${vod.length}`);
+
+  const streamSettings = await getSettingGroup("streams");
+  const directPlay = streamSettings.vodDirectPlay !== false;
 
   return vod.map((s, i) => {
     const full = s;
-    // Always use panel proxy URL for VOD (XUI One style) — hides provider URL
-    const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, "auto", false);
+    const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, "auto", directPlay);
     const numCategoryId = numericCategoryId(s.categoryId);
     return {
       num: i + 1,
@@ -334,6 +336,7 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
     series_id: cuidToNum(s.id),
     cover: s.streamIcon ?? "",
     last_modified: Math.floor(s.updatedAt.getTime() / 1000).toString(),
+    updated_at: Math.floor(s.updatedAt.getTime() / 1000),
     category_id: numericCategoryId(s.categoryId),
   }));
 }

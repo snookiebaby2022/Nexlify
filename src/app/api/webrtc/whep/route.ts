@@ -17,15 +17,22 @@ import { prisma } from "@/lib/prisma";
 import { resolveStreamPlaybackUrl } from "@/lib/resolve-stream-url";
 import { trackConnection } from "@/lib/connections";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
+  try {
   const settings = await getWebRtcSettings();
   if (!settings.enabled) {
     return NextResponse.json({ error: "WebRTC is disabled on this panel" }, { status: 503 });
   }
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const username = String(body.username ?? "").trim();
   const password = String(body.password ?? "").trim();
   const streamId = String(body.streamId ?? "").trim();
@@ -108,9 +115,13 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: message }, { status: 502 });
   }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const body = await req.json().catch(() => ({}));
   const sessionUrl = String(body.sessionUrl ?? "").trim();
   if (!sessionUrl) {
@@ -118,4 +129,7 @@ export async function DELETE(req: NextRequest) {
   }
   await teardownWhepSession(sessionUrl);
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

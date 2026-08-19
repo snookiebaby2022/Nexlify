@@ -12,6 +12,7 @@ import {
   PanelRole,
 } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -25,10 +26,16 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const target = body.target as PanelNotificationTarget;
   if (
     !Object.values(PanelNotificationTarget).includes(target)
@@ -61,5 +68,8 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to create notification";
     return NextResponse.json({ error: message }, { status: 400 });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

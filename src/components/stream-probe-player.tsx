@@ -110,8 +110,14 @@ export function StreamProbePlayer({
       const data = await res.json();
       if (data.stream?.streamUrl) {
         const rawUrl = String(data.stream.streamUrl);
-        // Use panel proxy for playback (handles TLS bypass for expired certs)
-        const proxyUrl = `/api/admin/streams/proxy?url=${encodeURIComponent(rawUrl)}`;
+        const mint = await fetch("/api/admin/streams/proxy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: rawUrl }),
+        });
+        const minted = (await mint.json().catch(() => null)) as { playbackUrl?: string } | null;
+        const proxyUrl =
+          mint.ok && minted?.playbackUrl ? minted.playbackUrl : rawUrl;
         setResolvedUrl(proxyUrl);
         return proxyUrl;
       }
@@ -155,7 +161,7 @@ export function StreamProbePlayer({
     void (async () => {
       let url = resolvedUrl || streamUrl;
       // Prefer panel proxy for browser playback (CORS / TLS).
-      if (!url.includes("/api/admin/streams/proxy")) {
+      if (!url.includes("/api/admin/streams/proxy?t=")) {
         const resolved = await resolvePlaybackUrl();
         if (cancelled) return;
         if (resolved) url = resolved;

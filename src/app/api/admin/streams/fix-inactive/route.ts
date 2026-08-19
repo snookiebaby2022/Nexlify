@@ -5,8 +5,10 @@ import { PanelRole } from "@prisma/client";
 import { logActivity } from "@/lib/lines";
 import { invalidateXtreamCategories, invalidateDashboardStats } from "@/lib/cache-invalidate";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 /** One-click dashboard fix: activate all inactive streams (or by type). */
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -55,4 +57,7 @@ export async function POST(req: NextRequest) {
   await invalidateDashboardStats().catch(() => {});
 
   return NextResponse.json({ ok: true, updated: result.count });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

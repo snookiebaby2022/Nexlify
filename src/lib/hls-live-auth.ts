@@ -13,6 +13,7 @@ export type HlsLiveAuth =
       ok: true;
       lineId: string;
       streamId: string;
+      diskStreamId: string;
       requestStreamKey: string;
       username: string;
       password: string;
@@ -80,7 +81,8 @@ export async function authorizeHlsLiveRequest(
   return {
     ok: true,
     lineId: line.id,
-    streamId: resolvedStreamId,
+      streamId: resolvedStreamId,
+      diskStreamId: resolvedStreamId,
     requestStreamKey,
     username,
     password,

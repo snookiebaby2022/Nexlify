@@ -3,20 +3,14 @@ import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
 import { aiChatJSON, aiTranscribe, isAiConfigured } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
-
-const READ_ONLY_TABLES = [
-  "Line",
-  "Stream",
-  "Package",
-  "Bouquet",
-  "LiveConnection",
-  "CreditTransaction",
-  "BillingEvent",
-  "ConnectionGeography",
-  "SameIpDetection",
-  "StreamHealthCheck",
-  "PanelUser",
-];
+import {
+  AI_PRISMA_MODELS,
+  forcedAiTake,
+  redactAiRow,
+  resolveAiPrismaModel,
+  sanitizeAiSelect,
+  sanitizeAiWhere,
+} from "@/lib/ai-prisma-plan";
 
 export async function POST(req: NextRequest) {
   try {
@@ -55,10 +49,11 @@ export async function POST(req: NextRequest) {
           role: "system",
           content: `You translate natural language admin queries into structured Prisma-like read-only database queries.
 
-Available tables: ${READ_ONLY_TABLES.join(", ")}
+Available tables: ${AI_PRISMA_MODELS.join(", ")}
 
 Rules:
 - Only use SELECT/read operations. Never generate mutations.
+- Never select password, passwordHash, passwordPlain, totpSecret, apiKey, or accessCode.
 - Map natural language to table names and field filters.
 - Use reasonable defaults: take=20, orderBy by createdAt desc.
 - Return JSON: { intent, table, filter, select, orderBy, take }`,
@@ -74,31 +69,42 @@ Rules:
     let results: unknown[] = [];
     let count = 0;
 
-    if (READ_ONLY_TABLES.includes(queryPlan.table)) {
-      const prismaClient = prisma as unknown as Record<string, { findMany: (args: Record<string, unknown>) => Promise<unknown[]> }>;
-      const prismaModel = prismaClient[queryPlan.table];
+    const modelName = resolveAiPrismaModel(queryPlan.table);
+    if (modelName) {
+      const prismaClient = prisma as unknown as Record<
+        string,
+        { findMany: (args: Record<string, unknown>) => Promise<unknown[]> }
+      >;
+      const prismaModel = prismaClient[modelName];
 
       if (prismaModel?.findMany) {
+        const selectFromList =
+          queryPlan.select && queryPlan.select.length > 0
+            ? Object.fromEntries(queryPlan.select.map((field) => [field, true]))
+            : undefined;
         const queryArgs: Record<string, unknown> = {
-          take: queryPlan.take ?? 20,
+          take: forcedAiTake(queryPlan.take, 20),
+          where: sanitizeAiWhere(queryPlan.filter),
           orderBy: queryPlan.orderBy
             ? { [queryPlan.orderBy]: "desc" }
             : { createdAt: "desc" },
         };
-
-        if (queryPlan.filter && Object.keys(queryPlan.filter).length > 0) {
-          queryArgs.where = queryPlan.filter;
-        }
-
-        if (queryPlan.select && queryPlan.select.length > 0) {
-          const selectObj: Record<string, boolean> = {};
-          for (const field of queryPlan.select) {
-            selectObj[field] = true;
-          }
-          queryArgs.select = selectObj;
+        const select = sanitizeAiSelect(selectFromList, modelName);
+        if (select) queryArgs.select = select;
+        else if (modelName === "panelUser") {
+          queryArgs.omit = {
+            passwordHash: true,
+            passwordPlain: true,
+            totpSecret: true,
+            apiKey: true,
+            accessCode: true,
+          };
+        } else if (modelName === "line") {
+          queryArgs.omit = { password: true };
         }
 
         results = await prismaModel.findMany(queryArgs);
+        results = redactAiRow(results) as unknown[];
         count = results.length;
       }
     }

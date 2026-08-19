@@ -7,6 +7,8 @@ import { restoreFullBackup } from "@/lib/backup-restore";
 import { decryptBackup, computeChecksum } from "@/lib/backup-run";
 import { readFile } from "fs/promises";
 import path from "path";
+import { parseJsonBody } from "@/lib/parse-json-body";
+import { confinePathToDir, resolveBackupDir } from "@/lib/backup-path";
 
 /**
  * POST /api/admin/disaster-recovery
@@ -20,7 +22,14 @@ export async function POST(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody<{
+    action?: string;
+    filePath?: string;
+    password?: string;
+    checksum?: string;
+  }>(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
   const { action } = body;
 
   // Health check
@@ -37,11 +46,18 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      let raw = await readFile(filePath, "utf8");
+      const backup = await getSettingGroup("backup");
+      const backupDir = resolveBackupDir(String(backup.localPath ?? ""));
+      const confined = confinePathToDir(String(filePath), backupDir);
+      if (!confined) {
+        return NextResponse.json({ error: "filePath must be inside the backups directory" }, { status: 400 });
+      }
+
+      let raw = await readFile(confined, "utf8");
 
       // Handle encrypted backups
-      if (password && filePath.endsWith(".enc")) {
-        const encrypted = await readFile(filePath);
+      if (password && confined.endsWith(".enc")) {
+        const encrypted = await readFile(confined);
         raw = decryptBackup(encrypted, password);
       }
 
@@ -91,11 +107,7 @@ export async function POST(req: NextRequest) {
   if (action === "restore-latest") {
     try {
       const backup = await getSettingGroup("backup");
-      const rawPath = String(backup.localPath ?? "").trim();
-      const dir = path.resolve(
-        process.cwd(),
-        rawPath && !rawPath.startsWith("(") ? rawPath.replace(/^\.\//, "") : "./backups"
-      );
+      const dir = resolveBackupDir(String(backup.localPath ?? ""));
 
       // Find latest backup file
       const { readdirSync } = await import("fs");
@@ -186,11 +198,7 @@ async function runHealthCheck() {
   // Backups available
   try {
     const backup = await getSettingGroup("backup");
-    const rawPath = String(backup.localPath ?? "").trim();
-    const dir = path.resolve(
-      process.cwd(),
-      rawPath && !rawPath.startsWith("(") ? rawPath.replace(/^\.\//, "") : "./backups"
-    );
+    const dir = resolveBackupDir(String(backup.localPath ?? ""));
     const { readdirSync } = await import("fs");
     const files = readdirSync(dir).filter((f) => f.startsWith("nexlify-backup-"));
     checks.backups = { ok: files.length > 0, detail: `${files.length} backup(s) available` };

@@ -11,6 +11,7 @@ import {
   runInstallJobSimulation,
 } from "@/lib/server-install-job";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -32,11 +33,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   pruneInstallJobs();
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+
   const panelUrl = String(body.panelUrl ?? process.env.NEXT_PUBLIC_SERVER_URL ?? "").replace(/\/$/, "");
   const serverName = String(body.serverName ?? "Stream-1");
   const host = String(body.host ?? "").trim();
@@ -89,4 +94,7 @@ export async function POST(req: NextRequest) {
   );
 
   return NextResponse.json({ jobId });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

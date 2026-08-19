@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -11,9 +12,13 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+
   const code = String(body.code ?? "")
     .trim()
     .toUpperCase()
@@ -32,13 +37,20 @@ export async function POST(req: NextRequest) {
     },
   });
   return NextResponse.json({ code: item });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
   await prisma.accessCode.delete({ where: { id } });
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

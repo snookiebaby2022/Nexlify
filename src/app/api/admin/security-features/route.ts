@@ -10,6 +10,7 @@ import {
   removeFromWhitelist,
 } from "@/lib/security-features";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -23,10 +24,15 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { action, type, severity, sourceIp, description, alertId, ip } = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const { action, type, severity, sourceIp, description, alertId, ip } = parsed.data;
 
   if (action === "create_alert") {
     const alert = await createSecurityAlert(type, severity, sourceIp, description);
@@ -49,4 +55,7 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

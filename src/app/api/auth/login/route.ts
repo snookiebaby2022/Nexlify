@@ -25,6 +25,7 @@ import {
 import { licenseCookieSecure } from "@/lib/license/cookie-options";
 import { jwtSecretBytes } from "@/lib/jwt-secret";
 
+import { parseJsonBody } from "@/lib/parse-json-body";
 /**
  * If the panel is licensed (or in an active trial), build the license-session
  * (or trial) cookie descriptor so the caller can drop it on the response. This
@@ -91,10 +92,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: rate.error }, { status: 429 });
     }
 
-    const body = await req.json().catch(() => null);
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
-    }
+    const parsed = await parseJsonBody<{
+      username?: unknown;
+      password?: unknown;
+      totpCode?: unknown;
+      rememberMe?: unknown;
+    }>(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
     const username = String(body.username ?? "").trim();
     const password = String(body.password ?? "");
     const totpCode = String(body.totpCode ?? "").trim();

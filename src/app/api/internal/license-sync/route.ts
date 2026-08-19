@@ -9,6 +9,7 @@ import {
 import { licenseCookieSecure } from "@/lib/license/cookie-options";
 import { applyRemoteLicenseAction } from "@/lib/license/remote-sync";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 function panelHost(req: NextRequest): string {
   const host = req.headers.get("host") ?? "localhost";
   return host.split(":")[0].toLowerCase();
@@ -21,6 +22,7 @@ const bodySchema = z.object({
 
 /** Vendor admin pushes license add / renew / revoke / suspend to this panel. */
 export async function POST(req: NextRequest) {
+  try {
   if (!isAuthorizedInternalRequest(req)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -58,5 +60,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
     return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

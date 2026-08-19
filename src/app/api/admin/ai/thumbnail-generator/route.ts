@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
 import { aiImageGenerate, isAiConfigured } from "@/lib/ai";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession([PanelRole.ADMIN]);
@@ -15,7 +16,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+
+    if (!parsed.ok) return parsed.response;
+
+    const body = parsed.data;
+
     const { title, type, genre, description } = body as {
       title: string;
       type: "movie" | "series";

@@ -5,6 +5,7 @@ import { syncEpgSource } from "@/lib/epg";
 import { invalidateEpgCache } from "@/lib/cache-invalidate";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -28,10 +29,15 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { action, name, url, format, sourceId } = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const { action, name, url, format, sourceId } = parsed.data;
 
   if (action === "create") {
     const source = await prisma.epgSource.create({
@@ -64,4 +70,7 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

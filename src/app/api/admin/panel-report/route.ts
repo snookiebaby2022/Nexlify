@@ -6,12 +6,14 @@ import { buildPanelReport } from "@/lib/panel-report";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const COOLDOWN_MS = 5 * 60 * 1000;
 const MAX_IMAGES = 5;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
@@ -120,5 +122,8 @@ export async function POST(req: NextRequest) {
     const message = e instanceof Error ? e.message : "Failed to send report";
     console.error("[panel-report]", e);
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

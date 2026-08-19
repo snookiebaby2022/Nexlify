@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole, Prisma } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 function asConfig(body: Record<string, unknown>) {
   return {
     theme: body.theme ? String(body.theme) : "dark",
@@ -52,6 +53,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -158,9 +160,13 @@ export async function POST(req: Request) {
       message: "Build queued; config package write failed — retry or use external pipeline.",
     });
   }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PATCH(req: Request) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -180,9 +186,13 @@ export async function PATCH(req: Request) {
   });
 
   return NextResponse.json({ build });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: Request) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -192,4 +202,7 @@ export async function DELETE(req: Request) {
 
   await prisma.appBuild.delete({ where: { id } });
   return NextResponse.json({ success: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

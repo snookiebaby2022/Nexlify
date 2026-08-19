@@ -12,7 +12,7 @@ import { isHlsClientPath, HLS_PLAYLIST_CONTENT_TYPE, buildClientVodHlsPlaylist, 
 import { serverBaseUrl } from "@/lib/xtream";
 
 export const runtime = "nodejs";
-const PROXY_TIMEOUT_MS = 30_000;
+const PROXY_TIMEOUT_MS = 60_000;
 
 export async function OPTIONS() {
   return iptvCorsPreflight();

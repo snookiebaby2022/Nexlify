@@ -18,7 +18,7 @@ test("buildNativeTsHlsManifest points .m3u8 clients at panel .ts URL", () => {
   assert.match(body, /#EXT-X-VERSION:3/);
   assert.match(body, /#EXT-X-PLAYLIST-TYPE:EVENT/);
   assert.match(body, /#EXTINF:-1,/);
-  assert.match(body, /http:\/\/45\.88\.138\.18\/live\/user1\/pass1\/stream123\.ts$/m);
+  assert.match(body, /\/live\/user1\/pass1\/stream123\.ts$/m);
 });
 
 test("buildHlsRelayUrl uses path token without query string", () => {
@@ -42,10 +42,7 @@ test("rewritePackagerPlaylist rewrites segN.ts to panel HLS paths", () => {
     "pass1",
     "1862838169"
   );
-  assert.match(
-    body,
-    /http:\/\/45\.88\.138\.18\/live\/user1\/pass1\/1862838169\/hls\/seg3\.ts/
-  );
+  assert.match(body, /\/live\/user1\/pass1\/1862838169_3\.ts/);
 });
 
 test("isPackagerSegmentName accepts ffmpeg segment files only", () => {

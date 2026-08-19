@@ -4,6 +4,7 @@ import { importFromM3uContent } from "@/lib/import-media";
 import { prisma } from "@/lib/prisma";
 import { ImportKind, PanelRole, StreamType } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 async function fetchM3uContent(body: { url?: string; content?: string }) {
   let content = body.content as string | undefined;
   if (body.url) {
@@ -16,10 +17,15 @@ async function fetchM3uContent(body: { url?: string; content?: string }) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
 
   if (body.action === "review") {
     try {
@@ -95,5 +101,8 @@ export async function POST(req: NextRequest) {
       { error: e instanceof Error ? e.message : "Import failed" },
       { status: 400 }
     );
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

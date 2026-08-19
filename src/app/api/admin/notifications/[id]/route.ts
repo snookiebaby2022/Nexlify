@@ -3,14 +3,18 @@ import { requireSession } from "@/lib/auth";
 import { deleteNotification, updateNotification } from "@/lib/panel-notifications";
 import { PanelNotificationPriority, PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: NextRequest, { params }: Params) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
 
   const patch: {
     isActive?: boolean;
@@ -39,9 +43,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -51,5 +59,8 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

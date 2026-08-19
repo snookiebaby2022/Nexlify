@@ -10,6 +10,7 @@ import { invalidatePlaybackUrlCache } from "@/lib/playback-url-cache";
 import { invalidateDashboardStats, invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { getStreamBouquetIds, syncStreamBouquets } from "@/lib/stream-bouquets";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
@@ -35,6 +36,7 @@ export async function PATCH(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -42,7 +44,12 @@ export async function PATCH(
   const existing = await prisma.stream.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const merged = {
     ...existing,
     ...body,
@@ -89,5 +96,8 @@ export async function PATCH(
       { error: e instanceof Error ? e.message : "Failed to update stream" },
       { status: 400 }
     );
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

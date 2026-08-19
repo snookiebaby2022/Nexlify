@@ -2,6 +2,7 @@ import type { LineWithBouquets } from "./lines";
 import { exportPlaybackUrl } from "./export-playback-url";
 import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
+import { getSettingGroup } from "./panel-settings";
 import {
   cuidToNum,
   lineHasStream,
@@ -41,6 +42,8 @@ export async function xtreamVodInfo(
   if (!full || full.type !== StreamType.MOVIE) return null;
 
   const meta = parseMetaJson(full.agentStartCmd);
+  const streamSettings = await getSettingGroup("streams");
+  const directPlay = streamSettings.vodDirectPlay !== false;
   const ext = full.containerExtension ?? "mp4";
 
   return {
@@ -68,7 +71,7 @@ export async function xtreamVodInfo(
       category_id: xtreamCategoryId(full.categoryId),
       container_extension: ext,
       custom_sid: "",
-      direct_source: exportPlaybackUrl(baseUrl, line, full, full),
+      direct_source: exportPlaybackUrl(baseUrl, line, full, full, undefined, "auto", directPlay),
     },
   };
 }
@@ -99,6 +102,8 @@ export async function xtreamSeriesInfo(
     : [];
   const byId = new Map(fullRows.map((s) => [s.id, s]));
 
+  const streamSettings = await getSettingGroup("streams");
+  const directPlay = streamSettings.vodDirectPlay !== false;
   const seasons: Record<string, unknown[]> = {};
   for (const epId of episodeIds) {
     const ep = byId.get(epId);
@@ -124,7 +129,7 @@ export async function xtreamSeriesInfo(
       custom_sid: "",
       added: Math.floor(ep.createdAt.getTime() / 1000).toString(),
       season: seasonNum,
-      direct_source: exportPlaybackUrl(baseUrl, line, ep, ep),
+      direct_source: exportPlaybackUrl(baseUrl, line, ep, ep, undefined, "auto", directPlay),
     });
   }
 

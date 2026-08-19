@@ -3,6 +3,7 @@ import { StreamType } from "@prisma/client";
 import { resolveStreamPlaybackUrl, type StreamWithProvider } from "./resolve-stream-url";
 import { isHlsPlaybackUrl } from "./hls-playback";
 import { pickVodExtension } from "./vod-proxy";
+import type { StreamForLine } from "./lines";
 
 type LineCreds = { username: string; password: string };
 
@@ -29,7 +30,7 @@ export function exportPlaybackUrl(
   baseUrl: string,
   line: LineCreds,
   stream: Pick<Stream, "id" | "type" | "streamUrl" | "containerExtension">,
-  full?: StreamWithProvider,
+  full?: StreamWithProvider | StreamForLine,
   seed?: string,
   output: "hls" | "ts" | "auto" = "auto",
   directPlay: boolean = true

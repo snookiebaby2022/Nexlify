@@ -203,7 +203,7 @@ export async function GET(
     const variant = await resolveTranscodeVariantNumeric(parseInt(cleanId, 10), { username });
     if (variant) {
       cleanId = variant.streamId;
-      transcodeHint = transcodeHint || variant.profileId;
+      transcodeHint = transcodeHint || variant.profileId || null;
     } else {
       const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
       const resolved = await resolveStreamIdParam(cleanId, { username });

@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
 import { createTenant, getTenants, deleteTenant, getTenantByReseller } from "@/lib/multi-tenancy";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -12,10 +13,15 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const { action, name, resellerId, branding, tenantId } = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const { action, name, resellerId, branding, tenantId } = parsed.data;
 
   if (action === "create") {
     const tenant = await createTenant(name, resellerId, branding);
@@ -28,4 +34,7 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

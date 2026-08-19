@@ -8,6 +8,7 @@ import { MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput, validateLinePasswo
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
 import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
@@ -36,6 +37,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 }
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
+  try {
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
@@ -44,7 +46,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await ctx.params;
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
 
   const where =
     session.role === PanelRole.ADMIN ? { id } : { id, ownerId: session.id };
@@ -142,9 +146,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   });
 
   return NextResponse.json({ line });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
+  try {
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
@@ -171,4 +179,7 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
   await prisma.line.delete({ where: { id: existing.id } });
 
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

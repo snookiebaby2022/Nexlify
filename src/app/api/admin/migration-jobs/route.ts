@@ -1,3 +1,4 @@
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 /**
  * DEPRECATED: Legacy migration job endpoints. No worker processes these jobs.
  * Use POST /api/admin/migrate for actual migrations (runs synchronously with SSE progress).
@@ -19,10 +20,16 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const source = (body.source as MigrationSource) ?? MigrationSource.XTREAM_UI;
   const job = await prisma.migrationJob.create({
     data: {
@@ -33,4 +40,7 @@ export async function POST(req: NextRequest) {
     },
   });
   return NextResponse.json({ job });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

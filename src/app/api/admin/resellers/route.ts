@@ -5,6 +5,7 @@ import { PanelRole } from "@prisma/client";
 import { randomBytes } from "crypto";
 import { ensureStandardUserGroups } from "@/lib/ensure-user-groups";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 function roleLabel(role: PanelRole) {
   if (role === PanelRole.ADMIN) return "admin";
   if (role === PanelRole.SUB_RESELLER) return "sub-reseller";
@@ -33,7 +34,7 @@ function serializeUser(
     id: u.id,
     displayId,
     username: u.username,
-    password: u.passwordPlain ?? "",
+    password: "",
     email: u.email ?? "",
     role: u.role,
     roleLabel: roleLabel(u.role),
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
       user: {
         id: r.id,
         username: r.username,
-        password: r.passwordPlain ?? "",
+        password: "",
         email: r.email ?? "",
         role: r.role,
         isActive: r.isActive,
@@ -124,10 +125,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const id = String(body.id ?? "");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
@@ -168,7 +175,7 @@ export async function PATCH(req: NextRequest) {
     const passErr = validateLineCredential(plain, "password");
     if (passErr) return NextResponse.json({ error: passErr }, { status: 400 });
     data.passwordHash = await hashPassword(plain);
-    data.passwordPlain = plain;
+    data.passwordPlain = null;
   }
   if (body.maxLines != null) data.maxLines = Math.max(0, Number(body.maxLines) || 0);
   if (body.defaultLanguage !== undefined) data.defaultLanguage = String(body.defaultLanguage || "en");
@@ -241,9 +248,13 @@ export async function PATCH(req: NextRequest) {
     }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -264,13 +275,22 @@ export async function DELETE(req: NextRequest) {
 
   await prisma.panelUser.delete({ where: { id } });
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const password = typeof body.password === "string" && body.password.trim()
     ? body.password.trim()
     : randomBytes(12).toString("hex");
@@ -335,7 +355,6 @@ export async function POST(req: NextRequest) {
     data: {
       username,
       passwordHash: await hashPassword(password),
-      passwordPlain: password,
       role,
       email: body.email ? String(body.email) : null,
       isActive: body.isActive !== false,
@@ -364,4 +383,7 @@ export async function POST(req: NextRequest) {
     password,
     bouquetCount: bouquetIds.length,
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

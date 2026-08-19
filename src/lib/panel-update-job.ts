@@ -3,6 +3,7 @@ import { spawn, execSync } from "child_process";
 import path from "path";
 import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
 import { compareVersions } from "@/lib/panel-releases-feed";
+import { acquireExclusiveLockOrSteal, releaseLock, writeJsonAtomic } from "@/lib/job-file-lock";
 
 export type PanelUpdateJobStep = {
   name: string;
@@ -24,6 +25,10 @@ export type PanelUpdateJob = {
   fromVersion: string | null;
   toVersion: string | null;
 };
+
+export function getUpdateLockPath(repoPath: string): string {
+  return path.join(repoPath, ".update.lock");
+}
 
 export function getUpdateProgressPath(repoPath: string): string {
   return path.join(repoPath, ".update-progress.json");
@@ -491,7 +496,10 @@ export async function clearUpdateJob(repoPath: string): Promise<void> {
 }
 
 export async function writeUpdateJob(repoPath: string, job: PanelUpdateJob): Promise<void> {
-  await writeFile(getUpdateProgressPath(repoPath), JSON.stringify(job, null, 2), "utf8");
+  await writeJsonAtomic(getUpdateProgressPath(repoPath), job);
+  if (job.status !== "running") {
+    await releaseLock(getUpdateLockPath(repoPath));
+  }
 }
 
 export function isJobRunning(job: PanelUpdateJob | null | undefined): boolean {
@@ -531,7 +539,16 @@ export async function startBackgroundPanelUpdate(
 ): Promise<{ ok: boolean; error?: string }> {
   repoPath = resolvePanelRepoPathSync(repoPath);
   const existing = await reconcileStaleUpdateJob(repoPath);
+  const locked = await acquireExclusiveLockOrSteal(
+    getUpdateLockPath(repoPath),
+    `${Date.now()}:update`,
+    async () => !(isJobRunning(existing) || (await isPanelUpdateWorkAlive(repoPath)))
+  );
+  if (!locked) {
+    return { ok: false, error: "An update is already running" };
+  }
   if (isJobRunning(existing) || (await isPanelUpdateWorkAlive(repoPath))) {
+    await releaseLock(getUpdateLockPath(repoPath));
     return { ok: false, error: "An update is already running" };
   }
 

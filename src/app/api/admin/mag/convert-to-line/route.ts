@@ -3,7 +3,9 @@ import { requireSession } from "@/lib/auth";
 import { convertMagDevicesToLines } from "@/lib/mag-convert-to-line";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
@@ -20,5 +22,8 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Convert failed";
     return NextResponse.json({ error: message }, { status: 400 });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

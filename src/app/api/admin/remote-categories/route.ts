@@ -10,6 +10,7 @@ import {
   wouldCreateCategoryCycle,
 } from "@/lib/category-tree";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const VALID_TYPES = new Set<string>(Object.values(CategoryType));
 
 type IncomingCategory = {
@@ -32,6 +33,7 @@ function resolveType(raw: unknown): CategoryType {
  * Parent links are applied in a second pass (by id or parentName).
  */
 export async function POST(req: NextRequest) {
+  try {
   const ok = await requirePanelApiKey(req);
   if (!ok) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -190,6 +192,9 @@ export async function POST(req: NextRequest) {
     unchanged,
     errors: errors.length > 0 ? errors : undefined,
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 /**
@@ -212,6 +217,7 @@ export async function GET(req: NextRequest) {
 
 /** DELETE all categories (safe for self-FK). Requires panel API key + confirm. */
 export async function DELETE(req: NextRequest) {
+  try {
   const ok = await requirePanelApiKey(req);
   if (!ok) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -224,4 +230,7 @@ export async function DELETE(req: NextRequest) {
   await invalidateXtreamCategories();
   await invalidateDashboardStats();
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

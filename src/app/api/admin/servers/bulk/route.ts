@@ -5,11 +5,18 @@ import { logActivity } from "@/lib/lines";
 import { bumpConfigRevision, enqueueAgentCommand } from "@/lib/stream-agent";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const serverIds = Array.isArray(body.serverIds) ? body.serverIds.map(String) : [];
   if (!serverIds.length) {
     return NextResponse.json({ error: "Select at least one server" }, { status: 400 });
@@ -99,4 +106,7 @@ export async function POST(req: NextRequest) {
         ? `${queued} queued, ${skipped} skipped (no agent token)`
         : `${queued} command(s) queued`,
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

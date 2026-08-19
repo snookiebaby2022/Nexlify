@@ -1,3 +1,5 @@
+import type { LiveTranscodeProfile } from "@/lib/live-transcode";
+
 const DAEMON_URL = process.env.HLS_DAEMON_URL || "http://127.0.0.1:13081";
 const PANEL_INTERNAL_SECRET = process.env.PANEL_INTERNAL_SECRET || "";
 
@@ -18,7 +20,7 @@ async function callDaemonEnsure(opts: {
   upstreamUrl: string;
   userAgent?: string;
   loop?: boolean;
-  transcode?: string | null;
+  transcode?: unknown;
   vod?: boolean;
 }): Promise<{ ok: boolean; playlist?: string; via?: string; error?: string } | null> {
   const controller = new AbortController();
@@ -55,11 +57,16 @@ export async function ensureDiskHls(opts: {
   upstreamUrl: string;
   userAgent?: string;
   loop?: boolean;
-  transcode?: string | null;
+  transcode?: LiveTranscodeProfile | string | null;
   vod?: boolean;
-}): Promise<{ ok: boolean; playlist?: string; via?: string; error?: string }> {
+}): Promise<{ ok: true; playlist: string; via?: string } | { ok: false; error: string }> {
   const daemonResult = await callDaemonEnsure(opts);
-  if (daemonResult) return daemonResult;
+  if (daemonResult) {
+    if (daemonResult.ok && daemonResult.playlist) {
+      return { ok: true, playlist: daemonResult.playlist, via: daemonResult.via };
+    }
+    return { ok: false, error: daemonResult.error || "HLS daemon returned empty playlist" };
+  }
 
   if (await isHlsDaemonHealthy()) {
     return { ok: false, error: "HLS daemon is up but /ensure failed (check PANEL_INTERNAL_SECRET)" };
@@ -71,7 +78,7 @@ export async function ensureDiskHls(opts: {
     streamId: opts.streamId,
     userAgent: opts.userAgent,
     loop: opts.loop,
-    transcode: opts.transcode ?? null,
+    transcode: typeof opts.transcode === "string" ? null : opts.transcode ?? null,
     vod: opts.vod,
   });
   return local.ok ? { ok: true, playlist: local.playlist, via: "local" } : local;
@@ -85,9 +92,13 @@ export async function openDaemonMpegTs(opts: {
   userAgent?: string;
   hls?: boolean;
   forceUniversal?: boolean;
-  transcode?: string | null;
+  transcode?: unknown;
   signal?: AbortSignal;
-}): Promise<{ ok: boolean; body?: ReadableStream; contentType?: string; error?: string } | null> {
+}): Promise<
+  | { ok: true; body: ReadableStream<Uint8Array>; contentType: string }
+  | { ok: false; error: string }
+  | null
+> {
   try {
     const res = await fetch(`${DAEMON_URL}/mpegts`, {
       method: "POST",
@@ -113,7 +124,11 @@ export async function openDaemonMpegTs(opts: {
       return { ok: false, error: err };
     }
     if (!res.body) return { ok: false, error: "MPEGTS daemon returned empty body" };
-    return { ok: true, body: res.body, contentType: res.headers.get("content-type") || "video/mp2t" };
+    return {
+      ok: true,
+      body: res.body as ReadableStream<Uint8Array>,
+      contentType: res.headers.get("content-type") || "video/mp2t",
+    };
   } catch (e) {
     if (opts.signal?.aborted) return { ok: false, error: "aborted" };
     return null;

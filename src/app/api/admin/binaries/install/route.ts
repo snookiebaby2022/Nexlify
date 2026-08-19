@@ -5,11 +5,18 @@ import { catalogFfmpegVersions, catalogPhpVersions } from "@/lib/bin-version-cat
 import { installBinVersion, installLatestBinary } from "@/lib/bin-install";
 import { NEXLIFY_BIN_ROOT } from "@/lib/bin-paths-layout";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const tool = body.tool === "php" ? "php" : "ffmpeg";
   const binRoot = String(body.binRoot ?? NEXLIFY_BIN_ROOT);
   const installLatest = Boolean(body.installLatest);
@@ -28,4 +35,7 @@ export async function POST(req: NextRequest) {
 
   const result = await installBinVersion(option, tool);
   return NextResponse.json(result);
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

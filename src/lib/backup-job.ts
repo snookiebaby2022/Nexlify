@@ -1,7 +1,8 @@
-import { readFile, writeFile, unlink } from "fs/promises";
+import { readFile, unlink } from "fs/promises";
 import { spawn, execSync } from "child_process";
 import path from "path";
 import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
+import { acquireExclusiveLockOrSteal, releaseLock, writeJsonAtomic } from "@/lib/job-file-lock";
 
 export const BACKUP_LOCK_PATH = "/tmp/nexlify-backup-in-progress";
 export const BACKUP_JOB_PATH = "/tmp/nexlify-backup-job.json";
@@ -40,7 +41,7 @@ export async function readBackupJob(): Promise<BackupJob | null> {
 }
 
 export async function writeBackupJob(job: BackupJob): Promise<void> {
-  await writeFile(BACKUP_JOB_PATH, JSON.stringify(job), "utf8");
+  await writeJsonAtomic(BACKUP_JOB_PATH, job);
 }
 
 export async function clearBackupJob(): Promise<void> {
@@ -87,7 +88,7 @@ export async function reconcileBackupJob(): Promise<BackupJob | null> {
   job.message = job.error;
   await writeBackupJob(job);
   try {
-    await unlink(BACKUP_LOCK_PATH);
+    await releaseLock(BACKUP_LOCK_PATH);
   } catch {
     /* ignore */
   }
@@ -121,8 +122,23 @@ export async function startBackupBackgroundJob(input: {
     message: "Starting backup…",
     progress: { phase: "initializing", current: 0, total: 100 },
   };
+  const locked = await acquireExclusiveLockOrSteal(
+    BACKUP_LOCK_PATH,
+    `${Date.now()}:${id}`,
+    async () => {
+      const job = await readBackupJob();
+      return !job || job.status !== "running" || !(job.pid && isPidAlive(job.pid));
+    }
+  );
+  if (!locked) {
+    const raced = await reconcileBackupJob();
+    if (raced?.status === "running") {
+      return { ok: true, job: raced, alreadyRunning: true };
+    }
+    return { ok: false, error: "Could not acquire backup lock. Try again." };
+  }
+
   await writeBackupJob(job);
-  await writeFile(BACKUP_LOCK_PATH, `${Date.now()}:${id}`, "utf8");
 
   const workerTs = path.join(repoPath, "scripts", "panel-backup-background.ts");
   const logFile = "/tmp/nexlify-backup-worker.log";
@@ -136,6 +152,9 @@ export async function startBackupBackgroundJob(input: {
       PANEL_REPO_PATH: repoPath,
       NODE_OPTIONS: "--max-old-space-size=16384",
     },
+  });
+  child.on("error", (err) => {
+    console.error("[backup] worker spawn failed", err);
   });
   child.unref();
   job.pid = child.pid ?? undefined;

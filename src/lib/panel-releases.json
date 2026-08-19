@@ -1,7 +1,67 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.13",
+  "latestVersion": "2.0.16",
   "releases": [
+    {
+      "version": "2.0.16",
+      "date": "2026-08-19",
+      "channel": "stable",
+      "summary": "Security lockdown, Next 15.5.21, MPEG-TS/HLS playback for Exo/VLC/Smarters/XCIPTV, provider VOD URLs.",
+      "changelog": [
+        "Natural-language Prisma is allowlisted with secret-field denylist and forced take<=50",
+        "Next 15.5.21 with Server Action body cap 100mb and middleware/proxy 512mb",
+        "Admin stream proxy is POST-token + SSRF allowlist; disaster-recovery paths confined to backups/",
+        "PanelUser.passwordPlain is no longer persisted; nodemailer 7.0.11",
+        "Exclusive wx job locks and atomic JSON for update/migrate/backup; stale LiveConnection rows are deleted",
+        "Mutation routes parse JSON safely; builds fail on tsc (ignoreBuildErrors false)",
+        "Live MPEG-TS/HLS play with VLC UA, video/mp2t and application/x-mpegURL for Exo/VLC/Smarters/XCIPTV",
+        "Movies/series direct_source defaults to the provider URL; panel /movie and /series still proxy with Range when direct play is off",
+        "Xtream catalogs expose updated_at / last_modified so XCIPTV and IPTV Smarters refresh quickly"
+      ],
+      "fixes": [
+        "Open Prisma AI queries, SSRF stream proxy, plaintext panel passwords, and unbounded upload bodies",
+        "Update/migrate/backup job files could be truncated or double-run",
+        "Stale live connections never deleted; NODE_TLS_REJECT_UNAUTHORIZED=0 set process-wide",
+        "MPEG-TS/HLS mismatch for ExoPlayer and VLC; VOD went through a slow panel proxy by default",
+        "Smarters/XCIPTV catalogs did not delta-update because live streams lacked updated_at"
+      ]
+    },
+    {
+      "version": "2.0.15",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "XUI/NXT on-disk HLS daemon, timeshift playback, faster VOD, Updates no longer stuck at 60%.",
+      "changelog": [
+        "ffmpeg HLS restream runs in a PM2 nexlify-hls daemon writing /var/lib/nexlify/hls — outside the Next process like XUI/NXT",
+        "On-demand and created channels start that restream; transcode profiles persist and apply to live transcode mode",
+        "Xtream /timeshift/user/pass/duration/start/id.ts catch-up delivery (local archive or provider timeshift URL)",
+        "Movies/series fetch with VLC UA; .m3u8 VOD is packaged to real HLS segments",
+        "Updates: leftover .next.staging no longer keeps the bar running at 60% after PM2 swap"
+      ],
+      "fixes": [
+        "Panel Updates stuck at 60% after a successful restart",
+        "HLS packager inside Next could restart the whole panel",
+        "No timeshift/catch-up playback route for MAG/Smarters",
+        "Movie/series playback failed when providers blocked the app user-agent"
+      ]
+    },
+    {
+      "version": "2.0.14",
+      "date": "2026-08-17",
+      "channel": "stable",
+      "summary": "Smarters HLS v3 playlists + MPEGTS VLC UA so PC/phone stop erroring.",
+      "changelog": [
+        "HLS playlists are HLS v3 with TARGETDURATION >= ceil(EXTINF)",
+        "Segment URIs are path-absolute /live/user/pass/id/hls/segN.ts like XUI/NXT",
+        "Local packager uses 4s segments; unread ffmpeg stderr is discarded so Next does not freeze",
+        "MPEGTS /live/*.ts now fetches upstream with VLC user-agent"
+      ],
+      "fixes": [
+        "IPTV Smarters PC/mobile HLS playback error (invalid playlist + wrong segment host)",
+        "Panel crash/restart after the first HLS zap (ffmpeg stderr pipe filled the event loop)",
+        "MPEGTS channels that failed only because the provider blocked the Smarters user-agent"
+      ]
+    },
     {
       "version": "2.0.13",
       "date": "2026-08-19",

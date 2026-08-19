@@ -5,6 +5,7 @@ import { syncEpgSource } from "@/lib/epg";
 import { invalidateEpgCache } from "@/lib/cache-invalidate";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -17,10 +18,15 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
 
   if (body.syncAll === true) {
     const sources = await prisma.epgSource.findMany({ where: { isActive: true } });
@@ -66,9 +72,13 @@ export async function POST(req: NextRequest) {
   void syncEpgSource(source.id).catch(() => {});
 
   return NextResponse.json({ source });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -78,4 +88,7 @@ export async function DELETE(req: NextRequest) {
   await prisma.epgSource.delete({ where: { id } });
   await invalidateEpgCache();
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

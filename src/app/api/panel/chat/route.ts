@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const CHAT_ROLES: PanelRole[] = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER];
 
 export async function GET(req: NextRequest) {
@@ -41,10 +42,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession(CHAT_ROLES);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const text = String(body.body ?? "").trim();
   if (!text || text.length > 4000) {
     return NextResponse.json({ error: "Message required (max 4000 chars)" }, { status: 400 });
@@ -67,4 +74,7 @@ export async function POST(req: NextRequest) {
   );
 
   return NextResponse.json({ message });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

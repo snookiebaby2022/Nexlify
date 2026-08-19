@@ -1,7 +1,8 @@
-import { readFile, writeFile, unlink, readdir, stat } from "fs/promises";
+import { readFile, unlink, readdir, stat } from "fs/promises";
 import { spawn, execSync } from "child_process";
 import path from "path";
 import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
+import { acquireExclusiveLockOrSteal, releaseLock, writeJsonAtomic } from "@/lib/job-file-lock";
 
 export const MIGRATE_LOCK_PATH = "/tmp/nexlify-migrate-in-progress";
 export const MIGRATE_JOB_PATH = "/tmp/nexlify-migrate-job.json";
@@ -39,7 +40,7 @@ export async function readMigrateJob(): Promise<MigrateJob | null> {
 }
 
 export async function writeMigrateJob(job: MigrateJob): Promise<void> {
-  await writeFile(MIGRATE_JOB_PATH, JSON.stringify(job), "utf8");
+  await writeJsonAtomic(MIGRATE_JOB_PATH, job);
 }
 
 export async function clearMigrateJob(): Promise<void> {
@@ -55,16 +56,17 @@ export async function clearMigrateJob(): Promise<void> {
   }
 }
 
-export async function acquireMigrateLock(tag: string): Promise<void> {
-  await writeFile(MIGRATE_LOCK_PATH, `${Date.now()}:${tag}`, "utf8");
+export async function acquireMigrateLock(tag: string): Promise<boolean> {
+  return acquireExclusiveLockOrSteal(MIGRATE_LOCK_PATH, `${Date.now()}:${tag}`, async () => {
+    const job = await readMigrateJob();
+    if (!job || job.status !== "running") return true;
+    if (job.pid && isPidAlive(job.pid)) return false;
+    return true;
+  });
 }
 
 export async function releaseMigrateLock(): Promise<void> {
-  try {
-    await unlink(MIGRATE_LOCK_PATH);
-  } catch {
-    /* ignore */
-  }
+  await releaseLock(MIGRATE_LOCK_PATH);
 }
 
 /** Newest uploaded dump still on disk (last 48 hours, >= 1MB). */
@@ -160,8 +162,16 @@ export async function startMigrateBackgroundJob(input: {
     message: input.dryRun ? "Starting preview…" : "Starting import…",
     progress: { phase: "initializing", current: 0, total: 100 },
   };
+  const locked = await acquireMigrateLock(id);
+  if (!locked) {
+    const raced = await reconcileMigrateJob();
+    if (raced?.status === "running") {
+      return { ok: true, job: raced, alreadyRunning: true };
+    }
+    return { ok: false, error: "Could not acquire migration lock. Try again." };
+  }
+
   await writeMigrateJob(job);
-  await acquireMigrateLock(id);
 
   const workerTs = path.join(repoPath, "scripts", "panel-migrate-background.ts");
   const logFile = "/tmp/nexlify-migrate-worker.log";
@@ -175,6 +185,9 @@ export async function startMigrateBackgroundJob(input: {
       PANEL_REPO_PATH: repoPath,
       NODE_OPTIONS: "--max-old-space-size=16384",
     },
+  });
+  child.on("error", (err) => {
+    console.error("[migrate] worker spawn failed", err);
   });
   child.unref();
   job.pid = child.pid ?? undefined;

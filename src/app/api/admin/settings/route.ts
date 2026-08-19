@@ -10,6 +10,7 @@ import {
 } from "@/lib/panel-settings";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -25,10 +26,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const group = body.group as SettingGroup;
   if (!group || !SETTING_GROUPS.includes(group)) {
     return NextResponse.json({ error: "Invalid group" }, { status: 400 });
@@ -61,4 +68,7 @@ export async function PATCH(req: NextRequest) {
     resetCacheTtlMemo();
   }
   return NextResponse.json({ group, settings });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

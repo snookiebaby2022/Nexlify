@@ -19,6 +19,7 @@ import {
 import { LineStatus, Prisma } from "@prisma/client";
 import { normalizeAllowedOutputInput, DEFAULT_ALLOWED_OUTPUT } from "@/lib/line-access-output";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 5000;
 
@@ -142,6 +143,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
@@ -149,12 +151,9 @@ export async function POST(req: NextRequest) {
   ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  let body: Record<string, unknown>;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const parsed = await parseJsonBody<Record<string, unknown>>(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
 
   const security = await getSettingGroup("security");
   const minLen = Math.max(
@@ -372,5 +371,8 @@ export async function POST(req: NextRequest) {
     }
     console.error("[create_line]", e);
     return NextResponse.json({ error: msg || "Failed to create line" }, { status: 500 });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

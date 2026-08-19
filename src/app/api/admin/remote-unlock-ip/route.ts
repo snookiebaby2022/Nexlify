@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePanelApiKey } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 /**
  * POST /api/admin/remote-unlock-ip
  * Unlock IP restrictions on one or more lines.
@@ -16,6 +17,7 @@ import { prisma } from "@/lib/prisma";
  * - unlockAll: unlock ALL lines on this panel
  */
 export async function POST(req: NextRequest) {
+  try {
   const ok = await requirePanelApiKey(req);
   if (!ok) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -87,6 +89,9 @@ export async function POST(req: NextRequest) {
       hadIps: Boolean(l.allowedIps?.trim()),
     })),
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 /**

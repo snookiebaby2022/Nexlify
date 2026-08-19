@@ -3,7 +3,9 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -22,4 +24,7 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ ok: true, task: updated });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

@@ -58,6 +58,53 @@ export function looksLikePlayableMediaPayload(buf: Buffer): boolean {
   return false;
 }
 
+export function looksLikeHlsManifestPayload(buf: Buffer): boolean {
+  const head = buf.subarray(0, Math.min(buf.length, 64)).toString("utf8");
+  return head.includes("#EXTM3U");
+}
+
+export function shouldSniffAccidentalHlsManifest(contentType: string | undefined | null): boolean {
+  const c = (contentType ?? "").toLowerCase();
+  if (c.includes("mpegurl") || c.includes("m3u8")) return true;
+  if (c.includes("mp2t") || c.startsWith("video/") || c.startsWith("audio/")) return false;
+  return true;
+}
+
+/** Follow redirects and confirm the URL is playable MPEG-TS (not an HLS playlist). */
+export async function resolvePlayableUpstreamUrl(
+  url: string,
+  opts?: { userAgent?: string; timeoutMs?: number }
+): Promise<string | null> {
+  try {
+    const open = await openUpstreamLiveStream(url, opts);
+    const ct = open.contentType.toLowerCase();
+    try {
+      open.body.destroy();
+    } catch {
+      /* ignore */
+    }
+    if (ct.includes("mpegurl") || ct.includes("m3u8")) return null;
+    return open.finalUrl || url;
+  } catch {
+    return null;
+  }
+}
+
+/** ExoPlayer / VLC / Smarters: live .ts must be MPEG-TS, not text/html from a lying CDN. */
+export function normalizeLiveMpegTsContentType(contentType: string | undefined | null): string {
+  const c = (contentType ?? "").toLowerCase();
+  if (c.includes("mpegurl") || c.includes("m3u8")) return "application/x-mpegURL";
+  if (c.includes("mp2t")) return "video/mp2t";
+  if (c.startsWith("video/") || c.startsWith("audio/")) {
+    return (contentType ?? "video/mp2t").split(";")[0]!.trim();
+  }
+  return "video/mp2t";
+}
+
+export function normalizeHlsManifestContentType(_contentType?: string | null): string {
+  return "application/x-mpegURL";
+}
+
 export function looksLikeHtmlErrorPayload(buf: Buffer): boolean {
   const head = buf.subarray(0, Math.min(buf.length, 256)).toString("utf8").trimStart().toLowerCase();
   return (
@@ -275,7 +322,7 @@ export function upstreamToWebResponse(
   extraHeaders?: Record<string, string>
 ): { stream: ReadableStream<Uint8Array>; headers: Record<string, string> } {
   const headers: Record<string, string> = {
-    "Content-Type": open.contentType.includes("html") ? "video/mp2t" : open.contentType,
+    "Content-Type": normalizeLiveMpegTsContentType(open.contentType),
     "Cache-Control": "no-cache, no-store",
     "Access-Control-Allow-Origin": "*",
     Connection: "keep-alive",

@@ -6,6 +6,7 @@ import { computeChecksum, decryptBackup } from "@/lib/backup-run";
 import { bundleFromSql } from "@/lib/panel-migration/map-rows";
 import type { MigrationBundle, MigrationSource } from "@/lib/panel-migration/types";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 /**
  * POST /api/admin/backup-restore
  *
@@ -14,10 +15,16 @@ import type { MigrationBundle, MigrationSource } from "@/lib/panel-migration/typ
  * - restore-file: Restore from a file path on the server
  */
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const { action } = body;
 
   if (action === "restore" || action === "restore_database") {
@@ -65,6 +72,9 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 /**

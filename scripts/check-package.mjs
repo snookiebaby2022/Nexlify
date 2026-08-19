@@ -14,12 +14,12 @@ if (pkg.overrides?.next) {
 const nextVer = pkg.dependencies?.next ?? "";
 if (nextVer.startsWith("16.")) {
   console.error(
-    "\nERROR: Next 16 requires Node >= 20.9. On Node 18 use: npm install next@15.5.19\n"
+    "\nERROR: Next 16 requires Node >= 20.9. On Node 18 use: npm install next@15.5.21\n"
   );
   process.exit(1);
 }
-if (nextVer !== "15.5.19") {
-  console.warn(`WARN: recommended dependencies.next = "15.5.19", got "${nextVer}"`);
+if (nextVer !== "15.5.21") {
+  console.warn(`WARN: recommended dependencies.next = "15.5.21", got "${nextVer}"`);
 }
 
 console.log("package.json OK — next is", pkg.dependencies.next, "(no next override)");

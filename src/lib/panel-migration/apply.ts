@@ -588,7 +588,6 @@ async function applyMigrationBundleInner(
           data: {
             username,
             passwordHash: pw,
-            passwordPlain: prehashed ? null : password,
             role,
             credits: Number(r.credits) || 0,
             isActive: r.isActive !== false,

@@ -26,7 +26,7 @@ export async function GET(
     return new NextResponse("Invalid stream", { status: 400 });
   }
 
-  const dir = join(hlsDiskRoot(), safeStreamId);
+  const dir = join(hlsDiskRoot, safeStreamId);
   const path = join(dir, segName);
 
   if (!path.startsWith(dir)) {

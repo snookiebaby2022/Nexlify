@@ -430,7 +430,7 @@ cmd_build_compile() {
   echo "WARN: next build failed — clear caches + reinstall next/SWC + retry once ..." >&2
   rm -rf .next.staging node_modules/.cache .next/cache 2>/dev/null || true
   # Prefer surgical next reinstall first (faster); full wipe if still broken.
-  npm install next@15.5.19 --include=optional --no-audit --no-fund --loglevel=error || true
+  npm install next@15.5.21 --include=optional --no-audit --no-fund --loglevel=error || true
   npm install --no-save --include=optional @next/swc-linux-x64-gnu 2>/dev/null || \
     npm install --no-save --include=optional @next/swc-linux-x64-musl 2>/dev/null || true
   if ! node ./node_modules/next/dist/bin/next build; then

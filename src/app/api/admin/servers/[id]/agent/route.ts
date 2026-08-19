@@ -10,6 +10,7 @@ import { logActivity } from "@/lib/lines";
 import { STREAM_HTTP_PORT } from "@/lib/server-ports";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
@@ -44,11 +45,15 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 }
 
 export async function POST(req: NextRequest, ctx: Ctx) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await ctx.params;
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+
   const action = String(body.action ?? "");
 
   const server = await prisma.streamServer.findUnique({ where: { id } });
@@ -198,5 +203,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     }
     default:
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

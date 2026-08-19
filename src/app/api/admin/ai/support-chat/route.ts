@@ -5,6 +5,7 @@ import { aiChat, isAiConfigured } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const SYSTEM_PROMPT = `You are a helpful AI support assistant for Nexlify IPTV Panel. Answer user questions about:
 
 DEVICE SETUP:
@@ -39,7 +40,12 @@ export async function POST(req: NextRequest) {
     const session = await requireSession([PanelRole.ADMIN]);
     if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+
+    if (!parsed.ok) return parsed.response;
+
+    const body = parsed.data;
+
     const { message, sessionId } = body as { message: string; sessionId?: string };
 
     if (!message || typeof message !== "string") {

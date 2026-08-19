@@ -6,11 +6,13 @@ import { collectDescendantCategoryIds } from "@/lib/category-tree";
 import { logActivity } from "@/lib/lines";
 import { invalidateXtreamCategories, invalidateDashboardStats } from "@/lib/cache-invalidate";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 /**
  * POST — set all streams in a category (and descendants) active or offline.
  * Body: { categoryId: string, isActive: boolean, includeDescendants?: boolean }
  */
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -58,4 +60,7 @@ export async function POST(req: NextRequest) {
     categoryId,
     isActive: body.isActive,
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

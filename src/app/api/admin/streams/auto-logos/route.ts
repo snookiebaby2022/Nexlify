@@ -5,6 +5,7 @@ import { applyAutoLogoToStream } from "@/lib/channel-logo";
 import { enrichVodFromTmdb, isTmdbConfigured } from "@/lib/vod-tmdb-enrich";
 import { PanelRole, StreamType } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 /**
  * Batch auto-icons:
  * - LIVE → channel logo resolver
@@ -13,6 +14,7 @@ import { PanelRole, StreamType } from "@prisma/client";
  * Body (optional): { type?: "LIVE"|"MOVIE"|"SERIES"|"ALL", limit?: number }
  */
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -85,4 +87,7 @@ export async function POST(req: NextRequest) {
     types,
     errors: errors.length ? errors : undefined,
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

@@ -16,23 +16,57 @@ describe("exportPlaybackUrl", () => {
     assert.equal(url, "http://45.88.138.18/live/demo/pass/live123.ts");
   });
 
-  it("routes movies through the panel movie path", () => {
-    const url = exportPlaybackUrl(baseUrl, line, {
-      id: "movie123",
-      type: "MOVIE",
-      streamUrl: "http://upstream/movie.mkv",
-      containerExtension: "mkv",
-    });
+  it("uses the provider URL for movies when direct play is on", () => {
+    const url = exportPlaybackUrl(
+      baseUrl,
+      line,
+      {
+        id: "movie123",
+        type: "MOVIE",
+        streamUrl: "http://upstream/movie.mkv",
+        containerExtension: "mkv",
+      },
+      undefined,
+      undefined,
+      "auto",
+      true
+    );
+    assert.equal(url, "http://upstream/movie.mkv");
+  });
+
+  it("routes movies through the panel movie path when direct play is off", () => {
+    const url = exportPlaybackUrl(
+      baseUrl,
+      line,
+      {
+        id: "movie123",
+        type: "MOVIE",
+        streamUrl: "http://upstream/movie.mkv",
+        containerExtension: "mkv",
+      },
+      undefined,
+      undefined,
+      "auto",
+      false
+    );
     assert.equal(url, "http://45.88.138.18/movie/demo/pass/movie123.mkv");
   });
 
-  it("routes series through the panel series path", () => {
-    const url = exportPlaybackUrl(baseUrl, line, {
-      id: "series123",
-      type: "SERIES",
-      streamUrl: "http://upstream/series.mkv",
-      containerExtension: null,
-    });
+  it("routes series through the panel series path when direct play is off", () => {
+    const url = exportPlaybackUrl(
+      baseUrl,
+      line,
+      {
+        id: "series123",
+        type: "SERIES",
+        streamUrl: "http://upstream/series.mkv",
+        containerExtension: null,
+      },
+      undefined,
+      undefined,
+      "auto",
+      false
+    );
     assert.equal(url, "http://45.88.138.18/series/demo/pass/series123.mkv");
   });
 });

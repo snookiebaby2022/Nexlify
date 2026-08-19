@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole, TicketPriority, TicketStatus } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
@@ -34,11 +35,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
 }
 
 export async function PATCH(req: NextRequest, { params }: Params) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { id } = await params;
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+  if (!parsed.ok) return parsed.response;
+  const body = parsed.data;
+
   const data: {
     status?: TicketStatus;
     priority?: TicketPriority;
@@ -50,4 +55,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const ticket = await prisma.ticket.update({ where: { id }, data });
   return NextResponse.json({ ticket });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

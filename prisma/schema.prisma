@@ -210,7 +210,7 @@ model PanelUser {
   id           String    @id @default(cuid())
   username     String    @unique
   passwordHash String
-  /// Plaintext copy for panel UI reveal (login still uses passwordHash). Null until next set/reset.
+  /// Deprecated: no longer written. Kept nullable so existing rows still migrate. Never return this to clients.
   passwordPlain String?
   displayName  String?
   email        String?

@@ -9,11 +9,18 @@ import {
 import { logActivity } from "@/lib/lines";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   if (!body.agreeToTerms) {
     return NextResponse.json(
       { error: "You must agree to the Let's Encrypt terms of service." },
@@ -61,4 +68,7 @@ export async function POST(req: NextRequest) {
     log: result.log,
     settings: updated,
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

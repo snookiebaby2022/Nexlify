@@ -11,6 +11,7 @@ import {
 import { resolveProviderUrl } from "@/lib/vod-provider-url";
 import { normalizeStreamSource } from "@/lib/stream-source";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 
@@ -120,10 +121,16 @@ async function resolveEpisodeSource(body: {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const seriesId = String(body.seriesId ?? "").trim();
   const title = String(body.title ?? "").trim();
   const season = Math.max(1, parseInt(String(body.season ?? body.seasonNum ?? 1), 10) || 1);
@@ -178,13 +185,22 @@ export async function POST(req: NextRequest) {
       series: { id: parent.id, name: seriesName },
     },
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const id = String(body.id ?? "").trim();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
@@ -238,9 +254,13 @@ export async function PATCH(req: NextRequest) {
       hostedExternally: stream.hostedExternally,
     },
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -251,4 +271,7 @@ export async function DELETE(req: NextRequest) {
   await invalidateXtreamCategories();
   await invalidateDashboardStats();
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

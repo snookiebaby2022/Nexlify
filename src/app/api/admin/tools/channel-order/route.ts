@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole, StreamType } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 function parseType(raw: string | null): StreamType {
   const t = String(raw ?? "LIVE").toUpperCase();
   if (t === "MOVIE") return StreamType.MOVIE;
@@ -33,10 +34,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const order: string[] = body.order ?? [];
   if (!order.length) return NextResponse.json({ error: "order required" }, { status: 400 });
 
@@ -46,4 +53,7 @@ export async function PATCH(req: NextRequest) {
   const { cacheDel } = await import("@/lib/cache");
   await cacheDel("categories");
   return NextResponse.json({ ok: true, count: order.length });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

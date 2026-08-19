@@ -46,10 +46,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   generateEtags: true,
   eslint: {
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   // middlewareClientMaxBodySize belongs under experimental (Next 15).
   serverExternalPackages: ["ioredis"],
@@ -68,17 +68,14 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: devOrigins,
   experimental: {
     serverActions: {
-      // Large migration .sql uploads (Xtream/XUI/1-stream) easily exceed the
-      // default limit and cause "Failed to parse body as FormData". Allow big bodies.
-      bodySizeLimit: "2gb",
+      // Server Actions are not the SQL-dump path. Keep a hard cap against DoS
+      // (GHSA-m99w-x7hq-7vfj). Large migrate uploads use Route Handlers below.
+      bodySizeLimit: "100mb",
     },
     // The license-session middleware clones the request body before it reaches
-    // Route Handlers. Its clone is capped at 10MB by default, which truncates
-    // large migration uploads ("Only the first 10MB will be available"). Raise it.
-    middlewareClientMaxBodySize: "2gb",
-    // Next 15.5+ standalone proxy defaults to ~1MB and can drop multipart bodies.
-    // Typed ExperimentalConfig in this Next version omits the key; keep runtime option.
-    ...({ proxyClientMaxBodySize: "2gb" } as Record<string, string>),
+    // Route Handlers. Default 10MB truncates migration uploads. Cap below 2GB.
+    middlewareClientMaxBodySize: "512mb",
+    ...({ proxyClientMaxBodySize: "512mb" } as Record<string, string>),
   },
 };
 

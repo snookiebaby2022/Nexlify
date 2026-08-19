@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { iptvCorsPreflight } from "@/lib/iptv-cors";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function OPTIONS() {
   return iptvCorsPreflight();
 }
@@ -48,10 +49,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   try {
     if (body.action === "import-cloudflare") {
       const suggestions = await suggestCloudflareCdnEndpoints();
@@ -107,9 +114,13 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
   }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -141,9 +152,13 @@ export async function PATCH(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "CDN endpoint not found" }, { status: 404 });
   }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -155,5 +170,8 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "CDN endpoint not found" }, { status: 404 });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

@@ -3,11 +3,18 @@ import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
 import { probeMigrationPostgres, type PostgresMigrationConfig } from "@/lib/panel-migration";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const pg = body.pg as PostgresMigrationConfig | undefined;
   if (!pg?.connectionString && !(pg?.host && pg?.database && pg?.user)) {
     return NextResponse.json(
@@ -24,5 +31,8 @@ export async function POST(req: NextRequest) {
       { error: e instanceof Error ? e.message : String(e) },
       { status: 400 }
     );
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

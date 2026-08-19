@@ -8,6 +8,7 @@ import { normalizeUserAgentField } from "@/lib/line-restrictions";
 import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
 import { LineStatus, PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 function applyMassEditPatch(patch: MassEditPatch) {
   const data: {
     password?: string;
@@ -59,6 +60,7 @@ function applyMassEditPatch(patch: MassEditPatch) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
@@ -66,7 +68,12 @@ export async function POST(req: NextRequest) {
   ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const lineIds: string[] = body.lineIds ?? [];
   const action = body.action as string;
 
@@ -171,4 +178,7 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ ok: true, affected });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

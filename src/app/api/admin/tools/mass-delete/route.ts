@@ -3,11 +3,18 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const entity = body.entity as string;
   const ids: string[] = body.ids ?? [];
   if (!ids.length) return NextResponse.json({ error: "ids required" }, { status: 400 });
@@ -31,4 +38,7 @@ export async function POST(req: NextRequest) {
   const { cacheDel } = await import("@/lib/cache");
   await cacheDel("stats");
   return NextResponse.json({ ok: true, count });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

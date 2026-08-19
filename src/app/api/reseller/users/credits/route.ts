@@ -3,11 +3,18 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const userId = String(body.userId ?? "");
   const action = String(body.action ?? "add") as "add" | "refund" | "deduct";
   const amount = Math.max(0, Math.floor(Number(body.amount ?? 0)));
@@ -86,4 +93,7 @@ export async function POST(req: NextRequest) {
     user: { id: result.id, username: result.username, credits: result.credits },
     balanceAfter: result.credits,
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

@@ -1,6 +1,6 @@
 {
   "name": "nexlify",
-  "version": "2.0.13",
+  "version": "2.0.16",
   "private": true,
   "engines": {
     "node": ">=18.17.0"
@@ -13,7 +13,7 @@
     "start": "node scripts/run-next.mjs start",
     "pm2:start": "bash scripts/pm2-start.sh",
     "pm2:boot": "bash scripts/pm2-boot-enable.sh",
-    "test": "tsx --test src/lib/secrets-equal.test.ts src/lib/line-restrictions.test.ts src/lib/ffmpeg-agent.test.ts src/lib/playback-token.test.ts src/lib/panel-update-mode.test.ts src/lib/panel-server.test.ts src/lib/backup-schedule.test.ts src/lib/backup-run.test.ts src/lib/epg-auto-match.test.ts src/lib/live-playback-fix.test.ts src/lib/m3u-parser.test.ts src/lib/stream-url-match.test.ts src/lib/panel-update-job-success.test.ts src/lib/smart-cdn.test.ts src/lib/reseller-bouquets.test.ts src/lib/credential-generate.test.ts src/lib/smart-cdn-suggest.test.ts src/lib/password-verify.test.ts src/lib/connections-kick.test.ts src/lib/panel-migration/xui-migration.test.ts src/lib/line-access-output.test.ts src/lib/resolve-stream-url-vodmode.test.ts src/lib/ticket-content-types.test.ts src/lib/export-playback-url.test.ts src/lib/connection-quality.test.ts src/lib/connection-quality-live.test.ts src/lib/hls-playback-native-ts.test.ts marketing-drop-in/src/lib/rate-limit.test.ts marketing-drop-in/src/lib/json-ld.test.ts marketing-drop-in/src/lib/panel-url-variants.test.ts",
+    "test": "tsx --test src/lib/secrets-equal.test.ts src/lib/line-restrictions.test.ts src/lib/ffmpeg-agent.test.ts src/lib/playback-token.test.ts src/lib/panel-update-mode.test.ts src/lib/panel-server.test.ts src/lib/backup-schedule.test.ts src/lib/backup-run.test.ts src/lib/epg-auto-match.test.ts src/lib/live-playback-fix.test.ts src/lib/m3u-parser.test.ts src/lib/stream-url-match.test.ts src/lib/panel-update-job-success.test.ts src/lib/smart-cdn.test.ts src/lib/reseller-bouquets.test.ts src/lib/credential-generate.test.ts src/lib/smart-cdn-suggest.test.ts src/lib/password-verify.test.ts src/lib/connections-kick.test.ts src/lib/panel-migration/xui-migration.test.ts src/lib/line-access-output.test.ts src/lib/resolve-stream-url-vodmode.test.ts src/lib/ticket-content-types.test.ts src/lib/export-playback-url.test.ts src/lib/connection-quality.test.ts src/lib/connection-quality-live.test.ts src/lib/hls-playback-native-ts.test.ts src/lib/ai-prisma-plan.test.ts src/lib/ssrf.test.ts src/lib/backup-path.test.ts src/lib/job-file-lock.test.ts marketing-drop-in/src/lib/rate-limit.test.ts marketing-drop-in/src/lib/json-ld.test.ts marketing-drop-in/src/lib/panel-url-variants.test.ts",
     "lint": "next lint",
     "releases:sync": "node scripts/sync-releases-to-website.mjs",
     "sync:all": "bash scripts/nexlify-sync-all.sh",
@@ -55,8 +55,8 @@
     "jose": "6.0.11",
     "lucide-react": "0.513.0",
     "mmdb-lib": "2.2.0",
-    "next": "15.5.19",
-    "nodemailer": "6.10.1",
+    "next": "15.5.21",
+    "nodemailer": "7.0.11",
     "openai": "6.45.0",
     "pg": "8.16.0",
     "react": "19.1.0",
@@ -66,10 +66,10 @@
     "zod": "3.25.56"
   },
   "optionalDependencies": {
-    "@next/swc-linux-x64-gnu": "15.5.19"
+    "@next/swc-linux-x64-gnu": "15.5.21"
   },
   "overrides": {
-    "postcss": "8.5.15"
+    "postcss": "8.5.18"
   },
   "devDependencies": {
     "@types/bcryptjs": "2.4.6",
@@ -80,8 +80,8 @@
     "@types/react-dom": "19.1.5",
     "autoprefixer": "10.4.21",
     "eslint": "^8.57.1",
-    "eslint-config-next": "15.5.19",
-    "postcss": "8.5.15",
+    "eslint-config-next": "15.5.21",
+    "postcss": "8.5.18",
     "prisma": "6.9.0",
     "tailwindcss": "3.4.17",
     "typescript": "5.8.3"

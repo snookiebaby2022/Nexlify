@@ -10,6 +10,7 @@ import {
   wouldCreateCategoryCycle,
 } from "@/lib/category-tree";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const VALID_TYPES = new Set<string>(Object.values(CategoryType));
 
 export async function GET(req: NextRequest) {
@@ -75,11 +76,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
+
     const name = String(body.name ?? "").trim();
     if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
 
@@ -111,14 +116,21 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
+
     const order = body.order as string[] | undefined;
     if (order?.length) {
       for (let index = 0; index < order.length; index++) {
@@ -191,9 +203,13 @@ export async function PATCH(req: NextRequest) {
       { status: 400 }
     );
   }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -213,5 +229,8 @@ export async function DELETE(req: NextRequest) {
       { error: e instanceof Error ? e.message : "Failed to delete category" },
       { status: 400 }
     );
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

@@ -1,15 +1,21 @@
 import { gunzipSync } from "zlib";
+import http from "node:http";
+import https from "node:https";
 import type { StreamProxy } from "@prisma/client";
-import { fetchWithOptionalProxy } from "@/lib/proxy";
+import { proxyUrl } from "@/lib/proxy";
 
-// Allow upstream fetches to sources with expired/self-signed TLS certs
-if (typeof process !== "undefined") process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
-const EPG_HEADERS = {
+const EPG_HEADERS: Record<string, string> = {
   "User-Agent":
     "Mozilla/5.0 (compatible; NexlifyPanel/1.0; +https://github.com/iptv-org/epg)",
   Accept: "application/xml, text/xml, application/gzip, */*",
   "Accept-Encoding": "gzip, deflate, br",
+};
+
+type EpgFetchResult = {
+  ok: boolean;
+  status: number;
+  contentType: string | null;
+  body: Buffer;
 };
 
 function isGzip(buf: Buffer, url: string, contentType: string | null): boolean {
@@ -18,16 +24,75 @@ function isGzip(buf: Buffer, url: string, contentType: string | null): boolean {
   return buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b;
 }
 
+/** Per-request TLS skip for EPG sources with expired certs — does not change process.env. */
+function fetchEpgOnce(
+  url: string,
+  extraHeaders: Record<string, string>,
+  timeoutMs: number,
+  redirectsLeft: number
+): Promise<EpgFetchResult> {
+  return new Promise((resolve, reject) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      reject(new Error("Invalid EPG URL"));
+      return;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      reject(new Error("EPG URL must be http or https"));
+      return;
+    }
+
+    const lib = parsed.protocol === "https:" ? https : http;
+    const req = lib.request(
+      url,
+      {
+        method: "GET",
+        headers: { ...EPG_HEADERS, ...extraHeaders },
+        timeout: timeoutMs,
+        ...(parsed.protocol === "https:" ? { rejectUnauthorized: false } : {}),
+      },
+      (res) => {
+        const status = res.statusCode ?? 0;
+        const location = res.headers.location;
+        if (status >= 300 && status < 400 && location && redirectsLeft > 0) {
+          res.resume();
+          try {
+            const next = new URL(location, url).toString();
+            resolve(fetchEpgOnce(next, extraHeaders, timeoutMs, redirectsLeft - 1));
+          } catch {
+            reject(new Error("Invalid EPG redirect"));
+          }
+          return;
+        }
+        const chunks: Buffer[] = [];
+        res.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+        res.on("end", () => {
+          resolve({
+            ok: status >= 200 && status < 300,
+            status,
+            contentType: typeof res.headers["content-type"] === "string" ? res.headers["content-type"] : null,
+            body: Buffer.concat(chunks),
+          });
+        });
+        res.on("error", reject);
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("EPG fetch timeout")));
+    req.on("error", reject);
+    req.end();
+  });
+}
+
 async function fetchOnce(
   url: string,
   proxy: Pick<StreamProxy, "type" | "host" | "port" | "username" | "password"> | null
 ): Promise<string> {
-  const res = await fetchWithOptionalProxy(url, proxy, {
-    headers: EPG_HEADERS,
-    redirect: "follow",
-    signal: AbortSignal.timeout(120_000),
-    cache: "no-store",
-  });
+  const extra: Record<string, string> = {};
+  if (proxy) extra["X-Nexlify-Proxy"] = proxyUrl(proxy);
+
+  const res = await fetchEpgOnce(url, extra, 120_000, 5);
 
   if (!res.ok) {
     const hint =
@@ -39,12 +104,12 @@ async function fetchOnce(
     throw new Error(`EPG fetch failed: HTTP ${res.status}${hint}`);
   }
 
-  const buf = Buffer.from(await res.arrayBuffer());
+  const buf = res.body;
   if (!buf.length) throw new Error("EPG fetch failed: empty response");
 
   let xml: string;
   try {
-    xml = isGzip(buf, url, res.headers.get("content-type"))
+    xml = isGzip(buf, url, res.contentType)
       ? gunzipSync(buf).toString("utf8")
       : buf.toString("utf8");
   } catch {

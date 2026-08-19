@@ -113,21 +113,21 @@ async function repairAdminPasswordHash(password: string) {
   const hash = await bcrypt.hash(password, 12);
   await prisma.panelUser.update({
     where: { username: "admin" },
-    data: { passwordHash: hash, passwordPlain: password, isActive: true, role: "ADMIN" },
+    data: { passwordHash: hash, passwordPlain: null, isActive: true, role: "ADMIN" },
   });
   return prisma.panelUser.findUnique({ where: { username: "admin" } });
 }
 
 const ADMIN_IDENTIFIERS = new Set(["admin", "admin@nexlify.live"]);
 
-/** After a successful legacy ($6$) login, upgrade to bcrypt + passwordPlain for UI reveal. */
+/** After a successful legacy ($6$) login, upgrade to bcrypt. */
 async function upgradeLegacyPasswordHash(userId: string, password: string, storedHash: string) {
   if (BCRYPT_HASH_RE.test(storedHash)) return;
   try {
     const hash = await bcrypt.hash(password, 12);
     await prisma.panelUser.update({
       where: { id: userId },
-      data: { passwordHash: hash, passwordPlain: password },
+      data: { passwordHash: hash, passwordPlain: null },
     });
   } catch (err) {
     console.error("[auth] password upgrade failed:", err);
@@ -178,7 +178,7 @@ export async function verifyPanelLogin(identifier: string, password: string) {
   const ok = await verifyStoredPassword(password, hash);
   if (!ok) return null;
 
-  // Transparent upgrade: XUI $6$ → bcrypt + passwordPlain so Manage Users can reveal it.
+  // Transparent upgrade: XUI $6$ → bcrypt.
   if (hash.startsWith("$6$")) {
     void upgradeLegacyPasswordHash(user.id, password, hash);
   }

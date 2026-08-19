@@ -416,10 +416,12 @@ export async function fetchHlsUpstream(
       return { ok: true, kind: "manifest", body: buf.toString("utf8"), finalUrl };
     }
 
+    const copy = new ArrayBuffer(buf.byteLength);
+    new Uint8Array(copy).set(buf);
     return {
       ok: true,
       kind: "segment",
-      body: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+      body: copy,
       contentType: contentType || "video/mp2t",
       finalUrl,
     };
@@ -492,7 +494,7 @@ export async function buildClientVodHlsPlaylist(opts: {
     userAgent: UPSTREAM_HLS_UA,
     vod: true,
   });
-  if (!packed.ok) return packed;
+  if (!packed.ok) return { ok: false, error: packed.error };
   return {
     ok: true,
     body: markHlsPlaylistAsVod(

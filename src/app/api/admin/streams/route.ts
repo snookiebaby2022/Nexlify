@@ -29,6 +29,7 @@ import { expandCategoryFilter } from "@/lib/category-tree";
 
 
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET(req: NextRequest) {
 
   const session = await requireSession([
@@ -299,6 +300,7 @@ export async function GET(req: NextRequest) {
 
 
 export async function POST(req: NextRequest) {
+  try {
 
   const session = await requireSession([PanelRole.ADMIN]);
 
@@ -306,7 +308,15 @@ export async function POST(req: NextRequest) {
 
 
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+
+
+  if (!parsed.ok) return parsed.response;
+
+
+
+  const body = parsed.data;
 
   const err = validateStreamCreate(body);
 
@@ -417,11 +427,15 @@ export async function POST(req: NextRequest) {
 
   }
 
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 
 
 export async function PATCH(req: NextRequest) {
+  try {
 
   const session = await requireSession([PanelRole.ADMIN]);
 
@@ -429,7 +443,15 @@ export async function PATCH(req: NextRequest) {
 
 
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+
+
+  if (!parsed.ok) return parsed.response;
+
+
+
+  const body = parsed.data;
 
   const id = String(body.id ?? "");
 
@@ -654,11 +676,15 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 
 
 export async function DELETE(req: NextRequest) {
+  try {
 
   const session = await requireSession([PanelRole.ADMIN]);
 
@@ -679,5 +705,8 @@ export async function DELETE(req: NextRequest) {
   await invalidateDashboardStats();
   return NextResponse.json({ ok: true });
 
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 

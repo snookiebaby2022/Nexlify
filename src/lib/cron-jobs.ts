@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
-import { listActiveConnections, countActiveConnections } from "./connections";
+import { StreamType } from "@prisma/client";
+import { listActiveConnections, countActiveConnections, deleteStaleConnections } from "./connections";
 import { importFromFolder } from "./import-media";
 import { syncEpgSource } from "./epg";
 import { enqueueAgentCommand, generateAgentToken } from "./stream-agent";
@@ -26,8 +27,14 @@ async function logCron(job: string, status: string, message?: string, durationMs
 export async function jobCleanupConnections() {
   const start = Date.now();
   try {
+    const deleted = await deleteStaleConnections();
     await listActiveConnections();
-    await logCron("cleanup_connections", "ok", undefined, Date.now() - start);
+    await logCron(
+      "cleanup_connections",
+      "ok",
+      deleted.count ? `removed ${deleted.count} stale connection(s)` : undefined,
+      Date.now() - start
+    );
   } catch (e) {
     await logCron("cleanup_connections", "error", String(e), Date.now() - start);
   }
@@ -139,16 +146,14 @@ export async function jobWatchFolders() {
       });
       if (pending > 0) continue;
 
-      const streamType =
+      const streamType: StreamType =
         folder.type === "SERIES"
-          ? "SERIES"
+          ? StreamType.SERIES
           : folder.type === "MOVIE"
-            ? "MOVIE"
+            ? StreamType.MOVIE
             : folder.type === "LIVE"
-              ? "LIVE"
-              : isRemoteM3uUrl(folder.path)
-                ? "MIXED"
-                : "MIXED";
+              ? StreamType.LIVE
+              : StreamType.MOVIE;
 
       await prisma.importJob.create({
         data: {

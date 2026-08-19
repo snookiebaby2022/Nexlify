@@ -5,11 +5,18 @@ import { generateAgentToken } from "@/lib/stream-agent";
 import fs from "fs";
 import path from "path";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const panelUrl = String(body.panelUrl ?? process.env.NEXT_PUBLIC_SERVER_URL ?? "").replace(/\/$/, "");
   const serverName = String(body.serverName ?? "Stream-1");
   const host = String(body.host ?? "").trim();
@@ -37,4 +44,7 @@ export async function POST(req: NextRequest) {
       "Save server — agent should appear online within 1–2 minutes",
     ],
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

@@ -6,6 +6,7 @@ import os from "os";
 import { execSync } from "child_process";
 import { sampleCpuPercent } from "@/lib/server-hardware";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 type ScaleMetrics = {
   cpu: number;
   memory: number;
@@ -99,10 +100,15 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
 
   if (body.action === "scale") {
     const target = Number(body.instances);
@@ -157,4 +163,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

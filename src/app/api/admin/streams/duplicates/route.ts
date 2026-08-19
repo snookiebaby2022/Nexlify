@@ -13,6 +13,7 @@ import {
   invalidateXtreamCategories,
 } from "@/lib/cache-invalidate";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 function parseKind(value: string | null): DuplicateKind | null {
   if (value === "movies" || value === "series" || value === "live") return value;
   return null;
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -64,4 +66,7 @@ export async function POST(req: NextRequest) {
   await invalidateXtreamCategories();
   await invalidateDashboardStats();
   return NextResponse.json({ ok: true, ...result });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

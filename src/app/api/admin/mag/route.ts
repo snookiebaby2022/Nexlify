@@ -7,6 +7,7 @@ import { logActivity } from "@/lib/lines";
 import { assertMagDeviceAccess } from "@/lib/device-access";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
 
 export async function GET() {
@@ -27,10 +28,16 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const mac = normalizeMac(String(body.mac ?? ""));
   if (!mac || mac.replace(/[^A-F0-9]/gi, "").length !== 12) {
     return NextResponse.json({ error: "Valid MAC address required" }, { status: 400 });
@@ -76,13 +83,22 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ device });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const id = String(body.id ?? "");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
@@ -105,9 +121,13 @@ export async function PATCH(req: NextRequest) {
     include: { line: { select: { username: true, id: true } } },
   });
   return NextResponse.json({ device });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -123,4 +143,7 @@ export async function DELETE(req: NextRequest) {
 
   await prisma.magDevice.delete({ where: { id } });
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { cacheDel } from "@/lib/cache";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -28,10 +29,16 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const sync = body.sync === true;
   const forceSync = body.forceSync === true;
   const codes: string[] = body.all
@@ -78,4 +85,7 @@ export async function POST(req: NextRequest) {
   await cacheDel("epg*");
 
   return NextResponse.json({ added, synced, errors: errors.slice(0, 20) });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

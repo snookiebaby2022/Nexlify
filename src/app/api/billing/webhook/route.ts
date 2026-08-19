@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleBillingWebhook, type BillingPayload } from "@/lib/billing";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const secret =
     req.headers.get("x-billing-secret") ??
     req.nextUrl.searchParams.get("secret") ??
@@ -17,4 +19,7 @@ export async function POST(req: NextRequest) {
   const result = await handleBillingWebhook(body, secret ?? body.secret ?? null);
   const status = result.ok ? 200 : result.error?.includes("secret") ? 401 : 400;
   return NextResponse.json(result, { status });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

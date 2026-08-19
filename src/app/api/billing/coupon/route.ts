@@ -8,6 +8,7 @@ import { redeemCouponCode, toCouponPublicView } from "@/lib/coupon-redeem";
 
 
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const DEFAULT_PUBLIC_CODE = "NEXLIFY50";
 
 
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest) {
 
 
 export async function POST(req: NextRequest) {
+  try {
 
   const settings = await getSettingGroup("billing");
 
@@ -172,11 +174,15 @@ export async function POST(req: NextRequest) {
 
   });
 
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 
 
 export async function PUT(req: NextRequest) {
+  try {
 
   const secret = req.headers.get("x-billing-secret");
 
@@ -225,5 +231,8 @@ export async function PUT(req: NextRequest) {
 
   });
 
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 

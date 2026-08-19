@@ -9,6 +9,7 @@ import { getPanelServerSettingsSafe, getResolvedRepoPath } from "@/lib/panel-ser
 import { readInstalledVersion } from "@/lib/panel-version";
 import { getPanelUpdateStatus } from "@/lib/panel-update-auto";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 /**
  * Remote update trigger — called by the marketing site admin.
  * Requires the panel API secret (x-panel-api-key or Authorization).
@@ -17,6 +18,7 @@ import { getPanelUpdateStatus } from "@/lib/panel-update-auto";
  *   { "force": true } — re-sync even when already on latest
  */
 export async function POST(req: NextRequest) {
+  try {
   const ok = await requirePanelApiKey(req);
   if (!ok) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -64,6 +66,9 @@ export async function POST(req: NextRequest) {
     latestVersion: status.latestVersion,
     forced: force,
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function GET(req: NextRequest) {

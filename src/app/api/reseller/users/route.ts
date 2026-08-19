@@ -5,6 +5,7 @@ import { PanelRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { canManageSubUsers, directSubUserWhere } from "@/lib/reseller-sub-users";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 function roleLabel(role: PanelRole) {
   if (role === PanelRole.SUB_RESELLER) return "sub-reseller";
   return "reseller";
@@ -32,7 +33,7 @@ function serializeUser(
     id: u.id,
     displayId,
     username: u.username,
-    password: u.passwordPlain ?? "",
+    password: "",
     email: u.email ?? "",
     role: u.role,
     roleLabel: roleLabel(u.role),
@@ -69,12 +70,18 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session || !canManageSubUsers(session.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const username = String(body.username ?? "").trim();
   const password = String(body.password ?? "");
   if (!username || !password) {
@@ -137,7 +144,6 @@ export async function POST(req: NextRequest) {
       data: {
         username,
         passwordHash: await bcrypt.hash(password, 12),
-        passwordPlain: password,
         email: body.email ? String(body.email).trim() : null,
         role: PanelRole.SUB_RESELLER,
         parentId: session.id,
@@ -179,13 +185,22 @@ export async function POST(req: NextRequest) {
     user: { id: user.id, username: user.username },
     bouquetCount,
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const id = String(body.id ?? "");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
@@ -211,7 +226,7 @@ export async function PATCH(req: NextRequest) {
     const passErr = validateLineCredential(plain, "password");
     if (passErr) return NextResponse.json({ error: passErr }, { status: 400 });
     data.passwordHash = await bcrypt.hash(plain, 12);
-    data.passwordPlain = plain;
+    data.passwordPlain = null;
   }
   if (body.groupId !== undefined) {
     const groupId =
@@ -233,12 +248,16 @@ export async function PATCH(req: NextRequest) {
       username: user.username,
       isActive: user.isActive,
       groupId: user.groupId,
-      password: user.passwordPlain ?? "",
+      password: typeof body.password === "string" && body.password.trim() ? body.password.trim() : "",
     },
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -259,4 +278,7 @@ export async function DELETE(req: NextRequest) {
 
   await prisma.panelUser.delete({ where: { id } });
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

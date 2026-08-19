@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import crypto from "crypto";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -20,10 +21,16 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const { userId, commissionRate } = body;
 
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
@@ -49,13 +56,22 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ affiliate });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const { id, commissionRate, isActive } = body;
 
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -69,4 +85,7 @@ export async function PATCH(req: NextRequest) {
   });
 
   return NextResponse.json({ affiliate });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

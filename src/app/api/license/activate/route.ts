@@ -10,16 +10,21 @@ import {
 } from "@/lib/license";
 import { licenseCookieSecure } from "@/lib/license/cookie-options";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 function panelHost(req: NextRequest): string {
   const host = req.headers.get("host") ?? "localhost";
   return host.split(":")[0].toLowerCase();
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const json = await parseJsonBody(req);
+  if (!json.ok) return json.response;
+  const body = json.data;
+
   const key = normalizeLicenseKeyInput(String(body.licenseKey ?? body.key ?? ""));
   if (!key) return NextResponse.json({ error: "licenseKey required" }, { status: 400 });
 
@@ -72,4 +77,7 @@ export async function POST(req: NextRequest) {
     }
   }
   return res;
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

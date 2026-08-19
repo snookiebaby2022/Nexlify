@@ -6,6 +6,7 @@ import { parseAvatarConfig } from "@/lib/avatar-config";
 import { validatePanelPasswordChange } from "@/lib/panel-password";
 import { Prisma } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession();
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -31,17 +32,22 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession();
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const data: {
     displayName?: string | null;
     email?: string | null;
     avatarUrl?: string | null;
     avatarConfig?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
     passwordHash?: string;
-    passwordPlain?: string;
   } = {};
 
   if (body.displayName !== undefined) data.displayName = body.displayName || null;
@@ -69,7 +75,6 @@ export async function PATCH(req: NextRequest) {
     if (!ok) return NextResponse.json({ error: "Current password incorrect" }, { status: 400 });
     const plain = String(body.newPassword).trim();
     data.passwordHash = await bcrypt.hash(plain, 12);
-    data.passwordPlain = plain;
   }
 
   const user = await prisma.panelUser.update({
@@ -87,4 +92,7 @@ export async function PATCH(req: NextRequest) {
     },
   });
   return NextResponse.json({ user });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

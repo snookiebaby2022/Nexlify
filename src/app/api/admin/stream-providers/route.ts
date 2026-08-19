@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { probeStreamProvider, validateProviderInput } from "@/lib/stream-provider-probe";
 import { PanelRole, Prisma } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 function prismaError(e: unknown) {
   if (e instanceof Prisma.PrismaClientKnownRequestError) {
     if (e.code === "P2025") return { status: 404, error: "Provider not found" };
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -114,9 +116,13 @@ export async function POST(req: NextRequest) {
     const err = prismaError(e);
     return NextResponse.json({ error: err.error }, { status: err.status });
   }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -224,9 +230,13 @@ export async function PATCH(req: NextRequest) {
     const err = prismaError(e);
     return NextResponse.json({ error: err.error }, { status: err.status });
   }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -239,5 +249,8 @@ export async function DELETE(req: NextRequest) {
   } catch (e) {
     const err = prismaError(e);
     return NextResponse.json({ error: err.error }, { status: err.status });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getPortalSession } from "@/lib/portal-session";
 import { generateLinePassword, MIN_LINE_CREDENTIAL_LENGTH } from "@/lib/credential-generate";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   const session = await getPortalSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -34,9 +36,13 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PUT(req: NextRequest) {
+  try {
   const session = await getPortalSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -56,4 +62,7 @@ export async function PUT(req: NextRequest) {
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

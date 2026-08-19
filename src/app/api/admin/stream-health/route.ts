@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole, StreamType } from "@prisma/client";
 import { probeStreamUrl } from "@/lib/stream-probe-server";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -90,11 +91,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
+
     const streamId = String(body.streamId ?? "");
     if (!streamId) return NextResponse.json({ error: "streamId required" }, { status: 400 });
 
@@ -128,5 +133,8 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

@@ -14,6 +14,7 @@ import {
   type BackupJob,
 } from "@/lib/backup-job";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 function backupDirFromSettings(backup: { localPath?: unknown }) {
   const rawPath = String(backup.localPath ?? "").trim();
   return path.resolve(
@@ -141,6 +142,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -189,9 +191,13 @@ export async function POST(req: NextRequest) {
       ? "A backup is already in progress — showing live status."
       : "Backup started in the background. Progress will update until complete.",
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PUT(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -200,7 +206,12 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Restore upload disabled in settings" }, { status: 403 });
   }
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   let snapshot = body.snapshot as Record<string, unknown> | undefined;
 
   if (body.encrypted && body.data && body.password) {
@@ -257,9 +268,13 @@ export async function PUT(req: NextRequest) {
         ? "Full backup restored successfully."
         : `Restored with ${result.errors.length} error(s). Check errors array.`,
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -284,5 +299,8 @@ export async function DELETE(req: NextRequest) {
       { error: e instanceof Error ? e.message : "Delete failed" },
       { status: 500 }
     );
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

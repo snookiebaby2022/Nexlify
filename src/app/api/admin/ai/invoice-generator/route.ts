@@ -4,6 +4,7 @@ import { PanelRole } from "@prisma/client";
 import { aiChatJSON, isAiConfigured } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 interface InvoiceResult {
   invoiceDescription: string;
   lineItems: { description: string; amount: number }[];
@@ -22,7 +23,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+
+    if (!parsed.ok) return parsed.response;
+
+    const body = parsed.data;
+
     const { lineId, template, language } = body as {
       lineId?: string;
       template?: string;

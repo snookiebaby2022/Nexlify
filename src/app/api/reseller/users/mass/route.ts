@@ -5,14 +5,21 @@ import { PanelRole } from "@prisma/client";
 import { canManageSubUsers, directSubUserWhere } from "@/lib/reseller-sub-users";
 import { logActivity } from "@/lib/lines";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 /** Mass enable / disable / setGroup for the reseller’s direct sub-users only. */
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session || !canManageSubUsers(session.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const ids: string[] = Array.isArray(body.ids) ? body.ids.map(String) : [];
   const action = String(body.action ?? "");
   if (!ids.length) return NextResponse.json({ error: "ids required" }, { status: 400 });
@@ -65,4 +72,7 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ ok: true, count });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

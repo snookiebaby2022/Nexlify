@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { aiChatJSON, isAiConfigured } from "@/lib/ai";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 interface BouquetRecommendation {
   name: string;
   streams: { streamId: string; streamName: string; reason: string }[];
@@ -12,6 +13,7 @@ interface BouquetRecommendation {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -23,7 +25,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
+
     const description = String(body.description ?? "").trim();
     if (!description) {
       return NextResponse.json({ error: "description is required" }, { status: 400 });
@@ -124,5 +129,8 @@ export async function POST(req: NextRequest) {
     const message = e instanceof Error ? e.message : "Unknown error";
     console.error("Bouquet builder error:", message);
     return NextResponse.json({ error: "Failed to generate bouquet recommendation" }, { status: 500 });
+  }
+  } catch (e) {
+    return apiMutationErrorResponse(e);
   }
 }

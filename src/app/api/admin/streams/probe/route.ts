@@ -6,6 +6,7 @@ import { normalizeStreamSource } from "@/lib/stream-source";
 import { resolveSourceToStreamUrl, getMediaImportRoot } from "@/lib/import-media";
 import { PanelRole } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 function resolveProbeUrl(raw: string): string {
   const normalized = normalizeStreamSource(raw);
   if (!normalized) return "";
@@ -14,10 +15,16 @@ function resolveProbeUrl(raw: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   let url = String(body.url ?? "").trim();
 
   if (!url && body.streamId) {
@@ -47,4 +54,7 @@ export async function POST(req: NextRequest) {
 
   const probe = await probeStreamUrl(url, { fast: body.fast === true });
   return NextResponse.json({ probe, stream: { streamUrl: url } });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

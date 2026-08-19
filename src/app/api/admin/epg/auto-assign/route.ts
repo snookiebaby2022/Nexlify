@@ -4,11 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole, StreamType } from "@prisma/client";
 import { autoAssignEpgToStream, findBestEpgMatch, listEpgChannelCandidates } from "@/lib/epg-auto-match";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 /**
  * POST { streamId?, name?, channelId?, force? }
  * Auto-match EPG from loaded guide channels (provider/XMLTV imports).
  */
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -65,4 +67,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "No close EPG match for this name." });
   }
   return NextResponse.json({ ok: true, match });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

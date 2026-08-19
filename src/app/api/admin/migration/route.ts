@@ -1,3 +1,4 @@
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 /**
  * DEPRECATED: This endpoint manages MigrationJob records, but no worker processes them.
  * Actual migrations run synchronously via POST /api/admin/migrate.
@@ -37,10 +38,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const source = body.source as MigrationSource;
   if (!source) return NextResponse.json({ error: "source required" }, { status: 400 });
 
@@ -66,13 +73,22 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ job });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const id = String(body.id ?? "");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
@@ -92,4 +108,7 @@ export async function PATCH(req: NextRequest) {
   });
 
   return NextResponse.json({ job: updated });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

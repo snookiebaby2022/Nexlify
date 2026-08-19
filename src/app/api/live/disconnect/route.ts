@@ -4,7 +4,9 @@ import { getLineForPlaybackAuth } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
 import { removeConnection } from "@/lib/connections";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
+  try {
   let body: { username?: string; password?: string; streamId?: string } | null = null;
 
   try {
@@ -31,4 +33,7 @@ export async function POST(req: NextRequest) {
   const ip = getClientIp(req) ?? "unknown";
   await removeConnection(line.id, body.streamId, ip);
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

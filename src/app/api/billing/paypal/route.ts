@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSettingGroup } from "@/lib/panel-settings";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 /** PayPal Orders v2 create-order stub wired to panel billing settings. */
 export async function POST(req: NextRequest) {
+  try {
   const billing = await getSettingGroup("billing");
   const clientId = String(billing.paypalClientId ?? "").trim();
   const clientSecret = String(billing.paypalClientSecret ?? "").trim();
@@ -83,4 +85,7 @@ export async function POST(req: NextRequest) {
     sandbox,
     couponCode,
   });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }

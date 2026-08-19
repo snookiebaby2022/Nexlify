@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole, Prisma, StreamType } from "@prisma/client";
 
+import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 type SeriesAggRow = {
   id: string;
   name: string;
@@ -159,10 +160,16 @@ export async function GET(req: NextRequest) {
 
 /** Enable/disable all streams belonging to a series label. */
 export async function PATCH(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const body = await req.json();
+  const parsed = await parseJsonBody(req);
+
+  if (!parsed.ok) return parsed.response;
+
+  const body = parsed.data;
+
   const id = String(body.id ?? "").trim();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
@@ -188,10 +195,14 @@ export async function PATCH(req: NextRequest) {
   });
 
   return NextResponse.json({ ok: true, updated: result.count });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
 
 /** Delete an entire series (parent + all episodes with the same seriesName). */
 export async function DELETE(req: NextRequest) {
+  try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -212,4 +223,7 @@ export async function DELETE(req: NextRequest) {
   });
 
   return NextResponse.json({ ok: true, deleted: result.count });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
 }
