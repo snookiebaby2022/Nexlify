@@ -8,7 +8,7 @@ import {
   scheduleZapPrefetch,
   schedulePlaybackUpstreamWarm,
 } from "@/lib/anti-freeze";
-import { getLineForPlaybackAuth, resolvePlaybackUrlCandidatesForLine } from "@/lib/line-playback";
+import { getLineForPlaybackAuth, resolvePlaybackUrlCandidatesForLine, type LinePlaybackAuth } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
@@ -79,7 +79,7 @@ type LiveAuthOk = {
   streamId: string;
   requestStreamKey: string;
   cleanId: string;
-  line: Awaited<ReturnType<typeof getLineForPlaybackAuth>>;
+  line: LinePlaybackAuth;
   ip: string | null;
   ua: string | undefined;
 };
@@ -196,7 +196,6 @@ export async function GET(
   const auth = await authorizeLivePlayback(req, ctx);
   if (!auth.ok) return auth.response;
   const { username, password, streamId, requestStreamKey, cleanId, line, ip, ua } = auth;
-  if (!line) return iptvText("Unauthorized", { status: 401 });
 
   const antiFreeze = await getAntiFreezeSettings();
   let candidates = await resolvePlaybackUrlCandidatesForLine(
