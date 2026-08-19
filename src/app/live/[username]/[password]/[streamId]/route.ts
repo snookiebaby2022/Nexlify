@@ -80,7 +80,7 @@ type LiveAuthOk = {
   requestStreamKey: string;
   cleanId: string;
   line: LinePlaybackAuth;
-  ip: string | null;
+  ip: string | undefined;
   ua: string | undefined;
 };
 
