@@ -8,7 +8,7 @@ const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
 export const HLS_PLAYLIST_CONTENT_TYPE = "application/x-mpegURL";
 
 /** Real provider .m3u8 (BBC One FHD). Guessed Xtream suffixes get a much shorter probe. */
-export const HLS_NATIVE_PROBE_MS = 2_000;
+export const HLS_NATIVE_PROBE_MS = 800;
 export const HLS_GUESSED_PROBE_MS = 800;
 
 /**

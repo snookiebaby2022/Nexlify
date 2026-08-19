@@ -117,7 +117,7 @@ export async function createHlsToMpegTsStream(opts: {
     "-probesize",
     "32768",
     "-analyzeduration",
-    "500000",
+    "100000",
     ...inputArgs,
     "-map",
     "0:v:0?",

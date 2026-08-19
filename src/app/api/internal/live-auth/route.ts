@@ -70,15 +70,6 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Max connections reached", { status: 403 });
   }
 
-  if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD") {
-    void trackConnection({
-      lineId: line.id,
-      streamId: cleanId,
-      ip: ip ?? "",
-      userAgent: ua,
-    });
-  }
-
   const antiFreeze = await getAntiFreezeSettings();
   const ctx = { clientIp: ip, userAgent: ua };
 
@@ -105,6 +96,15 @@ export async function GET(req: NextRequest) {
 
   if (!upstream || !isSafeUpstreamUrl(upstream)) {
     return new NextResponse(null, { status: 204, headers: { "X-Nexlify-Passthrough": "1" } });
+  }
+
+  if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD") {
+    void trackConnection({
+      lineId: line.id,
+      streamId: cleanId,
+      ip: ip ?? "",
+      userAgent: ua,
+    });
   }
 
   return new NextResponse(null, {

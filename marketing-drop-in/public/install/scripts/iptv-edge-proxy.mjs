@@ -158,7 +158,7 @@ function authLive(clientReq) {
   });
 }
 
-function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft }) {
+function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, listenPort, proto }) {
   let parsed;
   try {
     parsed = new URL(targetUrl);
@@ -200,12 +200,37 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft }) 
         clientRes.end("Bad upstream redirect");
         return;
       }
-      pipeUpstream(next, clientReq, clientRes, { live, redirectsLeft: redirectsLeft - 1 });
+      pipeUpstream(next, clientReq, clientRes, { live, redirectsLeft: redirectsLeft - 1, listenPort, proto });
       return;
     }
     if (live) {
-      clientRes.writeHead(200, liveTsHeaders());
-      upRes.pipe(clientRes);
+      const ct = String(upRes.headers["content-type"] || "").toLowerCase();
+      const loc = String(upRes.headers.location || "");
+      if (/mpegurl|x-mpegurl/.test(ct) || /\.m3u8/i.test(loc)) {
+        upRes.resume();
+        up.destroy();
+        forward(clientReq, clientRes, { listenPort, proto });
+        return;
+      }
+      let sent = false;
+      upRes.once("data", (chunk) => {
+        const head = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        if (head.subarray(0, 7).toString("ascii") === "#EXTM3U") {
+          up.destroy();
+          if (!clientRes.headersSent) forward(clientReq, clientRes, { listenPort, proto });
+          return;
+        }
+        sent = true;
+        clientRes.writeHead(200, liveTsHeaders());
+        clientRes.write(head);
+        upRes.pipe(clientRes);
+      });
+      upRes.once("end", () => {
+        if (!sent && !clientRes.headersSent) {
+          clientRes.writeHead(502, { "content-type": "text/plain" });
+          clientRes.end("Empty upstream");
+        }
+      });
       return;
     }
     clientRes.writeHead(status || 502, upRes.headers);
@@ -260,7 +285,7 @@ async function onRequest(clientReq, clientRes, ctx) {
       clientRes.end();
       return;
     }
-    pipeUpstream(auth.upstream, clientReq, clientRes, { live: auth.live, redirectsLeft: 5 });
+    pipeUpstream(auth.upstream, clientReq, clientRes, { live: auth.live, redirectsLeft: 5, ...ctx });
   } catch {
     forward(clientReq, clientRes, ctx);
   }
