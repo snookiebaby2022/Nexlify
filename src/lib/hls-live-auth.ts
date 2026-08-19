@@ -47,7 +47,10 @@ export async function authorizeHlsLiveRequest(
   }
 
   const ua = req.headers.get("user-agent") ?? undefined;
-  const deny = await assertPlaybackAllowed(asPlaybackGuardLine(line), ip, ua);
+  const deny = await assertPlaybackAllowed(asPlaybackGuardLine(line), ip, ua, {
+    streamId: resolvedStreamId,
+    hotPath: true,
+  });
   if (deny) {
     const status =
       deny === "rate" || deny === "ddos" ? 429 : deny === "connections" || deny === "ip" || deny === "kicked" ? 403 : 403;
@@ -66,7 +69,7 @@ export async function authorizeHlsLiveRequest(
       (await resolvePlaybackUrlForLine(
         line.id,
         resolvedStreamId,
-        { clientIp: ip, userAgent: ua },
+        { clientIp: ip, userAgent: ua, skipGeo: true },
         antiFreeze.playbackUrlCacheTtlSec
       )) ?? "";
     if (rootUpstream) {

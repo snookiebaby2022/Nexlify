@@ -107,7 +107,7 @@ export function liveMpegTsResponseHeaders(
     "Content-Type": normalized.includes("mpegurl") ? "video/mp2t" : normalized,
     "Cache-Control": "no-cache, no-store, no-transform",
     "Access-Control-Allow-Origin": "*",
-    Connection: "keep-alive",
+    Connection: "close",
     "Accept-Ranges": "none",
     "X-Accel-Buffering": "no",
   };

@@ -115,7 +115,7 @@ function liveTsHeaders() {
   return {
     "Content-Type": "video/mp2t",
     "Cache-Control": "no-cache, no-store, no-transform",
-    Connection: "keep-alive",
+    Connection: "close",
     "Accept-Ranges": "none",
     "Access-Control-Allow-Origin": "*",
     "X-Accel-Buffering": "no",
@@ -212,25 +212,10 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         forward(clientReq, clientRes, { listenPort, proto });
         return;
       }
-      let sent = false;
-      upRes.once("data", (chunk) => {
-        const head = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        if (head.subarray(0, 7).toString("ascii") === "#EXTM3U") {
-          up.destroy();
-          if (!clientRes.headersSent) forward(clientReq, clientRes, { listenPort, proto });
-          return;
-        }
-        sent = true;
-        clientRes.writeHead(200, liveTsHeaders());
-        clientRes.write(head);
-        upRes.pipe(clientRes);
-      });
-      upRes.once("end", () => {
-        if (!sent && !clientRes.headersSent) {
-          clientRes.writeHead(502, { "content-type": "text/plain" });
-          clientRes.end("Empty upstream");
-        }
-      });
+      // Send MPEG-TS headers immediately. Waiting to sniff the body stalls VLC
+      // (it aborts if 0x47 is not preceded by a fast 200 video/mp2t).
+      clientRes.writeHead(200, liveTsHeaders());
+      upRes.pipe(clientRes);
       return;
     }
     clientRes.writeHead(status || 502, upRes.headers);

@@ -62,6 +62,8 @@ export type PlaybackGuardOptions = {
   listingOnly?: boolean;
   /** When set, same IP+stream reconnect is allowed even at max connections (Smarters channel replay). */
   streamId?: string;
+  /** HLS media segments: skip geo/VPN/reputation (those add seconds per segment). */
+  hotPath?: boolean;
 };
 
 export async function assertPlaybackAllowed(
@@ -86,6 +88,19 @@ async function assertPlaybackAllowedInner(
   // Hard kick deny TTL — block reconnect after admin/reseller Kick
   const { isSessionKicked } = await import("@/lib/connections");
   if (await isSessionKicked(line.id, clientIp)) return "kicked";
+
+  if (options?.hotPath) {
+    if (!checkLineIpAccess(line, clientIp)) return "ip";
+    if (!checkLineUserAgent(line, userAgent)) return "user_agent";
+    if (!options?.listingOnly) {
+      const hasCapacity = await lineHasConnectionCapacity(line.id, line.maxConnections, {
+        streamId: options?.streamId,
+        clientIp,
+      });
+      if (!hasCapacity) return "connections";
+    }
+    return null;
+  }
 
   if (clientIp) {
     const ddos = await checkDdosShield(clientIp);

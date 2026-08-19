@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
   }
 
   const antiFreeze = await getAntiFreezeSettings();
-  const ctx = { clientIp: ip, userAgent: ua };
+  const ctx = { clientIp: ip, userAgent: ua, skipGeo: true };
 
   let upstream = "";
   if (parsed.spliceLiveTs) {

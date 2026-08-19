@@ -85,6 +85,8 @@ export type LinePlaybackAuth = {
 export type PlaybackContext = {
   clientIp?: string;
   userAgent?: string;
+  /** Skip geo/LB lookups on the zap path — those can add 1–2s before the first byte. */
+  skipGeo?: boolean;
 };
 
 export async function getLineForPlaybackAuth(username: string): Promise<LinePlaybackAuth | null> {
@@ -149,9 +151,8 @@ export async function resolvePlaybackUrlForLine(
     include: { provider: true, server: true, category: { select: { name: true } } },
   });
   if (!stream) return null;
-  const effectiveStream = ctx?.clientIp
-    ? await preferGeoMatchedStream(stream, lineId, ctx.clientIp)
-    : stream;
+  const effectiveStream =
+    ctx?.skipGeo || !ctx?.clientIp ? stream : await preferGeoMatchedStream(stream, lineId, ctx.clientIp);
   if (lineRow && !lineCanWatchStream({ canWatchAdult: lineRow.canWatchAdult }, effectiveStream)) return null;
 
   const { ensureOnDemandStreamStarted } = await import("@/lib/stream-on-demand");
@@ -229,9 +230,8 @@ export async function resolvePlaybackUrlCandidatesForLine(
     include: { provider: true, server: true, category: { select: { name: true } } },
   });
   if (!stream) return [];
-  const effectiveStream = ctx?.clientIp
-    ? await preferGeoMatchedStream(stream, lineId, ctx.clientIp)
-    : stream;
+  const effectiveStream =
+    ctx?.skipGeo || !ctx?.clientIp ? stream : await preferGeoMatchedStream(stream, lineId, ctx.clientIp);
   if (lineRow && !lineCanWatchStream({ canWatchAdult: lineRow.canWatchAdult }, effectiveStream)) {
     return [];
   }

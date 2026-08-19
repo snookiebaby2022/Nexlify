@@ -197,7 +197,7 @@ export async function GET(
   let candidates = await resolvePlaybackUrlCandidatesForLine(
     line.id,
     cleanId,
-    { clientIp: ip, userAgent: ua },
+    { clientIp: ip, userAgent: ua, skipGeo: true },
     antiFreeze.playbackUrlCacheTtlSec
   );
   if (!candidates.length) return iptvText("Not found", { status: 404 });
@@ -235,19 +235,6 @@ export async function GET(
       return hlsHeaders(body);
     };
 
-    for (const playbackUrl of candidates) {
-      if (!isHlsPlaybackUrl(playbackUrl)) continue;
-      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, HLS_NATIVE_PROBE_MS);
-      if (!manifest.ok) {
-        lastError = manifest.detail || "Stream unavailable";
-        if (!clientDirectHls && shouldOfferClientDirectHls(manifest.status, manifest.detail)) {
-          clientDirectHls = playbackUrl;
-        }
-        continue;
-      }
-      return returnNativeHls(playbackUrl, manifest);
-    }
-
     const tsUrls = candidates.filter((u) => !isHlsPlaybackUrl(u));
     const existingPlaylist = readReadyPackagerPlaylist(cleanId);
     if (existingPlaylist) {
@@ -260,6 +247,19 @@ export async function GET(
     if (tsUrls[0]) {
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), tsUrls[0], 3600);
       return hlsHeaders(buildNativeTsHlsManifest(panelOrigin, username, password, requestStreamKey));
+    }
+
+    for (const playbackUrl of candidates) {
+      if (!isHlsPlaybackUrl(playbackUrl)) continue;
+      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, HLS_NATIVE_PROBE_MS);
+      if (!manifest.ok) {
+        lastError = manifest.detail || "Stream unavailable";
+        if (!clientDirectHls && shouldOfferClientDirectHls(manifest.status, manifest.detail)) {
+          clientDirectHls = playbackUrl;
+        }
+        continue;
+      }
+      return returnNativeHls(playbackUrl, manifest);
     }
 
     if (clientDirectHls) {
