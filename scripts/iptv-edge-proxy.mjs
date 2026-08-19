@@ -150,15 +150,24 @@ function connectOriginSocket(targetUrl, proxy, timeoutMs) {
   });
 }
 
-function shouldSniffLiveTs(upRes, clientReq) {
+function shouldSniffLiveTs(upRes) {
   const ct = String(upRes.headers["content-type"] || "").toLowerCase();
-  const ua = String(clientReq.headers["user-agent"] || "").toLowerCase();
-  if (/vlc|libvlc/.test(ua)) return true;
   if (ct.includes("html") || ct.includes("json") || ct.includes("xml") || ct.startsWith("text/")) return true;
   if (!ct || ct.includes("octet-stream") || ct.includes("mp2t") || ct.startsWith("video/") || ct.startsWith("audio/")) {
     return false;
   }
   return true;
+}
+
+function normalizeUpstreamUrl(url) {
+  try {
+    const u = new URL(String(url || "").trim());
+    if (u.protocol === "https:" && u.port === "443") u.port = "";
+    if (u.protocol === "http:" && u.port === "80") u.port = "";
+    return u.toString();
+  } catch {
+    return url;
+  }
 }
 
 function looksLikeMpegTs(buf) {
@@ -403,10 +412,15 @@ function serveHlsPlaylist(streamId, clientReq, clientRes) {
 }
 
 function pipeLiveMpegTs(upRes, clientReq, clientRes) {
+  if (!shouldSniffLiveTs(upRes)) {
+    clientRes.writeHead(200, liveTsHeaders());
+    upRes.pipe(clientRes);
+    return;
+  }
+
   const chunks = [];
   let total = 0;
   let headersSent = false;
-  const started = Date.now();
 
   const fail = (msg) => {
     upRes.destroy();
@@ -468,7 +482,8 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes) {
   });
 }
 
-function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, listenPort, proto, proxy }) {
+function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, listenPort, proto, proxy, altProtocolLeft }) {
+  targetUrl = normalizeUpstreamUrl(targetUrl);
   let parsed;
   try {
     parsed = new URL(targetUrl);
@@ -525,11 +540,35 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         clientRes.end("Bad upstream redirect");
         return;
       }
-      pipeUpstream(next, clientReq, clientRes, { live, redirectsLeft: redirectsLeft - 1, listenPort, proto, proxy });
+      pipeUpstream(next, clientReq, clientRes, {
+        live,
+        redirectsLeft: redirectsLeft - 1,
+        listenPort,
+        proto,
+        proxy,
+        altProtocolLeft,
+      });
       return;
     }
     if (status < 200 || status >= 300) {
       upRes.resume();
+      if (altProtocolLeft > 0) {
+        try {
+          const alt = new URL(parsed.toString());
+          alt.protocol = alt.protocol === "https:" ? "http:" : "https:";
+          pipeUpstream(alt.toString(), clientReq, clientRes, {
+            live,
+            redirectsLeft,
+            listenPort,
+            proto,
+            proxy,
+            altProtocolLeft: altProtocolLeft - 1,
+          });
+          return;
+        } catch {
+          /* fall through */
+        }
+      }
       if (!clientRes.headersSent) {
         clientRes.writeHead(status || 502, { "content-type": "text/plain" });
       }
@@ -553,6 +592,23 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
   });
   up.on("timeout", () => up.destroy(new Error("upstream timeout")));
   up.on("error", (err) => {
+    if (altProtocolLeft > 0 && !clientRes.headersSent) {
+      try {
+        const alt = new URL(parsed.toString());
+        alt.protocol = alt.protocol === "https:" ? "http:" : "https:";
+        pipeUpstream(alt.toString(), clientReq, clientRes, {
+          live,
+          redirectsLeft,
+          listenPort,
+          proto,
+          proxy,
+          altProtocolLeft: altProtocolLeft - 1,
+        });
+        return;
+      } catch {
+        /* fall through */
+      }
+    }
     if (!clientRes.headersSent) {
       clientRes.writeHead(502, { "content-type": "text/plain" });
     }
@@ -685,6 +741,7 @@ async function onRequest(clientReq, clientRes, ctx) {
     pipeUpstream(auth.upstream, clientReq, clientRes, {
       live: auth.live,
       redirectsLeft: 5,
+      altProtocolLeft: 1,
       proxy: auth.outboundProxy,
       ...ctx,
     });

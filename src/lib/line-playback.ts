@@ -1,6 +1,7 @@
 import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { lineIsPlayable, type Line } from "@/lib/lines";
+import { expandHlsPlaybackCandidates } from "@/lib/hls-playback";
 import {
   listStreamPlaybackUrls,
   resolveStreamPlaybackUrl,
@@ -280,10 +281,11 @@ export async function resolvePlaybackUrlCandidatesForLine(
       })
     );
   }
-  await cacheSet(cacheKey, signed, ttl);
+  const expanded = expandHlsPlaybackCandidates(signed);
+  await cacheSet(cacheKey, expanded, ttl);
   // Keep single-URL cache in sync for zap prefetch / redirects
-  if (signed[0]) await cacheSet(`playback:url:${lineId}:${streamId}`, signed[0], ttl);
-  return signed;
+  if (expanded[0]) await cacheSet(`playback:url:${lineId}:${streamId}`, expanded[0], ttl);
+  return expanded;
 }
 
 export async function resolveLivePlaybackRedirect(

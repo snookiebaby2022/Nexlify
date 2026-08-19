@@ -6,6 +6,7 @@ import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 import { hlsStreamDir } from "@/lib/hls-disk";
 import type { OutboundProxy } from "@/lib/outbound-proxy";
 import { ffmpegHttpProxyArg } from "@/lib/outbound-proxy";
+import { normalizeUpstreamStreamUrl } from "@/lib/resolve-stream-url";
 
 /** Short segments so the first playlist is ready before XCIPTV's ~10s HLS timeout. */
 const HLS_TIME_SEC = 1;
@@ -215,6 +216,7 @@ async function spawnPackager(
     outboundProxy?: OutboundProxy | null;
   }
 ): Promise<PackagerSession | null> {
+  upstreamUrl = normalizeUpstreamStreamUrl(upstreamUrl);
   const ffmpegPath = await getFfmpegPath();
   if (!(await binExists(ffmpegPath))) return null;
 

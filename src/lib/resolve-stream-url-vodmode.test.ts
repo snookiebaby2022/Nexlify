@@ -44,7 +44,7 @@ describe("listStreamPlaybackUrls", () => {
       },
     } as unknown as StreamWithProvider;
     const urls = listStreamPlaybackUrls(stream);
-    assert.equal(urls[0], "https://junki3monk3y.com:443/Blade2nd/PaaJhvNbqX/602");
+    assert.equal(urls[0], "https://junki3monk3y.com/Blade2nd/PaaJhvNbqX/602");
     assert.ok(urls.includes("http://zee-portal.xyz:80/ghostface/bHwC552glfki2026/238103"));
     assert.ok(urls.includes("http://tinypanel.info:8080/17391"));
   });

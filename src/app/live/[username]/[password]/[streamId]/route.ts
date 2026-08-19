@@ -25,6 +25,8 @@ import {
   rewritePackagerPlaylist,
   buildClientDirectHlsMaster,
   shouldOfferClientDirectHls,
+  buildNativeTsHlsManifest,
+  expandHlsPlaybackCandidates,
   UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
@@ -229,6 +231,10 @@ export async function GET(
 
   if (wantsM3u8) {
     const panelOrigin = serverBaseUrl(req.url, req.headers);
+    const expanded = expandHlsPlaybackCandidates(candidates);
+    const tsUrls = expanded.filter((u) => !isHlsPlaybackUrl(u));
+    const hlsUrls = expanded.filter((u) => isHlsPlaybackUrl(u));
+
     const returnNativeHls = async (playbackUrl: string, manifest: { body: string; finalUrl: string }) => {
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
       const relay = (url: string) =>
@@ -240,33 +246,19 @@ export async function GET(
       return hlsHeaders(body);
     };
 
-    const tsUrls = candidates.filter((u) => !isHlsPlaybackUrl(u));
-    const existingPlaylist = readReadyPackagerPlaylist(cleanId);
-    if (existingPlaylist) {
-      if (tsUrls[0]) await cacheSet(hlsRelayCacheKey(line.id, cleanId), tsUrls[0], 3600);
+    // XUI direct_source: MPEG-TS upstream + HLS client → instant EVENT playlist → panel .ts (no ffmpeg).
+    if (tsUrls[0]) {
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), tsUrls[0], 3600);
+      if (antiFreeze.fastZapEnabled) {
+        schedulePlaybackUpstreamWarm(tsUrls[0], UPSTREAM_HLS_UA);
+      }
       return hlsHeaders(
-        rewritePackagerPlaylist(existingPlaylist, panelOrigin, username, password, requestStreamKey)
+        buildNativeTsHlsManifest(panelOrigin, username, password, requestStreamKey)
       );
     }
 
-    if (tsUrls[0]) {
-      await cacheSet(hlsRelayCacheKey(line.id, cleanId), tsUrls[0], 3600);
-      const packed = await ensureDiskHls({
-        streamId: cleanId,
-        upstreamUrl: tsUrls[0],
-        userAgent: UPSTREAM_HLS_UA,
-        outboundProxy,
-      });
-      if (packed.ok) {
-        return hlsHeaders(
-          rewritePackagerPlaylist(packed.playlist, panelOrigin, username, password, requestStreamKey)
-        );
-      }
-      lastError = packed.error;
-    }
-
-    for (const playbackUrl of candidates) {
-      if (!isHlsPlaybackUrl(playbackUrl)) continue;
+    // read_native_hls: provider .m3u8 before local remux.
+    for (const playbackUrl of hlsUrls) {
       const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, HLS_NATIVE_PROBE_MS);
       if (!manifest.ok) {
         lastError = manifest.detail || "Stream unavailable";
@@ -276,6 +268,13 @@ export async function GET(
         continue;
       }
       return returnNativeHls(playbackUrl, manifest);
+    }
+
+    const existingPlaylist = readReadyPackagerPlaylist(cleanId);
+    if (existingPlaylist) {
+      return hlsHeaders(
+        rewritePackagerPlaylist(existingPlaylist, panelOrigin, username, password, requestStreamKey)
+      );
     }
 
     if (clientDirectHls) {
@@ -289,10 +288,10 @@ export async function GET(
 
   void trackConnection({ lineId: line.id, streamId: cleanId, ip: ip ?? "", userAgent: ua });
 
-  const mpegTsOrder = [
+  const mpegTsOrder = expandHlsPlaybackCandidates([
     ...candidates.filter((u) => !isHlsPlaybackUrl(u)),
     ...candidates.filter((u) => isHlsPlaybackUrl(u)),
-  ];
+  ]).filter((u, i, arr) => arr.indexOf(u) === i);
 
   for (let i = 0; i < mpegTsOrder.length; i++) {
     const playbackUrl = mpegTsOrder[i]!;

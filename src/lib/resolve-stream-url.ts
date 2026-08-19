@@ -21,10 +21,36 @@ export function normalizeUpstreamStreamUrl(url: string): string {
       u.port = "";
       return u.toString();
     }
-    return t;
+    return u.toString();
   } catch {
     return t;
   }
+}
+
+/** XUI-style: try normalized URL first, then the alternate scheme if playback fails. */
+export function alternateProtocolUrls(url: string): string[] {
+  const normalized = normalizeUpstreamStreamUrl(url);
+  const out: string[] = [];
+  const add = (u: string) => {
+    const t = u.trim();
+    if (t && !out.includes(t)) out.push(t);
+  };
+  add(normalized);
+  try {
+    const u = new URL(normalized);
+    if (u.protocol === "https:") {
+      const http = new URL(u.toString());
+      http.protocol = "http:";
+      add(http.toString());
+    } else if (u.protocol === "http:") {
+      const https = new URL(u.toString());
+      https.protocol = "https:";
+      add(https.toString());
+    }
+  } catch {
+    add(url);
+  }
+  return out;
 }
 
 function resolveEffectiveStreamUrl(stream: StreamWithProvider, streamUrl: string, seed?: string): string {
@@ -100,10 +126,16 @@ export function listStreamPlaybackUrls(stream: StreamWithProvider, seed?: string
   for (const variant of parseBitrates(stream.bitrates)) {
     add(variant.path);
   }
-  if (stream.lastProbeOk === false && out.length > 1) {
-    return [out[1]!, out[0]!, ...out.slice(2)];
+  const withAlternates: string[] = [];
+  for (const u of out) {
+    for (const alt of alternateProtocolUrls(u)) {
+      if (!withAlternates.includes(alt)) withAlternates.push(alt);
+    }
   }
-  return out;
+  if (stream.lastProbeOk === false && withAlternates.length > 1) {
+    return [withAlternates[1]!, withAlternates[0]!, ...withAlternates.slice(2)];
+  }
+  return withAlternates;
 }
 export function vodModeLabel(mode: VodMode | string): string {
   switch (mode) {
