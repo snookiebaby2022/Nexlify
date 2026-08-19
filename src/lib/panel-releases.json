@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.12",
+  "latestVersion": "2.0.13",
   "releases": [
+    {
+      "version": "2.0.13",
+      "date": "2026-08-19",
+      "channel": "stable",
+      "summary": "Fix panel update worker crash: missing tsx on PATH and getPanelServerSettingsSafe CJS import.",
+      "changelog": [
+        "Update worker resolves tsx from node_modules first so PM2's thin PATH no longer exits 127",
+        "Background worker no longer calls getPanelServerSettingsSafe (CJS dynamic import left it undefined)",
+        "Named exports from tsx-loaded panel libs are unwrapped from CJS default",
+        "Worker locale forced to C.UTF-8 to silence en_US.UTF-8 setlocale warnings"
+      ],
+      "fixes": [
+        "Update worker crashed: getPanelServerSettingsSafe is not a function",
+        "Update worker exited with code 127 when npx/tsx were not on PATH",
+        "Stuck 'Starting update…' banner after worker crash on customer VPS"
+      ]
+    },
     {
       "version": "2.0.12",
       "date": "2026-08-17",

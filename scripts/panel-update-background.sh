@@ -3,6 +3,15 @@
 # Spawned by Admin → Settings → Updates (startBackgroundPanelUpdate).
 set -euo pipefail
 
+# Avoid "cannot change locale (en_US.UTF-8)" when that locale is not generated.
+if [ "${LC_ALL:-}" = "en_US.UTF-8" ] || [ "${LANG:-}" = "en_US.UTF-8" ]; then
+  export LANG=C.UTF-8
+  export LC_ALL=C.UTF-8
+else
+  export LANG="${LANG:-C.UTF-8}"
+  export LC_ALL="${LC_ALL:-C.UTF-8}"
+fi
+
 find_panel_root() {
   local dir="$1"
   while [ -n "$dir" ] && [ "$dir" != "/" ]; do
@@ -46,21 +55,31 @@ fi
 
 cd "$ROOT"
 export PANEL_REPO_PATH="$ROOT"
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${ROOT}/node_modules/.bin:${PATH:-}"
 
 ERR_LOG="${ROOT}/.update-worker-err.log"
 TS_SCRIPT="${ROOT}/scripts/panel-update-background.ts"
 
+if [ ! -f "${ROOT}/node_modules/tsx/dist/cli.mjs" ] && [ -f "${ROOT}/scripts/ensure-tsx.sh" ]; then
+  bash "${ROOT}/scripts/ensure-tsx.sh" >>"$ERR_LOG" 2>&1 || true
+fi
+
 run_tsx() {
-  if command -v npx >/dev/null 2>&1 && npx tsx --version >/dev/null 2>&1; then
-    exec npx tsx "$TS_SCRIPT" 2>>"$ERR_LOG"
+  local tsx_bin="${ROOT}/node_modules/.bin/tsx"
+  local tsx_cli="${ROOT}/node_modules/tsx/dist/cli.mjs"
+  if [ -x "$tsx_bin" ]; then
+    exec "$tsx_bin" "$TS_SCRIPT" 2>>"$ERR_LOG"
+  fi
+  if [ -f "$tsx_cli" ]; then
+    exec node "$tsx_cli" "$TS_SCRIPT" 2>>"$ERR_LOG"
+  fi
+  if command -v tsx >/dev/null 2>&1; then
+    exec tsx "$TS_SCRIPT" 2>>"$ERR_LOG"
   fi
   if command -v npx >/dev/null 2>&1; then
     exec npx --yes tsx "$TS_SCRIPT" 2>>"$ERR_LOG"
   fi
-  if node --import tsx "$TS_SCRIPT" 2>>"$ERR_LOG"; then
-    exit 0
-  fi
-  echo "panel-update-background.sh: tsx not available — run: npm install -g tsx" >&2
+  echo "panel-update-background.sh: tsx not available — run: cd $ROOT && bash scripts/ensure-tsx.sh" >&2
   exit 127
 }
 

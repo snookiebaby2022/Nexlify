@@ -558,9 +558,13 @@ export async function startBackgroundPanelUpdate(
         `(command -v setsid >/dev/null 2>&1 && setsid -w bash -c 'CMD') || bash -c 'CMD'`
       : `bash -c 'CMD'`;
 
-  // Prefer bash launcher (cd to real panel root + tsx); fall back to tsx on .ts for older installs.
+  // Prefer bash launcher (cd to real panel root + local tsx). npx is often missing from PM2 PATH → exit 127.
+  const localTsx = path.join(repoPath, "node_modules", ".bin", "tsx");
+  const tsxCli = path.join(repoPath, "node_modules", "tsx", "dist", "cli.mjs");
   const workerCandidates = [
     `bash ${JSON.stringify(launcherPath)}`,
+    `${JSON.stringify(localTsx)} ${JSON.stringify(tsScriptPath)}`,
+    `node ${JSON.stringify(tsxCli)} ${JSON.stringify(tsScriptPath)}`,
     `npx tsx ${JSON.stringify(tsScriptPath)}`,
     `npx --yes tsx ${JSON.stringify(tsScriptPath)}`,
     `node --import tsx ${JSON.stringify(tsScriptPath)}`,
@@ -577,6 +581,15 @@ export async function startBackgroundPanelUpdate(
         env: {
           ...process.env,
           PANEL_REPO_PATH: repoPath,
+          PATH: [
+            path.join(repoPath, "node_modules", ".bin"),
+            "/usr/local/bin",
+            "/usr/bin",
+            "/bin",
+            process.env.PATH || "",
+          ].join(":"),
+          LANG: "C.UTF-8",
+          LC_ALL: "C.UTF-8",
           ...(opts?.force ? { PANEL_UPDATE_FORCE: "1" } : {}),
         },
         windowsHide: true,

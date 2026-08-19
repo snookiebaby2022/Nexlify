@@ -3,6 +3,7 @@ import { spawn } from "child_process";
 import path from "path";
 import {
   appendUpdateHistory,
+  defaultPanelServerSettings,
   getPanelServerSettingsSafe,
   savePanelServerSettings,
   type PanelServerSettings,
@@ -27,6 +28,14 @@ import {
   isVersionNewer,
 } from "@/lib/panel-releases-feed";
 import { choosePanelUpdateMode, isPanelUpdateForced } from "@/lib/panel-update-mode";
+
+async function loadPanelServerSettings(): Promise<PanelServerSettings> {
+  if (typeof getPanelServerSettingsSafe === "function") {
+    return getPanelServerSettingsSafe();
+  }
+  console.warn("[panel-update] getPanelServerSettingsSafe is not a function — using filesystem defaults");
+  return defaultPanelServerSettings();
+}
 
 export type UpdateProgressCallback = (update: Partial<PanelUpdateJob>) => void | Promise<void>;
 
@@ -186,7 +195,7 @@ export async function resolvePrebuiltDownloadUrl(
   repoPath: string,
 ): Promise<string | null> {
   try {
-    const settings = await getPanelServerSettingsSafe();
+    const settings = await loadPanelServerSettings();
     const feedUrl = settings.updateCheckUrl?.trim() || DEFAULT_RELEASES_FEED_URL;
     const feed = await fetchNexlifyReleasesFeed(feedUrl);
     const release = feed.releases.find((r) => r.version === targetVersion);
@@ -528,7 +537,7 @@ async function postPullBuildSteps(repoPath: string): Promise<UpdateStep[]> {
 export async function runPanelUpdateWithProgress(
   onProgress?: UpdateProgressCallback
 ): Promise<PanelUpdateResult> {
-  const settings = await getPanelServerSettingsSafe();
+  const settings = await loadPanelServerSettings();
   const repoPath = resolvePanelRepoPathSync(settings.repoPath);
   const { version: fromVersion } = await readInstalledVersion(repoPath);
   /** Initialized up front so failure returns never hit TDZ (shorthand `toVersion` in same scope). */
@@ -757,7 +766,7 @@ export async function runPanelUpdate(): Promise<PanelUpdateResult> {
 }
 
 export async function runPanelRollback(): Promise<PanelUpdateResult> {
-  const settings = await getPanelServerSettingsSafe();
+  const settings = await loadPanelServerSettings();
   const repoPath = resolvePanelRepoPathSync(settings.repoPath);
   const { version: fromVersion } = await readInstalledVersion(repoPath);
   let toVersion = fromVersion;

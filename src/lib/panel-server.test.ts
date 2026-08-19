@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { defaultPanelServerSettings, parsePanelServerSettings } from "./panel-server";
+import {
+  defaultPanelServerSettings,
+  getPanelServerSettingsSafe,
+  parsePanelServerSettings,
+} from "./panel-server";
+
+test("getPanelServerSettingsSafe is exported as a function", () => {
+  assert.equal(typeof getPanelServerSettingsSafe, "function");
+});
 
 test("default panel settings resolve without a database row", () => {
   const s = defaultPanelServerSettings();

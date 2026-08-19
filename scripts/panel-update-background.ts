@@ -1,5 +1,5 @@
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { spawn } from "child_process";
 import { access } from "fs/promises";
 
@@ -13,6 +13,36 @@ function resolveRepoRootFromScriptDir(scriptDir: string): string {
 
 const REPO_ROOT = resolveRepoRootFromScriptDir(path.dirname(fileURLToPath(import.meta.url)));
 process.chdir(REPO_ROOT);
+if (!process.env.PANEL_REPO_PATH) {
+  process.env.PANEL_REPO_PATH = REPO_ROOT;
+}
+
+type ModuleNs = Record<string, unknown> & { default?: unknown };
+
+async function importPanelFile(relPath: string): Promise<ModuleNs> {
+  const abs = path.join(REPO_ROOT, relPath);
+  return (await import(pathToFileURL(abs).href)) as ModuleNs;
+}
+
+/**
+ * tsx sometimes compiles panel lib files as CJS. Dynamic import() then exposes
+ * named exports only on `default`, so `const { foo } = await import(...)`
+ * leaves `foo` undefined → "X is not a function".
+ */
+function namedExport<T>(mod: ModuleNs, name: string): T {
+  const fromNs = mod[name];
+  if (typeof fromNs === "function") return fromNs as T;
+  const def = mod.default;
+  if (def && typeof def === "object") {
+    const fromDefault = (def as Record<string, unknown>)[name];
+    if (typeof fromDefault === "function") return fromDefault as T;
+  }
+  const defaultKeys =
+    def && typeof def === "object" ? Object.keys(def as object).join(", ") : typeof def;
+  throw new Error(
+    `${name} is not a function (module keys: ${Object.keys(mod).join(", ") || "(none)"}; default: ${defaultKeys})`
+  );
+}
 
 async function spawnRecover(repoPath: string) {
   const script = path.join(repoPath, "scripts/panel-update-recover.sh");
@@ -24,23 +54,47 @@ async function spawnRecover(repoPath: string) {
   spawn("bash", [script], { cwd: repoPath, detached: true, stdio: "ignore", env: process.env }).unref();
 }
 
+function resolveJobRepoPath(
+  resolvePanelRepoPathSync: (settingsRepoPath?: string) => string
+): string {
+  return resolvePanelRepoPathSync(process.env.PANEL_REPO_PATH || REPO_ROOT);
+}
+
 async function main() {
-  const { getPanelServerSettingsSafe } = await import(
-    path.join(REPO_ROOT, "src/lib/panel-server.ts")
+  const runPanelUpdateWithProgress = namedExport<
+    (onProgress?: (update: Record<string, unknown>) => void | Promise<void>) => Promise<{
+      ok: boolean;
+      message: string;
+      toVersion: string;
+      steps: { name: string; ok: boolean; output?: string }[];
+    }>
+  >(await importPanelFile("src/lib/panel-update.ts"), "runPanelUpdateWithProgress");
+  const jobMod = await importPanelFile("src/lib/panel-update-job.ts");
+  const readUpdateJob = namedExport<(repoPath: string) => Promise<{
+    status: string;
+    progress: number;
+    currentStep: string | null;
+    [key: string]: unknown;
+  } | null>>(jobMod, "readUpdateJob");
+  const writeUpdateJob = namedExport<(repoPath: string, job: unknown) => Promise<void>>(
+    jobMod,
+    "writeUpdateJob"
   );
-  const { runPanelUpdateWithProgress } = await import(
-    path.join(REPO_ROOT, "src/lib/panel-update.ts")
+  const looksLikeSuccessfulUpdateDespiteWorkerExit = namedExport<(job: unknown) => boolean>(
+    jobMod,
+    "looksLikeSuccessfulUpdateDespiteWorkerExit"
   );
-  const { readUpdateJob, writeUpdateJob, looksLikeSuccessfulUpdateDespiteWorkerExit, installedVersionImpliesUpdateSuccess } = await import(
-    path.join(REPO_ROOT, "src/lib/panel-update-job.ts")
-  );
-  const { resolvePanelRepoPathSync } = await import(
-    path.join(REPO_ROOT, "src/lib/panel-repo-path.ts")
+  const installedVersionImpliesUpdateSuccess = namedExport<
+    (job: unknown, installedVersion: string | null) => boolean
+  >(jobMod, "installedVersionImpliesUpdateSuccess");
+  const repoMod = await importPanelFile("src/lib/panel-repo-path.ts");
+  const resolvePanelRepoPathSync = namedExport<(settingsRepoPath?: string) => string>(
+    repoMod,
+    "resolvePanelRepoPathSync"
   );
   const { writeFile, unlink } = await import("fs/promises");
 
-  const server = await getPanelServerSettingsSafe();
-  const repoPath = resolvePanelRepoPathSync(server.repoPath);
+  const repoPath = resolveJobRepoPath(resolvePanelRepoPathSync);
   let job = await readUpdateJob(repoPath);
 
   if (!job || job.status !== "running") {
@@ -129,17 +183,22 @@ async function main() {
 main().catch(async (e) => {
   console.error(e);
   try {
-    const { getPanelServerSettingsSafe } = await import(
-      path.join(REPO_ROOT, "src/lib/panel-server.ts")
+    const jobMod = await importPanelFile("src/lib/panel-update-job.ts");
+    const readUpdateJob = namedExport<(repoPath: string) => Promise<{
+      status: string;
+      progress: number;
+      [key: string]: unknown;
+    } | null>>(jobMod, "readUpdateJob");
+    const writeUpdateJob = namedExport<(repoPath: string, job: unknown) => Promise<void>>(
+      jobMod,
+      "writeUpdateJob"
     );
-    const { readUpdateJob, writeUpdateJob } = await import(
-      path.join(REPO_ROOT, "src/lib/panel-update-job.ts")
+    const repoMod = await importPanelFile("src/lib/panel-repo-path.ts");
+    const resolvePanelRepoPathSync = namedExport<(settingsRepoPath?: string) => string>(
+      repoMod,
+      "resolvePanelRepoPathSync"
     );
-    const { resolvePanelRepoPathSync } = await import(
-      path.join(REPO_ROOT, "src/lib/panel-repo-path.ts")
-    );
-    const server = await getPanelServerSettingsSafe();
-    const repoPath = resolvePanelRepoPathSync(server.repoPath);
+    const repoPath = resolveJobRepoPath(resolvePanelRepoPathSync);
     const job = await readUpdateJob(repoPath);
     if (job) {
       await writeUpdateJob(repoPath, {
