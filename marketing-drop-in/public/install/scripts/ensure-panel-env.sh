@@ -36,9 +36,16 @@ WEBSITE_PORT="$(read_env WEBSITE_PORT)"
 
 set_kv WEBSITE_PORT "${WEBSITE_PORT}"
 set_kv STREAM_HTTP_PORT 8080
+set_kv STREAM_EDGE_PORT 8080
+set_kv STREAM_HTTPS_PORT 443
+set_kv PANEL_SSL_PORT 443
+# IPTV apps often use :8080/:25461; Node edge owns these (nginx cannot share the same TCP port).
+set_kv STREAM_HTTP_EXTRA_PORTS "8080,25461"
+set_kv NEXLIFY_USE_IPTV_EDGE 1
 set_kv PANEL_PRIMARY_DOMAIN "${PRIMARY}"
 set_kv PANEL_COOKIE_SECURE 0
 set_kv NEXLIFY_LICENSE_COOKIE_SECURE 0
+set_kv PANEL_TRUST_CLOUDFLARE 1
 
 # Never expose internal upstream ports in browser URLs.
 PANEL_PUB="$(read_env PANEL_PUBLIC_PORT)"
@@ -47,15 +54,19 @@ case "$PANEL_PUB" in
 esac
 
 if is_ip_host "$PRIMARY"; then
-  set_kv PORT 80
-  set_kv PANEL_PORT 80
-  set_kv PANEL_BIND_HOST 0.0.0.0
+  # Next stays on localhost; IPTV edge owns :80 like XUI nginx (origin sees panel IP).
+  set_kv PORT 13000
+  set_kv PANEL_PORT 13000
+  set_kv PANEL_BIND_HOST 127.0.0.1
   set_kv PANEL_BEHIND_NGINX 0
   set_kv PANEL_ASSUME_PROXY_SSL 0
   set_kv PANEL_PUBLIC_PORT 80
+  set_kv STREAM_HTTP_PORT 80
+  set_kv STREAM_EDGE_PORT 80
+  set_kv STREAM_HTTP_EXTRA_PORTS "80,8080,25461"
   set_kv NEXT_PUBLIC_SERVER_URL "http://${PRIMARY}"
   set_kv NEXT_PUBLIC_WEBSITE_URL "http://${PRIMARY}"
-  echo "Panel env: HTTP IP=${PRIMARY} — direct on port 80 (no :3000)"
+  echo "Panel env: HTTP IP=${PRIMARY} — Xtream edge on :80, panel Node on :13000"
 elif panel_https_active "$PRIMARY"; then
   set_kv PORT 13000
   set_kv PANEL_PORT 13000
@@ -63,6 +74,8 @@ elif panel_https_active "$PRIMARY"; then
   set_kv PANEL_BEHIND_NGINX 1
   set_kv PANEL_ASSUME_PROXY_SSL 1
   set_kv PANEL_PUBLIC_PORT 443
+  set_kv STREAM_HTTP_PORT 8080
+  set_kv STREAM_EDGE_PORT 8080
   set_kv NEXT_PUBLIC_SERVER_URL "https://${PRIMARY}"
   set_kv NEXT_PUBLIC_WEBSITE_URL "https://${PRIMARY}"
   echo "Panel env: HTTPS domain=${PRIMARY} (nginx → 127.0.0.1:13000)"
@@ -73,6 +86,8 @@ else
   set_kv PANEL_BEHIND_NGINX 1
   set_kv PANEL_ASSUME_PROXY_SSL 0
   set_kv PANEL_PUBLIC_PORT 80
+  set_kv STREAM_HTTP_PORT 8080
+  set_kv STREAM_EDGE_PORT 8080
   set_kv NEXT_PUBLIC_SERVER_URL "http://${PRIMARY}"
   set_kv NEXT_PUBLIC_WEBSITE_URL "http://${PRIMARY}"
   echo "Panel env: HTTP domain=${PRIMARY} (nginx → 127.0.0.1:13000)"
@@ -88,3 +103,29 @@ if ! is_ip_host "$PRIMARY"; then
       ;;
   esac
 fi
+
+# Production domain must allow Xtream/webplayer playback — never mark primary host as demo.
+sanitize_demo_hosts() {
+  local primary norm h out="" demo
+  primary="$(normalize_demo_host "$1")"
+  demo="$(read_env PANEL_DEMO_HOSTS)"
+  if [ -z "$demo" ]; then
+    set_kv PANEL_DEMO_HOSTS "panel.demo.nexlify.live"
+    return
+  fi
+  IFS=',' read -ra parts <<< "$demo"
+  for h in "${parts[@]}"; do
+    norm="$(normalize_demo_host "$h")"
+    [ -z "$norm" ] && continue
+    [ "$norm" = "$primary" ] && continue
+    out="${out:+$out,}$norm"
+  done
+  [ -z "$out" ] && out="panel.demo.nexlify.live"
+  set_kv PANEL_DEMO_HOSTS "$out"
+}
+
+normalize_demo_host() {
+  echo "$1" | tr '[:upper:]' '[:lower:]' | sed -e 's/^https\?:\/\///' -e 's/\/.*$//' -e 's/:.*$//' | xargs
+}
+
+sanitize_demo_hosts "$PRIMARY"

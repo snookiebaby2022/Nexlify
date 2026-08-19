@@ -36,6 +36,12 @@ fi
 HTTP_PORTS="$(env_val STREAM_HTTP_EXTRA_PORTS)"
 [ -z "$HTTP_PORTS" ] && HTTP_PORTS="$(env_val PANEL_HTTP_EXTRA_PORTS)"
 [ -z "$HTTP_PORTS" ] && HTTP_PORTS="8080,25461"
+
+# IP panels: Node listens on 13000; edge must own public :80 (XUI-style stream splice).
+STREAM_PUBLIC="$(env_val STREAM_HTTP_PORT)"
+if [ "$PANEL_LISTEN" != "80" ] && [ "$STREAM_PUBLIC" = "80" ]; then
+  HTTP_PORTS="80,${HTTP_PORTS}"
+fi
 HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
 [ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="$(env_val PANEL_SSL_PORT)"
 [ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="443"
@@ -81,10 +87,12 @@ export IPTV_EDGE_KEY="$KEY"
 
 # Wait briefly for previous listeners to release sockets
 sleep 1
-# Only free ports we will bind (never kill nginx :80 / vendor :443)
+# Only free ports we will bind (do not kill :80 while the panel Node still owns it).
 for p in $(echo "$HTTP_PORTS" | tr ',' ' '); do
   [ -z "$p" ] && continue
-  [ "$p" = "80" ] && continue
+  if [ "$p" = "80" ] && [ "$PANEL_LISTEN" = "80" ]; then
+    continue
+  fi
   fuser -k "${p}/tcp" 2>/dev/null || true
 done
 if [ -n "$HTTPS_PORTS" ]; then

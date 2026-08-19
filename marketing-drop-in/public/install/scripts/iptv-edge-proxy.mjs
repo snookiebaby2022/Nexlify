@@ -1,25 +1,52 @@
 #!/usr/bin/env node
 /**
- * IPTV edge proxy — accepts Host headers like "http://1.2.3.4" / "https://host:443"
- * that nginx rejects with 400, sanitizes them, and forwards to the panel.
+ * IPTV edge — Host sanitizer + XUI-style live/VOD byte pipe.
  *
- * Usage:
- *   node scripts/iptv-edge-proxy.mjs
+ * Xtream apps hit :80/:8080/:25461. Auth stays on the panel; MPEG-TS/MP4 is
+ * fetched from stream_source with a VLC UA so the origin sees the panel IP.
+ *
  * Env:
- *   IPTV_EDGE_BACKEND=127.0.0.1:80
- *   IPTV_EDGE_HTTP_PORTS=8080,25461
- *   IPTV_EDGE_HTTPS_PORTS=443
- *   IPTV_EDGE_CERT=/etc/nginx/ssl/nexlify-panel/fullchain.pem
- *   IPTV_EDGE_KEY=/etc/nginx/ssl/nexlify-panel/privkey.pem
+ *   IPTV_EDGE_BACKEND=127.0.0.1:13000
+ *   IPTV_EDGE_HTTP_PORTS=80,8080,25461
+ *   IPTV_EDGE_HTTPS_PORTS=
+ *   PANEL_INTERNAL_SECRET=...
  */
 import http from "node:http";
 import https from "node:https";
 import fs from "node:fs";
-import { URL } from "node:url";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function loadDotEnv() {
+  const file = path.join(__dirname, "..", ".env");
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    if (!line || line.startsWith("#")) continue;
+    const i = line.indexOf("=");
+    if (i < 1) continue;
+    const k = line.slice(0, i).trim();
+    let v = line.slice(i + 1).trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+      v = v.slice(1, -1);
+    }
+    if (process.env[k] == null || process.env[k] === "") process.env[k] = v;
+  }
+}
+loadDotEnv();
 
 const BACKEND = process.env.IPTV_EDGE_BACKEND || "127.0.0.1:80";
 const [backendHost, backendPortRaw] = BACKEND.split(":");
 const backendPort = Number(backendPortRaw || 80);
+const INTERNAL_SECRET =
+  process.env.PANEL_INTERNAL_SECRET ||
+  process.env.NEXLIFY_PANEL_API_SECRET ||
+  process.env.PANEL_API_SECRET ||
+  "";
+const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
+const PLAYBACK_RE = /^\/(live|movie|series)\//;
+const HLS_RE = /\.m3u8(?:[?#]|$)/i;
 
 function parsePorts(raw, fallback) {
   const s = (raw ?? fallback ?? "").trim();
@@ -27,7 +54,6 @@ function parsePorts(raw, fallback) {
   return [...new Set(s.split(/[,\s]+/).map((p) => Number(p)).filter((n) => n > 0 && n < 65536))];
 }
 
-/** Same rules as src/lib/public-origin.parseRequestHostHeader */
 function sanitizeHostHeader(raw) {
   let t = String(raw ?? "").trim();
   if (!t) return "";
@@ -41,6 +67,18 @@ function sanitizeHostHeader(raw) {
   return t;
 }
 
+function clientIp(req) {
+  const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return fwd || req.socket.remoteAddress || "";
+}
+
+function shouldSplice(req) {
+  const pathOnly = String(req.url || "/").split("?")[0];
+  if (!PLAYBACK_RE.test(pathOnly)) return false;
+  if (HLS_RE.test(pathOnly) || /\/hls\//i.test(pathOnly)) return false;
+  return true;
+}
+
 function forward(clientReq, clientRes, { listenPort, proto }) {
   const cleanHost = sanitizeHostHeader(clientReq.headers.host) || backendHost;
   const headers = { ...clientReq.headers };
@@ -49,7 +87,7 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
   headers["x-forwarded-proto"] = proto;
   headers["x-forwarded-port"] = String(listenPort);
   headers["x-nexlify-client-port"] = String(listenPort);
-  headers["x-forwarded-for"] = clientReq.socket.remoteAddress || "";
+  headers["x-forwarded-for"] = clientIp(clientReq);
   const proxyReq = http.request(
     {
       hostname: backendHost,
@@ -73,14 +111,167 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
   clientReq.pipe(proxyReq);
 }
 
+function liveTsHeaders() {
+  return {
+    "Content-Type": "video/mp2t",
+    "Cache-Control": "no-cache, no-store, no-transform",
+    Connection: "keep-alive",
+    "Accept-Ranges": "none",
+    "Access-Control-Allow-Origin": "*",
+    "X-Accel-Buffering": "no",
+  };
+}
+
+function authLive(clientReq) {
+  return new Promise((resolve, reject) => {
+    const headers = {
+      "x-original-uri": clientReq.url || "/",
+      "x-original-method": clientReq.method || "GET",
+      "x-panel-internal-secret": INTERNAL_SECRET,
+      "x-forwarded-for": clientIp(clientReq),
+      "x-real-ip": clientIp(clientReq),
+      "user-agent": clientReq.headers["user-agent"] || "",
+      connection: "close",
+    };
+    const req = http.request(
+      {
+        hostname: backendHost,
+        port: backendPort,
+        path: "/api/internal/live-auth",
+        method: "GET",
+        headers,
+        timeout: 15_000,
+      },
+      (res) => {
+        res.resume();
+        resolve({
+          status: res.statusCode || 502,
+          upstream: String(res.headers["x-nexlify-upstream"] || ""),
+          live: String(res.headers["x-nexlify-live"] || "") === "1",
+          passthrough: String(res.headers["x-nexlify-passthrough"] || "") === "1" || res.statusCode === 204,
+        });
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("live-auth timeout")));
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft }) {
+  let parsed;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    clientRes.writeHead(502, { "content-type": "text/plain" });
+    clientRes.end("Invalid upstream");
+    return;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    clientRes.writeHead(502, { "content-type": "text/plain" });
+    clientRes.end("Unsupported upstream");
+    return;
+  }
+  const lib = parsed.protocol === "https:" ? https : http;
+  const headers = {
+    "User-Agent": UPSTREAM_UA,
+    Accept: "*/*",
+    Connection: "keep-alive",
+    "Icy-MetaData": "0",
+  };
+  if (!live && clientReq.headers.range) headers.Range = clientReq.headers.range;
+  const opts = {
+    method: "GET",
+    headers,
+    timeout: 300_000,
+  };
+  if (parsed.protocol === "https:") opts.rejectUnauthorized = false;
+
+  const up = lib.request(parsed, opts, (upRes) => {
+    const status = upRes.statusCode || 0;
+    const loc = upRes.headers.location;
+    if (status >= 300 && status < 400 && loc && redirectsLeft > 0) {
+      upRes.resume();
+      let next;
+      try {
+        next = new URL(loc, parsed).toString();
+      } catch {
+        clientRes.writeHead(502, { "content-type": "text/plain" });
+        clientRes.end("Bad upstream redirect");
+        return;
+      }
+      pipeUpstream(next, clientReq, clientRes, { live, redirectsLeft: redirectsLeft - 1 });
+      return;
+    }
+    if (live) {
+      clientRes.writeHead(200, liveTsHeaders());
+      upRes.pipe(clientRes);
+      return;
+    }
+    clientRes.writeHead(status || 502, upRes.headers);
+    upRes.pipe(clientRes);
+  });
+  up.on("timeout", () => up.destroy(new Error("upstream timeout")));
+  up.on("error", (err) => {
+    if (!clientRes.headersSent) {
+      clientRes.writeHead(502, { "content-type": "text/plain" });
+    }
+    clientRes.end(`upstream error: ${err.message}`);
+  });
+  clientReq.on("close", () => up.destroy());
+  up.end();
+}
+
+async function onRequest(clientReq, clientRes, ctx) {
+  if (clientReq.method === "OPTIONS" && shouldSplice(clientReq)) {
+    clientRes.writeHead(204, {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, User-Agent, Accept, Range",
+    });
+    clientRes.end();
+    return;
+  }
+  if (!shouldSplice(clientReq)) {
+    forward(clientReq, clientRes, ctx);
+    return;
+  }
+  if (!INTERNAL_SECRET) {
+    forward(clientReq, clientRes, ctx);
+    return;
+  }
+  try {
+    const auth = await authLive(clientReq);
+    if (auth.passthrough || !auth.upstream) {
+      forward(clientReq, clientRes, ctx);
+      return;
+    }
+    if (auth.status === 401 || auth.status === 403 || auth.status === 429) {
+      clientRes.writeHead(auth.status, { "content-type": "text/plain" });
+      clientRes.end(auth.status === 401 ? "Unauthorized" : "Forbidden");
+      return;
+    }
+    if (auth.status !== 200) {
+      forward(clientReq, clientRes, ctx);
+      return;
+    }
+    if (clientReq.method === "HEAD") {
+      clientRes.writeHead(200, auth.live ? liveTsHeaders() : { "Content-Type": "video/mp4", "Access-Control-Allow-Origin": "*" });
+      clientRes.end();
+      return;
+    }
+    pipeUpstream(auth.upstream, clientReq, clientRes, { live: auth.live, redirectsLeft: 5 });
+  } catch {
+    forward(clientReq, clientRes, ctx);
+  }
+}
+
 function listenHttp(port) {
-  const server = http.createServer((req, res) =>
-    forward(req, res, { listenPort: port, proto: "http" })
-  );
+  const server = http.createServer((req, res) => onRequest(req, res, { listenPort: port, proto: "http" }));
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 70_000;
   server.listen(port, "0.0.0.0", () => {
-    console.log(`[iptv-edge] http://0.0.0.0:${port} → ${BACKEND}`);
+    console.log(`[iptv-edge] http://0.0.0.0:${port} → ${BACKEND} (live splice on)`);
   });
   server.on("error", (err) => {
     console.error(`[iptv-edge] http :${port} failed:`, err.message);
@@ -91,12 +282,12 @@ function listenHttp(port) {
 
 function listenHttps(port, cert, key) {
   const server = https.createServer({ cert, key }, (req, res) =>
-    forward(req, res, { listenPort: port, proto: "https" })
+    onRequest(req, res, { listenPort: port, proto: "https" })
   );
   server.keepAliveTimeout = 65_000;
   server.headersTimeout = 70_000;
   server.listen(port, "0.0.0.0", () => {
-    console.log(`[iptv-edge] https://0.0.0.0:${port} → ${BACKEND}`);
+    console.log(`[iptv-edge] https://0.0.0.0:${port} → ${BACKEND} (live splice on)`);
   });
   server.on("error", (err) => {
     console.error(`[iptv-edge] https :${port} failed:`, err.message);

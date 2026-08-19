@@ -101,6 +101,8 @@ cp -f "$ROOT/scripts/nexlify-nginx-release-ports.sh" "$INSTALL_DEST/scripts/nexl
 cp -f "$ROOT/scripts/install-nginx-stream-edge.sh" "$INSTALL_DEST/scripts/install-nginx-stream-edge.sh"
 cp -f "$ROOT/scripts/install-iptv-edge-proxy.sh" "$INSTALL_DEST/scripts/install-iptv-edge-proxy.sh"
 cp -f "$ROOT/scripts/iptv-edge-proxy.mjs" "$INSTALL_DEST/scripts/iptv-edge-proxy.mjs"
+cp -f "$ROOT/scripts/ensure-panel-env.sh" "$INSTALL_DEST/scripts/ensure-panel-env.sh"
+cp -f "$ROOT/scripts/pm2-start.sh" "$INSTALL_DEST/scripts/pm2-start.sh"
 cp -f "$ROOT/scripts/install-nginx-rtmp.sh" "$INSTALL_DEST/scripts/install-nginx-rtmp.sh"
 cp -f "$ROOT/scripts/install-nginx-https-extra-ports.sh" "$INSTALL_DEST/scripts/install-nginx-https-extra-ports.sh"
 cp -f "$ROOT/scripts/install-monolithic-profile.sh" "$INSTALL_DEST/scripts/install-monolithic-profile.sh"

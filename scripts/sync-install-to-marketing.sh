@@ -46,6 +46,8 @@ cp -f "$SCRIPTS/nexlify-nginx-release-ports.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/install-nginx-stream-edge.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/install-iptv-edge-proxy.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/iptv-edge-proxy.mjs" "$INSTALL/scripts/"
+cp -f "$SCRIPTS/ensure-panel-env.sh" "$INSTALL/scripts/"
+cp -f "$SCRIPTS/pm2-start.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/install-nginx-rtmp.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/nexlify-panel-dir.sh" "$INSTALL/scripts/"
 cp -f "$SCRIPTS/lock-production-configs.sh" "$INSTALL/scripts/"
@@ -87,7 +89,8 @@ chmod +x "$INSTALL/vps-emergency-fix.sh" "$INSTALL/vps-fix-installer.sh" "$INSTA
   "$INSTALL/vps-init-panel-git.sh" "$INSTALL/vps-publish-panel-release.sh" "$INSTALL/vps-fix-everything.sh" \
   "$INSTALL/vps-sync-from-github.sh" "$INSTALL/vps-git-auth.sh" 2>/dev/null || true
 
-PANEL_VER="$(node -p "require('$ROOT/package.json').version")"
+cd "$ROOT"
+PANEL_VER="$(node -p "require('./package.json').version")"
 cp -f "$ROOT/src/lib/panel-releases.json" "$ROOT/marketing-drop-in/src/lib/panel-releases.json"
 cp -f "$ROOT/src/lib/panel-releases.json" "$ROOT/marketing-drop-in/public/panel-releases.json"
 sed -i "s/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v[^\"]*}\"/PANEL_CACHE_BUST=\"\${PANEL_CACHE_BUST:-v${PANEL_VER}}\"/" \

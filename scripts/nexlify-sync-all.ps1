@@ -34,6 +34,7 @@ $scripts = "$Root\scripts"
 New-Item -ItemType Directory -Force -Path $install, "$install\scripts" | Out-Null
 
 Copy-Item -Force "$scripts\install-linux.sh" "$install\panel.sh"
+Copy-Item -Force "$scripts\install-linux.sh" "$Root\marketing-drop-in\scripts\install-linux.sh"
 Copy-Item -Force "$scripts\fix-panel-auto-update.sh" "$install\"
 Copy-Item -Force "$scripts\fix-panel-restart.sh" "$install\"
 Copy-Item -Force "$scripts\fix-panel-license-sync.sh" "$install\"
@@ -43,7 +44,10 @@ Copy-Item -Force "$scripts\apply-panel-fast-update.sh" "$install\"
 $scriptCopies = @(
     "panel-restart-safe.sh", "panel-update-recover.sh", "install-mediamtx-webrtc.sh",
     "installer-finalize-ports.sh", "sync-panel-ports.sh", "nexlify-firewall-ports.sh",
-    "nexlify-port-registry.sh", "install-nginx-stream-edge.sh", "install-nginx-rtmp.sh",
+    "nexlify-port-registry.sh", "nexlify-nginx-release-ports.sh",
+    "install-nginx-stream-edge.sh", "install-iptv-edge-proxy.sh", "iptv-edge-proxy.mjs",
+    "ensure-panel-env.sh", "pm2-start.sh",
+    "install-nginx-rtmp.sh",
     "install-nginx-https-extra-ports.sh", "install-monolithic-profile.sh",
     "install-local-stream-agent.sh", "fix-stream-edge-now.sh", "verify-panel-ports.sh",
     "has-valid-next-build.sh", "load-env.cjs", "panel-port-config.sh",

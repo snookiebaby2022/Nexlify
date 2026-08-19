@@ -86,6 +86,9 @@ check_install() {
   fi
 }
 check_install install-linux.sh panel.sh
+check_install install-iptv-edge-proxy.sh scripts/install-iptv-edge-proxy.sh
+check_install iptv-edge-proxy.mjs scripts/iptv-edge-proxy.mjs
+check_install ensure-panel-env.sh scripts/ensure-panel-env.sh
 for f in apply-panel-fast-update.sh fix-panel-auto-update.sh fix-panel-restart.sh \
   fix-panel-license-sync.sh fix-stream-edge-now.sh; do
   check_install "$f" "$f"

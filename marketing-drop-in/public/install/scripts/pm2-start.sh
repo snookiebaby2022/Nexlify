@@ -221,6 +221,12 @@ ensure_pm2_app() {
 
 ensure_pm2_app nexlify
 ensure_pm2_app nexlify-cron
+ensure_pm2_app nexlify-hls
+
+if [ "${NEXLIFY_USE_IPTV_EDGE:-1}" = "1" ] && [ -f "$ROOT/scripts/install-iptv-edge-proxy.sh" ]; then
+  echo "Refreshing IPTV edge (Xtream/live splice)..."
+  bash "$ROOT/scripts/install-iptv-edge-proxy.sh" || echo "WARN: iptv-edge install failed"
+fi
 
 if [ -f .license-keys/private.pem ] || [ -n "${LICENSE_SERVER_PRIVATE_PEM:-}" ]; then
   if needs_reregister nexlify-license; then
