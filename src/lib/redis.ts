@@ -22,7 +22,7 @@ function createClient() {
       const nodes = parseClusterNodes(clusterNodes);
       if (nodes.length) {
         const client = new Redis.Cluster(nodes, {
-          redisOptions: { maxRetriesPerRequest: 1, lazyConnect: true, connectTimeout: 250, enableOfflineQueue: false },
+          redisOptions: { maxRetriesPerRequest: 1, lazyConnect: true, connectTimeout: 250 },
           lazyConnect: true,
         });
         client.on("error", () => {});
