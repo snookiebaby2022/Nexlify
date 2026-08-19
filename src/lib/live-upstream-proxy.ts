@@ -245,8 +245,11 @@ export function openUpstreamLiveStream(
         "User-Agent": ua,
         Accept: "*/*",
         Connection: "keep-alive",
+        "Icy-MetaData": "0",
         ...(opts?.headers ?? {}),
       };
+      delete headers.Range;
+      delete headers.range;
 
       const reqOpts: http.RequestOptions & https.RequestOptions = {
         method: "GET",

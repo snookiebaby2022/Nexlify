@@ -16,6 +16,7 @@ import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/co
 import { generateLinePassword, MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput } from "@/lib/credential-generate";
 import { formatDateTime } from "@/lib/format";
 import { LINE_DURATION_PRESETS } from "@/lib/line-duration-presets";
+import { bouquetsApiRoot, linesApiRoot } from "@/lib/panel-api";
 
 type LineDetail = {
   id: string;
@@ -128,13 +129,18 @@ export function LineEditForm({
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([
-      fetch(`/api/admin/lines/${lineId}`).then((r) => r.json()),
-      fetch("/api/admin/bouquets").then((r) => r.json()),
-      fetch("/api/admin/servers").then((r) => r.json()),
-    ])
+    const linesApi = linesApiRoot(panel);
+    const bouquetApi = bouquetsApiRoot(panel);
+    const tasks: Promise<Record<string, unknown>>[] = [
+      fetch(`${linesApi}/${lineId}`).then((r) => r.json()),
+      fetch(bouquetApi).then((r) => r.json()),
+    ];
+    if (panel === "admin") {
+      tasks.push(fetch("/api/admin/servers").then((r) => r.json()));
+    }
+    Promise.all(tasks)
       .then(([lineRes, bouquetRes, serverRes]) => {
-        const row = lineRes.line as LineDetail | undefined;
+        const row = (lineRes as { line?: LineDetail }).line;
         if (!row) return;
         setLine(row);
         const notes = splitNotes(row.notes);
@@ -161,14 +167,19 @@ export function LineEditForm({
             return selected.size ? selected : defaultAccessOutputSelection();
           })(),
         });
-        setBouquets(bouquetRes.bouquets ?? []);
-        setServers((serverRes.servers ?? []).map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })));
+        setBouquets((bouquetRes as { bouquets?: { id: string; name: string }[] }).bouquets ?? []);
+        setServers(
+          ((serverRes as { servers?: { id: string; name: string }[] } | undefined)?.servers ?? []).map((s) => ({
+            id: s.id,
+            name: s.name,
+          }))
+        );
       })
       .finally(() => setLoading(false));
-  }, [lineId]);
+  }, [lineId, panel]);
 
   async function setStatus(status: string) {
-    await fetch(`/api/admin/lines/${lineId}/status`, {
+    await fetch(`${linesApiRoot(panel)}/${lineId}/status`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
@@ -193,7 +204,7 @@ export function LineEditForm({
     }
 
     const notes = [form.adminNotes, form.resellerNotes].filter(Boolean).join("\n---\n");
-    const res = await fetch(`/api/admin/lines/${lineId}`, {
+    const res = await fetch(`${linesApiRoot(panel)}/${lineId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -232,7 +243,7 @@ export function LineEditForm({
 
   async function deleteLine() {
     if (!confirm(`Delete line ${line?.username}? This cannot be undone.`)) return;
-    await fetch(`/api/admin/lines/${lineId}`, { method: "DELETE" });
+    await fetch(`${linesApiRoot(panel)}/${lineId}`, { method: "DELETE" });
     onSaved();
   }
 

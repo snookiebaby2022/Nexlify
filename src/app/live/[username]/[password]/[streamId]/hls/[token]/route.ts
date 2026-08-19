@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
+import { isSessionKicked } from "@/lib/connections";
 import { getClientIp } from "@/lib/client-ip";
 
 import { buildLiveRedirectHeaders, getAntiFreezeSettings } from "@/lib/anti-freeze";
@@ -24,13 +24,33 @@ export async function OPTIONS() {
   return iptvCorsPreflight();
 }
 
-function bufferToStream(buf: Buffer): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(new Uint8Array(buf));
-      controller.close();
-    },
-  });
+export async function HEAD(
+  req: NextRequest,
+  ctx: { params: Promise<{ username: string; password: string; streamId: string; token: string }> }
+) {
+  const { username, password, streamId, token: rawToken } = await ctx.params;
+  const auth = await authorizeHlsLiveRequest(req, username, password, streamId);
+  if (!auth.ok) {
+    const msg = auth.message === "kicked" ? "Session kicked" : auth.message;
+    return iptvText(msg, { status: auth.status });
+  }
+  const antiFreeze = await getAntiFreezeSettings();
+  const token = decodeURIComponent(rawToken).split("/").pop() ?? rawToken;
+  const isSeg = isPackagerSegmentName(token);
+  const headers = isSeg
+    ? hlsMediaSegmentHttp(0).headers
+    : {
+        "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
+        "Cache-Control": "no-cache, no-store",
+        "Accept-Ranges": "none",
+      };
+  if (isSeg) delete headers["Content-Length"];
+  return withIptvCors(
+    new NextResponse(null, {
+      status: 200,
+      headers: { ...buildLiveRedirectHeaders(antiFreeze), ...headers },
+    })
+  );
 }
 
 export async function GET(
@@ -129,17 +149,9 @@ export async function GET(
   }
 
   const segmentBuf = Buffer.from(upstream.body);
-  const kickedBody = attachKickAwareProxyBody({
-    body: bufferToStream(segmentBuf),
-    lineId: auth.lineId,
-    streamId: auth.streamId,
-    ip: clientIp || "",
-    userAgent: auth.userAgent,
-  });
-
   const seg = hlsMediaSegmentHttp(segmentBuf.length);
   return withIptvCors(
-    new NextResponse(kickedBody as unknown as BodyInit, {
+    new NextResponse(segmentBuf, {
       status: seg.status,
       headers: {
         ...buildLiveRedirectHeaders(antiFreeze),

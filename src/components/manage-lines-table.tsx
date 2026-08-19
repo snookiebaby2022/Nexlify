@@ -16,6 +16,7 @@ import {
 import { LineRowActionsMenu } from "@/components/line-row-actions-menu";
 import { LineEditForm } from "@/components/line-edit-form";
 import { CopyableCredential } from "@/components/copyable-credential";
+import { linesApiRoot } from "@/lib/panel-api";
 import { ConnInfoCell, LastWatchedCell } from "@/components/line-last-watched-cell";
 import { formatDateTime, formatExpireXui } from "@/lib/format";
 
@@ -107,6 +108,7 @@ export function ManageLinesTable({
 }) {
   const router = useRouter();
   const base = panel === "reseller" ? "/reseller" : "/admin";
+  const linesApi = linesApiRoot(panel);
   const serverMode = typeof serverTotal === "number" && !!onServerPageChange;
   const [search, setSearch] = useState(serverSearch ?? "");
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -235,7 +237,7 @@ export function ManageLinesTable({
     const ids = [...selected];
     if (bulk === "disable") {
       for (const id of ids) {
-        await fetch(`/api/admin/lines/${id}/status`, {
+        await fetch(`${linesApi}/${id}/status`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "DISABLED" }),
@@ -244,7 +246,7 @@ export function ManageLinesTable({
     } else if (bulk === "delete") {
       if (!confirm(`Delete ${ids.length} line(s)?`)) return;
       for (const id of ids) {
-        await fetch(`/api/admin/lines/${id}`, { method: "DELETE" });
+        await fetch(`${linesApi}/${id}`, { method: "DELETE" });
       }
     }
     setBulk("");
@@ -350,6 +352,7 @@ export function ManageLinesTable({
         <td className="xui-lines-td xui-lines-td--actions">
           <LineRowActionsMenu
             line={l}
+            panel={panel}
             onUpdated={onRefresh}
             open={openMenuId === l.id}
             onToggle={() => setOpenMenuId(openMenuId === l.id ? null : l.id)}
@@ -410,6 +413,7 @@ export function ManageLinesTable({
           <button type="button" className="xui-lines-toolbar-btn" onClick={() => void runBulk()} disabled={!bulk}>
             Apply
           </button>
+          {panel === "admin" && (
           <button
             type="button"
             className="xui-lines-toolbar-btn xui-lines-toolbar-btn--export"
@@ -420,6 +424,7 @@ export function ManageLinesTable({
             <List size={14} />
             Export To File
           </button>
+          )}
         </div>
         <label className="xui-lines-toggle">
           <RefreshCw size={14} className="opacity-70" />
@@ -476,6 +481,7 @@ export function ManageLinesTable({
                 </div>
                 <LineRowActionsMenu
                   line={l}
+                  panel={panel}
                   onUpdated={onRefresh}
                   open={openMenuId === l.id}
                   onToggle={() => setOpenMenuId(openMenuId === l.id ? null : l.id)}

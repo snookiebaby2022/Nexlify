@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
+import { isSessionKicked } from "@/lib/connections";
 import { getClientIp } from "@/lib/client-ip";
 
 import { buildLiveRedirectHeaders, getAntiFreezeSettings } from "@/lib/anti-freeze";
@@ -19,6 +19,30 @@ export const runtime = "nodejs";
 
 export async function OPTIONS() {
   return iptvCorsPreflight();
+}
+
+export async function HEAD(
+  req: NextRequest,
+  ctx: { params: Promise<{ username: string; password: string; streamId: string }> }
+) {
+  const { username, password, streamId } = await ctx.params;
+  const auth = await authorizeHlsLiveRequest(req, username, password, streamId);
+  if (!auth.ok) {
+    const msg = auth.message === "kicked" ? "Session kicked" : auth.message;
+    return iptvText(msg, { status: auth.status });
+  }
+  const antiFreeze = await getAntiFreezeSettings();
+  return withIptvCors(
+    new NextResponse(null, {
+      status: 200,
+      headers: {
+        ...buildLiveRedirectHeaders(antiFreeze),
+        "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
+        "Cache-Control": "no-cache, no-store",
+        "Accept-Ranges": "none",
+      },
+    })
+  );
 }
 
 export async function GET(
@@ -83,21 +107,9 @@ export async function GET(
   }
 
   const segmentBuf = Buffer.from(upstream.body);
-  const kickedBody = attachKickAwareProxyBody({
-    body: new ReadableStream({
-      start(controller) {
-        controller.enqueue(new Uint8Array(segmentBuf));
-        controller.close();
-      },
-    }),
-    lineId: auth.lineId,
-    streamId: auth.streamId,
-    ip: clientIp || "",
-    userAgent: auth.userAgent,
-  });
   const seg = hlsMediaSegmentHttp(segmentBuf.length);
   return withIptvCors(
-    new NextResponse(kickedBody as unknown as BodyInit, {
+    new NextResponse(segmentBuf, {
       status: seg.status,
       headers: {
         ...buildLiveRedirectHeaders(antiFreeze),

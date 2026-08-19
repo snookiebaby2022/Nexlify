@@ -257,7 +257,7 @@ const TreeRow = memo(function TreeRow({
     setStreamsLoading(true);
     try {
       const res = await fetch(
-        `/api/admin/streams?categoryId=${encodeURIComponent(node.id)}&page=1&pageSize=100&lite=1`
+        `/api/admin/streams?categoryId=${encodeURIComponent(node.id)}&page=1&pageSize=50&lite=1`
       );
       const data = await res.json();
       setStreams(data.streams ?? []);

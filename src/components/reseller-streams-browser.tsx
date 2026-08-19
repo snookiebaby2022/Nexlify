@@ -40,7 +40,7 @@ export function ResellerStreamsBrowser({
           }
           return;
         }
-        const res = await fetch(`/api/admin/streams?${query}&lite=1`);
+        const res = await fetch(`/api/reseller/streams?${query}&lite=1&page=1&pageSize=50`);
         if (!res.ok) throw new Error("streams");
         const d = await res.json();
         if (!cancelled) {

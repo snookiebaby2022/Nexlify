@@ -9,7 +9,7 @@ import {
   upstreamToWebResponse,
 } from "./live-upstream-proxy";
 import { packagerLiveInputPrefix } from "./ts-hls-packager";
-import { hlsMediaSegmentHttp } from "./hls-playback";
+import { rewriteLivePathToHls, hlsMediaSegmentHttp } from "./hls-playback";
 import { getPrimaryBitrate, type BitrateVariant } from "./stream-variants";
 
 describe("isPlayableUpstreamContentType", () => {
@@ -96,6 +96,13 @@ describe("HLS packager live input", () => {
   it("keeps -re for looped created channels and VOD files", () => {
     assert.deepEqual(packagerLiveInputPrefix({ loop: true }), ["-re", "-stream_loop", "-1"]);
     assert.deepEqual(packagerLiveInputPrefix({ vod: true }), ["-re"]);
+  });
+});
+
+describe("rewriteLivePathToHls", () => {
+  it("turns a MPEG-TS live path into HLS without changing credentials", () => {
+    const next = rewriteLivePathToHls("http://panel.example/live/user/pass/abc123.ts");
+    assert.equal(next, "http://panel.example/live/user/pass/abc123.m3u8");
   });
 });
 

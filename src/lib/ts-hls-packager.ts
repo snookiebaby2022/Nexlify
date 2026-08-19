@@ -7,7 +7,7 @@ import { hlsStreamDir } from "@/lib/hls-disk";
 /** Short segments so the first playlist is ready before XCIPTV's ~10s HLS timeout. */
 const HLS_TIME_SEC = 1;
 const HLS_LIST_SIZE = 6;
-const READY_TIMEOUT_MS = 12_000;
+const READY_TIMEOUT_MS = 8_000;
 const MAX_SESSIONS = 32;
 const IDLE_MS = 10 * 60 * 1000;
 const REAP_EVERY_MS = 30_000;
@@ -298,7 +298,7 @@ async function spawnPackager(
   return session;
 }
 
-export async function ensureTsHlsPackager(opts: {
+async function getOrStartPackagerSession(opts: {
   upstreamUrl: string;
   lineId: string;
   streamId: string;
@@ -306,9 +306,8 @@ export async function ensureTsHlsPackager(opts: {
   loop?: boolean;
   transcode?: PackagerTranscode;
   vod?: boolean;
-}): Promise<{ ok: true; playlist: string } | { ok: false; error: string }> {
+}): Promise<PackagerSession | { error: string }> {
   const key = sessionKey(opts.lineId, opts.streamId);
-  const dir = packagerDir(opts.lineId, opts.streamId);
   const fingerprint = packagerFingerprint(opts.upstreamUrl, opts.transcode ?? null, opts.loop, opts.vod);
   let session = sessions.get(key);
 
@@ -323,20 +322,79 @@ export async function ensureTsHlsPackager(opts: {
 
   if (!session) {
     evictOldestIfNeeded();
-    const created = await spawnPackager(key, dir, opts.upstreamUrl, {
+    const created = await spawnPackager(key, packagerDir(opts.lineId, opts.streamId), opts.upstreamUrl, {
       userAgent: opts.userAgent,
       loop: opts.loop,
       transcode: opts.transcode,
       vod: opts.vod,
     });
-    if (!created) return { ok: false, error: "ffmpeg not available for HLS packaging" };
+    if (!created) return { error: "ffmpeg not available for HLS packaging" };
     session = created;
   }
 
   session.lastAccess = Date.now();
+  return session;
+}
+
+/** Spawn ffmpeg immediately; do not wait for the first segment. */
+export async function startTsHlsPackager(opts: {
+  upstreamUrl: string;
+  lineId: string;
+  streamId: string;
+  userAgent?: string;
+  loop?: boolean;
+  transcode?: PackagerTranscode;
+  vod?: boolean;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const session = await getOrStartPackagerSession(opts);
+  if ("error" in session) return { ok: false, error: session.error };
+  return { ok: true };
+}
+
+export function readReadyPackagerPlaylist(streamId: string): string | null {
+  const dir = hlsStreamDir(streamId);
+  if (!packagerPlaylistIsReady(dir)) return null;
+  try {
+    const playlist = filterPackagerPlaylistToExisting(
+      readFileSync(join(dir, "index.m3u8"), "utf8"),
+      "daemon",
+      streamId
+    );
+    if (!playlist.includes("#EXTM3U") || !/seg\d+\.ts/i.test(playlist)) return null;
+    return playlist;
+  } catch {
+    return null;
+  }
+}
+
+export async function waitForReadyPackagerPlaylist(
+  streamId: string,
+  timeoutMs: number
+): Promise<string | null> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const playlist = readReadyPackagerPlaylist(streamId);
+    if (playlist) return playlist;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return readReadyPackagerPlaylist(streamId);
+}
+
+export async function ensureTsHlsPackager(opts: {
+  upstreamUrl: string;
+  lineId: string;
+  streamId: string;
+  userAgent?: string;
+  loop?: boolean;
+  transcode?: PackagerTranscode;
+  vod?: boolean;
+}): Promise<{ ok: true; playlist: string } | { ok: false; error: string }> {
+  const session = await getOrStartPackagerSession(opts);
+  if ("error" in session) return { ok: false, error: session.error };
+
   const ready = await session.ready;
   if (!ready) {
-    stopSession(key);
+    stopSession(session.key);
     return { ok: false, error: "HLS packager timed out" };
   }
 

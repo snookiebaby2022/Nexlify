@@ -5,6 +5,7 @@ import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 import { TicketBadge } from "@/components/ticket-ui";
 import { TicketPrioritySelect } from "@/components/ticket-priority-select";
+import { ticketsApiRoot } from "@/lib/panel-api";
 
 type Ticket = {
   id: string;
@@ -37,12 +38,14 @@ export function TicketDetailView({
   const [reply, setReply] = useState("");
   const [msg, setMsg] = useState("");
 
+  const ticketsApi = ticketsApiRoot(isAdmin);
+
   const load = useCallback(() => {
-    fetch(`/api/admin/tickets/${ticketId}`)
+    fetch(`${ticketsApi}/${ticketId}`)
       .then((r) => r.json())
       .then((d) => { if (d?.ticket) setTicket(d.ticket); })
       .catch(() => setMsg("Failed to load ticket"));
-  }, [ticketId]);
+  }, [ticketId, ticketsApi]);
 
   useEffect(() => {
     load();
@@ -52,7 +55,7 @@ export function TicketDetailView({
     e.preventDefault();
     if (!reply.trim()) return;
     try {
-      const res = await fetch(`/api/admin/tickets/${ticketId}/messages`, {
+      const res = await fetch(`${ticketsApi}/${ticketId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: reply }),

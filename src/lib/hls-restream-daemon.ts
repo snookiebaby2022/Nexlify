@@ -1,6 +1,6 @@
 import http from "node:http";
 import { HLS_DAEMON_HOST, HLS_DAEMON_PORT, hlsDaemonToken } from "./hls-disk";
-import { ensureTsHlsPackager, isPackagerSegmentName, readTsHlsSegment } from "./ts-hls-packager";
+import { ensureTsHlsPackager, isPackagerSegmentName, readTsHlsSegment, startTsHlsPackager } from "./ts-hls-packager";
 
 function unauthorized(res: http.ServerResponse) {
   res.writeHead(401, { "Content-Type": "text/plain" });
@@ -41,6 +41,37 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    if (req.method === "POST" && url.pathname === "/start") {
+      const body = await readJson(req);
+      const streamId = String(body.streamId ?? "").replace(/[^a-zA-Z0-9_-]/g, "");
+      const upstreamUrl = String(body.upstreamUrl ?? "").trim();
+      if (!streamId || !/^https?:\/\//i.test(upstreamUrl)) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "invalid stream" }));
+        return;
+      }
+      void startTsHlsPackager({
+        upstreamUrl,
+        lineId: "daemon",
+        streamId,
+        userAgent: typeof body.userAgent === "string" ? body.userAgent : undefined,
+        loop: Boolean(body.loop),
+        vod: Boolean(body.vod),
+        transcode:
+          body.transcode && typeof body.transcode === "object"
+            ? (body.transcode as {
+                resolution: string;
+                bitrate: number;
+                codec: string;
+                gpuAcceleration: boolean;
+              })
+            : null,
+      }).catch(() => undefined);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, started: true }));
+      return;
+    }
+
     if (req.method === "POST" && url.pathname === "/ensure") {
       const body = await readJson(req);
       const streamId = String(body.streamId ?? "").replace(/[^a-zA-Z0-9_-]/g, "");

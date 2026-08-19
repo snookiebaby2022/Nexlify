@@ -8,7 +8,7 @@ const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
 export const HLS_PLAYLIST_CONTENT_TYPE = "application/x-mpegURL";
 
 /** Real provider .m3u8 (BBC One FHD). Guessed Xtream suffixes get a much shorter probe. */
-export const HLS_NATIVE_PROBE_MS = 5_000;
+export const HLS_NATIVE_PROBE_MS = 2_000;
 export const HLS_GUESSED_PROBE_MS = 800;
 
 /**
@@ -36,6 +36,18 @@ export function isHlsClientPath(streamId: string): boolean {
 
 export function stripLiveStreamExtension(streamId: string): string {
   return streamId.replace(/\.(ts|m3u8|hls)$/i, "");
+}
+
+/** Same-origin HLS URL when a player requested MPEG-TS for an HLS source. */
+export function rewriteLivePathToHls(requestUrl: string): string {
+  const u = new URL(requestUrl);
+  const segs = u.pathname.split("/");
+  const last = segs[segs.length - 1] || "";
+  segs[segs.length - 1] = `${stripLiveStreamExtension(decodeURIComponent(last))}.m3u8`;
+  u.pathname = segs.join("/");
+  u.search = "";
+  u.hash = "";
+  return u.toString();
 }
 
 /** Upstream fetches must not use IPTV Smarters UA — many providers block it (empty/hang). */

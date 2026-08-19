@@ -1,5 +1,6 @@
 import { hlsDaemonOrigin, hlsDaemonToken } from "@/lib/hls-disk";
 import type { TranscodingProfile } from "@/lib/transcoding-profiles";
+import { startTsHlsPackager } from "@/lib/ts-hls-packager";
 
 export type HlsEnsureOpts = {
   streamId: string;
@@ -27,9 +28,48 @@ export async function isHlsDaemonHealthy(): Promise<boolean> {
   }
 }
 
+/** Kick ffmpeg in the HLS daemon (or local fallback) without waiting for a playlist. */
+export function startDiskHls(opts: HlsEnsureOpts): void {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 1_200);
+  void fetch(`${hlsDaemonOrigin()}/start`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${hlsDaemonToken()}`,
+    },
+    body: JSON.stringify(opts),
+    signal: ac.signal,
+  })
+    .then(async (res) => {
+      if (res.ok) return;
+      await startTsHlsPackager({
+        upstreamUrl: opts.upstreamUrl,
+        lineId: "daemon",
+        streamId: opts.streamId,
+        userAgent: opts.userAgent,
+        loop: opts.loop,
+        transcode: opts.transcode ?? null,
+        vod: opts.vod,
+      });
+    })
+    .catch(() =>
+      startTsHlsPackager({
+        upstreamUrl: opts.upstreamUrl,
+        lineId: "daemon",
+        streamId: opts.streamId,
+        userAgent: opts.userAgent,
+        loop: opts.loop,
+        transcode: opts.transcode ?? null,
+        vod: opts.vod,
+      })
+    )
+    .finally(() => clearTimeout(t));
+}
+
 async function daemonEnsure(opts: HlsEnsureOpts): Promise<HlsEnsureResult | null> {
   const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), 18_000);
+  const t = setTimeout(() => ac.abort(), 12_000);
   try {
     const res = await fetch(`${hlsDaemonOrigin()}/ensure`, {
       method: "POST",

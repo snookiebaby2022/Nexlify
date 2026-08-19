@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
   const page = Math.max(1, parseInt(req.nextUrl.searchParams.get("page") ?? "1", 10) || 1);
   const pageSize = Math.min(
     500,
-    Math.max(1, parseInt(req.nextUrl.searchParams.get("pageSize") ?? "100", 10) || 100)
+    Math.max(1, parseInt(req.nextUrl.searchParams.get("pageSize") ?? "50", 10) || 50)
   );
   const picker = req.nextUrl.searchParams.get("picker") === "1";
   const lite =

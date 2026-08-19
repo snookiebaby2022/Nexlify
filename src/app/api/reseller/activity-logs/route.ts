@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
 
   const take = Math.min(
     200,
-    Math.max(10, parseInt(req.nextUrl.searchParams.get("limit") ?? "100", 10) || 100)
+    Math.max(10, parseInt(req.nextUrl.searchParams.get("limit") ?? "50", 10) || 50)
   );
 
   const logs = await prisma.activityLog.findMany({

@@ -20,6 +20,7 @@ import {
 import { computePortalMenuPosition } from "@/lib/portal-menu-position";
 import { DownloadPlaylistModal } from "@/components/download-playlist-modal";
 import { LineRecentlyWatchedDialog } from "@/components/line-recently-watched-dialog";
+import { linesApiRoot, type PanelKind } from "@/lib/panel-api";
 
 export type LineRowForMenu = {
   id: string;
@@ -34,6 +35,7 @@ export type LineRowForMenu = {
 
 export function LineRowActionsMenu({
   line,
+  panel = "admin",
   onUpdated,
   open,
   onToggle,
@@ -45,6 +47,7 @@ export function LineRowActionsMenu({
   open: boolean;
   onToggle: () => void;
   onClose: () => void;
+  panel?: PanelKind;
   /** When false, only the trigger renders (avoids duplicate portals for hidden mobile/desktop layouts). */
   portalEnabled?: boolean;
 }) {
@@ -56,6 +59,8 @@ export function LineRowActionsMenu({
   const [recentOpen, setRecentOpen] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
 
+  const linesApi = linesApiRoot(panel);
+
   async function apiCall(url: string, options?: RequestInit) {
     const res = await fetch(url, options);
     const body = await res.json().catch(() => ({}));
@@ -65,7 +70,7 @@ export function LineRowActionsMenu({
 
   async function setStatus(status: string) {
     try {
-      await apiCall(`/api/admin/lines/${line.id}/status`, {
+      await apiCall(`${linesApi}/${line.id}/status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
@@ -81,7 +86,7 @@ export function LineRowActionsMenu({
     const days = prompt("Extend line by how many days?", "30");
     if (!days || Number(days) <= 0) return;
     try {
-      await apiCall(`/api/admin/lines/${line.id}`, {
+      await apiCall(`${linesApi}/${line.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ days: Number(days) }),
@@ -95,7 +100,7 @@ export function LineRowActionsMenu({
 
   async function killConnections() {
     try {
-      const body = await apiCall(`/api/admin/lines/${line.id}/connections`, { method: "DELETE" });
+      const body = await apiCall(`${linesApi}/${line.id}/connections`, { method: "DELETE" });
       alert(`Killed ${body.killed ?? 0} connection(s)`);
       onUpdated();
       onClose();
@@ -107,7 +112,7 @@ export function LineRowActionsMenu({
   async function remove() {
     if (!confirm(`Delete line "${line.username}"?`)) return;
     try {
-      await apiCall(`/api/admin/lines/${line.id}`, { method: "DELETE" });
+      await apiCall(`${linesApi}/${line.id}`, { method: "DELETE" });
       onUpdated();
       onClose();
     } catch (e) {
@@ -292,6 +297,7 @@ export function LineRowActionsMenu({
         username={line.username}
         open={recentOpen}
         onClose={() => setRecentOpen(false)}
+        apiRoot={linesApi}
       />
       <DownloadPlaylistModal
         open={downloadModalOpen}

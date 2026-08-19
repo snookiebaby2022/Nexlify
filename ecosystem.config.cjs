@@ -176,7 +176,7 @@ module.exports = {
       autorestart: true,
       max_restarts: 20,
       min_uptime: "5s",
-      max_memory_restart: "1024M",
+          max_memory_restart: "2048M",
       env: {
         NODE_ENV: "production",
         DATABASE_URL: fileEnv.DATABASE_URL || "",

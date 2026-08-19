@@ -21,11 +21,13 @@ export function LineRecentlyWatchedDialog({
   username,
   open,
   onClose,
+  apiRoot = "/api/admin/lines",
 }: {
   lineId: string;
   username: string;
   open: boolean;
   onClose: () => void;
+  apiRoot?: string;
 }) {
   const [data, setData] = useState<WatchSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,7 @@ export function LineRecentlyWatchedDialog({
     if (!open) return;
     setLoading(true);
     setError(null);
-    fetch(`/api/admin/lines/${lineId}/watch`)
+    fetch(`${apiRoot}/${lineId}/watch`)
       .then(async (r) => {
         const body = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(body.error ?? "Could not load watch history");
@@ -46,7 +48,7 @@ export function LineRecentlyWatchedDialog({
         setError(e.message);
       })
       .finally(() => setLoading(false));
-  }, [open, lineId]);
+  }, [open, lineId, apiRoot]);
 
   if (!open) return null;
 
