@@ -23,7 +23,6 @@ import {
   HLS_PLAYLIST_CONTENT_TYPE,
   HLS_NATIVE_PROBE_MS,
   rewritePackagerPlaylist,
-  buildNativeTsHlsManifest,
   buildClientDirectHlsMaster,
   shouldOfferClientDirectHls,
   UPSTREAM_HLS_UA,
@@ -35,6 +34,7 @@ import { logActivity } from "@/lib/lines";
 import { openUpstreamLiveStream, liveMpegTsResponseHeaders, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
 import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
 import { readReadyPackagerPlaylist } from "@/lib/ts-hls-packager";
+import { ensureDiskHls } from "@/lib/hls-restream-client";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -246,7 +246,17 @@ export async function GET(
 
     if (tsUrls[0]) {
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), tsUrls[0], 3600);
-      return hlsHeaders(buildNativeTsHlsManifest(panelOrigin, username, password, requestStreamKey));
+      const packed = await ensureDiskHls({
+        streamId: cleanId,
+        upstreamUrl: tsUrls[0],
+        userAgent: UPSTREAM_HLS_UA,
+      });
+      if (packed.ok) {
+        return hlsHeaders(
+          rewritePackagerPlaylist(packed.playlist, panelOrigin, username, password, requestStreamKey)
+        );
+      }
+      lastError = packed.error;
     }
 
     for (const playbackUrl of candidates) {

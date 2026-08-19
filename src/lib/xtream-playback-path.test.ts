@@ -12,10 +12,17 @@ test("parseXtreamPlaybackPath matches XUI /live/user/pass/id.ts", () => {
   assert.equal(p?.spliceVod, false);
 });
 
-test("parseXtreamPlaybackPath leaves HLS playlist/relay to Next", () => {
-  assert.equal(parseXtreamPlaybackPath("/live/u/p/123.m3u8")?.spliceLiveTs, false);
-  assert.equal(parseXtreamPlaybackPath("/live/u/p/123.m3u8")?.wantsHls, true);
-  assert.equal(parseXtreamPlaybackPath("/live/u/p/123/hls/token")?.spliceLiveTs, false);
+test("parseXtreamPlaybackPath marks HLS playlist and packager segments", () => {
+  const playlist = parseXtreamPlaybackPath("/live/u/p/123.m3u8");
+  assert.equal(playlist?.spliceLiveTs, false);
+  assert.equal(playlist?.wantsHls, true);
+  const relay = parseXtreamPlaybackPath("/live/u/p/123/hls/token");
+  assert.equal(relay?.spliceLiveTs, false);
+  assert.equal(relay?.wantsHls, true);
+  const seg = parseXtreamPlaybackPath("/live/u/p/123/hls/seg0.ts");
+  assert.equal(seg?.spliceLiveTs, false);
+  assert.equal(seg?.wantsHls, true);
+  assert.equal(seg?.streamKey, "123/hls/seg0.ts");
 });
 
 test("parseXtreamPlaybackPath splices movie/series but not timeshift", () => {

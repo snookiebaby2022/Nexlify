@@ -37,9 +37,11 @@ export async function GET(req: NextRequest) {
     return new NextResponse(null, { status: 204, headers: { "X-Nexlify-Passthrough": "1" } });
   }
 
-  if (parsed.kind === "timeshift" || parsed.wantsHls || (!parsed.spliceLiveTs && !parsed.spliceVod)) {
+  if (parsed.kind === "timeshift" || (!parsed.spliceLiveTs && !parsed.spliceVod && !parsed.wantsHls)) {
     return new NextResponse(null, { status: 204, headers: { "X-Nexlify-Passthrough": "1" } });
   }
+
+  const isHlsSegment = parsed.wantsHls && /\/hls\/seg\d+\.ts$/i.test(parsed.streamKey);
 
   const ip = getClientIp(req);
   const ua = req.headers.get("user-agent") ?? undefined;
@@ -61,13 +63,35 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Session kicked", { status: 403 });
   }
 
-  const { lineHasConnectionCapacity } = await import("@/lib/connections");
-  const hasCapacity = await lineHasConnectionCapacity(line.id, line.maxConnections, {
-    streamId: cleanId,
-    clientIp: ip,
-  });
-  if (!hasCapacity) {
-    return new NextResponse("Max connections reached", { status: 403 });
+  if (!isHlsSegment) {
+    const { lineHasConnectionCapacity } = await import("@/lib/connections");
+    const hasCapacity = await lineHasConnectionCapacity(line.id, line.maxConnections, {
+      streamId: cleanId,
+      clientIp: ip,
+    });
+    if (!hasCapacity) {
+      return new NextResponse("Max connections reached", { status: 403 });
+    }
+  }
+
+  if (parsed.wantsHls) {
+    if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD" && !isHlsSegment) {
+      void trackConnection({
+        lineId: line.id,
+        streamId: cleanId,
+        ip: ip ?? "",
+        userAgent: ua,
+      });
+    }
+    return new NextResponse(null, {
+      status: 200,
+      headers: {
+        "X-Nexlify-Stream-Id": cleanId,
+        "X-Nexlify-Live": "1",
+        "X-Nexlify-Hls": "1",
+        "Cache-Control": "no-store",
+      },
+    });
   }
 
   const antiFreeze = await getAntiFreezeSettings();
