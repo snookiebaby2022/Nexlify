@@ -47,35 +47,40 @@ function isUpdateWorkerAlive(pid: number): boolean {
   }
 }
 
-function findUpdateWorkerPid(): number | null {
-  if (process.platform === "win32") return null;
+function pgrepByPattern(pattern: string): number[] {
+  if (process.platform === "win32") return [];
   try {
-    const out = execSync(
-      "pgrep -f 'panel-update-background' 2>/dev/null || true",
-      { encoding: "utf8", timeout: 5000 }
-    ).trim();
-    const pid = parseInt(out.split("\n")[0] ?? "", 10);
-    return Number.isFinite(pid) && pid > 0 ? pid : null;
+    const out = execSync(`pgrep -f ${JSON.stringify(pattern)} 2>/dev/null || true`, {
+      encoding: "utf8",
+      timeout: 5000,
+    }).trim();
+    return out
+      .split("\n")
+      .map((line) => parseInt(line.trim(), 10))
+      .filter((pid) => Number.isFinite(pid) && pid > 0);
   } catch {
-    return null;
+    return [];
   }
 }
 
+function findUpdateWorkerPid(repoPath: string): number | null {
+  const pids = pgrepByPattern(`${repoPath}/scripts/panel-update-background`);
+  return pids[0] ?? null;
+}
+
 /** True when next build / apply-panel-fast-update is still running (outer worker may already be gone). */
-export function isPanelUpdateChildWorkAlive(): boolean {
+export function isPanelUpdateChildWorkAlive(repoPath?: string): boolean {
   if (process.platform === "win32") return false;
-  try {
-    const out = execSync(
-      "pgrep -f 'apply-panel-fast-update|next/dist/bin/next build|run-panel-build|panel-update-background' 2>/dev/null || true",
-      { encoding: "utf8", timeout: 5000 }
-    ).trim();
-    return out.split("\n").some((line) => {
-      const pid = parseInt(line.trim(), 10);
-      return Number.isFinite(pid) && pid > 0;
-    });
-  } catch {
-    return false;
-  }
+  const root = repoPath?.trim() || resolvePanelRepoPathSync();
+  const patterns = [
+    `${root}/scripts/panel-update-background`,
+    `${root}/scripts/apply-panel-fast-update`,
+    `${root}/scripts/run-panel-build`,
+    `${root}/scripts/run-next.mjs`,
+    `${root}/node_modules/.bin/next build`,
+    "next/dist/bin/next build",
+  ];
+  return patterns.some((p) => pgrepByPattern(p).length > 0);
 }
 
 /**
@@ -84,8 +89,8 @@ export function isPanelUpdateChildWorkAlive(): boolean {
  * `next build` continues — that must not flip the UI to "Update failed".
  */
 export async function isPanelUpdateWorkAlive(repoPath: string): Promise<boolean> {
-  if (findUpdateWorkerPid() != null) return true;
-  if (isPanelUpdateChildWorkAlive()) return true;
+  if (findUpdateWorkerPid(repoPath) != null) return true;
+  if (isPanelUpdateChildWorkAlive(repoPath)) return true;
   try {
     const marker = path.join(repoPath, ".update-in-progress");
     const st = await stat(marker);
@@ -351,7 +356,7 @@ export async function reconcileStaleUpdateJob(
 
   const pidAlive =
     workerPid != null && Number.isFinite(workerPid) && isUpdateWorkerAlive(workerPid);
-  const scriptAlive = findUpdateWorkerPid() != null;
+  const scriptAlive = findUpdateWorkerPid(repoPath) != null;
   const childAlive = await isPanelUpdateWorkAlive(repoPath);
   const alive = pidAlive || scriptAlive || childAlive;
   const started = job.startedAt ? Date.parse(job.startedAt) : NaN;
@@ -369,7 +374,7 @@ export async function reconcileStaleUpdateJob(
   }
 
   // Build/apply still running: never mark failed (outer PID death is common mid-compile)
-  if (childAlive || isPanelUpdateChildWorkAlive()) {
+  if (childAlive || isPanelUpdateChildWorkAlive(repoPath)) {
     return job;
   }
 
@@ -567,6 +572,12 @@ export async function startBackgroundPanelUpdate(
     toVersion: targetVersion?.replace(/^v/i, "").trim() || null,
   };
   await writeUpdateJob(repoPath, initialJob);
+
+  const persisted = await readUpdateJob(repoPath);
+  if (!persisted || persisted.status !== "running") {
+    await releaseLock(getUpdateLockPath(repoPath));
+    return { ok: false, error: "Could not persist update job state on disk" };
+  }
 
   const launcherPath = path.join(repoPath, "scripts", "panel-update-background.sh");
   const tsScriptPath = path.join(repoPath, "scripts", "panel-update-background.ts");

@@ -95,7 +95,14 @@ async function main() {
   const { writeFile, unlink } = await import("fs/promises");
 
   const repoPath = resolveJobRepoPath(resolvePanelRepoPathSync);
-  let job = await readUpdateJob(repoPath);
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  let job: Awaited<ReturnType<typeof readUpdateJob>> = null;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    job = await readUpdateJob(repoPath);
+    if (job?.status === "running") break;
+    await sleep(400);
+  }
 
   if (!job || job.status !== "running") {
     console.error("No running update job found");

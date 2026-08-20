@@ -21,6 +21,14 @@ type PanelUpdateJobContextValue = {
 
 const PanelUpdateJobContext = createContext<PanelUpdateJobContextValue | null>(null);
 
+/** Keep local "running" UI only briefly when the API is unreachable during PM2 swap. */
+function keepRecentRunningJob(prev: PanelUpdateJob | null, maxMs = 120_000): PanelUpdateJob | null {
+  if (prev?.status !== "running" || !prev.startedAt) return null;
+  const started = Date.parse(prev.startedAt);
+  if (!Number.isFinite(started) || Date.now() - started > maxMs) return null;
+  return prev;
+}
+
 /** One poll loop shared by Updates page + bottom overlay (prevents drift between UIs). */
 export function PanelUpdateJobProvider({ children }: { children: React.ReactNode }) {
   const [job, setJob] = useState<PanelUpdateJob | null>(null);
@@ -47,9 +55,11 @@ export function PanelUpdateJobProvider({ children }: { children: React.ReactNode
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { job?: PanelUpdateJob | null; updateRunning?: boolean } | null) => {
         if (!d) {
-          // Keep in-flight running job across 502s during PM2/nginx swap
-          setJob((prev) => (prev?.status === "running" ? prev : null));
-          setUpdateRunning((prev) => prev || false);
+          setJob((prev) => {
+            const kept = keepRecentRunningJob(prev);
+            setUpdateRunning(kept != null);
+            return kept;
+          });
           return;
         }
         const next = d.job ?? null;
@@ -63,7 +73,11 @@ export function PanelUpdateJobProvider({ children }: { children: React.ReactNode
         setUpdateRunning(Boolean(d.updateRunning || next?.status === "running"));
       })
       .catch(() => {
-        setJob((prev) => (prev?.status === "running" ? prev : null));
+        setJob((prev) => {
+          const kept = keepRecentRunningJob(prev);
+          setUpdateRunning(kept != null);
+          return kept;
+        });
       })
       .finally(() => {
         window.clearTimeout(timer);
