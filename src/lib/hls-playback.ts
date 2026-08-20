@@ -386,28 +386,6 @@ export async function fetchHlsManifestForClient(
   return { ok: true, body: res.body, finalUrl: res.finalUrl };
 }
 
-/**
- * When upstream is native MPEG-TS but the app requests `.m3u8` (Smarters HLS output),
- * serve an event-style playlist that points at the panel `.ts` URL — not raw TS bytes.
- * Uses EXTINF:-1 (continuous live TS). Finite EXTINF breaks Smarters HLS mode entirely.
- */
-export function buildNativeTsHlsManifest(
-  _panelOrigin: string,
-  username: string,
-  password: string,
-  streamId: string
-): string {
-  const tsUrl = `/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(streamId)}.ts`;
-  return [
-    "#EXTM3U",
-    "#EXT-X-VERSION:3",
-    "#EXT-X-PLAYLIST-TYPE:EVENT",
-    "#EXTINF:-1,",
-    tsUrl,
-    "",
-  ].join("\n");
-}
-
 /** Fast VOD HLS: rewrite a native provider playlist; otherwise package via the HLS daemon. */
 export async function buildClientVodHlsPlaylist(opts: {
   playbackUrl: string;

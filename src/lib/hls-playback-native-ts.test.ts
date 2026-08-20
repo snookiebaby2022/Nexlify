@@ -2,25 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildHlsRelayUrl,
-  buildNativeTsHlsManifest,
   rewritePackagerPlaylist,
   xuiDirectSourceLocation,
 } from "./hls-playback";
 import { isPackagerSegmentName } from "./ts-hls-packager";
-
-test("buildNativeTsHlsManifest points .m3u8 clients at panel .ts URL", () => {
-  const body = buildNativeTsHlsManifest(
-    "http://45.88.138.18",
-    "user1",
-    "pass1",
-    "stream123"
-  );
-  assert.ok(body.startsWith("#EXTM3U"));
-  assert.match(body, /#EXT-X-VERSION:3/);
-  assert.match(body, /#EXT-X-PLAYLIST-TYPE:EVENT/);
-  assert.match(body, /#EXTINF:-1,/);
-  assert.match(body, /^\/live\/user1\/pass1\/stream123\.ts$/m);
-});
 
 test("buildHlsRelayUrl uses path token without query string", () => {
   const url = buildHlsRelayUrl(

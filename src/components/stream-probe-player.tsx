@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { attachUrlToVideo } from "@/lib/browser-stream-player";
 import { canPlayInBrowser } from "@/lib/stream-probe-fast";
+import { isHlsPlaybackUrl } from "@/lib/hls-playback";
 
 type ProbeResult = {
   status: string;
@@ -38,64 +40,17 @@ export function StreamProbePlayer({
   const [showPlayer, setShowPlayer] = useState(Boolean(playFirst && canPlayInBrowser(streamUrl)));
   const [playerError, setPlayerError] = useState("");
 
-  const attachMedia = useCallback((url: string) => {
+  const attachMedia = useCallback(async (url: string) => {
     const video = videoRef.current;
     if (!video) return;
 
     hlsRef.current?.destroy();
     hlsRef.current = null;
     setPlayerError("");
-    video.removeAttribute("src");
-    video.load();
 
-    if (url.includes(".m3u8")) {
-      const HLS_SRC = "https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js";
-      const existing = document.querySelector(`script[src="${HLS_SRC}"]`);
-      const script = (existing as HTMLScriptElement | null) ?? document.createElement("script");
-      if (!existing) {
-        script.src = HLS_SRC;
-        script.async = true;
-        document.body.appendChild(script);
-      }
-      script.onload = () => {
-        const Hls = (
-          window as unknown as {
-            Hls?: {
-              isSupported: () => boolean;
-              new (): {
-                loadSource: (u: string) => void;
-                attachMedia: (v: HTMLVideoElement) => void;
-                on: (e: string, cb: () => void) => void;
-                destroy: () => void;
-              };
-            };
-          }
-        ).Hls;
-        if (Hls?.isSupported()) {
-          const hls = new Hls();
-          hlsRef.current = hls;
-          hls.loadSource(url);
-          hls.attachMedia(video);
-          hls.on("hlsError", () => setPlayerError("HLS playback failed (CORS or codec)"));
-          void video.play().catch(() => undefined);
-        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-          video.src = url;
-          void video.play().catch(() => undefined);
-        } else {
-          setPlayerError("HLS not supported in this browser");
-        }
-      };
-      document.body.appendChild(script);
-      return () => {
-        if (!existing) script.remove();
-      };
-    }
-
-    video.src = url;
-    void video.play().catch(() => {
-      /* autoplay may be blocked until user interacts */
-    });
-    return undefined;
+    const handle = await attachUrlToVideo(video, url, (msg) => setPlayerError(msg));
+    hlsRef.current = handle;
+    return () => handle.destroy();
   }, []);
 
   useEffect(() => {
@@ -119,7 +74,10 @@ export function StreamProbePlayer({
         const mint = await fetch("/api/admin/streams/proxy", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: rawUrl }),
+          body: JSON.stringify({
+            url: rawUrl,
+            hls: isHlsPlaybackUrl(rawUrl) || (!rawUrl.includes(".ts") && /^https?:\/\//i.test(rawUrl)),
+          }),
         });
         const minted = (await mint.json().catch(() => null)) as { playbackUrl?: string } | null;
         const proxyUrl =
@@ -166,13 +124,13 @@ export function StreamProbePlayer({
 
     void (async () => {
       let url = resolvedUrl || streamUrl;
-      // Prefer panel proxy for browser playback (CORS / TLS).
-      if (!url.includes("/api/admin/streams/proxy?t=")) {
+      if (!url.includes("/api/admin/streams/proxy?")) {
         const resolved = await resolvePlaybackUrl();
         if (cancelled) return;
         if (resolved) url = resolved;
       }
-      cleanup = attachMedia(url);
+      const teardown = await attachMedia(url);
+      if (!cancelled && teardown) cleanup = teardown;
     })();
 
     return () => {

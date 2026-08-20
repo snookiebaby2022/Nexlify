@@ -9,6 +9,7 @@ import { getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { isSessionKicked, trackConnection } from "@/lib/connections";
 import { outboundProxyHeaderValue, resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
+import { startDiskHls } from "@/lib/hls-restream-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,8 +95,15 @@ export async function GET(req: NextRequest) {
       antiFreeze.playbackUrlCacheTtlSec
     );
     const outboundProxy = await resolveStreamOutboundProxy(cleanId);
-    // XUI read_native_hls / direct_source: .m3u8 on TS sources is served as an EVENT
-    // playlist pointing at panel .ts — do not spawn ffmpeg on every HLS auth.
+    const tsUrl = candidates.find((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
+    if (tsUrl) {
+      startDiskHls({
+        streamId: cleanId,
+        upstreamUrl: tsUrl,
+        userAgent: UPSTREAM_HLS_UA,
+        outboundProxy,
+      });
+    }
     if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD" && !isHlsSegment) {
       void trackConnection({
         lineId: line.id,
