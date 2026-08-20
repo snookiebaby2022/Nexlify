@@ -40,7 +40,9 @@ ensure_nexlify_git_ssh() {
 
 nexlify_git_ssh_works() {
   ensure_nexlify_git_ssh
-  ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 | grep -qi 'successfully authenticated'
+  local out
+  out="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1)" || true
+  echo "$out" | grep -qiE 'successfully authenticated|Hi .+! You'
 }
 
 resolve_nexlify_git_url() {
