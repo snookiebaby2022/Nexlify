@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
+import { normalizeTimeFormat } from "@/lib/epg-time";
+import { getSettingGroup } from "@/lib/panel-settings";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
@@ -31,5 +33,11 @@ export async function GET() {
     }),
   ]);
 
-  return NextResponse.json({ sources, programs });
+  const general = await getSettingGroup("general");
+  const display = {
+    timezone: String(general.timezone || "Europe/London"),
+    timeFormat: normalizeTimeFormat(general.timeFormat),
+  };
+
+  return NextResponse.json({ sources, programs, display });
 }

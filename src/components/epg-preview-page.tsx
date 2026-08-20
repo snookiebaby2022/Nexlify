@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { DataTable } from "@/components/data-table";
-import { formatDateTime } from "@/lib/format";
+import { formatEpgDateTimeLabel, type PanelTimeFormat } from "@/lib/epg-time";
 
 type Program = {
   id: string;
@@ -16,6 +16,10 @@ type Program = {
 export function EpgPreviewPage() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [sources, setSources] = useState<{ id: string; name: string; country: string | null }[]>([]);
+  const [display, setDisplay] = useState<{ timezone: string; timeFormat: PanelTimeFormat }>({
+    timezone: "Europe/London",
+    timeFormat: "24",
+  });
 
   useEffect(() => {
     fetch("/api/reseller/epg-preview")
@@ -23,6 +27,12 @@ export function EpgPreviewPage() {
       .then((d) => {
         setPrograms(d.programs ?? []);
         setSources(d.sources ?? []);
+        if (d.display?.timezone) {
+          setDisplay({
+            timezone: d.display.timezone,
+            timeFormat: d.display.timeFormat === "12" ? "12" : "24",
+          });
+        }
       });
   }, []);
 
@@ -32,7 +42,7 @@ export function EpgPreviewPage() {
         <h1 className="text-2xl font-semibold">EPG preview</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
           Read-only guide data for the next 24 hours ({sources.length} active source
-          {sources.length === 1 ? "" : "s"}).
+          {sources.length === 1 ? "" : "s"}) · {display.timezone} · {display.timeFormat === "12" ? "12-hour" : "24-hour"} clock.
         </p>
       </div>
 
@@ -47,8 +57,8 @@ export function EpgPreviewPage() {
         rows={programs.map((p) => [
           p.channelId,
           p.title,
-          formatDateTime(p.start),
-          formatDateTime(p.stop),
+          formatEpgDateTimeLabel(p.start, display),
+          formatEpgDateTimeLabel(p.stop, display),
           p.source.name,
         ])}
       />

@@ -307,6 +307,7 @@ function authLive(clientReq) {
           status: res.statusCode || 502,
           upstream: String(res.headers["x-nexlify-upstream"] || ""),
           live: String(res.headers["x-nexlify-live"] || "") === "1",
+          hlsNative: String(res.headers["x-nexlify-hls-native"] || "") === "1",
           passthrough: String(res.headers["x-nexlify-passthrough"] || "") === "1" || res.statusCode === 204,
           streamId: String(res.headers["x-nexlify-stream-id"] || ""),
           outboundProxy: parseOutboundProxyHeader(res.headers["x-nexlify-outbound-proxy"]),
@@ -642,6 +643,11 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
   }
   if (auth.status === 401 || auth.status === 403 || auth.status === 429) {
     denyAuth(clientRes, auth.status);
+    return;
+  }
+  // Provider-native .m3u8 must relay through Next (rewritten manifest + upstream segments).
+  if (auth.hlsNative) {
+    forward(clientReq, clientRes, ctx);
     return;
   }
   if (auth.passthrough || auth.status !== 200 || !auth.streamId) {

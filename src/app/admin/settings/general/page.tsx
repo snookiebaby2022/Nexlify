@@ -23,6 +23,16 @@ export default function GeneralSettingsPage() {
               type: "select",
               options: TIMEZONE_OPTIONS,
             },
+            {
+              key: "timeFormat",
+              label: "Time format",
+              type: "select",
+              options: [
+                { value: "24", label: "24-hour (22:30)" },
+                { value: "12", label: "12-hour (10:30 PM)" },
+              ],
+              hint: "EPG times in player_api, xmltv.php, and the built-in web player.",
+            },
             { key: "defaultLanguage", label: "Default language" },
           ],
         },

@@ -2,19 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { streamsForLineExport, type LineWithBouquets } from "@/lib/lines";
 import { resolveEpgId } from "@/lib/subscription-export";
 import { Prisma, StreamType } from "@prisma/client";
+import { formatXmltvDateInTimezone } from "@/lib/epg-time";
+import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
-
-function formatXmltvDate(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  const t = Number.isFinite(d.getTime()) ? d : new Date();
-  return (
-    `${t.getUTCFullYear()}${p(t.getUTCMonth() + 1)}${p(t.getUTCDate())}` +
-    `${p(t.getUTCHours())}${p(t.getUTCMinutes())}${p(t.getUTCSeconds())} +0000`
-  );
-}
 
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
 export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 24): Promise<string> {
+  const general = await getSettingGroup("general");
+  const panelTimezone = String(general.timezone || "Europe/London");
   const streams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
   const channelMap = new Map<string, string>();
   for (const s of streams) {
@@ -61,7 +56,7 @@ export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 24): P
     const ch = xmltvSafeText(p.channelId);
     if (!ch) continue;
     lines.push(
-      `  <programme start="${formatXmltvDate(p.start)}" stop="${formatXmltvDate(p.stop)}" channel="${ch}">`,
+      `  <programme start="${formatXmltvDateInTimezone(p.start, panelTimezone)}" stop="${formatXmltvDateInTimezone(p.stop, panelTimezone)}" channel="${ch}">`,
       `    <title>${xmltvSafeText(p.title) || "Programme"}</title>`
     );
     if (p.description) lines.push(`    <desc>${xmltvSafeText(p.description)}</desc>`);

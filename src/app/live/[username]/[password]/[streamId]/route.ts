@@ -232,6 +232,7 @@ export async function GET(
   if (wantsM3u8) {
     const panelOrigin = serverBaseUrl(req.url, req.headers);
     const originalCandidates = new Set(candidates);
+    const hasStoredNativeHls = candidates.some((u) => isHlsPlaybackUrl(u));
     const expanded = expandHlsPlaybackCandidates(candidates);
     const tsUrls = expanded.filter((u) => !isHlsPlaybackUrl(u));
     const hlsUrls = expanded.filter((u) => isHlsPlaybackUrl(u));
@@ -265,8 +266,8 @@ export async function GET(
       return returnNativeHls(playbackUrl, manifest);
     }
 
-    // 2. Warm disk packager playlist (finite segments).
-    const existingPlaylist = readReadyPackagerPlaylist(cleanId);
+    // 2. Warm disk packager playlist (MPEG-TS sources only — not when stream_source is native HLS).
+    const existingPlaylist = !hasStoredNativeHls ? readReadyPackagerPlaylist(cleanId) : null;
     if (existingPlaylist) {
       if (tsUrls[0]) await cacheSet(hlsRelayCacheKey(line.id, cleanId), tsUrls[0], 3600);
       return hlsHeaders(

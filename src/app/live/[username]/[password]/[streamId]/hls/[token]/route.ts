@@ -5,13 +5,12 @@ import { getClientIp } from "@/lib/client-ip";
 import { buildLiveRedirectHeaders, getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { authorizeHlsLiveRequest, decodeRelayTarget } from "@/lib/hls-live-auth";
 import {
-  buildHlsRelayUrl,
   fetchHlsUpstream,
-  rewriteHlsManifestForRelay,
   HLS_PLAYLIST_CONTENT_TYPE,
-  UPSTREAM_HLS_UA,
   hlsMediaSegmentHttp,
+  UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
+import { antiFreezeLiveHeaders, respondNativeHlsRelay } from "@/lib/hls-relay-response";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { logActivity } from "@/lib/lines";
 import { ensureDiskHls } from "@/lib/hls-restream-client";
@@ -115,48 +114,9 @@ export async function GET(
     return iptvText("Segment unavailable", { status: upstream.status >= 400 ? upstream.status : 502 });
   }
 
-  const panelOrigin = req.nextUrl.origin;
-  const relay = (url: string) =>
-    buildHlsRelayUrl(
-      panelOrigin,
-      auth.username,
-      auth.password,
-      auth.requestStreamKey,
-      url
-    );
-
-  if (upstream.kind === "manifest") {
-    if (await isSessionKicked(auth.lineId, clientIp)) {
-      return iptvText("Session kicked", { status: 403 });
-    }
-
-    const body = rewriteHlsManifestForRelay(upstream.body, upstream.finalUrl, relay);
-    return withIptvCors(
-      new NextResponse(body, {
-        status: 200,
-        headers: {
-          ...buildLiveRedirectHeaders(antiFreeze),
-          "Content-Type": HLS_PLAYLIST_CONTENT_TYPE,
-          "Cache-Control": "no-cache, no-store",
-          "Accept-Ranges": "none",
-        },
-      })
-    );
-  }
-
   if (await isSessionKicked(auth.lineId, clientIp)) {
     return iptvText("Session kicked", { status: 403 });
   }
 
-  const segmentBuf = Buffer.from(upstream.body);
-  const seg = hlsMediaSegmentHttp(segmentBuf.length);
-  return withIptvCors(
-    new NextResponse(segmentBuf, {
-      status: seg.status,
-      headers: {
-        ...buildLiveRedirectHeaders(antiFreeze),
-        ...seg.headers,
-      },
-    })
-  );
+  return respondNativeHlsRelay(upstream, req, auth, antiFreezeLiveHeaders(antiFreeze));
 }

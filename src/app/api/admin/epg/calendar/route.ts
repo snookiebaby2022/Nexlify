@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
+import { normalizeTimeFormat } from "@/lib/epg-time";
+import { getSettingGroup } from "@/lib/panel-settings";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
@@ -20,6 +22,12 @@ export async function GET(req: Request) {
   endDate.setHours(23, 59, 59, 999);
 
   try {
+    const general = await getSettingGroup("general");
+    const display = {
+      timezone: String(general.timezone || "Europe/London"),
+      timeFormat: normalizeTimeFormat(general.timeFormat),
+    };
+
     const programs = await prisma.epgProgram.findMany({
       where: {
         start: { gte: startDate },
@@ -41,7 +49,7 @@ export async function GET(req: Request) {
 
     const channels = [...new Set(mapped.map((p) => p.channelName))].sort();
 
-    return NextResponse.json({ programs: mapped, channels, start, end });
+    return NextResponse.json({ programs: mapped, channels, start, end, display });
   } catch (e) {
     console.error("EPG calendar query error:", e);
     return NextResponse.json({ error: "Failed to load EPG programs" }, { status: 500 });

@@ -1,4 +1,6 @@
 import { prisma } from "./prisma";
+import { formatXtreamEpgDateTime, normalizeTimeFormat } from "./epg-time";
+import { getSettingGroup } from "./panel-settings";
 import { xtreamBase64, xtreamSafeText, xtreamUnix } from "./xtream-safe";
 
 /** Parse XMLTV datetime: 20240603120000 +0000 (offset required for correct EPG times). */
@@ -116,11 +118,21 @@ export async function syncEpgSource(sourceId: string) {
 export async function getShortEpg(channelId: string, limit = 4) {
   const { cacheGetOrSet } = await import("./cache");
   const { getCacheTtls } = await import("./cache-ttl");
+  const general = await getSettingGroup("general");
+  const timezone = String(general.timezone || "Europe/London");
+  const timeFormat = normalizeTimeFormat(general.timeFormat);
   const ttl = await getCacheTtls();
-  return cacheGetOrSet(`epg:short:${channelId}:${limit}`, ttl.epg, async () => loadShortEpg(channelId, limit));
+  const cacheKey = `epg:short:${channelId}:${limit}:${timezone}:${timeFormat}`;
+  return cacheGetOrSet(cacheKey, ttl.epg, async () =>
+    loadShortEpg(channelId, limit, { timezone, timeFormat })
+  );
 }
 
-async function loadShortEpg(channelId: string, limit: number) {
+async function loadShortEpg(
+  channelId: string,
+  limit: number,
+  display: { timezone: string; timeFormat: "12" | "24" }
+) {
   const now = new Date();
   const programs = await prisma.epgProgram.findMany({
     where: {
@@ -136,8 +148,8 @@ async function loadShortEpg(channelId: string, limit: number) {
     epg_id: xtreamSafeText(channelId),
     title: xtreamBase64(p.title),
     lang: "en",
-    start: p.start.toISOString().replace("T", " ").replace(/\.\d+Z$/, ""),
-    end: p.stop.toISOString().replace("T", " ").replace(/\.\d+Z$/, ""),
+    start: formatXtreamEpgDateTime(p.start, display),
+    end: formatXtreamEpgDateTime(p.stop, display),
     description: xtreamBase64(p.description ?? ""),
     channel_id: xtreamSafeText(channelId),
     start_timestamp: String(xtreamUnix(p.start)),

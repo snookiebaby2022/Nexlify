@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { attachUrlToVideo } from "@/lib/use-hls-player";
 import type { StreamPlayerHandle } from "@/lib/use-hls-player";
+import { decodeXtreamBase64, formatEpgTimeRange, formatPanelClock, normalizeTimeFormat } from "@/lib/epg-time";
 
 type LiveStream = {
   stream_id: string;
@@ -29,7 +30,15 @@ type EpgProgram = {
   title: string;
   start: string;
   end: string;
+  startTimestamp?: number;
+  endTimestamp?: number;
   desc?: string;
+};
+
+type ServerInfo = {
+  timezone?: string;
+  time_format?: string;
+  time_now?: string;
 };
 
 function PanelWebPlayerInner() {
@@ -56,6 +65,8 @@ function PanelWebPlayerInner() {
   const [tab, setTab] = useState<"all" | "recent" | "fav">("all");
   const [showInfo, setShowInfo] = useState(true);
   const [epgProgram, setEpgProgram] = useState<EpgProgram | null>(null);
+  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
+  const [panelClock, setPanelClock] = useState("");
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -112,6 +123,7 @@ function PanelWebPlayerInner() {
       if (info?.user_info?.auth === 0) {
         throw new Error(info.user_info.message || "Login failed");
       }
+      setServerInfo(info?.server_info ?? null);
       const catData = await catRes.json();
       const liveData = await liveRes.json();
       const catsArr = Array.isArray(catData) ? catData : [];
@@ -141,6 +153,24 @@ function PanelWebPlayerInner() {
     }
   }, [params, loadPlaylist]);
 
+  const displayOpts = useMemo(
+    () => ({
+      timezone: serverInfo?.timezone || "Europe/London",
+      timeFormat: normalizeTimeFormat(serverInfo?.time_format),
+    }),
+    [serverInfo]
+  );
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    const tick = () => {
+      setPanelClock(formatPanelClock(new Date(), displayOpts));
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [loggedIn, displayOpts]);
+
   // EPG fetch for current channel
   const fetchEpg = useCallback(async (streamId: string, username: string, password: string) => {
     if (!streamId || !username || !password) return;
@@ -151,11 +181,15 @@ function PanelWebPlayerInner() {
       const items = Array.isArray(data?.epg_listings) ? data.epg_listings : [];
       if (items.length > 0) {
         const first = items[0];
+        const startTs = Number(first.start_timestamp);
+        const endTs = Number(first.stop_timestamp);
         setEpgProgram({
-          title: first.title || "No program info",
+          title: decodeXtreamBase64(first.title || "") || "No program info",
           start: first.start || "",
           end: first.end || "",
-          desc: first.description || "",
+          startTimestamp: Number.isFinite(startTs) ? startTs : undefined,
+          endTimestamp: Number.isFinite(endTs) ? endTs : undefined,
+          desc: decodeXtreamBase64(first.description || ""),
         });
       } else {
         setEpgProgram(null);
@@ -460,6 +494,9 @@ function PanelWebPlayerInner() {
           <div className="min-w-0">
             <p className="text-[10px] uppercase tracking-wider text-neutral-500">Logged in as</p>
             <p className="text-sm font-medium truncate">{username}</p>
+            {panelClock && (
+              <p className="text-[10px] text-neutral-400 mt-1 font-mono tabular-nums">{panelClock}</p>
+            )}
           </div>
           <button
             type="button"
@@ -692,7 +729,13 @@ function PanelWebPlayerInner() {
                           {epgProgram.title}
                           {epgProgram.start && epgProgram.end && (
                             <span className="text-neutral-500 ml-1">
-                              {String(epgProgram.start).slice(0, 4)}:{String(epgProgram.start).slice(4, 6)} - {String(epgProgram.end).slice(0, 4)}:{String(epgProgram.end).slice(4, 6)}
+                              {epgProgram.startTimestamp && epgProgram.endTimestamp
+                                ? formatEpgTimeRange(
+                                    new Date(epgProgram.startTimestamp * 1000),
+                                    new Date(epgProgram.endTimestamp * 1000),
+                                    displayOpts
+                                  )
+                                : `${epgProgram.start} - ${epgProgram.end}`}
                             </span>
                           )}
                         </p>
@@ -726,6 +769,12 @@ function PanelWebPlayerInner() {
                   )}
                 </div>
               </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {panelClock && (
+                  <span className="hidden sm:inline text-[10px] font-mono tabular-nums text-neutral-300 bg-black/40 px-2 py-1 rounded">
+                    {panelClock}
+                  </span>
+                )}
               <div className="flex items-center gap-1">
                 <button
                   type="button"
@@ -829,6 +878,7 @@ function PanelWebPlayerInner() {
                 >
                   <X size={14} />
                 </button>
+              </div>
               </div>
             </div>
           </div>

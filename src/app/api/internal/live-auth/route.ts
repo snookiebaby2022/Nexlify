@@ -95,8 +95,10 @@ export async function GET(req: NextRequest) {
       antiFreeze.playbackUrlCacheTtlSec
     );
     const outboundProxy = await resolveStreamOutboundProxy(cleanId);
+    const hlsNative = candidates.find((u) => isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
     const tsUrl = candidates.find((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
-    if (tsUrl) {
+    // Disk packager is for MPEG-TS only — never compete with provider-native HLS.
+    if (tsUrl && !hlsNative) {
       startDiskHls({
         streamId: cleanId,
         upstreamUrl: tsUrl,
@@ -118,6 +120,7 @@ export async function GET(req: NextRequest) {
         "X-Nexlify-Stream-Id": cleanId,
         "X-Nexlify-Live": "1",
         "X-Nexlify-Hls": "1",
+        ...(hlsNative ? { "X-Nexlify-Hls-Native": "1" } : {}),
         "Cache-Control": "no-store",
         ...proxyAuthHeaders(outboundProxy),
       } as Record<string, string>,

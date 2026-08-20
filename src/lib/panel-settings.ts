@@ -81,6 +81,8 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     webhookUrls: "",
     webhookEvents: "*",
     timezone: "Europe/London",
+    /** "24" (default) or "12" — IPTV apps and panel EPG display. */
+    timeFormat: "24",
     defaultLanguage: "en",
     maintenanceMode: false,
     disableTrial: false,

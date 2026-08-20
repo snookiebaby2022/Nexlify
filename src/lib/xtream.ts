@@ -41,25 +41,15 @@ import {
   resolveStreamHttpsPort,
   resolveWebsiteHttpPort,
 } from "./server-ports";
+import { formatPanelClock, normalizeTimeFormat } from "./epg-time";
 import { getPanelServerSettings } from "./panel-server";
 import { getSettingGroup } from "./panel-settings";
 import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
 
 type RequestHeaders = { get(name: string): string | null };
 
-function xtreamClockNow(timezone: string): string {
-  const fmt = new Intl.DateTimeFormat("en-GB", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-  const parts = Object.fromEntries(fmt.formatToParts(new Date()).map((p) => [p.type, p.value]));
-  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
+function xtreamClockNow(timezone: string, timeFormat: "12" | "24"): string {
+  return formatPanelClock(new Date(), { timezone, timeFormat });
 }
 
 /** Panel + IPTV base URL (M3U live links, Xtream when served from same host). */
@@ -108,6 +98,7 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
   const streams = await getSettingGroup("streams");
   const general = await getSettingGroup("general");
   const panelTimezone = String(general.timezone || "Europe/London");
+  const timeFormat = normalizeTimeFormat(general.timeFormat);
   const abrAutoSwitch = streams.abrAutoSwitch === true;
   const panelOrigin = pickPublicOrigin(
     panelBaseUrl,
@@ -129,7 +120,8 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
   const httpPort = useHttps ? String(streamHttpsPort) : publicPort;
   const httpsPort = String(streamHttpsPort);
   const formats = xtreamOutputFormats(line.allowedOutput);
-  const clock = xtreamClockNow(panelTimezone);
+  const clock = xtreamClockNow(panelTimezone, timeFormat);
+  const datetimeFormat = timeFormat === "12" ? "Y-m-d h:i:s A" : "Y-m-d H:i:s";
   return {
     user_info: {
       username: line.username,
@@ -156,6 +148,9 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
       server_protocol: useHttps ? "https" : "http",
       rtmp_port: "0",
       timezone: panelTimezone,
+      time_format: timeFormat,
+      date_format: "Y-m-d",
+      datetime_format: datetimeFormat,
       timestamp_now: Math.floor(Date.now() / 1000),
       time_now: clock,
       time: clock,

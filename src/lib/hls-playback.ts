@@ -1,5 +1,10 @@
 import { Readable } from "node:stream";
-import { looksLikeHtmlErrorPayload, openUpstreamLiveStream } from "@/lib/live-upstream-proxy";
+import { ReadableStream } from "node:stream/web";
+import {
+  looksLikeHtmlErrorPayload,
+  openUpstreamLiveStream,
+  type UpstreamOpenResult,
+} from "@/lib/live-upstream-proxy";
 import { isPackagerSegmentName } from "@/lib/ts-hls-packager";
 
 const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
@@ -7,27 +12,46 @@ const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
 /** Xtream/nginx HLS playlist type — Smarters ExoPlayer accepts this more reliably than vnd.apple.mpegurl. */
 export const HLS_PLAYLIST_CONTENT_TYPE = "application/x-mpegURL";
 
-/** Real provider .m3u8 (BBC One FHD). Guessed Xtream suffixes get a much shorter probe. */
-export const HLS_NATIVE_PROBE_MS = 800;
+/** Real provider .m3u8 — allow slow CDNs; guessed Xtream suffixes stay short. */
+export const HLS_NATIVE_PROBE_MS = 3_000;
 export const HLS_GUESSED_PROBE_MS = 800;
 
 /**
  * Finite HLS segments: never 206 without Content-Range. VLC refuses that combo;
  * ExoPlayer is lenient which is why MPEG-TS/HLS looked "fine" only on Exo.
  */
-export function hlsMediaSegmentHttp(byteLength: number): {
+export function hlsMediaSegmentHttp(
+  byteLength: number,
+  contentType?: string
+): {
   status: number;
   headers: Record<string, string>;
 } {
   return {
     status: 200,
-    headers: {
-      "Content-Type": "video/mp2t",
-      "Content-Length": String(byteLength),
-      "Cache-Control": "no-cache, no-store",
-      "Accept-Ranges": "none",
-    },
+    headers: hlsSegmentResponseHeaders(contentType, byteLength),
   };
+}
+
+/** Native HLS segment headers — preserve fmp4/mp2t; ExoPlayer wants 200 + Content-Length. */
+export function hlsSegmentResponseHeaders(
+  contentType?: string,
+  byteLength?: number
+): Record<string, string> {
+  let ct = (contentType ?? "video/mp2t").split(";")[0]!.trim() || "video/mp2t";
+  if (ct.includes("mpegurl") || ct.includes("m3u8")) ct = "video/mp2t";
+  const headers: Record<string, string> = {
+    "Content-Type": ct,
+    "Cache-Control": "no-cache, no-store",
+    "Accept-Ranges": "none",
+    "Access-Control-Allow-Origin": "*",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  };
+  if (byteLength != null && byteLength > 0) {
+    headers["Content-Length"] = String(byteLength);
+  }
+  return headers;
 }
 
 export function isHlsClientPath(streamId: string): boolean {
@@ -313,6 +337,7 @@ export function rewriteHlsManifest(body: string, manifestUrl: string): string {
 export type HlsFetchResult =
   | { ok: true; kind: "manifest"; body: string; finalUrl: string }
   | { ok: true; kind: "segment"; body: ArrayBuffer; contentType: string; finalUrl: string }
+  | { ok: true; kind: "segment-stream"; open: UpstreamOpenResult; finalUrl: string }
   | { ok: false; status: number; detail?: string };
 
 async function readReadableLimited(stream: Readable, maxBytes: number): Promise<Buffer> {
@@ -331,41 +356,119 @@ async function readReadableLimited(stream: Readable, maxBytes: number): Promise<
   return Buffer.concat(chunks, total);
 }
 
+function prependReadable(prefix: Buffer, stream: Readable): Readable {
+  if (!prefix.length) return stream;
+  return Readable.from(
+    (async function* () {
+      yield prefix;
+      for await (const chunk of stream) {
+        yield chunk;
+      }
+    })()
+  );
+}
+
+async function peekReadable(stream: Readable, maxBytes: number): Promise<{ prefix: Buffer; rest: Readable }> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for await (const chunk of stream) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    if (total + buf.length <= maxBytes) {
+      chunks.push(buf);
+      total += buf.length;
+      continue;
+    }
+    const need = maxBytes - total;
+    chunks.push(buf.subarray(0, need));
+    return {
+      prefix: Buffer.concat(chunks),
+      rest: prependReadable(buf.subarray(need), stream),
+    };
+  }
+  return { prefix: Buffer.concat(chunks), rest: Readable.from([]) };
+}
+
+function nodeStreamToWeb(nodeStream: Readable): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      nodeStream.on("data", (chunk: Buffer) => {
+        controller.enqueue(new Uint8Array(chunk));
+      });
+      nodeStream.on("end", () => {
+        try {
+          controller.close();
+        } catch {
+          /* ignore */
+        }
+      });
+      nodeStream.on("error", (err) => {
+        try {
+          controller.error(err);
+        } catch {
+          /* ignore */
+        }
+      });
+    },
+    cancel() {
+      nodeStream.destroy();
+    },
+  });
+}
+
+/** Stream a native HLS segment without buffering the full file (lower latency for ExoPlayer). */
+export function hlsSegmentStreamResponse(open: UpstreamOpenResult): {
+  stream: ReadableStream<Uint8Array>;
+  headers: Record<string, string>;
+} {
+  const cl = open.headers["content-length"];
+  const len = cl ? Number(cl) : undefined;
+  return {
+    stream: nodeStreamToWeb(open.body),
+    headers: hlsSegmentResponseHeaders(open.contentType, Number.isFinite(len) ? len : undefined),
+  };
+}
+
 export async function fetchHlsUpstream(
   upstreamUrl: string,
   userAgent?: string,
-  range?: string | null,
+  _range?: string | null,
   timeoutMs = 20_000
 ): Promise<HlsFetchResult> {
   try {
-    const extra: Record<string, string> = {};
-    if (range) extra.Range = range;
     const open = await openUpstreamLiveStream(upstreamUrl, {
       userAgent: userAgent?.trim() || UPSTREAM_HLS_UA,
       timeoutMs,
-      headers: extra,
     });
     const finalUrl = open.finalUrl || upstreamUrl;
     const contentType = open.contentType ?? "";
-    const buf = await readReadableLimited(open.body, 16_000_000);
+    const ct = contentType.toLowerCase();
+    const likelyManifest = isHlsPlaybackUrl(upstreamUrl) || ct.includes("mpegurl") || ct.includes("m3u8");
+
+    if (!likelyManifest) {
+      return { ok: true, kind: "segment-stream", open, finalUrl };
+    }
+
+    const { prefix, rest } = await peekReadable(open.body, 512);
+    if (looksLikeHtmlErrorPayload(prefix)) {
+      rest.destroy();
+      return { ok: false, status: 502, detail: "html error page" };
+    }
+    const head = prefix.toString("utf8").trimStart();
+    if (!head.startsWith("#EXT")) {
+      return {
+        ok: true,
+        kind: "segment-stream",
+        open: { ...open, body: prependReadable(prefix, rest) },
+        finalUrl,
+      };
+    }
+
+    const tail = await readReadableLimited(rest, 512_000);
+    const buf = Buffer.concat([prefix, tail]);
     if (!buf.length) {
       return { ok: false, status: 502, detail: "empty upstream body" };
     }
-    if (looksLikeHtmlErrorPayload(buf)) {
-      return { ok: false, status: 502, detail: "html error page" };
-    }
-    const head = buf.subarray(0, Math.min(buf.length, 16)).toString("utf8").trimStart();
-    if (head.startsWith("#EXT")) {
-      return { ok: true, kind: "manifest", body: buf.toString("utf8"), finalUrl };
-    }
-
-    return {
-      ok: true,
-      kind: "segment",
-      body: Uint8Array.from(buf).buffer,
-      contentType: contentType || "video/mp2t",
-      finalUrl,
-    };
+    return { ok: true, kind: "manifest", body: buf.toString("utf8"), finalUrl };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "fetch failed";
     const status = /timeout/i.test(msg) ? 504 : /HTTP (\d+)/.test(msg) ? Number(RegExp.$1) : 502;

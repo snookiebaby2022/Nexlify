@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { formatEpgDateTimeLabel, type PanelTimeFormat } from "@/lib/epg-time";
 
 type EpgProgram = {
   id: string;
@@ -45,6 +46,10 @@ export default function EpgCalendarPage() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [programs, setPrograms] = useState<EpgProgram[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
+  const [display, setDisplay] = useState<{ timezone: string; timeFormat: PanelTimeFormat }>({
+    timezone: "Europe/London",
+    timeFormat: "24",
+  });
 
   const today = new Date();
   const weekStart = useMemo(() => startOfWeek(new Date(today)), []);
@@ -58,6 +63,12 @@ export default function EpgCalendarPage() {
       .then((r) => r.json())
       .then((d) => {
         setPrograms(d.programs ?? []);
+        if (d.display?.timezone) {
+          setDisplay({
+            timezone: d.display.timezone,
+            timeFormat: d.display.timeFormat === "12" ? "12" : "24",
+          });
+        }
         const ch = [...new Set((d.programs ?? []).map((p: EpgProgram) => p.channelName))].sort() as string[];
         setChannels(ch);
       })
@@ -85,7 +96,9 @@ export default function EpgCalendarPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">EPG Calendar</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>Week view of scheduled programs across all channels.</p>
+          <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
+            Week view of scheduled programs across all channels ({display.timezone}, {display.timeFormat === "12" ? "12-hour" : "24-hour"} clock).
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" className="p-2 rounded border" style={{ borderColor: "var(--border)" }} onClick={() => setWeekOffset((o) => o - 1)}>
@@ -122,12 +135,12 @@ export default function EpgCalendarPage() {
                     key={p.id}
                     className="rounded px-2 py-1 text-xs cursor-pointer hover:opacity-90"
                     style={{ background: "rgba(0,192,239,0.15)", borderLeft: "3px solid var(--accent)" }}
-                    title={`${p.channelName}: ${p.title} (${new Date(p.start).toLocaleTimeString()} - ${new Date(p.end).toLocaleTimeString()})`}
+                    title={`${p.channelName}: ${p.title} (${formatEpgDateTimeLabel(p.start, display)} - ${formatEpgDateTimeLabel(p.end, display)})`}
                   >
                     <div className="font-medium truncate">{p.title}</div>
                     <div className="text-[10px] opacity-70">{p.channelName}</div>
                     <div className="text-[10px] opacity-70">
-                      {new Date(p.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} - {new Date(p.end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {formatEpgDateTimeLabel(p.start, display)} – {formatEpgDateTimeLabel(p.end, display)}
                     </div>
                   </div>
                 );
