@@ -75,7 +75,7 @@ export function StreamProbePlayer({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             url: rawUrl,
-            hls: isHlsPlaybackUrl(rawUrl) || (!rawUrl.includes(".ts") && /^https?:\/\//i.test(rawUrl)),
+            hls: isBrowserHlsUrl(rawUrl) || (!rawUrl.includes(".ts") && /^https?:\/\//i.test(rawUrl)),
           }),
         });
         const minted = (await mint.json().catch(() => null)) as { playbackUrl?: string } | null;
