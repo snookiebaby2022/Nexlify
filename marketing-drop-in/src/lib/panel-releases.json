@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.22",
+  "latestVersion": "2.0.23",
   "releases": [
+    {
+      "version": "2.0.23",
+      "date": "2026-08-21",
+      "channel": "stable",
+      "summary": "Live Connections show HLS viewers and refresh faster.",
+      "changelog": [
+        "Track live sessions on every HLS segment/playlist request (edge disk HLS and Next relay)",
+        "Pulse connection heartbeats from IPTV edge disk HLS; upsert when pulse arrives before track",
+        "Live Connections page polls every 2s; reseller header shows live connection count"
+      ],
+      "fixes": [
+        "Live Connections empty while watching via HLS — only the first playlist was tracked, then rows expired after 45s",
+        "Sub-reseller dashboard SSE and header stats omitted live connection counts"
+      ]
+    },
     {
       "version": "2.0.22",
       "date": "2026-08-21",

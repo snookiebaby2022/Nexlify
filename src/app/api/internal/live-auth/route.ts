@@ -52,8 +52,6 @@ export async function GET(req: NextRequest) {
     return new NextResponse(null, { status: 204, headers: { "X-Nexlify-Passthrough": "1" } });
   }
 
-  const isHlsSegment = parsed.wantsHls && /\/hls\/seg\d+\.ts$/i.test(parsed.streamKey);
-
   const ip = getClientIp(req);
   const ua = req.headers.get("user-agent") ?? undefined;
   let cleanId = stripLiveStreamExtension(parsed.streamKey.split("/")[0] ?? parsed.streamKey);
@@ -77,6 +75,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Session kicked", { status: 403 });
   }
 
+  const isHlsSegment = parsed.wantsHls && /\/hls\/seg\d+\.ts$/i.test(parsed.streamKey);
   if (!isHlsSegment) {
     const { lineHasConnectionCapacity } = await import("@/lib/connections");
     const hasCapacity = await lineHasConnectionCapacity(line.id, line.maxConnections, {
@@ -112,7 +111,7 @@ export async function GET(req: NextRequest) {
     if (hlsNative) {
       schedulePlaybackUpstreamWarm(hlsNative, UPSTREAM_HLS_UA);
     }
-    if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD" && !isHlsSegment) {
+    if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD") {
       void trackConnection({
         lineId: line.id,
         streamId: cleanId,

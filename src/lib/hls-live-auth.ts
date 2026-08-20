@@ -5,6 +5,7 @@ import { getLineForPlaybackAuth, resolvePlaybackUrlForLine } from "@/lib/line-pl
 import { lineIsPlayable } from "@/lib/lines";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { cacheGet, cacheSet } from "@/lib/cache";
+import { trackConnection } from "@/lib/connections";
 import { getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { hlsRelayCacheKey, isSafeUpstreamUrl, stripLiveStreamExtension, hlsNativeUrlCacheKey } from "@/lib/hls-playback";
 
@@ -86,6 +87,14 @@ export async function authorizeHlsLiveRequest(
   if (!rootUpstream) {
     return { ok: false, status: 404, message: "Not found" };
   }
+
+  void trackConnection({
+    lineId: line.id,
+    streamId: resolvedStreamId,
+    ip: ip ?? "",
+    userAgent: ua,
+    playbackPath: req.nextUrl.pathname,
+  });
 
   return {
     ok: true,

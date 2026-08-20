@@ -121,35 +121,45 @@ export function PanelTopNav({
   }, [loadProfileAvatar]);
 
   useEffect(() => {
-    if (role !== "RESELLER") return;
-    const loadCredits = () =>
-      fetch("/api/reseller/stats")
-        .then((r) => (r.ok ? r.json() : null))
-        .then((d) => setResellerCredits(d?.credits ?? 0))
-        .catch(() => {});
-    loadCredits();
-    const t = setInterval(loadCredits, 60000);
-    return () => clearInterval(t);
-  }, [role]);
-
-  useEffect(() => {
-    if (role !== "ADMIN") return;
-    const load = () =>
-      fetch("/api/admin/stats")
-        .then((r) => r.json())
-        .then((d) =>
-          setStats({
-            activeLines: d.activeLines,
-            streams: d.liveStreams ?? d.streams,
-            onlineConnections: d.onlineConnections,
-            networkInPerMin: d.networkInPerMin,
-            networkOutPerMin: d.networkOutPerMin,
+    if (role === "ADMIN") {
+      const load = () =>
+        fetch("/api/admin/stats")
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (!d) return;
+            setStats({
+              activeLines: d.activeLines,
+              streams: d.liveStreams ?? d.streams,
+              onlineConnections: d.onlineConnections,
+              networkInPerMin: d.networkInPerMin,
+              networkOutPerMin: d.networkOutPerMin,
+            });
           })
-        )
-        .catch(() => {});
-    load();
-    const t = setInterval(load, 15000);
-    return () => clearInterval(t);
+          .catch(() => {});
+      load();
+      const t = setInterval(load, 15000);
+      return () => clearInterval(t);
+    }
+    if (role === "RESELLER") {
+      const load = () =>
+        fetch("/api/reseller/stats")
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (!d) return;
+            setResellerCredits(d.credits ?? 0);
+            setStats({
+              activeLines: d.activeLines ?? 0,
+              streams: d.dashboard?.onlineStreams ?? 0,
+              onlineConnections: d.dashboard?.onlineConnections ?? 0,
+              networkInPerMin: 0,
+              networkOutPerMin: 0,
+            });
+          })
+          .catch(() => {});
+      load();
+      const t = setInterval(load, 15000);
+      return () => clearInterval(t);
+    }
   }, [role]);
 
   useEffect(() => {

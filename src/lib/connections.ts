@@ -8,7 +8,7 @@ import {
 } from "./connection-playback-output";
 
 export const STALE_MS = 5 * 60 * 1000; // 5 minutes — DB cleanup for orphaned rows
-export const LIVE_STALE_MS = 45 * 1000; // 45s — live connections display (who is watching now)
+export const LIVE_STALE_MS = 25 * 1000; // 25s — live connections display (HLS segments refresh ~every 2–6s)
 /** Max-connection checks use a shorter window so closed/zombie sessions free slots quickly. */
 export const PLAYBACK_STALE_MS = 60 * 1000;
 const CONNECTIONS_CACHE_TTL = 5; // 5 seconds — short TTL for dashboard responsiveness
@@ -212,6 +212,7 @@ export async function trackConnection(opts: {
       where: { id: existing.id },
       data: { lastSeenAt: new Date() },
     });
+    void cacheDel("conn:*").catch(() => {});
     if (streamId) {
       const output = resolvePlaybackOutputLabel({
         requestPath: opts.playbackPath,
@@ -235,10 +236,11 @@ export async function trackConnection(opts: {
       data: {
         lineId: opts.lineId,
         streamId,
-        ip: opts.ip,
+        ip: opts.ip ?? null,
         userAgent: opts.userAgent,
       },
     });
+    void cacheDel("conn:*").catch(() => {});
     if (streamId) {
       const output = resolvePlaybackOutputLabel({
         requestPath: opts.playbackPath,

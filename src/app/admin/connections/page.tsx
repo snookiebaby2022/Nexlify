@@ -44,14 +44,15 @@ export default function AdminConnectionsPage() {
   const [tick, setTick] = useState(0);
 
   function load() {
-    fetch("/api/admin/connections")
-      .then((r) => r.json())
-      .then((d) => setConnections(d.connections));
+    fetch("/api/admin/connections", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => setConnections(Array.isArray(d.connections) ? d.connections : []))
+      .catch(() => setConnections([]));
   }
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 5000);
+    const t = setInterval(load, 2000);
     return () => clearInterval(t);
   }, []);
 
@@ -97,8 +98,7 @@ export default function AdminConnectionsPage() {
       <p className="text-sm px-1" style={{ color: "var(--muted)" }}>
         Kick hard-stops panel-proxied live HTTP (aborts the stream body) and blocks reconnect for
         ~2 minutes. Movie/series redirects and clients already holding a direct upstream URL are
-        outside that path — they fail on the next panel request. Active plays refresh every 5s.
-        Quality % is measured from live throughput (bytes/sec) and stall time while media flows.
+        outside that path — they fail on the next panel request.         Active plays refresh every 2s. Quality % is measured from live throughput (bytes/sec) and stall time while media flows.
         {paths.isReseller ? " Showing your lines only." : ""}
       </p>
 

@@ -6,7 +6,7 @@ import { countActiveConnections, listLiveConnections } from "@/lib/connections";
 import { sampleLocalHostMetrics } from "@/lib/host-metrics";
 
 export async function GET(req: NextRequest) {
-  const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER]);
+  const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return new Response("Unauthorized", { status: 401 });
 
   const encoder = new TextEncoder();

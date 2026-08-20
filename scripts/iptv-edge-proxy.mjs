@@ -89,7 +89,6 @@ function clientIp(req) {
 function pulseConnection(ctx, bytes) {
   if (!INTERNAL_SECRET || !ctx?.lineId || !ctx?.streamId) return;
   const n = Math.max(0, Math.floor(bytes ?? 0));
-  if (n <= 0) return;
   const body = JSON.stringify({
     lineId: ctx.lineId,
     streamId: ctx.streamId,
@@ -460,13 +459,14 @@ function hlsSegPath(streamId, segName) {
   return path.join(hlsStreamDir(streamId), segName);
 }
 
-function serveHlsSegment(streamId, segName, clientRes) {
+function serveHlsSegment(streamId, segName, clientRes, pulseCtx) {
   const segPath = hlsSegPath(streamId, segName);
   if (!segPath) return false;
   try {
     if (!fs.existsSync(segPath)) return false;
     const buf = fs.readFileSync(segPath);
     if (!buf.length) return false;
+    if (pulseCtx) pulseConnection(pulseCtx, buf.length);
     clientRes.writeHead(200, hlsSegHeaders(buf.length));
     clientRes.end(buf);
     return true;
@@ -475,7 +475,7 @@ function serveHlsSegment(streamId, segName, clientRes) {
   }
 }
 
-function serveHlsPlaylist(streamId, clientReq, clientRes) {
+function serveHlsPlaylist(streamId, clientReq, clientRes, pulseCtx) {
   const dir = hlsStreamDir(streamId);
   const indexPath = path.join(dir, "index.m3u8");
   try {
@@ -494,6 +494,7 @@ function serveHlsPlaylist(streamId, clientReq, clientRes) {
       return line;
     });
     const out = lines.join("\n");
+    if (pulseCtx) pulseConnection(pulseCtx, Buffer.byteLength(out));
     clientRes.writeHead(200, hlsPlaylistHeaders());
     clientRes.end(out);
     return true;
@@ -760,6 +761,10 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     return;
   }
   const streamId = auth.streamId;
+  const pulseCtx =
+    auth.lineId && auth.streamId
+      ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
+      : null;
   touchHlsDaemon(streamId);
   const fresh = hlsDirFresh(streamId);
   if (!fresh) {
@@ -784,7 +789,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
       forward(clientReq, clientRes, ctx);
       return;
     }
-    if (serveHlsSegment(streamId, segName, clientRes)) return;
+    if (serveHlsSegment(streamId, segName, clientRes, pulseCtx)) return;
     forward(clientReq, clientRes, ctx);
     return;
   }
@@ -793,7 +798,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     clientRes.end();
     return;
   }
-  if (serveHlsPlaylist(streamId, clientReq, clientRes)) return;
+  if (serveHlsPlaylist(streamId, clientReq, clientRes, pulseCtx)) return;
   forward(clientReq, clientRes, ctx);
 }
 
