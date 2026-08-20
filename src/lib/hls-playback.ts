@@ -6,6 +6,7 @@ import {
   type UpstreamOpenResult,
 } from "@/lib/live-upstream-proxy";
 import { isPackagerSegmentName } from "@/lib/ts-hls-packager";
+import { isPrivateOrReservedIp } from "@/lib/ssrf";
 
 const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
 
@@ -267,18 +268,17 @@ export function isSafeUpstreamUrl(url: string): boolean {
   try {
     const u = new URL(url);
     if (u.protocol !== "http:" && u.protocol !== "https:") return false;
-    const host = u.hostname.toLowerCase();
+    const host = u.hostname.replace(/^\[|\]$/g, "").toLowerCase();
     if (
       host === "localhost" ||
-      host === "127.0.0.1" ||
-      host === "::1" ||
       host.endsWith(".local") ||
-      /^10\./.test(host) ||
-      /^192\.168\./.test(host) ||
-      /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+      host.endsWith(".internal") ||
+      host === "metadata.google.internal" ||
+      host === "metadata"
     ) {
       return false;
     }
+    if (isPrivateOrReservedIp(host)) return false;
     return true;
   } catch {
     return false;
@@ -295,9 +295,15 @@ export function xuiDirectSourceLocation(url: string): string | null {
   return t;
 }
 
-export function isAllowedHlsRelayTarget(target: string, _rootUpstream = ""): boolean {
-  // Line auth is required to hit the relay; block only private/local SSRF targets.
-  return isSafeUpstreamUrl(target);
+export function isAllowedHlsRelayTarget(target: string, rootUpstream = ""): boolean {
+  if (!isSafeUpstreamUrl(target)) return false;
+  const root = rootUpstream.trim();
+  if (!root) return true;
+  try {
+    return new URL(target).hostname.toLowerCase() === new URL(root).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
 }
 
 /** Rewrite playlist lines so segments and sub-playlists go through the panel relay. */

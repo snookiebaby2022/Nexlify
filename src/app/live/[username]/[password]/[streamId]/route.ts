@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
 
-import { isSessionKicked, attachKickAwareProxyBody, trackConnection } from "@/lib/connections";
+import { attachKickAwareProxyBody, trackConnection } from "@/lib/connections";
 import {
   buildLiveRedirectHeaders,
   getAntiFreezeSettings,
@@ -34,7 +34,7 @@ import {
   UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
-import { checkLineUserAgent } from "@/lib/line-restrictions";
+import { asPlaybackGuardLine, assertPlaybackAllowed, playbackDenyMessage } from "@/lib/playback-guard";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
 import { openUpstreamLiveStream, liveMpegTsResponseHeaders, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
@@ -126,36 +126,16 @@ async function authorizeLivePlayback(
 
   const ua = req.headers.get("user-agent") ?? undefined;
 
-  const { checkDdosShield } = await import("@/lib/ddos-shield");
-  const ddos = await checkDdosShield(ip);
-  if (!ddos.ok) return { ok: false, response: iptvText("Access temporarily blocked", { status: 429 }) };
-
-  const { checkLineIpAccess } = await import("@/lib/line-ip-lock");
-  if (!checkLineIpAccess(line, ip)) return { ok: false, response: iptvText("IP not allowed", { status: 403 }) };
-
-  if (!checkLineUserAgent(line, ua)) {
-    return { ok: false, response: iptvText("User-Agent not allowed for this line", { status: 403 }) };
-  }
-
-  const { lineHasConnectionCapacity } = await import("@/lib/connections");
-  const [kicked, hasCapacity] = await Promise.all([
-    isSessionKicked(line.id, ip),
-    lineHasConnectionCapacity(line.id, line.maxConnections, {
-      streamId: cleanId,
-      clientIp: ip,
-    }),
-  ]);
-  if (kicked) {
-    return { ok: false, response: withIptvCors(iptvText("Session kicked", { status: 403 })) };
-  }
-  if (!hasCapacity) {
-    return {
-      ok: false,
-      response: iptvText(
-        "Max connections reached. You are using all allowed streams. Please disconnect another device or increase your connection limit in the panel.",
-        { status: 403 }
-      ),
-    };
+  const deny = await assertPlaybackAllowed(asPlaybackGuardLine(line), ip, ua, {
+    streamId: cleanId,
+  });
+  if (deny) {
+    const status = deny === "ddos" ? 429 : 403;
+    const msg =
+      deny === "connections"
+        ? "Max connections reached. You are using all allowed streams. Please disconnect another device or increase your connection limit in the panel."
+        : playbackDenyMessage(deny);
+    return { ok: false, response: withIptvCors(iptvText(msg, { status })) };
   }
 
   return { ok: true, username, password, streamId, requestStreamKey, cleanId, line, ip, ua };

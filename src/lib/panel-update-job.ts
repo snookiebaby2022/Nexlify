@@ -511,6 +511,7 @@ export function isJobRunning(job: PanelUpdateJob | null | undefined): boolean {
 const STEP_PROGRESS: Record<string, number> = {
   "git stash local changes": 6,
   "git pull": 14,
+  "git fetch origin main": 12,
   "bootstrap update scripts": 18,
   "sync panel files": 26,
   "npm install": 34,

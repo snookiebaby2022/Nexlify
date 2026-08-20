@@ -634,10 +634,27 @@ export async function runPanelUpdateWithProgress(
 
   let gitFetchOk: boolean | undefined;
   if (versionInfo.isGitRepo) {
+    const fetchStepName = "git fetch origin main";
+    await reportProgress(onProgress, {
+      currentStep: fetchStepName,
+      progress: progressForStep(fetchStepName),
+      steps: [...jobSteps, { name: fetchStepName, ok: false, status: "running" }],
+    });
     const fetch = await runCommand(repoPath, "git", ["fetch", "origin", "main"], {
       stepName: "git pull",
     });
-    steps.push({ name: "git fetch origin main", ok: fetch.ok, output: fetch.output });
+    steps.push({ name: fetchStepName, ok: fetch.ok, output: fetch.output });
+    jobSteps.push({
+      name: fetchStepName,
+      ok: fetch.ok,
+      status: fetch.ok ? "done" : "failed",
+      output: fetch.output,
+    });
+    await reportProgress(onProgress, {
+      currentStep: fetch.ok ? null : fetchStepName,
+      progress: progressForStep("git pull"),
+      steps: [...jobSteps],
+    });
     gitFetchOk = fetch.ok;
   }
 
@@ -784,6 +801,14 @@ export async function runPanelRollback(): Promise<PanelUpdateResult> {
     return { ok: false, message: msg, steps: [], fromVersion, toVersion: fromVersion };
   }
 
+  const versionInfo = await getPanelVersionInfo(repoPath);
+  if (!versionInfo.isGitRepo) {
+    const msg =
+      "Rollback requires a git-based panel install. Patch/prebuilt-only servers must restore from backup or redeploy.";
+    await recordResult(settings, false, msg, fromVersion, fromVersion, "rollback", []);
+    return { ok: false, message: msg, steps: [], fromVersion, toVersion: fromVersion };
+  }
+
   const steps: PanelUpdateResult["steps"] = [];
   const reset = await runCommand(repoPath, "git", ["reset", "--hard", ref]);
   steps.push({ name: `git reset --hard ${ref.slice(0, 8)}`, ok: reset.ok, output: reset.output });
@@ -793,20 +818,33 @@ export async function runPanelRollback(): Promise<PanelUpdateResult> {
     return { ok: false, message: msg, steps, fromVersion, toVersion: fromVersion };
   }
 
-  const skipNpm = !(await lockfileChanged(repoPath));
-  for (const step of await buildSteps(repoPath, skipNpm)) {
+  const rebuildSteps = await postPullBuildSteps(repoPath);
+  for (const step of rebuildSteps) {
     const result = await runCommand(repoPath, step.command, step.args, { stepName: step.name });
     steps.push({ name: step.name, ok: result.ok, output: result.output });
     if (!result.ok) {
-      const msg = `Rollback rebuild failed at: ${step.name}`;
+      await tryRecoverPanel(repoPath, steps);
+      const msg = `Rollback rebuild failed at: ${step.name}. Panel recovery was attempted automatically.`;
       await recordResult(settings, false, msg, fromVersion, fromVersion, "rollback", steps);
       return { ok: false, message: msg, steps, fromVersion, toVersion: fromVersion };
     }
   }
 
+  const restartStep = await resolvePanelRestartStep(repoPath);
+  const pm2 = await runCommand(repoPath, restartStep.command, restartStep.args, {
+    stepName: restartStep.name,
+  });
+  steps.push({ name: restartStep.name, ok: pm2.ok, output: pm2.output });
+  if (!pm2.ok) {
+    await tryRecoverPanel(repoPath, steps);
+    const msg = "Rollback rebuilt the previous version but PM2 restart failed. Run: bash scripts/panel-restart-safe.sh --nexlify-only";
+    await recordResult(settings, false, msg, fromVersion, fromVersion, "rollback", steps);
+    return { ok: false, message: msg, steps, fromVersion, toVersion: fromVersion };
+  }
+
   await writeUpdateCache(repoPath);
   toVersion = (await readInstalledVersion(repoPath)).version;
-  const msg = `Rolled back to commit ${ref.slice(0, 8)} (v${toVersion}). Restart PM2.`;
-  await recordResult(settings, true, msg, fromVersion, toVersion, "rollback", steps);
+  const msg = `Rolled back to commit ${ref.slice(0, 8)} (v${toVersion}). Panel restarted via PM2.`;
+  await recordResult(settings, true, msg, fromVersion, toVersion, "rollback", steps, null);
   return { ok: true, message: msg, steps, fromVersion, toVersion };
 }

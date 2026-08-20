@@ -7,7 +7,7 @@ import { xtreamBase64, xtreamSafeText, xtreamUnix } from "./xtream-safe";
 export function parseXmltvDate(raw: string): Date {
   const clean = raw.trim().replace(/\s+/g, " ");
   const m = clean.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\s*([+-]\d{4}))?/);
-  if (!m) return new Date();
+  if (!m) throw new Error("Invalid XMLTV datetime: malformed timestamp");
   const y = parseInt(m[1]!, 10);
   const mo = parseInt(m[2]!, 10);
   const d = parseInt(m[3]!, 10);
@@ -57,13 +57,22 @@ export function parseXmltvPrograms(xml: string, sourceId: string) {
     const descM = body.match(/<desc[^>]*>([^<]*)<\/desc>/i);
     if (!startM || !stopM || !channelM || !titleM) continue;
 
+    let start: Date;
+    let stop: Date;
+    try {
+      start = parseXmltvDate(startM[1]);
+      stop = parseXmltvDate(stopM[1]);
+    } catch {
+      continue;
+    }
+
     programs.push({
       sourceId,
       channelId: channelM[1],
       title: decodeXmltvText(titleM[1].trim()),
       description: descM?.[1] ? decodeXmltvText(descM[1].trim()) : null,
-      start: parseXmltvDate(startM[1]),
-      stop: parseXmltvDate(stopM[1]),
+      start,
+      stop,
     });
   }
   return programs;

@@ -103,6 +103,26 @@ export async function countLineSessions(lineId: string) {
   return result.length;
 }
 
+/**
+ * Whether a new playback session is allowed given current counts.
+ * Exported for unit tests — keep in sync with lineHasConnectionCapacity.
+ *
+ * @param sameIpDistinctSessions distinct (stream) sessions from clientIp
+ */
+export function connectionCapacityAllows(
+  activeSessionCount: number,
+  maxConnections: number,
+  sameIpDistinctSessions: number,
+  clientIp?: string | null
+): boolean {
+  if (maxConnections <= 0) return true;
+  if (activeSessionCount < maxConnections) return true;
+  if (!clientIp) return false;
+  if (sameIpDistinctSessions === 0) return false;
+  // Same IP may refresh or zap channels while within their slot count — not open extra streams.
+  return sameIpDistinctSessions <= maxConnections;
+}
+
 export async function lineHasConnectionCapacity(
   lineId: string,
   maxConnections: number,
@@ -111,21 +131,20 @@ export async function lineHasConnectionCapacity(
   if (maxConnections <= 0) return true;
   const active = await countLineSessions(lineId);
   if (active < maxConnections) return true;
-  // Same IP can always reconnect — allows channel switching from same device
-  // and handles stale connections from the same IP gracefully
+  let sameIpDistinct = 0;
   if (opts?.clientIp) {
     const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
-    const sameIpConns = await prisma.liveConnection.count({
+    const sameIpSessions = await prisma.liveConnection.groupBy({
+      by: ["streamId"],
       where: {
         lineId,
         ip: opts.clientIp,
         lastSeenAt: { gte: staleBefore },
       },
     });
-    // If all active connections are from this IP, allow it (channel switching)
-    if (sameIpConns > 0) return true;
+    sameIpDistinct = sameIpSessions.length;
   }
-  return false;
+  return connectionCapacityAllows(active, maxConnections, sameIpDistinct, opts?.clientIp);
 }
 
 export async function trackConnection(opts: {

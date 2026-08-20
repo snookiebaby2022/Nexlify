@@ -9,7 +9,7 @@ import {
   normalizeReleasesFeed,
 } from "@/lib/panel-releases-feed";
 import { PANEL_RELEASES_FEED } from "@/lib/panel-releases-data";
-import { getPanelVersionInfoWithRelease } from "@/lib/panel-version";
+import { getPanelVersionInfoWithRelease, readInstalledVersion } from "@/lib/panel-version";
 import {
   clearUpdateJob,
   isJobRunning,
@@ -22,9 +22,7 @@ import {
   panelUpdateManualSteps,
   resolvePatchUpdateScript,
   runPanelRollback,
-  runPanelUpdate,
 } from "@/lib/panel-update";
-import { readInstalledVersion } from "@/lib/panel-version";
 import { PanelRole } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
@@ -150,7 +148,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ cancelled: true, job: await readUpdateJob(repoPath) });
   }
 
-  if (action === "start") {
+  if (action === "start" || action === "update") {
     const server = await getPanelServerSettingsSafe();
     const repoPath = getResolvedRepoPath(server);
     const { version: fromVersion } = await readInstalledVersion(repoPath);
@@ -177,7 +175,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ started: true, action: "start", job });
   }
 
-  const result = action === "rollback" ? await runPanelRollback() : await runPanelUpdate();
+  if (action !== "rollback") {
+    return NextResponse.json({ error: "Unknown panel update action" }, { status: 400 });
+  }
+
+  const result = await runPanelRollback();
   await logActivity(result.ok ? `panel_${action}_ok` : `panel_${action}_failed`, {
     meta: {
       fromVersion: result.fromVersion,
