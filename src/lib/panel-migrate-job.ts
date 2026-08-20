@@ -107,6 +107,8 @@ export async function reconcileMigrateJob(): Promise<MigrateJob | null> {
   const job = await readMigrateJob();
   if (!job) return null;
   if (job.status !== "running") return job;
+  const started = Date.parse(job.startedAt);
+  const elapsed = Number.isFinite(started) ? Date.now() - started : 0;
   if (job.pid && isPidAlive(job.pid)) return job;
   // Look for detached worker by name
   try {
@@ -122,7 +124,9 @@ export async function reconcileMigrateJob(): Promise<MigrateJob | null> {
   job.finishedAt = new Date().toISOString();
   job.error =
     job.error ||
-    "Migration worker stopped unexpectedly (panel restart or crash). Use Resume last upload — the SQL file is still on the server.";
+    (job.progress?.phase === "scanning" && job.progress.current >= 100
+      ? "Migration worker crashed during import (job file write race — fixed in v2.0.17+). Click Resume last upload to continue; the SQL dump is still on the server."
+      : "Migration worker stopped unexpectedly (panel restart or crash). Use Resume last upload — the SQL file is still on the server.");
   job.message = job.error;
   await writeMigrateJob(job);
   await releaseMigrateLock();

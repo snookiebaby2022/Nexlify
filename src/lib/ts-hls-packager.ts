@@ -11,7 +11,10 @@ import { normalizeUpstreamStreamUrl } from "@/lib/resolve-stream-url";
 /** Short segments so the first playlist is ready before XCIPTV's ~10s HLS timeout. */
 const HLS_TIME_SEC = 1;
 const HLS_LIST_SIZE = 6;
-const READY_TIMEOUT_MS = 8_000;
+const READY_TIMEOUT_MS = Math.max(
+  8_000,
+  Number(process.env.HLS_PACKAGER_READY_MS || process.env.NEXLIFY_HLS_READY_MS || 18_000) || 18_000
+);
 const MAX_SESSIONS = Math.max(8, Number(process.env.HLS_MAX_SESSIONS || 128) || 128);
 const IDLE_MS = 10 * 60 * 1000;
 const REAP_EVERY_MS = 30_000;

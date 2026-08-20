@@ -2,7 +2,8 @@
  * Detached SQL migration worker — survives `pm2 restart nexlify`.
  * Usage: npx tsx scripts/panel-migrate-background.ts /tmp/nexlify-migrate-job.json
  */
-import { readFile, writeFile, unlink, rename } from "fs/promises";
+import { readFile, writeFile, unlink } from "fs/promises";
+import { writeJsonAtomic } from "../src/lib/job-file-lock";
 import { bundleFromSqlFile } from "../src/lib/panel-migration/map-rows";
 import { previewMigrationBundle } from "../src/lib/panel-migration";
 import { applyMigrationBundle } from "../src/lib/panel-migration/apply";
@@ -28,12 +29,12 @@ type Job = {
   pid?: number;
 };
 
-/** Atomic replace so UI/pollers never read a half-written empty job file. */
+/** Serialized writes — concurrent progress updates must not share one .tmp path. */
+let writeChain: Promise<void> = Promise.resolve();
+
 async function writeJob(job: Job) {
-  const tmp = `${jobPath}.${process.pid}.tmp`;
-  const payload = JSON.stringify(job);
-  await writeFile(tmp, payload, "utf8");
-  await rename(tmp, jobPath);
+  writeChain = writeChain.then(() => writeJsonAtomic(jobPath, job));
+  await writeChain;
 }
 
 async function main() {
@@ -58,8 +59,11 @@ async function main() {
     job.message =
       phase === "scanning"
         ? `Scanning SQL dump… ${current}%`
-        : `Importing ${phase}: ${current}/${total}`;
-    void writeJob(job);
+        : phase === "done"
+          ? "Import complete."
+          : `Importing ${phase}: ${current}/${total}`;
+    writeChain = writeChain.then(() => writeJsonAtomic(jobPath, job));
+    void writeChain;
   };
 
   const onProgress = (phase: string, current: number, total: number) => {
@@ -113,6 +117,7 @@ async function main() {
     }
 
     job.message = `Parse complete — importing (${bundle.streams.length} streams, ${bundle.lines.length} lines)…`;
+    await writeChain;
     await writeJob(job);
 
     const { dryRun: _dryRun, ...applyOpts } = job.options as Record<string, unknown>;
