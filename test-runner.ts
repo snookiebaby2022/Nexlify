@@ -322,7 +322,7 @@ async function testPlayback() {
   if (seriesList.length > 0) {
     const info = await xtreamRaw(`get_series_info&series_id=${seriesList[0].series_id}`);
     const eps = Object.values(info.json?.episodes || {}).flat() as any[];
-    episodeId = eps[0]?.stream_id;
+    episodeId = eps[0]?.stream_id ?? eps[0]?.id;
   }
 
   log(`  IDs → live: ${liveId}, movie: ${movieId}, episode: ${episodeId || "n/a"}`);
@@ -569,7 +569,11 @@ async function testSecurity() {
   });
 
   await test("Auth: admin API requires session", async () => {
-    const r = await http(`${PANEL}/api/admin/streams`, { headers: {}, noSession: true });
+    const r = await http(`${PANEL}/api/admin/streams`, {
+      headers: {},
+      noSession: true,
+      followRedirects: false,
+    });
     ok(r.status === 401 || r.status === 403 || r.status === 307, `Expected 401/403/307, got ${r.status}`);
     log(`    → HTTP ${r.status} (unauthenticated)`);
   });
