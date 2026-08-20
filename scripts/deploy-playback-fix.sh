@@ -17,5 +17,8 @@ echo "=== wait for health ==="
 sleep 5
 curl -sf "http://127.0.0.1:13000/api/health" >/dev/null && echo "panel OK" || echo "panel health WARN"
 
+echo "=== apply panel optimizations ==="
+bash scripts/server-apply-panel-optimizations.sh
+
 echo "=== smoke test ==="
 bash scripts/playback-smoke-hls-vlc.sh

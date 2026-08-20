@@ -276,8 +276,8 @@ export default function BinariesSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Server binaries</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Tools under <code className="font-mono">{NEXLIFY_BIN_ROOT}</code> — nginx, FFmpeg, PHP, Redis, certbot.
-          System packages (e.g. <code className="font-mono">/usr/bin/ffmpeg</code>) count as installed.
+          Playback uses <strong>Node.js</strong> on the panel and edge — PHP is optional (legacy scripts only).
+          Click <strong>Use best installed</strong> for FFmpeg; bundled <strong>FFmpeg 8.0</strong> is fastest for HLS remux when needed.
         </p>
       </div>
 

@@ -12,9 +12,20 @@ const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
 /** Xtream/nginx HLS playlist type — Smarters ExoPlayer accepts this more reliably than vnd.apple.mpegurl. */
 export const HLS_PLAYLIST_CONTENT_TYPE = "application/x-mpegURL";
 
-/** Real provider .m3u8 — allow slow CDNs; guessed Xtream suffixes stay short. */
-export const HLS_NATIVE_PROBE_MS = 3_000;
+/** Cold probe for provider .m3u8; warm path uses playlist cache + shorter timeout. */
+export const HLS_NATIVE_PROBE_MS = 2_000;
+export const HLS_NATIVE_PROBE_WARM_MS = 900;
 export const HLS_GUESSED_PROBE_MS = 800;
+/** Rewritten live playlist TTL — Exo/VLC poll every 2–4s; cache avoids upstream round-trip. */
+export const HLS_PLAYLIST_CACHE_SEC = 4;
+
+export function hlsNativeUrlCacheKey(streamId: string): string {
+  return `hls:native:url:${streamId}`;
+}
+
+export function hlsPlaylistCacheKey(lineId: string, streamId: string): string {
+  return `hls:playlist:${lineId}:${streamId}`;
+}
 
 /**
  * Finite HLS segments: never 206 without Content-Range. VLC refuses that combo;

@@ -37,7 +37,7 @@ export default function StreamSettingsPage() {
               hint: "When off, created channels cannot play and new restream channels cannot be added.",
             },
             { key: "vodDirectPlay", label: "VOD direct play", type: "yesno" },
-            { key: "epgHoursAhead", label: "EPG hours ahead", type: "number" },
+            { key: "epgHoursAhead", label: "EPG hours ahead", type: "number", hint: "24 recommended for XCIPTV/Smarters (guide window in apps)." },
             {
               key: "autoChannelLogos",
               label: "Auto-fetch channel logos",

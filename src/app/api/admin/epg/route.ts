@@ -31,28 +31,49 @@ export async function POST(req: NextRequest) {
   if (body.syncAll === true) {
     const sources = await prisma.epgSource.findMany({ where: { isActive: true } });
     let synced = 0;
+    let programsImported = 0;
     const errors: string[] = [];
     for (const source of sources) {
       try {
-        await syncEpgSource(source.id);
+        const count = await syncEpgSource(source.id, { skipAutoMatch: true });
         synced++;
+        programsImported += count;
       } catch (e) {
-        errors.push(`${source.name}: ${e instanceof Error ? e.message : "sync failed"}`);
+        const msg = e instanceof Error ? e.message : "sync failed";
+        errors.push(`${source.name}: ${msg}`);
+        await prisma.epgSource.update({
+          where: { id: source.id },
+          data: { lastSyncError: msg.slice(0, 500) },
+        }).catch(() => {});
       }
     }
+    try {
+      const { autoAssignMissingEpg } = await import("./epg-auto-match");
+      await autoAssignMissingEpg({ limit: 800 });
+    } catch {
+      /* optional */
+    }
     await invalidateEpgCache();
-    return NextResponse.json({ ok: true, synced, total: sources.length, errors: errors.slice(0, 30) });
+    return NextResponse.json({
+      ok: true,
+      synced,
+      programsImported,
+      total: sources.length,
+      errors: errors.slice(0, 30),
+    });
   }
 
   if (body.sync && body.sourceId) {
     try {
       const count = await syncEpgSource(body.sourceId);
-      return NextResponse.json({ ok: true, programsImported: count });
+      return NextResponse.json({ ok: true, synced: count, programsImported: count });
     } catch (e) {
-      return NextResponse.json(
-        { error: e instanceof Error ? e.message : "Sync failed" },
-        { status: 500 }
-      );
+      const msg = e instanceof Error ? e.message : "Sync failed";
+      await prisma.epgSource.update({
+        where: { id: String(body.sourceId) },
+        data: { lastSyncError: msg.slice(0, 500) },
+      }).catch(() => {});
+      return NextResponse.json({ error: msg }, { status: 500 });
     }
   }
 

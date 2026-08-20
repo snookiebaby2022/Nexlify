@@ -20,8 +20,12 @@ import {
   buildHlsRelayUrl,
   rewriteHlsManifestForRelay,
   hlsRelayCacheKey,
+  hlsNativeUrlCacheKey,
+  hlsPlaylistCacheKey,
   HLS_PLAYLIST_CONTENT_TYPE,
   HLS_NATIVE_PROBE_MS,
+  HLS_NATIVE_PROBE_WARM_MS,
+  HLS_PLAYLIST_CACHE_SEC,
   HLS_GUESSED_PROBE_MS,
   rewritePackagerPlaylist,
   buildClientDirectHlsMaster,
@@ -31,7 +35,7 @@ import {
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
-import { cacheSet } from "@/lib/cache";
+import { cacheGet, cacheSet } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
 import { openUpstreamLiveStream, liveMpegTsResponseHeaders, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
 import { createHlsToMpegTsStream } from "@/lib/hls-mpegts-relay";
@@ -237,20 +241,39 @@ export async function GET(
     const tsUrls = expanded.filter((u) => !isHlsPlaybackUrl(u));
     const hlsUrls = expanded.filter((u) => isHlsPlaybackUrl(u));
 
+    const playlistKey = hlsPlaylistCacheKey(line.id, cleanId);
+    const cachedPlaylist = await cacheGet<string>(playlistKey);
+    if (cachedPlaylist) {
+      return hlsHeaders(cachedPlaylist);
+    }
+
+    const cachedNativeUrl = await cacheGet<string>(hlsNativeUrlCacheKey(cleanId));
+
     const returnNativeHls = async (playbackUrl: string, manifest: { body: string; finalUrl: string }) => {
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
+      await cacheSet(hlsNativeUrlCacheKey(cleanId), playbackUrl, 3600);
       const relay = (url: string) =>
         buildHlsRelayUrl(panelOrigin, username, password, requestStreamKey, url);
       const body = rewriteHlsManifestForRelay(manifest.body, manifest.finalUrl, relay);
+      await cacheSet(playlistKey, body, HLS_PLAYLIST_CACHE_SEC);
       if (antiFreeze.fastZapEnabled) {
         schedulePlaybackUpstreamWarm(playbackUrl, UPSTREAM_HLS_UA);
       }
       return hlsHeaders(body);
     };
 
+    const orderedHlsUrls = cachedNativeUrl
+      ? [cachedNativeUrl, ...hlsUrls.filter((u) => u !== cachedNativeUrl)]
+      : hlsUrls;
+
     // 1. Provider-native HLS (stored .m3u8 in stream_source) before local remux.
-    for (const playbackUrl of hlsUrls) {
-      const probeMs = originalCandidates.has(playbackUrl) ? HLS_NATIVE_PROBE_MS : HLS_GUESSED_PROBE_MS;
+    for (const playbackUrl of orderedHlsUrls) {
+      const isKnownNative = playbackUrl === cachedNativeUrl;
+      const probeMs = isKnownNative
+        ? HLS_NATIVE_PROBE_WARM_MS
+        : originalCandidates.has(playbackUrl)
+          ? HLS_NATIVE_PROBE_MS
+          : HLS_GUESSED_PROBE_MS;
       const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, probeMs);
       if (!manifest.ok) {
         lastError = manifest.detail || "Stream unavailable";

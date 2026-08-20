@@ -69,7 +69,10 @@ export function parseXmltvPrograms(xml: string, sourceId: string) {
   return programs;
 }
 
-export async function syncEpgSource(sourceId: string) {
+export async function syncEpgSource(
+  sourceId: string,
+  opts?: { skipAutoMatch?: boolean }
+) {
   const source = await prisma.epgSource.findUnique({ where: { id: sourceId } });
   if (!source?.url) throw new Error("EPG source not found");
 
@@ -89,27 +92,31 @@ export async function syncEpgSource(sourceId: string) {
     throw new Error("EPG sync found no programmes in the guide (empty or wrong format)");
   }
 
-  await prisma.$transaction([
-    prisma.epgProgram.deleteMany({ where: { sourceId } }),
-    prisma.epgProgram.createMany({ data: programs }),
-    prisma.epgSource.update({
+  const CHUNK = 5000;
+  await prisma.$transaction(async (tx) => {
+    await tx.epgProgram.deleteMany({ where: { sourceId } });
+    for (let i = 0; i < programs.length; i += CHUNK) {
+      await tx.epgProgram.createMany({ data: programs.slice(i, i + CHUNK) });
+    }
+    await tx.epgSource.update({
       where: { id: sourceId },
-      data: { lastSync: new Date() },
-    }),
-  ]);
+      data: { lastSync: new Date(), lastSyncError: null },
+    });
+  });
 
   const { invalidateEpgCache } = await import("./cache-invalidate");
   await invalidateEpgCache();
 
-  // After a fresh guide lands, auto-link LIVE streams missing (or stale) EPG ids.
-  try {
-    const { autoAssignMissingEpg } = await import("./epg-auto-match");
-    await autoAssignMissingEpg({ limit: 400 });
-  } catch (e) {
-    console.warn(
-      "[epg] auto-assign after sync failed:",
-      e instanceof Error ? e.message : e
-    );
+  if (!opts?.skipAutoMatch) {
+    try {
+      const { autoAssignMissingEpg } = await import("./epg-auto-match");
+      await autoAssignMissingEpg({ limit: 400 });
+    } catch (e) {
+      console.warn(
+        "[epg] auto-assign after sync failed:",
+        e instanceof Error ? e.message : e
+      );
+    }
   }
 
   return programs.length;

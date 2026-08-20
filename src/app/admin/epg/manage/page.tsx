@@ -21,6 +21,14 @@ export default function ManageEpgPage() {
   const [sources, setSources] = useState<EpgSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState<Set<string>>(new Set());
+  const [syncProgress, setSyncProgress] = useState<{
+    active: boolean;
+    current: number;
+    total: number;
+    name: string;
+    programs: number;
+    errors: string[];
+  } | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", url: "", syncEveryHours: 24 });
   const [msg, setMsg] = useState("");
@@ -54,20 +62,58 @@ export default function ManageEpgPage() {
   }
 
   async function forceSyncAll() {
-    setSyncing(new Set(sources.map((s) => s.id)));
+    const active = sources.filter((s) => s.isActive);
+    setSyncProgress({
+      active: true,
+      current: 0,
+      total: active.length,
+      name: "",
+      programs: 0,
+      errors: [],
+    });
+    setSyncing(new Set(active.map((s) => s.id)));
     setMsg("");
-    try {
-      const res = await fetch("/api/admin/epg", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ syncAll: true }),
+
+    let programs = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < active.length; i++) {
+      const source = active[i]!;
+      setSyncProgress((p) =>
+        p ? { ...p, current: i + 1, name: source.name } : p
+      );
+      try {
+        const res = await fetch("/api/admin/epg", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sync: true, sourceId: source.id }),
+        });
+        const data = await res.json();
+        if (data.error) {
+          errors.push(`${source.name}: ${data.error}`);
+        } else {
+          programs += Number(data.programsImported ?? data.synced ?? 0);
+        }
+      } catch {
+        errors.push(`${source.name}: sync failed`);
+      }
+      setSyncing((prev) => {
+        const next = new Set(prev);
+        next.delete(source.id);
+        return next;
       });
-      const data = await res.json();
-      setMsg(`Force synced all: ${data.synced ?? 0} programs, ${data.errors?.length ?? 0} errors`);
-    } catch {
-      setMsg("Force sync failed");
     }
+
+    setSyncProgress(null);
     setSyncing(new Set());
+    setMsg(
+      errors.length
+        ? `Force sync done: ${programs.toLocaleString()} programmes · ${errors.length} error(s)`
+        : `Force sync complete: ${programs.toLocaleString()} programmes imported`
+    );
+    if (errors.length) {
+      setSyncProgress({ active: false, current: active.length, total: active.length, name: "", programs, errors });
+    }
     load();
   }
 
@@ -132,6 +178,38 @@ export default function ManageEpgPage() {
           </Link>
         </div>
       </div>
+
+      {syncProgress?.active && (
+        <div className="rounded-lg border p-4 space-y-3" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
+          <div className="flex items-center justify-between text-sm">
+            <span>
+              Syncing EPG ({syncProgress.current}/{syncProgress.total})
+              {syncProgress.name ? ` — ${syncProgress.name}` : ""}
+            </span>
+            <span style={{ color: "var(--muted)" }}>
+              {Math.round((syncProgress.current / Math.max(syncProgress.total, 1)) * 100)}%
+            </span>
+          </div>
+          <div className="h-2 rounded-full overflow-hidden" style={{ background: "rgba(0,0,0,0.08)" }}>
+            <div
+              className="h-full transition-all duration-300"
+              style={{
+                width: `${(syncProgress.current / Math.max(syncProgress.total, 1)) * 100}%`,
+                background: "var(--accent)",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {syncProgress && !syncProgress.active && syncProgress.errors.length > 0 && (
+        <div className="rounded-lg border px-4 py-3 text-sm space-y-1" style={{ borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.06)" }}>
+          <p className="font-medium text-red-400">Sync errors</p>
+          {syncProgress.errors.slice(0, 8).map((e) => (
+            <p key={e} className="text-xs text-red-300">{e}</p>
+          ))}
+        </div>
+      )}
 
       {msg && (
         <div className="rounded-lg border px-4 py-3 text-sm" style={{ borderColor: "var(--border)", background: "var(--card)" }}>

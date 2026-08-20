@@ -23,6 +23,7 @@ function partsMap(d: Date, timeZone: string, hour12: boolean) {
     minute: "2-digit",
     second: "2-digit",
     hour12,
+    hourCycle: hour12 ? "h12" : "h23",
   });
   return Object.fromEntries(fmt.formatToParts(d).map((p) => [p.type, p.value]));
 }
@@ -50,6 +51,7 @@ export function formatEpgTimeRange(start: Date, end: Date, opts: EpgDisplayOptio
     hour: "2-digit",
     minute: "2-digit",
     hour12,
+    hourCycle: hour12 ? "h12" : "h23",
   });
   return `${fmt.format(start)} - ${fmt.format(end)}`;
 }
@@ -68,6 +70,7 @@ export function formatEpgDateTimeLabel(iso: string | Date, opts: EpgDisplayOptio
     hour: "2-digit",
     minute: "2-digit",
     hour12,
+    hourCycle: hour12 ? "h12" : "h23",
   });
   return fmt.format(d);
 }

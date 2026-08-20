@@ -480,12 +480,12 @@ function PanelWebPlayerInner() {
   }
 
   return (
-    <div className="flex h-screen bg-[#0a0e14] text-white overflow-hidden">
+    <div className="flex h-[100dvh] max-h-[100dvh] bg-[#0a0e14] text-white overflow-hidden touch-manipulation supports-[padding:max(0px)]:pb-[env(safe-area-inset-bottom)]">
       {/* Sidebar */}
       <aside
         className={`shrink-0 border-r flex flex-col transition-all duration-300 z-30 ${
           sidebarOpen
-            ? "w-64 absolute h-full md:relative md:w-56"
+            ? "w-[min(100vw,18rem)] absolute h-full md:relative md:w-56 shadow-xl md:shadow-none"
             : "w-0 md:w-56 overflow-hidden"
         }`}
         style={{ borderColor: "rgba(255,255,255,0.08)", background: "#111820" }}
@@ -571,10 +571,16 @@ function PanelWebPlayerInner() {
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="md:hidden p-1.5 rounded hover:bg-white/10"
+            className="md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center rounded hover:bg-white/10"
+            aria-label="Open channel list"
           >
-            <Menu size={18} />
+            <Menu size={20} />
           </button>
+          {panelClock && (
+            <span className="md:hidden text-[10px] font-mono tabular-nums text-neutral-400 shrink-0 max-w-[8.5rem] truncate">
+              {panelClock}
+            </span>
+          )}
           <div
             className="flex items-center gap-2 flex-1 bg-black/30 rounded-lg px-3 py-2 border"
             style={{ borderColor: "rgba(255,255,255,0.08)" }}

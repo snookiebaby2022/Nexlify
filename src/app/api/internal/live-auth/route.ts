@@ -5,7 +5,7 @@ import { getLineForPlaybackAuth, resolvePlaybackUrlCandidatesForLine, resolvePla
 import { lineIsPlayable } from "@/lib/lines";
 import { parseXtreamPlaybackPath } from "@/lib/xtream-playback-path";
 import { stripLiveStreamExtension, isHlsPlaybackUrl, isSafeUpstreamUrl, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
-import { getAntiFreezeSettings } from "@/lib/anti-freeze";
+import { getAntiFreezeSettings, schedulePlaybackUpstreamWarm } from "@/lib/anti-freeze";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { isSessionKicked, trackConnection } from "@/lib/connections";
 import { outboundProxyHeaderValue, resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
@@ -105,6 +105,9 @@ export async function GET(req: NextRequest) {
         userAgent: UPSTREAM_HLS_UA,
         outboundProxy,
       });
+    }
+    if (hlsNative) {
+      schedulePlaybackUpstreamWarm(hlsNative, UPSTREAM_HLS_UA);
     }
     if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD" && !isHlsSegment) {
       void trackConnection({
