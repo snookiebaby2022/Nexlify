@@ -205,6 +205,21 @@ ensure_pm2_app() {
       bash "$ROOT/scripts/verify-standalone.sh"
     }
   fi
+  if [ "$name" = "nexlify-hls" ]; then
+    HLS_PORT="${NEXLIFY_HLS_DAEMON_PORT:-13081}"
+    if [ -f "$ROOT/.env" ]; then
+      val="$(grep -E '^NEXLIFY_HLS_DAEMON_PORT=' "$ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' "'\''"')"
+      [ -n "$val" ] && HLS_PORT="$val"
+    fi
+    # tsx child processes can survive PM2 bash-wrapper restarts and block :13081
+    if command -v fuser >/dev/null 2>&1 && fuser "${HLS_PORT}/tcp" >/dev/null 2>&1; then
+      echo "Clearing stale HLS daemon listener on port ${HLS_PORT}..."
+      fuser -k "${HLS_PORT}/tcp" 2>/dev/null || true
+      sleep 1
+    fi
+    pkill -f 'hls-restream-daemon.ts' 2>/dev/null || true
+    sleep 0.5
+  fi
   if needs_reregister "$name"; then
     pm2 delete "$name" 2>/dev/null || true
     echo "Starting $name from $ROOT..."
