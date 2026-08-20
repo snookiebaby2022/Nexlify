@@ -154,7 +154,6 @@ export async function POST(req: NextRequest) {
         entity: "stream",
         meta: { action: "setSpeed", count: ids.length, minSpeedKbps, maxSpeedKbps },
       });
-      return NextResponse.json({ ok: true, count: ids.length });
     } else if (action === "setBackupUrl") {
       const backupUrl =
         body.backupUrl === null || body.backupUrl === ""
