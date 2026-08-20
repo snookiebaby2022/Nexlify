@@ -414,6 +414,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/management/tools/mass-delete/streams", label: "Mass Delete Streams", section: "Mass Delete" },
           { href: "/admin/management/tools/mass-delete/movies", label: "Mass Delete Movies", section: "Mass Delete" },
           { href: "/admin/management/tools/mass-delete/series", label: "Mass Delete Series", section: "Mass Delete" },
+          { href: "/admin/management/tools/mass-delete/categories", label: "Mass Delete Categories", section: "Mass Delete" },
           { href: "/admin/management/tools/mass-delete/users", label: "Mass Delete Users", section: "Mass Delete" },
           { href: "/admin/management/tools/mass-delete/lines", label: "Mass Delete Lines", section: "Mass Delete" },
         ],

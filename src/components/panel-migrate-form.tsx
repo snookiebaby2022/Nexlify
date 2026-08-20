@@ -1376,7 +1376,7 @@ export function PanelMigrateForm() {
         ) : (
           <> If the dump is no longer on the server, Run import will upload it once; after that prefer Resume.</>
         )}{" "}
-        Use <strong>Repair existing import</strong> after that for bouquets, activation, and empty categories.
+        Use <strong>Repair existing import</strong> after that to merge duplicate categories (e.g. UK Entertainment → UK | Entertainment), fix bouquets, activate streams, and remove duplicate channels.
         Repair alone does not re-read the SQL file.
       </p>
 
@@ -1438,8 +1438,12 @@ export function PanelMigrateForm() {
                 setResult(d.error ?? "Repair failed");
               } else {
                 const r = d.result ?? {};
+                const bc = r.bouquetCategory ?? {};
+                const dup = r.duplicates ?? {};
+                const dupDeleted =
+                  (dup.live?.deleted ?? 0) + (dup.movies?.deleted ?? 0) + (dup.series?.deleted ?? 0);
                 setResult(
-                  `Repair done. Activated ${r.streamsActivated ?? 0} streams; linked ${r.liveLinkedToBouquets ?? 0} live, ${r.moviesLinkedToBouquets ?? 0} movies, ${r.seriesLinkedToBouquets ?? 0} series into bouquets; attached ${r.linesLinkedToBouquets ?? 0} line-bouquet links; categorized ${r.liveCategorized ?? 0} live / ${r.movieCategorized ?? 0} movies / ${r.seriesCategorized ?? 0} series.`
+                  `Repair done. Merged ${bc.categoriesMerged ?? 0} duplicate categories. Re-linked ${bc.orphanLiveLinked ?? 0} live streams to bouquets. Synced ${bc.bouquetSortSynced ?? 0} bouquet sort orders. Removed ${dupDeleted} duplicate streams.`
                 );
                 loadImportHealth();
               }

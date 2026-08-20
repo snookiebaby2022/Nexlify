@@ -158,6 +158,22 @@ export async function trackConnection(opts: {
     return null;
   }
 
+  let streamId = opts.streamId?.trim() || undefined;
+  if (streamId) {
+    if (/^\d+$/.test(streamId)) {
+      const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
+      const resolved = await resolveStreamIdParam(streamId, { lineId: opts.lineId });
+      if (!resolved) return null;
+      streamId = resolved;
+    } else {
+      const exists = await prisma.stream.findUnique({
+        where: { id: streamId },
+        select: { id: true },
+      });
+      if (!exists) return null;
+    }
+  }
+
   const staleBefore = new Date(Date.now() - STALE_MS);
 
   // When a user switches channels, remove their previous active connection
@@ -170,7 +186,7 @@ export async function trackConnection(opts: {
         lineId: opts.lineId,
         ip: opts.ip,
         // Only delete if it's a different stream (channel switching)
-        streamId: opts.streamId ? { not: opts.streamId } : undefined,
+        streamId: streamId ? { not: streamId } : undefined,
       },
     });
   }
@@ -178,7 +194,7 @@ export async function trackConnection(opts: {
   const existing = await prisma.liveConnection.findFirst({
     where: {
       lineId: opts.lineId,
-      streamId: opts.streamId ?? null,
+      streamId: streamId ?? null,
       ip: opts.ip ?? null,
       lastSeenAt: { gte: staleBefore },
     },
@@ -189,38 +205,44 @@ export async function trackConnection(opts: {
       where: { id: existing.id },
       data: { lastSeenAt: new Date() },
     });
-    if (opts.streamId) {
+    if (streamId) {
       const { recordLineWatch } = await import("@/lib/line-watch");
-      void recordLineWatch(opts.lineId, opts.streamId, opts.ip);
+      void recordLineWatch(opts.lineId, streamId, opts.ip);
     }
     const { recordConnectionGeography } = await import("@/lib/connection-geography");
     void recordConnectionGeography({
       lineId: opts.lineId,
-      streamId: opts.streamId,
+      streamId,
       ip: opts.ip,
     });
     return existing.id;
   }
 
-  const conn = await prisma.liveConnection.create({
-    data: {
+  try {
+    const conn = await prisma.liveConnection.create({
+      data: {
+        lineId: opts.lineId,
+        streamId,
+        ip: opts.ip,
+        userAgent: opts.userAgent,
+      },
+    });
+    if (streamId) {
+      const { recordLineWatch } = await import("@/lib/line-watch");
+      void recordLineWatch(opts.lineId, streamId);
+    }
+    const { recordConnectionGeography } = await import("@/lib/connection-geography");
+    void recordConnectionGeography({
       lineId: opts.lineId,
-      streamId: opts.streamId,
+      streamId,
       ip: opts.ip,
-      userAgent: opts.userAgent,
-    },
-  });
-  if (opts.streamId) {
-    const { recordLineWatch } = await import("@/lib/line-watch");
-    void recordLineWatch(opts.lineId, opts.streamId);
+    });
+    return conn.id;
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code === "P2003") return null;
+    throw err;
   }
-  const { recordConnectionGeography } = await import("@/lib/connection-geography");
-  void recordConnectionGeography({
-    lineId: opts.lineId,
-    streamId: opts.streamId,
-    ip: opts.ip,
-  });
-  return conn.id;
 }
 
 /** Remove connection when user stops watching */

@@ -54,6 +54,8 @@ export async function GET(req: NextRequest) {
   const created = req.nextUrl.searchParams.get("created");
   const radio = req.nextUrl.searchParams.get("radio");
   const video = req.nextUrl.searchParams.get("video");
+  const episodesOnly = req.nextUrl.searchParams.get("episodesOnly") === "1";
+  const seriesSeedsOnly = req.nextUrl.searchParams.get("seriesSeedsOnly") === "1";
 
   const page = Math.max(1, parseInt(req.nextUrl.searchParams.get("page") ?? "1", 10) || 1);
   const pageSize = Math.min(
@@ -147,6 +149,21 @@ export async function GET(req: NextRequest) {
   if (bouquetId) {
     where.bouquets = { some: { bouquetId } };
   }
+  if (episodesOnly) {
+    where.type = StreamType.SERIES;
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      {
+        OR: [{ episodeNum: { not: null, gt: 0 } }, { name: { contains: "E", mode: "insensitive" } }],
+      },
+    ];
+  } else if (seriesSeedsOnly) {
+    where.type = StreamType.SERIES;
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      { OR: [{ episodeNum: null }, { episodeNum: 0 }] },
+    ];
+  }
   if (categoryId) {
     if (categoryId === "0" || categoryId.toLowerCase() === "uncategorized") {
       where.categoryId = null;
@@ -163,6 +180,7 @@ export async function GET(req: NextRequest) {
       { streamUrl: { contains: search, mode: "insensitive" } },
       { channelId: { contains: search, mode: "insensitive" } },
       { epgChannelId: { contains: search, mode: "insensitive" } },
+      { seriesName: { contains: search, mode: "insensitive" } },
       { agentStartCmd: { contains: `"tmdbId":"${search}"` } },
       { agentStartCmd: { contains: `"tmdbId":${search}` } },
     ];

@@ -24,7 +24,6 @@ export function getStreamPlaybackMode(stream: StreamForPlaybackMode): StreamPlay
   const mode = stream.vodMode as VodMode;
   if (stream.isCreatedChannel) return "created";
   if (mode === "CATCHUP") return "catchup";
-  if (mode === "ON_DEMAND" || stream.isOnDemand) return "on_demand";
 
   const meta = parseLiveStreamMeta(stream.agentStartCmd);
   if (meta.redirectStream) return "direct";
@@ -40,6 +39,8 @@ export function getStreamPlaybackMode(stream: StreamForPlaybackMode): StreamPlay
   ) {
     return "direct";
   }
+
+  if (mode === "ON_DEMAND" || stream.isOnDemand) return "on_demand";
 
   return "transcode";
 }

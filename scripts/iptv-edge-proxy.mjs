@@ -42,6 +42,9 @@ loadDotEnv();
 const BACKEND = process.env.IPTV_EDGE_BACKEND || "127.0.0.1:13000";
 const [backendHost, backendPortRaw] = BACKEND.split(":");
 const backendPort = Number(backendPortRaw || 13000);
+/** Retry panel upstream while nexlify restarts (ECONNREFUSED on :13000). */
+const BACKEND_RETRY_MS = Number(process.env.IPTV_EDGE_BACKEND_RETRY_MS || 500);
+const BACKEND_RETRY_MAX = Number(process.env.IPTV_EDGE_BACKEND_RETRY_MAX || 15);
 const INTERNAL_SECRET =
   process.env.PANEL_INTERNAL_SECRET ||
   process.env.NEXLIFY_PANEL_API_SECRET ||
@@ -53,7 +56,7 @@ const HLS_LIVE_MAX_AGE_MS = Number(process.env.NEXLIFY_HLS_LIVE_MAX_AGE_MS || 60
 const HLS_DAEMON_PORT = Number(process.env.NEXLIFY_HLS_DAEMON_PORT || 13081);
 const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
 const LIVE_TS_PEEK_BYTES = 188;
-const LIVE_TS_OPEN_MS = 12_000;
+const LIVE_TS_OPEN_MS = Number(process.env.IPTV_EDGE_TS_OPEN_MS || 4500);
 const PLAYBACK_RE = /^\/(live|movie|series)\//;
 const HLS_RE = /\.m3u8(?:[?#]|$)/i;
 const HLS_SEG_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\/hls\/(seg\d+\.ts)$/i;
@@ -241,6 +244,11 @@ function hlsSegHeaders(len) {
   };
 }
 
+function isBackendRetryable(err) {
+  const code = String(err?.code || "");
+  return code === "ECONNREFUSED" || code === "ECONNRESET" || code === "EHOSTUNREACH";
+}
+
 function forward(clientReq, clientRes, { listenPort, proto }) {
   const cleanHost = sanitizeHostHeader(clientReq.headers.host) || backendHost;
   const headers = { ...clientReq.headers };
@@ -250,35 +258,54 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
   headers["x-forwarded-port"] = String(listenPort);
   headers["x-nexlify-client-port"] = String(listenPort);
   headers["x-forwarded-for"] = clientIp(clientReq);
-  const proxyReq = http.request(
-    {
-      hostname: backendHost,
-      port: backendPort,
-      path: clientReq.url,
-      method: clientReq.method,
-      headers,
-      timeout: 300_000,
-    },
-    (proxyRes) => {
-      const hdrs = { ...proxyRes.headers };
-      delete hdrs["vary"];
-      delete hdrs["x-frame-options"];
-      delete hdrs["x-content-type-options"];
-      delete hdrs["referrer-policy"];
-      delete hdrs["permissions-policy"];
-      delete hdrs["x-robots-tag"];
-      delete hdrs["strict-transport-security"];
-      clientRes.writeHead(proxyRes.statusCode || 502, hdrs);
-      proxyRes.pipe(clientRes);
-    }
-  );
-  proxyReq.on("error", (err) => {
-    if (!clientRes.headersSent) {
-      clientRes.writeHead(502, { "content-type": "text/plain" });
-    }
-    clientRes.end(`iptv-edge proxy error: ${err.message}`);
-  });
-  clientReq.pipe(proxyReq);
+  const method = (clientReq.method || "GET").toUpperCase();
+  const hasBody = method !== "GET" && method !== "HEAD";
+  let attempt = 0;
+
+  function sendToBackend() {
+    attempt++;
+    const proxyReq = http.request(
+      {
+        hostname: backendHost,
+        port: backendPort,
+        path: clientReq.url,
+        method: clientReq.method,
+        headers,
+        timeout: 300_000,
+      },
+      (proxyRes) => {
+        const hdrs = { ...proxyRes.headers };
+        delete hdrs["vary"];
+        delete hdrs["x-frame-options"];
+        delete hdrs["x-content-type-options"];
+        delete hdrs["referrer-policy"];
+        delete hdrs["permissions-policy"];
+        delete hdrs["x-robots-tag"];
+        delete hdrs["strict-transport-security"];
+        clientRes.writeHead(proxyRes.statusCode || 502, hdrs);
+        proxyRes.pipe(clientRes);
+      }
+    );
+    proxyReq.on("error", (err) => {
+      if (
+        !clientRes.headersSent &&
+        !hasBody &&
+        attempt < BACKEND_RETRY_MAX &&
+        isBackendRetryable(err)
+      ) {
+        setTimeout(sendToBackend, BACKEND_RETRY_MS);
+        return;
+      }
+      if (!clientRes.headersSent) {
+        clientRes.writeHead(502, { "content-type": "text/plain" });
+      }
+      clientRes.end(`iptv-edge proxy error: ${err.message}`);
+    });
+    if (hasBody) clientReq.pipe(proxyReq);
+    else proxyReq.end();
+  }
+
+  sendToBackend();
 }
 
 function authLive(clientReq) {
@@ -292,31 +319,44 @@ function authLive(clientReq) {
       "user-agent": clientReq.headers["user-agent"] || "",
       connection: "close",
     };
-    const req = http.request(
-      {
-        hostname: backendHost,
-        port: backendPort,
-        path: "/api/internal/live-auth",
-        method: "GET",
-        headers,
-        timeout: 15_000,
-      },
-      (res) => {
-        res.resume();
-        resolve({
-          status: res.statusCode || 502,
-          upstream: String(res.headers["x-nexlify-upstream"] || ""),
-          live: String(res.headers["x-nexlify-live"] || "") === "1",
-          hlsNative: String(res.headers["x-nexlify-hls-native"] || "") === "1",
-          passthrough: String(res.headers["x-nexlify-passthrough"] || "") === "1" || res.statusCode === 204,
-          streamId: String(res.headers["x-nexlify-stream-id"] || ""),
-          outboundProxy: parseOutboundProxyHeader(res.headers["x-nexlify-outbound-proxy"]),
-        });
-      }
-    );
-    req.on("timeout", () => req.destroy(new Error("live-auth timeout")));
-    req.on("error", reject);
-    req.end();
+    let attempt = 0;
+
+    function go() {
+      attempt++;
+      const req = http.request(
+        {
+          hostname: backendHost,
+          port: backendPort,
+          path: "/api/internal/live-auth",
+          method: "GET",
+          headers,
+          timeout: 15_000,
+        },
+        (res) => {
+          res.resume();
+          resolve({
+            status: res.statusCode || 502,
+            upstream: String(res.headers["x-nexlify-upstream"] || ""),
+            live: String(res.headers["x-nexlify-live"] || "") === "1",
+            hlsNative: String(res.headers["x-nexlify-hls-native"] || "") === "1",
+            passthrough: String(res.headers["x-nexlify-passthrough"] || "") === "1" || res.statusCode === 204,
+            streamId: String(res.headers["x-nexlify-stream-id"] || ""),
+            outboundProxy: parseOutboundProxyHeader(res.headers["x-nexlify-outbound-proxy"]),
+          });
+        }
+      );
+      req.on("timeout", () => req.destroy(new Error("live-auth timeout")));
+      req.on("error", (err) => {
+        if (attempt < BACKEND_RETRY_MAX && isBackendRetryable(err)) {
+          setTimeout(go, BACKEND_RETRY_MS);
+          return;
+        }
+        reject(err);
+      });
+      req.end();
+    }
+
+    go();
   });
 }
 

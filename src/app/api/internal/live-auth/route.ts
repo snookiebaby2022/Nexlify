@@ -60,7 +60,10 @@ export async function GET(req: NextRequest) {
   if (/^\d+$/.test(cleanId)) {
     const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
     const resolved = await resolveStreamIdParam(cleanId, { username: parsed.username });
-    if (resolved) cleanId = resolved;
+    if (!resolved) {
+      return new NextResponse("Not found", { status: 404 });
+    }
+    cleanId = resolved;
   }
 
   const line = await getLineForPlaybackAuth(parsed.username);

@@ -1,9 +1,10 @@
 import Link from "next/link";
 
 const items = [
-  { href: "/admin/management/tools/mass-delete/live", label: "Live streams", desc: "Delete live channels (50 per page)" },
+  { href: "/admin/management/tools/mass-delete/live", label: "Live streams", desc: "Delete live channels in bulk" },
   { href: "/admin/management/tools/mass-delete/movies", label: "Movies", desc: "Delete movie streams" },
   { href: "/admin/management/tools/mass-delete/series", label: "TV series", desc: "Delete series entries" },
+  { href: "/admin/management/tools/mass-delete/categories", label: "Categories", desc: "Delete, move streams, enable/disable by category" },
   { href: "/admin/management/tools/mass-delete/lines", label: "Lines", desc: "Delete subscriber lines" },
   { href: "/admin/management/tools/mass-delete/users", label: "Users", desc: "Delete resellers (not admins)" },
 ];

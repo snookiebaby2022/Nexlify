@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, memo, useCallback, Suspense } from "react";
+import { useEffect, useMemo, useState, memo, useCallback, Suspense, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowDown, ArrowUp, ChevronRight, ChevronDown, Folder, FolderOpen, Plus, Zap } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, ChevronDown, Folder, FolderOpen, GripVertical, Plus, Zap } from "lucide-react";
 import {
   CategoryTypeTabs,
   CATEGORY_TYPE_LABELS,
@@ -202,22 +202,38 @@ const TreeRow = memo(function TreeRow({
   node,
   expanded,
   allCategories,
+  dragId,
+  dropTargetId,
+  dragParentId,
   onToggle,
   onRemove,
   onMove,
   onRename,
   onReparent,
   onStreamsChanged,
+  onDragStart,
+  onDragEnd,
+  onDragOverRow,
+  onDragLeaveRow,
+  onDropOnRow,
 }: {
   node: CategoryNode;
   expanded: boolean;
   allCategories: CategoryRow[];
+  dragId: string | null;
+  dropTargetId: string | null;
+  dragParentId: string | null;
   onToggle: () => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
   onRename: (id: string, name: string) => void;
   onReparent: (id: string, parentId: string | null) => void;
   onStreamsChanged: () => void;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
+  onDragOverRow: (id: string) => void;
+  onDragLeaveRow: () => void;
+  onDropOnRow: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(node.name);
@@ -226,7 +242,14 @@ const TreeRow = memo(function TreeRow({
   const [streams, setStreams] = useState<CatStreamRow[]>([]);
   const [streamsLoading, setStreamsLoading] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const didDragRef = useRef(false);
   const hasChildren = node.children.length > 0;
+  const isDragging = dragId === node.id;
+  const isDropTarget =
+    dropTargetId === node.id &&
+    dragId != null &&
+    dragId !== node.id &&
+    dragParentId === (node.parentId ?? null);
   const indent = node.depth * 24;
   const activeCount = node.activeCount ?? 0;
   const inactiveCount = node.inactiveCount ?? 0;
@@ -323,7 +346,22 @@ const TreeRow = memo(function TreeRow({
     <div>
       <div
         className="flex items-center gap-2 px-3 py-2 border-b"
-        style={{ borderColor: "var(--border)", paddingLeft: `${12 + indent}px` }}
+        style={{
+          borderColor: "var(--border)",
+          paddingLeft: `${12 + indent}px`,
+          background: isDropTarget ? "rgba(0,192,239,0.12)" : isDragging ? "rgba(0,192,239,0.08)" : undefined,
+        }}
+        onDragOver={(e) => {
+          if (dragId == null || dragParentId !== (node.parentId ?? null) || dragId === node.id) return;
+          e.preventDefault();
+          onDragOverRow(node.id);
+        }}
+        onDragLeave={onDragLeaveRow}
+        onDrop={(e) => {
+          if (dragId == null || dragParentId !== (node.parentId ?? null) || dragId === node.id) return;
+          e.preventDefault();
+          onDropOnRow(node.id);
+        }}
       >
         <button
           type="button"
@@ -388,14 +426,37 @@ const TreeRow = memo(function TreeRow({
           </>
         ) : (
           <>
-            <button
-              type="button"
-              className="flex-1 text-left font-medium text-sm hover:opacity-90"
-              onClick={hasChildren ? onToggle : toggleShowStreams}
-              title={hasChildren ? (expanded ? "Collapse" : "Expand") : "Edit streams"}
+            <div
+              className="flex flex-1 items-center gap-1.5 min-w-0 cursor-grab active:cursor-grabbing select-none"
+              draggable={!editing}
+              onDragStart={(e) => {
+                didDragRef.current = true;
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", node.id);
+                onDragStart(node.id);
+              }}
+              onDragEnd={() => {
+                onDragEnd();
+                setTimeout(() => {
+                  didDragRef.current = false;
+                }, 0);
+              }}
+              title="Drag to reorder among siblings"
             >
-              {node.name}
-            </button>
+              <GripVertical size={14} className="shrink-0 touch-none" style={{ color: "var(--muted)" }} />
+              <button
+                type="button"
+                className="flex-1 text-left font-medium text-sm hover:opacity-90 min-w-0 truncate"
+                onClick={() => {
+                  if (didDragRef.current) return;
+                  if (hasChildren) onToggle();
+                  else toggleShowStreams();
+                }}
+                title={hasChildren ? "Expand/collapse" : "Edit streams"}
+              >
+                {node.name}
+              </button>
+            </div>
             {node.isAdult && (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Adult</span>
             )}
@@ -537,6 +598,8 @@ function ManagementCategoriesInner() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
   function load() {
     fetch("/api/admin/categories")
@@ -605,7 +668,7 @@ function ManagementCategoriesInner() {
       setMsg(data.error ?? "Failed");
       return;
     }
-    setMsg("Category added — use arrows to reorder siblings.");
+    setMsg("Category added — drag the name or use arrows to reorder siblings.");
     setName("");
     setParentId("");
     setIsAdult(false);
@@ -652,6 +715,28 @@ function ManagementCategoriesInner() {
     load();
   }
 
+  const dragParentId = useMemo(() => {
+    if (!dragId) return null;
+    return tabCategories.find((c) => c.id === dragId)?.parentId ?? null;
+  }, [dragId, tabCategories]);
+
+  async function saveSiblingOrder(list: CategoryRow[]) {
+    setBusy(true);
+    const res = await fetch("/api/admin/categories", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order: list.map((c) => c.id) }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setMsg(data.error ?? "Reorder failed");
+      return false;
+    }
+    load();
+    return true;
+  }
+
   async function move(id: string, dir: -1 | 1) {
     const target = tabCategories.find((c) => c.id === id);
     if (!target) return;
@@ -663,19 +748,25 @@ function ManagementCategoriesInner() {
     if (idx < 0 || j < 0 || j >= siblings.length) return;
     const list = [...siblings];
     [list[idx], list[j]] = [list[j], list[idx]];
-    setBusy(true);
-    const res = await fetch("/api/admin/categories", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ order: list.map((c) => c.id) }),
-    });
-    setBusy(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setMsg(data.error ?? "Reorder failed");
-      return;
-    }
-    load();
+    await saveSiblingOrder(list);
+  }
+
+  async function reorderSiblings(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    const from = tabCategories.find((c) => c.id === fromId);
+    const to = tabCategories.find((c) => c.id === toId);
+    if (!from || !to) return;
+    if ((from.parentId ?? null) !== (to.parentId ?? null)) return;
+    const siblings = tabCategories
+      .filter((c) => (c.parentId ?? null) === (from.parentId ?? null))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    const fromIdx = siblings.findIndex((c) => c.id === fromId);
+    const toIdx = siblings.findIndex((c) => c.id === toId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const list = [...siblings];
+    const [item] = list.splice(fromIdx, 1);
+    list.splice(toIdx, 0, item);
+    await saveSiblingOrder(list);
   }
 
   return (
@@ -729,7 +820,7 @@ function ManagementCategoriesInner() {
       >
         <p>
           <strong style={{ color: "var(--accent)" }}>{CATEGORY_TYPE_LABELS[tab]}</strong> categories — these are
-          the folders the IPTV app and site player show (same order: use ↑↓ arrows). Bouquets only control which
+          the folders the IPTV app and site player show (same order: drag category names or use ↑↓ among siblings). Bouquets only control which
           packages a line can access.
         </p>
         <ul className="list-disc pl-5 space-y-1" style={{ color: "var(--muted)" }}>
@@ -826,6 +917,9 @@ function ManagementCategoriesInner() {
             node={node}
             expanded={expanded.has(node.id)}
             allCategories={tabCategories}
+            dragId={dragId}
+            dropTargetId={dropTargetId}
+            dragParentId={dragParentId}
             onToggle={() =>
               setExpanded((prev) => {
                 const next = new Set(prev);
@@ -839,6 +933,19 @@ function ManagementCategoriesInner() {
             onRename={renameCategory}
             onReparent={reparentCategory}
             onStreamsChanged={load}
+            onDragStart={setDragId}
+            onDragEnd={() => {
+              setDragId(null);
+              setDropTargetId(null);
+            }}
+            onDragOverRow={setDropTargetId}
+            onDragLeaveRow={() => setDropTargetId(null)}
+            onDropOnRow={(targetId) => {
+              if (!dragId) return;
+              void reorderSiblings(dragId, targetId);
+              setDragId(null);
+              setDropTargetId(null);
+            }}
           />
         ))}
         {!tabCategories.length && (

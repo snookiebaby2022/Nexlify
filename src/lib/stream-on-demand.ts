@@ -3,7 +3,7 @@ import { enqueueAgentCommand } from "@/lib/stream-agent";
 import { getStreamPlaybackMode, type StreamForPlaybackMode } from "@/lib/stream-playback-mode";
 import type { VodMode } from "@prisma/client";
 
-const START_COOLDOWN_MS = 15_000;
+const START_COOLDOWN_MS = 5_000;
 const startInflight = new Map<string, number>();
 
 /** XUI-style: start ffmpeg on the streaming server when a viewer opens an on-demand channel. */

@@ -10,9 +10,11 @@ type User = {
   username: string;
   role: string;
   credits: number;
+  maxLines: number;
   isActive: boolean;
   groupId: string | null;
   groupName: string;
+  email?: string | null;
 };
 
 type GroupOption = {
@@ -27,8 +29,11 @@ export default function MassEditUsersPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [action, setAction] = useState("setGroup");
   const [credits, setCredits] = useState(10);
+  const [maxLines, setMaxLines] = useState(500);
   const [groupId, setGroupId] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [groupFilter, setGroupFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
@@ -63,20 +68,21 @@ export default function MassEditUsersPage() {
 
   const filtered = useMemo(() => {
     let list = users;
-    if (roleFilter === "RESELLER") {
-      list = list.filter((u) => u.role === "RESELLER");
-    } else if (roleFilter === "SUB_RESELLER") {
-      list = list.filter((u) => u.role === "SUB_RESELLER");
-    }
+    if (roleFilter === "RESELLER") list = list.filter((u) => u.role === "RESELLER");
+    else if (roleFilter === "SUB_RESELLER") list = list.filter((u) => u.role === "SUB_RESELLER");
+    if (groupFilter) list = list.filter((u) => u.groupId === groupFilter);
+    if (statusFilter === "active") list = list.filter((u) => u.isActive);
+    if (statusFilter === "inactive") list = list.filter((u) => !u.isActive);
     if (!search.trim()) return list;
     const q = search.toLowerCase();
     return list.filter(
       (u) =>
         u.username.toLowerCase().includes(q) ||
         u.role.toLowerCase().includes(q) ||
-        (u.groupName ?? "").toLowerCase().includes(q)
+        (u.groupName ?? "").toLowerCase().includes(q) ||
+        (u.email ?? "").toLowerCase().includes(q)
     );
-  }, [users, search, roleFilter]);
+  }, [users, search, roleFilter, groupFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = useMemo(
@@ -109,6 +115,8 @@ export default function MassEditUsersPage() {
       setMsg("Choose a group");
       return;
     }
+    if (action === "delete" && !confirm(`Delete ${selected.size} user(s)? This cannot be undone.`)) return;
+
     setBusy(true);
     setMsg("");
     try {
@@ -119,6 +127,7 @@ export default function MassEditUsersPage() {
           ids: [...selected],
           action,
           credits,
+          maxLines,
           groupId: action === "setGroup" ? groupId : undefined,
         }),
       });
@@ -141,7 +150,7 @@ export default function MassEditUsersPage() {
       </div>
 
       <p className="text-sm" style={{ color: "var(--muted)" }}>
-        Select resellers and sub-resellers, then enable/disable, add credits, or move them into a different group.
+        Filter by role, group, or status. Bulk change group, enable/disable, add or deduct credits, set credit balance, set max lines, or delete resellers.
       </p>
 
       <div className="flex flex-wrap gap-3 items-end">
@@ -157,6 +166,10 @@ export default function MassEditUsersPage() {
             <option value="enable">Enable</option>
             <option value="disable">Disable</option>
             <option value="addCredits">Add credits</option>
+            <option value="deductCredits">Deduct credits</option>
+            <option value="setCredits">Set credits (exact)</option>
+            <option value="setMaxLines">Set max lines</option>
+            <option value="delete">Delete users</option>
           </select>
         </label>
         {action === "setGroup" && (
@@ -170,22 +183,34 @@ export default function MassEditUsersPage() {
             >
               <option value="">Select group…</option>
               {groups.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
+                <option key={g.id} value={g.id}>{g.name}</option>
               ))}
             </select>
           </label>
         )}
-        {action === "addCredits" && (
+        {(action === "addCredits" || action === "deductCredits" || action === "setCredits") && (
           <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
             Credits
             <input
               type="number"
+              min={0}
               className="rounded border px-3 py-2 bg-transparent w-24 text-sm"
               style={{ borderColor: "var(--border)" }}
               value={credits}
-              onChange={(e) => setCredits(parseInt(e.target.value, 10))}
+              onChange={(e) => setCredits(parseInt(e.target.value, 10) || 0)}
+            />
+          </label>
+        )}
+        {action === "setMaxLines" && (
+          <label className="flex flex-col gap-1 text-xs" style={{ color: "var(--muted)" }}>
+            Max lines
+            <input
+              type="number"
+              min={0}
+              className="rounded border px-3 py-2 bg-transparent w-24 text-sm"
+              style={{ borderColor: "var(--border)" }}
+              value={maxLines}
+              onChange={(e) => setMaxLines(parseInt(e.target.value, 10) || 0)}
             />
           </label>
         )}
@@ -230,6 +255,35 @@ export default function MassEditUsersPage() {
         </select>
         <select
           className="rounded border px-2 py-1.5 text-sm bg-transparent"
+          style={{ borderColor: "var(--border)", color: "inherit" }}
+          value={groupFilter}
+          onChange={(e) => {
+            setGroupFilter(e.target.value);
+            setPage(1);
+            setSelected(new Set());
+          }}
+        >
+          <option value="">All groups</option>
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>{g.name}</option>
+          ))}
+        </select>
+        <select
+          className="rounded border px-2 py-1.5 text-sm bg-transparent"
+          style={{ borderColor: "var(--border)", color: "inherit" }}
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setPage(1);
+            setSelected(new Set());
+          }}
+        >
+          <option value="all">All status</option>
+          <option value="active">Active only</option>
+          <option value="inactive">Disabled only</option>
+        </select>
+        <select
+          className="rounded border px-2 py-1.5 text-sm bg-transparent"
           style={{ borderColor: "var(--border)" }}
           value={pageSize}
           onChange={(e) => {
@@ -238,9 +292,7 @@ export default function MassEditUsersPage() {
           }}
         >
           {PAGE_SIZES.map((n) => (
-            <option key={n} value={n}>
-              {n} entries
-            </option>
+            <option key={n} value={n}>{n} entries</option>
           ))}
         </select>
         <span className="text-xs" style={{ color: "var(--muted)" }}>
@@ -269,6 +321,7 @@ export default function MassEditUsersPage() {
               <th className="text-left p-3">Role</th>
               <th className="text-left p-3">Group</th>
               <th className="text-left p-3">Credits</th>
+              <th className="text-left p-3">Max lines</th>
               <th className="text-left p-3">Status</th>
             </tr>
           </thead>
@@ -282,6 +335,7 @@ export default function MassEditUsersPage() {
                 <td className="p-3">{u.role === "SUB_RESELLER" ? "Sub-reseller" : "Reseller"}</td>
                 <td className="p-3">{u.groupName || "—"}</td>
                 <td className="p-3">{u.credits}</td>
+                <td className="p-3">{u.maxLines ?? "—"}</td>
                 <td className="p-3">{u.isActive ? "Active" : "Disabled"}</td>
               </tr>
             ))}
@@ -291,46 +345,12 @@ export default function MassEditUsersPage() {
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm">
-          <span style={{ color: "var(--muted)" }}>
-            Page {page} of {totalPages}
-          </span>
+          <span style={{ color: "var(--muted)" }}>Page {page} of {totalPages}</span>
           <div className="flex gap-1">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage(1)}
-              className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40"
-              style={{ borderColor: "var(--border)" }}
-            >
-              «
-            </button>
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40"
-              style={{ borderColor: "var(--border)" }}
-            >
-              ‹
-            </button>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40"
-              style={{ borderColor: "var(--border)" }}
-            >
-              ›
-            </button>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => setPage(totalPages)}
-              className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40"
-              style={{ borderColor: "var(--border)" }}
-            >
-              »
-            </button>
+            <button type="button" disabled={page <= 1} onClick={() => setPage(1)} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>«</button>
+            <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>‹</button>
+            <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>›</button>
+            <button type="button" disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>»</button>
           </div>
         </div>
       )}

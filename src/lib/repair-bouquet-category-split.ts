@@ -19,6 +19,9 @@ export type BouquetCategoryRepairResult = {
   categoriesMerged: number;
   streamsRecategorized: number;
   sortOrdersFixed: number;
+  orphanLiveLinked?: number;
+  orphanLiveSkipped?: number;
+  bouquetSortSynced?: number;
   unmatchedOrphanBouquets: { name: string; streams: number }[];
 };
 
@@ -104,6 +107,69 @@ function resolvePackageId(
     if (hit) return hit.id;
   }
   return null;
+}
+
+/** Link live streams with no bouquet rows (common after dedupe) into package bouquets by category name. */
+export async function repairOrphanLiveBouquetLinks(
+  prisma: PrismaClient,
+  bouquets: { id: string; name: string }[]
+): Promise<{ linked: number; skipped: number }> {
+  let linked = 0;
+  let skipped = 0;
+  const BATCH = 400;
+  let cursor: string | undefined;
+
+  for (;;) {
+    const orphans = await prisma.stream.findMany({
+      where: { type: "LIVE", isActive: true, bouquets: { none: {} } },
+      select: {
+        id: true,
+        sortOrder: true,
+        category: { select: { name: true } },
+      },
+      take: BATCH,
+      orderBy: { id: "asc" },
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    if (!orphans.length) break;
+    cursor = orphans[orphans.length - 1]!.id;
+
+    const rows: { bouquetId: string; streamId: string; sortOrder: number }[] = [];
+    for (const s of orphans) {
+      const label = s.category?.name ?? "";
+      const bouquetId =
+        resolvePackageIdPrefer(label, bouquets) ??
+        resolvePackageId(label, bouquets) ??
+        bouquets.find((b) => /^Live TV$/i.test(b.name))?.id ??
+        bouquets.find((b) => /UK no XXX/i.test(b.name))?.id ??
+        null;
+      if (!bouquetId) {
+        skipped++;
+        continue;
+      }
+      rows.push({ bouquetId, streamId: s.id, sortOrder: s.sortOrder });
+    }
+    if (rows.length) {
+      const created = await prisma.bouquetStream.createMany({ data: rows, skipDuplicates: true });
+      linked += created.count;
+    }
+  }
+
+  return { linked, skipped };
+}
+
+/** Align bouquet stream order with stream.sortOrder so Xtream apps match category order. */
+export async function syncLiveBouquetStreamSortOrders(prisma: PrismaClient): Promise<number> {
+  const updated = await prisma.$executeRaw`
+    UPDATE "BouquetStream" AS bs
+    SET "sortOrder" = s."sortOrder"
+    FROM "Stream" AS s
+    WHERE bs."streamId" = s.id
+      AND s.type = 'LIVE'::"StreamType"
+      AND s."isActive" = true
+      AND bs."sortOrder" <> s."sortOrder"
+  `;
+  return Number(updated) || 0;
 }
 
 export async function repairBouquetCategorySplit(
@@ -302,6 +368,14 @@ export async function repairBouquetCategorySplit(
 
   // Package bouquet order already has sortOrder 1..N — leave it.
   // Ensure packages sort before any leftover orphans by leaving orphans deleted.
+
+  const packageList = bouquets
+    .filter((b) => b._count.lines > 0)
+    .map((b) => ({ id: b.id, name: b.name }));
+  const orphanLive = await repairOrphanLiveBouquetLinks(prisma, packageList.length ? packageList : bouquets.map((b) => ({ id: b.id, name: b.name })));
+  result.orphanLiveLinked = orphanLive.linked;
+  result.orphanLiveSkipped = orphanLive.skipped;
+  result.bouquetSortSynced = await syncLiveBouquetStreamSortOrders(prisma);
 
   void invalidateXtreamCategories();
   return result;

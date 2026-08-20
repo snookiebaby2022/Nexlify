@@ -412,6 +412,8 @@ model Category {
 
 model Stream {
   id                 String     @id @default(cuid())
+  /// Stable Xtream numeric id (cuidToNum) for XCIPTV / API lookups — indexed for instant playback auth.
+  xtreamNum          Int?
   name               String
   streamIcon         String?
   streamUrl          String
@@ -475,6 +477,7 @@ model Stream {
   moderationFlags      ModerationFlag[]
 
   @@index([type, isActive])
+  @@index([xtreamNum])
   @@index([serverId])
   @@index([categoryId])
   @@index([lastProbeOk])

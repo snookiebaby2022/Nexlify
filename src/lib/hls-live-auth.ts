@@ -37,7 +37,10 @@ export async function authorizeHlsLiveRequest(
   if (/^\d+$/.test(cleanId)) {
     const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
     const resolved = await resolveStreamIdParam(cleanId, { username });
-    if (resolved) resolvedStreamId = resolved;
+    if (!resolved) {
+      return { ok: false, status: 404, message: "Not found" };
+    }
+    resolvedStreamId = resolved;
   }
 
   const ip = getClientIp(req);

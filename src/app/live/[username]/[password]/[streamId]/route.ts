@@ -105,7 +105,10 @@ async function authorizeLivePlayback(
   if (/^\d+$/.test(cleanId)) {
     const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
     const resolved = await resolveStreamIdParam(cleanId, { username });
-    if (resolved) cleanId = resolved;
+    if (!resolved) {
+      return { ok: false, response: iptvText("Not found", { status: 404 }) };
+    }
+    cleanId = resolved;
   }
 
   const line = await getLineForPlaybackAuth(username);

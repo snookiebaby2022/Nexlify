@@ -106,6 +106,20 @@ export async function resolveStreamIdParam(
     lineId = row?.id ?? null;
   }
 
+  // Fast path: indexed xtreamNum (populated by backfill / stream create).
+  const byNum = await prisma.stream.findFirst({
+    where: { xtreamNum: numericId, isActive: true },
+    select: { id: true },
+  });
+  if (byNum) {
+    if (lineId) {
+      const allowed = await lineHasStream(lineId, byNum.id);
+      if (allowed) return byNum.id;
+    } else {
+      return byNum.id;
+    }
+  }
+
   if (lineId) {
     const rows = await prisma.$queryRaw<{ id: string }[]>`
       SELECT DISTINCT s.id AS id
@@ -114,19 +128,50 @@ export async function resolveStreamIdParam(
       INNER JOIN "Stream" s ON s.id = bs."streamId"
       WHERE lb."lineId" = ${lineId}
         AND s."isActive" = true
+        AND s."xtreamNum" = ${numericId}
+      LIMIT 1
     `;
-    const match = rows.find((r) => cuidToNum(r.id) === numericId);
-    if (match) return match.id;
+    if (rows[0]?.id) return rows[0].id;
+
+    // XCIPTV uses numeric stream_id — scan this line's bouquets in batches (no full-table load).
+    const BATCH = 8000;
+    for (let offset = 0; offset < 500_000; offset += BATCH) {
+      const batch = await prisma.$queryRaw<{ id: string }[]>`
+        SELECT DISTINCT s.id AS id
+        FROM "LineBouquet" lb
+        INNER JOIN "BouquetStream" bs ON bs."bouquetId" = lb."bouquetId"
+        INNER JOIN "Stream" s ON s.id = bs."streamId"
+        WHERE lb."lineId" = ${lineId}
+          AND s."isActive" = true
+        ORDER BY s.id ASC
+        LIMIT ${BATCH} OFFSET ${offset}
+      `;
+      if (!batch.length) break;
+      const match = batch.find((r) => cuidToNum(r.id) === numericId);
+      if (match) {
+        void prisma.stream
+          .update({ where: { id: match.id }, data: { xtreamNum: numericId } })
+          .catch(() => {});
+        return match.id;
+      }
+      if (batch.length < BATCH) break;
+    }
   }
 
-  // Bounded fallback when bouquet lookup misses (small panels / orphaned ids)
+  // Legacy fallback before backfill completes — bounded scan only.
   const candidates = await prisma.stream.findMany({
-    where: { isActive: true },
+    where: { isActive: true, xtreamNum: null },
     select: { id: true },
-    take: 20_000,
+    take: 5_000,
     orderBy: { updatedAt: "desc" },
   });
-  return candidates.find((s) => cuidToNum(s.id) === numericId)?.id ?? null;
+  const legacy = candidates.find((s) => cuidToNum(s.id) === numericId)?.id ?? null;
+  if (legacy) {
+    void prisma.stream.update({ where: { id: legacy }, data: { xtreamNum: numericId } }).catch(() => {});
+    return legacy;
+  }
+
+  return null;
 }
 
 /** True when the stream is on any bouquet assigned to the line. */

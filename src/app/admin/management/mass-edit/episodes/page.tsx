@@ -4,7 +4,7 @@ export default function MassEditEpisodesPage() {
   return (
     <StreamsMassEdit
       title="Mass edit — episodes"
-      description="Bulk update episode entries (series with season/episode)."
+      description="Filter episodes by category, series name, or bouquet. Bulk set category, series name, container, adult flag, bouquet, enable/disable, or delete."
       typeFilter="SERIES"
       episodesOnly
     />
