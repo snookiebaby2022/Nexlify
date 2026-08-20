@@ -108,9 +108,10 @@ export function isPanelUpdateChildWorkAlive(repoPath?: string): boolean {
  * `next build` continues — that must not flip the UI to "Update failed".
  */
 export async function isPanelUpdateWorkAlive(repoPath: string): Promise<boolean> {
-  if (findUpdateWorkerPid(repoPath) != null) return true;
-
   const active = await hasActiveUpdateSignal(repoPath);
+
+  // Worker/script PIDs with no job/lock/marker are orphans — must not block the UI forever.
+  if (active && findUpdateWorkerPid(repoPath) != null) return true;
   if (!active) return false;
 
   if (isPanelUpdateChildWorkAlive(repoPath)) return true;
@@ -316,10 +317,36 @@ function isDoneJobStale(job: PanelUpdateJob): boolean {
 /** Mark jobs stale when the background worker died (e.g. PM2 restart during update).
  *  Also auto-clear failed jobs so the error banner doesn't persist forever.
  */
+/** Kill update workers left running after a crashed/cleared job (prevents fake "Updating…"). */
+function killOrphanUpdateWorkers(repoPath: string): void {
+  if (process.platform === "win32") return;
+  try {
+    const { execSync } = require("child_process") as typeof import("child_process");
+    execSync(
+      `pkill -f ${JSON.stringify(`${repoPath}/scripts/panel-update-background`)} 2>/dev/null || true; ` +
+        `pkill -f ${JSON.stringify(`${repoPath}/scripts/apply-panel-fast-update`)} 2>/dev/null || true`,
+      { stdio: "ignore", timeout: 5000 }
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function reconcileStaleUpdateJob(
   repoPath: string
 ): Promise<PanelUpdateJob | null> {
   const job = await readUpdateJob(repoPath);
+
+  if (!job || job.status !== "running") {
+    const active = await hasActiveUpdateSignal(repoPath);
+    if (
+      !active &&
+      (findUpdateWorkerPid(repoPath) != null || isPanelUpdateChildWorkAlive(repoPath))
+    ) {
+      killOrphanUpdateWorkers(repoPath);
+    }
+  }
+
   if (!job) return job;
 
   // Orphan idle placeholder left on disk — treat as no job so Clear stuck / reload work
