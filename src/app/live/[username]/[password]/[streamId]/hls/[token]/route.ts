@@ -15,6 +15,7 @@ import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { logActivity } from "@/lib/lines";
 import { ensureDiskHls } from "@/lib/hls-restream-client";
 import { isPackagerSegmentName, readTsHlsSegment } from "@/lib/ts-hls-packager";
+import { resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -102,7 +103,8 @@ export async function GET(
   const target = decodeRelayTarget(token, auth.rootUpstream);
   if (!target) return iptvText("Bad relay target", { status: 400 });
 
-  const upstream = await fetchHlsUpstream(target, UPSTREAM_HLS_UA, null);
+  const outboundProxy = await resolveOutboundProxyForStream(auth.streamId);
+  const upstream = await fetchHlsUpstream(target, UPSTREAM_HLS_UA, null, 20_000, outboundProxy);
 
   if (!upstream.ok) {
     void logActivity("stream_hls_relay_error", {

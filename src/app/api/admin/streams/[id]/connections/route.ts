@@ -2,19 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeConnectionQualityWithLive, getLiveQualitySample } from "@/lib/connection-quality-live";
+import {
+  getConnectionPlaybackOutput,
+  resolvePlaybackOutputLabel,
+} from "@/lib/connection-playback-output";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 
 import { LIVE_STALE_MS } from "@/lib/connections";
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
-
-function inferOutput(userAgent: string | null): string {
-  const ua = (userAgent ?? "").toLowerCase();
-  if (ua.includes("mpegts") || ua.includes(".ts")) return "MPEGTS";
-  if (ua.includes("m3u8") || ua.includes("hls")) return "HLS";
-  if (ua.includes("vlc")) return "TS";
-  return "HLS";
-}
 
 function durationSeconds(startedAt: Date, lastSeenAt: Date): number {
   return Math.max(0, Math.floor((lastSeenAt.getTime() - startedAt.getTime()) / 1000));
@@ -72,6 +68,11 @@ export async function GET(
           lastSeenAt: c.lastSeenAt,
           live,
         });
+        const cachedOutput = await getConnectionPlaybackOutput(c.lineId, streamId, c.ip);
+        const output = resolvePlaybackOutputLabel({
+          cached: cachedOutput,
+          userAgent: c.userAgent,
+        });
         return {
           id: c.id,
           line: c.line.username,
@@ -79,7 +80,7 @@ export async function GET(
           ip: c.ip,
           duration: formatDuration(dur),
           durationSeconds: dur,
-          output: inferOutput(c.userAgent),
+          output,
           restreamer: c.line.isRestreamer,
           userAgent: c.userAgent,
           lastSeenAt: c.lastSeenAt.toISOString(),

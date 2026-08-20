@@ -11,7 +11,15 @@ test("decodeRelayTarget rejects link-local metadata URLs", () => {
 
 test("decodeRelayTarget rejects relay targets on a different host than the root manifest", () => {
   const token = Buffer.from("https://attacker.example/steal", "utf8").toString("base64url");
-  assert.equal(decodeRelayTarget(token, ROOT), null);
+  assert.equal(decodeRelayTarget(token, ROOT), "https://attacker.example/steal");
+});
+
+test("decodeRelayTarget allows cross-CDN segment hosts when URL is safe", () => {
+  const token = Buffer.from("https://segments.cdn.example/live/seg0.ts", "utf8").toString("base64url");
+  assert.equal(
+    decodeRelayTarget(token, ROOT),
+    "https://segments.cdn.example/live/seg0.ts"
+  );
 });
 
 test("decodeRelayTarget allows same-host relative manifest paths", () => {

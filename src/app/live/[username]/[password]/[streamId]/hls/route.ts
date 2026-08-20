@@ -9,6 +9,7 @@ import { fetchHlsUpstream, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
 import { antiFreezeLiveHeaders, respondNativeHlsRelay } from "@/lib/hls-relay-response";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { logActivity } from "@/lib/lines";
+import { resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
 
 export const runtime = "nodejs";
 
@@ -56,7 +57,8 @@ export async function GET(
   if (!target) return iptvText("Bad relay target", { status: 400 });
 
   const antiFreeze = await getAntiFreezeSettings();
-  const upstream = await fetchHlsUpstream(target, UPSTREAM_HLS_UA, null);
+  const outboundProxy = await resolveOutboundProxyForStream(auth.streamId);
+  const upstream = await fetchHlsUpstream(target, UPSTREAM_HLS_UA, null, 20_000, outboundProxy);
 
   if (!upstream.ok) {
     void logActivity("stream_hls_relay_error", {

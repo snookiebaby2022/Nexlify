@@ -36,3 +36,15 @@ test("computeConnectionQualityWithLive marks stalled streams poor", () => {
   });
   assert.equal(q.level, "poor");
 });
+
+test("computeConnectionQualityWithLive treats fresh lastSeen as active when no byte samples", () => {
+  const now = Date.now();
+  const q = computeConnectionQualityWithLive({
+    startedAt: new Date(now - 120_000),
+    lastSeenAt: new Date(now - 3_000),
+    now,
+    live: null,
+  });
+  assert.equal(q.level, "excellent");
+  assert.ok(q.score >= 80);
+});

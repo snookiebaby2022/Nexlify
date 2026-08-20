@@ -86,6 +86,55 @@ function clientIp(req) {
   return fwd || req.socket.remoteAddress || "";
 }
 
+function pulseConnection(ctx, bytes) {
+  if (!INTERNAL_SECRET || !ctx?.lineId || !ctx?.streamId) return;
+  const n = Math.max(0, Math.floor(bytes ?? 0));
+  if (n <= 0) return;
+  const body = JSON.stringify({
+    lineId: ctx.lineId,
+    streamId: ctx.streamId,
+    ip: ctx.ip ?? "",
+    bytes: n,
+  });
+  const req = http.request(
+    {
+      hostname: backendHost,
+      port: backendPort,
+      path: "/api/internal/connection-pulse",
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(body),
+        "x-panel-internal-secret": INTERNAL_SECRET,
+      },
+      timeout: 3000,
+    },
+    (res) => res.resume()
+  );
+  req.on("error", () => undefined);
+  req.on("timeout", () => req.destroy());
+  req.write(body);
+  req.end();
+}
+
+function createLiveByteMeter(pulseCtx) {
+  if (!pulseCtx?.lineId || !pulseCtx?.streamId) return () => undefined;
+  let pending = 0;
+  let lastPulse = 0;
+  return (chunk) => {
+    const n = chunk?.length ?? 0;
+    if (n <= 0) return;
+    pending += n;
+    const now = Date.now();
+    if (lastPulse === 0) lastPulse = now;
+    if (now - lastPulse >= 10_000 || pending >= 512_000) {
+      pulseConnection(pulseCtx, pending);
+      pending = 0;
+      lastPulse = now;
+    }
+  };
+}
+
 function parseOutboundProxyHeader(raw) {
   const s = String(raw || "").trim();
   if (!s || /^socks5:/i.test(s)) return null;
@@ -341,6 +390,7 @@ function authLive(clientReq) {
             hlsNative: String(res.headers["x-nexlify-hls-native"] || "") === "1",
             passthrough: String(res.headers["x-nexlify-passthrough"] || "") === "1" || res.statusCode === 204,
             streamId: String(res.headers["x-nexlify-stream-id"] || ""),
+            lineId: String(res.headers["x-nexlify-line-id"] || ""),
             outboundProxy: parseOutboundProxyHeader(res.headers["x-nexlify-outbound-proxy"]),
           });
         }
@@ -452,9 +502,11 @@ function serveHlsPlaylist(streamId, clientReq, clientRes) {
   }
 }
 
-function pipeLiveMpegTs(upRes, clientReq, clientRes) {
+function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx) {
+  const meter = pulseCtx ? createLiveByteMeter(pulseCtx) : null;
   if (!shouldSniffLiveTs(upRes)) {
     clientRes.writeHead(200, liveTsHeaders());
+    if (meter) upRes.on("data", meter);
     upRes.pipe(clientRes);
     return;
   }
@@ -486,6 +538,10 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes) {
     clientRes.writeHead(200, liveTsHeaders());
     headersSent = true;
     clientRes.write(prefix);
+    if (meter) {
+      meter(prefix);
+      upRes.on("data", meter);
+    }
     upRes.pipe(clientRes);
   };
 
@@ -516,6 +572,7 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes) {
     if (looksLikeMpegTs(prefix)) {
       clientRes.writeHead(200, liveTsHeaders());
       clientRes.write(prefix);
+      if (meter) meter(prefix);
       clientRes.end();
       return;
     }
@@ -523,7 +580,7 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes) {
   });
 }
 
-function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, listenPort, proto, proxy, altProtocolLeft }) {
+function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, listenPort, proto, proxy, altProtocolLeft, pulseCtx }) {
   targetUrl = normalizeUpstreamUrl(targetUrl);
   let parsed;
   try {
@@ -588,6 +645,7 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         proto,
         proxy,
         altProtocolLeft,
+        pulseCtx,
       });
       return;
     }
@@ -604,11 +662,17 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
             proto,
             proxy,
             altProtocolLeft: altProtocolLeft - 1,
+            pulseCtx,
           });
           return;
         } catch {
           /* fall through */
         }
+      }
+      // Provider auth errors: fall back to Next.js (HLS remux, outbound proxy, disk packager).
+      if (live && (status === 401 || status === 403 || status === 407)) {
+        forward(clientReq, clientRes, { listenPort, proto });
+        return;
       }
       if (!clientRes.headersSent) {
         clientRes.writeHead(status || 502, { "content-type": "text/plain" });
@@ -625,7 +689,7 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         forward(clientReq, clientRes, { listenPort, proto });
         return;
       }
-      pipeLiveMpegTs(upRes, clientReq, clientRes);
+      pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx);
       return;
     }
     clientRes.writeHead(status || 502, upRes.headers);
@@ -644,6 +708,7 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
           proto,
           proxy,
           altProtocolLeft: altProtocolLeft - 1,
+          pulseCtx,
         });
         return;
       } catch {
@@ -789,6 +854,10 @@ async function onRequest(clientReq, clientRes, ctx) {
       redirectsLeft: 5,
       altProtocolLeft: 1,
       proxy: auth.outboundProxy,
+      pulseCtx:
+        auth.lineId && auth.streamId
+          ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
+          : null,
       ...ctx,
     });
   } catch {

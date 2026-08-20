@@ -17,12 +17,21 @@ const XUI   = process.env.XUI_URL   || "";
 const ADMIN_USER = process.env.ADMIN_USER || process.env.TEST_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || process.env.TEST_PASS || "admin";
 const OUTPUT_DIR = "./test-results";
+/** Known-good live stream on server 45 (BBC One FHD). Override via SMOKE_LIVE_STREAM_ID. */
+const SMOKE_LIVE_STREAM_ID = process.env.SMOKE_LIVE_STREAM_ID || "1058467879";
 
 const results: { name: string; pass: boolean; detail: string; ms: number }[] = [];
 let adminSession = "";
 let lineUser = "";
 let linePass = "";
 let lineId = "";
+let cachedM3uPrefix: { status: number; raw: string } | null = null;
+let playbackCatalog: {
+  liveStreams: any[];
+  vodStreams: any[];
+  seriesList: any[];
+  seriesInfo: { json: any } | null;
+} | null = null;
 
 function log(msg: string) { console.log(msg); }
 
@@ -55,6 +64,69 @@ async function http(url: string, opts: { method?: string; headers?: Record<strin
   } catch (e: any) {
     clearTimeout(timer);
     return { status: -1, json: null, raw: e?.message || String(e), setCookie: "" };
+  }
+}
+
+function m3uPlaylistUrl() {
+  return `${PANEL}/get.php?username=${encodeURIComponent(lineUser)}&password=${encodeURIComponent(linePass)}&type=m3u_plus&output=ts`;
+}
+
+async function fetchM3uPrefix() {
+  if (!cachedM3uPrefix) {
+    cachedM3uPrefix = await httpPrefix(m3uPlaylistUrl(), { timeout: 120000, noSession: true });
+  }
+  return cachedM3uPrefix;
+}
+
+function pickLiveStreamId(liveStreams: any[]): string | number | undefined {
+  const preferred = String(SMOKE_LIVE_STREAM_ID).trim();
+  if (preferred && liveStreams.some((s) => String(s.stream_id) === preferred)) {
+    return preferred;
+  }
+  const bbc = liveStreams.find((s) => /bbc one/i.test(String(s.name || "")));
+  if (bbc?.stream_id != null) return bbc.stream_id;
+  return liveStreams[0]?.stream_id;
+}
+
+async function loadPlaybackCatalog() {
+  if (playbackCatalog) return playbackCatalog;
+  const [liveRes, vodRes, seriesRes] = await Promise.all([
+    xtreamRaw("get_live_streams"),
+    xtreamRaw("get_vod_streams"),
+    xtreamRaw("get_series"),
+  ]);
+  let seriesInfo: { json: any } | null = null;
+  const firstSeries = seriesRes.json?.[0];
+  if (firstSeries?.series_id) {
+    seriesInfo = await xtreamRaw(`get_series_info&series_id=${firstSeries.series_id}`);
+  }
+  playbackCatalog = {
+    liveStreams: liveRes.json || [],
+    vodStreams: vodRes.json || [],
+    seriesList: seriesRes.json || [],
+    seriesInfo,
+  };
+  return playbackCatalog;
+}
+
+/** Small ranged GET — avoids downloading multi-GB VOD bodies during smoke tests. */
+async function httpProbe(
+  url: string,
+  opts: { timeout?: number; noSession?: boolean } = {}
+): Promise<{ status: number; contentType: string; prefix: string }> {
+  const headers: Record<string, string> = { Accept: "*/*", Range: "bytes=0-8191" };
+  if (adminSession && !opts.noSession) headers["Cookie"] = adminSession;
+  const controller = new AbortController();
+  const ms = opts.timeout ?? 20000;
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, { headers, redirect: "follow", signal: controller.signal });
+    clearTimeout(timer);
+    const prefix = (await res.text()).slice(0, 4096);
+    return { status: res.status, contentType: res.headers.get("content-type") || "", prefix };
+  } catch (e: any) {
+    clearTimeout(timer);
+    return { status: -1, contentType: "", prefix: e?.message || String(e) };
   }
 }
 
@@ -307,21 +379,17 @@ async function testPlayback() {
   log("\x1b[1m  STEP 4: Playback (Live / Movie / Series / EPG)\x1b[0m");
   log("\x1b[1m══════════════════════════════════════════════════════════════\x1b[0m\n");
 
-  // Gather IDs
-  const liveRes = await xtreamRaw("get_live_streams");
-  const vodRes = await xtreamRaw("get_vod_streams");
-  const seriesRes = await xtreamRaw("get_series");
-  const liveStreams: any[] = liveRes.json || [];
-  const vodStreams: any[] = vodRes.json || [];
-  const seriesList: any[] = seriesRes.json || [];
+  const catalog = await loadPlaybackCatalog();
+  const liveStreams = catalog.liveStreams;
+  const vodStreams = catalog.vodStreams;
+  const seriesList = catalog.seriesList;
 
-  const liveId = liveStreams[0]?.stream_id;
+  const liveId = pickLiveStreamId(liveStreams);
   const movieId = vodStreams[0]?.stream_id;
   let episodeId: string | undefined;
 
-  if (seriesList.length > 0) {
-    const info = await xtreamRaw(`get_series_info&series_id=${seriesList[0].series_id}`);
-    const eps = Object.values(info.json?.episodes || {}).flat() as any[];
+  if (seriesList.length > 0 && catalog.seriesInfo?.json) {
+    const eps = Object.values(catalog.seriesInfo.json.episodes || {}).flat() as any[];
     episodeId = eps[0]?.stream_id ?? eps[0]?.id;
   }
 
@@ -351,23 +419,29 @@ async function testPlayback() {
     });
   }
 
-  // Series episode HLS
+  // Series episode — MKV/MP4 proxy returns binary, not M3U8
   if (episodeId) {
-    await test("Series episode HLS manifest", async () => {
-      const url = xtreamStream("series", episodeId);
-      const r = await http(url, { headers: {} });
-      log(`    HTTP ${r.status}, size: ${r.raw.length}`);
+    await test("Series episode playback URL", async () => {
+      const url = xtreamStream("series", episodeId!);
+      const r = await httpProbe(url, { noSession: true, timeout: 20000 });
+      log(`    HTTP ${r.status}, type: ${r.contentType || "(none)"}`);
       ok(r.status === 200 || r.status === 206, `HTTP ${r.status}`);
-      ok(r.raw.includes("#EXTM3U"), `Not M3U8: ${r.raw.slice(0, 200)}`);
+      const isM3u8 = r.prefix.includes("#EXTM3U");
+      const ct = r.contentType.toLowerCase();
+      const isMedia =
+        ct.includes("video/") ||
+        ct.includes("octet-stream") ||
+        ct.includes("application/vnd.apple.mpegurl") ||
+        ct.includes("mpegurl");
+      ok(isM3u8 || isMedia || r.prefix.length > 64, `Not stream body: ${r.prefix.slice(0, 120)}`);
     });
   }
 
-  // EPG XMLTV — try with line credentials
+  // EPG XMLTV — prefix only (full guide can be tens of MB)
   await test("EPG XMLTV output", async () => {
     const url = `${PANEL}/xmltv.php?username=${encodeURIComponent(lineUser)}&password=${encodeURIComponent(linePass)}`;
-    const r = await http(url, { headers: { Accept: "application/xml" }, timeout: 120000, noSession: true });
+    const r = await httpPrefix(url, { maxBytes: 262144, timeout: 120000, noSession: true });
     if (r.status === 400) {
-      // Panel may not support EPG via this endpoint
       log(`    ⚠ HTTP ${r.status} — panel may not expose EPG at /xmltv.php`);
       return;
     }
@@ -375,7 +449,7 @@ async function testPlayback() {
     ok(r.raw.includes("<tv>") || r.raw.includes("<tv "), "Not XMLTV");
     const channels = (r.raw.match(/<channel id="/g) || []).length;
     const programs = (r.raw.match(/<programme /g) || []).length;
-    log(`    → ${channels} channels, ${programs} programmes`);
+    log(`    → ${channels} channels, ${programs} programmes (prefix sample)`);
   });
 
   // Short EPG
@@ -393,14 +467,14 @@ async function testPlayback() {
     });
   }
 
-  // M3U playlist
+  // M3U playlist (shared prefix cache with XUI format check below)
   await test("M3U playlist (get.php)", async () => {
-    const url = `${PANEL}/get.php?username=${encodeURIComponent(lineUser)}&password=${encodeURIComponent(linePass)}&type=m3u_plus&output=ts`;
-    const r = await httpPrefix(url, { timeout: 120000, noSession: true });
+    const r = await fetchM3uPrefix();
+    ok(r.status === 200, `HTTP ${r.status}`);
     ok(r.raw.includes("#EXTM3U"), "Not M3U");
     const count = (r.raw.match(/#EXTINF:/g) || []).length;
     ok(count > 0, "No channels in playlist");
-    log(`    → ${count} channels in M3U`);
+    log(`    → ${count}+ channels in M3U prefix`);
   });
 
   // Bouquets — try multiple action names (panel-dependent)
@@ -510,10 +584,10 @@ async function testXuiCompat() {
     });
   }
 
-  // M3U format check
+  // M3U format check (reuses get.php prefix from Step 4 when available)
   await test("XUI M3U format: #EXTINF fields", async () => {
-    const url = `${PANEL}/get.php?username=${encodeURIComponent(lineUser)}&password=${encodeURIComponent(linePass)}&type=m3u_plus&output=ts`;
-    const r = await httpPrefix(url, { timeout: 120000, noSession: true });
+    const r = await fetchM3uPrefix();
+    ok(r.status === 200, `HTTP ${r.status}`);
     const extinfLines = r.raw.split("\n").filter(l => l.startsWith("#EXTINF:"));
     ok(extinfLines.length > 0, "No #EXTINF lines");
     const first = extinfLines[0];

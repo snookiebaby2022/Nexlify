@@ -6,6 +6,10 @@ import {
   listLiveConnections,
 } from "@/lib/connections";
 import { computeConnectionQualityWithLive, getLiveQualitySample } from "@/lib/connection-quality-live";
+import {
+  getConnectionPlaybackOutput,
+  resolvePlaybackOutputLabel,
+} from "@/lib/connection-playback-output";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 
@@ -28,12 +32,20 @@ export async function GET() {
         now,
         live,
       });
+      const cachedOutput = c.streamId
+        ? await getConnectionPlaybackOutput(c.lineId, c.streamId, c.ip)
+        : null;
+      const output = resolvePlaybackOutputLabel({
+        cached: cachedOutput,
+        userAgent: c.userAgent,
+      });
       return {
         ...c,
         startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
         lastSeenAt: c.lastSeenAt instanceof Date ? c.lastSeenAt.toISOString() : String(c.lastSeenAt),
         serverName: c.stream?.server?.name ?? "Main Server",
         quality,
+        output,
       };
     })
   );

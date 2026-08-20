@@ -175,6 +175,22 @@ needs_reregister() {
     echo "$name: instances changed from '$instances' to '$expected_instances' — re-registering"
     return 0
   fi
+  if [ "$name" = "nexlify" ]; then
+    local max_mem_bytes
+    max_mem_bytes="$(pm2 jlist 2>/dev/null | node -e "
+      try {
+        const list = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+        const app = list.find((x) => x.name === 'nexlify');
+        const n = Number(app?.pm2_env?.max_memory_restart || 0);
+        process.stdout.write(String(Number.isFinite(n) ? n : 0));
+      } catch { process.stdout.write('0'); }
+    " 2>/dev/null || echo 0)"
+    # Stale installs used 700M and PM2 killed nexlify during catalog/smoke loads.
+    if [ -n "$max_mem_bytes" ] && [ "$max_mem_bytes" -gt 0 ] && [ "$max_mem_bytes" -lt 2147483648 ]; then
+      echo "$name: max_memory_restart ${max_mem_bytes} bytes (< 2GB) — re-registering from ecosystem.config.cjs"
+      return 0
+    fi
+  fi
   return 1
 }
 

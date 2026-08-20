@@ -6,7 +6,7 @@ import { lineIsPlayable } from "@/lib/lines";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { getAntiFreezeSettings } from "@/lib/anti-freeze";
-import { hlsRelayCacheKey, isAllowedHlsRelayTarget, isSafeUpstreamUrl, stripLiveStreamExtension } from "@/lib/hls-playback";
+import { hlsRelayCacheKey, isSafeUpstreamUrl, stripLiveStreamExtension, hlsNativeUrlCacheKey } from "@/lib/hls-playback";
 
 export type HlsLiveAuth =
   | {
@@ -67,6 +67,9 @@ export async function authorizeHlsLiveRequest(
   const cacheKey = hlsRelayCacheKey(line.id, resolvedStreamId);
   let rootUpstream = await cacheGet<string>(cacheKey);
   if (!rootUpstream) {
+    rootUpstream = (await cacheGet<string>(hlsNativeUrlCacheKey(resolvedStreamId))) ?? "";
+  }
+  if (!rootUpstream) {
     const antiFreeze = await getAntiFreezeSettings();
     rootUpstream =
       (await resolvePlaybackUrlForLine(
@@ -97,7 +100,7 @@ export async function authorizeHlsLiveRequest(
   };
 }
 
-export function decodeRelayTarget(encoded: string | null, rootUpstream: string): string | null {
+export function decodeRelayTarget(encoded: string | null, _rootUpstream: string): string | null {
   if (!encoded?.trim()) return null;
   let target: string;
   try {
@@ -105,8 +108,6 @@ export function decodeRelayTarget(encoded: string | null, rootUpstream: string):
   } catch {
     return null;
   }
-  if (!isSafeUpstreamUrl(target) || !isAllowedHlsRelayTarget(target, rootUpstream)) {
-    return null;
-  }
+  if (!isSafeUpstreamUrl(target)) return null;
   return target;
 }

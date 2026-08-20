@@ -52,6 +52,8 @@ test("sanitizeHlsPlaylist drops DISCONTINUITY tags that freeze Smarters", async 
   assert.match(master, /https:\/\/cdn\.example\/live\/12\.m3u8/);
 
   assert.equal(shouldOfferClientDirectHls(404), false);
+  assert.equal(shouldOfferClientDirectHls(407), false);
+  assert.equal(shouldOfferClientDirectHls(502, "Upstream HTTP 407"), false);
   assert.equal(shouldOfferClientDirectHls(502, "Non-playable content-type: text/html"), true);
   assert.equal(shouldOfferClientDirectHls(504, "Upstream timeout"), true);
   assert.equal(shouldOfferClientDirectHls(502, "Upstream HTTP 404"), false);

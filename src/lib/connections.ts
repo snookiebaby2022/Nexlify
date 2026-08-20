@@ -1,6 +1,11 @@
 import { prisma } from "./prisma";
 import { cacheGetOrSet, cacheDel, cacheGet, cacheSet } from "./cache";
 import { clearConnectionQuality, recordConnectionMediaBytes } from "./connection-quality-live";
+import {
+  clearConnectionPlaybackOutput,
+  resolvePlaybackOutputLabel,
+  setConnectionPlaybackOutput,
+} from "./connection-playback-output";
 
 export const STALE_MS = 5 * 60 * 1000; // 5 minutes — DB cleanup for orphaned rows
 export const LIVE_STALE_MS = 45 * 1000; // 45s — live connections display (who is watching now)
@@ -152,6 +157,8 @@ export async function trackConnection(opts: {
   streamId?: string;
   ip?: string;
   userAgent?: string;
+  /** Xtream playback path e.g. /live/user/pass/123.ts — used for Output column. */
+  playbackPath?: string;
 }): Promise<string | null> {
   // Hard kick: do not revive a session that was just kicked
   if (await isSessionKicked(opts.lineId, opts.ip)) {
@@ -206,6 +213,11 @@ export async function trackConnection(opts: {
       data: { lastSeenAt: new Date() },
     });
     if (streamId) {
+      const output = resolvePlaybackOutputLabel({
+        requestPath: opts.playbackPath,
+        userAgent: opts.userAgent,
+      });
+      void setConnectionPlaybackOutput(opts.lineId, streamId, opts.ip, output);
       const { recordLineWatch } = await import("@/lib/line-watch");
       void recordLineWatch(opts.lineId, streamId, opts.ip);
     }
@@ -228,6 +240,11 @@ export async function trackConnection(opts: {
       },
     });
     if (streamId) {
+      const output = resolvePlaybackOutputLabel({
+        requestPath: opts.playbackPath,
+        userAgent: opts.userAgent,
+      });
+      void setConnectionPlaybackOutput(opts.lineId, streamId, opts.ip, output);
       const { recordLineWatch } = await import("@/lib/line-watch");
       void recordLineWatch(opts.lineId, streamId);
     }
@@ -251,6 +268,7 @@ export async function removeConnection(lineId: string, streamId: string, ip: str
     where: { lineId, streamId, ip },
   });
   void clearConnectionQuality(lineId, streamId, ip);
+  void clearConnectionPlaybackOutput(lineId, streamId, ip);
   // Invalidate connection caches
   void cacheDel("conn:*").catch(() => {});
 }

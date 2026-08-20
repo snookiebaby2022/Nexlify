@@ -1,7 +1,32 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.17",
+  "latestVersion": "2.0.18",
   "releases": [
+    {
+      "version": "2.0.18",
+      "date": "2026-08-20",
+      "channel": "stable",
+      "summary": "XCIPTV/Smarters/TiviMate playback fixes, Live Connections quality/output, faster M3U/XMLTV exports, and smoke-test stability.",
+      "changelog": [
+        "HLS segment relay accepts CDN host variants (XCIPTV/TiviMate); no client-direct provider URLs when panel relay fails",
+        "IPTV edge falls back to Next.js on 401/403/407; connection pulse reports edge splice throughput for Live Connections quality",
+        "Live Connections Output derived from request path (.ts → MPEGTS, .m3u8 → HLS); quality scoring uses pulse bytes and fresh lastSeen",
+        "get.php m3u_plus streams LIVE+VOD in one pass (exclude SERIES by default); XMLTV export cached 5 min with optimized SQL",
+        "player_api EPG (get_short_epg / get_simple_data_table) resolves epg_channel_id consistently with catalog",
+        "PM2 re-register when nexlify max_memory_restart is under 2GB (fixes smoke/catalog OOM at 700M)",
+        "Smoke tests use BBC One for live HLS, ranged probes for series VOD, shared M3U prefix, and panel port from .env"
+      ],
+      "fixes": [
+        "XCIPTV all streams failed (HLS relay 400 Bad relay target; CDN segment URLs differ from master host)",
+        "Live HLS fell back to raw provider URLs players cannot reach off-panel",
+        "Edge .ts splice returned 407 with no Next.js fallback",
+        "Live Connections Quality always Poor and Output showed HLS for MPEG-TS/VLC traffic",
+        "Smoke test crashed panel at Step 4 when PM2 700M memory cap was exceeded loading 35k+ VOD twice",
+        "get.php double-fetched every stream batch and included SERIES (~200MB playlists, 25s+ exports)",
+        "xmltv.php regenerated full guide on every request (18s+); duplicate M3U smoke runs added another 27s",
+        "Smoke live HLS tested dead first catalog stream (B4U Movies 502) instead of a known-good channel"
+      ]
+    },
     {
       "version": "2.0.17",
       "date": "2026-08-20",

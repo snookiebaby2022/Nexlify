@@ -28,8 +28,6 @@ import {
   HLS_PLAYLIST_CACHE_SEC,
   HLS_GUESSED_PROBE_MS,
   rewritePackagerPlaylist,
-  buildClientDirectHlsMaster,
-  shouldOfferClientDirectHls,
   expandHlsPlaybackCandidates,
   UPSTREAM_HLS_UA,
 } from "@/lib/hls-playback";
@@ -214,7 +212,6 @@ export async function GET(
     );
 
   let lastError = "Stream fetch failed";
-  let clientDirectHls: string | null = null;
 
   if (wantsM3u8) {
     const panelOrigin = serverBaseUrl(req.url, req.headers);
@@ -227,6 +224,10 @@ export async function GET(
     const playlistKey = hlsPlaylistCacheKey(line.id, cleanId);
     const cachedPlaylist = await cacheGet<string>(playlistKey);
     if (cachedPlaylist) {
+      const cachedNativeUrl = await cacheGet<string>(hlsNativeUrlCacheKey(cleanId));
+      if (cachedNativeUrl) {
+        await cacheSet(hlsRelayCacheKey(line.id, cleanId), cachedNativeUrl, 3600);
+      }
       return hlsHeaders(cachedPlaylist);
     }
 
@@ -261,16 +262,14 @@ export async function GET(
         : originalCandidates.has(playbackUrl)
           ? HLS_NATIVE_PROBE_MS
           : HLS_GUESSED_PROBE_MS;
-      const manifest = await fetchHlsManifestForClient(playbackUrl, UPSTREAM_HLS_UA, probeMs);
+      const manifest = await fetchHlsManifestForClient(
+        playbackUrl,
+        UPSTREAM_HLS_UA,
+        probeMs,
+        outboundProxy
+      );
       if (!manifest.ok) {
         lastError = manifest.detail || "Stream unavailable";
-        if (
-          !clientDirectHls &&
-          originalCandidates.has(playbackUrl) &&
-          shouldOfferClientDirectHls(manifest.status, manifest.detail)
-        ) {
-          clientDirectHls = playbackUrl;
-        }
         continue;
       }
       return returnNativeHls(playbackUrl, manifest);
@@ -305,17 +304,36 @@ export async function GET(
       lastError = packed.error;
     }
 
-    // 4. Client-direct only for real stored .m3u8 (never guessed Xtream suffixes).
-    if (clientDirectHls) {
-      await cacheSet(hlsRelayCacheKey(line.id, cleanId), clientDirectHls, 3600);
-      return hlsHeaders(buildClientDirectHlsMaster(clientDirectHls));
+    // 4. Repackage provider-native HLS via disk packager (XCIPTV/TiviMate cannot
+    // reach many provider URLs directly; never redirect players off-panel).
+    for (const hlsUrl of orderedHlsUrls) {
+      if (!originalCandidates.has(hlsUrl)) continue;
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), hlsUrl, 3600);
+      const packed = await ensureDiskHls({
+        streamId: cleanId,
+        upstreamUrl: hlsUrl,
+        userAgent: UPSTREAM_HLS_UA,
+        outboundProxy,
+      });
+      if (packed.ok) {
+        return hlsHeaders(
+          rewritePackagerPlaylist(packed.playlist, panelOrigin, username, password, requestStreamKey)
+        );
+      }
+      lastError = packed.error;
     }
 
     const status = /timeout/i.test(lastError) ? 504 : 502;
     return withIptvCors(iptvText(lastError.slice(0, 200) || "Stream fetch failed", { status }));
   }
 
-  void trackConnection({ lineId: line.id, streamId: cleanId, ip: ip ?? "", userAgent: ua });
+  void trackConnection({
+    lineId: line.id,
+    streamId: cleanId,
+    ip: ip ?? "",
+    userAgent: ua,
+    playbackPath: `/live/${username}/${password}/${streamId}`,
+  });
 
   const mpegTsOrder = expandHlsPlaybackCandidates([
     ...candidates.filter((u) => !isHlsPlaybackUrl(u)),

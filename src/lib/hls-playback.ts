@@ -237,9 +237,9 @@ export function buildClientDirectHlsMaster(hlsUrl: string): string {
 
 /** 404 means this host has no HLS container — do not send the player there. */
 export function shouldOfferClientDirectHls(status: number, detail?: string): boolean {
-  if (status === 404 || status === 410 || status === 405) return false;
+  if (status === 404 || status === 405 || status === 407 || status === 410) return false;
   const d = (detail ?? "").toLowerCase();
-  if (/\bhttp 404\b/.test(d) || /\bhttp 410\b/.test(d)) return false;
+  if (/\bhttp 404\b/.test(d) || /\bhttp 407\b/.test(d) || /\bhttp 410\b/.test(d)) return false;
   return true;
 }
 
@@ -449,12 +449,14 @@ export async function fetchHlsUpstream(
   upstreamUrl: string,
   userAgent?: string,
   _range?: string | null,
-  timeoutMs = 20_000
+  timeoutMs = 20_000,
+  proxy?: import("@/lib/outbound-proxy").OutboundProxy | null
 ): Promise<HlsFetchResult> {
   try {
     const open = await openUpstreamLiveStream(upstreamUrl, {
       userAgent: userAgent?.trim() || UPSTREAM_HLS_UA,
       timeoutMs,
+      proxy,
     });
     const finalUrl = open.finalUrl || upstreamUrl;
     const contentType = open.contentType ?? "";
@@ -496,11 +498,12 @@ export async function fetchHlsUpstream(
 export async function fetchHlsManifestForClient(
   upstreamUrl: string,
   userAgent?: string,
-  timeoutMs = 20_000
+  timeoutMs = 20_000,
+  proxy?: import("@/lib/outbound-proxy").OutboundProxy | null
 ): Promise<
   { ok: true; body: string; finalUrl: string } | { ok: false; status: number; detail?: string }
 > {
-  const res = await fetchHlsUpstream(upstreamUrl, userAgent?.trim() || UPSTREAM_HLS_UA, null, timeoutMs);
+  const res = await fetchHlsUpstream(upstreamUrl, userAgent?.trim() || UPSTREAM_HLS_UA, null, timeoutMs, proxy);
   if (!res.ok) return { ok: false, status: res.status, detail: res.detail };
   if (res.kind !== "manifest") return { ok: false, status: 502, detail: "not an HLS playlist" };
   return { ok: true, body: res.body, finalUrl: res.finalUrl };

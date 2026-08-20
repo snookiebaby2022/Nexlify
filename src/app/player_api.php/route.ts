@@ -19,6 +19,7 @@ import { checkDdosShield } from "@/lib/ddos-shield";
 import { cacheGetOrSet } from "@/lib/cache";
 import { getCacheTtls } from "@/lib/cache-ttl";
 import { getShortEpg } from "@/lib/epg";
+import { resolveEpgId } from "@/lib/subscription-export";
 import { getAntiFreezeSettings, schedulePlaylistZapWarm } from "@/lib/anti-freeze";
 import { iptvCorsPreflight, iptvJson } from "@/lib/iptv-cors";
 import { xtreamDeltaArray } from "@/lib/xtream-safe";
@@ -186,7 +187,7 @@ export async function GET(req: NextRequest) {
             select: { epgChannelId: true, id: true },
           })
         : null;
-      const channelId = stream?.epgChannelId ?? resolved ?? streamId;
+      const channelId = stream ? resolveEpgId(stream) : streamId;
       const epg = await getShortEpg(channelId);
       return j({ epg_listings: epg });
     }
@@ -200,7 +201,7 @@ export async function GET(req: NextRequest) {
             select: { epgChannelId: true, id: true },
           })
         : null;
-      const channelId = stream?.epgChannelId ?? resolved ?? streamId;
+      const channelId = stream ? resolveEpgId(stream) : streamId;
       return j({ epg_listings: await getShortEpg(channelId, 10) });
     }
     case "get_user_info":

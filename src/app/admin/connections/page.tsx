@@ -10,6 +10,7 @@ import {
   connectionQualityClass,
   type ConnectionQuality,
 } from "@/lib/connection-quality";
+import type { PlaybackOutputLabel } from "@/lib/connection-playback-output";
 
 function formatConnDuration(startedAt: string | Date): string {
   const sec = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
@@ -18,13 +19,6 @@ function formatConnDuration(startedAt: string | Date): string {
   const s = sec % 60;
   if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
   return `${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
-}
-
-function inferOutput(userAgent: string | null): string {
-  const ua = (userAgent ?? "").toLowerCase();
-  if (ua.includes("mpegts") || ua.includes(".ts")) return "MPEGTS";
-  if (ua.includes("m3u8") || ua.includes("hls")) return "HLS";
-  return "HLS";
 }
 
 export default function AdminConnectionsPage() {
@@ -42,6 +36,7 @@ export default function AdminConnectionsPage() {
       line: { username: string; maxConnections: number; isRestreamer?: boolean };
       stream: { id: string; name: string; type: string } | null;
       quality: ConnectionQuality;
+      output: PlaybackOutputLabel;
     }[]
   >([]);
   const [search, setSearch] = useState("");
@@ -167,7 +162,7 @@ export default function AdminConnectionsPage() {
                     {formatConnDuration(c.startedAt)}
                   </span>
                 </td>
-                <td>{inferOutput(c.userAgent)}</td>
+                <td>{c.output}</td>
                 <td>
                   <span
                     className={`xui-restreamer-dot ${c.line.isRestreamer ? "xui-restreamer-dot--yes" : ""}`}

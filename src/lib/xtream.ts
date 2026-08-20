@@ -409,18 +409,21 @@ export async function buildM3u(line: LineWithBouquets, baseUrl: string, type: st
 }
 
 /**
- * Streaming M3U builder — processes streams in batches of 1500.
- * Never loads the entire playlist into memory (XUI/1-stream model).
+ * Streaming M3U builder — one DB batch at a time (no full-catalog hydration).
+ * Default: LIVE + VOD only (XUI m3u_plus); SERIES when include_series=1.
  */
 export function buildM3uStream(
   line: LineWithBouquets,
   baseUrl: string,
   type: string,
   output: "hls" | "ts" | "auto" = "auto",
-  _opts?: { includeSeries?: boolean }
+  opts?: { includeSeries?: boolean }
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const isExtended = type === "m3u_plus";
+  const exportTypes: StreamType[] = opts?.includeSeries
+    ? [StreamType.LIVE, StreamType.MOVIE, StreamType.SERIES]
+    : [StreamType.LIVE, StreamType.MOVIE];
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -431,59 +434,54 @@ export function buildM3uStream(
         const directPlay = streamSettings.vodDirectPlay !== false;
         const excludeDisabled = streamSettings.excludeDisabledFromExport === true;
 
-        // Get all stream IDs for this line
         const { streamsForLineExport } = await import("./lines");
-        const allStreams = await streamsForLineExport(line);
+        await streamsForLineExport(line, {
+          type: exportTypes,
+          onBatch: async (chunk) => {
+            const batchLines: string[] = [];
+            for (const full of chunk) {
+              if (excludeDisabled && !full.isActive) continue;
 
-        const filtered = allStreams;
-
-        const BATCH = 1500;
-        for (let i = 0; i < filtered.length; i += BATCH) {
-          const chunk = filtered.slice(i, i + BATCH);
-          const withProviders = await prisma.stream.findMany({
-            where: { id: { in: chunk.map((s) => s.id) } },
-            include: { provider: true },
-          });
-          const byId = new Map(withProviders.map((s) => [s.id, s]));
-
-          const batchLines: string[] = [];
-          for (const s of chunk) {
-            const full = byId.get(s.id) ?? s;
-
-            if (excludeDisabled && !full.isActive) continue;
-
-            const variants = parseBitrates(full.bitrates);
-            if (s.type === StreamType.LIVE && variants.length > 1) {
-              for (const v of variants) {
-                batchLines.push(
-                  `#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidthKbps ?? 2500000},RESOLUTION=${v.resolution ?? "1280x720"},NAME="${v.label}"`
-                );
-                const variantFull = { ...full, streamUrl: v.path } as typeof full;
-                batchLines.push(exportPlaybackUrl(baseUrl, line, s, variantFull, undefined, output, directPlay));
+              const variants = parseBitrates(full.bitrates);
+              if (full.type === StreamType.LIVE && variants.length > 1) {
+                for (const v of variants) {
+                  batchLines.push(
+                    `#EXT-X-STREAM-INF:BANDWIDTH=${v.bandwidthKbps ?? 2500000},RESOLUTION=${v.resolution ?? "1280x720"},NAME="${v.label}"`
+                  );
+                  const variantFull = { ...full, streamUrl: v.path } as typeof full;
+                  batchLines.push(
+                    exportPlaybackUrl(baseUrl, line, full, variantFull, undefined, output, directPlay)
+                  );
+                }
+                continue;
               }
-              continue;
+
+              const logo = isExtended && full.streamIcon ? ` tvg-logo="${full.streamIcon}"` : "";
+              const tvgId = isExtended ? resolveEpgId(full) : "";
+              const tvgName = full.name.replace(/"/g, "'");
+              const group =
+                full.type === StreamType.LIVE
+                  ? "Live"
+                  : full.type === StreamType.MOVIE
+                    ? "Movies"
+                    : "Series";
+              const playUrl = exportPlaybackUrl(baseUrl, line, full, full, undefined, output, directPlay);
+
+              if (isExtended) {
+                batchLines.push(
+                  `#EXTINF:-1 tvg-id="${tvgId}" tvg-name="${tvgName}" channel-id="${resolveChannelId(full)}"${logo} group-title="${group}",${full.name}`
+                );
+              } else {
+                batchLines.push(`#EXTINF:-1,${full.name}`);
+              }
+              batchLines.push(playUrl);
             }
 
-            const logo = isExtended && s.streamIcon ? ` tvg-logo="${s.streamIcon}"` : "";
-            const tvgId = isExtended ? resolveEpgId(s) : "";
-            const tvgName = s.name.replace(/"/g, "'");
-            const group = s.type === StreamType.LIVE ? "Live" : s.type === StreamType.MOVIE ? "Movies" : "Series";
-            const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, output, directPlay);
-
-            if (isExtended) {
-              batchLines.push(
-                `#EXTINF:-1 tvg-id="${tvgId}" tvg-name="${tvgName}" channel-id="${resolveChannelId(s)}"${logo} group-title="${group}",${s.name}`
-              );
-            } else {
-              batchLines.push(`#EXTINF:-1,${s.name}`);
+            if (batchLines.length) {
+              controller.enqueue(encoder.encode(batchLines.join("\n") + "\n"));
             }
-            batchLines.push(playUrl);
-          }
-
-          if (batchLines.length) {
-            controller.enqueue(encoder.encode(batchLines.join("\n") + "\n"));
-          }
-        }
+          },
+        });
 
         controller.close();
       } catch (err) {

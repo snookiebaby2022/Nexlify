@@ -118,11 +118,13 @@ export async function GET(req: NextRequest) {
         streamId: cleanId,
         ip: ip ?? "",
         userAgent: ua,
+        playbackPath: originalPath(req),
       });
     }
     return new NextResponse(null, {
       status: 200,
       headers: {
+        "X-Nexlify-Line-Id": line.id,
         "X-Nexlify-Stream-Id": cleanId,
         "X-Nexlify-Live": "1",
         "X-Nexlify-Hls": "1",
@@ -168,12 +170,14 @@ export async function GET(req: NextRequest) {
       streamId: cleanId,
       ip: ip ?? "",
       userAgent: ua,
+      playbackPath: originalPath(req),
     });
   }
 
   return new NextResponse(null, {
     status: 200,
     headers: {
+      "X-Nexlify-Line-Id": line.id,
       "X-Nexlify-Upstream": upstream,
       "X-Nexlify-Live": parsed.spliceLiveTs ? "1" : "0",
       "Cache-Control": "no-store",

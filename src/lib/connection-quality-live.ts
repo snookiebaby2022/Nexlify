@@ -100,7 +100,21 @@ export function computeConnectionQualityWithLive(opts: {
   live?: LiveQualitySample | null;
 }): ConnectionQuality {
   const now = opts.now ?? Date.now();
-  const live = opts.live;
+  const lastSeenMs = new Date(opts.lastSeenAt).getTime();
+  const staleSec = Math.max(0, (now - lastSeenMs) / 1000);
+  let live = opts.live;
+
+  // Edge-spliced live often has no Next.js proxy samples yet — treat a fresh
+  // lastSeenAt as an active stream with typical SD live bitrate.
+  if (!live?.hasSamples && staleSec <= 12) {
+    live = {
+      bytesPerSec: staleSec <= 4 ? 450_000 : 220_000,
+      lastByteAt: lastSeenMs,
+      totalBytes: 1,
+      stallSec: staleSec,
+      hasSamples: true,
+    };
+  }
 
   if (live?.hasSamples) {
     const bps = live.bytesPerSec;
@@ -109,16 +123,18 @@ export function computeConnectionQualityWithLive(opts: {
     let score: number;
     if (stall >= 12) {
       score = Math.max(5, 35 - Math.min(25, Math.round(stall - 12)));
+    } else if (bps >= 800_000) {
+      score = Math.min(100, 92 + Math.min(8, Math.round(bps / 1_000_000)));
     } else if (bps >= 400_000) {
-      score = Math.min(100, 88 + Math.min(12, Math.round(bps / 500_000)));
+      score = Math.min(100, 85 + Math.min(14, Math.round((bps - 400_000) / 50_000)));
     } else if (bps >= 150_000) {
-      score = 70 + Math.min(17, Math.round((bps - 150_000) / 20_000));
+      score = 72 + Math.min(12, Math.round((bps - 150_000) / 25_000));
     } else if (bps >= 50_000) {
-      score = 52 + Math.min(17, Math.round((bps - 50_000) / 10_000));
+      score = 55 + Math.min(16, Math.round((bps - 50_000) / 12_500));
     } else if (bps >= 15_000) {
-      score = 35 + Math.min(16, Math.round((bps - 15_000) / 5_000));
+      score = 38 + Math.min(16, Math.round((bps - 15_000) / 5_000));
     } else {
-      score = Math.max(8, Math.round((bps / 15_000) * 34));
+      score = Math.max(10, Math.round((bps / 15_000) * 36));
     }
 
     // Penalize brief stalls while bytes are still trickling
