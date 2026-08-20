@@ -74,6 +74,87 @@ export const SETTING_GROUPS = [
 
 export type SettingGroup = (typeof SETTING_GROUPS)[number];
 
+/** Proven instant-start / fast-zap defaults for every Nexlify install (XUI-One parity). */
+export function instantStreamingPanelDefaults(): Partial<Record<SettingGroup, Record<string, unknown>>> {
+  return {
+    streams: {
+      antiFreezeEnabled: true,
+      fastZapEnabled: true,
+      liveInstantStart: true,
+      playbackUrlCacheTtlSec: 60,
+      zapPrefetchNeighbors: 3,
+      zapPrefetchOnLiveHit: true,
+      zapPrefetchOnPlaylist: true,
+      liveBandwidthSaver: false,
+      liveBandwidthSaverKbps: 1000,
+      liveBandwidthSaverResolution: "854x480",
+      onDemandProbesizeAuto: true,
+      onDemandProbesize: "128000",
+      hlsSegmentDuration: 4,
+      segmentLength: 8,
+      bufferSize: "512k",
+      readTimeout: 35,
+      connectionTimeout: 8,
+      defaultStreamTimeout: 35,
+      ffmpegThreadCount: 0,
+      transcodePreset: "veryfast",
+      defaultFfmpegProfile: "copy",
+      forceUniversalMpegTs: false,
+      nginxBufferLive: false,
+      nginxBufferVod: false,
+      nginxRestreamUseBuffer: false,
+      nginxBufferCountLive: 96,
+      nginxBufferCountVod: 96,
+      nginxBufferSizeLive: "32k",
+      nginxBufferSizeVod: "32k",
+      vodDirectPlay: true,
+      connectionLimitHandle: "validate_on_connect",
+      vodConnectionHandle: "30m_expire",
+      streamConnectionsOnRestart: "keep",
+      maxConnectionsPerStream: 0,
+      preferredLiveOutput: "ts",
+      abrAutoSwitch: true,
+      autoFixDeadLinks: true,
+      autoFixDeadLinksIntervalMin: 15,
+    },
+    cache: {
+      statsTtlSeconds: 15,
+      epgTtlSeconds: 120,
+      playbackUrlCacheTtlSec: 60,
+      redisMode: "single",
+      redisKeyPrefix: "nexlify:",
+    },
+    "performance-core": {
+      perfCoreEnabled: true,
+      perfLowRamMode: true,
+      perfConnectionPooling: true,
+      perfNginxWorkers: "auto",
+      perfStreamPreload: true,
+      perfBufferOptimization: true,
+      perfConnectionReuse: true,
+    },
+    "vod-burst": {
+      enabled: true,
+      burstSizeKb: 512,
+      burstRateKbps: 0,
+      bufferCount: 4,
+      bufferSize: "256k",
+      maxBufferSize: "4m",
+      proxyBuffering: true,
+    },
+    "nginx-cache": {
+      enabled: true,
+      cachePath: "/var/cache/nexlify/hls",
+      cacheSize: "2g",
+      inactiveMinutes: 60,
+      sliceEnabled: true,
+      sliceSize: "1m",
+      useStale: true,
+      revalidate: true,
+    },
+  };
+}
+
 const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
   general: {
     panelName: "Nexlify",
@@ -130,7 +211,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
       "Upgrade stream agents: Admin → Servers → action menu → Reinstall agent, or SSH to the node and re-run the install command from the server wizard. Match agent version to panel release shown on Updates.",
   },
   streams: {
-    defaultStreamTimeout: 30,
+    defaultStreamTimeout: 35,
     maxConnectionsPerLine: 1,
     allowRestream: false,
     epgHoursAhead: 24,
@@ -154,10 +235,10 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     nginxBufferCountVod: 96,
     nginxBufferSizeLive: "32k",
     nginxBufferSizeVod: "32k",
-    hlsSegmentDuration: 6,
-    segmentLength: 10,
+    hlsSegmentDuration: 4,
+    segmentLength: 8,
     bufferSize: "512k",
-    readTimeout: 20,
+    readTimeout: 35,
     connectionTimeout: 8,
     maxConnectionsPerStream: 0,
     ffmpegThreadCount: 0,
@@ -191,7 +272,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     statsTtlSeconds: 15,
     epgTtlSeconds: 120,
     categoriesTtlSeconds: 30,
-    playbackUrlCacheTtlSec: 30,
+    playbackUrlCacheTtlSec: 60,
     redisMode: "single",
     redisClusterNodes: "",
     redisMaxMemory: "",
@@ -671,9 +752,9 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     providers: [] as import("@/lib/live-sports-types").LiveSportsProvider[],
   },
   "nginx-cache": {
-    enabled: false,
+    enabled: true,
     cachePath: "/var/cache/nexlify/hls",
-    cacheSize: "1g",
+    cacheSize: "2g",
     cacheLevels: "1:2",
     keysZoneName: "hls_cache",
     keysZoneSize: "10m",
@@ -702,7 +783,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     notes: "IP2Proxy database for detecting VPN, datacenter, proxy, and Tor exit nodes. Download BIN file from ip2proxy.com. Complements MaxMind geo-blocking.",
   },
   "vod-burst": {
-    enabled: false,
+    enabled: true,
     burstSizeKb: 512,
     burstRateKbps: 0,
     bufferCount: 4,
@@ -816,11 +897,8 @@ export async function ensureAddonSettingsHealed(): Promise<{
       streamsPromoted = true;
       touched.push("streams");
     } else if (!modern?.value) {
-      await setSettingGroup("streams", {
-        autoChannelLogos: true,
-        autoChannelLogoSource: "tmdb_then_slug",
-        autoFixDeadLinks: true,
-      });
+      await ensureInstantStreamingDefaults();
+      streamsPromoted = true;
       touched.push("streams");
     }
   } catch {
@@ -871,6 +949,42 @@ export async function ensureAddonSettingsHealed(): Promise<{
   }
 
   return { tmdbImported, streamsPromoted, groupsTouched: touched };
+}
+
+/**
+ * Persist instant-start streaming defaults once per panel (fresh install + upgrade heal).
+ * Operators can change settings afterward in Admin → Settings.
+ */
+export async function ensureInstantStreamingDefaults(): Promise<{ applied: boolean; groups: string[] }> {
+  const groups: string[] = [];
+  try {
+    const streams = await getSettingGroup("streams");
+    if (streams._instantStreamingDefaultsV1 === true) {
+      return { applied: false, groups: [] };
+    }
+
+    const patches = instantStreamingPanelDefaults();
+    for (const [group, patch] of Object.entries(patches)) {
+      if (!patch || !Object.keys(patch).length) continue;
+      const g = group as SettingGroup;
+      const current = await getSettingGroup(g);
+      await setSettingGroup(g, { ...current, ...patch });
+      groups.push(g);
+    }
+
+    await setSettingGroup("streams", {
+      ...(await getSettingGroup("streams")),
+      _instantStreamingDefaultsV1: true,
+      autoChannelLogos: (await getSettingGroup("streams")).autoChannelLogos !== false,
+      autoChannelLogoSource:
+        String((await getSettingGroup("streams")).autoChannelLogoSource ?? "") || "tmdb_then_slug",
+    });
+    groups.push("streams-meta");
+    invalidateSettingGroupCache();
+    return { applied: true, groups };
+  } catch {
+    return { applied: false, groups: [] };
+  }
 }
 
 /**

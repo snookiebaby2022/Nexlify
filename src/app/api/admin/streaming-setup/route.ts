@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
-import { getSettingGroup, setSettingGroup } from "@/lib/panel-settings";
+import {
+  getSettingGroup,
+  instantStreamingPanelDefaults,
+  setSettingGroup,
+  type SettingGroup,
+} from "@/lib/panel-settings";
 
 export async function POST() {
   const session = await requireSession([PanelRole.ADMIN]);
@@ -19,7 +24,7 @@ export async function POST() {
         host: "127.0.0.1",
         port: 8080,
         protocol: "http",
-        maxClients: 1000,
+        maxClients: 1200,
         isActive: true,
       },
     });
@@ -51,49 +56,24 @@ export async function POST() {
     steps.push('Bouquet "full" already exists');
   }
 
-  const streamsSettings = await getSettingGroup("streams");
-  const cacheSettings = await getSettingGroup("cache");
-  const needsStreams = streamsSettings.antiFreezeEnabled === false || streamsSettings.fastZapEnabled === false;
-  const needsPrefetch =
-    Number(streamsSettings.zapPrefetchNeighbors ?? 0) < 2 ||
-    streamsSettings.zapPrefetchOnLiveHit === false;
+  const instant = instantStreamingPanelDefaults();
+  for (const [group, patch] of Object.entries(instant)) {
+    if (!patch) continue;
+    const g = group as SettingGroup;
+    const current = await getSettingGroup(g);
+    await setSettingGroup(g, { ...current, ...patch });
+  }
+  await setSettingGroup("streams", {
+    ...(await getSettingGroup("streams")),
+    _instantStreamingDefaultsV1: true,
+  });
+  steps.push("Applied instant-start streaming defaults (anti-freeze, fast zap, cache, VOD burst)");
 
-  if (needsStreams || needsPrefetch) {
-    await setSettingGroup("streams", {
-      ...streamsSettings,
-      antiFreezeEnabled: true,
-      fastZapEnabled: true,
-      nginxBufferLive: false,
-      zapPrefetchNeighbors: Math.max(3, Number(streamsSettings.zapPrefetchNeighbors ?? 3)),
-      zapPrefetchOnLiveHit: true,
-      playbackUrlCacheTtlSec: Number(streamsSettings.playbackUrlCacheTtlSec ?? 60) || 60,
-    });
-    steps.push("Enabled anti-freeze + fast zap + neighbour prefetch");
+  if (!process.env.REDIS_URL?.trim()) {
+    steps.push("Tip: set REDIS_URL=redis://127.0.0.1:6379 in .env for Fast Zap Redis cache");
   } else {
-    steps.push("Anti-freeze stack already enabled");
+    steps.push("Redis URL configured");
   }
 
-  if (!cacheSettings.playbackUrlCacheTtlSec) {
-    await setSettingGroup("cache", { ...cacheSettings, playbackUrlCacheTtlSec: 30 });
-    steps.push("Set cache playback URL TTL");
-  }
-
-  const activeServers = await prisma.streamServer.findMany({
-    where: { isActive: true },
-    select: { id: true },
-  });
-  if (activeServers.length) {
-    const { bumpConfigRevision } = await import("@/lib/stream-agent");
-    for (const s of activeServers) {
-      await bumpConfigRevision(s.id);
-    }
-    steps.push(`Pushed anti-freeze agent config to ${activeServers.length} server(s)`);
-  }
-
-  return NextResponse.json({
-    ok: true,
-    steps,
-    bouquetId: bouquet.id,
-    m3uHint: "Create a line and assign bouquets under Users → Manage Lines",
-  });
+  return NextResponse.json({ ok: true, steps, serverId: server.id });
 }

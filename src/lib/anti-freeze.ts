@@ -6,6 +6,7 @@ import { StreamType } from "@prisma/client";
 export type AntiFreezeSettings = {
   antiFreezeEnabled: boolean;
   fastZapEnabled: boolean;
+  liveInstantStart: boolean;
   playbackUrlCacheTtlSec: number;
   zapPrefetchNeighbors: number;
   zapPrefetchOnLiveHit: boolean;
@@ -17,6 +18,7 @@ export async function getAntiFreezeSettings(): Promise<AntiFreezeSettings> {
   return {
     antiFreezeEnabled: s.antiFreezeEnabled !== false,
     fastZapEnabled: s.fastZapEnabled !== false,
+    liveInstantStart: s.liveInstantStart !== false,
     playbackUrlCacheTtlSec: Math.max(15, Math.min(300, Number(s.playbackUrlCacheTtlSec ?? 60))),
     zapPrefetchNeighbors: Math.max(0, Math.min(8, Number(s.zapPrefetchNeighbors ?? 3))),
     zapPrefetchOnLiveHit: s.zapPrefetchOnLiveHit !== false,

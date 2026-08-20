@@ -31,9 +31,11 @@ export async function register() {
       console.error("[LICENSE] Startup validation error:", e);
     }
     try {
-      const { ensurePanelUpdateAutoApplyOffByDefault, ensureAddonSettingsHealed } = await import("@/lib/panel-settings");
+      const { ensurePanelUpdateAutoApplyOffByDefault, ensureAddonSettingsHealed, ensureInstantStreamingDefaults } =
+        await import("@/lib/panel-settings");
       await ensurePanelUpdateAutoApplyOffByDefault();
       await ensureAddonSettingsHealed();
+      await ensureInstantStreamingDefaults();
     } catch {
       /* DB unavailable during build / early boot */
     }

@@ -11,7 +11,7 @@ const FALLBACK: CacheTtlSettings = {
   stats: 5,
   epg: 120,
   categories: 30,
-  playbackUrl: 30,
+  playbackUrl: 60,
 };
 
 let cached: { at: number; ttl: CacheTtlSettings } | null = null;

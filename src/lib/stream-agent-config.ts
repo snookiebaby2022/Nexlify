@@ -105,8 +105,8 @@ export async function buildAgentConfigForServer(
     bufferSizeVod: String(streamsSettings.nginxBufferSizeVod ?? "32k"),
     hlsSegmentDuration: antiFreeze ? Math.min(4, hlsBase) : hlsBase,
     proxyBufferSize: String(streamsSettings.bufferSize ?? "512k"),
-    readTimeout: Number(streamsSettings.readTimeout ?? 30),
-    connectionTimeout: Number(streamsSettings.connectionTimeout ?? 10),
+    readTimeout: Number(streamsSettings.readTimeout ?? 35),
+    connectionTimeout: Number(streamsSettings.connectionTimeout ?? 8),
   };
 
   const rawStreams = await import("@/lib/prisma").then(({ prisma }) =>

@@ -250,7 +250,11 @@ export async function GET(
       : hlsUrls;
 
     // 1. Provider-native HLS (stored .m3u8 in stream_source) before local remux.
+    const instantStart = antiFreeze.liveInstantStart !== false;
     for (const playbackUrl of orderedHlsUrls) {
+      if (instantStart && !originalCandidates.has(playbackUrl) && playbackUrl !== cachedNativeUrl) {
+        continue;
+      }
       const isKnownNative = playbackUrl === cachedNativeUrl;
       const probeMs = isKnownNative
         ? HLS_NATIVE_PROBE_WARM_MS

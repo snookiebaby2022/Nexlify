@@ -1,8 +1,13 @@
 import { PrismaClient, PanelRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
+import { instantStreamingPanelDefaults } from "../src/lib/panel-settings";
 
 const prisma = new PrismaClient();
+
+function settingKey(group: string) {
+  return `settings.${group}`;
+}
 
 /** Minimal seed — admin + optional demo reseller. Production uses a random unusable hash until install sets the password. */
 async function main() {
@@ -59,6 +64,21 @@ async function main() {
       }),
     },
   });
+
+  const streamingDefaults = instantStreamingPanelDefaults();
+  for (const [group, patch] of Object.entries(streamingDefaults)) {
+    if (!patch) continue;
+    const key = settingKey(group);
+    const value =
+      group === "streams"
+        ? JSON.stringify({ ...patch, _instantStreamingDefaultsV1: true, autoChannelLogos: true })
+        : JSON.stringify(patch);
+    await prisma.panelSetting.upsert({
+      where: { key },
+      update: {},
+      create: { key, value },
+    });
+  }
 
   console.log("Seed complete — Nexlify (minimal, no demo content)");
   if (process.env.QUIET_SEED !== "1") {
