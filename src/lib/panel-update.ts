@@ -588,33 +588,9 @@ export async function runPanelUpdateWithProgress(
     /* optional — older installs without vendor key distribution */
   }
 
-  if (!patchScript && versionInfo.gitDirty) {
-    const stepName = "git stash local changes";
-    await reportProgress(onProgress, {
-      currentStep: stepName,
-      progress: progressForStep(stepName),
-      steps: [...jobSteps, { name: stepName, ok: false, status: "running" }],
-    });
-    const stash = await runCommand(repoPath, "git", [
-      "stash",
-      "push",
-      "-u",
-      "-m",
-      `nexlify-pre-update-${Date.now()}`,
-    ]);
-    steps.push({ name: stepName, ok: stash.ok, output: stash.output });
-    jobSteps.push({ name: stepName, ok: stash.ok, status: stash.ok ? "done" : "failed", output: stash.output });
-    await reportProgress(onProgress, {
-      currentStep: stash.ok ? null : stepName,
-      progress: progressForStep(stepName),
-      steps: [...jobSteps],
-    });
-    if (!stash.ok) {
-      const msg = `Update failed at step: ${stepName}`;
-      await recordResult(settings, false, msg, fromVersion, fromVersion, "update", steps);
-      return { ok: false, message: msg, steps, fromVersion, toVersion: fromVersion };
-    }
-  }
+  // git reset --hard origin/main (below) already discards tracked edits. git stash on
+  // fleet panels with CRLF/line-ending noise in scripts/ often times out and blocks
+  // every release while the UI sits on "Updating…".
 
   let ok = false;
   let mode: "prebuilt" | "patch" | "git" = "git";

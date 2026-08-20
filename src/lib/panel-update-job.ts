@@ -68,15 +68,34 @@ function findUpdateWorkerPid(repoPath: string): number | null {
   return pids[0] ?? null;
 }
 
+async function hasActiveUpdateSignal(repoPath: string): Promise<boolean> {
+  const job = await readUpdateJob(repoPath);
+  if (job?.status === "running") return true;
+  try {
+    await stat(getUpdateLockPath(repoPath));
+    return true;
+  } catch {
+    /* no lock */
+  }
+  try {
+    const marker = path.join(repoPath, ".update-in-progress");
+    const st = await stat(marker);
+    if (Date.now() - st.mtimeMs <= 45 * 60 * 1000) return true;
+  } catch {
+    /* no marker */
+  }
+  return false;
+}
+
 /** True when next build / apply-panel-fast-update is still running (outer worker may already be gone). */
 export function isPanelUpdateChildWorkAlive(repoPath?: string): boolean {
   if (process.platform === "win32") return false;
   const root = repoPath?.trim() || resolvePanelRepoPathSync();
+  // Do not match run-next.mjs — that is the live panel process on many installs.
   const patterns = [
     `${root}/scripts/panel-update-background`,
     `${root}/scripts/apply-panel-fast-update`,
     `${root}/scripts/run-panel-build`,
-    `${root}/scripts/run-next.mjs`,
     `${root}/node_modules/.bin/next build`,
     "next/dist/bin/next build",
   ];
@@ -90,7 +109,12 @@ export function isPanelUpdateChildWorkAlive(repoPath?: string): boolean {
  */
 export async function isPanelUpdateWorkAlive(repoPath: string): Promise<boolean> {
   if (findUpdateWorkerPid(repoPath) != null) return true;
+
+  const active = await hasActiveUpdateSignal(repoPath);
+  if (!active) return false;
+
   if (isPanelUpdateChildWorkAlive(repoPath)) return true;
+
   try {
     const marker = path.join(repoPath, ".update-in-progress");
     const st = await stat(marker);
@@ -108,6 +132,12 @@ export async function isPanelUpdateWorkAlive(repoPath: string): Promise<boolean>
     return false;
   } catch {
     /* no marker */
+  }
+
+  const job = await readUpdateJob(repoPath);
+  if (job?.status === "running" && job.startedAt) {
+    const elapsed = Date.now() - Date.parse(job.startedAt);
+    if (Number.isFinite(elapsed) && elapsed < 45_000) return true;
   }
   return false;
 }

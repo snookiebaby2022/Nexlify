@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.18",
+  "latestVersion": "2.0.19",
   "releases": [
+    {
+      "version": "2.0.19",
+      "date": "2026-08-20",
+      "channel": "stable",
+      "summary": "Fix in-panel updates stuck on Updating without applying new releases.",
+      "changelog": [
+        "Panel update no longer runs git stash before hard-reset — CRLF/line-ending noise in scripts/ on fleet VPS hosts was blocking every release",
+        "Update-running detection no longer treats the live run-next.mjs panel process as an in-flight update (fixes false An update is already running on non-standalone installs)"
+      ],
+      "fixes": [
+        "Settings → Updates showed Updating… but version never changed when local script files were dirty",
+        "New releases could not start because isPanelUpdateWorkAlive matched the running panel process"
+      ]
+    },
     {
       "version": "2.0.18",
       "date": "2026-08-20",
