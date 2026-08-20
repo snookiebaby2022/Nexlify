@@ -27,8 +27,8 @@ dist/
 scripts/cron-daemon.bundle.cjs
 
 marketing-drop-in/scripts/vps-full-update.sh
-**/install/github-deploy-key
-marketing-drop-in/public/install/github-deploy-key
+**/install/panel-github-deploy-key.env
+marketing-drop-in/public/install/panel-github-deploy-key.env
 scripts/.panel-releases-website-snippet.ts
 
 # Env backups

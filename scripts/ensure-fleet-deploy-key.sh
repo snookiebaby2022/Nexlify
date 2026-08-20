@@ -14,7 +14,7 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 KEY_PATH="$NEXLIFY_FLEET_DEPLOY_KEY"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-https://nexlify.live/install}"
-KEY_URL="${NEXLIFY_FLEET_DEPLOY_KEY_URL:-${PANEL_INSTALL_BASE}/github-deploy-key}"
+KEY_URL="${NEXLIFY_FLEET_DEPLOY_KEY_URL:-${PANEL_INSTALL_BASE}/panel-github-deploy-key.env}"
 
 if nexlify_git_ssh_works 2>/dev/null; then
   configure_nexlify_git_origin "$ROOT" 2>/dev/null || true

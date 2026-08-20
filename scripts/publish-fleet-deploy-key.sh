@@ -28,7 +28,7 @@ echo "==> Public key (must be in GitHub Deploy keys):"
 ssh-keygen -y -f "$SRC"
 
 if [ -n "$LOCAL_MARKETING" ] && [ -d "$LOCAL_MARKETING" ]; then
-  dest="$LOCAL_MARKETING/public/install/github-deploy-key"
+  dest="$LOCAL_MARKETING/public/install/panel-github-deploy-key.env"
   mkdir -p "$(dirname "$dest")"
   install -m 600 "$SRC" "$dest"
   echo "==> Wrote $dest (run marketing sync / deploy to go live)"
@@ -43,8 +43,8 @@ if [ "$VENDOR_HOST" = "localhost" ] || [ "$VENDOR_HOST" = "127.0.0.1" ]; then
   exit 0
 fi
 
-echo "==> Uploading to root@${VENDOR_HOST}:${VENDOR_DIR}/github-deploy-key"
+echo "==> Uploading to root@${VENDOR_HOST}:${VENDOR_DIR}/panel-github-deploy-key.env"
 ssh -o StrictHostKeyChecking=accept-new "root@${VENDOR_HOST}" "mkdir -p '$VENDOR_DIR'"
-scp -o StrictHostKeyChecking=accept-new "$SRC" "root@${VENDOR_HOST}:${VENDOR_DIR}/github-deploy-key"
-ssh -o StrictHostKeyChecking=accept-new "root@${VENDOR_HOST}" "chmod 600 '${VENDOR_DIR}/github-deploy-key'"
+scp -o StrictHostKeyChecking=accept-new "$SRC" "root@${VENDOR_HOST}:${VENDOR_DIR}/panel-github-deploy-key.env"
+ssh -o StrictHostKeyChecking=accept-new "root@${VENDOR_HOST}" "chown root:www-data '${VENDOR_DIR}/panel-github-deploy-key.env' && chmod 640 '${VENDOR_DIR}/panel-github-deploy-key.env'"
 echo "==> Published. Customer panels will fetch on next update (ensure-fleet-deploy-key.sh)."
