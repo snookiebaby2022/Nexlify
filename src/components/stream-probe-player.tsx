@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { attachUrlToVideo } from "@/lib/browser-stream-player";
-import { canPlayInBrowser } from "@/lib/stream-probe-fast";
-import { isHlsPlaybackUrl } from "@/lib/hls-playback";
+import { canPlayInBrowser, isBrowserHlsUrl } from "@/lib/stream-probe-fast";
 
 type ProbeResult = {
   status: string;

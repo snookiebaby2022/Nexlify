@@ -33,3 +33,8 @@ export function canPlayInBrowser(url: string): boolean {
   if (/^https?:\/\//i.test(url.trim())) return true;
   return false;
 }
+
+export function isBrowserHlsUrl(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  return u.includes(".m3u8") || u.includes("/hls/");
+}
