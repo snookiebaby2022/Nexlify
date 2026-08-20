@@ -8,7 +8,8 @@ const EPG_HEADERS: Record<string, string> = {
   "User-Agent":
     "Mozilla/5.0 (compatible; NexlifyPanel/1.0; +https://github.com/iptv-org/epg)",
   Accept: "application/xml, text/xml, application/gzip, */*",
-  "Accept-Encoding": "gzip, deflate, br",
+  // Omit br — we only decode gzip; brotli bodies fail parse on many custom EPG hosts.
+  "Accept-Encoding": "gzip, deflate",
 };
 
 type EpgFetchResult = {
@@ -116,9 +117,9 @@ async function fetchOnce(
     throw new Error("EPG fetch failed: could not decode XML (invalid gzip or encoding)");
   }
 
-  if (!/<programme[\s>]/i.test(xml) && !/<tv[\s>]/i.test(xml)) {
+  if (!/<programme[\s>]/i.test(xml)) {
     throw new Error(
-      "EPG fetch failed: response is not valid XMLTV (missing <programme> or <tv> tags)"
+      "EPG fetch failed: response is not valid XMLTV (missing <programme> entries — channel-only guides cannot sync)"
     );
   }
 

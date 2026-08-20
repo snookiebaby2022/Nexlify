@@ -107,15 +107,17 @@ async function repairAdminPasswordHash(password: string) {
   const installPass = process.env.INSTALL_ADMIN_PASSWORD?.trim();
   if (!installPass || !secretsEqual(password, installPass)) return null;
 
-  const user = await prisma.panelUser.findUnique({ where: { username: "admin" } });
+  const user = await prisma.panelUser.findFirst({
+    where: { username: { equals: "admin", mode: "insensitive" }, role: "ADMIN" },
+  });
   if (!user) return null;
 
   const hash = await bcrypt.hash(password, 12);
   await prisma.panelUser.update({
-    where: { username: "admin" },
+    where: { id: user.id },
     data: { passwordHash: hash, passwordPlain: null, isActive: true, role: "ADMIN" },
   });
-  return prisma.panelUser.findUnique({ where: { username: "admin" } });
+  return prisma.panelUser.findUnique({ where: { id: user.id } });
 }
 
 const ADMIN_IDENTIFIERS = new Set(["admin", "admin@nexlify.live"]);
@@ -153,9 +155,8 @@ export async function verifyPanelLogin(identifier: string, password: string) {
     }));
   const idLower = id.toLowerCase();
   const isAdminTarget =
-    ADMIN_IDENTIFIERS.has(idLower) ||
-    user?.username?.toLowerCase() === "admin" ||
-    user?.email?.toLowerCase() === "admin@nexlify.live";
+    ADMIN_IDENTIFIERS.has(idLower) &&
+    (!user || user.role === "ADMIN");
 
   if (!user || !user.isActive) {
     if (canRepairAdminHash({ isAdminTarget, user })) {

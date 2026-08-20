@@ -10,6 +10,7 @@ import {
   RESELLER_PERMISSIONS,
   type GroupConfig,
   type GroupDashboardConfig,
+  type GroupRole,
 } from "@/lib/group-config";
 import { creditCostForDays, STANDARD_PACKAGE_TEMPLATES } from "@/lib/package-credits";
 import {
@@ -345,6 +346,27 @@ export function GroupEditForm({
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                 />
+              </FormField>
+              <FormField label="Group type">
+                <select
+                  className={formSelectClass}
+                  style={formInputStyle}
+                  value={form.config.groupRole ?? (form.isReseller ? "reseller" : "admin")}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      isReseller: e.target.value !== "admin",
+                      config: {
+                        ...form.config,
+                        groupRole: e.target.value as GroupRole,
+                      },
+                    })
+                  }
+                >
+                  <option value="admin">Administrator</option>
+                  <option value="reseller">Reseller</option>
+                  <option value="sub_reseller">Sub-reseller</option>
+                </select>
               </FormField>
               <FormField label="Group color">
                 <div className="flex gap-2">

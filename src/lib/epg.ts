@@ -35,6 +35,24 @@ function decodeXmltvText(raw: string): string {
     .replace(/&gt;/g, ">");
 }
 
+function readXmlAttr(attrs: string, name: string): string | null {
+  const dq = attrs.match(new RegExp(`${name}="([^"]*)"`, "i"));
+  if (dq) return dq[1] ?? null;
+  const sq = attrs.match(new RegExp(`${name}='([^']*)'`, "i"));
+  if (sq) return sq[1] ?? null;
+  return null;
+}
+
+function readXmlTagContent(body: string, tag: string): string | null {
+  const m = body.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  if (!m?.[1]) return null;
+  const inner = m[1]
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1")
+    .replace(/<[^>]+>/g, "")
+    .trim();
+  return inner ? decodeXmltvText(inner) : null;
+}
+
 export function parseXmltvPrograms(xml: string, sourceId: string) {
   const programs: {
     sourceId: string;
@@ -50,27 +68,28 @@ export function parseXmltvPrograms(xml: string, sourceId: string) {
   while ((match = blockRegex.exec(xml)) !== null) {
     const attrs = match[1];
     const body = match[2];
-    const startM = attrs.match(/start="([^"]+)"/);
-    const stopM = attrs.match(/stop="([^"]+)"/);
-    const channelM = attrs.match(/channel="([^"]+)"/);
-    const titleM = body.match(/<title[^>]*>([^<]*)<\/title>/i);
-    const descM = body.match(/<desc[^>]*>([^<]*)<\/desc>/i);
-    if (!startM || !stopM || !channelM || !titleM) continue;
+    const startRaw = readXmlAttr(attrs, "start");
+    const stopRaw = readXmlAttr(attrs, "stop");
+    const channelId = readXmlAttr(attrs, "channel");
+    if (!startRaw || !stopRaw || !channelId) continue;
 
     let start: Date;
     let stop: Date;
     try {
-      start = parseXmltvDate(startM[1]);
-      stop = parseXmltvDate(stopM[1]);
+      start = parseXmltvDate(startRaw);
+      stop = parseXmltvDate(stopRaw);
     } catch {
       continue;
     }
 
+    const title = readXmlTagContent(body, "title") ?? channelId;
+    const description = readXmlTagContent(body, "desc");
+
     programs.push({
       sourceId,
-      channelId: channelM[1],
-      title: decodeXmltvText(titleM[1].trim()),
-      description: descM?.[1] ? decodeXmltvText(descM[1].trim()) : null,
+      channelId,
+      title,
+      description,
       start,
       stop,
     });
@@ -102,16 +121,19 @@ export async function syncEpgSource(
   }
 
   const CHUNK = 5000;
-  await prisma.$transaction(async (tx) => {
-    await tx.epgProgram.deleteMany({ where: { sourceId } });
-    for (let i = 0; i < programs.length; i += CHUNK) {
-      await tx.epgProgram.createMany({ data: programs.slice(i, i + CHUNK) });
-    }
-    await tx.epgSource.update({
-      where: { id: sourceId },
-      data: { lastSync: new Date(), lastSyncError: null },
-    });
-  });
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.epgProgram.deleteMany({ where: { sourceId } });
+      for (let i = 0; i < programs.length; i += CHUNK) {
+        await tx.epgProgram.createMany({ data: programs.slice(i, i + CHUNK) });
+      }
+      await tx.epgSource.update({
+        where: { id: sourceId },
+        data: { lastSync: new Date(), lastSyncError: null },
+      });
+    },
+    { timeout: 180_000, maxWait: 30_000 }
+  );
 
   const { invalidateEpgCache } = await import("./cache-invalidate");
   await invalidateEpgCache();

@@ -8,6 +8,7 @@ const STANDARD_GROUPS = [
     isReseller: false,
     sortOrder: 0,
     color: "#e74c3c",
+    groupRole: "admin" as const,
   },
   {
     name: "Resellers",
@@ -15,6 +16,7 @@ const STANDARD_GROUPS = [
     isReseller: true,
     sortOrder: 10,
     color: "#22c55e",
+    groupRole: "reseller" as const,
   },
   {
     name: "Sub-resellers",
@@ -22,8 +24,47 @@ const STANDARD_GROUPS = [
     isReseller: true,
     sortOrder: 20,
     color: "#e67e22",
+    groupRole: "sub_reseller" as const,
   },
 ] as const;
+
+const SUB_RESELLER_GROUP_ALIASES = [
+  "sub-resellers",
+  "sub-reseller",
+  "sub reseller",
+  "subreseller",
+  "subresellers",
+];
+
+async function dedupeSubResellerGroups(prisma: PrismaClient) {
+  const all = await prisma.userGroup.findMany({
+    where: { isReseller: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const matches = all.filter((g) =>
+    SUB_RESELLER_GROUP_ALIASES.includes(g.name.trim().toLowerCase())
+  );
+  if (matches.length <= 1) return;
+
+  const canonical =
+    matches.find((g) => g.name === "Sub-resellers") ??
+    matches.find((g) => g.name.toLowerCase() === "sub-resellers") ??
+    matches[0]!;
+
+  for (const dup of matches) {
+    if (dup.id === canonical.id) continue;
+    await prisma.panelUser.updateMany({
+      where: { groupId: dup.id },
+      data: { groupId: canonical.id },
+    });
+    await prisma.userGroup.delete({ where: { id: dup.id } }).catch(() => {});
+  }
+
+  await prisma.userGroup.update({
+    where: { id: canonical.id },
+    data: { name: "Sub-resellers", description: "Resellers under a parent reseller" },
+  });
+}
 
 /** Ensure Administrator / Reseller / Sub-reseller groups exist with standard packages. */
 export async function ensureStandardUserGroups(prisma: PrismaClient) {
@@ -70,7 +111,7 @@ export async function ensureStandardUserGroups(prisma: PrismaClient) {
           isReseller: g.isReseller,
           sortOrder: g.sortOrder,
           color: existing.color || g.color,
-          config: { ...cfg, packageIds: merged },
+          config: { ...cfg, packageIds: merged, groupRole: g.groupRole },
         },
       });
       byName.set(g.name, existing.id);
@@ -84,11 +125,13 @@ export async function ensureStandardUserGroups(prisma: PrismaClient) {
         isReseller: g.isReseller,
         sortOrder: g.sortOrder,
         color: g.color,
-        config: { packageIds },
+        config: { packageIds, groupRole: g.groupRole },
       },
     });
     byName.set(g.name, created.id);
   }
+
+  await dedupeSubResellerGroups(prisma);
 
   return byName;
 }

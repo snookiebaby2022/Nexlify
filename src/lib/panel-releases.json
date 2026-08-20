@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.19",
+  "latestVersion": "2.0.20",
   "releases": [
+    {
+      "version": "2.0.20",
+      "date": "2026-08-20",
+      "channel": "stable",
+      "summary": "Notification/ticket inbox controls, sub-reseller groups, EPG sync fixes, and marketing banner polish.",
+      "changelog": [
+        "Notifications inbox: select all, clear all, mark all read, and per-user delete (admin + reseller)",
+        "Reseller tickets: select all and bulk delete own tickets; tickets/notifications scoped per account",
+        "User groups: Group type (Admin / Reseller / Sub-reseller), dedupe duplicate sub-reseller groups, sub-reseller username admin",
+        "Reserved panel usernames (admin, root, etc.) — sub-resellers can no longer hijack admin login",
+        "EPG sync: flexible XMLTV parser (single quotes, CDATA), no Brotli fetch mismatch, longer import timeout",
+        "Marketing site announcement banner centered with brand gradient styling"
+      ],
+      "fixes": [
+        "Duplicate Sub-Resellers nav and admin user list entries",
+        "Custom EPG URLs that downloaded in browser but failed panel sync (Funky/custom XMLTV providers)",
+        "Sub-reseller accounts named admin could be treated as panel admin on login"
+      ]
+    },
     {
       "version": "2.0.19",
       "date": "2026-08-20",

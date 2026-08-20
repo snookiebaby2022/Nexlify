@@ -889,9 +889,12 @@ model PanelNotificationRead {
   userId         String
   user           PanelUser         @relation(fields: [userId], references: [id], onDelete: Cascade)
   readAt         DateTime          @default(now())
+  /** When set, notification is hidden from this user's inbox (per-user clear/delete). */
+  dismissedAt    DateTime?
 
   @@unique([notificationId, userId])
   @@index([userId])
+  @@index([userId, dismissedAt])
 }
 
 model UserGroup {

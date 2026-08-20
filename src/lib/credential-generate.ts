@@ -75,7 +75,15 @@ export function validateLineCredential(
   return null;
 }
 
-/** Validate reseller / sub-reseller username + password (min 6, letters & numbers allowed). */
+/** Usernames reserved for the panel bootstrap admin — cannot be used for resellers/sub-resellers. */
+export const RESERVED_PANEL_USERNAMES = new Set([
+  "admin",
+  "administrator",
+  "root",
+  "nexlify",
+  "support",
+]);
+
 export function validatePanelAccountCredentials(
   username: string,
   password: string,
@@ -83,6 +91,9 @@ export function validatePanelAccountCredentials(
 ): string | null {
   const userErr = validateLineCredential(username, "username", minLength);
   if (userErr) return userErr;
+  if (RESERVED_PANEL_USERNAMES.has(sanitizeCredentialInput(username).toLowerCase())) {
+    return "That username is reserved — choose another";
+  }
   const passErr = validateLineCredential(password, "password", minLength);
   if (passErr) return passErr;
   return null;

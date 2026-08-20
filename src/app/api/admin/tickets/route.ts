@@ -119,7 +119,11 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-  const session = await requireSession([PanelRole.ADMIN]);
+  const session = await requireSession([
+    PanelRole.ADMIN,
+    PanelRole.RESELLER,
+    PanelRole.SUB_RESELLER,
+  ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
@@ -130,9 +134,20 @@ export async function DELETE(req: NextRequest) {
       : [];
   if (!ids.length) return NextResponse.json({ error: "id or ids required" }, { status: 400 });
 
-  await prisma.ticketMessage.deleteMany({ where: { ticketId: { in: ids } } }).catch(() => {});
-  await prisma.ticket.deleteMany({ where: { id: { in: ids } } });
-  return NextResponse.json({ ok: true, deleted: ids.length });
+  const where =
+    session.role === PanelRole.ADMIN
+      ? { id: { in: ids } }
+      : { id: { in: ids }, createdById: session.id };
+
+  const owned = await prisma.ticket.findMany({ where, select: { id: true } });
+  if (!owned.length) {
+    return NextResponse.json({ error: "No tickets found" }, { status: 404 });
+  }
+  const ownedIds = owned.map((t) => t.id);
+
+  await prisma.ticketMessage.deleteMany({ where: { ticketId: { in: ownedIds } } }).catch(() => {});
+  await prisma.ticket.deleteMany({ where: { id: { in: ownedIds } } });
+  return NextResponse.json({ ok: true, deleted: ownedIds.length });
   } catch (e) {
     return apiMutationErrorResponse(e);
   }

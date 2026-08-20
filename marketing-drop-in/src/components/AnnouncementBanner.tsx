@@ -10,26 +10,47 @@ type Announcement = {
   type: string;
 };
 
-const TYPE_CONFIG: Record<string, { bg: string; border: string; icon: React.ReactNode }> = {
+const TYPE_CONFIG: Record<
+  string,
+  {
+    shell: string;
+    iconWrap: string;
+    icon: React.ReactNode;
+    title: string;
+    body: string;
+  }
+> = {
   info: {
-    bg: "bg-blue-900/60",
-    border: "border-blue-500/30",
-    icon: <Info size={40} className="text-blue-400" />,
+    shell:
+      "border-violet-500/35 bg-gradient-to-r from-violet-950/95 via-[#1a1030] to-orange-950/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    iconWrap: "bg-violet-500/15 ring-1 ring-violet-400/30",
+    icon: <Info size={18} className="text-violet-300" aria-hidden />,
+    title: "text-white",
+    body: "text-violet-100/90",
   },
   warning: {
-    bg: "bg-yellow-900/60",
-    border: "border-yellow-500/30",
-    icon: <AlertTriangle size={40} className="text-yellow-400" />,
+    shell:
+      "border-amber-500/35 bg-gradient-to-r from-amber-950/95 via-[#241a0a] to-orange-950/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    iconWrap: "bg-amber-500/15 ring-1 ring-amber-400/30",
+    icon: <AlertTriangle size={18} className="text-amber-300" aria-hidden />,
+    title: "text-amber-50",
+    body: "text-amber-100/90",
   },
   success: {
-    bg: "bg-green-900/60",
-    border: "border-green-500/30",
-    icon: <CheckCircle size={40} className="text-green-400" />,
+    shell:
+      "border-emerald-500/35 bg-gradient-to-r from-emerald-950/95 via-[#0a1f18] to-teal-950/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    iconWrap: "bg-emerald-500/15 ring-1 ring-emerald-400/30",
+    icon: <CheckCircle size={18} className="text-emerald-300" aria-hidden />,
+    title: "text-emerald-50",
+    body: "text-emerald-100/90",
   },
   error: {
-    bg: "bg-red-900/60",
-    border: "border-red-500/30",
-    icon: <AlertCircle size={40} className="text-red-400" />,
+    shell:
+      "border-rose-500/35 bg-gradient-to-r from-rose-950/95 via-[#2a0a12] to-red-950/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]",
+    iconWrap: "bg-rose-500/15 ring-1 ring-rose-400/30",
+    icon: <AlertCircle size={18} className="text-rose-300" aria-hidden />,
+    title: "text-rose-50",
+    body: "text-rose-100/90",
   },
 };
 
@@ -48,27 +69,36 @@ export function AnnouncementBanner() {
   if (!visible.length) return null;
 
   return (
-    <div className="w-full space-y-1">
+    <div className="w-full space-y-0">
       {visible.map((a) => {
         const config = TYPE_CONFIG[a.type] ?? TYPE_CONFIG.info;
         return (
           <div
             key={a.id}
-            className={`${config.bg} ${config.border} border-b px-6 py-8 md:px-12 md:py-10 flex items-center justify-between gap-5`}
+            role="region"
+            aria-label={a.title}
+            className={`relative border-b ${config.shell}`}
           >
-            <div className="flex items-center gap-5 min-w-0">
-              <span className="shrink-0 [&_svg]:w-10 [&_svg]:h-10">{config.icon}</span>
-              <div className="min-w-0">
-                <span className="block text-xl md:text-2xl font-bold text-white leading-snug">{a.title}</span>
-                <span className="block text-base md:text-lg text-gray-100 mt-2 leading-relaxed">{a.message}</span>
+            <div className="mx-auto max-w-3xl px-12 py-4 text-center md:px-16 md:py-5">
+              <div className="mx-auto flex max-w-2xl flex-col items-center gap-2.5">
+                <span
+                  className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${config.iconWrap}`}
+                >
+                  {config.icon}
+                </span>
+                <p className={`font-display text-base font-bold leading-snug md:text-lg ${config.title}`}>
+                  {a.title}
+                </p>
+                <p className={`text-sm leading-relaxed md:text-[15px] ${config.body}`}>{a.message}</p>
               </div>
             </div>
             <button
+              type="button"
               onClick={() => setDismissed((prev) => new Set(prev).add(a.id))}
-              className="text-gray-300 hover:text-white shrink-0 p-3"
+              className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-white/50 transition-colors hover:bg-white/10 hover:text-white md:right-5"
               aria-label="Dismiss announcement"
             >
-              <X size={28} />
+              <X size={18} />
             </button>
           </div>
         );

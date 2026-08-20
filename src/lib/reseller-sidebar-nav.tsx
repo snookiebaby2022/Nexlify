@@ -152,11 +152,9 @@ export function getResellerSidebarNav(): SidebarNavEntry[] {
 
         items: [
 
-          { href: "/reseller/users/add", label: "Add User", section: "Users" },
+          { href: "/reseller/users/add", label: "Add Sub-Reseller", section: "Users" },
 
-          { href: "/reseller/users", label: "Manage Users", section: "Users" },
-
-          { href: "/reseller/users/sub", label: "Sub-Resellers" },
+          { href: "/reseller/users", label: "Manage Sub-Resellers", section: "Users" },
 
           { href: "/reseller/users/credits", label: "Add Credits" },
 

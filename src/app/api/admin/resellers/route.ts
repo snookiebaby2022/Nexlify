@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
       i + 1
     )
   );
-  const resellers = users.filter((u) => u.role !== PanelRole.ADMIN);
+  const resellers = users.filter((u) => u.role === PanelRole.RESELLER);
 
   return NextResponse.json({ users, resellers });
 }

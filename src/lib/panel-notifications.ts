@@ -44,11 +44,22 @@ function activeInboxWhere(now = new Date()): Prisma.PanelNotificationWhereInput 
 
 function inboxWhereForUser(user: SessionUser): Prisma.PanelNotificationWhereInput {
   const active = activeInboxWhere();
+  const notDismissed: Prisma.PanelNotificationWhereInput = {
+    NOT: {
+      reads: {
+        some: {
+          userId: user.id,
+          dismissedAt: { not: null },
+        },
+      },
+    },
+  };
 
   if (user.role === PanelRole.ADMIN) {
     return {
       AND: [
         active,
+        notDismissed,
         { target: PanelNotificationTarget.SPECIFIC_USER, recipientId: user.id },
       ],
     };
@@ -57,6 +68,7 @@ function inboxWhereForUser(user: SessionUser): Prisma.PanelNotificationWhereInpu
   return {
     AND: [
       active,
+      notDismissed,
       {
         OR: [
           { target: PanelNotificationTarget.ALL_RESELLERS },
@@ -295,4 +307,86 @@ export async function canUserAccessNotification(
     select: { id: true },
   });
   return !!notification;
+}
+
+/** Hide a notification from the current user's inbox (does not delete for others). */
+export async function dismissNotificationForUser(notificationId: string, user: SessionUser) {
+  const allowed = await canUserAccessNotification(notificationId, user);
+  if (!allowed) return null;
+  const now = new Date();
+  return prisma.panelNotificationRead.upsert({
+    where: {
+      notificationId_userId: { notificationId, userId: user.id },
+    },
+    create: { notificationId, userId: user.id, readAt: now, dismissedAt: now },
+    update: { dismissedAt: now, readAt: now },
+  });
+}
+
+/** Mark all inbox notifications read for the user. */
+export async function markAllNotificationsRead(user: SessionUser) {
+  const rows = await prisma.panelNotification.findMany({
+    where: inboxWhereForUser(user),
+    select: { id: true },
+  });
+  if (!rows.length) return 0;
+  const now = new Date();
+  await prisma.$transaction(
+    rows.map((n) =>
+      prisma.panelNotificationRead.upsert({
+        where: {
+          notificationId_userId: { notificationId: n.id, userId: user.id },
+        },
+        create: { notificationId: n.id, userId: user.id, readAt: now },
+        update: { readAt: now },
+      })
+    )
+  );
+  return rows.length;
+}
+
+/** Clear (dismiss) all inbox notifications for the user. */
+export async function dismissAllNotificationsForUser(user: SessionUser) {
+  const rows = await prisma.panelNotification.findMany({
+    where: inboxWhereForUser(user),
+    select: { id: true },
+  });
+  if (!rows.length) return 0;
+  const now = new Date();
+  await prisma.$transaction(
+    rows.map((n) =>
+      prisma.panelNotificationRead.upsert({
+        where: {
+          notificationId_userId: { notificationId: n.id, userId: user.id },
+        },
+        create: { notificationId: n.id, userId: user.id, readAt: now, dismissedAt: now },
+        update: { dismissedAt: now, readAt: now },
+      })
+    )
+  );
+  return rows.length;
+}
+
+/** Dismiss selected notifications for the user (must be in their inbox). */
+export async function dismissNotificationsForUser(user: SessionUser, notificationIds: string[]) {
+  const ids = [...new Set(notificationIds.map(String).filter(Boolean))];
+  if (!ids.length) return 0;
+  const allowed = await prisma.panelNotification.findMany({
+    where: { id: { in: ids }, ...inboxWhereForUser(user) },
+    select: { id: true },
+  });
+  if (!allowed.length) return 0;
+  const now = new Date();
+  await prisma.$transaction(
+    allowed.map((n) =>
+      prisma.panelNotificationRead.upsert({
+        where: {
+          notificationId_userId: { notificationId: n.id, userId: user.id },
+        },
+        create: { notificationId: n.id, userId: user.id, readAt: now, dismissedAt: now },
+        update: { dismissedAt: now, readAt: now },
+      })
+    )
+  );
+  return allowed.length;
 }

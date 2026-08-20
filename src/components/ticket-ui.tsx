@@ -73,11 +73,17 @@ export function TicketsList({
   detailBase,
   isAdmin,
   onStatusChange,
+  selectable,
+  selectedIds,
+  onToggleSelect,
 }: {
   tickets: TicketRow[];
   detailBase: string;
   isAdmin?: boolean;
   onStatusChange?: (id: string, status: string) => void;
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }) {
   if (!tickets.length) {
     return (
@@ -99,12 +105,21 @@ export function TicketsList({
       {tickets.map((t) => (
         <article
           key={t.id}
-          className="rounded-xl border p-4 flex flex-wrap items-start gap-4 transition-shadow hover:shadow-md"
+          className="rounded-xl border p-4 flex flex-wrap items-start gap-3 transition-shadow hover:shadow-md"
           style={{
             borderColor: "var(--border)",
             background: "linear-gradient(135deg, var(--bg-card) 0%, rgba(94,184,232,0.04) 100%)",
           }}
         >
+          {selectable && onToggleSelect && (
+            <input
+              type="checkbox"
+              className="mt-1 shrink-0"
+              checked={selectedIds?.has(t.id) ?? false}
+              onChange={() => onToggleSelect(t.id)}
+              aria-label={`Select ${t.subject}`}
+            />
+          )}
           <div className="flex-1 min-w-[200px]">
             <Link
               href={`${detailBase}/${t.id}`}

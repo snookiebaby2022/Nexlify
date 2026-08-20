@@ -11,7 +11,11 @@ export type GroupWhiteLabelConfig = {
   supportEmail: string;
 };
 
+export type GroupRole = "admin" | "reseller" | "sub_reseller";
+
 export type GroupConfig = {
+  /** Which panel role this group is intended for (admin CP user groups / packages). */
+  groupRole?: GroupRole;
   isSuperAdmin: boolean;
   accessAdminCp: boolean;
   canAccessOtherSubscriptions: boolean;
@@ -79,6 +83,9 @@ export const RECOMMENDED_SUB_RESELLER_PERMISSIONS = [
   "lines.edit",
   "lines.extend",
   "lines.trial",
+  "users.view",
+  "users.create",
+  "users.edit",
   "credits.view",
   "bouquets.view",
   "streams.view",
@@ -141,12 +148,17 @@ export const RESELLER_PERMISSIONS = [
   "api.access",
 ];
 
+const VALID_GROUP_ROLES = new Set<GroupRole>(["admin", "reseller", "sub_reseller"]);
+
 export function mergeGroupConfig(raw: unknown): GroupConfig {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_GROUP_CONFIG };
   const src = raw as Partial<GroupConfig> & { dashboard?: Partial<GroupDashboardConfig> };
+  const groupRole =
+    src.groupRole && VALID_GROUP_ROLES.has(src.groupRole) ? src.groupRole : undefined;
   return {
     ...DEFAULT_GROUP_CONFIG,
     ...src,
+    groupRole,
     packageIds: Array.isArray(src.packageIds) ? src.packageIds.map(String) : [],
     dashboard: { ...DEFAULT_GROUP_DASHBOARD, ...(src.dashboard ?? {}) },
     permissions: Array.isArray(src.permissions)
