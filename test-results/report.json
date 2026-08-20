@@ -1,0 +1,302 @@
+{
+  "timestamp": "2026-08-19T21:08:20.433Z",
+  "panel": "http://localhost:3000",
+  "xui": null,
+  "line": "_smoke_test",
+  "summary": {
+    "total": 48,
+    "passed": 35,
+    "failed": 13,
+    "totalMs": 38871
+  },
+  "tests": [
+    {
+      "name": "GET get_live_categories",
+      "pass": true,
+      "detail": "OK",
+      "ms": 411
+    },
+    {
+      "name": "GET get_vod_categories",
+      "pass": true,
+      "detail": "OK",
+      "ms": 366
+    },
+    {
+      "name": "GET get_series_categories",
+      "pass": true,
+      "detail": "OK",
+      "ms": 327
+    },
+    {
+      "name": "Category hierarchy integrity (no orphan children)",
+      "pass": true,
+      "detail": "OK",
+      "ms": 338
+    },
+    {
+      "name": "GET get_live_streams",
+      "pass": true,
+      "detail": "OK",
+      "ms": 1699
+    },
+    {
+      "name": "GET get_vod_streams",
+      "pass": true,
+      "detail": "OK",
+      "ms": 349
+    },
+    {
+      "name": "GET get_series",
+      "pass": true,
+      "detail": "OK",
+      "ms": 321
+    },
+    {
+      "name": "GET get_series_info (seasons/episodes)",
+      "pass": true,
+      "detail": "OK",
+      "ms": 341
+    },
+    {
+      "name": "GET get_user_info",
+      "pass": true,
+      "detail": "OK",
+      "ms": 274
+    },
+    {
+      "name": "GET get_server_info",
+      "pass": true,
+      "detail": "OK",
+      "ms": 260
+    },
+    {
+      "name": "Live HLS manifest (valid M3U8)",
+      "pass": true,
+      "detail": "OK",
+      "ms": 864
+    },
+    {
+      "name": "EPG XMLTV output",
+      "pass": true,
+      "detail": "OK",
+      "ms": 2834
+    },
+    {
+      "name": "EPG short EPG API",
+      "pass": false,
+      "detail": "HTTP 502",
+      "ms": 50
+    },
+    {
+      "name": "M3U playlist (get.php)",
+      "pass": false,
+      "detail": "Not M3U",
+      "ms": 50
+    },
+    {
+      "name": "GET get_bouquets",
+      "pass": false,
+      "detail": "HTTP 502",
+      "ms": 100
+    },
+    {
+      "name": "GET /api/admin/streams",
+      "pass": false,
+      "detail": "HTTP 502 — iptv-edge proxy error: connect ECONNREFUSED 127.0.0.1:13000",
+      "ms": 51
+    },
+    {
+      "name": "GET /api/admin/lines",
+      "pass": false,
+      "detail": "HTTP 502 — iptv-edge proxy error: connect ECONNREFUSED 127.0.0.1:13000",
+      "ms": 48
+    },
+    {
+      "name": "GET /api/admin/users",
+      "pass": false,
+      "detail": "HTTP 502 — iptv-edge proxy error: connect ECONNREFUSED 127.0.0.1:13000",
+      "ms": 49
+    },
+    {
+      "name": "GET /api/admin/bouquets",
+      "pass": false,
+      "detail": "HTTP 502 — iptv-edge proxy error: connect ECONNREFUSED 127.0.0.1:13000",
+      "ms": 50
+    },
+    {
+      "name": "GET /api/admin/servers",
+      "pass": false,
+      "detail": "HTTP 502 — iptv-edge proxy error: connect ECONNREFUSED 127.0.0.1:13000",
+      "ms": 49
+    },
+    {
+      "name": "GET /api/admin/analytics",
+      "pass": false,
+      "detail": "HTTP 502 — iptv-edge proxy error: connect ECONNREFUSED 127.0.0.1:13000",
+      "ms": 52
+    },
+    {
+      "name": "GET /api/admin/settings",
+      "pass": false,
+      "detail": "HTTP 502 — iptv-edge proxy error: connect ECONNREFUSED 127.0.0.1:13000",
+      "ms": 49
+    },
+    {
+      "name": "GET /api/admin/epg-sources",
+      "pass": false,
+      "detail": "HTTP 502 — iptv-edge proxy error: connect ECONNREFUSED 127.0.0.1:13000",
+      "ms": 50
+    },
+    {
+      "name": "GET /api/admin/packages",
+      "pass": false,
+      "detail": "HTTP 502 — iptv-edge proxy error: connect ECONNREFUSED 127.0.0.1:13000",
+      "ms": 48
+    },
+    {
+      "name": "GET /api/admin/coupons",
+      "pass": true,
+      "detail": "OK",
+      "ms": 8793
+    },
+    {
+      "name": "GET /api/admin/access-codes",
+      "pass": true,
+      "detail": "OK",
+      "ms": 166
+    },
+    {
+      "name": "GET /api/admin/notifications",
+      "pass": true,
+      "detail": "OK",
+      "ms": 8754
+    },
+    {
+      "name": "GET /api/admin/activity-logs",
+      "pass": true,
+      "detail": "OK",
+      "ms": 192
+    },
+    {
+      "name": "GET /api/admin/cache",
+      "pass": true,
+      "detail": "OK",
+      "ms": 66
+    },
+    {
+      "name": "GET /api/panel/version",
+      "pass": true,
+      "detail": "OK",
+      "ms": 62
+    },
+    {
+      "name": "XUI field check: get_live_streams",
+      "pass": true,
+      "detail": "OK",
+      "ms": 696
+    },
+    {
+      "name": "XUI field check: get_vod_streams",
+      "pass": true,
+      "detail": "OK",
+      "ms": 309
+    },
+    {
+      "name": "XUI field check: get_series",
+      "pass": true,
+      "detail": "OK",
+      "ms": 272
+    },
+    {
+      "name": "XUI field check: get_live_categories",
+      "pass": true,
+      "detail": "OK",
+      "ms": 255
+    },
+    {
+      "name": "XUI field check: get_vod_categories",
+      "pass": true,
+      "detail": "OK",
+      "ms": 263
+    },
+    {
+      "name": "XUI field check: get_series_categories",
+      "pass": true,
+      "detail": "OK",
+      "ms": 488
+    },
+    {
+      "name": "XUI field check: get_user_info",
+      "pass": true,
+      "detail": "OK",
+      "ms": 364
+    },
+    {
+      "name": "XUI field check: get_server_info",
+      "pass": true,
+      "detail": "OK",
+      "ms": 263
+    },
+    {
+      "name": "XUI M3U format: #EXTINF fields",
+      "pass": true,
+      "detail": "OK",
+      "ms": 3082
+    },
+    {
+      "name": "Rate limit: login lockout after failures",
+      "pass": true,
+      "detail": "OK",
+      "ms": 1402
+    },
+    {
+      "name": "Auth: invalid line credentials rejected",
+      "pass": true,
+      "detail": "OK",
+      "ms": 62
+    },
+    {
+      "name": "Auth: admin API requires session",
+      "pass": false,
+      "detail": "Expected 401/403/307, got 200",
+      "ms": 452
+    },
+    {
+      "name": "Timing: player_api get_user_info",
+      "pass": true,
+      "detail": "OK",
+      "ms": 517
+    },
+    {
+      "name": "Timing: player_api get_live_streams",
+      "pass": true,
+      "detail": "OK",
+      "ms": 1669
+    },
+    {
+      "name": "Timing: player_api get_vod_streams",
+      "pass": true,
+      "detail": "OK",
+      "ms": 397
+    },
+    {
+      "name": "Timing: player_api get_series",
+      "pass": true,
+      "detail": "OK",
+      "ms": 326
+    },
+    {
+      "name": "Timing: api/admin/streams",
+      "pass": true,
+      "detail": "OK",
+      "ms": 566
+    },
+    {
+      "name": "Timing: api/admin/lines",
+      "pass": true,
+      "detail": "OK",
+      "ms": 425
+    }
+  ]
+}
