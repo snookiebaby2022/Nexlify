@@ -1,29 +1,48 @@
 import { prisma } from "@/lib/prisma";
-import { streamsForLineExport, type LineWithBouquets } from "@/lib/lines";
-import { resolveEpgId } from "@/lib/subscription-export";
+import type { LineWithBouquets } from "@/lib/lines";
 import { Prisma, StreamType } from "@prisma/client";
 import { formatXmltvDateInTimezone } from "@/lib/epg-time";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
 
+const lineLiveEpgIdsSql = (lineId: string) => Prisma.sql`
+  SELECT DISTINCT COALESCE(NULLIF(TRIM(s."epgChannelId"), ''), s.id) AS epg_id
+  FROM "LineBouquet" lb
+  INNER JOIN "BouquetStream" bs ON bs."bouquetId" = lb."bouquetId"
+  INNER JOIN "Stream" s ON s.id = bs."streamId"
+  WHERE lb."lineId" = ${lineId}
+    AND s.type = ${StreamType.LIVE}::"StreamType"
+    AND s."isActive" = true
+`;
+
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
 export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 24): Promise<string> {
   const general = await getSettingGroup("general");
   const panelTimezone = String(general.timezone || "Europe/London");
-  const streams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
-  const channelMap = new Map<string, string>();
-  for (const s of streams) {
-    const epgId = String(resolveEpgId(s) || s.id).trim();
-    if (!epgId) continue;
-    if (!channelMap.has(epgId)) channelMap.set(epgId, s.name || "Live");
-  }
-
   const now = new Date();
   const until = new Date(now.getTime() + hoursAhead * 3600_000);
-  const channelIds = [...channelMap.keys()];
+
+  const channelRows = await prisma.$queryRaw<{ epg_id: string; name: string }[]>`
+    SELECT DISTINCT
+      COALESCE(NULLIF(TRIM(s."epgChannelId"), ''), s.id) AS epg_id,
+      s.name
+    FROM "LineBouquet" lb
+    INNER JOIN "BouquetStream" bs ON bs."bouquetId" = lb."bouquetId"
+    INNER JOIN "Stream" s ON s.id = bs."streamId"
+    WHERE lb."lineId" = ${line.id}
+      AND s.type = ${StreamType.LIVE}::"StreamType"
+      AND s."isActive" = true
+  `;
+
+  const channelMap = new Map<string, string>();
+  for (const row of channelRows) {
+    const id = String(row.epg_id || "").trim();
+    if (!id) continue;
+    if (!channelMap.has(id)) channelMap.set(id, row.name || "Live");
+  }
 
   const programs =
-    channelIds.length > 0
+    channelMap.size > 0
       ? await prisma.$queryRaw<
           { channelId: string; title: string; description: string | null; start: Date; stop: Date }[]
         >`
@@ -37,7 +56,7 @@ export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 24): P
               p.stop,
               ROW_NUMBER() OVER (PARTITION BY p."channelId" ORDER BY p.start ASC) AS rn
             FROM "EpgProgram" p
-            WHERE p."channelId" IN (${Prisma.join(channelIds)})
+            WHERE p."channelId" IN (${lineLiveEpgIdsSql(line.id)})
               AND p.stop >= ${now}
               AND p.start <= ${until}
           ) ranked

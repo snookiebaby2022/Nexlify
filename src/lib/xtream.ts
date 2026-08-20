@@ -308,14 +308,30 @@ export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string, 
     const full = s;
     const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, "auto", directPlay);
     const numCategoryId = numericCategoryId(s.categoryId);
+    let rating = "0";
+    let rating5 = 0;
+    if (full.agentStartCmd?.trim()) {
+      try {
+        const meta = JSON.parse(full.agentStartCmd) as { rating?: string | number; rating_5based?: number };
+        if (meta.rating != null && meta.rating !== "") rating = String(meta.rating);
+        if (typeof meta.rating_5based === "number" && Number.isFinite(meta.rating_5based)) {
+          rating5 = meta.rating_5based;
+        }
+      } catch {
+        /* ignore non-json agentStartCmd */
+      }
+    }
     return {
       num: i + 1,
       name: xtreamSafeText(s.name) || "Movie",
       stream_type: "movie",
       stream_id: cuidToNum(s.id),
       stream_icon: xtreamSafeText(s.streamIcon),
+      rating,
+      rating_5based: rating5,
       added: xtreamUnixString(s.createdAt),
       updated_at: xtreamUnix(full.updatedAt),
+      is_adult: full.isAdult ? 1 : 0,
       category_id: numCategoryId,
       category_ids: xtreamCategoryIds(numCategoryId),
       container_extension: pickVodExtension(playUrl) || "mp4",

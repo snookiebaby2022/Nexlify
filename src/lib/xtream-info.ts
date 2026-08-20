@@ -115,6 +115,7 @@ export async function xtreamSeriesInfo(
     const ext = ep.containerExtension ?? "mkv";
     seasons[key].push({
       id: cuidToNum(ep.id),
+      stream_id: cuidToNum(ep.id),
       episode_num: Number(meta.episode ?? ep.episodeNum ?? seasons[key].length + 1) || 1,
       title: ep.name,
       container_extension: ext,

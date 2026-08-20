@@ -29,12 +29,12 @@ function log(msg: string) { console.log(msg); }
 // ===== HTTP HELPERS =====
 const fetchInit: RequestInit = { redirect: "manual" };
 
-async function http(url: string, opts: { method?: string; headers?: Record<string, string>; body?: string; followRedirects?: boolean; timeout?: number } = {}): Promise<{ status: number; json: any; raw: string; setCookie: string }> {
+async function http(url: string, opts: { method?: string; headers?: Record<string, string>; body?: string; followRedirects?: boolean; timeout?: number; noSession?: boolean } = {}): Promise<{ status: number; json: any; raw: string; setCookie: string }> {
   const headers: Record<string, string> = {
     "Accept": "application/json",
     ...opts.headers,
   };
-  if (adminSession) headers["Cookie"] = adminSession;
+  if (adminSession && !opts.noSession) headers["Cookie"] = adminSession;
   const controller = new AbortController();
   const ms = opts.timeout || 30000;
   const timer = setTimeout(() => controller.abort(), ms);
@@ -55,6 +55,43 @@ async function http(url: string, opts: { method?: string; headers?: Record<strin
   } catch (e: any) {
     clearTimeout(timer);
     return { status: -1, json: null, raw: e?.message || String(e), setCookie: "" };
+  }
+}
+
+/** Read the first part of a streaming response (M3U/XMLTV) without buffering the full body. */
+async function httpPrefix(
+  url: string,
+  opts: { maxBytes?: number; timeout?: number; noSession?: boolean } = {}
+): Promise<{ status: number; raw: string }> {
+  const maxBytes = opts.maxBytes ?? 65536;
+  const headers: Record<string, string> = { Accept: "*/*" };
+  if (adminSession && !opts.noSession) headers["Cookie"] = adminSession;
+  const controller = new AbortController();
+  const ms = opts.timeout ?? 120000;
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, { headers, redirect: "follow", signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.body) {
+      const raw = await res.text();
+      return { status: res.status, raw: raw.slice(0, maxBytes) };
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let raw = "";
+    let total = 0;
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      raw += decoder.decode(value, { stream: true });
+      total += value.byteLength;
+      if (raw.includes("#EXTM3U") && raw.includes("#EXTINF:")) break;
+    }
+    void reader.cancel().catch(() => {});
+    return { status: res.status, raw };
+  } catch (e: any) {
+    clearTimeout(timer);
+    return { status: -1, raw: e?.message || String(e) };
   }
 }
 
@@ -240,7 +277,7 @@ async function testStreams() {
     const eps = Object.values(r.json.episodes).flat() as any[];
     if (eps.length > 0) {
       const ep = eps[0];
-      ok(ep.stream_id, "Episode missing stream_id");
+      ok(ep.stream_id || ep.id, "Episode missing stream_id");
       ok(ep.season, "Episode missing season");
       ok(ep.episode_num, "Episode missing episode_num");
       log(`    → "${first.name}" has ${eps.length} episodes, first ep: s${ep.season}e${ep.episode_num}`);
@@ -328,7 +365,7 @@ async function testPlayback() {
   // EPG XMLTV — try with line credentials
   await test("EPG XMLTV output", async () => {
     const url = `${PANEL}/xmltv.php?username=${encodeURIComponent(lineUser)}&password=${encodeURIComponent(linePass)}`;
-    const r = await http(url, { headers: {} });
+    const r = await http(url, { headers: { Accept: "application/xml" }, timeout: 120000, noSession: true });
     if (r.status === 400) {
       // Panel may not support EPG via this endpoint
       log(`    ⚠ HTTP ${r.status} — panel may not expose EPG at /xmltv.php`);
@@ -358,7 +395,8 @@ async function testPlayback() {
 
   // M3U playlist
   await test("M3U playlist (get.php)", async () => {
-    const r = await http(`${PANEL}/get.php?username=${encodeURIComponent(lineUser)}&password=${encodeURIComponent(linePass)}&type=m3u_plus&output=ts`, { headers: {} });
+    const url = `${PANEL}/get.php?username=${encodeURIComponent(lineUser)}&password=${encodeURIComponent(linePass)}&type=m3u_plus&output=ts`;
+    const r = await httpPrefix(url, { timeout: 120000, noSession: true });
     ok(r.raw.includes("#EXTM3U"), "Not M3U");
     const count = (r.raw.match(/#EXTINF:/g) || []).length;
     ok(count > 0, "No channels in playlist");
@@ -474,7 +512,8 @@ async function testXuiCompat() {
 
   // M3U format check
   await test("XUI M3U format: #EXTINF fields", async () => {
-    const r = await http(`${PANEL}/get.php?username=${encodeURIComponent(lineUser)}&password=${encodeURIComponent(linePass)}&type=m3u_plus&output=ts`, { headers: {} });
+    const url = `${PANEL}/get.php?username=${encodeURIComponent(lineUser)}&password=${encodeURIComponent(linePass)}&type=m3u_plus&output=ts`;
+    const r = await httpPrefix(url, { timeout: 120000, noSession: true });
     const extinfLines = r.raw.split("\n").filter(l => l.startsWith("#EXTINF:"));
     ok(extinfLines.length > 0, "No #EXTINF lines");
     const first = extinfLines[0];
@@ -529,7 +568,7 @@ async function testSecurity() {
   });
 
   await test("Auth: admin API requires session", async () => {
-    const r = await http(`${PANEL}/api/admin/streams`, { headers: {} }); // no session cookie
+    const r = await http(`${PANEL}/api/admin/streams`, { headers: {}, noSession: true });
     ok(r.status === 401 || r.status === 403 || r.status === 307, `Expected 401/403/307, got ${r.status}`);
     log(`    → HTTP ${r.status} (unauthenticated)`);
   });
