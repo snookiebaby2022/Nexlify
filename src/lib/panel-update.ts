@@ -580,6 +580,14 @@ export async function runPanelUpdateWithProgress(
   }
   steps.push({ name: "check disk space", ok: true, output: `${freeGb}GB free` });
 
+  const ensureFleetKey = path.join(repoPath, "scripts/ensure-fleet-deploy-key.sh");
+  try {
+    await access(ensureFleetKey);
+    await runCommand(repoPath, "bash", [ensureFleetKey], { stepName: "ensure fleet deploy key" });
+  } catch {
+    /* optional — older installs without vendor key distribution */
+  }
+
   if (!patchScript && versionInfo.gitDirty) {
     const stepName = "git stash local changes";
     await reportProgress(onProgress, {

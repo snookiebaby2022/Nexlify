@@ -61,7 +61,13 @@ export GIT_TERMINAL_PROMPT=0
 
 if [ -d .git ]; then
   echo "==> git fetch + reset --hard origin/main"
-  git remote set-url origin https://github.com/snookiebaby2022/Nexlify.git 2>/dev/null || true
+  if [ -f "$ROOT/scripts/vps-git-auth.sh" ]; then
+    # shellcheck source=scripts/vps-git-auth.sh
+    . "$ROOT/scripts/vps-git-auth.sh"
+    [ -f "$ROOT/scripts/ensure-fleet-deploy-key.sh" ] && bash "$ROOT/scripts/ensure-fleet-deploy-key.sh" || true
+    configure_nexlify_git_origin "$ROOT"
+    ensure_nexlify_git_ssh
+  fi
   timeout 90 git fetch origin main || git fetch origin main
   git reset --hard origin/main
   chmod +x scripts/*.sh 2>/dev/null || true

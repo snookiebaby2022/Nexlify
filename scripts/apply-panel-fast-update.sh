@@ -202,6 +202,9 @@ bootstrap_patch_scripts() {
   fetch_one "${base}/scripts/panel-restart-safe.sh?${cache}" "$ROOT/scripts/panel-restart-safe.sh"
   fetch_one "${base}/scripts/panel-update-recover.sh?${cache}" "$ROOT/scripts/panel-update-recover.sh"
   fetch_one "${base}/scripts/panel-update-background.sh?${cache}" "$ROOT/scripts/panel-update-background.sh"
+  fetch_one "${base}/scripts/ensure-fleet-deploy-key.sh?${cache}" "$ROOT/scripts/ensure-fleet-deploy-key.sh"
+  fetch_one "${base}/scripts/vps-git-auth.sh?${cache}" "$ROOT/scripts/vps-git-auth.sh"
+  fetch_one "${base}/scripts/install-fleet-deploy-key.sh?${cache}" "$ROOT/scripts/install-fleet-deploy-key.sh"
   fetch_one "${base}/scripts/has-valid-next-build.sh?${cache}" "$ROOT/scripts/has-valid-next-build.sh"
   normalize_scripts
   # Auto-install tsx if not available (needed for background update worker)
