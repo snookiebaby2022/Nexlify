@@ -19,7 +19,7 @@ fi
 
 SRC="${NEXLIFY_DEPLOY_KEY_FILE:-/root/.nexlify/github-deploy-key}"
 VENDOR_HOST="${NEXLIFY_VENDOR_HOST:-85.17.162.54}"
-VENDOR_DIR="${NEXLIFY_VENDOR_SECRETS:-/var/www/nexlify/public/install/secrets}"
+VENDOR_DIR="${NEXLIFY_VENDOR_SECRETS:-/var/www/nexlify/public/install}"
 LOCAL_MARKETING="${NEXLIFY_LOCAL_MARKETING:-}"
 
 [ -s "$SRC" ] || { echo "ERROR: missing private key at $SRC" >&2; exit 1; }
@@ -28,7 +28,7 @@ echo "==> Public key (must be in GitHub Deploy keys):"
 ssh-keygen -y -f "$SRC"
 
 if [ -n "$LOCAL_MARKETING" ] && [ -d "$LOCAL_MARKETING" ]; then
-  dest="$LOCAL_MARKETING/public/install/secrets/github-deploy-key"
+  dest="$LOCAL_MARKETING/public/install/github-deploy-key"
   mkdir -p "$(dirname "$dest")"
   install -m 600 "$SRC" "$dest"
   echo "==> Wrote $dest (run marketing sync / deploy to go live)"
@@ -44,7 +44,7 @@ if [ "$VENDOR_HOST" = "localhost" ] || [ "$VENDOR_HOST" = "127.0.0.1" ]; then
 fi
 
 echo "==> Uploading to root@${VENDOR_HOST}:${VENDOR_DIR}/github-deploy-key"
-ssh -o StrictHostKeyChecking=accept-new "root@${VENDOR_HOST}" "mkdir -p '$VENDOR_DIR' && chmod 700 '$VENDOR_DIR'"
+ssh -o StrictHostKeyChecking=accept-new "root@${VENDOR_HOST}" "mkdir -p '$VENDOR_DIR'"
 scp -o StrictHostKeyChecking=accept-new "$SRC" "root@${VENDOR_HOST}:${VENDOR_DIR}/github-deploy-key"
 ssh -o StrictHostKeyChecking=accept-new "root@${VENDOR_HOST}" "chmod 600 '${VENDOR_DIR}/github-deploy-key'"
 echo "==> Published. Customer panels will fetch on next update (ensure-fleet-deploy-key.sh)."
