@@ -55,7 +55,7 @@ export async function respondNativeHlsRelay(
   if (upstream.kind === "segment-stream") {
     const { stream, headers } = hlsSegmentStreamResponse(upstream.open);
     return withIptvCors(
-      new NextResponse(stream, {
+      new NextResponse(stream as unknown as BodyInit, {
         status: 200,
         headers: { ...antiFreezeHeaders, ...headers },
       })
