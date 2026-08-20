@@ -551,8 +551,9 @@ async function testSecurity() {
     for (const pw of ["wrong1", "wrong2", "wrong3", "wrong4", "wrong5"]) {
       const r = await http(`${PANEL}/api/auth/login`, {
         method: "POST",
-        body: JSON.stringify({ username: ADMIN_USER, password: pw }),
-        headers: {}, // no session
+        body: JSON.stringify({ username: "__nexlify_rate_limit_probe__", password: pw }),
+        headers: {},
+        noSession: true,
       });
       statuses.push(r.status);
     }
