@@ -149,11 +149,6 @@ export async function POST(req: NextRequest) {
       }
 
       await prisma.stream.updateMany({ where: { id: { in: ids } }, data });
-      await logActivity("mass_streams", {
-        userId: session.id,
-        entity: "stream",
-        meta: { action: "setSpeed", count: ids.length, minSpeedKbps, maxSpeedKbps },
-      });
     } else if (action === "setBackupUrl") {
       const backupUrl =
         body.backupUrl === null || body.backupUrl === ""
@@ -172,13 +167,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
 
-    if (action !== "setSpeed") {
-      await logActivity("mass_streams", {
-        userId: session.id,
-        entity: "stream",
-        meta: { action, count: ids.length },
-      });
-    }
+    await logActivity("mass_streams", {
+      userId: session.id,
+      entity: "stream",
+      meta: { action, count: ids.length },
+    });
 
     return NextResponse.json({ ok: true, count: ids.length });
   } catch (e) {
