@@ -1,7 +1,20 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.21",
+  "latestVersion": "2.0.22",
   "releases": [
+    {
+      "version": "2.0.22",
+      "date": "2026-08-21",
+      "channel": "stable",
+      "summary": "Reseller add sub-reseller form uses Sub-resellers group for packages.",
+      "changelog": [
+        "Add sub-reseller loads Sub-resellers user group (not parent Resellers group) for package pricing",
+        "Reseller groups API filters by groupRole sub_reseller for sub-reseller creation and bulk group changes"
+      ],
+      "fixes": [
+        "Reseller portal Add Sub-Reseller showed only the parent Resellers group in User group (packages)"
+      ]
+    },
     {
       "version": "2.0.21",
       "date": "2026-08-20",

@@ -8,7 +8,7 @@ import { PasswordInput } from "@/components/password-input";
 
 export default function ResellerAddUserPage() {
   const router = useRouter();
-  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [groups, setGroups] = useState<{ id: string; name: string; groupRole?: string }[]>([]);
   const [myCredits, setMyCredits] = useState(0);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
@@ -23,15 +23,18 @@ export default function ResellerAddUserPage() {
   });
 
   useEffect(() => {
-    fetch("/api/admin/profile")
-      .then((r) => r.json())
-      .then((d) => {
-        setMyCredits(d.user?.credits ?? 0);
-        const g = d.user?.group;
-        if (g?.id && g?.name) {
-          setGroups([{ id: g.id, name: g.name }]);
-          setForm((f) => ({ ...f, groupId: g.id }));
-        }
+    Promise.all([
+      fetch("/api/admin/profile").then((r) => r.json()),
+      fetch("/api/reseller/groups?role=sub_reseller").then((r) => r.json()),
+    ])
+      .then(([profile, groupsData]) => {
+        setMyCredits(profile.user?.credits ?? 0);
+        const list = (groupsData.groups ?? []) as { id: string; name: string; groupRole?: string }[];
+        setGroups(list);
+        const subGroup =
+          list.find((g) => g.groupRole === "sub_reseller" || /sub-?reseller/i.test(g.name)) ??
+          list[0];
+        if (subGroup) setForm((f) => ({ ...f, groupId: subGroup.id }));
       })
       .catch(() => {});
   }, []);
@@ -71,9 +74,9 @@ export default function ResellerAddUserPage() {
 
   return (
     <FormPageShell
-      title="Add sub-user"
+      title="Add sub-reseller"
       manageHref="/reseller/users"
-      manageLabel="Manage users"
+      manageLabel="Manage sub-resellers"
     >
       <form onSubmit={create} className="space-y-4 max-w-xl">
         <p className="text-sm" style={{ color: "var(--muted)" }}>
@@ -120,13 +123,16 @@ export default function ResellerAddUserPage() {
               value={form.groupId}
               onChange={(e) => setForm({ ...form, groupId: e.target.value })}
             >
-              <option value="">Default group</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.name}
                 </option>
               ))}
             </select>
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              Sub-resellers should use the <strong>Sub-resellers</strong> group so they get sub-reseller
+              package pricing. Configure packages under Admin → Management → Groups.
+            </p>
           </FormField>
         )}
         <FormField label="Initial credits">
@@ -157,7 +163,7 @@ export default function ResellerAddUserPage() {
             className="rounded px-4 py-2 font-medium cursor-pointer disabled:opacity-50"
             style={{ background: "var(--accent)", color: "#fff" }}
           >
-            {saving ? "Creating…" : "Create sub-user"}
+            {saving ? "Creating…" : "Create sub-reseller"}
           </button>
           <Link href="/reseller/users" className="text-sm py-2" style={{ color: "var(--accent)" }}>
             Cancel

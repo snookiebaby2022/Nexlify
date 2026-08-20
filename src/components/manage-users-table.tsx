@@ -80,7 +80,8 @@ export function ManageUsersTable({
   const [bulkBusy, setBulkBusy] = useState(false);
   const canBulk = panel === "admin" || panel === "reseller";
   const massApi = panel === "admin" ? "/api/admin/users/mass" : "/api/reseller/users/mass";
-  const groupsApi = panel === "admin" ? "/api/admin/groups" : "/api/reseller/groups";
+  const groupsApi =
+    panel === "admin" ? "/api/admin/groups" : "/api/reseller/groups?role=sub_reseller";
 
   useEffect(() => {
     if (!canBulk) return;
