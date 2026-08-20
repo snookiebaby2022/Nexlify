@@ -1,7 +1,34 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.16",
+  "latestVersion": "2.0.17",
   "releases": [
+    {
+      "version": "2.0.17",
+      "date": "2026-08-20",
+      "channel": "stable",
+      "summary": "Fleet GitHub deploy keys, reliable panel updates/rollback, native HLS startup, EPG sync UX, and playback security hardening.",
+      "changelog": [
+        "Fleet GitHub deploy key is fetched from nexlify.live on every panel update so customer VPS installs can git pull over SSH without manual key setup",
+        "Panel update rollback runs post-pull build steps and PM2 restart; background update job reports git fetch progress and clears stale rollback refs",
+        "Native HLS relay serves real finite segments (no EXTINF:-1 live manifest); instant XUI EVENT playlists skip stale on-disk ffmpeg when upstream is already HLS",
+        "Live playback aligned with XUI: faster zap, VLC user-agent failover, http/https upstream retry, and XCIPTV-compatible native HLS paths",
+        "EPG force-sync shows progress; panel clock and programme times respect 12h/24h and timezone settings; mobile web player layout improvements",
+        "Connection capacity counts same-IP multi-stream sessions correctly; live route uses full playback guard (license, line limits, geo)",
+        "HLS edge relay blocks private/reserved IPs and same-host SSRF; malformed XMLTV dates fail parse instead of silently shifting EPG"
+      ],
+      "fixes": [
+        "Panel update rollback left the app on a broken build without restarting PM2",
+        "Updates could hang or mis-report progress during git fetch origin main",
+        "Customer panels could not auto-update when GitHub HTTPS credentials were missing (fleet deploy key distribution)",
+        "GitHub SSH auth check missed the success message and falsely reported failure",
+        "Fleet deploy key download returned 403 until nginx route and file permissions were corrected",
+        "Same-IP viewers bypassed max-connection limits when opening multiple streams",
+        "HLS relay could fetch internal/private URLs via crafted stream URLs",
+        "IPTV Smarters/XCIPTV HLS errors from invalid live playlists and slow cold starts",
+        "EPG panel showed wrong local times; force-sync gave no progress feedback",
+        "Admin stream preview imported server-only HLS modules in the browser bundle"
+      ]
+    },
     {
       "version": "2.0.16",
       "date": "2026-08-19",
