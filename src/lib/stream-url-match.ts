@@ -25,7 +25,7 @@ function stripDefaultPort(host: string, port: string, protocol: string): string 
 
 /** Canonical path for Xtream-style live / VOD URLs. */
 export function canonicalizeStreamPath(pathname: string): string {
-  let path = pathname.replace(/\/+$/, "") || "/";
+  const path = pathname.replace(/\/+$/, "") || "/";
 
   const liveFull = path.match(/^\/live\/([^/]+)\/([^/]+)\/(\d+)(?:\.[A-Za-z0-9]+)?$/i);
   if (liveFull) {

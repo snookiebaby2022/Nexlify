@@ -169,8 +169,8 @@ export function enrichSqlTablesFromJunctions(
   lines: SqlTableData | null
 ): { bouquets: SqlTableData | null; lines: SqlTableData | null; warnings: string[] } {
   const warnings: string[] = [];
-  let nextBouquets = bouquets;
-  let nextLines = lines;
+  const nextBouquets = bouquets;
+  const nextLines = lines;
 
   const bs = findMerged(allTables, BOUQUET_STREAM_JUNCTIONS);
   if (bs && nextBouquets) {
