@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       }
     }
     try {
-      const { autoAssignMissingEpg } = await import("./epg-auto-match");
+      const { autoAssignMissingEpg } = await import("@/lib/epg-auto-match");
       await autoAssignMissingEpg({ limit: 800 });
     } catch {
       /* optional */
