@@ -6,9 +6,12 @@ node <<'NODE'
 const { PrismaClient } = require("@prisma/client");
 (async () => {
   const p = new PrismaClient();
-  for (const g of ["streams", "general", "anti-freeze", "performance-core"]) {
-    const row = await p.panelSetting.findUnique({ where: { group: g } });
-    if (row) console.log("SETTING", g, JSON.stringify(row.data));
+  for (const g of ["streams", "general", "cache", "performance-core"]) {
+    const key = `settings.${g}`;
+    const row = await p.panelSetting.findUnique({ where: { key } });
+    if (row) {
+      console.log("SETTING", g, row.value.slice(0, 500));
+    }
   }
   const bbc = await p.stream.findMany({
     where: { name: { contains: "BBC", mode: "insensitive" }, type: "LIVE" },
