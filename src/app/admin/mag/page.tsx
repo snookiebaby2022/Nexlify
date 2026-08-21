@@ -5,26 +5,29 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DataTable } from "@/components/data-table";
 import { DevicePortalBanner } from "@/components/device-portal-banner";
+import { DeviceRenewModal } from "@/components/device-renew-modal";
+import { formatDateTime } from "@/lib/format";
 import { subscriptionPaths } from "@/lib/panel-paths";
+
+type DeviceRow = {
+  id: string;
+  mac: string;
+  model: string | null;
+  isActive: boolean;
+  line: { id: string; username: string; status: string; expiresAt: string };
+};
 
 export default function AdminMagAllPage() {
   const pathname = usePathname();
   const paths = subscriptionPaths(pathname);
 
-  const [devices, setDevices] = useState<
-    {
-      id: string;
-      mac: string;
-      model: string | null;
-      isActive: boolean;
-      line: { username: string };
-    }[]
-  >([]);
+  const [devices, setDevices] = useState<DeviceRow[]>([]);
+  const [renewTarget, setRenewTarget] = useState<DeviceRow | null>(null);
 
   function load() {
     fetch("/api/admin/mag")
       .then((r) => r.json())
-      .then((d) => setDevices(d.devices));
+      .then((d) => setDevices(d.devices ?? []));
   }
 
   useEffect(() => {
@@ -65,13 +68,16 @@ export default function AdminMagAllPage() {
     load();
   }
 
+  const lineEditHref = (lineId: string) =>
+    paths.isReseller ? `${paths.lines}?edit=${lineId}` : `/admin/lines?edit=${lineId}`;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">MAG devices</h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            Registered by MAC address only.
+            Registered by MAC address. Renew extends the linked line subscription.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -90,17 +96,29 @@ export default function AdminMagAllPage() {
       <DevicePortalBanner deviceKind="mag" settingsHref={paths.isReseller ? null : "/admin/settings/server"} />
 
       <DataTable
-        headers={["MAC", "Line", "Status", ""]}
+        headers={["MAC", "Line", "Expires", "Status", ""]}
         rows={devices.map((d) => [
           d.mac,
           d.line.username,
-          d.isActive ? "Active" : "Off",
-          <span key={d.id} className="flex gap-2">
+          formatDateTime(d.line.expiresAt),
+          [d.isActive ? "Device on" : "Device off", d.line.status].join(" · "),
+          <span key={d.id} className="flex flex-wrap gap-2">
             {paths.magEdit(d.id) && (
               <Link href={paths.magEdit(d.id)!} className="text-xs" style={{ color: "var(--accent)" }}>
                 Edit
               </Link>
             )}
+            <button
+              type="button"
+              className="text-xs cursor-pointer"
+              style={{ color: "var(--accent)" }}
+              onClick={() => setRenewTarget(d)}
+            >
+              Renew
+            </button>
+            <Link href={lineEditHref(d.line.id)} className="text-xs" style={{ color: "var(--accent)" }}>
+              Line
+            </Link>
             <button
               type="button"
               className="text-xs cursor-pointer"
@@ -120,6 +138,17 @@ export default function AdminMagAllPage() {
           </span>,
         ])}
       />
+
+      {renewTarget && (
+        <DeviceRenewModal
+          open
+          lineId={renewTarget.line.id}
+          lineUsername={renewTarget.line.username}
+          expiresAt={renewTarget.line.expiresAt}
+          onClose={() => setRenewTarget(null)}
+          onRenewed={load}
+        />
+      )}
     </div>
   );
 }

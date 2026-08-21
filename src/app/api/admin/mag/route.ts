@@ -21,7 +21,9 @@ export async function GET() {
 
   const devices = await prisma.magDevice.findMany({
     where: lineFilter,
-    include: { line: { select: { username: true, id: true } } },
+    include: {
+      line: { select: { username: true, id: true, status: true, expiresAt: true } },
+    },
     orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
   });
   return NextResponse.json({ devices });

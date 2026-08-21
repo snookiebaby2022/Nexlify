@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeMac } from "@/lib/mag";
 import { normalizeEnigmaMac } from "@/lib/enigma";
-import { getLineByCredentials, type LineWithBouquets } from "@/lib/lines";
+import { getLineByCredentials, lineAuthInclude, type LineWithBouquets } from "@/lib/lines";
 import { handleStalkerAction, resolveMacFromRequest, stalkerJsResponse } from "@/lib/stalker";
 import { logStbEvent } from "@/lib/stb-events";
 import { serverBaseUrl } from "@/lib/xtream";
@@ -21,21 +21,7 @@ async function lineForMac(macRaw: string | null) {
   if (!mac) return null;
   const device = await prisma.magDevice.findUnique({
     where: { mac },
-    include: {
-      line: {
-        include: {
-          bouquets: {
-            include: {
-              bouquet: {
-                include: {
-                  streams: { include: { stream: true } },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    include: { line: { include: lineAuthInclude } },
   });
   if (!device?.isActive || !device.line) return null;
   return device.line;
@@ -47,27 +33,13 @@ async function lineForEnigmaMac(macRaw: string | null) {
   if (!mac) return null;
   const device = await prisma.enigmaDevice.findUnique({
     where: { mac },
-    include: {
-      line: {
-        include: {
-          bouquets: {
-            include: {
-              bouquet: {
-                include: {
-                  streams: { include: { stream: true } },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    include: { line: { include: lineAuthInclude } },
   });
   if (!device?.isActive || !device.line) return null;
   return device.line;
 }
 
-function isStalkerPortalRequest(req: NextRequest): boolean {
+export function isStalkerPortalRequest(req: NextRequest): boolean {
   const params = req.nextUrl.searchParams;
   const type = params.get("type");
   if (type === "stb" || type === "itv") return true;
@@ -149,5 +121,3 @@ export async function handleStalkerPortalRequest(req: NextRequest): Promise<Next
 
   return NextResponse.json(body);
 }
-
-export { isStalkerPortalRequest };

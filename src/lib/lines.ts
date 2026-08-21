@@ -4,7 +4,7 @@ export type { Line };
 import { prisma } from "./prisma";
 
 /** Auth / listing include — bouquets only, never nested BouquetStream rows (can be 100k+). */
-const lineAuthInclude = {
+export const lineAuthInclude = {
   bouquets: {
     include: {
       bouquet: true,

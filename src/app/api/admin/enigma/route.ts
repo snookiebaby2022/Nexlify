@@ -19,7 +19,9 @@ export async function GET() {
 
   const devices = await prisma.enigmaDevice.findMany({
     where: lineFilter,
-    include: { line: { select: { username: true, password: true, id: true, expiresAt: true } } },
+    include: {
+      line: { select: { username: true, id: true, status: true, expiresAt: true } },
+    },
     orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
   });
   return NextResponse.json({ devices });

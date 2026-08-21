@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { magPortalUrl } from "@/lib/mag";
-import { stalkerPortalUrl } from "@/lib/mag";
+import { magPortalUrl, stalkerPortalUrl } from "@/lib/mag";
 import { resolveServerUrls } from "@/lib/server-urls";
 import { serverBaseUrl } from "@/lib/xtream";
 import { handleStalkerPortalRequest, isStalkerPortalRequest } from "@/lib/stalker-portal-handle";
 
-export async function GET(req: NextRequest) {
-  if (isStalkerPortalRequest(req)) {
-    return handleStalkerPortalRequest(req);
+async function handle(req: NextRequest) {
+  if (req.method === "GET" && !isStalkerPortalRequest(req)) {
+    return magPortalHelpPage(req);
   }
-  return magPortalHelpPage(req);
+  return handleStalkerPortalRequest(req);
+}
+
+export async function GET(req: NextRequest) {
+  return handle(req);
 }
 
 export async function POST(req: NextRequest) {
