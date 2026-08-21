@@ -10,6 +10,8 @@ export type ResolvedServerUrls = {
   serverUrl: string;
   magServerUrl: string;
   enigmaServerUrl: string;
+  stalkerPortalUrl: string;
+  magHelpUrl: string;
 };
 
 /** Public panel / device portal URLs from settings (with sensible fallbacks). */
@@ -29,5 +31,11 @@ export async function resolveServerUrls(requestOrigin?: string): Promise<Resolve
   const magServerUrl = magExplicit || (serverUrl ? magPortalUrl(serverUrl) : "");
   const enigmaServerUrl = enigmaExplicit || magServerUrl || (serverUrl ? magPortalUrl(serverUrl) : "");
 
-  return { serverUrl, magServerUrl, enigmaServerUrl };
+  return {
+    serverUrl,
+    magServerUrl,
+    enigmaServerUrl,
+    stalkerPortalUrl: magServerUrl,
+    magHelpUrl: serverUrl ? `${serverUrl.replace(/\/+$/, "")}/c/` : "",
+  };
 }

@@ -148,6 +148,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         icon: coloredGroupIcon("providers"),
         items: [
           { href: "/admin/management/stream-providers", label: "Manage Providers", section: "Providers" },
+          { href: "/admin/management/stream-providers", label: "Add Provider", section: "Providers" },
           { href: "/admin/management/tools/provider-urls", label: "Provider URL Tools", section: "Providers" },
           { href: "/admin/m3u-sync", label: "M3U Auto-Sync", section: "Auto-Sync" },
           { href: "/admin/import/m3u", label: "Import from Provider M3U", section: "Auto-Sync" },
@@ -167,6 +168,8 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/categories?type=SERIES", label: "TV Series", section: "Types" },
           { href: "/admin/categories?type=RADIO", label: "Radio", section: "Types" },
           { href: "/admin/categories", label: "All Categories", section: "Types" },
+          { href: "/admin/management/categories", label: "Add Category", section: "Types" },
+          { href: "/admin/management/tools/mass-delete/categories", label: "Mass Delete Categories", section: "Types" },
         ],
       },
     },
@@ -259,6 +262,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         items: [
           { href: "/admin/management/packages/add", label: "Add Package" },
           { href: "/admin/management/packages", label: "Manage Packages" },
+          { href: "/admin/management/groups", label: "Assign Packages to Groups" },
         ],
       },
     },

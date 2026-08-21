@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { normalizeMac } from "@/lib/mag";
+import { normalizeEnigmaMac } from "@/lib/enigma";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 
 type PackageRow = { id: string; name: string; days: number; creditCost: number };
@@ -24,13 +26,21 @@ export function DeviceAddForm({
   settingsHref?: string | null;
 }) {
   const [mac, setMac] = useState("");
+  const [model, setModel] = useState("");
   const [packageId, setPackageId] = useState("");
   const [packages, setPackages] = useState<PackageRow[]>([]);
   const [portalUrl, setPortalUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState<{
+    mac: string;
+    username: string;
+    password: string;
+    expiresAt?: string;
+  } | null>(null);
 
   const portalKey = deviceKind === "mag" ? "magServerUrl" : "enigmaServerUrl";
+  const normalize = deviceKind === "mag" ? normalizeMac : normalizeEnigmaMac;
 
   useEffect(() => {
     fetch("/api/admin/portal-urls")
@@ -40,22 +50,35 @@ export function DeviceAddForm({
     if (withPackage) {
       fetch("/api/admin/packages")
         .then((r) => r.json())
-        .then((d) => setPackages((d.packages ?? []).filter((p: { isActive: boolean }) => p.isActive)))
+        .then((d) => setPackages(d.packages ?? []))
         .catch(() => {});
     }
   }, [withPackage, portalKey]);
+
+  const formattedMac = normalize(mac.trim());
+
+  async function copyPortal() {
+    if (!portalUrl || portalUrl === "—") return;
+    try {
+      await navigator.clipboard.writeText(portalUrl);
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
-    const normalizedMac = mac
-      .trim()
-      .toUpperCase()
-      .replace(/[^A-F0-9]/g, "")
-      .replace(/(.{2})(?=.)/g, "$1:");
-    const body: Record<string, string> = { mac: normalizedMac || mac.trim() };
+    setSuccess(null);
+    if (!formattedMac) {
+      setError("Enter a valid MAC address (12 hex digits, e.g. 00:1A:79:00:00:01)");
+      setBusy(false);
+      return;
+    }
+    const body: Record<string, string> = { mac: formattedMac };
     if (withPackage && packageId) body.packageId = packageId;
+    if (model.trim()) body.model = model.trim();
 
     const res = await fetch(apiPath, {
       method: "POST",
@@ -68,41 +91,43 @@ export function DeviceAddForm({
       setError(data.error ?? "Failed to register device");
       return;
     }
+    const line = data.device?.line;
+    if (line?.username && line?.password) {
+      setSuccess({
+        mac: formattedMac,
+        username: line.username,
+        password: line.password,
+        expiresAt: line.expiresAt,
+      });
+      setMac("");
+      setModel("");
+      setPackageId("");
+      return;
+    }
     window.location.href = backHref;
   }
 
   return (
     <div className="space-y-6 max-w-xl">
-      {/* Info Card */}
       <div
         className="rounded-lg border p-4 text-sm space-y-3"
         style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}
       >
         <h3 className="font-semibold" style={{ color: "var(--accent)" }}>
-          ℹ️ How to add a {deviceKind === "mag" ? "MAG" : "Enigma2"} device
+          How to add a {deviceKind === "mag" ? "MAG" : "Enigma2"} device
         </h3>
         <div className="space-y-2 text-[var(--muted)]">
           <p>
-            <strong>1. Find the MAC address</strong> — On your {deviceKind === "mag" ? "MAG box" : "Enigma2 receiver"}, go to{" "}
-            <em>Settings → System Info</em> or <em>Network</em> to find the MAC address.
+            <strong>1.</strong> Register the MAC below (creates a line automatically
+            {withPackage ? " from the selected package" : ""}).
           </p>
           <p>
-            <strong>2. Enter the portal URL</strong> — On the device, go to{" "}
-            <em>Portals</em> and enter the portal URL shown below.
+            <strong>2.</strong> On the box, open <em>Portals</em> and enter the Stalker portal URL below —{" "}
+            <strong>not</strong> the M3U or web player URL.
           </p>
           <p>
-            <strong>3. Register here</strong> — Enter the MAC address below and save. The device will authenticate automatically.
+            <strong>3.</strong> Reboot the box or reload the portal. It authenticates by MAC only (no username on the device).
           </p>
-          {deviceKind === "mag" && (
-            <p className="text-xs">
-              Common MAG models: MAG 250, MAG 254, MAG 256, MAG 322, MAG 420, MAG 520.
-            </p>
-          )}
-          {deviceKind === "enigma" && (
-            <p className="text-xs">
-              Common Enigma2 images: OpenATV, OpenPLi, OpenVIX, Egami, Pure2. Plugins: XC Plugin, IPTV Player.
-            </p>
-          )}
         </div>
       </div>
 
@@ -114,32 +139,53 @@ export function DeviceAddForm({
       </div>
 
       <div
-        className="rounded-lg border px-4 py-3 text-sm"
+        className="rounded-lg border px-4 py-3 text-sm space-y-2"
         style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}
       >
-        <p style={{ color: "var(--muted)" }}>
-          Portal URL — enter on the {deviceKind === "mag" ? "MAG" : "Enigma2"} box:
-        </p>
-        <p className="mt-1 font-mono text-base break-all" style={{ color: "var(--accent)" }}>
+        <p style={{ color: "var(--muted)" }}>Stalker portal URL — enter on the device:</p>
+        <p className="font-mono text-base break-all" style={{ color: "var(--accent)" }}>
           {portalUrl || "—"}
         </p>
-        {settingsHref && (
-          <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
-            Change in{" "}
-            <Link href={settingsHref} className="underline" style={{ color: "var(--accent)" }}>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={copyPortal}
+            className="text-xs px-3 py-1.5 rounded border cursor-pointer"
+            style={{ borderColor: "var(--border)" }}
+          >
+            Copy portal URL
+          </button>
+          {settingsHref && (
+            <Link href={settingsHref} className="text-xs underline" style={{ color: "var(--accent)" }}>
               Settings → Server &amp; port
             </Link>
-            .
-          </p>
-        )}
+          )}
+        </div>
       </div>
 
-      <p className="text-sm" style={{ color: "var(--muted)" }}>
-        {deviceKind === "mag" ? "MAG" : "Enigma2"} devices are identified by <strong>MAC address</strong> only.
-        {withPackage
-          ? " Select a package and a subscription line is created automatically."
-          : " A new line is created automatically for this MAC."}
-      </p>
+      {success && (
+        <div
+          className="rounded-lg border p-4 text-sm space-y-2"
+          style={{ borderColor: "var(--border)", background: "rgba(34,197,94,0.08)" }}
+        >
+          <p className="font-semibold" style={{ color: "var(--success, #22c55e)" }}>
+            Device registered — {success.mac}
+          </p>
+          <p style={{ color: "var(--muted)" }}>
+            Line (for reference / Xtream apps):{" "}
+            <span className="font-mono">{success.username}</span> /{" "}
+            <span className="font-mono">{success.password}</span>
+          </p>
+          {success.expiresAt && (
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Expires: {new Date(success.expiresAt).toLocaleString()}
+            </p>
+          )}
+          <Link href={backHref} className="inline-block text-sm underline" style={{ color: "var(--accent)" }}>
+            View all devices →
+          </Link>
+        </div>
+      )}
 
       <form
         onSubmit={submit}
@@ -176,6 +222,26 @@ export function DeviceAddForm({
             onChange={(e) => setMac(e.target.value)}
             required
             autoComplete="off"
+          />
+          {mac.trim() && !formattedMac && (
+            <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>
+              MAC must be exactly 12 hexadecimal digits.
+            </p>
+          )}
+          {formattedMac && (
+            <p className="text-xs mt-1 font-mono" style={{ color: "var(--muted)" }}>
+              Stored as: {formattedMac}
+            </p>
+          )}
+        </FormField>
+
+        <FormField label="Model (optional)">
+          <input
+            className={formInputClass}
+            style={formInputStyle}
+            placeholder={deviceKind === "mag" ? "MAG 254" : "OpenPLi / Dreambox"}
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
           />
         </FormField>
 

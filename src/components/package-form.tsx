@@ -12,6 +12,9 @@ export type PackageFormValues = {
   maxLines: number;
   extraDeviceSlots: number;
   bouquetIds: string[];
+  allowResellers: boolean;
+  allowSubResellers: boolean;
+  isActive: boolean;
 };
 
 const emptyForm: PackageFormValues = {
@@ -21,13 +24,18 @@ const emptyForm: PackageFormValues = {
   maxLines: 1,
   extraDeviceSlots: 0,
   bouquetIds: [],
+  allowResellers: true,
+  allowSubResellers: true,
+  isActive: true,
 };
 
 export function PackageForm({
+  packageId,
   title = "Add Package",
   submitLabel = "Create package",
   onSuccess,
 }: {
+  packageId?: string;
   title?: string;
   submitLabel?: string;
   onSuccess?: () => void;
@@ -35,6 +43,8 @@ export function PackageForm({
   const [bouquetItems, setBouquetItems] = useState<DualListItem[]>([]);
   const [form, setForm] = useState<PackageFormValues>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const editing = Boolean(packageId);
 
   useEffect(() => {
     fetch("/api/admin/bouquets")
@@ -49,6 +59,27 @@ export function PackageForm({
       );
   }, []);
 
+  useEffect(() => {
+    if (!packageId) return;
+    fetch("/api/admin/packages?manage=1")
+      .then((r) => r.json())
+      .then((d) => {
+        const pkg = (d.packages ?? []).find((p: { id: string }) => p.id === packageId);
+        if (!pkg) return;
+        setForm({
+          name: pkg.name ?? "",
+          creditCost: pkg.creditCost ?? 0,
+          days: pkg.days ?? 30,
+          maxLines: pkg.maxLines ?? 1,
+          extraDeviceSlots: pkg.extraDeviceSlots ?? 0,
+          bouquetIds: pkg.bouquetIds ?? [],
+          allowResellers: pkg.allowResellers !== false,
+          allowSubResellers: pkg.allowSubResellers !== false,
+          isActive: pkg.isActive !== false,
+        });
+      });
+  }, [packageId]);
+
   function applyTemplate(t: (typeof STANDARD_PACKAGE_TEMPLATES)[number]) {
     setForm({
       ...form,
@@ -61,15 +92,23 @@ export function PackageForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setError("");
     try {
       const res = await fetch("/api/admin/packages", {
-        method: "POST",
+        method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(editing ? { id: packageId, ...form } : form),
       });
-      if (!res.ok) return;
-      setForm(emptyForm);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Save failed");
+        return;
+      }
+      if (!editing) setForm(emptyForm);
       onSuccess?.();
+      if (editing) {
+        window.location.href = "/admin/management/packages";
+      }
     } finally {
       setSaving(false);
     }
@@ -88,21 +127,23 @@ export function PackageForm({
         </Link>
       </div>
       <p className="text-sm" style={{ color: "var(--muted)" }}>
-        Subscription packages for lines (credits, duration, bouquets). Credits auto-suggest from duration.
+        Subscription packages for lines (credits, duration, bouquets). Control which reseller levels can sell each package.
       </p>
-      <div className="flex flex-wrap gap-2">
-        {STANDARD_PACKAGE_TEMPLATES.map((t) => (
-          <button
-            key={t.name}
-            type="button"
-            onClick={() => applyTemplate(t)}
-            className="text-xs rounded-full px-3 py-1 border cursor-pointer"
-            style={{ borderColor: "var(--border)", color: "var(--muted)" }}
-          >
-            {t.name}
-          </button>
-        ))}
-      </div>
+      {!editing && (
+        <div className="flex flex-wrap gap-2">
+          {STANDARD_PACKAGE_TEMPLATES.map((t) => (
+            <button
+              key={t.name}
+              type="button"
+              onClick={() => applyTemplate(t)}
+              className="text-xs rounded-full px-3 py-1 border cursor-pointer"
+              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+            >
+              {t.name}
+            </button>
+          ))}
+        </div>
+      )}
       <form
         onSubmit={submit}
         className="rounded-lg border p-4 space-y-4"
@@ -179,11 +220,38 @@ export function PackageForm({
                 setForm({ ...form, extraDeviceSlots: parseInt(e.target.value, 10) || 0 })
               }
             />
-            <span className="text-xs mt-1 block" style={{ color: "var(--muted)" }}>
-              Added to maxConnections when creating lines from this package.
-            </span>
           </label>
         </div>
+
+        <div className="flex flex-wrap gap-6 text-sm">
+          <label className="inline-flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.allowResellers}
+              onChange={(e) => setForm({ ...form, allowResellers: e.target.checked })}
+            />
+            <span>Available to resellers</span>
+          </label>
+          <label className="inline-flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.allowSubResellers}
+              onChange={(e) => setForm({ ...form, allowSubResellers: e.target.checked })}
+            />
+            <span>Available to sub-resellers</span>
+          </label>
+          {editing && (
+            <label className="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              />
+              <span>Active (visible when selling lines/devices)</span>
+            </label>
+          )}
+        </div>
+
         <DualListPicker
           items={bouquetItems}
           selectedIds={form.bouquetIds}
@@ -193,6 +261,11 @@ export function PackageForm({
           availableHint="Bouquets included when a reseller sells this package. ≫ assigns all."
           selectedHint="Default bouquet access for lines created from this package."
         />
+        {error && (
+          <p className="text-sm" style={{ color: "var(--danger)" }}>
+            {error}
+          </p>
+        )}
         <button
           type="submit"
           disabled={saving}

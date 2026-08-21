@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizeEnigmaMac } from "@/lib/enigma";
 import { createLineForDevice } from "@/lib/device-line-create";
 import { logActivity } from "@/lib/lines";
-import { assertEnigmaDeviceAccess } from "@/lib/device-access";
+import { assertEnigmaDeviceAccess, assertOwnedLine } from "@/lib/device-access";
 import { PanelRole } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
@@ -19,7 +19,7 @@ export async function GET() {
 
   const devices = await prisma.enigmaDevice.findMany({
     where: lineFilter,
-    include: { line: { select: { username: true, id: true } } },
+    include: { line: { select: { username: true, password: true, id: true, expiresAt: true } } },
     orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
   });
   return NextResponse.json({ devices });
@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
   const body = parsed.data;
 
   const mac = normalizeEnigmaMac(String(body.mac ?? ""));
-  if (!mac || mac.replace(/[^A-F0-9]/gi, "").length !== 12) {
-    return NextResponse.json({ error: "Valid MAC address required" }, { status: 400 });
+  if (!mac) {
+    return NextResponse.json({ error: "Valid MAC address required (12 hex digits)" }, { status: 400 });
   }
 
   const existing = await prisma.enigmaDevice.findUnique({ where: { mac } });
@@ -49,7 +49,16 @@ export async function POST(req: NextRequest) {
   let lineId = String(body.lineId ?? "").trim();
   const packageId = body.packageId ? String(body.packageId) : "";
 
-  if (!lineId) {
+  if (lineId) {
+    try {
+      await assertOwnedLine(session, lineId);
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Forbidden" },
+        { status: 403 }
+      );
+    }
+  } else {
     try {
       const line = await createLineForDevice({
         session,
@@ -68,8 +77,8 @@ export async function POST(req: NextRequest) {
   }
 
   const device = await prisma.enigmaDevice.create({
-    data: { mac, lineId },
-    include: { line: true },
+    data: { mac, lineId, model: body.model ? String(body.model) : null },
+    include: { line: { select: { username: true, password: true, id: true, expiresAt: true } } },
   });
 
   await logActivity("enigma_device_added", {
@@ -108,8 +117,31 @@ export async function PATCH(req: NextRequest) {
   }
 
   const data: { mac?: string; lineId?: string; model?: string | null; isActive?: boolean } = {};
-  if (body.mac != null) data.mac = normalizeEnigmaMac(String(body.mac));
-  if (body.lineId != null) data.lineId = String(body.lineId);
+  if (body.mac != null) {
+    const nextMac = normalizeEnigmaMac(String(body.mac));
+    if (!nextMac) {
+      return NextResponse.json({ error: "Valid MAC address required" }, { status: 400 });
+    }
+    const dup = await prisma.enigmaDevice.findFirst({
+      where: { mac: nextMac, NOT: { id } },
+    });
+    if (dup) {
+      return NextResponse.json({ error: "MAC already registered" }, { status: 409 });
+    }
+    data.mac = nextMac;
+  }
+  if (body.lineId != null) {
+    const nextLineId = String(body.lineId);
+    try {
+      await assertOwnedLine(session, nextLineId);
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : "Forbidden" },
+        { status: 403 }
+      );
+    }
+    data.lineId = nextLineId;
+  }
   if (body.model !== undefined) data.model = body.model ? String(body.model) : null;
   if (body.isActive != null) data.isActive = Boolean(body.isActive);
 
