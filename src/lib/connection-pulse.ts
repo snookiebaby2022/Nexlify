@@ -3,10 +3,10 @@ import { cacheDel } from "@/lib/cache";
 import { recordConnectionMediaBytes } from "@/lib/connection-quality-live";
 import { trackConnection } from "@/lib/connections";
 
-function ipWhere(ip?: string | null) {
+function ipMatchWhere(ip?: string | null) {
   const raw = ip?.trim() ?? "";
-  if (!raw) return { in: [null, ""] as (string | null)[] };
-  return raw;
+  if (raw) return { ip: raw };
+  return { OR: [{ ip: null }, { ip: "" }] };
 }
 
 /** Edge / proxy heartbeat: refresh lastSeenAt and optional throughput samples. */
@@ -29,7 +29,7 @@ export async function pulseLiveConnection(opts: {
   }
 
   const result = await prisma.liveConnection.updateMany({
-    where: { lineId, streamId, ip: ipWhere(opts.ip) },
+    where: { lineId, streamId, ...ipMatchWhere(opts.ip) },
     data: { lastSeenAt: new Date() },
   });
 
