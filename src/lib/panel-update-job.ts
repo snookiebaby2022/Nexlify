@@ -54,10 +54,29 @@ function pgrepByPattern(pattern: string): number[] {
       encoding: "utf8",
       timeout: 5000,
     }).trim();
-    return out
+    const pids = out
       .split("\n")
       .map((line) => parseInt(line.trim(), 10))
-      .filter((pid) => Number.isFinite(pid) && pid > 0);
+      .filter((pid) => Number.isFinite(pid) && pid > 0 && pid !== process.pid);
+    const verified: number[] = [];
+    for (const pid of pids) {
+      try {
+        const args = execSync(`ps -p ${pid} -o args= 2>/dev/null`, {
+          encoding: "utf8",
+          timeout: 3000,
+        }).trim();
+        if (!args || !args.includes(pattern)) continue;
+        // pgrep -f matches its own argv and ssh/bash wrappers — ignore those.
+        if (/\bpgrep\b/.test(args) || /\bps\s+-p\b/.test(args)) continue;
+        if (/^\s*bash\s+-c\s+/i.test(args) && !/\b(bash|sh)\s+\S*apply-panel-fast-update/.test(args)) {
+          if (!/\b(bash|sh)\s+\S*panel-update-background/.test(args)) continue;
+        }
+        verified.push(pid);
+      } catch {
+        /* process gone */
+      }
+    }
+    return verified;
   } catch {
     return [];
   }
@@ -71,16 +90,28 @@ function findUpdateWorkerPid(repoPath: string): number | null {
 async function hasActiveUpdateSignal(repoPath: string): Promise<boolean> {
   const job = await readUpdateJob(repoPath);
   if (job?.status === "running") return true;
+  if (findUpdateWorkerPid(repoPath) != null) return true;
+  if (isPanelUpdateChildWorkAlive(repoPath)) return true;
   try {
     await stat(getUpdateLockPath(repoPath));
-    return true;
+    // Lock file alone (no worker/build) is stale — stealable in startBackgroundPanelUpdate.
+    return false;
   } catch {
     /* no lock */
   }
   try {
     const marker = path.join(repoPath, ".update-in-progress");
     const st = await stat(marker);
-    if (Date.now() - st.mtimeMs <= 45 * 60 * 1000) return true;
+    const ageMs = Date.now() - st.mtimeMs;
+    if (ageMs > 45 * 60 * 1000) return false;
+    try {
+      const raw = (await readFile(marker, "utf8")).trim();
+      const pid = parseInt(raw, 10);
+      if (Number.isFinite(pid) && pid > 0 && isUpdateWorkerAlive(pid)) return true;
+    } catch {
+      /* empty marker */
+    }
+    return ageMs < 3 * 60 * 1000 && isPanelUpdateChildWorkAlive(repoPath);
   } catch {
     /* no marker */
   }
@@ -541,6 +572,7 @@ export async function clearUpdateJob(repoPath: string): Promise<void> {
       getUpdateProgressPath(repoPath),
       getUpdatePidPath(repoPath),
       path.join(repoPath, ".update-in-progress"),
+      getUpdateLockPath(repoPath),
     ]) {
       try {
         unlinkSync(f);
@@ -553,7 +585,11 @@ export async function clearUpdateJob(repoPath: string): Promise<void> {
   }
   try {
     const { execSync } = require("child_process") as typeof import("child_process");
-    execSync("pkill -f panel-update-background || true", { stdio: "ignore", timeout: 5000 });
+    execSync(
+      `pkill -f ${JSON.stringify(`${repoPath}/scripts/panel-update-background`)} 2>/dev/null || true; ` +
+        `pkill -f ${JSON.stringify(`${repoPath}/scripts/apply-panel-fast-update`)} 2>/dev/null || true`,
+      { stdio: "ignore", timeout: 5000 }
+    );
   } catch {
     /* ignore */
   }

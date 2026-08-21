@@ -1,7 +1,21 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.23",
+  "latestVersion": "2.0.24",
   "releases": [
+    {
+      "version": "2.0.24",
+      "date": "2026-08-21",
+      "channel": "stable",
+      "summary": "Fix false An update is already running when starting panel update.",
+      "changelog": [
+        "pgrep process detection ignores pgrep/bash wrapper false matches",
+        "Stale .update.lock and .update-in-progress markers no longer block new updates without a live worker",
+        "Clear stuck update now removes the lock file and scoped update worker processes"
+      ],
+      "fixes": [
+        "Update panel returned An update is already running even with no job, lock, or worker on disk"
+      ]
+    },
     {
       "version": "2.0.23",
       "date": "2026-08-21",
