@@ -122,8 +122,7 @@ export function DeviceAddForm({
             {withPackage ? " from the selected package" : ""}).
           </p>
           <p>
-            <strong>2.</strong> On the box, open <em>Portals</em> and enter the Stalker portal URL below —{" "}
-            <strong>not</strong> the M3U or web player URL.
+            <strong>2.</strong> On the box, open <em>Portals</em> and enter the portal URL below (short form <code>/c/</code>).
           </p>
           <p>
             <strong>3.</strong> Reboot the box or reload the portal. It authenticates by MAC only (no username on the device).
@@ -142,7 +141,7 @@ export function DeviceAddForm({
         className="rounded-lg border px-4 py-3 text-sm space-y-2"
         style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}
       >
-        <p style={{ color: "var(--muted)" }}>Stalker portal URL — enter on the device:</p>
+        <p className="text-sm" style={{ color: "var(--muted)" }}>Portal URL (/c/) — enter on the device:</p>
         <p className="font-mono text-base break-all" style={{ color: "var(--accent)" }}>
           {portalUrl || "—"}
         </p>

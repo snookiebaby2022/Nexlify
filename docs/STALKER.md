@@ -1,6 +1,6 @@
 # Stalker / MAG portal
 
-Portal URL: `/stalker_portal/server/load.php` (MAG boxes often use `/c/` as the entry page).
+Portal URL: `/c/` (MAG default — serves Stalker API). Alternate: `/stalker_portal/server/load.php`.
 
 ## Geo & security on handshake
 

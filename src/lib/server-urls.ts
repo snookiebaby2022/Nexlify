@@ -1,5 +1,5 @@
 import { getSettingGroup } from "@/lib/panel-settings";
-import { magPortalUrl } from "@/lib/mag";
+import { magPortalUrl, stalkerPortalUrl } from "@/lib/mag";
 import { pickPublicOrigin } from "@/lib/public-origin";
 
 function trimUrl(url: string): string {
@@ -35,7 +35,7 @@ export async function resolveServerUrls(requestOrigin?: string): Promise<Resolve
     serverUrl,
     magServerUrl,
     enigmaServerUrl,
-    stalkerPortalUrl: magServerUrl,
-    magHelpUrl: serverUrl ? `${serverUrl.replace(/\/+$/, "")}/c/` : "",
+    stalkerPortalUrl: serverUrl ? stalkerPortalUrl(serverUrl) : "",
+    magHelpUrl: serverUrl ? magPortalUrl(serverUrl) : "",
   };
 }
