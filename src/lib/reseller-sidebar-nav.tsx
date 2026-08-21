@@ -68,8 +68,6 @@ export function getResellerSidebarNav(): SidebarNavEntry[] {
 
           { href: "/reseller/mags/add", label: "Add MAG Device", section: "MAG Device" },
 
-          { href: "/reseller/mags/add?package=1", label: "Add MAG Device (with Package)", section: "MAG Device" },
-
           { href: "/reseller/mags/bulk", label: "Bulk Add MAG Devices", section: "MAG Device" },
 
           { href: "/reseller/mags", label: "Manage MAG Devices", section: "MAG Device" },
@@ -77,8 +75,6 @@ export function getResellerSidebarNav(): SidebarNavEntry[] {
           { href: "/reseller/mags/convert-to-line", label: "Convert MAG Devices to Line", section: "MAG Device" },
 
           { href: "/reseller/enigmas/add", label: "Add Enigma2 Device", section: "Enigma2" },
-
-          { href: "/reseller/enigmas/add?package=1", label: "Add Enigma2 Device (with Package)", section: "Enigma2" },
 
           { href: "/reseller/enigmas", label: "Manage Enigma2 Devices", section: "Enigma2" },
 

@@ -75,11 +75,8 @@ export default function AdminMagAllPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={`${paths.magAdd}?package=1`} className="text-sm px-3 py-2 rounded-md btn-positive">
-            + Add MAG (with package)
-          </Link>
-          <Link href={paths.magAdd} className="text-sm px-3 py-2 rounded-md border" style={{ borderColor: "var(--border)" }}>
-            + Add MAG
+          <Link href={paths.magAdd} className="text-sm px-3 py-2 rounded-md btn-positive">
+            + Add MAG device
           </Link>
           <Link href={paths.magBulk} className="text-sm px-3 py-2 rounded-md border" style={{ borderColor: "var(--border)" }}>
             Bulk add

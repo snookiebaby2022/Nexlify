@@ -46,11 +46,8 @@ export default function AdminEnigmasPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={`${paths.enigmaAdd}?package=1`} className="text-sm px-3 py-2 rounded-md btn-positive">
-            + Add Enigma2 (with package)
-          </Link>
-          <Link href={paths.enigmaAdd} className="text-sm px-3 py-2 rounded-md border" style={{ borderColor: "var(--border)" }}>
-            + Add Enigma2
+          <Link href={paths.enigmaAdd} className="text-sm px-3 py-2 rounded-md btn-positive">
+            + Add Enigma2 device
           </Link>
           {paths.enigmaBulk && (
             <Link href={paths.enigmaBulk} className="text-sm px-3 py-2 rounded-md border" style={{ borderColor: "var(--border)" }}>
