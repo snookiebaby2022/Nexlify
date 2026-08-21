@@ -30,6 +30,7 @@ import { LogoAccentToggle } from "@/components/logo-accent-toggle";
 import { PanelBrandMark } from "@/components/panel-brand-mark";
 import { PanelNotificationBell } from "@/components/panel-notification-bell";
 import { PanelLanguageSwitcher } from "@/components/panel-language-switcher";
+import { getMobilePageTitle } from "@/lib/panel-mobile-nav";
 
 export type TopNavItem = { href: string; label: string; section?: string; icon?: React.ReactNode };
 export type TopNavMenu = {
@@ -93,6 +94,7 @@ export function PanelTopNav({
 }) {
   const homeHref = brandHref ?? (role === "ADMIN" ? "/admin/dashboard" : "/reseller/dashboard");
   const pathname = usePathname();
+  const mobilePageTitle = getMobilePageTitle(pathname);
   const router = useRouter();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [stats, setStats] = useState<HeaderStats | null>(null);
@@ -219,35 +221,26 @@ export function PanelTopNav({
         {onMenuToggle && (
           <button
             type="button"
-            className="panel-mobile-menu-btn md:hidden"
+            className="panel-mobile-menu-btn panel-header-icon-btn md:hidden"
             onClick={onMenuToggle}
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
           >
-            <Menu size={22} />
+            <Menu size={20} />
           </button>
         )}
-        <div className="md:hidden shrink-0">
-          <PanelBrandMark name={brand} href={homeHref} size="sm" logoUrl={brandLogoUrl} />
+        <div className="md:hidden flex-1 min-w-0 px-1">
+          <h1 className="panel-mobile-page-title truncate">{mobilePageTitle}</h1>
         </div>
 
         {role === "RESELLER" && resellerCredits != null && (
-          <>
-            <div className="panel-credits-badge hidden sm:flex" title="Your reseller credit balance">
-              {coloredIcon(CreditCard, "#fbbf24", 18)}
-              <span className="font-bold tabular-nums text-white text-base leading-none">
-                {resellerCredits}
-              </span>
-              <span className="text-xs text-amber-200/90">credits</span>
-            </div>
-            <StatPill
-              compact
-              className="sm:hidden"
-              icon={coloredIcon(CreditCard, "#fbbf24", 12)}
-              value={String(resellerCredits)}
-              title="Credit balance"
-            />
-          </>
+          <div className="panel-credits-badge hidden sm:flex" title="Your reseller credit balance">
+            {coloredIcon(CreditCard, "#fbbf24", 18)}
+            <span className="font-bold tabular-nums text-white text-base leading-none">
+              {resellerCredits}
+            </span>
+            <span className="text-xs text-amber-200/90">credits</span>
+          </div>
         )}
 
         {role === "ADMIN" && (
@@ -263,7 +256,8 @@ export function PanelTopNav({
           </div>
         )}
 
-        <div className="panel-header-controls flex items-center gap-1.5 sm:gap-2 ml-auto">
+        <div className="panel-header-end flex items-center gap-1.5 sm:gap-2 ml-auto shrink-0">
+        <div className="panel-header-controls flex items-center gap-1.5 sm:gap-2">
           <div
             className="panel-header-toggle-bar hidden sm:flex items-center gap-2 rounded-lg px-2 py-1 shrink-0"
             title="Logo accent and theme"
@@ -278,12 +272,12 @@ export function PanelTopNav({
               <PanelLanguageSwitcher />
             </div>
           </div>
-          <div className="sm:hidden shrink-0">
+          <div className="hidden sm:block shrink-0">
             <ThemeToggle />
           </div>
           <button
             type="button"
-            className="sm:hidden p-2 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
+            className="hidden sm:inline-flex p-2 rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
             onClick={() => setMobileSearchOpen((o) => !o)}
             aria-label={mobileSearchOpen ? "Close search" : "Open search"}
             aria-expanded={mobileSearchOpen}
@@ -299,7 +293,7 @@ export function PanelTopNav({
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          {role === "ADMIN" && <PanelNotificationBell role={role} />}
+          <PanelNotificationBell role={role} />
           <div className="relative">
             <button
               type="button"
@@ -364,20 +358,8 @@ export function PanelTopNav({
             )}
           </div>
         </div>
-      </div>
-
-      {role === "ADMIN" && (
-        <div className="panel-header-mobile-stats md:hidden">
-          <StatPill compact icon={coloredIcon(Users, "#22d3ee", 12)} value={String(connections)} title="Live connections" />
-          <StatPill compact icon={coloredIcon(Play, "#4ade80", 12)} value={String(streamCount)} title="Streams" />
-          <StatPill
-            compact
-            icon={coloredIcon(Activity, "#a78bfa", 12)}
-            value={`${inMbps}/${outMbps}`}
-            title="Bandwidth in/out Mbps"
-          />
         </div>
-      )}
+      </div>
 
       {mobileSearchOpen && (
         <div className="panel-header-mobile-search sm:hidden">

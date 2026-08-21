@@ -91,6 +91,8 @@ import { DashboardLiveSports } from "@/components/dashboard-live-sports";
 
 import { DashboardQuickActions } from "@/components/dashboard-quick-actions";
 
+import { PanelMobileDashboard } from "@/components/panel-mobile-dashboard";
+
 import { DashboardStackStrip } from "@/components/dashboard-stack-strip";
 
 import { DashboardIssuesPanel } from "@/components/dashboard-issues-panel";
@@ -302,9 +304,29 @@ export function PanelDashboard({
 
 
 
+  const ticketsHref = isReseller ? "/reseller/tickets" : "/admin/tickets";
+  const stackHealthy = stackItems.length === 0 || stackItems.every((s) => s.ok);
+
+
+
   return (
 
-    <div className="dashboard-v2 space-y-5">
+    <>
+    <div className="md:hidden">
+      <PanelMobileDashboard
+        variant={variant}
+        statsUrl={statsUrl}
+        widgetsUrl={widgetsUrl}
+        linesHref={linesHref}
+        streamsHref={streamsHref}
+        connectionsHref={connectionsHref}
+        ticketsHref={ticketsHref}
+        dashboard={d ?? undefined}
+        stackHealthy={stackHealthy}
+      />
+    </div>
+
+    <div className="dashboard-v2 space-y-5 hidden md:block">
 
       <header
 
@@ -724,6 +746,7 @@ export function PanelDashboard({
       {!isReseller && <DashboardInsightsPanels widgetsUrl={widgetsUrl} linesHref={linesHref} />}
 
     </div>
+    </>
 
   );
 

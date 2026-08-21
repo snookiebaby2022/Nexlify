@@ -1,6 +1,8 @@
 import { cacheGet, cacheSet, cacheDel } from "@/lib/cache";
 import {
   computeConnectionQuality,
+  scoreFromLastSeen,
+  LIVE_STALE_SEC,
   type ConnectionQuality,
   type ConnectionQualityLevel,
 } from "@/lib/connection-quality";
@@ -105,7 +107,11 @@ export async function getLiveQualitySample(
   };
 }
 
-/** Quality from measured throughput + stall time (falls back to heartbeat heuristic). */
+/**
+ * Quality for Live Connections.
+ * Primary signal: lastSeenAt freshness (HLS gaps between segment fetches are normal).
+ * Throughput/stall only nudges the score — never tanks a healthy active session.
+ */
 export function computeConnectionQualityWithLive(opts: {
   startedAt: Date | string;
   lastSeenAt: Date | string;
@@ -115,61 +121,20 @@ export function computeConnectionQualityWithLive(opts: {
   const now = opts.now ?? Date.now();
   const lastSeenMs = new Date(opts.lastSeenAt).getTime();
   const staleSec = Math.max(0, (now - lastSeenMs) / 1000);
-  let live = opts.live;
 
-  // Active row in the live list but no Redis samples yet (edge auth-only path).
-  if (!live?.hasSamples && staleSec <= 24) {
-    live = {
-      bytesPerSec: staleSec <= 6 ? 520_000 : 340_000,
-      lastByteAt: lastSeenMs,
-      totalBytes: 1,
-      stallSec: staleSec,
-      hasSamples: true,
-    };
+  let score = scoreFromLastSeen(staleSec);
+
+  const live = opts.live;
+  if (live?.hasSamples && staleSec <= LIVE_STALE_SEC) {
+    // XUI-style: active row stays green; throughput can only boost, never downgrade.
+    if (live.bytesPerSec >= 120_000) {
+      score = Math.max(score, 98);
+    }
   }
 
-  if (live?.hasSamples) {
-    let bps = live.bytesPerSec;
-    const stall = live.stallSec;
+  score = Math.round(Math.min(100, Math.max(0, score)));
+  const level: ConnectionQualityLevel =
+    score >= 80 ? "excellent" : score >= 50 ? "ok" : "poor";
 
-    // Playlist-only heartbeats can under-report; floor for still-active sessions.
-    if (staleSec <= 20) {
-      bps = Math.max(bps, 280_000);
-    }
-
-    let score: number;
-    if (stall >= 12) {
-      score = Math.max(5, 35 - Math.min(25, Math.round(stall - 12)));
-    } else if (bps >= 800_000) {
-      score = Math.min(100, 92 + Math.min(8, Math.round(bps / 1_000_000)));
-    } else if (bps >= 400_000) {
-      score = Math.min(100, 85 + Math.min(14, Math.round((bps - 400_000) / 50_000)));
-    } else if (bps >= 150_000) {
-      score = 72 + Math.min(12, Math.round((bps - 150_000) / 25_000));
-    } else if (bps >= 50_000) {
-      score = 55 + Math.min(16, Math.round((bps - 50_000) / 12_500));
-    } else if (bps >= 15_000) {
-      score = 38 + Math.min(16, Math.round((bps - 15_000) / 5_000));
-    } else {
-      score = Math.max(10, Math.round((bps / 15_000) * 36));
-    }
-
-    // Penalize brief stalls while bytes are still trickling
-    if (stall >= 4 && stall < 12) score = Math.max(25, score - Math.round(stall * 2));
-
-    score = Math.round(Math.min(100, Math.max(0, score)));
-
-    let level: ConnectionQualityLevel;
-    if (score >= 80) level = "excellent";
-    else if (score >= 50) level = "ok";
-    else level = "poor";
-
-    return { score, level, label: `${score}%` };
-  }
-
-  return computeConnectionQuality({
-    startedAt: opts.startedAt,
-    lastSeenAt: opts.lastSeenAt,
-    now,
-  });
+  return { score, level, label: `${score}%` };
 }

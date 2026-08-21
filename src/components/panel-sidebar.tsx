@@ -476,15 +476,6 @@ export function PanelSidebar({
         })}
       </nav>
 
-      {showReport && !effectiveCollapsed && (
-        <div className="panel-sidebar-footer-actions space-y-1">
-          {username && <PanelLiveChat username={username} variant="sidebar" />}
-          <ChatAssistant variant="sidebar" />
-          <PanelSidebarSuggestions />
-          <PanelSidebarReport />
-        </div>
-      )}
-
       {!isMobileDrawer && (
         <div className="panel-sidebar-collapse-row">
           <button
@@ -501,6 +492,15 @@ export function PanelSidebar({
       )}
 
       {!effectiveCollapsed && <PanelSidebarVersion />}
+
+      {showReport && !effectiveCollapsed && (
+        <div className="panel-sidebar-footer-actions space-y-1">
+          {username && <PanelLiveChat username={username} variant="sidebar" />}
+          <ChatAssistant variant="sidebar" />
+          <PanelSidebarSuggestions />
+          <PanelSidebarReport />
+        </div>
+      )}
     </aside>
   );
 }

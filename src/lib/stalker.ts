@@ -4,6 +4,12 @@ import { StreamType } from "@prisma/client";
 import { stalkerFfmpegCmd } from "./bin-tools";
 import { prisma } from "./prisma";
 import { expandCategoryFilter } from "./category-tree";
+import {
+  handleStalkerExtendedAction,
+  STALKER_EXTENDED_ACTIONS,
+} from "./stalker-portal-ext";
+
+export { STALKER_EXTENDED_ACTIONS };
 
 export function stalkerJsResponse(data: unknown) {
   return {
@@ -143,8 +149,11 @@ export async function handleStalkerAction(
       return stalkerJsResponse({ cmd: url, id: stream.id });
     }
 
-    default:
+    default: {
+      const extended = await handleStalkerExtendedAction(action, line, baseUrl, extra);
+      if (extended !== null) return stalkerJsResponse(extended);
       return stalkerJsResponse({ error: `Unknown action: ${action}` });
+    }
   }
 }
 

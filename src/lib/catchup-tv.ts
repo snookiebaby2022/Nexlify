@@ -1,11 +1,22 @@
+import {
+  cleanupExpiredDvrRecordings,
+  createDvrSchedule,
+  deleteDvrRecording,
+  dvrPlaybackUrl,
+  getDvrRecording,
+  getDvrSettings,
+  getDvrStorageUsage,
+  listDvrRecordings,
+  listDvrSchedules,
+  startDvrRecording,
+  stopDvrRecording,
+  updateDvrSettings,
+} from "@/lib/dvr-service";
+import { resolveStreamPlaybackUrl } from "@/lib/resolve-stream-url";
 import { prisma } from "@/lib/prisma";
-import { cacheGet, cacheSet, cacheDel } from "@/lib/cache";
-import { getRedis } from "@/lib/redis";
-import { logActivity } from "@/lib/lines";
+import { DvrRecordingStatus } from "@prisma/client";
 
-const CATCHUP_PREFIX = "catchup:";
-const RECORDING_PREFIX = "recording:";
-
+/** Bridge legacy catchup API to disk-backed DVR recordings. */
 export type CatchupSettings = {
   enabled: boolean;
   bufferHours: number;
@@ -42,23 +53,71 @@ export type CatchupProgram = {
   available: boolean;
 };
 
-export async function getCatchupSettings(): Promise<CatchupSettings> {
-  const cached = await cacheGet<CatchupSettings>(`${CATCHUP_PREFIX}settings`);
-  if (cached) return cached;
+function mapStatus(status: DvrRecordingStatus): CatchupRecording["status"] {
+  switch (status) {
+    case "RECORDING":
+      return "recording";
+    case "COMPLETED":
+      return "completed";
+    case "FAILED":
+      return "failed";
+    default:
+      return "expired";
+  }
+}
+
+function mapRecording(row: {
+  id: string;
+  streamId: string;
+  channelName: string;
+  startTime: Date;
+  endTime: Date | null;
+  durationSec: number;
+  filePath: string;
+  fileSize: bigint;
+  format: string;
+  status: DvrRecordingStatus;
+  error: string | null;
+  createdAt: Date;
+  title: string;
+}): CatchupRecording {
   return {
-    enabled: false,
-    bufferHours: 24,
-    maxStorageGb: 100,
-    recordingFormat: "ts",
-    autoCleanup: true,
-    cleanupAfterHours: 48,
+    id: row.id,
+    streamId: row.streamId,
+    channelId: row.streamId,
+    channelName: row.channelName,
+    startTime: row.startTime.getTime(),
+    endTime: row.endTime?.getTime() ?? null,
+    duration: row.durationSec * 1000,
+    filePath: row.filePath,
+    fileSize: Number(row.fileSize),
+    format: row.format,
+    status: mapStatus(row.status),
+    error: row.error ?? undefined,
+    createdAt: row.createdAt,
+  };
+}
+
+export async function getCatchupSettings(): Promise<CatchupSettings> {
+  const dvr = await getDvrSettings();
+  return {
+    enabled: dvr.enabled,
+    bufferHours: Math.round(dvr.retentionHours / 1),
+    maxStorageGb: dvr.maxStorageGb,
+    recordingFormat: dvr.recordingFormat,
+    autoCleanup: dvr.autoCleanup,
+    cleanupAfterHours: dvr.retentionHours,
   };
 }
 
 export async function updateCatchupSettings(settings: Partial<CatchupSettings>): Promise<void> {
-  const current = await getCatchupSettings();
-  const updated = { ...current, ...settings };
-  await cacheSet(`${CATCHUP_PREFIX}settings`, updated, 86400);
+  await updateDvrSettings({
+    enabled: settings.enabled,
+    maxStorageGb: settings.maxStorageGb,
+    recordingFormat: settings.recordingFormat,
+    autoCleanup: settings.autoCleanup,
+    retentionHours: settings.cleanupAfterHours ?? settings.bufferHours,
+  });
 }
 
 export async function startRecording(
@@ -69,48 +128,28 @@ export async function startRecording(
 ): Promise<CatchupRecording | null> {
   const settings = await getCatchupSettings();
   if (!settings.enabled) return null;
-
-  const id = `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const filePath = `/recordings/${streamId}/${id}.${settings.recordingFormat}`;
-  const recording: CatchupRecording = {
-    id,
+  const rec = await startDvrRecording({
     streamId,
-    channelId,
-    channelName,
-    startTime: Date.now(),
-    endTime: null,
-    duration: 0,
-    filePath,
-    fileSize: 0,
-    format: settings.recordingFormat,
-    status: "recording",
-    createdAt: new Date(),
-  };
-
-  await cacheSet(`${RECORDING_PREFIX}${id}`, recording, 86400);
-  const streamRecordings = await getStreamRecordings(streamId);
-  streamRecordings.push(recording);
-  await cacheSet(`${CATCHUP_PREFIX}stream:${streamId}`, streamRecordings, 86400);
-  void logActivity("catchup_recording_started", { entity: "catchup", entityId: id, meta: { recordingId: id, streamId, channelName } });
-  return recording;
+    title: channelName,
+    durationSec: 3600,
+    upstreamUrl,
+  });
+  return mapRecording(rec);
 }
 
 export async function stopRecording(recordingId: string): Promise<CatchupRecording | null> {
-  const recording = await cacheGet<CatchupRecording>(`${RECORDING_PREFIX}${recordingId}`);
-  if (!recording) return null;
-  recording.endTime = Date.now();
-  recording.duration = recording.endTime - recording.startTime;
-  recording.status = "completed";
-  await cacheSet(`${RECORDING_PREFIX}${recordingId}`, recording, 86400);
-  return recording;
+  const rec = await stopDvrRecording(recordingId);
+  return rec ? mapRecording(rec) : null;
 }
 
 export async function getRecording(recordingId: string): Promise<CatchupRecording | null> {
-  return cacheGet<CatchupRecording>(`${RECORDING_PREFIX}${recordingId}`);
+  const rec = await getDvrRecording(recordingId);
+  return rec ? mapRecording(rec) : null;
 }
 
 export async function getStreamRecordings(streamId: string): Promise<CatchupRecording[]> {
-  return (await cacheGet<CatchupRecording[]>(`${CATCHUP_PREFIX}stream:${streamId}`)) ?? [];
+  const rows = await listDvrRecordings({ streamId });
+  return rows.map(mapRecording);
 }
 
 export async function getAvailableCatchup(
@@ -118,28 +157,27 @@ export async function getAvailableCatchup(
   startTime: number,
   endTime: number
 ): Promise<CatchupProgram[]> {
-  const recordings = await getStreamRecordings(streamId);
   const settings = await getCatchupSettings();
   const cutoff = Date.now() - settings.bufferHours * 3600 * 1000;
-
-  const available = recordings.filter(
-    (r) =>
-      r.status === "completed" &&
-      r.startTime >= cutoff &&
-      r.startTime <= endTime &&
-      (r.endTime ?? Infinity) >= startTime
-  );
-
-  return available.map((r) => ({
-    id: `catchup_${r.id}`,
-    streamId: r.streamId,
-    title: r.channelName,
-    start: r.startTime,
-    end: r.endTime ?? Date.now(),
-    duration: r.duration,
-    recordingId: r.id,
-    available: true,
-  }));
+  const rows = await listDvrRecordings({ streamId });
+  return rows
+    .filter(
+      (r) =>
+        r.status === DvrRecordingStatus.COMPLETED &&
+        r.startTime.getTime() >= cutoff &&
+        r.startTime.getTime() <= endTime &&
+        (r.endTime?.getTime() ?? Date.now()) >= startTime
+    )
+    .map((r) => ({
+      id: `catchup_${r.id}`,
+      streamId: r.streamId,
+      title: r.title,
+      start: r.startTime.getTime(),
+      end: r.endTime?.getTime() ?? Date.now(),
+      duration: r.durationSec * 1000,
+      recordingId: r.id,
+      available: true,
+    }));
 }
 
 export async function getCatchupStreamUrl(
@@ -148,59 +186,57 @@ export async function getCatchupStreamUrl(
   username: string,
   password: string
 ): Promise<string | null> {
-  const recording = await getRecording(recordingId);
-  if (!recording || recording.status !== "completed") return null;
-  const token = Buffer.from(recording.filePath, "utf8").toString("base64url");
-  return `${panelOrigin}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(recording.streamId)}/catchup?r=${encodeURIComponent(token)}`;
+  const rec = await getDvrRecording(recordingId);
+  if (!rec || rec.status !== DvrRecordingStatus.COMPLETED) return null;
+  return dvrPlaybackUrl(panelOrigin, username, password, recordingId);
 }
 
 export async function cleanupExpiredRecordings(): Promise<number> {
-  const settings = await getCatchupSettings();
-  if (!settings.autoCleanup) return 0;
-  const cutoff = Date.now() - settings.cleanupAfterHours * 3600 * 1000;
-  const redis = getRedis();
-  if (!redis) return 0;
-
-  let cleaned = 0;
-  const keys = await redis.keys(`nexlify:${RECORDING_PREFIX}*`);
-  for (const key of keys) {
-    const raw = await redis.get(key);
-    if (!raw) continue;
-    try {
-      const recording = JSON.parse(raw) as CatchupRecording;
-      if (recording.startTime < cutoff && recording.status === "completed") {
-        recording.status = "expired";
-        await redis.setex(key, 3600, JSON.stringify(recording));
-        cleaned++;
-      }
-    } catch {
-      continue;
-    }
-  }
-  return cleaned;
+  return cleanupExpiredDvrRecordings();
 }
 
-export async function getStorageUsage(): Promise<{ usedGb: number; limitGb: number; percentUsed: number }> {
-  const settings = await getCatchupSettings();
-  const redis = getRedis();
-  if (!redis) return { usedGb: 0, limitGb: settings.maxStorageGb, percentUsed: 0 };
-
-  let totalBytes = 0;
-  const keys = await redis.keys(`nexlify:${RECORDING_PREFIX}*`);
-  for (const key of keys) {
-    const raw = await redis.get(key);
-    if (!raw) continue;
-    try {
-      const recording = JSON.parse(raw) as CatchupRecording;
-      if (recording.status !== "expired") totalBytes += recording.fileSize;
-    } catch {
-      continue;
-    }
-  }
-  const usedGb = totalBytes / (1024 * 1024 * 1024);
+export async function getStorageUsage() {
+  const usage = await getDvrStorageUsage();
   return {
-    usedGb: Math.round(usedGb * 100) / 100,
-    limitGb: settings.maxStorageGb,
-    percentUsed: Math.round((usedGb / settings.maxStorageGb) * 100),
+    usedGb: usage.usedGb,
+    limitGb: usage.limitGb,
+    percentUsed: usage.percentUsed,
   };
+}
+
+export async function scheduleRecording(opts: {
+  streamId: string;
+  lineId?: string;
+  title?: string;
+  startAt: Date;
+  durationMin?: number;
+}) {
+  return createDvrSchedule(opts);
+}
+
+export async function listScheduledRecordings(activeOnly = true) {
+  return listDvrSchedules(activeOnly);
+}
+
+export async function startScheduledRecording(scheduleId: string) {
+  const schedule = (await listDvrSchedules(false)).find((s) => s.id === scheduleId);
+  if (!schedule) return null;
+  const stream = await prisma.stream.findUnique({
+    where: { id: schedule.streamId },
+    include: { provider: true, server: true },
+  });
+  if (!stream) return null;
+  const upstream = resolveStreamPlaybackUrl(stream);
+  return startDvrRecording({
+    streamId: schedule.streamId,
+    lineId: schedule.lineId,
+    title: schedule.title ?? stream.name,
+    durationSec: schedule.durationMin * 60,
+    scheduleId: schedule.id,
+    upstreamUrl: upstream,
+  });
+}
+
+export async function removeRecording(recordingId: string) {
+  return deleteDvrRecording(recordingId);
 }

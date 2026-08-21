@@ -306,6 +306,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         items: [
           { href: "/admin/unique-features", label: "Unique Features" },
           { href: "/admin/settings/catchup", label: "Catch-up TV (DVR)" },
+          { href: "/admin/dvr", label: "DVR Library" },
           { href: "/admin/epg/sources", label: "Custom EPG Sources" },
           { href: "/admin/servers/load-balancer", label: "Load Balancer" },
           { href: "/admin/sessions", label: "Session Management" },
@@ -450,6 +451,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         items: [
           { href: "/admin/service-setup", label: "Setup overview", section: "Start here" },
           { href: "/admin/settings/general", label: "General settings", section: "Panel" },
+          { href: "/admin/staff", label: "Staff & permissions", section: "Panel" },
           { href: "/admin/settings/server", label: "Server & ports", section: "Panel" },
           { href: "/admin/settings/domains", label: "Domains & SSL", section: "Panel" },
           { href: "/admin/settings/binaries", label: "FFmpeg & binaries", section: "Panel" },

@@ -6,6 +6,9 @@ import { listActiveConnections } from "./connections";
 import { dispatchOutboundWebhook } from "./outbound-webhooks";
 import { PanelRole, Prisma, StreamType } from "@prisma/client";
 import { createHmac, timingSafeEqual } from "crypto";
+import { handleXuiExtendedAction } from "./xui-api-extended";
+import { generatePassword } from "./xui-api-utils";
+import { hasPermission, PERMS } from "./staff-permissions";
 
 export async function authenticateAdminApi(req: NextRequest) {
   const params = req.nextUrl.searchParams;
@@ -37,11 +40,15 @@ export async function authenticateAdminApi(req: NextRequest) {
   const user = await prisma.panelUser.findFirst({
     where: {
       apiKey,
-      role: PanelRole.ADMIN,
       isActive: true,
       ...(accessCode ? { accessCode } : {}),
+      OR: [
+        { role: PanelRole.ADMIN },
+        { role: PanelRole.STAFF, permissions: { has: PERMS.API_ACCESS } },
+      ],
     },
   });
+  if (user && user.role === PanelRole.STAFF && !hasPermission(user, PERMS.API_ACCESS)) return null;
   return user;
 }
 
@@ -295,8 +302,11 @@ export async function handleXuiAction(
       return { status: "success", reseller: { id: reseller.id, username }, password };
     }
 
-    default:
+    default: {
+      const extended = await handleXuiExtendedAction(action, params, adminId);
+      if (extended) return extended;
       return { status: "error", message: `unknown action: ${action}` };
+    }
   }
 }
 
@@ -319,6 +329,3 @@ async function setLineStatus(
   return { status: "success", line };
 }
 
-function generatePassword() {
-  return Math.random().toString(36).slice(2, 10);
-}

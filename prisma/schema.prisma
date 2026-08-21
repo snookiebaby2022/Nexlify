@@ -12,6 +12,14 @@ enum PanelRole {
   ADMIN
   RESELLER
   SUB_RESELLER
+  STAFF
+}
+
+enum DvrRecordingStatus {
+  RECORDING
+  COMPLETED
+  FAILED
+  EXPIRED
 }
 
 enum StreamType {
@@ -219,6 +227,8 @@ model PanelUser {
   totpSecret   String?
   totpEnabled  Boolean   @default(false)
   role         PanelRole @default(ADMIN)
+  /// Fine-grained module access for STAFF users (e.g. lines:read, streams:write).
+  permissions  String[]  @default([])
   credits      Int       @default(0)
   apiKey       String?   @unique
   accessCode   String?
@@ -475,6 +485,8 @@ model Stream {
   lbSessions          LoadBalancerSession[] @relation(name: "LbSessionStream")
   aiTranscodeSuggestions AiTranscodeSuggestion[]
   moderationFlags      ModerationFlag[]
+  dvrRecordings        DvrRecording[]
+  dvrSchedules         DvrSchedule[]
 
   @@index([type, isActive])
   @@index([xtreamNum])
@@ -658,6 +670,8 @@ model Line {
   connectionGeographies ConnectionGeography[]
   appsLocks          LineAppsLock[]
   aiSupportChats     AiSupportChat[]
+  dvrRecordings      DvrRecording[]
+  dvrSchedules       DvrSchedule[]
 
   @@index([ownerId])
   @@index([status, expiresAt])
@@ -1636,4 +1650,50 @@ model CdnEndpoint {
   updatedAt        DateTime @updatedAt
 
   @@index([isActive, priority])
+}
+
+model DvrRecording {
+  id          String             @id @default(cuid())
+  lineId      String?
+  line        Line?              @relation(fields: [lineId], references: [id], onDelete: SetNull)
+  streamId    String
+  stream      Stream             @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  scheduleId  String?
+  schedule    DvrSchedule?       @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  title       String
+  channelName String
+  startTime   DateTime
+  endTime     DateTime?
+  durationSec Int                @default(0)
+  filePath    String
+  fileSize    BigInt             @default(0)
+  format      String             @default("ts")
+  status      DvrRecordingStatus @default(RECORDING)
+  error       String?
+  pid         Int?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([streamId, startTime])
+  @@index([lineId, startTime])
+  @@index([status, startTime])
+}
+
+model DvrSchedule {
+  id          String   @id @default(cuid())
+  lineId      String?
+  line        Line?    @relation(fields: [lineId], references: [id], onDelete: SetNull)
+  streamId    String
+  stream      Stream   @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  title       String?
+  startAt     DateTime
+  durationMin Int      @default(60)
+  repeatRule  String   @default("none")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  recordings  DvrRecording[]
+
+  @@index([streamId, startAt])
+  @@index([lineId, isActive])
 }

@@ -8,6 +8,7 @@ import { panelSessionCookieOptions, panelSessionCookieSecure } from "@/lib/sessi
 import { secretsEqual, BCRYPT_HASH_RE, canRepairAdminHash } from "@/lib/secrets-equal";
 import { verifyStoredPassword } from "@/lib/password-verify";
 import type { PanelRole } from "@prisma/client";
+import { hasPermission, type StaffPermission } from "./staff-permissions";
 
 const COOKIE = "nexlify_session";
 
@@ -16,6 +17,7 @@ export type SessionUser = {
   username: string;
   role: PanelRole;
   credits: number;
+  permissions: string[];
 };
 
 function secret() {
@@ -82,11 +84,24 @@ export async function getSession(): Promise<SessionUser | null> {
 
     const row = await prisma.panelUser.findUnique({
       where: { id },
-      select: { id: true, username: true, role: true, credits: true, isActive: true },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        credits: true,
+        isActive: true,
+        permissions: true,
+      },
     });
     const user =
       row?.isActive
-        ? { id: row.id, username: row.username, role: row.role, credits: row.credits }
+        ? {
+            id: row.id,
+            username: row.username,
+            role: row.role,
+            credits: row.credits,
+            permissions: row.permissions ?? [],
+          }
         : null;
     sessionUserCache.set(id, { at: Date.now(), user });
     if (sessionUserCache.size > 2000) sessionUserCache.clear();
@@ -100,6 +115,13 @@ export async function requireSession(roles?: PanelRole[]) {
   const session = await getSession();
   if (!session) return null;
   if (roles && !roles.includes(session.role)) return null;
+  return session;
+}
+
+export async function requirePermission(perm: StaffPermission | string) {
+  const session = await getSession();
+  if (!session) return null;
+  if (!hasPermission(session, perm)) return null;
   return session;
 }
 

@@ -1,14 +1,12 @@
-import { prisma } from "@/lib/prisma";
-import { cacheGet, cacheSet } from "@/lib/cache";
+import { createDvrSchedule, listDvrSchedules } from "@/lib/dvr-service";
 
-const RECORDING_PREFIX = "recording:";
-
+/** Disk-backed DVR scheduler (replaces cache-only recording scheduler). */
 export type RecordingSchedule = {
   id: string;
   streamId: string;
   streamName: string;
   startTime: string;
-  duration: number; // minutes
+  duration: number;
   repeat: "none" | "daily" | "weekly";
   isActive: boolean;
   storagePath: string;
@@ -33,69 +31,86 @@ export async function createRecordingSchedule(
   duration: number,
   repeat: RecordingSchedule["repeat"] = "none"
 ): Promise<RecordingSchedule> {
-  const stream = await prisma.stream.findUnique({ where: { id: streamId } });
-  const schedule: RecordingSchedule = {
-    id: `recsched_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  const schedule = await createDvrSchedule({
     streamId,
-    streamName: stream?.name ?? "",
-    startTime,
-    duration,
-    repeat,
-    isActive: true,
+    startAt: new Date(startTime),
+    durationMin: duration,
+    repeatRule: repeat,
+  });
+  return {
+    id: schedule.id,
+    streamId: schedule.streamId,
+    streamName: schedule.title ?? "",
+    startTime: schedule.startAt.toISOString(),
+    duration: schedule.durationMin,
+    repeat: (schedule.repeatRule as RecordingSchedule["repeat"]) || "none",
+    isActive: schedule.isActive,
     storagePath: `/recordings/${streamId}/`,
   };
-
-  const schedules = await getRecordingSchedules();
-  schedules.push(schedule);
-  await cacheSet(`${RECORDING_PREFIX}schedules`, schedules, 86400);
-  return schedule;
 }
 
 export async function getRecordingSchedules(): Promise<RecordingSchedule[]> {
-  return (await cacheGet<RecordingSchedule[]>(`${RECORDING_PREFIX}schedules`)) ?? [];
+  const rows = await listDvrSchedules(false);
+  return rows.map((s) => ({
+    id: s.id,
+    streamId: s.streamId,
+    streamName: s.stream?.name ?? s.title ?? "",
+    startTime: s.startAt.toISOString(),
+    duration: s.durationMin,
+    repeat: (s.repeatRule as RecordingSchedule["repeat"]) || "none",
+    isActive: s.isActive,
+    storagePath: `/recordings/${s.streamId}/`,
+  }));
 }
 
 export async function deleteRecordingSchedule(scheduleId: string): Promise<boolean> {
-  const schedules = await getRecordingSchedules();
-  const filtered = schedules.filter((s) => s.id !== scheduleId);
-  await cacheSet(`${RECORDING_PREFIX}schedules`, filtered, 86400);
+  const { prisma } = await import("@/lib/prisma");
+  await prisma.dvrSchedule.delete({ where: { id: scheduleId } }).catch(() => null);
   return true;
 }
 
 export async function getRecordings(): Promise<Recording[]> {
-  return (await cacheGet<Recording[]>(`${RECORDING_PREFIX}list`)) ?? [];
+  const { listDvrRecordings } = await import("@/lib/dvr-service");
+  const rows = await listDvrRecordings();
+  return rows.map((r) => ({
+    id: r.id,
+    scheduleId: r.scheduleId ?? "",
+    streamId: r.streamId,
+    streamName: r.channelName,
+    startTime: r.startTime.toISOString(),
+    endTime: r.endTime?.toISOString() ?? "",
+    duration: r.durationSec,
+    filePath: r.filePath,
+    fileSize: Number(r.fileSize),
+    status:
+      r.status === "RECORDING"
+        ? "recording"
+        : r.status === "COMPLETED"
+          ? "completed"
+          : "failed",
+  }));
 }
 
 export async function startRecording(scheduleId: string): Promise<Recording | null> {
-  const schedules = await getRecordingSchedules();
-  const schedule = schedules.find((s) => s.id === scheduleId);
-  if (!schedule) return null;
-
-  const recording: Recording = {
-    id: `rec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    scheduleId: schedule.id,
-    streamId: schedule.streamId,
-    streamName: schedule.streamName,
-    startTime: new Date().toISOString(),
+  const { startScheduledRecording } = await import("@/lib/catchup-tv");
+  const rec = await startScheduledRecording(scheduleId);
+  if (!rec) return null;
+  return {
+    id: rec.id,
+    scheduleId: rec.scheduleId ?? "",
+    streamId: rec.streamId,
+    streamName: rec.channelName,
+    startTime: rec.startTime.toISOString(),
     endTime: "",
-    duration: schedule.duration,
-    filePath: `${schedule.storagePath}${Date.now()}.ts`,
-    fileSize: 0,
+    duration: rec.durationSec,
+    filePath: rec.filePath,
+    fileSize: Number(rec.fileSize),
     status: "recording",
   };
-
-  const recordings = await getRecordings();
-  recordings.push(recording);
-  await cacheSet(`${RECORDING_PREFIX}list`, recordings, 86400);
-  return recording;
 }
 
 export async function stopRecording(recordingId: string): Promise<boolean> {
-  const recordings = await getRecordings();
-  const idx = recordings.findIndex((r) => r.id === recordingId);
-  if (idx < 0) return false;
-  recordings[idx].status = "completed";
-  recordings[idx].endTime = new Date().toISOString();
-  await cacheSet(`${RECORDING_PREFIX}list`, recordings, 86400);
+  const { stopDvrRecording } = await import("@/lib/dvr-service");
+  await stopDvrRecording(recordingId);
   return true;
 }

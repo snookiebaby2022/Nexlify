@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMediaQuery } from "@/lib/use-media-query";
 import {
   ArrowUpDown,
+  ChevronRight,
   Filter,
   List,
   RefreshCw,
@@ -523,49 +524,27 @@ export function ManageLinesTable({
           </button>
         </div>
       </div>
-      <div className="md:hidden divide-y" style={{ borderColor: "var(--border)" }}>
-        {pageRows.map((l, idx) => {
+      <div className="md:hidden panel-mobile-activity-list py-1">
+        {pageRows.map((l) => {
           const exp = formatExpireXui(l.expiresAt);
-          const notes = splitNotes(l.notes);
           return (
-            <article key={l.id} className="panel-mobile-card p-4 space-y-2">
-              <div className="flex justify-between gap-2">
-                <div>
-                  <Link href={`${base}/lines?edit=${l.id}`} className="xui-lines-username font-semibold">
-                    {l.username}
-                  </Link>
-                  <CopyableCredential value={l.password} masked className="mt-1" />
-                </div>
-                <LineRowActionsMenu
-                  line={l}
-                  panel={panel}
-                  onUpdated={onRefresh}
-                  open={openMenuId === l.id}
-                  onToggle={() => setOpenMenuId(openMenuId === l.id ? null : l.id)}
-                  onClose={() => setOpenMenuId(null)}
-                  portalEnabled={!isMdUp}
-                />
+            <article key={l.id} className="panel-mobile-activity-card">
+              <div className="panel-mobile-activity-card-body min-w-0">
+                <Link href={`${base}/lines?edit=${l.id}`} className="panel-mobile-activity-card-title hover:underline">
+                  {l.username}
+                </Link>
+                <p className="panel-mobile-activity-card-meta">
+                  <span className={`panel-mobile-status-badge ${l.status === "BANNED" ? "panel-mobile-status-badge--danger" : "panel-mobile-status-badge--active"}`}>
+                    {l.status === "BANNED" ? "Banned" : "Active"}
+                  </span>
+                  {" · "}
+                  {exp.kind === "unlimited" ? "Unlimited" : exp.text}
+                </p>
               </div>
-              <div className="flex flex-wrap gap-2 text-xs">
-                <XuiPill value={l.status === "BANNED" ? "YES" : "NO"} variant={l.status === "BANNED" ? "yes" : "no"} />
-                {exp.kind === "unlimited" ? (
-                  <XuiPill value="UNLIMITED" variant="unlimited" />
-                ) : (
-                  <span>{exp.text}</span>
-                )}
-              </div>
-              <p className="text-xs">
-                Conn {(l as { activeConnectionCount?: number }).activeConnectionCount ?? 0}/{l.maxConnections} · {l.owner?.username ?? "admin"}
-              </p>
-              <LastWatchedCell
-                streamName={l.lastWatchedStream?.name}
-                ip={l.lastWatchedIp ?? l.activeConnection?.ip}
-                watchedAt={l.lastWatchedAt}
-              />
-              <div className="flex gap-1">
-                <NoteBtn label="Admin" hasNote={Boolean(notes.admin)} />
-                <NoteBtn label="Reseller" hasNote={Boolean(notes.reseller)} />
-              </div>
+              <Link href={`${base}/lines?edit=${l.id}`} className="panel-mobile-activity-manage">
+                Manage
+                <ChevronRight size={16} />
+              </Link>
             </article>
           );
         })}      </div>

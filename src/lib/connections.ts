@@ -7,12 +7,12 @@ import {
   setConnectionPlaybackOutput,
 } from "./connection-playback-output";
 
-export const STALE_MS = 5 * 60 * 1000; // 5 minutes — DB cleanup for orphaned rows
-/** Active playback window — used by Live Connections + Manage Lines conn column (keep in sync). */
-export const LIVE_STALE_MS = 90 * 1000; // 90s — HLS playlist-only clients may gap ~30–60s between requests
-/** Max-connection checks use a shorter window so closed/zombie sessions free slots quickly. */
-export const PLAYBACK_STALE_MS = 60 * 1000;
-const CONNECTIONS_CACHE_TTL = 5; // 5 seconds — short TTL for dashboard responsiveness
+export const STALE_MS = 5 * 60 * 1000; // cron safety net for orphaned rows
+/** Live Connections UI + listLiveConnections — HLS may gap ~15–30s between playlist polls. */
+export const LIVE_STALE_MS = 35 * 1000;
+/** Max-connection checks — free slots soon after the viewer stops. */
+export const PLAYBACK_STALE_MS = 20 * 1000;
+const CONNECTIONS_CACHE_TTL = 2; // seconds — keep dashboard counts responsive
 /** After Kick, block reconnect / track refresh for this long (covers multi-worker via Redis). */
 export const KICK_DENY_TTL_SEC = 120;
 
@@ -99,7 +99,7 @@ async function markSessionKicked(lineId: string, ip?: string | null) {
 }
 
 export async function countActiveConnectionsForLine(lineId: string) {
-  const staleBefore = new Date(Date.now() - STALE_MS);
+  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
   return prisma.liveConnection.count({
     where: { lineId, lastSeenAt: { gte: staleBefore } },
   });
@@ -107,7 +107,7 @@ export async function countActiveConnectionsForLine(lineId: string) {
 
 /** Count total active connections without loading rows into memory */
 export async function countActiveConnections(ownerId?: string): Promise<number> {
-  const staleBefore = new Date(Date.now() - STALE_MS);
+  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
   const cacheKey = ownerId ? `conn:count:${ownerId}` : "conn:count:all";
   return cacheGetOrSet(cacheKey, CONNECTIONS_CACHE_TTL, () =>
     prisma.liveConnection.count({
@@ -243,7 +243,7 @@ export async function trackConnection(opts: {
     }
   }
 
-  const staleBefore = new Date(Date.now() - STALE_MS);
+  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
 
   // Drop loopback/anonymous duplicate rows for this stream when a real client IP connects.
   if (clientIp && streamId) {
@@ -376,7 +376,7 @@ const connectionInclude = {
 export async function listActiveConnections(ownerId?: string) {
   const cacheKey = ownerId ? `conn:list:${ownerId}` : "conn:list:all";
   return cacheGetOrSet(cacheKey, CONNECTIONS_CACHE_TTL, async () => {
-    const staleBefore = new Date(Date.now() - STALE_MS);
+    const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
     return prisma.liveConnection.findMany({
       where: {
         lastSeenAt: { gte: staleBefore },
@@ -389,15 +389,23 @@ export async function listActiveConnections(ownerId?: string) {
   });
 }
 
-export async function deleteStaleConnections() {
-  const staleBefore = new Date(Date.now() - STALE_MS);
-  return prisma.liveConnection.deleteMany({
+/** Delete rows with no heartbeat within `thresholdMs` (default LIVE_STALE_MS). */
+export async function pruneStaleConnections(thresholdMs: number = LIVE_STALE_MS) {
+  const staleBefore = new Date(Date.now() - thresholdMs);
+  const result = await prisma.liveConnection.deleteMany({
     where: { lastSeenAt: { lt: staleBefore } },
   });
+  if (result.count > 0) void cacheDel("conn:*").catch(() => {});
+  return result;
 }
 
-/** List connections that are actually live right now (refreshed within last 2 minutes) */
+export async function deleteStaleConnections() {
+  return pruneStaleConnections(LIVE_STALE_MS);
+}
+
+/** List connections that are actually live right now */
 export async function listLiveConnections(ownerId?: string, take = 5000) {
+  await pruneStaleConnections(LIVE_STALE_MS);
   const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
   return prisma.liveConnection.findMany({
     where: {
@@ -424,7 +432,7 @@ export async function deleteActiveConnection(id: string, ownerId?: string) {
 }
 
 export async function clearActiveConnections(ownerId?: string) {
-  const staleBefore = new Date(Date.now() - STALE_MS);
+  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
   const rows = await prisma.liveConnection.findMany({
     where: {
       lastSeenAt: { gte: staleBefore },
@@ -484,7 +492,7 @@ export function attachKickAwareProxyBody(opts: {
     });
   };
 
-  const IDLE_MS = 12_000;
+  const IDLE_MS = 8_000;
   const HEARTBEAT_MS = 5_000;
 
   return new ReadableStream<Uint8Array>({

@@ -1,4 +1,4 @@
-/** Live connection quality derived from session age + heartbeat freshness (no fake static dot). */
+/** Live connection quality derived from session heartbeat freshness. */
 
 export type ConnectionQualityLevel = "excellent" | "ok" | "poor";
 
@@ -8,10 +8,25 @@ export type ConnectionQuality = {
   label: string;
 };
 
-/** Panel live proxies refresh lastSeenAt about every 10s while bytes flow. */
-const HEARTBEAT_INTERVAL_SEC = 10;
 /** Keep in sync with LIVE_STALE_MS in connections.ts */
-const LIVE_STALE_SEC = 90;
+export const LIVE_STALE_SEC = 35;
+
+function levelFromScore(score: number): ConnectionQualityLevel {
+  if (score >= 80) return "excellent";
+  if (score >= 50) return "ok";
+  return "poor";
+}
+
+/** Score from how recently the session was touched (lastSeenAt). HLS clients gap between requests — that is normal. */
+export function scoreFromLastSeen(staleSec: number): number {
+  if (staleSec <= 4) return 100;
+  if (staleSec <= 8) return 98;
+  if (staleSec <= 12) return 95;
+  if (staleSec <= 18) return 92;
+  if (staleSec <= 25) return 88;
+  if (staleSec <= LIVE_STALE_SEC) return 78;
+  return Math.max(8, 40 - Math.round((staleSec - LIVE_STALE_SEC) * 2));
+}
 
 export function computeConnectionQuality(opts: {
   startedAt: Date | string;
@@ -19,37 +34,10 @@ export function computeConnectionQuality(opts: {
   now?: number;
 }): ConnectionQuality {
   const now = opts.now ?? Date.now();
-  const startedMs = new Date(opts.startedAt).getTime();
   const lastSeenMs = new Date(opts.lastSeenAt).getTime();
-  const ageSec = Math.max(0, (now - startedMs) / 1000);
   const staleSec = Math.max(0, (now - lastSeenMs) / 1000);
-
-  // Heartbeat: how recently the proxy reported activity
-  let heartbeat: number;
-  if (staleSec <= HEARTBEAT_INTERVAL_SEC * 0.5) heartbeat = 100;
-  else if (staleSec <= HEARTBEAT_INTERVAL_SEC) heartbeat = 90;
-  else if (staleSec <= HEARTBEAT_INTERVAL_SEC * 1.5) heartbeat = 76;
-  else if (staleSec <= HEARTBEAT_INTERVAL_SEC * 2) heartbeat = 58;
-  else if (staleSec <= HEARTBEAT_INTERVAL_SEC * 3) heartbeat = 40;
-  else if (staleSec <= LIVE_STALE_SEC) heartbeat = 22;
-  else heartbeat = 8;
-
-  // Stability: longer sessions with fresh heartbeats are healthier
-  const stability = Math.min(100, Math.round((Math.min(ageSec, 900) / 900) * 100));
-
-  // Brief warmup window — players often buffer/reconnect in the first seconds
-  const warmup =
-    ageSec < 5 ? 0.7 : ageSec < 15 ? 0.88 : ageSec < 30 ? 0.95 : 1;
-
-  const score = Math.round(
-    Math.min(100, Math.max(0, (heartbeat * 0.68 + stability * 0.32) * warmup))
-  );
-
-  let level: ConnectionQualityLevel;
-  if (score >= 80) level = "excellent";
-  else if (score >= 50) level = "ok";
-  else level = "poor";
-
+  const score = scoreFromLastSeen(staleSec);
+  const level = levelFromScore(score);
   return { score, level, label: `${score}%` };
 }
 

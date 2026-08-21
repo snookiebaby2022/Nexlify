@@ -14,4 +14,18 @@ For guarded actions (`handshake`, `get_profile`, `get_main_info`, `get_categorie
 
 On denial, Stalker receives `{ authorized: 0, error: "..." }` and an STB event is logged (`denied_handshake`, etc.).
 
+## Extended MAG portal (v2.0.29+)
+
+Additional Stalker actions for full MAG/TV archive/PVR UI:
+
+- **Modules:** `get_modules`, `get_tv_modules`
+- **Channels:** `get_all_channels`, `get_genres`, `get_tv_genres`
+- **EPG:** `get_short_epg`, `get_simple_data_table`, `get_week`, `get_epg_info`
+- **Playback:** `get_url`, `create_link`
+- **PVR:** `get_pvr`, `get_pvr_version`, `create_pvr` / `pvr_add`, `pvr_stop` / `stop_pvr`
+- **TV archive:** `get_tv_archive`, `get_tv_archive_day`, `tv_get_archive`
+- **Storage:** `get_storages`, `get_localization`
+
+PVR and TV archive recordings use the disk-backed DVR library (`/api/dvr/playback/...`).
+
 Configure country lists on **Admin → Lines → Add/Edit line**.

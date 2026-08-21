@@ -129,3 +129,10 @@ normalize_demo_host() {
 }
 
 sanitize_demo_hosts "$PRIMARY"
+
+# Disk-backed DVR / catch-up recordings (created on every install + panel restart env sync).
+if [ -f scripts/setup-dvr-storage.sh ]; then
+  bash scripts/setup-dvr-storage.sh
+elif [ -f "$(dirname "$0")/setup-dvr-storage.sh" ]; then
+  bash "$(dirname "$0")/setup-dvr-storage.sh"
+fi
