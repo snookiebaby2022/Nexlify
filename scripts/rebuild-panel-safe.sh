@@ -75,8 +75,13 @@ fi
 
 echo "==> deps + prisma"
 npm install --include=dev --no-audit --no-fund
-npx prisma generate || true
-npx prisma migrate deploy || npx prisma db push --accept-data-loss || true
+npx prisma generate
+npx prisma migrate deploy
+if [ -x scripts/verify-db-schema.sh ]; then
+  bash scripts/verify-db-schema.sh
+else
+  node scripts/audit-db-schema.cjs
+fi
 
 echo "==> staging build + swap"
 if [ -x scripts/apply-panel-fast-update.sh ]; then

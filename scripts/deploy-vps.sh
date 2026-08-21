@@ -45,8 +45,13 @@ deploy_panel() {
   chmod +x scripts/*.sh 2>/dev/null || true
   npm install --include=dev --no-audit --no-fund
   if command -v npx >/dev/null 2>&1 && [ -d prisma ]; then
-    npx prisma generate || true
-    npx prisma migrate deploy || true
+    npx prisma generate
+    npx prisma migrate deploy
+    if [ -x scripts/verify-db-schema.sh ]; then
+      bash scripts/verify-db-schema.sh
+    else
+      node scripts/audit-db-schema.cjs
+    fi
   fi
   # Always stage when a live .next exists (run-panel-build.mjs) — never race PM2.
   npm run build

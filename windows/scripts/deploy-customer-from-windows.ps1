@@ -46,7 +46,7 @@ if ($Full) {
   $remoteCmd = "cd $CustomerPath && rm -f .update-progress.json .update-progress.pid && sed -i 's/\r$//' scripts/*.sh ecosystem.config.cjs 2>/dev/null && chmod +x scripts/*.sh && ./scripts/deploy-vps.sh"
   Write-Host "Full rebuild on customer (git pull + npm install) ..."
 } else {
-  $remoteCmd = "cd $CustomerPath && rm -f .update-progress.json .update-progress.pid && sed -i 's/\r$//' scripts/*.sh scripts/*.mjs ecosystem.config.cjs 2>/dev/null; chmod +x scripts/*.sh; npm run build && bash scripts/panel-restart-safe.sh --nexlify-only && (bash scripts/install-iptv-edge-proxy.sh 2>/dev/null || pm2 restart nexlify-iptv-edge 2>/dev/null || true) && echo DEPLOY_OK"
+  $remoteCmd = "cd $CustomerPath && rm -f .update-progress.json .update-progress.pid && sed -i 's/\r$//' scripts/*.sh scripts/*.mjs ecosystem.config.cjs 2>/dev/null; chmod +x scripts/*.sh; npx prisma generate && npx prisma migrate deploy && (bash scripts/verify-db-schema.sh 2>/dev/null || node scripts/audit-db-schema.cjs) && npm run build && bash scripts/panel-restart-safe.sh --nexlify-only && (bash scripts/install-iptv-edge-proxy.sh 2>/dev/null || pm2 restart nexlify-iptv-edge 2>/dev/null || true) && echo DEPLOY_OK"
   Write-Host "Fast rebuild on customer (synced files only, no npm install) ..."
 }
 $plinkArgs += $remoteCmd
