@@ -18,6 +18,7 @@ import {
 } from "@/lib/credential-generate";
 import { LineStatus, Prisma } from "@prisma/client";
 import { normalizeAllowedOutputInput, DEFAULT_ALLOWED_OUTPUT } from "@/lib/line-access-output";
+import { LIVE_STALE_MS } from "@/lib/connections";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const DEFAULT_PAGE_SIZE = 50;
@@ -70,7 +71,7 @@ export async function GET(req: NextRequest) {
             ? { status: sortDir as "asc" | "desc" }
             : { createdAt: sortDir as "asc" | "desc" };
 
-  const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
+  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
 
   try {
   const [lines, total] = await Promise.all([

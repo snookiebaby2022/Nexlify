@@ -132,7 +132,6 @@ async function main() {
         lastProbeOk: true,
         lastProbeError: true,
         hostedExternally: true,
-        maxConnectionsPerStream: true,
       },
     });
     if (!stream) {

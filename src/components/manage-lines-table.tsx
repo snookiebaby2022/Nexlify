@@ -19,6 +19,7 @@ import { CopyableCredential } from "@/components/copyable-credential";
 import { linesApiRoot } from "@/lib/panel-api";
 import { ConnInfoCell, LastWatchedCell } from "@/components/line-last-watched-cell";
 import { formatDateTime, formatExpireXui } from "@/lib/format";
+import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
 
 export type ManageLineRow = {
   id: string;
@@ -121,6 +122,7 @@ export function ManageLinesTable({
   const [sortKey, setSortKey] = useState<"username" | "expiresAt" | "owner" | "createdAt">("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [createdBanner, setCreatedBanner] = useState("");
+  const [mobileToolbarOpen, setMobileToolbarOpen] = useState(false);
 
   useEffect(() => {
     if (typeof serverSearch === "string") setSearch(serverSearch);
@@ -267,7 +269,8 @@ export function ManageLinesTable({
     const exp = formatExpireXui(l.expiresAt);
     const notes = splitNotes(l.notes);
     const pkg = l.bouquets?.[0]?.bouquet?.name ?? "—";
-    const activeConn = (l as { activeConnectionCount?: number }).activeConnectionCount ?? l._count?.liveConnections ?? 0;
+    const activeConn =
+      (l as { activeConnectionCount?: number }).activeConnectionCount ?? 0;
     const isActive = l.status === "ACTIVE" && new Date(l.expiresAt) > new Date();
 
     return (
@@ -440,7 +443,61 @@ export function ManageLinesTable({
           </button>
           <span className="text-xs font-medium">{autoRefresh ? "On" : "Off"}</span>
         </label>
-        <div className="flex items-center gap-2 ml-auto flex-1 justify-end min-w-[200px] max-w-md">
+        <button
+          type="button"
+          className="panel-mobile-toolbar-trigger md:hidden"
+          onClick={() => setMobileToolbarOpen(true)}
+        >
+          <Filter size={16} />
+          Search & filters
+        </button>
+        <MobileFilterSheet
+          open={mobileToolbarOpen}
+          onClose={() => setMobileToolbarOpen(false)}
+          title="Search lines"
+        >
+          <label>
+            Search
+            <input
+              type="search"
+              autoComplete="off"
+              placeholder="Search lines…"
+              className="xui-lines-search-input w-full"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+          <label className="mt-3">
+            Show entries
+            <select
+              className="xui-lines-select w-full"
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="panel-mobile-sheet-actions">
+            <button type="button" className="xui-lines-toolbar-btn" onClick={onRefresh}>
+              <RefreshCw size={16} />
+              Refresh list
+            </button>
+            <button type="button" className="btn-positive" onClick={() => setMobileToolbarOpen(false)}>
+              Done
+            </button>
+          </div>
+        </MobileFilterSheet>
+        <div className="xui-lines-toolbar--desktop-search flex items-center gap-2 ml-auto flex-1 justify-end min-w-[200px] max-w-md">
           <div className="xui-lines-search-wrap flex-1">
             <Search size={15} className="xui-lines-search-icon" />
             <input
@@ -498,7 +555,7 @@ export function ManageLinesTable({
                 )}
               </div>
               <p className="text-xs">
-                Conn {(l as { activeConnectionCount?: number }).activeConnectionCount ?? l._count?.liveConnections ?? 0}/{l.maxConnections} · {l.owner?.username ?? "admin"}
+                Conn {(l as { activeConnectionCount?: number }).activeConnectionCount ?? 0}/{l.maxConnections} · {l.owner?.username ?? "admin"}
               </p>
               <LastWatchedCell
                 streamName={l.lastWatchedStream?.name}

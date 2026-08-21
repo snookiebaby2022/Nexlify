@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Hammer, Fingerprint } from "lucide-react";
@@ -12,6 +12,19 @@ import {
 } from "@/lib/connection-quality";
 import type { PlaybackOutputLabel } from "@/lib/connection-playback-output";
 
+type ConnectionRow = {
+  id: string;
+  ip: string | null;
+  userAgent: string | null;
+  startedAt: string;
+  lastSeenAt: string;
+  serverName: string;
+  line: { username: string; maxConnections: number; isRestreamer?: boolean };
+  stream: { id: string; name: string; type: string } | null;
+  quality: ConnectionQuality;
+  output: PlaybackOutputLabel;
+};
+
 function formatConnDuration(startedAt: string | Date): string {
   const sec = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
   const h = Math.floor(sec / 3600);
@@ -21,27 +34,76 @@ function formatConnDuration(startedAt: string | Date): string {
   return `${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
 }
 
+function ConnectionCard({
+  c,
+  paths,
+  onKick,
+}: {
+  c: ConnectionRow;
+  paths: ReturnType<typeof subscriptionPaths>;
+  onKick: (id: string) => void;
+}) {
+  return (
+    <article className="panel-mobile-card p-4 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="font-semibold text-base">{c.line.username}</p>
+          <p className="text-sm truncate max-w-[240px]" style={{ color: "var(--muted)" }}>
+            {c.stream?.name ?? "—"}
+          </p>
+        </div>
+        <span
+          className={connectionQualityClass(c.quality.level)}
+          title={`Connection quality ${c.quality.label}`}
+        >
+          {c.quality.label}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 panel-mobile-card-row">
+        <div>
+          <p className="panel-mobile-card-label">IP</p>
+          <p>{c.ip ? <IpWithFlag ip={c.ip} /> : "—"}</p>
+        </div>
+        <div>
+          <p className="panel-mobile-card-label">Duration</p>
+          <span className="xui-duration-badge">{formatConnDuration(c.startedAt)}</span>
+        </div>
+        <div>
+          <p className="panel-mobile-card-label">Server</p>
+          <p className="text-sm">{c.serverName ?? "Main Server"}</p>
+        </div>
+        <div>
+          <p className="panel-mobile-card-label">Output</p>
+          <p className="text-sm">{c.output}</p>
+        </div>
+      </div>
+      <div className="panel-mobile-card-actions">
+        <button
+          type="button"
+          className="panel-mobile-card-action panel-mobile-card-action--danger"
+          onClick={() => onKick(c.id)}
+        >
+          <Hammer size={16} />
+          Kick
+        </button>
+        {c.stream && paths.streamEdit(c.stream.id) ? (
+          <Link href={paths.streamEdit(c.stream.id)!} className="panel-mobile-card-action">
+            <Fingerprint size={16} />
+            Stream
+          </Link>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
 export default function AdminConnectionsPage() {
   const pathname = usePathname();
   const paths = subscriptionPaths(pathname);
 
-  const [connections, setConnections] = useState<
-    {
-      id: string;
-      ip: string | null;
-      userAgent: string | null;
-      startedAt: string;
-      lastSeenAt: string;
-      serverName: string;
-      line: { username: string; maxConnections: number; isRestreamer?: boolean };
-      stream: { id: string; name: string; type: string } | null;
-      quality: ConnectionQuality;
-      output: PlaybackOutputLabel;
-    }[]
-  >([]);
+  const [connections, setConnections] = useState<ConnectionRow[]>([]);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(50);
-  const [tick, setTick] = useState(0);
 
   function load() {
     fetch("/api/admin/connections", { cache: "no-store" })
@@ -56,9 +118,8 @@ export default function AdminConnectionsPage() {
     return () => clearInterval(t);
   }, []);
 
-  // Tick every second to update durations in real-time
   useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    const t = setInterval(() => setConnections((rows) => [...rows]), 1000);
     return () => clearInterval(t);
   }, []);
 
@@ -96,9 +157,7 @@ export default function AdminConnectionsPage() {
         </button>
       </div>
       <p className="text-sm px-1" style={{ color: "var(--muted)" }}>
-        Kick hard-stops panel-proxied live HTTP (aborts the stream body) and blocks reconnect for
-        ~2 minutes. Movie/series redirects and clients already holding a direct upstream URL are
-        outside that path — they fail on the next panel request.         Active plays refresh every 2s. Quality % is measured from live throughput (bytes/sec) and stall time while media flows.
+        Active plays refresh every 2s. Quality is measured from live throughput and stall time.
         {paths.isReseller ? " Showing your lines only." : ""}
       </p>
 
@@ -125,7 +184,14 @@ export default function AdminConnectionsPage() {
         </label>
       </div>
 
-      <div className="xui-streams-table-wrap">
+      <div className="md:hidden divide-y" style={{ borderColor: "var(--border)" }}>
+        {shown.map((c) => (
+          <ConnectionCard key={c.id} c={c} paths={paths} onKick={kick} />
+        ))}
+        {shown.length === 0 && <p className="xui-streams-empty p-4">No active connections.</p>}
+      </div>
+
+      <div className="xui-streams-table-wrap hidden md:block">
         <table className="xui-clients-table xui-clients-table--page">
           <thead>
             <tr>
@@ -158,9 +224,7 @@ export default function AdminConnectionsPage() {
                 <td>{c.serverName ?? "Main Server"}</td>
                 <td>{c.ip ? <IpWithFlag ip={c.ip} /> : "—"}</td>
                 <td>
-                  <span className="xui-duration-badge">
-                    {formatConnDuration(c.startedAt)}
-                  </span>
+                  <span className="xui-duration-badge">{formatConnDuration(c.startedAt)}</span>
                 </td>
                 <td>{c.output}</td>
                 <td>
@@ -170,7 +234,12 @@ export default function AdminConnectionsPage() {
                 </td>
                 <td>
                   <div className="xui-clients-actions">
-                    <button type="button" className="xui-icon-action" title="Kick — ends live session" onClick={() => kick(c.id)}>
+                    <button
+                      type="button"
+                      className="xui-icon-action"
+                      title="Kick — ends live session"
+                      onClick={() => kick(c.id)}
+                    >
                       <Hammer size={14} />
                     </button>
                     {c.stream && paths.streamEdit(c.stream.id) ? (
@@ -188,9 +257,7 @@ export default function AdminConnectionsPage() {
             ))}
           </tbody>
         </table>
-        {shown.length === 0 && (
-          <p className="xui-streams-empty">No active connections.</p>
-        )}
+        {shown.length === 0 && <p className="xui-streams-empty">No active connections.</p>}
       </div>
 
       <div className="xui-streams-footer">

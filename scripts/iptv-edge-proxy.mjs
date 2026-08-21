@@ -126,7 +126,7 @@ function createLiveByteMeter(pulseCtx) {
     pending += n;
     const now = Date.now();
     if (lastPulse === 0) lastPulse = now;
-    if (now - lastPulse >= 10_000 || pending >= 512_000) {
+    if (now - lastPulse >= 3_000 || pending >= 128_000) {
       pulseConnection(pulseCtx, pending);
       pending = 0;
       lastPulse = now;
@@ -778,6 +778,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
         if (segPath) {
           const st = fs.statSync(segPath);
           if (st.isFile() && st.size > 0) {
+            if (pulseCtx) pulseConnection(pulseCtx, st.size);
             clientRes.writeHead(200, hlsSegHeaders(st.size));
             clientRes.end();
             return;

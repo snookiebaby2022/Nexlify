@@ -1101,6 +1101,326 @@ button {
   .panel-main-content table.min-w-\[1400px\] {
     min-width: 0 !important;
   }
+
+  /* Touch-friendly controls (min 44px tap targets) */
+  .panel-mobile-menu-btn,
+  .panel-mobile-sheet-close,
+  .xui-icon-action,
+  .xui-streams-icon-btn,
+  .xui-lines-icon-btn,
+  .xui-streams-btn,
+  .xui-streams-pagination button,
+  .panel-mobile-card-action {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .panel-mobile-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .panel-mobile-menu-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Compact mobile top bar */
+  .panel-top-header {
+    min-height: 3.25rem;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+
+  /* Mobile drawer slide-in */
+  .panel-mobile-drawer {
+    animation: panel-drawer-in 0.22s ease-out;
+  }
+
+  @keyframes panel-drawer-in {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  /* Bottom filter / action sheet */
+  .panel-mobile-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 280;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    border: none;
+    cursor: pointer;
+  }
+
+  .panel-mobile-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 290;
+    max-height: min(85dvh, 640px);
+    display: flex;
+    flex-direction: column;
+    border-radius: 1rem 1rem 0 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+    animation: panel-sheet-up 0.24s ease-out;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  @keyframes panel-sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  .panel-mobile-sheet-handle {
+    width: 2.5rem;
+    height: 0.25rem;
+    border-radius: 999px;
+    background: var(--border);
+    margin: 0.5rem auto 0;
+    flex-shrink: 0;
+  }
+
+  .panel-mobile-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-mobile-sheet-title {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .panel-mobile-sheet-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .panel-mobile-sheet-body {
+    overflow-y: auto;
+    padding: 1rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .panel-mobile-sheet-body .xui-streams-filter-select,
+  .panel-mobile-sheet-body .xui-lines-select,
+  .panel-mobile-sheet-body input,
+  .panel-mobile-sheet-body select {
+    width: 100%;
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .panel-mobile-sheet-body label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+
+  .panel-mobile-sheet-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+
+  .panel-mobile-sheet-actions .btn-positive,
+  .panel-mobile-sheet-actions .btn-negative,
+  .panel-mobile-sheet-actions .xui-lines-toolbar-btn,
+  .panel-mobile-sheet-actions .xui-streams-btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  /* Mobile connection / stream cards */
+  .panel-mobile-card {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .panel-mobile-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+  }
+
+  .panel-mobile-card-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+
+  .panel-mobile-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+
+  .panel-mobile-card-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0 0.85rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--bg-hover);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .panel-mobile-card-action--danger {
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #f87171;
+  }
+
+  /* Stack toolbars on mobile */
+  .xui-streams-topbar,
+  .xui-streams-page .xui-streams-topbar {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.65rem;
+  }
+
+  .xui-streams-topbar .xui-streams-btn,
+  .xui-streams-topbar .xui-streams-header-actions .xui-streams-btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .xui-clients-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+  }
+
+  .xui-clients-toolbar label,
+  .xui-clients-search-label {
+    width: 100%;
+  }
+
+  .xui-clients-search-input,
+  .xui-clients-toolbar select {
+    width: 100%;
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  /* Hide desktop filter rows — use bottom sheet instead */
+  .xui-streams-filters--desktop {
+    display: none !important;
+  }
+
+  .xui-lines-toolbar--desktop-search {
+    display: none !important;
+  }
+
+  .xui-lines-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
+  }
+
+  .xui-lines-toolbar .xui-lines-toolbar-btn,
+  .xui-lines-toolbar .xui-lines-select {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .panel-mobile-toolbar-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 44px;
+    padding: 0 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  /* Dashboard: single-column cards on phones */
+  .dashboard-v2 .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .dashboard-v2 header .flex.flex-wrap.items-start {
+    flex-direction: column;
+  }
+
+  .xui-streams-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    text-align: center;
+  }
+
+  .xui-streams-pagination {
+    justify-content: center;
+  }
+
+  .xui-streams-pagination button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Forms: full-width action bars */
+  .panel-form-mobile-tight .btn-positive,
+  .panel-form-mobile-tight .btn-negative,
+  .panel-form-mobile-tight .btn-cancel {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
+@media (min-width: 768px) {
+  .panel-mobile-toolbar-trigger {
+    display: none !important;
+  }
+
+  .xui-streams-filters--desktop {
+    display: flex !important;
+  }
+
+  .xui-lines-toolbar--desktop-search {
+    display: flex !important;
+  }
 }
 
 /* High-contrast panel inputs (search + forms) in both themes */

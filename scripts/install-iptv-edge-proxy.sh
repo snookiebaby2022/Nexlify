@@ -125,6 +125,13 @@ fi
 
 if command -v pm2 >/dev/null 2>&1; then
   pm2 delete nexlify-iptv-edge 2>/dev/null || true
+  set -a
+  # shellcheck disable=SC1091
+  [ -f "$PANEL_DIR/.env" ] && . "$PANEL_DIR/.env"
+  set +a
+  export PANEL_INTERNAL_SECRET="${PANEL_INTERNAL_SECRET:-$(env_val PANEL_API_SECRET)}"
+  export PANEL_API_SECRET="${PANEL_API_SECRET:-$PANEL_INTERNAL_SECRET}"
+  export NEXLIFY_PANEL_API_SECRET="${NEXLIFY_PANEL_API_SECRET:-$PANEL_INTERNAL_SECRET}"
   pm2 start "$PANEL_DIR/scripts/iptv-edge-proxy.mjs" \
     --name nexlify-iptv-edge \
     --cwd "$PANEL_DIR" \

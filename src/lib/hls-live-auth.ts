@@ -91,9 +91,10 @@ export async function authorizeHlsLiveRequest(
   void trackConnection({
     lineId: line.id,
     streamId: resolvedStreamId,
-    ip: ip ?? "",
+    ip,
     userAgent: ua,
     playbackPath: req.nextUrl.pathname,
+    mediaBytes: /\/seg\d+\.ts$/i.test(req.nextUrl.pathname) ? 260_000 : 48_000,
   });
 
   return {

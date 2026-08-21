@@ -112,12 +112,15 @@ export async function GET(req: NextRequest) {
       schedulePlaybackUpstreamWarm(hlsNative, UPSTREAM_HLS_UA);
     }
     if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD") {
+      const path = originalPath(req);
+      const isSeg = /\/hls\/seg\d+\.ts$/i.test(path);
       void trackConnection({
         lineId: line.id,
         streamId: cleanId,
-        ip: ip ?? "",
+        ip,
         userAgent: ua,
-        playbackPath: originalPath(req),
+        playbackPath: path,
+        mediaBytes: isSeg ? 260_000 : parsed.wantsHls ? 48_000 : 180_000,
       });
     }
     return new NextResponse(null, {
@@ -167,9 +170,10 @@ export async function GET(req: NextRequest) {
     void trackConnection({
       lineId: line.id,
       streamId: cleanId,
-      ip: ip ?? "",
+      ip,
       userAgent: ua,
       playbackPath: originalPath(req),
+      mediaBytes: 220_000,
     });
   }
 

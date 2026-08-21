@@ -73,9 +73,22 @@ export async function getLiveQualitySample(
   now = Date.now()
 ): Promise<LiveQualitySample | null> {
   if (!lineId || !streamId) return null;
-  const key = connectionQualityKey(lineId, streamId, ip ?? "");
-  const window = await cacheGet<QualityWindow>(key);
-  if (!window || window.totalBytes <= 0) return null;
+
+  const keys = new Set<string>();
+  const raw = ip?.trim() ?? "";
+  if (raw) keys.add(raw);
+  keys.add("");
+  keys.add("*");
+
+  let window: QualityWindow | null = null;
+  for (const k of keys) {
+    const hit = await cacheGet<QualityWindow>(connectionQualityKey(lineId, streamId, k));
+    if (hit && hit.totalBytes > 0) {
+      window = hit;
+      break;
+    }
+  }
+  if (!window) return null;
 
   const stallSec = Math.max(0, (now - window.lastByteAt) / 1000);
   const elapsed = Math.max(1, now - window.windowStart);
@@ -104,11 +117,10 @@ export function computeConnectionQualityWithLive(opts: {
   const staleSec = Math.max(0, (now - lastSeenMs) / 1000);
   let live = opts.live;
 
-  // Edge-spliced live often has no Next.js proxy samples yet — treat a fresh
-  // lastSeenAt as an active stream with typical SD live bitrate.
-  if (!live?.hasSamples && staleSec <= 12) {
+  // Active row in the live list but no Redis samples yet (edge auth-only path).
+  if (!live?.hasSamples && staleSec <= 24) {
     live = {
-      bytesPerSec: staleSec <= 4 ? 450_000 : 220_000,
+      bytesPerSec: staleSec <= 6 ? 520_000 : 340_000,
       lastByteAt: lastSeenMs,
       totalBytes: 1,
       stallSec: staleSec,
@@ -117,8 +129,13 @@ export function computeConnectionQualityWithLive(opts: {
   }
 
   if (live?.hasSamples) {
-    const bps = live.bytesPerSec;
+    let bps = live.bytesPerSec;
     const stall = live.stallSec;
+
+    // Playlist-only heartbeats can under-report; floor for still-active sessions.
+    if (staleSec <= 20) {
+      bps = Math.max(bps, 280_000);
+    }
 
     let score: number;
     if (stall >= 12) {

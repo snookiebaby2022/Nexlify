@@ -10,8 +10,8 @@ export type ConnectionQuality = {
 
 /** Panel live proxies refresh lastSeenAt about every 10s while bytes flow. */
 const HEARTBEAT_INTERVAL_SEC = 10;
-/** Connections list uses LIVE_STALE_MS (45s) — quality drops as we approach expiry. */
-const LIVE_STALE_SEC = 45;
+/** Keep in sync with LIVE_STALE_MS in connections.ts */
+const LIVE_STALE_SEC = 90;
 
 export function computeConnectionQuality(opts: {
   startedAt: Date | string;

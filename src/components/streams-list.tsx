@@ -19,6 +19,7 @@ import { formatUptimeXui, type StreamLiveStat } from "@/lib/stream-live-stats";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
+import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
 
 type Stream = {
   id: string;
@@ -117,6 +118,7 @@ export function StreamsList({
   const [videoFilter, setVideoFilter] = useState("");
   const [qualityFilter, setQualityFilter] = useState("");
   const [clientsModal, setClientsModal] = useState<{ id: string; name: string } | null>(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [tick, setTick] = useState(0);
   const fetchTimeRef = useRef(0);
   const urlInitRef = useRef(false);
@@ -261,6 +263,86 @@ export function StreamsList({
 
       {type === "LIVE" && !statusFilter && <StreamVerifyPanel />}
 
+      <button
+        type="button"
+        className="panel-mobile-toolbar-trigger md:hidden"
+        onClick={() => setMobileFiltersOpen(true)}
+      >
+        <Filter size={16} />
+        Filters & search
+      </button>
+
+      <MobileFilterSheet
+        open={mobileFiltersOpen}
+        onClose={() => setMobileFiltersOpen(false)}
+        title="Stream filters"
+      >
+        <label>
+          Search
+          <input
+            type="search"
+            placeholder="Search streams…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+        </label>
+        <label className="mt-3">
+          Server
+          <select
+            value={serverId}
+            onChange={(e) => {
+              setServerId(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">All Servers</option>
+            {servers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="mt-3">
+          Category
+          <CategorySelect
+            className="xui-streams-filter-select w-full"
+            value={categoryId}
+            onChange={(v) => {
+              setCategoryId(v);
+              setPage(1);
+            }}
+            categories={categories}
+            typeFilter={type ? categoryTypeForStream(type) : null}
+            emptyLabel="All Categories"
+          />
+        </label>
+        <label className="mt-3">
+          Status
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as typeof statusFilter);
+              setPage(1);
+            }}
+          >
+            <option value="">No Filter</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+            <option value="active">Active</option>
+            <option value="inactive">Disabled</option>
+          </select>
+        </label>
+        <div className="panel-mobile-sheet-actions">
+          <button type="button" className="xui-streams-btn xui-streams-btn--add" onClick={() => setMobileFiltersOpen(false)}>
+            Apply
+          </button>
+        </div>
+      </MobileFilterSheet>
+
       {statusFilter === "offline" && (
         <p className="text-sm rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
           Live streams whose last source probe failed. Direct and on-demand channels without a running
@@ -268,7 +350,7 @@ export function StreamsList({
         </p>
       )}
 
-      <div className="xui-streams-filters">
+      <div className="xui-streams-filters xui-streams-filters--desktop">
         <div className="xui-streams-search-wrap">
           <Search size={14} className="xui-streams-search-icon" />
           <input
@@ -358,7 +440,83 @@ export function StreamsList({
         </select>
       </div>
 
-      <div className="xui-streams-table-wrap">
+      <div className="md:hidden divide-y" style={{ borderColor: "var(--border)" }}>
+        {filtered.map((s, i) => {
+          const st = s.liveStats;
+          const { name: serverName } = serverLabel(s);
+          const isOnline = st?.status === "online" && (st.uptimeSeconds ?? 0) > 0;
+          const viewers = st?.viewers ?? 0;
+          return (
+            <article key={s.id} className="panel-mobile-card p-4 space-y-2">
+              <div className="flex gap-3">
+                {s.streamIcon ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.streamIcon} alt="" className="xui-stream-icon shrink-0" />
+                ) : (
+                  <span className="xui-stream-icon xui-stream-icon--empty shrink-0" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <Link href={`/admin/servers/streams?edit=${s.id}`} className="xui-stream-name font-semibold block truncate">
+                    {s.name}
+                  </Link>
+                  {s.category?.name ? (
+                    <p className="text-xs truncate" style={{ color: "var(--muted)" }}>
+                      {s.category.name}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <p className="panel-mobile-card-label">Server</p>
+                  <p>{serverName}</p>
+                </div>
+                <div>
+                  <p className="panel-mobile-card-label">Clients</p>
+                  <button
+                    type="button"
+                    className={`xui-clients-badge ${viewers > 0 ? "xui-clients-badge--active" : ""}`}
+                    onClick={() => setClientsModal({ id: s.id, name: s.name })}
+                  >
+                    {viewers}
+                  </button>
+                </div>
+                <div className="col-span-2">
+                  <p className="panel-mobile-card-label">Uptime</p>
+                  {isOnline || (st?.uptimeSeconds ?? 0) > 0 ? (
+                    <span className="xui-uptime-badge xui-uptime-badge--ok">
+                      {formatUptimeXui(
+                        (st?.uptimeSeconds ?? 0) +
+                          (st?.uptimeSeconds != null ? Math.floor((Date.now() - fetchTimeRef.current) / 1000) : 0)
+                      )}
+                    </span>
+                  ) : (
+                    <span className="xui-uptime-badge xui-uptime-badge--idle">—</span>
+                  )}
+                </div>
+              </div>
+              <div className="panel-mobile-card-actions">
+                <StreamRowActionsMenu
+                  streamId={s.id}
+                  streamType={type}
+                  isActive={s.isActive}
+                  onRefresh={load}
+                  onDelete={() => remove(s.id)}
+                />
+              </div>
+            </article>
+          );
+        })}
+        {filtered.length === 0 && (
+          <p className="xui-streams-empty p-4">
+            {statusFilter === "offline"
+              ? "No live streams with a failed source probe."
+              : "No streams match your filters."}
+          </p>
+        )}
+      </div>
+
+      <div className="xui-streams-table-wrap hidden md:block">
         <table className="xui-streams-table">
           <thead>
             <tr>

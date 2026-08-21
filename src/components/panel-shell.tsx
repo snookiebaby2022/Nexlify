@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { PanelTopNav } from "@/components/panel-top-nav";
 import { AdminPanelSidebar, PanelSidebar, ResellerPanelSidebar } from "@/components/panel-sidebar";
 import { ResellerNotificationsWidget } from "@/components/reseller-notifications-widget";
@@ -31,6 +31,14 @@ export function PanelShell({
   children: React.ReactNode;
 }) {
   const [mobileNav, setMobileNav] = useState(false);
+  useEffect(() => {
+    if (!mobileNav) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileNav]);
   const resellerSidebar =
     role === "RESELLER" ? withSidebarItemIcons(getResellerSidebarNav()) : null;
   const adminEntries = role === "ADMIN" ? withSidebarItemIcons(getAdminSidebarNav()) : null;
@@ -58,7 +66,9 @@ export function PanelShell({
               aria-label="Close menu"
               onClick={() => setMobileNav(false)}
             />
-            <div className="fixed inset-y-0 left-0 z-[250] flex w-[min(300px,92vw)] flex-col overflow-hidden bg-[#0d111c] shadow-2xl md:hidden">
+            <div
+              className={`panel-mobile-drawer fixed inset-y-0 left-0 z-[250] flex w-[min(300px,92vw)] flex-col overflow-hidden bg-[#0d111c] shadow-2xl md:hidden ${mobileNav ? "panel-mobile-drawer--open" : ""}`}
+            >
               {role === "ADMIN" && adminEntries ? (
                 <Suspense fallback={<aside className="panel-sidebar !w-full h-full min-h-[100dvh]" aria-hidden />}>
                   <PanelSidebar
@@ -102,6 +112,7 @@ export function PanelShell({
             showMenuBar={false}
             username={username}
             onMenuToggle={() => setMobileNav((o) => !o)}
+            menuOpen={mobileNav}
           />
           <main className="panel-main-content flex-1 p-3 sm:p-4 md:p-6 pb-24 overflow-x-hidden md:overflow-x-auto overflow-y-auto min-w-0 flex flex-col">
             {isDemo && <PanelDemoBanner />}

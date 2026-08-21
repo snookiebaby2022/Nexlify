@@ -75,6 +75,7 @@ export function PanelTopNav({
   showMenuBar = true,
   username,
   onMenuToggle,
+  menuOpen = false,
 }: {
   brand: string;
   brandHref?: string;
@@ -87,6 +88,8 @@ export function PanelTopNav({
   username?: string;
   /** Opens left navigation on small screens when menu bar is hidden. */
   onMenuToggle?: () => void;
+  /** Whether the mobile nav drawer is open (for aria-expanded). */
+  menuOpen?: boolean;
 }) {
   const homeHref = brandHref ?? (role === "ADMIN" ? "/admin/dashboard" : "/reseller/dashboard");
   const pathname = usePathname();
@@ -216,9 +219,10 @@ export function PanelTopNav({
         {onMenuToggle && (
           <button
             type="button"
-            className="md:hidden inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg cursor-pointer hover:bg-white/10 transition-colors"
+            className="panel-mobile-menu-btn md:hidden"
             onClick={onMenuToggle}
-            aria-label="Open menu"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={menuOpen}
           >
             <Menu size={22} />
           </button>

@@ -8,22 +8,38 @@ import {
 } from "./connection-playback-output";
 
 export const STALE_MS = 5 * 60 * 1000; // 5 minutes — DB cleanup for orphaned rows
-export const LIVE_STALE_MS = 25 * 1000; // 25s — live connections display (HLS segments refresh ~every 2–6s)
+/** Active playback window — used by Live Connections + Manage Lines conn column (keep in sync). */
+export const LIVE_STALE_MS = 90 * 1000; // 90s — HLS playlist-only clients may gap ~30–60s between requests
 /** Max-connection checks use a shorter window so closed/zombie sessions free slots quickly. */
 export const PLAYBACK_STALE_MS = 60 * 1000;
 const CONNECTIONS_CACHE_TTL = 5; // 5 seconds — short TTL for dashboard responsiveness
 /** After Kick, block reconnect / track refresh for this long (covers multi-worker via Redis). */
 export const KICK_DENY_TTL_SEC = 120;
 
+/** Normalize client IP for DB + Redis keys (empty/loopback → null in Postgres). */
+export function normalizeConnectionIp(ip?: string | null): string | null {
+  const raw = ip?.trim() ?? "";
+  if (!raw || raw === "127.0.0.1" || raw === "::1") return null;
+  return raw;
+}
+
+/** Match rows stored with null or "" when IP was missing on either side. */
+export function connectionIpPrismaFilter(ip?: string | null) {
+  const normalized = normalizeConnectionIp(ip);
+  if (normalized) return { ip: normalized };
+  return { OR: [{ ip: null }, { ip: "" }] };
+}
+
 type LiveProxyHandle = { abort: () => void };
 const liveProxies = new Map<string, Set<LiveProxyHandle>>();
 
 export function liveSessionKey(lineId: string, ip?: string | null, streamId?: string | null) {
-  return `${lineId}|${ip ?? ""}|${streamId ?? ""}`;
+  return `${lineId}|${normalizeConnectionIp(ip) ?? ""}|${streamId ?? ""}`;
 }
 
 function kickDenyCacheKey(lineId: string, ip?: string | null) {
-  return `kick:deny:${lineId}:${ip ?? "*"}`;
+  const normalized = normalizeConnectionIp(ip);
+  return `kick:deny:${lineId}:${normalized ?? "*"}`;
 }
 
 /** Register an in-process live proxy so Kick can abort the HTTP body on this worker. */
@@ -47,9 +63,10 @@ export function registerLiveProxy(
 }
 
 function abortLocalProxies(lineId: string, ip?: string | null, streamId?: string | null) {
+  const clientIp = normalizeConnectionIp(ip);
   const matches = (key: string) => {
-    if (streamId) return key === liveSessionKey(lineId, ip, streamId);
-    if (ip != null && ip !== "") return key.startsWith(`${lineId}|${ip}|`);
+    if (streamId) return key === liveSessionKey(lineId, clientIp, streamId);
+    if (clientIp) return key.startsWith(`${lineId}|${clientIp}|`);
     return key.startsWith(`${lineId}|`);
   };
   for (const [key, set] of [...liveProxies.entries()]) {
@@ -68,15 +85,17 @@ function abortLocalProxies(lineId: string, ip?: string | null, streamId?: string
 /** True if this line/IP was kicked recently and must not keep streaming. */
 export async function isSessionKicked(lineId: string, ip?: string | null): Promise<boolean> {
   if (!lineId) return false;
-  const specific = await cacheGet<boolean>(kickDenyCacheKey(lineId, ip));
+  const clientIp = normalizeConnectionIp(ip);
+  const specific = await cacheGet<boolean>(kickDenyCacheKey(lineId, clientIp));
   if (specific) return true;
   const allIp = await cacheGet<boolean>(kickDenyCacheKey(lineId, "*"));
   return Boolean(allIp);
 }
 
 async function markSessionKicked(lineId: string, ip?: string | null) {
-  await cacheSet(kickDenyCacheKey(lineId, ip ?? null), true, KICK_DENY_TTL_SEC);
-  abortLocalProxies(lineId, ip ?? null, null);
+  const clientIp = normalizeConnectionIp(ip);
+  await cacheSet(kickDenyCacheKey(lineId, clientIp), true, KICK_DENY_TTL_SEC);
+  abortLocalProxies(lineId, clientIp, null);
 }
 
 export async function countActiveConnectionsForLine(lineId: string) {
@@ -128,28 +147,68 @@ export function connectionCapacityAllows(
   return sameIpDistinctSessions <= maxConnections;
 }
 
+/** Distinct active streams for max-connection enforcement (ignores anonymous/loopback rows when client has IP). */
+async function countCapacitySessions(lineId: string, clientIp?: string | null) {
+  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
+  const normalized = normalizeConnectionIp(clientIp);
+  const where: {
+    lineId: string;
+    lastSeenAt: { gte: Date };
+    NOT?: { OR: Array<{ ip: null } | { ip: string }> };
+  } = {
+    lineId,
+    lastSeenAt: { gte: staleBefore },
+  };
+  if (normalized) {
+    where.NOT = { OR: [{ ip: null }, { ip: "" }, { ip: "127.0.0.1" }, { ip: "::1" }] };
+  }
+  const result = await prisma.liveConnection.groupBy({
+    by: ["streamId"],
+    where,
+  });
+  return result.length;
+}
+
 export async function lineHasConnectionCapacity(
   lineId: string,
   maxConnections: number,
   opts?: { streamId?: string; clientIp?: string }
 ) {
   if (maxConnections <= 0) return true;
-  const active = await countLineSessions(lineId);
-  if (active < maxConnections) return true;
-  let sameIpDistinct = 0;
-  if (opts?.clientIp) {
-    const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
-    const sameIpSessions = await prisma.liveConnection.groupBy({
+  const clientIp = normalizeConnectionIp(opts?.clientIp);
+  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
+
+  // Same stream refresh / HLS segment from an existing viewer — always allow.
+  if (opts?.streamId && clientIp) {
+    const sameStream = await prisma.liveConnection.findFirst({
+      where: {
+        lineId,
+        streamId: opts.streamId,
+        ...connectionIpPrismaFilter(clientIp),
+        lastSeenAt: { gte: staleBefore },
+      },
+      select: { id: true },
+    });
+    if (sameStream) return true;
+  }
+
+  // Existing viewer (channel zap / reconnect) — allow while within their slot count.
+  if (clientIp) {
+    const clientSessions = await prisma.liveConnection.groupBy({
       by: ["streamId"],
       where: {
         lineId,
-        ip: opts.clientIp,
+        ...connectionIpPrismaFilter(clientIp),
         lastSeenAt: { gte: staleBefore },
       },
     });
-    sameIpDistinct = sameIpSessions.length;
+    if (clientSessions.length > 0) {
+      return clientSessions.length <= maxConnections;
+    }
   }
-  return connectionCapacityAllows(active, maxConnections, sameIpDistinct, opts?.clientIp);
+
+  const active = await countCapacitySessions(lineId, clientIp);
+  return active < maxConnections;
 }
 
 export async function trackConnection(opts: {
@@ -159,9 +218,12 @@ export async function trackConnection(opts: {
   userAgent?: string;
   /** Xtream playback path e.g. /live/user/pass/123.ts — used for Output column. */
   playbackPath?: string;
+  /** Bytes observed this heartbeat (HLS segment size, TS chunk, etc.) for quality scoring. */
+  mediaBytes?: number;
 }): Promise<string | null> {
+  const clientIp = normalizeConnectionIp(opts.ip);
   // Hard kick: do not revive a session that was just kicked
-  if (await isSessionKicked(opts.lineId, opts.ip)) {
+  if (await isSessionKicked(opts.lineId, clientIp ?? opts.ip)) {
     return null;
   }
 
@@ -183,16 +245,32 @@ export async function trackConnection(opts: {
 
   const staleBefore = new Date(Date.now() - STALE_MS);
 
-  // When a user switches channels, remove their previous active connection
-  // This prevents duplicate connections from showing in the dashboard
-  if (opts.ip) {
-    // Delete ALL connections from this IP (not just stale ones)
-    // This handles channel switching - old connection is replaced with new one
+  // Drop loopback/anonymous duplicate rows for this stream when a real client IP connects.
+  if (clientIp && streamId) {
     await prisma.liveConnection.deleteMany({
       where: {
         lineId: opts.lineId,
-        ip: opts.ip,
-        // Only delete if it's a different stream (channel switching)
+        streamId,
+        OR: [{ ip: null }, { ip: "" }, { ip: "127.0.0.1" }, { ip: "::1" }],
+      },
+    });
+  }
+
+  // When a user switches channels, remove their previous active connection
+  // This prevents duplicate connections from showing in the dashboard
+  if (clientIp) {
+    await prisma.liveConnection.deleteMany({
+      where: {
+        lineId: opts.lineId,
+        ip: clientIp,
+        streamId: streamId ? { not: streamId } : undefined,
+      },
+    });
+  } else {
+    await prisma.liveConnection.deleteMany({
+      where: {
+        lineId: opts.lineId,
+        OR: [{ ip: null }, { ip: "" }],
         streamId: streamId ? { not: streamId } : undefined,
       },
     });
@@ -202,25 +280,32 @@ export async function trackConnection(opts: {
     where: {
       lineId: opts.lineId,
       streamId: streamId ?? null,
-      ip: opts.ip ?? null,
+      ...connectionIpPrismaFilter(clientIp),
       lastSeenAt: { gte: staleBefore },
     },
   });
 
+  const touchQuality = () => {
+    if (!streamId) return;
+    const bytes = Math.max(0, opts.mediaBytes ?? 120_000);
+    void recordConnectionMediaBytes(opts.lineId, streamId, clientIp ?? "", bytes);
+  };
+
   if (existing) {
     await prisma.liveConnection.update({
       where: { id: existing.id },
-      data: { lastSeenAt: new Date() },
+      data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },
     });
     void cacheDel("conn:*").catch(() => {});
+    touchQuality();
     if (streamId) {
       const output = resolvePlaybackOutputLabel({
         requestPath: opts.playbackPath,
         userAgent: opts.userAgent,
       });
-      void setConnectionPlaybackOutput(opts.lineId, streamId, opts.ip, output);
+      void setConnectionPlaybackOutput(opts.lineId, streamId, clientIp, output);
       const { recordLineWatch } = await import("@/lib/line-watch");
-      void recordLineWatch(opts.lineId, streamId, opts.ip);
+      void recordLineWatch(opts.lineId, streamId, clientIp ?? undefined);
     }
     const { recordConnectionGeography } = await import("@/lib/connection-geography");
     void recordConnectionGeography({
@@ -236,17 +321,18 @@ export async function trackConnection(opts: {
       data: {
         lineId: opts.lineId,
         streamId,
-        ip: opts.ip ?? null,
+        ip: clientIp,
         userAgent: opts.userAgent,
       },
     });
     void cacheDel("conn:*").catch(() => {});
+    touchQuality();
     if (streamId) {
       const output = resolvePlaybackOutputLabel({
         requestPath: opts.playbackPath,
         userAgent: opts.userAgent,
       });
-      void setConnectionPlaybackOutput(opts.lineId, streamId, opts.ip, output);
+      void setConnectionPlaybackOutput(opts.lineId, streamId, clientIp, output);
       const { recordLineWatch } = await import("@/lib/line-watch");
       void recordLineWatch(opts.lineId, streamId);
     }
@@ -267,7 +353,7 @@ export async function trackConnection(opts: {
 /** Remove connection when user stops watching */
 export async function removeConnection(lineId: string, streamId: string, ip: string) {
   await prisma.liveConnection.deleteMany({
-    where: { lineId, streamId, ip },
+    where: { lineId, streamId, ...connectionIpPrismaFilter(ip) },
   });
   void clearConnectionQuality(lineId, streamId, ip);
   void clearConnectionPlaybackOutput(lineId, streamId, ip);
@@ -392,8 +478,14 @@ export function attachKickAwareProxyBody(opts: {
     finish();
   };
 
+  const abortIfKicked = () => {
+    void isSessionKicked(lineId, ip).then((kicked) => {
+      if (kicked) abort();
+    });
+  };
+
   const IDLE_MS = 12_000;
-  const HEARTBEAT_MS = 10_000;
+  const HEARTBEAT_MS = 5_000;
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -423,14 +515,18 @@ export function attachKickAwareProxyBody(opts: {
             if (!tracked) {
               tracked = true;
               lastTrackAt = Date.now();
-              void trackConnection({ lineId, streamId, ip, userAgent }).then((id) => {
-                if (!id) abort();
-              });
+              void trackConnection({ lineId, streamId, ip, userAgent });
+              abortIfKicked();
             } else if (Date.now() - lastTrackAt > HEARTBEAT_MS) {
               lastTrackAt = Date.now();
-              void trackConnection({ lineId, streamId, ip, userAgent }).then((id) => {
-                if (!id) abort();
+              void trackConnection({
+                lineId,
+                streamId,
+                ip,
+                userAgent,
+                mediaBytes: byteLen > 0 ? byteLen : 96_000,
               });
+              abortIfKicked();
             }
             if (Date.now() - lastByteAt > IDLE_MS) {
               abort();

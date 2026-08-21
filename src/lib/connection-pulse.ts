@@ -1,13 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { cacheDel } from "@/lib/cache";
 import { recordConnectionMediaBytes } from "@/lib/connection-quality-live";
-import { trackConnection } from "@/lib/connections";
-
-function ipMatchWhere(ip?: string | null) {
-  const raw = ip?.trim() ?? "";
-  if (raw) return { ip: raw };
-  return { OR: [{ ip: null }, { ip: "" }] };
-}
+import {
+  connectionIpPrismaFilter,
+  normalizeConnectionIp,
+  trackConnection,
+} from "@/lib/connections";
 
 /** Edge / proxy heartbeat: refresh lastSeenAt and optional throughput samples. */
 export async function pulseLiveConnection(opts: {
@@ -22,14 +20,14 @@ export async function pulseLiveConnection(opts: {
   const streamId = opts.streamId?.trim();
   if (!lineId || !streamId) return;
 
+  const clientIp = normalizeConnectionIp(opts.ip);
   const bytes = Math.max(0, Math.floor(opts.bytes ?? 0));
+  const qualityBytes = bytes > 0 ? bytes : 96_000;
 
-  if (bytes > 0) {
-    await recordConnectionMediaBytes(lineId, streamId, opts.ip ?? "", bytes);
-  }
+  await recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", qualityBytes);
 
   const result = await prisma.liveConnection.updateMany({
-    where: { lineId, streamId, ...ipMatchWhere(opts.ip) },
+    where: { lineId, streamId, ...connectionIpPrismaFilter(clientIp) },
     data: { lastSeenAt: new Date() },
   });
 
@@ -37,9 +35,10 @@ export async function pulseLiveConnection(opts: {
     await trackConnection({
       lineId,
       streamId,
-      ip: opts.ip ?? "",
+      ip: clientIp ?? undefined,
       userAgent: opts.userAgent,
       playbackPath: opts.playbackPath,
+      mediaBytes: qualityBytes,
     });
   } else {
     void cacheDel("conn:*").catch(() => {});
