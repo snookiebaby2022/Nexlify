@@ -1,7 +1,66 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.24",
+  "latestVersion": "2.0.28",
   "releases": [
+    {
+      "version": "2.0.28",
+      "date": "2026-08-21",
+      "channel": "stable",
+      "summary": "Fix IPTV playback blocked on edge (HLS/m3u8) when connection slots were double-counted.",
+      "changelog": [
+        "Count max connections by distinct streams, not IP×stream pairs",
+        "Treat loopback (127.0.0.1) IPs as anonymous so internal probes do not consume viewer slots",
+        "Edge HLS (.m3u8) auth no longer returns 403 while panel direct playback works"
+      ],
+      "fixes": [
+        "Streams not playing via port 80 / ExoPlayer HLS while MPEG-TS appeared intermittent",
+        "Duplicate live connection rows from localhost probes blocking max-connection lines"
+      ]
+    },
+    {
+      "version": "2.0.27",
+      "date": "2026-08-21",
+      "channel": "stable",
+      "summary": "Fix streams failing to play after connection-tracking changes.",
+      "changelog": [
+        "Max-connection checks match stored IPs correctly (null vs empty string)",
+        "Same-stream HLS/TS refresh no longer blocked when line is at capacity",
+        "Live TS proxy no longer cuts off when a heartbeat track fails (kick-only abort)"
+      ],
+      "fixes": [
+        "Streams not playing or cutting out after v2.0.26 connection tracking update"
+      ]
+    },
+    {
+      "version": "2.0.26",
+      "date": "2026-08-21",
+      "channel": "stable",
+      "summary": "Align Live Connections with Manage Lines conn column using the same active window.",
+      "changelog": [
+        "Live Connections and Manage Lines both use the same 90s active-playback window",
+        "Proxy heartbeats every 5s; edge TS pulse every 3s for fresher lastSeenAt",
+        "Fixes Live Connections empty while Manage Lines still shows 1/1"
+      ],
+      "fixes": [
+        "Reseller Live Connections page empty while Manage Lines shows an active viewer"
+      ]
+    },
+    {
+      "version": "2.0.25",
+      "date": "2026-08-21",
+      "channel": "stable",
+      "summary": "Fix live connections disappearing during playback and incorrect low quality scores.",
+      "changelog": [
+        "Normalize client IP matching (null vs empty) so heartbeats update the same DB row",
+        "Record media throughput on every track/pulse for accurate quality scoring",
+        "HLS playlist-only heartbeats no longer report artificially low quality",
+        "Edge TS proxy pulses every 5s; HLS HEAD segment requests refresh sessions"
+      ],
+      "fixes": [
+        "Live Connections vanishing while a stream is still playing",
+        "Connection quality always showing poor despite healthy playback"
+      ]
+    },
     {
       "version": "2.0.24",
       "date": "2026-08-21",
