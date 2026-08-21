@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
-import { listLiveConnections } from "@/lib/connections";
+import { countActiveConnections } from "@/lib/connections";
 import { cacheGetOrSet } from "@/lib/cache";
 import { getCacheTtls } from "@/lib/cache-ttl";
 import { prisma } from "@/lib/prisma";
@@ -8,14 +8,59 @@ import { PanelRole, StreamType } from "@prisma/client";
 import { formatAuditAction } from "@/lib/audit-log";
 import { activityFixHref, cronFixHref } from "@/lib/activity-fix-links";
 import { getDashboardServerMetrics, getDashboardSummary, getDashboardKpiExtended } from "@/lib/dashboard-server-metrics";
-import { pluginEntitlementResponse } from "@/lib/plugin-entitlement";
 import { ensureMainServerOnline } from "@/lib/ensure-main-server-online";
+
+async function loadHeaderStats() {
+  const now = new Date();
+  try {
+    const [lines, activeLines, liveStreams, onlineConnections, totalIn, totalOut, snapshots] =
+      await Promise.all([
+        prisma.line.count(),
+        prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
+        prisma.stream.count({ where: { type: StreamType.LIVE, isActive: true } }),
+        countActiveConnections(),
+        prisma.panelSetting.findUnique({ where: { key: "network_bytes_in_total" } }),
+        prisma.panelSetting.findUnique({ where: { key: "network_bytes_out_total" } }),
+        prisma.bandwidthSnapshot.findMany({ take: 2, orderBy: { createdAt: "desc" } }),
+      ]);
+
+    let networkInPerMin = 0;
+    let networkOutPerMin = 0;
+    if (snapshots.length >= 1) {
+      networkInPerMin = Number(snapshots[0].bytesIn) / 60;
+      networkOutPerMin = Number(snapshots[0].bytesOut) / 60;
+    }
+
+    return {
+      lines,
+      activeLines,
+      liveStreams,
+      onlineConnections,
+      networkInPerMin,
+      networkOutPerMin,
+      networkBytesInTotal: totalIn?.value ?? "0",
+      networkBytesOutTotal: totalOut?.value ?? "0",
+    };
+  } catch (e) {
+    console.error("[stats] loadHeaderStats error:", e);
+    return {
+      lines: 0,
+      activeLines: 0,
+      liveStreams: 0,
+      onlineConnections: 0,
+      networkInPerMin: 0,
+      networkOutPerMin: 0,
+      networkBytesInTotal: "0",
+      networkBytesOutTotal: "0",
+    };
+  }
+}
 
 async function loadStats() {
   await ensureMainServerOnline();
   const now = new Date();
 
-  let connections: Awaited<ReturnType<typeof listLiveConnections>> = [];
+  let onlineConnections = 0;
   let snapshots: { bytesIn: bigint; bytesOut: bigint }[] = [];
   let totalIn: { value: string } | null = null;
   let totalOut: { value: string } | null = null;
@@ -29,7 +74,7 @@ async function loadStats() {
       prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
       prisma.stream.count({ where: { type: StreamType.LIVE, isActive: true } }),
       prisma.magDevice.count({ where: { isActive: true } }),
-      listLiveConnections(),
+      countActiveConnections(),
       prisma.activityLog.findMany({ take: 8, orderBy: { createdAt: "desc" }, where: { createdAt: { gte: new Date(Date.now() - 3 * 60 * 60 * 1000) } } }),
       prisma.panelSetting.findUnique({ where: { key: "cron_last_run" } }),
       prisma.bandwidthSnapshot.findMany({ take: 2, orderBy: { createdAt: "desc" } }),
@@ -40,7 +85,7 @@ async function loadStats() {
     activeLines = results[1];
     liveStreams = results[2];
     magDevices = results[3];
-    connections = results[4];
+    onlineConnections = results[4] as number;
     logs = results[5];
     cronLast = results[6];
     snapshots = results[7];
@@ -50,7 +95,6 @@ async function loadStats() {
     console.error("[stats] loadStats primary query error:", e);
   }
 
-  const onlineConnections = connections.length;
 
   let networkInPerMin = 0;
   let networkOutPerMin = 0;
@@ -128,7 +172,12 @@ export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const light = req.nextUrl.searchParams.get("light") === "1";
   const ttl = await getCacheTtls();
+  if (light) {
+    const stats = await cacheGetOrSet("stats:header", ttl.stats, loadHeaderStats);
+    return NextResponse.json(stats);
+  }
   const stats = await cacheGetOrSet("stats:dashboard", ttl.stats, loadStats);
   return NextResponse.json(stats);
 }

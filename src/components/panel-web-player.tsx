@@ -49,7 +49,8 @@ function PanelWebPlayerInner() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [cats, setCats] = useState<Category[]>([]);
-  const [streams, setStreams] = useState<LiveStream[]>([]);
+  const [streamsByCat, setStreamsByCat] = useState<Record<string, LiveStream[]>>({});
+  const [streamsLoading, setStreamsLoading] = useState(false);
   const [activeCat, setActiveCat] = useState("");
   const [search, setSearch] = useState("");
   const [playingUrl, setPlayingUrl] = useState("");
@@ -109,14 +110,37 @@ function PanelWebPlayerInner() {
 
   const isFav = useCallback((id: string) => favorites.includes(id), [favorites]);
 
+  const loadCategoryStreams = useCallback(
+    async (catId: string, u: string, p: string) => {
+      const key = catId || "__all__";
+      setStreamsLoading(true);
+      try {
+        const q = `username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`;
+        const catParam = catId ? `&category_id=${encodeURIComponent(catId)}` : "";
+        const liveRes = await fetch(
+          `${apiBase}/player_api.php?${q}&action=get_live_streams${catParam}`,
+          { cache: "no-store" }
+        );
+        const liveData = await liveRes.json();
+        const streamsArr = (Array.isArray(liveData) ? liveData : []).map((s: LiveStream, i: number) => ({
+          ...s,
+          num: i + 1,
+        }));
+        setStreamsByCat((prev) => ({ ...prev, [key]: streamsArr }));
+      } finally {
+        setStreamsLoading(false);
+      }
+    },
+    [apiBase]
+  );
+
   const loadPlaylist = useCallback(async (u: string, p: string) => {
     setLoading(true);
     setError("");
     try {
       const q = `username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`;
-      const [catRes, liveRes, infoRes] = await Promise.all([
+      const [catRes, infoRes] = await Promise.all([
         fetch(`${apiBase}/player_api.php?${q}&action=get_live_categories`, { cache: "no-store" }),
-        fetch(`${apiBase}/player_api.php?${q}&action=get_live_streams`, { cache: "no-store" }),
         fetch(`${apiBase}/player_api.php?${q}`, { cache: "no-store" }),
       ]);
       const info = await infoRes.json();
@@ -125,23 +149,23 @@ function PanelWebPlayerInner() {
       }
       setServerInfo(info?.server_info ?? null);
       const catData = await catRes.json();
-      const liveData = await liveRes.json();
       const catsArr = Array.isArray(catData) ? catData : [];
-      const streamsArr = (Array.isArray(liveData) ? liveData : []).map((s: LiveStream, i: number) => ({
-        ...s,
-        num: i + 1,
-      }));
       setCats(catsArr);
-      setStreams(streamsArr);
+      setStreamsByCat({});
       setActiveCat("");
       setLoggedIn(true);
+      if (catsArr.length > 0) {
+        const firstId = String(catsArr[0].category_id);
+        setActiveCat(firstId);
+        await loadCategoryStreams(firstId, u, p);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load playlist");
       setLoggedIn(false);
     } finally {
       setLoading(false);
     }
-  }, [apiBase]);
+  }, [apiBase, loadCategoryStreams]);
 
   useEffect(() => {
     const u = params.get("username");
@@ -152,6 +176,18 @@ function PanelWebPlayerInner() {
       void loadPlaylist(u, p);
     }
   }, [params, loadPlaylist]);
+
+  useEffect(() => {
+    if (!loggedIn || tab !== "all" || !username || !password) return;
+    const key = activeCat || "__all__";
+    if (streamsByCat[key]?.length) return;
+    void loadCategoryStreams(activeCat, username, password);
+  }, [loggedIn, tab, activeCat, username, password, streamsByCat, loadCategoryStreams]);
+
+  const streams = useMemo(
+    () => streamsByCat[activeCat || "__all__"] ?? [],
+    [streamsByCat, activeCat]
+  );
 
   const displayOpts = useMemo(
     () => ({
@@ -512,6 +548,9 @@ function PanelWebPlayerInner() {
             onClick={() => {
               setTab("all");
               setActiveCat("");
+              if (username && password) {
+                void loadCategoryStreams("", username, password);
+              }
             }}
             className={`w-full text-left px-2 py-1.5 rounded text-sm flex items-center gap-2 transition ${
               tab === "all" && !activeCat ? "bg-[#00c0ef]/20 text-[#00c0ef]" : "text-neutral-400 hover:text-white"
@@ -546,6 +585,9 @@ function PanelWebPlayerInner() {
                 onClick={() => {
                   setTab("all");
                   setActiveCat(String(c.category_id));
+                  if (username && password) {
+                    void loadCategoryStreams(String(c.category_id), username, password);
+                  }
                 }}
                 className={`w-full text-left px-2 py-1.5 rounded text-sm truncate transition ${
                   String(activeCat) === String(c.category_id)
@@ -593,7 +635,9 @@ function PanelWebPlayerInner() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <span className="text-xs text-neutral-500 shrink-0">{displayStreams.length} channels</span>
+          <span className="text-xs text-neutral-500 shrink-0">
+            {streamsLoading ? "Loading…" : `${displayStreams.length} channels`}
+          </span>
           <button
             type="button"
             onClick={toggleFullscreen}

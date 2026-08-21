@@ -6,7 +6,7 @@ import { ensurePanelCategory } from "@/lib/ensure-panel-category";
 import { STREAM_HTTP_PORT, STREAM_HTTPS_PORT, PANEL_HTTP_PORT } from "@/lib/server-ports";
 import { PanelRole } from "@prisma/client";
 import { assertCanCreateMainServer } from "@/lib/plan-limits";
-import { ensureMainServerOnline, sortServersMainFirst } from "@/lib/ensure-main-server-online";
+import { sortServersMainFirst } from "@/lib/ensure-main-server-online";
 import {
   isLocalPanelServer,
   serverPortProfile,
@@ -18,12 +18,10 @@ export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  await ensureMainServerOnline();
-
   const servers = await prisma.streamServer.findMany({
     include: {
       proxy: true,
-      _count: { select: { streams: true, lbSessions: true, healthChecks: true } },
+      _count: { select: { streams: true, lbSessions: true } },
     },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });

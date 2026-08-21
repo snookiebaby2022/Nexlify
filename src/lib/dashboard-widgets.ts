@@ -667,29 +667,35 @@ async function creditStats(userId: string) {
 }
 
 export async function getMostWatchedByCountry(ownerId?: string): Promise<CountryWatch[]> {
-  const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000); // Match connection tracking 24h window
-
-  // Use ConnectionGeography table instead of O(N) HTTP calls
-  const geoPoints = await prisma.connectionGeography.findMany({
+  const watches = await prisma.lineChannelWatch.findMany({
     where: {
-      lastSeenAt: { gte: staleBefore },
+      watchCount: { gt: 0 },
       ...(ownerId ? { line: { ownerId } } : {}),
     },
     include: {
       stream: { select: { name: true } },
     },
-    orderBy: { lastSeenAt: "desc" },
-    take: 5000,
+    orderBy: [{ watchCount: "desc" }, { lastWatchedAt: "desc" }],
+    take: 3000,
   });
 
-  // Deduplicate: keep only the most recent entry per lineId+countryCode
-  const seen = new Set<string>();
-  const deduped: typeof geoPoints = [];
-  for (const g of geoPoints) {
-    const key = `${g.lineId || ""}:${g.countryCode || ""}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(g);
+  if (!watches.length) return [];
+
+  const lineIds = [...new Set(watches.map((w) => w.lineId))];
+  const geoRows = await prisma.connectionGeography.findMany({
+    where: { lineId: { in: lineIds } },
+    select: { lineId: true, streamId: true, countryCode: true, country: true },
+    orderBy: { lastSeenAt: "desc" },
+  });
+  const geoByLineStream = new Map<string, { countryCode: string; countryName: string }>();
+  for (const g of geoRows) {
+    const key = `${g.lineId}:${g.streamId ?? ""}`;
+    if (!geoByLineStream.has(key)) {
+      geoByLineStream.set(key, {
+        countryCode: g.countryCode || "??",
+        countryName: g.country || "Unknown",
+      });
+    }
   }
 
   const byCountry = new Map<
@@ -697,15 +703,15 @@ export async function getMostWatchedByCountry(ownerId?: string): Promise<Country
     { countryCode: string; countryName: string; streams: Map<string, number> }
   >();
 
-  for (const g of deduped) {
-    const countryCode = g.countryCode || "??";
-    const countryName = g.country || "Unknown";
-    const streamName = g.stream?.name ?? "Unknown";
+  for (const w of watches) {
+    const geo = geoByLineStream.get(`${w.lineId}:${w.streamId}`);
+    if (!geo) continue;
+    const streamName = w.stream?.name ?? "Unknown";
     const bucket =
-      byCountry.get(countryCode) ??
-      { countryCode, countryName, streams: new Map<string, number>() };
-    bucket.streams.set(streamName, (bucket.streams.get(streamName) ?? 0) + g.connectionCount);
-    byCountry.set(countryCode, bucket);
+      byCountry.get(geo.countryCode) ??
+      { countryCode: geo.countryCode, countryName: geo.countryName, streams: new Map<string, number>() };
+    bucket.streams.set(streamName, (bucket.streams.get(streamName) ?? 0) + w.watchCount);
+    byCountry.set(geo.countryCode, bucket);
   }
 
   return Array.from(byCountry.values())

@@ -39,7 +39,7 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 60000);
+    const t = setInterval(load, 5 * 60 * 1000);
     return () => clearInterval(t);
   }, [load]);
 
@@ -71,7 +71,7 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
 
       {collapsed ? null : countries.length === 0 ? (
         <p className="text-sm text-center py-8" style={{ color: "var(--muted)" }}>
-          No live viewers by country yet
+          No watch history by country yet
         </p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">

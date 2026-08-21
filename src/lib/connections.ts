@@ -6,19 +6,22 @@ import {
   resolvePlaybackOutputLabel,
   setConnectionPlaybackOutput,
 } from "./connection-playback-output";
+import { clearLiveSession, isLiveSessionActive, touchLiveSession } from "./live-session";
 
 export const STALE_MS = 5 * 60 * 1000; // cron safety net for orphaned rows
-/** Live Connections UI + listLiveConnections — HLS may gap ~15–30s between playlist polls. */
-export const LIVE_STALE_MS = 35 * 1000;
-/** Max-connection checks — free slots soon after the viewer stops. */
-export const PLAYBACK_STALE_MS = 20 * 1000;
+/** Live Connections UI — show sessions touched within this window or with an active session key. */
+export const LIVE_STALE_MS = STALE_MS;
+export const PLAYBACK_STALE_MS = 60 * 1000;
+/** Admin Live Connections list — hide rows idle longer than this (HLS gaps tolerated). */
+export const LIVE_LIST_STALE_MS = PLAYBACK_STALE_MS;
 const CONNECTIONS_CACHE_TTL = 2; // seconds — keep dashboard counts responsive
 /** After Kick, block reconnect / track refresh for this long (covers multi-worker via Redis). */
 export const KICK_DENY_TTL_SEC = 120;
 
 /** Normalize client IP for DB + Redis keys (empty/loopback → null in Postgres). */
 export function normalizeConnectionIp(ip?: string | null): string | null {
-  const raw = ip?.trim() ?? "";
+  let raw = ip?.trim() ?? "";
+  if (raw.startsWith("::ffff:")) raw = raw.slice(7);
   if (!raw || raw === "127.0.0.1" || raw === "::1") return null;
   return raw;
 }
@@ -211,6 +214,36 @@ export async function lineHasConnectionCapacity(
   return active < maxConnections;
 }
 
+/** Remove other active streams for the same viewer (channel zap / failover cleanup). */
+export async function pruneOtherViewerStreams(
+  lineId: string,
+  streamId: string,
+  clientIp?: string | null
+): Promise<void> {
+  const normalized = normalizeConnectionIp(clientIp);
+  if (!normalized || !streamId) return;
+  const stale = await prisma.liveConnection.findMany({
+    where: {
+      lineId,
+      ...connectionIpPrismaFilter(normalized),
+      streamId: { not: streamId },
+    },
+    select: { streamId: true },
+  });
+  if (!stale.length) return;
+  await prisma.liveConnection.deleteMany({
+    where: {
+      lineId,
+      ...connectionIpPrismaFilter(normalized),
+      streamId: { not: streamId },
+    },
+  });
+  for (const row of stale) {
+    if (row.streamId) void clearLiveSession(lineId, row.streamId, normalized);
+  }
+  void cacheDel("conn:*").catch(() => {});
+}
+
 export async function trackConnection(opts: {
   lineId: string;
   streamId?: string;
@@ -243,8 +276,6 @@ export async function trackConnection(opts: {
     }
   }
 
-  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
-
   // Drop loopback/anonymous duplicate rows for this stream when a real client IP connects.
   if (clientIp && streamId) {
     await prisma.liveConnection.deleteMany({
@@ -257,13 +288,13 @@ export async function trackConnection(opts: {
   }
 
   // When a user switches channels, remove their previous active connection
-  // This prevents duplicate connections from showing in the dashboard
-  if (clientIp) {
+  if (clientIp && streamId) {
+    await pruneOtherViewerStreams(opts.lineId, streamId, clientIp);
+  } else if (clientIp) {
     await prisma.liveConnection.deleteMany({
       where: {
         lineId: opts.lineId,
         ip: clientIp,
-        streamId: streamId ? { not: streamId } : undefined,
       },
     });
   } else {
@@ -276,20 +307,52 @@ export async function trackConnection(opts: {
     });
   }
 
-  const existing = await prisma.liveConnection.findFirst({
-    where: {
-      lineId: opts.lineId,
-      streamId: streamId ?? null,
-      ...connectionIpPrismaFilter(clientIp),
-      lastSeenAt: { gte: staleBefore },
-    },
-  });
-
   const touchQuality = () => {
     if (!streamId) return;
     const bytes = Math.max(0, opts.mediaBytes ?? 120_000);
     void recordConnectionMediaBytes(opts.lineId, streamId, clientIp ?? "", bytes);
   };
+
+  const existing = await prisma.liveConnection.findFirst({
+    where: {
+      lineId: opts.lineId,
+      streamId: streamId ?? null,
+      ...connectionIpPrismaFilter(clientIp),
+    },
+    orderBy: { lastSeenAt: "desc" },
+  });
+
+  if (!existing && clientIp && streamId) {
+    const loose = await prisma.liveConnection.findFirst({
+      where: { lineId: opts.lineId, streamId },
+      orderBy: { lastSeenAt: "desc" },
+    });
+    if (loose) {
+      await prisma.liveConnection.update({
+        where: { id: loose.id },
+        data: { lastSeenAt: new Date(), ip: clientIp },
+      });
+      void cacheDel("conn:*").catch(() => {});
+      void touchLiveSession(opts.lineId, streamId, clientIp);
+      touchQuality();
+      if (streamId) {
+        const output = resolvePlaybackOutputLabel({
+          requestPath: opts.playbackPath,
+          userAgent: opts.userAgent,
+        });
+        void setConnectionPlaybackOutput(opts.lineId, streamId, clientIp, output);
+        const { recordLineWatch } = await import("@/lib/line-watch");
+        void recordLineWatch(opts.lineId, streamId, clientIp ?? undefined);
+      }
+      const { recordConnectionGeography } = await import("@/lib/connection-geography");
+      void recordConnectionGeography({
+        lineId: opts.lineId,
+        streamId,
+        ip: opts.ip,
+      });
+      return loose.id;
+    }
+  }
 
   if (existing) {
     await prisma.liveConnection.update({
@@ -297,6 +360,7 @@ export async function trackConnection(opts: {
       data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },
     });
     void cacheDel("conn:*").catch(() => {});
+    if (streamId) void touchLiveSession(opts.lineId, streamId, clientIp);
     touchQuality();
     if (streamId) {
       const output = resolvePlaybackOutputLabel({
@@ -327,6 +391,7 @@ export async function trackConnection(opts: {
     });
     void cacheDel("conn:*").catch(() => {});
     touchQuality();
+    if (streamId) void touchLiveSession(opts.lineId, streamId, clientIp);
     if (streamId) {
       const output = resolvePlaybackOutputLabel({
         requestPath: opts.playbackPath,
@@ -355,6 +420,7 @@ export async function removeConnection(lineId: string, streamId: string, ip: str
   await prisma.liveConnection.deleteMany({
     where: { lineId, streamId, ...connectionIpPrismaFilter(ip) },
   });
+  void clearLiveSession(lineId, streamId, ip);
   void clearConnectionQuality(lineId, streamId, ip);
   void clearConnectionPlaybackOutput(lineId, streamId, ip);
   // Invalidate connection caches
@@ -389,33 +455,58 @@ export async function listActiveConnections(ownerId?: string) {
   });
 }
 
-/** Delete rows with no heartbeat within `thresholdMs` (default LIVE_STALE_MS). */
-export async function pruneStaleConnections(thresholdMs: number = LIVE_STALE_MS) {
+/** Delete rows with no heartbeat within `thresholdMs` and no active session key. */
+export async function pruneStaleConnections(thresholdMs: number = STALE_MS) {
   const staleBefore = new Date(Date.now() - thresholdMs);
+  const staleRows = await prisma.liveConnection.findMany({
+    where: { lastSeenAt: { lt: staleBefore }, streamId: { not: null } },
+    select: { id: true, lineId: true, streamId: true, ip: true },
+    take: 5000,
+  });
+  const toDelete: string[] = [];
+  for (const row of staleRows) {
+    if (!row.streamId) continue;
+    if (await isLiveSessionActive(row.lineId, row.streamId, row.ip)) continue;
+    toDelete.push(row.id);
+  }
+  if (!toDelete.length) return { count: 0 };
   const result = await prisma.liveConnection.deleteMany({
-    where: { lastSeenAt: { lt: staleBefore } },
+    where: { id: { in: toDelete } },
   });
   if (result.count > 0) void cacheDel("conn:*").catch(() => {});
   return result;
 }
 
 export async function deleteStaleConnections() {
-  return pruneStaleConnections(LIVE_STALE_MS);
+  return pruneStaleConnections(STALE_MS);
 }
 
 /** List connections that are actually live right now */
 export async function listLiveConnections(ownerId?: string, take = 5000) {
-  await pruneStaleConnections(LIVE_STALE_MS);
-  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
-  return prisma.liveConnection.findMany({
+  const staleBefore = new Date(Date.now() - LIVE_LIST_STALE_MS);
+  const baseWhere = {
+    ...(ownerId ? { line: { ownerId } } : {}),
+  };
+  const rows = await prisma.liveConnection.findMany({
     where: {
+      ...baseWhere,
       lastSeenAt: { gte: staleBefore },
-      ...(ownerId ? { line: { ownerId } } : {}),
     },
     include: connectionInclude,
     orderBy: { lastSeenAt: "desc" },
     take: Math.min(Math.max(1, take), 5000),
   });
+  const out: typeof rows = [];
+  for (const row of rows) {
+    if (!row.streamId) {
+      out.push(row);
+      continue;
+    }
+    if (await isLiveSessionActive(row.lineId, row.streamId, row.ip)) {
+      out.push(row);
+    }
+  }
+  return out.slice(0, Math.min(Math.max(1, take), 5000));
 }
 
 export async function deleteActiveConnection(id: string, ownerId?: string) {
@@ -427,6 +518,7 @@ export async function deleteActiveConnection(id: string, ownerId?: string) {
 
   await markSessionKicked(conn.lineId, conn.ip);
   abortLocalProxies(conn.lineId, conn.ip, conn.streamId);
+  if (conn.streamId) await clearLiveSession(conn.lineId, conn.streamId, conn.ip);
   await prisma.liveConnection.delete({ where: { id: conn.id } }).catch(() => undefined);
   void cacheDel("conn:*").catch(() => {});
 }
@@ -472,6 +564,10 @@ export function attachKickAwareProxyBody(opts: {
   const finish = () => {
     if (closed) return;
     closed = true;
+    if (timerHeartbeat) {
+      clearInterval(timerHeartbeat);
+      timerHeartbeat = null;
+    }
     unregister?.();
     unregister = null;
     void removeConnection(lineId, streamId, ip);
@@ -492,13 +588,30 @@ export function attachKickAwareProxyBody(opts: {
     });
   };
 
-  const IDLE_MS = 8_000;
+  const IDLE_MS = 60_000;
   const HEARTBEAT_MS = 5_000;
+  const TIMER_HEARTBEAT_MS = 1_000;
+  let timerHeartbeat: ReturnType<typeof setInterval> | null = null;
+
+  const touchSession = (mediaBytes?: number) => {
+    void trackConnection({
+      lineId,
+      streamId,
+      ip,
+      userAgent,
+      mediaBytes: mediaBytes ?? 96_000,
+    });
+    abortIfKicked();
+  };
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
       reader = body.getReader();
       unregister = registerLiveProxy(lineId, ip, streamId, { abort });
+      timerHeartbeat = setInterval(() => {
+        if (closed) return;
+        touchSession();
+      }, TIMER_HEARTBEAT_MS);
       const pump = () => {
         if (closed) return;
         void (async () => {
@@ -506,10 +619,12 @@ export function attachKickAwareProxyBody(opts: {
             const { done, value } = await reader!.read();
             if (done) {
               if (!closed) {
-                closed = true;
-                unregister?.();
-                controller.close();
-                void removeConnection(lineId, streamId, ip);
+                try {
+                  controller.close();
+                } catch {
+                  /* ignore */
+                }
+                finish();
               }
               return;
             }
@@ -523,18 +638,10 @@ export function attachKickAwareProxyBody(opts: {
             if (!tracked) {
               tracked = true;
               lastTrackAt = Date.now();
-              void trackConnection({ lineId, streamId, ip, userAgent });
-              abortIfKicked();
+              touchSession(byteLen > 0 ? byteLen : undefined);
             } else if (Date.now() - lastTrackAt > HEARTBEAT_MS) {
               lastTrackAt = Date.now();
-              void trackConnection({
-                lineId,
-                streamId,
-                ip,
-                userAgent,
-                mediaBytes: byteLen > 0 ? byteLen : 96_000,
-              });
-              abortIfKicked();
+              touchSession(byteLen > 0 ? byteLen : undefined);
             }
             if (Date.now() - lastByteAt > IDLE_MS) {
               abort();

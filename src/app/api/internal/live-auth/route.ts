@@ -181,6 +181,7 @@ export async function GET(req: NextRequest) {
     status: 200,
     headers: {
       "X-Nexlify-Line-Id": line.id,
+      "X-Nexlify-Stream-Id": cleanId,
       "X-Nexlify-Upstream": upstream,
       "X-Nexlify-Live": parsed.spliceLiveTs ? "1" : "0",
       "Cache-Control": "no-store",

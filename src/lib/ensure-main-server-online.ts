@@ -137,7 +137,13 @@ function mergeRole(
 }
 
 /** Auto-create a Main Server entry if none exists, then mark it online and tag LBs. */
+let ensureMainServerLastRun = 0;
+const ENSURE_MAIN_SERVER_INTERVAL_MS = 5 * 60 * 1000;
+
 export async function ensureMainServerOnline(): Promise<void> {
+  const now = Date.now();
+  if (now - ensureMainServerLastRun < ENSURE_MAIN_SERVER_INTERVAL_MS) return;
+  ensureMainServerLastRun = now;
   const servers = await prisma.streamServer.findMany({
     select: {
       id: true,

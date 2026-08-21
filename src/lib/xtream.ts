@@ -33,7 +33,7 @@ import {
 } from "./xtream-safe";
 import { seriesSeedsForBouquets, resolveCategoryIdParam } from "./xtream-stream-id";
 import { expandCategoryFilter } from "./category-tree";
-import { normalizeCategoryName } from "./category-options";
+import { categoryMergeKey } from "./category-options";
 import { pickVodExtension } from "./vod-proxy";
 import {
   portFromPanelBaseUrl,
@@ -173,14 +173,11 @@ async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType)
       orderBy: { sortOrder: "asc" },
     });
     const seenNorm = new Set<string>();
-    const ordered = [...cats].sort((a, b) => {
-      const ap = a.name.includes("|") ? 0 : 1;
-      const bp = b.name.includes("|") ? 0 : 1;
-      if (ap !== bp) return ap - bp;
-      return a.sortOrder - b.sortOrder;
-    });
+    const ordered = [...cats].sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+    );
     for (const c of ordered) {
-      const norm = normalizeCategoryName(c.name);
+      const norm = categoryMergeKey(c.name);
       if (norm && seenNorm.has(norm)) continue;
       if (norm) seenNorm.add(norm);
       rows.push({
@@ -202,7 +199,7 @@ async function canonicalCategoryNumericByType(type: StreamType): Promise<Map<str
   });
   const groups = new Map<string, { id: string; name: string }[]>();
   for (const c of cats) {
-    const n = normalizeCategoryName(c.name);
+    const n = categoryMergeKey(c.name);
     if (!n) continue;
     const list = groups.get(n) ?? [];
     list.push(c);
@@ -232,13 +229,13 @@ async function categoryIdsForXtreamFilter(categoryId: string): Promise<string[] 
     select: { name: true, categoryType: true },
   });
   if (root?.name) {
-    const n = normalizeCategoryName(root.name);
+    const n = categoryMergeKey(root.name);
     const twins = await prisma.category.findMany({
       where: { categoryType: root.categoryType },
       select: { id: true, name: true },
     });
     for (const twin of twins) {
-      if (normalizeCategoryName(twin.name) === n && !ids.includes(twin.id)) ids.push(twin.id);
+      if (categoryMergeKey(twin.name) === n && !ids.includes(twin.id)) ids.push(twin.id);
     }
   }
   return ids;

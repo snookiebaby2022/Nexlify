@@ -9,6 +9,7 @@
  * and copies sortOrder so panel + Xtream apps share the same order.
  */
 import type { PrismaClient } from "@prisma/client";
+import { categoryMergeKey } from "./category-options";
 import { invalidateXtreamCategories } from "./cache-invalidate";
 
 export type BouquetCategoryRepairResult = {
@@ -26,11 +27,7 @@ export type BouquetCategoryRepairResult = {
 };
 
 function normCatName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/\s*\|\s*/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return categoryMergeKey(name);
 }
 
 /** Prefer the XUI-style "UK | Entertainment" name over heuristic "UK Entertainment". */

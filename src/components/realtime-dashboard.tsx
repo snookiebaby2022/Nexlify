@@ -113,45 +113,6 @@ export function RealtimeDashboard() {
           </div>
         </div>
       </div>
-
-      {/* Live connections table */}
-      {data?.connections && data.connections.length > 0 && (
-        <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)" }}>
-          <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: "var(--border)", background: "var(--card)" }}>
-            <h3 className="text-sm font-semibold">Live Connections</h3>
-            <span className="text-xs" style={{ color: "var(--muted)" }}>Latest 10</span>
-          </div>
-          <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ background: "var(--card)" }}>
-                  <th className="text-left px-4 py-2">Line</th>
-                  <th className="text-left px-4 py-2">Stream</th>
-                  <th className="text-left px-4 py-2">Duration</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.connections.slice(0, 10).map((c) => {
-                  const started = new Date(c.startedAt);
-                  const durationSec = Math.max(0, Math.floor((Date.now() - started.getTime()) / 1000));
-                  const h = Math.floor(durationSec / 3600);
-                  const m = Math.floor((durationSec % 3600) / 60);
-                  const s = durationSec % 60;
-                  const duration = h > 0 ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
-
-                  return (
-                    <tr key={c.id} className="border-t" style={{ borderColor: "var(--border)" }}>
-                      <td className="px-4 py-2 font-medium">{c.line}</td>
-                      <td className="px-4 py-2" style={{ color: "var(--muted)" }}>{c.stream}</td>
-                      <td className="px-4 py-2 tabular-nums">{duration}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

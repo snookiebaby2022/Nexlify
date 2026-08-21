@@ -1,7 +1,6 @@
 "use client";
 
 import { PanelDashboard } from "@/components/panel-dashboard";
-import { RealtimeDashboard } from "@/components/realtime-dashboard";
 import { OpsStatusGlance } from "@/components/ops-status-glance";
 
 export default function AdminDashboardPage() {
@@ -18,7 +17,6 @@ export default function AdminDashboardPage() {
         addServerHref="/admin/servers/add"
         showActivity
       />
-      <RealtimeDashboard />
     </div>
   );
 }

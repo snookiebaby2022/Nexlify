@@ -83,11 +83,14 @@ function sanitizeHostHeader(raw) {
 
 function clientIp(req) {
   const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  return fwd || req.socket.remoteAddress || "";
+  let ip = fwd || req.socket.remoteAddress || "";
+  if (ip.startsWith("::ffff:")) ip = ip.slice(7);
+  return ip;
 }
 
 function pulseConnection(ctx, bytes) {
   if (!INTERNAL_SECRET || !ctx?.lineId || !ctx?.streamId) return;
+  touchPlaybackSession(ctx);
   const n = Math.max(0, Math.floor(bytes ?? 0));
   const body = JSON.stringify({
     lineId: ctx.lineId,
@@ -116,8 +119,145 @@ function pulseConnection(ctx, bytes) {
   req.end();
 }
 
+function querySessionKicked(lineId, ip) {
+  if (!INTERNAL_SECRET || !lineId) return Promise.resolve(false);
+  const q = new URLSearchParams({ lineId, ip: ip ?? "" });
+  return new Promise((resolve) => {
+    const req = http.request(
+      {
+        hostname: backendHost,
+        port: backendPort,
+        path: `/api/internal/session-kicked?${q}`,
+        method: "GET",
+        headers: { "x-panel-internal-secret": INTERNAL_SECRET },
+        timeout: 2000,
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => {
+          data += c;
+        });
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(data).kicked === true);
+          } catch {
+            resolve(false);
+          }
+        });
+      }
+    );
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.end();
+  });
+}
+
+/** Abort upstream/client pipes within ~1s when admin kicks the session. */
+function watchSessionKick(pulseCtx, onKicked) {
+  if (!pulseCtx?.lineId || !INTERNAL_SECRET) return () => undefined;
+  let stopped = false;
+  const tick = () => {
+    if (stopped) return;
+    void querySessionKicked(pulseCtx.lineId, pulseCtx.ip).then((kicked) => {
+      if (kicked && !stopped) onKicked();
+    });
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
+}
+
+function clearPlaybackSession(ctx) {
+  if (!ctx?.lineId || !ctx?.streamId) return;
+  const key = playbackSessionKey(ctx);
+  const session = playbackSessions.get(key);
+  if (session) {
+    clearInterval(session.timer);
+    playbackSessions.delete(key);
+  }
+}
+
+function endPlaybackSession(ctx) {
+  if (!INTERNAL_SECRET || !ctx?.lineId || !ctx?.streamId) return;
+  clearPlaybackSession(ctx);
+  const body = JSON.stringify({
+    lineId: ctx.lineId,
+    streamId: ctx.streamId,
+    ip: ctx.ip ?? "",
+  });
+  const req = http.request(
+    {
+      hostname: backendHost,
+      port: backendPort,
+      path: "/api/internal/connection-end",
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(body),
+        "x-panel-internal-secret": INTERNAL_SECRET,
+      },
+      timeout: 3000,
+    },
+    (res) => res.resume()
+  );
+  req.on("error", () => undefined);
+  req.on("timeout", () => req.destroy());
+  req.write(body);
+  req.end();
+}
+
+/** Keep panel live rows fresh while MPEG-TS/HLS clients are connected (XUI-style). */
+const playbackSessions = new Map();
+const SESSION_KEEPALIVE_MS = 8_000;
+const SESSION_IDLE_MS = 240_000;
+
+function playbackSessionKey(ctx) {
+  return `${ctx.lineId}|${ctx.ip ?? ""}|${ctx.streamId}`;
+}
+
+function stopOtherPlaybackSessions(ctx) {
+  const prefix = `${ctx.lineId}|${ctx.ip ?? ""}|`;
+  const myKey = playbackSessionKey(ctx);
+  for (const [key, session] of [...playbackSessions.entries()]) {
+    if (!key.startsWith(prefix) || key === myKey) continue;
+    clearInterval(session.timer);
+    playbackSessions.delete(key);
+  }
+}
+
+function touchPlaybackSession(ctx) {
+  if (!ctx?.lineId || !ctx?.streamId) return;
+  stopOtherPlaybackSessions(ctx);
+  const key = playbackSessionKey(ctx);
+  const now = Date.now();
+  let session = playbackSessions.get(key);
+  if (!session) {
+    session = { ctx, lastClientAt: now };
+    session.timer = setInterval(() => {
+      const idle = Date.now() - session.lastClientAt;
+      if (idle > SESSION_IDLE_MS) {
+        clearInterval(session.timer);
+        playbackSessions.delete(key);
+        return;
+      }
+      pulseConnection(session.ctx, 72_000);
+    }, SESSION_KEEPALIVE_MS);
+    playbackSessions.set(key, session);
+    pulseConnection(ctx, 72_000);
+    return;
+  }
+  session.lastClientAt = now;
+}
+
 function createLiveByteMeter(pulseCtx) {
   if (!pulseCtx?.lineId || !pulseCtx?.streamId) return () => undefined;
+  touchPlaybackSession(pulseCtx);
   let pending = 0;
   let lastPulse = 0;
   return (chunk) => {
@@ -505,10 +645,35 @@ function serveHlsPlaylist(streamId, clientReq, clientRes, pulseCtx) {
 
 function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx) {
   const meter = pulseCtx ? createLiveByteMeter(pulseCtx) : null;
+  let stopKickWatch = () => undefined;
+  const stopStream = () => {
+    stopKickWatch();
+    try {
+      upRes.destroy();
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (!clientRes.writableEnded) clientRes.end();
+    } catch {
+      /* ignore */
+    }
+  };
+  stopKickWatch = watchSessionKick(pulseCtx, stopStream);
+  clientReq.once("close", () => {
+    stopKickWatch();
+    endPlaybackSession(pulseCtx);
+  });
+  clientReq.once("aborted", () => {
+    stopKickWatch();
+    endPlaybackSession(pulseCtx);
+  });
   if (!shouldSniffLiveTs(upRes)) {
     clientRes.writeHead(200, liveTsHeaders());
     if (meter) upRes.on("data", meter);
     upRes.pipe(clientRes);
+    upRes.once("close", stopKickWatch);
+    upRes.once("error", stopKickWatch);
     return;
   }
 
@@ -517,6 +682,7 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx) {
   let headersSent = false;
 
   const fail = (msg) => {
+    stopKickWatch();
     upRes.destroy();
     if (!clientRes.headersSent) {
       clientRes.writeHead(502, { "content-type": "text/plain" });
@@ -751,6 +917,11 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     denyAuth(clientRes, auth.status);
     return;
   }
+  const pulseCtx =
+    auth.lineId && auth.streamId
+      ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
+      : null;
+  if (pulseCtx) touchPlaybackSession(pulseCtx);
   // Provider-native .m3u8 must relay through Next (rewritten manifest + upstream segments).
   if (auth.hlsNative) {
     forward(clientReq, clientRes, ctx);
@@ -761,10 +932,6 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     return;
   }
   const streamId = auth.streamId;
-  const pulseCtx =
-    auth.lineId && auth.streamId
-      ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
-      : null;
   touchHlsDaemon(streamId);
   const fresh = hlsDirFresh(streamId);
   if (!fresh) {
@@ -850,6 +1017,11 @@ async function onRequest(clientReq, clientRes, ctx) {
       forward(clientReq, clientRes, ctx);
       return;
     }
+    const pulseCtx =
+      auth.lineId && auth.streamId
+        ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
+        : null;
+    if (pulseCtx) touchPlaybackSession(pulseCtx);
     if (clientReq.method === "HEAD") {
       clientRes.writeHead(200, auth.live ? liveTsHeaders() : { "Content-Type": "video/mp4", "Access-Control-Allow-Origin": "*" });
       clientRes.end();
@@ -860,10 +1032,7 @@ async function onRequest(clientReq, clientRes, ctx) {
       redirectsLeft: 5,
       altProtocolLeft: 1,
       proxy: auth.outboundProxy,
-      pulseCtx:
-        auth.lineId && auth.streamId
-          ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
-          : null,
+      pulseCtx,
       ...ctx,
     });
   } catch {

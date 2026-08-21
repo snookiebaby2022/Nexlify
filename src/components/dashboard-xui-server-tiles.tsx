@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import type { ServerDashboardMetrics } from "@/components/dashboard-server-card";
+import { streamServerDisplayName } from "@/lib/stream-server-display";
 
 function Sparkline({ values, color }: { values: number[]; color: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -86,7 +87,7 @@ export function DashboardXuiServerTiles({ servers }: { servers: ServerDashboardM
                 style={{ background: headerColor }}
               >
                 <Link href="/admin/servers" className="truncate hover:underline">
-                  {s.name}
+                  {streamServerDisplayName(s.name, s.host)}
                 </Link>
                 <span className="text-[10px] font-normal opacity-90 tabular-nums">
                   {s.connections ?? 0} conns

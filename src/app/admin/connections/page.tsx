@@ -25,8 +25,8 @@ type ConnectionRow = {
   output: PlaybackOutputLabel;
 };
 
-function formatConnDuration(startedAt: string | Date): string {
-  const sec = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+function formatConnDuration(startedAt: string | Date, nowMs: number): string {
+  const sec = Math.max(0, Math.floor((nowMs - new Date(startedAt).getTime()) / 1000));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
@@ -40,12 +40,14 @@ function CompactConnectionRow({
   onToggle,
   onKick,
   paths,
+  nowMs,
 }: {
   c: ConnectionRow;
   expanded: boolean;
   onToggle: () => void;
   onKick: (id: string) => void;
   paths: ReturnType<typeof subscriptionPaths>;
+  nowMs: number;
 }) {
   return (
     <div className="panel-mobile-conn-row">
@@ -58,7 +60,7 @@ function CompactConnectionRow({
       </button>
       {expanded ? (
         <div className="panel-mobile-conn-detail">
-          <ConnectionCard c={c} paths={paths} onKick={onKick} compact />
+          <ConnectionCard c={c} paths={paths} onKick={onKick} compact nowMs={nowMs} />
         </div>
       ) : null}
     </div>
@@ -70,11 +72,13 @@ function ConnectionCard({
   paths,
   onKick,
   compact = false,
+  nowMs,
 }: {
   c: ConnectionRow;
   paths: ReturnType<typeof subscriptionPaths>;
   onKick: (id: string) => void;
   compact?: boolean;
+  nowMs: number;
 }) {
   return (
     <article className={`panel-mobile-card space-y-2 ${compact ? "p-3 border-0" : "p-4"}`}>
@@ -99,7 +103,7 @@ function ConnectionCard({
         </div>
         <div>
           <p className="panel-mobile-card-label">Duration</p>
-          <span className="xui-duration-badge">{formatConnDuration(c.startedAt)}</span>
+          <span className="xui-duration-badge">{formatConnDuration(c.startedAt, nowMs)}</span>
         </div>
         <div>
           <p className="panel-mobile-card-label">Server</p>
@@ -130,6 +134,8 @@ function ConnectionCard({
   );
 }
 
+const LS_AUTO_REFRESH_KEY = "nx-live-conn-auto-refresh";
+
 export default function AdminConnectionsPage() {
   const pathname = usePathname();
   const paths = subscriptionPaths(pathname);
@@ -138,6 +144,25 @@ export default function AdminConnectionsPage() {
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(50);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [autoRefresh, setAutoRefresh] = useState(true);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(LS_AUTO_REFRESH_KEY);
+      if (stored === "0") setAutoRefresh(false);
+    } catch {}
+  }, []);
+
+  function toggleAutoRefresh() {
+    setAutoRefresh((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(LS_AUTO_REFRESH_KEY, next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  }
 
   function load() {
     fetch("/api/admin/connections", { cache: "no-store" })
@@ -148,16 +173,18 @@ export default function AdminConnectionsPage() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 2000);
+    if (!autoRefresh) return;
+    const t = setInterval(load, 5000);
     return () => clearInterval(t);
-  }, []);
+  }, [autoRefresh]);
 
   useEffect(() => {
-    const t = setInterval(() => setConnections((rows) => [...rows]), 1000);
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
 
   async function kick(id: string) {
+    setConnections((rows) => rows.filter((c) => c.id !== id));
     await fetch(`/api/admin/connections?id=${id}`, { method: "DELETE" });
     load();
   }
@@ -186,14 +213,28 @@ export default function AdminConnectionsPage() {
     <div className="xui-streams-page space-y-4">
       <div className="xui-streams-topbar">
         <h1 className="xui-streams-title">Live Connections</h1>
-        <button type="button" className="xui-streams-btn xui-streams-btn--ghost" onClick={kickAll}>
-          {paths.isReseller ? "Kick mine" : "Kick all"}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="xui-streams-btn xui-streams-btn--ghost"
+            onClick={toggleAutoRefresh}
+            title={autoRefresh ? "Auto refresh every 5s (click to pause)" : "Auto refresh paused (click to enable)"}
+          >
+            {autoRefresh ? "Auto refresh: On" : "Auto refresh: Off"}
+          </button>
+          <button type="button" className="xui-streams-btn xui-streams-btn--ghost" onClick={load}>
+            Refresh now
+          </button>
+          <button type="button" className="xui-streams-btn xui-streams-btn--ghost" onClick={kickAll}>
+            {paths.isReseller ? "Kick mine" : "Kick all"}
+          </button>
+        </div>
       </div>
-      <p className="text-sm px-1" style={{ color: "var(--muted)" }}>
-        Active plays refresh every 2s. Quality reflects session freshness (XUI-style) — green while the viewer is connected.
-        {paths.isReseller ? " Showing your lines only." : ""}
-      </p>
+      {paths.isReseller ? (
+        <p className="text-sm px-1" style={{ color: "var(--muted)" }}>
+          Showing your lines only.
+        </p>
+      ) : null}
 
       <div className="xui-clients-toolbar">
         <label className="xui-clients-show">
@@ -231,6 +272,7 @@ export default function AdminConnectionsPage() {
             onToggle={() => setExpandedId((id) => (id === c.id ? null : c.id))}
             onKick={kick}
             paths={paths}
+            nowMs={nowMs}
           />
         ))}
         {shown.length === 0 && <p className="xui-streams-empty p-4">No active connections.</p>}
@@ -269,7 +311,7 @@ export default function AdminConnectionsPage() {
                 <td>{c.serverName ?? "Main Server"}</td>
                 <td>{c.ip ? <IpWithFlag ip={c.ip} /> : "—"}</td>
                 <td>
-                  <span className="xui-duration-badge">{formatConnDuration(c.startedAt)}</span>
+                  <span className="xui-duration-badge">{formatConnDuration(c.startedAt, nowMs)}</span>
                 </td>
                 <td>{c.output}</td>
                 <td>

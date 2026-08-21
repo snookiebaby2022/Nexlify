@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { probeStreamUrl } from "@/lib/stream-probe-server";
+import { streamProbeErrorWithHint } from "@/lib/stream-probe-fix-hints";
 import { resolveStreamPlaybackUrl } from "@/lib/resolve-stream-url";
 import { sendTelegramAlert } from "@/lib/panel-telegram-alerts";
 import { enqueueAgentCommand } from "@/lib/stream-agent";
@@ -49,7 +50,7 @@ export async function runDeadLinkProbeJob() {
           isActive: false,
           lastProbeAt: new Date(),
           lastProbeOk: false,
-          lastProbeError: `Auto-disabled: ${probe.message ?? "dead link"}`,
+          lastProbeError: streamProbeErrorWithHint(`Auto-disabled: ${probe.message ?? "dead link"}`),
         },
       });
       failed++;
@@ -62,7 +63,7 @@ export async function runDeadLinkProbeJob() {
       data: {
         lastProbeAt: new Date(),
         lastProbeOk: ok,
-        lastProbeError: ok ? null : probe.message ?? "Probe failed",
+        lastProbeError: ok ? null : streamProbeErrorWithHint(probe.message ?? "Probe failed"),
       },
     });
 

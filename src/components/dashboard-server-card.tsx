@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, Wifi, Users, Radio, Signal } from "lucide-react";
+import { Plus, Wifi, Users, Radio } from "lucide-react";
+import { streamServerDisplayName } from "@/lib/stream-server-display";
 import { DashboardMetricBar } from "@/components/dashboard-metric-bar";
 import { IpWithFlag } from "@/components/ip-with-flag";
 
@@ -53,9 +54,9 @@ export function DashboardServerCard({ server }: { server: ServerDashboardMetrics
           <Link
             href="/admin/servers"
             className="font-semibold text-sm truncate hover:underline"
-            title={server.name}
+            title={streamServerDisplayName(server.name, server.host)}
           >
-            {server.name}
+            {streamServerDisplayName(server.name, server.host)}
           </Link>
         </div>
         <div className="flex items-center gap-1.5">

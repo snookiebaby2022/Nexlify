@@ -1,7 +1,7 @@
 import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
-import { LIVE_STALE_MS, STALE_MS, listLiveConnections } from "@/lib/connections";
+import { LIVE_STALE_MS, STALE_MS, countActiveConnections } from "@/lib/connections";
 import { sortServersMainFirst } from "@/lib/ensure-main-server-online";
 import { isThisPanelMachine } from "@/lib/panel-local-server";
 import {
@@ -81,6 +81,7 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
       name: true,
       host: true,
       healthStatus: true,
+      agentToken: true,
       agentLastSeen: true,
       bandwidthMbps: true,
       panelSettings: true,
@@ -124,12 +125,15 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
 
   const rows: ServerMetricsRow[] = [];
   for (const s of ordered) {
-    const online =
-      s.healthStatus === "online" ||
-      s.healthStatus === "healthy" ||
-      (s.agentLastSeen != null && s.agentLastSeen >= staleBefore);
+    const managed =
+      isThisPanelMachine(s) ||
+      (s.agentToken != null && s.agentLastSeen != null && s.agentLastSeen >= staleBefore);
+    const connections = connsByServer.get(s.id) ?? 0;
+    const users = usersByServer.get(s.id)?.size ?? 0;
+    const streamsOn = onByServer.get(s.id) ?? 0;
+    const streamsOff = offByServer.get(s.id) ?? 0;
 
-    if (!online) {
+    if (!managed) {
       rows.push({
         id: s.id,
         name: s.name,
@@ -140,10 +144,10 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
         memory: 0,
         storage: 0,
         cpu: 0,
-        connections: 0,
-        users: 0,
-        streamsOn: 0,
-        streamsOff: 0,
+        connections,
+        users,
+        streamsOn,
+        streamsOff,
         maxClients: s.maxClients,
       });
       continue;
@@ -169,10 +173,10 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
       memory: clampPct(host.memory),
       storage: clampPct(host.storage),
       cpu: clampPct(host.cpu),
-      connections: connsByServer.get(s.id) ?? 0,
-      users: usersByServer.get(s.id)?.size ?? 0,
-      streamsOn: onByServer.get(s.id) ?? 0,
-      streamsOff: offByServer.get(s.id) ?? 0,
+      connections,
+      users,
+      streamsOn,
+      streamsOff,
       maxClients: s.maxClients,
     });
   }
@@ -316,7 +320,7 @@ export async function getDashboardSummary() {
       select: { lineId: true },
       distinct: ["lineId"],
     }),
-    listLiveConnections(),
+    countActiveConnections(),
     prisma.streamServer.count(),
     prisma.streamServer.count({
       where: {
@@ -348,7 +352,7 @@ export async function getDashboardSummary() {
     totalLiveStreams,
     onlineUsers,
     totalActiveLines,
-    onlineConnections: connections.length,
+    onlineConnections: connections,
     maxConnections,
     onlineServers: onlineServerCount,
     totalServers: allServers,
@@ -381,7 +385,7 @@ export async function getResellerDashboardSummary(ownerId: string) {
       where: { ...lineWhere, status: "ACTIVE", expiresAt: { gt: now } },
     }),
     prisma.line.findMany({ where: lineWhere, select: { id: true } }),
-    listLiveConnections(ownerId),
+    countActiveConnections(ownerId),
     prisma.streamServer.count(),
     prisma.streamServer.count({
       where: {
@@ -428,7 +432,7 @@ export async function getResellerDashboardSummary(ownerId: string) {
     totalLiveStreams,
     onlineUsers: linesWithConnections.length,
     totalActiveLines,
-    onlineConnections: ownerConnections.length,
+    onlineConnections: ownerConnections,
     maxConnections,
     onlineServers: onlineServerCount,
     totalServers: allServers,

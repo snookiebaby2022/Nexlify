@@ -23,7 +23,7 @@ test("computeConnectionQuality — ok when heartbeat is aging", () => {
   const now = Date.now();
   const q = computeConnectionQuality({
     startedAt: new Date(now - 300_000),
-    lastSeenAt: new Date(now - 28_000),
+    lastSeenAt: new Date(now - 95_000),
     now,
   });
   assert.equal(q.level, "ok");
@@ -34,7 +34,7 @@ test("computeConnectionQuality — poor when nearly stale", () => {
   const now = Date.now();
   const q = computeConnectionQuality({
     startedAt: new Date(now - 30_000),
-    lastSeenAt: new Date(now - 50_000),
+    lastSeenAt: new Date(now - 310_000),
     now,
   });
   assert.equal(q.level, "poor");

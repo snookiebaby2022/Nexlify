@@ -4,8 +4,10 @@ import { recordConnectionMediaBytes } from "@/lib/connection-quality-live";
 import {
   connectionIpPrismaFilter,
   normalizeConnectionIp,
+  pruneOtherViewerStreams,
   trackConnection,
 } from "@/lib/connections";
+import { touchLiveSession } from "@/lib/live-session";
 
 /** Edge / proxy heartbeat: refresh lastSeenAt and optional throughput samples. */
 export async function pulseLiveConnection(opts: {
@@ -24,23 +26,38 @@ export async function pulseLiveConnection(opts: {
   const bytes = Math.max(0, Math.floor(opts.bytes ?? 0));
   const qualityBytes = bytes > 0 ? bytes : 96_000;
 
-  await recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", qualityBytes);
+  void recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", qualityBytes);
+  void touchLiveSession(lineId, streamId, clientIp);
+  if (clientIp) await pruneOtherViewerStreams(lineId, streamId, clientIp);
 
-  const result = await prisma.liveConnection.updateMany({
+  let row = await prisma.liveConnection.findFirst({
     where: { lineId, streamId, ...connectionIpPrismaFilter(clientIp) },
-    data: { lastSeenAt: new Date() },
+    orderBy: { lastSeenAt: "desc" },
+    select: { id: true },
   });
-
-  if (result.count === 0) {
-    await trackConnection({
-      lineId,
-      streamId,
-      ip: clientIp ?? undefined,
-      userAgent: opts.userAgent,
-      playbackPath: opts.playbackPath,
-      mediaBytes: qualityBytes,
+  if (!row) {
+    row = await prisma.liveConnection.findFirst({
+      where: { lineId, streamId },
+      orderBy: { lastSeenAt: "desc" },
+      select: { id: true },
     });
-  } else {
-    void cacheDel("conn:*").catch(() => {});
   }
+
+  if (row) {
+    await prisma.liveConnection.update({
+      where: { id: row.id },
+      data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },
+    });
+    void cacheDel("conn:*").catch(() => {});
+    return;
+  }
+
+  await trackConnection({
+    lineId,
+    streamId,
+    ip: clientIp ?? undefined,
+    userAgent: opts.userAgent,
+    playbackPath: opts.playbackPath,
+    mediaBytes: qualityBytes,
+  });
 }

@@ -60,7 +60,7 @@ test("computeConnectionQualityWithLive marks disconnected sessions poor", () => 
   const now = Date.now();
   const q = computeConnectionQualityWithLive({
     startedAt: new Date(now - 60_000),
-    lastSeenAt: new Date(now - 45_000),
+    lastSeenAt: new Date(now - 310_000),
     now,
     live: {
       bytesPerSec: 400_000,

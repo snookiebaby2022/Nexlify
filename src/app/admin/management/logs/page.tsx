@@ -43,7 +43,7 @@ export default function ManagementLogsPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Audit log</h1>
       <p className="text-sm" style={{ color: "var(--muted)" }}>
-        Panel actions with user, line, and detail metadata.
+        Panel actions with user, line, and detail metadata. Entries older than 3 days are removed automatically by the cron job.
       </p>
 
       <div className="flex flex-wrap gap-3">

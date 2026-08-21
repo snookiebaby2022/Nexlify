@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { DataTable } from "@/components/data-table";
 import { formatDateTime } from "@/lib/format";
+import { streamProbeFixHint } from "@/lib/stream-probe-fix-hints";
 
 export default function StreamErrorsPage() {
   const [probeFails, setProbeFails] = useState<
@@ -13,6 +14,7 @@ export default function StreamErrorsPage() {
       type: string;
       lastProbeAt: string | null;
       lastProbeError: string | null;
+      fixHint?: string;
       server: { name: string } | null;
       serverId?: string | null;
     }[]
@@ -40,8 +42,6 @@ export default function StreamErrorsPage() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 20000);
-    return () => clearInterval(t);
   }, []);
 
   async function probeStream(streamId: string) {
@@ -120,7 +120,11 @@ export default function StreamErrorsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Stream errors</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Failed probes and agent process issues.{" "}
+          Failed probes and agent process issues. Refresh manually — this page no longer polls in the background.{" "}
+          <button type="button" className="underline cursor-pointer" onClick={load}>
+            Refresh
+          </button>
+          {" · "}
           <Link href="/admin/process_monitor" style={{ color: "var(--accent)" }}>
             Process monitor
           </Link>
@@ -139,12 +143,13 @@ export default function StreamErrorsPage() {
           </p>
         ) : (
         <DataTable
-          headers={["Stream", "Server", "Last probe", "Error", "Fix"]}
+          headers={["Stream", "Server", "Last probe", "Error", "How to fix", "Fix"]}
           rows={probeFails.map((s) => [
             s.name,
             s.server?.name ?? "—",
             s.lastProbeAt ? formatDateTime(s.lastProbeAt) : "—",
             s.lastProbeError ?? "—",
+            s.fixHint ?? streamProbeFixHint(s.lastProbeError),
             fixButtons(s.id, s.serverId),
           ])}
         />

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { invalidateDashboardStats, invalidateXtreamCategories } from "@/lib/cache-invalidate";
+import { cacheGetOrSet } from "@/lib/cache";
 import { PanelRole, CategoryType } from "@prisma/client";
 import {
   collectDescendantCategoryIds,
@@ -35,25 +36,32 @@ export async function GET(req: NextRequest) {
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     });
 
-    // Active / inactive counts per category (for online/offline controls).
-    const [activeGroups, inactiveGroups] = await Promise.all([
-      prisma.stream.groupBy({
-        by: ["categoryId"],
-        where: { isActive: true, categoryId: { not: null } },
-        _count: true,
-      }),
-      prisma.stream.groupBy({
-        by: ["categoryId"],
-        where: { isActive: false, categoryId: { not: null } },
-        _count: true,
-      }),
-    ]);
-    const activeMap = new Map(
-      activeGroups.filter((g) => g.categoryId).map((g) => [g.categoryId as string, g._count])
-    );
-    const inactiveMap = new Map(
-      inactiveGroups.filter((g) => g.categoryId).map((g) => [g.categoryId as string, g._count])
-    );
+    // Active / inactive counts per category (cached — heavy on large catalogs).
+    const counts = await cacheGetOrSet("categories:stream-counts", 60, async () => {
+      const [activeGroups, inactiveGroups] = await Promise.all([
+        prisma.stream.groupBy({
+          by: ["categoryId"],
+          where: { isActive: true, categoryId: { not: null } },
+          _count: true,
+        }),
+        prisma.stream.groupBy({
+          by: ["categoryId"],
+          where: { isActive: false, categoryId: { not: null } },
+          _count: true,
+        }),
+      ]);
+      const active: Record<string, number> = {};
+      const inactive: Record<string, number> = {};
+      for (const g of activeGroups) {
+        if (g.categoryId) active[g.categoryId] = g._count;
+      }
+      for (const g of inactiveGroups) {
+        if (g.categoryId) inactive[g.categoryId] = g._count;
+      }
+      return { active, inactive };
+    });
+    const activeMap = new Map(Object.entries(counts.active));
+    const inactiveMap = new Map(Object.entries(counts.inactive));
 
     return NextResponse.json({
       categories: categories.map((c) => ({

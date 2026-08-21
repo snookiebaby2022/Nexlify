@@ -315,8 +315,6 @@ export default function StreamProvidersPage() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 15000);
-    return () => clearInterval(t);
   }, [load]);
 
   async function add(e: React.FormEvent) {

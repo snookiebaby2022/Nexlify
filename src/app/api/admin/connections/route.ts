@@ -4,6 +4,8 @@ import {
   clearActiveConnections,
   deleteActiveConnection,
   listLiveConnections,
+  pruneStaleConnections,
+  PLAYBACK_STALE_MS,
 } from "@/lib/connections";
 import { computeConnectionQualityWithLive, getLiveQualitySample } from "@/lib/connection-quality-live";
 import {
@@ -19,6 +21,7 @@ export async function GET() {
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  void pruneStaleConnections(PLAYBACK_STALE_MS);
   const connections = await listLiveConnections(ownerScope(session));
   const now = Date.now();
   const mapped = await Promise.all(

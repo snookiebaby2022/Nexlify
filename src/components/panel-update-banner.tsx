@@ -21,12 +21,23 @@ export function PanelUpdateBanner() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    if (pathname?.includes("/admin/settings/updates")) return;
-    fetch("/api/admin/panel-update")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setData(d))
-      .catch(() => {});
-  }, [pathname]);
+    let cancelled = false;
+    const load = () => {
+      if (window.location.pathname.includes("/admin/settings/updates")) return;
+      fetch("/api/admin/panel-update")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!cancelled) setData(d);
+        })
+        .catch(() => {});
+    };
+    load();
+    const t = setInterval(load, 10 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
 
   if (pathname?.includes("/admin/settings/updates")) return null;
   if (!data?.version) return null;

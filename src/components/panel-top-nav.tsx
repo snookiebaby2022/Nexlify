@@ -128,7 +128,7 @@ export function PanelTopNav({
   useEffect(() => {
     if (role === "ADMIN") {
       const load = () =>
-        fetch("/api/admin/stats")
+        fetch("/api/admin/stats?light=1")
           .then((r) => (r.ok ? r.json() : null))
           .then((d) => {
             if (!d) return;
@@ -142,7 +142,7 @@ export function PanelTopNav({
           })
           .catch(() => {});
       load();
-      const t = setInterval(load, 15000);
+      const t = setInterval(load, 30000);
       return () => clearInterval(t);
     }
     if (role === "RESELLER") {
@@ -162,7 +162,7 @@ export function PanelTopNav({
           })
           .catch(() => {});
       load();
-      const t = setInterval(load, 15000);
+      const t = setInterval(load, 30000);
       return () => clearInterval(t);
     }
   }, [role]);
@@ -271,9 +271,6 @@ export function PanelTopNav({
             <div className="hidden md:block">
               <PanelLanguageSwitcher />
             </div>
-          </div>
-          <div className="hidden sm:block shrink-0">
-            <ThemeToggle />
           </div>
           <button
             type="button"
