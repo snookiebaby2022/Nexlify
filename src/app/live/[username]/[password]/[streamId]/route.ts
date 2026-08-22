@@ -371,7 +371,7 @@ export async function GET(
       }
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
       const trackedBody = attachKickAwareProxyBody({
-        body: remux.stream,
+        body: remux.stream as unknown as ReadableStream<Uint8Array>,
         lineId: line.id,
         streamId: cleanId,
         ip: ip ?? "",
