@@ -333,7 +333,7 @@ export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string, 
       category_ids: xtreamCategoryIds(numCategoryId),
       container_extension: pickVodExtension(playUrl) || "mp4",
       custom_sid: "",
-      direct_source: playUrl,
+      direct_source: directPlay ? playUrl : "",
     };
   });
 }

@@ -18,7 +18,7 @@ import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { checkDdosShield } from "@/lib/ddos-shield";
 import { cacheGetOrSet } from "@/lib/cache";
 import { getCacheTtls } from "@/lib/cache-ttl";
-import { getShortEpg } from "@/lib/epg";
+import { getShortEpg, getShortEpgForChannelIds } from "@/lib/epg";
 import { resolveEpgId } from "@/lib/subscription-export";
 import { getAntiFreezeSettings, schedulePlaylistZapWarm } from "@/lib/anti-freeze";
 import { iptvCorsPreflight, iptvJson } from "@/lib/iptv-cors";
@@ -184,11 +184,15 @@ export async function GET(req: NextRequest) {
       const stream = resolved
         ? await prisma.stream.findUnique({
             where: { id: resolved },
-            select: { epgChannelId: true, id: true },
+            select: { epgChannelId: true, channelId: true, id: true },
           })
         : null;
-      const channelId = stream ? resolveEpgId(stream) : streamId;
-      const epg = await getShortEpg(channelId);
+      const channelIds = stream
+        ? [stream.epgChannelId, stream.channelId, stream.id, streamId].filter(
+            (v): v is string => Boolean(v?.trim())
+          )
+        : [streamId];
+      const epg = await getShortEpgForChannelIds(channelIds);
       return j({ epg_listings: epg });
     }
     case "get_simple_data_table": {
@@ -198,11 +202,15 @@ export async function GET(req: NextRequest) {
       const stream = resolved
         ? await prisma.stream.findUnique({
             where: { id: resolved },
-            select: { epgChannelId: true, id: true },
+            select: { epgChannelId: true, channelId: true, id: true },
           })
         : null;
-      const channelId = stream ? resolveEpgId(stream) : streamId;
-      return j({ epg_listings: await getShortEpg(channelId, 10) });
+      const channelIds = stream
+        ? [stream.epgChannelId, stream.channelId, stream.id, streamId].filter(
+            (v): v is string => Boolean(v?.trim())
+          )
+        : [streamId];
+      return j({ epg_listings: await getShortEpgForChannelIds(channelIds, 10) });
     }
     case "get_user_info":
       return j(await xtreamUserInfo(line, baseUrl));

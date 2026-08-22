@@ -229,6 +229,14 @@ function stopOtherPlaybackSessions(ctx) {
   const myKey = playbackSessionKey(ctx);
   for (const [key, session] of [...playbackSessions.entries()]) {
     if (!key.startsWith(prefix) || key === myKey) continue;
+    if (typeof session.teardown === "function") {
+      try {
+        session.teardown();
+      } catch {
+        /* ignore */
+      }
+    }
+    endPlaybackSession(session.ctx);
     clearInterval(session.timer);
     playbackSessions.delete(key);
   }
@@ -241,7 +249,7 @@ function touchPlaybackSession(ctx) {
   const now = Date.now();
   let session = playbackSessions.get(key);
   if (!session) {
-    session = { ctx, lastClientAt: now };
+    session = { ctx, lastClientAt: now, teardown: null };
     session.timer = setInterval(() => {
       const idle = Date.now() - session.lastClientAt;
       if (idle > SESSION_IDLE_MS) {
@@ -256,6 +264,12 @@ function touchPlaybackSession(ctx) {
     return;
   }
   session.lastClientAt = now;
+}
+
+function registerPipeTeardown(pulseCtx, fn) {
+  if (!pulseCtx?.lineId || !pulseCtx?.streamId || typeof fn !== "function") return;
+  const session = playbackSessions.get(playbackSessionKey(pulseCtx));
+  if (session) session.teardown = fn;
 }
 
 function createLiveByteMeter(pulseCtx) {
@@ -682,6 +696,7 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx) {
     }
   };
   stopKickWatch = watchSessionKick(pulseCtx, stopStream);
+  registerPipeTeardown(pulseCtx, stopStream);
   clientReq.once("close", () => {
     stopKickWatch();
     endPlaybackSession(pulseCtx);

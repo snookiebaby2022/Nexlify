@@ -121,6 +121,7 @@ export async function GET(req: NextRequest) {
         userAgent: ua,
         playbackPath: path,
         mediaBytes: isSeg ? 260_000 : parsed.wantsHls ? 48_000 : 180_000,
+        pruneOthers: true,
       });
     }
     return new NextResponse(null, {
@@ -174,6 +175,7 @@ export async function GET(req: NextRequest) {
       userAgent: ua,
       playbackPath: originalPath(req),
       mediaBytes: 220_000,
+      pruneOthers: true,
     });
   }
 

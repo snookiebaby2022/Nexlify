@@ -166,6 +166,19 @@ export async function getShortEpg(channelId: string, limit = 4) {
   );
 }
 
+/** Try several XMLTV channel ids (epg_channel_id, channel_id, stream id) — XCIPTV uses numeric stream_id. */
+export async function getShortEpgForChannelIds(channelIds: string[], limit = 4) {
+  const seen = new Set<string>();
+  for (const raw of channelIds) {
+    const id = raw?.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const listings = await getShortEpg(id, limit);
+    if (listings.length) return listings;
+  }
+  return [];
+}
+
 async function loadShortEpg(
   channelId: string,
   limit: number,

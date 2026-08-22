@@ -71,7 +71,7 @@ export async function xtreamVodInfo(
       category_id: xtreamCategoryId(full.categoryId),
       container_extension: ext,
       custom_sid: "",
-      direct_source: exportPlaybackUrl(baseUrl, line, full, full, undefined, "auto", directPlay),
+      direct_source: directPlay ? exportPlaybackUrl(baseUrl, line, full, full, undefined, "auto", directPlay) : "",
     },
   };
 }
@@ -130,7 +130,9 @@ export async function xtreamSeriesInfo(
       custom_sid: "",
       added: Math.floor(ep.createdAt.getTime() / 1000).toString(),
       season: seasonNum,
-      direct_source: exportPlaybackUrl(baseUrl, line, ep, ep, undefined, "auto", directPlay),
+      direct_source: directPlay
+        ? exportPlaybackUrl(baseUrl, line, ep, ep, undefined, "auto", directPlay)
+        : "",
     });
   }
 

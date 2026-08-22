@@ -220,6 +220,7 @@ export async function GET(
       ip: ip ?? "",
       userAgent: ua,
       playbackPath: `/live/${username}/${password}/${streamId}`,
+      pruneOthers: true,
     });
 
     const panelOrigin = serverBaseUrl(req.url, req.headers);
@@ -345,6 +346,7 @@ export async function GET(
     ip: ip ?? "",
     userAgent: ua,
     playbackPath: `/live/${username}/${password}/${streamId}`,
+    pruneOthers: true,
   });
 
   const mpegTsOrder = expandHlsPlaybackCandidates([
@@ -368,8 +370,15 @@ export async function GET(
         continue;
       }
       await cacheSet(hlsRelayCacheKey(line.id, cleanId), playbackUrl, 3600);
+      const trackedBody = attachKickAwareProxyBody({
+        body: remux.stream,
+        lineId: line.id,
+        streamId: cleanId,
+        ip: ip ?? "",
+        userAgent: ua,
+      });
       return withIptvCors(
-        new NextResponse(remux.stream as unknown as BodyInit, {
+        new NextResponse(trackedBody as unknown as BodyInit, {
           status: 200,
           headers: {
             ...liveMpegTsResponseHeaders(remux.contentType),

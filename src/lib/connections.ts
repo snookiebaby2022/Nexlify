@@ -6,7 +6,7 @@ import {
   resolvePlaybackOutputLabel,
   setConnectionPlaybackOutput,
 } from "./connection-playback-output";
-import { clearLiveSession, isLiveSessionActive, touchLiveSession } from "./live-session";
+import { clearLiveSession, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
 
 export const STALE_MS = 5 * 60 * 1000; // cron safety net for orphaned rows
 /** Live Connections UI + dashboard counts — align with playback heartbeat, not cron stale. */
@@ -258,6 +258,7 @@ export async function pruneOtherViewerStreams(
   for (const row of stale) {
     if (row.streamId) void clearLiveSession(lineId, row.streamId, normalized);
   }
+  void setViewerActiveStream(lineId, streamId, normalized);
   void cacheDel("conn:*").catch(() => {});
 }
 
@@ -270,6 +271,8 @@ export async function trackConnection(opts: {
   playbackPath?: string;
   /** Bytes observed this heartbeat (HLS segment size, TS chunk, etc.) for quality scoring. */
   mediaBytes?: number;
+  /** When true, drop other streams for this viewer (channel zap). Default false — heartbeats must not prune. */
+  pruneOthers?: boolean;
 }): Promise<string | null> {
   const clientIp = normalizeConnectionIp(opts.ip);
   // Hard kick: do not revive a session that was just kicked
@@ -304,8 +307,8 @@ export async function trackConnection(opts: {
     });
   }
 
-  // When a user switches channels, remove their previous active connection
-  if (clientIp && streamId) {
+  // Channel zap: only on explicit session start (live-auth / first GET), never on heartbeats.
+  if (opts.pruneOthers && clientIp && streamId) {
     await pruneOtherViewerStreams(opts.lineId, streamId, clientIp);
   } else if (clientIp) {
     await prisma.liveConnection.deleteMany({
@@ -329,6 +332,11 @@ export async function trackConnection(opts: {
     const bytes = Math.max(0, opts.mediaBytes ?? 120_000);
     void recordConnectionMediaBytes(opts.lineId, streamId, clientIp ?? "", bytes);
   };
+
+  void touchLiveSession(opts.lineId, streamId, clientIp);
+  if (clientIp && streamId && opts.pruneOthers) {
+    void setViewerActiveStream(opts.lineId, streamId, clientIp);
+  }
 
   const existing = await prisma.liveConnection.findFirst({
     where: {

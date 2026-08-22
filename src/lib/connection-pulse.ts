@@ -4,10 +4,8 @@ import { recordConnectionMediaBytes } from "@/lib/connection-quality-live";
 import {
   connectionIpPrismaFilter,
   normalizeConnectionIp,
-  pruneOtherViewerStreams,
-  trackConnection,
 } from "@/lib/connections";
-import { touchLiveSession } from "@/lib/live-session";
+import { getViewerActiveStream, touchLiveSession } from "@/lib/live-session";
 
 /** Edge / proxy heartbeat: refresh lastSeenAt and optional throughput samples. */
 export async function pulseLiveConnection(opts: {
@@ -26,9 +24,13 @@ export async function pulseLiveConnection(opts: {
   const bytes = Math.max(0, Math.floor(opts.bytes ?? 0));
   const qualityBytes = bytes > 0 ? bytes : 96_000;
 
+  if (clientIp) {
+    const active = await getViewerActiveStream(lineId, clientIp);
+    if (active && active !== streamId) return;
+  }
+
   void recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", qualityBytes);
   void touchLiveSession(lineId, streamId, clientIp);
-  if (clientIp) await pruneOtherViewerStreams(lineId, streamId, clientIp);
 
   let row = await prisma.liveConnection.findFirst({
     where: { lineId, streamId, ...connectionIpPrismaFilter(clientIp) },
@@ -52,12 +54,18 @@ export async function pulseLiveConnection(opts: {
     return;
   }
 
-  await trackConnection({
-    lineId,
-    streamId,
-    ip: clientIp ?? undefined,
-    userAgent: opts.userAgent,
-    playbackPath: opts.playbackPath,
-    mediaBytes: qualityBytes,
-  });
+  // Row missing (race after zap) — upsert without pruning other streams.
+  try {
+    await prisma.liveConnection.create({
+      data: {
+        lineId,
+        streamId,
+        ip: clientIp ?? "",
+        lastSeenAt: new Date(),
+      },
+    });
+  } catch {
+    /* concurrent insert — ignore */
+  }
+  void cacheDel("conn:*").catch(() => {});
 }
