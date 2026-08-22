@@ -19,7 +19,6 @@ import { checkDdosShield } from "@/lib/ddos-shield";
 import { cacheGetOrSet } from "@/lib/cache";
 import { getCacheTtls } from "@/lib/cache-ttl";
 import { getShortEpg, getShortEpgForChannelIds } from "@/lib/epg";
-import { resolveEpgId } from "@/lib/subscription-export";
 import { getAntiFreezeSettings, schedulePlaylistZapWarm } from "@/lib/anti-freeze";
 import { iptvCorsPreflight, iptvJson } from "@/lib/iptv-cors";
 import { xtreamDeltaArray } from "@/lib/xtream-safe";
