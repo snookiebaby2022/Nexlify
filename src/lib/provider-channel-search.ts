@@ -20,12 +20,13 @@ export async function searchProviderChannels(
   if (q.length < 2) return [];
 
   const limit = Math.min(Math.max(opts?.limit ?? 40, 1), 80);
+  const t = opts?.streamType != null ? String(opts.streamType) : "";
   const typeFilter: Prisma.StreamWhereInput =
-    opts?.streamType === StreamType.LIVE || opts?.streamType === "LIVE"
+    t === "LIVE"
       ? { type: StreamType.LIVE }
-      : opts?.streamType === StreamType.MOVIE || opts?.streamType === "MOVIE"
+      : t === "MOVIE"
         ? { type: StreamType.MOVIE }
-        : opts?.streamType === StreamType.SERIES || opts?.streamType === "SERIES"
+        : t === "SERIES"
           ? { type: StreamType.SERIES }
           : {};
 
