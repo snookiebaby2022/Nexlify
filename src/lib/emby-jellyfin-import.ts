@@ -40,6 +40,7 @@ async function importEmbyStyleLibrary(
   const base = normalizeBase(String(cfg.url ?? ""), kind);
   const token = String(cfg.token ?? "");
   if (!base || !token) throw new Error("Server URL and API key required");
+  const effectiveServerId = serverId ?? (cfg.serverId ? String(cfg.serverId) : null);
 
   const users = await fetchEmbyJson<EmbyUser[]>(`${base}/Users`, token);
   const userId = users[0]?.Id;
@@ -65,7 +66,7 @@ async function importEmbyStyleLibrary(
     if (existing) {
       await prisma.stream.update({
         where: { id: existing.id },
-        data: { name: `${name} (${kind})`, isActive: true, hostedExternally: true },
+        data: { name: `${name} (${kind})`, isActive: true, hostedExternally: true, serverId: effectiveServerId ?? undefined },
       });
       await linkStreamToPluginBouquet(existing.id);
       continue;
@@ -77,7 +78,7 @@ async function importEmbyStyleLibrary(
         type,
         streamUrl,
         hostedExternally: true,
-        serverId: serverId ?? undefined,
+        serverId: effectiveServerId ?? undefined,
         isActive: true,
       },
     });

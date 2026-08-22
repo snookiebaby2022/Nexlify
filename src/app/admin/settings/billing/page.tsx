@@ -14,7 +14,8 @@ export default function BillingSettingsPage() {
             { key: "paypalClientId", label: "PayPal client ID" },
             { key: "paypalClientSecret", label: "PayPal client secret", type: "password" },
             { key: "paypalSandbox", label: "Sandbox mode", type: "yesno" },
-            { key: "paypalWebhookUrl", label: "Webhook URL (reference)", placeholder: "https://yoursite.com/api/billing/paypal" },
+            { key: "paypalWebhookUrl", label: "Webhook URL (reference)", placeholder: "https://yoursite.com/api/billing/paypal/webhook" },
+            { key: "paypalWebhookId", label: "Webhook ID (PayPal dashboard)", placeholder: "WH-…" },
           ],
         },
         {

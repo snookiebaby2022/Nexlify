@@ -17,6 +17,8 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
   const [row, setRow] = useState<IntegrationRow | null>(null);
   const [config, setConfig] = useState<Record<string, string>>({});
   const [name, setName] = useState(addon.name);
+  const [serverId, setServerId] = useState("");
+  const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
   const [msg, setMsg] = useState("");
   const [licenses, setLicenses] = useState<{ id: string; label: string; expiresAt: string | null }[]>([]);
 
@@ -33,8 +35,12 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
           const next: Record<string, string> = {};
           for (const f of addon.fields) next[f.key] = cfg[f.key] ?? "";
           setConfig(next);
+          setServerId(String(cfg.serverId ?? ""));
         }
       });
+    fetch("/api/admin/servers")
+      .then((r) => r.json())
+      .then((d) => setServers(d.servers ?? []));
     fetch(`/api/admin/addon-licenses?service=${addon.id}`)
       .then((r) => r.json())
       .then((d) => setLicenses(d.licenses ?? []));
@@ -53,6 +59,7 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
       body: JSON.stringify({
         type: addon.id,
         name,
+        serverId: serverId || null,
         ...config,
         config,
         isActive: true,
@@ -101,7 +108,7 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
     const res = await fetch("/api/admin/integrations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "sync", id: row.id }),
+      body: JSON.stringify({ action: "sync", id: row.id, serverId: serverId || null }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -171,6 +178,25 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
               />
             </label>
           ))}
+          <label className="block text-sm">
+            <span style={{ color: "var(--muted)" }}>Remote streaming server (LB)</span>
+            <select
+              className="mt-1 w-full rounded border px-3 py-2 panel-select bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={serverId}
+              onChange={(e) => setServerId(e.target.value)}
+            >
+              <option value="">— Panel default —</option>
+              {servers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs mt-1 block" style={{ color: "var(--muted)" }}>
+              Imported tracks route playback through this load-balancer server.
+            </span>
+          </label>
           <div className="flex flex-wrap gap-2 pt-2">
             <button type="submit" className="btn-positive rounded px-4 py-2 text-sm cursor-pointer">
               Save integration

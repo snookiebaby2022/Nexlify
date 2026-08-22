@@ -1443,7 +1443,7 @@ export function PanelMigrateForm() {
                 const dupDeleted =
                   (dup.live?.deleted ?? 0) + (dup.movies?.deleted ?? 0) + (dup.series?.deleted ?? 0);
                 setResult(
-                  `Repair done. Merged ${bc.categoriesMerged ?? 0} duplicate categories. Re-linked ${bc.orphanLiveLinked ?? 0} live streams to bouquets. Synced ${bc.bouquetSortSynced ?? 0} bouquet sort orders. Removed ${dupDeleted} duplicate streams.`
+                  `Repair done. Renamed ${bc.categoriesRenamed ?? 0} categories to XUI format. Merged ${bc.categoriesMerged ?? 0} duplicate categories. Re-linked ${bc.orphanLiveLinked ?? 0} live streams to bouquets. Synced ${bc.bouquetSortSynced ?? 0} bouquet sort orders. Removed ${dupDeleted} duplicate streams.`
                 );
                 loadImportHealth();
               }

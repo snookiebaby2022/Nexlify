@@ -112,12 +112,8 @@ export async function handleBillingWebhook(
     case "renew": {
       if (!line) return { ok: false, error: "Line not found" };
       const days = payload.days ?? 30;
-      const expiresAt = new Date(line.expiresAt > new Date() ? line.expiresAt : new Date());
-      expiresAt.setDate(expiresAt.getDate() + days);
-      await prisma.line.update({
-        where: { id: line.id },
-        data: { expiresAt, status: LineStatus.ACTIVE },
-      });
+      const { applyLineRenewDays } = await import("@/lib/line-renew");
+      await applyLineRenewDays(line.id, days, { reactivate: true });
       try {
         const { notifyLineRenewal } = await import("@/lib/panel-notification-events");
         await notifyLineRenewal(line.id);

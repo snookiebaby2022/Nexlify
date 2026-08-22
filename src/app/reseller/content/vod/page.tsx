@@ -1,5 +1,5 @@
-import { ContentFolderPage } from "@/components/content-folder-page";
+import { redirect } from "next/navigation";
 
-export default function ResellerVodPage() {
-  return <ContentFolderPage panel="reseller" slug="vod" />;
+export default function ResellerContentVodPage() {
+  redirect("/reseller/dashboard");
 }

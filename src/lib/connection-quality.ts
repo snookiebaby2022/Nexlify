@@ -9,7 +9,7 @@ export type ConnectionQuality = {
 };
 
 /** Keep in sync with LIVE_STALE_MS in connections.ts */
-export const LIVE_STALE_SEC = 300;
+export const LIVE_STALE_SEC = 60;
 
 function levelFromScore(score: number): ConnectionQualityLevel {
   if (score >= 80) return "excellent";

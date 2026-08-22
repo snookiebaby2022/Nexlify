@@ -44,6 +44,12 @@ export type AgentStreamConfig = {
     gpuEncoder: string;
     ladderIds: string[];
   };
+  rollingArchive?: {
+    streamId: string;
+    name: string;
+    retentionDays: number;
+    storagePath: string;
+  }[];
   binRoot: string;
   nginxPath: string;
   ffmpegPath: string;
@@ -121,6 +127,7 @@ export async function buildAgentConfigForServer(
         agentStartCmd: true,
         agentPid: true,
         vodMode: true,
+        archiveDays: true,
         isOnDemand: true,
         isCreatedChannel: true,
         hostedExternally: true,
@@ -130,23 +137,32 @@ export async function buildAgentConfigForServer(
   );
 
   const { streamNeedsAlwaysOnProcess } = await import("@/lib/stream-playback-mode");
+  const { parseLiveStreamMeta } = await import("@/lib/stream-live-meta");
+  const { FFMPEG_TRANSCODE_PROFILES, buildFfmpegTranscodeArgs } = await import("@/lib/ffmpeg-transcode-profiles");
   const alwaysOnStreams = rawStreams.filter((s) => streamNeedsAlwaysOnProcess(s));
 
   const streams: AgentStreamEntry[] = alwaysOnStreams.map((s) => {
-    const transcodeArgs =
-      transcodeProfile && transcodeSettings
-        ? buildGpuFfmpegArgs(
-            transcodeProfile,
-            s.streamUrl,
-            String(transcodeSettings.vaapiDevice ?? "/dev/dri/renderD128")
-          )
+    const liveMeta = parseLiveStreamMeta(s.agentStartCmd);
+    const cpuProfile =
+      liveMeta.transcodeProfile && liveMeta.transcodeProfile !== "none"
+        ? FFMPEG_TRANSCODE_PROFILES.find((p) => p.id === liveMeta.transcodeProfile)
         : undefined;
+    const transcodeArgs =
+      cpuProfile
+        ? buildFfmpegTranscodeArgs(cpuProfile, s.streamUrl)
+        : transcodeProfile && transcodeSettings
+          ? buildGpuFfmpegArgs(
+              transcodeProfile,
+              s.streamUrl,
+              String(transcodeSettings.vaapiDevice ?? "/dev/dri/renderD128")
+            )
+          : undefined;
     const spec = buildFfmpegArgv({
       ffmpegPath,
       inputUrl: s.streamUrl,
       streamId: s.id,
       serverId,
-      preset: transcodeProfile?.preset ?? preset,
+      preset: cpuProfile?.preset ?? transcodeProfile?.preset ?? preset,
       threads,
       transcodeArgs,
     });
@@ -166,6 +182,26 @@ export async function buildAgentConfigForServer(
     };
   });
 
+  const { isArchivePackEnabled } = await import("@/lib/archive-recorder");
+  const archiveEnabled = await isArchivePackEnabled();
+  const archiveSettings = archiveEnabled ? await getSettingGroup("archive-pack" as never) : null;
+  const archiveStorage = String(archiveSettings?.storagePath ?? "/var/nexlify/archive");
+  const defaultRetention = Number(archiveSettings?.defaultRetentionDays ?? 7);
+  const rollingArchive = archiveEnabled
+    ? rawStreams
+        .filter(
+          (s) =>
+            s.vodMode === "CATCHUP" ||
+            (s.archiveDays != null && Number(s.archiveDays) > 0)
+        )
+        .map((s) => ({
+          streamId: s.id,
+          name: s.name,
+          retentionDays: s.archiveDays ?? defaultRetention,
+          storagePath: `${archiveStorage}/${s.id}`,
+        }))
+    : undefined;
+
   return {
     revision,
     nginx,
@@ -181,6 +217,7 @@ export async function buildAgentConfigForServer(
           ladderIds: transcodeLadder.map((p) => p.id),
         }
       : undefined,
+    rollingArchive,
     binRoot,
     nginxPath: String(binaries.nginxPath ?? paths.nginxPath),
     ffmpegPath,

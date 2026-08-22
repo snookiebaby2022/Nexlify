@@ -22,7 +22,7 @@ function asConfig(body: Record<string, unknown>) {
     allowCast: body.allowCast !== false,
     allowPip: body.allowPip !== false,
     showEpg: body.showEpg !== false,
-    showCatchup: body.showCatchup === true,
+    showCatchup: body.showCatchup !== false,
     adultPinRequired: body.adultPinRequired === true,
     forceUpdate: body.forceUpdate === true,
     versionName: body.versionName ? String(body.versionName) : "1.0.0",

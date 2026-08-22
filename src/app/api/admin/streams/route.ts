@@ -26,6 +26,8 @@ import {
 } from "@/lib/cache-invalidate";
 import { syncStreamBouquets } from "@/lib/stream-bouquets";
 import { expandCategoryFilter } from "@/lib/category-tree";
+import { getResellerBouquetIds } from "@/lib/reseller-bouquet-scope";
+import { canAccessBouquet } from "@/lib/bouquet-access";
 
 
 
@@ -77,6 +79,25 @@ export async function GET(req: NextRequest) {
   const missingEpg = req.nextUrl.searchParams.get("missingEpg") === "1";
 
   const where: Prisma.StreamWhereInput = {};
+
+  const resellerBouquetIds = await getResellerBouquetIds(session);
+  if (resellerBouquetIds !== null) {
+    if (!resellerBouquetIds.length) {
+      return NextResponse.json({
+        streams: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+      });
+    }
+    if (bouquetId && !(await canAccessBouquet(session, bouquetId))) {
+      return NextResponse.json({ error: "Forbidden bouquet" }, { status: 403 });
+    }
+    if (!bouquetId) {
+      where.bouquets = { some: { bouquetId: { in: resellerBouquetIds } } };
+    }
+  }
 
 
 
@@ -584,6 +605,24 @@ export async function PATCH(req: NextRequest) {
   if (body.isRadio !== undefined) data.isRadio = Boolean(body.isRadio);
   if (body.isCreatedChannel !== undefined) data.isCreatedChannel = Boolean(body.isCreatedChannel);
   if (body.autoRestart !== undefined) data.autoRestart = Boolean(body.autoRestart);
+
+  if (body.transcodeProfile !== undefined) {
+    const { parseLiveStreamMeta, encodeLiveStreamMeta } = await import("@/lib/stream-live-meta");
+    const existing = await prisma.stream.findUnique({
+      where: { id },
+      select: { agentStartCmd: true },
+    });
+    const meta = parseLiveStreamMeta(existing?.agentStartCmd);
+    const nextProfile = String(body.transcodeProfile ?? "none");
+    data.agentStartCmd = encodeLiveStreamMeta({
+      ...(meta.raw ?? {}),
+      transcodeProfile: nextProfile,
+      redirectStream: nextProfile === "none",
+    });
+    if (nextProfile !== "none") {
+      data.autoRestart = true;
+    }
+  }
 
   if (body.vodMode !== undefined || body.isOnDemand !== undefined) {
     const { syncVodModeFields } = await import("@/lib/resolve-stream-url");

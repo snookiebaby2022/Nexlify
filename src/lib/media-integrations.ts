@@ -9,6 +9,12 @@ import {
 import { buildIntegrationStreamUrl } from "@/lib/integration-stream-url";
 import { linkStreamToPluginBouquet } from "@/lib/integration-bouquet";
 import { maxStreamSortOrder } from "@/lib/stream-order";
+import {
+  buildPlexBaseUrl,
+  normalizePlexConfig,
+  plexTokenParam,
+  type PlexIntegrationConfig,
+} from "@/lib/plex-config";
 
 export async function listIntegrations(type: "plex" | "youtube") {
   return prisma.mediaIntegration.findMany({
@@ -134,21 +140,44 @@ async function importPlexEpisodesForShow(
   return { imported, skipped };
 }
 
+export async function listPlexLibraries(integrationId: string) {
+  const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
+  if (!row || row.type !== "plex") throw new Error("Plex integration not found");
+  const cfg = normalizePlexConfig((row.config ?? {}) as Record<string, unknown>);
+  const base = buildPlexBaseUrl(cfg);
+  const token = String(cfg.token ?? "");
+  if (!base || !token) throw new Error("Plex host and token required");
+
+  const sections = await fetchPlexJson<PlexSectionResponse>(
+    `${base}/library/sections?${plexTokenParam(cfg)}`
+  );
+  const dirs = sections.MediaContainer?.Directory ?? [];
+  return dirs.map((d) => ({
+    key: String(d.key),
+    title: d.title ?? "Library",
+    type: d.type ?? "unknown",
+  }));
+}
+
 export async function importPlexLibrary(integrationId: string, serverId?: string | null) {
   const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
   if (!row || row.type !== "plex") throw new Error("Plex integration not found");
-  const cfg = row.config as Record<string, unknown>;
-  const base = String(cfg.url ?? "").replace(/\/$/, "");
+  const cfg = normalizePlexConfig((row.config ?? {}) as Record<string, unknown>);
+  const base = buildPlexBaseUrl(cfg);
   const token = String(cfg.token ?? "");
-  if (!base || !token) throw new Error("Plex URL and token required");
+  if (!base || !token) throw new Error("Plex host and token required");
 
-  const tokenParam = `X-Plex-Token=${encodeURIComponent(token)}`;
+  const effectiveServerId = serverId ?? cfg.serverId ?? null;
+  const tokenParam = plexTokenParam(cfg);
 
   // Validate connection and load libraries
   const sections = await fetchPlexJson<PlexSectionResponse>(
     `${base}/library/sections?${tokenParam}`
   );
-  const dirs = sections.MediaContainer?.Directory ?? [];
+  let dirs = sections.MediaContainer?.Directory ?? [];
+  if (cfg.libraryKey) {
+    dirs = dirs.filter((d) => String(d.key) === String(cfg.libraryKey));
+  }
   let imported = 0;
   let skipped = 0;
   let episodes = 0;
@@ -175,7 +204,7 @@ export async function importPlexLibrary(integrationId: string, serverId?: string
           String(ratingKey),
           name,
           integrationId,
-          serverId,
+          effectiveServerId,
           sortCounter
         );
         imported += epResult.imported;
@@ -191,7 +220,7 @@ export async function importPlexLibrary(integrationId: string, serverId?: string
           name: `${name} (Plex)`,
           streamUrl,
           type: StreamType.MOVIE,
-          serverId,
+          serverId: effectiveServerId,
           streamIcon: icon,
         },
         sortCounter.value++
@@ -251,6 +280,7 @@ export async function importYoutubeSource(integrationId: string, serverId?: stri
   const cfg = row.config as Record<string, unknown>;
   const channelUrl = String(cfg.channelUrl ?? cfg.url ?? "").trim();
   if (!channelUrl) throw new Error("YouTube channel URL required");
+  const effectiveServerId = serverId ?? (cfg.serverId ? String(cfg.serverId) : null);
 
   const channelId = extractYoutubeChannelId(channelUrl);
   let imported = 0;
@@ -265,7 +295,7 @@ export async function importYoutubeSource(integrationId: string, serverId?: stri
           name: `${row.name} — ${videoId}`,
           streamUrl,
           type: StreamType.LIVE,
-          serverId,
+          serverId: effectiveServerId,
         },
         sortCounter.value++
       );
@@ -280,7 +310,7 @@ export async function importYoutubeSource(integrationId: string, serverId?: stri
         name: `${row.name} (YouTube)`,
         streamUrl,
         type: StreamType.LIVE,
-        serverId,
+        serverId: effectiveServerId,
       },
       sortCounter.value++
     );
@@ -298,26 +328,45 @@ export async function importYoutubeSource(integrationId: string, serverId?: stri
 export async function resolvePlexIntegrationPlayback(
   integrationId: string,
   itemId: string,
-  cfg: Record<string, unknown>
+  cfgRaw: Record<string, unknown>
 ): Promise<string | null> {
-  const base = String(cfg.url ?? "").replace(/\/$/, "");
+  const cfg = normalizePlexConfig(cfgRaw);
+  const base = buildPlexBaseUrl(cfg);
   const token = String(cfg.token ?? "");
   if (!base || !token) return null;
-  const profile = resolvePlexProfile(cfg.transcodeProfile ?? "1080p");
-  const tokenParam = `X-Plex-Token=${encodeURIComponent(token)}`;
+  const profile = resolvePlexProfile(
+    cfg.directStream ? "direct" : (cfg.transcodeProfile ?? "1080p")
+  );
+  const tokenParam = plexTokenParam(cfg);
 
+  let upstream: string | null = null;
   try {
     const meta = await fetchPlexJson<{
       MediaContainer?: { Metadata?: PlexJsonMetadata[] };
     }>(`${base}/library/metadata/${itemId}?${tokenParam}`);
     const item = meta.MediaContainer?.Metadata?.[0];
     if (item) {
-      return pickPlexPlaybackUrl(base, token, item, profile);
+      upstream = pickPlexPlaybackUrl(base, token, item, profile);
     }
   } catch {
     /* fall through to transcode URL */
   }
 
-  const { buildPlexTranscodeM3u8 } = await import("@/lib/plex-playback");
-  return buildPlexTranscodeM3u8(base, token, itemId, profile);
+  if (!upstream) {
+    const { buildPlexTranscodeM3u8 } = await import("@/lib/plex-playback");
+    upstream = buildPlexTranscodeM3u8(base, token, itemId, profile);
+  }
+
+  // Remote LB server: playback egress uses the stream's assigned server proxy (see line-playback).
+  // Imported Plex rows get serverId from integration config during sync.
+  if (cfg.serverId && upstream) {
+    const { prisma } = await import("@/lib/prisma");
+    const server = await prisma.streamServer.findUnique({
+      where: { id: String(cfg.serverId) },
+      select: { id: true, isActive: true },
+    });
+    if (!server?.isActive) return upstream;
+  }
+
+  return upstream;
 }

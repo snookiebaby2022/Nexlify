@@ -64,6 +64,8 @@ export function getResellerSidebarNav(): SidebarNavEntry[] {
 
           { href: "/reseller/lines/mass-edit", label: "Mass Edit Lines", section: "Users" },
 
+          { href: "/reseller/bouquets", label: "My Bouquets", section: "Users" },
+
           { href: "/reseller/line_activity", label: "Line Activity", section: "Users" },
 
           { href: "/reseller/mags/add", label: "Add MAG Device", section: "MAG Device" },
@@ -108,27 +110,9 @@ export function getResellerSidebarNav(): SidebarNavEntry[] {
 
           { href: "/reseller/radios", label: "Radio" },
 
-          { href: "/reseller/created_channels", label: "Created Channels" },
+          { href: "/reseller/epg_view", label: "EPG Preview" },
 
         ],
-
-      },
-
-    },
-
-    {
-
-      kind: "group",
-
-      group: {
-
-        id: "epg",
-
-        label: "EPG",
-
-        icon: coloredGroupIcon("epg"),
-
-        items: [{ href: "/reseller/epg_view", label: "EPG Preview" }],
 
       },
 

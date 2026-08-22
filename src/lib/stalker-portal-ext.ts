@@ -1,8 +1,11 @@
 import type { LineWithBouquets } from "./lines";
-import { streamsForLineExport } from "./lines";
+import { activeBouquetIds, streamCountForLine, streamsForLineExport } from "./lines";
 import { StreamType } from "@prisma/client";
-import { stalkerFfmpegCmd } from "./bin-tools";
+import { getBinPaths } from "./bin-paths";
 import { prisma } from "./prisma";
+
+/** Ministra / XUI default page size. */
+const STALKER_PAGE_SIZE = 14;
 import {
   dvrPlaybackUrl,
   listDvrRecordings,
@@ -10,6 +13,7 @@ import {
   stopDvrRecording,
 } from "./dvr-service";
 import { resolveStreamPlaybackUrl } from "./resolve-stream-url";
+import { exportPlaybackUrl } from "./export-playback-url";
 
 export const STALKER_EXTENDED_ACTIONS = new Set([
   "get_modules",
@@ -53,15 +57,17 @@ function stalkerModules() {
 async function stalkerChannelRows(
   streams: Awaited<ReturnType<typeof streamsForLineExport>>,
   baseUrl: string,
-  line: LineWithBouquets
+  line: LineWithBouquets,
+  page = 0
 ) {
-  const cmds = await Promise.all(streams.map((s) => stalkerFfmpegCmd(s.id)));
+  const paths = await getBinPaths();
+  const prefix = `${paths.ffmpegPath.split(/[/\\]/).pop() ?? "ffmpeg"} `;
   return streams.map((s, i) => ({
     id: s.id,
     name: s.name,
-    number: String(i + 1),
+    number: String(page * STALKER_PAGE_SIZE + i + 1),
     censored: s.isAdult ? 1 : 0,
-    cmd: cmds[i],
+    cmd: `${prefix}${s.id}`,
     cost: 0,
     count: 0,
     status: 1,
@@ -120,7 +126,7 @@ export async function handleStalkerExtendedAction(
   baseUrl: string,
   extra: StalkerExtra
 ): Promise<unknown | null> {
-  const streams = await streamsForLineExport(line, { type: StreamType.LIVE });
+  const page = parseInt(extra.page ?? extra.p ?? "0", 10) || 0;
 
   switch (action) {
     case "get_modules":
@@ -129,38 +135,54 @@ export async function handleStalkerExtendedAction(
 
     case "get_genres":
     case "get_tv_genres": {
-      const categoryIds = [
-        ...new Set(streams.map((s) => s.categoryId).filter(Boolean) as string[]),
-      ];
+      const { categoryIdsForLine } = await import("./lines");
+      const { categoryIds, hasUncategorized } = await categoryIdsForLine(line, {
+        type: StreamType.LIVE,
+      });
       const cats = categoryIds.length
         ? await prisma.category.findMany({
             where: { id: { in: categoryIds } },
             orderBy: { sortOrder: "asc" },
           })
         : [];
-      return cats.map((c, i) => ({
+      const rows = cats.map((c, i) => ({
         id: c.id,
         title: c.name,
         alias: c.id,
         censored: c.isAdult ? 1 : 0,
         number: i + 1,
       }));
+      if (hasUncategorized) {
+        rows.unshift({ id: "0", title: "Live TV", alias: "0", censored: 0, number: 0 });
+      }
+      return rows;
     }
 
-    case "get_all_channels":
+    case "get_all_channels": {
+      const total = await streamCountForLine(line, { type: StreamType.LIVE });
+      const streams = await streamsForLineExport(line, {
+        type: StreamType.LIVE,
+        lean: true,
+        offset: page * STALKER_PAGE_SIZE,
+        limit: STALKER_PAGE_SIZE,
+      });
       return {
-        total_items: streams.length,
-        max_page_items: 14,
-        data: await stalkerChannelRows(streams, baseUrl, line),
+        total_items: total,
+        max_page_items: STALKER_PAGE_SIZE,
+        data: await stalkerChannelRows(streams, baseUrl, line, page),
       };
+    }
 
     case "get_short_epg":
     case "get_week":
-    case "get_epg_info":
+    case "get_epg_info": {
+      const streams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
       return stalkerShortEpg(streams, extra);
+    }
 
     case "get_simple_data_table": {
-      const rows = await stalkerShortEpg(streams, extra);
+      const epgStreams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
+      const rows = await stalkerShortEpg(epgStreams, extra);
       return rows.map((r) => ({
         name: r.name,
         descr: r.descr,
@@ -195,7 +217,9 @@ export async function handleStalkerExtendedAction(
     case "pvr_add":
     case "create_pvr": {
       const streamId = extra.ch_id ?? extra.id ?? "";
-      const stream = streams.find((s) => s.id === streamId);
+      const stream = streamId
+        ? await prisma.stream.findFirst({ where: { id: streamId, isActive: true } })
+        : null;
       if (!stream) return { error: "Channel not found" };
       const durationSec = Math.max(300, parseInt(extra.duration ?? "3600", 10));
       const upstream = await upstreamForStream(stream.id);
@@ -227,10 +251,30 @@ export async function handleStalkerExtendedAction(
     case "get_url": {
       const cmd = extra.cmd ?? extra.id ?? "";
       const streamId = cmd.replace(/^ffmpeg\s+/i, "").trim();
-      const stream = streams.find((s) => s.id === streamId);
+      const bouquetIds = activeBouquetIds(line);
+      const stream = streamId
+        ? await prisma.stream.findFirst({
+            where: {
+              id: streamId,
+              isActive: true,
+              bouquets: bouquetIds.length
+                ? { some: { bouquetId: { in: bouquetIds } } }
+                : undefined,
+            },
+            include: {
+              provider: { select: { baseUrl: true } },
+              server: { select: { host: true } },
+            },
+          })
+        : null;
       if (!stream) return { error: "Stream not found" };
       return {
-        cmd: `${baseUrl}/live/${encodeURIComponent(line.username)}/${encodeURIComponent(line.password)}/${stream.id}.ts`,
+        cmd: exportPlaybackUrl(
+          baseUrl,
+          { username: line.username, password: line.password },
+          stream,
+          stream
+        ),
         id: stream.id,
       };
     }

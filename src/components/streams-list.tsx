@@ -13,6 +13,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { StreamRowActionsMenu } from "@/components/stream-row-actions-menu";
+import { StreamTranscodeQuickActions } from "@/components/stream-transcode-quick-actions";
 import { StreamVerifyPanel } from "@/components/stream-verify-panel";
 import { StreamClientsModal } from "@/components/stream-clients-modal";
 import { formatUptimeXui, type StreamLiveStat } from "@/lib/stream-live-stats";
@@ -574,6 +575,14 @@ export function StreamsList({
                   <td className="xui-streams-td-server">
                     <span className="xui-stream-server-name">{serverName}</span>
                     {serverHost && <span className="xui-stream-server-host">{serverHost}</span>}
+                    {type === "LIVE" && (
+                      <StreamTranscodeQuickActions
+                        streamId={s.id}
+                        serverId={s.server?.id}
+                        playbackStatus={st?.status}
+                        onRefresh={load}
+                      />
+                    )}
                   </td>
                   <td>
                     <button

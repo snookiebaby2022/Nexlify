@@ -22,6 +22,7 @@ type LbConfig = {
   geoLoadBalancing: boolean;
   loadBalancingRestriction: string;
   autoRebalanceLive: string;
+  autoRebalanceIncludeMain: boolean;
   lbProEnabled: boolean;
   lbPro: {
     enabled?: boolean;
@@ -38,6 +39,7 @@ export default function LoadBalancerPage() {
   const [config, setConfig] = useState<LbConfig | null>(null);
   const [testIp, setTestIp] = useState("");
   const [saving, setSaving] = useState(false);
+  const [balancing, setBalancing] = useState(false);
   const [msg, setMsg] = useState("");
 
   const load = useCallback(() => {
@@ -74,12 +76,31 @@ export default function LoadBalancerPage() {
           geoLoadBalancing: config.geoLoadBalancing,
           loadBalancingRestriction: config.loadBalancingRestriction,
           autoRebalanceLive: config.autoRebalanceLive,
+          autoRebalanceIncludeMain: config.autoRebalanceIncludeMain,
         },
         lbPro: config.lbPro,
       }),
     });
     setSaving(false);
     setMsg(res.ok ? "Load balancer settings saved." : "Save failed");
+    if (res.ok) load();
+  }
+
+  async function balanceNow() {
+    if (!config) return;
+    setBalancing(true);
+    setMsg("");
+    const res = await fetch("/api/admin/servers/load-balancer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "rebalance_now",
+        includeMain: config.autoRebalanceIncludeMain,
+      }),
+    });
+    const data = await res.json();
+    setBalancing(false);
+    setMsg(res.ok ? (data.message ?? `Moved ${data.moved ?? 0} stream(s)`) : (data.error ?? "Balance failed"));
     if (res.ok) load();
   }
 
@@ -133,16 +154,24 @@ export default function LoadBalancerPage() {
             <select
               className="mt-1 w-full rounded border px-2 py-1.5 panel-select bg-transparent text-sm"
               style={{ borderColor: "var(--border)" }}
-              value={String(config.autoRebalanceLive || "even_spread")}
+              value={String(config.autoRebalanceLive || "off")}
               onChange={(e) => setConfig({ ...config, autoRebalanceLive: e.target.value })}
             >
+              <option value="off">Off (default)</option>
               <option value="even_spread">Even spread (save bandwidth / CPU / RAM)</option>
               <option value="failover_only">Failover only (move off offline servers)</option>
-              <option value="off">Off</option>
             </select>
             <span className="mt-1 block text-xs" style={{ color: "var(--muted)" }}>
               Cron reassigns live channels across online load balancers so no single box holds most of the catalog.
             </span>
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer self-end pb-2">
+            <input
+              type="checkbox"
+              checked={config.autoRebalanceIncludeMain === true}
+              onChange={(e) => setConfig({ ...config, autoRebalanceIncludeMain: e.target.checked })}
+            />
+            Include main server in auto-balance
           </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer self-end pb-2">
             <input
@@ -152,7 +181,7 @@ export default function LoadBalancerPage() {
             />
             Geo-aware routing
           </label>
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-2 flex-wrap">
             <button
               type="button"
               disabled={saving}
@@ -160,6 +189,15 @@ export default function LoadBalancerPage() {
               className="rounded px-4 py-2 text-sm font-medium btn-positive disabled:opacity-60"
             >
               {saving ? "Saving…" : "Save rules"}
+            </button>
+            <button
+              type="button"
+              disabled={balancing}
+              onClick={balanceNow}
+              className="rounded px-4 py-2 text-sm font-medium border disabled:opacity-60"
+              style={{ borderColor: "var(--border)" }}
+            >
+              {balancing ? "Balancing…" : "Balance now"}
             </button>
           </div>
           {msg && <p className="text-xs md:col-span-3" style={{ color: "var(--muted)" }}>{msg}</p>}

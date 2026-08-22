@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
+import { buildServerRoleContext, resolveServerRole } from "@/lib/ensure-main-server-online";
 
 const STALE_MS = 5 * 60 * 1000;
 
@@ -79,16 +80,36 @@ export async function reassignStreamsFromOfflineServers() {
  */
 export async function rebalanceLiveStreamsAcrossServers(opts?: {
   maxMoves?: number;
+  includeMain?: boolean;
+  /** Skip autoRebalanceLive mode check (manual "Balance now"). */
+  force?: boolean;
 }): Promise<{ moved: number; servers: number }> {
   const settings = await getSettingGroup("streams");
-  const mode = String(settings.autoRebalanceLive ?? settings.loadBalancing ?? "server_slots");
-  // off | failover_only → skip even spread (failover handled separately)
-  if (mode === "off" || mode === "failover_only") {
+  const mode = String(settings.autoRebalanceLive ?? "off");
+  if (!opts?.force && (mode === "off" || mode === "failover_only")) {
     return { moved: 0, servers: 0 };
   }
 
+  const includeMain =
+    opts?.includeMain === true || settings.autoRebalanceIncludeMain === true;
+
   const scores = await getServerLoadScores();
-  const online = scores.filter((x) => x.online && x.server.isActive);
+  const roleCtx = buildServerRoleContext(
+    scores.map((x) => ({
+      id: x.server.id,
+      host: x.server.host,
+      sortOrder: x.server.sortOrder,
+      panelSettings: x.server.panelSettings,
+      geoLbCountries: x.server.geoLbCountries,
+      geoLbIsps: x.server.geoLbIsps,
+      name: x.server.name,
+    }))
+  );
+  const online = scores.filter((x) => {
+    if (!x.online || !x.server.isActive) return false;
+    if (!includeMain && resolveServerRole(x.server, roleCtx) === "main") return false;
+    return true;
+  });
   if (online.length < 2) return { moved: 0, servers: online.length };
 
   const maxMoves = Math.max(1, Math.min(opts?.maxMoves ?? 80, 400));

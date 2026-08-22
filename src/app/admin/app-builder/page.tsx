@@ -43,7 +43,7 @@ const emptyForm = {
   allowCast: true,
   allowPip: true,
   showEpg: true,
-  showCatchup: false,
+  showCatchup: true,
   adultPinRequired: false,
   forceUpdate: false,
   hideServerUrl: true,

@@ -7,6 +7,7 @@ import { PanelRole } from "@prisma/client";
 import { MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput, validateLinePasswordPolicy } from "@/lib/credential-generate";
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
 import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
+import { applyLineRenewDays } from "@/lib/line-renew";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 type Ctx = { params: Promise<{ id: string }> };
@@ -117,12 +118,16 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         : undefined,
   };
 
-  if (body.days && Number(body.days) > 0) {
-    const expiresAt = new Date(
-      existing.expiresAt > new Date() ? existing.expiresAt : new Date()
-    );
-    expiresAt.setDate(expiresAt.getDate() + Number(body.days));
-    data.expiresAt = expiresAt;
+  let renewResult: Awaited<ReturnType<typeof applyLineRenewDays>> | null = null;
+  const days = body.days != null ? Number(body.days) : 0;
+  if (Number.isFinite(days) && days > 0) {
+    renewResult = await applyLineRenewDays(existing.id, days, {
+      reactivate: body.reactivate !== false,
+    });
+    data.expiresAt = renewResult.expiresAt;
+    if (renewResult.reactivated) {
+      data.status = renewResult.status;
+    }
   }
 
   const line = await prisma.line.update({
@@ -138,14 +143,32 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     await invalidateXtreamCategories();
   }
 
-  await logActivity("edit_line", {
+  await logActivity(renewResult ? "renew_line" : "edit_line", {
     userId: session.id,
     lineId: line.id,
     entity: "line",
     entityId: line.id,
+    meta: renewResult
+      ? {
+          days: renewResult.daysAdded,
+          previousExpiresAt: renewResult.previousExpiresAt.toISOString(),
+          reactivated: renewResult.reactivated,
+        }
+      : undefined,
   });
 
-  return NextResponse.json({ line });
+  return NextResponse.json({
+    line,
+    renew: renewResult
+      ? {
+          expiresAt: renewResult.expiresAt.toISOString(),
+          previousExpiresAt: renewResult.previousExpiresAt.toISOString(),
+          daysAdded: renewResult.daysAdded,
+          status: renewResult.status,
+          reactivated: renewResult.reactivated,
+        }
+      : undefined,
+  });
   } catch (e) {
     return apiMutationErrorResponse(e);
   }

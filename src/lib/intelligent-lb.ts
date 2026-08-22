@@ -1,7 +1,7 @@
 import { getServerLoadScores } from "@/lib/server-load";
 import { pickServerForClient, serverMatchesGeo } from "@/lib/server-geo-lb";
 import { lookupGeo } from "@/lib/geoip";
-import { getSettingGroup } from "@/lib/panel-settings";
+import { getSettingGroup, isBundledFeaturePacksEnabled } from "@/lib/panel-settings";
 import { isPluginEntitled } from "@/lib/plugin-entitlement";
 
 export type LbServerScore = {
@@ -14,6 +14,7 @@ export type LbServerScore = {
 };
 
 export async function isLbProEnabled(panelHost?: string): Promise<boolean> {
+  if (await isBundledFeaturePacksEnabled()) return true;
   const entitled = await isPluginEntitled("lb_pro", panelHost);
   if (!entitled.ok) return false;
   const s = await getSettingGroup("lb-pro" as never);

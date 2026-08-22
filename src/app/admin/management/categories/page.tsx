@@ -17,16 +17,16 @@ import { AutoLogosButton } from "@/components/auto-logos-button";
 
 const PREDEFINED_CATEGORIES: Record<CategoryTab, string[]> = {
   LIVE: [
-    "UK Entertainment", "UK Sports", "UK News", "UK Movies", "UK Documentaries",
-    "US Entertainment", "US Sports", "US News", "US Movies",
-    "Canadian", "Australian", "Irish",
-    "Sports", "Football", "Cricket", "Rugby", "Boxing", "UFC/MMA", "Tennis", "Golf", "F1/Motorsport",
-    "News", "Kids", "Documentaries", "Music", "Religious", "Adult",
-    "Arabic", "Turkish", "Indian", "Pakistani", "Bangla", "Filipino", "African",
-    "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Polish", "Scandinavian",
-    "Greek", "Romanian", "Hungarian", "Czech", "Balkan",
-    "Chinese", "Japanese", "Korean", "Thai", "Vietnamese",
-    "Latino", "Brazilian", "Mexican", "Argentine", "Colombian",
+    "UK | Entertainment", "UK | Sports", "UK | News", "UK | Movies", "UK | Documentaries",
+    "US | Entertainment", "US | Sports", "US | News", "US | Movies",
+    "CA | Entertainment", "AU | Entertainment", "IE | Entertainment",
+    "UK | Football", "UK | Cricket", "UK | Rugby", "UK | Boxing", "UK | UFC/MMA", "UK | Tennis", "UK | Golf", "UK | F1/Motorsport",
+    "UK | News", "UK | Kids", "UK | Documentaries", "UK | Music", "UK | Religious", "XXX | Adult",
+    "AR | Arabic", "TR | Turkish", "IN | Indian", "PK | Pakistani", "PH | Filipino", "African | Entertainment",
+    "FR | Entertainment", "DE | Entertainment", "ES | Entertainment", "IT | Entertainment", "PT | Entertainment", "NL | Entertainment", "PL | Entertainment", "Scandinavian | Entertainment",
+    "GR | Entertainment", "RO | Entertainment", "HU | Entertainment", "CZ | Entertainment", "Balkan | Entertainment",
+    "CN | Entertainment", "JP | Entertainment", "KR | Entertainment", "TH | Entertainment", "VN | Entertainment",
+    "Latino | Entertainment", "BR | Entertainment", "MX | Entertainment", "AR | Argentine", "CO | Colombian",
   ],
   MOVIE: [
     "Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary",
@@ -581,6 +581,404 @@ const TreeRow = memo(function TreeRow({
   );
 });
 
+function CategoryRemoveDuplicatesPanel({
+  tab,
+  onApplied,
+  setMsg,
+  setBusy,
+  busy,
+}: {
+  tab: CategoryTab;
+  onApplied: () => void;
+  setMsg: (msg: string) => void;
+  setBusy: (busy: boolean) => void;
+  busy: boolean;
+}) {
+  const [samples, setSamples] = useState<{ kept: string; removed: string[] }[]>([]);
+
+  async function run(dryRun: boolean) {
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/categories/remove-duplicates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryType: tab, dryRun }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(data.error ?? "Remove duplicates failed");
+        return;
+      }
+      setSamples(data.samples ?? []);
+      if (dryRun) {
+        setMsg(
+          `Preview: ${data.duplicateGroups} duplicate name groups, ${data.merged} folders would be merged (${data.scanned} scanned)`
+        );
+        return;
+      }
+      setMsg(`Merged ${data.merged} duplicate folders with the same name`);
+      onApplied();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="rounded-lg border p-4 space-y-3"
+      style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+    >
+      <div>
+        <h2 className="text-sm font-semibold">Remove duplicate names</h2>
+        <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+          Finds {CATEGORY_TYPE_LABELS[tab].toLowerCase()} categories with the same name (case and spacing
+          insensitive) and merges them — streams move to the kept folder.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded border"
+          style={{ borderColor: "var(--border)" }}
+          onClick={() => void run(true)}
+        >
+          Preview duplicates
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded font-medium text-white"
+          style={{ background: "var(--accent)" }}
+          onClick={() => {
+            if (
+              !confirm(
+                `Merge duplicate ${CATEGORY_TYPE_LABELS[tab].toLowerCase()} categories with the same name? Streams will be moved to the kept folder.`
+              )
+            ) {
+              return;
+            }
+            void run(false);
+          }}
+        >
+          {busy ? "Working…" : "Remove duplicates"}
+        </button>
+      </div>
+      {samples.length > 0 && (
+        <div
+          className="rounded border max-h-48 overflow-y-auto text-xs font-mono"
+          style={{ borderColor: "var(--border)" }}
+        >
+          {samples.map((s, i) => (
+            <div
+              key={`${s.kept}-${i}`}
+              className="px-2 py-1 border-b"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <span className="font-medium">{s.kept}</span>
+              <span className="mx-2" style={{ color: "var(--muted)" }}>
+                ←
+              </span>
+              <span style={{ color: "var(--muted)" }}>{s.removed.join(", ")}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CategoryNameNormalizePanel({
+  tab,
+  onApplied,
+  setMsg,
+  setBusy,
+  busy,
+}: {
+  tab: CategoryTab;
+  onApplied: () => void;
+  setMsg: (msg: string) => void;
+  setBusy: (busy: boolean) => void;
+  busy: boolean;
+}) {
+  const [samples, setSamples] = useState<{ from: string; to: string }[]>([]);
+
+  async function run(dryRun: boolean) {
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/categories/normalize-names", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryType: tab, dryRun }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(data.error ?? "Normalize failed");
+        return;
+      }
+      setSamples(data.samples ?? []);
+      if (dryRun) {
+        setMsg(
+          `Preview: ${data.renamed} rename, ${data.merged} merge, ${data.unchanged} already OK (${data.scanned} scanned)`
+        );
+        return;
+      }
+      setMsg(
+        `Renamed ${data.renamed}, merged ${data.merged} duplicates — folders now use UK | … / US | … / XXX | … format`
+      );
+      onApplied();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="rounded-lg border p-4 space-y-3"
+      style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+    >
+      <div>
+        <h2 className="text-sm font-semibold">Normalize folder names (XUI format)</h2>
+        <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+          Converts names like <code>UK Entertainment</code> → <code>UK | Entertainment</code>,{" "}
+          <code>US Fubo</code> → <code>US | Fubo</code>, adult → <code>XXX | …</code>. Future SQL
+          migrations apply this automatically on import.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded border"
+          style={{ borderColor: "var(--border)" }}
+          onClick={() => void run(true)}
+        >
+          Preview renames
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded font-medium text-white"
+          style={{ background: "var(--accent)" }}
+          onClick={() => {
+            if (
+              !confirm(
+                `Rename ${CATEGORY_TYPE_LABELS[tab].toLowerCase()} categories to XUI pipe format (UK | …)? Duplicates will be merged.`
+              )
+            ) {
+              return;
+            }
+            void run(false);
+          }}
+        >
+          {busy ? "Working…" : "Normalize names"}
+        </button>
+      </div>
+      {samples.length > 0 && (
+        <div
+          className="rounded border max-h-48 overflow-y-auto text-xs font-mono"
+          style={{ borderColor: "var(--border)" }}
+        >
+          {samples.map((s, i) => (
+            <div
+              key={`${s.from}-${i}`}
+              className="px-2 py-1 border-b"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <span style={{ color: "var(--muted)" }}>{s.from}</span>
+              <span className="mx-2">→</span>
+              <span>{s.to}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const AUTO_SORT_PRESETS = [
+  {
+    id: "operator-order",
+    label: "Operator order (Sky · US · Sports · 24/7 · A–Z)",
+    hint: "UK in Sky EPG order, US network order, sports block, 24/7, then rest A–Z.",
+    custom: false,
+  },
+  {
+    id: "uk-sports-us",
+    label: "UK → Sports → US → A–Z",
+    hint: "UK & Ireland first, sports next, US/Canada, then the rest alphabetically.",
+    custom: false,
+  },
+  {
+    id: "country-groups",
+    label: "Country groups",
+    hint: "Group by region/country prefix, then A–Z inside each group.",
+    custom: false,
+  },
+  {
+    id: "alphabetical",
+    label: "A–Z only",
+    hint: "Reset to simple alphabetical order.",
+    custom: false,
+  },
+  {
+    id: "custom",
+    label: "Custom tiers (one keyword per line)",
+    hint: "First matching line wins. Example: UK, Sports, US",
+    custom: true,
+  },
+] as const;
+
+function CategoryAutoSortPanel({
+  tab,
+  onApplied,
+  setMsg,
+  setBusy,
+  busy,
+}: {
+  tab: CategoryTab;
+  onApplied: () => void;
+  setMsg: (msg: string) => void;
+  setBusy: (busy: boolean) => void;
+  busy: boolean;
+}) {
+  const [preset, setPreset] = useState<(typeof AUTO_SORT_PRESETS)[number]["id"]>("operator-order");
+  const [customLines, setCustomLines] = useState("UK\nSports\nFootball\nUS\nCanada");
+  const [preview, setPreview] = useState<{ name: string; tier: number }[]>([]);
+  const selected = AUTO_SORT_PRESETS.find((p) => p.id === preset)!;
+
+  async function run(dryRun: boolean) {
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/categories/auto-sort", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          categoryType: tab,
+          preset,
+          customLines: preset === "custom" ? customLines.split(/\r?\n/) : undefined,
+          dryRun,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(data.error ?? "Auto-sort failed");
+        return;
+      }
+      if (dryRun) {
+        setPreview((data.preview ?? []).map((p: { name: string; tier: number }) => ({ name: p.name, tier: p.tier })));
+        setMsg(`Preview: ${data.total} ${CATEGORY_TYPE_LABELS[tab].toLowerCase()} categories`);
+        return;
+      }
+      setPreview([]);
+      setMsg(`Auto-ordered ${data.updated} of ${data.total} categories — StbEmu/Xtream apps use this order on reload.`);
+      onApplied();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="rounded-lg border p-4 space-y-3"
+      style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+    >
+      <div>
+        <h2 className="text-sm font-semibold">Auto-order categories</h2>
+        <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+          One-click ordering for {CATEGORY_TYPE_LABELS[tab].toLowerCase()} folders in StbEmu, XCIPTV, and other apps.
+          Drag-and-drop above still works for fine-tuning.
+        </p>
+      </div>
+      <label className="block text-sm">
+        <span className="font-medium">Sort preset</span>
+        <select
+          className="mt-1.5 w-full rounded border px-3 py-2 panel-select bg-transparent"
+          style={{ borderColor: "var(--border)" }}
+          value={preset}
+          onChange={(e) => {
+            setPreset(e.target.value as (typeof AUTO_SORT_PRESETS)[number]["id"]);
+            setPreview([]);
+          }}
+        >
+          {AUTO_SORT_PRESETS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="text-xs" style={{ color: "var(--muted)" }}>
+        {selected.hint}
+      </p>
+      {selected.custom && (
+        <label className="block text-sm">
+          <span className="font-medium">Custom tiers (top → bottom)</span>
+          <textarea
+            className="mt-1.5 w-full rounded border px-3 py-2 bg-transparent font-mono text-xs min-h-[120px]"
+            style={{ borderColor: "var(--border)" }}
+            value={customLines}
+            onChange={(e) => setCustomLines(e.target.value)}
+            placeholder={"UK\nSports\nUS"}
+          />
+          <span className="text-xs mt-1 block" style={{ color: "var(--muted)" }}>
+            Each line is a tier. Categories matching that keyword (prefix or contains) are placed in that tier.
+          </span>
+        </label>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded border"
+          style={{ borderColor: "var(--border)" }}
+          onClick={() => void run(true)}
+        >
+          Preview
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded font-medium text-white"
+          style={{ background: "var(--accent)" }}
+          onClick={() => {
+            if (
+              !confirm(
+                `Apply auto-order to all ${CATEGORY_TYPE_LABELS[tab].toLowerCase()} categories? This updates sort order for every sibling group.`
+              )
+            ) {
+              return;
+            }
+            void run(false);
+          }}
+        >
+          {busy ? "Applying…" : "Apply order"}
+        </button>
+      </div>
+      {preview.length > 0 && (
+        <div
+          className="rounded border max-h-48 overflow-y-auto text-xs font-mono"
+          style={{ borderColor: "var(--border)" }}
+        >
+          {preview.map((p, i) => (
+            <div
+              key={`${p.name}-${i}`}
+              className="px-2 py-1 border-b flex justify-between gap-2"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <span className="truncate">{p.name}</span>
+              <span style={{ color: "var(--muted)" }}>tier {p.tier + 1}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ManagementCategoriesInner() {
   const router = useRouter();
   const pathname = usePathname();
@@ -814,14 +1212,18 @@ function ManagementCategoriesInner() {
       {/* Predefined category quick-add */}
       <PredefinedCategories tab={tab} existingNames={tabCategories.map((c) => c.name.toLowerCase())} onAdded={load} />
 
+      <CategoryRemoveDuplicatesPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+      <CategoryNameNormalizePanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+
+      <CategoryAutoSortPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+
       <div
         className="rounded-lg border p-4 text-sm space-y-2"
         style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}
       >
         <p>
-          <strong style={{ color: "var(--accent)" }}>{CATEGORY_TYPE_LABELS[tab]}</strong> categories — these are
-          the folders the IPTV app and site player show (same order: drag category names or use ↑↓ among siblings). Bouquets only control which
-          packages a line can access.
+          <strong style={{ color: "var(--accent)" }}>{CATEGORY_TYPE_LABELS[tab]}</strong> categories use XUI folder names like{" "}
+          <code>UK | Entertainment</code>, <code>US | Fubo</code>, <code>XXX | Adult</code> — same order in StbEmu/Xtream apps (drag names or use auto-order below).
         </p>
         <ul className="list-disc pl-5 space-y-1" style={{ color: "var(--muted)" }}>
           <li>
@@ -866,7 +1268,7 @@ function ManagementCategoriesInner() {
         <label className="block text-sm">
           <span className="font-medium">Category name</span>
           <input
-            placeholder="e.g. UK Entertainment"
+            placeholder="e.g. UK | Entertainment"
             required
             className="mt-1.5 w-full rounded border px-3 py-2 bg-transparent"
             style={{ borderColor: "var(--border)" }}

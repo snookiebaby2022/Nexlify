@@ -4,7 +4,7 @@ export default function ResellerMoviesPage() {
   return (
     <ResellerStreamsBrowser
       title="Movies"
-      description="VOD movies in your bouquets (read-only)."
+      description="Movies in your assigned bouquets (read-only)."
       query="type=MOVIE"
     />
   );

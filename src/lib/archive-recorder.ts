@@ -3,6 +3,8 @@ import { getSettingGroup } from "@/lib/panel-settings";
 import { isPluginEntitled } from "@/lib/plugin-entitlement";
 
 export async function isArchivePackEnabled(panelHost?: string): Promise<boolean> {
+  const { isBundledFeaturePacksEnabled } = await import("@/lib/panel-settings");
+  if (await isBundledFeaturePacksEnabled()) return true;
   const entitled = await isPluginEntitled("archive_timeshift", panelHost);
   if (!entitled.ok) return false;
   const s = await getSettingGroup("archive-pack" as never);

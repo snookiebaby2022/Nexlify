@@ -10,6 +10,8 @@
  */
 import type { PrismaClient } from "@prisma/client";
 import { categoryMergeKey } from "./category-options";
+import { preferXuiCategoryName } from "./category-xui-name";
+import { normalizeCategoryNamesToXui } from "./normalize-category-names";
 import { invalidateXtreamCategories } from "./cache-invalidate";
 
 export type BouquetCategoryRepairResult = {
@@ -18,6 +20,7 @@ export type BouquetCategoryRepairResult = {
   streamLinksMerged: number;
   orphanBouquetsDeleted: number;
   categoriesMerged: number;
+  categoriesRenamed?: number;
   streamsRecategorized: number;
   sortOrdersFixed: number;
   orphanLiveLinked?: number;
@@ -30,14 +33,9 @@ function normCatName(name: string): string {
   return categoryMergeKey(name);
 }
 
-/** Prefer the XUI-style "UK | Entertainment" name over heuristic "UK Entertainment". */
+/** Prefer XUI-style `UK | Name` over `UK Name`. */
 function preferCategoryName(a: string, b: string): string {
-  const aPipe = a.includes("|");
-  const bPipe = b.includes("|");
-  if (aPipe && !bPipe) return a;
-  if (bPipe && !aPipe) return b;
-  // Prefer the one that looks more like the dump (shorter pipe form wins on equal)
-  return a.length <= b.length ? a : b;
+  return preferXuiCategoryName(a, b);
 }
 
 const PACKAGE_RULES: { re: RegExp; packageName: RegExp | string }[] = [
@@ -373,6 +371,10 @@ export async function repairBouquetCategorySplit(
   result.orphanLiveLinked = orphanLive.linked;
   result.orphanLiveSkipped = orphanLive.skipped;
   result.bouquetSortSynced = await syncLiveBouquetStreamSortOrders(prisma);
+
+  const nameNorm = await normalizeCategoryNamesToXui(prisma);
+  result.categoriesRenamed = nameNorm.renamed;
+  result.categoriesMerged += nameNorm.merged;
 
   void invalidateXtreamCategories();
   return result;

@@ -63,6 +63,11 @@ export default function AdminServersPage() {
   const [massAction, setMassAction] = useState("patch_active");
   const [massProxyId, setMassProxyId] = useState("");
   const [massMsg, setMassMsg] = useState("");
+  const [moveFromId, setMoveFromId] = useState("");
+  const [moveToId, setMoveToId] = useState("");
+  const [moveTypes, setMoveTypes] = useState({ LIVE: true, MOVIE: true, SERIES: true });
+  const [moveMsg, setMoveMsg] = useState("");
+  const [moveBusy, setMoveBusy] = useState(false);
   const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
 
@@ -135,6 +140,42 @@ export default function AdminServersPage() {
       setSelected(new Set());
       load();
     }
+  }
+
+  async function moveStreamsBetweenServers() {
+    const types = (["LIVE", "MOVIE", "SERIES"] as const).filter((t) => moveTypes[t]);
+    if (!moveFromId || !moveToId) {
+      setMoveMsg("Select source and destination servers");
+      return;
+    }
+    if (moveFromId === moveToId) {
+      setMoveMsg("Source and destination must differ");
+      return;
+    }
+    if (!types.length) {
+      setMoveMsg("Select at least one content type");
+      return;
+    }
+    const fromName = servers.find((s) => s.id === moveFromId)?.name ?? "source";
+    const toName = servers.find((s) => s.id === moveToId)?.name ?? "destination";
+    if (
+      !confirm(
+        `Move all ${types.join(", ")} streams from ${fromName} to ${toName}? This cannot be undone in one click.`
+      )
+    ) {
+      return;
+    }
+    setMoveBusy(true);
+    setMoveMsg("");
+    const res = await fetch("/api/admin/servers/move-streams", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fromServerId: moveFromId, toServerId: moveToId, types }),
+    });
+    const data = await res.json();
+    setMoveBusy(false);
+    setMoveMsg(res.ok ? (data.message ?? `Moved ${data.moved ?? 0}`) : (data.error ?? "Move failed"));
+    if (res.ok) load();
   }
 
   async function serverAction(serverId: string, action: string) {
@@ -534,6 +575,77 @@ export default function AdminServersPage() {
           {massMsg && (
             <span className="text-sm" style={{ color: "var(--muted)" }}>
               {massMsg}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div
+        className="rounded-lg border p-4 space-y-3"
+        style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+      >
+        <h2 className="text-sm font-medium" style={{ color: "var(--accent)" }}>
+          Move streams between servers
+        </h2>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>
+          Reassign all live channels, movies, and/or series from one server to another.
+        </p>
+        <div className="flex flex-wrap gap-3 items-end">
+          <label className="text-sm block">
+            <span className="block mb-1 text-xs" style={{ color: "var(--muted)" }}>From server</span>
+            <select
+              className="panel-select rounded border px-3 py-2 text-sm min-w-[180px]"
+              style={{ borderColor: "var(--border)" }}
+              value={moveFromId}
+              onChange={(e) => setMoveFromId(e.target.value)}
+            >
+              <option value="">— Select —</option>
+              {servers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s._count?.streams ?? 0})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm block">
+            <span className="block mb-1 text-xs" style={{ color: "var(--muted)" }}>To server</span>
+            <select
+              className="panel-select rounded border px-3 py-2 text-sm min-w-[180px]"
+              style={{ borderColor: "var(--border)" }}
+              value={moveToId}
+              onChange={(e) => setMoveToId(e.target.value)}
+            >
+              <option value="">— Select —</option>
+              {servers.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex flex-wrap gap-3 items-center text-sm pb-2">
+            {(["LIVE", "MOVIE", "SERIES"] as const).map((t) => (
+              <label key={t} className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={moveTypes[t]}
+                  onChange={(e) => setMoveTypes((prev) => ({ ...prev, [t]: e.target.checked }))}
+                />
+                {t === "LIVE" ? "Live" : t === "MOVIE" ? "Movies" : "Series"}
+              </label>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="btn-positive rounded px-4 py-2 text-sm cursor-pointer disabled:opacity-60"
+            disabled={moveBusy}
+            onClick={moveStreamsBetweenServers}
+          >
+            {moveBusy ? "Moving…" : "Move content"}
+          </button>
+          {moveMsg && (
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              {moveMsg}
             </span>
           )}
         </div>

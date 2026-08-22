@@ -145,6 +145,7 @@ export default function AdminMagAllPage() {
           lineId={renewTarget.line.id}
           lineUsername={renewTarget.line.username}
           expiresAt={renewTarget.line.expiresAt}
+          status={renewTarget.line.status}
           onClose={() => setRenewTarget(null)}
           onRenewed={load}
         />

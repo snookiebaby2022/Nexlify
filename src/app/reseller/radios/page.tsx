@@ -1,11 +1,11 @@
 import { ResellerStreamsBrowser } from "@/components/reseller-streams-browser";
 
-export default function Page() {
+export default function ResellerRadiosPage() {
   return (
     <ResellerStreamsBrowser
-      title="Radio stations"
-      description="Radio streams in your bouquets (read-only)."
-      query="radio=1"
+      title="Radio"
+      description="Radio stations in your assigned bouquets (read-only)."
+      query="type=LIVE&radio=1"
     />
   );
 }

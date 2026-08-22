@@ -151,25 +151,149 @@ export async function probeStreamProvider(
   }
 }
 
+export type InferredRemoteConnection = {
+  remoteHost: string | null;
+  remotePort: number | null;
+  remoteProtocol: string | null;
+  remotePanelUrl: string | null;
+};
+
+/** Derive SSH/panel host details from the stream base URL (hostname, port, protocol, origin). */
+export function inferRemoteConnectionFromUrl(raw: string): InferredRemoteConnection {
+  const normalized = normalizeProviderUrl(raw);
+  if (!normalized.ok) {
+    return { remoteHost: null, remotePort: null, remoteProtocol: null, remotePanelUrl: null };
+  }
+
+  try {
+    const url = new URL(normalized.url);
+    const remoteHost = url.hostname || null;
+    const defaultPort = url.protocol === "https:" ? 443 : url.protocol === "http:" ? 80 : null;
+    const remotePort = url.port ? Number(url.port) : defaultPort;
+    const remoteProtocol =
+      url.protocol === "https:" ? "https" : url.protocol === "http:" ? "http" : "other";
+    return {
+      remoteHost,
+      remotePort,
+      remoteProtocol,
+      remotePanelUrl: url.origin,
+    };
+  } catch {
+    return { remoteHost: null, remotePort: null, remoteProtocol: null, remotePanelUrl: null };
+  }
+}
+
+export type ProviderAccountProbe = {
+  expiresAt: Date | null;
+  maxConnections: number | null;
+  upstreamActiveConnections: number | null;
+};
+
+function parsePositiveInt(raw: unknown): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.floor(n);
+}
+
+function parseExpiry(raw: unknown): Date | null {
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "string" && /^\d+$/.test(raw.trim())) {
+    const sec = Number(raw);
+    if (sec > 1_000_000_000) return new Date(sec * 1000);
+  }
+  const d = new Date(String(raw));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Pull username/password from provider URL query or apiKey (`user:pass`). */
+export function extractProviderCredentials(
+  baseUrl: string,
+  apiKey?: string | null
+): { username?: string; password?: string; origin?: string } {
+  try {
+    const normalized = normalizeProviderUrl(baseUrl);
+    if (!normalized.ok) return {};
+    const url = new URL(normalized.url);
+    const username =
+      url.searchParams.get("username") ??
+      url.searchParams.get("user") ??
+      url.searchParams.get("login") ??
+      undefined;
+    const password =
+      url.searchParams.get("password") ??
+      url.searchParams.get("pass") ??
+      url.searchParams.get("pwd") ??
+      undefined;
+    if (username && password) {
+      return { username, password, origin: url.origin };
+    }
+    const key = apiKey?.trim();
+    if (key?.includes(":")) {
+      const idx = key.indexOf(":");
+      return {
+        username: key.slice(0, idx),
+        password: key.slice(idx + 1),
+        origin: url.origin,
+      };
+    }
+    return { origin: url.origin };
+  } catch {
+    return {};
+  }
+}
+
+/** Query upstream Xtream player_api for account expiry and connection stats. */
+export async function probeProviderAccountInfo(
+  baseUrl: string,
+  apiKey?: string | null
+): Promise<ProviderAccountProbe> {
+  const creds = extractProviderCredentials(baseUrl, apiKey);
+  if (!creds.username || !creds.password || !creds.origin) {
+    return { expiresAt: null, maxConnections: null, upstreamActiveConnections: null };
+  }
+
+  const apiUrl = `${creds.origin}/player_api.php?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}`;
+  try {
+    const res = await fetch(apiUrl, {
+      signal: AbortSignal.timeout(probeTimeoutMs()),
+      headers: { "User-Agent": "Nexlify-Provider-Probe/1.0" },
+    });
+    if (!res.ok) {
+      return { expiresAt: null, maxConnections: null, upstreamActiveConnections: null };
+    }
+    const data = (await res.json()) as {
+      user_info?: {
+        auth?: number;
+        exp_date?: string;
+        max_connections?: string;
+        active_cons?: string;
+      };
+    };
+    const info = data.user_info;
+    if (!info || info.auth === 0) {
+      return { expiresAt: null, maxConnections: null, upstreamActiveConnections: null };
+    }
+    return {
+      expiresAt: parseExpiry(info.exp_date),
+      maxConnections: parsePositiveInt(info.max_connections),
+      upstreamActiveConnections: parsePositiveInt(info.active_cons),
+    };
+  } catch {
+    return { expiresAt: null, maxConnections: null, upstreamActiveConnections: null };
+  }
+}
+
 export function validateProviderInput(body: {
   name?: unknown;
   baseUrl?: unknown;
   maxStreams?: unknown;
-  contactEmail?: unknown;
-}): { ok: true; data: { name: string; baseUrl: string; maxStreams: number | null; contactEmail: string | null } } | { ok: false; error: string; field?: string } {
+}): { ok: true; data: { name: string; baseUrl: string; maxStreams: number | null } } | { ok: false; error: string; field?: string } {
   const name = String(body.name ?? "").trim();
   if (!name) return { ok: false, error: "Name is required", field: "name" };
 
   const baseUrlRaw = String(body.baseUrl ?? "").trim();
   const urlCheck = normalizeProviderUrl(baseUrlRaw);
   if (!urlCheck.ok) return { ok: false, error: urlCheck.error, field: "baseUrl" };
-
-  const email = body.contactEmail != null && String(body.contactEmail).trim() !== ""
-    ? String(body.contactEmail).trim()
-    : null;
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { ok: false, error: "Invalid contact email", field: "contactEmail" };
-  }
 
   let maxStreams: number | null = null;
   if (body.maxStreams != null && body.maxStreams !== "") {
@@ -180,5 +304,5 @@ export function validateProviderInput(body: {
     maxStreams = Math.floor(n);
   }
 
-  return { ok: true, data: { name, baseUrl: urlCheck.url, maxStreams, contactEmail: email } };
+  return { ok: true, data: { name, baseUrl: urlCheck.url, maxStreams } };
 }

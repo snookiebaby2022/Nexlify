@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { magPortalUrl, stalkerPortalUrl } from "@/lib/mag";
-import { resolveServerUrls } from "@/lib/server-urls";
+import { magPortalClientHtml } from "@/lib/mag-portal-html";
 import { serverBaseUrl } from "@/lib/xtream";
-import { handleStalkerPortalRequest, isStalkerPortalRequest } from "@/lib/stalker-portal-handle";
+import {
+  handleStalkerPortalRequest,
+  isStalkerPortalRequest,
+  isPortalDocumentNavigation,
+} from "@/lib/stalker-portal-handle";
 
 async function handle(req: NextRequest) {
   if (req.method === "GET" && !isStalkerPortalRequest(req)) {
-    return magPortalHelpPage(req);
+    if (req.nextUrl.searchParams.get("help") === "1") {
+      return magPortalHelpPage(req);
+    }
+    return magPortalPage();
   }
+
+  if (req.method === "GET" && isPortalDocumentNavigation(req)) {
+    return NextResponse.redirect(new URL("/c/", req.url), 302);
+  }
+
   return handleStalkerPortalRequest(req);
 }
 
@@ -17,6 +29,15 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   return handleStalkerPortalRequest(req);
+}
+
+function magPortalPage() {
+  return new NextResponse(magPortalClientHtml(), {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
 function magPortalHelpPage(req: NextRequest) {

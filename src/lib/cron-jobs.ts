@@ -5,7 +5,7 @@ import { importFromFolder } from "./import-media";
 import { syncEpgSource } from "./epg";
 import { enqueueAgentCommand, generateAgentToken } from "./stream-agent";
 import { runPanelBackup } from "./backup-run";
-import { reassignStreamsFromOfflineServers } from "./server-load";
+import { reassignStreamsFromOfflineServers, rebalanceLiveStreamsAcrossServers } from "./server-load";
 import { jobCheckStreamCerts } from "./cert-monitor";
 import { isRemoteM3uUrl } from "./m3u-watch-sync";
 import { runDueM3uSyncJobs, runWatchFolderM3uSync } from "./m3u-sync-jobs";
@@ -469,8 +469,22 @@ export async function jobPanelBackup() {
 export async function jobServerRebalance() {
   const start = Date.now();
   try {
-    const n = await reassignStreamsFromOfflineServers();
-    await logCron("server_rebalance", "ok", `${n} streams moved`, Date.now() - start);
+    const failover = await reassignStreamsFromOfflineServers();
+    const settings = await getSettingGroup("streams");
+    const mode = String(settings.autoRebalanceLive ?? "off");
+    let spread = 0;
+    if (mode === "even_spread") {
+      const result = await rebalanceLiveStreamsAcrossServers({
+        includeMain: settings.autoRebalanceIncludeMain === true,
+      });
+      spread = result.moved;
+    }
+    await logCron(
+      "server_rebalance",
+      "ok",
+      `${failover} failover, ${spread} spread`,
+      Date.now() - start
+    );
   } catch (e) {
     await logCron("server_rebalance", "error", String(e), Date.now() - start);
   }
@@ -640,6 +654,31 @@ async function jobM3uSync() {
   }
 }
 
+async function jobPlexAutoSync() {
+  const start = Date.now();
+  try {
+    const rows = await prisma.mediaIntegration.findMany({
+      where: { type: "plex", isActive: true },
+      select: { id: true, config: true },
+    });
+    if (!rows.length) {
+      await logCron("plex_auto_sync", "ok", "no active integrations", Date.now() - start);
+      return;
+    }
+    const { importPlexLibrary } = await import("./media-integrations");
+    let imported = 0;
+    for (const row of rows) {
+      const cfg = (row.config ?? {}) as Record<string, unknown>;
+      const serverId = cfg.serverId ? String(cfg.serverId) : null;
+      const result = await importPlexLibrary(row.id, serverId);
+      imported += result.imported;
+    }
+    await logCron("plex_auto_sync", "ok", `synced ${rows.length} server(s), +${imported} items`, Date.now() - start);
+  } catch (e) {
+    await logCron("plex_auto_sync", "error", String(e), Date.now() - start);
+  }
+}
+
 export async function runAllCronJobs() {
   await jobPanelHealthWatchdog();
   await jobCleanupConnections();
@@ -648,6 +687,7 @@ export async function runAllCronJobs() {
   await jobWatchFolders();
   await jobImportQueue();
   await jobM3uSync();
+  await jobPlexAutoSync();
   await jobAgentAutoRestart();
   await jobServerRebalance();
   await jobTheftDetection();

@@ -22,6 +22,7 @@ export async function GET() {
       avatarConfig: true,
       role: true,
       credits: true,
+      resellerDns: true,
       totpEnabled: true,
       createdAt: true,
       group: { select: { id: true, name: true } },

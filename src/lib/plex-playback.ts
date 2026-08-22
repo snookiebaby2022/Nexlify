@@ -14,8 +14,8 @@ const PROFILES: Record<string, PlexTranscodeProfile> = {
 };
 
 export function resolvePlexProfile(raw: unknown): PlexTranscodeProfile {
-  const key = String(raw ?? "1080p").toLowerCase();
-  return { ...PROFILES["1080p"], ...(PROFILES[key] ?? {}) };
+  const key = String(raw ?? "direct").toLowerCase();
+  return { ...(PROFILES[key] ?? PROFILES.direct) };
 }
 
 export type PlexJsonMetadata = {

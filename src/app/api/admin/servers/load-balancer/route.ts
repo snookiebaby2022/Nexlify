@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { getSettingGroup, setSettingGroup } from "@/lib/panel-settings";
 import { rankServersForClient } from "@/lib/intelligent-lb";
-import { getServerLoadScores } from "@/lib/server-load";
+import { getServerLoadScores, rebalanceLiveStreamsAcrossServers } from "@/lib/server-load";
 import { isLbProEnabled } from "@/lib/intelligent-lb";
 import { PanelRole } from "@prisma/client";
 
@@ -47,7 +47,8 @@ export async function GET(req: NextRequest) {
       loadBalancing: streamSettings.loadBalancing,
       geoLoadBalancing: streamSettings.geoLoadBalancing,
       loadBalancingRestriction: streamSettings.loadBalancingRestriction,
-      autoRebalanceLive: streamSettings.autoRebalanceLive ?? "even_spread",
+      autoRebalanceLive: streamSettings.autoRebalanceLive ?? "off",
+      autoRebalanceIncludeMain: streamSettings.autoRebalanceIncludeMain === true,
       lbProEnabled,
       lbPro: lbProSettings,
     },
@@ -81,6 +82,43 @@ export async function PATCH(req: NextRequest) {
     await setSettingGroup("lb-pro" as never, { ...current, ...body.lbPro });
   }
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    return apiMutationErrorResponse(e);
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const session = await requireSession([PanelRole.ADMIN]);
+    if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+
+    const body = parsed.data;
+    if (String(body.action) !== "rebalance_now") {
+      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    }
+
+    const settings = await getSettingGroup("streams");
+    const includeMain =
+      body.includeMain === true || settings.autoRebalanceIncludeMain === true;
+
+    const result = await rebalanceLiveStreamsAcrossServers({
+      includeMain,
+      force: true,
+      maxMoves: typeof body.maxMoves === "number" ? body.maxMoves : 120,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      moved: result.moved,
+      servers: result.servers,
+      message:
+        result.moved > 0
+          ? `Moved ${result.moved} live stream(s) across ${result.servers} server(s)`
+          : "No rebalance needed (servers already balanced or fewer than 2 eligible servers)",
+    });
   } catch (e) {
     return apiMutationErrorResponse(e);
   }

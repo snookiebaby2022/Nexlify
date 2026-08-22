@@ -185,12 +185,199 @@ export async function handleXuiExtendedAction(
     }
 
     case "get_transcodes": {
+      const { FFMPEG_TRANSCODE_PROFILES, buildFfmpegTranscodeArgs } = await import("./ffmpeg-transcode-profiles");
       return {
         status: "success",
-        transcodes: [
-          { id: "copy", name: "Copy", cmd: "-c copy" },
-          { id: "h264_720", name: "H.264 720p", cmd: "-c:v libx264 -preset veryfast -vf scale=1280:720" },
-        ],
+        transcodes: FFMPEG_TRANSCODE_PROFILES.map((p) => ({
+          id: p.id,
+          name: p.label,
+          cmd: buildFfmpegTranscodeArgs(p, "{input}").join(" "),
+        })),
+      };
+    }
+
+    case "start_stream":
+    case "stop_stream":
+    case "restart_stream": {
+      const streamId = params.get("stream_id") ?? params.get("id");
+      if (!streamId) return { status: "error", message: "stream_id required" };
+      const stream = await prisma.stream.findUnique({
+        where: { id: streamId },
+        select: { id: true, serverId: true },
+      });
+      if (!stream?.serverId) return { status: "error", message: "stream has no server" };
+      const { enqueueAgentCommand } = await import("./stream-agent");
+      const cmd =
+        action === "start_stream"
+          ? "start_stream"
+          : action === "stop_stream"
+            ? "stop_stream"
+            : "restart_stream";
+      await enqueueAgentCommand(stream.serverId, cmd, { streamId });
+      return { status: "success", queued: cmd };
+    }
+
+    case "add_stream_to_bouquet":
+    case "remove_stream_from_bouquet": {
+      const bouquetId = params.get("bouquet_id") ?? params.get("bouquetId");
+      const streamId = params.get("stream_id") ?? params.get("streamId");
+      if (!bouquetId || !streamId) return { status: "error", message: "bouquet_id and stream_id required" };
+      if (action === "add_stream_to_bouquet") {
+        await prisma.bouquetStream.upsert({
+          where: { bouquetId_streamId: { bouquetId, streamId } },
+          create: { bouquetId, streamId },
+          update: {},
+        });
+      } else {
+        await prisma.bouquetStream.deleteMany({ where: { bouquetId, streamId } });
+      }
+      return { status: "success" };
+    }
+
+    case "set_epg_channel": {
+      const streamId = params.get("stream_id") ?? params.get("id");
+      const epgChannelId = params.get("epg_channel_id") ?? params.get("channel_id");
+      if (!streamId || !epgChannelId) return { status: "error", message: "stream_id and epg_channel_id required" };
+      const stream = await prisma.stream.update({
+        where: { id: streamId },
+        data: { epgChannelId: String(epgChannelId) },
+      });
+      return { status: "success", stream };
+    }
+
+    case "set_line_bouquets":
+    case "assign_bouquets_to_line": {
+      const lineId = params.get("line_id") ?? params.get("id");
+      if (!lineId) return { status: "error", message: "line_id required" };
+      const bouquetIds = params.getAll("bouquet[]").length
+        ? params.getAll("bouquet[]")
+        : (params.get("bouquets")?.split(",").filter(Boolean) ?? []);
+      await prisma.lineBouquet.deleteMany({ where: { lineId } });
+      if (bouquetIds.length) {
+        await prisma.lineBouquet.createMany({
+          data: bouquetIds.map((bouquetId) => ({ lineId, bouquetId })),
+          skipDuplicates: true,
+        });
+      }
+      const line = await prisma.line.findUnique({
+        where: { id: lineId },
+        include: { bouquets: { include: { bouquet: true } } },
+      });
+      return { status: "success", line };
+    }
+
+    case "get_bouquet_streams": {
+      const bouquetId = params.get("bouquet_id") ?? params.get("id");
+      if (!bouquetId) return { status: "error", message: "bouquet_id required" };
+      const rows = await prisma.bouquetStream.findMany({
+        where: { bouquetId },
+        include: { stream: { select: { id: true, name: true, type: true, isActive: true } } },
+        orderBy: { sortOrder: "asc" },
+      });
+      return { status: "success", streams: rows.map((r) => r.stream) };
+    }
+
+    case "mass_enable_streams":
+    case "mass_disable_streams": {
+      const ids = params.getAll("stream_id[]").length
+        ? params.getAll("stream_id[]")
+        : (params.get("stream_ids")?.split(",").filter(Boolean) ?? []);
+      if (!ids.length) return { status: "error", message: "stream_ids required" };
+      const isActive = action === "mass_enable_streams";
+      const result = await prisma.stream.updateMany({
+        where: { id: { in: ids } },
+        data: { isActive },
+      });
+      return { status: "success", updated: result.count };
+    }
+
+    case "get_processes":
+    case "get_stream_processes": {
+      const serverId = params.get("server_id") ?? params.get("serverId");
+      const processes = await prisma.streamProcess.findMany({
+        where: serverId ? { serverId } : undefined,
+        include: {
+          stream: { select: { id: true, name: true } },
+          server: { select: { id: true, name: true } },
+        },
+        orderBy: { lastSeenAt: "desc" },
+        take: Math.min(500, parseInt(params.get("limit") ?? "200", 10)),
+      });
+      return { status: "success", processes };
+    }
+
+    case "sync_epg":
+    case "reload_epg": {
+      const sourceId = params.get("source_id") ?? params.get("id");
+      if (!sourceId) return { status: "error", message: "source_id required" };
+      const { syncEpgSource } = await import("./epg");
+      const result = await syncEpgSource(sourceId);
+      return { status: "success", result };
+    }
+
+    case "create_category": {
+      const name = params.get("name");
+      if (!name) return { status: "error", message: "name required" };
+      const categoryType = (params.get("category_type") ?? "LIVE") as CategoryType;
+      const category = await prisma.category.create({
+        data: { name, categoryType },
+      });
+      return { status: "success", category };
+    }
+
+    case "edit_category": {
+      const id = params.get("id");
+      const name = params.get("name");
+      if (!id || !name) return { status: "error", message: "id and name required" };
+      const category = await prisma.category.update({ where: { id }, data: { name } });
+      return { status: "success", category };
+    }
+
+    case "delete_category": {
+      const id = params.get("id");
+      if (!id) return { status: "error", message: "id required" };
+      await prisma.category.delete({ where: { id } });
+      return { status: "success" };
+    }
+
+    case "apply_server_config":
+    case "reload_nginx": {
+      const serverId = params.get("server_id") ?? params.get("id");
+      if (!serverId) return { status: "error", message: "server_id required" };
+      const { bumpConfigRevision, enqueueAgentCommand } = await import("./stream-agent");
+      const revision = await bumpConfigRevision(serverId);
+      await enqueueAgentCommand(serverId, "apply_config", { reason: "api_reload" });
+      return { status: "success", revision };
+    }
+
+    case "reorder_bouquets": {
+      const ids = params.get("order")?.split(",").filter(Boolean) ?? [];
+      await Promise.all(ids.map((id, i) => prisma.bouquet.update({ where: { id }, data: { sortOrder: i } })));
+      return { status: "success", count: ids.length };
+    }
+
+    case "assign_bouquet_to_reseller": {
+      const userId = params.get("user_id") ?? params.get("reseller_id");
+      const bouquetId = params.get("bouquet_id");
+      if (!userId || !bouquetId) return { status: "error", message: "user_id and bouquet_id required" };
+      await prisma.resellerBouquet.upsert({
+        where: { userId_bouquetId: { userId, bouquetId } },
+        create: { userId, bouquetId },
+        update: {},
+      });
+      return { status: "success" };
+    }
+
+    case "get_dashboard": {
+      const [lines, streams, connections, resellers] = await Promise.all([
+        prisma.line.count(),
+        prisma.stream.count({ where: { isActive: true } }),
+        prisma.liveConnection.count(),
+        prisma.panelUser.count({ where: { role: { in: [PanelRole.RESELLER, PanelRole.SUB_RESELLER] } } }),
+      ]);
+      return {
+        status: "success",
+        dashboard: { lines, streams, open_connections: connections, resellers },
       };
     }
 

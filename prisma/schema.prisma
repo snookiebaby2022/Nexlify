@@ -246,6 +246,7 @@ model PanelUser {
   lines              Line[]
   creditTransactions CreditTransaction[]
   resellerBouquets   ResellerBouquet[]
+  ownedBouquets      Bouquet[] @relation("OwnedBouquets")
   activityLogs       ActivityLog[]
   ticketsCreated     Ticket[] @relation("TicketCreator")
   ticketsAssigned    Ticket[] @relation("TicketAssignee")
@@ -586,16 +587,20 @@ model LiveConnection {
 }
 
 model Bouquet {
-  id        String   @id @default(cuid())
-  name      String
-  sortOrder Int      @default(0)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  ownerUserId String?
+  owner       PanelUser? @relation("OwnedBouquets", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   streams          BouquetStream[]
   lines            LineBouquet[]
   resellerBouquets ResellerBouquet[]
+
+  @@index([ownerUserId])
 }
 
 model BouquetStream {
@@ -969,6 +974,12 @@ model StreamProvider {
   /// ssh | https | http | rdp | other
   remoteProtocol   String?
   remoteNotes      String?
+  /// Upstream account expiry (from Xtream player_api on Check)
+  remoteExpiresAt  DateTime?
+  /// Upstream max connections (from player_api)
+  remoteMaxConnections Int?
+  /// Active connections reported by upstream on last Check
+  remoteUpstreamConnections Int?
   status        String    @default("unknown")
   statusMessage String?
   lastCheckAt   DateTime?

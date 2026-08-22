@@ -7,12 +7,14 @@ export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const action = req.nextUrl.searchParams.get("action")?.trim();
+  const actionFilter = req.nextUrl.searchParams.get("action")?.trim();
   const q = req.nextUrl.searchParams.get("q")?.trim();
   const take = Math.min(500, Math.max(10, parseInt(req.nextUrl.searchParams.get("limit") ?? "200", 10)));
 
   const where: Prisma.ActivityLogWhereInput = {};
-  if (action) where.action = { contains: action, mode: "insensitive" };
+  if (actionFilter) {
+    where.action = { contains: actionFilter, mode: "insensitive" };
+  }
   if (q) {
     where.OR = [
       { entity: { contains: q, mode: "insensitive" } },

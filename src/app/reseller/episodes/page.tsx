@@ -4,8 +4,8 @@ export default function ResellerEpisodesPage() {
   return (
     <ResellerStreamsBrowser
       title="Episodes"
-      description="Series episodes in your bouquets (read-only)."
-      query="type=SERIES"
+      description="Series episodes in your assigned bouquets (read-only)."
+      query="type=SERIES&episodesOnly=1"
     />
   );
 }

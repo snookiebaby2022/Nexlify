@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Home, Users, Play, Wrench, MoreHorizontal } from "lucide-react";
+import { Home, Users, Play, Server, MoreHorizontal, Wifi } from "lucide-react";
 
 export type MobileBottomNavItem = {
   id: string;
@@ -34,11 +34,11 @@ const ADMIN_BOTTOM_NAV: MobileBottomNavItem[] = [
     match: (p) => p.includes("/streams") || p.includes("/content/"),
   },
   {
-    id: "tools",
-    label: "Tools",
-    href: "/admin/management/packages",
-    icon: Wrench,
-    match: (p) => p.includes("/packages") || p.includes("/tickets") || p.includes("/settings"),
+    id: "servers",
+    label: "Servers",
+    href: "/admin/servers",
+    icon: Server,
+    match: (p) => p.startsWith("/admin/servers"),
   },
   { id: "more", label: "More", icon: MoreHorizontal, action: "more" },
 ];
@@ -59,18 +59,11 @@ const RESELLER_BOTTOM_NAV: MobileBottomNavItem[] = [
     match: (p) => p.startsWith("/reseller/lines") || p.startsWith("/reseller/users"),
   },
   {
-    id: "streams",
-    label: "Streams",
-    href: "/reseller/streams",
-    icon: Play,
-    match: (p) => p.startsWith("/reseller/streams") || p.startsWith("/reseller/content"),
-  },
-  {
-    id: "tools",
-    label: "Tools",
-    href: "/reseller/tickets",
-    icon: Wrench,
-    match: (p) => p.startsWith("/reseller/tickets") || p.startsWith("/reseller/live_connections"),
+    id: "connections",
+    label: "Live",
+    href: "/reseller/live_connections",
+    icon: Wifi,
+    match: (p) => p.startsWith("/reseller/live_connections"),
   },
   { id: "more", label: "More", icon: MoreHorizontal, action: "more" },
 ];
@@ -84,6 +77,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/admin/lines": "Manage Lines",
   "/admin/lines/add": "Add Line",
   "/admin/connections": "Live Connections",
+  "/admin/servers": "Servers",
   "/admin/content/streams": "Streams",
   "/admin/tickets": "Tickets",
   "/admin/management/packages": "Packages",
@@ -91,7 +85,6 @@ const PAGE_TITLES: Record<string, string> = {
   "/reseller/lines": "Manage Lines",
   "/reseller/lines/add": "Add Line",
   "/reseller/live_connections": "Live Connections",
-  "/reseller/streams": "Streams",
   "/reseller/tickets": "Tickets",
 };
 

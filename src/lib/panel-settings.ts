@@ -167,6 +167,8 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     defaultLanguage: "en",
     maintenanceMode: false,
     disableTrial: false,
+    /** When true, feature packs (LB Pro, transcoding, archive, security) work without WHMCS addon licenses. */
+    bundledFeaturePacks: true,
   },
   community: {
     telegramUrl: "",
@@ -221,8 +223,10 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     connectionLimitHandle: "validate_on_connect",
     vodConnectionHandle: "30m_expire",
     loadBalancing: "server_slots",
-    /** even_spread (default with server_slots) | failover_only | off — UI: Streaming Servers → Load Balancer */
-    autoRebalanceLive: "even_spread",
+    /** even_spread | failover_only | off — UI: Streaming Servers → Load Balancer */
+    autoRebalanceLive: "off",
+    /** When true, even-spread cron may move streams off the main server (default off). */
+    autoRebalanceIncludeMain: false,
     /** When M3U auto-sync matches an existing URL, refresh name/logo/epg (UI: M3U Auto-Sync) */
     updateNamesOnSync: true,
     geoLoadBalancing: true,
@@ -360,6 +364,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     paypalClientSecret: "",
     paypalSandbox: true,
     paypalWebhookUrl: "",
+    paypalWebhookId: "",
     stripePublishableKey: "",
     stripeSecretKey: "",
     stripeWebhookSecret: "",
@@ -807,6 +812,12 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
 
 function settingKey(group: SettingGroup) {
   return `settings.${group}`;
+}
+
+/** Core bundles LB Pro, transcoding, archive, security without WHMCS addon licenses. */
+export async function isBundledFeaturePacksEnabled(): Promise<boolean> {
+  const general = await getSettingGroup("general");
+  return general.bundledFeaturePacks === true;
 }
 
 export async function getSettingGroup(group: SettingGroup): Promise<Record<string, unknown>> {

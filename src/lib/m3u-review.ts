@@ -11,6 +11,9 @@ export type M3uReviewResult = {
   duplicates: number;
   truncated: boolean;
   totalParsed: number;
+  uniqueCount: number;
+  groups: { name: string; count: number }[];
+  withLogo: number;
 };
 
 const REVIEW_LIMIT = 500;
@@ -52,5 +55,24 @@ export function buildM3uReview(content: string): M3uReviewResult {
     return { ...entry, id, duplicateOf, selected: !duplicateOf };
   });
 
-  return { entries, duplicates, truncated, totalParsed: parsed.length };
+  const groupMap = new Map<string, number>();
+  let withLogo = 0;
+  for (const entry of parsed) {
+    const g = entry.group?.trim() || "Uncategorized";
+    groupMap.set(g, (groupMap.get(g) ?? 0) + 1);
+    if (entry.logo?.trim()) withLogo += 1;
+  }
+  const groups = [...groupMap.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    entries,
+    duplicates,
+    truncated,
+    totalParsed: parsed.length,
+    uniqueCount: parsed.length - duplicates,
+    groups,
+    withLogo,
+  };
 }

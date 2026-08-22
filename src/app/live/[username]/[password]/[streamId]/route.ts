@@ -214,6 +214,14 @@ export async function GET(
   let lastError = "Stream fetch failed";
 
   if (wantsM3u8) {
+    void trackConnection({
+      lineId: line.id,
+      streamId: cleanId,
+      ip: ip ?? "",
+      userAgent: ua,
+      playbackPath: `/live/${username}/${password}/${streamId}`,
+    });
+
     const panelOrigin = serverBaseUrl(req.url, req.headers);
     const originalCandidates = new Set(candidates);
     const hasStoredNativeHls = candidates.some((u) => isHlsPlaybackUrl(u));

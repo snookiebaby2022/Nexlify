@@ -1,10 +1,10 @@
 import { ResellerStreamsBrowser } from "@/components/reseller-streams-browser";
 
-export default function Page() {
+export default function ResellerCreatedChannelsPage() {
   return (
     <ResellerStreamsBrowser
-      title="Created channels"
-      description="Custom / restream channels available in your bouquets (read-only)."
+      title="Created Channels"
+      description="Created channels in your assigned bouquets (read-only)."
       query="type=LIVE&created=1"
     />
   );

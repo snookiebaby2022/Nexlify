@@ -9,12 +9,12 @@ import {
 import { clearLiveSession, isLiveSessionActive, touchLiveSession } from "./live-session";
 
 export const STALE_MS = 5 * 60 * 1000; // cron safety net for orphaned rows
-/** Live Connections UI — show sessions touched within this window or with an active session key. */
-export const LIVE_STALE_MS = STALE_MS;
-export const PLAYBACK_STALE_MS = 60 * 1000;
+/** Live Connections UI + dashboard counts — align with playback heartbeat, not cron stale. */
+export const LIVE_STALE_MS = 60 * 1000;
+export const PLAYBACK_STALE_MS = LIVE_STALE_MS;
 /** Admin Live Connections list — hide rows idle longer than this (HLS gaps tolerated). */
-export const LIVE_LIST_STALE_MS = PLAYBACK_STALE_MS;
-const CONNECTIONS_CACHE_TTL = 2; // seconds — keep dashboard counts responsive
+export const LIVE_LIST_STALE_MS = LIVE_STALE_MS;
+const CONNECTIONS_CACHE_TTL = 1; // seconds — dashboard SSE should reflect disconnects quickly
 /** After Kick, block reconnect / track refresh for this long (covers multi-worker via Redis). */
 export const KICK_DENY_TTL_SEC = 120;
 
@@ -108,15 +108,32 @@ export async function countActiveConnectionsForLine(lineId: string) {
   });
 }
 
+/** Count distinct viewer sessions (line + stream + IP), not duplicate DB rows. */
+export async function countDistinctActiveConnections(ownerId?: string): Promise<number> {
+  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
+  const cacheKey = ownerId ? `conn:distinct:${ownerId}` : "conn:distinct:all";
+  return cacheGetOrSet(cacheKey, CONNECTIONS_CACHE_TTL, async () => {
+    return countDistinctActiveConnectionsUncached(ownerId, staleBefore);
+  });
+}
+
+/** Uncached count for real-time dashboard SSE (no Redis delay). */
+export async function countDistinctActiveConnectionsUncached(
+  ownerId?: string,
+  staleBefore: Date = new Date(Date.now() - LIVE_STALE_MS)
+): Promise<number> {
+  const groups = await prisma.liveConnection.groupBy({
+    by: ["lineId", "streamId", "ip"],
+    where: ownerId
+      ? { line: { ownerId }, lastSeenAt: { gte: staleBefore } }
+      : { lastSeenAt: { gte: staleBefore } },
+  });
+  return groups.length;
+}
+
 /** Count total active connections without loading rows into memory */
 export async function countActiveConnections(ownerId?: string): Promise<number> {
-  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
-  const cacheKey = ownerId ? `conn:count:${ownerId}` : "conn:count:all";
-  return cacheGetOrSet(cacheKey, CONNECTIONS_CACHE_TTL, () =>
-    prisma.liveConnection.count({
-      where: ownerId ? { line: { ownerId }, lastSeenAt: { gte: staleBefore } } : { lastSeenAt: { gte: staleBefore } },
-    })
-  );
+  return countDistinctActiveConnections(ownerId);
 }
 
 /** Distinct active sessions: use groupBy instead of loading all rows */
@@ -322,6 +339,21 @@ export async function trackConnection(opts: {
     orderBy: { lastSeenAt: "desc" },
   });
 
+  if (streamId) {
+    const dupes = await prisma.liveConnection.findMany({
+      where: { lineId: opts.lineId, streamId, ...connectionIpPrismaFilter(clientIp) },
+      orderBy: { lastSeenAt: "desc" },
+      select: { id: true },
+    });
+    if (dupes.length > 1) {
+      const keepId = existing?.id ?? dupes[0]!.id;
+      const dropIds = dupes.filter((d) => d.id !== keepId).map((d) => d.id);
+      if (dropIds.length) {
+        await prisma.liveConnection.deleteMany({ where: { id: { in: dropIds } } });
+      }
+    }
+  }
+
   if (!existing && clientIp && streamId) {
     const loose = await prisma.liveConnection.findFirst({
       where: { lineId: opts.lineId, streamId },
@@ -417,14 +449,19 @@ export async function trackConnection(opts: {
 
 /** Remove connection when user stops watching */
 export async function removeConnection(lineId: string, streamId: string, ip: string) {
-  await prisma.liveConnection.deleteMany({
+  abortLocalProxies(lineId, ip, streamId);
+  const deleted = await prisma.liveConnection.deleteMany({
     where: { lineId, streamId, ...connectionIpPrismaFilter(ip) },
   });
+  if (deleted.count === 0) {
+    await prisma.liveConnection.deleteMany({
+      where: { lineId, streamId },
+    });
+  }
   void clearLiveSession(lineId, streamId, ip);
   void clearConnectionQuality(lineId, streamId, ip);
   void clearConnectionPlaybackOutput(lineId, streamId, ip);
-  // Invalidate connection caches
-  void cacheDel("conn:*").catch(() => {});
+  await cacheDel("conn:*").catch(() => {});
 }
 
 const connectionInclude = {
@@ -588,9 +625,9 @@ export function attachKickAwareProxyBody(opts: {
     });
   };
 
-  const IDLE_MS = 60_000;
+  const IDLE_MS = 45_000;
   const HEARTBEAT_MS = 5_000;
-  const TIMER_HEARTBEAT_MS = 1_000;
+  const TIMER_HEARTBEAT_MS = 5_000;
   let timerHeartbeat: ReturnType<typeof setInterval> | null = null;
 
   const touchSession = (mediaBytes?: number) => {
@@ -610,7 +647,14 @@ export function attachKickAwareProxyBody(opts: {
       unregister = registerLiveProxy(lineId, ip, streamId, { abort });
       timerHeartbeat = setInterval(() => {
         if (closed) return;
-        touchSession();
+        if (Date.now() - lastByteAt > IDLE_MS) {
+          abort();
+          return;
+        }
+        if (Date.now() - lastTrackAt >= HEARTBEAT_MS) {
+          lastTrackAt = Date.now();
+          touchSession();
+        }
       }, TIMER_HEARTBEAT_MS);
       const pump = () => {
         if (closed) return;

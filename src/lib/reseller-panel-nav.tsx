@@ -1,9 +1,9 @@
 import {
   LayoutDashboard,
   Monitor,
+  Play,
   Send,
   Settings,
-  Tv,
   UserPlus,
   Wifi,
 } from "lucide-react";
@@ -46,9 +46,19 @@ export function getResellerPanelNav(): {
         ]),
       },
       {
+        id: "reseller-content",
+        label: "Content",
+        icon: coloredIcon(Play, "#60a5fa", 16),
+        items: withNavItemIcons([
+          { href: "/reseller/streams", label: "Live streams" },
+          { href: "/reseller/movies", label: "Movies" },
+          { href: "/reseller/episodes", label: "Episodes" },
+        ]),
+      },
+      {
         id: "reseller-epg",
         label: "EPG",
-        icon: coloredIcon(Tv, "#c084fc", 16),
+        icon: coloredIcon(Wifi, "#c084fc", 16),
         items: withNavItemIcons([{ href: "/reseller/epg_view", label: "EPG preview" }]),
       },
       {

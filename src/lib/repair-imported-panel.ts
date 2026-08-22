@@ -3,6 +3,46 @@ import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-
 import { ensureStandardUserGroups } from "@/lib/ensure-user-groups";
 import { packageLabelForDays, STANDARD_PACKAGE_TEMPLATES } from "@/lib/package-credits";
 import { reassignUncategorizedLiveStreams } from "@/lib/reassign-uncategorized-live";
+import { isPendingStreamUrl } from "@/lib/panel-migration/stream-source-urls";
+import { resolveProviderUrl } from "@/lib/vod-provider-url";
+
+async function resolvePendingStreamUrls(prisma: PrismaClient): Promise<{ resolved: number; deactivated: number }> {
+  const pending = await prisma.stream.findMany({
+    where: { streamUrl: { startsWith: "pending://" } },
+    select: {
+      id: true,
+      providerId: true,
+      providerPath: true,
+      provider: {
+        select: { id: true, baseUrl: true, providerType: true, apiKey: true },
+      },
+    },
+    take: 10_000,
+  });
+
+  let resolved = 0;
+  for (const row of pending) {
+    if (!row.providerId || !row.providerPath || !row.provider) continue;
+    try {
+      const url = resolveProviderUrl(row.provider, row.providerPath);
+      if (!url || isPendingStreamUrl(url)) continue;
+      await prisma.stream.update({
+        where: { id: row.id },
+        data: { streamUrl: url, isActive: true },
+      });
+      resolved++;
+    } catch {
+      /* skip invalid provider rows */
+    }
+  }
+
+  const deactivated = await prisma.stream.updateMany({
+    where: { streamUrl: { startsWith: "pending://" }, isActive: true },
+    data: { isActive: false },
+  });
+
+  return { resolved, deactivated: deactivated.count };
+}
 
 export type RepairImportedPanelResult = {
   streamsActivated: number;
@@ -23,6 +63,9 @@ export type RepairImportedPanelResult = {
   resellerBouquetsGranted: number;
   uncategorizedReassigned: number;
   uncategorizedRemaining: number;
+  pendingStreamUrls: number;
+  pendingResolved: number;
+  pendingDeactivated: number;
 };
 
 /**
@@ -50,6 +93,9 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
     resellerBouquetsGranted: 0,
     uncategorizedReassigned: 0,
     uncategorizedRemaining: 0,
+    pendingStreamUrls: 0,
+    pendingResolved: 0,
+    pendingDeactivated: 0,
   };
 
   const activated = await prisma.stream.updateMany({
@@ -353,6 +399,14 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
       result.resellerBouquetsGranted += res.count;
     }
   }
+
+  const pendingRepair = await resolvePendingStreamUrls(prisma);
+  result.pendingResolved = pendingRepair.resolved;
+  result.pendingDeactivated = pendingRepair.deactivated;
+
+  result.pendingStreamUrls = await prisma.stream.count({
+    where: { streamUrl: { startsWith: "pending://" } },
+  });
 
   return result;
 }

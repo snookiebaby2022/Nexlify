@@ -84,6 +84,12 @@ export async function isPluginEntitled(
     return { ok: true };
   }
 
+  const { getSettingGroup } = await import("@/lib/panel-settings");
+  const general = await getSettingGroup("general");
+  if (general.bundledFeaturePacks === true) {
+    return { ok: true };
+  }
+
   const limits = await getPlanLimits(panelHost);
   if (limits.allPlugins) return { ok: true };
 

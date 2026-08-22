@@ -16,6 +16,7 @@ export default function ResellerProfilePage() {
     avatarConfig: unknown;
     role: string;
     credits: number;
+    resellerDns: string | null;
   } | null>(null);
   const [form, setForm] = useState({ displayName: "", email: "" });
   const [avatarConfig, setAvatarConfig] = useState<AvatarConfig>(DEFAULT_AVATAR_CONFIG);
@@ -140,6 +141,26 @@ export default function ResellerProfilePage() {
               Also works on: {panelUrl.aliases.join(", ")}
             </p>
           )}
+        </div>
+      )}
+      {user?.resellerDns && (
+        <div
+          className="rounded-lg border p-4 text-sm space-y-2"
+          style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+        >
+          <div className="font-medium">Branded portal (reseller DNS)</div>
+          <p style={{ color: "var(--muted)" }}>
+            Your white-label hostname for IPTV apps and the reseller portal. DNS must point to this panel.
+          </p>
+          <p className="font-mono text-xs break-all" style={{ color: "var(--accent)" }}>
+            https://{user.resellerDns}
+          </p>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            MAG/Stalker portal: <span className="font-mono">https://{user.resellerDns}/c/</span>
+          </p>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            To change this domain, contact your provider (Admin → Resellers).
+          </p>
         </div>
       )}
       <form

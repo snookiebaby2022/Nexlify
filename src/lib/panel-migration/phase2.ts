@@ -8,6 +8,7 @@ import type {
   MigrationPhase2Data,
   MigrationServerRow,
 } from "./types";
+import { formatXuiCategoryName } from "@/lib/category-xui-name";
 
 export type { MigrationCategoryRow, MigrationEpgRow, MigrationPhase2Data, MigrationServerRow };
 
@@ -46,18 +47,20 @@ export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[]
     const legacyId = String(r.id ?? "");
     if (!legacyId) return;
     const parentRaw = r.parent_id ?? r.parentId ?? r.parent;
-    const name = String(
+    const nameRaw = String(
       r.category_name ?? r.name ?? r.title ?? `Category ${legacyId}`
     ).trim() || `Category ${legacyId}`;
+    const isAdult = Number(r.is_adult ?? r.adult ?? 0) === 1;
+    const name = formatXuiCategoryName(nameRaw, { isAdult });
     // Skip rows that are clearly bouquet channel JSON dumped into categories.
-    if (name === "[]" || name === "{}" || /^\[.*\]$/.test(name)) return;
+    if (nameRaw === "[]" || nameRaw === "{}" || /^\[.*\]$/.test(nameRaw)) return;
 
     const typeRaw = String(
       r.category_type ?? r.type ?? r.cat_type ?? r.stream_type ?? ""
     )
       .trim()
       .toUpperCase();
-    const nameKey = name.toLowerCase();
+    const nameKey = nameRaw.toLowerCase();
 
     // Classic XUI/XC: category_type 1=live, 2=movie, 3=series (4=radio on some panels).
     let categoryType: MigrationCategoryRow["categoryType"] = "LIVE";
@@ -112,7 +115,7 @@ export function mapCategories(data: SqlTableData | null): MigrationCategoryRow[]
           ? String(parentRaw)
           : undefined,
       categoryType,
-      isAdult: Number(r.is_adult ?? r.adult ?? 0) === 1,
+      isAdult,
       sortOrder,
       dumpIndex,
     });

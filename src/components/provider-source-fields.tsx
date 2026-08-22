@@ -105,15 +105,20 @@ export function OnDemandStreamFields({
         <option value="CATCHUP">Catch-up / timeshift</option>
       </select>
       {vodMode === "CATCHUP" && (
-        <input
-          type="number"
-          min={1}
-          placeholder="Archive days (default 7)"
-          className="w-full rounded border px-3 py-2 bg-transparent text-sm"
-          style={{ borderColor: "var(--border)" }}
-          value={archiveDays}
-          onChange={(e) => onChange({ vodMode, archiveDays: e.target.value, playlistUrl })}
-        />
+        <>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Rolling archive on the stream server — nginx timeshift + panel archive pack. No full DVR pipeline required.
+          </p>
+          <input
+            type="number"
+            min={1}
+            placeholder="Archive days (default 7)"
+            className="w-full rounded border px-3 py-2 bg-transparent text-sm"
+            style={{ borderColor: "var(--border)" }}
+            value={archiveDays}
+            onChange={(e) => onChange({ vodMode, archiveDays: e.target.value, playlistUrl })}
+          />
+        </>
       )}
       {(vodMode === "ON_DEMAND" || vodMode === "CATCHUP") && (
         <input

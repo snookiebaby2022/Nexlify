@@ -59,7 +59,34 @@ ${snippet}
 #     proxy_pass PANEL_ORIGIN;
 #     proxy_buffering off;
 #     proxy_read_timeout 300s;
+#     add_header Access-Control-Allow-Origin *;
 # }
+#
+location /timeshift/ {
+    proxy_pass ${panelOrigin};
+    proxy_buffering off;
+    proxy_read_timeout 300s;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    add_header Access-Control-Allow-Origin *;
+}
+
+location ~ ^/live/ {
+    proxy_pass ${panelOrigin};
+    proxy_buffering off;
+    proxy_read_timeout 300s;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    add_header Access-Control-Allow-Origin *;
+}
+
+location /archive/ {
+    proxy_pass ${panelOrigin};
+    proxy_buffering off;
+    proxy_read_timeout 300s;
+    add_header Access-Control-Allow-Origin *;
+}
 #
 # Full template: nginx/nexlify-stream-server.conf in the Nexlify panel repo.
 `;

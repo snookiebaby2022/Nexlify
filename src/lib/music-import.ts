@@ -10,6 +10,10 @@ import {
   spotifyAccessToken,
 } from "@/lib/music-relay";
 
+function resolveIntegrationServerId(cfg: Record<string, unknown>, serverId?: string | null) {
+  return serverId ?? (cfg.serverId ? String(cfg.serverId) : null);
+}
+
 async function upsertIntegrationStream(opts: {
   integrationId: string;
   type: string;
@@ -61,6 +65,7 @@ export async function importSpotifyPlaylist(integrationId: string, serverId?: st
   const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
   if (!row || row.type !== "spotify") throw new Error("Spotify integration not found");
   const cfg = row.config as Record<string, unknown>;
+  const effectiveServerId = resolveIntegrationServerId(cfg, serverId);
   const playlistId = parseSpotifyPlaylistId(String(cfg.playlistUri ?? ""));
   if (!playlistId) throw new Error("Spotify playlist URI required");
 
@@ -76,7 +81,7 @@ export async function importSpotifyPlaylist(integrationId: string, serverId?: st
         itemId: track.id,
         name: `${track.name} (Spotify)`,
         streamType: StreamType.LIVE,
-        serverId,
+        serverId: effectiveServerId,
         streamIcon: track.image ?? null,
       });
       if (r.created) imported++;
@@ -112,7 +117,7 @@ export async function importSpotifyPlaylist(integrationId: string, serverId?: st
       itemId: track.id,
       name: `${track.name} (Spotify)`,
       streamType: StreamType.LIVE,
-      serverId,
+      serverId: effectiveServerId,
       streamIcon: track.album?.images?.[0]?.url ?? null,
     });
     if (r.created) imported++;
@@ -133,6 +138,7 @@ export async function importAppleMusicPlaylist(integrationId: string, serverId?:
   const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
   if (!row || row.type !== "apple_music") throw new Error("Apple Music integration not found");
   const cfg = row.config as Record<string, unknown>;
+  const effectiveServerId = resolveIntegrationServerId(cfg, serverId);
   const playlistId = String(cfg.playlistId ?? "").trim();
   if (!playlistId) throw new Error("Apple Music playlist ID required");
 
@@ -152,7 +158,7 @@ export async function importAppleMusicPlaylist(integrationId: string, serverId?:
       itemId: track.id,
       name: `${track.name} (Apple Music)`,
       streamType: StreamType.LIVE,
-      serverId,
+      serverId: effectiveServerId,
       streamIcon: track.image ?? null,
     });
     if (r.created) imported++;
@@ -169,6 +175,7 @@ export async function importDeezerPlaylist(integrationId: string, serverId?: str
   const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
   if (!row || row.type !== "deezer") throw new Error("Deezer integration not found");
   const cfg = row.config as Record<string, unknown>;
+  const effectiveServerId = resolveIntegrationServerId(cfg, serverId);
   const playlistId = String(cfg.playlistId ?? "").trim();
   if (!playlistId) throw new Error("Deezer playlist ID required");
 
@@ -184,7 +191,7 @@ export async function importDeezerPlaylist(integrationId: string, serverId?: str
         itemId: track.id,
         name: `${track.name} (Deezer)`,
         streamType: StreamType.LIVE,
-        serverId,
+        serverId: effectiveServerId,
         streamIcon: track.image ?? null,
       });
       if (r.created) imported++;
@@ -212,7 +219,7 @@ export async function importDeezerPlaylist(integrationId: string, serverId?: str
       itemId: String(track.id),
       name: `${track.title} (Deezer)`,
       streamType: StreamType.LIVE,
-      serverId,
+      serverId: effectiveServerId,
       streamIcon: track.album?.cover ?? null,
     });
     if (r.created) imported++;
@@ -229,6 +236,7 @@ export async function importYoutubeMusic(integrationId: string, serverId?: strin
   const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
   if (!row || row.type !== "youtube_music") throw new Error("YouTube Music integration not found");
   const cfg = row.config as Record<string, unknown>;
+  const effectiveServerId = resolveIntegrationServerId(cfg, serverId);
   const relay = String(cfg.relayUrl ?? "").trim();
   if (relay) {
     const streamUrl = relay;
@@ -239,7 +247,7 @@ export async function importYoutubeMusic(integrationId: string, serverId?: strin
           name: `${row.name} (YouTube Music)`,
           streamUrl,
           type: StreamType.LIVE,
-          serverId: serverId ?? null,
+          serverId: effectiveServerId,
           hostedExternally: true,
           isActive: true,
         },
@@ -274,7 +282,7 @@ export async function importYoutubeMusic(integrationId: string, serverId?: strin
       itemId: videoId,
       name: `${title} (YT Music)`,
       streamType: StreamType.LIVE,
-      serverId,
+      serverId: effectiveServerId,
       streamIcon: item.snippet?.thumbnails?.default?.url ?? null,
     });
     if (r.created) imported++;

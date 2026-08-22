@@ -10,6 +10,7 @@ import {
   resolveCategoryParent,
   wouldCreateCategoryCycle,
 } from "@/lib/category-tree";
+import { formatXuiCategoryName } from "@/lib/category-xui-name";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 const VALID_TYPES = new Set<string>(Object.values(CategoryType));
@@ -93,7 +94,9 @@ export async function POST(req: NextRequest) {
     if (!parsed.ok) return parsed.response;
     const body = parsed.data;
 
-    const name = String(body.name ?? "").trim();
+    const name = formatXuiCategoryName(String(body.name ?? "").trim(), {
+      isAdult: body.isAdult === true,
+    });
     if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
 
     const categoryType = VALID_TYPES.has(String(body.categoryType ?? "LIVE").toUpperCase())
@@ -169,9 +172,11 @@ export async function PATCH(req: NextRequest) {
     } = {};
 
     if (body.name !== undefined) {
-      const name = String(body.name).trim();
-      if (!name) return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
-      data.name = name;
+      const raw = String(body.name).trim();
+      if (!raw) return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
+      data.name = formatXuiCategoryName(raw, {
+        isAdult: body.isAdult !== undefined ? Boolean(body.isAdult) : existing.isAdult,
+      });
     }
     if (body.categoryType && VALID_TYPES.has(String(body.categoryType).toUpperCase())) {
       data.categoryType = String(body.categoryType).toUpperCase() as CategoryType;

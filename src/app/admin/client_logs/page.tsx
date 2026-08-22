@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 
 type ClientLogRow = {
@@ -8,42 +9,37 @@ type ClientLogRow = {
   lineId: string;
   lineUsername: string;
   streamName: string | null;
+  streamType: string | null;
   ip: string | null;
   userAgent: string | null;
   startedAt: string;
   lastSeenAt: string;
+  active: boolean;
 };
 
 export default function ClientLogsPage() {
   const [logs, setLogs] = useState<ClientLogRow[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(100);
 
   const load = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams({ limit: String(pageSize) });
     if (q.trim()) params.set("q", q.trim());
-    fetch(`/api/admin/connections?${params}`)
+    fetch(`/api/admin/client-logs?${params}`)
       .then((r) => r.json())
       .then((d) => {
-        const conns = (d.connections ?? []).map((c: { id: string; line: { username: string }; stream: { name: string } | null; ip: string | null; userAgent: string | null; startedAt: string; lastSeenAt: string }) => ({
-          id: c.id,
-          lineId: "",
-          lineUsername: c.line?.username ?? "—",
-          streamName: c.stream?.name ?? null,
-          ip: c.ip ?? null,
-          userAgent: c.userAgent ?? null,
-          startedAt: c.startedAt,
-          lastSeenAt: c.lastSeenAt,
-        }));
-        setLogs(conns);
+        setLogs(d.logs ?? []);
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   }, [q, pageSize]);
 
   useEffect(() => {
     load();
+    const t = setInterval(load, 15000);
+    return () => clearInterval(t);
   }, [load]);
 
   return (
@@ -51,7 +47,7 @@ export default function ClientLogsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Client Logs</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Player and app client connection history. Shows recent active sessions with user-agent and stream info.
+          IPTV player sessions (last 24h). Active sessions refresh every 15s.
         </p>
       </div>
 
@@ -59,7 +55,7 @@ export default function ClientLogsPage() {
         <input
           className="rounded-lg border px-3 py-2 text-sm flex-1 min-w-[200px]"
           style={{ borderColor: "var(--border)" }}
-          placeholder="Search line, IP, user-agent..."
+          placeholder="Search line, stream, IP, user-agent..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
@@ -70,7 +66,7 @@ export default function ClientLogsPage() {
           value={pageSize}
           onChange={(e) => setPageSize(Number(e.target.value))}
         >
-          {[25, 50, 100, 200].map((n) => (
+          {[50, 100, 200, 500].map((n) => (
             <option key={n} value={n}>
               {n}
             </option>
@@ -84,12 +80,16 @@ export default function ClientLogsPage() {
         >
           Refresh
         </button>
+        <Link href="/admin/line_activity" className="rounded-lg px-4 py-2 text-sm border" style={{ borderColor: "var(--border)" }}>
+          Line activity
+        </Link>
       </div>
 
       <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border)" }}>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-left" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+              <th className="p-3 font-medium">Status</th>
               <th className="p-3 font-medium">Line</th>
               <th className="p-3 font-medium">Stream</th>
               <th className="p-3 font-medium">IP</th>
@@ -101,23 +101,41 @@ export default function ClientLogsPage() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="p-8 text-center" style={{ color: "var(--muted)" }}>
+                <td colSpan={7} className="p-8 text-center" style={{ color: "var(--muted)" }}>
                   Loading...
                 </td>
               </tr>
             )}
             {!loading && logs.length === 0 && (
               <tr>
-                <td colSpan={6} className="p-8 text-center" style={{ color: "var(--muted)" }}>
-                  No client logs found.
+                <td colSpan={7} className="p-8 text-center" style={{ color: "var(--muted)" }}>
+                  No client logs in the last 24 hours.
                 </td>
               </tr>
             )}
             {!loading &&
               logs.map((log) => (
                 <tr key={log.id} className="border-b" style={{ borderColor: "var(--border)" }}>
+                  <td className="p-3">
+                    <span
+                      className="text-xs px-2 py-0.5 rounded font-medium"
+                      style={{
+                        background: log.active ? "rgba(34,197,94,0.15)" : "rgba(148,163,184,0.15)",
+                        color: log.active ? "#22c55e" : "var(--muted)",
+                      }}
+                    >
+                      {log.active ? "Live" : "Ended"}
+                    </span>
+                  </td>
                   <td className="p-3 font-medium">{log.lineUsername}</td>
-                  <td className="p-3">{log.streamName ?? "—"}</td>
+                  <td className="p-3">
+                    {log.streamName ?? "—"}
+                    {log.streamType ? (
+                      <span className="block text-xs" style={{ color: "var(--muted)" }}>
+                        {log.streamType}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="p-3 font-mono text-xs">{log.ip ?? "—"}</td>
                   <td className="p-3 text-xs truncate max-w-[200px]" style={{ color: "var(--muted)" }} title={log.userAgent ?? ""}>
                     {log.userAgent ?? "—"}

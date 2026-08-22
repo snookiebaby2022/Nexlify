@@ -19,12 +19,17 @@ export type DashboardStreamData = {
   }[];
 };
 
-export function useDashboardStream() {
+export function useDashboardStream(enabled = true) {
   const [data, setData] = useState<DashboardStreamData | null>(null);
   const [connected, setConnected] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      setConnected(false);
+      return;
+    }
+
     const es = new EventSource("/api/admin/dashboard-stream");
     eventSourceRef.current = es;
 
@@ -48,7 +53,7 @@ export function useDashboardStream() {
       es.close();
       eventSourceRef.current = null;
     };
-  }, []);
+  }, [enabled]);
 
   return { data, connected };
 }

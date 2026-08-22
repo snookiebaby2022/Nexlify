@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
-import { countActiveConnections, listLiveConnections } from "@/lib/connections";
+import { LIVE_STALE_MS, countDistinctActiveConnectionsUncached, listLiveConnections } from "@/lib/connections";
 import { sampleLocalHostMetrics } from "@/lib/host-metrics";
 
 export async function GET(req: NextRequest) {
@@ -22,11 +22,28 @@ export async function GET(req: NextRequest) {
         try {
           const now = new Date();
 
-          const [onlineConnections, bandwidthSnap, activeLines, sampleConns] = await Promise.all([
-            countActiveConnections(ownerId),
+          const connStaleBefore = new Date(Date.now() - LIVE_STALE_MS);
+
+          const [onlineConnections, bandwidthSnap, activeLines, sampleConns, onlineUsers, onlineStreams] =
+            await Promise.all([
+            countDistinctActiveConnectionsUncached(ownerId, connStaleBefore),
             prisma.bandwidthSnapshot.findFirst({ orderBy: { createdAt: "desc" } }),
             prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
             listLiveConnections(ownerId, 10),
+            prisma.liveConnection.findMany({
+              where: ownerId
+                ? { line: { ownerId }, lastSeenAt: { gte: connStaleBefore } }
+                : { lastSeenAt: { gte: connStaleBefore } },
+              select: { lineId: true },
+              distinct: ["lineId"],
+            }),
+            prisma.liveConnection.findMany({
+              where: ownerId
+                ? { line: { ownerId }, streamId: { not: null }, lastSeenAt: { gte: connStaleBefore } }
+                : { streamId: { not: null }, lastSeenAt: { gte: connStaleBefore } },
+              select: { streamId: true },
+              distinct: ["streamId"],
+            }),
           ]);
 
           const nic = sampleLocalHostMetrics();
@@ -37,14 +54,11 @@ export async function GET(req: NextRequest) {
             networkInMbps = Math.round((Number(bandwidthSnap.bytesIn) / 125000 / 60) * 10) / 10;
           }
 
-          // Approximate distinct users/streams from the small sample when connection volume is high.
-          const onlineUsersApprox =
-            new Set(sampleConns.map((c) => c.lineId)).size || Math.min(onlineConnections, sampleConns.length);
           send({
             timestamp: now.toISOString(),
             onlineConnections,
-            onlineUsers: onlineUsersApprox,
-            onlineStreams: new Set(sampleConns.map((c) => c.streamId).filter(Boolean)).size,
+            onlineUsers: onlineUsers.length,
+            onlineStreams: onlineStreams.length,
             totalActiveLines: activeLines,
             networkInMbps,
             networkOutMbps,
@@ -62,7 +76,7 @@ export async function GET(req: NextRequest) {
       };
 
       update();
-      const interval = setInterval(update, 10000);
+      const interval = setInterval(update, 1000);
 
       req.signal.addEventListener("abort", () => {
         clearInterval(interval);

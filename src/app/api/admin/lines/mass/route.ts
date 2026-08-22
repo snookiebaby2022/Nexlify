@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
 import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { mergeResellerNotes, type MassEditPatch } from "@/lib/lines-mass-edit";
+import { applyLineRenewDays } from "@/lib/line-renew";
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
 import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
 import { LineStatus, PanelRole } from "@prisma/client";
@@ -115,15 +116,13 @@ export async function POST(req: NextRequest) {
       break;
     case "extend": {
       const days = Number(body.days ?? 30);
-      const lines = await prisma.line.findMany({ where, select: { id: true, expiresAt: true } });
-      const now = new Date();
-      await prisma.$transaction(
-        lines.map((line) => {
-          const expiresAt = new Date(line.expiresAt > now ? line.expiresAt : now);
-          expiresAt.setDate(expiresAt.getDate() + days);
-          return prisma.line.update({ where: { id: line.id }, data: { expiresAt } });
-        })
-      );
+      if (!Number.isFinite(days) || days <= 0) {
+        return NextResponse.json({ error: "days must be positive" }, { status: 400 });
+      }
+      const lines = await prisma.line.findMany({ where, select: { id: true } });
+      for (const line of lines) {
+        await applyLineRenewDays(line.id, days, { reactivate: body.reactivate !== false });
+      }
       affected = lines.length;
       break;
     }

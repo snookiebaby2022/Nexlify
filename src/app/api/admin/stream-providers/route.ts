@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { probeStreamProvider, validateProviderInput } from "@/lib/stream-provider-probe";
+import { LIVE_STALE_MS } from "@/lib/connections";
+import {
+  inferRemoteConnectionFromUrl,
+  probeProviderAccountInfo,
+  probeStreamProvider,
+  validateProviderInput,
+} from "@/lib/stream-provider-probe";
 import { PanelRole, Prisma } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
@@ -12,6 +18,65 @@ function prismaError(e: unknown) {
   }
   console.error("[stream-providers]", e);
   return { status: 500, error: "Database error — try again" };
+}
+
+async function panelConnectionCounts(providerIds: string[]) {
+  if (!providerIds.length) return new Map<string, number>();
+  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
+  const rows = await prisma.liveConnection.findMany({
+    where: {
+      lastSeenAt: { gte: staleBefore },
+      stream: { providerId: { in: providerIds } },
+    },
+    select: {
+      lineId: true,
+      streamId: true,
+      ip: true,
+      stream: { select: { providerId: true } },
+    },
+  });
+  const sessions = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const pid = row.stream?.providerId;
+    if (!pid) continue;
+    const sessionKey = `${row.lineId}|${row.streamId ?? ""}|${row.ip ?? ""}`;
+    let set = sessions.get(pid);
+    if (!set) {
+      set = new Set();
+      sessions.set(pid, set);
+    }
+    set.add(sessionKey);
+  }
+  return new Map([...sessions.entries()].map(([id, set]) => [id, set.size]));
+}
+
+async function runProviderCheck(p: { baseUrl: string; apiKey: string | null }) {
+  const [probe, remote, account] = await Promise.all([
+    probeStreamProvider(p.baseUrl),
+    Promise.resolve(inferRemoteConnectionFromUrl(p.baseUrl)),
+    probeProviderAccountInfo(p.baseUrl, p.apiKey),
+  ]);
+  return { probe, remote, account };
+}
+
+function checkUpdateData(
+  probe: Awaited<ReturnType<typeof probeStreamProvider>>,
+  remote: ReturnType<typeof inferRemoteConnectionFromUrl>,
+  account: Awaited<ReturnType<typeof probeProviderAccountInfo>>
+) {
+  return {
+    status: probe.status,
+    statusMessage: probe.message,
+    lastCheckAt: new Date(),
+    lastLatencyMs: probe.latencyMs ?? null,
+    remoteHost: remote.remoteHost,
+    remotePort: remote.remotePort,
+    remoteProtocol: remote.remoteProtocol,
+    remotePanelUrl: remote.remotePanelUrl,
+    remoteExpiresAt: account.expiresAt,
+    remoteMaxConnections: account.maxConnections,
+    remoteUpstreamConnections: account.upstreamActiveConnections,
+  };
 }
 
 export async function GET(req: NextRequest) {
@@ -35,7 +100,12 @@ export async function GET(req: NextRequest) {
           return t === "generic_url" || t === "file_host" || t === "xtream_vod" || !t;
         })
       : providers;
-    return NextResponse.json({ providers: filtered, readOnly: session.role !== PanelRole.ADMIN });
+    const panelCounts = await panelConnectionCounts(filtered.map((p) => p.id));
+    const enriched = filtered.map((p) => ({
+      ...p,
+      panelConnectionCount: panelCounts.get(p.id) ?? 0,
+    }));
+    return NextResponse.json({ providers: enriched, readOnly: session.role !== PanelRole.ADMIN });
   } catch (e) {
     const err = prismaError(e);
     return NextResponse.json({ error: err.error }, { status: err.status });
@@ -60,17 +130,13 @@ export async function POST(req: NextRequest) {
       const p = await prisma.streamProvider.findUnique({ where: { id } });
       if (!p) return NextResponse.json({ error: "Provider not found" }, { status: 404 });
 
-      const probe = await probeStreamProvider(p.baseUrl);
+      const { probe, remote, account } = await runProviderCheck(p);
       const updated = await prisma.streamProvider.update({
         where: { id: p.id },
-        data: {
-          status: probe.status,
-          statusMessage: probe.message,
-          lastCheckAt: new Date(),
-          lastLatencyMs: probe.latencyMs ?? null,
-        },
+        data: checkUpdateData(probe, remote, account),
       });
-      return NextResponse.json({ provider: updated, probe });
+      const panelConnectionCount = (await panelConnectionCounts([p.id])).get(p.id) ?? 0;
+      return NextResponse.json({ provider: { ...updated, panelConnectionCount }, probe, account });
     } catch (e) {
       const err = prismaError(e);
       return NextResponse.json({ error: err.error }, { status: err.status });
@@ -83,32 +149,22 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const probe = await probeStreamProvider(validated.data.baseUrl);
+    const { probe, remote, account } = await runProviderCheck({
+      baseUrl: validated.data.baseUrl,
+      apiKey: body.apiKey ? String(body.apiKey) : null,
+    });
     const provider = await prisma.streamProvider.create({
       data: {
         name: validated.data.name,
         baseUrl: validated.data.baseUrl,
         apiKey: body.apiKey ? String(body.apiKey) : null,
         providerType: body.providerType ? String(body.providerType) : null,
-        description: body.description ? String(body.description) : null,
-        contactEmail: validated.data.contactEmail,
-        region: body.region ? String(body.region) : null,
         maxStreams: validated.data.maxStreams,
         notes: body.notes ? String(body.notes) : null,
-        remotePanelUrl: body.remotePanelUrl ? String(body.remotePanelUrl).trim() : null,
-        remoteHost: body.remoteHost ? String(body.remoteHost).trim() : null,
-        remotePort:
-          body.remotePort != null && String(body.remotePort).trim() !== ""
-            ? Number(body.remotePort)
-            : null,
         remoteUsername: body.remoteUsername ? String(body.remoteUsername).trim() : null,
         remotePassword: body.remotePassword ? String(body.remotePassword) : null,
-        remoteProtocol: body.remoteProtocol ? String(body.remoteProtocol).trim() : null,
         remoteNotes: body.remoteNotes ? String(body.remoteNotes) : null,
-        status: probe.status,
-        statusMessage: probe.message,
-        lastCheckAt: new Date(),
-        lastLatencyMs: probe.latencyMs ?? null,
+        ...checkUpdateData(probe, remote, account),
       },
     });
     return NextResponse.json({ provider, probe });
@@ -140,7 +196,6 @@ export async function PATCH(req: NextRequest) {
     name: body.name,
     baseUrl: body.baseUrl,
     maxStreams: body.maxStreams,
-    contactEmail: body.contactEmail,
   });
   if (!validated.ok) {
     return NextResponse.json({ error: validated.error, field: validated.field }, { status: 400 });
@@ -156,12 +211,27 @@ export async function PATCH(req: NextRequest) {
     let lastCheckAt = existing.lastCheckAt;
     let lastLatencyMs = existing.lastLatencyMs;
 
+    const remote = inferRemoteConnectionFromUrl(validated.data.baseUrl);
+    let account = {
+      expiresAt: existing.remoteExpiresAt,
+      maxConnections: existing.remoteMaxConnections,
+      upstreamActiveConnections: existing.remoteUpstreamConnections,
+    };
     if (urlChanged || body.recheck) {
-      const probe = await probeStreamProvider(validated.data.baseUrl);
-      status = probe.status;
-      statusMessage = probe.message;
+      const checked = await runProviderCheck({
+        baseUrl: validated.data.baseUrl,
+        apiKey:
+          body.apiKey === undefined
+            ? existing.apiKey
+            : body.apiKey
+              ? String(body.apiKey)
+              : null,
+      });
+      status = checked.probe.status;
+      statusMessage = checked.probe.message;
       lastCheckAt = new Date();
-      lastLatencyMs = probe.latencyMs ?? null;
+      lastLatencyMs = checked.probe.latencyMs ?? null;
+      account = checked.account;
     }
 
     const provider = await prisma.streamProvider.update({
@@ -172,29 +242,16 @@ export async function PATCH(req: NextRequest) {
         apiKey: body.apiKey === undefined ? undefined : body.apiKey ? String(body.apiKey) : null,
         isActive: body.isActive === undefined ? undefined : Boolean(body.isActive),
         providerType: body.providerType === undefined ? undefined : body.providerType ? String(body.providerType) : null,
-        description: body.description === undefined ? undefined : body.description ? String(body.description) : null,
-        contactEmail: validated.data.contactEmail,
-        region: body.region === undefined ? undefined : body.region ? String(body.region) : null,
         maxStreams: validated.data.maxStreams,
         notes: body.notes === undefined ? undefined : body.notes ? String(body.notes) : null,
-        remotePanelUrl:
-          body.remotePanelUrl === undefined
-            ? undefined
-            : body.remotePanelUrl
-              ? String(body.remotePanelUrl).trim()
-              : null,
-        remoteHost:
-          body.remoteHost === undefined
-            ? undefined
-            : body.remoteHost
-              ? String(body.remoteHost).trim()
-              : null,
-        remotePort:
-          body.remotePort === undefined
-            ? undefined
-            : body.remotePort != null && String(body.remotePort).trim() !== ""
-              ? Number(body.remotePort)
-              : null,
+        remotePanelUrl: urlChanged || body.recheck ? remote.remotePanelUrl : undefined,
+        remoteHost: urlChanged || body.recheck ? remote.remoteHost : undefined,
+        remotePort: urlChanged || body.recheck ? remote.remotePort : undefined,
+        remoteProtocol: urlChanged || body.recheck ? remote.remoteProtocol : undefined,
+        remoteExpiresAt: urlChanged || body.recheck ? account.expiresAt : undefined,
+        remoteMaxConnections: urlChanged || body.recheck ? account.maxConnections : undefined,
+        remoteUpstreamConnections:
+          urlChanged || body.recheck ? account.upstreamActiveConnections : undefined,
         remoteUsername:
           body.remoteUsername === undefined
             ? undefined
@@ -206,12 +263,6 @@ export async function PATCH(req: NextRequest) {
             ? undefined
             : body.remotePassword
               ? String(body.remotePassword)
-              : null,
-        remoteProtocol:
-          body.remoteProtocol === undefined
-            ? undefined
-            : body.remoteProtocol
-              ? String(body.remoteProtocol).trim()
               : null,
         remoteNotes:
           body.remoteNotes === undefined

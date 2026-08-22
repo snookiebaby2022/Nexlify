@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
-import { canAccessBouquet } from "@/lib/bouquet-access";
+import { canAccessBouquet, canManageBouquet } from "@/lib/bouquet-access";
 import {
   bouquetContentCountsByBouquetId,
   emptyBouquetContentCounts,
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
 
   const withCounts = bouquets.map((b) => ({
     ...b,
-    // Keep a tiny streams stub so older clients reading streams.length still work.
+    ownerUserId: b.ownerUserId ?? null,
     streams: [] as { stream: { type: string } }[],
     contentCounts: countMap.get(b.id) ?? emptyBouquetContentCounts(),
   }));
@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-  const session = await requireSession([PanelRole.ADMIN]);
+  const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = await parseJsonBody(req);
@@ -118,7 +118,7 @@ export async function PATCH(req: NextRequest) {
 
   const body = parsed.data;
 
-  if (body.order && Array.isArray(body.order)) {
+  if (body.order && Array.isArray(body.order) && session.role === PanelRole.ADMIN) {
     const ids: string[] = body.order;
     await Promise.all(
       ids.map((id, i) => prisma.bouquet.update({ where: { id }, data: { sortOrder: i } }))
@@ -129,8 +129,27 @@ export async function PATCH(req: NextRequest) {
   const id = body.id as string;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
+  if (!(await canManageBouquet(session, id))) {
+    return NextResponse.json({ error: "You can only edit bouquets you created" }, { status: 403 });
+  }
+
   if (Array.isArray(body.streamIds)) {
-    const streamIds: string[] = body.streamIds;
+    let streamIds: string[] = body.streamIds;
+    if (session.role !== PanelRole.ADMIN) {
+      const { getResellerBouquetIds } = await import("@/lib/reseller-bouquet-scope");
+      const allowedBouquets = await getResellerBouquetIds(session);
+      if (!allowedBouquets?.length) {
+        return NextResponse.json({ error: "No bouquet access" }, { status: 403 });
+      }
+      const allowedRows = await prisma.bouquetStream.findMany({
+        where: { bouquetId: { in: allowedBouquets } },
+        select: { streamId: true },
+      });
+      const allowedSet = new Set(allowedRows.map((r) => r.streamId));
+      if (streamIds.some((sid) => !allowedSet.has(sid))) {
+        return NextResponse.json({ error: "Some streams are outside your bouquet scope" }, { status: 403 });
+      }
+    }
     await prisma.bouquetStream.deleteMany({ where: { bouquetId: id } });
     if (streamIds.length) {
       await prisma.bouquetStream.createMany({
@@ -174,7 +193,7 @@ export async function PATCH(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-  const session = await requireSession([PanelRole.ADMIN]);
+  const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const parsed = await parseJsonBody(req);
@@ -189,10 +208,14 @@ export async function POST(req: NextRequest) {
       include: { streams: { orderBy: { sortOrder: "asc" } } },
     });
     if (!source) return NextResponse.json({ error: "Source bouquet not found" }, { status: 404 });
+    if (!(await canAccessBouquet(session, source.id))) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     const bouquet = await prisma.bouquet.create({
       data: {
-        name: source.name + " (Copy)",
+        name: String(body.name ?? `${source.name} (Copy)`),
+        ownerUserId: session.role === PanelRole.ADMIN ? null : session.id,
         streams: {
           create: source.streams.map((bs) => ({
             streamId: bs.streamId,
@@ -202,6 +225,12 @@ export async function POST(req: NextRequest) {
       },
       include: { streams: { select: { streamId: true } } },
     });
+
+    if (session.role !== PanelRole.ADMIN) {
+      await prisma.resellerBouquet.create({
+        data: { userId: session.id, bouquetId: bouquet.id },
+      });
+    }
 
     await logActivity("duplicate_bouquet", {
       userId: session.id,
@@ -216,10 +245,26 @@ export async function POST(req: NextRequest) {
   }
 
   const streamIds: string[] = body.streamIds ?? [];
+  if (session.role !== PanelRole.ADMIN && streamIds.length) {
+    const { getResellerBouquetIds } = await import("@/lib/reseller-bouquet-scope");
+    const allowedBouquets = await getResellerBouquetIds(session);
+    if (!allowedBouquets?.length) {
+      return NextResponse.json({ error: "No bouquet access" }, { status: 403 });
+    }
+    const allowedRows = await prisma.bouquetStream.findMany({
+      where: { bouquetId: { in: allowedBouquets } },
+      select: { streamId: true },
+    });
+    const allowedSet = new Set(allowedRows.map((r) => r.streamId));
+    if (streamIds.some((sid) => !allowedSet.has(sid))) {
+      return NextResponse.json({ error: "Some streams are outside your bouquet scope" }, { status: 403 });
+    }
+  }
 
   const bouquet = await prisma.bouquet.create({
     data: {
       name: body.name,
+      ownerUserId: session.role === PanelRole.ADMIN ? null : session.id,
       streams: {
         create: streamIds.map((streamId: string, i: number) => ({
           streamId,
@@ -229,6 +274,12 @@ export async function POST(req: NextRequest) {
     },
     include: { streams: { select: { streamId: true } } },
   });
+
+  if (session.role !== PanelRole.ADMIN) {
+    await prisma.resellerBouquet.create({
+      data: { userId: session.id, bouquetId: bouquet.id },
+    });
+  }
 
   await logActivity("create_bouquet", {
     userId: session.id,
@@ -247,7 +298,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-  const session = await requireSession([PanelRole.ADMIN]);
+  const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const id = req.nextUrl.searchParams.get("id");
@@ -255,6 +306,10 @@ export async function DELETE(req: NextRequest) {
 
   const existing = await prisma.bouquet.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if (!(await canManageBouquet(session, id))) {
+    return NextResponse.json({ error: "You can only delete bouquets you created" }, { status: 403 });
+  }
 
   await prisma.bouquet.delete({ where: { id } });
 

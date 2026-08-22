@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState, Fragment } from "react";
+import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { formatDateTime } from "@/lib/format";
-import { copyToClipboard } from "@/lib/copy-to-clipboard";
+import { inferRemoteConnectionFromUrl } from "@/lib/stream-provider-probe";
 
 type Provider = {
   id: string;
@@ -22,6 +22,10 @@ type Provider = {
   remotePassword: string | null;
   remoteProtocol: string | null;
   remoteNotes: string | null;
+  remoteExpiresAt: string | null;
+  remoteMaxConnections: number | null;
+  remoteUpstreamConnections: number | null;
+  panelConnectionCount?: number;
   status: string;
   statusMessage: string | null;
   lastCheckAt: string | null;
@@ -35,17 +39,10 @@ const emptyForm = {
   baseUrl: "",
   apiKey: "",
   providerType: "",
-  description: "",
-  contactEmail: "",
-  region: "",
   maxStreams: "",
   notes: "",
-  remotePanelUrl: "",
-  remoteHost: "",
-  remotePort: "",
   remoteUsername: "",
   remotePassword: "",
-  remoteProtocol: "ssh",
   remoteNotes: "",
 };
 
@@ -76,6 +73,39 @@ function Alert({ type, message, onDismiss }: { type: "error" | "success"; messag
           ×
         </button>
       )}
+    </div>
+  );
+}
+
+function RemoteAutoPreview({ baseUrl }: { baseUrl: string }) {
+  const remote = useMemo(() => inferRemoteConnectionFromUrl(baseUrl), [baseUrl]);
+  if (!baseUrl.trim()) {
+    return (
+      <p className="text-xs md:col-span-3" style={{ color: "var(--muted)" }}>
+        Host, port, and panel URL are detected from the base URL when you add or press Check.
+      </p>
+    );
+  }
+  if (!remote.remoteHost) {
+    return (
+      <p className="text-xs md:col-span-3" style={{ color: "var(--muted)" }}>
+        Enter a valid base URL to preview detected remote connection info.
+      </p>
+    );
+  }
+  const hostLine = remote.remotePort ? `${remote.remoteHost}:${remote.remotePort}` : remote.remoteHost;
+  return (
+    <div
+      className="md:col-span-3 rounded border px-3 py-2 text-xs space-y-1"
+      style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+    >
+      <div className="font-medium" style={{ color: "var(--text)" }}>
+        Auto-detected remote connection
+      </div>
+      <div>
+        {remote.remoteProtocol?.toUpperCase() ?? "—"} · {hostLine}
+      </div>
+      {remote.remotePanelUrl && <div>Panel: {remote.remotePanelUrl}</div>}
     </div>
   );
 }
@@ -134,29 +164,6 @@ function ProviderFields({
         value={value.maxStreams}
         onChange={(e) => set("maxStreams", e.target.value)}
       />
-      <input
-        placeholder="Contact email"
-        type="email"
-        className="rounded border px-3 py-2 bg-transparent"
-        style={{ borderColor: "var(--border)" }}
-        value={value.contactEmail}
-        onChange={(e) => set("contactEmail", e.target.value)}
-      />
-      <input
-        placeholder="Region (e.g. EU, US-East)"
-        className="rounded border px-3 py-2 bg-transparent"
-        style={{ borderColor: "var(--border)" }}
-        value={value.region}
-        onChange={(e) => set("region", e.target.value)}
-      />
-      <textarea
-        placeholder="Description"
-        className="rounded border px-3 py-2 bg-transparent md:col-span-3"
-        style={{ borderColor: "var(--border)" }}
-        rows={2}
-        value={value.description}
-        onChange={(e) => set("description", e.target.value)}
-      />
       <textarea
         placeholder="Notes"
         className="rounded border px-3 py-2 bg-transparent md:col-span-3"
@@ -169,42 +176,7 @@ function ProviderFields({
       <div className="md:col-span-3 pt-2 border-t text-sm font-medium" style={{ borderColor: "var(--border)", color: "var(--accent)" }}>
         Remote connection info
       </div>
-      <input
-        placeholder="Remote panel URL"
-        className="rounded border px-3 py-2 bg-transparent md:col-span-2"
-        style={{ borderColor: "var(--border)" }}
-        value={value.remotePanelUrl}
-        onChange={(e) => set("remotePanelUrl", e.target.value)}
-      />
-      <select
-        className="rounded border px-3 py-2 bg-transparent"
-        style={{ borderColor: "var(--border)" }}
-        value={value.remoteProtocol}
-        onChange={(e) => set("remoteProtocol", e.target.value)}
-      >
-        <option value="ssh">SSH</option>
-        <option value="https">HTTPS panel</option>
-        <option value="http">HTTP panel</option>
-        <option value="rdp">RDP</option>
-        <option value="other">Other</option>
-      </select>
-      <input
-        placeholder="Remote host / IP"
-        className="rounded border px-3 py-2 bg-transparent"
-        style={{ borderColor: "var(--border)" }}
-        value={value.remoteHost}
-        onChange={(e) => set("remoteHost", e.target.value)}
-      />
-      <input
-        placeholder="Port (22, 443…)"
-        type="number"
-        min={1}
-        max={65535}
-        className="rounded border px-3 py-2 bg-transparent"
-        style={{ borderColor: "var(--border)" }}
-        value={value.remotePort}
-        onChange={(e) => set("remotePort", e.target.value)}
-      />
+      <RemoteAutoPreview baseUrl={value.baseUrl} />
       <input
         placeholder="Remote username"
         className="rounded border px-3 py-2 bg-transparent"
@@ -237,15 +209,9 @@ function formPayload(form: typeof emptyForm) {
   return {
     ...form,
     maxStreams: form.maxStreams ? Number(form.maxStreams) : null,
-    remotePort: form.remotePort ? Number(form.remotePort) : null,
     apiKey: form.apiKey || null,
-    contactEmail: form.contactEmail || null,
-    region: form.region || null,
-    remotePanelUrl: form.remotePanelUrl || null,
-    remoteHost: form.remoteHost || null,
     remoteUsername: form.remoteUsername || null,
     remotePassword: form.remotePassword || null,
-    remoteProtocol: form.remoteProtocol || null,
     remoteNotes: form.remoteNotes || null,
   };
 }
@@ -256,30 +222,60 @@ function providerToForm(p: Provider): typeof emptyForm {
     baseUrl: p.baseUrl,
     apiKey: p.apiKey ?? "",
     providerType: p.providerType ?? "",
-    description: p.description ?? "",
-    contactEmail: p.contactEmail ?? "",
-    region: p.region ?? "",
     maxStreams: p.maxStreams != null ? String(p.maxStreams) : "",
     notes: p.notes ?? "",
-    remotePanelUrl: p.remotePanelUrl ?? "",
-    remoteHost: p.remoteHost ?? "",
-    remotePort: p.remotePort != null ? String(p.remotePort) : "",
     remoteUsername: p.remoteUsername ?? "",
     remotePassword: p.remotePassword ?? "",
-    remoteProtocol: p.remoteProtocol ?? "ssh",
     remoteNotes: p.remoteNotes ?? "",
   };
 }
 
-function remoteSummary(p: Provider): string {
-  const parts: string[] = [];
-  if (p.remoteProtocol) parts.push(p.remoteProtocol.toUpperCase());
-  if (p.remoteHost) {
-    parts.push(p.remotePort ? `${p.remoteHost}:${p.remotePort}` : p.remoteHost);
+function effectiveRemote(p: Provider) {
+  const inferred = inferRemoteConnectionFromUrl(p.baseUrl);
+  return {
+    host: p.remoteHost || inferred.remoteHost,
+    port: p.remotePort ?? inferred.remotePort,
+    protocol: p.remoteProtocol || inferred.remoteProtocol,
+    panelUrl: p.remotePanelUrl || inferred.remotePanelUrl,
+    username: p.remoteUsername,
+    password: p.remotePassword,
+    notes: p.remoteNotes,
+  };
+}
+
+function remoteDisplay(p: Provider): { primary: string; secondary?: string; stats?: string; title: string } {
+  const r = effectiveRemote(p);
+  if (!r.host) {
+    return { primary: "—", title: "Could not parse host from base URL" };
   }
-  if (p.remoteUsername) parts.push(`user=${p.remoteUsername}`);
-  if (p.remotePanelUrl) parts.push(p.remotePanelUrl);
-  return parts.join(" · ") || "—";
+  const primaryParts: string[] = [];
+  if (r.protocol) primaryParts.push(r.protocol.toUpperCase());
+  primaryParts.push(r.port ? `${r.host}:${r.port}` : r.host);
+  if (r.username) primaryParts.push(`user ${r.username}`);
+  const primary = primaryParts.join(" · ");
+  const secondary = r.panelUrl && r.panelUrl !== `http://${r.host}` && r.panelUrl !== `https://${r.host}`
+    ? r.panelUrl
+    : r.panelUrl || undefined;
+
+  const statParts: string[] = [];
+  if (p.remoteExpiresAt) {
+    statParts.push(`Expires ${formatDateTime(p.remoteExpiresAt)}`);
+  }
+  const panelConns = p.panelConnectionCount ?? 0;
+  statParts.push(`Panel ${panelConns} conn${panelConns === 1 ? "" : "s"}`);
+  if (p.remoteUpstreamConnections != null) {
+    const max = p.remoteMaxConnections != null ? `/${p.remoteMaxConnections}` : "";
+    statParts.push(`Upstream ${p.remoteUpstreamConnections}${max}`);
+  } else if (p.remoteMaxConnections != null) {
+    statParts.push(`Max ${p.remoteMaxConnections}`);
+  }
+
+  return {
+    primary,
+    secondary: secondary && secondary !== primary ? secondary : undefined,
+    stats: statParts.length ? statParts.join(" · ") : undefined,
+    title: [primary, secondary, statParts.join(" · "), r.notes].filter(Boolean).join("\n"),
+  };
 }
 
 export default function StreamProvidersPage() {
@@ -398,6 +394,12 @@ export default function StreamProvidersPage() {
         setRowErrors((prev) => ({ ...prev, [id]: msg }));
         return;
       }
+      const data = await res.json();
+      const p = data.provider as Provider | undefined;
+      if (p) {
+        const remote = remoteDisplay(p);
+        setFormSuccess(`Checked — ${remote.primary}${remote.secondary ? ` · ${remote.secondary}` : ""}`);
+      }
       await load();
     } catch {
       setRowErrors((prev) => ({ ...prev, [id]: "Check failed — network error" }));
@@ -416,7 +418,6 @@ export default function StreamProvidersPage() {
           name: p.name,
           baseUrl: p.baseUrl,
           maxStreams: p.maxStreams,
-          contactEmail: p.contactEmail,
           isActive: !p.isActive,
         }),
       });
@@ -453,25 +454,6 @@ export default function StreamProvidersPage() {
     } finally {
       setSubmitting(false);
     }
-  }
-
-  async function copyRemote(p: Provider) {
-    const text = [
-      `Provider: ${p.name}`,
-      `Stream URL: ${p.baseUrl}`,
-      p.remotePanelUrl ? `Panel: ${p.remotePanelUrl}` : null,
-      p.remoteHost
-        ? `Host: ${p.remoteHost}${p.remotePort ? `:${p.remotePort}` : ""} (${p.remoteProtocol || "ssh"})`
-        : null,
-      p.remoteUsername ? `User: ${p.remoteUsername}` : null,
-      p.remotePassword ? `Pass: ${p.remotePassword}` : null,
-      p.remoteNotes ? `Notes: ${p.remoteNotes}` : null,
-      p.contactEmail ? `Email: ${p.contactEmail}` : null,
-    ]
-      .filter(Boolean)
-      .join("\n");
-    const ok = await copyToClipboard(text);
-    setFormSuccess(ok ? "Remote connection info copied" : "Could not copy");
   }
 
   async function remove(id: string) {
@@ -522,7 +504,7 @@ export default function StreamProvidersPage() {
             <strong>Generic URL / File host / Xtream VOD</strong> — Movie and series sources.
           </p>
           <p>
-            <strong>Remote connection</strong> — Store SSH/panel host, port, credentials, and notes so ops can reach the provider box quickly.
+            <strong>Remote connection</strong> — Host, port, and panel URL are auto-detected from the base URL. Add optional credentials and notes for ops access.
           </p>
         </div>
       </div>
@@ -553,7 +535,7 @@ export default function StreamProvidersPage() {
           className="rounded-lg border p-4 grid md:grid-cols-3 gap-3"
           style={{ borderColor: "var(--accent)", background: "var(--bg-card)" }}
         >
-          <div className="md:col-span-3 text-sm font-medium">Edit provider (re-checks URL on save)</div>
+          <div className="md:col-span-3 text-sm font-medium">Edit provider (re-checks URL and remote info on save)</div>
           <ProviderFields value={edit} onChange={setEdit} />
           <div className="flex gap-2 md:col-span-3">
             <button
@@ -622,11 +604,6 @@ export default function StreamProvidersPage() {
                             inactive
                           </span>
                         )}
-                        {p.description && (
-                          <span className="block text-xs mt-1" style={{ color: "var(--muted)" }}>
-                            {p.description}
-                          </span>
-                        )}
                         <button
                           type="button"
                           className="mt-1 text-[11px] underline cursor-pointer"
@@ -638,7 +615,6 @@ export default function StreamProvidersPage() {
                       </td>
                       <td className="p-3" style={{ color: "var(--muted)" }}>
                         {p.providerType ?? "—"}
-                        {p.region ? <span className="block text-xs">{p.region}</span> : null}
                       </td>
                       <td className="p-3">
                         {p._count?.streams ?? 0}
@@ -653,10 +629,27 @@ export default function StreamProvidersPage() {
                           </span>
                         )}
                       </td>
-                      <td className="p-3 max-w-[14rem]">
-                        <span className="block truncate text-xs" title={remoteSummary(p)}>
-                          {remoteSummary(p)}
-                        </span>
+                      <td className="p-3 max-w-[16rem]">
+                        {(() => {
+                          const remote = remoteDisplay(p);
+                          return (
+                            <>
+                              <span className="block text-xs font-medium truncate" style={{ color: "var(--text)" }} title={remote.title}>
+                                {remote.primary}
+                              </span>
+                              {remote.secondary && (
+                                <span className="block text-[11px] mt-0.5 truncate" style={{ color: "var(--accent)" }} title={remote.secondary}>
+                                  {remote.secondary}
+                                </span>
+                              )}
+                              {remote.stats && (
+                                <span className="block text-[11px] mt-0.5 truncate" style={{ color: "var(--muted)" }} title={remote.stats}>
+                                  {remote.stats}
+                                </span>
+                              )}
+                            </>
+                          );
+                        })()}
                       </td>
                       <td className="p-3">
                         <span className="px-2 py-0.5 rounded text-xs capitalize" style={{ background: st.bg, color: st.color }}>
@@ -697,9 +690,6 @@ export default function StreamProvidersPage() {
                         <button type="button" className="text-xs cursor-pointer" style={{ color: "var(--accent)" }} onClick={() => void duplicate(p)}>
                           Duplicate
                         </button>
-                        <button type="button" className="text-xs cursor-pointer" style={{ color: "var(--accent)" }} onClick={() => void copyRemote(p)}>
-                          Copy remote
-                        </button>
                         <button type="button" className="text-xs cursor-pointer" style={{ color: "var(--danger)" }} onClick={() => remove(p.id)}>
                           Delete
                         </button>
@@ -711,27 +701,30 @@ export default function StreamProvidersPage() {
                           <div>
                             <strong style={{ color: "var(--text)" }}>URL:</strong> {p.baseUrl}
                           </div>
-                          {p.contactEmail && (
-                            <div>
-                              <strong style={{ color: "var(--text)" }}>Email:</strong> {p.contactEmail}
-                            </div>
-                          )}
-                          {p.remotePanelUrl && (
-                            <div>
-                              <strong style={{ color: "var(--text)" }}>Panel:</strong>{" "}
-                              <a href={p.remotePanelUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--accent)" }}>
-                                {p.remotePanelUrl}
-                              </a>
-                            </div>
-                          )}
-                          {(p.remoteHost || p.remoteUsername) && (
-                            <div>
-                              <strong style={{ color: "var(--text)" }}>SSH/Remote:</strong>{" "}
-                              {p.remoteUsername ? `${p.remoteUsername}@` : ""}
-                              {p.remoteHost || "—"}
-                              {p.remotePort ? `:${p.remotePort}` : ""}
-                            </div>
-                          )}
+                          {(() => {
+                            const r = effectiveRemote(p);
+                            return (
+                              <>
+                                {r.panelUrl && (
+                                  <div>
+                                    <strong style={{ color: "var(--text)" }}>Panel:</strong>{" "}
+                                    <a href={r.panelUrl} target="_blank" rel="noreferrer" className="underline" style={{ color: "var(--accent)" }}>
+                                      {r.panelUrl}
+                                    </a>
+                                  </div>
+                                )}
+                                {r.host && (
+                                  <div>
+                                    <strong style={{ color: "var(--text)" }}>Remote:</strong>{" "}
+                                    {r.username ? `${r.username}@` : ""}
+                                    {r.host}
+                                    {r.port ? `:${r.port}` : ""}
+                                    {r.protocol ? ` (${r.protocol})` : ""}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                           {p.remoteNotes && (
                             <div>
                               <strong style={{ color: "var(--text)" }}>Remote notes:</strong> {p.remoteNotes}

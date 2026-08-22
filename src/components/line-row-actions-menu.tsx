@@ -20,6 +20,7 @@ import {
 import { computePortalMenuPosition } from "@/lib/portal-menu-position";
 import { DownloadPlaylistModal } from "@/components/download-playlist-modal";
 import { LineRecentlyWatchedDialog } from "@/components/line-recently-watched-dialog";
+import { LineRenewModal } from "@/components/line-renew-modal";
 import { linesApiRoot, type PanelKind } from "@/lib/panel-api";
 
 export type LineRowForMenu = {
@@ -58,6 +59,7 @@ export function LineRowActionsMenu({
   const [flipped, setFlipped] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+  const [renewOpen, setRenewOpen] = useState(false);
 
   const linesApi = linesApiRoot(panel);
 
@@ -83,19 +85,8 @@ export function LineRowActionsMenu({
   }
 
   async function renew() {
-    const days = prompt("Extend line by how many days?", "30");
-    if (!days || Number(days) <= 0) return;
-    try {
-      await apiCall(`${linesApi}/${line.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ days: Number(days) }),
-      });
-      onUpdated();
-      onClose();
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Could not renew line");
-    }
+    setRenewOpen(true);
+    onClose();
   }
 
   async function killConnections() {
@@ -304,6 +295,19 @@ export function LineRowActionsMenu({
         onClose={() => setDownloadModalOpen(false)}
         username={line.username}
         password={line.password}
+      />
+      <LineRenewModal
+        open={renewOpen}
+        lineId={line.id}
+        lineUsername={line.username}
+        expiresAt={line.expiresAt}
+        status={line.status}
+        panel={panel}
+        onClose={() => setRenewOpen(false)}
+        onRenewed={() => {
+          setRenewOpen(false);
+          onUpdated();
+        }}
       />
     </>
   );

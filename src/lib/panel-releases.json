@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.28",
+  "latestVersion": "2.0.29",
   "releases": [
+    {
+      "version": "2.0.29",
+      "date": "2026-08-22",
+      "channel": "stable",
+      "summary": "Category tools, integration LB streaming, Plex direct-play defaults, and admin/reseller parity improvements.",
+      "changelog": [
+        "Remove duplicate category names and operator auto-order preset (Sky · US · Sports · 24/7 · A–Z)",
+        "Plex sync: X-Plex-Token help link, direct play default, LB server routing on import",
+        "Emby, Jellyfin, YouTube, Spotify, Apple Music, Deezer, YouTube Music: LB server picker and sync routing",
+        "PayPal billing capture/webhook, analytics PDF export, extended legacy admin API",
+        "Client/login/restream log viewers, reseller bouquet CRUD, stream provider remote stats"
+      ],
+      "fixes": [
+        "Category auto-sort false matches on short tokens (e.g. IE inside movies)",
+        "Integration sync ignoring saved LB serverId from config"
+      ]
+    },
     {
       "version": "2.0.28",
       "date": "2026-08-21",

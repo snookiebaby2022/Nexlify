@@ -91,9 +91,37 @@ export type StreamsForLineOptions = {
   lean?: boolean;
   /** Process streams in ordered batches without holding the full catalog in RAM. */
   onBatch?: (streams: StreamForLine[]) => void | Promise<void>;
+  /** Pagination for Stalker get_ordered_list (Ministra page size). */
+  offset?: number;
+  limit?: number;
 };
 
 const STREAM_BATCH = 1500;
+
+/** Streams with a resolvable playback URL (matches Xtream/M3U export rules). */
+function playableStreamUrlSql() {
+  return Prisma.sql`
+    AND (
+      s."backupUrl" LIKE 'http://%'
+      OR s."backupUrl" LIKE 'https://%'
+      OR (
+        s."streamUrl" NOT LIKE 'pending://%'
+        AND (
+          s."streamUrl" LIKE 'http://%'
+          OR s."streamUrl" LIKE 'https://%'
+          OR s."streamUrl" LIKE 'nexlify://%'
+          OR (
+            s."playlistUrl" IS NOT NULL
+            AND (
+              s."playlistUrl" LIKE 'http://%'
+              OR s."playlistUrl" LIKE 'https://%'
+            )
+          )
+        )
+      )
+    )
+  `;
+}
 
 function typeList(options?: StreamsForLineOptions): StreamType[] | null {
   if (!options?.type) return null;
@@ -119,25 +147,7 @@ export async function streamIdsForLine(
     INNER JOIN "Stream" s ON s.id = bs."streamId"
     WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
     ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
-    AND (
-      s."backupUrl" LIKE 'http://%'
-      OR s."backupUrl" LIKE 'https://%'
-      OR (
-        s."streamUrl" NOT LIKE 'pending://%'
-        AND (
-          s."streamUrl" LIKE 'http://%'
-          OR s."streamUrl" LIKE 'https://%'
-          OR s."streamUrl" LIKE 'nexlify://%'
-          OR (
-            s."playlistUrl" IS NOT NULL
-            AND (
-              s."playlistUrl" LIKE 'http://%'
-              OR s."playlistUrl" LIKE 'https://%'
-            )
-          )
-        )
-      )
-    )
+    ${playableStreamUrlSql()}
     ${
       typeTexts && typeTexts.length
         ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
@@ -154,6 +164,40 @@ export async function streamIdsForLine(
     ORDER BY ord ASC, s.id ASC
   `;
   return rows.map((r) => r.id);
+}
+
+/** Count streams for Stalker pagination headers (no hydration). */
+export async function streamCountForLine(
+  line: LineWithBouquets,
+  options?: Omit<StreamsForLineOptions, "offset" | "limit" | "onBatch" | "lean">
+): Promise<number> {
+  const excludeDisabled = options?.excludeDisabled !== false;
+  const bouquetIds = activeBouquetIds(line, excludeDisabled);
+  if (!bouquetIds.length) return 0;
+
+  const types = typeList(options);
+  const typeTexts = types?.map((t) => String(t)) ?? null;
+  const rows = await prisma.$queryRaw<{ count: bigint }[]>`
+    SELECT COUNT(DISTINCT s.id)::bigint AS count
+    FROM "BouquetStream" bs
+    INNER JOIN "Stream" s ON s.id = bs."streamId"
+    WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
+    ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
+    ${playableStreamUrlSql()}
+    ${
+      typeTexts && typeTexts.length
+        ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
+        : Prisma.empty
+    }
+    ${
+      options?.uncategorizedOnly
+        ? Prisma.sql`AND s."categoryId" IS NULL`
+        : options?.categoryIds && options.categoryIds.length
+          ? Prisma.sql`AND s."categoryId" IN (${Prisma.join(options.categoryIds)})`
+          : Prisma.empty
+    }
+  `;
+  return Number(rows[0]?.count ?? 0);
 }
 
 /** Distinct category IDs used by a line for a stream type (no Stream hydration). */
@@ -173,6 +217,7 @@ export async function categoryIdsForLine(
     INNER JOIN "Stream" s ON s.id = bs."streamId"
     WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
     ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
+    ${playableStreamUrlSql()}
     ${
       typeTexts && typeTexts.length
         ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
@@ -197,7 +242,14 @@ export async function streamsForLine(
   line: LineWithBouquets,
   options?: StreamsForLineOptions
 ): Promise<StreamForLine[]> {
-  const ids = await streamIdsForLine(line, options);
+  const { offset, limit, ...idQueryOpts } = options ?? {};
+  let ids = await streamIdsForLine(line, idQueryOpts);
+  if (limit != null && limit > 0) {
+    const off = Math.max(0, offset ?? 0);
+    ids = ids.slice(off, off + limit);
+  } else if (offset != null && offset > 0) {
+    ids = ids.slice(offset);
+  }
   if (!ids.length) return [];
 
   const lean = options?.lean === true;
@@ -213,7 +265,6 @@ export async function streamsForLine(
   for (let i = 0; i < ids.length; i += STREAM_BATCH) {
     batches.push(ids.slice(i, i + STREAM_BATCH));
   }
-  console.log(`streamsForLine ${ids.length} ids in ${batches.length} batches`);
 
   if (options?.onBatch) {
     for (const chunkIds of batches) {

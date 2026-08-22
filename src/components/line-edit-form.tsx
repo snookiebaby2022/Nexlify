@@ -227,10 +227,14 @@ export function LineEditForm({
       }),
     });
     setSaving(false);
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const data = await res.json();
       alert(data.error ?? "Failed to save line");
       return;
+    }
+    if (data.line) {
+      setLine(data.line);
+      setForm((f) => ({ ...f, extendDays: 0 }));
     }
     onSaved();
   }

@@ -104,7 +104,20 @@ export default function EPGScraperPage() {
                 type="button"
                 className="mt-auto px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                 style={{ background: "var(--accent)", color: "white" }}
-                onClick={() => alert("Apply functionality coming soon!")}
+                onClick={async () => {
+                  const res = await fetch("/api/admin/ai/epg-scraper/apply", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      channelName: s.channelName,
+                      suggestedName: s.suggestedName,
+                      suggestedCategory: s.suggestedCategory,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) alert(data.error ?? "Apply failed");
+                  else alert(`Updated ${data.stream?.name ?? s.channelName}`);
+                }}
               >
                 Apply
               </button>

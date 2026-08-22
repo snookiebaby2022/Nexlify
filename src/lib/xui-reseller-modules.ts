@@ -45,15 +45,15 @@ export const XUI_RESELLER_MODULES: ResellerModuleDef[] = [
   { slug: "api", title: "API", category: "Developers", redirect: "/reseller/api" },
   { slug: "resize", title: "Resize", category: "Tools", redirect: "/reseller/profile" },
 
-  { slug: "content", title: "Content", category: "Content", redirect: "/reseller/content" },
-  { slug: "content_created", title: "Content — created", category: "Content", redirect: "/reseller/content/created" },
-  { slug: "content_video", title: "Content — video", category: "Content", redirect: "/reseller/content/video" },
-  { slug: "content_archive", title: "Content — archive", category: "Content", redirect: "/reseller/content/archive" },
-  { slug: "content_delayed", title: "Content — delayed", category: "Content", redirect: "/reseller/content/delayed" },
-  { slug: "content_epg", title: "Content — EPG", category: "Content", redirect: "/reseller/content/epg" },
-  { slug: "content_playlists", title: "Content — playlists", category: "Content", redirect: "/reseller/content/playlists" },
-  { slug: "content_streams", title: "Content — streams", category: "Content", redirect: "/reseller/content/streams" },
-  { slug: "content_vod", title: "Content — VOD", category: "Content", redirect: "/reseller/content/vod" },
+  { slug: "content", title: "Content", category: "Content", redirect: "/reseller/dashboard" },
+  { slug: "content_created", title: "Content — created", category: "Content", redirect: "/reseller/dashboard" },
+  { slug: "content_video", title: "Content — video", category: "Content", redirect: "/reseller/dashboard" },
+  { slug: "content_archive", title: "Content — archive", category: "Content", redirect: "/reseller/dashboard" },
+  { slug: "content_delayed", title: "Content — delayed", category: "Content", redirect: "/reseller/dashboard" },
+  { slug: "content_epg", title: "Content — EPG", category: "Content", redirect: "/reseller/dashboard" },
+  { slug: "content_playlists", title: "Content — playlists", category: "Content", redirect: "/reseller/dashboard" },
+  { slug: "content_streams", title: "Content — streams", category: "Content", redirect: "/reseller/dashboard" },
+  { slug: "content_vod", title: "Content — VOD", category: "Content", redirect: "/reseller/dashboard" },
 ];
 
 /** Layout partials in XUI — not separate routes in Nexlify */

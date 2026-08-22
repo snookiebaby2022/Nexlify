@@ -1,6 +1,6 @@
 {
   "name": "nexlify",
-  "version": "2.0.28",
+  "version": "2.0.29",
   "private": true,
   "engines": {
     "node": ">=18.17.0"
@@ -48,6 +48,7 @@
   },
   "dependencies": {
     "@prisma/client": "6.9.0",
+    "@types/pdfkit": "0.17.6",
     "bcryptjs": "3.0.2",
     "busboy": "1.6.0",
     "hls.js": "1.6.16",
@@ -58,6 +59,7 @@
     "next": "15.5.21",
     "nodemailer": "7.0.11",
     "openai": "6.45.0",
+    "pdfkit": "0.19.1",
     "pg": "8.16.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",

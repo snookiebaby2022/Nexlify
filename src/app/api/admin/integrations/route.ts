@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { PanelRole, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { importPlexLibrary, importYoutubeSource } from "@/lib/media-integrations";
+import { importPlexLibrary, importYoutubeSource, listPlexLibraries } from "@/lib/media-integrations";
 import { importEmbyLibrary, importJellyfinLibrary } from "@/lib/emby-jellyfin-import";
 import { importMusicAddon } from "@/lib/music-import";
 import { testAppleMusicConnection, testSpotifyConnection } from "@/lib/music-relay";
@@ -73,11 +73,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ message: `${addon.name} credentials stored.` });
   }
 
+  if (body.action === "libraries") {
+    const id = String(body.id ?? "");
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+    const libraries = await listPlexLibraries(id);
+    return NextResponse.json({ libraries });
+  }
+
   if (body.action === "sync") {
     const id = String(body.id);
-    const serverId = body.serverId ? String(body.serverId) : null;
     const row = await prisma.mediaIntegration.findUnique({ where: { id } });
     if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const cfg = (row.config ?? {}) as Record<string, unknown>;
+    const serverId = body.serverId
+      ? String(body.serverId)
+      : cfg.serverId
+        ? String(cfg.serverId)
+        : null;
     let result: Record<string, unknown>;
     if (row.type === "plex") {
       result = await importPlexLibrary(id, serverId);
@@ -106,10 +118,18 @@ export async function POST(req: NextRequest) {
         ? (body.config as Record<string, unknown>)
         : Object.fromEntries(
             Object.entries(body).filter(
-              ([k]) => !["type", "name", "action", "isActive"].includes(k)
+              ([k]) => !["type", "name", "action", "isActive", "serverId"].includes(k)
             )
           );
-    const config = rawConfig as Prisma.InputJsonValue;
+    const config = {
+      ...rawConfig,
+      serverId:
+        body.serverId !== undefined
+          ? body.serverId
+            ? String(body.serverId)
+            : null
+          : rawConfig.serverId ?? null,
+    } as Prisma.InputJsonValue;
     if (existing) {
       const item = await prisma.mediaIntegration.update({
         where: { id: existing.id },
@@ -138,11 +158,19 @@ export async function POST(req: NextRequest) {
       name: String(body.name ?? type),
       config: {
         url: body.url ?? body.plexUrl,
-        token: body.token,
         channelUrl: body.channelUrl,
-        transcodeProfile: body.transcodeProfile ?? "1080p",
+        host: body.host,
+        port: body.port,
+        username: body.username,
+        password: body.password,
+        token: body.token,
+        serverId: body.serverId ? String(body.serverId) : null,
+        transcodeProfile: body.transcodeProfile ?? "direct",
+        directStream: body.directStream !== false,
+        libraryKey: body.libraryKey ? String(body.libraryKey) : undefined,
+        libraryTitle: body.libraryTitle ? String(body.libraryTitle) : undefined,
       },
-      isActive: true,
+      isActive: body.isActive !== false,
     },
   });
   return NextResponse.json({ item });
@@ -165,12 +193,32 @@ export async function PATCH(req: NextRequest) {
   if (denied) return denied;
   const id = String(body.id ?? "");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  const existing = await prisma.mediaIntegration.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const prev = (existing.config ?? {}) as Record<string, unknown>;
+  const patchConfig =
+    body.config && typeof body.config === "object"
+      ? body.config
+      : {
+          url: body.url ?? prev.url,
+          channelUrl: body.channelUrl ?? prev.channelUrl,
+          host: body.host ?? prev.host,
+          port: body.port ?? prev.port,
+          username: body.username ?? prev.username,
+          password: body.password ?? prev.password,
+          token: body.token ?? prev.token,
+          serverId: body.serverId !== undefined ? body.serverId || null : prev.serverId,
+          transcodeProfile: body.transcodeProfile ?? prev.transcodeProfile,
+          directStream: body.directStream !== undefined ? body.directStream === true : prev.directStream,
+          libraryKey: body.libraryKey ?? prev.libraryKey,
+          libraryTitle: body.libraryTitle ?? prev.libraryTitle,
+        };
   const item = await prisma.mediaIntegration.update({
     where: { id },
     data: {
       isActive: body.isActive !== undefined ? Boolean(body.isActive) : undefined,
       name: body.name !== undefined ? String(body.name) : undefined,
-      config: body.config !== undefined ? body.config : undefined,
+      config: patchConfig,
     },
   });
   return NextResponse.json({ item });

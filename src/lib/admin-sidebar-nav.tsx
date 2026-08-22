@@ -372,6 +372,9 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         icon: coloredGroupIcon("logs"),
         items: [
           { href: "/admin/management/logs", label: "Panel Logs" },
+          { href: "/admin/client_logs", label: "Client Logs" },
+          { href: "/admin/login_logs", label: "Login Logs" },
+          { href: "/admin/restream_logs", label: "Restream Logs" },
           { href: "/admin/streams/logs", label: "Stream Logs" },
           { href: "/admin/stream_errors", label: "Stream Errors" },
           { href: "/admin/resellers/credits", label: "Credit Transactions" },

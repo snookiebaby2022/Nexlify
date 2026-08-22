@@ -1,5 +1,5 @@
 import type { FfmpegTranscodeProfile } from "@/lib/ffmpeg-transcode-profiles";
-import { getSettingGroup } from "@/lib/panel-settings";
+import { getSettingGroup, isBundledFeaturePacksEnabled } from "@/lib/panel-settings";
 import { isPluginEntitled } from "@/lib/plugin-entitlement";
 
 export type GpuEncoder = "nvenc" | "vaapi" | "qsv" | "cpu";
@@ -98,6 +98,7 @@ export async function getTranscodingPackSettings() {
 }
 
 export async function isTranscodingPackEnabled(panelHost?: string): Promise<boolean> {
+  if (await isBundledFeaturePacksEnabled()) return true;
   const entitled = await isPluginEntitled("transcoding_pro", panelHost);
   if (!entitled.ok) return false;
   const s = await getTranscodingPackSettings();

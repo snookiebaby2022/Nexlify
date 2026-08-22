@@ -84,6 +84,7 @@ import { DashboardCacheRebuild } from "@/components/dashboard-cache-rebuild";
 import { DashboardXuiResourceMonitor } from "@/components/dashboard-xui-resource-monitor";
 
 import { DashboardXuiKpiRibbon } from "@/components/dashboard-xui-kpi-ribbon";
+import { useDashboardStream } from "@/hooks/use-dashboard-stream";
 
 import { DashboardXuiServerTiles } from "@/components/dashboard-xui-server-tiles";
 
@@ -236,8 +237,8 @@ export function PanelDashboard({
   const isReseller = variant === "reseller";
 
   const [stats, setStats] = useState<Stats | null>(null);
-
   const [stackItems, setStackItems] = useState<StackComponentStatus[]>([]);
+  const { data: liveStats, connected: liveConnected } = useDashboardStream(!isReseller);
 
 
 
@@ -274,11 +275,11 @@ export function PanelDashboard({
 
     load();
 
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, isReseller ? 45000 : 15000);
 
     return () => clearInterval(t);
 
-  }, [load]);
+  }, [load, isReseller]);
 
 
 
@@ -297,6 +298,22 @@ export function PanelDashboard({
 
 
   const d = stats?.dashboard;
+  const liveSummary = liveStats && liveConnected
+    ? {
+        onlineConnections: liveStats.onlineConnections,
+        onlineUsers: liveStats.onlineUsers,
+        onlineStreams: liveStats.onlineStreams,
+        totalLiveStreams: d?.totalLiveStreams,
+        totalActiveLines: d?.totalActiveLines,
+      }
+    : d ?? undefined;
+  const liveKpi = liveStats && liveConnected && stats?.dashboardKpi
+    ? {
+        ...stats.dashboardKpi,
+        networkInMbps: liveStats.networkInMbps,
+        networkOutMbps: liveStats.networkOutMbps,
+      }
+    : stats?.dashboardKpi;
 
   const connMax = d && d.maxConnections > 0 ? String(d.maxConnections) : "∞";
 
@@ -418,9 +435,9 @@ export function PanelDashboard({
 
           <DashboardXuiKpiRibbon
 
-            summary={d ?? undefined}
+            summary={liveSummary}
 
-            kpi={stats?.dashboardKpi}
+            kpi={liveKpi}
 
             connectionsHref={connectionsHref}
 
@@ -687,7 +704,7 @@ export function PanelDashboard({
 
             variant="green"
 
-            value={`${d?.onlineStreams ?? "—"} / ${d?.totalLiveStreams ?? "—"}`}
+            value={`${liveSummary?.onlineStreams ?? d?.onlineStreams ?? "—"} / ${liveSummary?.totalLiveStreams ?? d?.totalLiveStreams ?? "—"}`}
 
             label="Online Streams"
 
@@ -703,7 +720,7 @@ export function PanelDashboard({
 
             variant="blue"
 
-            value={`${d?.onlineUsers ?? "—"} / ${d?.totalActiveLines ?? "—"}`}
+            value={`${liveSummary?.onlineUsers ?? d?.onlineUsers ?? "—"} / ${liveSummary?.totalActiveLines ?? d?.totalActiveLines ?? "—"}`}
 
             label="Online Users"
 
@@ -717,7 +734,7 @@ export function PanelDashboard({
 
             variant="orange"
 
-            value={`${d?.onlineConnections ?? "—"} / ${connMax}`}
+            value={`${liveSummary?.onlineConnections ?? d?.onlineConnections ?? "—"} / ${connMax}`}
 
             label="Online Connections"
 

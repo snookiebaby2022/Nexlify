@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { FormPageShell } from "@/components/form-page-shell";
 import { BUILTIN_ADDONS, builtinAddonsByCategory } from "@/lib/builtin-addons-catalog";
 import { MUSIC_ADDONS, musicAddonHref } from "@/lib/music-addons-catalog";
+import { FEATURE_PACKS } from "@/lib/feature-packs";
 
 type PluginDef = {
   id: string;
@@ -372,13 +373,52 @@ export default function AddonsOverviewPage() {
       TOOL_PLUGINS.some((p) => p.id === id),
   ).length;
 
+  const isFeaturePackActive = useMemo(() => {
+    return (pack: (typeof FEATURE_PACKS)[number]) => {
+      if (configuredIds.has(pack.serviceId) || configuredIds.has(pack.id)) return true;
+      const group = panelSettings[pack.settingGroup];
+      if (!group || typeof group !== "object") return false;
+      return Object.values(group).some((v) => {
+        if (typeof v === "boolean") return v;
+        if (typeof v === "string") return v.trim().length > 0;
+        if (typeof v === "number") return v > 0;
+        return Boolean(v);
+      });
+    };
+  }, [configuredIds, panelSettings]);
+
+  const configuredSummary = useMemo(() => {
+    const items: { name: string; kind: string; href?: string }[] = [];
+    for (const p of BUILTIN_ADDONS) {
+      if (isBuiltinConfigured(p)) items.push({ name: p.name, kind: "Built-in", href: p.href });
+    }
+    for (const p of MEDIA_PLUGINS) {
+      if (configuredIds.has(p.id)) items.push({ name: p.name, kind: "Integration", href: p.href });
+    }
+    for (const p of music) {
+      if (configuredIds.has(p.id)) items.push({ name: p.name, kind: "Music", href: p.href });
+    }
+    for (const p of FEATURE_PACKS) {
+      if (isFeaturePackActive(p)) items.push({ name: p.name, kind: "Feature pack", href: p.settingsHref });
+    }
+    for (const lic of licenses.filter((l) => l.isActive)) {
+      if (!items.some((i) => i.name === lic.service)) {
+        items.push({ name: lic.service, kind: "License" });
+      }
+    }
+    return items;
+  }, [configuredIds, isBuiltinConfigured, isFeaturePackActive, licenses, music]);
+
+  const featurePackActiveCount = FEATURE_PACKS.filter((p) => isFeaturePackActive(p)).length;
+
   return (
     <FormPageShell title="Addons" manageHref="/admin/dashboard" manageLabel="Dashboard">
       <div className="space-y-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm" style={{ color: "var(--muted)" }}>
             {BUILTIN_ADDONS.length} built-in features included · {builtinConfiguredCount} configured ·{" "}
-            {activeCount} of {internalCount} optional plugins active
+            {activeCount} of {internalCount} optional plugins active · {featurePackActiveCount} feature pack
+            {featurePackActiveCount === 1 ? "" : "s"} licensed
           </p>
           <Link
             href="/admin/license/addon/add"
@@ -389,6 +429,94 @@ export default function AddonsOverviewPage() {
             Add addon license
           </Link>
         </div>
+
+        <section
+          className="rounded-xl border p-4 space-y-3"
+          style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold">Configured on this panel</h2>
+              <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                Live snapshot from panel settings, integrations, and licenses.
+              </p>
+            </div>
+            <Link href="/admin/marketplace" className="text-xs underline" style={{ color: "var(--accent)" }}>
+              Feature marketplace →
+            </Link>
+          </div>
+          {configuredSummary.length === 0 ? (
+            <p className="text-sm py-4 text-center" style={{ color: "var(--muted)" }}>
+              No addons configured yet. Enable built-in features below or connect an integration.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {configuredSummary.map((item) =>
+                item.href ? (
+                  <Link
+                    key={`${item.kind}-${item.name}`}
+                    href={item.href}
+                    className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs hover:opacity-90"
+                    style={{ borderColor: "var(--border)", color: "var(--text)" }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                    {item.name}
+                    <span style={{ color: "var(--muted)" }}>({item.kind})</span>
+                  </Link>
+                ) : (
+                  <span
+                    key={`${item.kind}-${item.name}`}
+                    className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs"
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                    {item.name}
+                    <span style={{ color: "var(--muted)" }}>({item.kind})</span>
+                  </span>
+                )
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-4">
+          <SectionHeader
+            title="Feature packs"
+            action={
+              <Link href="/admin/marketplace" className="text-xs underline" style={{ color: "var(--accent)" }}>
+                View all packs
+              </Link>
+            }
+          />
+          <div className="grid gap-4 lg:grid-cols-2">
+            {FEATURE_PACKS.filter((p) => p.id !== "full_enterprise").map((pack) => (
+              <Link key={pack.id} href={pack.settingsHref} className="block">
+                <div
+                  className="rounded-xl border p-4 transition-all hover:-translate-y-0.5 hover:shadow-md"
+                  style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-sm">{pack.name}</div>
+                      <p className="text-xs mt-1 line-clamp-2" style={{ color: "var(--muted)" }}>
+                        {pack.tagline}
+                      </p>
+                    </div>
+                    <span
+                      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                      style={{
+                        background: isFeaturePackActive(pack) ? "rgba(34,197,94,0.15)" : "rgba(148,163,184,0.15)",
+                        color: isFeaturePackActive(pack) ? "#22c55e" : "var(--muted)",
+                      }}
+                    >
+                      {isFeaturePackActive(pack) ? "Active" : "Not licensed"}
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
 
         {builtinAddonsByCategory().map(({ category, items }) => (
           <section key={category} className="space-y-4">

@@ -1,5 +1,5 @@
-import { ContentHubPage } from "@/components/content-folder-page";
+import { redirect } from "next/navigation";
 
-export default function ResellerContentHubPage() {
-  return <ContentHubPage panel="reseller" />;
+export default function ResellerContentPage() {
+  redirect("/reseller/dashboard");
 }
