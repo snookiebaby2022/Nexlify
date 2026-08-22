@@ -155,8 +155,9 @@ export default function AdminM3uSyncPage() {
           M3U auto-sync
         </h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Scheduled re-pull from upstream IPTV provider M3U URLs (Live TV, Movies, Series). New entries
-          are imported; matching URLs can refresh channel names. Runs via{" "}
+          Scheduled re-pull from upstream IPTV provider M3U URLs (Live TV, Movies, Series, or Mixed).
+          New channels/movies/episodes are imported; existing rows matched by URL refresh names, logos,
+          EPG ids, and series episode metadata (S01E05 titles). Runs via{" "}
           <code className="text-xs">nexlify-cron</code> when due. Also used by{" "}
           <Link href="/admin/watch-folders" className="underline" style={{ color: "var(--accent)" }}>
             Watch folders
@@ -173,8 +174,9 @@ export default function AdminM3uSyncPage() {
           Auto stream / live names
         </h2>
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          When a sync finds an existing stream by URL, update its display name, logo, and EPG id from the
-          playlist (especially important for Live TV renames).
+          When a sync finds an existing stream by URL, update its display name, logo, EPG id, and series
+          season/episode fields from the playlist (live renames, movie title fixes, new episodes in series
+          playlists).
         </p>
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
@@ -183,7 +185,7 @@ export default function AdminM3uSyncPage() {
             disabled={namesSaving}
             onChange={(e) => void saveNamesSetting(e.target.checked)}
           />
-          Update live (and VOD) names on auto-sync
+          Refresh names &amp; metadata on auto-sync
         </label>
         {namesMsg && (
           <p className="text-xs" style={{ color: "var(--muted)" }}>

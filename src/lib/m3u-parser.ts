@@ -103,3 +103,34 @@ export function guessStreamType(entry: M3uEntry, forced?: "LIVE" | "MOVIE" | "SE
   // IPTV playlists are live-first; defaulting to MOVIE created false VOD rows.
   return "LIVE" as const;
 }
+
+/** Parse S01E05 / 1x05 style episode titles from provider M3U rows. */
+export function parseSeriesFromM3uEntry(entry: M3uEntry): {
+  seriesName: string;
+  seasonNum: number;
+  episodeNum: number;
+  displayName: string;
+} | null {
+  const raw = (entry.tvgName?.trim() || entry.name?.trim() || "").replace(/\s+/g, " ");
+  if (!raw) return null;
+
+  const epMatch =
+    raw.match(/\bS(\d{1,2})\s*[EeXx]\s*(\d{1,3})\b/i) ||
+    raw.match(/\b(\d{1,2})x(\d{1,3})\b/i);
+  if (!epMatch) return null;
+
+  const seasonNum = parseInt(epMatch[1], 10);
+  const episodeNum = parseInt(epMatch[2], 10);
+  if (!Number.isFinite(seasonNum) || !Number.isFinite(episodeNum)) return null;
+
+  let seriesName = raw
+    .replace(/\s*[-–|]\s*S\d{1,2}\s*[EeXx]\s*\d{1,3}.*$/i, "")
+    .replace(/\s+S\d{1,2}\s*[EeXx]\s*\d{1,3}.*$/i, "")
+    .replace(/\s+\d{1,2}x\d{1,3}.*$/i, "")
+    .trim();
+  if (!seriesName) seriesName = entry.group?.trim() || raw;
+  seriesName = seriesName.slice(0, 200);
+
+  const displayName = `${seriesName} S${String(seasonNum).padStart(2, "0")}E${String(episodeNum).padStart(2, "0")}`;
+  return { seriesName, seasonNum, episodeNum, displayName: displayName.slice(0, 200) };
+}

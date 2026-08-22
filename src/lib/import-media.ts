@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { parseM3u, guessStreamType, type M3uEntry } from "./m3u-parser";
+import { parseM3u, guessStreamType, parseSeriesFromM3uEntry, type M3uEntry } from "./m3u-parser";
 import { prisma } from "./prisma";
 import { StreamType, VodMode } from "@prisma/client";
 import { resolveProviderUrl } from "./vod-provider-url";
@@ -240,6 +240,9 @@ type ExistingTyped = {
   streamIcon: string | null;
   epgChannelId: string | null;
   type: StreamType;
+  seriesName: string | null;
+  seasonNum: number | null;
+  episodeNum: number | null;
 };
 
 const EXISTING_CHUNK = 400;
@@ -267,6 +270,9 @@ async function loadExistingByTypeAndUrls(
         streamIcon: true,
         epgChannelId: true,
         type: true,
+        seriesName: true,
+        seasonNum: true,
+        episodeNum: true,
       },
     });
     for (const row of rows) remember(row);
@@ -285,6 +291,9 @@ async function loadExistingByTypeAndUrls(
         streamIcon: true,
         epgChannelId: true,
         type: true,
+        seriesName: true,
+        seasonNum: true,
+        episodeNum: true,
       },
     });
     for (const row of rows) remember(row);
@@ -445,10 +454,11 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
     for (const { entry, index } of rows) {
       const entrySortOrder = sortOrderStart + index;
       const existing = resolveTypedExisting(entry.url, maps.byExact, maps.byNorm);
+      const seriesMeta = type === StreamType.SERIES ? parseSeriesFromM3uEntry(entry) : null;
       if (existing) {
         const wantNames = opts.updateNamesOnSync !== false;
         const nextName = wantNames
-          ? (entry.name?.trim() || existing.name).slice(0, 200)
+          ? (seriesMeta?.displayName || entry.name?.trim() || existing.name).slice(0, 200)
           : null;
         const nextIcon = wantNames ? entry.logo?.trim() || null : null;
         const nextEpg = wantNames
@@ -462,7 +472,13 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
         const epgChanged = Boolean(
           nextEpg && nextEpg !== (existing.epgChannelId ?? null)
         );
-        const metaChanged = nameChanged || iconChanged || epgChanged;
+        const seriesChanged = Boolean(
+          seriesMeta &&
+            (seriesMeta.seriesName !== (existing.seriesName ?? null) ||
+              seriesMeta.seasonNum !== existing.seasonNum ||
+              seriesMeta.episodeNum !== existing.episodeNum)
+        );
+        const metaChanged = nameChanged || iconChanged || epgChanged || seriesChanged;
 
         if (opts.reorderExisting !== false || metaChanged || urlChanged) {
           await prisma.stream.update({
@@ -473,6 +489,13 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
               ...(nameChanged && nextName ? { name: nextName } : {}),
               ...(iconChanged && nextIcon ? { streamIcon: nextIcon } : {}),
               ...(epgChanged && nextEpg ? { epgChannelId: nextEpg } : {}),
+              ...(seriesMeta
+                ? {
+                    seriesName: seriesMeta.seriesName,
+                    seasonNum: seriesMeta.seasonNum,
+                    episodeNum: seriesMeta.episodeNum,
+                  }
+                : {}),
             },
           });
           if (bouquetIds.length) {
@@ -492,13 +515,13 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
       }
 
       const meta =
-        type === "MOVIE" || type === "SERIES"
+        type === StreamType.MOVIE || type === StreamType.SERIES
           ? await resolveVodCategoryAndMeta({
               type,
               explicitCategoryId: opts.categoryId,
               groupOrCategory: entry.group,
-              seriesName: type === "SERIES" ? entry.name : null,
-              displayName: entry.name,
+              seriesName: seriesMeta?.seriesName ?? (type === StreamType.SERIES ? entry.name : null),
+              displayName: seriesMeta?.displayName || entry.name,
               autoCategory: opts.autoCategory,
               autoTmdb: opts.autoTmdb,
             })
@@ -525,7 +548,7 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
       try {
         const stream = await prisma.stream.create({
           data: {
-            name: entry.name,
+            name: seriesMeta?.displayName || entry.name,
             streamUrl: entry.url,
             streamIcon: meta.streamIcon ?? entry.logo ?? null,
             type,
@@ -533,7 +556,10 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
             categoryId: meta.categoryId,
             serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
             epgChannelId: entry.tvgId || entry.tvgName || entry.channelId || null,
-            seriesName: type === "SERIES" ? entry.name : null,
+            seriesName:
+              seriesMeta?.seriesName ?? (type === StreamType.SERIES ? entry.name : null),
+            seasonNum: seriesMeta?.seasonNum ?? null,
+            episodeNum: seriesMeta?.episodeNum ?? null,
             agentStartCmd: type === "LIVE" ? liveAgentStartCmd : agentStartCmd,
             isOnDemand: onDemand,
             vodMode: onDemand ? VodMode.ON_DEMAND : VodMode.LIVE,

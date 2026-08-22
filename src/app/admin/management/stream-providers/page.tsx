@@ -265,7 +265,7 @@ function remoteDisplay(p: Provider): { primary: string; secondary?: string; stat
   statParts.push(`Panel ${panelConns} conn${panelConns === 1 ? "" : "s"}`);
   if (p.remoteUpstreamConnections != null) {
     const max = p.remoteMaxConnections != null ? `/${p.remoteMaxConnections}` : "";
-    statParts.push(`Upstream ${p.remoteUpstreamConnections}${max}`);
+    statParts.push(`Provider ${p.remoteUpstreamConnections}${max} conn${p.remoteUpstreamConnections === 1 ? "" : "s"}`);
   } else if (p.remoteMaxConnections != null) {
     statParts.push(`Max ${p.remoteMaxConnections}`);
   }

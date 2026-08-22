@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { choosePanelUpdateMode, isPanelUpdateForced } from "./panel-update-mode";
+import { choosePanelUpdateMode, isPanelUpdateForced, preferTarballPanelUpdates } from "./panel-update-mode";
 
 test("git repo prefers git even when a patch script and prebuilt exist", () => {
   assert.equal(
@@ -55,4 +55,35 @@ test("git still preferred when fetch result is unknown", () => {
     }),
     "git",
   );
+});
+
+test("failed git fetch falls back to patch tarball", () => {
+  assert.equal(
+    choosePanelUpdateMode({
+      isGitRepo: true,
+      gitFetchOk: false,
+      hasPatchScript: true,
+      hasPrebuiltDownload: true,
+      hasNewerRelease: true,
+    }),
+    "prebuilt",
+  );
+});
+
+test("PANEL_UPDATE_PREFER_TARBALL skips git when patch exists", () => {
+  const prev = process.env.PANEL_UPDATE_PREFER_TARBALL;
+  process.env.PANEL_UPDATE_PREFER_TARBALL = "1";
+  assert.equal(preferTarballPanelUpdates(), true);
+  assert.equal(
+    choosePanelUpdateMode({
+      isGitRepo: true,
+      gitFetchOk: true,
+      hasPatchScript: true,
+      hasPrebuiltDownload: false,
+      hasNewerRelease: false,
+    }),
+    "patch",
+  );
+  if (prev === undefined) delete process.env.PANEL_UPDATE_PREFER_TARBALL;
+  else process.env.PANEL_UPDATE_PREFER_TARBALL = prev;
 });

@@ -581,6 +581,134 @@ const TreeRow = memo(function TreeRow({
   );
 });
 
+function streamTypeForCategoryTab(tab: CategoryTab): {
+  streamType: "LIVE" | "MOVIE" | "SERIES";
+  isRadio?: boolean;
+  label: string;
+} {
+  if (tab === "MOVIE") return { streamType: "MOVIE", label: "movies" };
+  if (tab === "SERIES") return { streamType: "SERIES", label: "series/episodes" };
+  if (tab === "RADIO") return { streamType: "LIVE", isRadio: true, label: "radio stations" };
+  return { streamType: "LIVE", label: "live channels" };
+}
+
+function CategoryRemoveDuplicateStreamsPanel({
+  tab,
+  onApplied,
+  setMsg,
+  setBusy,
+  busy,
+}: {
+  tab: CategoryTab;
+  onApplied: () => void;
+  setMsg: (msg: string) => void;
+  setBusy: (busy: boolean) => void;
+  busy: boolean;
+}) {
+  const [samples, setSamples] = useState<{ kept: string; removed: string[] }[]>([]);
+  const target = streamTypeForCategoryTab(tab);
+
+  async function run(dryRun: boolean) {
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/streams/remove-duplicates-by-name", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          streamType: target.streamType,
+          isRadio: target.isRadio,
+          dryRun,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(data.error ?? "Remove duplicate streams failed");
+        return;
+      }
+      setSamples(data.samples ?? []);
+      if (dryRun) {
+        setMsg(
+          `Preview: ${data.duplicateGroups} duplicate name groups, ${data.merged} ${target.label} would be removed (${data.scanned} scanned)`
+        );
+        return;
+      }
+      setMsg(`Removed ${data.merged} duplicate ${target.label} with the same name`);
+      onApplied();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="rounded-lg border p-4 space-y-3"
+      style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+    >
+      <div>
+        <h2 className="text-sm font-semibold">Remove duplicate streams (same name)</h2>
+        <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+          Deletes extra {target.label} that share the exact same display name (case/spacing insensitive).
+          Keeps the best copy (most bouquets, active, oldest). For URL/title fuzzy matching use{" "}
+          <Link href="/admin/management/tools/remove-duplicates" className="underline" style={{ color: "var(--accent)" }}>
+            Remove Duplicates tool
+          </Link>
+          .
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded border"
+          style={{ borderColor: "var(--border)" }}
+          onClick={() => void run(true)}
+        >
+          Preview duplicates
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded font-medium text-white"
+          style={{ background: "var(--accent)" }}
+          onClick={() => {
+            if (
+              !confirm(
+                `Delete duplicate ${target.label} with the same name? The kept copy in each group stays.`
+              )
+            ) {
+              return;
+            }
+            void run(false);
+          }}
+        >
+          {busy ? "Working…" : "Remove duplicate streams"}
+        </button>
+      </div>
+      {samples.length > 0 && (
+        <div
+          className="rounded border max-h-48 overflow-y-auto text-xs font-mono"
+          style={{ borderColor: "var(--border)" }}
+        >
+          {samples.map((s, i) => (
+            <div
+              key={`${s.kept}-${i}`}
+              className="px-2 py-1 border-b"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <span className="font-medium">{s.kept}</span>
+              <span className="mx-2" style={{ color: "var(--muted)" }}>
+                ←
+              </span>
+              <span style={{ color: "var(--muted)" }}>{s.removed.join(", ")}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CategoryRemoveDuplicatesPanel({
   tab,
   onApplied,
@@ -1213,6 +1341,7 @@ function ManagementCategoriesInner() {
       <PredefinedCategories tab={tab} existingNames={tabCategories.map((c) => c.name.toLowerCase())} onAdded={load} />
 
       <CategoryRemoveDuplicatesPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+      <CategoryRemoveDuplicateStreamsPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
       <CategoryNameNormalizePanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
 
       <CategoryAutoSortPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
