@@ -566,6 +566,7 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
                     Paste the provider’s full URL for direct playback (302 / proxy to upstream).
                   </p>
                 </FormField>
+                </>
               )}
               <FormField label="Backup source URL (failover)">
                 <input
