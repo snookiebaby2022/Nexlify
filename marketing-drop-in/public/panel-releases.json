@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.29",
+  "latestVersion": "2.0.30",
   "releases": [
+    {
+      "version": "2.0.30",
+      "date": "2026-08-22",
+      "channel": "stable",
+      "summary": "Stream dedupe by name, M3U episode metadata sync, provider conn labels, and private-repo update path.",
+      "changelog": [
+        "Categories: remove duplicate streams with the same display name",
+        "M3U auto-sync refreshes series episode SxxExx metadata and VOD names on URL match",
+        "Provider stats show Provider X/Y conns (upstream active connections) vs Panel conns",
+        "Private GitHub: fall back to nexlify.live tarball when git fetch fails; PANEL_UPDATE_PREFER_TARBALL option"
+      ],
+      "fixes": [
+        "Panel updates no longer stuck on git pull when GitHub is private or unreachable"
+      ]
+    },
     {
       "version": "2.0.29",
       "date": "2026-08-22",
