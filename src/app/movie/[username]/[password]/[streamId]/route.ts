@@ -64,7 +64,11 @@ export async function GET(
   if (deny === "user_agent") return iptvText("User-Agent not allowed for this line", { status: 403 });
   if (deny === "kicked") return iptvText("Session kicked", { status: 403 });
 
-  const playbackUrl = await resolvePlaybackUrlForLine(line.id, cleanId, { clientIp: ip, userAgent: ua });
+  const playbackUrl = await resolvePlaybackUrlForLine(line.id, cleanId, {
+    clientIp: ip,
+    userAgent: ua,
+    skipGeo: true,
+  });
   if (!playbackUrl) return iptvText("Not found", { status: 404 });
 
   if (isHlsClientPath(streamId) || /\.m3u8$/i.test(streamId)) {

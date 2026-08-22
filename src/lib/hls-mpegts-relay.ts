@@ -6,9 +6,8 @@ import { binExists, getFfmpegPath } from "@/lib/bin-tools";
 const remuxProcs = new Map<string, ChildProcess>();
 const MAX_REMUX = 24;
 
-function remuxKey(streamId: string, lineId: string, clientIp?: string): string {
-  const ip = clientIp?.trim() || "unknown";
-  return `${lineId}:${streamId}:${ip}`;
+function remuxKey(streamId: string): string {
+  return streamId;
 }
 
 function stopRemux(key: string) {
@@ -69,9 +68,9 @@ export async function createHlsToMpegTsStream(opts: {
   clientIp?: string;
   userAgent?: string;
 }): Promise<{ stream: ReadableStream<Uint8Array>; contentType: string } | { error: string }> {
-  const key = remuxKey(opts.streamId, opts.lineId, opts.clientIp);
+  const key = remuxKey(opts.streamId);
 
-  // Replace any prior remux for this viewer — apps often reopen the same channel without closing first.
+  // Replace prior remux for this channel (shared key — warm slot reused on zap-back when within MAX_REMUX).
   stopRemux(key);
   if (remuxProcs.size >= MAX_REMUX) {
     const oldest = remuxProcs.keys().next().value;

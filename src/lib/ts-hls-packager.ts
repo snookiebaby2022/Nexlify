@@ -12,8 +12,8 @@ import { normalizeUpstreamStreamUrl } from "@/lib/resolve-stream-url";
 const HLS_TIME_SEC = 1;
 const HLS_LIST_SIZE = 6;
 const READY_TIMEOUT_MS = Math.max(
-  8_000,
-  Number(process.env.HLS_PACKAGER_READY_MS || process.env.NEXLIFY_HLS_READY_MS || 18_000) || 18_000
+  6_000,
+  Number(process.env.HLS_PACKAGER_READY_MS || process.env.NEXLIFY_HLS_READY_MS || 10_000) || 10_000
 );
 const MAX_SESSIONS = Math.max(8, Number(process.env.HLS_MAX_SESSIONS || 128) || 128);
 const IDLE_MS = 10 * 60 * 1000;
@@ -115,7 +115,8 @@ function stopSession(key: string) {
 /** Live HTTP input is already realtime — `-re` delays the first HLS segment by a full GOP. */
 export function packagerLiveInputPrefix(opts?: { loop?: boolean; vod?: boolean }): string[] {
   if (opts?.loop) return ["-re", "-stream_loop", "-1"];
-  if (opts?.vod) return ["-re"];
+  // VOD: no `-re` — read as fast as possible for quick movie/episode start.
+  if (opts?.vod) return [];
   return [];
 }
 

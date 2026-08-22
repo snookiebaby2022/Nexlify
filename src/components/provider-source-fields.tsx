@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type Provider = { id: string; name: string; providerType: string | null; isActive: boolean };
+type Provider = {
+  id: string;
+  name: string;
+  providerType: string | null;
+  baseUrl?: string | null;
+  isActive: boolean;
+};
 
 export function ProviderSourceFields({
   providerId,
@@ -18,6 +24,7 @@ export function ProviderSourceFields({
   vodOnly?: boolean;
 }) {
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [providerQuery, setProviderQuery] = useState("");
 
   useEffect(() => {
     const q = vodOnly ? "?vod=1" : "";
@@ -25,6 +32,24 @@ export function ProviderSourceFields({
       .then((r) => r.json())
       .then((d) => setProviders((d.providers ?? []).filter((p: Provider) => p.isActive)));
   }, [vodOnly]);
+
+  const filteredProviders = useMemo(() => {
+    const q = providerQuery.trim().toLowerCase();
+    let list = providers;
+    if (q) {
+      list = providers.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.providerType ?? "").toLowerCase().includes(q) ||
+          (p.baseUrl ?? "").toLowerCase().includes(q)
+      );
+    }
+    if (providerId && !list.some((p) => p.id === providerId)) {
+      const current = providers.find((p) => p.id === providerId);
+      if (current) list = [current, ...list];
+    }
+    return list;
+  }, [providers, providerQuery, providerId]);
 
   return (
     <div
@@ -45,6 +70,14 @@ export function ProviderSourceFields({
             Playback resolves through the selected provider so viewers hit the provider URL directly. Configure
             providers under sidebar → Providers → Manage Providers.
           </p>
+          <input
+            type="search"
+            placeholder="Search providers by name, type, or URL…"
+            className="w-full rounded border px-3 py-2 bg-transparent text-sm"
+            style={{ borderColor: "var(--border)" }}
+            value={providerQuery}
+            onChange={(e) => setProviderQuery(e.target.value)}
+          />
           <select
             className="w-full rounded border px-3 py-2 bg-transparent text-sm"
             style={{ borderColor: "var(--border)" }}
@@ -53,14 +86,25 @@ export function ProviderSourceFields({
               onChange({ providerId: e.target.value, providerPath, useProvider: true })
             }
           >
-            <option value="">Select provider</option>
-            {providers.map((p) => (
+            <option value="">
+              {filteredProviders.length
+                ? "Select provider"
+                : providerQuery.trim()
+                  ? "No providers match your search"
+                  : "Select provider"}
+            </option>
+            {filteredProviders.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
                 {p.providerType ? ` (${p.providerType})` : ""}
               </option>
             ))}
           </select>
+          {providerQuery.trim() && filteredProviders.length > 0 ? (
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              {filteredProviders.length} provider{filteredProviders.length === 1 ? "" : "s"} match
+            </p>
+          ) : null}
           <input
             placeholder="Provider path or content ID *"
             required={useProvider}

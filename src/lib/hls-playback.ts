@@ -14,11 +14,11 @@ const HLS_URL_RE = /\.m3u8(?:[?#]|$)/i;
 export const HLS_PLAYLIST_CONTENT_TYPE = "application/x-mpegURL";
 
 /** Cold probe for provider .m3u8; warm path uses playlist cache + shorter timeout. */
-export const HLS_NATIVE_PROBE_MS = 2_000;
-export const HLS_NATIVE_PROBE_WARM_MS = 900;
-export const HLS_GUESSED_PROBE_MS = 800;
+export const HLS_NATIVE_PROBE_MS = 1_200;
+export const HLS_NATIVE_PROBE_WARM_MS = 600;
+export const HLS_GUESSED_PROBE_MS = 500;
 /** Rewritten live playlist TTL — Exo/VLC poll every 2–4s; cache avoids upstream round-trip. */
-export const HLS_PLAYLIST_CACHE_SEC = 4;
+export const HLS_PLAYLIST_CACHE_SEC = 6;
 
 export function hlsNativeUrlCacheKey(streamId: string): string {
   return `hls:native:url:${streamId}`;
@@ -507,6 +507,29 @@ export async function fetchHlsManifestForClient(
   if (!res.ok) return { ok: false, status: res.status, detail: res.detail };
   if (res.kind !== "manifest") return { ok: false, status: 502, detail: "not an HLS playlist" };
   return { ok: true, body: res.body, finalUrl: res.finalUrl };
+}
+
+/** Probe multiple HLS URLs in parallel — first success wins (faster live zap). */
+export async function raceHlsManifestProbes(
+  urls: string[],
+  userAgent: string,
+  probeMsForUrl: (url: string) => number,
+  proxy?: import("@/lib/outbound-proxy").OutboundProxy | null
+): Promise<{ playbackUrl: string; body: string; finalUrl: string } | null> {
+  if (!urls.length) return null;
+  return new Promise((resolve) => {
+    let failures = 0;
+    for (const url of urls) {
+      void fetchHlsManifestForClient(url, userAgent, probeMsForUrl(url), proxy).then((manifest) => {
+        if (manifest.ok) {
+          resolve({ playbackUrl: url, body: manifest.body, finalUrl: manifest.finalUrl });
+          return;
+        }
+        failures++;
+        if (failures >= urls.length) resolve(null);
+      });
+    }
+  });
 }
 
 /** Fast VOD HLS: rewrite a native provider playlist; otherwise package via the HLS daemon. */

@@ -56,7 +56,10 @@ const HLS_LIVE_MAX_AGE_MS = Number(process.env.NEXLIFY_HLS_LIVE_MAX_AGE_MS || 60
 const HLS_DAEMON_PORT = Number(process.env.NEXLIFY_HLS_DAEMON_PORT || 13081);
 const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
 const LIVE_TS_PEEK_BYTES = 188;
-const LIVE_TS_OPEN_MS = Number(process.env.IPTV_EDGE_TS_OPEN_MS || 4500);
+const LIVE_TS_OPEN_MS = Number(process.env.IPTV_EDGE_TS_OPEN_MS || 2000);
+/** Cache live-auth at edge so channel zaps skip panel round-trip (45s default). */
+const AUTH_CACHE_TTL_MS = Number(process.env.IPTV_EDGE_AUTH_CACHE_MS || 45_000);
+const authCache = new Map();
 const PLAYBACK_RE = /^\/(live|movie|series)\//;
 const HLS_RE = /\.m3u8(?:[?#]|$)/i;
 const HLS_SEG_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\/hls\/(seg\d+\.ts)$/i;
@@ -496,6 +499,10 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
   sendToBackend();
 }
 
+function authCacheKey(clientReq) {
+  return `${clientIp(clientReq)}:${clientReq.url || "/"}`;
+}
+
 function authLive(clientReq) {
   return new Promise((resolve, reject) => {
     const headers = {
@@ -547,6 +554,21 @@ function authLive(clientReq) {
 
     go();
   });
+}
+
+async function authLiveCached(clientReq) {
+  const key = authCacheKey(clientReq);
+  const hit = authCache.get(key);
+  if (hit && hit.expires > Date.now()) return hit.data;
+  const data = await authLive(clientReq);
+  if (data.status === 200 && (data.upstream || data.streamId)) {
+    authCache.set(key, { expires: Date.now() + AUTH_CACHE_TTL_MS, data });
+    if (authCache.size > 4096) {
+      const oldest = authCache.keys().next().value;
+      if (oldest) authCache.delete(oldest);
+    }
+  }
+  return data;
 }
 
 function hlsStreamDir(streamId) {
@@ -908,7 +930,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
   }
   let auth;
   try {
-    auth = await authLive(clientReq);
+    auth = await authLiveCached(clientReq);
   } catch {
     forward(clientReq, clientRes, ctx);
     return;
@@ -1003,7 +1025,7 @@ async function onRequest(clientReq, clientRes, ctx) {
     return;
   }
   try {
-    const auth = await authLive(clientReq);
+    const auth = await authLiveCached(clientReq);
     if (auth.passthrough || !auth.upstream) {
       forward(clientReq, clientRes, ctx);
       return;

@@ -14,6 +14,7 @@ import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import {
   fetchHlsManifestForClient,
+  raceHlsManifestProbes,
   isHlsPlaybackUrl,
   isHlsClientPath,
   stripLiveStreamExtension,
@@ -258,29 +259,33 @@ export async function GET(
       ? [cachedNativeUrl, ...hlsUrls.filter((u) => u !== cachedNativeUrl)]
       : hlsUrls;
 
-    // 1. Provider-native HLS (stored .m3u8 in stream_source) before local remux.
+    // 1. Provider-native HLS (stored .m3u8 in stream_source) before local remux — parallel probe.
     const instantStart = antiFreeze.liveInstantStart !== false;
-    for (const playbackUrl of orderedHlsUrls) {
-      if (instantStart && !originalCandidates.has(playbackUrl) && playbackUrl !== cachedNativeUrl) {
-        continue;
-      }
-      const isKnownNative = playbackUrl === cachedNativeUrl;
-      const probeMs = isKnownNative
-        ? HLS_NATIVE_PROBE_WARM_MS
-        : originalCandidates.has(playbackUrl)
-          ? HLS_NATIVE_PROBE_MS
-          : HLS_GUESSED_PROBE_MS;
-      const manifest = await fetchHlsManifestForClient(
-        playbackUrl,
+    const probeUrls = orderedHlsUrls.filter(
+      (playbackUrl) =>
+        !instantStart ||
+        originalCandidates.has(playbackUrl) ||
+        playbackUrl === cachedNativeUrl
+    );
+    if (probeUrls.length) {
+      const probeMsForUrl = (playbackUrl: string) => {
+        const isKnownNative = playbackUrl === cachedNativeUrl;
+        return isKnownNative
+          ? HLS_NATIVE_PROBE_WARM_MS
+          : originalCandidates.has(playbackUrl)
+            ? HLS_NATIVE_PROBE_MS
+            : HLS_GUESSED_PROBE_MS;
+      };
+      const winner = await raceHlsManifestProbes(
+        probeUrls,
         UPSTREAM_HLS_UA,
-        probeMs,
+        probeMsForUrl,
         outboundProxy
       );
-      if (!manifest.ok) {
-        lastError = manifest.detail || "Stream unavailable";
-        continue;
+      if (winner) {
+        return returnNativeHls(winner.playbackUrl, { body: winner.body, finalUrl: winner.finalUrl });
       }
-      return returnNativeHls(playbackUrl, manifest);
+      lastError = "Stream unavailable";
     }
 
     // 2. Warm disk packager playlist (MPEG-TS sources only — not when stream_source is native HLS).
