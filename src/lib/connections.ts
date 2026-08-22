@@ -6,7 +6,7 @@ import {
   resolvePlaybackOutputLabel,
   setConnectionPlaybackOutput,
 } from "./connection-playback-output";
-import { clearLiveSession, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
+import { clearLiveSession, batchIsLiveSessionActive, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
 
 export const STALE_MS = 5 * 60 * 1000; // cron safety net for orphaned rows
 /** Live Connections UI + dashboard counts — align with playback heartbeat, not cron stale. */
@@ -138,13 +138,16 @@ export async function countActiveConnections(ownerId?: string): Promise<number> 
 
 /** Distinct active sessions: use groupBy instead of loading all rows */
 export async function countLineSessions(lineId: string) {
-  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
-  const result = await prisma.liveConnection.groupBy({
-    by: ["ip", "streamId"],
-    where: { lineId, lastSeenAt: { gte: staleBefore } },
-    _count: true,
+  const { cacheGetOrSet } = await import("./cache");
+  return cacheGetOrSet(`conn:line_sessions:${lineId}`, 5, async () => {
+    const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
+    const result = await prisma.liveConnection.groupBy({
+      by: ["ip", "streamId"],
+      where: { lineId, lastSeenAt: { gte: staleBefore } },
+      _count: true,
+    });
+    return result.length;
   });
-  return result.length;
 }
 
 /**
@@ -541,17 +544,24 @@ export async function listLiveConnections(ownerId?: string, take = 5000) {
     orderBy: { lastSeenAt: "desc" },
     take: Math.min(Math.max(1, take), 5000),
   });
-  const out: typeof rows = [];
-  for (const row of rows) {
+  const checkItems: Array<{ lineId: string; streamId: string; ip?: string | null; rowIndex: number }> =
+    [];
+  const keep = new Array<boolean>(rows.length).fill(false);
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!;
     if (!row.streamId) {
-      out.push(row);
+      keep[i] = true;
       continue;
     }
-    if (await isLiveSessionActive(row.lineId, row.streamId, row.ip)) {
-      out.push(row);
+    checkItems.push({ lineId: row.lineId, streamId: row.streamId, ip: row.ip, rowIndex: i });
+  }
+  if (checkItems.length) {
+    const activeFlags = await batchIsLiveSessionActive(checkItems);
+    for (let j = 0; j < checkItems.length; j++) {
+      if (activeFlags[j]) keep[checkItems[j]!.rowIndex] = true;
     }
   }
-  return out.slice(0, Math.min(Math.max(1, take), 5000));
+  return rows.filter((_, i) => keep[i]).slice(0, Math.min(Math.max(1, take), 5000));
 }
 
 export async function deleteActiveConnection(id: string, ownerId?: string) {

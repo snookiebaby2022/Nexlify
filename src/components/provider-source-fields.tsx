@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { SourceChannelFinder } from "@/components/source-channel-finder";
+import type { ProviderChannelMatch } from "@/lib/provider-channel-search";
 
 type Provider = {
   id: string;
@@ -16,12 +18,14 @@ export function ProviderSourceFields({
   useProvider,
   onChange,
   vodOnly = true,
+  streamType = "LIVE",
 }: {
   providerId: string;
   providerPath: string;
   useProvider: boolean;
   onChange: (next: { providerId: string; providerPath: string; useProvider: boolean }) => void;
   vodOnly?: boolean;
+  streamType?: "LIVE" | "MOVIE" | "SERIES";
 }) {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [providerQuery, setProviderQuery] = useState("");
@@ -51,6 +55,14 @@ export function ProviderSourceFields({
     return list;
   }, [providers, providerQuery, providerId]);
 
+  function pickChannel(match: ProviderChannelMatch) {
+    onChange({
+      useProvider: true,
+      providerId: match.providerId,
+      providerPath: match.providerPath ?? "",
+    });
+  }
+
   return (
     <div
       className="rounded border p-3 space-y-3"
@@ -62,17 +74,23 @@ export function ProviderSourceFields({
           checked={useProvider}
           onChange={(e) => onChange({ providerId, providerPath, useProvider: e.target.checked })}
         />
-          Hosted by external provider (use provider’s URL)
+        Hosted by external provider (use provider’s URL)
       </label>
       {useProvider ? (
         <>
           <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Playback resolves through the selected provider so viewers hit the provider URL directly. Configure
-            providers under sidebar → Providers → Manage Providers.
+            Playback resolves through the selected provider so viewers hit the provider URL directly.
+            Configure providers under sidebar → Providers → Manage Providers.
           </p>
+          <SourceChannelFinder
+            streamType={streamType}
+            label="Search channel across providers"
+            hint="Type a channel name to see which providers on this panel already carry it — click Use provider to fill provider + path."
+            onPickProvider={pickChannel}
+          />
           <input
             type="search"
-            placeholder="Search providers by name, type, or URL…"
+            placeholder="Filter provider list by name, type, or URL…"
             className="w-full rounded border px-3 py-2 bg-transparent text-sm"
             style={{ borderColor: "var(--border)" }}
             value={providerQuery}
@@ -90,7 +108,7 @@ export function ProviderSourceFields({
               {filteredProviders.length
                 ? "Select provider"
                 : providerQuery.trim()
-                  ? "No providers match your search"
+                  ? "No providers match your filter"
                   : "Select provider"}
             </option>
             {filteredProviders.map((p) => (
@@ -102,7 +120,7 @@ export function ProviderSourceFields({
           </select>
           {providerQuery.trim() && filteredProviders.length > 0 ? (
             <p className="text-xs" style={{ color: "var(--muted)" }}>
-              {filteredProviders.length} provider{filteredProviders.length === 1 ? "" : "s"} match
+              {filteredProviders.length} provider{filteredProviders.length === 1 ? "" : "s"} in list
             </p>
           ) : null}
           <input
@@ -151,7 +169,8 @@ export function OnDemandStreamFields({
       {vodMode === "CATCHUP" && (
         <>
           <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Rolling archive on the stream server — nginx timeshift + panel archive pack. No full DVR pipeline required.
+            Rolling archive on the stream server — nginx timeshift + panel archive pack. No full DVR
+            pipeline required.
           </p>
           <input
             type="number"

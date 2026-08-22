@@ -77,7 +77,7 @@ server {
     client_max_body_size 100m;
     large_client_header_buffers 8 64k;
 
-    location ~ ^/(player_api\.php|get\.php|xmltv\.php|live/|movie/|series/|c/|stalker_portal/) {
+    location ~ ^/(player_api\.php|get\.php|xmltv\.php|live/|timeshift/|movie/|series/|c/|stalker_portal/) {
         add_header Access-Control-Allow-Origin "*" always;
         proxy_pass http://nexlify_panel;
         proxy_http_version 1.1;

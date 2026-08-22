@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Play, Square } from "lucide-react";
+import { HelpCircle, Play, Square } from "lucide-react";
 import { FFMPEG_TRANSCODE_PROFILES } from "@/lib/ffmpeg-transcode-profiles";
 
 export function StreamTranscodeQuickActions({
@@ -17,6 +17,7 @@ export function StreamTranscodeQuickActions({
 }) {
   const [profile, setProfile] = useState("none");
   const [busy, setBusy] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   if (!serverId) return null;
 
@@ -64,32 +65,60 @@ export function StreamTranscodeQuickActions({
   const running = playbackStatus === "online" || playbackStatus === "transcode";
 
   return (
-    <div className="flex flex-wrap items-center gap-1 mt-1">
-      <select
-        className="xui-streams-filter-select text-[10px] py-0.5 max-w-[7rem]"
-        value={profile}
-        disabled={busy}
-        onChange={(e) => void saveProfile(e.target.value)}
-        title="Transcode profile"
-        aria-label="Transcode profile"
-      >
-        <option value="none">Copy</option>
-        {FFMPEG_TRANSCODE_PROFILES.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.label}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        className="xui-lines-action-btn p-1"
-        disabled={busy}
-        title={running ? "Stop transcode" : "Start transcode"}
-        aria-label={running ? "Stop transcode" : "Start transcode"}
-        onClick={() => void agentAction(running ? "stop_stream" : "start_stream")}
-      >
-        {running ? <Square size={12} /> : <Play size={12} />}
-      </button>
+    <div className="mt-1">
+      <div className="flex flex-wrap items-center gap-1">
+        <select
+          className="xui-streams-filter-select text-[10px] py-0.5 max-w-[7rem]"
+          value={profile}
+          disabled={busy}
+          onChange={(e) => void saveProfile(e.target.value)}
+          title="Transcode profile — Copy passes the source through unchanged; other options re-encode on the server"
+          aria-label="Transcode profile"
+        >
+          <option value="none">Copy</option>
+          {FFMPEG_TRANSCODE_PROFILES.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="xui-lines-action-btn p-1"
+          disabled={busy}
+          title={
+            running
+              ? "Stop FFmpeg on the streaming server (stops transcode/restream for this channel)"
+              : "Start FFmpeg on the streaming server (begins transcode/restream for this channel)"
+          }
+          aria-label={running ? "Stop transcode" : "Start transcode"}
+          onClick={() => void agentAction(running ? "stop_stream" : "start_stream")}
+        >
+          {running ? <Square size={12} /> : <Play size={12} />}
+        </button>
+        <button
+          type="button"
+          className="xui-lines-action-btn p-0.5 opacity-70 hover:opacity-100"
+          title="What are these controls?"
+          aria-label="Explain transcode controls"
+          aria-expanded={showHelp}
+          onClick={() => setShowHelp((v) => !v)}
+        >
+          <HelpCircle size={11} />
+        </button>
+      </div>
+      {showHelp ? (
+        <p
+          className="text-[9px] leading-snug mt-1 max-w-[14rem]"
+          style={{ color: "var(--muted)" }}
+        >
+          <strong style={{ color: "var(--text)" }}>Copy</strong> = no re-encode; source is passed
+          through. Pick 720p/1080p etc. to transcode on the server.{" "}
+          <strong style={{ color: "var(--text)" }}>Play</strong> starts FFmpeg on the assigned
+          server; square stops it. Use when the channel needs on-server processing (transcode,
+          restream, or created channel loop).
+        </p>
+      ) : null}
     </div>
   );
 }

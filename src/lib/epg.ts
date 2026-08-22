@@ -153,27 +153,44 @@ export async function syncEpgSource(
   return programs.length;
 }
 
-export async function getShortEpg(channelId: string, limit = 4) {
+export async function getShortEpg(
+  channelId: string,
+  limit = 4,
+  opts?: { archivable?: boolean }
+) {
   const { cacheGetOrSet } = await import("./cache");
   const { getCacheTtls } = await import("./cache-ttl");
   const general = await getSettingGroup("general");
   const timezone = String(general.timezone || "Europe/London");
   const timeFormat = normalizeTimeFormat(general.timeFormat);
   const ttl = await getCacheTtls();
-  const cacheKey = `epg:short:${channelId}:${limit}:${timezone}:${timeFormat}`;
+  const arch = opts?.archivable ? "1" : "0";
+  const cacheKey = `epg:short:${channelId}:${limit}:${timezone}:${timeFormat}:${arch}`;
   return cacheGetOrSet(cacheKey, ttl.epg, async () =>
-    loadShortEpg(channelId, limit, { timezone, timeFormat })
+    loadShortEpg(channelId, limit, { timezone, timeFormat, archivable: opts?.archivable })
   );
 }
 
 /** Try several XMLTV channel ids (epg_channel_id, channel_id, stream id) — XCIPTV uses numeric stream_id. */
-export async function getShortEpgForChannelIds(channelIds: string[], limit = 4) {
+export async function getShortEpgForChannelIds(
+  channelIds: string[],
+  limit = 4,
+  archivable = false
+) {
   const seen = new Set<string>();
+  const candidates: string[] = [];
   for (const raw of channelIds) {
     const id = raw?.trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
-    const listings = await getShortEpg(id, limit);
+    candidates.push(id);
+  }
+  if (!candidates.length) return [];
+
+  const results = await Promise.all(
+    candidates.map((id) => getShortEpg(id, limit, { archivable }))
+  );
+  for (const listings of results) {
     if (listings.length) return listings;
   }
   return [];
@@ -182,14 +199,19 @@ export async function getShortEpgForChannelIds(channelIds: string[], limit = 4) 
 async function loadShortEpg(
   channelId: string,
   limit: number,
-  display: { timezone: string; timeFormat: "12" | "24" }
+  display: { timezone: string; timeFormat: "12" | "24"; archivable?: boolean }
 ) {
   const now = new Date();
   const programs = await prisma.epgProgram.findMany({
-    where: {
-      channelId,
-      stop: { gte: now },
-    },
+    where: display.archivable
+      ? {
+          channelId,
+          stop: { gte: new Date(now.getTime() - 7 * 86400000) },
+        }
+      : {
+          channelId,
+          stop: { gte: now },
+        },
     orderBy: { start: "asc" },
     take: limit,
   });
@@ -205,7 +227,7 @@ async function loadShortEpg(
     channel_id: xtreamSafeText(channelId),
     start_timestamp: String(xtreamUnix(p.start)),
     stop_timestamp: String(xtreamUnix(p.stop)),
-    now_playing: i === 0 ? 1 : 0,
-    has_archive: 0,
+    now_playing: i === 0 && p.start <= now && p.stop >= now ? 1 : 0,
+    has_archive: display.archivable && p.stop < now ? 1 : 0,
   }));
 }

@@ -1,4 +1,4 @@
-import { cacheGet, cacheSet, cacheDel } from "@/lib/cache";
+import { cacheGet, cacheMget, cacheSet, cacheDel } from "@/lib/cache";
 import {
   computeConnectionQuality,
   scoreFromLastSeen,
@@ -105,6 +105,61 @@ export async function getLiveQualitySample(
     stallSec,
     hasSamples: true,
   };
+}
+
+function qualitySampleFromWindow(window: QualityWindow, now: number): LiveQualitySample {
+  const stallSec = Math.max(0, (now - window.lastByteAt) / 1000);
+  const elapsed = Math.max(1, now - window.windowStart);
+  const currentBps =
+    window.windowBytes > 0 ? Math.round((window.windowBytes * 1000) / elapsed) : 0;
+  const bytesPerSec = Math.max(window.peakBytesPerSec, currentBps);
+  return {
+    bytesPerSec,
+    lastByteAt: window.lastByteAt,
+    totalBytes: window.totalBytes,
+    stallSec,
+    hasSamples: true,
+  };
+}
+
+/** Batch quality reads for Live Connections page (one MGET). */
+export async function batchGetLiveQualitySamples(
+  items: Array<{ lineId: string; streamId: string; ip: string | null | undefined }>,
+  now = Date.now()
+): Promise<(LiveQualitySample | null)[]> {
+  const flatKeys: string[] = [];
+  const lookups: Array<{ itemIndex: number; keyIndexes: number[] }> = [];
+
+  for (let i = 0; i < items.length; i++) {
+    const { lineId, streamId, ip } = items[i]!;
+    if (!lineId || !streamId) continue;
+    const keyIndexes: number[] = [];
+    const raw = ip?.trim() ?? "";
+    if (raw) {
+      keyIndexes.push(flatKeys.length);
+      flatKeys.push(connectionQualityKey(lineId, streamId, raw));
+    }
+    keyIndexes.push(flatKeys.length);
+    flatKeys.push(connectionQualityKey(lineId, streamId, ""));
+    keyIndexes.push(flatKeys.length);
+    flatKeys.push(connectionQualityKey(lineId, streamId, "*"));
+    lookups.push({ itemIndex: i, keyIndexes });
+  }
+
+  const windows = flatKeys.length ? await cacheMget<QualityWindow>(flatKeys) : [];
+  const out: (LiveQualitySample | null)[] = items.map(() => null);
+  for (const { itemIndex, keyIndexes } of lookups) {
+    let window: QualityWindow | null = null;
+    for (const ki of keyIndexes) {
+      const hit = windows[ki];
+      if (hit && hit.totalBytes > 0) {
+        window = hit;
+        break;
+      }
+    }
+    if (window) out[itemIndex] = qualitySampleFromWindow(window, now);
+  }
+  return out;
 }
 
 /**

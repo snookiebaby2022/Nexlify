@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { cacheGetOrSet } from "@/lib/cache";
 
 /** Stable numeric id for Xtream-compatible APIs (matches historical live/movie routes). */
 export function cuidToNum(id: string): number {
@@ -27,10 +28,12 @@ export async function resolveCategoryIdParam(categoryId: string): Promise<string
     const exists = await prisma.category.findUnique({ where: { id: raw }, select: { id: true } });
     return exists?.id ?? null;
   }
-  const numericId = parseInt(raw, 10);
-  if (!Number.isFinite(numericId)) return null;
-  const cats = await prisma.category.findMany({ select: { id: true }, take: 50_000 });
-  return cats.find((c) => cuidToNum(c.id) === numericId)?.id ?? null;
+  return cacheGetOrSet(`xtream:catresolve:${raw}`, 300, async () => {
+    const numericId = parseInt(raw, 10);
+    if (!Number.isFinite(numericId)) return null;
+    const cats = await prisma.category.findMany({ select: { id: true }, take: 50_000 });
+    return cats.find((c) => cuidToNum(c.id) === numericId)?.id ?? null;
+  });
 }
 
 export type SeriesSeedRow = {
@@ -53,7 +56,7 @@ export async function seriesSeedsForBouquets(
 
   let categorySql: Prisma.Sql = Prisma.empty;
   if (opts?.uncategorizedOnly) {
-    categorySql = Prisma.sql`AND s."categoryId" IS NULL`;
+    categorySql = Prisma.sql`AND (s."categoryId" IS NULL OR s."categoryId" = '')`;
   } else if (opts?.categoryIds?.length) {
     categorySql = Prisma.sql`AND s."categoryId" IN (${Prisma.join(opts.categoryIds)})`;
   }

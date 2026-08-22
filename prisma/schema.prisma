@@ -611,6 +611,8 @@ model BouquetStream {
   stream    Stream  @relation(fields: [streamId], references: [id], onDelete: Cascade)
 
   @@id([bouquetId, streamId])
+  @@index([streamId])
+  @@index([bouquetId, sortOrder])
 }
 
 model ResellerBouquet {

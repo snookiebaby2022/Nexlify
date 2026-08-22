@@ -11,6 +11,9 @@ import {
   type ConnectionQuality,
 } from "@/lib/connection-quality";
 import type { PlaybackOutputLabel } from "@/lib/connection-playback-output";
+import { resolveClientPollIntervals } from "@/lib/perf-polling";
+
+const ADMIN_POLLS = resolveClientPollIntervals();
 
 type ConnectionRow = {
   id: string;
@@ -174,7 +177,7 @@ export default function AdminConnectionsPage() {
   useEffect(() => {
     load();
     if (!autoRefresh) return;
-    const t = setInterval(load, 5000);
+    const t = setInterval(load, ADMIN_POLLS.connectionsMs);
     return () => clearInterval(t);
   }, [autoRefresh]);
 

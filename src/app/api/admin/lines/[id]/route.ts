@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
-import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
+import { invalidateLineAuth, invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { PanelRole } from "@prisma/client";
 import { MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput, validateLinePasswordPolicy } from "@/lib/credential-generate";
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
@@ -134,6 +134,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     where: { id: existing.id },
     data,
   });
+
+  void invalidateLineAuth(existing.username);
+  if (line.username !== existing.username) void invalidateLineAuth(line.username);
 
   if (body.bouquetIds && Array.isArray(body.bouquetIds)) {
     await prisma.lineBouquet.deleteMany({ where: { lineId: line.id } });

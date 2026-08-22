@@ -86,7 +86,7 @@ server {
     listen [::]:${STREAM_PORT} default_server;
     server_name _;
     client_max_body_size 50m;
-    location ~ ^/(player_api\\.php|get\\.php|xmltv\\.php|live/|movie/|series/|c/|stalker_portal/) {
+    location ~ ^/(player_api\\.php|get\\.php|xmltv\\.php|live/|timeshift/|movie/|series/|c/|stalker_portal/) {
         proxy_pass http://nexlify_panel;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;

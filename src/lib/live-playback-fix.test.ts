@@ -93,9 +93,9 @@ describe("HLS packager live input", () => {
     assert.deepEqual(packagerLiveInputPrefix(), []);
     assert.equal(packagerLiveInputPrefix().includes("-re"), false);
   });
-  it("keeps -re for looped created channels and VOD files", () => {
+  it("keeps -re for looped created channels; VOD reads without -re for faster start", () => {
     assert.deepEqual(packagerLiveInputPrefix({ loop: true }), ["-re", "-stream_loop", "-1"]);
-    assert.deepEqual(packagerLiveInputPrefix({ vod: true }), ["-re"]);
+    assert.deepEqual(packagerLiveInputPrefix({ vod: true }), []);
   });
 });
 

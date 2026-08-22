@@ -7,9 +7,9 @@ import {
   pruneStaleConnections,
   PLAYBACK_STALE_MS,
 } from "@/lib/connections";
-import { computeConnectionQualityWithLive, getLiveQualitySample } from "@/lib/connection-quality-live";
+import { computeConnectionQualityWithLive, batchGetLiveQualitySamples } from "@/lib/connection-quality-live";
 import {
-  getConnectionPlaybackOutput,
+  batchGetConnectionPlaybackOutputs,
   resolvePlaybackOutputLabel,
 } from "@/lib/connection-playback-output";
 import { PanelRole } from "@prisma/client";
@@ -24,34 +24,42 @@ export async function GET() {
   void pruneStaleConnections(PLAYBACK_STALE_MS);
   const connections = await listLiveConnections(ownerScope(session));
   const now = Date.now();
-  const mapped = await Promise.all(
-    connections.map(async (c) => {
-      const live = c.streamId
-        ? await getLiveQualitySample(c.lineId, c.streamId, c.ip, now)
-        : null;
-      const quality = computeConnectionQualityWithLive({
-        startedAt: c.startedAt,
-        lastSeenAt: c.lastSeenAt,
-        now,
-        live,
-      });
-      const cachedOutput = c.streamId
-        ? await getConnectionPlaybackOutput(c.lineId, c.streamId, c.ip)
-        : null;
-      const output = resolvePlaybackOutputLabel({
-        cached: cachedOutput,
-        userAgent: c.userAgent,
-      });
-      return {
-        ...c,
-        startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
-        lastSeenAt: c.lastSeenAt instanceof Date ? c.lastSeenAt.toISOString() : String(c.lastSeenAt),
-        serverName: c.stream?.server?.name ?? "Main Server",
-        quality,
-        output,
-      };
-    })
-  );
+  const qualityItems = connections.map((c) => ({
+    lineId: c.lineId,
+    streamId: c.streamId ?? "",
+    ip: c.ip,
+  }));
+  const outputItems = connections.map((c) => ({
+    lineId: c.lineId,
+    streamId: c.streamId ?? "",
+    ip: c.ip,
+  }));
+  const [liveSamples, cachedOutputs] = await Promise.all([
+    batchGetLiveQualitySamples(qualityItems, now),
+    batchGetConnectionPlaybackOutputs(outputItems),
+  ]);
+  const mapped = connections.map((c, i) => {
+    const live = c.streamId ? liveSamples[i] : null;
+    const quality = computeConnectionQualityWithLive({
+      startedAt: c.startedAt,
+      lastSeenAt: c.lastSeenAt,
+      now,
+      live,
+    });
+    const cachedOutput = c.streamId ? cachedOutputs[i] : null;
+    const output = resolvePlaybackOutputLabel({
+      cached: cachedOutput,
+      userAgent: c.userAgent,
+    });
+    return {
+      ...c,
+      startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
+      lastSeenAt: c.lastSeenAt instanceof Date ? c.lastSeenAt.toISOString() : String(c.lastSeenAt),
+      serverName: c.stream?.server?.name ?? "Main Server",
+      quality,
+      output,
+    };
+  });
   return NextResponse.json({ connections: mapped });
 }
 

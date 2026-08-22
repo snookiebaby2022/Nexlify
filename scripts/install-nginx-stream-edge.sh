@@ -68,7 +68,7 @@ write_stream_locations() {
   local fwd_port="$1"
   local upstream_target="${2:-http://nexlify_panel}"
   cat <<LOC
-    location ~ ^/(player_api\.php|panel_api\.php|get\.php|xmltv\.php|live/|movie/|series/|c/|stalker_portal/) {
+    location ~ ^/(player_api\.php|panel_api\.php|get\.php|xmltv\.php|live/|timeshift/|movie/|series/|c/|stalker_portal/) {
         if (\$request_method = OPTIONS) {
             add_header Access-Control-Allow-Origin "*";
             add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";

@@ -3805,6 +3805,10 @@ a.btn-back:hover,
   background: #f39c12;
 }
 
+.xui-stream-epg-btn--working {
+  background: #27ae60;
+}
+
 .xui-stream-info-empty {
   font-size: 0.75rem;
   color: #aaa;

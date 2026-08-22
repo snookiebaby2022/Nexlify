@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { PanelRole } from "@prisma/client";
-import { LIVE_STALE_MS, countDistinctActiveConnectionsUncached, listLiveConnections } from "@/lib/connections";
+import { PanelRole, Prisma } from "@prisma/client";
+import { LIVE_STALE_MS, countDistinctActiveConnections, listLiveConnections } from "@/lib/connections";
 import { sampleLocalHostMetrics } from "@/lib/host-metrics";
+import { getServerPollIntervals } from "@/lib/perf-polling";
 
 export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
@@ -11,6 +12,7 @@ export async function GET(req: NextRequest) {
 
   const encoder = new TextEncoder();
   const ownerId = session.role === "ADMIN" ? undefined : session.id;
+  const { dashboardSseMs } = await getServerPollIntervals();
 
   const stream = new ReadableStream({
     start(controller) {
@@ -21,30 +23,28 @@ export async function GET(req: NextRequest) {
       const update = async () => {
         try {
           const now = new Date();
-
           const connStaleBefore = new Date(Date.now() - LIVE_STALE_MS);
+          const ownerSql = ownerId
+            ? Prisma.sql`AND lc."lineId" IN (SELECT id FROM "Line" WHERE "ownerId" = ${ownerId})`
+            : Prisma.empty;
 
-          const [onlineConnections, bandwidthSnap, activeLines, sampleConns, onlineUsers, onlineStreams] =
+          const [onlineConnections, bandwidthSnap, activeLines, sampleConns, distinctRow] =
             await Promise.all([
-            countDistinctActiveConnectionsUncached(ownerId, connStaleBefore),
+            countDistinctActiveConnections(ownerId),
             prisma.bandwidthSnapshot.findFirst({ orderBy: { createdAt: "desc" } }),
             prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
             listLiveConnections(ownerId, 10),
-            prisma.liveConnection.findMany({
-              where: ownerId
-                ? { line: { ownerId }, lastSeenAt: { gte: connStaleBefore } }
-                : { lastSeenAt: { gte: connStaleBefore } },
-              select: { lineId: true },
-              distinct: ["lineId"],
-            }),
-            prisma.liveConnection.findMany({
-              where: ownerId
-                ? { line: { ownerId }, streamId: { not: null }, lastSeenAt: { gte: connStaleBefore } }
-                : { streamId: { not: null }, lastSeenAt: { gte: connStaleBefore } },
-              select: { streamId: true },
-              distinct: ["streamId"],
-            }),
+            prisma.$queryRaw<Array<{ users: bigint; streams: bigint }>>`
+              SELECT COUNT(DISTINCT lc."lineId")::bigint AS users,
+                     COUNT(DISTINCT lc."streamId") FILTER (WHERE lc."streamId" IS NOT NULL)::bigint AS streams
+              FROM "LiveConnection" lc
+              WHERE lc."lastSeenAt" >= ${connStaleBefore}
+              ${ownerSql}
+            `,
           ]);
+
+          const onlineUsers = Number(distinctRow[0]?.users ?? 0);
+          const onlineStreams = Number(distinctRow[0]?.streams ?? 0);
 
           const nic = sampleLocalHostMetrics();
           let networkOutMbps = nic.uploadMbps;
@@ -57,8 +57,8 @@ export async function GET(req: NextRequest) {
           send({
             timestamp: now.toISOString(),
             onlineConnections,
-            onlineUsers: onlineUsers.length,
-            onlineStreams: onlineStreams.length,
+            onlineUsers,
+            onlineStreams,
             totalActiveLines: activeLines,
             networkInMbps,
             networkOutMbps,
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
       };
 
       update();
-      const interval = setInterval(update, 1000);
+      const interval = setInterval(update, dashboardSseMs);
 
       req.signal.addEventListener("abort", () => {
         clearInterval(interval);

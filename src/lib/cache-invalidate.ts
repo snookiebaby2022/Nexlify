@@ -9,7 +9,14 @@ export async function invalidateXtreamCategories() {
     cacheDel("xtream:live_categories"),
     cacheDel("xtream:vod_categories"),
     cacheDel("xtream:series_categories"),
+    cacheDel("xtream:catnum:"),
+    cacheDel("xtream:catcanon:"),
+    cacheDel("xtream:catresolve:"),
   ]);
+}
+
+export async function invalidateLineAuth(username: string) {
+  await cacheDel(`line:cred:${username}:`);
 }
 
 export async function invalidateEpgCache() {

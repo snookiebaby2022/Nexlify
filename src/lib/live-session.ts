@@ -1,4 +1,4 @@
-import { cacheDel, cacheGet, cacheSet } from "./cache";
+import { cacheDel, cacheGet, cacheMget, cacheSet } from "./cache";
 
 /** Active playback session TTL — refreshed on every track/pulse/edge keepalive. */
 export const LIVE_SESSION_TTL_SEC = 300;
@@ -55,9 +55,34 @@ export async function isLiveSessionActive(
   ip?: string | null
 ): Promise<boolean> {
   if (!lineId || !streamId) return false;
-  if (await cacheGet<boolean>(liveSessionCacheKey(lineId, streamId, ip))) return true;
-  if (ip && (await cacheGet<boolean>(liveSessionCacheKey(lineId, streamId, null)))) return true;
-  return false;
+  const [specific, wildcard] = await cacheMget<boolean>([
+    liveSessionCacheKey(lineId, streamId, ip),
+    ...(ip ? [liveSessionCacheKey(lineId, streamId, null)] : []),
+  ]);
+  return Boolean(specific || wildcard);
+}
+
+/** Batch session checks for live connections list (one MGET per page). */
+export async function batchIsLiveSessionActive(
+  items: Array<{ lineId: string; streamId: string; ip?: string | null }>
+): Promise<boolean[]> {
+  if (!items.length) return [];
+  const flatKeys: string[] = [];
+  const slots: Array<{ primary: number; fallback?: number }> = [];
+  for (const item of items) {
+    const primary = flatKeys.length;
+    flatKeys.push(liveSessionCacheKey(item.lineId, item.streamId, item.ip));
+    let fallback: number | undefined;
+    if (item.ip) {
+      fallback = flatKeys.length;
+      flatKeys.push(liveSessionCacheKey(item.lineId, item.streamId, null));
+    }
+    slots.push({ primary, fallback });
+  }
+  const values = await cacheMget<boolean>(flatKeys);
+  return slots.map(({ primary, fallback }) =>
+    Boolean(values[primary] || (fallback != null && values[fallback]))
+  );
 }
 
 export async function clearLiveSession(

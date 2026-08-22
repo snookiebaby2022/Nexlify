@@ -23,6 +23,7 @@ import { StreamBouquetSection } from "@/components/stream-bouquet-section";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 import { OnDemandStreamFields, ProviderSourceFields } from "@/components/provider-source-fields";
+import { SourceChannelFinder } from "@/components/source-channel-finder";
 
 type Stream = {
   id: string;
@@ -521,6 +522,7 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
                 providerPath={form.providerPath}
                 useProvider={form.useProvider}
                 vodOnly={form.type !== "LIVE"}
+                streamType={form.type === "SERIES" ? "SERIES" : form.type === "MOVIE" ? "MOVIE" : "LIVE"}
                 onChange={(next) =>
                   setForm({
                     ...form,
@@ -531,7 +533,27 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
                 }
               />
               {!form.useProvider && (
-                <FormField label="Direct source URL (M3U8, TS, MP4, RTMP…)" required>
+                <>
+                  <SourceChannelFinder
+                    streamType={
+                      form.type === "SERIES" ? "SERIES" : form.type === "MOVIE" ? "MOVIE" : "LIVE"
+                    }
+                    label="Find source URL from another channel"
+                    hint="Search by channel name — shows matching streams on this panel. Use URL copies the direct source into the field below."
+                    showDirectUrl
+                    onPickProvider={(m) =>
+                      setForm({
+                        ...form,
+                        useProvider: true,
+                        providerId: m.providerId,
+                        providerPath: m.providerPath ?? "",
+                      })
+                    }
+                    onPickDirectUrl={(m) =>
+                      setForm({ ...form, streamUrl: m.streamUrl, useProvider: false })
+                    }
+                  />
+                  <FormField label="Direct source URL (M3U8, TS, MP4, RTMP…)" required>
                   <input
                     className={`${formInputClass} font-mono text-xs`}
                     style={formInputStyle}

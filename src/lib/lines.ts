@@ -1,7 +1,14 @@
 import { LineStatus, Prisma, StreamType, type Line, type Stream } from "@prisma/client";
+import { createHash } from "crypto";
 
 export type { Line };
 import { prisma } from "./prisma";
+import { cacheGetOrSet } from "./cache";
+
+function lineCredCacheKey(username: string, password: string) {
+  const digest = createHash("sha256").update(`${username}\0${password}`).digest("hex").slice(0, 20);
+  return `line:cred:${username}:${digest}`;
+}
 
 /** Auth / listing include — bouquets only, never nested BouquetStream rows (can be 100k+). */
 export const lineAuthInclude = {
@@ -39,22 +46,24 @@ export async function getLineByCredentials(
   username: string,
   password: string
 ): Promise<LineWithBouquets | null> {
-  const line = await prisma.line.findUnique({
-    where: { username },
-    include: lineAuthInclude,
-  });
-  if (line && line.password === password) return line;
+  return cacheGetOrSet(lineCredCacheKey(username, password), 45, async () => {
+    const line = await prisma.line.findUnique({
+      where: { username },
+      include: lineAuthInclude,
+    });
+    if (line && line.password === password) return line;
 
-  const code = username.trim().toUpperCase();
-  if (!code) return null;
+    const code = username.trim().toUpperCase();
+    if (!code) return null;
 
-  const activeLine = await prisma.line.findFirst({
-    where: { activeCode: code, authMode: "ACTIVE_CODE" },
-    include: lineAuthInclude,
+    const activeLine = await prisma.line.findFirst({
+      where: { activeCode: code, authMode: "ACTIVE_CODE" },
+      include: lineAuthInclude,
+    });
+    if (!activeLine) return null;
+    if (password && password !== activeLine.password && password !== code) return null;
+    return activeLine;
   });
-  if (!activeLine) return null;
-  if (password && password !== activeLine.password && password !== code) return null;
-  return activeLine;
 }
 
 export function effectiveLineStatus(line: Pick<Line, "status" | "expiresAt">): LineStatus {
@@ -85,7 +94,7 @@ export type StreamsForLineOptions = {
   type?: StreamType | StreamType[];
   /** When set, only streams in these category IDs (use null sentinel via uncategorizedOnly). */
   categoryIds?: string[] | null;
-  /** When true, only streams with categoryId IS NULL. */
+  /** When true, only streams with no category (NULL or empty). */
   uncategorizedOnly?: boolean;
   /** Skip provider/server joins (enough for M3U live paths and listings). */
   lean?: boolean;
@@ -155,7 +164,7 @@ export async function streamIdsForLine(
     }
     ${
       options?.uncategorizedOnly
-        ? Prisma.sql`AND s."categoryId" IS NULL`
+        ? Prisma.sql`AND (s."categoryId" IS NULL OR s."categoryId" = '')`
         : options?.categoryIds && options.categoryIds.length
           ? Prisma.sql`AND s."categoryId" IN (${Prisma.join(options.categoryIds)})`
           : Prisma.empty
@@ -191,7 +200,7 @@ export async function streamCountForLine(
     }
     ${
       options?.uncategorizedOnly
-        ? Prisma.sql`AND s."categoryId" IS NULL`
+        ? Prisma.sql`AND (s."categoryId" IS NULL OR s."categoryId" = '')`
         : options?.categoryIds && options.categoryIds.length
           ? Prisma.sql`AND s."categoryId" IN (${Prisma.join(options.categoryIds)})`
           : Prisma.empty

@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.30",
+  "latestVersion": "2.0.31",
   "releases": [
+    {
+      "version": "2.0.31",
+      "date": "2026-08-22",
+      "channel": "stable",
+      "summary": "XCIPTV category fixes, panel performance, MAG catch-up, and admin UX improvements.",
+      "changelog": [
+        "XCIPTV: merged duplicate categories (UK | Entertainment) share one numeric category_id",
+        "XCIPTV: uncategorized streams (empty categoryId) appear under category 0",
+        "Performance: Redis gzip cache, batch live-session checks, lazy dashboard widgets, faster Xtream API",
+        "MAG/Stalker catch-up playback via timeshift URLs and archive EPG flags",
+        "Admin: transcode control help text, green EPG status when guide data is active",
+        "Edit stream: search channels across all providers to swap source quickly"
+      ],
+      "fixes": [
+        "XCIPTV empty UK | Entertainment folder while panel showed streams in category",
+        "XCIPTV uncategorized folder missing streams with blank category",
+        "Live playback test expectation for VOD FFmpeg -re behaviour"
+      ]
+    },
     {
       "version": "2.0.30",
       "date": "2026-08-22",

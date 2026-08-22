@@ -90,11 +90,17 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     },
   });
 
-  const [conns, streamProbeCounts] = await Promise.all([
-    prisma.liveConnection.findMany({
-      where: { lastSeenAt: { gte: liveBefore } },
-      select: { lineId: true, stream: { select: { serverId: true } } },
-    }),
+  const [connAgg, streamProbeCounts] = await Promise.all([
+    prisma.$queryRaw<Array<{ serverId: string; conns: bigint; users: bigint }>>`
+      SELECT s."serverId" AS "serverId",
+             COUNT(*)::bigint AS conns,
+             COUNT(DISTINCT lc."lineId")::bigint AS users
+      FROM "LiveConnection" lc
+      INNER JOIN "Stream" s ON s.id = lc."streamId"
+      WHERE lc."lastSeenAt" >= ${liveBefore}
+        AND s."serverId" IS NOT NULL
+      GROUP BY s."serverId"
+    `,
     prisma.stream.groupBy({
       by: ["serverId", "lastProbeOk"],
       where: { isActive: true, type: StreamType.LIVE, serverId: { not: null } },
@@ -102,14 +108,11 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     }),
   ]);
 
-  const usersByServer = new Map<string, Set<string>>();
+  const usersByServer = new Map<string, number>();
   const connsByServer = new Map<string, number>();
-  for (const c of conns) {
-    const sid = c.stream?.serverId;
-    if (!sid) continue;
-    connsByServer.set(sid, (connsByServer.get(sid) ?? 0) + 1);
-    if (!usersByServer.has(sid)) usersByServer.set(sid, new Set());
-    usersByServer.get(sid)!.add(c.lineId);
+  for (const row of connAgg) {
+    connsByServer.set(row.serverId, Number(row.conns));
+    usersByServer.set(row.serverId, Number(row.users));
   }
 
   const onByServer = new Map<string, number>();
@@ -129,7 +132,7 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
       isThisPanelMachine(s) ||
       (s.agentToken != null && s.agentLastSeen != null && s.agentLastSeen >= staleBefore);
     const connections = connsByServer.get(s.id) ?? 0;
-    const users = usersByServer.get(s.id)?.size ?? 0;
+    const users = usersByServer.get(s.id) ?? 0;
     const streamsOn = onByServer.get(s.id) ?? 0;
     const streamsOff = offByServer.get(s.id) ?? 0;
 

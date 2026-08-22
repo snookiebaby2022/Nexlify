@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Play, Users, Zap, Layers, ChevronDown, ChevronRight } from "lucide-react";
+import { resolveClientPollIntervals } from "@/lib/perf-polling";
+
+const ADMIN_POLLS = resolveClientPollIntervals();
 
 const LS_COLLAPSE_KEY = "nx-dash-sections";
 
@@ -97,6 +100,7 @@ import { PanelMobileDashboard } from "@/components/panel-mobile-dashboard";
 import { DashboardStackStrip } from "@/components/dashboard-stack-strip";
 
 import { DashboardIssuesPanel } from "@/components/dashboard-issues-panel";
+import { LazyDashboardSection } from "@/components/lazy-dashboard-section";
 
 import type { DashboardKpiExtended } from "@/lib/dashboard-server-metrics";
 
@@ -186,8 +190,6 @@ type Stats = {
 
 };
 
-
-
 export type PanelDashboardProps = {
 
   statsUrl: string;
@@ -242,7 +244,19 @@ export function PanelDashboard({
 
 
 
-  const load = useCallback(() => {
+  const loadHeader = useCallback(() => {
+    fetch(`${statsUrl}?light=1`)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((header) => {
+        setStats((prev) => ({
+          ...(prev ?? {}),
+          ...header,
+        }));
+      })
+      .catch(() => {});
+  }, [statsUrl]);
+
+  const loadFull = useCallback(() => {
     const statsPromise = fetch(statsUrl).then((r) => (r.ok ? r.json() : {}));
     const analyticsPromise = isReseller
       ? Promise.resolve({})
@@ -269,17 +283,27 @@ export function PanelDashboard({
     });
   }, [statsUrl, isReseller]);
 
-
-
   useEffect(() => {
-
-    load();
-
-    const t = setInterval(load, isReseller ? 45000 : 15000);
-
-    return () => clearInterval(t);
-
-  }, [load, isReseller]);
+    loadHeader();
+    let cancelled = false;
+    const runFull = () => {
+      if (!cancelled) loadFull();
+    };
+    const idleId =
+      typeof requestIdleCallback !== "undefined"
+        ? requestIdleCallback(runFull, { timeout: 1500 })
+        : null;
+    const timeoutId = idleId == null ? setTimeout(runFull, 120) : null;
+    const t = setInterval(loadFull, isReseller ? 45000 : ADMIN_POLLS.dashboardMs);
+    return () => {
+      cancelled = true;
+      if (idleId != null && typeof cancelIdleCallback !== "undefined") {
+        cancelIdleCallback(idleId);
+      }
+      if (timeoutId != null) clearTimeout(timeoutId);
+      clearInterval(t);
+    };
+  }, [loadHeader, loadFull, isReseller]);
 
 
 
@@ -447,9 +471,13 @@ export function PanelDashboard({
 
           />
 
-          <DashboardIssuesPanel statsUrl={statsUrl} kpi={stats?.dashboardKpi} />
+          <LazyDashboardSection minHeight="6rem">
+            <DashboardIssuesPanel statsUrl={statsUrl} kpi={stats?.dashboardKpi} />
+          </LazyDashboardSection>
 
-          <DashboardXuiSummaryCards widgetsUrl={widgetsUrl} />
+          <LazyDashboardSection minHeight="5rem">
+            <DashboardXuiSummaryCards widgetsUrl={widgetsUrl} />
+          </LazyDashboardSection>
 
         </>
 
@@ -661,16 +689,22 @@ export function PanelDashboard({
 
             <DashboardXuiServerTiles servers={servers} />
 
-            <DashboardXuiResourceMonitor serverMetrics={servers} summary={d ?? undefined} />
+            <LazyDashboardSection minHeight="10rem">
+              <DashboardXuiResourceMonitor serverMetrics={servers} summary={d ?? undefined} />
+            </LazyDashboardSection>
 
-            <DashboardLiveSports />
+            <LazyDashboardSection minHeight="8rem">
+              <DashboardLiveSports />
+            </LazyDashboardSection>
 
           </div>
 
           <aside className="xl:col-span-4 space-y-5">
 
             <DashboardCard id="expiring-lines" title="Expiring in 7 days">
-              <DashboardExpiringLines widgetsUrl={widgetsUrl} linesHref={linesHref} />
+              <LazyDashboardSection minHeight="6rem">
+                <DashboardExpiringLines widgetsUrl={widgetsUrl} linesHref={linesHref} />
+              </LazyDashboardSection>
             </DashboardCard>
 
             <DashboardCard id="top-channels" title="Top channels">
@@ -751,16 +785,19 @@ export function PanelDashboard({
 
 
       <div className="grid lg:grid-cols-2 gap-5">
-
-        <ConnectionMap />
-
-        <DashboardMostWatchedByCountry widgetsUrl={widgetsUrl} />
-
+        <LazyDashboardSection minHeight="12rem">
+          <ConnectionMap />
+        </LazyDashboardSection>
+        <LazyDashboardSection minHeight="12rem">
+          <DashboardMostWatchedByCountry widgetsUrl={widgetsUrl} />
+        </LazyDashboardSection>
       </div>
 
-
-
-      {!isReseller && <DashboardInsightsPanels widgetsUrl={widgetsUrl} linesHref={linesHref} />}
+      {!isReseller && (
+        <LazyDashboardSection minHeight="10rem">
+          <DashboardInsightsPanels widgetsUrl={widgetsUrl} linesHref={linesHref} />
+        </LazyDashboardSection>
+      )}
 
     </div>
     </>

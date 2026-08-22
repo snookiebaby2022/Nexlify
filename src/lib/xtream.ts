@@ -1,28 +1,9 @@
 import type { LineWithBouquets } from "./lines";
 import { streamsForLineExport, lineIsPlayable, categoryIdsForLine, activeBouquetIds } from "./lines";
 import { resolveChannelId, resolveEpgId } from "./subscription-export";
-
 import { exportPlaybackUrl } from "./export-playback-url";
 import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
-
-function cuidToNum(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = ((h << 5) - h + id.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h);
-}
-
-/**
- * Xtream Codes API expects numeric category_id strings (e.g. "3").
- * Our DB uses CUIDs. This maps CUIDs → stable numeric strings.
- */
-function numericCategoryId(cuid?: string | null): string {
-  if (!cuid) return "0";
-  return String(cuidToNum(cuid));
-}
-
 import { parseBitrates, formatTimeshiftLabel } from "./stream-variants";
 import {
   xtreamSafeText,
@@ -34,6 +15,11 @@ import {
 import { seriesSeedsForBouquets, resolveCategoryIdParam } from "./xtream-stream-id";
 import { expandCategoryFilter } from "./category-tree";
 import { categoryMergeKey } from "./category-options";
+import {
+  buildCanonicalCategoryMaps,
+  canonicalNumericForCategory,
+  resolveCategoryCuidsForNumericId,
+} from "./xtream-category-canonical";
 import { pickVodExtension } from "./vod-proxy";
 import {
   portFromPanelBaseUrl,
@@ -45,6 +31,14 @@ import { formatPanelClock, normalizeTimeFormat } from "./epg-time";
 import { getPanelServerSettings } from "./panel-server";
 import { getSettingGroup } from "./panel-settings";
 import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
+
+function cuidToNum(id: string): number {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
 
 type RequestHeaders = { get(name: string): string | null };
 
@@ -162,6 +156,7 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
 }
 
 async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType) {
+  const canonicalMaps = await buildCanonicalCategoryMaps(type);
   const { categoryIds, hasUncategorized } = await categoryIdsForLine(line, { type });
   const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
   if (hasUncategorized) {
@@ -172,17 +167,18 @@ async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType)
       where: { id: { in: categoryIds } },
       orderBy: { sortOrder: "asc" },
     });
-    const seenNorm = new Set<string>();
+    const seenMerge = new Set<string>();
     const ordered = [...cats].sort(
       (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
     );
     for (const c of ordered) {
-      const norm = categoryMergeKey(c.name);
-      if (norm && seenNorm.has(norm)) continue;
-      if (norm) seenNorm.add(norm);
+      const mergeKey = categoryMergeKey(c.name);
+      if (mergeKey && seenMerge.has(mergeKey)) continue;
+      const entry = mergeKey ? canonicalMaps.byMergeKey.get(mergeKey) : undefined;
+      if (mergeKey) seenMerge.add(mergeKey);
       rows.push({
-        category_id: numericCategoryId(c.id),
-        category_name: xtreamSafeText(c.name) || "Category",
+        category_id: entry?.numericId ?? canonicalNumericForCategory(canonicalMaps, c.id),
+        category_name: xtreamSafeText(entry?.name ?? c.name) || "Category",
         parent_id: c.parentId ? cuidToNum(c.parentId) : 0,
         created_at: xtreamUnixString(c.createdAt),
       });
@@ -191,60 +187,50 @@ async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType)
   return rows;
 }
 
-async function canonicalCategoryNumericByType(type: StreamType): Promise<Map<string, string>> {
-  const categoryType = type === StreamType.MOVIE ? "MOVIE" : type === StreamType.SERIES ? "SERIES" : "LIVE";
-  const cats = await prisma.category.findMany({
-    where: { categoryType },
-    select: { id: true, name: true },
-  });
-  const groups = new Map<string, { id: string; name: string }[]>();
-  for (const c of cats) {
-    const n = categoryMergeKey(c.name);
-    if (!n) continue;
-    const list = groups.get(n) ?? [];
-    list.push(c);
-    groups.set(n, list);
-  }
-  const map = new Map<string, string>();
-  for (const list of groups.values()) {
-    const canonical = list.find((c) => c.name.includes("|")) ?? list[0]!;
-    const num = numericCategoryId(canonical.id);
-    for (const c of list) map.set(c.id, num);
-  }
-  return map;
-}
-
 export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
   return xtreamCategoriesForType(line, StreamType.LIVE);
 }
 
-async function categoryIdsForXtreamFilter(categoryId: string): Promise<string[] | "uncategorized" | "missing"> {
+async function categoryIdsForXtreamFilter(
+  categoryId: string,
+  type: StreamType
+): Promise<string[] | "uncategorized" | "missing"> {
   if (categoryId === "0") return "uncategorized";
+  const ids = new Set<string>();
+
+  if (/^\d+$/.test(categoryId)) {
+    const cuids = await resolveCategoryCuidsForNumericId(categoryId, type);
+    if (!cuids.length) return "missing";
+    for (const cuid of cuids) {
+      for (const id of await expandCategoryFilter(cuid)) ids.add(id);
+    }
+    return ids.size ? [...ids] : "missing";
+  }
+
   const resolved = await resolveCategoryIdParam(categoryId);
   if (!resolved) return "missing";
   if (resolved === "0") return "uncategorized";
-  const ids = await expandCategoryFilter(resolved);
+  for (const id of await expandCategoryFilter(resolved)) ids.add(id);
   const root = await prisma.category.findUnique({
     where: { id: resolved },
     select: { name: true, categoryType: true },
   });
   if (root?.name) {
-    const n = categoryMergeKey(root.name);
-    const twins = await prisma.category.findMany({
-      where: { categoryType: root.categoryType },
-      select: { id: true, name: true },
-    });
+    const twins = await resolveCategoryCuidsForNumericId(
+      canonicalNumericForCategory(await buildCanonicalCategoryMaps(type), resolved),
+      type
+    );
     for (const twin of twins) {
-      if (categoryMergeKey(twin.name) === n && !ids.includes(twin.id)) ids.push(twin.id);
+      for (const id of await expandCategoryFilter(twin)) ids.add(id);
     }
   }
-  return ids;
+  return ids.size ? [...ids] : "missing";
 }
 
 export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
   let live;
   if (categoryId != null && categoryId !== "") {
-    const ids = await categoryIdsForXtreamFilter(categoryId);
+    const ids = await categoryIdsForXtreamFilter(categoryId, StreamType.LIVE);
     if (ids === "missing") return [];
     live = await streamsForLineExport(line, {
       type: StreamType.LIVE,
@@ -256,14 +242,14 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
     live = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
   }
 
-  const canonical = await canonicalCategoryNumericByType(StreamType.LIVE);
+  const canonical = await buildCanonicalCategoryMaps(StreamType.LIVE);
 
   return live.map((s, i) => {
     const catchup = s.vodMode === "CATCHUP" || s.isShifted;
     const archiveDays = s.archiveDays ?? 0;
     const timeshiftHours = s.timeshiftSeconds ? Math.ceil(s.timeshiftSeconds / 3600) : 0;
     const shiftLabel = formatTimeshiftLabel(s.timeshiftSeconds);
-    const numCategoryId = (s.categoryId && canonical.get(s.categoryId)) || numericCategoryId(s.categoryId);
+    const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
     const name = xtreamSafeText(shiftLabel ? `${s.name} (${shiftLabel})` : s.name) || "Live";
     return {
       num: i + 1,
@@ -287,24 +273,28 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
 }
 
 export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
-  // Only query MOVIE streams from the database
-  // Use lean mode to skip provider/server joins (faster for large catalogs)
-  const streams = await streamsForLineExport(line, { type: StreamType.MOVIE, lean: true });
-  let vod = streams;
+  let vod;
   if (categoryId != null && categoryId !== "") {
-    vod =
-      categoryId === "0"
-        ? vod.filter((s) => !s.categoryId)
-        : vod.filter((s) => numericCategoryId(s.categoryId) === categoryId);
+    const ids = await categoryIdsForXtreamFilter(categoryId, StreamType.MOVIE);
+    if (ids === "missing") return [];
+    vod = await streamsForLineExport(line, {
+      type: StreamType.MOVIE,
+      lean: true,
+      uncategorizedOnly: ids === "uncategorized",
+      categoryIds: ids === "uncategorized" ? undefined : ids,
+    });
+  } else {
+    vod = await streamsForLineExport(line, { type: StreamType.MOVIE, lean: true });
   }
 
   const streamSettings = await getSettingGroup("streams");
   const directPlay = streamSettings.vodDirectPlay !== false;
+  const canonical = await buildCanonicalCategoryMaps(StreamType.MOVIE);
 
   return vod.map((s, i) => {
     const full = s;
     const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, "auto", directPlay);
-    const numCategoryId = numericCategoryId(s.categoryId);
+    const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
     let rating = "0";
     let rating5 = 0;
     if (full.agentStartCmd?.trim()) {
@@ -348,20 +338,20 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
 
   let seeds;
   if (categoryId != null && categoryId !== "") {
-    if (categoryId === "0") {
-      seeds = await seriesSeedsForBouquets(bouquetIds, { uncategorizedOnly: true });
-    } else {
-      const { categoryIds } = await categoryIdsForLine(line, { type: StreamType.SERIES });
-      const matched = categoryIds.filter((id) => numericCategoryId(id) === categoryId);
-      if (!matched.length) return [];
-      seeds = await seriesSeedsForBouquets(bouquetIds, { categoryIds: matched });
-    }
+    const ids = await categoryIdsForXtreamFilter(categoryId, StreamType.SERIES);
+    if (ids === "missing") return [];
+    seeds = await seriesSeedsForBouquets(bouquetIds, {
+      uncategorizedOnly: ids === "uncategorized",
+      categoryIds: ids === "uncategorized" ? undefined : ids,
+    });
   } else {
     seeds = await seriesSeedsForBouquets(bouquetIds);
   }
 
+  const canonical = await buildCanonicalCategoryMaps(StreamType.SERIES);
+
   return seeds.map((s, i) => {
-    const numCategoryId = numericCategoryId(s.categoryId);
+    const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
     const cover = xtreamSafeText(s.streamIcon);
     const modified = xtreamUnix(s.updatedAt);
     return {

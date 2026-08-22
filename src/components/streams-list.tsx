@@ -13,6 +13,9 @@ import {
   Volume2,
 } from "lucide-react";
 import { StreamRowActionsMenu } from "@/components/stream-row-actions-menu";
+import { resolveClientPollIntervals } from "@/lib/perf-polling";
+
+const ADMIN_POLLS = resolveClientPollIntervals();
 import { StreamTranscodeQuickActions } from "@/components/stream-transcode-quick-actions";
 import { StreamVerifyPanel } from "@/components/stream-verify-panel";
 import { StreamClientsModal } from "@/components/stream-clients-modal";
@@ -35,6 +38,7 @@ type Stream = {
   minSpeedKbps?: number | null;
   maxSpeedKbps?: number | null;
   epgChannelId?: string | null;
+  epgWorking?: boolean;
   lastProbeOk?: boolean | null;
   lastProbeError?: string | null;
   liveStats?: StreamLiveStat | null;
@@ -193,7 +197,7 @@ export function StreamsList({
     if (type === "MOVIE" || type === "SERIES") {
       return;
     }
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, ADMIN_POLLS.streamsMs);
     return () => clearInterval(t);
   }, [load, type]);
 
@@ -518,6 +522,11 @@ export function StreamsList({
       </div>
 
       <div className="xui-streams-table-wrap hidden md:block">
+        {type === "LIVE" ? (
+          <p className="text-[10px] px-2 pb-1" style={{ color: "var(--muted)" }}>
+            EPG: gray = not linked · orange = linked · green = linked with active guide data
+          </p>
+        ) : null}
         <table className="xui-streams-table">
           <thead>
             <tr>
@@ -631,8 +640,20 @@ export function StreamsList({
                   <td>
                     <Link
                       href={`/admin/servers/streams?edit=${s.id}#epg`}
-                      className={`xui-stream-epg-btn ${s.epgChannelId ? "xui-stream-epg-btn--on" : ""}`}
-                      title={s.epgChannelId ? "EPG linked" : "No EPG"}
+                      className={`xui-stream-epg-btn ${
+                        s.epgChannelId
+                          ? s.epgWorking
+                            ? "xui-stream-epg-btn--working"
+                            : "xui-stream-epg-btn--on"
+                          : ""
+                      }`}
+                      title={
+                        !s.epgChannelId
+                          ? "No EPG linked — click to map"
+                          : s.epgWorking
+                            ? "EPG linked with active guide data"
+                            : "EPG linked — no current guide data (check XMLTV import)"
+                      }
                     >
                       <Square size={12} fill="currentColor" />
                     </Link>

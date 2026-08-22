@@ -14,6 +14,13 @@ import {
 } from "./dvr-service";
 import { resolveStreamPlaybackUrl } from "./resolve-stream-url";
 import { exportPlaybackUrl } from "./export-playback-url";
+import {
+  archiveRetentionDays,
+  panelTimeshiftUrl,
+  parseStalkerArchiveCmd,
+  stalkerArchiveEpgCmd,
+  streamHasArchive,
+} from "./catchup-playback-url";
 
 export const STALKER_EXTENDED_ACTIONS = new Set([
   "get_modules",
@@ -75,7 +82,7 @@ async function stalkerChannelRows(
     tv_genre_id: s.categoryId ?? "0",
     logo: s.streamIcon ?? "",
     modified: "",
-    hasArchive: (s.archiveDays ?? 0) > 0 ? 1 : 0,
+    hasArchive: streamHasArchive(s) ? 1 : 0,
     archive: s.archiveDays ?? 0,
     allow_pvr: 1,
     allow_local_pvr: 1,
@@ -86,28 +93,115 @@ async function stalkerChannelRows(
 
 async function stalkerShortEpg(
   streams: Awaited<ReturnType<typeof streamsForLineExport>>,
-  extra: StalkerExtra
+  extra: StalkerExtra,
+  baseUrl?: string,
+  line?: LineWithBouquets
 ) {
   const chId = extra.ch_id ?? extra.id ?? streams[0]?.id ?? "";
   const stream = streams.find((s) => s.id === chId || s.epgChannelId === chId);
   const epgId = stream?.epgChannelId ?? stream?.channelId ?? stream?.id ?? chId;
   const limit = parseInt(extra.limit ?? "4", 10);
   const now = new Date();
+  const archived = stream ? streamHasArchive(stream) : false;
+  const retentionDays = stream ? archiveRetentionDays(stream) : 7;
+  const archiveFrom = new Date(now.getTime() - retentionDays * 86400000);
   const programs = await prisma.epgProgram.findMany({
-    where: { channelId: epgId, stop: { gte: now } },
+    where: {
+      channelId: epgId,
+      stop: { gte: archiveFrom },
+    },
     orderBy: { start: "asc" },
-    take: limit,
+    take: Math.max(limit, limit * 2),
   });
-  return programs.map((p) => ({
-    id: p.id,
-    ch_id: stream?.id ?? chId,
-    name: p.title,
-    descr: p.description ?? "",
-    time: Math.floor(p.start.getTime() / 1000),
-    time_to: Math.floor(p.stop.getTime() / 1000),
-    duration: Math.max(0, Math.floor((p.stop.getTime() - p.start.getTime()) / 1000)),
-    mark_archive: (stream?.archiveDays ?? 0) > 0 ? 1 : 0,
-  }));
+  const slice = programs.slice(0, limit);
+  return slice.map((p) => {
+    const ended = p.stop.getTime() < now.getTime();
+    const durationSec = Math.max(0, Math.floor((p.stop.getTime() - p.start.getTime()) / 1000));
+    const startUnix = Math.floor(p.start.getTime() / 1000);
+    const canArchive = archived && ended;
+    return {
+      id: p.id,
+      ch_id: stream?.id ?? chId,
+      name: p.title,
+      descr: p.description ?? "",
+      time: startUnix,
+      time_to: Math.floor(p.stop.getTime() / 1000),
+      duration: durationSec,
+      mark_archive: canArchive ? 1 : 0,
+      ...(canArchive && stream && baseUrl && line
+        ? {
+            cmd: stalkerArchiveEpgCmd(stream.id, startUnix, durationSec),
+            url: panelTimeshiftUrl(
+              baseUrl,
+              line.username,
+              line.password,
+              stream.id,
+              startUnix,
+              durationSec
+            ),
+          }
+        : {}),
+    };
+  });
+}
+
+async function stalkerArchiveDayFromEpg(
+  line: LineWithBouquets,
+  baseUrl: string,
+  streamId: string,
+  dayUnix: number
+) {
+  const stream = await prisma.stream.findFirst({
+    where: { id: streamId, isActive: true },
+    select: {
+      id: true,
+      epgChannelId: true,
+      channelId: true,
+      archiveDays: true,
+      timeshiftSeconds: true,
+      vodMode: true,
+      isShifted: true,
+    },
+  });
+  if (!stream || !streamHasArchive(stream)) return [];
+
+  const epgId = stream.epgChannelId ?? stream.channelId ?? stream.id;
+  const dayStart = new Date(dayUnix * 1000);
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart.getTime() + 86400000);
+  const programs = await prisma.epgProgram.findMany({
+    where: {
+      channelId: epgId,
+      start: { gte: dayStart, lt: dayEnd },
+    },
+    orderBy: { start: "asc" },
+    take: 200,
+  });
+  const now = Date.now();
+  return programs
+    .filter((p) => p.stop.getTime() < now)
+    .map((p) => {
+      const durationSec = Math.max(0, Math.floor((p.stop.getTime() - p.start.getTime()) / 1000));
+      const startUnix = Math.floor(p.start.getTime() / 1000);
+      return {
+        id: p.id,
+        ch_id: stream.id,
+        name: p.title,
+        start_time: startUnix,
+        end_time: Math.floor(p.stop.getTime() / 1000),
+        duration: durationSec,
+        mark_archive: 1,
+        cmd: stalkerArchiveEpgCmd(stream.id, startUnix, durationSec),
+        url: panelTimeshiftUrl(
+          baseUrl,
+          line.username,
+          line.password,
+          stream.id,
+          startUnix,
+          durationSec
+        ),
+      };
+    });
 }
 
 async function upstreamForStream(streamId: string): Promise<string | null> {
@@ -177,12 +271,12 @@ export async function handleStalkerExtendedAction(
     case "get_week":
     case "get_epg_info": {
       const streams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
-      return stalkerShortEpg(streams, extra);
+      return stalkerShortEpg(streams, extra, baseUrl, line);
     }
 
     case "get_simple_data_table": {
       const epgStreams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
-      const rows = await stalkerShortEpg(epgStreams, extra);
+      const rows = await stalkerShortEpg(epgStreams, extra, baseUrl, line);
       return rows.map((r) => ({
         name: r.name,
         descr: r.descr,
@@ -250,23 +344,42 @@ export async function handleStalkerExtendedAction(
 
     case "get_url": {
       const cmd = extra.cmd ?? extra.id ?? "";
-      const streamId = cmd.replace(/^ffmpeg\s+/i, "").trim();
+      const archive = parseStalkerArchiveCmd(cmd);
       const bouquetIds = activeBouquetIds(line);
-      const stream = streamId
-        ? await prisma.stream.findFirst({
-            where: {
-              id: streamId,
-              isActive: true,
-              bouquets: bouquetIds.length
-                ? { some: { bouquetId: { in: bouquetIds } } }
-                : undefined,
-            },
-            include: {
-              provider: { select: { baseUrl: true } },
-              server: { select: { host: true } },
-            },
-          })
-        : null;
+      const findStream = async (id: string) =>
+        prisma.stream.findFirst({
+          where: {
+            id,
+            isActive: true,
+            bouquets: bouquetIds.length
+              ? { some: { bouquetId: { in: bouquetIds } } }
+              : undefined,
+          },
+          include: {
+            provider: { select: { baseUrl: true } },
+            server: { select: { host: true } },
+          },
+        });
+
+      if (archive) {
+        const stream = await findStream(archive.streamId);
+        if (!stream) return { error: "Stream not found" };
+        if (!streamHasArchive(stream)) return { error: "Archive not available" };
+        return {
+          cmd: panelTimeshiftUrl(
+            baseUrl,
+            line.username,
+            line.password,
+            stream.id,
+            archive.startUnix,
+            archive.durationSec
+          ),
+          id: stream.id,
+        };
+      }
+
+      const streamId = cmd.replace(/^ffmpeg\s+/i, "").trim();
+      const stream = streamId ? await findStream(streamId) : null;
       if (!stream) return { error: "Stream not found" };
       return {
         cmd: exportPlaybackUrl(
@@ -279,10 +392,39 @@ export async function handleStalkerExtendedAction(
       };
     }
 
-    case "tv_get_archive":
-    case "get_tv_archive":
     case "get_tv_archive_day": {
       const streamId = extra.ch_id ?? extra.id ?? "";
+      const dayUnix = parseInt(extra.day ?? extra.date ?? "0", 10);
+      if (streamId && dayUnix > 0) {
+        const epgRows = await stalkerArchiveDayFromEpg(line, baseUrl, streamId, dayUnix);
+        if (epgRows.length) return epgRows;
+      }
+      const recs = await listDvrRecordings({ streamId: streamId || undefined, take: 50 });
+      const completed = recs.filter((r) => r.status === "COMPLETED");
+      return completed.map((r) => ({
+        id: r.id,
+        ch_id: r.streamId,
+        name: r.title,
+        start_time: Math.floor(r.startTime.getTime() / 1000),
+        end_time: r.endTime ? Math.floor(r.endTime.getTime() / 1000) : 0,
+        duration: r.durationSec,
+        mark_archive: 1,
+        cmd: dvrPlaybackUrl(baseUrl, line.username, line.password, r.id),
+      }));
+    }
+
+    case "tv_get_archive":
+    case "get_tv_archive": {
+      const streamId = extra.ch_id ?? extra.id ?? "";
+      if (streamId) {
+        const epgRows = await stalkerArchiveDayFromEpg(
+          line,
+          baseUrl,
+          streamId,
+          Math.floor(Date.now() / 1000) - 86400
+        );
+        if (epgRows.length) return epgRows;
+      }
       const recs = await listDvrRecordings({ streamId: streamId || undefined, take: 50 });
       const completed = recs.filter((r) => r.status === "COMPLETED");
       return completed.map((r) => ({

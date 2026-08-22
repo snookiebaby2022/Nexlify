@@ -302,10 +302,19 @@ export async function GET(req: NextRequest) {
       hostedExternally: s.hostedExternally ?? false,
     }));
     const statsMap = await getStreamLiveStatsMap(statsInputs);
+    const epgIds = streams
+      .map((s) => ("epgChannelId" in s ? (s.epgChannelId as string | null) : null))
+      .filter((id): id is string => Boolean(id?.trim()));
+    const { epgWorkingChannelIds, streamEpgWorking } = await import("@/lib/epg-working-status");
+    const workingEpg = await epgWorkingChannelIds(epgIds);
     const enriched = redactStreams(
       streams.map((s) => ({
         ...s,
         liveStats: statsMap.get(s.id) ?? null,
+        epgWorking: streamEpgWorking(
+          "epgChannelId" in s ? (s.epgChannelId as string | null) : null,
+          workingEpg
+        ),
       })),
       session.role
     );

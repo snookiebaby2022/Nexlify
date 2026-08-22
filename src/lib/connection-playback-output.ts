@@ -1,4 +1,4 @@
-import { cacheGet, cacheSet, cacheDel } from "@/lib/cache";
+import { cacheGet, cacheMget, cacheSet, cacheDel } from "@/lib/cache";
 import { parseXtreamPlaybackPath } from "@/lib/xtream-playback-path";
 
 export type PlaybackOutputLabel = "MPEGTS" | "HLS" | "RTMP";
@@ -26,6 +26,19 @@ export async function getConnectionPlaybackOutput(
 ): Promise<PlaybackOutputLabel | null> {
   if (!lineId || !streamId) return null;
   return cacheGet<PlaybackOutputLabel>(connectionPlaybackOutputKey(lineId, streamId, ip ?? ""));
+}
+
+/** Batch output label reads for Live Connections (one MGET). */
+export async function batchGetConnectionPlaybackOutputs(
+  items: Array<{ lineId: string; streamId: string; ip: string | null | undefined }>
+): Promise<(PlaybackOutputLabel | null)[]> {
+  const keys = items.map(({ lineId, streamId, ip }) =>
+    lineId && streamId ? connectionPlaybackOutputKey(lineId, streamId, ip ?? "") : null
+  );
+  const fetchKeys = keys.filter((k): k is string => Boolean(k));
+  const values = fetchKeys.length ? await cacheMget<PlaybackOutputLabel>(fetchKeys) : [];
+  let vi = 0;
+  return keys.map((k) => (k ? values[vi++] ?? null : null));
 }
 
 export async function clearConnectionPlaybackOutput(

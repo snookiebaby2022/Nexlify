@@ -16,6 +16,11 @@ import {
   handleStalkerExtendedAction,
   STALKER_EXTENDED_ACTIONS,
 } from "./stalker-portal-ext";
+import {
+  panelTimeshiftUrl,
+  parseStalkerArchiveCmd,
+  streamHasArchive,
+} from "./catchup-playback-url";
 
 export { STALKER_EXTENDED_ACTIONS };
 
@@ -163,6 +168,7 @@ function listingRow(
   prefix: string,
   extra?: Partial<{ cmd: string; is_series: number }>
 ) {
+  const archived = streamHasArchive(s);
   return {
     id: s.id,
     name: s.name,
@@ -177,6 +183,9 @@ function listingRow(
     tv_genre_id: s.categoryId ?? "0",
     logo: s.streamIcon ?? "",
     modified: "",
+    hasArchive: archived ? 1 : 0,
+    archive: s.archiveDays ?? 0,
+    allow_local_timeshift: (s.timeshiftSeconds ?? 0) > 0 ? 1 : 0,
   };
 }
 
@@ -389,6 +398,25 @@ export async function handleStalkerAction(
 
     case "create_link": {
       const cmd = extra.cmd ?? extra.id ?? "";
+      const archive = parseStalkerArchiveCmd(cmd);
+      if (archive) {
+        const stream = await findStreamForLine(line, archive.streamId);
+        if (!stream) {
+          return stalkerJsResponse({ error: "Stream not found" });
+        }
+        if (!streamHasArchive(stream)) {
+          return stalkerJsResponse({ error: "Archive not available for this channel" });
+        }
+        const url = panelTimeshiftUrl(
+          baseUrl,
+          line.username,
+          line.password,
+          stream.id,
+          archive.startUnix,
+          archive.durationSec
+        );
+        return stalkerJsResponse({ cmd: url, id: stream.id });
+      }
       const streamId = cmd.replace(/^ffmpeg\s+/i, "").replace(/^series:/i, "").trim();
       const stream = await findStreamForLine(line, streamId);
       if (!stream) {
