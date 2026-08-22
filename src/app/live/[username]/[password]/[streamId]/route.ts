@@ -13,7 +13,6 @@ import { lineIsPlayable } from "@/lib/lines";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import {
-  fetchHlsManifestForClient,
   raceHlsManifestProbes,
   isHlsPlaybackUrl,
   isHlsClientPath,
