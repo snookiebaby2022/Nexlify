@@ -333,7 +333,7 @@ export async function trackConnection(opts: {
     void recordConnectionMediaBytes(opts.lineId, streamId, clientIp ?? "", bytes);
   };
 
-  void touchLiveSession(opts.lineId, streamId, clientIp);
+  if (streamId) void touchLiveSession(opts.lineId, streamId, clientIp);
   if (clientIp && streamId && opts.pruneOthers) {
     void setViewerActiveStream(opts.lineId, streamId, clientIp);
   }
