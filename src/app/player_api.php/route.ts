@@ -24,6 +24,7 @@ import { getAntiFreezeSettings, schedulePlaylistZapWarm } from "@/lib/anti-freez
 import { iptvCorsPreflight, iptvJson } from "@/lib/iptv-cors";
 import { xtreamDeltaArray } from "@/lib/xtream-safe";
 import { resolveClientPlaybackProfile } from "@/lib/client-playback-profiles";
+import { prisma } from "@/lib/prisma";
 
 export async function OPTIONS() {
   return iptvCorsPreflight();
