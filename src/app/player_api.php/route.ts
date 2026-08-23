@@ -25,6 +25,7 @@ import { iptvCorsPreflight, iptvJson } from "@/lib/iptv-cors";
 import { xtreamDeltaArray } from "@/lib/xtream-safe";
 import { resolveClientPlaybackProfile } from "@/lib/client-playback-profiles";
 import { prisma } from "@/lib/prisma";
+import { warmLineXmltv } from "@/lib/xmltv-export";
 
 function xtreamEpgStreamParam(req: NextRequest): string {
   return (
@@ -172,6 +173,8 @@ export async function GET(req: NextRequest) {
           );
         });
       }
+      // XCIPTV downloads xmltv after Update Content — start the cache fill now.
+      warmLineXmltv(line);
       return j(xtreamDeltaArray(payload, clientTimestamp, (s) => s.updated_at ?? 0));
     }
     case "get_vod_streams": {

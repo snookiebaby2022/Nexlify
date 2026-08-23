@@ -5,11 +5,14 @@ import { formatXmltvDateInTimezone } from "@/lib/epg-time";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
 import { cacheGetOrSet } from "@/lib/cache";
+import { cuidToNum } from "@/lib/xtream-stream-id";
 
 const PROGRAMS_PER_CHANNEL = 8;
+/** XCIPTV live overlay only needs now/next, keyed by numeric stream_id. */
+const NUMERIC_PROGRAMS = 2;
 const DESC_MAX_CHARS = 160;
-const EPG_ID_CHUNK = 800;
-const XMLTV_CACHE_TTL_SEC = 180;
+const EPG_ID_CHUNK = 1500;
+const XMLTV_CACHE_TTL_SEC = 1800;
 
 function truncateXmltvDesc(value: string | null | undefined): string | null {
   const text = String(value ?? "").trim();
@@ -20,9 +23,16 @@ function truncateXmltvDesc(value: string | null | undefined): string | null {
 
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
 export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 12): Promise<string> {
-  return cacheGetOrSet(`xmltv:v8:${line.id}:${hoursAhead}`, XMLTV_CACHE_TTL_SEC, () =>
+  return cacheGetOrSet(`xmltv:v9:${line.id}:${hoursAhead}`, XMLTV_CACHE_TTL_SEC, () =>
     buildLineXmltvBody(line, hoursAhead)
   );
+}
+
+/** Start a cache fill so XCIPTV's xmltv download after Update Content is already warm. */
+export function warmLineXmltv(line: LineWithBouquets): void {
+  void buildLineXmltv(line).catch((err) => {
+    console.error("[xmltv] warm failed:", err instanceof Error ? err.message : err);
+  });
 }
 
 type LineChannel = {
@@ -82,7 +92,7 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
   const until = new Date(now.getTime() + hoursAhead * 3600_000);
 
   const channels = await prisma.$queryRaw<LineChannel[]>`
-    SELECT DISTINCT ON (COALESCE(NULLIF(TRIM(s."epgChannelId"), ''), s.id))
+    SELECT
       s.id AS stream_cuid,
       COALESCE(NULLIF(TRIM(s."epgChannelId"), ''), s.id) AS epg_id,
       NULLIF(TRIM(s."channelId"), '') AS stream_channel_id,
@@ -93,8 +103,7 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
     WHERE lb."lineId" = ${line.id}
       AND s.type = ${StreamType.LIVE}::"StreamType"
       AND s."isActive" = true
-      AND NULLIF(TRIM(s."epgChannelId"), '') IS NOT NULL
-    ORDER BY COALESCE(NULLIF(TRIM(s."epgChannelId"), ''), s.id), s.id
+    ORDER BY s.name, s.id
   `;
 
   const epgIdSet = new Set<string>();
@@ -128,20 +137,7 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
   const programSeen = new Set<string>();
   const programRows: ProgramRow[] = [];
 
-  for (const row of channels) {
-    const epgId = String(row.epg_id || "").trim();
-    if (!epgId) continue;
-    const extra = row.stream_channel_id?.trim();
-    const ids = extra && extra !== epgId ? [epgId, extra] : [epgId];
-    for (const id of ids) {
-      if (!channelMap.has(id)) channelMap.set(id, row.name || "Live");
-    }
-    const listings = [
-      ...(programsByChannel.get(epgId) ?? []),
-      ...(programsByChannel.get(epgId.toLowerCase()) ?? []),
-      ...(extra ? programsByChannel.get(extra) ?? [] : []),
-      ...(extra ? programsByChannel.get(extra.toLowerCase()) ?? [] : []),
-    ];
+  const pushProgrammes = (ids: string[], listings: ProgramRow[]) => {
     for (const p of listings) {
       for (const channelId of ids) {
         const key = `${channelId}|${p.start.toISOString()}|${p.title}`;
@@ -156,10 +152,40 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
         });
       }
     }
+  };
+
+  for (const row of channels) {
+    const epgId = String(row.epg_id || "").trim();
+    if (!epgId) continue;
+    const extra = row.stream_channel_id?.trim();
+    const numericId = String(cuidToNum(row.stream_cuid));
+    const catalogIds = extra && extra !== epgId ? [epgId, extra] : [epgId];
+    for (const id of [...catalogIds, numericId]) {
+      if (!channelMap.has(id)) channelMap.set(id, row.name || "Live");
+    }
+    const listings = [
+      ...(programsByChannel.get(epgId) ?? []),
+      ...(epgId !== epgId.toLowerCase() ? programsByChannel.get(epgId.toLowerCase()) ?? [] : []),
+      ...(extra ? programsByChannel.get(extra) ?? [] : []),
+      ...(extra && extra !== extra.toLowerCase() ? programsByChannel.get(extra.toLowerCase()) ?? [] : []),
+    ];
+    const uniqueListings: ProgramRow[] = [];
+    const seenListing = new Set<string>();
+    for (const p of listings) {
+      const k = `${p.start.toISOString()}|${p.title}`;
+      if (seenListing.has(k)) continue;
+      seenListing.add(k);
+      uniqueListings.push(p);
+    }
+    // tvg-id / epg_channel_id (TiviMate, M3U) — full window
+    pushProgrammes(catalogIds, uniqueListings);
+    // XCIPTV PlayStreamEPGActivity matches xmltv channel id to numeric stream_id
+    pushProgrammes([numericId], uniqueListings.slice(0, NUMERIC_PROGRAMS));
   }
 
   const lines: string[] = [
     '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE tv SYSTEM "xmltv.dtd">',
     '<tv generator-info-name="Nexlify">',
   ];
   for (const [id, name] of channelMap) {
@@ -172,9 +198,9 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
     if (!ch) continue;
     lines.push(
       `  <programme start="${formatXmltvDateInTimezone(p.start, panelTimezone)}" stop="${formatXmltvDateInTimezone(p.stop, panelTimezone)}" channel="${ch}">`,
-      `    <title>${xmltvSafeText(p.title) || "Programme"}</title>`
+      `    <title lang="en">${xmltvSafeText(p.title) || "Programme"}</title>`
     );
-    if (p.description) lines.push(`    <desc>${xmltvSafeText(p.description)}</desc>`);
+    if (p.description) lines.push(`    <desc lang="en">${xmltvSafeText(p.description)}</desc>`);
     lines.push("  </programme>");
   }
   lines.push("</tv>");

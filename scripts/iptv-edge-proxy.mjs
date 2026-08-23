@@ -552,6 +552,11 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
         delete hdrs["x-content-type-options"];
         delete hdrs["referrer-policy"];
         delete hdrs["permissions-policy"];
+        const pathOnly = String(clientReq.url || "/").split("?")[0];
+        if (/\/xmltv\.php$/i.test(pathOnly) && !hdrs["content-type"]) {
+          const gzipFile = /[?&]type=(gzip|gz)\b/i.test(String(clientReq.url || ""));
+          hdrs["content-type"] = gzipFile ? "application/gzip" : "text/xml; charset=utf-8";
+        }
         delete hdrs["x-robots-tag"];
         delete hdrs["strict-transport-security"];
         clientRes.writeHead(proxyRes.statusCode || 502, hdrs);

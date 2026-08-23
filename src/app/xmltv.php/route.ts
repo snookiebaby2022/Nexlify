@@ -45,7 +45,7 @@ export async function HEAD(req: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": "text/xml; charset=utf-8",
-        "Cache-Control": "private, max-age=180, no-transform",
+        "Cache-Control": "private, max-age=1800, no-transform",
       },
     })
   );
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
   const gzipFile = xmltvWantsGzipFile(typeParam);
   const headers = new Headers({
     "Content-Type": gzipFile ? "application/gzip" : "text/xml; charset=utf-8",
-    "Cache-Control": "private, max-age=180, no-transform",
+    "Cache-Control": "private, max-age=1800, no-transform",
     Vary: "Accept-Encoding",
   });
   const acceptEnc = (req.headers.get("accept-encoding") ?? "").toLowerCase();
