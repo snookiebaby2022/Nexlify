@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gzipSync } from "zlib";
 import { getLineByCredentials, lineIsPlayable } from "@/lib/lines";
 import { getClientIp } from "@/lib/client-ip";
 import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
-import { buildLineXmltv } from "@/lib/xmltv-export";
+import { buildLineXmltv, buildLineXmltvGzip } from "@/lib/xmltv-export";
 import { shouldGzipXmltv, xmltvWantsGzipFile } from "@/lib/xmltv-http";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { withIptvCors } from "@/lib/iptv-cors";
@@ -56,27 +55,30 @@ export async function GET(req: NextRequest) {
   if (auth.error) return auth.error;
   const line = auth.line!;
 
-  let xml = EMPTY_XMLTV;
-  try {
-    xml = await buildLineXmltv(line);
-  } catch (e) {
-    console.error("[xmltv] build failed:", e instanceof Error ? e.message : e);
-  }
   const typeParam = req.nextUrl.searchParams.get("type");
   const gzipFile = xmltvWantsGzipFile(typeParam);
+  const acceptEnc = (req.headers.get("accept-encoding") ?? "").toLowerCase();
+  const ua = req.headers.get("user-agent") ?? "";
   const headers = new Headers({
     "Content-Type": gzipFile ? "application/gzip" : "text/xml; charset=utf-8",
     "Cache-Control": "private, max-age=1800, no-transform",
     Vary: "Accept-Encoding",
   });
-  const acceptEnc = (req.headers.get("accept-encoding") ?? "").toLowerCase();
-  const ua = req.headers.get("user-agent") ?? "";
-  if (shouldGzipXmltv(acceptEnc, ua, typeParam) && xml.length >= 512) {
-    const compressed = gzipSync(Buffer.from(xml, "utf8"), { level: 6 });
-    if (!gzipFile) headers.set("Content-Encoding", "gzip");
-    headers.set("Content-Length", String(compressed.length));
-    return withIptvCors(new NextResponse(compressed, { headers }));
+  try {
+    if (shouldGzipXmltv(acceptEnc, ua, typeParam)) {
+      const compressed = await buildLineXmltvGzip(line);
+      if (compressed.length >= 32) {
+        if (!gzipFile) headers.set("Content-Encoding", "gzip");
+        headers.set("Content-Length", String(compressed.length));
+        return withIptvCors(new NextResponse(compressed, { headers }));
+      }
+    }
+    const xml = await buildLineXmltv(line);
+    headers.set("Content-Length", String(Buffer.byteLength(xml)));
+    return withIptvCors(new NextResponse(xml, { headers }));
+  } catch (e) {
+    console.error("[xmltv] build failed:", e instanceof Error ? e.message : e);
+    headers.set("Content-Length", String(Buffer.byteLength(EMPTY_XMLTV)));
+    return withIptvCors(new NextResponse(EMPTY_XMLTV, { headers }));
   }
-  headers.set("Content-Length", String(Buffer.byteLength(xml)));
-  return withIptvCors(new NextResponse(xml, { headers }));
 }
