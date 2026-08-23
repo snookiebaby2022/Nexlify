@@ -68,6 +68,32 @@ write_stream_locations() {
   local fwd_port="$1"
   local upstream_target="${2:-http://nexlify_panel}"
   cat <<LOC
+    location = /xmltv.php {
+        gzip off;
+        if (\$request_method = OPTIONS) {
+            add_header Access-Control-Allow-Origin "*";
+            add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS";
+            add_header Access-Control-Allow-Headers "Content-Type, User-Agent, Accept, Range";
+            add_header Content-Length 0;
+            return 204;
+        }
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Access-Control-Allow-Methods "GET, HEAD, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Content-Type, User-Agent, Accept, Range" always;
+        proxy_pass ${upstream_target};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port ${fwd_port};
+        proxy_set_header X-Nexlify-Client-Port ${fwd_port};
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto http;
+        proxy_set_header Accept-Encoding "";
+        proxy_read_timeout 300s;
+        proxy_buffering off;
+    }
+
     location ~ ^/(player_api\.php|panel_api\.php|get\.php|xmltv\.php|live/|timeshift/|movie/|series/|c/|stalker_portal/) {
         if (\$request_method = OPTIONS) {
             add_header Access-Control-Allow-Origin "*";

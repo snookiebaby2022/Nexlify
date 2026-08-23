@@ -77,6 +77,22 @@ server {
     client_max_body_size 100m;
     large_client_header_buffers 8 64k;
 
+    location = /xmltv.php {
+        gzip off;
+        add_header Access-Control-Allow-Origin "*" always;
+        proxy_pass http://nexlify_panel;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port ${p};
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Accept-Encoding "";
+        proxy_read_timeout 300s;
+        proxy_buffering off;
+    }
+
     location ~ ^/(player_api\.php|get\.php|xmltv\.php|live/|timeshift/|movie/|series/|c/|stalker_portal/) {
         add_header Access-Control-Allow-Origin "*" always;
         proxy_pass http://nexlify_panel;

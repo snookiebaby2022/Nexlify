@@ -13,7 +13,7 @@ import {
   xtreamSeriesCategoriesForLine,
 } from "@/lib/xtream";
 import { xtreamVodInfo, xtreamSeriesInfo } from "@/lib/xtream-info";
-import { resolveStreamIdParam } from "@/lib/xtream-stream-id";
+import { cuidToNum, resolveStreamIdParam } from "@/lib/xtream-stream-id";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { checkDdosShield } from "@/lib/ddos-shield";
 import { cacheGet, cacheGetOrSet } from "@/lib/cache";
@@ -25,6 +25,15 @@ import { iptvCorsPreflight, iptvJson } from "@/lib/iptv-cors";
 import { xtreamDeltaArray } from "@/lib/xtream-safe";
 import { resolveClientPlaybackProfile } from "@/lib/client-playback-profiles";
 import { prisma } from "@/lib/prisma";
+
+function xtreamEpgStreamParam(req: NextRequest): string {
+  return (
+    req.nextUrl.searchParams.get("stream_id") ||
+    req.nextUrl.searchParams.get("channel_id") ||
+    req.nextUrl.searchParams.get("epg_channel_id") ||
+    ""
+  ).trim();
+}
 
 async function resolveXtreamEpgListings(
   lineId: string,
@@ -47,9 +56,13 @@ async function resolveXtreamEpgListings(
       })
     : null;
   const channelIds = stream
-    ? [stream.epgChannelId, stream.channelId, stream.id, streamId].filter(
-        (v): v is string => Boolean(v?.trim())
-      )
+    ? [
+        stream.epgChannelId,
+        stream.channelId,
+        stream.id,
+        streamId,
+        String(cuidToNum(stream.id)),
+      ].filter((v): v is string => Boolean(v?.trim()))
     : [streamId];
   const archivable = stream ? streamHasArchive(stream) : false;
   return getShortEpgForChannelIds(channelIds, limit, archivable);
@@ -214,13 +227,13 @@ export async function GET(req: NextRequest) {
       return j(info ?? {});
     }
     case "get_short_epg": {
-      const streamId = req.nextUrl.searchParams.get("stream_id");
+      const streamId = xtreamEpgStreamParam(req);
       if (!streamId) return j({ epg_listings: [] });
       const epg = await resolveXtreamEpgListings(line.id, streamId, 4);
       return j({ epg_listings: epg });
     }
     case "get_epg": {
-      const streamId = req.nextUrl.searchParams.get("stream_id");
+      const streamId = xtreamEpgStreamParam(req);
       if (!streamId) return j({ epg_listings: [] });
       const limit = Math.min(
         500,
@@ -230,7 +243,7 @@ export async function GET(req: NextRequest) {
       return j({ epg_listings: epg });
     }
     case "get_simple_data_table": {
-      const streamId = req.nextUrl.searchParams.get("stream_id");
+      const streamId = xtreamEpgStreamParam(req);
       if (!streamId) return j({ epg_listings: [] });
       return j({ epg_listings: await resolveXtreamEpgListings(line.id, streamId, 10) });
     }

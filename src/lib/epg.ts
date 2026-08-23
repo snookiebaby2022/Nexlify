@@ -205,11 +205,11 @@ async function loadShortEpg(
   const programs = await prisma.epgProgram.findMany({
     where: display.archivable
       ? {
-          channelId,
+          channelId: { equals: channelId, mode: "insensitive" },
           stop: { gte: new Date(now.getTime() - 7 * 86400000) },
         }
       : {
-          channelId,
+          channelId: { equals: channelId, mode: "insensitive" },
           stop: { gte: now },
         },
     orderBy: { start: "asc" },

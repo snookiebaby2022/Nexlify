@@ -93,9 +93,9 @@ function clientIp(req) {
   return ip;
 }
 
-function pulseConnection(ctx, bytes) {
+/** HTTP heartbeat only — must not reset lastClientAt or HLS never goes idle. */
+function sendConnectionPulse(ctx, bytes) {
   if (!INTERNAL_SECRET || !ctx?.lineId || !ctx?.streamId) return;
-  touchPlaybackSession(ctx);
   const n = Math.max(0, Math.floor(bytes ?? 0));
   const body = JSON.stringify({
     lineId: ctx.lineId,
@@ -122,6 +122,11 @@ function pulseConnection(ctx, bytes) {
   req.on("timeout", () => req.destroy());
   req.write(body);
   req.end();
+}
+
+function pulseConnection(ctx, bytes) {
+  touchPlaybackSession(ctx);
+  sendConnectionPulse(ctx, bytes);
 }
 
 function querySessionKicked(lineId, ip) {
@@ -245,28 +250,29 @@ function stopOtherPlaybackSessions(ctx) {
   }
 }
 
-function touchPlaybackSession(ctx) {
+function touchPlaybackSession(ctx, opts = {}) {
   if (!ctx?.lineId || !ctx?.streamId) return;
   stopOtherPlaybackSessions(ctx);
   const key = playbackSessionKey(ctx);
   const now = Date.now();
   let session = playbackSessions.get(key);
   if (!session) {
-    session = { ctx, lastClientAt: now, teardown: null };
+    session = { ctx, lastClientAt: now, teardown: null, hls: Boolean(opts.hls) };
     session.timer = setInterval(() => {
+      // HLS is many short GETs — no TCP close. MPEG-TS uses clientReq close instead.
+      if (!session.hls) return;
       const idle = Date.now() - session.lastClientAt;
       if (idle > SESSION_IDLE_MS) {
         clearInterval(session.timer);
         playbackSessions.delete(key);
         endPlaybackSession(session.ctx);
-        return;
       }
-      pulseConnection(session.ctx, 72_000);
     }, SESSION_KEEPALIVE_MS);
     playbackSessions.set(key, session);
     pulseConnection(ctx, 72_000);
     return;
   }
+  if (opts.hls) session.hls = true;
   session.lastClientAt = now;
 }
 
@@ -515,6 +521,10 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
   headers["x-forwarded-port"] = String(listenPort);
   headers["x-nexlify-client-port"] = String(listenPort);
   headers["x-forwarded-for"] = clientIp(clientReq);
+  const pathOnly = String(clientReq.url || "/").split("?")[0];
+  if (/\/xmltv\.php$/i.test(pathOnly)) {
+    delete headers["accept-encoding"];
+  }
   const method = (clientReq.method || "GET").toUpperCase();
   const hasBody = method !== "GET" && method !== "HEAD";
   let attempt = 0;
@@ -1023,7 +1033,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
       ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
       : null;
   const isHead = String(clientReq.method || "GET").toUpperCase() === "HEAD";
-  if (pulseCtx && !isHead) touchPlaybackSession(pulseCtx);
+  if (pulseCtx && !isHead) touchPlaybackSession(pulseCtx, { hls: true });
   // Provider-native .m3u8 must relay through Next (rewritten manifest + upstream segments).
   if (auth.hlsNative) {
     forward(clientReq, clientRes, ctx);

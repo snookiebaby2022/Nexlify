@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import type { LineWithBouquets } from "@/lib/lines";
-import { Prisma, StreamType } from "@prisma/client";
+import { StreamType } from "@prisma/client";
 import { formatXmltvDateInTimezone } from "@/lib/epg-time";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
 import { cacheGetOrSet } from "@/lib/cache";
+import { xmltvChannelIds } from "@/lib/xmltv-http";
 
 const XMLTV_CACHE_SEC = 180;
 const PROGRAMS_PER_CHANNEL = 8;
@@ -19,7 +20,7 @@ function truncateXmltvDesc(value: string | null | undefined): string | null {
 
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
 export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 12): Promise<string> {
-  const cacheKey = `xmltv:v3:${line.id}:${hoursAhead}:${PROGRAMS_PER_CHANNEL}`;
+  const cacheKey = `xmltv:v5:${line.id}:${hoursAhead}:${PROGRAMS_PER_CHANNEL}`;
   return cacheGetOrSet(cacheKey, XMLTV_CACHE_SEC, () => buildLineXmltvBody(line, hoursAhead));
 }
 
@@ -31,7 +32,9 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
 
   const rows = await prisma.$queryRaw<
     {
+      stream_cuid: string;
       epg_id: string;
+      stream_channel_id: string | null;
       name: string;
       channelId: string | null;
       title: string | null;
@@ -42,7 +45,9 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
   >`
     WITH line_channels AS (
       SELECT DISTINCT
+        s.id AS stream_cuid,
         COALESCE(NULLIF(TRIM(s."epgChannelId"), ''), s.id) AS epg_id,
+        NULLIF(TRIM(s."channelId"), '') AS stream_channel_id,
         s.name
       FROM "LineBouquet" lb
       INNER JOIN "BouquetStream" bs ON bs."bouquetId" = lb."bouquetId"
@@ -59,14 +64,18 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
         p.description,
         p.start,
         p.stop,
-        ROW_NUMBER() OVER (PARTITION BY p."channelId" ORDER BY p.start ASC) AS rn
+        ROW_NUMBER() OVER (PARTITION BY lower(p."channelId") ORDER BY p.start ASC) AS rn
       FROM "EpgProgram" p
-      INNER JOIN line_channels lc ON lc.epg_id = p."channelId"
+      INNER JOIN line_channels lc
+        ON lower(lc.epg_id) = lower(p."channelId")
+        OR (lc.stream_channel_id IS NOT NULL AND lower(lc.stream_channel_id) = lower(p."channelId"))
       WHERE p.stop >= ${now}
         AND p.start <= ${until}
     )
     SELECT
+      lc.stream_cuid,
       lc.epg_id,
+      lc.stream_channel_id,
       lc.name,
       rp."channelId",
       rp.title,
@@ -74,7 +83,12 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
       rp.start,
       rp.stop
     FROM line_channels lc
-    LEFT JOIN ranked_programs rp ON rp."channelId" = lc.epg_id AND rp.rn <= ${PROGRAMS_PER_CHANNEL}
+    LEFT JOIN ranked_programs rp
+      ON rp.rn <= ${PROGRAMS_PER_CHANNEL}
+      AND (
+        lower(rp."channelId") = lower(lc.epg_id)
+        OR (lc.stream_channel_id IS NOT NULL AND lower(rp."channelId") = lower(lc.stream_channel_id))
+      )
     ORDER BY lc.epg_id ASC, rp.start ASC NULLS LAST
   `;
 
@@ -88,17 +102,23 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
   }[] = [];
 
   for (const row of rows) {
-    const id = String(row.epg_id || "").trim();
-    if (!id) continue;
-    if (!channelMap.has(id)) channelMap.set(id, row.name || "Live");
-    if (row.channelId && row.start && row.stop && row.title) {
-      programRows.push({
-        channelId: String(row.channelId),
-        title: row.title,
-        description: truncateXmltvDesc(row.description),
-        start: row.start,
-        stop: row.stop,
-      });
+    const epgId = String(row.epg_id || "").trim();
+    const streamCuid = String(row.stream_cuid || "").trim();
+    if (!epgId && !streamCuid) continue;
+    const ids = xmltvChannelIds(epgId, streamCuid, row.stream_channel_id);
+    for (const id of ids) {
+      if (!channelMap.has(id)) channelMap.set(id, row.name || "Live");
+    }
+    if (row.start && row.stop && row.title) {
+      for (const channelId of ids) {
+        programRows.push({
+          channelId,
+          title: row.title,
+          description: truncateXmltvDesc(row.description),
+          start: row.start,
+          stop: row.stop,
+        });
+      }
     }
   }
 

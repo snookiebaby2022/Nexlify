@@ -22,14 +22,15 @@ export async function pulseLiveConnection(opts: {
 
   const clientIp = normalizeConnectionIp(opts.ip);
   const bytes = Math.max(0, Math.floor(opts.bytes ?? 0));
-  const qualityBytes = bytes > 0 ? bytes : 96_000;
+  // Zero-byte keepalives must not refresh lastSeenAt or Redis — HLS idle close relies on that.
+  if (bytes <= 0) return;
 
   if (clientIp) {
     const active = await getViewerActiveStream(lineId, clientIp);
     if (active && active !== streamId) return;
   }
 
-  void recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", qualityBytes);
+  void recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", bytes);
   void touchLiveSession(lineId, streamId, clientIp);
 
   const row = await prisma.liveConnection.findFirst({

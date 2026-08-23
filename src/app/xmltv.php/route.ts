@@ -36,8 +36,8 @@ export async function GET(req: NextRequest) {
   const typeParam = req.nextUrl.searchParams.get("type");
   const gzipFile = xmltvWantsGzipFile(typeParam);
   const headers = new Headers({
-    "Content-Type": gzipFile ? "application/gzip" : "application/xml; charset=utf-8",
-    "Cache-Control": "private, max-age=180",
+    "Content-Type": gzipFile ? "application/gzip" : "text/xml; charset=utf-8",
+    "Cache-Control": "private, max-age=180, no-transform",
     Vary: "Accept-Encoding",
   });
   const acceptEnc = (req.headers.get("accept-encoding") ?? "").toLowerCase();
