@@ -98,8 +98,7 @@ export function formatXmltvDateInTimezone(d: Date, timeZone: string): string {
 }
 
 /**
- * Xtream/XUI xmltv.php style: UTC wall clock + `+0000`.
- * Prefer `formatXmltvDateXui` for XCIPTV — it shows the 14 digits as local time.
+ * True UTC digits + `+0000`. Wrong for apps that ignore the offset (they show UTC).
  */
 export function formatXmltvDateUtc(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -110,12 +109,21 @@ export function formatXmltvDateUtc(d: Date): string {
 }
 
 /**
- * XUI xmltv.php: panel-local wall clock with dummy `+0000`.
- * XCIPTV ignores the offset and displays the 14 digits as the programme time.
+ * Panel-local digits with dummy `+0000` (XUI One `date('YmdHis').' +0000'`).
+ * Wrong during DST for apps that parse the offset (XCIPTV SimpleDateFormat `Z`).
  */
 export function formatXmltvDateXui(d: Date, timeZone: string): string {
   const p = partsMap(d, timeZone, false);
   return `${p.year}${p.month}${p.day}${p.hour}${p.minute}${p.second} +0000`;
+}
+
+/**
+ * XMLTV timestamp that is correct for both XCIPTV modes:
+ * - ignores offset → shows panel-local digits (same as Smarters)
+ * - honours offset → instant is still panel-local on a UK/BST device
+ */
+export function formatXmltvDateForXtreamApps(d: Date, timeZone: string): string {
+  return formatXmltvDateInTimezone(d, timeZone);
 }
 
 export function decodeXtreamBase64(value: string): string {

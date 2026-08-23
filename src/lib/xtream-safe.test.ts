@@ -8,6 +8,8 @@ import {
   xtreamCategoryIds,
   xmltvSafeText,
   xtreamBase64,
+  xtreamCatalogDirectSource,
+  xtreamListingExtension,
 } from "./xtream-safe";
 
 describe("xtream-safe", () => {
@@ -49,5 +51,16 @@ describe("xtream-safe", () => {
 
   it("base64-encodes EPG titles the way Xtream/XUI do", () => {
     assert.equal(xtreamBase64("News"), Buffer.from("News", "utf8").toString("base64"));
+  });
+
+  it("never puts a playback URL on Xtream catalog listings", () => {
+    assert.equal(xtreamCatalogDirectSource(), "");
+  });
+
+  it("reads VOD container_extension without parsing a source URL", () => {
+    assert.equal(xtreamListingExtension("mkv"), "mkv");
+    assert.equal(xtreamListingExtension(".MP4"), "mp4");
+    assert.equal(xtreamListingExtension("hls"), "m3u8");
+    assert.equal(xtreamListingExtension(""), "mp4");
   });
 });

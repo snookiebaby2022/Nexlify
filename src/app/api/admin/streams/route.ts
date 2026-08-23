@@ -65,11 +65,9 @@ export async function GET(req: NextRequest) {
     Math.max(1, parseInt(req.nextUrl.searchParams.get("pageSize") ?? "50", 10) || 50)
   );
   const picker = req.nextUrl.searchParams.get("picker") === "1";
-  const lite =
-    req.nextUrl.searchParams.get("lite") === "1" ||
-    (!req.nextUrl.searchParams.has("lite") && req.nextUrl.searchParams.get("withStats") !== "1");
-  const paginate = true;
   const withStats = req.nextUrl.searchParams.get("withStats") === "1";
+  const paginate = true;
+  const lite = req.nextUrl.searchParams.get("full") !== "1";
   const search = req.nextUrl.searchParams.get("search")?.trim();
   const categoryId = req.nextUrl.searchParams.get("categoryId")?.trim();
   const bouquetId = req.nextUrl.searchParams.get("bouquetId")?.trim();

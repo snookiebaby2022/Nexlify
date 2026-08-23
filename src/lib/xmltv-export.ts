@@ -1,12 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import type { LineWithBouquets } from "@/lib/lines";
 import { Prisma, StreamType } from "@prisma/client";
-import { formatXmltvDateXui } from "@/lib/epg-time";
+import { formatXmltvDateForXtreamApps } from "@/lib/epg-time";
+import { xmltvChannelIds } from "@/lib/xmltv-http";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
 import { gzipSync, gunzipSync } from "zlib";
 import { cacheGet, cacheSet } from "@/lib/cache";
-import { cuidToNum } from "@/lib/xtream-stream-id";
 
 const PROGRAMS_PER_CHANNEL = 16;
 const DESC_MAX_CHARS = 160;
@@ -23,7 +23,7 @@ function truncateXmltvDesc(value: string | null | undefined): string | null {
 /** Gzipped XMLTV — cached as base64 so HTTP gzip is not built twice in RAM. */
 export async function buildLineXmltvGzip(line: LineWithBouquets, hoursAhead?: number): Promise<Buffer> {
   const hours = hoursAhead && hoursAhead > 0 ? hoursAhead : 24;
-  const key = `xmltv:gz:v13:${line.id}:${hours}`;
+  const key = `xmltv:gz:v14:${line.id}:${hours}`;
   const hit = await cacheGet<string>(key);
   if (typeof hit === "string" && hit.length > 8) {
     try {
@@ -179,8 +179,7 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
     const epgId = String(row.epg_id || "").trim();
     if (!epgId) continue;
     const extra = row.stream_channel_id?.trim();
-    const numericId = String(cuidToNum(row.stream_cuid));
-    const catalogIds = extra && extra !== epgId ? [epgId, extra] : [epgId];
+    const catalogIds = xmltvChannelIds(epgId, row.stream_cuid, extra);
     const listings = [
       ...(programsByChannel.get(epgId) ?? []),
       ...(epgId !== epgId.toLowerCase() ? programsByChannel.get(epgId.toLowerCase()) ?? [] : []),
@@ -196,11 +195,10 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
       uniqueListings.push(p);
     }
     if (!uniqueListings.length) continue;
-    for (const id of [...catalogIds, numericId]) {
+    for (const id of catalogIds) {
       if (!channelMap.has(id)) channelMap.set(id, row.name || "Live");
     }
     pushProgrammes(catalogIds, uniqueListings);
-    pushProgrammes([numericId], uniqueListings);
   }
 
   const lines: string[] = [
@@ -217,7 +215,7 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
     const ch = xmltvSafeText(p.channelId);
     if (!ch) continue;
     lines.push(
-      `  <programme start="${formatXmltvDateXui(p.start, panelTimezone)}" stop="${formatXmltvDateXui(p.stop, panelTimezone)}" channel="${ch}">`,
+      `  <programme start="${formatXmltvDateForXtreamApps(p.start, panelTimezone)}" stop="${formatXmltvDateForXtreamApps(p.stop, panelTimezone)}" channel="${ch}">`,
       `    <title lang="en">${xmltvSafeText(p.title) || "Programme"}</title>`
     );
     if (p.description) lines.push(`    <desc lang="en">${xmltvSafeText(p.description)}</desc>`);

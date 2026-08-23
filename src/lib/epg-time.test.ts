@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { parseXmltvDate } from "./epg";
 import {
   formatEpgTimeRange,
   formatPanelClock,
   formatXtreamEpgDateTime,
+  formatXmltvDateForXtreamApps,
   formatXmltvDateInTimezone,
   formatXmltvDateUtc,
   formatXmltvDateXui,
@@ -45,6 +47,20 @@ test("formatXmltvDateUtc is true UTC", () => {
 
 test("formatXmltvDateXui is London wall clock with dummy +0000 for XCIPTV", () => {
   assert.equal(formatXmltvDateXui(sample, "Europe/London"), "20250819223000 +0000");
+});
+
+test("formatXmltvDateForXtreamApps uses real BST offset so TZ-aware XCIPTV stays on UK time", () => {
+  assert.equal(formatXmltvDateForXtreamApps(sample, "Europe/London"), "20250819223000 +0100");
+  assert.equal(formatXmltvDateInTimezone(sample, "Europe/London"), "20250819223000 +0100");
+  assert.equal(parseXmltvDate("20250819223000 +0100").toISOString(), sample.toISOString());
+  // Dummy +0000 on London digits is 1h fast if the app honours the offset (BST).
+  assert.equal(parseXmltvDate("20250819223000 +0000").toISOString(), "2025-08-19T22:30:00.000Z");
+});
+
+test("formatXmltvDateForXtreamApps winter GMT is +0000 and still the same instant", () => {
+  const winter = new Date("2025-01-15T21:30:00.000Z");
+  assert.equal(formatXmltvDateForXtreamApps(winter, "Europe/London"), "20250115213000 +0000");
+  assert.equal(parseXmltvDate("20250115213000 +0000").toISOString(), winter.toISOString());
 });
 
 test("normalizeTimeFormat", () => {

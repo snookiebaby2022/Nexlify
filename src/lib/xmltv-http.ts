@@ -7,7 +7,7 @@ function numericStreamId(streamCuid: string): string {
   return String(Math.abs(h));
 }
 
-/** XCIPTV matches xmltv `<channel id>` to epg_channel_id and/or numeric stream_id. */
+/** XCIPTV matches xmltv `<channel id>` to `epg_channel_id` and/or numeric `stream_id`. */
 export function xmltvChannelIds(epgId: string, streamCuid: string, extraId?: string | null): string[] {
   const ids: string[] = [];
   const seen = new Set<string>();

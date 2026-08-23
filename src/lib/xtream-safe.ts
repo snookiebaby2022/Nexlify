@@ -53,6 +53,23 @@ export function xtreamCategoryIds(numericId: string): number[] {
   return Number.isFinite(n) ? [n] : [0];
 }
 
+/** Catalog listings must not embed playback URLs — XCIPTV HTTP-probes every `direct_source`. */
+export function xtreamCatalogDirectSource(): string {
+  return "";
+}
+
+/** Xtream `container_extension` from the stored field (no URL parse on catalog). */
+export function xtreamListingExtension(containerExtension?: string | null, fallback = "mp4"): string {
+  const raw = String(containerExtension ?? "")
+    .trim()
+    .replace(/^\./, "")
+    .toLowerCase();
+  if (!raw) return fallback;
+  if (raw === "hls") return "m3u8";
+  const safe = raw.replace(/[^a-z0-9]/g, "");
+  return safe || fallback;
+}
+
 export function xmltvSafeText(value: unknown): string {
   return xtreamSafeText(value)
     .replace(/&/g, "&amp;")

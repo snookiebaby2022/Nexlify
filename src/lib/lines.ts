@@ -141,23 +141,13 @@ const LEAN_LISTING_SELECT = {
   timeshiftSeconds: true,
   isShifted: true,
   isAdult: true,
-  agentStartCmd: true,
   isActive: true,
   sortOrder: true,
   containerExtension: true,
 } as const;
 
-const LEAN_PLAYBACK_SELECT = {
-  ...LEAN_LISTING_SELECT,
-  streamUrl: true,
-  playlistUrl: true,
-  backupUrl: true,
-} as const;
-
-function leanStreamSelect(options?: StreamsForLineOptions) {
-  const types = typeList(options);
-  const liveOnly = types?.length === 1 && types[0] === StreamType.LIVE;
-  return liveOnly ? LEAN_LISTING_SELECT : LEAN_PLAYBACK_SELECT;
+function leanStreamSelect(_options?: StreamsForLineOptions) {
+  return LEAN_LISTING_SELECT;
 }
 
 async function loadStreamChunk(
@@ -209,6 +199,83 @@ function playableStreamUrlSql() {
 function typeList(options?: StreamsForLineOptions): StreamType[] | null {
   if (!options?.type) return null;
   return Array.isArray(options.type) ? options.type : [options.type];
+}
+
+type LeanListingRow = {
+  id: string;
+  name: string;
+  type: StreamType;
+  streamIcon: string | null;
+  epgChannelId: string | null;
+  channelId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  categoryId: string | null;
+  vodMode: Stream["vodMode"];
+  archiveDays: number | null;
+  timeshiftSeconds: number | null;
+  isShifted: boolean;
+  isAdult: boolean;
+  isActive: boolean;
+  sortOrder: number;
+  containerExtension: string | null;
+  ord: bigint;
+};
+
+/** One SQL round-trip for Xtream catalogs — skip ID list + Prisma hydrate of source URLs. */
+async function loadLeanListingForLine(
+  line: LineWithBouquets,
+  options?: StreamsForLineOptions
+): Promise<StreamForLine[]> {
+  const excludeDisabled = options?.excludeDisabled !== false;
+  const bouquetIds = activeBouquetIds(line, excludeDisabled);
+  if (!bouquetIds.length) return [];
+
+  const types = typeList(options);
+  const typeTexts = types?.map((t) => String(t)) ?? null;
+  const rows = await prisma.$queryRaw<LeanListingRow[]>`
+    SELECT * FROM (
+      SELECT DISTINCT ON (s.id)
+        s.id,
+        s.name,
+        s.type,
+        s."streamIcon" AS "streamIcon",
+        s."epgChannelId" AS "epgChannelId",
+        s."channelId" AS "channelId",
+        s."createdAt" AS "createdAt",
+        s."updatedAt" AS "updatedAt",
+        s."categoryId" AS "categoryId",
+        s."vodMode" AS "vodMode",
+        s."archiveDays" AS "archiveDays",
+        s."timeshiftSeconds" AS "timeshiftSeconds",
+        s."isShifted" AS "isShifted",
+        s."isAdult" AS "isAdult",
+        s."isActive" AS "isActive",
+        s."sortOrder" AS "sortOrder",
+        s."containerExtension" AS "containerExtension",
+        (bs."sortOrder"::bigint * 1000000 + s."sortOrder"::bigint) AS ord
+      FROM "BouquetStream" bs
+      INNER JOIN "Stream" s ON s.id = bs."streamId"
+      WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
+      ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
+      ${playableStreamUrlSql()}
+      ${
+        typeTexts && typeTexts.length
+          ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
+          : Prisma.empty
+      }
+      ${
+        options?.uncategorizedOnly
+          ? Prisma.sql`AND (s."categoryId" IS NULL OR s."categoryId" = '')`
+          : options?.categoryIds && options.categoryIds.length
+            ? Prisma.sql`AND s."categoryId" IN (${Prisma.join(options.categoryIds)})`
+            : Prisma.empty
+      }
+      ORDER BY s.id, (bs."sortOrder"::bigint * 1000000 + s."sortOrder"::bigint) ASC
+    ) x
+    ORDER BY x.ord ASC, x.id ASC
+  `;
+  return rows.map(({ ord: _ord, ...s }) => s as StreamForLine);
 }
 
 /** Distinct stream IDs for a line (ordered), without hydrating Stream rows. */
@@ -326,6 +393,11 @@ export async function streamsForLine(
   options?: StreamsForLineOptions
 ): Promise<StreamForLine[]> {
   const { offset, limit, ...idQueryOpts } = options ?? {};
+
+  if (options?.lean === true && !options?.onBatch && limit == null && offset == null) {
+    return loadLeanListingForLine(line, idQueryOpts);
+  }
+
   let ids = await streamIdsForLine(line, idQueryOpts);
   if (limit != null && limit > 0) {
     const off = Math.max(0, offset ?? 0);

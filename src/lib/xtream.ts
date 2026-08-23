@@ -11,6 +11,8 @@ import {
   xtreamUnixString,
   xtreamOutputFormats,
   xtreamCategoryIds,
+  xtreamCatalogDirectSource,
+  xtreamListingExtension,
 } from "./xtream-safe";
 import { seriesSeedsForBouquets, resolveCategoryIdParam } from "./xtream-stream-id";
 import { expandCategoryFilter } from "./category-tree";
@@ -20,7 +22,6 @@ import {
   canonicalNumericForCategory,
   resolveCategoryCuidsForNumericId,
 } from "./xtream-category-canonical";
-import { pickVodExtension } from "./vod-proxy";
 import {
   portFromPanelBaseUrl,
   resolvePanelListenPort,
@@ -288,14 +289,14 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
       tv_archive: catchup || timeshiftHours > 0 ? 1 : 0,
       // XCIPTV builds /live/user/pass/{stream_id}.ts from stream_id. A filled
       // direct_source makes it HTTP-probe every channel during "Update media".
-      direct_source: "",
+      direct_source: xtreamCatalogDirectSource(),
       tv_archive_duration: catchup ? archiveDays || timeshiftHours || 7 : timeshiftHours || 0,
       updated_at: xtreamUnix(s.updatedAt),
     };
   });
 }
 
-export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
+export async function xtreamVodStreams(line: LineWithBouquets, _baseUrl: string, categoryId?: string | null) {
   let vod;
   if (categoryId != null && categoryId !== "") {
     const ids = await categoryIdsForXtreamFilter(categoryId, StreamType.MOVIE);
@@ -310,43 +311,27 @@ export async function xtreamVodStreams(line: LineWithBouquets, baseUrl: string, 
     vod = await streamsForLineExport(line, { type: StreamType.MOVIE, lean: true });
   }
 
-  const streamSettings = await getSettingGroup("streams");
-  const directPlay = streamSettings.vodDirectPlay !== false;
   const canonical = await buildCanonicalCategoryMaps(StreamType.MOVIE);
 
   return vod.map((s, i) => {
-    const full = s;
-    const playUrl = exportPlaybackUrl(baseUrl, line, s, full, undefined, "auto", directPlay);
     const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
-    let rating = "0";
-    let rating5 = 0;
-    if (full.agentStartCmd?.trim()) {
-      try {
-        const meta = JSON.parse(full.agentStartCmd) as { rating?: string | number; rating_5based?: number };
-        if (meta.rating != null && meta.rating !== "") rating = String(meta.rating);
-        if (typeof meta.rating_5based === "number" && Number.isFinite(meta.rating_5based)) {
-          rating5 = meta.rating_5based;
-        }
-      } catch {
-        /* ignore non-json agentStartCmd */
-      }
-    }
     return {
       num: i + 1,
       name: xtreamSafeText(s.name) || "Movie",
       stream_type: "movie",
       stream_id: cuidToNum(s.id),
       stream_icon: xtreamSafeText(s.streamIcon),
-      rating,
-      rating_5based: rating5,
+      rating: "0",
+      rating_5based: 0,
       added: xtreamUnixString(s.createdAt),
-      updated_at: xtreamUnix(full.updatedAt),
-      is_adult: full.isAdult ? 1 : 0,
+      updated_at: xtreamUnix(s.updatedAt),
+      is_adult: s.isAdult ? 1 : 0,
       category_id: numCategoryId,
       category_ids: xtreamCategoryIds(numCategoryId),
-      container_extension: pickVodExtension(playUrl) || "mp4",
+      container_extension: xtreamListingExtension(s.containerExtension),
       custom_sid: "",
-      direct_source: directPlay ? playUrl : "",
+      // Empty like live: XCIPTV probes every filled URL during Update Content.
+      direct_source: xtreamCatalogDirectSource(),
     };
   });
 }

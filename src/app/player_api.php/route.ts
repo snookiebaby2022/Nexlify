@@ -153,11 +153,11 @@ export async function GET(req: NextRequest) {
     case "get_live_streams": {
       const categoryId = req.nextUrl.searchParams.get("category_id");
       const ttl = await getCacheTtls();
-      const cacheKey = `xtream:live_streams:v5:${line.id}:${categoryId ?? "all"}`;
+      const cacheKey = `xtream:live_streams:v6:${line.id}:${categoryId ?? "all"}`;
       const cached = await cacheGet<Awaited<ReturnType<typeof xtreamLiveStreams>>>(cacheKey);
       const payload =
         cached ??
-        (await cacheGetOrSet(cacheKey, Math.min(ttl.categories || 60, 90), () =>
+        (await cacheGetOrSet(cacheKey, Math.min(ttl.categories || 60, 180), () =>
           xtreamLiveStreams(line, baseUrl, categoryId)
         ));
       const profile = resolveClientPlaybackProfile(userAgent);
@@ -178,8 +178,8 @@ export async function GET(req: NextRequest) {
       const vodCategoryId = req.nextUrl.searchParams.get("category_id");
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(
-        `xtream:vod_streams:v3:${line.id}:${vodCategoryId ?? "all"}`,
-        Math.min(ttl.categories || 60, 90),
+        `xtream:vod_streams:v4:${line.id}:${vodCategoryId ?? "all"}`,
+        Math.min(ttl.categories || 60, 180),
         () => xtreamVodStreams(line, baseUrl, vodCategoryId)
       );
       return j(xtreamDeltaArray(payload, clientTimestamp, (s) => s.updated_at ?? 0));
@@ -202,8 +202,8 @@ export async function GET(req: NextRequest) {
       const seriesCategoryId = req.nextUrl.searchParams.get("category_id");
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(
-        `xtream:series:v3:${line.id}:${seriesCategoryId ?? "all"}`,
-        Math.min(ttl.categories || 60, 90),
+        `xtream:series:v4:${line.id}:${seriesCategoryId ?? "all"}`,
+        Math.min(ttl.categories || 60, 180),
         () => xtreamSeriesForLine(line, seriesCategoryId)
       );
       return j(xtreamDeltaArray(payload, clientTimestamp, (s) => Number(s.last_modified) || 0));

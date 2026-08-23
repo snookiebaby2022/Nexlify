@@ -105,18 +105,7 @@ async function loadStats() {
   }
 
   let cronLogs: { job: string; status: string; createdAt: Date; fixHref: string | null }[] = [];
-  try {
-    cronLogs = (await prisma.cronRunLog.findMany({ take: 5, orderBy: { createdAt: "desc" } })).map((log) => ({
-      job: log.job,
-      status: log.status,
-      createdAt: log.createdAt,
-      fixHref: cronFixHref(log.job, log.status),
-    }));
-  } catch {}
-
   let dashboard = { onlineStreams: 0, totalLiveStreams: 0, onlineUsers: 0, totalActiveLines: 0, onlineConnections: 0, maxConnections: 0, onlineServers: 0, totalServers: 0 };
-  try { dashboard = await getDashboardSummary(); } catch (e) { console.error("[stats] getDashboardSummary error:", e); }
-
   let dashboardKpi = {
     paidUsers: 0,
     trialUsers: 0,
@@ -135,10 +124,44 @@ async function loadStats() {
     offlineStreams: 0,
     openTickets: 0,
   };
-  try { dashboardKpi = await getDashboardKpiExtended(); } catch (e) { console.error("[stats] getDashboardKpiExtended error:", e); }
-
   let serverMetrics: Awaited<ReturnType<typeof getDashboardServerMetrics>> = [];
-  try { serverMetrics = await getDashboardServerMetrics(); } catch (e) { console.error("[stats] getDashboardServerMetrics error:", e); }
+  let bouquets = 0;
+  let resellers = 0;
+
+  try {
+    const extras = await Promise.all([
+      prisma.cronRunLog.findMany({ take: 5, orderBy: { createdAt: "desc" } }).then((rows) =>
+        rows.map((log) => ({
+          job: log.job,
+          status: log.status,
+          createdAt: log.createdAt,
+          fixHref: cronFixHref(log.job, log.status),
+        }))
+      ).catch(() => [] as typeof cronLogs),
+      getDashboardSummary().catch((e) => {
+        console.error("[stats] getDashboardSummary error:", e);
+        return dashboard;
+      }),
+      getDashboardKpiExtended().catch((e) => {
+        console.error("[stats] getDashboardKpiExtended error:", e);
+        return dashboardKpi;
+      }),
+      getDashboardServerMetrics().catch((e) => {
+        console.error("[stats] getDashboardServerMetrics error:", e);
+        return [] as Awaited<ReturnType<typeof getDashboardServerMetrics>>;
+      }),
+      prisma.bouquet.count().catch(() => 0),
+      prisma.panelUser.count({ where: { role: { in: [PanelRole.RESELLER, PanelRole.SUB_RESELLER] } } }).catch(() => 0),
+    ]);
+    cronLogs = extras[0];
+    dashboard = extras[1];
+    dashboardKpi = extras[2];
+    serverMetrics = extras[3];
+    bouquets = extras[4];
+    resellers = extras[5];
+  } catch (e) {
+    console.error("[stats] loadStats extras error:", e);
+  }
 
   return {
     lines,
@@ -160,8 +183,8 @@ async function loadStats() {
       entityId: log.entityId,
       fixHref: activityFixHref(log),
     })),
-    bouquets: await prisma.bouquet.count().catch(() => 0),
-    resellers: await prisma.panelUser.count({ where: { role: { in: [PanelRole.RESELLER, PanelRole.SUB_RESELLER] } } }).catch(() => 0),
+    bouquets,
+    resellers,
     dashboard,
     dashboardKpi,
     serverMetrics,

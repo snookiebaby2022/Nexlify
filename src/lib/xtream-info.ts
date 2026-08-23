@@ -1,8 +1,6 @@
 import type { LineWithBouquets } from "./lines";
-import { exportPlaybackUrl } from "./export-playback-url";
 import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
-import { getSettingGroup } from "./panel-settings";
 import {
   cuidToNum,
   lineHasStream,
@@ -28,7 +26,7 @@ function parseMetaJson(raw: string | null | undefined): Record<string, unknown> 
 /** Xtream get_vod_info response for a movie on the line. */
 export async function xtreamVodInfo(
   line: LineWithBouquets,
-  baseUrl: string,
+  _baseUrl: string,
   streamIdParam: string
 ) {
   const streamId = await resolveStreamIdParam(streamIdParam, { lineId: line.id });
@@ -37,13 +35,11 @@ export async function xtreamVodInfo(
 
   const full = await prisma.stream.findUnique({
     where: { id: streamId },
-    include: { provider: true, category: true },
+    include: { category: true },
   });
   if (!full || full.type !== StreamType.MOVIE) return null;
 
   const meta = parseMetaJson(full.agentStartCmd);
-  const streamSettings = await getSettingGroup("streams");
-  const directPlay = streamSettings.vodDirectPlay !== false;
   const ext = full.containerExtension ?? "mp4";
 
   return {
@@ -71,7 +67,7 @@ export async function xtreamVodInfo(
       category_id: xtreamCategoryId(full.categoryId),
       container_extension: ext,
       custom_sid: "",
-      direct_source: directPlay ? exportPlaybackUrl(baseUrl, line, full, full, undefined, "auto", directPlay) : "",
+      direct_source: "",
     },
   };
 }
@@ -79,7 +75,7 @@ export async function xtreamVodInfo(
 /** Xtream get_series_info — groups episodes by seriesName (or single stream as one episode). */
 export async function xtreamSeriesInfo(
   line: LineWithBouquets,
-  baseUrl: string,
+  _baseUrl: string,
   seriesIdParam: string
 ) {
   const streamId = await resolveStreamIdParam(seriesIdParam, { lineId: line.id });
@@ -97,13 +93,11 @@ export async function xtreamSeriesInfo(
   const fullRows = episodeIds.length
     ? await prisma.stream.findMany({
         where: { id: { in: episodeIds } },
-        include: { provider: true, category: true },
+        include: { category: true },
       })
     : [];
   const byId = new Map(fullRows.map((s) => [s.id, s]));
 
-  const streamSettings = await getSettingGroup("streams");
-  const directPlay = streamSettings.vodDirectPlay !== false;
   const seasons: Record<string, unknown[]> = {};
   for (const epId of episodeIds) {
     const ep = byId.get(epId);
@@ -130,9 +124,7 @@ export async function xtreamSeriesInfo(
       custom_sid: "",
       added: Math.floor(ep.createdAt.getTime() / 1000).toString(),
       season: seasonNum,
-      direct_source: directPlay
-        ? exportPlaybackUrl(baseUrl, line, ep, ep, undefined, "auto", directPlay)
-        : "",
+      direct_source: "",
     });
   }
 

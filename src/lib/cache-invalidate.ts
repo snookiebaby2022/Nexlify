@@ -20,7 +20,7 @@ export async function invalidateLineAuth(username: string) {
 }
 
 export async function invalidateEpgCache() {
-  await cacheDel("epg:");
+  await Promise.all([cacheDel("epg:"), cacheDel("xmltv:")]);
 }
 
 export async function invalidatePlaybackUrls(streamId?: string) {
