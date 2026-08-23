@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { cacheGetOrSet } from "@/lib/cache";
+import { bouquetMembershipSql } from "@/lib/lines";
 
 /** Stable numeric id for Xtream-compatible APIs (matches historical live/movie routes). */
 export function cuidToNum(id: string): number {
@@ -68,10 +69,9 @@ export async function seriesSeedsForBouquets(
       s."streamIcon" AS "streamIcon",
       s."categoryId" AS "categoryId",
       s."updatedAt" AS "updatedAt"
-    FROM "BouquetStream" bs
-    INNER JOIN "Stream" s ON s.id = bs."streamId"
-    WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
-      AND s."isActive" = true
+    FROM ${bouquetMembershipSql(bouquetIds)} m
+    INNER JOIN "Stream" s ON s.id = m."streamId"
+    WHERE s."isActive" = true
       AND s.type = 'SERIES'::"StreamType"
       ${categorySql}
     ORDER BY
@@ -197,16 +197,20 @@ export async function seriesEpisodeIdsForLine(
   seriesKey: string
 ): Promise<string[]> {
   const rows = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT DISTINCT s.id AS id
-    FROM "LineBouquet" lb
-    INNER JOIN "BouquetStream" bs ON bs."bouquetId" = lb."bouquetId"
-    INNER JOIN "Stream" s ON s.id = bs."streamId"
-    WHERE lb."lineId" = ${lineId}
-      AND s."isActive" = true
+    SELECT s.id AS id
+    FROM "Stream" s
+    WHERE s."isActive" = true
       AND s.type = 'SERIES'::"StreamType"
       AND (
         s.id = ${seedId}
         OR COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name) = ${seriesKey}
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM "LineBouquet" lb
+        INNER JOIN "BouquetStream" bs ON bs."bouquetId" = lb."bouquetId"
+        WHERE lb."lineId" = ${lineId}
+          AND bs."streamId" = s.id
       )
     ORDER BY s.id ASC
   `;

@@ -2,7 +2,6 @@ import type { Stream } from "@prisma/client";
 import { StreamType } from "@prisma/client";
 import { resolveStreamPlaybackUrl, type StreamWithProvider } from "./resolve-stream-url";
 import { isHlsPlaybackUrl } from "./hls-playback";
-import { pickVodExtension } from "./vod-proxy";
 import type { StreamForLine } from "./lines";
 
 type LineCreds = { username: string; password: string };
@@ -39,26 +38,31 @@ export function exportPlaybackUrl(
   const base = trimBase(baseUrl);
 
   if (stream.type === StreamType.LIVE) {
+    if (output === "ts") {
+      return `${base}/live/${line.username}/${line.password}/${stream.id}.ts`;
+    }
     // Serve HLS sources as HLS when possible. Players handle native HLS far
     // better than a forced HLS->TS remux (faster zapping, no buffering).
     // output=hls forces HLS; output=auto picks HLS for HLS upstreams, TS otherwise.
-    if ((output === "hls" || output === "auto") && isHlsUpstream(resolved, seed)) {
+    if ((output === "hls" || output === "auto") && full && isHlsUpstream(resolved, seed)) {
       return `${base}/live/${line.username}/${line.password}/${stream.id}.m3u8`;
     }
     return `${base}/live/${line.username}/${line.password}/${stream.id}.ts`;
   }
 
-  // Direct play: return the raw provider URL (fastest, no panel overhead).
-  if (directPlay) {
+  const ext =
+    String(stream.containerExtension ?? "")
+      .replace(/^\./, "")
+      .toLowerCase() || "mp4";
+
+  // Direct play needs a resolved source URL. Lean catalog rows omit it.
+  if (directPlay && (resolved.streamUrl || resolved.playlistUrl || resolved.backupUrl)) {
     const directUrl = resolveStreamPlaybackUrl(resolved, seed);
     if (directUrl) return directUrl;
   }
 
-  // Proxy through panel: hides source URL, handles Range requests and HLS.
-  const resolvedUrl = resolveStreamPlaybackUrl(resolved, seed);
-  const ext = pickVodExtension(resolvedUrl);
   if (stream.type === StreamType.SERIES) {
-    return `${base}/series/${line.username}/${line.password}/${stream.id}.${ext}`;
+    return `${base}/series/${line.username}/${line.password}/${stream.id}.${ext === "mp4" ? "mkv" : ext}`;
   }
   return `${base}/movie/${line.username}/${line.password}/${stream.id}.${ext}`;
 }

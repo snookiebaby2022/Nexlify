@@ -1,12 +1,15 @@
 import { prisma } from "@/lib/prisma";
-import type { LineWithBouquets } from "@/lib/lines";
-import { Prisma, StreamType } from "@prisma/client";
+import { activeBouquetIds, bouquetMembershipSql, type LineWithBouquets } from "@/lib/lines";
+import { StreamType, Prisma } from "@prisma/client";
 import { formatXmltvDateForXtreamApps } from "@/lib/epg-time";
 import { xmltvChannelIds } from "@/lib/xmltv-http";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
-import { gzipSync, gunzipSync } from "zlib";
+import { gzip, gunzipSync } from "zlib";
+import { promisify } from "node:util";
 import { cacheGet, cacheSet } from "@/lib/cache";
+
+const gzipAsync = promisify(gzip);
 
 const PROGRAMS_PER_CHANNEL = 16;
 const DESC_MAX_CHARS = 160;
@@ -23,7 +26,7 @@ function truncateXmltvDesc(value: string | null | undefined): string | null {
 /** Gzipped XMLTV — cached as base64 so HTTP gzip is not built twice in RAM. */
 export async function buildLineXmltvGzip(line: LineWithBouquets, hoursAhead?: number): Promise<Buffer> {
   const hours = hoursAhead && hoursAhead > 0 ? hoursAhead : 24;
-  const key = `xmltv:gz:v14:${line.id}:${hours}`;
+  const key = `xmltv:gz:v15:${line.id}:${hours}`;
   const hit = await cacheGet<string>(key);
   if (typeof hit === "string" && hit.length > 8) {
     try {
@@ -33,7 +36,7 @@ export async function buildLineXmltvGzip(line: LineWithBouquets, hoursAhead?: nu
     }
   }
   const xml = await buildLineXmltvBody(line, hours);
-  const gz = gzipSync(Buffer.from(xml, "utf8"), { level: 6 });
+  const gz = await gzipAsync(Buffer.from(xml, "utf8"), { level: 3 });
   await cacheSet(key, gz.toString("base64"), XMLTV_CACHE_TTL_SEC);
   return gz;
 }
@@ -112,20 +115,21 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
   const now = new Date();
   const until = new Date(now.getTime() + hours * 3600_000);
 
-  const channels = await prisma.$queryRaw<LineChannel[]>`
+  const bouquetIds = activeBouquetIds(line);
+  const channels = bouquetIds.length
+    ? await prisma.$queryRaw<LineChannel[]>`
     SELECT
       s.id AS stream_cuid,
       COALESCE(NULLIF(TRIM(s."epgChannelId"), ''), s.id) AS epg_id,
       NULLIF(TRIM(s."channelId"), '') AS stream_channel_id,
       s.name
-    FROM "LineBouquet" lb
-    INNER JOIN "BouquetStream" bs ON bs."bouquetId" = lb."bouquetId"
-    INNER JOIN "Stream" s ON s.id = bs."streamId"
-    WHERE lb."lineId" = ${line.id}
-      AND s.type = ${StreamType.LIVE}::"StreamType"
+    FROM ${bouquetMembershipSql(bouquetIds)} m
+    INNER JOIN "Stream" s ON s.id = m."streamId"
+    WHERE s.type = ${StreamType.LIVE}::"StreamType"
       AND s."isActive" = true
     ORDER BY s.name, s.id
-  `;
+  `
+    : [];
 
   const epgIdSet = new Set<string>();
   for (const c of channels) {

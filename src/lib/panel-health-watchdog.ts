@@ -39,8 +39,8 @@ function pm2NexlifyOnline(): boolean {
 
 function curlHealth(host: string, port: string): boolean {
   try {
-    execSync(`curl -fsS --max-time 5 "http://${host}:${port}/api/health" >/dev/null`, {
-      timeout: 8000,
+    execSync(`curl -fsS --max-time 20 "http://${host}:${port}/api/health" >/dev/null`, {
+      timeout: 25000,
     });
     return true;
   } catch (err) {
@@ -134,10 +134,13 @@ export async function maybeRestartUnhealthyPanel(): Promise<{
 
   const { host, port } = readEnvPort(repoPath);
   const pm2Up = pm2NexlifyOnline();
-  const healthy = pm2Up && curlHealth(host, port);
-
-  if (healthy) {
-    return { action: "ok", reason: "healthy" };
+  if (pm2Up) {
+    const healthy = curlHealth(host, port);
+    if (healthy) {
+      return { action: "ok", reason: "healthy" };
+    }
+    // Worker is up but busy (catalog/xmltv). Restarting it drops playlists mid-download.
+    return { action: "skipped", reason: "pm2_online_health_slow" };
   }
 
   const last = await lastRestartMs();

@@ -1,5 +1,8 @@
-import { gzipSync } from "zlib";
+import { gzip } from "node:zlib";
+import { promisify } from "node:util";
 import { NextResponse } from "next/server";
+
+const gzipAsync = promisify(gzip);
 
 /** Allow browser clients (nexlify.live/webplayer, customer sites) to call IPTV APIs. */
 export const IPTV_CORS_HEADERS: Record<string, string> = {
@@ -33,7 +36,7 @@ function clientAcceptsGzip(req?: Request | null): boolean {
   return /\bgzip\b/i.test(ae);
 }
 
-export function iptvJson(data: unknown, init?: IptvJsonInit): NextResponse {
+export async function iptvJson(data: unknown, init?: IptvJsonInit): Promise<NextResponse> {
   const { compressFor, headers: initHeaders, ...rest } = init ?? {};
   const json = JSON.stringify(data);
   const headers = new Headers(initHeaders);
@@ -42,11 +45,10 @@ export function iptvJson(data: unknown, init?: IptvJsonInit): NextResponse {
   }
 
   if (json.length >= GZIP_MIN_BYTES && clientAcceptsGzip(compressFor ?? null)) {
-    const compressed = gzipSync(Buffer.from(json, "utf8"), { level: 4 });
+    const compressed = await gzipAsync(Buffer.from(json, "utf8"), { level: 3 });
     headers.set("Content-Encoding", "gzip");
     const vary = headers.get("Vary");
     headers.set("Vary", vary ? `${vary}, Accept-Encoding` : "Accept-Encoding");
-    // Content-Length helps some IPTV apps finish the download promptly
     headers.set("Content-Length", String(compressed.length));
     return withIptvCors(new NextResponse(compressed, { ...rest, headers }));
   }

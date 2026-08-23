@@ -432,6 +432,7 @@ export function buildM3uStream(
         const { streamsForLineExport } = await import("./lines");
         await streamsForLineExport(line, {
           type: exportTypes,
+          lean: true,
           onBatch: async (chunk) => {
             const batchLines: string[] = [];
             for (const full of chunk) {

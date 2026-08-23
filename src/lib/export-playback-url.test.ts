@@ -52,6 +52,41 @@ describe("exportPlaybackUrl", () => {
     assert.equal(url, "http://45.88.138.18/movie/demo/pass/movie123.mkv");
   });
 
+  it("uses the panel movie path for lean rows with no source URL", () => {
+    const url = exportPlaybackUrl(
+      baseUrl,
+      line,
+      {
+        id: "movie123",
+        type: "MOVIE",
+        streamUrl: "",
+        containerExtension: "mkv",
+      },
+      undefined,
+      undefined,
+      "auto",
+      true
+    );
+    assert.equal(url, "http://45.88.138.18/movie/demo/pass/movie123.mkv");
+  });
+
+  it("forces live panel .ts when output is ts", () => {
+    const url = exportPlaybackUrl(
+      baseUrl,
+      line,
+      {
+        id: "live123",
+        type: "LIVE",
+        streamUrl: "http://upstream/live.m3u8",
+        containerExtension: null,
+      },
+      undefined,
+      undefined,
+      "ts"
+    );
+    assert.equal(url, "http://45.88.138.18/live/demo/pass/live123.ts");
+  });
+
   it("routes series through the panel series path when direct play is off", () => {
     const url = exportPlaybackUrl(
       baseUrl,

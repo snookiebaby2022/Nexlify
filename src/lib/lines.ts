@@ -171,29 +171,17 @@ async function loadStreamChunk(
   return chunkIds.map((id) => byId.get(id)).filter((s): s is StreamForLine => Boolean(s));
 }
 
-/** Streams with a resolvable playback URL (matches Xtream/M3U export rules). */
-function playableStreamUrlSql() {
-  return Prisma.sql`
-    AND (
-      s."backupUrl" LIKE 'http://%'
-      OR s."backupUrl" LIKE 'https://%'
-      OR (
-        s."streamUrl" NOT LIKE 'pending://%'
-        AND (
-          s."streamUrl" LIKE 'http://%'
-          OR s."streamUrl" LIKE 'https://%'
-          OR s."streamUrl" LIKE 'nexlify://%'
-          OR (
-            s."playlistUrl" IS NOT NULL
-            AND (
-              s."playlistUrl" LIKE 'http://%'
-              OR s."playlistUrl" LIKE 'https://%'
-            )
-          )
-        )
-      )
-    )
-  `;
+function listingPlayableSql() {
+  return Prisma.sql`AND (s."streamUrl" IS NULL OR s."streamUrl" NOT LIKE 'pending://%')`;
+}
+
+/** Indexed membership for a line's bouquets — avoids a 981k BouquetStream join. */
+export function bouquetMembershipSql(bouquetIds: string[]) {
+  return Prisma.sql`(
+    SELECT DISTINCT bs."streamId" AS "streamId"
+    FROM "BouquetStream" bs
+    WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
+  )`;
 }
 
 function typeList(options?: StreamsForLineOptions): StreamType[] | null {
@@ -234,31 +222,30 @@ async function loadLeanListingForLine(
   const types = typeList(options);
   const typeTexts = types?.map((t) => String(t)) ?? null;
   const rows = await prisma.$queryRaw<LeanListingRow[]>`
-    SELECT * FROM (
-      SELECT DISTINCT ON (s.id)
-        s.id,
-        s.name,
-        s.type,
-        s."streamIcon" AS "streamIcon",
-        s."epgChannelId" AS "epgChannelId",
-        s."channelId" AS "channelId",
-        s."createdAt" AS "createdAt",
-        s."updatedAt" AS "updatedAt",
-        s."categoryId" AS "categoryId",
-        s."vodMode" AS "vodMode",
-        s."archiveDays" AS "archiveDays",
-        s."timeshiftSeconds" AS "timeshiftSeconds",
-        s."isShifted" AS "isShifted",
-        s."isAdult" AS "isAdult",
-        s."isActive" AS "isActive",
-        s."sortOrder" AS "sortOrder",
-        s."containerExtension" AS "containerExtension",
-        (bs."sortOrder"::bigint * 1000000 + s."sortOrder"::bigint) AS ord
-      FROM "BouquetStream" bs
-      INNER JOIN "Stream" s ON s.id = bs."streamId"
-      WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
+    SELECT
+      s.id,
+      s.name,
+      s.type,
+      s."streamIcon" AS "streamIcon",
+      s."epgChannelId" AS "epgChannelId",
+      s."channelId" AS "channelId",
+      s."createdAt" AS "createdAt",
+      s."updatedAt" AS "updatedAt",
+      s."categoryId" AS "categoryId",
+      s."vodMode" AS "vodMode",
+      s."archiveDays" AS "archiveDays",
+      s."timeshiftSeconds" AS "timeshiftSeconds",
+      s."isShifted" AS "isShifted",
+      s."isAdult" AS "isAdult",
+      s."isActive" AS "isActive",
+      s."sortOrder" AS "sortOrder",
+      s."containerExtension" AS "containerExtension",
+      s."sortOrder"::bigint AS ord
+    FROM ${bouquetMembershipSql(bouquetIds)} m
+    INNER JOIN "Stream" s ON s.id = m."streamId"
+    WHERE 1=1
       ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
-      ${playableStreamUrlSql()}
+      ${listingPlayableSql()}
       ${
         typeTexts && typeTexts.length
           ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
@@ -271,9 +258,7 @@ async function loadLeanListingForLine(
             ? Prisma.sql`AND s."categoryId" IN (${Prisma.join(options.categoryIds)})`
             : Prisma.empty
       }
-      ORDER BY s.id, (bs."sortOrder"::bigint * 1000000 + s."sortOrder"::bigint) ASC
-    ) x
-    ORDER BY x.ord ASC, x.id ASC
+    ORDER BY s."sortOrder" ASC, s.name ASC, s.id ASC
   `;
   return rows.map(({ ord: _ord, ...s }) => s as StreamForLine);
 }
@@ -292,12 +277,12 @@ export async function streamIdsForLine(
   // Exclude pending:// placeholders (empty XUI sources) from Xtream/M3U exports —
   // they 502 in apps and slow playlist load with dead channels.
   const rows = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT s.id AS id, MIN(bs."sortOrder"::bigint * 1000000 + s."sortOrder"::bigint) AS ord
-    FROM "BouquetStream" bs
-    INNER JOIN "Stream" s ON s.id = bs."streamId"
-    WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
-    ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
-    ${playableStreamUrlSql()}
+    SELECT s.id AS id
+    FROM ${bouquetMembershipSql(bouquetIds)} m
+    INNER JOIN "Stream" s ON s.id = m."streamId"
+    WHERE 1=1
+      ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
+      ${listingPlayableSql()}
     ${
       typeTexts && typeTexts.length
         ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
@@ -310,8 +295,7 @@ export async function streamIdsForLine(
           ? Prisma.sql`AND s."categoryId" IN (${Prisma.join(options.categoryIds)})`
           : Prisma.empty
     }
-    GROUP BY s.id
-    ORDER BY ord ASC, s.id ASC
+    ORDER BY s."sortOrder" ASC, s.name ASC, s.id ASC
   `;
   return rows.map((r) => r.id);
 }
@@ -328,12 +312,12 @@ export async function streamCountForLine(
   const types = typeList(options);
   const typeTexts = types?.map((t) => String(t)) ?? null;
   const rows = await prisma.$queryRaw<{ count: bigint }[]>`
-    SELECT COUNT(DISTINCT s.id)::bigint AS count
-    FROM "BouquetStream" bs
-    INNER JOIN "Stream" s ON s.id = bs."streamId"
-    WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
-    ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
-    ${playableStreamUrlSql()}
+    SELECT COUNT(*)::bigint AS count
+    FROM ${bouquetMembershipSql(bouquetIds)} m
+    INNER JOIN "Stream" s ON s.id = m."streamId"
+    WHERE 1=1
+      ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
+      ${listingPlayableSql()}
     ${
       typeTexts && typeTexts.length
         ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
@@ -363,11 +347,11 @@ export async function categoryIdsForLine(
   const typeTexts = types?.map((t) => String(t)) ?? null;
   const rows = await prisma.$queryRaw<{ categoryId: string | null }[]>`
     SELECT DISTINCT s."categoryId" AS "categoryId"
-    FROM "BouquetStream" bs
-    INNER JOIN "Stream" s ON s.id = bs."streamId"
-    WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
-    ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
-    ${playableStreamUrlSql()}
+    FROM ${bouquetMembershipSql(bouquetIds)} m
+    INNER JOIN "Stream" s ON s.id = m."streamId"
+    WHERE 1=1
+      ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
+      ${listingPlayableSql()}
     ${
       typeTexts && typeTexts.length
         ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
@@ -394,8 +378,15 @@ export async function streamsForLine(
 ): Promise<StreamForLine[]> {
   const { offset, limit, ...idQueryOpts } = options ?? {};
 
-  if (options?.lean === true && !options?.onBatch && limit == null && offset == null) {
-    return loadLeanListingForLine(line, idQueryOpts);
+  if (options?.lean === true && limit == null && offset == null) {
+    const rows = await loadLeanListingForLine(line, idQueryOpts);
+    if (options.onBatch) {
+      for (let i = 0; i < rows.length; i += STREAM_BATCH) {
+        await options.onBatch(rows.slice(i, i + STREAM_BATCH));
+      }
+      return [];
+    }
+    return rows;
   }
 
   let ids = await streamIdsForLine(line, idQueryOpts);

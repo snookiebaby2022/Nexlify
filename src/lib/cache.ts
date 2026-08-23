@@ -1,6 +1,10 @@
 import { getRedis, ensureRedisConnected } from "./redis";
 import type { Redis } from "ioredis";
-import { gunzipSync, gzipSync } from "node:zlib";
+import { gunzip, gzip } from "node:zlib";
+import { promisify } from "node:util";
+
+const gzipAsync = promisify(gzip);
+const gunzipAsync = promisify(gunzip);
 
 const KEY_PREFIX = "nexlify:";
 const SCAN_COUNT = 250;
@@ -109,28 +113,30 @@ function memoryDeleteByPattern(pattern: string): number {
   return deleted;
 }
 
-function encodeCachePayload(raw: string): string {
+async function encodeCachePayload(raw: string): Promise<string> {
   if (raw.length < COMPRESS_MIN_BYTES) return raw;
   try {
-    return COMPRESS_PREFIX + gzipSync(Buffer.from(raw, "utf8")).toString("base64");
+    const gz = await gzipAsync(Buffer.from(raw, "utf8"), { level: 3 });
+    return COMPRESS_PREFIX + gz.toString("base64");
   } catch {
     return raw;
   }
 }
 
-function decodeCachePayload(stored: string): string {
+async function decodeCachePayload(stored: string): Promise<string> {
   if (!stored.startsWith(COMPRESS_PREFIX)) return stored;
   try {
-    return gunzipSync(Buffer.from(stored.slice(COMPRESS_PREFIX.length), "base64")).toString("utf8");
+    const buf = await gunzipAsync(Buffer.from(stored.slice(COMPRESS_PREFIX.length), "base64"));
+    return buf.toString("utf8");
   } catch {
     return stored;
   }
 }
 
-function parseCached<T>(raw: string | null): T | null {
+async function parseCached<T>(raw: string | null): Promise<T | null> {
   if (!raw) return null;
   try {
-    return JSON.parse(decodeCachePayload(raw)) as T;
+    return JSON.parse(await decodeCachePayload(raw)) as T;
   } catch {
     return null;
   }
@@ -142,12 +148,12 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     try {
       await ensureRedisReady(redis);
       const raw = await redis.get(`${KEY_PREFIX}${key}`);
-      return parseCached<T>(raw);
+      return await parseCached<T>(raw);
     } catch {
       /* fallback */
     }
   }
-  return parseCached<T>(memDecodeGet(key));
+  return parseCached<T>(await memDecodeGet(key));
 }
 
 /** Batch read — one Redis MGET round-trip instead of N sequential GETs. */
@@ -159,16 +165,16 @@ export async function cacheMget<T>(keys: string[]): Promise<(T | null)[]> {
       await ensureRedisReady(redis);
       const prefixed = keys.map((k) => `${KEY_PREFIX}${k}`);
       const raws = await redis.mget(...prefixed);
-      return raws.map((raw) => parseCached<T>(raw));
+      return Promise.all(raws.map((raw) => parseCached<T>(raw)));
     } catch {
       /* fallback */
     }
   }
-  return keys.map((k) => parseCached<T>(memDecodeGet(k)));
+  return Promise.all(keys.map(async (k) => parseCached<T>(await memDecodeGet(k))));
 }
 
 export async function cacheSet(key: string, value: unknown, ttlSec = 60) {
-  const raw = encodeCachePayload(JSON.stringify(value));
+  const raw = await encodeCachePayload(JSON.stringify(value));
   const redis = getRedis();
   if (redis) {
     try {
@@ -183,9 +189,8 @@ export async function cacheSet(key: string, value: unknown, ttlSec = 60) {
   memSet(key, raw, ttlSec);
 }
 
-function memDecodeGet(key: string): string | null {
-  const raw = memGet(key);
-  return raw ? decodeCachePayload(raw) : null;
+async function memDecodeGet(key: string): Promise<string | null> {
+  return memGet(key);
 }
 
 export async function cacheDelExact(key: string) {

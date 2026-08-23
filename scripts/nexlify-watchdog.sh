@@ -183,7 +183,7 @@ if [ -f "$PANEL_DIR/.license-keys/private.pem" ] || [ -n "${LICENSE_SERVER_PRIVA
 fi
 
 # --- Check 2: Upstream health (never assume public :80 is the Node bind port) ---
-HTTP_CODE="$(curl -sS -o /tmp/nexlify-watchdog-health.json -w '%{http_code}' -m 5 "$HEALTH_URL" 2>/dev/null || echo 000)"
+HTTP_CODE="$(curl -sS -o /tmp/nexlify-watchdog-health.json -w '%{http_code}' -m 20 "$HEALTH_URL" 2>/dev/null || echo 000)"
 APP_OK=0
 if grep -q '"app":"ok"' /tmp/nexlify-watchdog-health.json 2>/dev/null; then
   APP_OK=1
@@ -191,14 +191,19 @@ fi
 rm -f /tmp/nexlify-watchdog-health.json
 
 if [ "$HTTP_CODE" != "200" ] && [ "$APP_OK" != "1" ]; then
-  log "WARN: upstream health $HEALTH_URL → HTTP $HTTP_CODE — safe restart"
-  safe_restart_panel
-  sleep 5
-  HTTP_CODE="$(curl -sS -o /dev/null -w '%{http_code}' -m 5 "$HEALTH_URL" 2>/dev/null || echo 000)"
-  if [ "$HTTP_CODE" != "200" ]; then
-    log "ERROR: still unhealthy after safe restart ($HTTP_CODE) — running panel-update-recover --quick"
-    if [ -f "$PANEL_DIR/scripts/panel-update-recover.sh" ]; then
-      bash "$PANEL_DIR/scripts/panel-update-recover.sh" --quick >>"$LOG" 2>&1 || true
+  STATUS="$(pm2_status "$PM2_APP")"
+  if [ "$STATUS" = "online" ]; then
+    log "WARN: upstream health $HEALTH_URL → HTTP $HTTP_CODE but $PM2_APP is online — not restarting (busy catalogs)"
+  else
+    log "WARN: upstream health $HEALTH_URL → HTTP $HTTP_CODE — safe restart"
+    safe_restart_panel
+    sleep 5
+    HTTP_CODE="$(curl -sS -o /dev/null -w '%{http_code}' -m 20 "$HEALTH_URL" 2>/dev/null || echo 000)"
+    if [ "$HTTP_CODE" != "200" ]; then
+      log "ERROR: still unhealthy after safe restart ($HTTP_CODE) — running panel-update-recover --quick"
+      if [ -f "$PANEL_DIR/scripts/panel-update-recover.sh" ]; then
+        bash "$PANEL_DIR/scripts/panel-update-recover.sh" --quick >>"$LOG" 2>&1 || true
+      fi
     fi
   fi
 fi
