@@ -18,8 +18,8 @@ const READY_TIMEOUT_MS = Math.max(
 const MAX_SESSIONS = Math.max(8, Number(process.env.HLS_MAX_SESSIONS || 128) || 128);
 /** Stop ffmpeg soon after the last HLS viewer so slots free and new zaps start quickly. */
 const IDLE_MS = Math.max(
-  20_000,
-  Number(process.env.HLS_PACKAGER_IDLE_MS || process.env.NEXLIFY_HLS_IDLE_MS || 45_000) || 45_000
+  15_000,
+  Number(process.env.HLS_PACKAGER_IDLE_MS || process.env.NEXLIFY_HLS_IDLE_MS || 20_000) || 20_000
 );
 const REAP_EVERY_MS = 10_000;
 
@@ -237,7 +237,7 @@ async function spawnPackager(
 
   const ua = opts?.userAgent?.trim() || "VLC/3.0.20 LibVLC/3.0.20";
   const inputPrefix = packagerLiveInputPrefix(opts);
-  const hlsFlags = opts?.vod ? "temp_file" : "omit_endlist+temp_file";
+  const hlsFlags = opts?.vod ? "temp_file" : "omit_endlist+temp_file+split_by_time+delete_segments";
   const listSize = opts?.vod ? "0" : String(HLS_LIST_SIZE);
   const fingerprint = packagerFingerprint(upstreamUrl, opts?.transcode ?? null, opts?.loop, opts?.vod);
   const liveTune = opts?.vod ? [] : ["-flags", "low_delay"];
@@ -266,9 +266,9 @@ async function spawnPackager(
       "-rw_timeout",
       "15000000",
       "-probesize",
-      "327680",
+      "131072",
       "-analyzeduration",
-      "500000",
+      "200000",
       "-fflags",
       "+genpts+discardcorrupt",
       "-avoid_negative_ts",
@@ -281,6 +281,8 @@ async function spawnPackager(
       "-f",
       "hls",
       "-hls_time",
+      String(HLS_TIME_SEC),
+      "-hls_init_time",
       String(HLS_TIME_SEC),
       "-hls_list_size",
       listSize,

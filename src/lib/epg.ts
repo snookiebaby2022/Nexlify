@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { formatXtreamEpgDateTime, normalizeTimeFormat } from "./epg-time";
+import { formatXtreamEpgDateTime } from "./epg-time";
 import { getSettingGroup } from "./panel-settings";
 import { xtreamBase64, xtreamSafeText, xtreamUnix } from "./xtream-safe";
 
@@ -162,12 +162,11 @@ export async function getShortEpg(
   const { getCacheTtls } = await import("./cache-ttl");
   const general = await getSettingGroup("general");
   const timezone = String(general.timezone || "Europe/London");
-  const timeFormat = normalizeTimeFormat(general.timeFormat);
   const ttl = await getCacheTtls();
   const arch = opts?.archivable ? "1" : "0";
-  const cacheKey = `epg:short:${channelId}:${limit}:${timezone}:${timeFormat}:${arch}`;
+  const cacheKey = `epg:short:${channelId}:${limit}:${timezone}:24:${arch}`;
   return cacheGetOrSet(cacheKey, ttl.epg, async () =>
-    loadShortEpg(channelId, limit, { timezone, timeFormat, archivable: opts?.archivable })
+    loadShortEpg(channelId, limit, { timezone, timeFormat: "24", archivable: opts?.archivable })
   );
 }
 

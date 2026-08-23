@@ -23,9 +23,9 @@ describe("client playback profiles", () => {
     assert.deepEqual(preferLiveOutputFormats(["m3u8", "ts", "rtmp"], profile), ["ts", "m3u8", "rtmp"]);
   });
 
-  it("leaves Smarters on auto output order (HLS-capable)", () => {
+  it("leaves Smarters on auto output order (HLS-capable) and does not catalog-prefetch", () => {
     const profile = resolveClientPlaybackProfile("IPTV Smarters Pro");
     assert.deepEqual(preferLiveOutputFormats(["m3u8", "ts", "rtmp"], profile), ["m3u8", "ts", "rtmp"]);
-    assert.equal(profile.zapPrefetchOnPlaylist, true);
+    assert.equal(profile.zapPrefetchOnPlaylist, false);
   });
 });

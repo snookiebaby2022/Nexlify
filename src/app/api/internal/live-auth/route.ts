@@ -99,8 +99,10 @@ export async function GET(req: NextRequest) {
     const outboundProxy = await resolveStreamOutboundProxy(cleanId);
     const hlsNative = candidates.find((u) => isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
     const tsUrl = candidates.find((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
+    const method = (req.headers.get("x-original-method") || "GET").toUpperCase();
     // Disk packager is for MPEG-TS only — never compete with provider-native HLS.
-    if (tsUrl && !hlsNative) {
+    // HEAD probes during XCIPTV "Update Content" must not spawn ffmpeg or occupy slots.
+    if (tsUrl && !hlsNative && method !== "HEAD") {
       startDiskHls({
         streamId: cleanId,
         upstreamUrl: tsUrl,
@@ -111,7 +113,7 @@ export async function GET(req: NextRequest) {
     if (hlsNative) {
       schedulePlaybackUpstreamWarm(hlsNative, UPSTREAM_HLS_UA);
     }
-    if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD") {
+    if (method !== "HEAD") {
       const path = originalPath(req);
       const isSeg = /\/hls\/seg\d+\.ts$/i.test(path);
       // HLS segments are keep-alive via edge pulse only — tracking each segment multiplies rows.

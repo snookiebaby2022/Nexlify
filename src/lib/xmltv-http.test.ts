@@ -3,12 +3,15 @@ import { describe, it } from "node:test";
 import { shouldGzipXmltv, xmltvChannelIds, xmltvWantsGzipFile } from "./xmltv-http";
 
 describe("xmltv gzip", () => {
-  it("never HTTP-gzips xmltv, including XCIPTV and browsers", () => {
-    assert.equal(shouldGzipXmltv("gzip, deflate", "XCIPTV/5.0.0"), false);
-    assert.equal(shouldGzipXmltv("gzip", "IPTVSmartersPlayer"), false);
+  it("never HTTP-gzips xmltv when the client does not ask for gzip", () => {
     assert.equal(shouldGzipXmltv("", "XCIPTV/5.0.0"), false);
-    assert.equal(shouldGzipXmltv("gzip, deflate, br", "Mozilla/5.0"), false);
     assert.equal(shouldGzipXmltv("", "Mozilla/5.0"), false);
+  });
+
+  it("HTTP-gzips xmltv when Accept-Encoding includes gzip (OkHttp/XCIPTV)", () => {
+    assert.equal(shouldGzipXmltv("gzip, deflate", "XCIPTV/5.0.0"), true);
+    assert.equal(shouldGzipXmltv("gzip", "IPTVSmartersPlayer"), true);
+    assert.equal(shouldGzipXmltv("gzip, deflate, br", "Mozilla/5.0"), true);
   });
 
   it("treats type=gzip as an Xtream gzip file download", () => {

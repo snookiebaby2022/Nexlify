@@ -30,13 +30,14 @@ export function xmltvWantsGzipFile(typeParam?: string | null): boolean {
 }
 
 /**
- * HTTP Content-Encoding gzip breaks XCIPTV's XML parser (including okhttp / empty UAs).
- * Only `type=gzip` is an Xtream gzip *file* body, not Content-Encoding.
+ * Gzip xmltv when the client asks (OkHttp/XCIPTV/Smarters). `type=gzip` is a file body.
+ * Nginx must not gzip xml (`gzip off` / no xml gzip_types) or the body is double-compressed.
  */
 export function shouldGzipXmltv(
-  _acceptEncoding: string,
+  acceptEncoding: string,
   _userAgent: string,
   typeParam?: string | null
 ): boolean {
-  return xmltvWantsGzipFile(typeParam);
+  if (xmltvWantsGzipFile(typeParam)) return true;
+  return /\bgzip\b/i.test(acceptEncoding);
 }

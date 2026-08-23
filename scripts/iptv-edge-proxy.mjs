@@ -226,7 +226,7 @@ function endPlaybackSession(ctx) {
 const playbackSessions = new Map();
 const SESSION_KEEPALIVE_MS = 8_000;
 /** HLS playlist polls stop when the app exits — close the panel row quickly. */
-const SESSION_IDLE_MS = Number(process.env.IPTV_EDGE_SESSION_IDLE_MS || 20_000);
+const SESSION_IDLE_MS = Number(process.env.IPTV_EDGE_SESSION_IDLE_MS || 5_000);
 
 function playbackSessionKey(ctx) {
   return `${ctx.lineId}|${ctx.ip ?? ""}|${ctx.streamId}`;
@@ -258,6 +258,7 @@ function touchPlaybackSession(ctx, opts = {}) {
   let session = playbackSessions.get(key);
   if (!session) {
     session = { ctx, lastClientAt: now, teardown: null, hls: Boolean(opts.hls) };
+    const tickMs = session.hls ? 1_000 : SESSION_KEEPALIVE_MS;
     session.timer = setInterval(() => {
       // HLS is many short GETs — no TCP close. MPEG-TS uses clientReq close instead.
       if (!session.hls) return;
@@ -267,7 +268,7 @@ function touchPlaybackSession(ctx, opts = {}) {
         playbackSessions.delete(key);
         endPlaybackSession(session.ctx);
       }
-    }, SESSION_KEEPALIVE_MS);
+    }, tickMs);
     playbackSessions.set(key, session);
     pulseConnection(ctx, 72_000);
     return;
@@ -521,10 +522,6 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
   headers["x-forwarded-port"] = String(listenPort);
   headers["x-nexlify-client-port"] = String(listenPort);
   headers["x-forwarded-for"] = clientIp(clientReq);
-  const pathOnly = String(clientReq.url || "/").split("?")[0];
-  if (/\/xmltv\.php$/i.test(pathOnly)) {
-    delete headers["accept-encoding"];
-  }
   const method = (clientReq.method || "GET").toUpperCase();
   const hasBody = method !== "GET" && method !== "HEAD";
   let attempt = 0;
@@ -582,10 +579,12 @@ function authCacheKey(clientReq) {
     .slice(0, 96)
     .toLowerCase();
   let urlPath = (clientReq.url || "/").split("?")[0];
+  const method = String(clientReq.method || "GET").toUpperCase();
   // HLS segments share auth with the parent playlist — avoid per-seg panel round-trips.
   const segMatch = urlPath.match(/^(\/live\/[^/]+\/[^/]+\/\d+)\/hls\/seg\d+\.ts$/i);
   if (segMatch) urlPath = `${segMatch[1]}.m3u8`;
-  return `${clientIp(clientReq)}:${urlPath}:${ua}`;
+  const methodKey = segMatch ? "GET" : method;
+  return `${clientIp(clientReq)}:${methodKey}:${urlPath}:${ua}`;
 }
 
 function authLive(clientReq) {
@@ -1045,7 +1044,14 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
   }
   const streamId = auth.streamId;
   touchHlsDaemon(streamId);
-  const fresh = hlsDirFresh(streamId);
+  let fresh = hlsDirFresh(streamId);
+  if (!fresh && kind === "playlist" && !isHead) {
+    const deadline = Date.now() + 4_000;
+    while (!fresh && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 150));
+      fresh = hlsDirFresh(streamId);
+    }
+  }
   if (!fresh) {
     forward(clientReq, clientRes, ctx);
     return;
@@ -1132,7 +1138,7 @@ async function onRequest(clientReq, clientRes, ctx) {
       auth.lineId && auth.streamId
         ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
         : null;
-    if (pulseCtx) touchPlaybackSession(pulseCtx);
+    if (pulseCtx && clientReq.method !== "HEAD") touchPlaybackSession(pulseCtx);
     if (clientReq.method === "HEAD") {
       clientRes.writeHead(200, auth.live ? liveTsHeaders() : { "Content-Type": "video/mp4", "Access-Control-Allow-Origin": "*" });
       clientRes.end();

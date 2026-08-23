@@ -23,7 +23,8 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
     label: "IPTV Smarters / Pro",
     liveOutput: "auto",
     vodDirectPlay: false,
-    zapPrefetchOnPlaylist: true,
+    // Prefetch during catalog update starts HLS ffmpeg and leaves live rows open.
+    zapPrefetchOnPlaylist: false,
   },
   xciptv: {
     id: "xciptv",

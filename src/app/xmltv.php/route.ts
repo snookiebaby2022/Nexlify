@@ -8,6 +8,12 @@ import { shouldGzipXmltv, xmltvWantsGzipFile } from "@/lib/xmltv-http";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { withIptvCors } from "@/lib/iptv-cors";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+const EMPTY_XMLTV = `<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="Nexlify">\n</tv>`;
+
 export async function GET(req: NextRequest) {
   const demoBlock = rejectDemoIptvPlayback(req);
   if (demoBlock) return demoBlock;
@@ -32,7 +38,12 @@ export async function GET(req: NextRequest) {
   );
   if (deny) return new NextResponse("Forbidden", { status: deny === "rate" ? 429 : 403 });
 
-  const xml = await buildLineXmltv(line);
+  let xml = EMPTY_XMLTV;
+  try {
+    xml = await buildLineXmltv(line);
+  } catch (e) {
+    console.error("[xmltv] build failed:", e instanceof Error ? e.message : e);
+  }
   const typeParam = req.nextUrl.searchParams.get("type");
   const gzipFile = xmltvWantsGzipFile(typeParam);
   const headers = new Headers({
@@ -48,5 +59,6 @@ export async function GET(req: NextRequest) {
     headers.set("Content-Length", String(compressed.length));
     return withIptvCors(new NextResponse(compressed, { headers }));
   }
+  headers.set("Content-Length", String(Buffer.byteLength(xml)));
   return withIptvCors(new NextResponse(xml, { headers }));
 }

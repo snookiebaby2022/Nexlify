@@ -20,7 +20,7 @@ function truncateXmltvDesc(value: string | null | undefined): string | null {
 
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
 export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 12): Promise<string> {
-  const cacheKey = `xmltv:v5:${line.id}:${hoursAhead}:${PROGRAMS_PER_CHANNEL}`;
+  const cacheKey = `xmltv:v6:${line.id}:${hoursAhead}:${PROGRAMS_PER_CHANNEL}`;
   return cacheGetOrSet(cacheKey, XMLTV_CACHE_SEC, () => buildLineXmltvBody(line, hoursAhead));
 }
 
@@ -57,6 +57,15 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
         AND s."isActive" = true
         AND NULLIF(TRIM(s."epgChannelId"), '') IS NOT NULL
     ),
+    epg_ids AS (
+      SELECT epg_id AS id FROM line_channels
+      UNION
+      SELECT lower(epg_id) FROM line_channels
+      UNION
+      SELECT stream_channel_id FROM line_channels WHERE stream_channel_id IS NOT NULL
+      UNION
+      SELECT lower(stream_channel_id) FROM line_channels WHERE stream_channel_id IS NOT NULL
+    ),
     ranked_programs AS (
       SELECT
         p."channelId",
@@ -64,11 +73,9 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
         p.description,
         p.start,
         p.stop,
-        ROW_NUMBER() OVER (PARTITION BY lower(p."channelId") ORDER BY p.start ASC) AS rn
+        ROW_NUMBER() OVER (PARTITION BY p."channelId" ORDER BY p.start ASC) AS rn
       FROM "EpgProgram" p
-      INNER JOIN line_channels lc
-        ON lower(lc.epg_id) = lower(p."channelId")
-        OR (lc.stream_channel_id IS NOT NULL AND lower(lc.stream_channel_id) = lower(p."channelId"))
+      INNER JOIN epg_ids e ON e.id = p."channelId"
       WHERE p.stop >= ${now}
         AND p.start <= ${until}
     )
@@ -86,13 +93,21 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
     LEFT JOIN ranked_programs rp
       ON rp.rn <= ${PROGRAMS_PER_CHANNEL}
       AND (
-        lower(rp."channelId") = lower(lc.epg_id)
-        OR (lc.stream_channel_id IS NOT NULL AND lower(rp."channelId") = lower(lc.stream_channel_id))
+        rp."channelId" = lc.epg_id
+        OR rp."channelId" = lower(lc.epg_id)
+        OR (
+          lc.stream_channel_id IS NOT NULL
+          AND (
+            rp."channelId" = lc.stream_channel_id
+            OR rp."channelId" = lower(lc.stream_channel_id)
+          )
+        )
       )
     ORDER BY lc.epg_id ASC, rp.start ASC NULLS LAST
   `;
 
   const channelMap = new Map<string, string>();
+  const programSeen = new Set<string>();
   const programRows: {
     channelId: string;
     title: string;
@@ -110,7 +125,11 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
       if (!channelMap.has(id)) channelMap.set(id, row.name || "Live");
     }
     if (row.start && row.stop && row.title) {
+      const startKey = row.start.toISOString();
       for (const channelId of ids) {
+        const key = `${channelId}|${startKey}|${row.title}`;
+        if (programSeen.has(key)) continue;
+        programSeen.add(key);
         programRows.push({
           channelId,
           title: row.title,
