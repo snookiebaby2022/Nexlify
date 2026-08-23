@@ -42,6 +42,37 @@ loadDotEnv();
 const BACKEND = process.env.IPTV_EDGE_BACKEND || "127.0.0.1:13000";
 const [backendHost, backendPortRaw] = BACKEND.split(":");
 const backendPort = Number(backendPortRaw || 13000);
+/** Cap sockets to the single Next worker so live zaps cannot fill the 511 accept queue. */
+const apiAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: Number(process.env.IPTV_EDGE_API_SOCKETS || 24),
+  maxFreeSockets: 8,
+  timeout: 300_000,
+});
+const liveAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: Number(process.env.IPTV_EDGE_LIVE_SOCKETS || 40),
+  maxFreeSockets: 8,
+  timeout: 60_000,
+});
+
+function isPanelPriorityPath(urlPath) {
+  const p = String(urlPath || "/").split("?")[0];
+  return (
+    /\/(?:player_api|panel_api|get|xmltv)\.php$/i.test(p) ||
+    p === "/" ||
+    p.startsWith("/login") ||
+    p.startsWith("/admin") ||
+    p.startsWith("/reseller") ||
+    p.startsWith("/api/") ||
+    p.startsWith("/_next") ||
+    p.startsWith("/favicon")
+  );
+}
+
+function backendAgentFor(urlPath) {
+  return isPanelPriorityPath(urlPath) ? apiAgent : liveAgent;
+}
 /** Retry panel upstream while nexlify restarts (ECONNREFUSED on :13000). */
 const BACKEND_RETRY_MS = Number(process.env.IPTV_EDGE_BACKEND_RETRY_MS || 500);
 const BACKEND_RETRY_MAX = Number(process.env.IPTV_EDGE_BACKEND_RETRY_MAX || 120);
@@ -109,6 +140,7 @@ function sendConnectionPulse(ctx, bytes) {
       port: backendPort,
       path: "/api/internal/connection-pulse",
       method: "POST",
+      agent: liveAgent,
       headers: {
         "content-type": "application/json",
         "content-length": Buffer.byteLength(body),
@@ -139,6 +171,7 @@ function querySessionKicked(lineId, ip) {
         port: backendPort,
         path: `/api/internal/session-kicked?${q}`,
         method: "GET",
+        agent: liveAgent,
         headers: { "x-panel-internal-secret": INTERNAL_SECRET },
         timeout: 2000,
       },
@@ -207,6 +240,7 @@ function endPlaybackSession(ctx) {
       port: backendPort,
       path: "/api/internal/connection-end",
       method: "POST",
+      agent: liveAgent,
       headers: {
         "content-type": "application/json",
         "content-length": Buffer.byteLength(body),
@@ -486,6 +520,7 @@ function probeBackendHealth() {
         port: backendPort,
         path: "/api/health",
         method: "GET",
+        agent: apiAgent,
         timeout: 4000,
       },
       (res) => {
@@ -540,6 +575,7 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
         port: backendPort,
         path: clientReq.url,
         method: clientReq.method,
+        agent: backendAgentFor(clientReq.url),
         headers,
         timeout: 300_000,
       },
@@ -620,6 +656,7 @@ function authLive(clientReq) {
           port: backendPort,
           path: "/api/internal/live-auth",
           method: "GET",
+          agent: liveAgent,
           headers,
           timeout: 15_000,
         },
