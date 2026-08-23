@@ -4,12 +4,10 @@ import { Prisma, StreamType } from "@prisma/client";
 import { formatXmltvDateInTimezone } from "@/lib/epg-time";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
-import { cacheGetOrSet } from "@/lib/cache";
 
-const XMLTV_CACHE_SEC = 180;
 const PROGRAMS_PER_CHANNEL = 8;
 const DESC_MAX_CHARS = 160;
-const EPG_ID_CHUNK = 800;
+const EPG_ID_CHUNK = 400;
 
 function truncateXmltvDesc(value: string | null | undefined): string | null {
   const text = String(value ?? "").trim();
@@ -20,8 +18,7 @@ function truncateXmltvDesc(value: string | null | undefined): string | null {
 
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
 export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 12): Promise<string> {
-  const cacheKey = `xmltv:v7:${line.id}:${hoursAhead}:${PROGRAMS_PER_CHANNEL}`;
-  return cacheGetOrSet(cacheKey, XMLTV_CACHE_SEC, () => buildLineXmltvBody(line, hoursAhead));
+  return buildLineXmltvBody(line, hoursAhead);
 }
 
 type LineChannel = {
@@ -49,22 +46,21 @@ async function loadProgramsForEpgIds(
     const chunk = epgIds.slice(i, i + EPG_ID_CHUNK);
     if (!chunk.length) continue;
     const rows = await prisma.$queryRaw<ProgramRow[]>`
-      SELECT p."channelId", p.title, p.description, p.start, p.stop
-      FROM unnest(ARRAY[${Prisma.join(chunk)}]::text[]) AS eid(id)
-      CROSS JOIN LATERAL (
+      SELECT x."channelId", x.title, x.description, x.start, x.stop
+      FROM (
         SELECT
           e."channelId",
           e.title,
           e.description,
           e.start,
-          e.stop
+          e.stop,
+          ROW_NUMBER() OVER (PARTITION BY e."channelId" ORDER BY e.start ASC) AS rn
         FROM "EpgProgram" e
-        WHERE e."channelId" = eid.id
+        WHERE e."channelId" IN (${Prisma.join(chunk)})
           AND e.stop >= ${now}
           AND e.start <= ${until}
-        ORDER BY e.start ASC
-        LIMIT ${PROGRAMS_PER_CHANNEL}
-      ) p
+      ) x
+      WHERE x.rn <= ${PROGRAMS_PER_CHANNEL}
     `;
     out.push(...rows);
   }
