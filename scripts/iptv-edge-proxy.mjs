@@ -45,13 +45,13 @@ const backendPort = Number(backendPortRaw || 13000);
 /** Cap sockets to the single Next worker so live zaps cannot fill the 511 accept queue. */
 const apiAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: Number(process.env.IPTV_EDGE_API_SOCKETS || 24),
+  maxSockets: Number(process.env.IPTV_EDGE_API_SOCKETS || 32),
   maxFreeSockets: 8,
   timeout: 300_000,
 });
 const liveAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: Number(process.env.IPTV_EDGE_LIVE_SOCKETS || 40),
+  maxSockets: Number(process.env.IPTV_EDGE_LIVE_SOCKETS || 12),
   maxFreeSockets: 8,
   timeout: 60_000,
 });
@@ -91,7 +91,7 @@ const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
 const LIVE_TS_PEEK_BYTES = 188;
 const LIVE_TS_OPEN_MS = Number(process.env.IPTV_EDGE_TS_OPEN_MS || 2000);
 /** Cache live-auth at edge so channel zaps skip panel round-trip (45s default). */
-const AUTH_CACHE_TTL_MS = Number(process.env.IPTV_EDGE_AUTH_CACHE_MS || 45_000);
+const AUTH_CACHE_TTL_MS = Number(process.env.IPTV_EDGE_AUTH_CACHE_MS || 90_000);
 const authCache = new Map();
 const PLAYBACK_RE = /^\/(live|movie|series)\//;
 const HLS_RE = /\.m3u8(?:[?#]|$)/i;
