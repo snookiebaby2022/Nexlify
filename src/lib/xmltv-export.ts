@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { LineWithBouquets } from "@/lib/lines";
 import { Prisma, StreamType } from "@prisma/client";
-import { formatXmltvDateInTimezone } from "@/lib/epg-time";
-import { getSettingGroup } from "@/lib/panel-settings";
+import { formatXmltvDateUtc } from "@/lib/epg-time";
 import { xmltvSafeText } from "@/lib/xtream-safe";
 import { gzipSync, gunzipSync } from "zlib";
 import { cacheGet, cacheSet } from "@/lib/cache";
@@ -22,7 +21,7 @@ function truncateXmltvDesc(value: string | null | undefined): string | null {
 
 /** Gzipped XMLTV — cached as base64 so HTTP gzip is not built twice in RAM. */
 export async function buildLineXmltvGzip(line: LineWithBouquets, hoursAhead = 12): Promise<Buffer> {
-  const key = `xmltv:gz:v10:${line.id}:${hoursAhead}`;
+  const key = `xmltv:gz:v11:${line.id}:${hoursAhead}`;
   const hit = await cacheGet<string>(key);
   if (typeof hit === "string" && hit.length > 8) {
     try {
@@ -42,7 +41,11 @@ export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 12): P
   return gunzipSync(await buildLineXmltvGzip(line, hoursAhead)).toString("utf8");
 }
 
-/** Start a cache fill so XCIPTV's xmltv download after Update Content is already warm. */
+/**
+ * Background xmltv cache fill. Do not call from get_live_streams / catalog
+ * actions — a 10s+ build on the IPTV worker stalls Update Content and the
+ * first zap. Cached xmltv.php (~300ms) is enough for XCIPTV Reload EPG.
+ */
 export function warmLineXmltv(line: LineWithBouquets): void {
   void buildLineXmltvGzip(line).catch((err) => {
     console.error("[xmltv] warm failed:", err instanceof Error ? err.message : err);
@@ -100,8 +103,6 @@ async function loadProgramsForEpgIds(
 }
 
 async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): Promise<string> {
-  const general = await getSettingGroup("general");
-  const panelTimezone = String(general.timezone || "Europe/London");
   const now = new Date();
   const until = new Date(now.getTime() + hoursAhead * 3600_000);
 
@@ -210,7 +211,7 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
     const ch = xmltvSafeText(p.channelId);
     if (!ch) continue;
     lines.push(
-      `  <programme start="${formatXmltvDateInTimezone(p.start, panelTimezone)}" stop="${formatXmltvDateInTimezone(p.stop, panelTimezone)}" channel="${ch}">`,
+      `  <programme start="${formatXmltvDateUtc(p.start)}" stop="${formatXmltvDateUtc(p.stop)}" channel="${ch}">`,
       `    <title lang="en">${xmltvSafeText(p.title) || "Programme"}</title>`
     );
     if (p.description) lines.push(`    <desc lang="en">${xmltvSafeText(p.description)}</desc>`);

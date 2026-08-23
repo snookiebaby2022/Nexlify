@@ -42,7 +42,7 @@ export function iptvJson(data: unknown, init?: IptvJsonInit): NextResponse {
   }
 
   if (json.length >= GZIP_MIN_BYTES && clientAcceptsGzip(compressFor ?? null)) {
-    const compressed = gzipSync(Buffer.from(json, "utf8"), { level: 6 });
+    const compressed = gzipSync(Buffer.from(json, "utf8"), { level: 4 });
     headers.set("Content-Encoding", "gzip");
     const vary = headers.get("Vary");
     headers.set("Vary", vary ? `${vary}, Accept-Encoding` : "Accept-Encoding");

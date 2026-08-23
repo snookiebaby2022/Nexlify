@@ -604,6 +604,7 @@ function authLive(clientReq) {
     const headers = {
       "x-original-uri": clientReq.url || "/",
       "x-original-method": clientReq.method || "GET",
+      "x-original-range": String(clientReq.headers.range || ""),
       "x-panel-internal-secret": INTERNAL_SECRET,
       "x-forwarded-for": clientIp(clientReq),
       "x-real-ip": clientIp(clientReq),
@@ -1150,8 +1151,9 @@ async function onRequest(clientReq, clientRes, ctx) {
       auth.lineId && auth.streamId
         ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
         : null;
-    if (pulseCtx && clientReq.method !== "HEAD") touchPlaybackSession(pulseCtx);
-    if (clientReq.method === "HEAD") {
+    const isLiveRangeProbe = Boolean(auth.live && clientReq.method !== "HEAD" && clientReq.headers.range);
+    if (pulseCtx && clientReq.method !== "HEAD" && !isLiveRangeProbe) touchPlaybackSession(pulseCtx);
+    if (clientReq.method === "HEAD" || isLiveRangeProbe) {
       clientRes.writeHead(200, auth.live ? liveTsHeaders() : { "Content-Type": "video/mp4", "Access-Control-Allow-Origin": "*" });
       clientRes.end();
       return;

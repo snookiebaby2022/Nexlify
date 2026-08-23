@@ -125,6 +125,62 @@ export type StreamsForLineOptions = {
 
 const STREAM_BATCH = 1500;
 
+/** Listing columns only — skip streamUrl/backupUrl/playlistUrl (often huge) on live catalogs. */
+const LEAN_LISTING_SELECT = {
+  id: true,
+  name: true,
+  type: true,
+  streamIcon: true,
+  epgChannelId: true,
+  channelId: true,
+  createdAt: true,
+  updatedAt: true,
+  categoryId: true,
+  vodMode: true,
+  archiveDays: true,
+  timeshiftSeconds: true,
+  isShifted: true,
+  isAdult: true,
+  agentStartCmd: true,
+  isActive: true,
+  sortOrder: true,
+  containerExtension: true,
+} as const;
+
+const LEAN_PLAYBACK_SELECT = {
+  ...LEAN_LISTING_SELECT,
+  streamUrl: true,
+  playlistUrl: true,
+  backupUrl: true,
+} as const;
+
+function leanStreamSelect(options?: StreamsForLineOptions) {
+  const types = typeList(options);
+  const liveOnly = types?.length === 1 && types[0] === StreamType.LIVE;
+  return liveOnly ? LEAN_LISTING_SELECT : LEAN_PLAYBACK_SELECT;
+}
+
+async function loadStreamChunk(
+  chunkIds: string[],
+  options?: StreamsForLineOptions
+): Promise<StreamForLine[]> {
+  const lean = options?.lean === true;
+  const rows = lean
+    ? await prisma.stream.findMany({
+        where: { id: { in: chunkIds } },
+        select: leanStreamSelect(options),
+      })
+    : await prisma.stream.findMany({
+        where: { id: { in: chunkIds } },
+        include: {
+          provider: { select: { baseUrl: true } },
+          server: { select: { host: true } },
+        },
+      });
+  const byId = new Map(rows.map((s) => [s.id, s as StreamForLine]));
+  return chunkIds.map((id) => byId.get(id)).filter((s): s is StreamForLine => Boolean(s));
+}
+
 /** Streams with a resolvable playback URL (matches Xtream/M3U export rules). */
 function playableStreamUrlSql() {
   return Prisma.sql`
@@ -279,14 +335,7 @@ export async function streamsForLine(
   }
   if (!ids.length) return [];
 
-  const lean = options?.lean === true;
   const out: StreamForLine[] = [];
-  const include = lean
-    ? undefined
-    : {
-        provider: { select: { baseUrl: true } },
-        server: { select: { host: true } },
-      };
 
   const batches: string[][] = [];
   for (let i = 0; i < ids.length; i += STREAM_BATCH) {
@@ -295,15 +344,7 @@ export async function streamsForLine(
 
   if (options?.onBatch) {
     for (const chunkIds of batches) {
-      const rows = await prisma.stream.findMany({
-        where: { id: { in: chunkIds } },
-        ...(include ? { include } : {}),
-      });
-      const byId = new Map(rows.map((s) => [s.id, s as StreamForLine]));
-      const ordered = chunkIds
-        .map((id) => byId.get(id))
-        .filter((s): s is StreamForLine => Boolean(s));
-      await options.onBatch(ordered);
+      await options.onBatch(await loadStreamChunk(chunkIds, options));
     }
     return [];
   }
@@ -313,18 +354,7 @@ export async function streamsForLine(
   const PARALLEL = 4;
   for (let i = 0; i < batches.length; i += PARALLEL) {
     const group = batches.slice(i, i + PARALLEL);
-    const loaded = await Promise.all(
-      group.map(async (chunkIds) => {
-        const rows = await prisma.stream.findMany({
-          where: { id: { in: chunkIds } },
-          ...(include ? { include } : {}),
-        });
-        const byId = new Map(rows.map((s) => [s.id, s as StreamForLine]));
-        return chunkIds
-          .map((id) => byId.get(id))
-          .filter((s): s is StreamForLine => Boolean(s));
-      })
-    );
+    const loaded = await Promise.all(group.map((chunkIds) => loadStreamChunk(chunkIds, options)));
     for (const ordered of loaded) out.push(...ordered);
   }
 

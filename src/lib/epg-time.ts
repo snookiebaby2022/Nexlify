@@ -93,10 +93,19 @@ function xmltvOffsetToken(d: Date, timeZone: string): string {
 
 /** XMLTV programme timestamp in channel/panel timezone with offset suffix. */
 export function formatXmltvDateInTimezone(d: Date, timeZone: string): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
   const p = partsMap(d, timeZone, false);
+  return `${p.year}${p.month}${p.day}${p.hour}${p.minute}${p.second} ${xmltvOffsetToken(d, timeZone)}`;
+}
+
+/**
+ * Xtream/XUI xmltv.php style: UTC wall clock + `+0000`.
+ * XCIPTV parses the 14 digits and ignores the offset, then applies the device TZ.
+ */
+export function formatXmltvDateUtc(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
   return (
-    `${p.year}${p.month}${p.day}${p.hour}${p.minute}${p.second} ${xmltvOffsetToken(d, timeZone)}`
+    `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
+    `${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())} +0000`
   );
 }
 

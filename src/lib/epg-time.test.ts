@@ -5,6 +5,7 @@ import {
   formatPanelClock,
   formatXtreamEpgDateTime,
   formatXmltvDateInTimezone,
+  formatXmltvDateUtc,
   normalizeTimeFormat,
 } from "./epg-time";
 
@@ -35,6 +36,10 @@ test("formatEpgTimeRange respects 12/24h", () => {
 test("formatXmltvDateInTimezone includes offset", () => {
   const out = formatXmltvDateInTimezone(sample, "Europe/London");
   assert.match(out, /^20250819223000 \+0\d00$/);
+});
+
+test("formatXmltvDateUtc is XUI-style UTC so XCIPTV does not double-apply BST", () => {
+  assert.equal(formatXmltvDateUtc(sample), "20250819213000 +0000");
 });
 
 test("normalizeTimeFormat", () => {

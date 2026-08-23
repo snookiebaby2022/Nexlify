@@ -26,6 +26,26 @@ function originalPath(req: NextRequest): string {
   return raw.split("?")[0] || "";
 }
 
+function originalMethod(req: NextRequest): string {
+  return (req.headers.get("x-original-method") || req.method || "GET").toUpperCase();
+}
+
+function originalRange(req: NextRequest): string {
+  return (req.headers.get("x-original-range") || req.headers.get("range") || "").trim();
+}
+
+/** HEAD or live MPEG-TS Range probes during XCIPTV Update Content — do not occupy slots. */
+function isLiveByteProbe(
+  req: NextRequest,
+  parsed: { spliceLiveTs?: boolean; wantsHls?: boolean },
+  isHlsSegment: boolean
+): boolean {
+  if (originalMethod(req) === "HEAD") return true;
+  if (isHlsSegment) return false;
+  if (!originalRange(req)) return false;
+  return Boolean(parsed.spliceLiveTs);
+}
+
 async function resolveStreamOutboundProxy(streamId: string) {
   return resolveOutboundProxyForStream(streamId);
 }
@@ -76,7 +96,19 @@ export async function GET(req: NextRequest) {
   }
 
   const isHlsSegment = parsed.wantsHls && /\/hls\/seg\d+\.ts$/i.test(parsed.streamKey);
-  if (!isHlsSegment) {
+  const liveProbe = isLiveByteProbe(req, parsed, isHlsSegment);
+  if (liveProbe && parsed.spliceLiveTs && !parsed.wantsHls) {
+    return new NextResponse(null, {
+      status: 200,
+      headers: {
+        "X-Nexlify-Line-Id": line.id,
+        "X-Nexlify-Stream-Id": cleanId,
+        "X-Nexlify-Live": "1",
+        "Cache-Control": "no-store",
+      } as Record<string, string>,
+    });
+  }
+  if (!isHlsSegment && !liveProbe) {
     const { lineHasConnectionCapacity } = await import("@/lib/connections");
     const hasCapacity = await lineHasConnectionCapacity(line.id, line.maxConnections, {
       streamId: cleanId,
@@ -99,10 +131,10 @@ export async function GET(req: NextRequest) {
     const outboundProxy = await resolveStreamOutboundProxy(cleanId);
     const hlsNative = candidates.find((u) => isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
     const tsUrl = candidates.find((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
-    const method = (req.headers.get("x-original-method") || "GET").toUpperCase();
+    const method = originalMethod(req);
     // Disk packager is for MPEG-TS only — never compete with provider-native HLS.
-    // HEAD probes during XCIPTV "Update Content" must not spawn ffmpeg or occupy slots.
-    if (tsUrl && !hlsNative && method !== "HEAD") {
+    // HEAD / Range probes during XCIPTV "Update Content" must not spawn ffmpeg or occupy slots.
+    if (tsUrl && !hlsNative && method !== "HEAD" && !liveProbe) {
       startDiskHls({
         streamId: cleanId,
         upstreamUrl: tsUrl,
@@ -113,7 +145,7 @@ export async function GET(req: NextRequest) {
     if (hlsNative) {
       schedulePlaybackUpstreamWarm(hlsNative, UPSTREAM_HLS_UA);
     }
-    if (method !== "HEAD") {
+    if (method !== "HEAD" && !liveProbe) {
       const path = originalPath(req);
       const isSeg = /\/hls\/seg\d+\.ts$/i.test(path);
       // HLS segments are keep-alive via edge pulse only — tracking each segment multiplies rows.
@@ -172,7 +204,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(null, { status: 204, headers: { "X-Nexlify-Passthrough": "1" } });
   }
 
-  if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD") {
+  if (originalMethod(req) !== "HEAD" && !liveProbe) {
     void trackConnection({
       lineId: line.id,
       streamId: cleanId,
