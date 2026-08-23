@@ -1,7 +1,7 @@
 import { cacheDel, cacheGet, cacheMget, cacheSet } from "./cache";
 
 /** Active playback session TTL — drop quickly after the last real client byte/playlist. */
-export const LIVE_SESSION_TTL_SEC = 20;
+export const LIVE_SESSION_TTL_SEC = 12;
 
 function sessionIpKey(ip?: string | null): string {
   let raw = ip?.trim() ?? "";

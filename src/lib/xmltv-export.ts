@@ -4,6 +4,7 @@ import { Prisma, StreamType } from "@prisma/client";
 import { formatXmltvDateInTimezone } from "@/lib/epg-time";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
+import { xmltvChannelIds } from "@/lib/xmltv-http";
 
 const PROGRAMS_PER_CHANNEL = 8;
 const DESC_MAX_CHARS = 160;
@@ -45,24 +46,28 @@ async function loadProgramsForEpgIds(
   for (let i = 0; i < epgIds.length; i += EPG_ID_CHUNK) {
     const chunk = epgIds.slice(i, i + EPG_ID_CHUNK);
     if (!chunk.length) continue;
-    const rows = await prisma.$queryRaw<ProgramRow[]>`
-      SELECT x."channelId", x.title, x.description, x.start, x.stop
-      FROM (
-        SELECT
-          e."channelId",
-          e.title,
-          e.description,
-          e.start,
-          e.stop,
-          ROW_NUMBER() OVER (PARTITION BY e."channelId" ORDER BY e.start ASC) AS rn
-        FROM "EpgProgram" e
-        WHERE e."channelId" IN (${Prisma.join(chunk)})
-          AND e.stop >= ${now}
-          AND e.start <= ${until}
-      ) x
-      WHERE x.rn <= ${PROGRAMS_PER_CHANNEL}
-    `;
-    out.push(...rows);
+    try {
+      const rows = await prisma.$queryRaw<ProgramRow[]>`
+        SELECT x."channelId", x.title, x.description, x.start, x.stop
+        FROM (
+          SELECT
+            e."channelId",
+            e.title,
+            e.description,
+            e.start,
+            e.stop,
+            ROW_NUMBER() OVER (PARTITION BY e."channelId" ORDER BY e.start ASC) AS rn
+          FROM "EpgProgram" e
+          WHERE e."channelId" IN (${Prisma.join(chunk)})
+            AND e.stop >= ${now}
+            AND e.start <= ${until}
+        ) x
+        WHERE x.rn <= ${PROGRAMS_PER_CHANNEL}
+      `;
+      out.push(...rows);
+    } catch (err) {
+      console.error("[xmltv] program chunk failed:", err instanceof Error ? err.message : err);
+    }
   }
   return out;
 }
@@ -109,10 +114,11 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
 
   const programsByChannel = new Map<string, ProgramRow[]>();
   for (const p of programs) {
-    const key = p.channelId;
-    const list = programsByChannel.get(key) ?? [];
-    list.push(p);
-    programsByChannel.set(key, list);
+    for (const key of new Set([p.channelId, p.channelId.toLowerCase()])) {
+      const list = programsByChannel.get(key) ?? [];
+      list.push(p);
+      programsByChannel.set(key, list);
+    }
   }
 
   const channelMap = new Map<string, string>();
@@ -122,10 +128,13 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
   for (const row of channels) {
     const epgId = String(row.epg_id || "").trim();
     if (!epgId) continue;
-    // Catalog epg_channel_id is the tvg-id — XCIPTV matches that, not numeric stream_id.
-    const ids = [epgId];
     const extra = row.stream_channel_id?.trim();
-    if (extra && extra !== epgId) ids.push(extra);
+    const ids =
+      channels.length <= 4000
+        ? xmltvChannelIds(epgId, row.stream_cuid, extra)
+        : extra && extra !== epgId
+          ? [epgId, extra]
+          : [epgId];
     for (const id of ids) {
       if (!channelMap.has(id)) channelMap.set(id, row.name || "Live");
     }

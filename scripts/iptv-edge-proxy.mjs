@@ -125,7 +125,7 @@ function sendConnectionPulse(ctx, bytes) {
 }
 
 function pulseConnection(ctx, bytes) {
-  touchPlaybackSession(ctx);
+  touchPlaybackSession(ctx, { hls: Boolean(ctx?.hls) });
   sendConnectionPulse(ctx, bytes);
 }
 
@@ -226,7 +226,7 @@ function endPlaybackSession(ctx) {
 const playbackSessions = new Map();
 const SESSION_KEEPALIVE_MS = 8_000;
 /** HLS playlist polls stop when the app exits — close the panel row quickly. */
-const SESSION_IDLE_MS = Number(process.env.IPTV_EDGE_SESSION_IDLE_MS || 5_000);
+const SESSION_IDLE_MS = Number(process.env.IPTV_EDGE_SESSION_IDLE_MS || 3_000);
 
 function playbackSessionKey(ctx) {
   return `${ctx.lineId}|${ctx.ip ?? ""}|${ctx.streamId}`;
@@ -257,7 +257,7 @@ function touchPlaybackSession(ctx, opts = {}) {
   const now = Date.now();
   let session = playbackSessions.get(key);
   if (!session) {
-    session = { ctx, lastClientAt: now, teardown: null, hls: Boolean(opts.hls) };
+    session = { ctx, lastClientAt: now, teardown: null, hls: Boolean(opts.hls || ctx.hls) };
     const tickMs = session.hls ? 1_000 : SESSION_KEEPALIVE_MS;
     session.timer = setInterval(() => {
       // HLS is many short GETs — no TCP close. MPEG-TS uses clientReq close instead.
@@ -266,6 +266,13 @@ function touchPlaybackSession(ctx, opts = {}) {
       if (idle > SESSION_IDLE_MS) {
         clearInterval(session.timer);
         playbackSessions.delete(key);
+        if (typeof session.teardown === "function") {
+          try {
+            session.teardown();
+          } catch {
+            /* ignore */
+          }
+        }
         endPlaybackSession(session.ctx);
       }
     }, tickMs);
@@ -273,7 +280,7 @@ function touchPlaybackSession(ctx, opts = {}) {
     pulseConnection(ctx, 72_000);
     return;
   }
-  if (opts.hls) session.hls = true;
+  if (opts.hls || ctx.hls) session.hls = true;
   session.lastClientAt = now;
 }
 
@@ -1029,7 +1036,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
   }
   const pulseCtx =
     auth.lineId && auth.streamId
-      ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
+      ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq), hls: true }
       : null;
   const isHead = String(clientReq.method || "GET").toUpperCase() === "HEAD";
   if (pulseCtx && !isHead) touchPlaybackSession(pulseCtx, { hls: true });
@@ -1046,7 +1053,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
   touchHlsDaemon(streamId);
   let fresh = hlsDirFresh(streamId);
   if (!fresh && kind === "playlist" && !isHead) {
-    const deadline = Date.now() + 4_000;
+    const deadline = Date.now() + 6_000;
     while (!fresh && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 150));
       fresh = hlsDirFresh(streamId);

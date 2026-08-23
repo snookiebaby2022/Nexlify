@@ -10,7 +10,7 @@ import { clearLiveSession, batchIsLiveSessionActive, isLiveSessionActive, setVie
 
 export const STALE_MS = 5 * 60 * 1000; // cron safety net for orphaned rows
 /** Live Connections UI + dashboard counts — align with playback heartbeat, not cron stale. */
-export const LIVE_STALE_MS = 60 * 1000;
+export const LIVE_STALE_MS = 18 * 1000;
 export const PLAYBACK_STALE_MS = LIVE_STALE_MS;
 /** Admin Live Connections list — hide rows idle longer than this (HLS gaps tolerated). */
 export const LIVE_LIST_STALE_MS = LIVE_STALE_MS;

@@ -14,29 +14,47 @@ export const maxDuration = 60;
 
 const EMPTY_XMLTV = `<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="Nexlify">\n</tv>`;
 
-export async function GET(req: NextRequest) {
+async function authorizeXmltv(req: NextRequest) {
   const demoBlock = rejectDemoIptvPlayback(req);
-  if (demoBlock) return demoBlock;
-
+  if (demoBlock) return { error: demoBlock };
   const username = req.nextUrl.searchParams.get("username");
   const password = req.nextUrl.searchParams.get("password");
-
   if (!username || !password) {
-    return new NextResponse("Missing credentials", { status: 400 });
+    return { error: new NextResponse("Missing credentials", { status: 400 }) };
   }
-
   const line = await getLineByCredentials(username, password);
   if (!line || !lineIsPlayable(line)) {
-    return new NextResponse("Unauthorized", { status: 401 });
+    return { error: new NextResponse("Unauthorized", { status: 401 }) };
   }
-
   const deny = await assertPlaybackAllowed(
     asPlaybackGuardLine(line),
     getClientIp(req),
     req.headers.get("user-agent") ?? undefined,
     { listingOnly: true }
   );
-  if (deny) return new NextResponse("Forbidden", { status: deny === "rate" ? 429 : 403 });
+  if (deny) return { error: new NextResponse("Forbidden", { status: deny === "rate" ? 429 : 403 }) };
+  return { line };
+}
+
+/** XCIPTV probes xmltv with HEAD during Update Content — do not build the full guide. */
+export async function HEAD(req: NextRequest) {
+  const auth = await authorizeXmltv(req);
+  if (auth.error) return auth.error;
+  return withIptvCors(
+    new NextResponse(null, {
+      status: 200,
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        "Cache-Control": "private, max-age=180, no-transform",
+      },
+    })
+  );
+}
+
+export async function GET(req: NextRequest) {
+  const auth = await authorizeXmltv(req);
+  if (auth.error) return auth.error;
+  const line = auth.line!;
 
   let xml = EMPTY_XMLTV;
   try {

@@ -13,15 +13,15 @@ const HLS_TIME_SEC = 1;
 const HLS_LIST_SIZE = 6;
 const READY_TIMEOUT_MS = Math.max(
   4_000,
-  Number(process.env.HLS_PACKAGER_READY_MS || process.env.NEXLIFY_HLS_READY_MS || 8_000) || 8_000
+  Number(process.env.HLS_PACKAGER_READY_MS || process.env.NEXLIFY_HLS_READY_MS || 6_000) || 6_000
 );
 const MAX_SESSIONS = Math.max(8, Number(process.env.HLS_MAX_SESSIONS || 128) || 128);
 /** Stop ffmpeg soon after the last HLS viewer so slots free and new zaps start quickly. */
 const IDLE_MS = Math.max(
-  15_000,
-  Number(process.env.HLS_PACKAGER_IDLE_MS || process.env.NEXLIFY_HLS_IDLE_MS || 20_000) || 20_000
+  8_000,
+  Number(process.env.HLS_PACKAGER_IDLE_MS || process.env.NEXLIFY_HLS_IDLE_MS || 10_000) || 10_000
 );
-const REAP_EVERY_MS = 10_000;
+const REAP_EVERY_MS = 3_000;
 
 export function isPackagerSegmentName(name: string): boolean {
   return /^seg\d+\.ts$/i.test(name.trim());
@@ -240,7 +240,7 @@ async function spawnPackager(
   const hlsFlags = opts?.vod ? "temp_file" : "omit_endlist+temp_file+split_by_time+delete_segments";
   const listSize = opts?.vod ? "0" : String(HLS_LIST_SIZE);
   const fingerprint = packagerFingerprint(upstreamUrl, opts?.transcode ?? null, opts?.loop, opts?.vod);
-  const liveTune = opts?.vod ? [] : ["-flags", "low_delay"];
+  const liveTune = opts?.vod ? [] : ["-flags", "low_delay", "-muxdelay", "0", "-muxpreload", "0"];
   const httpProxy = ffmpegHttpProxyArg(opts?.outboundProxy ?? null);
   const proxyArgs = httpProxy ? ["-http_proxy", httpProxy] : [];
 
@@ -270,7 +270,7 @@ async function spawnPackager(
       "-analyzeduration",
       "200000",
       "-fflags",
-      "+genpts+discardcorrupt",
+      opts?.vod ? "+genpts+discardcorrupt" : "+genpts+discardcorrupt+nobuffer+flush_packets",
       "-avoid_negative_ts",
       "make_zero",
       ...inputPrefix,
