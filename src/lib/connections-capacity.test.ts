@@ -22,3 +22,10 @@ test("connectionCapacityAllows allows same IP channel switch on a 1-conn line at
 test("connectionCapacityAllows treats maxConnections 0 as unlimited", () => {
   assert.equal(connectionCapacityAllows(99, 0, 99, "192.0.2.10"), true);
 });
+
+test("isTestConnectionIp identifies RFC5737 probe addresses", async () => {
+  const { isTestConnectionIp } = await import("./connections");
+  assert.equal(isTestConnectionIp("1.2.3.4"), true);
+  assert.equal(isTestConnectionIp("203.0.113.50"), true);
+  assert.equal(isTestConnectionIp("87.192.105.4"), false);
+});

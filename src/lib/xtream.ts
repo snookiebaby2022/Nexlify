@@ -1,5 +1,5 @@
 import type { LineWithBouquets } from "./lines";
-import { streamsForLineExport, lineIsPlayable, categoryIdsForLine, activeBouquetIds } from "./lines";
+import { streamsForLineExport, lineIsPlayable, categoryIdsForLine, activeBouquetIds, streamCountForLine } from "./lines";
 import { resolveChannelId, resolveEpgId } from "./subscription-export";
 import { exportPlaybackUrl } from "./export-playback-url";
 import { StreamType } from "@prisma/client";
@@ -31,6 +31,7 @@ import { formatPanelClock, normalizeTimeFormat } from "./epg-time";
 import { getPanelServerSettings } from "./panel-server";
 import { getSettingGroup } from "./panel-settings";
 import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
+import { preferLiveOutputFormats, resolveClientPlaybackProfile } from "./client-playback-profiles";
 
 function cuidToNum(id: string): number {
   let h = 0;
@@ -41,6 +42,13 @@ function cuidToNum(id: string): number {
 }
 
 type RequestHeaders = { get(name: string): string | null };
+
+function lineDateMs(value: Date | string | null | undefined): number {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
 
 function xtreamClockNow(timezone: string, timeFormat: "12" | "24"): string {
   return formatPanelClock(new Date(), { timezone, timeFormat });
@@ -84,7 +92,11 @@ export function websiteBaseUrl(panelBaseUrl?: string): string {
   return `http://127.0.0.1:${resolveWebsiteHttpPort()}`;
 }
 
-export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: string) {
+export async function xtreamUserInfo(
+  line: LineWithBouquets,
+  panelBaseUrl: string,
+  userAgent?: string | null
+) {
   const playable = lineIsPlayable(line);
   const { countLineSessions } = await import("@/lib/connections");
   const activeCons = playable ? await countLineSessions(line.id) : 0;
@@ -113,13 +125,19 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
   // HTTPS :443 clients to :8080 — player_api is on 443 and many hosts block 8080 externally.
   const httpPort = useHttps ? String(streamHttpsPort) : publicPort;
   const httpsPort = String(streamHttpsPort);
-  const formats = xtreamOutputFormats(line.allowedOutput);
+  const formats = preferLiveOutputFormats(
+    xtreamOutputFormats(line.allowedOutput),
+    resolveClientPlaybackProfile(userAgent)
+  );
   const clock = xtreamClockNow(panelTimezone, timeFormat);
   const datetimeFormat = timeFormat === "12" ? "Y-m-d h:i:s A" : "Y-m-d H:i:s";
+  const websiteOrigin = websiteBaseUrl(panelOrigin);
+  const epgUrl = `${websiteOrigin}/xmltv.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`;
   return {
     user_info: {
       username: line.username,
       password: line.password,
+      epg_url: epgUrl,
       message: !playable
         ? "Account inactive or expired"
         : atCapacity
@@ -127,10 +145,10 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
           : "",
       auth: playable ? 1 : 0,
       status: playable ? "Active" : "Disabled",
-      exp_date: Math.floor(line.expiresAt.getTime() / 1000).toString(),
+      exp_date: String(Math.floor(lineDateMs(line.expiresAt) / 1000)),
       is_trial: "0",
       active_cons: String(activeCons),
-      created_at: Math.floor(line.createdAt.getTime() / 1000).toString(),
+      created_at: String(Math.floor(lineDateMs(line.createdAt) / 1000)),
       max_connections: line.maxConnections.toString(),
       allowed_output_formats: formats,
       allowed_outputs: formats,
@@ -151,6 +169,7 @@ export async function xtreamUserInfo(line: LineWithBouquets, panelBaseUrl: strin
       allowed_output_formats: formats,
       abr_auto_switch: abrAutoSwitch ? 1 : 0,
       abr_hint: abrAutoSwitch ? "client_may_switch_variants" : "",
+      epg_url: epgUrl,
     },
   };
 }
@@ -160,7 +179,10 @@ async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType)
   const { categoryIds, hasUncategorized } = await categoryIdsForLine(line, { type });
   const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
   if (hasUncategorized) {
-    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
+    const uncategorizedCount = await streamCountForLine(line, { type, uncategorizedOnly: true });
+    if (uncategorizedCount > 0) {
+      rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
+    }
   }
   if (categoryIds.length) {
     const cats = await prisma.category.findMany({
@@ -258,6 +280,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
       stream_id: cuidToNum(s.id),
       stream_icon: xtreamSafeText(s.streamIcon),
       epg_channel_id: xtreamSafeText(resolveEpgId(s)),
+      epg_id: xtreamSafeText(resolveEpgId(s)),
       added: xtreamUnixString(s.createdAt),
       category_id: numCategoryId,
       category_ids: xtreamCategoryIds(numCategoryId),

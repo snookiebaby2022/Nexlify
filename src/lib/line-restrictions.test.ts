@@ -40,6 +40,18 @@ describe("checkLineUserAgent", () => {
     assert.equal(checkLineUserAgent({ allowedUserAgents: '["vlc"]' }, "VLC/3.0 LibVLC"), true);
   });
 
+  it("allows LibVLC when line allows XCIPTV (built-in player)", () => {
+    assert.equal(
+      checkLineUserAgent({ allowedUserAgents: "XCIPTV" }, "VLC/3.0.20 LibVLC/3.0.20"),
+      true
+    );
+    assert.equal(
+      checkLineUserAgent({ allowedUserAgents: "xciptv" }, "ExoPlayerLib/2.11.3"),
+      true
+    );
+    assert.equal(checkLineUserAgent({ allowedUserAgents: "VLC" }, "XCIPTV/5.0.0"), false);
+  });
+
   it("blocks disallowed patterns", () => {
     assert.equal(
       checkLineUserAgent({ disallowedUserAgents: "curl" }, "curl/8.0"),

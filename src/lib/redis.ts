@@ -2,7 +2,7 @@ import Redis, { Cluster } from "ioredis";
 
 type RedisClient = Redis | Cluster;
 
-const globalRedis = globalThis as unknown as { redis: RedisClient | null };
+const globalRedis = globalThis as unknown as { redis: RedisClient | null; redisErrorLogged?: boolean };
 
 function parseClusterNodes(raw: string) {
   return raw
@@ -15,6 +15,15 @@ function parseClusterNodes(raw: string) {
     });
 }
 
+function attachRedisErrorLogging(client: RedisClient) {
+  client.on("error", (err) => {
+    if (globalRedis.redisErrorLogged) return;
+    globalRedis.redisErrorLogged = true;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[redis] connection error: ${msg}`);
+  });
+}
+
 function createClient() {
   const clusterNodes = process.env.REDIS_CLUSTER_NODES?.trim();
   if (clusterNodes) {
@@ -22,10 +31,14 @@ function createClient() {
       const nodes = parseClusterNodes(clusterNodes);
       if (nodes.length) {
         const client = new Redis.Cluster(nodes, {
-          redisOptions: { maxRetriesPerRequest: 1, lazyConnect: true, connectTimeout: 250 },
+          redisOptions: {
+            maxRetriesPerRequest: 3,
+            lazyConnect: true,
+            connectTimeout: 5000,
+          },
           lazyConnect: true,
         });
-        client.on("error", () => {});
+        attachRedisErrorLogging(client);
         return client;
       }
     } catch {
@@ -33,16 +46,16 @@ function createClient() {
     }
   }
 
-  const url = process.env.REDIS_URL;
+  const url = process.env.REDIS_URL?.trim();
   if (!url) return null;
   try {
     const client = new Redis(url, {
-      maxRetriesPerRequest: 1,
+      maxRetriesPerRequest: 3,
       lazyConnect: true,
-      connectTimeout: 250,
-      enableOfflineQueue: false,
+      connectTimeout: 5000,
+      retryStrategy: (times) => (times > 8 ? null : Math.min(times * 200, 2000)),
     });
-    client.on("error", () => {});
+    attachRedisErrorLogging(client);
     return client;
   } catch {
     return null;
@@ -60,11 +73,24 @@ export function redisModeFromEnv(): "cluster" | "single" | "memory" {
   return "memory";
 }
 
+/** Connect lazy ioredis client — required before GET/SET when status is wait/connecting. */
+export async function ensureRedisConnected(): Promise<boolean> {
+  const r = getRedis();
+  if (!r) return false;
+  try {
+    if (r.status === "ready") return true;
+    await r.connect();
+    return (await r.ping()) === "PONG";
+  } catch {
+    return false;
+  }
+}
+
 export async function redisPing() {
   const r = getRedis();
   if (!r) return false;
   try {
-    if (r.status !== "ready") await r.connect();
+    if (!(await ensureRedisConnected())) return false;
     const pong = await r.ping();
     return pong === "PONG";
   } catch {
@@ -84,7 +110,7 @@ export async function redisMemoryHealth(): Promise<{
   const r = getRedis();
   if (!r) return null;
   try {
-    if (r.status !== "ready") await r.connect();
+    if (!(await ensureRedisConnected())) return null;
     const [maxmemoryRaw, policy, info] = await Promise.all([
       r.config("GET", "maxmemory") as Promise<string[]>,
       r.config("GET", "maxmemory-policy") as Promise<string[]>,

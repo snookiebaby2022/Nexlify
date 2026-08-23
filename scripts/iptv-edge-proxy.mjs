@@ -44,7 +44,9 @@ const [backendHost, backendPortRaw] = BACKEND.split(":");
 const backendPort = Number(backendPortRaw || 13000);
 /** Retry panel upstream while nexlify restarts (ECONNREFUSED on :13000). */
 const BACKEND_RETRY_MS = Number(process.env.IPTV_EDGE_BACKEND_RETRY_MS || 500);
-const BACKEND_RETRY_MAX = Number(process.env.IPTV_EDGE_BACKEND_RETRY_MAX || 15);
+const BACKEND_RETRY_MAX = Number(process.env.IPTV_EDGE_BACKEND_RETRY_MAX || 120);
+const BACKEND_RETRY_BUDGET_MS = Number(process.env.IPTV_EDGE_BACKEND_RETRY_BUDGET_MS || 90_000);
+const BACKEND_STARTUP_WAIT_MS = Number(process.env.IPTV_EDGE_BACKEND_WAIT_MS || 120_000);
 const INTERNAL_SECRET =
   process.env.PANEL_INTERNAL_SECRET ||
   process.env.NEXLIFY_PANEL_API_SECRET ||
@@ -52,7 +54,7 @@ const INTERNAL_SECRET =
   "";
 const HLS_DIR = (process.env.NEXLIFY_HLS_DIR || "/var/lib/nexlify/hls").replace(/\/+$/, "");
 /** Live HLS must be written within this window or we forward to Next (starts ffmpeg). */
-const HLS_LIVE_MAX_AGE_MS = Number(process.env.NEXLIFY_HLS_LIVE_MAX_AGE_MS || 6000);
+const HLS_LIVE_MAX_AGE_MS = Number(process.env.NEXLIFY_HLS_LIVE_MAX_AGE_MS || 12000);
 const HLS_DAEMON_PORT = Number(process.env.NEXLIFY_HLS_DAEMON_PORT || 13081);
 const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
 const LIVE_TS_PEEK_BYTES = 188;
@@ -218,7 +220,8 @@ function endPlaybackSession(ctx) {
 /** Keep panel live rows fresh while MPEG-TS/HLS clients are connected (XUI-style). */
 const playbackSessions = new Map();
 const SESSION_KEEPALIVE_MS = 8_000;
-const SESSION_IDLE_MS = 240_000;
+/** HLS playlist polls stop when the app exits — close the panel row quickly. */
+const SESSION_IDLE_MS = Number(process.env.IPTV_EDGE_SESSION_IDLE_MS || 20_000);
 
 function playbackSessionKey(ctx) {
   return `${ctx.lineId}|${ctx.ip ?? ""}|${ctx.streamId}`;
@@ -255,6 +258,7 @@ function touchPlaybackSession(ctx) {
       if (idle > SESSION_IDLE_MS) {
         clearInterval(session.timer);
         playbackSessions.delete(key);
+        endPlaybackSession(session.ctx);
         return;
       }
       pulseConnection(session.ctx, 72_000);
@@ -454,6 +458,54 @@ function isBackendRetryable(err) {
   return code === "ECONNREFUSED" || code === "ECONNRESET" || code === "EHOSTUNREACH";
 }
 
+function backendRetryDelay(attempt) {
+  return Math.min(BACKEND_RETRY_MS * 1.5 ** Math.max(0, attempt - 1), 4000);
+}
+
+function backendRetryBudgetLeft(startedAt) {
+  return Date.now() - startedAt < BACKEND_RETRY_BUDGET_MS;
+}
+
+function probeBackendHealth() {
+  return new Promise((resolve) => {
+    const req = http.request(
+      {
+        hostname: backendHost,
+        port: backendPort,
+        path: "/api/health",
+        method: "GET",
+        timeout: 4000,
+      },
+      (res) => {
+        res.resume();
+        resolve(res.statusCode === 200);
+      }
+    );
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.end();
+  });
+}
+
+async function waitForBackendReady() {
+  const start = Date.now();
+  while (Date.now() - start < BACKEND_STARTUP_WAIT_MS) {
+    if (await probeBackendHealth()) {
+      console.log(`[iptv-edge] backend ${BACKEND} ready`);
+      return true;
+    }
+    console.log(`[iptv-edge] waiting for backend ${BACKEND}...`);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  console.error(
+    `[iptv-edge] WARN: backend ${BACKEND} not ready after ${BACKEND_STARTUP_WAIT_MS}ms — listening anyway (requests will retry up to ${BACKEND_RETRY_BUDGET_MS}ms)`
+  );
+  return false;
+}
+
 function forward(clientReq, clientRes, { listenPort, proto }) {
   const cleanHost = sanitizeHostHeader(clientReq.headers.host) || backendHost;
   const headers = { ...clientReq.headers };
@@ -466,6 +518,7 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
   const method = (clientReq.method || "GET").toUpperCase();
   const hasBody = method !== "GET" && method !== "HEAD";
   let attempt = 0;
+  const retryStarted = Date.now();
 
   function sendToBackend() {
     attempt++;
@@ -496,9 +549,10 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
         !clientRes.headersSent &&
         !hasBody &&
         attempt < BACKEND_RETRY_MAX &&
+        backendRetryBudgetLeft(retryStarted) &&
         isBackendRetryable(err)
       ) {
-        setTimeout(sendToBackend, BACKEND_RETRY_MS);
+        setTimeout(sendToBackend, backendRetryDelay(attempt));
         return;
       }
       if (!clientRes.headersSent) {
@@ -514,7 +568,14 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
 }
 
 function authCacheKey(clientReq) {
-  return `${clientIp(clientReq)}:${clientReq.url || "/"}`;
+  const ua = String(clientReq.headers["user-agent"] || "")
+    .slice(0, 96)
+    .toLowerCase();
+  let urlPath = (clientReq.url || "/").split("?")[0];
+  // HLS segments share auth with the parent playlist — avoid per-seg panel round-trips.
+  const segMatch = urlPath.match(/^(\/live\/[^/]+\/[^/]+\/\d+)\/hls\/seg\d+\.ts$/i);
+  if (segMatch) urlPath = `${segMatch[1]}.m3u8`;
+  return `${clientIp(clientReq)}:${urlPath}:${ua}`;
 }
 
 function authLive(clientReq) {
@@ -529,6 +590,7 @@ function authLive(clientReq) {
       connection: "close",
     };
     let attempt = 0;
+    const retryStarted = Date.now();
 
     function go() {
       attempt++;
@@ -557,8 +619,12 @@ function authLive(clientReq) {
       );
       req.on("timeout", () => req.destroy(new Error("live-auth timeout")));
       req.on("error", (err) => {
-        if (attempt < BACKEND_RETRY_MAX && isBackendRetryable(err)) {
-          setTimeout(go, BACKEND_RETRY_MS);
+        if (
+          attempt < BACKEND_RETRY_MAX &&
+          backendRetryBudgetLeft(retryStarted) &&
+          isBackendRetryable(err)
+        ) {
+          setTimeout(go, backendRetryDelay(attempt));
           return;
         }
         reject(err);
@@ -600,12 +666,10 @@ function hlsDirFresh(streamId) {
     const body = fs.readFileSync(indexPath, "utf8");
     if (!body.includes("#EXTM3U") || !body.includes("#EXTINF")) return false;
     const segs = body.match(/seg\d+\.ts/gi);
-    if (!segs?.length || segs.length < 2) return false;
-    const seqM = body.match(/#EXT-X-MEDIA-SEQUENCE:(\d+)/i);
-    if (seqM && Number(seqM[1]) < 1) return false;
+    if (!segs?.length) return false;
     const last = segs[segs.length - 1];
     const segPath = path.join(dir, last);
-    if (!fs.existsSync(segPath)) return false;
+    if (!fs.existsSync(segPath) || fs.statSync(segPath).size < 188) return false;
     return Date.now() - fs.statSync(segPath).mtimeMs <= HLS_LIVE_MAX_AGE_MS;
   } catch {
     return false;
@@ -958,7 +1022,8 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     auth.lineId && auth.streamId
       ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
       : null;
-  if (pulseCtx) touchPlaybackSession(pulseCtx);
+  const isHead = String(clientReq.method || "GET").toUpperCase() === "HEAD";
+  if (pulseCtx && !isHead) touchPlaybackSession(pulseCtx);
   // Provider-native .m3u8 must relay through Next (rewritten manifest + upstream segments).
   if (auth.hlsNative) {
     forward(clientReq, clientRes, ctx);
@@ -982,7 +1047,6 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
         if (segPath) {
           const st = fs.statSync(segPath);
           if (st.isFile() && st.size > 0) {
-            if (pulseCtx) pulseConnection(pulseCtx, st.size);
             clientRes.writeHead(200, hlsSegHeaders(st.size));
             clientRes.end();
             return;
@@ -1112,17 +1176,24 @@ const httpsPorts = parsePorts(process.env.IPTV_EDGE_HTTPS_PORTS, "443");
 const certPath = process.env.IPTV_EDGE_CERT || "/etc/nginx/ssl/nexlify-panel/fullchain.pem";
 const keyPath = process.env.IPTV_EDGE_KEY || "/etc/nginx/ssl/nexlify-panel/privkey.pem";
 
-for (const p of httpPorts) listenHttp(p);
-
-if (httpsPorts.length) {
-  if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
-    console.error(`[iptv-edge] missing TLS cert/key at ${certPath} / ${keyPath}`);
-    process.exit(1);
+async function startEdge() {
+  await waitForBackendReady();
+  for (const p of httpPorts) listenHttp(p);
+  if (httpsPorts.length) {
+    if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+      console.error(`[iptv-edge] missing TLS cert/key at ${certPath} / ${keyPath}`);
+      process.exit(1);
+    }
+    const cert = fs.readFileSync(certPath);
+    const key = fs.readFileSync(keyPath);
+    for (const p of httpsPorts) listenHttps(p, cert, key);
   }
-  const cert = fs.readFileSync(certPath);
-  const key = fs.readFileSync(keyPath);
-  for (const p of httpsPorts) listenHttps(p, cert, key);
 }
+
+startEdge().catch((err) => {
+  console.error("[iptv-edge] startup failed:", err);
+  process.exit(1);
+});
 
 process.on("SIGTERM", () => process.exit(0));
 process.on("SIGINT", () => process.exit(0));

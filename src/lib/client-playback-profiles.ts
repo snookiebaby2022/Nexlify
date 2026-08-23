@@ -30,7 +30,8 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
     label: "XCIPTV",
     liveOutput: "ts",
     vodDirectPlay: false,
-    zapPrefetchOnPlaylist: true,
+    // Prefetch during get_live_streams stalls "Update Content" and can occupy the only slot.
+    zapPrefetchOnPlaylist: false,
   },
   tivimate: {
     id: "tivimate",
@@ -75,4 +76,14 @@ export function resolveClientPlaybackProfile(
       ? cfg
       : detectClientProfile(userAgent);
   return CLIENT_PLAYBACK_PROFILES[id] ?? CLIENT_PLAYBACK_PROFILES.auto;
+}
+
+/** XCIPTV/VLC pick the first allowed_output_formats token. Put mpegts first for those apps. */
+export function preferLiveOutputFormats(
+  formats: string[],
+  profile: ClientPlaybackProfile
+): string[] {
+  const want = profile.liveOutput === "ts" ? "ts" : profile.liveOutput === "hls" ? "m3u8" : null;
+  if (!want || !formats.includes(want)) return formats;
+  return [want, ...formats.filter((f) => f !== want)];
 }

@@ -1,4 +1,4 @@
-import { getRedis } from "./redis";
+import { getRedis, ensureRedisConnected } from "./redis";
 import type { Redis } from "ioredis";
 import { gunzipSync, gzipSync } from "node:zlib";
 
@@ -53,9 +53,9 @@ function redisMatchPattern(pattern: string): string {
 }
 
 async function ensureRedisReady(redis: NonNullable<ReturnType<typeof getRedis>>) {
-  // Only call connect() when the client has been fully closed; other non-ready
-  // states (connecting, reconnecting) manage their own lifecycle.
-  if (redis.status === "end") await redis.connect();
+  if (!(await ensureRedisConnected())) {
+    throw new Error("redis not connected");
+  }
 }
 
 async function scanDeleteOnNode(redis: Redis, match: string): Promise<number> {

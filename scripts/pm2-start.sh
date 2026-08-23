@@ -21,6 +21,11 @@ set -a
 [ -f .env ] && . ./.env
 set +a
 
+bash scripts/check-redis.sh || {
+  echo "ERROR: Redis check failed — panel needs REDIS_URL for auth/catalog cache"
+  exit 1
+}
+
 EXPECTED_PORT="${PORT:-${PANEL_PORT:-3000}}"
 EXPECTED_BIND="${PANEL_BIND_HOST:-127.0.0.1}"
 echo "Panel port from env: ${EXPECTED_PORT} (website: ${WEBSITE_PORT:-${STREAM_HTTP_PORT:-3001}})"

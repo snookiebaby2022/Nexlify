@@ -10,9 +10,10 @@ cd "$ROOT"
 echo "=== Nexlify local cleanup ==="
 
 # Build outputs
-rm -rf .next marketing-drop-in/.next dist marketing-drop-in/dist 2>/dev/null || true
+rm -rf .next .next.old .next.backup .next.staging marketing-drop-in/.next dist marketing-drop-in/dist test-results 2>/dev/null || true
 rm -f build-out.txt lint-out.txt tsconfig.tsbuildinfo marketing-drop-in/tsconfig.tsbuildinfo 2>/dev/null || true
 rm -f scripts/.panel-releases-website-snippet.ts 2>/dev/null || true
+rm -f ./*.log marketing-*.log release-*.log sync-*.log deploy-*.log 2>/dev/null || true
 
 # Regenerate gitignored deploy bundle locally (optional)
 if [ -f marketing-drop-in/scripts/generate-vps-bundle.sh ]; then

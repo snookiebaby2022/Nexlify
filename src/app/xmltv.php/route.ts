@@ -4,6 +4,7 @@ import { getLineByCredentials, lineIsPlayable } from "@/lib/lines";
 import { getClientIp } from "@/lib/client-ip";
 import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
 import { buildLineXmltv } from "@/lib/xmltv-export";
+import { shouldGzipXmltv, xmltvWantsGzipFile } from "@/lib/xmltv-http";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { withIptvCors } from "@/lib/iptv-cors";
 
@@ -32,15 +33,19 @@ export async function GET(req: NextRequest) {
   if (deny) return new NextResponse("Forbidden", { status: deny === "rate" ? 429 : 403 });
 
   const xml = await buildLineXmltv(line);
+  const typeParam = req.nextUrl.searchParams.get("type");
+  const gzipFile = xmltvWantsGzipFile(typeParam);
   const headers = new Headers({
-    "Content-Type": "application/xml; charset=utf-8",
-    "Cache-Control": "private, max-age=300",
+    "Content-Type": gzipFile ? "application/gzip" : "application/xml; charset=utf-8",
+    "Cache-Control": "private, max-age=180",
+    Vary: "Accept-Encoding",
   });
-  if (xml.length >= 2048) {
+  const acceptEnc = (req.headers.get("accept-encoding") ?? "").toLowerCase();
+  const ua = req.headers.get("user-agent") ?? "";
+  if (shouldGzipXmltv(acceptEnc, ua, typeParam) && xml.length >= 512) {
     const compressed = gzipSync(Buffer.from(xml, "utf8"), { level: 6 });
-    headers.set("Content-Encoding", "gzip");
+    if (!gzipFile) headers.set("Content-Encoding", "gzip");
     headers.set("Content-Length", String(compressed.length));
-    headers.set("Vary", "Accept-Encoding");
     return withIptvCors(new NextResponse(compressed, { headers }));
   }
   return withIptvCors(new NextResponse(xml, { headers }));

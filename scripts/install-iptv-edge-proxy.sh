@@ -20,7 +20,8 @@ env_val() {
 
 PANEL_LISTEN="$(env_val PORT)"
 [ -z "$PANEL_LISTEN" ] && PANEL_LISTEN="$(env_val PANEL_PORT)"
-[ -z "$PANEL_LISTEN" ] && PANEL_LISTEN="80"
+# IP panels: Node on 13000, edge on :80 — never default to 80 for the backend target.
+[ -z "$PANEL_LISTEN" ] && PANEL_LISTEN="13000"
 
 # Ensure TLS material exists (self-signed IP cert OK for IPTV apps).
 bash "$PANEL_DIR/scripts/fix-panel-https-default.sh" --certs-only
@@ -132,6 +133,13 @@ if command -v pm2 >/dev/null 2>&1; then
   export PANEL_INTERNAL_SECRET="${PANEL_INTERNAL_SECRET:-$(env_val PANEL_API_SECRET)}"
   export PANEL_API_SECRET="${PANEL_API_SECRET:-$PANEL_INTERNAL_SECRET}"
   export NEXLIFY_PANEL_API_SECRET="${NEXLIFY_PANEL_API_SECRET:-$PANEL_INTERNAL_SECRET}"
+  if [ -x "$PANEL_DIR/scripts/wait-panel-ready.sh" ]; then
+    echo "[iptv-edge] waiting for panel on 127.0.0.1:${PANEL_LISTEN} before starting edge..."
+    bash "$PANEL_DIR/scripts/wait-panel-ready.sh" || {
+      echo "[iptv-edge] ERROR: panel not ready — refusing to start edge (would 502 on :80)" >&2
+      exit 1
+    }
+  fi
   pm2 start "$PANEL_DIR/scripts/iptv-edge-proxy.mjs" \
     --name nexlify-iptv-edge \
     --cwd "$PANEL_DIR" \

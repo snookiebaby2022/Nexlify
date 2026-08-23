@@ -17,6 +17,7 @@ license-server/activations.json
 tsconfig.tsbuildinfo
 next-env.d.ts
 *.log
+test-results/
 __pycache__/
 *.pyc
 build-out.txt

@@ -1,7 +1,7 @@
 import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
-import { LIVE_STALE_MS, STALE_MS, countActiveConnections } from "@/lib/connections";
+import { STALE_MS, isTestConnectionIp, liveViewerStats, listLiveConnections } from "@/lib/connections";
 import { sortServersMainFirst } from "@/lib/ensure-main-server-online";
 import { isThisPanelMachine } from "@/lib/panel-local-server";
 import {
@@ -73,7 +73,6 @@ function emptyHostSample(): HostMetricsSample {
 
 export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
   const staleBefore = new Date(Date.now() - STALE_MS);
-  const liveBefore = new Date(Date.now() - LIVE_STALE_MS);
   const servers = await prisma.streamServer.findMany({
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: {
@@ -90,17 +89,8 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     },
   });
 
-  const [connAgg, streamProbeCounts] = await Promise.all([
-    prisma.$queryRaw<Array<{ serverId: string; conns: bigint; users: bigint }>>`
-      SELECT s."serverId" AS "serverId",
-             COUNT(*)::bigint AS conns,
-             COUNT(DISTINCT lc."lineId")::bigint AS users
-      FROM "LiveConnection" lc
-      INNER JOIN "Stream" s ON s.id = lc."streamId"
-      WHERE lc."lastSeenAt" >= ${liveBefore}
-        AND s."serverId" IS NOT NULL
-      GROUP BY s."serverId"
-    `,
+  const [liveRows, streamProbeCounts] = await Promise.all([
+    listLiveConnections(),
     prisma.stream.groupBy({
       by: ["serverId", "lastProbeOk"],
       where: { isActive: true, type: StreamType.LIVE, serverId: { not: null } },
@@ -108,11 +98,19 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     }),
   ]);
 
-  const usersByServer = new Map<string, number>();
+  const usersByServer = new Map<string, Set<string>>();
   const connsByServer = new Map<string, number>();
-  for (const row of connAgg) {
-    connsByServer.set(row.serverId, Number(row.conns));
-    usersByServer.set(row.serverId, Number(row.users));
+  for (const row of liveRows) {
+    if (isTestConnectionIp(row.ip)) continue;
+    const serverId = row.stream?.serverId ?? row.stream?.server?.id;
+    if (!serverId) continue;
+    connsByServer.set(serverId, (connsByServer.get(serverId) ?? 0) + 1);
+    let users = usersByServer.get(serverId);
+    if (!users) {
+      users = new Set();
+      usersByServer.set(serverId, users);
+    }
+    users.add(row.lineId);
   }
 
   const onByServer = new Map<string, number>();
@@ -132,7 +130,7 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
       isThisPanelMachine(s) ||
       (s.agentToken != null && s.agentLastSeen != null && s.agentLastSeen >= staleBefore);
     const connections = connsByServer.get(s.id) ?? 0;
-    const users = usersByServer.get(s.id) ?? 0;
+    const users = usersByServer.get(s.id)?.size ?? 0;
     const streamsOn = onByServer.get(s.id) ?? 0;
     const streamsOff = offByServer.get(s.id) ?? 0;
 
@@ -298,16 +296,13 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
 
 export async function getDashboardSummary() {
   const staleBefore = new Date(Date.now() - STALE_MS);
-  const connStaleBefore = new Date(Date.now() - LIVE_STALE_MS);
   const [
     totalLiveStreams,
     runningStreamIds,
     totalActiveLines,
-    linesWithConnections,
-    connections,
+    viewer,
     allServers,
     onlineServerCount,
-    liveConnectionStreams,
   ] = await Promise.all([
     prisma.stream.count({ where: { type: StreamType.LIVE, isActive: true } }),
     prisma.streamProcess.findMany({
@@ -318,12 +313,7 @@ export async function getDashboardSummary() {
     prisma.line.count({
       where: { status: "ACTIVE", expiresAt: { gt: new Date() } },
     }),
-    prisma.liveConnection.findMany({
-      where: { lastSeenAt: { gte: connStaleBefore } },
-      select: { lineId: true },
-      distinct: ["lineId"],
-    }),
-    countActiveConnections(),
+    liveViewerStats(),
     prisma.streamServer.count(),
     prisma.streamServer.count({
       where: {
@@ -333,18 +323,10 @@ export async function getDashboardSummary() {
         ],
       },
     }),
-    prisma.liveConnection.findMany({
-      where: { streamId: { not: null }, lastSeenAt: { gte: connStaleBefore } },
-      select: { streamId: true },
-      distinct: ["streamId"],
-      take: 500,
-    }),
   ]);
 
   const agentStreams = runningStreamIds.filter((r) => r.streamId).length;
-  const connectionStreams = liveConnectionStreams.length;
-  const onlineStreams = agentStreams > 0 ? agentStreams : connectionStreams;
-  const onlineUsers = linesWithConnections.length;
+  const onlineStreams = agentStreams > 0 ? agentStreams : viewer.onlineStreams;
   const streamSettings = await getSettingGroup("streams");
   const perLine = Number(streamSettings.maxConnectionsPerLine ?? 0);
   const maxConnections =
@@ -353,9 +335,9 @@ export async function getDashboardSummary() {
   return {
     onlineStreams,
     totalLiveStreams,
-    onlineUsers,
+    onlineUsers: viewer.onlineUsers,
     totalActiveLines,
-    onlineConnections: connections,
+    onlineConnections: viewer.onlineConnections,
     maxConnections,
     onlineServers: onlineServerCount,
     totalServers: allServers,
@@ -365,7 +347,6 @@ export async function getDashboardSummary() {
 /** Dashboard summary scoped to a reseller/sub-reseller's owned lines. */
 export async function getResellerDashboardSummary(ownerId: string) {
   const staleBefore = new Date(Date.now() - STALE_MS);
-  const connStaleBefore = new Date(Date.now() - LIVE_STALE_MS);
   const now = new Date();
   const lineWhere = { ownerId };
 
@@ -373,8 +354,7 @@ export async function getResellerDashboardSummary(ownerId: string) {
     totalLiveStreams,
     runningStreamIds,
     totalActiveLines,
-    ownerLineIds,
-    connections,
+    viewer,
     allServers,
     onlineServerCount,
   ] = await Promise.all([
@@ -387,8 +367,7 @@ export async function getResellerDashboardSummary(ownerId: string) {
     prisma.line.count({
       where: { ...lineWhere, status: "ACTIVE", expiresAt: { gt: now } },
     }),
-    prisma.line.findMany({ where: lineWhere, select: { id: true } }),
-    countActiveConnections(ownerId),
+    liveViewerStats(ownerId),
     prisma.streamServer.count(),
     prisma.streamServer.count({
       where: {
@@ -400,42 +379,19 @@ export async function getResellerDashboardSummary(ownerId: string) {
     }),
   ]);
 
-  const lineIdSet = new Set(ownerLineIds.map((l) => l.id));
-  const ownerConnections = connections;
-  const linesWithConnections = await prisma.liveConnection.findMany({
-    where: {
-      lineId: { in: [...lineIdSet] },
-      lastSeenAt: { gte: connStaleBefore },
-    },
-    select: { lineId: true },
-    distinct: ["lineId"],
-  });
-
-  const liveConnectionStreams = await prisma.liveConnection.findMany({
-    where: {
-      lineId: { in: [...lineIdSet] },
-      streamId: { not: null },
-      lastSeenAt: { gte: connStaleBefore },
-    },
-    select: { streamId: true },
-    distinct: ["streamId"],
-    take: 500,
-  });
-
   const streamSettings = await getSettingGroup("streams");
   const perLine = Number(streamSettings.maxConnectionsPerLine ?? 0);
   const maxConnections =
     perLine > 0 && totalActiveLines > 0 ? perLine * totalActiveLines : 0;
 
   const agentStreams = runningStreamIds.filter((r) => r.streamId).length;
-  const connectionStreams = liveConnectionStreams.length;
 
   return {
-    onlineStreams: agentStreams > 0 ? agentStreams : connectionStreams,
+    onlineStreams: agentStreams > 0 ? agentStreams : viewer.onlineStreams,
     totalLiveStreams,
-    onlineUsers: linesWithConnections.length,
+    onlineUsers: viewer.onlineUsers,
     totalActiveLines,
-    onlineConnections: ownerConnections,
+    onlineConnections: viewer.onlineConnections,
     maxConnections,
     onlineServers: onlineServerCount,
     totalServers: allServers,

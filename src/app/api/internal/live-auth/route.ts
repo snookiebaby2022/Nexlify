@@ -114,15 +114,18 @@ export async function GET(req: NextRequest) {
     if ((req.headers.get("x-original-method") || "GET").toUpperCase() !== "HEAD") {
       const path = originalPath(req);
       const isSeg = /\/hls\/seg\d+\.ts$/i.test(path);
-      void trackConnection({
-        lineId: line.id,
-        streamId: cleanId,
-        ip,
-        userAgent: ua,
-        playbackPath: path,
-        mediaBytes: isSeg ? 260_000 : parsed.wantsHls ? 48_000 : 180_000,
-        pruneOthers: true,
-      });
+      // HLS segments are keep-alive via edge pulse only — tracking each segment multiplies rows.
+      if (!isSeg) {
+        void trackConnection({
+          lineId: line.id,
+          streamId: cleanId,
+          ip,
+          userAgent: ua,
+          playbackPath: path,
+          mediaBytes: parsed.wantsHls ? 48_000 : 180_000,
+          pruneOthers: true,
+        });
+      }
     }
     return new NextResponse(null, {
       status: 200,

@@ -42,16 +42,25 @@ export type LineWithNestedBouquetStreams = Prisma.LineGetPayload<{
   };
 }>;
 
+function reviveLineDates<T extends Pick<Line, "expiresAt" | "createdAt" | "updatedAt">>(line: T): T {
+  return {
+    ...line,
+    expiresAt: coerceDate(line.expiresAt) ?? line.expiresAt,
+    createdAt: coerceDate(line.createdAt) ?? line.createdAt,
+    updatedAt: coerceDate(line.updatedAt) ?? line.updatedAt,
+  };
+}
+
 export async function getLineByCredentials(
   username: string,
   password: string
 ): Promise<LineWithBouquets | null> {
-  return cacheGetOrSet(lineCredCacheKey(username, password), 45, async () => {
-    const line = await prisma.line.findUnique({
+  const line = await cacheGetOrSet(lineCredCacheKey(username, password), 45, async () => {
+    const row = await prisma.line.findUnique({
       where: { username },
       include: lineAuthInclude,
     });
-    if (line && line.password === password) return line;
+    if (row && row.password === password) return row;
 
     const code = username.trim().toUpperCase();
     if (!code) return null;
@@ -64,13 +73,22 @@ export async function getLineByCredentials(
     if (password && password !== activeLine.password && password !== code) return null;
     return activeLine;
   });
+  return line ? reviveLineDates(line) : null;
+}
+
+function coerceDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 export function effectiveLineStatus(line: Pick<Line, "status" | "expiresAt">): LineStatus {
   if (line.status === LineStatus.BANNED || line.status === LineStatus.DISABLED) {
     return line.status;
   }
-  if (line.expiresAt && line.expiresAt < new Date()) return LineStatus.EXPIRED;
+  const expiresAt = coerceDate(line.expiresAt);
+  if (expiresAt && expiresAt < new Date()) return LineStatus.EXPIRED;
   return line.status;
 }
 

@@ -26,6 +26,14 @@ export function normalizeConnectionIp(ip?: string | null): string | null {
   return raw;
 }
 
+/** RFC 5737 / deploy smoke-test IPs — must not consume real viewer connection slots. */
+export function isTestConnectionIp(ip?: string | null): boolean {
+  const n = normalizeConnectionIp(ip);
+  if (!n) return false;
+  if (n === "1.2.3.4" || n === "1.1.1.1") return true;
+  return n.startsWith("203.0.113.") || n.startsWith("198.51.100.") || n.startsWith("192.0.2.");
+}
+
 /** Match rows stored with null or "" when IP was missing on either side. */
 export function connectionIpPrismaFilter(ip?: string | null) {
   const normalized = normalizeConnectionIp(ip);
@@ -110,30 +118,48 @@ export async function countActiveConnectionsForLine(lineId: string) {
 
 /** Count distinct viewer sessions (line + stream + IP), not duplicate DB rows. */
 export async function countDistinctActiveConnections(ownerId?: string): Promise<number> {
-  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
-  const cacheKey = ownerId ? `conn:distinct:${ownerId}` : "conn:distinct:all";
-  return cacheGetOrSet(cacheKey, CONNECTIONS_CACHE_TTL, async () => {
-    return countDistinctActiveConnectionsUncached(ownerId, staleBefore);
-  });
+  const stats = await liveViewerStats(ownerId);
+  return stats.onlineConnections;
 }
 
 /** Uncached count for real-time dashboard SSE (no Redis delay). */
 export async function countDistinctActiveConnectionsUncached(
   ownerId?: string,
-  staleBefore: Date = new Date(Date.now() - LIVE_STALE_MS)
+  _staleBefore: Date = new Date(Date.now() - LIVE_STALE_MS)
 ): Promise<number> {
-  const groups = await prisma.liveConnection.groupBy({
-    by: ["lineId", "streamId", "ip"],
-    where: ownerId
-      ? { line: { ownerId }, lastSeenAt: { gte: staleBefore } }
-      : { lastSeenAt: { gte: staleBefore } },
-  });
-  return groups.length;
+  const stats = await liveViewerStats(ownerId);
+  return stats.onlineConnections;
 }
 
 /** Count total active connections without loading rows into memory */
 export async function countActiveConnections(ownerId?: string): Promise<number> {
   return countDistinctActiveConnections(ownerId);
+}
+
+/**
+ * Open connections + online users from the same Redis-verified session list.
+ * Dashboard KPIs must not mix a cached groupBy with a raw COUNT DISTINCT.
+ */
+export async function liveViewerStats(ownerId?: string): Promise<{
+  onlineConnections: number;
+  onlineUsers: number;
+  onlineStreams: number;
+}> {
+  const rows = await listLiveConnections(ownerId);
+  const users = new Set<string>();
+  const streams = new Set<string>();
+  let onlineConnections = 0;
+  for (const row of rows) {
+    if (isTestConnectionIp(row.ip)) continue;
+    onlineConnections += 1;
+    users.add(row.lineId);
+    if (row.streamId) streams.add(row.streamId);
+  }
+  return {
+    onlineConnections,
+    onlineUsers: users.size,
+    onlineStreams: streams.size,
+  };
 }
 
 /** Distinct active sessions: use groupBy instead of loading all rows */
@@ -143,7 +169,7 @@ export async function countLineSessions(lineId: string) {
     const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
     const result = await prisma.liveConnection.groupBy({
       by: ["ip", "streamId"],
-      where: { lineId, lastSeenAt: { gte: staleBefore } },
+      where: { lineId, lastSeenAt: { gte: staleBefore }, NOT: anonymousIpNotFilter() },
       _count: true,
     });
     return result.length;
@@ -170,24 +196,108 @@ export function connectionCapacityAllows(
   return sameIpDistinctSessions <= maxConnections;
 }
 
-/** Distinct active streams for max-connection enforcement (ignores anonymous/loopback rows when client has IP). */
-async function countCapacitySessions(lineId: string, clientIp?: string | null) {
-  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
-  const normalized = normalizeConnectionIp(clientIp);
-  const where: {
-    lineId: string;
-    lastSeenAt: { gte: Date };
-    NOT?: { OR: Array<{ ip: null } | { ip: string }> };
-  } = {
-    lineId,
-    lastSeenAt: { gte: staleBefore },
+function anonymousIpNotFilter() {
+  return {
+    OR: [
+      { ip: null },
+      { ip: "" },
+      { ip: "127.0.0.1" },
+      { ip: "::1" },
+      { ip: "1.2.3.4" },
+      { ip: "1.1.1.1" },
+      { ip: { startsWith: "203.0.113." } },
+      { ip: { startsWith: "198.51.100." } },
+      { ip: { startsWith: "192.0.2." } },
+    ],
   };
-  if (normalized) {
-    where.NOT = { OR: [{ ip: null }, { ip: "" }, { ip: "127.0.0.1" }, { ip: "::1" }] };
+}
+
+/** Drop deploy/probe rows so they never block max_connections for real viewers. */
+async function pruneTestConnectionRows(lineId: string) {
+  const result = await prisma.liveConnection.deleteMany({
+    where: {
+      lineId,
+      OR: [
+        { ip: "1.2.3.4" },
+        { ip: "1.1.1.1" },
+        { ip: { startsWith: "203.0.113." } },
+        { ip: { startsWith: "198.51.100." } },
+        { ip: { startsWith: "192.0.2." } },
+      ],
+    },
+  });
+  if (result.count > 0) void cacheDel("conn:*").catch(() => {});
+}
+
+function sessionKey(lineId: string, streamId: string | null | undefined, ip?: string | null) {
+  return `${lineId}|${streamId ?? ""}|${normalizeConnectionIp(ip) ?? ""}`;
+}
+
+/** One live row per line + stream + viewer IP (XCIPTV/HLS must not multiply sessions). */
+async function dedupeLiveConnectionRows(
+  lineId: string,
+  streamId?: string | null,
+  clientIp?: string | null
+) {
+  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
+  const rows = await prisma.liveConnection.findMany({
+    where: {
+      lineId,
+      lastSeenAt: { gte: staleBefore },
+      ...(streamId ? { streamId } : {}),
+      ...(clientIp !== undefined ? connectionIpPrismaFilter(clientIp) : {}),
+    },
+    orderBy: { lastSeenAt: "desc" },
+    select: { id: true, streamId: true, ip: true, lastSeenAt: true },
+    take: 200,
+  });
+  const keepIds = new Set<string>();
+  const dropIds: string[] = [];
+  for (const row of rows) {
+    const key = sessionKey(lineId, row.streamId, row.ip);
+    if (keepIds.has(key)) {
+      dropIds.push(row.id);
+    } else {
+      keepIds.add(key);
+    }
   }
+  if (dropIds.length) {
+    await prisma.liveConnection.deleteMany({ where: { id: { in: dropIds } } });
+    void cacheDel("conn:*").catch(() => {});
+  }
+}
+
+/** Drop dead rows for one line before enforcing max connections (edge pulse can lag). */
+async function pruneLineStaleConnections(lineId: string, thresholdMs: number = PLAYBACK_STALE_MS) {
+  const staleBefore = new Date(Date.now() - thresholdMs);
+  const staleRows = await prisma.liveConnection.findMany({
+    where: { lineId, lastSeenAt: { lt: staleBefore }, streamId: { not: null } },
+    select: { id: true, lineId: true, streamId: true, ip: true },
+    take: 500,
+  });
+  if (!staleRows.length) return 0;
+  const toDelete: string[] = [];
+  for (const row of staleRows) {
+    if (!row.streamId) continue;
+    if (await isLiveSessionActive(row.lineId, row.streamId, row.ip)) continue;
+    toDelete.push(row.id);
+  }
+  if (!toDelete.length) return 0;
+  const result = await prisma.liveConnection.deleteMany({ where: { id: { in: toDelete } } });
+  if (result.count > 0) void cacheDel("conn:*").catch(() => {});
+  return result.count;
+}
+
+/** Distinct active streams for max-connection enforcement (never counts anonymous/loopback rows). */
+async function countCapacitySessions(lineId: string) {
+  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
   const result = await prisma.liveConnection.groupBy({
     by: ["streamId"],
-    where,
+    where: {
+      lineId,
+      lastSeenAt: { gte: staleBefore },
+      NOT: anonymousIpNotFilter(),
+    },
   });
   return result.length;
 }
@@ -198,7 +308,10 @@ export async function lineHasConnectionCapacity(
   opts?: { streamId?: string; clientIp?: string }
 ) {
   if (maxConnections <= 0) return true;
+  await pruneTestConnectionRows(lineId);
+  await pruneLineStaleConnections(lineId);
   const clientIp = normalizeConnectionIp(opts?.clientIp);
+  if (isTestConnectionIp(clientIp)) return true;
   const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
 
   // Same stream refresh / HLS segment from an existing viewer — always allow.
@@ -230,7 +343,7 @@ export async function lineHasConnectionCapacity(
     }
   }
 
-  const active = await countCapacitySessions(lineId, clientIp);
+  const active = await countCapacitySessions(lineId);
   return active < maxConnections;
 }
 
@@ -278,6 +391,10 @@ export async function trackConnection(opts: {
   pruneOthers?: boolean;
 }): Promise<string | null> {
   const clientIp = normalizeConnectionIp(opts.ip);
+  // Deploy smoke tests must not occupy real viewer slots or Live Connections rows.
+  if (isTestConnectionIp(clientIp ?? opts.ip)) {
+    return null;
+  }
   // Hard kick: do not revive a session that was just kicked
   if (await isSessionKicked(opts.lineId, clientIp ?? opts.ip)) {
     return null;
@@ -313,19 +430,12 @@ export async function trackConnection(opts: {
   // Channel zap: only on explicit session start (live-auth / first GET), never on heartbeats.
   if (opts.pruneOthers && clientIp && streamId) {
     await pruneOtherViewerStreams(opts.lineId, streamId, clientIp);
-  } else if (clientIp) {
-    await prisma.liveConnection.deleteMany({
-      where: {
-        lineId: opts.lineId,
-        ip: clientIp,
-      },
-    });
-  } else {
+  } else if (!clientIp && streamId) {
     await prisma.liveConnection.deleteMany({
       where: {
         lineId: opts.lineId,
         OR: [{ ip: null }, { ip: "" }],
-        streamId: streamId ? { not: streamId } : undefined,
+        streamId: { not: streamId },
       },
     });
   }
@@ -367,11 +477,15 @@ export async function trackConnection(opts: {
 
   if (!existing && clientIp && streamId) {
     const loose = await prisma.liveConnection.findFirst({
-      where: { lineId: opts.lineId, streamId },
+      where: {
+        lineId: opts.lineId,
+        streamId,
+        OR: [{ ip: null }, { ip: "" }, { ip: "127.0.0.1" }, { ip: "::1" }],
+      },
       orderBy: { lastSeenAt: "desc" },
     });
     if (loose) {
-      await prisma.liveConnection.update({
+      await prisma.liveConnection.updateMany({
         where: { id: loose.id },
         data: { lastSeenAt: new Date(), ip: clientIp },
       });
@@ -393,12 +507,13 @@ export async function trackConnection(opts: {
         streamId,
         ip: opts.ip,
       });
+      await dedupeLiveConnectionRows(opts.lineId, streamId, clientIp);
       return loose.id;
     }
   }
 
   if (existing) {
-    await prisma.liveConnection.update({
+    await prisma.liveConnection.updateMany({
       where: { id: existing.id },
       data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },
     });
@@ -420,6 +535,7 @@ export async function trackConnection(opts: {
       streamId,
       ip: opts.ip,
     });
+    await dedupeLiveConnectionRows(opts.lineId, streamId, clientIp);
     return existing.id;
   }
 
@@ -455,6 +571,10 @@ export async function trackConnection(opts: {
     const code = (err as { code?: string })?.code;
     if (code === "P2003") return null;
     throw err;
+  } finally {
+    if (streamId) {
+      await dedupeLiveConnectionRows(opts.lineId, streamId, clientIp);
+    }
   }
 }
 
@@ -482,7 +602,8 @@ const connectionInclude = {
       id: true,
       name: true,
       type: true,
-      server: { select: { name: true } },
+      serverId: true,
+      server: { select: { id: true, name: true } },
     },
   },
 } as const;
@@ -549,10 +670,7 @@ export async function listLiveConnections(ownerId?: string, take = 5000) {
   const keep = new Array<boolean>(rows.length).fill(false);
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;
-    if (!row.streamId) {
-      keep[i] = true;
-      continue;
-    }
+    if (isTestConnectionIp(row.ip) || !row.streamId) continue;
     checkItems.push({ lineId: row.lineId, streamId: row.streamId, ip: row.ip, rowIndex: i });
   }
   if (checkItems.length) {
@@ -561,7 +679,16 @@ export async function listLiveConnections(ownerId?: string, take = 5000) {
       if (activeFlags[j]) keep[checkItems[j]!.rowIndex] = true;
     }
   }
-  return rows.filter((_, i) => keep[i]).slice(0, Math.min(Math.max(1, take), 5000));
+  const live = rows.filter((_, i) => keep[i]);
+  const seen = new Set<string>();
+  const deduped: typeof live = [];
+  for (const row of live) {
+    const key = sessionKey(row.lineId, row.streamId, row.ip);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(row);
+  }
+  return deduped.slice(0, Math.min(Math.max(1, take), 5000));
 }
 
 export async function deleteActiveConnection(id: string, ownerId?: string) {

@@ -18,13 +18,42 @@ import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { checkDdosShield } from "@/lib/ddos-shield";
 import { cacheGet, cacheGetOrSet } from "@/lib/cache";
 import { getCacheTtls } from "@/lib/cache-ttl";
-import { getShortEpg, getShortEpgForChannelIds } from "@/lib/epg";
+import { getShortEpgForChannelIds } from "@/lib/epg";
 import { streamHasArchive } from "@/lib/catchup-playback-url";
 import { getAntiFreezeSettings, schedulePlaylistZapWarm } from "@/lib/anti-freeze";
 import { iptvCorsPreflight, iptvJson } from "@/lib/iptv-cors";
 import { xtreamDeltaArray } from "@/lib/xtream-safe";
 import { resolveClientPlaybackProfile } from "@/lib/client-playback-profiles";
 import { prisma } from "@/lib/prisma";
+
+async function resolveXtreamEpgListings(
+  lineId: string,
+  streamId: string,
+  limit: number
+): Promise<Awaited<ReturnType<typeof getShortEpgForChannelIds>>> {
+  const resolved = await resolveStreamIdParam(streamId, { lineId });
+  const stream = resolved
+    ? await prisma.stream.findUnique({
+        where: { id: resolved },
+        select: {
+          epgChannelId: true,
+          channelId: true,
+          id: true,
+          vodMode: true,
+          archiveDays: true,
+          timeshiftSeconds: true,
+          isShifted: true,
+        },
+      })
+    : null;
+  const channelIds = stream
+    ? [stream.epgChannelId, stream.channelId, stream.id, streamId].filter(
+        (v): v is string => Boolean(v?.trim())
+      )
+    : [streamId];
+  const archivable = stream ? streamHasArchive(stream) : false;
+  return getShortEpgForChannelIds(channelIds, limit, archivable);
+}
 
 export async function OPTIONS() {
   return iptvCorsPreflight();
@@ -94,15 +123,16 @@ export async function GET(req: NextRequest) {
   }
 
   const baseUrl = serverBaseUrl(req.url, req.headers);
+  const userAgent = req.headers.get("user-agent");
 
   if (!action) {
-    return j(await xtreamUserInfo(line, baseUrl));
+    return j(await xtreamUserInfo(line, baseUrl, userAgent));
   }
 
   switch (action) {
     case "get_live_categories": {
       const ttl = await getCacheTtls();
-      const payload = await cacheGetOrSet(`xtream:live_categories:v4:${line.id}`, ttl.categories, () =>
+      const payload = await cacheGetOrSet(`xtream:live_categories:v5:${line.id}`, ttl.categories, () =>
         xtreamLiveCategoriesForLine(line)
       );
       return j(xtreamDeltaArray(payload, clientTimestamp, (c) => Number(c.created_at || 0)));
@@ -110,25 +140,24 @@ export async function GET(req: NextRequest) {
     case "get_live_streams": {
       const categoryId = req.nextUrl.searchParams.get("category_id");
       const ttl = await getCacheTtls();
-      const cacheKey = `xtream:live_streams:v4:${line.id}:${categoryId ?? "all"}`;
+      const cacheKey = `xtream:live_streams:v5:${line.id}:${categoryId ?? "all"}`;
       const cached = await cacheGet<Awaited<ReturnType<typeof xtreamLiveStreams>>>(cacheKey);
       const payload =
         cached ??
         (await cacheGetOrSet(cacheKey, Math.min(ttl.categories || 60, 90), () =>
           xtreamLiveStreams(line, baseUrl, categoryId)
         ));
-      if (!cached) {
-        const antiFreeze = await getAntiFreezeSettings();
-        const profile = resolveClientPlaybackProfile(req.headers.get("user-agent"));
-        if (antiFreeze.zapPrefetchOnPlaylist && profile.zapPrefetchOnPlaylist) {
-          const ids = payload.map((s) => String(s.stream_id));
+      const profile = resolveClientPlaybackProfile(userAgent);
+      if (!cached && profile.zapPrefetchOnPlaylist) {
+        void getAntiFreezeSettings().then((antiFreeze) => {
+          if (!antiFreeze.zapPrefetchOnPlaylist) return;
           schedulePlaylistZapWarm(
             line.id,
-            ids,
-            { clientIp: getClientIp(req), userAgent: req.headers.get("user-agent") ?? undefined },
+            payload.map((s) => String(s.stream_id)),
+            { clientIp: getClientIp(req), userAgent: userAgent ?? undefined },
             antiFreeze
           );
-        }
+        });
       }
       return j(xtreamDeltaArray(payload, clientTimestamp, (s) => s.updated_at ?? 0));
     }
@@ -187,60 +216,28 @@ export async function GET(req: NextRequest) {
     case "get_short_epg": {
       const streamId = req.nextUrl.searchParams.get("stream_id");
       if (!streamId) return j({ epg_listings: [] });
-      const resolved = await resolveStreamIdParam(streamId, { lineId: line.id });
-      const stream = resolved
-        ? await prisma.stream.findUnique({
-            where: { id: resolved },
-            select: {
-              epgChannelId: true,
-              channelId: true,
-              id: true,
-              vodMode: true,
-              archiveDays: true,
-              timeshiftSeconds: true,
-              isShifted: true,
-            },
-          })
-        : null;
-      const channelIds = stream
-        ? [stream.epgChannelId, stream.channelId, stream.id, streamId].filter(
-            (v): v is string => Boolean(v?.trim())
-          )
-        : [streamId];
-      const archivable = stream ? streamHasArchive(stream) : false;
-      const epg = await getShortEpgForChannelIds(channelIds, 4, archivable);
+      const epg = await resolveXtreamEpgListings(line.id, streamId, 4);
+      return j({ epg_listings: epg });
+    }
+    case "get_epg": {
+      const streamId = req.nextUrl.searchParams.get("stream_id");
+      if (!streamId) return j({ epg_listings: [] });
+      const limit = Math.min(
+        500,
+        Math.max(1, parseInt(req.nextUrl.searchParams.get("limit") ?? "50", 10) || 50)
+      );
+      const epg = await resolveXtreamEpgListings(line.id, streamId, limit);
       return j({ epg_listings: epg });
     }
     case "get_simple_data_table": {
       const streamId = req.nextUrl.searchParams.get("stream_id");
       if (!streamId) return j({ epg_listings: [] });
-      const resolved = await resolveStreamIdParam(streamId, { lineId: line.id });
-      const stream = resolved
-        ? await prisma.stream.findUnique({
-            where: { id: resolved },
-            select: {
-              epgChannelId: true,
-              channelId: true,
-              id: true,
-              vodMode: true,
-              archiveDays: true,
-              timeshiftSeconds: true,
-              isShifted: true,
-            },
-          })
-        : null;
-      const channelIds = stream
-        ? [stream.epgChannelId, stream.channelId, stream.id, streamId].filter(
-            (v): v is string => Boolean(v?.trim())
-          )
-        : [streamId];
-      const archivable = stream ? streamHasArchive(stream) : false;
-      return j({ epg_listings: await getShortEpgForChannelIds(channelIds, 10, archivable) });
+      return j({ epg_listings: await resolveXtreamEpgListings(line.id, streamId, 10) });
     }
     case "get_user_info":
-      return j(await xtreamUserInfo(line, baseUrl));
+      return j(await xtreamUserInfo(line, baseUrl, userAgent));
     case "get_server_info": {
-      const payload = await xtreamUserInfo(line, baseUrl);
+      const payload = await xtreamUserInfo(line, baseUrl, userAgent);
       return j(payload);
     }
     case "get_bouquets": {
@@ -255,7 +252,7 @@ export async function GET(req: NextRequest) {
       return j(rows);
     }
     default:
-      return j(await xtreamUserInfo(line, baseUrl));
+      return j(await xtreamUserInfo(line, baseUrl, userAgent));
   }
 }
 

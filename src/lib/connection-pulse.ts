@@ -32,21 +32,14 @@ export async function pulseLiveConnection(opts: {
   void recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", qualityBytes);
   void touchLiveSession(lineId, streamId, clientIp);
 
-  let row = await prisma.liveConnection.findFirst({
+  const row = await prisma.liveConnection.findFirst({
     where: { lineId, streamId, ...connectionIpPrismaFilter(clientIp) },
     orderBy: { lastSeenAt: "desc" },
     select: { id: true },
   });
-  if (!row) {
-    row = await prisma.liveConnection.findFirst({
-      where: { lineId, streamId },
-      orderBy: { lastSeenAt: "desc" },
-      select: { id: true },
-    });
-  }
 
   if (row) {
-    await prisma.liveConnection.update({
+    await prisma.liveConnection.updateMany({
       where: { id: row.id },
       data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },
     });
@@ -54,18 +47,5 @@ export async function pulseLiveConnection(opts: {
     return;
   }
 
-  // Row missing (race after zap) — upsert without pruning other streams.
-  try {
-    await prisma.liveConnection.create({
-      data: {
-        lineId,
-        streamId,
-        ip: clientIp ?? "",
-        lastSeenAt: new Date(),
-      },
-    });
-  } catch {
-    /* concurrent insert — ignore */
-  }
-  void cacheDel("conn:*").catch(() => {});
+  // Edge pulse only refreshes rows opened by live-auth / trackConnection — never insert duplicates.
 }

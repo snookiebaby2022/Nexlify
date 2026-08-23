@@ -42,7 +42,6 @@ export async function reassignUncategorizedLiveStreams(
     where: { name: { equals: "Uncategorized", mode: "insensitive" }, categoryType: "LIVE" },
     select: { id: true },
   });
-  if (!uncat) return { moved: 0, remaining: 0, byCategory: {} };
 
   const cats = await prisma.category.findMany({
     where: { categoryType: "LIVE" },
@@ -86,9 +85,17 @@ export async function reassignUncategorizedLiveStreams(
     findCat(cats, "Music Channels") || (await ensureLiveCategory(prisma, "Music Channels", cache));
 
   const streams = await prisma.stream.findMany({
-    where: { categoryId: uncat.id, type: "LIVE" },
+    where: {
+      type: "LIVE",
+      OR: [
+        ...(uncat ? [{ categoryId: uncat.id }] : []),
+        { categoryId: null },
+        { categoryId: "" },
+      ],
+    },
     select: { id: true, name: true },
   });
+  if (!streams.length) return { moved: 0, remaining: 0, byCategory: {} };
 
   const byCategory: Record<string, number> = {};
   const updates = new Map<string, string[]>(); // categoryId -> streamIds
@@ -170,6 +177,11 @@ export async function reassignUncategorizedLiveStreams(
       assign(usaDoc, s.id, "USA Documentary");
       continue;
     }
+    if (/^UK:|^BBC|^ITV|^CH4|^CH5|^SKY\b|^GOLD\b|^Dave\b|^Quest\b/i.test(n)) {
+      assign(ukEnt, s.id, "UK Entertainment");
+      continue;
+    }
+    assign(usaEnt, s.id, "General");
   }
 
   let moved = 0;
@@ -185,6 +197,15 @@ export async function reassignUncategorizedLiveStreams(
     }
   }
 
-  const remaining = await prisma.stream.count({ where: { categoryId: uncat.id } });
+  const remaining = await prisma.stream.count({
+    where: {
+      type: "LIVE",
+      OR: [
+        ...(uncat ? [{ categoryId: uncat.id }] : []),
+        { categoryId: null },
+        { categoryId: "" },
+      ],
+    },
+  });
   return { moved, remaining, byCategory };
 }

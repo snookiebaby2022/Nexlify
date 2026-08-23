@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { PanelRole, Prisma } from "@prisma/client";
-import { LIVE_STALE_MS, countDistinctActiveConnections, listLiveConnections } from "@/lib/connections";
+import { PanelRole } from "@prisma/client";
+import { isTestConnectionIp, listLiveConnections } from "@/lib/connections";
 import { sampleLocalHostMetrics } from "@/lib/host-metrics";
 import { getServerPollIntervals } from "@/lib/perf-polling";
 
@@ -23,28 +23,15 @@ export async function GET(req: NextRequest) {
       const update = async () => {
         try {
           const now = new Date();
-          const connStaleBefore = new Date(Date.now() - LIVE_STALE_MS);
-          const ownerSql = ownerId
-            ? Prisma.sql`AND lc."lineId" IN (SELECT id FROM "Line" WHERE "ownerId" = ${ownerId})`
-            : Prisma.empty;
-
-          const [onlineConnections, bandwidthSnap, activeLines, sampleConns, distinctRow] =
-            await Promise.all([
-            countDistinctActiveConnections(ownerId),
+          const [rows, bandwidthSnap, activeLines] = await Promise.all([
+            listLiveConnections(ownerId),
             prisma.bandwidthSnapshot.findFirst({ orderBy: { createdAt: "desc" } }),
             prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
-            listLiveConnections(ownerId, 10),
-            prisma.$queryRaw<Array<{ users: bigint; streams: bigint }>>`
-              SELECT COUNT(DISTINCT lc."lineId")::bigint AS users,
-                     COUNT(DISTINCT lc."streamId") FILTER (WHERE lc."streamId" IS NOT NULL)::bigint AS streams
-              FROM "LiveConnection" lc
-              WHERE lc."lastSeenAt" >= ${connStaleBefore}
-              ${ownerSql}
-            `,
           ]);
 
-          const onlineUsers = Number(distinctRow[0]?.users ?? 0);
-          const onlineStreams = Number(distinctRow[0]?.streams ?? 0);
+          const live = rows.filter((r) => !isTestConnectionIp(r.ip));
+          const users = new Set(live.map((r) => r.lineId));
+          const streams = new Set(live.map((r) => r.streamId).filter(Boolean));
 
           const nic = sampleLocalHostMetrics();
           let networkOutMbps = nic.uploadMbps;
@@ -56,13 +43,13 @@ export async function GET(req: NextRequest) {
 
           send({
             timestamp: now.toISOString(),
-            onlineConnections,
-            onlineUsers,
-            onlineStreams,
+            onlineConnections: live.length,
+            onlineUsers: users.size,
+            onlineStreams: streams.size,
             totalActiveLines: activeLines,
             networkInMbps,
             networkOutMbps,
-            connections: sampleConns.map((c) => ({
+            connections: live.slice(0, 10).map((c) => ({
               id: c.id,
               line: c.line?.username ?? "unknown",
               stream: c.stream?.name ?? "unknown",

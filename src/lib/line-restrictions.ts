@@ -63,6 +63,18 @@ export function normalizeUserAgentField(raw?: string | null): string | null {
   );
 }
 
+/** Built-in decoders XCIPTV/Smarters launch (LibVLC, ExoPlayer) — not the app User-Agent. */
+const COMPANION_PLAYER_PATTERNS = ["vlc", "libvlc", "lavf", "exoplayer", "okhttp", "ffmpeg"];
+const IPTV_APP_PATTERNS = ["xciptv", "smarters", "tivimate", "iptv", "perfect player", "ghb", "stb"];
+
+function isCompanionPlayerUa(ua: string): boolean {
+  return COMPANION_PLAYER_PATTERNS.some((p) => ua.includes(p));
+}
+
+function allowedListIncludesIptvApp(allowed: string[]): boolean {
+  return allowed.some((pat) => IPTV_APP_PATTERNS.some((app) => pat.includes(app) || app.includes(pat)));
+}
+
 export function checkLineUserAgent(
   line: { allowedUserAgents?: string | null; disallowedUserAgents?: string | null },
   userAgent?: string
@@ -74,7 +86,12 @@ export function checkLineUserAgent(
 
   const allowed = parseUserAgentPatterns(line.allowedUserAgents);
   // Empty allow-list (null, "", "[]", JSON []) means no restriction
-  if (allowed.length > 0 && !allowed.some((pat) => ua.includes(pat))) return false;
+  if (allowed.length > 0) {
+    if (allowed.some((pat) => ua.includes(pat))) return true;
+    // XCIPTV ExoPlayer keeps the app UA; LibVLC/VLC sends VLC/LibVLC — allow when line permits the app.
+    if (isCompanionPlayerUa(ua) && allowedListIncludesIptvApp(allowed)) return true;
+    return false;
+  }
 
   return true;
 }

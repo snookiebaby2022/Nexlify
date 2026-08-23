@@ -6,12 +6,20 @@ import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
 import { cacheGetOrSet } from "@/lib/cache";
 
-const XMLTV_CACHE_SEC = 300;
-const PROGRAMS_PER_CHANNEL = 24;
+const XMLTV_CACHE_SEC = 180;
+const PROGRAMS_PER_CHANNEL = 8;
+const DESC_MAX_CHARS = 160;
+
+function truncateXmltvDesc(value: string | null | undefined): string | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  if (text.length <= DESC_MAX_CHARS) return text;
+  return `${text.slice(0, DESC_MAX_CHARS - 1).trimEnd()}…`;
+}
 
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
-export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 24): Promise<string> {
-  const cacheKey = `xmltv:${line.id}:${hoursAhead}:${PROGRAMS_PER_CHANNEL}`;
+export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 12): Promise<string> {
+  const cacheKey = `xmltv:v3:${line.id}:${hoursAhead}:${PROGRAMS_PER_CHANNEL}`;
   return cacheGetOrSet(cacheKey, XMLTV_CACHE_SEC, () => buildLineXmltvBody(line, hoursAhead));
 }
 
@@ -42,6 +50,7 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
       WHERE lb."lineId" = ${line.id}
         AND s.type = ${StreamType.LIVE}::"StreamType"
         AND s."isActive" = true
+        AND NULLIF(TRIM(s."epgChannelId"), '') IS NOT NULL
     ),
     ranked_programs AS (
       SELECT
@@ -86,14 +95,17 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
       programRows.push({
         channelId: String(row.channelId),
         title: row.title,
-        description: row.description,
+        description: truncateXmltvDesc(row.description),
         start: row.start,
         stop: row.stop,
       });
     }
   }
 
-  const lines: string[] = ['<?xml version="1.0" encoding="UTF-8"?>', "<tv>"];
+  const lines: string[] = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<tv generator-info-name="Nexlify">',
+  ];
   for (const [id, name] of channelMap) {
     lines.push(
       `  <channel id="${xmltvSafeText(id)}"><display-name>${xmltvSafeText(name) || "Live"}</display-name></channel>`

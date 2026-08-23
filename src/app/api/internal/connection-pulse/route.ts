@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     streamId,
     ip: body.ip ?? null,
     bytes: body.bytes,
-  });
+  }).catch(() => undefined);
 
   return new NextResponse(null, { status: 204 });
 }

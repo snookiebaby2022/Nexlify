@@ -130,6 +130,12 @@ normalize_demo_host() {
 
 sanitize_demo_hosts "$PRIMARY"
 
+# Redis — required for line auth cache, Xtream catalog, connection limits (PM2 also reads via ecosystem.config.cjs).
+if [ -z "$(read_env REDIS_URL)" ]; then
+  set_kv REDIS_URL "redis://127.0.0.1:6379"
+  echo "Panel env: set REDIS_URL=redis://127.0.0.1:6379"
+fi
+
 # Disk-backed DVR / catch-up recordings (created on every install + panel restart env sync).
 if [ -f scripts/setup-dvr-storage.sh ]; then
   bash scripts/setup-dvr-storage.sh
