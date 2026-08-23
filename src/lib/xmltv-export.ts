@@ -4,11 +4,12 @@ import { Prisma, StreamType } from "@prisma/client";
 import { formatXmltvDateInTimezone } from "@/lib/epg-time";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
-import { xmltvChannelIds } from "@/lib/xmltv-http";
+import { cacheGetOrSet } from "@/lib/cache";
 
 const PROGRAMS_PER_CHANNEL = 8;
 const DESC_MAX_CHARS = 160;
-const EPG_ID_CHUNK = 400;
+const EPG_ID_CHUNK = 800;
+const XMLTV_CACHE_TTL_SEC = 180;
 
 function truncateXmltvDesc(value: string | null | undefined): string | null {
   const text = String(value ?? "").trim();
@@ -19,7 +20,9 @@ function truncateXmltvDesc(value: string | null | undefined): string | null {
 
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
 export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 12): Promise<string> {
-  return buildLineXmltvBody(line, hoursAhead);
+  return cacheGetOrSet(`xmltv:v8:${line.id}:${hoursAhead}`, XMLTV_CACHE_TTL_SEC, () =>
+    buildLineXmltvBody(line, hoursAhead)
+  );
 }
 
 type LineChannel = {
@@ -129,12 +132,7 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
     const epgId = String(row.epg_id || "").trim();
     if (!epgId) continue;
     const extra = row.stream_channel_id?.trim();
-    const ids =
-      channels.length <= 4000
-        ? xmltvChannelIds(epgId, row.stream_cuid, extra)
-        : extra && extra !== epgId
-          ? [epgId, extra]
-          : [epgId];
+    const ids = extra && extra !== epgId ? [epgId, extra] : [epgId];
     for (const id of ids) {
       if (!channelMap.has(id)) channelMap.set(id, row.name || "Live");
     }
