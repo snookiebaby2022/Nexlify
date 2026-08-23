@@ -96,6 +96,8 @@ const sharedPanelEnv = {
   REDIS_URL: fileEnv.REDIS_URL || process.env.REDIS_URL || "redis://127.0.0.1:6379",
   REDIS_CLUSTER_NODES: fileEnv.REDIS_CLUSTER_NODES || process.env.REDIS_CLUSTER_NODES || "",
   PATH: pgBinPath(),
+  // EPG timestamps are stored as UTC-naive; a Moscow/other OS TZ shifts XCIPTV by 2–3 hours.
+  TZ: fileEnv.TZ || process.env.TZ || "UTC",
   // Large SQL migration uploads (~1GB+) need headroom for parse + preview.
   // Override via NODE_OPTIONS in .env when a box is memory-constrained.
   NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=8192",

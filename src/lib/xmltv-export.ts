@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import type { LineWithBouquets } from "@/lib/lines";
 import { Prisma, StreamType } from "@prisma/client";
-import { formatXmltvDateUtc } from "@/lib/epg-time";
+import { formatXmltvDateXui } from "@/lib/epg-time";
+import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
 import { gzipSync, gunzipSync } from "zlib";
 import { cacheGet, cacheSet } from "@/lib/cache";
@@ -21,7 +22,7 @@ function truncateXmltvDesc(value: string | null | undefined): string | null {
 
 /** Gzipped XMLTV — cached as base64 so HTTP gzip is not built twice in RAM. */
 export async function buildLineXmltvGzip(line: LineWithBouquets, hoursAhead = 12): Promise<Buffer> {
-  const key = `xmltv:gz:v11:${line.id}:${hoursAhead}`;
+  const key = `xmltv:gz:v12:${line.id}:${hoursAhead}`;
   const hit = await cacheGet<string>(key);
   if (typeof hit === "string" && hit.length > 8) {
     try {
@@ -84,13 +85,13 @@ async function loadProgramsForEpgIds(
             e."channelId",
             e.title,
             e.description,
-            e.start,
-            e.stop,
+            e.start AT TIME ZONE 'UTC' AS start,
+            e.stop AT TIME ZONE 'UTC' AS stop,
             ROW_NUMBER() OVER (PARTITION BY e."channelId" ORDER BY e.start ASC) AS rn
           FROM "EpgProgram" e
           WHERE e."channelId" IN (${Prisma.join(chunk)})
-            AND e.stop >= ${now}
-            AND e.start <= ${until}
+            AND e.stop >= (${now} AT TIME ZONE 'UTC')
+            AND e.start <= (${until} AT TIME ZONE 'UTC')
         ) x
         WHERE x.rn <= ${PROGRAMS_PER_CHANNEL}
       `;
@@ -103,6 +104,8 @@ async function loadProgramsForEpgIds(
 }
 
 async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): Promise<string> {
+  const general = await getSettingGroup("general");
+  const panelTimezone = String(general.timezone || "Europe/London");
   const now = new Date();
   const until = new Date(now.getTime() + hoursAhead * 3600_000);
 
@@ -211,7 +214,7 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
     const ch = xmltvSafeText(p.channelId);
     if (!ch) continue;
     lines.push(
-      `  <programme start="${formatXmltvDateUtc(p.start)}" stop="${formatXmltvDateUtc(p.stop)}" channel="${ch}">`,
+      `  <programme start="${formatXmltvDateXui(p.start, panelTimezone)}" stop="${formatXmltvDateXui(p.stop, panelTimezone)}" channel="${ch}">`,
       `    <title lang="en">${xmltvSafeText(p.title) || "Programme"}</title>`
     );
     if (p.description) lines.push(`    <desc lang="en">${xmltvSafeText(p.description)}</desc>`);

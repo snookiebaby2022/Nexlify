@@ -99,7 +99,7 @@ export function formatXmltvDateInTimezone(d: Date, timeZone: string): string {
 
 /**
  * Xtream/XUI xmltv.php style: UTC wall clock + `+0000`.
- * XCIPTV parses the 14 digits and ignores the offset, then applies the device TZ.
+ * Prefer `formatXmltvDateXui` for XCIPTV — it shows the 14 digits as local time.
  */
 export function formatXmltvDateUtc(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -107,6 +107,15 @@ export function formatXmltvDateUtc(d: Date): string {
     `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
     `${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())} +0000`
   );
+}
+
+/**
+ * XUI xmltv.php: panel-local wall clock with dummy `+0000`.
+ * XCIPTV ignores the offset and displays the 14 digits as the programme time.
+ */
+export function formatXmltvDateXui(d: Date, timeZone: string): string {
+  const p = partsMap(d, timeZone, false);
+  return `${p.year}${p.month}${p.day}${p.hour}${p.minute}${p.second} +0000`;
 }
 
 export function decodeXtreamBase64(value: string): string {
