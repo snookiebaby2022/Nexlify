@@ -6,7 +6,7 @@ import { xmltvChannelIds } from "@/lib/xmltv-http";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
 import { gzip, gunzipSync } from "zlib";
-import { promisify } from "node:util";
+import { promisify } from "util";
 import { cacheGet, cacheSet } from "@/lib/cache";
 
 const gzipAsync = promisify(gzip);

@@ -1,5 +1,5 @@
-import { gzip } from "node:zlib";
-import { promisify } from "node:util";
+import { gzip } from "zlib";
+import { promisify } from "util";
 import { NextResponse } from "next/server";
 
 const gzipAsync = promisify(gzip);
