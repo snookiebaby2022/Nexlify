@@ -8,10 +8,10 @@ import { gzipSync, gunzipSync } from "zlib";
 import { cacheGet, cacheSet } from "@/lib/cache";
 import { cuidToNum } from "@/lib/xtream-stream-id";
 
-const PROGRAMS_PER_CHANNEL = 2;
+const PROGRAMS_PER_CHANNEL = 16;
 const DESC_MAX_CHARS = 160;
 const EPG_ID_CHUNK = 1500;
-const XMLTV_CACHE_TTL_SEC = 1800;
+const XMLTV_CACHE_TTL_SEC = 600;
 
 function truncateXmltvDesc(value: string | null | undefined): string | null {
   const text = String(value ?? "").trim();
@@ -21,8 +21,9 @@ function truncateXmltvDesc(value: string | null | undefined): string | null {
 }
 
 /** Gzipped XMLTV — cached as base64 so HTTP gzip is not built twice in RAM. */
-export async function buildLineXmltvGzip(line: LineWithBouquets, hoursAhead = 12): Promise<Buffer> {
-  const key = `xmltv:gz:v12:${line.id}:${hoursAhead}`;
+export async function buildLineXmltvGzip(line: LineWithBouquets, hoursAhead?: number): Promise<Buffer> {
+  const hours = hoursAhead && hoursAhead > 0 ? hoursAhead : 24;
+  const key = `xmltv:gz:v13:${line.id}:${hours}`;
   const hit = await cacheGet<string>(key);
   if (typeof hit === "string" && hit.length > 8) {
     try {
@@ -31,14 +32,14 @@ export async function buildLineXmltvGzip(line: LineWithBouquets, hoursAhead = 12
       /* rebuild */
     }
   }
-  const xml = await buildLineXmltvBody(line, hoursAhead);
+  const xml = await buildLineXmltvBody(line, hours);
   const gz = gzipSync(Buffer.from(xml, "utf8"), { level: 6 });
   await cacheSet(key, gz.toString("base64"), XMLTV_CACHE_TTL_SEC);
   return gz;
 }
 
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
-export async function buildLineXmltv(line: LineWithBouquets, hoursAhead = 12): Promise<string> {
+export async function buildLineXmltv(line: LineWithBouquets, hoursAhead?: number): Promise<string> {
   return gunzipSync(await buildLineXmltvGzip(line, hoursAhead)).toString("utf8");
 }
 
@@ -85,13 +86,13 @@ async function loadProgramsForEpgIds(
             e."channelId",
             e.title,
             e.description,
-            e.start AT TIME ZONE 'UTC' AS start,
-            e.stop AT TIME ZONE 'UTC' AS stop,
+            e.start,
+            e.stop,
             ROW_NUMBER() OVER (PARTITION BY e."channelId" ORDER BY e.start ASC) AS rn
           FROM "EpgProgram" e
           WHERE e."channelId" IN (${Prisma.join(chunk)})
-            AND e.stop >= (${now} AT TIME ZONE 'UTC')
-            AND e.start <= (${until} AT TIME ZONE 'UTC')
+            AND e.stop >= ${now}
+            AND e.start <= ${until}
         ) x
         WHERE x.rn <= ${PROGRAMS_PER_CHANNEL}
       `;
@@ -105,9 +106,11 @@ async function loadProgramsForEpgIds(
 
 async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): Promise<string> {
   const general = await getSettingGroup("general");
+  const streams = await getSettingGroup("streams");
   const panelTimezone = String(general.timezone || "Europe/London");
+  const hours = hoursAhead > 0 ? hoursAhead : Number(streams.epgHoursAhead) || 24;
   const now = new Date();
-  const until = new Date(now.getTime() + hoursAhead * 3600_000);
+  const until = new Date(now.getTime() + hours * 3600_000);
 
   const channels = await prisma.$queryRaw<LineChannel[]>`
     SELECT
@@ -203,7 +206,7 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
   const lines: string[] = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<!DOCTYPE tv SYSTEM "xmltv.dtd">',
-    '<tv generator-info-name="Nexlify">',
+    '<tv generator-info-name="Xtream Codes" generator-info-url="">',
   ];
   for (const [id, name] of channelMap) {
     lines.push(

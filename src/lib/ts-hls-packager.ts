@@ -18,8 +18,8 @@ const READY_TIMEOUT_MS = Math.max(
 const MAX_SESSIONS = Math.max(8, Number(process.env.HLS_MAX_SESSIONS || 128) || 128);
 /** Stop ffmpeg soon after the last HLS viewer so slots free and new zaps start quickly. */
 const IDLE_MS = Math.max(
-  8_000,
-  Number(process.env.HLS_PACKAGER_IDLE_MS || process.env.NEXLIFY_HLS_IDLE_MS || 10_000) || 10_000
+  4_000,
+  Number(process.env.HLS_PACKAGER_IDLE_MS || process.env.NEXLIFY_HLS_IDLE_MS || 5_000) || 5_000
 );
 const REAP_EVERY_MS = 3_000;
 

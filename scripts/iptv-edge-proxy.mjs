@@ -260,8 +260,6 @@ function touchPlaybackSession(ctx, opts = {}) {
     session = { ctx, lastClientAt: now, teardown: null, hls: Boolean(opts.hls || ctx.hls) };
     const tickMs = session.hls ? 1_000 : SESSION_KEEPALIVE_MS;
     session.timer = setInterval(() => {
-      // HLS is many short GETs — no TCP close. MPEG-TS uses clientReq close instead.
-      if (!session.hls) return;
       const idle = Date.now() - session.lastClientAt;
       if (idle > SESSION_IDLE_MS) {
         clearInterval(session.timer);

@@ -43,8 +43,8 @@ export async function HEAD(req: NextRequest) {
     new NextResponse(null, {
       status: 200,
       headers: {
-        "Content-Type": "text/xml; charset=utf-8",
-        "Cache-Control": "private, max-age=1800, no-transform",
+        "Content-Type": "application/xml; charset=utf-8",
+        "Cache-Control": "private, no-cache, no-store, must-revalidate",
       },
     })
   );
@@ -60,8 +60,8 @@ export async function GET(req: NextRequest) {
   const acceptEnc = (req.headers.get("accept-encoding") ?? "").toLowerCase();
   const ua = req.headers.get("user-agent") ?? "";
   const headers = new Headers({
-    "Content-Type": gzipFile ? "application/gzip" : "text/xml; charset=utf-8",
-    "Cache-Control": "private, max-age=1800, no-transform",
+    "Content-Type": gzipFile ? "application/gzip" : "application/xml; charset=utf-8",
+    "Cache-Control": "private, no-cache, no-store, must-revalidate",
     Vary: "Accept-Encoding",
   });
   try {
