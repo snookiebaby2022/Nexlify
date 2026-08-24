@@ -1,7 +1,20 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.42",
+  "latestVersion": "2.0.43",
   "releases": [
+    {
+      "version": "2.0.43",
+      "date": "2026-08-24",
+      "channel": "stable",
+      "summary": "IPTV edge fast lane for panel admin UI — fixes slow/hanging login on port 80.",
+      "changelog": [
+        "Panel login, admin UI, APIs, and Xtream catalog bypass playback auth on iptv-edge",
+        "Panel traffic no longer queues behind capped HTTP agent pools during heavy playback"
+      ],
+      "fixes": [
+        "Admin panel stuck loading when iptv-edge admin socket pool (16) was exhausted by parallel assets"
+      ]
+    },
     {
       "version": "2.0.42",
       "date": "2026-08-24",

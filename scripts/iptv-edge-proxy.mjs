@@ -46,14 +46,14 @@ const backendPort = Number(backendPortRaw || 13000);
 /** Cap sockets per pool so catalog dumps cannot starve login/health. */
 const adminAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: Number(process.env.IPTV_EDGE_ADMIN_SOCKETS || 16),
-  maxFreeSockets: 8,
+  maxSockets: Number(process.env.IPTV_EDGE_ADMIN_SOCKETS || 128),
+  maxFreeSockets: 32,
   timeout: 60_000,
 });
 const apiAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: Number(process.env.IPTV_EDGE_API_SOCKETS || 24),
-  maxFreeSockets: 8,
+  maxSockets: Number(process.env.IPTV_EDGE_API_SOCKETS || 64),
+  maxFreeSockets: 16,
   timeout: 300_000,
 });
 const liveAgent = new http.Agent({
@@ -87,6 +87,7 @@ function isAdminUiPath(urlPath) {
     p.startsWith("/login") ||
     p.startsWith("/admin") ||
     p.startsWith("/reseller") ||
+    p.startsWith("/portal") ||
     p.startsWith("/api/") ||
     p.startsWith("/_next") ||
     p.startsWith("/favicon")
@@ -103,8 +104,9 @@ function isPanelPriorityPath(urlPath) {
 }
 
 function backendAgentFor(urlPath) {
-  if (isAdminUiPath(urlPath)) return adminAgent;
-  if (isCatalogPath(urlPath)) return apiAgent;
+  const pathOnly = String(urlPath || "/").split("?")[0];
+  // Panel UI/catalog must never queue behind a capped pool (one admin tab = 50+ parallel assets).
+  if (isPanelPriorityPath(pathOnly)) return false;
   return liveAgent;
 }
 /** Retry panel upstream while nexlify restarts (ECONNREFUSED on :13000). */
@@ -1381,6 +1383,12 @@ async function onRequest(clientReq, clientRes, ctx) {
       "Access-Control-Allow-Headers": "Content-Type, User-Agent, Accept, Range",
     });
     clientRes.end();
+    return;
+  }
+
+  // Fast lane: panel login, admin UI, APIs, Xtream catalog — skip playback auth/HLS.
+  if (isPanelPriorityPath(pathOnly)) {
+    forward(clientReq, clientRes, ctx);
     return;
   }
 
