@@ -1,20 +1,28 @@
 import { prisma } from "@/lib/prisma";
-import { activeBouquetIds, bouquetMembershipSql, type LineWithBouquets } from "@/lib/lines";
+import { activeBouquetIds, bouquetMembershipSql, lineBouquetCacheToken, type LineWithBouquets } from "@/lib/lines";
 import { StreamType, Prisma } from "@prisma/client";
 import { formatXmltvDateForXtreamApps } from "@/lib/epg-time";
 import { xmltvChannelIds } from "@/lib/xmltv-http";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { xmltvSafeText } from "@/lib/xtream-safe";
-import { gzip, gunzipSync } from "zlib";
-import { promisify } from "util";
-import { cacheGet, cacheSet } from "@/lib/cache";
-
-const gzipAsync = promisify(gzip);
+import { gunzipSync } from "zlib";
+import {
+  catalogBlobPath,
+  catalogFileAgeMs,
+  catalogFileIsFresh,
+  catalogFileIsUsable,
+  CATALOG_BLOB_VERSION,
+  hashCatalogKey,
+  withCatalogBuildLock,
+  writeGzipTextFile,
+} from "@/lib/catalog-disk-cache";
+import { yieldEventLoop } from "@/lib/yield-event-loop";
+import { readFile } from "node:fs/promises";
 
 const PROGRAMS_PER_CHANNEL = 16;
 const DESC_MAX_CHARS = 160;
 const EPG_ID_CHUNK = 1500;
-const XMLTV_CACHE_TTL_SEC = 600;
+const CHANNEL_WRITE_BATCH = 400;
 
 function truncateXmltvDesc(value: string | null | undefined): string | null {
   const text = String(value ?? "").trim();
@@ -23,22 +31,41 @@ function truncateXmltvDesc(value: string | null | undefined): string | null {
   return `${text.slice(0, DESC_MAX_CHARS - 1).trimEnd()}…`;
 }
 
-/** Gzipped XMLTV — cached as base64 so HTTP gzip is not built twice in RAM. */
-export async function buildLineXmltvGzip(line: LineWithBouquets, hoursAhead?: number): Promise<Buffer> {
-  const hours = hoursAhead && hoursAhead > 0 ? hoursAhead : 24;
-  const key = `xmltv:gz:v15:${line.id}:${hours}`;
-  const hit = await cacheGet<string>(key);
-  if (typeof hit === "string" && hit.length > 8) {
-    try {
-      return Buffer.from(hit, "base64");
-    } catch {
-      /* rebuild */
-    }
+function xmltvBlobName(line: LineWithBouquets, hours: number): string {
+  const key = hashCatalogKey([CATALOG_BLOB_VERSION, "xmltv", lineBouquetCacheToken(line), String(hours)]);
+  return `xmltv-${key}.xml.gz`;
+}
+
+async function ensureLineXmltvGzipFile(line: LineWithBouquets, hours: number): Promise<string> {
+  const destPath = catalogBlobPath(xmltvBlobName(line, hours));
+  const age = await catalogFileAgeMs(destPath);
+  const rebuild = async () => {
+    await withCatalogBuildLock(destPath, async () => {
+      await writeLineXmltvGzipFile(line, hours, destPath);
+      return "built" as const;
+    });
+  };
+  if (catalogFileIsFresh(age)) return destPath;
+  if (catalogFileIsUsable(age)) {
+    void rebuild().catch((err) => {
+      console.error("[xmltv] background rebuild failed:", err instanceof Error ? err.message : err);
+    });
+    return destPath;
   }
-  const xml = await buildLineXmltvBody(line, hours);
-  const gz = await gzipAsync(Buffer.from(xml, "utf8"), { level: 3 });
-  await cacheSet(key, gz.toString("base64"), XMLTV_CACHE_TTL_SEC);
-  return gz;
+  await rebuild();
+  return destPath;
+}
+
+/** Path to bouquet-keyed gzip XMLTV — stream this from xmltv.php, do not buffer. */
+export async function resolveLineXmltvGzipPath(line: LineWithBouquets, hoursAhead?: number): Promise<string> {
+  const hours = hoursAhead && hoursAhead > 0 ? hoursAhead : 24;
+  return ensureLineXmltvGzipFile(line, hours);
+}
+
+/** Gzipped XMLTV buffer (tests / small callers). Prefer resolveLineXmltvGzipPath on the HTTP path. */
+export async function buildLineXmltvGzip(line: LineWithBouquets, hoursAhead?: number): Promise<Buffer> {
+  const filePath = await resolveLineXmltvGzipPath(line, hoursAhead);
+  return readFile(filePath);
 }
 
 /** Build XMLTV guide for a line's live channels (from synced EPG sources). */
@@ -52,7 +79,7 @@ export async function buildLineXmltv(line: LineWithBouquets, hoursAhead?: number
  * first zap. Cached xmltv.php (~300ms) is enough for XCIPTV Reload EPG.
  */
 export function warmLineXmltv(line: LineWithBouquets): void {
-  void buildLineXmltvGzip(line).catch((err) => {
+  void resolveLineXmltvGzipPath(line).catch((err) => {
     console.error("[xmltv] warm failed:", err instanceof Error ? err.message : err);
   });
 }
@@ -107,7 +134,7 @@ async function loadProgramsForEpgIds(
   return out;
 }
 
-async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): Promise<string> {
+async function writeLineXmltvGzipFile(line: LineWithBouquets, hoursAhead: number, destPath: string): Promise<void> {
   const general = await getSettingGroup("general");
   const streams = await getSettingGroup("streams");
   const panelTimezone = String(general.timezone || "Europe/London");
@@ -131,100 +158,96 @@ async function buildLineXmltvBody(line: LineWithBouquets, hoursAhead: number): P
   `
     : [];
 
-  const epgIdSet = new Set<string>();
-  for (const c of channels) {
-    const epgId = c.epg_id?.trim();
-    if (epgId) {
-      epgIdSet.add(epgId);
-      epgIdSet.add(epgId.toLowerCase());
-    }
-    const extra = c.stream_channel_id?.trim();
-    if (extra) {
-      epgIdSet.add(extra);
-      epgIdSet.add(extra.toLowerCase());
-    }
-  }
-
-  const programs = epgIdSet.size
-    ? await loadProgramsForEpgIds([...epgIdSet], now, until)
-    : [];
-
-  const programsByChannel = new Map<string, ProgramRow[]>();
-  for (const p of programs) {
-    for (const key of new Set([p.channelId, p.channelId.toLowerCase()])) {
-      const list = programsByChannel.get(key) ?? [];
-      list.push(p);
-      programsByChannel.set(key, list);
-    }
-  }
-
-  const channelMap = new Map<string, string>();
+  const channelLines: string[] = [];
   const programSeen = new Set<string>();
-  const programRows: ProgramRow[] = [];
+  const programmeParts: string[] = [];
 
-  const pushProgrammes = (ids: string[], listings: ProgramRow[]) => {
-    for (const p of listings) {
-      for (const channelId of ids) {
-        const key = `${channelId}|${p.start.toISOString()}|${p.title}`;
-        if (programSeen.has(key)) continue;
-        programSeen.add(key);
-        programRows.push({
-          channelId,
-          title: p.title,
-          description: truncateXmltvDesc(p.description),
-          start: p.start,
-          stop: p.stop,
-        });
-      }
-    }
+  const flushProgrammes = async (write: (chunk: string) => Promise<void>) => {
+    if (!programmeParts.length) return;
+    await write(programmeParts.join("\n") + "\n");
+    programmeParts.length = 0;
   };
 
-  for (const row of channels) {
-    const epgId = String(row.epg_id || "").trim();
-    if (!epgId) continue;
-    const extra = row.stream_channel_id?.trim();
-    const catalogIds = xmltvChannelIds(epgId, row.stream_cuid, extra);
-    const listings = [
-      ...(programsByChannel.get(epgId) ?? []),
-      ...(epgId !== epgId.toLowerCase() ? programsByChannel.get(epgId.toLowerCase()) ?? [] : []),
-      ...(extra ? programsByChannel.get(extra) ?? [] : []),
-      ...(extra && extra !== extra.toLowerCase() ? programsByChannel.get(extra.toLowerCase()) ?? [] : []),
-    ];
-    const uniqueListings: ProgramRow[] = [];
-    const seenListing = new Set<string>();
-    for (const p of listings) {
-      const k = `${p.start.toISOString()}|${p.title}`;
-      if (seenListing.has(k)) continue;
-      seenListing.add(k);
-      uniqueListings.push(p);
-    }
-    if (!uniqueListings.length) continue;
-    for (const id of catalogIds) {
-      if (!channelMap.has(id)) channelMap.set(id, row.name || "Live");
-    }
-    pushProgrammes(catalogIds, uniqueListings);
-  }
+  await writeGzipTextFile(destPath, async (write) => {
+    await write('<?xml version="1.0" encoding="UTF-8"?>\n');
+    await write('<!DOCTYPE tv SYSTEM "xmltv.dtd">\n');
+    await write('<tv generator-info-name="Xtream Codes" generator-info-url="">\n');
 
-  const lines: string[] = [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<!DOCTYPE tv SYSTEM "xmltv.dtd">',
-    '<tv generator-info-name="Xtream Codes" generator-info-url="">',
-  ];
-  for (const [id, name] of channelMap) {
-    lines.push(
-      `  <channel id="${xmltvSafeText(id)}"><display-name>${xmltvSafeText(name) || "Live"}</display-name></channel>`
-    );
-  }
-  for (const p of programRows) {
-    const ch = xmltvSafeText(p.channelId);
-    if (!ch) continue;
-    lines.push(
-      `  <programme start="${formatXmltvDateForXtreamApps(p.start, panelTimezone)}" stop="${formatXmltvDateForXtreamApps(p.stop, panelTimezone)}" channel="${ch}">`,
-      `    <title lang="en">${xmltvSafeText(p.title) || "Programme"}</title>`
-    );
-    if (p.description) lines.push(`    <desc lang="en">${xmltvSafeText(p.description)}</desc>`);
-    lines.push("  </programme>");
-  }
-  lines.push("</tv>");
-  return lines.join("\n");
+    for (let i = 0; i < channels.length; i += CHANNEL_WRITE_BATCH) {
+      const batch = channels.slice(i, i + CHANNEL_WRITE_BATCH);
+      const epgIds = new Set<string>();
+      for (const c of batch) {
+        const epgId = c.epg_id?.trim();
+        if (epgId) {
+          epgIds.add(epgId);
+          epgIds.add(epgId.toLowerCase());
+        }
+        const extra = c.stream_channel_id?.trim();
+        if (extra) {
+          epgIds.add(extra);
+          epgIds.add(extra.toLowerCase());
+        }
+      }
+      const programs = epgIds.size ? await loadProgramsForEpgIds([...epgIds], now, until) : [];
+      const programsByChannel = new Map<string, ProgramRow[]>();
+      for (const p of programs) {
+        for (const key of new Set([p.channelId, p.channelId.toLowerCase()])) {
+          const list = programsByChannel.get(key) ?? [];
+          list.push(p);
+          programsByChannel.set(key, list);
+        }
+      }
+
+      for (const row of batch) {
+        const epgId = String(row.epg_id || "").trim();
+        if (!epgId) continue;
+        const extra = row.stream_channel_id?.trim();
+        const catalogIds = xmltvChannelIds(epgId, row.stream_cuid, extra);
+        const listings = [
+          ...(programsByChannel.get(epgId) ?? []),
+          ...(epgId !== epgId.toLowerCase() ? programsByChannel.get(epgId.toLowerCase()) ?? [] : []),
+          ...(extra ? programsByChannel.get(extra) ?? [] : []),
+          ...(extra && extra !== extra.toLowerCase() ? programsByChannel.get(extra.toLowerCase()) ?? [] : []),
+        ];
+        const uniqueListings: ProgramRow[] = [];
+        const seenListing = new Set<string>();
+        for (const p of listings) {
+          const k = `${p.start.toISOString()}|${p.title}`;
+          if (seenListing.has(k)) continue;
+          seenListing.add(k);
+          uniqueListings.push(p);
+        }
+        if (!uniqueListings.length) continue;
+        for (const id of catalogIds) {
+          channelLines.push(
+            `  <channel id="${xmltvSafeText(id)}"><display-name>${xmltvSafeText(row.name) || "Live"}</display-name></channel>`
+          );
+        }
+        for (const p of uniqueListings) {
+          for (const channelId of catalogIds) {
+            const key = `${channelId}|${p.start.toISOString()}|${p.title}`;
+            if (programSeen.has(key)) continue;
+            programSeen.add(key);
+            const ch = xmltvSafeText(channelId);
+            if (!ch) continue;
+            const desc = truncateXmltvDesc(p.description);
+            programmeParts.push(
+              `  <programme start="${formatXmltvDateForXtreamApps(p.start, panelTimezone)}" stop="${formatXmltvDateForXtreamApps(p.stop, panelTimezone)}" channel="${ch}">`,
+              `    <title lang="en">${xmltvSafeText(p.title) || "Programme"}</title>`
+            );
+            if (desc) programmeParts.push(`    <desc lang="en">${xmltvSafeText(desc)}</desc>`);
+            programmeParts.push("  </programme>");
+          }
+        }
+      }
+      if (programmeParts.length > 400) {
+        /* hold until channels written */
+      }
+      await yieldEventLoop();
+    }
+
+    if (channelLines.length) await write(channelLines.join("\n") + "\n");
+    await flushProgrammes(write);
+    await write("</tv>\n");
+  });
 }

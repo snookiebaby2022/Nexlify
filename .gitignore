@@ -77,3 +77,6 @@ scripts/test_trial*.py
 scripts/test_xtream.py
 scripts/verify_final2.py
 scripts/verify_separation.py
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

@@ -30,4 +30,6 @@ test("parseXtreamPlaybackPath splices movie/series but not timeshift", () => {
   assert.equal(parseXtreamPlaybackPath("/series/u/p/9.mkv")?.spliceVod, true);
   assert.equal(parseXtreamPlaybackPath("/timeshift/u/p/9")?.spliceLiveTs, false);
   assert.equal(parseXtreamPlaybackPath("/timeshift/u/p/9")?.spliceVod, false);
+  // Movie HLS stays a playlist URL at the edge (not a file splice).
+  assert.equal(parseXtreamPlaybackPath("/movie/u/p/9.m3u8")?.wantsHls, false);
 });

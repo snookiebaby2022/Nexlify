@@ -2,6 +2,7 @@
 
 import { useState, Suspense, useEffect } from "react";
 import { PanelTopNav } from "@/components/panel-top-nav";
+import { DashboardLiveMetricsProvider } from "@/components/dashboard-live-metrics";
 import { AdminPanelSidebar, PanelSidebar, ResellerPanelSidebar } from "@/components/panel-sidebar";
 import { ResellerNotificationsWidget } from "@/components/reseller-notifications-widget";
 import { PanelCommunityBar } from "@/components/panel-community-bar";
@@ -49,6 +50,7 @@ export function PanelShell({
 
   return (
     <PanelUpdateJobProvider>
+    <DashboardLiveMetricsProvider enabled={role === "ADMIN"}>
     <div
       className={`panel-shell${mobileNav ? " panel-shell--mobile-nav-open" : ""}`}
       style={accent ? ({ ["--accent" as string]: accent } as React.CSSProperties) : undefined}
@@ -131,6 +133,7 @@ export function PanelShell({
       </div>
       <PanelMobileBottomNav role={role} onMore={() => setMobileNav(true)} />
     </div>
+    </DashboardLiveMetricsProvider>
     </PanelUpdateJobProvider>
   );
 }

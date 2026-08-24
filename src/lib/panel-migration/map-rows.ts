@@ -655,6 +655,25 @@ function summarizeTables(
   });
 }
 
+function dumpRowsFor(
+  tablesFound: { name: string; rows: number }[],
+  names: string[]
+): number {
+  for (const name of names) {
+    const t = tablesFound.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    if (t && t.rows > 0) return t.rows;
+  }
+  return 0;
+}
+
+function coverageWarn(label: string, dumpRows: number, mapped: number, warnings: string[]) {
+  if (dumpRows > 0 && mapped < dumpRows) {
+    warnings.push(
+      `SQL ${label}: mapped ${mapped.toLocaleString()} of ${dumpRows.toLocaleString()} dump rows — ${(dumpRows - mapped).toLocaleString()} not imported (missing id or unreadable row).`
+    );
+  }
+}
+
 function warnIfUnmapped(bundle: MigrationBundle, tablesFound: { name: string; rows: number; hasColumns: boolean }[], warnings: string[]) {
   const totalMapped =
     bundle.streams.length +
@@ -676,6 +695,11 @@ function warnIfUnmapped(bundle: MigrationBundle, tablesFound: { name: string; ro
       );
     }
   }
+  const profile = PANEL_PROFILES[bundle.source];
+  if (!profile) return;
+  coverageWarn("streams", dumpRowsFor(tablesFound, profile.streams), bundle.streams.length, warnings);
+  coverageWarn("lines", dumpRowsFor(tablesFound, profile.lines), bundle.lines.length, warnings);
+  coverageWarn("bouquets", dumpRowsFor(tablesFound, profile.bouquets), bundle.bouquets.length, warnings);
 }
 
 export function bundleFromSql(sql: string, source: MigrationSource): MigrationBundle {

@@ -4,6 +4,7 @@ import { createHash } from "crypto";
 export type { Line };
 import { prisma } from "./prisma";
 import { cacheGetOrSet } from "./cache";
+import { yieldEventLoop } from "./yield-event-loop";
 
 function lineCredCacheKey(username: string, password: string) {
   const digest = createHash("sha256").update(`${username}\0${password}`).digest("hex").slice(0, 20);
@@ -102,9 +103,18 @@ export function activeBouquetIds(line: LineWithBouquets, excludeDisabled = true)
     .map((lb) => lb.bouquet.id);
 }
 
+/** Stable cache token so 4k lines on the same bouquets share one catalog blob. */
+export function lineBouquetCacheToken(line: LineWithBouquets, excludeDisabled = true): string {
+  return [...activeBouquetIds(line, excludeDisabled)].sort().join(",");
+}
+
 export type StreamForLine = Stream & {
   provider?: { baseUrl?: string | null } | null;
   server?: { host?: string | null } | null;
+  /** Category display name for XUI-style M3U group-title. */
+  categoryName?: string | null;
+  /** File extension parsed from streamUrl (lean catalog SQL). */
+  urlExt?: string | null;
 };
 
 export type StreamsForLineOptions = {
@@ -158,16 +168,25 @@ async function loadStreamChunk(
   const rows = lean
     ? await prisma.stream.findMany({
         where: { id: { in: chunkIds } },
-        select: leanStreamSelect(options),
+        select: {
+          ...leanStreamSelect(options),
+          category: { select: { name: true } },
+        },
       })
     : await prisma.stream.findMany({
         where: { id: { in: chunkIds } },
         include: {
           provider: { select: { baseUrl: true } },
           server: { select: { host: true } },
+          category: { select: { name: true } },
         },
       });
-  const byId = new Map(rows.map((s) => [s.id, s as StreamForLine]));
+  const byId = new Map(
+    rows.map((s) => {
+      const { category, ...rest } = s as typeof s & { category?: { name: string } | null };
+      return [s.id, { ...rest, categoryName: category?.name ?? null } as StreamForLine];
+    })
+  );
   return chunkIds.map((id) => byId.get(id)).filter((s): s is StreamForLine => Boolean(s));
 }
 
@@ -207,6 +226,8 @@ type LeanListingRow = {
   isActive: boolean;
   sortOrder: number;
   containerExtension: string | null;
+  urlExt: string | null;
+  categoryName: string | null;
   ord: bigint;
 };
 
@@ -240,9 +261,12 @@ async function loadLeanListingForLine(
       s."isActive" AS "isActive",
       s."sortOrder" AS "sortOrder",
       s."containerExtension" AS "containerExtension",
+      substring(split_part(s."streamUrl", '?', 1) from '[.]([A-Za-z0-9]{2,4})$') AS "urlExt",
+      c.name AS "categoryName",
       s."sortOrder"::bigint AS ord
     FROM ${bouquetMembershipSql(bouquetIds)} m
     INNER JOIN "Stream" s ON s.id = m."streamId"
+    LEFT JOIN "Category" c ON c.id = s."categoryId"
     WHERE 1=1
       ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
       ${listingPlayableSql()}
@@ -260,7 +284,98 @@ async function loadLeanListingForLine(
       }
     ORDER BY s."sortOrder" ASC, s.name ASC, s.id ASC
   `;
-  return rows.map(({ ord: _ord, ...s }) => s as StreamForLine);
+  return rows.map(({ ord: _ord, ...s }) => s as unknown as StreamForLine);
+}
+
+type ListingCursor = { sortOrder: number; name: string; id: string };
+
+function listingFilterSql(line: LineWithBouquets, options?: StreamsForLineOptions) {
+  const excludeDisabled = options?.excludeDisabled !== false;
+  const bouquetIds = activeBouquetIds(line, excludeDisabled);
+  const types = typeList(options);
+  const typeTexts = types?.map((t) => String(t)) ?? null;
+  return {
+    bouquetIds,
+    excludeDisabled,
+    where: Prisma.sql`
+      ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
+      ${listingPlayableSql()}
+      ${
+        typeTexts && typeTexts.length
+          ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
+          : Prisma.empty
+      }
+      ${
+        options?.uncategorizedOnly
+          ? Prisma.sql`AND (s."categoryId" IS NULL OR s."categoryId" = '')`
+          : options?.categoryIds && options.categoryIds.length
+            ? Prisma.sql`AND s."categoryId" IN (${Prisma.join(options.categoryIds)})`
+            : Prisma.empty
+      }
+    `,
+  };
+}
+
+/**
+ * Keyset-batched lean listing. Used by M3U / Xtream catalog blobs so a 475k
+ * bouquet never materialises as one Node array.
+ */
+export async function forEachLeanListingBatch(
+  line: LineWithBouquets,
+  options: StreamsForLineOptions | undefined,
+  onBatch: (streams: StreamForLine[]) => void | Promise<void>
+): Promise<void> {
+  const filter = listingFilterSql(line, options);
+  if (!filter.bouquetIds.length) return;
+
+  let cursor: ListingCursor | null = null;
+  for (;;) {
+    const cursorSql = cursor
+      ? Prisma.sql`AND (
+          s."sortOrder" > ${cursor.sortOrder}
+          OR (s."sortOrder" = ${cursor.sortOrder} AND s.name > ${cursor.name})
+          OR (s."sortOrder" = ${cursor.sortOrder} AND s.name = ${cursor.name} AND s.id > ${cursor.id})
+        )`
+      : Prisma.empty;
+    const rows = (await prisma.$queryRaw`
+      SELECT
+        s.id,
+        s.name,
+        s.type,
+        s."streamIcon" AS "streamIcon",
+        s."epgChannelId" AS "epgChannelId",
+        s."channelId" AS "channelId",
+        s."createdAt" AS "createdAt",
+        s."updatedAt" AS "updatedAt",
+        s."categoryId" AS "categoryId",
+        s."vodMode" AS "vodMode",
+        s."archiveDays" AS "archiveDays",
+        s."timeshiftSeconds" AS "timeshiftSeconds",
+        s."isShifted" AS "isShifted",
+        s."isAdult" AS "isAdult",
+        s."isActive" AS "isActive",
+        s."sortOrder" AS "sortOrder",
+        s."containerExtension" AS "containerExtension",
+        substring(split_part(s."streamUrl", '?', 1) from '[.]([A-Za-z0-9]{2,4})$') AS "urlExt",
+        c.name AS "categoryName",
+        s."sortOrder"::bigint AS ord
+      FROM ${bouquetMembershipSql(filter.bouquetIds)} m
+      INNER JOIN "Stream" s ON s.id = m."streamId"
+      LEFT JOIN "Category" c ON c.id = s."categoryId"
+      WHERE 1=1
+        ${filter.where}
+        ${cursorSql}
+      ORDER BY s."sortOrder" ASC, s.name ASC, s.id ASC
+      LIMIT ${STREAM_BATCH}
+    `) as LeanListingRow[];
+    if (!rows.length) return;
+    const mapped = rows.map(({ ord: _ord, ...s }) => s as unknown as StreamForLine);
+    await onBatch(mapped);
+    const last = rows[rows.length - 1]!;
+    cursor = { sortOrder: last.sortOrder, name: last.name, id: last.id };
+    if (rows.length < STREAM_BATCH) return;
+    await yieldEventLoop();
+  }
 }
 
 /** Distinct stream IDs for a line (ordered), without hydrating Stream rows. */
@@ -379,14 +494,11 @@ export async function streamsForLine(
   const { offset, limit, ...idQueryOpts } = options ?? {};
 
   if (options?.lean === true && limit == null && offset == null) {
-    const rows = await loadLeanListingForLine(line, idQueryOpts);
     if (options.onBatch) {
-      for (let i = 0; i < rows.length; i += STREAM_BATCH) {
-        await options.onBatch(rows.slice(i, i + STREAM_BATCH));
-      }
+      await forEachLeanListingBatch(line, idQueryOpts, options.onBatch);
       return [];
     }
-    return rows;
+    return loadLeanListingForLine(line, idQueryOpts);
   }
 
   let ids = await streamIdsForLine(line, idQueryOpts);

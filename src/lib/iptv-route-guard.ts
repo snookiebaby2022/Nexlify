@@ -11,7 +11,7 @@ export function rejectDemoIptvPlayback(req: NextRequest): NextResponse | null {
   const host = (req.headers.get("host") ?? "").split(":")[0].toLowerCase();
   if (!isPanelDemoHost(host)) return null;
   const path = req.nextUrl.pathname;
-  if (isDemoPlaybackPath(path) || path.startsWith("/movie/")) {
+  if (isDemoPlaybackPath(path)) {
     return demoModeBlockedResponse("playback");
   }
   return null;

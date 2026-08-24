@@ -10,6 +10,9 @@ import {
   xtreamBase64,
   xtreamCatalogDirectSource,
   xtreamListingExtension,
+  mediaExtensionFromUrl,
+  xtreamM3uAttr,
+  xtreamM3uFilename,
 } from "./xtream-safe";
 
 describe("xtream-safe", () => {
@@ -62,5 +65,22 @@ describe("xtream-safe", () => {
     assert.equal(xtreamListingExtension(".MP4"), "mp4");
     assert.equal(xtreamListingExtension("hls"), "m3u8");
     assert.equal(xtreamListingExtension(""), "mp4");
+  });
+
+  it("prefers a real file extension from the source URL over a default mp4 listing", () => {
+    assert.equal(mediaExtensionFromUrl("https://cdn.example/movie/1.mkv"), "mkv");
+    assert.equal(xtreamListingExtension("mp4", "mp4", "https://cdn.example/movie/1.mkv"), "mkv");
+    assert.equal(xtreamListingExtension("mkv", "mp4", "https://cdn.example/movie/1.mp4"), "mkv");
+  });
+
+  it("does not advertise m3u8 when the source file is mkv/mp4", () => {
+    assert.equal(xtreamListingExtension("m3u8", "mp4", "https://cdn.example/movie/1.mkv"), "mkv");
+    assert.equal(xtreamListingExtension("hls", "mp4", "https://cdn.example/series/1.mp4"), "mp4");
+  });
+
+  it("escapes M3U attributes and playlist filenames like XUI get.php", () => {
+    assert.equal(xtreamM3uAttr('UK "HD"\nNews'), "UK 'HD' News");
+    assert.equal(xtreamM3uFilename('user"\r\nname'), "user_name.m3u");
+    assert.equal(xtreamM3uFilename(""), "playlist.m3u");
   });
 });

@@ -5,36 +5,30 @@ import { logActivity } from "./lines";
 import { listActiveConnections } from "./connections";
 import { dispatchOutboundWebhook } from "./outbound-webhooks";
 import { PanelRole, Prisma, StreamType } from "@prisma/client";
-import { createHmac, timingSafeEqual } from "crypto";
 import { handleXuiExtendedAction } from "./xui-api-extended";
-import { generatePassword } from "./xui-api-utils";
+import {
+  generatePassword,
+  hmacHex,
+  hmacHexEqual,
+  hmacPayloadFromSearchParams,
+  parseBoundedInt,
+  parseStreamType,
+} from "./xui-api-utils";
 import { hasPermission, PERMS } from "./staff-permissions";
+import { validateLineCredential } from "./credential-generate";
 
-export async function authenticateAdminApi(req: NextRequest) {
-  const params = req.nextUrl.searchParams;
-  const apiKey = params.get("api_key");
-  const accessCode = params.get("access_code");
+export async function authenticateAdminApi(req: NextRequest, params?: URLSearchParams) {
+  const p = params ?? req.nextUrl.searchParams;
+  const apiKey = p.get("api_key") ?? req.headers.get("x-api-key");
+  const accessCode = p.get("access_code");
   if (!apiKey) return null;
 
-  const hmacSig = req.headers.get("x-nexlify-signature") ?? params.get("hmac");
+  const hmacSig = req.headers.get("x-nexlify-signature") ?? p.get("hmac");
   const hmacKey = await prisma.panelSetting.findUnique({ where: { key: "hmac_api_secret" } });
 
   if (hmacSig && hmacKey?.value) {
-    const payload = params.toString();
-    const expected = createHmac("sha256", hmacKey.value).update(payload).digest("hex");
-    try {
-      if (
-        hmacSig.length === expected.length &&
-        timingSafeEqual(Buffer.from(hmacSig), Buffer.from(expected))
-      ) {
-        const user = await prisma.panelUser.findFirst({
-          where: { role: PanelRole.ADMIN, isActive: true },
-        });
-        return user;
-      }
-    } catch {
-      /* fall through */
-    }
+    const expected = hmacHex(hmacKey.value, hmacPayloadFromSearchParams(p));
+    if (!hmacHexEqual(hmacSig, expected)) return null;
   }
 
   const user = await prisma.panelUser.findFirst({
@@ -67,7 +61,7 @@ export async function handleXuiAction(
     }
 
     case "get_users": {
-      const take = Math.min(1000, parseInt(params.get("limit") ?? "500", 10));
+      const take = parseBoundedInt(params.get("limit"), 500, 1, 1000);
       const users = await prisma.panelUser.findMany({
         take,
         select: {
@@ -84,7 +78,7 @@ export async function handleXuiAction(
     }
 
     case "get_lines": {
-      const take = Math.min(5000, parseInt(params.get("limit") ?? "1000", 10));
+      const take = parseBoundedInt(params.get("limit"), 1000, 1, 5000);
       const lines = await prisma.line.findMany({
         take,
         include: { bouquets: { include: { bouquet: true } } },
@@ -105,13 +99,13 @@ export async function handleXuiAction(
     }
 
     case "get_streams": {
-      const type = params.get("type");
+      const type = parseStreamType(params.get("type"));
       const where: Prisma.StreamWhereInput = {};
-      if (type) where.type = type as StreamType;
+      if (type) where.type = type;
       const streams = await prisma.stream.findMany({
         where,
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-        take: Math.min(5000, parseInt(params.get("limit") ?? "2000", 10)),
+        take: parseBoundedInt(params.get("limit"), 2000, 1, 5000),
       });
       return { status: "success", streams };
     }
@@ -120,7 +114,7 @@ export async function handleXuiAction(
       const movies = await prisma.stream.findMany({
         where: { type: StreamType.MOVIE },
         orderBy: { name: "asc" },
-        take: Math.min(5000, parseInt(params.get("limit") ?? "2000", 10)),
+        take: parseBoundedInt(params.get("limit"), 2000, 1, 5000),
       });
       return { status: "success", movies };
     }
@@ -129,13 +123,13 @@ export async function handleXuiAction(
       const series = await prisma.stream.findMany({
         where: { type: StreamType.SERIES },
         orderBy: [{ seriesName: "asc" }, { seasonNum: "asc" }, { episodeNum: "asc" }],
-        take: Math.min(5000, parseInt(params.get("limit") ?? "2000", 10)),
+        take: parseBoundedInt(params.get("limit"), 2000, 1, 5000),
       });
       return { status: "success", series };
     }
 
     case "get_mag": {
-      const take = Math.min(5000, parseInt(params.get("limit") ?? "1000", 10));
+      const take = parseBoundedInt(params.get("limit"), 1000, 1, 5000);
       const devices = await prisma.magDevice.findMany({
         take,
         include: { line: { select: { username: true } } },
@@ -145,7 +139,7 @@ export async function handleXuiAction(
     }
 
     case "live_connections": {
-      const take = Math.min(5000, parseInt(params.get("limit") ?? "1000", 10));
+      const take = parseBoundedInt(params.get("limit"), 1000, 1, 5000);
       const connections = await prisma.liveConnection.findMany({
         take,
         include: {
@@ -158,7 +152,7 @@ export async function handleXuiAction(
     }
 
     case "activity_logs": {
-      const take = Math.min(500, parseInt(params.get("limit") ?? "100", 10));
+      const take = parseBoundedInt(params.get("limit"), 100, 1, 500);
       const logs = await prisma.activityLog.findMany({
         take,
         orderBy: { createdAt: "desc" },
@@ -198,8 +192,8 @@ export async function handleXuiAction(
     case "create_line": {
       const username = params.get("username");
       const password = params.get("password") ?? generatePassword();
-      const maxConnections = parseInt(params.get("max_connections") ?? "1", 10);
-      const days = parseInt(params.get("days") ?? "30", 10);
+      const maxConnections = parseBoundedInt(params.get("max_connections"), 1, 1, 1000);
+      const days = parseBoundedInt(params.get("days"), 30, 1, 3650);
       const bouquetIds = params.getAll("bouquet[]").length
         ? params.getAll("bouquet[]")
         : (params.get("bouquets")?.split(",") ?? []);
@@ -212,6 +206,12 @@ export async function handleXuiAction(
       if (authMode === "ACTIVE_CODE" && !activeCode) {
         return { status: "error", message: "active_code required" };
       }
+      if (username) {
+        const userErr = validateLineCredential(username, "username");
+        if (userErr) return { status: "error", message: userErr };
+      }
+      const passErr = validateLineCredential(password, "password");
+      if (passErr) return { status: "error", message: passErr };
 
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + days);
@@ -245,13 +245,20 @@ export async function handleXuiAction(
     case "edit_line": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
+      const existing = await prisma.line.findUnique({ where: { id }, select: { id: true } });
+      if (!existing) return { status: "error", message: "not found" };
       const data: Prisma.LineUpdateInput = {};
-      if (params.get("password")) data.password = params.get("password")!;
+      if (params.get("password")) {
+        const nextPass = params.get("password")!;
+        const passErr = validateLineCredential(nextPass, "password");
+        if (passErr) return { status: "error", message: passErr };
+        data.password = nextPass;
+      }
       if (params.get("max_connections"))
-        data.maxConnections = parseInt(params.get("max_connections")!, 10);
+        data.maxConnections = parseBoundedInt(params.get("max_connections"), 1, 1, 1000);
       if (params.get("days")) {
         const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + parseInt(params.get("days")!, 10));
+        expiresAt.setDate(expiresAt.getDate() + parseBoundedInt(params.get("days"), 30, 1, 3650));
         data.expiresAt = expiresAt;
       }
       if (params.get("auth_mode") === "active_code") data.authMode = "ACTIVE_CODE";
@@ -278,6 +285,8 @@ export async function handleXuiAction(
     case "delete_line": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
+      const existing = await prisma.line.findUnique({ where: { id }, select: { id: true } });
+      if (!existing) return { status: "error", message: "not found" };
       await prisma.line.delete({ where: { id } });
       await logActivity("api_delete_line", { userId: adminId, entityId: id });
       void dispatchOutboundWebhook("line.deleted", { lineId: id });
@@ -287,8 +296,12 @@ export async function handleXuiAction(
     case "create_reseller": {
       const username = params.get("username");
       const password = params.get("password") ?? generatePassword();
-      const credits = parseInt(params.get("credits") ?? "0", 10);
+      const credits = parseBoundedInt(params.get("credits"), 0, 0, 1_000_000);
       if (!username) return { status: "error", message: "username required" };
+      const userErr = validateLineCredential(username, "username");
+      if (userErr) return { status: "error", message: userErr };
+      const passErr = validateLineCredential(password, "password");
+      if (passErr) return { status: "error", message: passErr };
 
       const reseller = await prisma.panelUser.create({
         data: {
@@ -317,6 +330,8 @@ async function setLineStatus(
   webhookEvent: string
 ) {
   if (!id) return { status: "error", message: "id required" };
+  const existing = await prisma.line.findUnique({ where: { id }, select: { id: true } });
+  if (!existing) return { status: "error", message: "not found" };
   const line = await prisma.line.update({
     where: { id },
     data: { status },

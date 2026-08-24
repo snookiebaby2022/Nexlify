@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
-import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
+import { asPlaybackGuardLine, assertPlaybackAllowed, playbackDenyMessage } from "@/lib/playback-guard";
+import { attachKickAwareProxyBody } from "@/lib/connections";
 import { getLineForPlaybackAuth, resolvePlaybackUrlCandidatesForLine } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
-import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
 import { parseTimeshiftStart, xtreamTimeshiftSourceUrl } from "@/lib/timeshift-url";
 import { stripLiveStreamExtension } from "@/lib/hls-playback";
@@ -49,7 +49,8 @@ export async function GET(
   if (/^\d+$/.test(cleanId)) {
     const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
     const resolved = await resolveStreamIdParam(cleanId, { username });
-    if (resolved) cleanId = resolved;
+    if (!resolved) return iptvText("Not found", { status: 404 });
+    cleanId = resolved;
   }
 
   const line = await getLineForPlaybackAuth(username);
@@ -57,8 +58,13 @@ export async function GET(
   if (!lineIsPlayable(line)) return iptvText("Unauthorized", { status: 403 });
 
   const ua = req.headers.get("user-agent") ?? undefined;
-  if (!checkLineUserAgent(line, ua)) return iptvText("User-Agent not allowed for this line", { status: 403 });
-  if (await isSessionKicked(line.id, ip)) return iptvText("Session kicked", { status: 403 });
+  const deny = await assertPlaybackAllowed(asPlaybackGuardLine(line), ip, ua, {
+    streamId: cleanId,
+  });
+  if (deny) {
+    const status = deny === "ddos" || deny === "rate" ? 429 : 403;
+    return iptvText(playbackDenyMessage(deny), { status });
+  }
 
   const catchup = await getSettingGroup("catchup");
   const durationMin = Math.max(1, Math.min(Number(duration) || 1, 24 * 60));

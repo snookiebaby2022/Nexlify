@@ -53,48 +53,80 @@ function readXmlTagContent(body: string, tag: string): string | null {
   return inner ? decodeXmltvText(inner) : null;
 }
 
-export function parseXmltvPrograms(xml: string, sourceId: string) {
-  const programs: {
-    sourceId: string;
-    channelId: string;
-    title: string;
-    description: string | null;
-    start: Date;
-    stop: Date;
-  }[] = [];
+export function parseXmltvProgrammeElement(
+  attrs: string,
+  body: string,
+  sourceId: string
+): {
+  sourceId: string;
+  channelId: string;
+  title: string;
+  description: string | null;
+  start: Date;
+  stop: Date;
+} | null {
+  const startRaw = readXmlAttr(attrs, "start");
+  const stopRaw = readXmlAttr(attrs, "stop");
+  const channelId = readXmlAttr(attrs, "channel");
+  if (!startRaw || !stopRaw || !channelId) return null;
 
+  let start: Date;
+  let stop: Date;
+  try {
+    start = parseXmltvDate(startRaw);
+    stop = parseXmltvDate(stopRaw);
+  } catch {
+    return null;
+  }
+
+  const title = readXmlTagContent(body, "title") ?? channelId;
+  const description = readXmlTagContent(body, "desc");
+  return { sourceId, channelId, title, description, start, stop };
+}
+
+export function* iterateXmltvPrograms(xml: string, sourceId: string) {
   const blockRegex = /<programme\s+([^>]+)>([\s\S]*?)<\/programme>/gi;
   let match: RegExpExecArray | null;
   while ((match = blockRegex.exec(xml)) !== null) {
-    const attrs = match[1];
-    const body = match[2];
-    const startRaw = readXmlAttr(attrs, "start");
-    const stopRaw = readXmlAttr(attrs, "stop");
-    const channelId = readXmlAttr(attrs, "channel");
-    if (!startRaw || !stopRaw || !channelId) continue;
-
-    let start: Date;
-    let stop: Date;
-    try {
-      start = parseXmltvDate(startRaw);
-      stop = parseXmltvDate(stopRaw);
-    } catch {
-      continue;
-    }
-
-    const title = readXmlTagContent(body, "title") ?? channelId;
-    const description = readXmlTagContent(body, "desc");
-
-    programs.push({
-      sourceId,
-      channelId,
-      title,
-      description,
-      start,
-      stop,
-    });
+    const row = parseXmltvProgrammeElement(match[1]!, match[2]!, sourceId);
+    if (row) yield row;
   }
-  return programs;
+}
+
+export function parseXmltvPrograms(xml: string, sourceId: string) {
+  return [...iterateXmltvPrograms(xml, sourceId)];
+}
+
+const PROGRAMME_END = "</programme>";
+
+export async function* iterateXmltvProgramsFromFile(filePath: string, sourceId: string) {
+  const { createReadStream } = await import("node:fs");
+  const stream = createReadStream(filePath, { encoding: "utf8", highWaterMark: 1024 * 256 });
+  let buf = "";
+  for await (const chunk of stream) {
+    buf += chunk;
+    for (;;) {
+      const start = buf.search(/<programme\s/i);
+      if (start < 0) {
+        if (buf.length > 8_000_000) buf = buf.slice(-16_384);
+        break;
+      }
+      if (start > 0) buf = buf.slice(start);
+      const end = buf.toLowerCase().indexOf(PROGRAMME_END);
+      if (end < 0) {
+        if (buf.length > 16_000_000) {
+          throw new Error("EPG programme block exceeded 16MB — aborting sync");
+        }
+        break;
+      }
+      const block = buf.slice(0, end + PROGRAMME_END.length);
+      buf = buf.slice(end + PROGRAMME_END.length);
+      const parsed = block.match(/<programme\s+([^>]+)>([\s\S]*?)<\/programme>/i);
+      if (!parsed) continue;
+      const row = parseXmltvProgrammeElement(parsed[1]!, parsed[2]!, sourceId);
+      if (row) yield row;
+    }
+  }
 }
 
 export async function syncEpgSource(
@@ -113,27 +145,42 @@ export async function syncEpgSource(
     proxy = await prisma.streamProxy.findFirst({ where: { isActive: true } });
   }
 
-  const { fetchEpgXml } = await import("./epg-fetch");
-  const xml = await fetchEpgXml(source.url, proxy);
-  const programs = parseXmltvPrograms(xml, sourceId);
-  if (!programs.length) {
-    throw new Error("EPG sync found no programmes in the guide (empty or wrong format)");
-  }
+  const { fetchEpgXmlToFile } = await import("./epg-fetch");
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(join(tmpdir(), "nexlify-epg-"));
+  const xmlPath = join(dir, "guide.xml");
+  let inserted = 0;
+  try {
+    await fetchEpgXmlToFile(source.url, proxy, xmlPath);
 
-  const CHUNK = 5000;
-  await prisma.$transaction(
-    async (tx) => {
-      await tx.epgProgram.deleteMany({ where: { sourceId } });
-      for (let i = 0; i < programs.length; i += CHUNK) {
-        await tx.epgProgram.createMany({ data: programs.slice(i, i + CHUNK) });
-      }
-      await tx.epgSource.update({
-        where: { id: sourceId },
-        data: { lastSync: new Date(), lastSyncError: null },
-      });
-    },
-    { timeout: 180_000, maxWait: 30_000 }
-  );
+    let batch: NonNullable<ReturnType<typeof parseXmltvProgrammeElement>>[] = [];
+    const CHUNK = 5000;
+    const flush = async () => {
+      if (!batch.length) return;
+      await prisma.epgProgram.createMany({ data: batch });
+      inserted += batch.length;
+      batch = [];
+    };
+
+    await prisma.epgProgram.deleteMany({ where: { sourceId } });
+    for await (const row of iterateXmltvProgramsFromFile(xmlPath, sourceId)) {
+      batch.push(row);
+      if (batch.length >= CHUNK) await flush();
+    }
+    await flush();
+    if (!inserted) {
+      throw new Error("EPG sync found no programmes in the guide (empty or wrong format)");
+    }
+
+    await prisma.epgSource.update({
+      where: { id: sourceId },
+      data: { lastSync: new Date(), lastSyncError: null },
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
 
   const { invalidateEpgCache } = await import("./cache-invalidate");
   await invalidateEpgCache();
@@ -150,7 +197,7 @@ export async function syncEpgSource(
     }
   }
 
-  return programs.length;
+  return inserted;
 }
 
 export async function getShortEpg(

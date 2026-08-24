@@ -5,6 +5,7 @@ export async function invalidateDashboardStats() {
 }
 
 export async function invalidateXtreamCategories() {
+  const { purgeCatalogDiskCache } = await import("@/lib/catalog-disk-cache");
   await Promise.all([
     cacheDel("xtream:live_categories"),
     cacheDel("xtream:vod_categories"),
@@ -12,6 +13,10 @@ export async function invalidateXtreamCategories() {
     cacheDel("xtream:catnum:"),
     cacheDel("xtream:catcanon:"),
     cacheDel("xtream:catresolve:"),
+    cacheDel("xtream:live_streams:"),
+    cacheDel("xtream:vod_streams:"),
+    cacheDel("xtream:series:"),
+    purgeCatalogDiskCache(),
   ]);
 }
 
@@ -20,7 +25,12 @@ export async function invalidateLineAuth(username: string) {
 }
 
 export async function invalidateEpgCache() {
-  await Promise.all([cacheDel("epg:"), cacheDel("xmltv:")]);
+  const { purgeCatalogDiskCache } = await import("@/lib/catalog-disk-cache");
+  await Promise.all([
+    cacheDel("epg:"),
+    cacheDel("xmltv:"),
+    purgeCatalogDiskCache((name) => name.endsWith(".xml.gz") || name.endsWith(".lock")),
+  ]);
 }
 
 export async function invalidatePlaybackUrls(streamId?: string) {
@@ -32,5 +42,7 @@ export async function invalidatePlaybackUrls(streamId?: string) {
 }
 
 export async function invalidateAllCache() {
-  return cacheDel("*");
+  const { purgeCatalogDiskCache } = await import("@/lib/catalog-disk-cache");
+  const [deleted] = await Promise.all([cacheDel("*"), purgeCatalogDiskCache()]);
+  return deleted;
 }

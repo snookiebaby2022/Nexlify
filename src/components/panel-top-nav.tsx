@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useDashboardLiveMetrics } from "@/components/dashboard-live-metrics";
 import {
   Activity,
   ChevronDown,
@@ -46,6 +47,8 @@ type HeaderStats = {
   onlineConnections?: number;
   networkInPerMin?: number;
   networkOutPerMin?: number;
+  networkInMbps?: number;
+  networkOutMbps?: number;
 };
 
 function pathActive(pathname: string, href: string) {
@@ -106,6 +109,7 @@ export function PanelTopNav({
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const navRef = useRef<HTMLDivElement>(null);
+  const { data: liveMetrics, connected: liveMetricsConnected } = useDashboardLiveMetrics();
 
   const loadProfileAvatar = useCallback(() => {
     if (!username) return;
@@ -138,6 +142,8 @@ export function PanelTopNav({
               onlineConnections: d.onlineConnections,
               networkInPerMin: d.networkInPerMin,
               networkOutPerMin: d.networkOutPerMin,
+              networkInMbps: d.networkInMbps,
+              networkOutMbps: d.networkOutMbps,
             });
           })
           .catch(() => {});
@@ -210,10 +216,20 @@ export function PanelTopNav({
     return menu.items.some((i) => pathActive(pathname, i.href));
   }
 
-  const connections = stats?.onlineConnections ?? 0;
+  const connections = liveMetricsConnected
+    ? (liveMetrics?.onlineConnections ?? stats?.onlineConnections ?? 0)
+    : (stats?.onlineConnections ?? 0);
   const streamCount = stats?.streams ?? 0;
-  const inMbps = ((stats?.networkInPerMin ?? 0) / 125_000 / 60).toFixed(1);
-  const outMbps = ((stats?.networkOutPerMin ?? 0) / 125_000 / 60).toFixed(1);
+  const inMbps = (
+    liveMetricsConnected
+      ? (liveMetrics?.networkInMbps ?? 0)
+      : (stats?.networkInMbps ?? stats?.networkInPerMin ?? 0)
+  ).toFixed(1);
+  const outMbps = (
+    liveMetricsConnected
+      ? (liveMetrics?.networkOutMbps ?? 0)
+      : (stats?.networkOutMbps ?? stats?.networkOutPerMin ?? 0)
+  ).toFixed(1);
 
   return (
     <header className="shrink-0 overflow-visible" ref={navRef}>
@@ -249,9 +265,9 @@ export function PanelTopNav({
             <StatPill icon={coloredIcon(Users, "#22d3ee", 14)} value={String(connections)} title="Live connections" />
             <StatPill icon={coloredIcon(Play, "#4ade80", 14)} value={`${streamCount} ↑ 0 ↓`} title="Streams" />
             <StatPill
-              icon={coloredIcon(Activity, "#a78bfa", 14)}
-              value={`${inMbps} Mbps ↑ ${outMbps} Mbps ↓`}
-              title="Bandwidth"
+              icon={coloredIcon(Activity, "#fb923c", 14)}
+              value={`${outMbps} Mbps ↑ ${inMbps} Mbps ↓`}
+              title={`Bandwidth — output ${outMbps} Mbps, input ${inMbps} Mbps (same as dashboard)`}
             />
           </div>
         )}

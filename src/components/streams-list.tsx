@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -17,13 +18,17 @@ import { resolveClientPollIntervals } from "@/lib/perf-polling";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
 import { StreamTranscodeQuickActions } from "@/components/stream-transcode-quick-actions";
-import { StreamVerifyPanel } from "@/components/stream-verify-panel";
 import { StreamClientsModal } from "@/components/stream-clients-modal";
 import { formatUptimeXui, type StreamLiveStat } from "@/lib/stream-live-stats";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
 import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
+
+const StreamVerifyPanel = dynamic(
+  () => import("@/components/stream-verify-panel").then((m) => m.StreamVerifyPanel),
+  { ssr: false }
+);
 
 type Stream = {
   id: string;
@@ -126,6 +131,7 @@ export function StreamsList({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [tick, setTick] = useState(0);
   const fetchTimeRef = useRef(0);
+  const countedKeyRef = useRef("");
   const urlInitRef = useRef(false);
 
   useEffect(() => {
@@ -140,20 +146,37 @@ export function StreamsList({
     }
   }, []);
 
+  const [verifyReady, setVerifyReady] = useState(false);
   const [typeTotals, setTypeTotals] = useState<{ LIVE?: number; MOVIE?: number; SERIES?: number }>({});
 
   useEffect(() => {
-    fetch("/api/admin/streams?page=1&pageSize=1&type=LIVE")
+    const idle =
+      typeof requestIdleCallback !== "undefined"
+        ? requestIdleCallback(() => setVerifyReady(true), { timeout: 800 })
+        : window.setTimeout(() => setVerifyReady(true), 200);
+    return () => {
+      if (typeof cancelIdleCallback !== "undefined" && typeof idle === "number") {
+        try {
+          cancelIdleCallback(idle);
+        } catch {
+          clearTimeout(idle);
+        }
+      } else {
+        clearTimeout(idle);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/admin/streams?totals=1")
       .then((r) => r.json())
-      .then((d) => setTypeTotals((t) => ({ ...t, LIVE: d.total ?? 0 })))
-      .catch(() => {});
-    fetch("/api/admin/streams?page=1&pageSize=1&type=MOVIE")
-      .then((r) => r.json())
-      .then((d) => setTypeTotals((t) => ({ ...t, MOVIE: d.total ?? 0 })))
-      .catch(() => {});
-    fetch("/api/admin/streams?page=1&pageSize=1&type=SERIES")
-      .then((r) => r.json())
-      .then((d) => setTypeTotals((t) => ({ ...t, SERIES: d.total ?? 0 })))
+      .then((d) =>
+        setTypeTotals({
+          LIVE: d.LIVE ?? 0,
+          MOVIE: d.MOVIE ?? 0,
+          SERIES: d.SERIES ?? 0,
+        })
+      )
       .catch(() => {});
   }, []);
 
@@ -173,23 +196,28 @@ export function StreamsList({
     if (serverId) params.set("serverId", serverId);
     if (search.trim()) params.set("search", search.trim());
     if (statusFilter) params.set("status", statusFilter);
+    const loadKey = `${type}|${categoryId}|${serverId}|${search}|${statusFilter}`;
+    if (countedKeyRef.current === loadKey) params.set("skipTotal", "1");
     fetch(`/api/admin/streams?${params}`)
       .then((r) => r.json())
       .then((d) => {
         setStreams(d.streams ?? []);
-        setTotal(d.total ?? d.streams?.length ?? 0);
+        if (typeof d.total === "number") {
+          setTotal(d.total);
+          countedKeyRef.current = loadKey;
+        }
         fetchTimeRef.current = Date.now();
       });
   }, [type, categoryId, serverId, search, page, pageSize, statusFilter]);
 
   useEffect(() => {
-    fetch("/api/admin/categories")
+    fetch(`/api/admin/categories?lite=1${type ? `&type=${type}` : ""}`)
       .then((r) => r.json())
       .then((d) => setCategories(d.categories ?? []));
-    fetch("/api/admin/servers")
+    fetch("/api/admin/servers?lite=1")
       .then((r) => r.json())
       .then((d) => setServers(d.servers ?? []));
-  }, []);
+  }, [type]);
 
   useEffect(() => {
     load();
@@ -201,11 +229,12 @@ export function StreamsList({
     return () => clearInterval(t);
   }, [load, type]);
 
-  // Tick every second for real-time uptime updates
+  // Tick every second for live uptime only — movies/series lists don't show it.
   useEffect(() => {
+    if (type === "MOVIE" || type === "SERIES") return;
     const t = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [type]);
 
   const filtered = useMemo(() => {
     return streams.filter((s) => {
@@ -266,7 +295,7 @@ export function StreamsList({
         </div>
       </div>
 
-      {type === "LIVE" && !statusFilter && <StreamVerifyPanel />}
+      {type === "LIVE" && !statusFilter && verifyReady && <StreamVerifyPanel />}
 
       <button
         type="button"

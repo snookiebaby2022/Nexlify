@@ -225,6 +225,8 @@ export function openUpstreamLiveStream(
     timeoutMs?: number;
     headers?: Record<string, string>;
     proxy?: OutboundProxy | null;
+    /** VOD: keep Range so players get a real 206 + Content-Range. Live must strip Range. */
+    forwardRange?: boolean;
   }
 ): Promise<UpstreamOpenResult> {
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -253,8 +255,13 @@ export function openUpstreamLiveStream(
         "Icy-MetaData": "0",
         ...(opts?.headers ?? {}),
       };
-      delete headers.Range;
-      delete headers.range;
+      if (!opts?.forwardRange) {
+        delete headers.Range;
+        delete headers.range;
+      } else if (headers.range && !headers.Range) {
+        headers.Range = headers.range;
+        delete headers.range;
+      }
 
       const req = requestOrigin(
         {
@@ -336,7 +343,7 @@ export function openUpstreamLiveStream(
 export function upstreamToWebResponse(
   open: UpstreamOpenResult,
   extraHeaders?: Record<string, string>,
-  opts?: { liveUnbounded?: boolean }
+  opts?: { liveUnbounded?: boolean; vod?: boolean; playbackUrl?: string }
 ): { stream: ReadableStream<Uint8Array>; headers: Record<string, string> } {
   if (opts?.liveUnbounded) {
     return {
@@ -344,11 +351,15 @@ export function upstreamToWebResponse(
       headers: liveMpegTsResponseHeaders(open.contentType, extraHeaders),
     };
   }
+  const contentType = opts?.vod
+    ? vodUpstreamContentType(open.contentType, opts.playbackUrl ?? open.finalUrl)
+    : normalizeLiveMpegTsContentType(open.contentType);
   const headers: Record<string, string> = {
-    "Content-Type": normalizeLiveMpegTsContentType(open.contentType),
-    "Cache-Control": "no-cache, no-store",
+    "Content-Type": contentType,
+    "Cache-Control": "private, no-cache, no-store",
     "Access-Control-Allow-Origin": "*",
     Connection: "keep-alive",
+    ...(opts?.vod ? { "Accept-Ranges": "bytes" } : {}),
     ...(open.headers ?? {}),
     ...(extraHeaders ?? {}),
   };
@@ -356,6 +367,21 @@ export function upstreamToWebResponse(
     stream: nodeToWebStream(open.body),
     headers,
   };
+}
+
+function vodUpstreamContentType(contentType: string, url: string): string {
+  const c = (contentType ?? "").toLowerCase();
+  if (c.includes("mpegurl") || c.includes("m3u8")) return "application/x-mpegURL";
+  if (c.startsWith("video/") || c.startsWith("audio/")) {
+    return (contentType || "video/mp4").split(";")[0]!.trim();
+  }
+  const path = url.split("?")[0]?.toLowerCase() ?? "";
+  if (path.endsWith(".mkv")) return "video/x-matroska";
+  if (path.endsWith(".mp4") || path.endsWith(".m4v")) return "video/mp4";
+  if (path.endsWith(".webm")) return "video/webm";
+  if (path.endsWith(".avi")) return "video/x-msvideo";
+  if (path.endsWith(".ts") || c.includes("mp2t")) return "video/mp2t";
+  return c && c !== "application/octet-stream" ? contentType.split(";")[0]!.trim() : "video/mp4";
 }
 
 export async function resolvePlayableUpstreamUrl(

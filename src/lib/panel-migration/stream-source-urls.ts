@@ -133,3 +133,78 @@ export function extraSourcesToBitrates(extras: string[] | undefined):
     isPrimary: false,
   }));
 }
+
+/** Stable key so the same dump URL matches a panel row after whitespace / host-case drift. */
+export function normalizeMigrationStreamUrl(url: string): string {
+  const raw = String(url ?? "").trim();
+  if (!raw) return "";
+  if (isPendingStreamUrl(raw)) return raw.toLowerCase();
+  try {
+    const u = new URL(raw);
+    u.hash = "";
+    u.hostname = u.hostname.toLowerCase();
+    u.protocol = u.protocol.toLowerCase();
+    if (u.pathname.length > 1) u.pathname = u.pathname.replace(/\/+$/, "");
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Identity keys for skip-existing reimports: exact URL, normalized URL,
+ * and pending:// placeholders from an earlier incomplete import of the same dump id.
+ */
+export function migrationStreamIdentityKeys(opts: {
+  streamUrl: string;
+  legacyId?: string | null;
+  channelId?: string | null;
+  source?: string | null;
+}): string[] {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  const add = (value: string) => {
+    const v = String(value ?? "").trim();
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    keys.push(v);
+  };
+  add(opts.streamUrl);
+  const normalized = normalizeMigrationStreamUrl(opts.streamUrl);
+  if (normalized) add(normalized);
+  const legacyId = opts.legacyId?.trim();
+  if (legacyId) add(pendingStreamUrl(legacyId, opts.source || "xui"));
+  return keys;
+}
+
+export type MigrationStreamFillFields = {
+  streamUrl: string;
+  categoryId: string | null;
+  serverId: string | null;
+  backupUrl: string | null;
+  streamIcon: string | null;
+  containerExtension: string | null;
+  epgChannelId: string | null;
+  channelId: string | null;
+};
+
+/** Additive skip-existing: copy dump values only onto empty / pending panel fields. */
+export function fillMissingStreamFields(
+  existing: MigrationStreamFillFields,
+  dump: MigrationStreamFillFields
+): Partial<MigrationStreamFillFields> {
+  const patch: Partial<MigrationStreamFillFields> = {};
+  const dumpReal = Boolean(dump.streamUrl) && !isPendingStreamUrl(dump.streamUrl);
+  const existingEmpty = !existing.streamUrl || isPendingStreamUrl(existing.streamUrl);
+  if (dumpReal && existingEmpty) patch.streamUrl = dump.streamUrl;
+  if (!existing.categoryId && dump.categoryId) patch.categoryId = dump.categoryId;
+  if (!existing.serverId && dump.serverId) patch.serverId = dump.serverId;
+  if (!existing.backupUrl && dump.backupUrl) patch.backupUrl = dump.backupUrl;
+  if (!existing.streamIcon && dump.streamIcon) patch.streamIcon = dump.streamIcon;
+  if (!existing.containerExtension && dump.containerExtension) {
+    patch.containerExtension = dump.containerExtension;
+  }
+  if (!existing.epgChannelId && dump.epgChannelId) patch.epgChannelId = dump.epgChannelId;
+  if (!existing.channelId && dump.channelId) patch.channelId = dump.channelId;
+  return patch;
+}

@@ -8,6 +8,7 @@ import { PanelRole, StreamType } from "@prisma/client";
 import { formatAuditAction } from "@/lib/audit-log";
 import { activityFixHref, cronFixHref } from "@/lib/activity-fix-links";
 import { getDashboardServerMetrics, getDashboardSummary, getDashboardKpiExtended } from "@/lib/dashboard-server-metrics";
+import { sampleLocalHostMetrics, snapshotWindowToMbps } from "@/lib/host-metrics";
 import { ensureMainServerOnline } from "@/lib/ensure-main-server-online";
 
 async function loadHeaderStats() {
@@ -24,11 +25,12 @@ async function loadHeaderStats() {
         prisma.bandwidthSnapshot.findMany({ take: 2, orderBy: { createdAt: "desc" } }),
       ]);
 
-    let networkInPerMin = 0;
-    let networkOutPerMin = 0;
-    if (snapshots.length >= 1) {
-      networkInPerMin = Number(snapshots[0].bytesIn) / 60;
-      networkOutPerMin = Number(snapshots[0].bytesOut) / 60;
+    const nic = sampleLocalHostMetrics();
+    let networkInMbps = nic.downloadMbps;
+    let networkOutMbps = nic.uploadMbps;
+    if (networkInMbps <= 0 && networkOutMbps <= 0 && snapshots[0]) {
+      networkInMbps = snapshotWindowToMbps(snapshots[0].bytesIn);
+      networkOutMbps = snapshotWindowToMbps(snapshots[0].bytesOut);
     }
 
     return {
@@ -36,8 +38,10 @@ async function loadHeaderStats() {
       activeLines,
       liveStreams,
       onlineConnections,
-      networkInPerMin,
-      networkOutPerMin,
+      networkInMbps,
+      networkOutMbps,
+      networkInPerMin: networkInMbps,
+      networkOutPerMin: networkOutMbps,
       networkBytesInTotal: totalIn?.value ?? "0",
       networkBytesOutTotal: totalOut?.value ?? "0",
     };
@@ -48,6 +52,8 @@ async function loadHeaderStats() {
       activeLines: 0,
       liveStreams: 0,
       onlineConnections: 0,
+      networkInMbps: 0,
+      networkOutMbps: 0,
       networkInPerMin: 0,
       networkOutPerMin: 0,
       networkBytesInTotal: "0",
@@ -96,13 +102,15 @@ async function loadStats() {
   }
 
 
-  let networkInPerMin = 0;
-  let networkOutPerMin = 0;
-  if (snapshots.length >= 1) {
-    const latest = snapshots[0];
-    networkInPerMin = Number(latest.bytesIn) / 60;
-    networkOutPerMin = Number(latest.bytesOut) / 60;
+  const nic = sampleLocalHostMetrics();
+  let networkInMbps = nic.downloadMbps;
+  let networkOutMbps = nic.uploadMbps;
+  if (networkInMbps <= 0 && networkOutMbps <= 0 && snapshots[0]) {
+    networkInMbps = snapshotWindowToMbps(snapshots[0].bytesIn);
+    networkOutMbps = snapshotWindowToMbps(snapshots[0].bytesOut);
   }
+  const networkInPerMin = networkInMbps;
+  const networkOutPerMin = networkOutMbps;
 
   let cronLogs: { job: string; status: string; createdAt: Date; fixHref: string | null }[] = [];
   let dashboard = { onlineStreams: 0, totalLiveStreams: 0, onlineUsers: 0, totalActiveLines: 0, onlineConnections: 0, maxConnections: 0, onlineServers: 0, totalServers: 0 };
@@ -169,6 +177,8 @@ async function loadStats() {
     liveStreams,
     onlineConnections,
     magDevices,
+    networkInMbps,
+    networkOutMbps,
     networkInPerMin,
     networkOutPerMin,
     networkBytesInTotal: totalIn?.value ?? "0",

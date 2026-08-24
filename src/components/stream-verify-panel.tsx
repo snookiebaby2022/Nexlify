@@ -53,7 +53,7 @@ export function StreamVerifyPanel() {
       .then((r) => r.json())
       .then((d) => setProcesses(d.processes ?? []))
       .catch(() => {});
-    fetch("/api/admin/streams?pageSize=50&withStats=1&type=LIVE")
+    fetch("/api/admin/streams?pageSize=50&withStats=1&type=LIVE&skipTotal=1")
       .then((r) => r.json())
       .then((d) => setSources(d.streams ?? []))
       .catch(() => {});
@@ -77,7 +77,7 @@ export function StreamVerifyPanel() {
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 12000);
+    const t = setInterval(load, 30000);
     return () => clearInterval(t);
   }, [load]);
 

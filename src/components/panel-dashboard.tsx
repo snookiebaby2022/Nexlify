@@ -87,7 +87,7 @@ import { DashboardCacheRebuild } from "@/components/dashboard-cache-rebuild";
 import { DashboardXuiResourceMonitor } from "@/components/dashboard-xui-resource-monitor";
 
 import { DashboardXuiKpiRibbon } from "@/components/dashboard-xui-kpi-ribbon";
-import { useDashboardStream } from "@/hooks/use-dashboard-stream";
+import { useDashboardLiveMetrics } from "@/components/dashboard-live-metrics";
 
 import { DashboardXuiServerTiles } from "@/components/dashboard-xui-server-tiles";
 
@@ -240,7 +240,7 @@ export function PanelDashboard({
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [stackItems, setStackItems] = useState<StackComponentStatus[]>([]);
-  const { data: liveStats, connected: liveConnected } = useDashboardStream(!isReseller);
+  const { data: liveStats, connected: liveConnected } = useDashboardLiveMetrics();
 
 
 
@@ -331,13 +331,31 @@ export function PanelDashboard({
         totalActiveLines: d?.totalActiveLines,
       }
     : d ?? undefined;
-  const liveKpi = liveStats && liveConnected && stats?.dashboardKpi
-    ? {
-        ...stats.dashboardKpi,
-        networkInMbps: liveStats.networkInMbps,
-        networkOutMbps: liveStats.networkOutMbps,
-      }
-    : stats?.dashboardKpi;
+  const liveKpi =
+    liveStats && liveConnected
+      ? {
+          ...(stats?.dashboardKpi ?? {
+            paidUsers: 0,
+            trialUsers: 0,
+            unstableStreams: 0,
+            deadStreams: 0,
+            reportedChannels: 0,
+            channelRequests: 0,
+            reportedBreakdown: { channels: 0, movies: 0, series: 0 },
+            requestBreakdown: { channels: 0, movies: 0, series: 0 },
+            networkInMbps: 0,
+            networkOutMbps: 0,
+            inactiveStreams: 0,
+            inactiveLive: 0,
+            inactiveMovies: 0,
+            inactiveSeries: 0,
+            offlineStreams: 0,
+            openTickets: 0,
+          }),
+          networkInMbps: liveStats.networkInMbps,
+          networkOutMbps: liveStats.networkOutMbps,
+        }
+      : stats?.dashboardKpi;
 
   const connMax = d && d.maxConnections > 0 ? String(d.maxConnections) : "∞";
 

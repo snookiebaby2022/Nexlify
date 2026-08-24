@@ -28,6 +28,11 @@ function clampMbps(n: number) {
   return Math.round(n * 10) / 10;
 }
 
+/** Convert a 60s bandwidth snapshot (bytes in the window) to Mbps. */
+export function snapshotWindowToMbps(bytes: number | bigint | null | undefined): number {
+  return clampMbps(Number(bytes ?? 0) / 125_000 / 60);
+}
+
 function memUsedPercent(): number {
   try {
     const text = readFileSync("/proc/meminfo", "utf8");
@@ -63,6 +68,7 @@ export function nicBytes(iface: string): { rx: number; tx: number } {
 }
 
 let lastNet = { at: 0, rx: 0, tx: 0, iface: "" };
+let lastGoodMbps = { downloadMbps: 0, uploadMbps: 0 };
 let sampleMemo: { at: number; sample: HostMetricsSample } | null = null;
 
 /** Live CPU / RAM / disk / NIC utilisation for this panel machine. */
@@ -73,19 +79,23 @@ export function sampleLocalHostMetrics(bandwidthMbps = 1000): HostMetricsSample 
   const { rx, tx } = nicBytes(hw.primaryInterface);
   let download = 0;
   let upload = 0;
-  let downloadMbps = 0;
-  let uploadMbps = 0;
+  let downloadMbps = lastGoodMbps.downloadMbps;
+  let uploadMbps = lastGoodMbps.uploadMbps;
   const cap = Math.max(1, bandwidthMbps);
   if (lastNet.at > 0 && lastNet.iface === hw.primaryInterface && now > lastNet.at) {
     const dt = (now - lastNet.at) / 1000;
     if (dt >= 0.5) {
       downloadMbps = Math.max(0, ((rx - lastNet.rx) * 8) / dt / 1_000_000);
       uploadMbps = Math.max(0, ((tx - lastNet.tx) * 8) / dt / 1_000_000);
-      download = clampPct((downloadMbps / cap) * 100);
-      upload = clampPct((uploadMbps / cap) * 100);
+      lastGoodMbps = { downloadMbps, uploadMbps };
+      lastNet = { at: now, rx, tx, iface: hw.primaryInterface };
     }
+    // dt < 0.5: keep previous counters so the next sample can compute a real window.
+  } else {
+    lastNet = { at: now, rx, tx, iface: hw.primaryInterface };
   }
-  lastNet = { at: now, rx, tx, iface: hw.primaryInterface };
+  download = clampPct((downloadMbps / cap) * 100);
+  upload = clampPct((uploadMbps / cap) * 100);
   const sample: HostMetricsSample = {
     cpu: clampPct(sampleCpuPercent()),
     memory: clampPct(memUsedPercent()),

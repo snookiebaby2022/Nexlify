@@ -185,16 +185,19 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
     fetch("/api/admin/servers")
       .then((r) => r.json())
       .then((d) => setServers(d.servers ?? []));
-    fetch("/api/admin/categories")
+    fetch("/api/admin/categories?lite=1")
       .then((r) => r.json())
       .then((d) => setCategories(d.categories ?? []));
-    fetch("/api/admin/streams?type=LIVE&lite=1&picker=1&pageSize=200")
+    fetch("/api/admin/streams?type=LIVE&lite=1&picker=1&pageSize=200&skipTotal=1")
       .then((r) => r.json())
       .then((d) =>
         setParentStreams(
-          (d.streams ?? [])
+          (d.streams ?? d.items ?? [])
             .filter((s: { id: string }) => s.id !== streamId)
-            .map((s: { id: string; name: string }) => ({ id: s.id, name: s.name }))
+            .map((s: { id: string; name?: string; label?: string }) => ({
+              id: s.id,
+              name: s.name ?? s.label ?? s.id,
+            }))
         )
       );
   }, [streamId]);

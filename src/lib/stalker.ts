@@ -11,7 +11,7 @@ import { getBinPaths } from "./bin-paths";
 import { prisma } from "./prisma";
 import { expandCategoryFilter } from "./category-tree";
 import { exportPlaybackUrl } from "./export-playback-url";
-import { seriesSeedsForBouquets } from "./xtream-stream-id";
+import { parseBitrates } from "./stream-variants";
 import {
   handleStalkerExtendedAction,
   STALKER_EXTENDED_ACTIONS,
@@ -295,20 +295,24 @@ async function seriesSeedList(line: LineWithBouquets, extra: Record<string, stri
   const genre = extra.genre ?? extra.category ?? "";
   const page = parsePage(extra);
   const bouquetIds = activeBouquetIds(line);
-  let seeds = await seriesSeedsForBouquets(bouquetIds);
-  if (genre && genre !== "0") {
-    const allowed = new Set(await expandCategoryFilter(genre));
-    seeds = seeds.filter((s) => s.categoryId && allowed.has(s.categoryId));
-  } else if (genre === "0") {
-    seeds = seeds.filter((s) => !s.categoryId);
-  }
-  const total = seeds.length;
-  const slice = seeds.slice(page * STALKER_PAGE_SIZE, (page + 1) * STALKER_PAGE_SIZE);
+  const filter =
+    genre && genre !== "0"
+      ? { categoryIds: await expandCategoryFilter(genre) }
+      : genre === "0"
+        ? { uncategorizedOnly: true as const }
+        : undefined;
+  const { countSeriesSeedsForBouquets, seriesSeedsForBouquets } = await import("@/lib/xtream-stream-id");
+  const total = await countSeriesSeedsForBouquets(bouquetIds, filter);
+  const seeds = await seriesSeedsForBouquets(bouquetIds, {
+    ...filter,
+    limit: STALKER_PAGE_SIZE,
+    offset: page * STALKER_PAGE_SIZE,
+  });
   return stalkerJsResponse(
     pagedList(
       total,
       page,
-      slice.map((s, i) => ({
+      seeds.map((s, i) => ({
         id: s.id,
         name: s.name,
         number: String(page * STALKER_PAGE_SIZE + i + 1),

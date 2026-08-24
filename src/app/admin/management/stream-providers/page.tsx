@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { formatDateTime } from "@/lib/format";
 import { inferRemoteConnectionFromUrl } from "@/lib/stream-provider-probe";
+import { SourceChannelFinder } from "@/components/source-channel-finder";
 
 type Provider = {
   id: string;
@@ -291,6 +292,7 @@ export default function StreamProvidersPage() {
   const [checkingId, setCheckingId] = useState<string | null>(null);
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [pageTab, setPageTab] = useState<"manage" | "search">("manage");
 
   const load = useCallback(async () => {
     try {
@@ -489,6 +491,72 @@ export default function StreamProvidersPage() {
         IPTV upstream sources and VOD hosts, plus remote connection details for SSH / panel access.
       </p>
 
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="rounded-lg px-3 py-1.5 text-sm font-medium"
+          style={{
+            background: pageTab === "manage" ? "var(--accent)" : "transparent",
+            color: pageTab === "manage" ? "#fff" : "var(--text)",
+            border: "1px solid var(--border)",
+          }}
+          onClick={() => setPageTab("manage")}
+        >
+          Manage providers
+        </button>
+        <button
+          type="button"
+          className="rounded-lg px-3 py-1.5 text-sm font-medium"
+          style={{
+            background: pageTab === "search" ? "var(--accent)" : "transparent",
+            color: pageTab === "search" ? "#fff" : "var(--text)",
+            border: "1px solid var(--border)",
+          }}
+          onClick={() => setPageTab("search")}
+        >
+          Search channels
+        </button>
+      </div>
+
+      <Alert type="error" message={loadError} onDismiss={() => setLoadError("")} />
+      <Alert type="error" message={formError} onDismiss={() => setFormError("")} />
+      <Alert type="success" message={formSuccess} onDismiss={() => setFormSuccess("")} />
+
+      {pageTab === "search" ? (
+        <div className="space-y-3 rounded-lg border p-4" style={{ borderColor: "var(--border)" }}>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Pick a provider, then search BBC, BBC Two, ITV, Sky Sports, TNT Sports, Sky Movies, and copy the source URL onto Add Stream / Add Movie.
+          </p>
+          <SourceChannelFinder
+            streamType="LIVE"
+            showDirectUrl
+            onPickProvider={(m) => {
+              if (m.streamUrl) void navigator.clipboard?.writeText(m.streamUrl);
+              setFormSuccess(`Copied ${m.streamName} URL`);
+            }}
+            onPickDirectUrl={(m) => {
+              if (m.streamUrl) void navigator.clipboard?.writeText(m.streamUrl);
+              setFormSuccess(`Copied ${m.streamName} URL`);
+            }}
+          />
+          <SourceChannelFinder
+            streamType="MOVIE"
+            label="Search movies / Sky Movies"
+            showDirectUrl
+            onPickProvider={(m) => {
+              if (m.streamUrl) void navigator.clipboard?.writeText(m.streamUrl);
+              setFormSuccess(`Copied ${m.streamName} URL`);
+            }}
+            onPickDirectUrl={(m) => {
+              if (m.streamUrl) void navigator.clipboard?.writeText(m.streamUrl);
+              setFormSuccess(`Copied ${m.streamName} URL`);
+            }}
+          />
+        </div>
+      ) : null}
+
+      {pageTab === "manage" ? (
+      <>
       <div
         className="rounded-lg border p-4 text-sm space-y-3"
         style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}
@@ -508,10 +576,6 @@ export default function StreamProvidersPage() {
           </p>
         </div>
       </div>
-
-      <Alert type="error" message={loadError} onDismiss={() => setLoadError("")} />
-      <Alert type="error" message={formError} onDismiss={() => setFormError("")} />
-      <Alert type="success" message={formSuccess} onDismiss={() => setFormSuccess("")} />
 
       <form
         onSubmit={add}
@@ -745,6 +809,8 @@ export default function StreamProvidersPage() {
           </table>
         </div>
       )}
+      </>
+      ) : null}
     </div>
   );
 }

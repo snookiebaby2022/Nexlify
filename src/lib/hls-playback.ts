@@ -71,7 +71,41 @@ export function isHlsClientPath(streamId: string): boolean {
 }
 
 export function stripLiveStreamExtension(streamId: string): string {
-  return streamId.replace(/\.(ts|m3u8|hls)$/i, "");
+  return streamId.replace(/\.(ts|m3u8|hls|mp4|mkv|avi|mov|webm)$/i, "");
+}
+
+/**
+ * Instant live HLS: one EVENT playlist whose only fragment is the panel MPEG-TS
+ * splice. Players start in milliseconds instead of waiting on ffmpeg.
+ */
+export function instantLiveTsHlsPlaylist(tsUri: string): string {
+  const uri = tsUri.trim() || "stream.ts";
+  return [
+    "#EXTM3U",
+    "#EXT-X-VERSION:3",
+    "#EXT-X-TARGETDURATION:6",
+    "#EXT-X-MEDIA-SEQUENCE:0",
+    "#EXT-X-PLAYLIST-TYPE:EVENT",
+    "#EXTINF:6.000,",
+    uri,
+    "",
+  ].join("\n");
+}
+
+/** Instant VOD HLS pointing at the progressive file (mp4/mkv) next to the playlist. */
+export function instantVodFileHlsPlaylist(fileUri: string, durationSec = 28_800): string {
+  const uri = fileUri.trim() || "video.mp4";
+  const dur = Math.max(1, Math.round(durationSec));
+  return [
+    "#EXTM3U",
+    "#EXT-X-VERSION:3",
+    "#EXT-X-PLAYLIST-TYPE:VOD",
+    `#EXT-X-TARGETDURATION:${dur}`,
+    `#EXTINF:${dur}.000,`,
+    uri,
+    "#EXT-X-ENDLIST",
+    "",
+  ].join("\n");
 }
 
 /** Same-origin HLS URL when a player requested MPEG-TS for an HLS source. */
@@ -542,7 +576,7 @@ export async function buildClientVodHlsPlaylist(opts: {
   diskStreamId: string;
 }): Promise<{ ok: true; body: string } | { ok: false; error: string }> {
   if (isHlsPlaybackUrl(opts.playbackUrl)) {
-    const manifest = await fetchHlsManifestForClient(opts.playbackUrl, UPSTREAM_HLS_UA, 10_000);
+    const manifest = await fetchHlsManifestForClient(opts.playbackUrl, UPSTREAM_HLS_UA, 2_500);
     if (manifest.ok) {
       const relay = (url: string) =>
         buildHlsRelayUrl(opts.panelOrigin, opts.username, opts.password, opts.streamKey, url);

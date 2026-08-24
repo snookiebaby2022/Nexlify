@@ -28,15 +28,17 @@ export function getStreamPlaybackMode(stream: StreamForPlaybackMode): StreamPlay
   const meta = parseLiveStreamMeta(stream.agentStartCmd);
   if (meta.redirectStream) return "direct";
 
-  // External HTTP(S) live sources default to direct relay (no always-on ffmpeg) — XUI default.
+  // External HTTP(S) restreams always splice at the edge. Imported XUI rows often
+  // have autoRestart + ON_DEMAND set, which incorrectly forced ffmpeg and made
+  // zaps wait on an agent that is not running.
   const url = stream.streamUrl?.trim() ?? "";
-  if (
-    !stream.autoRestart &&
-    !stream.hostedExternally &&
+  const isExternalHttp =
     /^https?:\/\//i.test(url) &&
     !url.includes("127.0.0.1") &&
-    !url.startsWith("file://")
-  ) {
+    !/localhost/i.test(url) &&
+    !url.startsWith("file://");
+  const transcoding = Boolean(meta.transcodeProfile && meta.transcodeProfile !== "none");
+  if (isExternalHttp && !transcoding) {
     return "direct";
   }
 

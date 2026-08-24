@@ -45,30 +45,31 @@ export type SeriesSeedRow = {
   updatedAt: Date;
 };
 
-/**
- * One Xtream "series" row per show (group episodes by seriesName).
- * Returning every episode as its own series (~400k) breaks XCIPTV login.
- */
-export async function seriesSeedsForBouquets(
-  bouquetIds: string[],
-  opts?: { categoryIds?: string[] | null; uncategorizedOnly?: boolean }
-): Promise<SeriesSeedRow[]> {
-  if (!bouquetIds.length) return [];
-
-  let categorySql: Prisma.Sql = Prisma.empty;
+function seriesSeedCategorySql(opts?: {
+  categoryIds?: string[] | null;
+  uncategorizedOnly?: boolean;
+}): Prisma.Sql {
   if (opts?.uncategorizedOnly) {
-    categorySql = Prisma.sql`AND (s."categoryId" IS NULL OR s."categoryId" = '')`;
-  } else if (opts?.categoryIds?.length) {
-    categorySql = Prisma.sql`AND s."categoryId" IN (${Prisma.join(opts.categoryIds)})`;
+    return Prisma.sql`AND (s."categoryId" IS NULL OR s."categoryId" = '')`;
   }
+  if (opts?.categoryIds?.length) {
+    return Prisma.sql`AND s."categoryId" IN (${Prisma.join(opts.categoryIds)})`;
+  }
+  return Prisma.empty;
+}
 
-  return prisma.$queryRaw<SeriesSeedRow[]>`
-    SELECT DISTINCT ON (lower(COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name)))
-      s.id AS id,
-      COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name) AS name,
-      s."streamIcon" AS "streamIcon",
-      s."categoryId" AS "categoryId",
-      s."updatedAt" AS "updatedAt"
+const SERIES_SEED_SELECT = Prisma.sql`
+  SELECT DISTINCT ON (lower(COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name)))
+    s.id AS id,
+    COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name) AS name,
+    s."streamIcon" AS "streamIcon",
+    s."categoryId" AS "categoryId",
+    s."updatedAt" AS "updatedAt"
+`;
+
+function seriesSeedFromSql(bouquetIds: string[], categorySql: Prisma.Sql) {
+  return Prisma.sql`
+    ${SERIES_SEED_SELECT}
     FROM ${bouquetMembershipSql(bouquetIds)} m
     INNER JOIN "Stream" s ON s.id = m."streamId"
     WHERE s."isActive" = true
@@ -79,6 +80,89 @@ export async function seriesSeedsForBouquets(
       CASE WHEN s."episodeNum" IS NULL OR s."episodeNum" = 0 THEN 0 ELSE 1 END,
       s.id ASC
   `;
+}
+
+/**
+ * One Xtream "series" row per show (group episodes by seriesName).
+ * Returning every episode as its own series (~400k) breaks XCIPTV login.
+ */
+export async function seriesSeedsForBouquets(
+  bouquetIds: string[],
+  opts?: {
+    categoryIds?: string[] | null;
+    uncategorizedOnly?: boolean;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<SeriesSeedRow[]> {
+  if (!bouquetIds.length) return [];
+  const categorySql = seriesSeedCategorySql(opts);
+  const limit = opts?.limit != null ? Math.min(Math.max(1, opts.limit), 5000) : null;
+  const offset = opts?.offset != null ? Math.max(0, opts.offset) : 0;
+  if (limit != null) {
+    return prisma.$queryRaw<SeriesSeedRow[]>`
+      SELECT * FROM (${seriesSeedFromSql(bouquetIds, categorySql)}) seeds
+      ORDER BY seeds.name ASC, seeds.id ASC
+      LIMIT ${limit} OFFSET ${offset}
+    `;
+  }
+  return prisma.$queryRaw<SeriesSeedRow[]>`${seriesSeedFromSql(bouquetIds, categorySql)}`;
+}
+
+export async function countSeriesSeedsForBouquets(
+  bouquetIds: string[],
+  opts?: { categoryIds?: string[] | null; uncategorizedOnly?: boolean }
+): Promise<number> {
+  if (!bouquetIds.length) return 0;
+  const categorySql = seriesSeedCategorySql(opts);
+  const rows = await prisma.$queryRaw<{ count: bigint }[]>`
+    SELECT COUNT(*)::bigint AS count
+    FROM (${seriesSeedFromSql(bouquetIds, categorySql)}) seeds
+  `;
+  return Number(rows[0]?.count ?? 0);
+}
+
+/** Cursor over distinct series so 400k shows never sit in one Node array. */
+export async function forEachSeriesSeedBatch(
+  bouquetIds: string[],
+  opts: { categoryIds?: string[] | null; uncategorizedOnly?: boolean } | undefined,
+  onBatch: (rows: SeriesSeedRow[]) => void | Promise<void>
+): Promise<void> {
+  if (!bouquetIds.length) return;
+  const categorySql = seriesSeedCategorySql(opts);
+  const { yieldEventLoop } = await import("@/lib/yield-event-loop");
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`
+          DECLARE series_seed_cur NO SCROLL CURSOR FOR
+          ${seriesSeedFromSql(bouquetIds, categorySql)}
+        `;
+        for (;;) {
+          const rows = await tx.$queryRaw<SeriesSeedRow[]>`FETCH 1500 FROM series_seed_cur`;
+          if (!rows.length) break;
+          await onBatch(rows);
+          if (rows.length < 1500) break;
+          await yieldEventLoop();
+        }
+      },
+      { maxWait: 20_000, timeout: 300_000 }
+    );
+  } catch (err) {
+    console.warn(
+      "[xtream] series cursor failed, paging instead:",
+      err instanceof Error ? err.message : err
+    );
+    let offset = 0;
+    for (;;) {
+      const rows = await seriesSeedsForBouquets(bouquetIds, { ...opts, limit: 1500, offset });
+      if (!rows.length) break;
+      await onBatch(rows);
+      if (rows.length < 1500) break;
+      offset += rows.length;
+      await yieldEventLoop();
+    }
+  }
 }
 
 /**
@@ -110,17 +194,21 @@ export async function resolveStreamIdParam(
   }
 
   // Fast path: indexed xtreamNum (populated by backfill / stream create).
-  const byNum = await prisma.stream.findFirst({
+  // Several rows can share a name; xtreamNum is per-row. Check every match so we
+  // do not 404 a line that has a duplicate with the same numeric id.
+  const byNumRows = await prisma.stream.findMany({
     where: { xtreamNum: numericId, isActive: true },
     select: { id: true },
+    take: 8,
   });
-  if (byNum) {
-    if (lineId) {
-      const allowed = await lineHasStream(lineId, byNum.id);
-      if (allowed) return byNum.id;
-    } else {
-      return byNum.id;
+  if (byNumRows.length) {
+    if (!lineId) return byNumRows[0]!.id;
+    for (const row of byNumRows) {
+      if (await lineHasStream(lineId, row.id)) return row.id;
     }
+    // This numeric id already maps to catalog rows this line cannot play.
+    // Do not scan hundreds of thousands of bouquet rows hashing cuids (~4s 404s).
+    return null;
   }
 
   if (lineId) {
@@ -212,7 +300,11 @@ export async function seriesEpisodeIdsForLine(
         WHERE lb."lineId" = ${lineId}
           AND bs."streamId" = s.id
       )
-    ORDER BY s.id ASC
+    ORDER BY
+      COALESCE(s."seasonNum", 1) ASC,
+      COALESCE(s."episodeNum", 1) ASC,
+      s.id ASC
+    LIMIT 1500
   `;
   return rows.map((r) => r.id);
 }

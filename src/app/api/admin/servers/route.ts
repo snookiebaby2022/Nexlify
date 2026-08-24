@@ -14,9 +14,17 @@ import {
 import { applyLocalServerPortProfile } from "@/lib/panel-port-sync";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  if (req.nextUrl.searchParams.get("lite") === "1") {
+    const servers = await prisma.streamServer.findMany({
+      select: { id: true, name: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    });
+    return NextResponse.json({ servers: sortServersMainFirst(servers) });
+  }
 
   const servers = await prisma.streamServer.findMany({
     include: {

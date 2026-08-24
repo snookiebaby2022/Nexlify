@@ -21,6 +21,7 @@ import {
   formSelectClass,
 } from "@/components/form-page-shell";
 import { StreamProbePlayer } from "@/components/stream-probe-player";
+import { SourceChannelFinder } from "@/components/source-channel-finder";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 
@@ -198,13 +199,20 @@ function LiveStreamForm({
   }, [initial]);
 
   useEffect(() => {
-    fetch("/api/admin/categories").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
-    fetch("/api/admin/epg")
+    fetch("/api/admin/categories?lite=1").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+    fetch("/api/admin/epg?lite=1")
       .then((r) => r.json())
       .then((d) => setEpgSources((d.sources ?? []).map((s: { id: string; name: string }) => ({ id: s.id, name: s.name }))));
-    fetch("/api/admin/streams?type=LIVE")
+    fetch("/api/admin/streams?type=LIVE&picker=1&pageSize=50&skipTotal=1")
       .then((r) => r.json())
-      .then((d) => setParentStreams((d.streams ?? []).map((s: { id: string; name: string }) => ({ id: s.id, name: s.name }))));
+      .then((d) =>
+        setParentStreams(
+          (d.streams ?? d.items ?? []).map((s: { id: string; name?: string; label?: string }) => ({
+            id: s.id,
+            name: s.name ?? s.label ?? s.id,
+          }))
+        )
+      );
   }, []);
 
   function setSource(i: number, value: string) {
@@ -413,6 +421,26 @@ function LiveStreamForm({
 
             {insertMode === "single" && (
             <>
+            <SourceChannelFinder
+              streamType="LIVE"
+              showDirectUrl
+              onPickProvider={(m) => {
+                setForm((f) => ({ ...f, name: f.name || m.streamName }));
+                setSources((prev) => {
+                  const next = [...prev];
+                  next[0] = m.streamUrl || prev[0];
+                  return next;
+                });
+              }}
+              onPickDirectUrl={(m) => {
+                setForm((f) => ({ ...f, name: f.name || m.streamName }));
+                setSources((prev) => {
+                  const next = [...prev];
+                  next[0] = m.streamUrl;
+                  return next;
+                });
+              }}
+            />
             <FormField label="Name" required>
               <input
                 required
@@ -879,7 +907,7 @@ function CompactStreamForm({
   });
 
   useEffect(() => {
-    fetch("/api/admin/categories").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+    fetch("/api/admin/categories?lite=1").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
     if (initial?.name) setForm((f) => ({ ...f, name: initial.name! }));
     if (initial?.streamUrl) setForm((f) => ({ ...f, streamUrl: initial.streamUrl! }));
   }, [initial]);

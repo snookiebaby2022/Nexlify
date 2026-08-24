@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { attachUrlToVideo } from "@/lib/use-hls-player";
 import type { StreamPlayerHandle } from "@/lib/use-hls-player";
+import mpegts from "mpegts.js";
 import { decodeXtreamBase64, formatEpgTimeRange, formatPanelClock, normalizeTimeFormat } from "@/lib/epg-time";
 
 type LiveStream = {
@@ -337,7 +338,8 @@ function PanelWebPlayerInner() {
     setPlayerError("");
     setBuffering(true);
     setIsPlaying(false);
-    const url = `${apiBase}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${s.stream_id}.m3u8`;
+    const ext = mpegts.isSupported() ? "ts" : "m3u8";
+    const url = `${apiBase}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${s.stream_id}.${ext}`;
     setPlayingUrl(url);
     setPlayingTitle(s.name);
     setPlayingId(s.stream_id);

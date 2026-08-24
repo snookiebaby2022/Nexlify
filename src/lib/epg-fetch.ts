@@ -1,6 +1,8 @@
-import { gunzipSync } from "zlib";
+import { gunzipSync, createGunzip } from "zlib";
 import http from "node:http";
 import https from "node:https";
+import { createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import type { StreamProxy } from "@prisma/client";
 import { proxyUrl } from "@/lib/proxy";
 
@@ -142,5 +144,98 @@ export async function fetchEpgXml(
     }
   }
 
+  throw lastErr ?? new Error("EPG fetch failed");
+}
+
+async function pipeEpgResponseToFile(
+  url: string,
+  extraHeaders: Record<string, string>,
+  destPath: string
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      reject(new Error("Invalid EPG URL"));
+      return;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      reject(new Error("EPG URL must be http or https"));
+      return;
+    }
+    const lib = parsed.protocol === "https:" ? https : http;
+    const req = lib.request(
+      url,
+      {
+        method: "GET",
+        headers: { ...EPG_HEADERS, ...extraHeaders },
+        timeout: 180_000,
+        ...(parsed.protocol === "https:" ? { rejectUnauthorized: false } : {}),
+      },
+      (res) => {
+        const status = res.statusCode ?? 0;
+        const location = res.headers.location;
+        if (status >= 300 && status < 400 && location) {
+          res.resume();
+          const next = new URL(location, url).toString();
+          pipeEpgResponseToFile(next, extraHeaders, destPath).then(resolve, reject);
+          return;
+        }
+        if (status < 200 || status >= 300) {
+          res.resume();
+          reject(new Error(`EPG fetch failed: HTTP ${status}`));
+          return;
+        }
+        const contentType = typeof res.headers["content-type"] === "string" ? res.headers["content-type"] : null;
+        const dest = createWriteStream(destPath);
+        const gzip =
+          url.toLowerCase().endsWith(".gz") || Boolean(contentType?.includes("gzip"));
+        if (gzip) {
+          pipeline(res, createGunzip(), dest).then(resolve, reject);
+        } else {
+          pipeline(res, dest).then(resolve, reject);
+        }
+      }
+    );
+    req.on("timeout", () => req.destroy(new Error("EPG fetch timeout")));
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+/** Stream XMLTV to disk (gunzip on the fly) so 2M-programme guides do not OOM cron. */
+export async function fetchEpgXmlToFile(
+  url: string,
+  proxy: Pick<StreamProxy, "type" | "host" | "port" | "username" | "password"> | null | undefined,
+  destPath: string
+): Promise<void> {
+  const extra: Record<string, string> = {};
+  if (proxy) extra["X-Nexlify-Proxy"] = proxyUrl(proxy);
+  const attempts: (typeof proxy | null)[] = proxy ? [null, proxy] : [null];
+  let lastErr: Error | null = null;
+  for (const p of attempts) {
+    try {
+      const hdrs = { ...extra };
+      if (!p) delete hdrs["X-Nexlify-Proxy"];
+      else hdrs["X-Nexlify-Proxy"] = proxyUrl(p);
+      await pipeEpgResponseToFile(url, hdrs, destPath);
+      const { createReadStream } = await import("node:fs");
+      const peek = createReadStream(destPath, { encoding: "utf8", start: 0, end: 512 * 1024 });
+      let sample = "";
+      for await (const chunk of peek) {
+        sample += chunk;
+        if (sample.length > 512 * 1024) break;
+      }
+      if (!/<programme[\s>]/i.test(sample)) {
+        throw new Error(
+          "EPG fetch failed: response is not valid XMLTV (missing <programme> entries — channel-only guides cannot sync)"
+        );
+      }
+      return;
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e));
+    }
+  }
   throw lastErr ?? new Error("EPG fetch failed");
 }

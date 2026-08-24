@@ -59,9 +59,14 @@ const standaloneDir = resolve(__dirname, ".next/standalone");
 const useStandalone = existsSync(resolve(standaloneDir, "server.js"));
 
 const cpuCount = cpus().length;
-const panelInstances = process.env.PANEL_INSTANCES
-  ? parseInt(process.env.PANEL_INSTANCES, 10)
-  : 1;
+const panelInstancesRaw = process.env.PANEL_INSTANCES || fileEnv.PANEL_INSTANCES;
+const parsedInstances = parseInt(String(panelInstancesRaw || ""), 10);
+const panelInstances = Number.isFinite(parsedInstances)
+  ? Math.min(8, Math.max(1, parsedInstances))
+  : cpuCount >= 4
+    ? 2
+    : 1;
+const panelExecMode = panelInstances > 1 ? "cluster" : "fork";
 
 const sharedPanelEnv = {
   NODE_ENV: "production",
@@ -100,6 +105,7 @@ const sharedPanelEnv = {
   TZ: fileEnv.TZ || process.env.TZ || "UTC",
   // Large SQL migration uploads (~1GB+) need headroom for parse + preview.
   // Override via NODE_OPTIONS in .env when a box is memory-constrained.
+  NEXLIFY_CATALOG_CACHE_DIR: fileEnv.NEXLIFY_CATALOG_CACHE_DIR || "/var/lib/nexlify/catalog-cache",
   NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=8192",
 };
 
@@ -111,8 +117,8 @@ module.exports = {
           name: "nexlify",
           cwd: standaloneDir,
           script: "server.js",
-          instances: 1,
-          exec_mode: "fork",
+          instances: panelInstances,
+          exec_mode: panelExecMode,
           autorestart: true,
           max_restarts: 15,
           min_uptime: "15s",
@@ -127,8 +133,8 @@ module.exports = {
           cwd: __dirname,
           script: "node_modules/next/dist/bin/next",
           args: `start -H ${bindHost} -p ${panelPort}`,
-          instances: 1,
-          exec_mode: "fork",
+          instances: panelInstances,
+          exec_mode: panelExecMode,
           autorestart: true,
           max_restarts: 10,
           min_uptime: "10s",
@@ -147,15 +153,15 @@ module.exports = {
       autorestart: true,
       max_restarts: 10,
       min_uptime: "10s",
-      max_memory_restart: "700M",
+      max_memory_restart: fileEnv.NEXLIFY_CRON_MAX_MEMORY_RESTART || "1800M",
       env: {
         NODE_ENV: "production",
         DATABASE_URL: fileEnv.DATABASE_URL || "",
         REDIS_URL: fileEnv.REDIS_URL || process.env.REDIS_URL || "redis://127.0.0.1:6379",
         REDIS_CLUSTER_NODES: fileEnv.REDIS_CLUSTER_NODES || process.env.REDIS_CLUSTER_NODES || "",
         PATH: pgBinPath(),
-        NEXLIFY_CRON_MAX_OLD_SPACE_MB: fileEnv.NEXLIFY_CRON_MAX_OLD_SPACE_MB || "512",
-        NEXLIFY_CRON_RECYCLE_RSS_MB: fileEnv.NEXLIFY_CRON_RECYCLE_RSS_MB || "400",
+        NEXLIFY_CRON_MAX_OLD_SPACE_MB: fileEnv.NEXLIFY_CRON_MAX_OLD_SPACE_MB || "1536",
+        NEXLIFY_CRON_RECYCLE_RSS_MB: fileEnv.NEXLIFY_CRON_RECYCLE_RSS_MB || "1200",
       },
     },
     {

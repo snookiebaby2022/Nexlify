@@ -30,6 +30,7 @@ import {
   rewritePackagerPlaylist,
   expandHlsPlaybackCandidates,
   UPSTREAM_HLS_UA,
+  instantLiveTsHlsPlaylist,
 } from "@/lib/hls-playback";
 import { serverBaseUrl } from "@/lib/xtream";
 import { asPlaybackGuardLine, assertPlaybackAllowed, playbackDenyMessage } from "@/lib/playback-guard";
@@ -42,6 +43,7 @@ import { ensureDiskHls } from "@/lib/hls-restream-client";
 import { resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
 import type { OutboundProxy } from "@/lib/outbound-proxy";
 import { prisma } from "@/lib/prisma";
+import { userAgentAllowsInstantTsWrap } from "@/lib/client-playback-profiles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -168,10 +170,11 @@ export async function HEAD(
   const auth = await authorizeLivePlayback(req, ctx);
   if (!auth.ok) return auth.response;
   const antiFreeze = await getAntiFreezeSettings();
+  const wantsM3u8 = isHlsClientPath(auth.streamId);
   return withIptvCors(
     new NextResponse(null, {
       status: 200,
-      headers: liveHeadHeaders(isHlsClientPath(auth.streamId), buildLiveRedirectHeaders(antiFreeze)),
+      headers: liveHeadHeaders(wantsM3u8, buildLiveRedirectHeaders(antiFreeze)),
     })
   );
 }
@@ -231,6 +234,20 @@ export async function GET(
     const hlsUrls = expanded.filter((u) => isHlsPlaybackUrl(u));
 
     const playlistKey = hlsPlaylistCacheKey(line.id, cleanId);
+    const instantStart = antiFreeze.liveInstantStart !== false;
+
+    // Instant MPEG-TS wrap before native .m3u8 probes / ffmpeg. Dead provider
+    // HLS plus packager wait is why only a warm channel (e.g. BBC One FHD) played.
+    // Smarters/VLC cannot play this wrap (black screen) — they need real HLS.
+    if (instantStart && tsUrls[0] && userAgentAllowsInstantTsWrap(ua)) {
+      const tsName = `${stripLiveStreamExtension(requestStreamKey)}.ts`;
+      if (antiFreeze.fastZapEnabled) {
+        schedulePlaybackUpstreamWarm(tsUrls[0], UPSTREAM_HLS_UA);
+      }
+      await cacheSet(hlsRelayCacheKey(line.id, cleanId), tsUrls[0], 3600);
+      return hlsHeaders(instantLiveTsHlsPlaylist(tsName));
+    }
+
     const cachedPlaylist = await cacheGet<string>(playlistKey);
     if (cachedPlaylist) {
       const cachedNativeUrl = await cacheGet<string>(hlsNativeUrlCacheKey(cleanId));
@@ -259,13 +276,9 @@ export async function GET(
       ? [cachedNativeUrl, ...hlsUrls.filter((u) => u !== cachedNativeUrl)]
       : hlsUrls;
 
-    // 1. Provider-native HLS (stored .m3u8 in stream_source) before local remux — parallel probe.
-    const instantStart = antiFreeze.liveInstantStart !== false;
+    // Provider-native HLS only when there is no MPEG-TS splice URL.
     const probeUrls = orderedHlsUrls.filter(
-      (playbackUrl) =>
-        !instantStart ||
-        originalCandidates.has(playbackUrl) ||
-        playbackUrl === cachedNativeUrl
+      (playbackUrl) => originalCandidates.has(playbackUrl) || playbackUrl === cachedNativeUrl
     );
     if (probeUrls.length) {
       const probeMsForUrl = (playbackUrl: string) => {

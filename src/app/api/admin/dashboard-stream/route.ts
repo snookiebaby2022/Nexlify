@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { isTestConnectionIp, listLiveConnections } from "@/lib/connections";
-import { sampleLocalHostMetrics } from "@/lib/host-metrics";
+import { sampleLocalHostMetrics, snapshotWindowToMbps } from "@/lib/host-metrics";
 import { getServerPollIntervals } from "@/lib/perf-polling";
 
 export async function GET(req: NextRequest) {
@@ -37,8 +37,8 @@ export async function GET(req: NextRequest) {
           let networkOutMbps = nic.uploadMbps;
           let networkInMbps = nic.downloadMbps;
           if (networkOutMbps <= 0 && networkInMbps <= 0 && bandwidthSnap) {
-            networkOutMbps = Math.round((Number(bandwidthSnap.bytesOut) / 125000 / 60) * 10) / 10;
-            networkInMbps = Math.round((Number(bandwidthSnap.bytesIn) / 125000 / 60) * 10) / 10;
+            networkOutMbps = snapshotWindowToMbps(bandwidthSnap.bytesOut);
+            networkInMbps = snapshotWindowToMbps(bandwidthSnap.bytesIn);
           }
 
           send({

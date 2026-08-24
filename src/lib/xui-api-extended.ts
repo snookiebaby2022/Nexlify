@@ -3,7 +3,8 @@ import { hashPassword } from "./auth";
 import { logActivity } from "./lines";
 import { kickLineConnections, listActiveConnections } from "./connections";
 import { PanelRole, Prisma, StreamType, CategoryType } from "@prisma/client";
-import { generatePassword } from "./xui-api-utils";
+import { generatePassword, parseBoundedInt, parseCategoryType, parseStreamType } from "./xui-api-utils";
+import { validateLineCredential } from "./credential-generate";
 
 export async function handleXuiExtendedAction(
   action: string,
@@ -12,9 +13,9 @@ export async function handleXuiExtendedAction(
 ): Promise<{ status: string; message?: string; [key: string]: unknown } | null> {
   switch (action) {
     case "get_categories": {
-      const categoryType = params.get("category_type") ?? params.get("type");
+      const categoryType = parseCategoryType(params.get("category_type") ?? params.get("type"));
       const categories = await prisma.category.findMany({
-        where: categoryType ? { categoryType: categoryType as CategoryType } : undefined,
+        where: categoryType ? { categoryType } : undefined,
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       });
       return { status: "success", categories };
@@ -52,7 +53,7 @@ export async function handleXuiExtendedAction(
           createdAt: true,
         },
         orderBy: { createdAt: "desc" },
-        take: Math.min(5000, parseInt(params.get("limit") ?? "1000", 10)),
+        take: parseBoundedInt(params.get("limit"), 1000, 1, 5000),
       });
       return { status: "success", users };
     }
@@ -65,7 +66,7 @@ export async function handleXuiExtendedAction(
       const rows = await prisma.epgProgram.findMany({
         where: { channelId },
         orderBy: { start: "asc" },
-        take: Math.min(500, parseInt(params.get("limit") ?? "100", 10)),
+        take: parseBoundedInt(params.get("limit"), 100, 1, 500),
       });
       return { status: "success", epg: rows };
     }
@@ -82,7 +83,7 @@ export async function handleXuiExtendedAction(
 
     case "renew_line": {
       const id = params.get("id");
-      const days = parseInt(params.get("days") ?? "30", 10);
+      const days = parseBoundedInt(params.get("days"), 30, 1, 3650);
       if (!id) return { status: "error", message: "id required" };
       const line = await prisma.line.findUnique({ where: { id } });
       if (!line) return { status: "error", message: "not found" };
@@ -106,6 +107,8 @@ export async function handleXuiExtendedAction(
       const id = params.get("id");
       const name = params.get("name");
       if (!id || !name) return { status: "error", message: "id and name required" };
+      const existing = await prisma.bouquet.findUnique({ where: { id }, select: { id: true } });
+      if (!existing) return { status: "error", message: "not found" };
       const bouquet = await prisma.bouquet.update({ where: { id }, data: { name } });
       return { status: "success", bouquet };
     }
@@ -113,6 +116,8 @@ export async function handleXuiExtendedAction(
     case "delete_bouquet": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
+      const existing = await prisma.bouquet.findUnique({ where: { id }, select: { id: true } });
+      if (!existing) return { status: "error", message: "not found" };
       await prisma.bouquet.delete({ where: { id } });
       return { status: "success" };
     }
@@ -121,11 +126,12 @@ export async function handleXuiExtendedAction(
       const name = params.get("name");
       const streamUrl = params.get("stream_url") ?? params.get("url");
       if (!name || !streamUrl) return { status: "error", message: "name and stream_url required" };
+      const streamType = parseStreamType(params.get("type")) ?? StreamType.LIVE;
       const stream = await prisma.stream.create({
         data: {
           name,
           streamUrl,
-          type: (params.get("type") as StreamType) || StreamType.LIVE,
+          type: streamType,
           categoryId: params.get("category_id") || null,
         },
       });
@@ -135,6 +141,8 @@ export async function handleXuiExtendedAction(
     case "edit_stream": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
+      const existing = await prisma.stream.findUnique({ where: { id }, select: { id: true } });
+      if (!existing) return { status: "error", message: "not found" };
       const data: Prisma.StreamUpdateInput = {};
       if (params.get("name")) data.name = params.get("name")!;
       if (params.get("stream_url")) data.streamUrl = params.get("stream_url")!;
@@ -146,6 +154,8 @@ export async function handleXuiExtendedAction(
     case "delete_stream": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
+      const existing = await prisma.stream.findUnique({ where: { id }, select: { id: true } });
+      if (!existing) return { status: "error", message: "not found" };
       await prisma.stream.delete({ where: { id } });
       return { status: "success" };
     }
@@ -153,9 +163,15 @@ export async function handleXuiExtendedAction(
     case "edit_user": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
+      const existing = await prisma.panelUser.findUnique({ where: { id }, select: { id: true } });
+      if (!existing) return { status: "error", message: "not found" };
       const data: Prisma.PanelUserUpdateInput = {};
-      if (params.get("password")) data.passwordHash = await hashPassword(params.get("password")!);
-      if (params.get("credits")) data.credits = parseInt(params.get("credits")!, 10);
+      if (params.get("password")) {
+        const passErr = validateLineCredential(params.get("password")!, "password");
+        if (passErr) return { status: "error", message: passErr };
+        data.passwordHash = await hashPassword(params.get("password")!);
+      }
+      if (params.get("credits")) data.credits = parseBoundedInt(params.get("credits"), 0, 0, 1_000_000);
       if (params.get("is_active") === "0") data.isActive = false;
       if (params.get("is_active") === "1") data.isActive = true;
       const user = await prisma.panelUser.update({ where: { id }, data });
@@ -165,6 +181,13 @@ export async function handleXuiExtendedAction(
     case "delete_user": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
+      if (id === adminId) return { status: "error", message: "cannot delete self" };
+      const existing = await prisma.panelUser.findUnique({
+        where: { id },
+        select: { id: true, role: true },
+      });
+      if (!existing) return { status: "error", message: "not found" };
+      if (existing.role === PanelRole.ADMIN) return { status: "error", message: "cannot delete admin" };
       await prisma.panelUser.delete({ where: { id } });
       return { status: "success" };
     }
@@ -301,7 +324,7 @@ export async function handleXuiExtendedAction(
           server: { select: { id: true, name: true } },
         },
         orderBy: { lastSeenAt: "desc" },
-        take: Math.min(500, parseInt(params.get("limit") ?? "200", 10)),
+        take: parseBoundedInt(params.get("limit"), 200, 1, 500),
       });
       return { status: "success", processes };
     }
@@ -318,7 +341,7 @@ export async function handleXuiExtendedAction(
     case "create_category": {
       const name = params.get("name");
       if (!name) return { status: "error", message: "name required" };
-      const categoryType = (params.get("category_type") ?? "LIVE") as CategoryType;
+      const categoryType = parseCategoryType(params.get("category_type")) ?? CategoryType.LIVE;
       const category = await prisma.category.create({
         data: { name, categoryType },
       });
@@ -329,6 +352,8 @@ export async function handleXuiExtendedAction(
       const id = params.get("id");
       const name = params.get("name");
       if (!id || !name) return { status: "error", message: "id and name required" };
+      const existing = await prisma.category.findUnique({ where: { id }, select: { id: true } });
+      if (!existing) return { status: "error", message: "not found" };
       const category = await prisma.category.update({ where: { id }, data: { name } });
       return { status: "success", category };
     }
@@ -336,6 +361,8 @@ export async function handleXuiExtendedAction(
     case "delete_category": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
+      const existing = await prisma.category.findUnique({ where: { id }, select: { id: true } });
+      if (!existing) return { status: "error", message: "not found" };
       await prisma.category.delete({ where: { id } });
       return { status: "success" };
     }
@@ -383,7 +410,7 @@ export async function handleXuiExtendedAction(
 
     case "get_events": {
       const logs = await prisma.activityLog.findMany({
-        take: Math.min(200, parseInt(params.get("limit") ?? "50", 10)),
+        take: parseBoundedInt(params.get("limit"), 50, 1, 200),
         orderBy: { createdAt: "desc" },
       });
       return { status: "success", events: logs };
@@ -393,7 +420,7 @@ export async function handleXuiExtendedAction(
     case "get_user_info": {
       const user = await prisma.panelUser.findUnique({
         where: { id: adminId },
-        select: { id: true, username: true, role: true, credits: true, apiKey: true },
+        select: { id: true, username: true, role: true, credits: true },
       });
       return { status: "success", user_info: user };
     }
@@ -412,6 +439,10 @@ export async function handleXuiExtendedAction(
       const password = params.get("password") ?? generatePassword();
       const preset = params.get("preset") ?? "support_agent";
       if (!username) return { status: "error", message: "username required" };
+      const userErr = validateLineCredential(username, "username");
+      if (userErr) return { status: "error", message: userErr };
+      const passErr = validateLineCredential(password, "password");
+      if (passErr) return { status: "error", message: passErr };
       const { permissionsForPreset } = await import("./staff-permissions");
       const staff = await prisma.panelUser.create({
         data: {

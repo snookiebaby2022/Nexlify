@@ -4,15 +4,12 @@ import { resolveChannelId, resolveEpgId } from "./subscription-export";
 import { exportPlaybackUrl } from "./export-playback-url";
 import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
-import { parseBitrates, formatTimeshiftLabel } from "./stream-variants";
+import { parseBitrates } from "./stream-variants";
 import {
   xtreamSafeText,
-  xtreamUnix,
   xtreamUnixString,
   xtreamOutputFormats,
-  xtreamCategoryIds,
-  xtreamCatalogDirectSource,
-  xtreamListingExtension,
+  xtreamM3uAttr,
 } from "./xtream-safe";
 import { seriesSeedsForBouquets, resolveCategoryIdParam } from "./xtream-stream-id";
 import { expandCategoryFilter } from "./category-tree";
@@ -33,6 +30,7 @@ import { getPanelServerSettings } from "./panel-server";
 import { getSettingGroup } from "./panel-settings";
 import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
 import { preferLiveOutputFormats, resolveClientPlaybackProfile } from "./client-playback-profiles";
+import { mapXtreamLiveItem, mapXtreamSeriesItem, mapXtreamVodItem } from "./xtream-catalog-items";
 
 function cuidToNum(id: string): number {
   let h = 0;
@@ -250,6 +248,13 @@ async function categoryIdsForXtreamFilter(
   return ids.size ? [...ids] : "missing";
 }
 
+export async function resolveXtreamCategoryFilter(
+  categoryId: string,
+  type: StreamType
+): Promise<string[] | "uncategorized" | "missing"> {
+  return categoryIdsForXtreamFilter(categoryId, type);
+}
+
 export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
   let live;
   if (categoryId != null && categoryId !== "") {
@@ -267,33 +272,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
 
   const canonical = await buildCanonicalCategoryMaps(StreamType.LIVE);
 
-  return live.map((s, i) => {
-    const catchup = s.vodMode === "CATCHUP" || s.isShifted;
-    const archiveDays = s.archiveDays ?? 0;
-    const timeshiftHours = s.timeshiftSeconds ? Math.ceil(s.timeshiftSeconds / 3600) : 0;
-    const shiftLabel = formatTimeshiftLabel(s.timeshiftSeconds);
-    const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
-    const name = xtreamSafeText(shiftLabel ? `${s.name} (${shiftLabel})` : s.name) || "Live";
-    return {
-      num: i + 1,
-      name,
-      stream_type: "live",
-      stream_id: cuidToNum(s.id),
-      stream_icon: xtreamSafeText(s.streamIcon),
-      epg_channel_id: xtreamSafeText(resolveEpgId(s)),
-      epg_id: xtreamSafeText(resolveEpgId(s)),
-      added: xtreamUnixString(s.createdAt),
-      category_id: numCategoryId,
-      category_ids: xtreamCategoryIds(numCategoryId),
-      custom_sid: "",
-      tv_archive: catchup || timeshiftHours > 0 ? 1 : 0,
-      // XCIPTV builds /live/user/pass/{stream_id}.ts from stream_id. A filled
-      // direct_source makes it HTTP-probe every channel during "Update media".
-      direct_source: xtreamCatalogDirectSource(),
-      tv_archive_duration: catchup ? archiveDays || timeshiftHours || 7 : timeshiftHours || 0,
-      updated_at: xtreamUnix(s.updatedAt),
-    };
-  });
+  return live.map((s, i) => mapXtreamLiveItem(s, i, canonical));
 }
 
 export async function xtreamVodStreams(line: LineWithBouquets, _baseUrl: string, categoryId?: string | null) {
@@ -313,27 +292,7 @@ export async function xtreamVodStreams(line: LineWithBouquets, _baseUrl: string,
 
   const canonical = await buildCanonicalCategoryMaps(StreamType.MOVIE);
 
-  return vod.map((s, i) => {
-    const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
-    return {
-      num: i + 1,
-      name: xtreamSafeText(s.name) || "Movie",
-      stream_type: "movie",
-      stream_id: cuidToNum(s.id),
-      stream_icon: xtreamSafeText(s.streamIcon),
-      rating: "0",
-      rating_5based: 0,
-      added: xtreamUnixString(s.createdAt),
-      updated_at: xtreamUnix(s.updatedAt),
-      is_adult: s.isAdult ? 1 : 0,
-      category_id: numCategoryId,
-      category_ids: xtreamCategoryIds(numCategoryId),
-      container_extension: xtreamListingExtension(s.containerExtension),
-      custom_sid: "",
-      // Empty like live: XCIPTV probes every filled URL during Update Content.
-      direct_source: xtreamCatalogDirectSource(),
-    };
-  });
+  return vod.map((s, i) => mapXtreamVodItem(s, i, canonical));
 }
 
 export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
@@ -358,31 +317,7 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
 
   const canonical = await buildCanonicalCategoryMaps(StreamType.SERIES);
 
-  return seeds.map((s, i) => {
-    const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
-    const cover = xtreamSafeText(s.streamIcon);
-    const modified = xtreamUnix(s.updatedAt);
-    return {
-      num: i + 1,
-      name: xtreamSafeText(s.name) || "Series",
-      series_id: cuidToNum(s.id),
-      cover,
-      cover_big: cover,
-      plot: "",
-      cast: "",
-      director: "",
-      genre: "",
-      releaseDate: "",
-      last_modified: String(modified),
-      rating: "0",
-      rating_5based: 0,
-      backdrop_path: [] as string[],
-      youtube_trailer: "",
-      episode_run_time: "0",
-      category_id: numCategoryId,
-      category_ids: xtreamCategoryIds(numCategoryId),
-    };
-  });
+  return seeds.map((s, i) => mapXtreamSeriesItem(s, i, canonical));
 }
 
 export async function xtreamSeriesCategoriesForLine(line: LineWithBouquets) {
@@ -452,23 +387,26 @@ export function buildM3uStream(
                 continue;
               }
 
-              const logo = isExtended && full.streamIcon ? ` tvg-logo="${full.streamIcon}"` : "";
-              const tvgId = isExtended ? resolveEpgId(full) : "";
-              const tvgName = full.name.replace(/"/g, "'");
-              const group =
-                full.type === StreamType.LIVE
-                  ? "Live"
-                  : full.type === StreamType.MOVIE
-                    ? "Movies"
-                    : "Series";
+              const logo = isExtended && full.streamIcon ? ` tvg-logo="${xtreamM3uAttr(full.streamIcon)}"` : "";
+              const tvgId = isExtended ? xtreamM3uAttr(resolveEpgId(full)) : "";
+              const tvgName = xtreamM3uAttr(full.name);
+              const group = xtreamM3uAttr(
+                full.categoryName ||
+                  (full.type === StreamType.LIVE
+                    ? "Live"
+                    : full.type === StreamType.MOVIE
+                      ? "Movies"
+                      : "Series")
+              );
               const playUrl = exportPlaybackUrl(baseUrl, line, full, full, undefined, output, directPlay);
+              const displayName = xtreamM3uAttr(full.name) || "Channel";
 
               if (isExtended) {
                 batchLines.push(
-                  `#EXTINF:-1 tvg-id="${tvgId}" tvg-name="${tvgName}" channel-id="${resolveChannelId(full)}"${logo} group-title="${group}",${full.name}`
+                  `#EXTINF:-1 tvg-id="${tvgId}" tvg-name="${tvgName}" channel-id="${xtreamM3uAttr(resolveChannelId(full))}"${logo} group-title="${group}",${displayName}`
                 );
               } else {
-                batchLines.push(`#EXTINF:-1,${full.name}`);
+                batchLines.push(`#EXTINF:-1,${displayName}`);
               }
               batchLines.push(playUrl);
             }

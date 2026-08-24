@@ -10,6 +10,7 @@
  *   IPTV_EDGE_BACKEND=127.0.0.1:13000
  *   IPTV_EDGE_HTTP_PORTS=80,8080,25461
  *   IPTV_EDGE_HTTPS_PORTS=
+ *   IPTV_EDGE_TRUST_XFF=loopback
  *   PANEL_INTERNAL_SECRET=...
  *   NEXLIFY_HLS_DIR=/var/lib/nexlify/hls
  */
@@ -42,24 +43,46 @@ loadDotEnv();
 const BACKEND = process.env.IPTV_EDGE_BACKEND || "127.0.0.1:13000";
 const [backendHost, backendPortRaw] = BACKEND.split(":");
 const backendPort = Number(backendPortRaw || 13000);
-/** Cap sockets to the single Next worker so live zaps cannot fill the 511 accept queue. */
+/** Cap sockets per pool so catalog dumps cannot starve login/health. */
+const adminAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: Number(process.env.IPTV_EDGE_ADMIN_SOCKETS || 16),
+  maxFreeSockets: 8,
+  timeout: 60_000,
+});
 const apiAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: Number(process.env.IPTV_EDGE_API_SOCKETS || 32),
+  maxSockets: Number(process.env.IPTV_EDGE_API_SOCKETS || 24),
   maxFreeSockets: 8,
   timeout: 300_000,
 });
 const liveAgent = new http.Agent({
+  // Do not keepAlive: a wedged live-auth socket used to stall every /live zap
+  // (max 12 sockets, no first byte to the player). Fresh connections recover
+  // as soon as the panel is healthy again.
+  keepAlive: false,
+  maxSockets: Number(process.env.IPTV_EDGE_LIVE_SOCKETS || 64),
+  timeout: 20_000,
+});
+const vodHttpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: Number(process.env.IPTV_EDGE_LIVE_SOCKETS || 12),
-  maxFreeSockets: 8,
-  timeout: 60_000,
+  maxSockets: Number(process.env.IPTV_EDGE_VOD_SOCKETS || 48),
+  maxFreeSockets: 16,
+  keepAliveMsecs: 15_000,
+  timeout: 300_000,
+});
+const vodHttpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: Number(process.env.IPTV_EDGE_VOD_SOCKETS || 48),
+  maxFreeSockets: 16,
+  keepAliveMsecs: 15_000,
+  timeout: 300_000,
+  rejectUnauthorized: false,
 });
 
-function isPanelPriorityPath(urlPath) {
+function isAdminUiPath(urlPath) {
   const p = String(urlPath || "/").split("?")[0];
   return (
-    /\/(?:player_api|panel_api|get|xmltv)\.php$/i.test(p) ||
     p === "/" ||
     p.startsWith("/login") ||
     p.startsWith("/admin") ||
@@ -70,13 +93,24 @@ function isPanelPriorityPath(urlPath) {
   );
 }
 
+function isCatalogPath(urlPath) {
+  const p = String(urlPath || "/").split("?")[0];
+  return /\/(?:player_api|panel_api|get|xmltv)\.php$/i.test(p);
+}
+
+function isPanelPriorityPath(urlPath) {
+  return isAdminUiPath(urlPath) || isCatalogPath(urlPath);
+}
+
 function backendAgentFor(urlPath) {
-  return isPanelPriorityPath(urlPath) ? apiAgent : liveAgent;
+  if (isAdminUiPath(urlPath)) return adminAgent;
+  if (isCatalogPath(urlPath)) return apiAgent;
+  return liveAgent;
 }
 /** Retry panel upstream while nexlify restarts (ECONNREFUSED on :13000). */
 const BACKEND_RETRY_MS = Number(process.env.IPTV_EDGE_BACKEND_RETRY_MS || 500);
-const BACKEND_RETRY_MAX = Number(process.env.IPTV_EDGE_BACKEND_RETRY_MAX || 120);
-const BACKEND_RETRY_BUDGET_MS = Number(process.env.IPTV_EDGE_BACKEND_RETRY_BUDGET_MS || 90_000);
+const BACKEND_RETRY_MAX = Number(process.env.IPTV_EDGE_BACKEND_RETRY_MAX || 8);
+const BACKEND_RETRY_BUDGET_MS = Number(process.env.IPTV_EDGE_BACKEND_RETRY_BUDGET_MS || 12_000);
 const BACKEND_STARTUP_WAIT_MS = Number(process.env.IPTV_EDGE_BACKEND_WAIT_MS || 120_000);
 const INTERNAL_SECRET =
   process.env.PANEL_INTERNAL_SECRET ||
@@ -98,6 +132,32 @@ const HLS_RE = /\.m3u8(?:[?#]|$)/i;
 const HLS_SEG_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\/hls\/(seg\d+\.ts)$/i;
 const LIVE_M3U8_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\.m3u8$/i;
 
+function isTinyLiveRangeProbe(range) {
+  const r = String(range ?? "").trim();
+  if (!r) return false;
+  const m = /^bytes=(\d+)-(\d+)$/i.exec(r);
+  if (!m) return false;
+  const start = Number(m[1]);
+  const end = Number(m[2]);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return false;
+  return end - start < 65536;
+}
+
+/** Exo/Chrome can play an instant HLS wrap. Smarters/LibVLC need real HLS segments. */
+function userAgentAllowsInstantTsWrap(ua) {
+  const s = String(ua || "").toLowerCase();
+  if (!s) return false;
+  if (s.includes("smarters") || s.includes("libvlc") || s.includes("lavf") || s.includes("vlc/")) {
+    return false;
+  }
+  if (s.includes("exoplayer") || s.includes("applecoremedia") || s.includes("cfnetwork") || s.includes("hls.js")) {
+    return true;
+  }
+  if (s.includes("chrome/") || s.includes("firefox/") || s.includes("edg/") || s.includes("crios/")) return true;
+  if (s.includes("safari/") && s.includes("version/")) return true;
+  return false;
+}
+
 function parsePorts(raw, fallback) {
   const s = (raw ?? fallback ?? "").trim();
   if (!s) return [];
@@ -117,11 +177,49 @@ function sanitizeHostHeader(raw) {
   return t;
 }
 
-function clientIp(req) {
-  const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
-  let ip = fwd || req.socket.remoteAddress || "";
+function isLoopbackIp(ip) {
+  return ip === "127.0.0.1" || ip === "::1" || ip === "0:0:0:0:0:0:0:1";
+}
+
+function isValidIpLiteral(ip) {
+  if (!ip || ip.length > 45) return false;
+  if (ip.includes(":") && !ip.includes(" ")) return true;
+  const parts = ip.split(".");
+  if (parts.length !== 4) return false;
+  return parts.every((p) => {
+    if (!/^\d{1,3}$/.test(p)) return false;
+    const n = Number(p);
+    return n >= 0 && n <= 255;
+  });
+}
+
+function socketIp(req) {
+  let ip = req.socket.remoteAddress || "";
   if (ip.startsWith("::ffff:")) ip = ip.slice(7);
   return ip;
+}
+
+/**
+ * Prefer the TCP peer. Only honor X-Forwarded-For when the hop is loopback
+ * (nginx on this host) or IPTV_EDGE_TRUST_XFF=always. Direct clients can
+ * otherwise spoof IP locks / geo / DDoS.
+ */
+function clientIp(req) {
+  const peer = socketIp(req);
+  const trust = String(process.env.IPTV_EDGE_TRUST_XFF || "loopback").toLowerCase();
+  const allowXff =
+    trust === "1" ||
+    trust === "true" ||
+    trust === "always" ||
+    ((trust === "loopback" || trust === "") && isLoopbackIp(peer));
+  if (allowXff) {
+    const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+    const real = String(req.headers["x-real-ip"] || "").trim();
+    const candidate = fwd || real;
+    let ip = candidate.startsWith("::ffff:") ? candidate.slice(7) : candidate;
+    if (isValidIpLiteral(ip)) return ip;
+  }
+  return peer;
 }
 
 /** HTTP heartbeat only — must not reset lastClientAt or HLS never goes idle. */
@@ -341,6 +439,21 @@ function createLiveByteMeter(pulseCtx) {
   };
 }
 
+function parseAltsHeader(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return [];
+  return s
+    .split(",")
+    .map((part) => {
+      try {
+        return decodeURIComponent(part.trim());
+      } catch {
+        return "";
+      }
+    })
+    .filter((u) => /^https?:\/\//i.test(u));
+}
+
 function parseOutboundProxyHeader(raw) {
   const s = String(raw || "").trim();
   if (!s || /^socks5:/i.test(s)) return null;
@@ -476,6 +589,31 @@ function liveTsHeaders() {
   };
 }
 
+function headerStr(headers, key) {
+  const v = headers?.[key];
+  if (Array.isArray(v)) return v[0] ? String(v[0]) : "";
+  return v ? String(v) : "";
+}
+
+/** Copy only media headers — hop-by-hop / Set-Cookie / Location leak the provider. */
+function vodClientHeaders(upHeaders) {
+  const headers = {
+    "Content-Type": headerStr(upHeaders, "content-type") || "video/mp4",
+    "Cache-Control": "private, no-cache, no-store",
+    "Access-Control-Allow-Origin": "*",
+    "Accept-Ranges": headerStr(upHeaders, "accept-ranges") || "bytes",
+  };
+  const len = headerStr(upHeaders, "content-length");
+  if (len) headers["Content-Length"] = len;
+  const cr = headerStr(upHeaders, "content-range");
+  if (cr) headers["Content-Range"] = cr;
+  const lm = headerStr(upHeaders, "last-modified");
+  if (lm) headers["Last-Modified"] = lm;
+  const et = headerStr(upHeaders, "etag");
+  if (et) headers["ETag"] = et;
+  return headers;
+}
+
 function hlsPlaylistHeaders() {
   return {
     "Content-Type": "application/x-mpegURL",
@@ -520,7 +658,7 @@ function probeBackendHealth() {
         port: backendPort,
         path: "/api/health",
         method: "GET",
-        agent: apiAgent,
+        agent: adminAgent,
         timeout: 4000,
       },
       (res) => {
@@ -577,7 +715,7 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
         method: clientReq.method,
         agent: backendAgentFor(clientReq.url),
         headers,
-        timeout: 300_000,
+        timeout: isAdminUiPath(clientReq.url) ? 60_000 : 300_000,
       },
       (proxyRes) => {
         const hdrs = { ...proxyRes.headers };
@@ -611,7 +749,7 @@ function forward(clientReq, clientRes, { listenPort, proto }) {
       if (!clientRes.headersSent) {
         clientRes.writeHead(502, { "content-type": "text/plain" });
       }
-      clientRes.end(`iptv-edge proxy error: ${err.message}`);
+      clientRes.end("iptv-edge proxy error");
     });
     if (hasBody) clientReq.pipe(proxyReq);
     else proxyReq.end();
@@ -665,6 +803,7 @@ function authLive(clientReq) {
           resolve({
             status: res.statusCode || 502,
             upstream: String(res.headers["x-nexlify-upstream"] || ""),
+            alts: parseAltsHeader(res.headers["x-nexlify-alts"]),
             live: String(res.headers["x-nexlify-live"] || "") === "1",
             hlsNative: String(res.headers["x-nexlify-hls-native"] || "") === "1",
             passthrough: String(res.headers["x-nexlify-passthrough"] || "") === "1" || res.statusCode === 204,
@@ -693,17 +832,27 @@ function authLive(clientReq) {
   });
 }
 
+function pruneAuthCache(now) {
+  if (authCache.size <= 2048) return;
+  for (const [key, hit] of authCache) {
+    if (hit.expires <= now) authCache.delete(key);
+  }
+  while (authCache.size > 4096) {
+    const oldest = authCache.keys().next().value;
+    if (!oldest) break;
+    authCache.delete(oldest);
+  }
+}
+
 async function authLiveCached(clientReq) {
   const key = authCacheKey(clientReq);
+  const now = Date.now();
   const hit = authCache.get(key);
-  if (hit && hit.expires > Date.now()) return hit.data;
+  if (hit && hit.expires > now) return hit.data;
   const data = await authLive(clientReq);
-  if (data.status === 200 && (data.upstream || data.streamId)) {
-    authCache.set(key, { expires: Date.now() + AUTH_CACHE_TTL_MS, data });
-    if (authCache.size > 4096) {
-      const oldest = authCache.keys().next().value;
-      if (oldest) authCache.delete(oldest);
-    }
+  if (data.status === 200 && data.upstream) {
+    authCache.set(key, { expires: now + AUTH_CACHE_TTL_MS, data });
+    pruneAuthCache(now);
   }
   return data;
 }
@@ -800,7 +949,25 @@ function serveHlsPlaylist(streamId, clientReq, clientRes, pulseCtx) {
   }
 }
 
-function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx) {
+function serveInstantTsPlaylist(clientReq, clientRes, pulseCtx) {
+  const pathOnly = String(clientReq.url || "/").split("?")[0];
+  const name = pathOnly.replace(/\.m3u8$/i, ".ts").split("/").pop() || "stream.ts";
+  const body = [
+    "#EXTM3U",
+    "#EXT-X-VERSION:3",
+    "#EXT-X-TARGETDURATION:6",
+    "#EXT-X-MEDIA-SEQUENCE:0",
+    "#EXT-X-PLAYLIST-TYPE:EVENT",
+    "#EXTINF:6.000,",
+    name,
+    "",
+  ].join("\n");
+  if (pulseCtx) pulseConnection(pulseCtx, Buffer.byteLength(body));
+  clientRes.writeHead(200, hlsPlaylistHeaders());
+  clientRes.end(body);
+}
+
+function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, onUnplayable) {
   const meter = pulseCtx ? createLiveByteMeter(pulseCtx) : null;
   let stopKickWatch = () => undefined;
   const stopStream = () => {
@@ -842,6 +1009,10 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx) {
   const fail = (msg) => {
     stopKickWatch();
     upRes.destroy();
+    if (typeof onUnplayable === "function" && !clientRes.headersSent) {
+      onUnplayable(msg);
+      return;
+    }
     if (!clientRes.headersSent) {
       clientRes.writeHead(502, { "content-type": "text/plain" });
       clientRes.end(msg);
@@ -905,17 +1076,45 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx) {
   });
 }
 
-function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, listenPort, proto, proxy, altProtocolLeft, pulseCtx }) {
+function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, listenPort, proto, proxy, altProtocolLeft, pulseCtx, failovers, method }) {
+  const remaining = Array.isArray(failovers) ? failovers.filter(Boolean) : [];
+  const reqMethod = String(method || clientReq.method || "GET").toUpperCase() === "HEAD" ? "HEAD" : "GET";
+  const tryNext = (reason) => {
+    if (clientRes.headersSent) return false;
+    if (remaining.length) {
+      const next = remaining.shift();
+      pipeUpstream(next, clientReq, clientRes, {
+        live,
+        redirectsLeft: 5,
+        listenPort,
+        proto,
+        proxy,
+        altProtocolLeft: 1,
+        pulseCtx,
+        failovers: remaining,
+        method: reqMethod,
+      });
+      return true;
+    }
+    if (live) {
+      forward(clientReq, clientRes, { listenPort, proto });
+      return true;
+    }
+    void reason;
+    return false;
+  };
   targetUrl = normalizeUpstreamUrl(targetUrl);
   let parsed;
   try {
     parsed = new URL(targetUrl);
   } catch {
+    if (tryNext("invalid upstream")) return;
     clientRes.writeHead(502, { "content-type": "text/plain" });
     clientRes.end("Invalid upstream");
     return;
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    if (tryNext("unsupported upstream")) return;
     clientRes.writeHead(502, { "content-type": "text/plain" });
     clientRes.end("Unsupported upstream");
     return;
@@ -933,7 +1132,7 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
   const reqOpts = {
     hostname: parsed.hostname,
     port: Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80)),
-    method: "GET",
+    method: reqMethod,
     path: `${parsed.pathname}${parsed.search}`,
     headers: {
       ...headers,
@@ -942,6 +1141,9 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
     timeout: 300_000,
   };
   if (parsed.protocol === "https:") reqOpts.rejectUnauthorized = false;
+  if (!live && !proxy) {
+    reqOpts.agent = parsed.protocol === "https:" ? vodHttpsAgent : vodHttpAgent;
+  }
   if (proxy) {
     reqOpts.createConnection = (_opts, cb) => {
       connectOriginSocket(parsed.toString(), proxy, 30_000)
@@ -971,6 +1173,8 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         proxy,
         altProtocolLeft,
         pulseCtx,
+        failovers: remaining,
+        method: reqMethod,
       });
       return;
     }
@@ -988,6 +1192,8 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
             proxy,
             altProtocolLeft: altProtocolLeft - 1,
             pulseCtx,
+            failovers: remaining,
+            method: reqMethod,
           });
           return;
         } catch {
@@ -999,10 +1205,11 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         forward(clientReq, clientRes, { listenPort, proto });
         return;
       }
+      if (tryNext("upstream status")) return;
       if (!clientRes.headersSent) {
         clientRes.writeHead(status || 502, { "content-type": "text/plain" });
       }
-      clientRes.end(`upstream HTTP ${status}`);
+      clientRes.end("upstream error");
       return;
     }
     if (live) {
@@ -1014,10 +1221,29 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         forward(clientReq, clientRes, { listenPort, proto });
         return;
       }
-      pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx);
+      if (ct.includes("html") || ct.includes("json") || ct.startsWith("text/")) {
+        upRes.resume();
+        up.destroy();
+        if (tryNext("non-media content-type")) return;
+        forward(clientReq, clientRes, { listenPort, proto });
+        return;
+      }
+      pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, () => {
+        if (tryNext("not mpegts")) return;
+        if (!clientRes.headersSent) {
+          clientRes.writeHead(502, { "content-type": "text/plain" });
+          clientRes.end("Upstream is not MPEG-TS");
+        }
+      });
       return;
     }
-    clientRes.writeHead(status || 502, upRes.headers);
+    if (reqMethod === "HEAD") {
+      clientRes.writeHead(status || 200, vodClientHeaders(upRes.headers));
+      upRes.resume();
+      clientRes.end();
+      return;
+    }
+    clientRes.writeHead(status || 200, vodClientHeaders(upRes.headers));
     upRes.pipe(clientRes);
   });
   up.on("timeout", () => up.destroy(new Error("upstream timeout")));
@@ -1034,6 +1260,8 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
           proxy,
           altProtocolLeft: altProtocolLeft - 1,
           pulseCtx,
+          failovers: remaining,
+          method: reqMethod,
         });
         return;
       } catch {
@@ -1041,17 +1269,19 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
       }
     }
     if (!clientRes.headersSent) {
+      if (tryNext(err.message)) return;
       clientRes.writeHead(502, { "content-type": "text/plain" });
     }
-    clientRes.end(`upstream error: ${err.message}`);
+    clientRes.end("upstream error");
   });
   clientReq.on("close", () => up.destroy());
   up.end();
 }
 
 function denyAuth(clientRes, status) {
+  const msg = status === 401 ? "Unauthorized" : status === 404 ? "Not found" : "Forbidden";
   clientRes.writeHead(status, { "content-type": "text/plain" });
-  clientRes.end(status === 401 ? "Unauthorized" : "Forbidden");
+  clientRes.end(msg);
 }
 
 /**
@@ -1071,7 +1301,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     forward(clientReq, clientRes, ctx);
     return;
   }
-  if (auth.status === 401 || auth.status === 403 || auth.status === 429) {
+  if (auth.status === 401 || auth.status === 403 || auth.status === 429 || auth.status === 404) {
     denyAuth(clientRes, auth.status);
     return;
   }
@@ -1093,8 +1323,14 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
   const streamId = auth.streamId;
   touchHlsDaemon(streamId);
   let fresh = hlsDirFresh(streamId);
+  if (!fresh && kind === "playlist" && !isHead && auth.upstream && !auth.hlsNative) {
+    if (userAgentAllowsInstantTsWrap(clientReq.headers["user-agent"])) {
+      serveInstantTsPlaylist(clientReq, clientRes, pulseCtx);
+      return;
+    }
+  }
   if (!fresh && kind === "playlist" && !isHead) {
-    const deadline = Date.now() + 6_000;
+    const deadline = Date.now() + 800;
     while (!fresh && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 150));
       fresh = hlsDirFresh(streamId);
@@ -1173,9 +1409,9 @@ async function onRequest(clientReq, clientRes, ctx) {
       forward(clientReq, clientRes, ctx);
       return;
     }
-    if (auth.status === 401 || auth.status === 403 || auth.status === 429) {
+    if (auth.status === 401 || auth.status === 403 || auth.status === 429 || auth.status === 404) {
       clientRes.writeHead(auth.status, { "content-type": "text/plain" });
-      clientRes.end(auth.status === 401 ? "Unauthorized" : "Forbidden");
+      clientRes.end(auth.status === 401 ? "Unauthorized" : auth.status === 404 ? "Not found" : "Forbidden");
       return;
     }
     if (auth.status !== 200) {
@@ -1186,10 +1422,12 @@ async function onRequest(clientReq, clientRes, ctx) {
       auth.lineId && auth.streamId
         ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
         : null;
-    const isLiveRangeProbe = Boolean(auth.live && clientReq.method !== "HEAD" && clientReq.headers.range);
+    const isLiveRangeProbe = Boolean(
+      auth.live && clientReq.method !== "HEAD" && isTinyLiveRangeProbe(clientReq.headers.range)
+    );
     if (pulseCtx && clientReq.method !== "HEAD" && !isLiveRangeProbe) touchPlaybackSession(pulseCtx);
-    if (clientReq.method === "HEAD" || isLiveRangeProbe) {
-      clientRes.writeHead(200, auth.live ? liveTsHeaders() : { "Content-Type": "video/mp4", "Access-Control-Allow-Origin": "*" });
+    if (isLiveRangeProbe || (clientReq.method === "HEAD" && auth.live)) {
+      clientRes.writeHead(200, liveTsHeaders());
       clientRes.end();
       return;
     }
@@ -1199,6 +1437,8 @@ async function onRequest(clientReq, clientRes, ctx) {
       altProtocolLeft: 1,
       proxy: auth.outboundProxy,
       pulseCtx,
+      failovers: auth.alts || [],
+      method: clientReq.method,
       ...ctx,
     });
   } catch {

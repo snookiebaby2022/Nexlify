@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.31",
+  "latestVersion": "2.0.38",
   "releases": [
+    {
+      "version": "2.0.38",
+      "date": "2026-08-24",
+      "channel": "stable",
+      "summary": "Smarters/XCIPTV VOD playback, Xtream catalog speed, and panel-migration skip-existing that only adds missing rows.",
+      "changelog": [
+        "Smarters file VOD: relative 302 from .m3u8 to the real mkv/mp4, with HTTP 206 Range",
+        "XCIPTV: catalogs stay usable from disk cache, warm live/VOD/series in parallel, gzip listings",
+        "Panel migration: skip-existing matches stream URLs and pending placeholders, adds missing streams/lines/bouquet links only",
+        "Preview warns when SQL dump rows cannot be mapped so imports are not silently incomplete",
+        "Release feed latestVersion matches the installed panel (was stuck on 2.0.31)"
+      ],
+      "fixes": [
+        "Smarters movies/series not playing when the app requested .m3u8 for a file source",
+        "XCIPTV Update Content failing or hanging on the first catalog pull",
+        "Re-uploading the same SQL dump overwrote existing streams instead of adding only new rows"
+      ]
+    },
     {
       "version": "2.0.31",
       "date": "2026-08-22",

@@ -1,37 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLineByCredentials } from "@/lib/lines";
 import { getClientIp } from "@/lib/client-ip";
-import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
+import { asPlaybackGuardLine, assertPlaybackAllowed, playbackDenyMessage } from "@/lib/playback-guard";
 import {
   serverBaseUrl,
   xtreamUserInfo,
-  xtreamLiveStreams,
   xtreamLiveCategoriesForLine,
-  xtreamVodStreams,
   xtreamVodCategoriesForLine,
-  xtreamSeriesForLine,
   xtreamSeriesCategoriesForLine,
 } from "@/lib/xtream";
-import { xtreamVodInfo, xtreamSeriesInfo } from "@/lib/xtream-info";
+import { xtreamVodInfo, xtreamSeriesInfo, emptyXtreamSeriesInfo } from "@/lib/xtream-info";
 import { cuidToNum, resolveStreamIdParam } from "@/lib/xtream-stream-id";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
-import { checkDdosShield } from "@/lib/ddos-shield";
-import { cacheGet, cacheGetOrSet } from "@/lib/cache";
+import { cacheGetOrSet } from "@/lib/cache";
 import { getCacheTtls } from "@/lib/cache-ttl";
 import { getShortEpgForChannelIds } from "@/lib/epg";
 import { streamHasArchive } from "@/lib/catchup-playback-url";
-import { getAntiFreezeSettings, schedulePlaylistZapWarm } from "@/lib/anti-freeze";
+import { getAntiFreezeSettings, schedulePlaylistZapWarm, schedulePlaybackUpstreamWarm } from "@/lib/anti-freeze";
 import { iptvCorsPreflight } from "@/lib/iptv-cors";
 import { iptvJson } from "@/lib/iptv-json";
-import { xtreamDeltaArray } from "@/lib/xtream-safe";
 import { resolveClientPlaybackProfile } from "@/lib/client-playback-profiles";
+import { mergeXtreamRequestParams } from "@/lib/xtream-request-params";
+import { serveXtreamCatalogJson, warmXtreamCatalogs } from "@/lib/xtream-catalog-blob";
+import { warmLineXmltv } from "@/lib/xmltv-export";
 import { prisma } from "@/lib/prisma";
+import { resolvePlaybackUrlForLine } from "@/lib/line-playback";
+import { UPSTREAM_HLS_UA } from "@/lib/hls-playback";
 
-function xtreamEpgStreamParam(req: NextRequest): string {
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 180;
+
+function xtreamEpgStreamParam(params: URLSearchParams): string {
   return (
-    req.nextUrl.searchParams.get("stream_id") ||
-    req.nextUrl.searchParams.get("channel_id") ||
-    req.nextUrl.searchParams.get("epg_channel_id") ||
+    params.get("stream_id") ||
+    params.get("channel_id") ||
+    params.get("epg_channel_id") ||
     ""
   ).trim();
 }
@@ -69,29 +73,60 @@ async function resolveXtreamEpgListings(
   return getShortEpgForChannelIds(channelIds, limit, archivable);
 }
 
+function warmVodPlayback(
+  lineId: string,
+  streamIdParam: string,
+  ip?: string | null,
+  userAgent?: string | null
+): void {
+  void (async () => {
+    const streamId = await resolveStreamIdParam(streamIdParam, { lineId });
+    if (!streamId) return;
+    const url = await resolvePlaybackUrlForLine(lineId, streamId, {
+      clientIp: ip ?? undefined,
+      userAgent: userAgent ?? undefined,
+      skipGeo: true,
+    });
+    if (url) schedulePlaybackUpstreamWarm(url, UPSTREAM_HLS_UA);
+  })().catch(() => undefined);
+}
+
 export async function OPTIONS() {
   return iptvCorsPreflight();
 }
 
 export async function GET(req: NextRequest) {
+  return handlePlayerApi(req, req.nextUrl.searchParams);
+}
+
+/** XUI.one / Xtream apps POST username, password, action as form fields. */
+export async function POST(req: NextRequest) {
+  return handlePlayerApi(req, await mergeXtreamRequestParams(req));
+}
+
+async function handlePlayerApi(req: NextRequest, params: URLSearchParams) {
   const demoBlock = rejectDemoIptvPlayback(req);
   if (demoBlock) return demoBlock;
 
-  /** Gzip large Xtream catalog JSON when clients send Accept-Encoding: gzip. */
   const j = (data: unknown, init?: ResponseInit) =>
     iptvJson(data, { ...init, compressFor: req });
 
-  const ip = getClientIp(req);
-  const ddos = await checkDdosShield(ip);
-  if (!ddos.ok) {
-    return j({ error: ddos.reason }, { status: 429 });
+  try {
+    return await handlePlayerApiInner(req, params, j);
+  } catch (e) {
+    console.error("[player_api]", e instanceof Error ? e.message : e);
+    return j({ user_info: { auth: 0, message: "Temporary error" } }, { status: 500 });
   }
+}
 
-  const username = req.nextUrl.searchParams.get("username");
-  const password = req.nextUrl.searchParams.get("password");
-  const action = req.nextUrl.searchParams.get("action");
-  const timestampParam = req.nextUrl.searchParams.get("timestamp");
-  const clientTimestamp = timestampParam ? Number(timestampParam) : null;
+async function handlePlayerApiInner(
+  req: NextRequest,
+  params: URLSearchParams,
+  j: (data: unknown, init?: ResponseInit) => Promise<NextResponse>
+) {
+  const username = params.get("username");
+  const password = params.get("password");
+  const action = params.get("action");
 
   if (!username || !password) {
     return j({ error: "credentials required" }, { status: 400 });
@@ -105,33 +140,16 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  const ip = getClientIp(req);
   const deny = await assertPlaybackAllowed(
     asPlaybackGuardLine(line),
-    getClientIp(req),
+    ip,
     req.headers.get("user-agent") ?? undefined,
     { listingOnly: true }
   );
   if (deny) {
-    const msg =
-      deny === "ip"
-        ? "IP not allowed for this line"
-        : deny === "connections"
-          ? "Max connections reached"
-          : deny === "rate"
-            ? "Rate limit exceeded"
-            : deny === "blocklist"
-              ? "Access blocked"
-              : deny === "country"
-                ? "Country not allowed"
-                : deny === "vpn"
-                  ? "VPN or hosting not allowed"
-                  : deny === "user_agent"
-                    ? "User-Agent not allowed for this line"
-                    : deny === "ddos"
-                      ? "Access temporarily blocked (DDoS shield)"
-                    : "Playback denied";
     return j(
-      { user_info: { auth: 0, message: msg } },
+      { user_info: { auth: 0, message: playbackDenyMessage(deny) } },
       { status: deny === "rate" || deny === "ddos" ? 429 : 403 }
     );
   }
@@ -140,111 +158,91 @@ export async function GET(req: NextRequest) {
   const userAgent = req.headers.get("user-agent");
 
   if (!action) {
+    warmXtreamCatalogs(line);
+    warmLineXmltv(line);
     return j(await xtreamUserInfo(line, baseUrl, userAgent));
   }
 
   switch (action) {
     case "get_live_categories": {
+      warmXtreamCatalogs(line);
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(`xtream:live_categories:v5:${line.id}`, ttl.categories, () =>
         xtreamLiveCategoriesForLine(line)
       );
-      return j(xtreamDeltaArray(payload, clientTimestamp, (c) => Number(c.created_at || 0)));
+      return j(payload);
     }
     case "get_live_streams": {
-      const categoryId = req.nextUrl.searchParams.get("category_id");
-      const ttl = await getCacheTtls();
-      const cacheKey = `xtream:live_streams:v6:${line.id}:${categoryId ?? "all"}`;
-      const cached = await cacheGet<Awaited<ReturnType<typeof xtreamLiveStreams>>>(cacheKey);
-      const payload =
-        cached ??
-        (await cacheGetOrSet(cacheKey, Math.min(ttl.categories || 60, 180), () =>
-          xtreamLiveStreams(line, baseUrl, categoryId)
-        ));
+      const categoryId = params.get("category_id");
       const profile = resolveClientPlaybackProfile(userAgent);
-      if (!cached && profile.zapPrefetchOnPlaylist) {
+      return serveXtreamCatalogJson("live", line, req, categoryId, (ids) => {
+        if (!profile.zapPrefetchOnPlaylist) return;
         void getAntiFreezeSettings().then((antiFreeze) => {
-          if (!antiFreeze.zapPrefetchOnPlaylist) return;
           schedulePlaylistZapWarm(
             line.id,
-            payload.map((s) => String(s.stream_id)),
-            { clientIp: getClientIp(req), userAgent: userAgent ?? undefined },
+            ids,
+            { clientIp: ip, userAgent: userAgent ?? undefined },
             antiFreeze
           );
         });
-      }
-      return j(xtreamDeltaArray(payload, clientTimestamp, (s) => s.updated_at ?? 0));
+      });
     }
     case "get_vod_streams": {
-      const vodCategoryId = req.nextUrl.searchParams.get("category_id");
-      const ttl = await getCacheTtls();
-      const payload = await cacheGetOrSet(
-        `xtream:vod_streams:v4:${line.id}:${vodCategoryId ?? "all"}`,
-        Math.min(ttl.categories || 60, 180),
-        () => xtreamVodStreams(line, baseUrl, vodCategoryId)
-      );
-      return j(xtreamDeltaArray(payload, clientTimestamp, (s) => s.updated_at ?? 0));
+      const vodCategoryId = params.get("category_id");
+      return serveXtreamCatalogJson("vod", line, req, vodCategoryId);
     }
     case "get_vod_categories": {
+      warmXtreamCatalogs(line);
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(`xtream:vod_categories:v3:${line.id}`, ttl.categories, () =>
         xtreamVodCategoriesForLine(line)
       );
-      return j(xtreamDeltaArray(payload, clientTimestamp, (c) => Number(c.created_at || 0)));
+      return j(payload);
     }
     case "get_series_categories": {
+      warmXtreamCatalogs(line);
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(`xtream:series_categories:v3:${line.id}`, ttl.categories, () =>
         xtreamSeriesCategoriesForLine(line)
       );
-      return j(xtreamDeltaArray(payload, clientTimestamp, (c) => Number(c.created_at || 0)));
+      return j(payload);
     }
     case "get_series": {
-      const seriesCategoryId = req.nextUrl.searchParams.get("category_id");
-      const ttl = await getCacheTtls();
-      const payload = await cacheGetOrSet(
-        `xtream:series:v4:${line.id}:${seriesCategoryId ?? "all"}`,
-        Math.min(ttl.categories || 60, 180),
-        () => xtreamSeriesForLine(line, seriesCategoryId)
-      );
-      return j(xtreamDeltaArray(payload, clientTimestamp, (s) => Number(s.last_modified) || 0));
+      const seriesCategoryId = params.get("category_id");
+      return serveXtreamCatalogJson("series", line, req, seriesCategoryId);
     }
     case "get_vod_info": {
-      const vodId =
-        req.nextUrl.searchParams.get("vod_id") ||
-        req.nextUrl.searchParams.get("stream_id") ||
-        "";
+      const vodId = params.get("vod_id") || params.get("stream_id") || "";
       if (!vodId) return j({});
       const info = await xtreamVodInfo(line, baseUrl, vodId);
+      if (info) warmVodPlayback(line.id, vodId, ip, userAgent);
       return j(info ?? {});
     }
     case "get_series_info": {
-      const seriesId =
-        req.nextUrl.searchParams.get("series_id") ||
-        req.nextUrl.searchParams.get("stream_id") ||
-        "";
-      if (!seriesId) return j({});
+      const seriesId = params.get("series_id") || params.get("stream_id") || "";
+      if (!seriesId) return j(emptyXtreamSeriesInfo());
       const info = await xtreamSeriesInfo(line, baseUrl, seriesId);
-      return j(info ?? {});
+      if (info) warmVodPlayback(line.id, seriesId, ip, userAgent);
+      return j(info ?? emptyXtreamSeriesInfo());
     }
     case "get_short_epg": {
-      const streamId = xtreamEpgStreamParam(req);
+      const streamId = xtreamEpgStreamParam(params);
       if (!streamId) return j({ epg_listings: [] });
       const epg = await resolveXtreamEpgListings(line.id, streamId, 4);
       return j({ epg_listings: epg });
     }
     case "get_epg": {
-      const streamId = xtreamEpgStreamParam(req);
+      const streamId = xtreamEpgStreamParam(params);
       if (!streamId) return j({ epg_listings: [] });
       const limit = Math.min(
         500,
-        Math.max(1, parseInt(req.nextUrl.searchParams.get("limit") ?? "50", 10) || 50)
+        Math.max(1, parseInt(params.get("limit") ?? "50", 10) || 50)
       );
       const epg = await resolveXtreamEpgListings(line.id, streamId, limit);
       return j({ epg_listings: epg });
     }
     case "get_simple_data_table": {
-      const streamId = xtreamEpgStreamParam(req);
+      const streamId = xtreamEpgStreamParam(params);
       if (!streamId) return j({ epg_listings: [] });
       return j({ epg_listings: await resolveXtreamEpgListings(line.id, streamId, 10) });
     }
@@ -252,7 +250,7 @@ export async function GET(req: NextRequest) {
       return j(await xtreamUserInfo(line, baseUrl, userAgent));
     case "get_server_info": {
       const payload = await xtreamUserInfo(line, baseUrl, userAgent);
-      return j(payload);
+      return j(payload.server_info);
     }
     case "get_bouquets": {
       const rows = (line.bouquets ?? []).map((lb) => ({

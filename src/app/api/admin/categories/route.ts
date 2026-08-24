@@ -20,10 +20,28 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const typeFilter = req.nextUrl.searchParams.get("type")?.toUpperCase();
+  const lite = req.nextUrl.searchParams.get("lite") === "1";
+  const where =
+    typeFilter && VALID_TYPES.has(typeFilter) ? { categoryType: typeFilter as CategoryType } : undefined;
   try {
+    if (lite) {
+      const categories = await prisma.category.findMany({
+        where,
+        include: { parent: { select: { id: true, name: true } } },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      });
+      return NextResponse.json({
+        categories: categories.map((c) => ({
+          ...c,
+          activeCount: 0,
+          inactiveCount: 0,
+          _count: { streams: 0, children: 0 },
+        })),
+      });
+    }
+
     const categories = await prisma.category.findMany({
-      where:
-        typeFilter && VALID_TYPES.has(typeFilter) ? { categoryType: typeFilter as CategoryType } : undefined,
+      where,
       include: {
         parent: { select: { id: true, name: true } },
         children: { select: { id: true, name: true, sortOrder: true, categoryType: true, isAdult: true } },

@@ -58,16 +58,46 @@ export function xtreamCatalogDirectSource(): string {
   return "";
 }
 
-/** Xtream `container_extension` from the stored field (no URL parse on catalog). */
-export function xtreamListingExtension(containerExtension?: string | null, fallback = "mp4"): string {
-  const raw = String(containerExtension ?? "")
+const LISTING_MEDIA_EXT = new Set(["mp4", "mkv", "avi", "mov", "ts", "m4v", "webm", "m3u8"]);
+
+function normalizeListingExt(raw: string | null | undefined): string {
+  const v = String(raw ?? "")
     .trim()
     .replace(/^\./, "")
     .toLowerCase();
-  if (!raw) return fallback;
-  if (raw === "hls") return "m3u8";
-  const safe = raw.replace(/[^a-z0-9]/g, "");
-  return safe || fallback;
+  if (!v) return "";
+  if (v === "hls") return "m3u8";
+  const safe = v.replace(/[^a-z0-9]/g, "");
+  return LISTING_MEDIA_EXT.has(safe) ? safe : "";
+}
+
+/** File extension from a playback URL (`.mkv`, `.m3u8`, …). */
+export function mediaExtensionFromUrl(url?: string | null): string {
+  if (!url) return "";
+  const path = url.split("?")[0] ?? url;
+  const m = path.match(/\.([a-z0-9]{2,4})$/i);
+  return m ? normalizeListingExt(m[1]) : "";
+}
+
+/**
+ * Xtream `container_extension`. Prefer a real file extension from the source URL
+ * when the stored field is empty or the generic `mp4` default — XCIPTV/VLC request
+ * `/movie/…/id.{ext}` and fail if that does not match the file.
+ */
+export function xtreamListingExtension(
+  containerExtension?: string | null,
+  fallback = "mp4",
+  streamUrlOrExt?: string | null
+): string {
+  const fromField = normalizeListingExt(containerExtension);
+  const hint = String(streamUrlOrExt ?? "").trim();
+  const fromUrl = hint.includes("/") || hint.includes(":")
+    ? mediaExtensionFromUrl(hint)
+    : normalizeListingExt(hint);
+  if (fromUrl && fromUrl !== "m3u8" && (!fromField || fromField === "mp4" || fromField === "m3u8")) {
+    return fromUrl;
+  }
+  return fromField || fromUrl || fallback;
 }
 
 export function xmltvSafeText(value: unknown): string {
@@ -76,6 +106,17 @@ export function xmltvSafeText(value: unknown): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** M3U attribute values (tvg-name, group-title) — no quotes or newlines. */
+export function xtreamM3uAttr(value: unknown): string {
+  return xtreamSafeText(value).replace(/"/g, "'").replace(/[\r\n]+/g, " ");
+}
+
+/** HTTP Content-Disposition filename for get.php (blocks header injection). */
+export function xtreamM3uFilename(username: unknown): string {
+  const base = xtreamSafeText(username).replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 64);
+  return `${base || "playlist"}.m3u`;
 }
 
 export function xtreamBase64(value: unknown): string {

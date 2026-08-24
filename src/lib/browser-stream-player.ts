@@ -1,4 +1,5 @@
 import Hls from "hls.js";
+import { attachMpegTsIfSupported } from "@/lib/attach-mpegts";
 
 export type StreamPlayerHandle = {
   destroy: () => void;
@@ -22,6 +23,9 @@ export async function attachUrlToVideo(
     prevHls.destroy();
     (video as any).__hlsInstance = null;
   }
+
+  const mpeg = attachMpegTsIfSupported(video, url, onError);
+  if (mpeg) return mpeg;
 
   if (isHls && Hls.isSupported()) {
     const hls = new Hls({

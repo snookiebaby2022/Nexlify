@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getClientIp } from "@/lib/client-ip";
 
-import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
-import { trackConnection, isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
+import { asPlaybackGuardLine, assertPlaybackAllowed, playbackDenyMessage } from "@/lib/playback-guard";
+import { isSessionKicked, attachKickAwareProxyBody } from "@/lib/connections";
 import { getLineForPlaybackAuth, resolvePlaybackUrlForLine } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { iptvCorsPreflight, iptvText, withIptvCors } from "@/lib/iptv-cors";
 import { openUpstreamLiveStream, upstreamToWebResponse } from "@/lib/live-upstream-proxy";
-import { isHlsClientPath, HLS_PLAYLIST_CONTENT_TYPE, buildClientVodHlsPlaylist, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
+import { isHlsClientPath, HLS_PLAYLIST_CONTENT_TYPE, buildClientVodHlsPlaylist, UPSTREAM_HLS_UA, isHlsPlaybackUrl } from "@/lib/hls-playback";
+import { vodHlsFileRedirectLocation } from "@/lib/vod-proxy";
 import { serverBaseUrl } from "@/lib/xtream";
 
 export const runtime = "nodejs";
@@ -32,7 +33,10 @@ export async function GET(
   if (/^\d+$/.test(cleanId)) {
     const { resolveStreamIdParam } = await import("@/lib/xtream-stream-id");
     const resolved = await resolveStreamIdParam(cleanId, { username });
-    if (resolved) cleanId = resolved;
+    if (!resolved) {
+      return iptvText("Not found", { status: 404 });
+    }
+    cleanId = resolved;
   }
 
   const line = await getLineForPlaybackAuth(username);
@@ -55,14 +59,10 @@ export async function GET(
   const deny = await assertPlaybackAllowed(asPlaybackGuardLine(line), ip, ua, {
     streamId: cleanId,
   });
-  if (deny === "ip") return iptvText("IP not allowed for this line", { status: 403 });
-  if (deny === "connections") return iptvText("Max connections reached. You are using all allowed streams. Please disconnect another device or increase your connection limit in the panel.", { status: 403 });
-  if (deny === "rate") return iptvText("Rate limit exceeded", { status: 429 });
-  if (deny === "blocklist") return iptvText("Access blocked", { status: 403 });
-  if (deny === "country") return iptvText("Country not allowed", { status: 403 });
-  if (deny === "vpn") return iptvText("VPN or hosting not allowed", { status: 403 });
-  if (deny === "user_agent") return iptvText("User-Agent not allowed for this line", { status: 403 });
-  if (deny === "kicked") return iptvText("Session kicked", { status: 403 });
+  if (deny) {
+    const status = deny === "ddos" || deny === "rate" ? 429 : 403;
+    return iptvText(playbackDenyMessage(deny), { status });
+  }
 
   const playbackUrl = await resolvePlaybackUrlForLine(line.id, cleanId, {
     clientIp: ip,
@@ -73,19 +73,30 @@ export async function GET(
 
   if (isHlsClientPath(streamId) || /\.m3u8$/i.test(streamId)) {
     const streamKey = streamId.replace(/\.(m3u8|hls)$/i, "");
-    const packed = await buildClientVodHlsPlaylist({
-      playbackUrl,
-      panelOrigin: serverBaseUrl(req.url, req.headers),
-      username,
-      password,
-      streamKey,
-      diskStreamId: cleanId,
-    });
-    if (packed.ok) {
+    if (isHlsPlaybackUrl(playbackUrl)) {
+      const packed = await buildClientVodHlsPlaylist({
+        playbackUrl,
+        panelOrigin: serverBaseUrl(req.url, req.headers),
+        username,
+        password,
+        streamKey,
+        diskStreamId: cleanId,
+      });
+      if (packed.ok) {
+        return withIptvCors(
+          new NextResponse(packed.body, {
+            status: 200,
+            headers: { "Content-Type": HLS_PLAYLIST_CONTENT_TYPE, "Cache-Control": "no-cache" },
+          })
+        );
+      }
+    }
+    const fileLoc = vodHlsFileRedirectLocation(streamId, playbackUrl);
+    if (fileLoc) {
       return withIptvCors(
-        new NextResponse(packed.body, {
-          status: 200,
-          headers: { "Content-Type": HLS_PLAYLIST_CONTENT_TYPE, "Cache-Control": "no-cache" },
+        new NextResponse(null, {
+          status: 302,
+          headers: { Location: fileLoc, "Cache-Control": "no-cache" },
         })
       );
     }
@@ -98,6 +109,7 @@ export async function GET(
       userAgent: UPSTREAM_HLS_UA,
       timeoutMs: PROXY_TIMEOUT_MS,
       headers: range ? { Range: range } : undefined,
+      forwardRange: Boolean(range),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Playback fetch failed";
@@ -109,7 +121,11 @@ export async function GET(
     return withIptvCors(iptvText("Session kicked", { status: 403 }));
   }
 
-  const { stream, headers } = upstreamToWebResponse(open, range ? { "Accept-Ranges": "bytes" } : undefined);
+  const { stream, headers } = upstreamToWebResponse(
+    open,
+    range ? { "Accept-Ranges": "bytes" } : undefined,
+    { vod: true, playbackUrl }
+  );
   const trackedBody = attachKickAwareProxyBody({
     body: stream as unknown as ReadableStream<Uint8Array>,
     lineId: line.id,
@@ -119,7 +135,7 @@ export async function GET(
   });
   return withIptvCors(
     new NextResponse(trackedBody as unknown as BodyInit, {
-      status: range ? 206 : 200,
+      status: open.status === 206 ? 206 : 200,
       headers,
     })
   );

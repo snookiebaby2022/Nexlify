@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
+import { attachMpegTsIfSupported } from "@/lib/attach-mpegts";
 
 export type StreamPlayerHandle = {
   destroy: () => void;
@@ -117,6 +118,9 @@ export function useHlsPlayer(opts?: {
     }
     const video = videoRef.current;
     if (video) {
+      const mpeg = (video as unknown as { __mpegtsHandle?: { destroy: () => void } }).__mpegtsHandle;
+      try { mpeg?.destroy(); } catch { /* ignore */ }
+      (video as unknown as { __mpegtsHandle?: { destroy: () => void } }).__mpegtsHandle = undefined;
       video.pause();
       video.removeAttribute("src");
       video.load();
@@ -136,6 +140,15 @@ export function useHlsPlayer(opts?: {
       lastRecoveryAttempt.current = 0;
       mediaErrorCount.current = 0;
       lastDiscontinuity.current = -1;
+
+      const mpeg = attachMpegTsIfSupported(video, url, (msg) =>
+        setState((s) => ({ ...s, buffering: false, error: msg }))
+      );
+      if (mpeg) {
+        (video as unknown as { __mpegtsHandle?: { destroy: () => void } }).__mpegtsHandle = mpeg;
+        retryRef.current = () => playStream(url);
+        return;
+      }
 
       const isHls =
         url.includes(".m3u8") || url.includes("/hls/") || url.includes("m3u8");
@@ -389,6 +402,9 @@ export async function attachUrlToVideo(
     prevHls.destroy();
     (video as any).__hlsInstance = null;
   }
+
+  const mpeg = attachMpegTsIfSupported(video, url, onError);
+  if (mpeg) return mpeg;
 
   const isHls = url.includes(".m3u8") || url.includes("/hls/") || url.includes("m3u8");
 

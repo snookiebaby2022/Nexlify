@@ -84,3 +84,90 @@ INSERT INTO \`streams\` (\`id\`,\`type\`,\`stream_display_name\`,\`stream_source
   assert.ok(orphan);
   assert.equal(orphan!.streamUrl, "pending://xui/99");
 });
+
+test("normalizeMigrationStreamUrl and identity keys match dump reimports", async () => {
+  const {
+    normalizeMigrationStreamUrl,
+    migrationStreamIdentityKeys,
+    fillMissingStreamFields,
+    pendingStreamUrl,
+  } = await import("./stream-source-urls");
+  assert.equal(
+    normalizeMigrationStreamUrl(" https://CDN.Example.com/live/1/ "),
+    "https://cdn.example.com/live/1"
+  );
+  const keys = migrationStreamIdentityKeys({
+    streamUrl: "http://cdn.example.com/live/1",
+    legacyId: "42",
+    source: "xui",
+  });
+  assert.ok(keys.includes("http://cdn.example.com/live/1"));
+  assert.ok(keys.includes(pendingStreamUrl("42", "xui")));
+  assert.ok(!keys.includes("ch:42"));
+
+  const fill = fillMissingStreamFields(
+    {
+      streamUrl: pendingStreamUrl("42", "xui"),
+      categoryId: null,
+      serverId: null,
+      backupUrl: null,
+      streamIcon: null,
+      containerExtension: null,
+      epgChannelId: null,
+      channelId: null,
+    },
+    {
+      streamUrl: "http://cdn.example.com/live/1",
+      categoryId: "cat-1",
+      serverId: null,
+      backupUrl: "http://b/1",
+      streamIcon: "http://icon/1.png",
+      containerExtension: "ts",
+      epgChannelId: "bbc1",
+      channelId: "42",
+    }
+  );
+  assert.equal(fill.streamUrl, "http://cdn.example.com/live/1");
+  assert.equal(fill.categoryId, "cat-1");
+  assert.equal(fill.backupUrl, "http://b/1");
+  assert.equal(fill.channelId, "42");
+
+  const noOverwrite = fillMissingStreamFields(
+    {
+      streamUrl: "http://already.example.com/live/1",
+      categoryId: "existing-cat",
+      serverId: "srv-1",
+      backupUrl: "http://b-old",
+      streamIcon: "http://icon-old",
+      containerExtension: "m3u8",
+      epgChannelId: "old",
+      channelId: "keep",
+    },
+    {
+      streamUrl: "http://cdn.example.com/live/1",
+      categoryId: "cat-1",
+      serverId: "srv-2",
+      backupUrl: "http://b/1",
+      streamIcon: "http://icon/1.png",
+      containerExtension: "ts",
+      epgChannelId: "bbc1",
+      channelId: "42",
+    }
+  );
+  assert.deepEqual(noOverwrite, {});
+});
+
+test("SQL dump coverage warns when stream rows cannot be mapped", () => {
+  const sql = `
+CREATE TABLE \`streams\` (\`id\` int, \`type\` int, \`stream_display_name\` varchar(255), \`stream_source\` mediumtext);
+INSERT INTO \`streams\` (\`id\`,\`type\`,\`stream_display_name\`,\`stream_source\`) VALUES
+(1,1,'Mapped','["http://a/1"]'),
+(NULL,1,'Missing id','["http://a/2"]');
+`;
+  const bundle = parseMigrationInput(sql, "xui", "sql");
+  assert.equal(bundle.streams.length, 1);
+  assert.ok(
+    (bundle.warnings ?? []).some((w) => /SQL streams: mapped 1 of 2 dump rows/i.test(w)),
+    (bundle.warnings ?? []).join("\n")
+  );
+});

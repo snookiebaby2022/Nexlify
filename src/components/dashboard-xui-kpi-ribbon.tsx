@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Play, Users, Zap } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Play, Users, Zap } from "lucide-react";
 import type { DashboardKpiExtended } from "@/lib/dashboard-server-metrics";
 
 type Summary = {
@@ -33,12 +33,12 @@ function KpiTile({
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-xs uppercase tracking-wide opacity-90">{label}</p>
-          <p className="text-3xl font-bold tabular-nums mt-1">{value}</p>
+          <p className="text-xs uppercase tracking-wide opacity-95">{label}</p>
+          <p className="text-3xl font-extrabold tabular-nums mt-1 drop-shadow-sm">{value}</p>
         </div>
         {icon && <div className="opacity-80 shrink-0">{icon}</div>}
       </div>
-      {sub && <div className="text-xs mt-2 opacity-95">{sub}</div>}
+      {sub && <div className="text-xs mt-2 opacity-100">{sub}</div>}
     </div>
   );
   if (href) {
@@ -134,16 +134,19 @@ export function DashboardXuiKpiRibbon({
         />
         <KpiTile
           label="Bandwidth"
-          value=""
-          gradient="linear-gradient(135deg, #f39c12 0%, #e08e0b 100%)"
+          value={`${(kpi?.networkOutMbps ?? 0).toFixed(1)} Mbps`}
+          gradient="linear-gradient(135deg, #ff9f1a 0%, #f39c12 45%, #e67e22 100%)"
           href="/admin/servers"
+          icon={<Activity size={28} />}
           sub={
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-1">
-                <ArrowUp size={12} /> Output: {(kpi?.networkOutMbps ?? 0).toFixed(1)} Mbps
+            <div className="space-y-1 text-[13px] font-semibold tracking-wide">
+              <div className="flex items-center gap-1.5">
+                <ArrowUp size={14} strokeWidth={2.5} />
+                Output { (kpi?.networkOutMbps ?? 0).toFixed(1) } Mbps
               </div>
-              <div className="flex items-center gap-1">
-                <ArrowDown size={12} /> Input: {(kpi?.networkInMbps ?? 0).toFixed(1)} Mbps
+              <div className="flex items-center gap-1.5">
+                <ArrowDown size={14} strokeWidth={2.5} />
+                Input { (kpi?.networkInMbps ?? 0).toFixed(1) } Mbps
               </div>
             </div>
           }

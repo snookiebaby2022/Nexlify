@@ -7,6 +7,7 @@ import { TmdbMetadataSection, emptyTmdbMeta, type TmdbMetaFields } from "@/compo
 import { ServerTreePicker } from "@/components/server-tree-picker";
 import { StreamBouquetSection } from "@/components/stream-bouquet-section";
 import { ProviderSourceFields } from "@/components/provider-source-fields";
+import { SourceChannelFinder } from "@/components/source-channel-finder";
 import {
   FormField,
   formInputClass,
@@ -146,7 +147,7 @@ export function VodMovieForm({
   });
 
   useEffect(() => {
-    fetch("/api/admin/categories").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+    fetch("/api/admin/categories?lite=1").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
   }, []);
 
   async function onVideoFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -268,6 +269,25 @@ export function VodMovieForm({
             </select>
           </FormField>
           <FormField label="Direct source URL / path">
+            <div className="space-y-2">
+            <SourceChannelFinder
+              streamType="MOVIE"
+              showDirectUrl
+              onPickProvider={(m) => {
+                setUseProvider(true);
+                setForm((f) => ({
+                  ...f,
+                  name: f.name || m.streamName,
+                  providerId: m.providerId,
+                  providerPath: m.providerPath ?? "",
+                  streamUrl: m.streamUrl,
+                }));
+              }}
+              onPickDirectUrl={(m) => {
+                setUseProvider(false);
+                setForm((f) => ({ ...f, name: f.name || m.streamName, streamUrl: m.streamUrl }));
+              }}
+            />
             <div className="flex gap-2">
               <input
                 className={`${formInputClass} flex-1 font-mono text-sm`}
@@ -287,6 +307,7 @@ export function VodMovieForm({
                 {uploadNote}
               </p>
             )}
+            </div>
           </FormField>
         </div>
 

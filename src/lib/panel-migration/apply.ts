@@ -1,7 +1,12 @@
 import { LineStatus, PanelRole, StreamType, VodMode } from "@prisma/client";
 import { prisma } from "../prisma";
 import { hashPassword } from "../auth";
-import { extraSourcesToBitrates } from "./stream-source-urls";
+import {
+  extraSourcesToBitrates,
+  fillMissingStreamFields,
+  isPendingStreamUrl,
+  migrationStreamIdentityKeys,
+} from "./stream-source-urls";
 import { applyMigrationPhase2 } from "./phase2";
 import { applyMigrationPhase3 } from "./apply-phase3";
 import { urlsFromPhpSerialized, looksLikePlayableUrl } from "./sql-junctions";
@@ -304,6 +309,7 @@ async function applyMigrationBundleInner(
       streamIcon: string | null;
       containerExtension: string | null;
       epgChannelId: string | null;
+      channelId: string | null;
     };
     const existingRows = (await prisma.stream.findMany({
       select: {
@@ -326,12 +332,38 @@ async function applyMigrationBundleInner(
         streamIcon: true,
         containerExtension: true,
         epgChannelId: true,
+        channelId: true,
       },
     })) as ExistingStreamRow[];
-    const byUrl = new Map<string, ExistingStreamRow>();
-    for (const row of existingRows) {
-      if (row.streamUrl) byUrl.set(row.streamUrl, row);
-    }
+    const byKey = new Map<string, ExistingStreamRow>();
+    const rememberStream = (row: ExistingStreamRow, extraLegacy?: string | null) => {
+      for (const k of migrationStreamIdentityKeys({
+        streamUrl: row.streamUrl,
+        channelId: row.channelId,
+        legacyId: extraLegacy,
+        source: bundle.source,
+      })) {
+        if (!byKey.has(k)) byKey.set(k, row);
+      }
+    };
+    for (const row of existingRows) rememberStream(row);
+    const findExistingStream = (
+      streamUrl: string,
+      legacyId: string,
+      channelId?: string | null
+    ): ExistingStreamRow | undefined => {
+      for (const k of migrationStreamIdentityKeys({
+        streamUrl,
+        legacyId,
+        channelId,
+        source: bundle.source,
+      })) {
+        const hit = byKey.get(k);
+        if (hit) return hit;
+      }
+      return undefined;
+    };
+    const skipExistingStreams = options.skipExistingStreams !== false;
 
     await runEach(
       bundle.streams,
@@ -381,15 +413,55 @@ async function applyMigrationBundleInner(
         const sortOrder = Number.isFinite(s.sortOrder) ? Number(s.sortOrder) : idx;
 
         const bitrates = extraSourcesToBitrates(s.extraSourceUrls);
-        const dup = byUrl.get(streamUrl);
+        const dumpChannelId = s.channelId?.trim() || null;
+        const dup = findExistingStream(streamUrl, s.legacyId, dumpChannelId);
         if (dup) {
           streamIdByLegacy.set(s.legacyId, dup.id);
+          rememberStream(dup, s.legacyId);
+          const fill = fillMissingStreamFields(
+            {
+              streamUrl: dup.streamUrl,
+              categoryId: dup.categoryId,
+              serverId: dup.serverId,
+              backupUrl: dup.backupUrl,
+              streamIcon: dup.streamIcon,
+              containerExtension: dup.containerExtension,
+              epgChannelId: dup.epgChannelId,
+              channelId: dup.channelId,
+            },
+            {
+              streamUrl,
+              categoryId: categoryId ?? null,
+              serverId: mappedServerId ?? null,
+              backupUrl,
+              streamIcon,
+              containerExtension,
+              epgChannelId,
+              channelId: dumpChannelId,
+            }
+          );
+          if (skipExistingStreams) {
+            if (Object.keys(fill).length === 0) return false;
+            try {
+              await prisma.stream.update({
+                where: { id: dup.id },
+                data: fill,
+              });
+              rememberStream({ ...dup, ...fill }, s.legacyId);
+            } catch (e) {
+              pushWarning(result.warnings, `Fill existing stream ${name}: ${shortErr(e)}`);
+            }
+            return false;
+          }
           const nextCategoryId = categoryId ?? dup.categoryId;
           const nextServerId = mappedServerId ?? dup.serverId;
           const nextBackup = backupUrl || dup.backupUrl;
           const nextIcon = streamIcon || dup.streamIcon;
           const nextExt = containerExtension || dup.containerExtension;
           const nextEpg = epgChannelId || dup.epgChannelId;
+          const nextChannelId = dumpChannelId || dup.channelId;
+          const dumpRealUrl = !isPendingStreamUrl(streamUrl);
+          const nextUrl = dumpRealUrl ? streamUrl : dup.streamUrl;
           const needsUpdate =
             dup.name !== name ||
             dup.type !== type ||
@@ -407,6 +479,8 @@ async function applyMigrationBundleInner(
             dup.streamIcon !== nextIcon ||
             dup.containerExtension !== nextExt ||
             dup.epgChannelId !== nextEpg ||
+            dup.channelId !== nextChannelId ||
+            dup.streamUrl !== nextUrl ||
             dup.sortOrder !== sortOrder;
           if (!needsUpdate) return false;
           try {
@@ -430,29 +504,36 @@ async function applyMigrationBundleInner(
                 streamIcon: nextIcon,
                 containerExtension: nextExt,
                 epgChannelId: nextEpg,
+                channelId: nextChannelId,
                 sortOrder,
+                ...(nextUrl !== dup.streamUrl ? { streamUrl: nextUrl } : {}),
               },
             });
-            byUrl.set(streamUrl, {
-              ...dup,
-              name,
-              type,
-              vodMode,
-              isOnDemand,
-              autoRestart,
-              isRadio,
-              isAdult,
-              seriesName,
-              seasonNum,
-              episodeNum,
-              categoryId: nextCategoryId,
-              serverId: nextServerId,
-              backupUrl: nextBackup,
-              streamIcon: nextIcon,
-              containerExtension: nextExt,
-              epgChannelId: nextEpg,
-              sortOrder,
-            });
+            rememberStream(
+              {
+                ...dup,
+                name,
+                type,
+                vodMode,
+                isOnDemand,
+                autoRestart,
+                isRadio,
+                isAdult,
+                seriesName,
+                seasonNum,
+                episodeNum,
+                categoryId: nextCategoryId,
+                serverId: nextServerId,
+                backupUrl: nextBackup,
+                streamIcon: nextIcon,
+                containerExtension: nextExt,
+                epgChannelId: nextEpg,
+                channelId: nextChannelId,
+                streamUrl: nextUrl,
+                sortOrder,
+              },
+              s.legacyId
+            );
           } catch (e) {
             pushWarning(result.warnings, `Update existing stream ${name}: ${shortErr(e)}`);
           }
@@ -469,7 +550,7 @@ async function applyMigrationBundleInner(
             serverId: mappedServerId ?? serverId ?? null,
             categoryId: categoryId ?? null,
             epgChannelId,
-            channelId: s.channelId?.trim() || null,
+            channelId: dumpChannelId,
             containerExtension,
             isActive:
               options.importStreamsStopped === true
@@ -487,27 +568,31 @@ async function applyMigrationBundleInner(
           },
         });
         streamIdByLegacy.set(s.legacyId, created.id);
-        byUrl.set(streamUrl, {
-          id: created.id,
-          streamUrl,
-          name,
-          type,
-          categoryId: categoryId ?? null,
-          sortOrder,
-          vodMode,
-          isOnDemand,
-          autoRestart,
-          isRadio,
-          isAdult,
-          seriesName,
-          seasonNum,
-          episodeNum,
-          serverId: mappedServerId ?? serverId ?? null,
-          backupUrl,
-          streamIcon,
-          containerExtension,
-          epgChannelId,
-        });
+        rememberStream(
+          {
+            id: created.id,
+            streamUrl,
+            name,
+            type,
+            categoryId: categoryId ?? null,
+            sortOrder,
+            vodMode,
+            isOnDemand,
+            autoRestart,
+            isRadio,
+            isAdult,
+            seriesName,
+            seasonNum,
+            episodeNum,
+            serverId: mappedServerId ?? serverId ?? null,
+            backupUrl,
+            streamIcon,
+            containerExtension,
+            epgChannelId,
+            channelId: dumpChannelId,
+          },
+          s.legacyId
+        );
         return true;
       },
       (c, t) => options.onProgress?.("streams", c, t),
@@ -679,6 +764,11 @@ async function applyMigrationBundleInner(
       select: { id: true, username: true, externalId: true },
     });
     const byUsername = new Map(existingLines.map((l) => [l.username, l]));
+    const byExternalId = new Map(
+      existingLines
+        .filter((l): l is typeof l & { externalId: string } => Boolean(l.externalId))
+        .map((l) => [l.externalId, l])
+    );
     const usedExternalIds = new Set(
       existingLines.map((l) => l.externalId).filter((id): id is string => Boolean(id))
     );
@@ -699,7 +789,9 @@ async function applyMigrationBundleInner(
         if (seenUsernames.has(username)) return false;
         seenUsernames.add(username);
 
-        const existing = byUsername.get(username);
+        const existing =
+          byUsername.get(username) ??
+          (l.legacyId?.trim() ? byExternalId.get(l.legacyId.trim()) : undefined);
 
         const status =
           l.status === "BANNED"
@@ -732,8 +824,7 @@ async function applyMigrationBundleInner(
 
         if (existing && options.skipExistingLines !== false) {
           if (l.legacyId) lineIdByLegacy.set(String(l.legacyId), existing.id);
-          const n = await prisma.lineBouquet.count({ where: { lineId: existing.id } });
-          if (n === 0) await attachLineBouquets(existing.id);
+          await attachLineBouquets(existing.id);
           return false;
         }
 
@@ -818,6 +909,8 @@ async function applyMigrationBundleInner(
         if (!mac || !lineUsername) return false;
         const line = await prisma.line.findUnique({ where: { username: lineUsername } });
         if (!line) return false;
+        const existingMag = await prisma.magDevice.findUnique({ where: { mac } });
+        if (existingMag && options.skipExistingLines !== false) return false;
         await prisma.magDevice.upsert({
           where: { mac },
           create: { mac, lineId: line.id, model: m.model?.trim() || null },
@@ -841,6 +934,8 @@ async function applyMigrationBundleInner(
         if (!mac || !lineUsername) return false;
         const line = await prisma.line.findUnique({ where: { username: lineUsername } });
         if (!line) return false;
+        const existingEnigma = await prisma.enigmaDevice.findUnique({ where: { mac } });
+        if (existingEnigma && options.skipExistingLines !== false) return false;
         await prisma.enigmaDevice.upsert({
           where: { mac },
           create: { mac, lineId: line.id, model: m.model?.trim() || null },
@@ -884,14 +979,19 @@ async function applyMigrationBundleInner(
           if (
             options.skipExistingStreams !== false &&
             options.clearDataBeforeImport !== true &&
-            Array.isArray(existing.bouquetIds) &&
-            existing.bouquetIds.length === 0 &&
             bouquetIds.length
           ) {
-            await prisma.package.update({
-              where: { id: existing.id },
-              data: { bouquetIds },
-            });
+            const have = new Set((existing.bouquetIds ?? []).map(String));
+            const merged = [...(existing.bouquetIds ?? [])];
+            for (const id of bouquetIds) {
+              if (!have.has(id)) merged.push(id);
+            }
+            if (merged.length !== (existing.bouquetIds ?? []).length) {
+              await prisma.package.update({
+                where: { id: existing.id },
+                data: { bouquetIds: merged },
+              });
+            }
           }
           return false;
         }

@@ -80,20 +80,26 @@ export default function AdminApiDocsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Admin API</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          XUI-compatible JSON API. Use your admin user&apos;s API key from Profile. ActiveCode lines:
-          pass <code>auth_mode=active_code</code> and <code>active_code=</code> on create_line.
+          XUI-compatible JSON API at <code>/api/v1</code> and XUI.one&apos;s <code>/api.php</code>.
+          Use your admin user&apos;s API key from Profile. ActiveCode lines: pass{" "}
+          <code>auth_mode=active_code</code> and <code>active_code=</code> on create_line.
         </p>
       </div>
 
       <div className="rounded-xl border p-4 space-y-2" style={{ borderColor: "var(--border)" }}>
         <div className="text-sm font-medium">Base URL</div>
         <code className="text-xs break-all block">{base}?api_key=YOUR_KEY&amp;action=ACTION</code>
+        <code className="text-xs break-all block mt-1 opacity-80">
+          {typeof window !== "undefined" ? `${window.location.origin}/api.php` : "/api.php"}
+          ?api_key=YOUR_KEY&amp;action=ACTION
+        </code>
       </div>
 
       <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
         <div className="text-sm font-medium">HMAC signing (optional)</div>
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          Sign query string with SHA-256 HMAC; send as <code>X-Nexlify-Signature</code> header.
+          Sign query string (excluding <code>hmac</code>) with SHA-256 HMAC; send as{" "}
+          <code>X-Nexlify-Signature</code>. HMAC never replaces <code>api_key</code>.
         </p>
         <input
           type="password"

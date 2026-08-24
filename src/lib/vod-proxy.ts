@@ -165,3 +165,32 @@ export function pickVodExtension(url: string): string {
 
   return "mp4";
 }
+
+/**
+ * LibVLC (IPTV Smarters) cannot play a fake HLS playlist whose only segment is a
+ * full mkv/mp4. Redirect `.m3u8` to the progressive file so the edge can splice
+ * with HTTP Range — same as XUI VOD.
+ */
+export function vodHlsFileRedirectUrl(
+  requestUrl: string,
+  streamId: string,
+  playbackUrl: string
+): string | null {
+  const loc = vodHlsFileRedirectLocation(streamId, playbackUrl);
+  if (!loc) return null;
+  try {
+    return new URL(loc, requestUrl).toString();
+  } catch {
+    return loc;
+  }
+}
+
+/** Relative Location so the player stays on the public Xtream host, not Next's loopback. */
+export function vodHlsFileRedirectLocation(streamId: string, playbackUrl: string): string | null {
+  if (!/\.(m3u8|hls)$/i.test(streamId)) return null;
+  if (isHlsPlaybackUrl(playbackUrl)) return null;
+  const ext = pickVodExtension(playbackUrl);
+  if (ext === "m3u8" || ext === "hls") return null;
+  const key = streamId.replace(/\.(m3u8|hls)$/i, "");
+  return `${key}.${ext}`;
+}

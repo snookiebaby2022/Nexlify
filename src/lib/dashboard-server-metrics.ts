@@ -7,6 +7,7 @@ import { isThisPanelMachine } from "@/lib/panel-local-server";
 import {
   readStoredHostMetrics,
   sampleLocalHostMetrics,
+  snapshotWindowToMbps,
   type HostMetricsSample,
 } from "@/lib/host-metrics";
 import {
@@ -265,8 +266,8 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
   let networkOutMbps = liveNic.uploadMbps;
   const snap = snapshots[0];
   if (networkInMbps <= 0 && networkOutMbps <= 0 && snap) {
-    networkInMbps = Number(snap.bytesIn) / 125_000 / 60;
-    networkOutMbps = Number(snap.bytesOut) / 125_000 / 60;
+    networkInMbps = snapshotWindowToMbps(snap.bytesIn);
+    networkOutMbps = snapshotWindowToMbps(snap.bytesOut);
   }
 
   const inactiveMap = new Map(inactiveByType.map((r) => [r.type, r._count]));

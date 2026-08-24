@@ -28,6 +28,8 @@ const XUI_EXTENDED_ACTIONS = [
   "get_user_info",
   "get_connection_stats",
   "create_staff",
+  "get_dashboard",
+  "mass_enable_streams",
 ];
 
 test("XUI extended actions cover common automation scripts", () => {

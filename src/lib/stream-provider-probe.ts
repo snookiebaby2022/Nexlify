@@ -242,6 +242,18 @@ export function extractProviderCredentials(
   }
 }
 
+export function resolveProviderXtreamCreds(provider: {
+  baseUrl: string;
+  apiKey?: string | null;
+  remoteUsername?: string | null;
+  remotePassword?: string | null;
+}): { username?: string; password?: string; origin?: string } {
+  const extracted = extractProviderCredentials(provider.baseUrl, provider.apiKey);
+  const username = provider.remoteUsername?.trim() || extracted.username;
+  const password = provider.remotePassword?.trim() || extracted.password;
+  return { username, password, origin: extracted.origin };
+}
+
 /** Query upstream Xtream player_api for account expiry and connection stats. */
 export async function probeProviderAccountInfo(
   baseUrl: string,

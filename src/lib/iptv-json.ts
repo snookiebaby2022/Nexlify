@@ -1,5 +1,8 @@
 import { gzip } from "zlib";
 import { promisify } from "util";
+import { createReadStream, statSync } from "node:fs";
+import { Readable } from "node:stream";
+import { createGunzip } from "node:zlib";
 import { NextResponse } from "next/server";
 import { withIptvCors } from "@/lib/iptv-cors";
 
@@ -15,7 +18,48 @@ const GZIP_MIN_BYTES = 2048;
 function clientAcceptsGzip(req?: Request | null): boolean {
   if (!req) return false;
   const ae = req.headers.get("accept-encoding") ?? "";
+  // Only gzip when the client advertised it. Forcing gzip on XCIPTV/Smarters
+  // User-Agents (no Accept-Encoding) makes get_series_info / category lists
+  // unreadable and the app UI goes blank.
   return /\bgzip\b/i.test(ae);
+}
+
+/** Stream a pre-gzipped catalog/xmltv file without loading it into RAM. */
+export function iptvGzipFileResponse(
+  filePath: string,
+  compressFor: Request | null,
+  contentType: string,
+  opts?: { asGzipFile?: boolean }
+): NextResponse {
+  const headers = new Headers();
+  headers.set("Cache-Control", "private, no-cache, no-store, must-revalidate");
+  let nodeStream: Readable;
+  if (opts?.asGzipFile) {
+    headers.set("Content-Type", "application/gzip");
+    nodeStream = createReadStream(filePath);
+    try {
+      headers.set("Content-Length", String(statSync(filePath).size));
+    } catch {
+      /* size unknown */
+    }
+  } else if (clientAcceptsGzip(compressFor)) {
+    headers.set("Content-Type", contentType);
+    headers.set("Content-Encoding", "gzip");
+    headers.set("Vary", "Accept-Encoding");
+    nodeStream = createReadStream(filePath);
+    try {
+      headers.set("Content-Length", String(statSync(filePath).size));
+    } catch {
+      /* size unknown */
+    }
+  } else {
+    headers.set("Content-Type", contentType);
+    headers.set("Vary", "Accept-Encoding");
+    nodeStream = createReadStream(filePath).pipe(createGunzip());
+  }
+  return withIptvCors(
+    new NextResponse(Readable.toWeb(nodeStream) as unknown as ReadableStream, { headers })
+  );
 }
 
 /** Server-only — do not import from middleware (Edge cannot load zlib). */

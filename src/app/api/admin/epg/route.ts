@@ -6,12 +6,13 @@ import { invalidateEpgCache } from "@/lib/cache-invalidate";
 import { PanelRole } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const lite = req.nextUrl.searchParams.get("lite") === "1";
   const sources = await prisma.epgSource.findMany({
-    include: { _count: { select: { programs: true } } },
+    include: lite ? undefined : { _count: { select: { programs: true } } },
     orderBy: { name: "asc" },
   });
   return NextResponse.json({ sources });

@@ -19,6 +19,7 @@ import { resolveSourceToStreamUrl, getMediaImportRoot } from "@/lib/import-media
 import { probeMediaFile } from "@/lib/media-probe";
 import { getStreamLiveStatsMap } from "@/lib/stream-live-stats";
 import { redactStreams } from "@/lib/stream-redact";
+import { cacheGetOrSet } from "@/lib/cache";
 import {
   invalidateDashboardStats,
   invalidatePlaybackUrls,
@@ -46,7 +47,31 @@ export async function GET(req: NextRequest) {
 
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-
+  if (req.nextUrl.searchParams.get("totals") === "1") {
+    const resellerBouquetIds = await getResellerBouquetIds(session);
+    if (resellerBouquetIds !== null && !resellerBouquetIds.length) {
+      return NextResponse.json({ LIVE: 0, MOVIE: 0, SERIES: 0 });
+    }
+    const totalsKey =
+      resellerBouquetIds === null
+        ? "admin:stream-type-totals:v1"
+        : `admin:stream-type-totals:v1:${session.id}`;
+    const totals = await cacheGetOrSet(totalsKey, 20, async () => {
+      const totalsWhere: Prisma.StreamWhereInput = {};
+      if (resellerBouquetIds !== null) {
+        totalsWhere.bouquets = { some: { bouquetId: { in: resellerBouquetIds } } };
+      }
+      const rows = await prisma.stream.groupBy({
+        by: ["type"],
+        where: totalsWhere,
+        _count: true,
+      });
+      const next: Record<string, number> = { LIVE: 0, MOVIE: 0, SERIES: 0 };
+      for (const r of rows) next[r.type] = r._count;
+      return next;
+    });
+    return NextResponse.json(totals);
+  }
 
   const typeParam = req.nextUrl.searchParams.get("type");
 
@@ -66,6 +91,7 @@ export async function GET(req: NextRequest) {
   );
   const picker = req.nextUrl.searchParams.get("picker") === "1";
   const withStats = req.nextUrl.searchParams.get("withStats") === "1";
+  const skipTotal = req.nextUrl.searchParams.get("skipTotal") === "1";
   const paginate = true;
   const lite = req.nextUrl.searchParams.get("full") !== "1";
   const search = req.nextUrl.searchParams.get("search")?.trim();
@@ -270,14 +296,17 @@ export async function GET(req: NextRequest) {
 
 
   if (picker) {
-    const total = await prisma.stream.count({ where });
+    const total = skipTotal ? streams.length : await prisma.stream.count({ where });
+    const slim = streams.map((s) => ({
+      id: s.id,
+      name: s.name,
+      label: s.name,
+      sublabel: s.type,
+      group: s.category?.name ?? undefined,
+    }));
     return NextResponse.json({
-      items: streams.map((s) => ({
-        id: s.id,
-        label: s.name,
-        sublabel: s.type,
-        group: s.category?.name ?? undefined,
-      })),
+      items: slim,
+      streams: slim,
       total,
       page,
       pageSize,
@@ -300,24 +329,15 @@ export async function GET(req: NextRequest) {
       hostedExternally: s.hostedExternally ?? false,
     }));
     const statsMap = await getStreamLiveStatsMap(statsInputs);
-    const epgIds = streams
-      .map((s) => ("epgChannelId" in s ? (s.epgChannelId as string | null) : null))
-      .filter((id): id is string => Boolean(id?.trim()));
-    const { epgWorkingChannelIds, streamEpgWorking } = await import("@/lib/epg-working-status");
-    const workingEpg = await epgWorkingChannelIds(epgIds);
     const enriched = redactStreams(
       streams.map((s) => ({
         ...s,
         liveStats: statsMap.get(s.id) ?? null,
-        epgWorking: streamEpgWorking(
-          "epgChannelId" in s ? (s.epgChannelId as string | null) : null,
-          workingEpg
-        ),
       })),
       session.role
     );
     if (paginate) {
-      const total = await prisma.stream.count({ where });
+      const total = skipTotal ? undefined : await prisma.stream.count({ where });
       return NextResponse.json({ streams: enriched, total, page, pageSize });
     }
     return NextResponse.json({ streams: enriched });
@@ -347,7 +367,7 @@ export async function GET(req: NextRequest) {
   const safeStreams = redactStreams(streams, session.role);
 
   if (paginate) {
-    const total = await prisma.stream.count({ where });
+    const total = skipTotal ? undefined : await prisma.stream.count({ where });
     return NextResponse.json({ streams: safeStreams, total, page, pageSize });
   }
   return NextResponse.json({ streams: safeStreams });

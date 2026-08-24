@@ -105,6 +105,22 @@ test("xtreamHlsSourceUrl matches XUI stream_source container swap", async () => 
   assert.equal(expanded[1], "https://junki3monk3y.com:443/Blade2nd/PaaJhvNbqX/51498");
 });
 
+test("instantLiveTsHlsPlaylist wraps the MPEG-TS splice for HLS clients", async () => {
+  const { instantLiveTsHlsPlaylist, instantVodFileHlsPlaylist, stripLiveStreamExtension } = await import("./hls-playback");
+  const live = instantLiveTsHlsPlaylist("1058467879.ts");
+  assert.match(live, /#EXTM3U/);
+  assert.match(live, /#EXT-X-PLAYLIST-TYPE:EVENT/);
+  assert.match(live, /^1058467879\.ts$/m);
+  const vod = instantVodFileHlsPlaylist("99.mkv");
+  assert.match(vod, /#EXT-X-PLAYLIST-TYPE:VOD/);
+  assert.match(vod, /#EXT-X-ENDLIST/);
+  assert.match(vod, /#EXTINF:28800/);
+  assert.match(vod, /^99\.mkv$/m);
+  assert.equal(stripLiveStreamExtension("123.mkv"), "123");
+  assert.equal(stripLiveStreamExtension("123.mp4"), "123");
+  assert.equal(stripLiveStreamExtension("123.ts"), "123");
+});
+
 test("xuiDirectSourceLocation only returns public http(s) stream_source URLs", () => {
   assert.equal(
     xuiDirectSourceLocation("https://cdn.example/live/1.ts"),

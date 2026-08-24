@@ -14,6 +14,9 @@ const COMPRESS_PREFIX = "gz:";
 
 const memory = new Map<string, { exp: number; val: string }>();
 let memoryWarned = false;
+/** Never keep Xtream catalogs in the process Map — that is what OOM'd the panel worker. */
+export const MEMORY_CACHE_MAX_BYTES = 256 * 1024;
+const MEMORY_CACHE_MAX_KEYS = 2000;
 
 function memGet(key: string) {
   const e = memory.get(key);
@@ -25,7 +28,22 @@ function memGet(key: string) {
   return e.val;
 }
 
+export function memoryCacheWouldStore(serializedBytes: number): boolean {
+  return serializedBytes <= MEMORY_CACHE_MAX_BYTES;
+}
+
 function memSet(key: string, val: string, ttlSec: number) {
+  if (!memoryCacheWouldStore(val.length)) return;
+  if (memory.size >= MEMORY_CACHE_MAX_KEYS) {
+    const now = Date.now();
+    for (const [k, e] of memory) {
+      if (now > e.exp) memory.delete(k);
+    }
+    if (memory.size >= MEMORY_CACHE_MAX_KEYS) {
+      const extra = [...memory.keys()].slice(0, 500);
+      for (const k of extra) memory.delete(k);
+    }
+  }
   memory.set(key, { val, exp: Date.now() + ttlSec * 1000 });
 }
 

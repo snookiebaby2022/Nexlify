@@ -3,8 +3,9 @@ import { describe, it } from "node:test";
 import { shouldGzipXmltv, xmltvChannelIds, xmltvWantsGzipFile } from "./xmltv-http";
 
 describe("xmltv gzip", () => {
-  it("never HTTP-gzips xmltv when the client does not ask for gzip", () => {
+  it("HTTP-gzips xmltv only when Accept-Encoding includes gzip (not by User-Agent alone)", () => {
     assert.equal(shouldGzipXmltv("", "XCIPTV/5.0.0"), false);
+    assert.equal(shouldGzipXmltv("", "IPTVSmartersPlayer"), false);
     assert.equal(shouldGzipXmltv("", "Mozilla/5.0"), false);
   });
 

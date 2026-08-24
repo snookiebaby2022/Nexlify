@@ -21,7 +21,9 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
   smarters: {
     id: "smarters",
     label: "IPTV Smarters / Pro",
-    liveOutput: "auto",
+    // PC Smarters is LibVLC and cannot play a fake HLS playlist that points at
+    // unbounded MPEG-TS. Advertise .ts first so live/VOD open the splice path.
+    liveOutput: "ts",
     vodDirectPlay: false,
     // Prefetch during catalog update starts HLS ffmpeg and leaves live rows open.
     zapPrefetchOnPlaylist: false,
@@ -87,4 +89,42 @@ export function preferLiveOutputFormats(
   const want = profile.liveOutput === "ts" ? "ts" : profile.liveOutput === "hls" ? "m3u8" : null;
   if (!want || !formats.includes(want)) return formats;
   return [want, ...formats.filter((f) => f !== want)];
+}
+
+/**
+ * XUI / 1-stream: a `.m3u8` URL is always an HLS playlist, never MPEG-TS bytes.
+ * Instant TS-wrap is a separate fast-start shortcut for Exo/Chrome only.
+ */
+export function userAgentWantsHlsPlaylist(_userAgent?: string | null): boolean {
+  return true;
+}
+
+/**
+ * Fake EVENT playlist pointing at a live `.ts` pipe. ExoPlayer/Chrome can play it;
+ * LibVLC (Smarters HLS, XCIPTV VLC) shows a black screen.
+ */
+export function userAgentAllowsInstantTsWrap(userAgent?: string | null): boolean {
+  const ua = (userAgent ?? "").toLowerCase();
+  if (!ua) return false;
+  if (
+    ua.includes("smarters") ||
+    ua.includes("libvlc") ||
+    ua.includes("lavf") ||
+    ua.includes("vlc/")
+  ) {
+    return false;
+  }
+  if (ua.includes("exoplayer") || ua.includes("applecoremedia") || ua.includes("cfnetwork") || ua.includes("hls.js")) {
+    return true;
+  }
+  if (ua.includes("chrome/") || ua.includes("firefox/") || ua.includes("edg/") || ua.includes("crios/")) {
+    return true;
+  }
+  if (ua.includes("safari/") && ua.includes("version/")) return true;
+  return false;
+}
+
+/** True when the player cannot use the instant TS-wrap playlist (needs real HLS or MPEG-TS). */
+export function userAgentIsVlcEngine(userAgent?: string | null): boolean {
+  return !userAgentAllowsInstantTsWrap(userAgent);
 }

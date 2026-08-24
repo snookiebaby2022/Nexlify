@@ -9,7 +9,7 @@ import { getAntiFreezeSettings, schedulePlaybackUpstreamWarm } from "@/lib/anti-
 import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { isSessionKicked, trackConnection } from "@/lib/connections";
 import { outboundProxyHeaderValue, resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
-import { startDiskHls } from "@/lib/hls-restream-client";
+import { isTinyLiveRangeProbe } from "@/lib/live-http-range";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,7 +34,8 @@ function originalRange(req: NextRequest): string {
   return (req.headers.get("x-original-range") || req.headers.get("range") || "").trim();
 }
 
-/** HEAD or live MPEG-TS Range probes during XCIPTV Update Content — do not occupy slots. */
+/** HEAD or tiny finite Range probes during XCIPTV Update Content — do not occupy slots.
+ *  LibVLC `Range: bytes=0-` is live playback (XUI/1-stream ignore Range and splice). */
 function isLiveByteProbe(
   req: NextRequest,
   parsed: { spliceLiveTs?: boolean; wantsHls?: boolean },
@@ -42,8 +43,8 @@ function isLiveByteProbe(
 ): boolean {
   if (originalMethod(req) === "HEAD") return true;
   if (isHlsSegment) return false;
-  if (!originalRange(req)) return false;
-  return Boolean(parsed.spliceLiveTs);
+  if (!parsed.spliceLiveTs) return false;
+  return isTinyLiveRangeProbe(originalRange(req));
 }
 
 async function resolveStreamOutboundProxy(streamId: string) {
@@ -129,21 +130,20 @@ export async function GET(req: NextRequest) {
       antiFreeze.playbackUrlCacheTtlSec
     );
     const outboundProxy = await resolveStreamOutboundProxy(cleanId);
-    const hlsNative = candidates.find((u) => isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
     const tsUrl = candidates.find((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
+    // Prefer MPEG-TS splice + instant playlist. Advertising native HLS here
+    // forwarded every zap into Next.js (dead .m3u8 probe / ffmpeg packager),
+    // which is why only a warm channel played.
+    const hlsNative = tsUrl
+      ? undefined
+      : candidates.find((u) => isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
     const method = originalMethod(req);
-    // Disk packager is for MPEG-TS only — never compete with provider-native HLS.
-    // HEAD / Range probes during XCIPTV "Update Content" must not spawn ffmpeg or occupy slots.
-    if (tsUrl && !hlsNative && method !== "HEAD" && !liveProbe) {
-      startDiskHls({
-        streamId: cleanId,
-        upstreamUrl: tsUrl,
-        userAgent: UPSTREAM_HLS_UA,
-        outboundProxy,
-      });
-    }
+    // MPEG-TS live is spliced as .ts (or an instant HLS wrapper). Do not spawn
+    // ffmpeg per zap — that is why only a warm channel (e.g. BBC One FHD) played.
     if (hlsNative) {
       schedulePlaybackUpstreamWarm(hlsNative, UPSTREAM_HLS_UA);
+    } else if (tsUrl && method !== "HEAD" && !liveProbe) {
+      schedulePlaybackUpstreamWarm(tsUrl, UPSTREAM_HLS_UA);
     }
     if (method !== "HEAD" && !liveProbe) {
       const path = originalPath(req);
@@ -169,6 +169,7 @@ export async function GET(req: NextRequest) {
         "X-Nexlify-Live": "1",
         "X-Nexlify-Hls": "1",
         ...(hlsNative ? { "X-Nexlify-Hls-Native": "1" } : {}),
+        ...(tsUrl ? { "X-Nexlify-Upstream": tsUrl } : {}),
         "Cache-Control": "no-store",
         ...proxyAuthHeaders(outboundProxy),
       } as Record<string, string>,
@@ -180,6 +181,7 @@ export async function GET(req: NextRequest) {
   const ctx = { clientIp: ip, userAgent: ua, skipGeo: true };
 
   let upstream = "";
+  let altUpstreams: string[] = [];
   if (parsed.spliceLiveTs) {
     const candidates = await resolvePlaybackUrlCandidatesForLine(
       line.id,
@@ -187,9 +189,11 @@ export async function GET(req: NextRequest) {
       ctx,
       antiFreeze.playbackUrlCacheTtlSec
     );
-    const ts = candidates.find((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
-    if (ts) upstream = ts;
-    else if (candidates.some((u) => isHlsPlaybackUrl(u))) {
+    const tsList = candidates.filter((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
+    if (tsList.length) {
+      upstream = tsList[0]!;
+      altUpstreams = tsList.slice(1, 4);
+    } else if (candidates.some((u) => isHlsPlaybackUrl(u))) {
       return new NextResponse(null, { status: 204, headers: { "X-Nexlify-Passthrough": "1" } });
     }
   } else {
@@ -222,6 +226,9 @@ export async function GET(req: NextRequest) {
       "X-Nexlify-Line-Id": line.id,
       "X-Nexlify-Stream-Id": cleanId,
       "X-Nexlify-Upstream": upstream,
+      ...(altUpstreams.length
+        ? { "X-Nexlify-Alts": altUpstreams.map((u) => encodeURIComponent(u)).join(",") }
+        : {}),
       "X-Nexlify-Live": parsed.spliceLiveTs ? "1" : "0",
       "Cache-Control": "no-store",
       ...proxyAuthHeaders(outboundProxy),

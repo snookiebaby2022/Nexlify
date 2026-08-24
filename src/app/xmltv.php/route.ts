@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getLineByCredentials, lineIsPlayable } from "@/lib/lines";
 import { getClientIp } from "@/lib/client-ip";
 import { asPlaybackGuardLine, assertPlaybackAllowed } from "@/lib/playback-guard";
-import { buildLineXmltv, buildLineXmltvGzip } from "@/lib/xmltv-export";
+import { resolveLineXmltvGzipPath, buildLineXmltv } from "@/lib/xmltv-export";
 import { shouldGzipXmltv, xmltvWantsGzipFile } from "@/lib/xmltv-http";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
 import { withIptvCors } from "@/lib/iptv-cors";
+import { iptvGzipFileResponse } from "@/lib/iptv-json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 180;
 
 const EMPTY_XMLTV = `<?xml version="1.0" encoding="UTF-8"?>\n<tv generator-info-name="Nexlify">\n</tv>`;
 
@@ -31,7 +32,7 @@ async function authorizeXmltv(req: NextRequest) {
     req.headers.get("user-agent") ?? undefined,
     { listingOnly: true }
   );
-  if (deny) return { error: new NextResponse("Forbidden", { status: deny === "rate" ? 429 : 403 }) };
+  if (deny) return { error: new NextResponse("Forbidden", { status: deny === "rate" || deny === "ddos" ? 429 : 403 }) };
   return { line };
 }
 
@@ -65,13 +66,11 @@ export async function GET(req: NextRequest) {
     Vary: "Accept-Encoding",
   });
   try {
-    if (shouldGzipXmltv(acceptEnc, ua, typeParam)) {
-      const compressed = await buildLineXmltvGzip(line);
-      if (compressed.length >= 32) {
-        if (!gzipFile) headers.set("Content-Encoding", "gzip");
-        headers.set("Content-Length", String(compressed.length));
-        return withIptvCors(new NextResponse(compressed, { headers }));
-      }
+    if (shouldGzipXmltv(acceptEnc, ua, typeParam) || gzipFile) {
+      const filePath = await resolveLineXmltvGzipPath(line);
+      return iptvGzipFileResponse(filePath, req, "application/xml; charset=utf-8", {
+        asGzipFile: gzipFile,
+      });
     }
     const xml = await buildLineXmltv(line);
     headers.set("Content-Length", String(Buffer.byteLength(xml)));
