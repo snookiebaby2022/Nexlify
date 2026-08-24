@@ -387,20 +387,16 @@ async function backfillPlexArtworkIcons(
 /** Strip legacy "(Plex)" suffixes from stream titles — source is shown separately in the UI. */
 async function backfillPlexDisplayNames(integrationId: string, reporter?: IntegrationSyncReporter) {
   const prefix = `nexlify://plex/${integrationId}/`;
-  const rows = await prisma.stream.findMany({
-    where: { streamUrl: { startsWith: prefix } },
-    select: { id: true, name: true },
-  });
-  let updated = 0;
-  for (const row of rows) {
-    const clean = stripIntegrationSourceSuffix(row.name);
-    if (clean && clean !== row.name) {
-      await prisma.stream.update({ where: { id: row.id }, data: { name: clean } });
-      updated++;
-    }
-  }
-  if (updated > 0) {
-    await reporter?.note(`Cleaned ${updated.toLocaleString()} Plex title(s) (removed “(Plex)” suffix).`);
+  await reporter?.note(`Cleaning Plex title suffixes…`);
+  const updated = await prisma.$executeRaw`
+    UPDATE "Stream"
+    SET name = trim(regexp_replace(name, '\s*\((Plex|Emby|Jellyfin|YouTube|Spotify|Deezer|Apple Music)\)\s*$', '', 'i'))
+    WHERE "streamUrl" LIKE ${`${prefix}%`}
+      AND name ~* '\((Plex|Emby|Jellyfin|YouTube|Spotify|Deezer|Apple Music)\)\s*$'
+  `;
+  const count = Number(updated);
+  if (count > 0) {
+    await reporter?.note(`Cleaned ${count.toLocaleString()} Plex title(s) (removed integration suffix).`);
   }
 }
 
