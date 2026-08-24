@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, RefreshCw, Search } from "lucide-react";
+import { StreamDisplayTitle, streamDisplayName } from "@/components/stream-display-title";
+import { IntegrationSourceBadge } from "@/components/stream-display-title";
 
 type Episode = {
   id: string;
@@ -207,13 +209,18 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
                   />
                 </td>
                 <td className="xui-lines-td">
-                  <Link href={`/admin/servers/streams?edit=${ep.series.id}`} className="xui-lines-username">
-                    {ep.series.name}
-                  </Link>
+                  <span className="inline-flex flex-wrap items-center gap-1.5">
+                    <Link href={`/admin/servers/streams?edit=${ep.series.id}`} className="xui-lines-username">
+                      {streamDisplayName(ep.series.name, ep.streamUrl)}
+                    </Link>
+                    <IntegrationSourceBadge streamUrl={ep.streamUrl} />
+                  </span>
                 </td>
                 <td className="xui-lines-td">S{ep.season}</td>
                 <td className="xui-lines-td">E{ep.episode}</td>
-                <td className="xui-lines-td font-medium">{ep.title}</td>
+                <td className="xui-lines-td font-medium">
+                  <StreamDisplayTitle name={ep.title} streamUrl={ep.streamUrl} />
+                </td>
                 <td className="xui-lines-td text-xs max-w-[220px] truncate font-mono" style={{ color: "var(--muted)" }}>
                   {ep.hostedExternally ? (
                     <span className="xui-uptime-badge xui-uptime-badge--direct mr-1">PROVIDER</span>

@@ -1,4 +1,5 @@
 import { getSettingGroup } from "@/lib/panel-settings";
+import { tmdbFetch } from "@/lib/tmdb-http";
 
 export type TmdbSearchResult = {
   id: number;
@@ -26,7 +27,7 @@ export async function searchTmdb(
   const path = mediaType === "tv" ? "search/tv" : "search/movie";
   const url = `https://api.themoviedb.org/3/${path}?api_key=${apiKey}&language=${language}&query=${q}&include_adult=false`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  const res = await tmdbFetch(url);
   if (!res.ok) {
     const err = await res.text();
     throw new Error(`TMDB error ${res.status}: ${err.slice(0, 120)}`);

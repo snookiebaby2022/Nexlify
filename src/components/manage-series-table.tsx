@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Pencil, RefreshCw, Search, Tv, Trash2, Power } from "lucide-react";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
 import { displayStreamIcon } from "@/lib/plex-artwork";
+import { StreamDisplayTitle } from "@/components/stream-display-title";
 
 type SeriesRow = {
   id: string;
@@ -174,7 +175,7 @@ export function ManageSeriesTable() {
                     ) : (
                       <Tv size={16} style={{ color: "var(--muted)" }} />
                     )}
-                    <span className="font-medium">{s.name}</span>
+                    <StreamDisplayTitle name={s.name} streamUrl={s.streamUrl} className="font-medium" />
                   </div>
                 </td>
                 <td className="xui-lines-td">{s.categoryName ?? "—"}</td>

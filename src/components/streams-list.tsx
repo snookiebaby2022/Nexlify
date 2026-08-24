@@ -24,6 +24,7 @@ import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
 import { displayStreamIcon } from "@/lib/plex-artwork";
+import { StreamDisplayTitle } from "@/components/stream-display-title";
 import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
 
 const StreamVerifyPanel = dynamic(
@@ -494,9 +495,12 @@ export function StreamsList({
                   );
                 })()}
                 <div className="min-w-0 flex-1">
-                  <Link href={`/admin/servers/streams?edit=${s.id}`} className="xui-stream-name font-semibold block truncate">
-                    {s.name}
-                  </Link>
+                  <StreamDisplayTitle
+                    name={s.name}
+                    streamUrl={s.streamUrl}
+                    href={`/admin/servers/streams?edit=${s.id}`}
+                    className="xui-stream-name font-semibold block truncate"
+                  />
                   {s.category?.name ? (
                     <p className="text-xs truncate" style={{ color: "var(--muted)" }}>
                       {s.category.name}
@@ -596,11 +600,14 @@ export function StreamsList({
                     )}
                   </td>
                   <td className="xui-streams-td-name">
-                    <Link href={`/admin/servers/streams?edit=${s.id}`} className="xui-stream-name">
-                      {s.name}
-                    </Link>
+                    <StreamDisplayTitle
+                      name={s.name}
+                      streamUrl={s.streamUrl}
+                      href={`/admin/servers/streams?edit=${s.id}`}
+                      className="xui-stream-name"
+                    />
                     <span className="flex flex-wrap gap-1 mt-0.5">
-                      {s.hostedExternally ? (
+                      {s.hostedExternally && !s.streamUrl?.startsWith("nexlify://") ? (
                         <span className="xui-uptime-badge xui-uptime-badge--direct text-[10px]">PROVIDER</span>
                       ) : null}
                       {s.isOnDemand || s.vodMode === "ON_DEMAND" ? (

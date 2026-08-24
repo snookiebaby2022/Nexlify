@@ -1,4 +1,5 @@
 import { getSettingGroup } from "@/lib/panel-settings";
+import { tmdbFetch as tmdbHttpFetch } from "@/lib/tmdb-http";
 
 export type TmdbDetails = {
   id: number;
@@ -15,13 +16,13 @@ export type TmdbDetails = {
   runtimeMinutes: string;
 };
 
-async function tmdbFetch(path: string) {
+async function tmdbApiGet(path: string) {
   const settings = await getSettingGroup("tmdb");
   const apiKey = String(settings.apiKey ?? "").trim();
   if (!apiKey) throw new Error("TMDB API key not configured (Settings → TMDB)");
   const language = String(settings.language ?? "en-US");
   const url = `https://api.themoviedb.org/3/${path}${path.includes("?") ? "&" : "?"}api_key=${apiKey}&language=${language}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+  const res = await tmdbHttpFetch(url);
   if (!res.ok) throw new Error(`TMDB error ${res.status}`);
   return res.json();
 }
@@ -30,7 +31,7 @@ export async function fetchTmdbDetails(
   id: number,
   mediaType: "movie" | "tv"
 ): Promise<TmdbDetails> {
-  const base = await tmdbFetch(`${mediaType}/${id}?append_to_response=credits,videos`);
+  const base = await tmdbApiGet(`${mediaType}/${id}?append_to_response=credits,videos`);
   const credits = base.credits as {
     cast?: { name: string }[];
     crew?: { name: string; job: string }[];
