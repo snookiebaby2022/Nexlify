@@ -1,5 +1,4 @@
 import { SettingsPanelForm } from "@/components/settings-panel-form";
-import { AutoLogosButton } from "@/components/auto-logos-button";
 
 export default function StreamSettingsPage() {
   return (
@@ -299,7 +298,14 @@ export default function StreamSettingsPage() {
           ],
         },
       ]}
-      footerExtra={<AutoLogosButton />}
+      footerExtra={
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          Bulk poster fetch:{" "}
+          <a href="/admin/settings/artwork" className="underline">
+            Settings → Posters &amp; icons
+          </a>
+        </p>
+      }
     />
   );
 }

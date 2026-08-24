@@ -28,6 +28,8 @@ import { emptyTmdbMeta, type TmdbMetaFields } from "@/components/tmdb-metadata-s
 import { readVodTmdbFields } from "@/lib/vod-meta";
 import { XuiFormTabs, type XuiFormTab } from "@/components/xui-form-tabs";
 import { VodInformationTab } from "@/components/vod-information-tab";
+import { integrationSourceLabel, stripIntegrationSourceSuffix } from "@/lib/integration-stream-url";
+import { cleanTitleForTmdb } from "@/lib/vod-tmdb-enrich";
 
 type Stream = {
   id: string;
@@ -211,6 +213,9 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
     }
     setSaving(true);
     setMessage("");
+    const cleanName = integrationSourceLabel(form.streamUrl)
+      ? stripIntegrationSourceSuffix(form.name)
+      : form.name.trim();
     const isLiveType = form.type === "LIVE";
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 45000);
@@ -221,7 +226,7 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
         signal: controller.signal,
         body: JSON.stringify({
           id: streamId,
-          name: form.name,
+          name: cleanName,
           type: form.type,
           source: form.streamUrl,
           hostedExternally: form.useProvider,
@@ -339,8 +344,10 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           : form.type;
 
   const isVod = form.type === "MOVIE" || form.type === "SERIES";
-  const vodSearchTitle =
+  const integrationSource = integrationSourceLabel(form.streamUrl);
+  const vodRawTitle =
     form.type === "SERIES" ? form.seriesName.trim() || form.name.trim() : form.name.trim();
+  const vodSearchTitle = cleanTitleForTmdb(stripIntegrationSourceSuffix(vodRawTitle));
 
   const saveBar = (
     <div className="flex flex-wrap gap-3 items-center pt-5 mt-5 border-t" style={{ borderColor: "var(--border)" }}>
@@ -393,14 +400,25 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           </select>
         </FormField>
         <FormField label="Stream name" required>
-          <input
-            className={formInputClass}
-            style={formInputStyle}
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="e.g. BBC One HD"
-            required
-          />
+          <div className="flex gap-2 items-center w-full">
+            <input
+              className={`${formInputClass} flex-1`}
+              style={formInputStyle}
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. BBC One HD"
+              required
+            />
+            {integrationSource ? (
+              <span
+                className="shrink-0 rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide"
+                style={{ background: "var(--border)", color: "var(--muted)" }}
+                title="Imported from integration — not part of the display title"
+              >
+                {integrationSource}
+              </span>
+            ) : null}
+          </div>
         </FormField>
         <FormField label="Category">
           <CategorySelect

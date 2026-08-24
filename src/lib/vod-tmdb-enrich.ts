@@ -17,6 +17,7 @@ export function cleanTitleForTmdb(name: string): string {
     .replace(/\.[a-z0-9]{2,4}$/i, "")
     .replace(/\s*\(\d{4}\)\s*$/i, "")
     .replace(/\s*\[\d{4}\]\s*$/i, "")
+    .replace(/\s*\((plex|emby|jellyfin|youtube|spotify|deezer)\)\s*$/i, "")
     .replace(/\s*S\d{1,2}E\d{1,2}\s*/gi, " ")
     .replace(/\s*\d{1,2}x\d{1,2}\s*/gi, " ")
     .replace(/\s*-\s*Season\s*\d+/gi, "")

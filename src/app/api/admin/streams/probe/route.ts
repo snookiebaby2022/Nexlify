@@ -4,10 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { probeStreamUrl } from "@/lib/stream-probe-server";
 import { normalizeStreamSource } from "@/lib/stream-source";
 import { resolveSourceToStreamUrl, getMediaImportRoot } from "@/lib/import-media";
+import { resolveProbeTargetUrl } from "@/lib/resolve-probe-url";
 import { PanelRole } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+
 function resolveProbeUrl(raw: string): string {
   const normalized = normalizeStreamSource(raw);
   if (!normalized) return "";
@@ -29,34 +31,43 @@ export async function POST(req: NextRequest) {
 
   const body = parsed.data;
 
+  const streamId = body.streamId ? String(body.streamId) : "";
   let url = String(body.url ?? "").trim();
+  const fast = body.fast === true;
 
-  if (!url && body.streamId) {
+  if (streamId) {
     const stream = await prisma.stream.findUnique({
-      where: { id: String(body.streamId) },
+      where: { id: streamId },
       include: { provider: true, server: true },
     });
     if (!stream) return NextResponse.json({ error: "Stream not found" }, { status: 404 });
-    const { resolveStreamPlaybackUrl } = await import("@/lib/resolve-stream-url");
-    url = resolveStreamPlaybackUrl(stream);
-    const fast = body.fast === true;
+    const resolved = await resolveProbeTargetUrl(url || stream.streamUrl, stream);
+    url = resolved.url || stream.streamUrl;
     const probe = await probeStreamUrl(url, { fast });
     await prisma.stream.update({
       where: { id: stream.id },
       data: {
         lastProbeAt: new Date(),
-        lastProbeOk: probe.status === "online",
-        lastProbeError: probe.status === "online" ? null : probe.message ?? "Probe failed",
+        lastProbeOk: probe.status === "online" || probe.status === "degraded",
+        lastProbeError:
+          probe.status === "online" || probe.status === "degraded"
+            ? null
+            : probe.message ?? "Probe failed",
       },
     });
-    return NextResponse.json({ probe, stream: { name: stream.name, streamUrl: url, isActive: stream.isActive } });
+    return NextResponse.json({
+      probe,
+      stream: { name: stream.name, streamUrl: url, isActive: stream.isActive },
+    });
   }
 
   if (!url) return NextResponse.json({ error: "url or streamId required" }, { status: 400 });
 
   url = resolveProbeUrl(url) || url;
+  const resolved = await resolveProbeTargetUrl(url);
+  url = resolved.url || url;
 
-  const probe = await probeStreamUrl(url, { fast: body.fast === true });
+  const probe = await probeStreamUrl(url, { fast });
   return NextResponse.json({ probe, stream: { streamUrl: url } });
   } catch (e) {
     return apiMutationErrorResponse(e);

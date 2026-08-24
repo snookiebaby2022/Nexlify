@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       scanned: result.scanned,
       updated: result.updated,
       fromProvider: result.fromProvider,
+      fromPlex: result.fromPlex,
       fromSeriesCover: result.fromSeriesCover,
       fromTmdb: result.fromTmdb,
       fromLiveLogo: result.fromLiveLogo,

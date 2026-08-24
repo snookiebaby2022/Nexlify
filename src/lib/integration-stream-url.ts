@@ -28,3 +28,30 @@ export function parseIntegrationStreamUrl(
 export function isIntegrationStreamUrl(url: string): boolean {
   return url.startsWith(NEXLIFY_INTEGRATION);
 }
+
+const INTEGRATION_SOURCE_SUFFIX =
+  /\s*\((Plex|Emby|Jellyfin|YouTube|Spotify|Deezer|Apple Music)\)\s*$/i;
+
+/** Remove trailing "(Plex)" / "(Emby)" labels from imported stream titles. */
+export function stripIntegrationSourceSuffix(name: string): string {
+  return String(name ?? "")
+    .replace(INTEGRATION_SOURCE_SUFFIX, "")
+    .trim();
+}
+
+const INTEGRATION_LABELS: Record<string, string> = {
+  plex: "Plex",
+  emby: "Emby",
+  jellyfin: "Jellyfin",
+  youtube: "YouTube",
+  spotify: "Spotify",
+  deezer: "Deezer",
+  apple: "Apple Music",
+};
+
+/** Human label for nexlify:// integration stream URLs (null when not an integration stream). */
+export function integrationSourceLabel(streamUrl: string): string | null {
+  const parsed = parseIntegrationStreamUrl(streamUrl);
+  if (!parsed) return null;
+  return INTEGRATION_LABELS[parsed.type] ?? parsed.type;
+}

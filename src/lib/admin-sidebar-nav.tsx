@@ -485,6 +485,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/settings/general#live-sports", label: "Live Sports APIs", section: "Panel" },
           { href: "/admin/settings/community", label: "Community & Chat", section: "Panel" },
           { href: "/admin/settings/streams", label: "Streaming", section: "Panel" },
+          { href: "/admin/settings/artwork", label: "Posters & icons", section: "Panel" },
           { href: "/admin/settings/server", label: "Server & Port", section: "Panel" },
           { href: "/admin/settings/domains", label: "Domains & SSL", section: "Panel" },
           { href: "/admin/settings/binaries", label: "Server Binaries", section: "Panel" },

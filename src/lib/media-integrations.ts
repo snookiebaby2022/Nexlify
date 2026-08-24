@@ -7,7 +7,7 @@ import {
   resolvePlexProfile,
   type PlexJsonMetadata,
 } from "@/lib/plex-playback";
-import { buildIntegrationStreamUrl, parseIntegrationStreamUrl } from "@/lib/integration-stream-url";
+import { buildIntegrationStreamUrl, parseIntegrationStreamUrl, stripIntegrationSourceSuffix } from "@/lib/integration-stream-url";
 import { plexArtworkUrl } from "@/lib/plex-artwork";
 import {
   attachVodBouquetsToAllLines,
@@ -384,6 +384,26 @@ async function backfillPlexArtworkIcons(
   if (ops.length) await Promise.all(ops);
 }
 
+/** Strip legacy "(Plex)" suffixes from stream titles — source is shown separately in the UI. */
+async function backfillPlexDisplayNames(integrationId: string, reporter?: IntegrationSyncReporter) {
+  const prefix = `nexlify://plex/${integrationId}/`;
+  const rows = await prisma.stream.findMany({
+    where: { streamUrl: { startsWith: prefix } },
+    select: { id: true, name: true },
+  });
+  let updated = 0;
+  for (const row of rows) {
+    const clean = stripIntegrationSourceSuffix(row.name);
+    if (clean && clean !== row.name) {
+      await prisma.stream.update({ where: { id: row.id }, data: { name: clean } });
+      updated++;
+    }
+  }
+  if (updated > 0) {
+    await reporter?.note(`Cleaned ${updated.toLocaleString()} Plex title(s) (removed “(Plex)” suffix).`);
+  }
+}
+
 /** Put existing Plex rows into Movies / TV Series (sync used to leave categoryId null). */
 async function backfillPlexCategories(integrationId: string, reporter?: IntegrationSyncReporter) {
   const prefix = `nexlify://plex/${integrationId}/`;
@@ -429,11 +449,23 @@ export async function repairPlexVodPlacement(
 ): Promise<{ movies: number; series: number }> {
   await reporter?.note("Attaching Movies and TV Series bouquets to all lines…");
   await attachVodBouquetsToAllLines();
+  await backfillPlexDisplayNames(integrationId, reporter);
   await backfillPlexCategories(integrationId, reporter);
   await reporter?.note("Moving Plex titles into the Movies and TV Series bouquets…");
   const linked = await relinkPlexStreamsToVodBouquets(integrationId);
   await invalidateXtreamCategories();
   return linked;
+}
+
+export async function cleanAllPlexDisplayNames(reporter?: IntegrationSyncReporter) {
+  const rows = await prisma.mediaIntegration.findMany({
+    where: { type: "plex" },
+    select: { id: true, name: true },
+  });
+  for (const row of rows) {
+    await reporter?.note(`Cleaning Plex titles in “${row.name}”…`);
+    await backfillPlexDisplayNames(row.id, reporter);
+  }
 }
 
 export async function repairAllPlexVodPlacement(reporter?: IntegrationSyncReporter) {
@@ -501,7 +533,7 @@ async function importPlexEpisodesForShow(
     const seasonNum = ep.parentIndex ?? 1;
     const episodeNum = ep.index ?? 1;
     const epTitle = ep.title?.trim() ?? `Episode ${episodeNum}`;
-    const name = `${showTitle} — S${String(seasonNum).padStart(2, "0")}E${String(episodeNum).padStart(2, "0")} — ${epTitle} (Plex)`;
+    const name = `${showTitle} — S${String(seasonNum).padStart(2, "0")}E${String(episodeNum).padStart(2, "0")} — ${epTitle}`;
     const streamUrl = buildIntegrationStreamUrl("plex", integrationId, String(ratingKey));
     if (plexUrls?.has(streamUrl)) {
       skipped++;
@@ -817,7 +849,7 @@ export async function importPlexLibrary(
       }
 
       pendingMovies.push({
-        name: `${name} (Plex)`,
+        name,
         streamUrl,
         type: StreamType.MOVIE,
         serverId: effectiveServerId,

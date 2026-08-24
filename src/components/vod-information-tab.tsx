@@ -5,6 +5,8 @@ import { Eye } from "lucide-react";
 import { TmdbSearch, type TmdbPick } from "@/components/tmdb-search";
 import { formInputClass, formInputStyle } from "@/components/form-page-shell";
 import type { VodTmdbFields } from "@/lib/vod-meta";
+import { cleanTitleForTmdb } from "@/lib/vod-tmdb-enrich";
+import { stripIntegrationSourceSuffix } from "@/lib/integration-stream-url";
 
 function InfoRow({
   label,
@@ -75,9 +77,11 @@ export function VodInformationTab({
 }) {
   const [loading, setLoading] = useState(false);
   const [autoBusy, setAutoBusy] = useState(false);
+  const [fetchError, setFetchError] = useState("");
 
   async function applyPick(pick: TmdbPick) {
     setLoading(true);
+    setFetchError("");
     onChange({
       tmdbId: String(pick.id),
       tmdbTitle: pick.title,
@@ -107,6 +111,8 @@ export function VodInformationTab({
           tmdbRuntime: d.runtimeMinutes,
         });
         if (d.posterUrl) onPoster?.(d.posterUrl);
+      } else if (!res.ok) {
+        setFetchError(String(data.error ?? "TMDB fetch failed"));
       }
     } finally {
       setLoading(false);
@@ -114,16 +120,26 @@ export function VodInformationTab({
   }
 
   async function fetchFromTitle() {
-    const query = defaultSearchQuery.trim();
-    if (query.length < 2) return;
+    const query = cleanTitleForTmdb(stripIntegrationSourceSuffix(defaultSearchQuery.trim()));
+    if (query.length < 2) {
+      setFetchError("Title too short for TMDB search.");
+      return;
+    }
     setAutoBusy(true);
+    setFetchError("");
     try {
       const res = await fetch(
         `/api/admin/tmdb/search?q=${encodeURIComponent(query)}&type=${mediaType}`
       );
       const data = await res.json();
-      if (res.ok && Array.isArray(data.results) && data.results.length) {
+      if (!res.ok) {
+        setFetchError(String(data.error ?? "TMDB search failed"));
+        return;
+      }
+      if (Array.isArray(data.results) && data.results.length) {
         await applyPick(data.results[0] as TmdbPick);
+      } else {
+        setFetchError(`No TMDB match for “${query}”. Try manual search below.`);
       }
     } finally {
       setAutoBusy(false);
@@ -131,6 +147,10 @@ export function VodInformationTab({
   }
 
   const set = (key: keyof VodTmdbFields, value: string) => onChange({ [key]: value });
+
+  const vodSearchTitle = cleanTitleForTmdb(
+    stripIntegrationSourceSuffix(defaultSearchQuery.trim())
+  );
 
   return (
     <div className="space-y-4">
@@ -149,11 +169,16 @@ export function VodInformationTab({
             Loading TMDB details…
           </span>
         ) : null}
+        {fetchError ? (
+          <span className="text-xs" style={{ color: "var(--danger, #f87171)" }}>
+            {fetchError}
+          </span>
+        ) : null}
       </div>
 
       <TmdbSearch
         mediaType={mediaType}
-        initialQuery={defaultSearchQuery}
+        initialQuery={vodSearchTitle}
         onSelect={(p) => void applyPick(p)}
       />
 

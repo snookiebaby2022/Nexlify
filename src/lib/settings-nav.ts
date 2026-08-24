@@ -10,6 +10,7 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
   { href: "/admin/settings/general", label: "General", group: "general" },
   { href: "/admin/settings/community", label: "Community & chat", group: "community" },
   { href: "/admin/settings/streams", label: "Streaming", group: "streams" },
+  { href: "/admin/settings/artwork", label: "Posters & icons" },
   { href: "/admin/settings/binaries", label: "Server binaries", group: "binaries" },
   { href: "/admin/settings/cache", label: "Cache & Redis", group: "cache" },
   { href: "/admin/settings/nginx-cache", label: "Nginx Cache", group: "nginx-cache" },
