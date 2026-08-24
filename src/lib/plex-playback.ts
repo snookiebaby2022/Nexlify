@@ -1,3 +1,5 @@
+import { plexRequestHeaders } from "@/lib/plex-config";
+
 export type PlexTranscodeProfile = {
   maxVideoBitrateKbps?: number;
   videoResolution?: string;
@@ -78,11 +80,55 @@ export function pickPlexPlaybackUrl(
   return buildPlexTranscodeM3u8(base, token, String(ratingKey), profile);
 }
 
-export async function fetchPlexJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!res.ok) throw new Error(`Plex API ${res.status}`);
-  return res.json() as Promise<T>;
+function describePlexFetchFailure(e: unknown): string {
+  if (!(e instanceof Error)) return "Could not reach Plex.";
+  const cause = (e as Error & { cause?: { code?: string; message?: string } }).cause;
+  const code = cause?.code ?? "";
+  const blob = `${e.name} ${e.message} ${cause?.message ?? ""} ${code}`;
+  if (e.name === "TimeoutError" || /timeout|aborted/i.test(blob)) {
+    return "Plex timed out. This VPS must be able to reach the Plex host and port.";
+  }
+  if (code === "ECONNREFUSED") return "Plex refused the connection. Check IP and port.";
+  if (code === "ENOTFOUND") return "Could not resolve the Plex hostname.";
+  if (/certificate|CERT_|SSL|UNABLE_TO_VERIFY/i.test(blob)) {
+    return "Plex TLS/certificate failed. Use http:// for a raw IP, or the *.plex.direct hostname.";
+  }
+  if (e.message && e.message !== "fetch failed") return e.message;
+  return "Could not reach Plex. Check host, port, and firewall.";
+}
+
+export async function fetchPlexJson<T>(url: string, clientIdentifier = "nexlify-panel"): Promise<T> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Invalid Plex URL");
+  }
+  const token = parsed.searchParams.get("X-Plex-Token") ?? "";
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: plexRequestHeaders(token, clientIdentifier),
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch (e) {
+    throw new Error(describePlexFetchFailure(e));
+  }
+  if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error(
+        "Plex rejected the token (HTTP 401). Paste only the X-Plex-Token value from Plex Web → Get Info → View XML, or fill username and password."
+      );
+    }
+    if (res.status === 403) throw new Error("Plex denied access (HTTP 403).");
+    throw new Error(`Plex API HTTP ${res.status}`);
+  }
+  const ct = res.headers.get("content-type") ?? "";
+  if (ct.includes("json")) return res.json() as Promise<T>;
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error("Plex returned a non-JSON response. Check the token and server URL.");
+  }
 }

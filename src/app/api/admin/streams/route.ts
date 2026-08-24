@@ -33,6 +33,8 @@ import { canAccessBouquet } from "@/lib/bouquet-access";
 
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { streamListOrderBy } from "@/lib/stream-order";
+
 export async function GET(req: NextRequest) {
 
   const session = await requireSession([
@@ -248,12 +250,14 @@ export async function GET(req: NextRequest) {
 
   const skip = paginate ? (page - 1) * pageSize : undefined;
   const take = paginate ? pageSize : undefined;
+  const orderBy = streamListOrderBy(req.nextUrl.searchParams.get("sort"));
 
   const streams = lite
     ? await prisma.stream.findMany({
         where,
         skip,
         take,
+        orderBy,
         select: {
           id: true,
           name: true,
@@ -277,12 +281,12 @@ export async function GET(req: NextRequest) {
           server: { select: { id: true, name: true } },
           category: { select: { id: true, name: true } },
         },
-        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       })
     : await prisma.stream.findMany({
         where,
         skip,
         take,
+        orderBy,
         include: {
           category: true,
           server: true,
@@ -290,7 +294,6 @@ export async function GET(req: NextRequest) {
           parentStream: { select: { id: true, name: true } },
           _count: { select: { childStreams: true } },
         },
-        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       });
 
 

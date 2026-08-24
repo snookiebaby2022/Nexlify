@@ -49,12 +49,20 @@ export function prismaErrorResponse(e: unknown): NextResponse | null {
   return null;
 }
 
-export function apiMutationErrorResponse(e: unknown): NextResponse {
+export function apiMutationErrorResponse(
+  e: unknown,
+  opts?: { exposeMessage?: boolean }
+): NextResponse {
   const mapped = prismaErrorResponse(e);
   if (mapped) return mapped;
   const message = e instanceof Error ? e.message : "Request failed";
   console.error("[api] mutation", message);
-  return NextResponse.json({ error: "Request failed" }, { status: 500 });
+  const expose =
+    opts?.exposeMessage === true &&
+    message.length > 0 &&
+    message.length <= 280 &&
+    !/prisma|sqlstate|password|secret|stack|econnreset/i.test(message);
+  return NextResponse.json({ error: expose ? message : "Request failed" }, { status: 500 });
 }
 
 /** Wrap POST/PATCH/PUT/DELETE handlers so req.json + Prisma failures become JSON errors. */

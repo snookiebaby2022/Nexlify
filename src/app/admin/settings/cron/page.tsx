@@ -5,7 +5,7 @@ export default function CronSettingsPage() {
     <SettingsPanelForm
       group="cron"
       title="Scheduled tasks"
-      description="Cron schedules for EPG sync, M3U provider sync, channel refresh, dead-link probes, and subscription notifications."
+      description="Cron schedules for EPG sync, M3U provider sync, Plex library sync, channel refresh, dead-link probes, and subscription notifications."
       sections={[
         {
           title: "EPG & channels",
@@ -27,6 +27,22 @@ export default function CronSettingsPage() {
           fields: [
             { key: "deadLinkProbeEnabled", label: "Auto probe dead links", type: "yesno" },
             { key: "deadLinkProbeCron", label: "Probe cron", placeholder: "*/15 * * * *" },
+          ],
+        },
+        {
+          title: "Plex",
+          info: "Requires an active Plex addon (Addons → Plex). Auto-sync skips movies and series already on the panel.",
+          fields: [
+            { key: "plexSyncEnabled", label: "Plex library auto-sync", type: "yesno" },
+            {
+              key: "plexSyncSchedule",
+              label: "Plex sync interval",
+              type: "select",
+              options: [
+                { value: "12h", label: "Every 12 hours" },
+                { value: "24h", label: "Every 24 hours" },
+              ],
+            },
           ],
         },
         {

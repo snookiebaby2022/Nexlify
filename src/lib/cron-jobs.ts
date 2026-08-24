@@ -657,23 +657,36 @@ async function jobM3uSync() {
 async function jobPlexAutoSync() {
   const start = Date.now();
   try {
+    const cron = await getSettingGroup("cron");
+    if (cron.plexSyncEnabled === false) return;
+
     const rows = await prisma.mediaIntegration.findMany({
       where: { type: "plex", isActive: true },
       select: { id: true, config: true },
     });
-    if (!rows.length) {
-      await logCron("plex_auto_sync", "ok", "no active integrations", Date.now() - start);
-      return;
-    }
-    const { importPlexLibrary } = await import("./media-integrations");
-    let imported = 0;
+    if (!rows.length) return;
+
+    const { plexAutoSyncIsDue, plexScheduleHours } = await import("./plex-catalog-match");
+    const intervalHours = plexScheduleHours(cron.plexSyncSchedule);
+    const last = await prisma.panelSetting.findUnique({ where: { key: "plex_auto_sync_last_run" } });
+    if (!plexAutoSyncIsDue(last?.value ?? null, intervalHours)) return;
+
+    const { enqueuePlexSync } = await import("./plex-sync-queue");
+    let queued = 0;
+    let already = 0;
     for (const row of rows) {
       const cfg = (row.config ?? {}) as Record<string, unknown>;
       const serverId = cfg.serverId ? String(cfg.serverId) : null;
-      const result = await importPlexLibrary(row.id, serverId);
-      imported += result.imported;
+      const result = await enqueuePlexSync(row.id, serverId);
+      if (result.alreadyRunning) already++;
+      else queued++;
     }
-    await logCron("plex_auto_sync", "ok", `synced ${rows.length} server(s), +${imported} items`, Date.now() - start);
+    await logCron(
+      "plex_auto_sync",
+      "ok",
+      `every ${intervalHours}h · queued ${queued} · already running ${already}`,
+      Date.now() - start
+    );
   } catch (e) {
     await logCron("plex_auto_sync", "error", String(e), Date.now() - start);
   }
@@ -687,7 +700,6 @@ export async function runAllCronJobs() {
   await jobWatchFolders();
   await jobImportQueue();
   await jobM3uSync();
-  await jobPlexAutoSync();
   await jobAgentAutoRestart();
   await jobServerRebalance();
   await jobTheftDetection();
@@ -816,4 +828,5 @@ export async function runHourlyCronJobs() {
   await jobPgDump();
   await jobCloudBackup();
   await jobCheckStreamCerts();
+  await jobPlexAutoSync();
 }

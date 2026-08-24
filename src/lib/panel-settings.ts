@@ -393,6 +393,8 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     deadLinkProbeEnabled: true,
     deadLinkProbeCron: "*/15 * * * *",
     subscriptionNotifyCron: "0 8 * * *",
+    plexSyncEnabled: true,
+    plexSyncSchedule: "12h",
     notes: "Requires PM2 nexlify-cron. Hourly jobs use runHourlyCronJobs; others run each minute cycle when due.",
   },
   security: {

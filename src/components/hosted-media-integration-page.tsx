@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { FormPageShell } from "@/components/form-page-shell";
 import { formatDateTime } from "@/lib/format";
+import { IntegrationProgressCard } from "@/components/integration-progress-card";
+import type { IntegrationSyncProgress } from "@/lib/integration-sync-types";
 
 export type HostedMediaType = "emby" | "jellyfin" | "youtube";
 
@@ -13,6 +15,7 @@ type IntegrationRow = {
   isActive: boolean;
   lastSync: string | null;
   config: Record<string, unknown>;
+  syncProgress?: IntegrationSyncProgress | null;
 };
 
 type HostedMediaIntegrationDef = {
@@ -36,12 +39,30 @@ export function HostedMediaIntegrationPage({ def }: { def: HostedMediaIntegratio
   const [serverId, setServerId] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
   const [syncing, setSyncing] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [addProgress, setAddProgress] = useState<IntegrationSyncProgress | null>(null);
+  const [syncProgress, setSyncProgress] = useState<IntegrationSyncProgress | null>(null);
 
   const load = useCallback(() => {
     fetch(`/api/admin/integrations?type=${def.type}`)
       .then((r) => r.json())
-      .then((d) => setItems(d.items ?? []));
+      .then((d) => {
+        const next = (d.items ?? []) as IntegrationRow[];
+        setItems(next);
+        const running = next.find((i) => i.syncProgress?.status === "running");
+        if (running?.syncProgress) {
+          setSyncProgress(running.syncProgress);
+          setSyncing(running.id);
+          return;
+        }
+        const failed = next.find((i) => i.syncProgress?.status === "error");
+        if (failed?.syncProgress) {
+          setSyncProgress(failed.syncProgress);
+          setError(failed.syncProgress.error || failed.syncProgress.message || "Sync failed");
+        }
+      });
     fetch("/api/admin/servers")
       .then((r) => r.json())
       .then((d) => setServers(d.servers ?? []));
@@ -50,6 +71,36 @@ export function HostedMediaIntegrationPage({ def }: { def: HostedMediaIntegratio
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!syncing) return;
+    let cancelled = false;
+    const tick = async () => {
+      const res = await fetch("/api/admin/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync-status", id: syncing }),
+      });
+      const data = await res.json();
+      if (cancelled) return;
+      const progress = data.progress as IntegrationSyncProgress | null;
+      if (progress) setSyncProgress(progress);
+      if (progress?.status === "done") {
+        setMsg(progress.message);
+        setSyncing(null);
+        load();
+      } else if (progress?.status === "error") {
+        setError(progress.error || progress.message || "Sync failed");
+        setSyncing(null);
+      }
+    };
+    void tick();
+    const t = setInterval(() => void tick(), 900);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [syncing, load]);
 
   function loadIntoForm(item: IntegrationRow) {
     const cfg = item.config ?? {};
@@ -73,6 +124,21 @@ export function HostedMediaIntegrationPage({ def }: { def: HostedMediaIntegratio
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setMsg("");
+    setError("");
+    setSaving(true);
+    const steps = ["Saving integration…"];
+    setAddProgress({
+      jobId: "add",
+      status: "running",
+      phase: "save",
+      message: "Saving integration…",
+      current: 1,
+      total: 3,
+      imported: 0,
+      skipped: 0,
+      steps: steps.map((text, i) => ({ at: `${i}`, text })),
+      updatedAt: new Date().toISOString(),
+    });
     const payload: Record<string, unknown> = {
       type: def.type,
       name,
@@ -86,24 +152,93 @@ export function HostedMediaIntegrationPage({ def }: { def: HostedMediaIntegratio
       payload.token = token;
     }
 
-    const res = await fetch("/api/admin/integrations", {
-      method: editId ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editId ? { id: editId, ...payload } : payload),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setMsg(data.error ?? "Save failed");
-      return;
+    try {
+      const res = await fetch("/api/admin/integrations", {
+        method: editId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editId ? { id: editId, ...payload } : payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Save failed");
+      const id = String(data.item?.id ?? editId);
+      setEditId(id);
+      steps.push("Testing connection…");
+      setAddProgress({
+        jobId: "add",
+        status: "running",
+        phase: "test",
+        message: "Testing connection…",
+        current: 2,
+        total: 3,
+        imported: 0,
+        skipped: 0,
+        steps: steps.map((text, i) => ({ at: `${i}`, text })),
+        updatedAt: new Date().toISOString(),
+      });
+      const testRes = await fetch("/api/admin/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test", id }),
+      });
+      const testData = await testRes.json();
+      if (!testRes.ok) throw new Error(testData.error ?? "Connection test failed");
+      const doneMsg = testData.message ?? (editId ? "Integration updated." : "Integration added.");
+      setMsg(doneMsg);
+      steps.push(doneMsg);
+      setAddProgress({
+        jobId: "add",
+        status: "done",
+        phase: "done",
+        message: doneMsg,
+        current: 3,
+        total: 3,
+        imported: 0,
+        skipped: 0,
+        steps: steps.map((text, i) => ({ at: `${i}`, text })),
+        updatedAt: new Date().toISOString(),
+      });
+      load();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Save failed";
+      setError(message);
+      setAddProgress((prev) =>
+        prev
+          ? { ...prev, status: "error", message, error: message }
+          : {
+              jobId: "add",
+              status: "error",
+              phase: "error",
+              message,
+              current: 0,
+              total: 3,
+              imported: 0,
+              skipped: 0,
+              steps: [],
+              error: message,
+              updatedAt: new Date().toISOString(),
+            }
+      );
+    } finally {
+      setSaving(false);
     }
-    setMsg(editId ? "Integration updated." : "Integration added.");
-    resetForm();
-    load();
   }
 
   async function sync(id: string) {
     setSyncing(id);
     setMsg("");
+    setError("");
+    setSyncProgress({
+      jobId: "pending",
+      status: "running",
+      phase: "queued",
+      message: "Starting sync…",
+      current: 0,
+      total: 0,
+      imported: 0,
+      skipped: 0,
+      steps: [{ at: new Date().toISOString(), text: "Starting sync…" }],
+      updatedAt: new Date().toISOString(),
+    });
     try {
       const item = items.find((i) => i.id === id);
       const res = await fetch("/api/admin/integrations", {
@@ -117,13 +252,9 @@ export function HostedMediaIntegrationPage({ def }: { def: HostedMediaIntegratio
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Sync failed");
-      setMsg(
-        `Synced ${data.imported ?? 0} stream(s). Content is in the “Plugin imports” bouquet on all active lines.`
-      );
-      load();
+      if (data.progress) setSyncProgress(data.progress);
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Sync failed");
-    } finally {
+      setError(e instanceof Error ? e.message : "Sync failed");
       setSyncing(null);
     }
   }
@@ -135,9 +266,17 @@ export function HostedMediaIntegrationPage({ def }: { def: HostedMediaIntegratio
           {def.description}
         </p>
 
+        {addProgress && <IntegrationProgressCard progress={addProgress} title="Add / update" />}
+        {syncProgress && <IntegrationProgressCard progress={syncProgress} title="Library sync" />}
+
         {msg && (
-          <p className="text-sm rounded border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+          <p className="text-sm rounded border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--accent)" }}>
             {msg}
+          </p>
+        )}
+        {error && (
+          <p className="text-sm rounded border px-3 py-2" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>
+            {error}
           </p>
         )}
 
@@ -206,8 +345,8 @@ export function HostedMediaIntegrationPage({ def }: { def: HostedMediaIntegratio
           </label>
 
           <div className="flex flex-wrap gap-2">
-            <button type="submit" className="btn-positive rounded px-4 py-2 text-sm cursor-pointer">
-              {editId ? "Update" : "Add integration"}
+            <button type="submit" disabled={saving} className="btn-positive rounded px-4 py-2 text-sm cursor-pointer">
+              {saving ? "Working…" : editId ? "Update" : "Add integration"}
             </button>
             {editId && (
               <button

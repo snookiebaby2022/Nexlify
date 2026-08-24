@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { FormPageShell } from "@/components/form-page-shell";
 import type { MusicAddonDef } from "@/lib/music-addons-catalog";
+import { IntegrationProgressCard } from "@/components/integration-progress-card";
+import type { IntegrationSyncProgress } from "@/lib/integration-sync-types";
 
 type IntegrationRow = {
   id: string;
@@ -20,7 +22,11 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
   const [serverId, setServerId] = useState("");
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
   const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
   const [licenses, setLicenses] = useState<{ id: string; label: string; expiresAt: string | null }[]>([]);
+  const [busy, setBusy] = useState<"save" | "test" | "sync" | null>(null);
+  const [addProgress, setAddProgress] = useState<IntegrationSyncProgress | null>(null);
+  const [syncProgress, setSyncProgress] = useState<IntegrationSyncProgress | null>(null);
 
   const load = useCallback(() => {
     fetch(`/api/admin/integrations?type=${addon.id}`)
@@ -28,7 +34,7 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
       .then((d) => {
         const items = d.items ?? [];
         if (items[0]) {
-          const i = items[0] as IntegrationRow;
+          const i = items[0] as IntegrationRow & { syncProgress?: IntegrationSyncProgress };
           setRow(i);
           setName(i.name);
           const cfg = (i.config ?? {}) as Record<string, string>;
@@ -36,6 +42,12 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
           for (const f of addon.fields) next[f.key] = cfg[f.key] ?? "";
           setConfig(next);
           setServerId(String(cfg.serverId ?? ""));
+          if (i.syncProgress?.status === "running") {
+            setSyncProgress(i.syncProgress);
+            setBusy("sync");
+          } else if (i.syncProgress) {
+            setSyncProgress(i.syncProgress);
+          }
         }
       });
     fetch("/api/admin/servers")
@@ -50,28 +62,92 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (busy !== "sync" || !row) return;
+    let cancelled = false;
+    const tick = async () => {
+      const res = await fetch("/api/admin/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync-status", id: row.id }),
+      });
+      const data = await res.json();
+      if (cancelled) return;
+      const progress = data.progress as IntegrationSyncProgress | null;
+      if (progress) setSyncProgress(progress);
+      if (progress?.status === "done") {
+        setMsg(progress.message);
+        setBusy(null);
+        load();
+      } else if (progress?.status === "error") {
+        setError(progress.error || progress.message || "Sync failed");
+        setBusy(null);
+      }
+    };
+    void tick();
+    const t = setInterval(() => void tick(), 900);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [busy, row, load]);
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setMsg("");
-    const res = await fetch("/api/admin/integrations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: addon.id,
-        name,
-        serverId: serverId || null,
-        ...config,
-        config,
-        isActive: true,
-      }),
+    setError("");
+    setBusy("save");
+    setAddProgress({
+      jobId: "add",
+      status: "running",
+      phase: "save",
+      message: "Saving integration…",
+      current: 1,
+      total: 2,
+      imported: 0,
+      skipped: 0,
+      steps: [{ at: "1", text: "Saving integration…" }],
+      updatedAt: new Date().toISOString(),
     });
-    if (!res.ok) {
+    try {
+      const res = await fetch("/api/admin/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: addon.id,
+          name,
+          serverId: serverId || null,
+          ...config,
+          config,
+          isActive: true,
+        }),
+      });
       const data = await res.json();
-      setMsg(data.error ?? "Save failed");
-      return;
+      if (!res.ok) throw new Error(data.error ?? "Save failed");
+      setMsg("Saved.");
+      setAddProgress({
+        jobId: "add",
+        status: "done",
+        phase: "done",
+        message: "Saved. Use Test connection, then Sync to panel.",
+        current: 2,
+        total: 2,
+        imported: 0,
+        skipped: 0,
+        steps: [
+          { at: "1", text: "Saving integration…" },
+          { at: "2", text: "Saved. Use Test connection, then Sync to panel." },
+        ],
+        updatedAt: new Date().toISOString(),
+      });
+      load();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Save failed";
+      setError(message);
+      setAddProgress((prev) => (prev ? { ...prev, status: "error", message, error: message } : prev));
+    } finally {
+      setBusy(null);
     }
-    setMsg("Saved.");
-    load();
   }
 
   async function toggleActive() {
@@ -86,39 +162,88 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
 
   async function testConnection() {
     if (!row) {
-      setMsg("Save integration first.");
+      setError("Save integration first.");
       return;
     }
-    setMsg("Testing…");
-    const res = await fetch("/api/admin/integrations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "test", id: row.id }),
+    setBusy("test");
+    setMsg("");
+    setError("");
+    setAddProgress({
+      jobId: "test",
+      status: "running",
+      phase: "test",
+      message: "Testing connection…",
+      current: 1,
+      total: 1,
+      imported: 0,
+      skipped: 0,
+      steps: [{ at: "1", text: "Testing connection…" }],
+      updatedAt: new Date().toISOString(),
     });
-    const data = await res.json();
-    setMsg(res.ok ? (data.message ?? "Connection OK") : (data.error ?? "Test failed"));
+    try {
+      const res = await fetch("/api/admin/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test", id: row.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Test failed");
+      const message = data.message ?? "Connection OK";
+      setMsg(message);
+      setAddProgress({
+        jobId: "test",
+        status: "done",
+        phase: "done",
+        message,
+        current: 1,
+        total: 1,
+        imported: 0,
+        skipped: 0,
+        steps: [{ at: "1", text: message }],
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Test failed";
+      setError(message);
+      setAddProgress((prev) => (prev ? { ...prev, status: "error", message, error: message } : prev));
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function syncToPanel() {
     if (!row) {
-      setMsg("Save integration first.");
+      setError("Save integration first.");
       return;
     }
-    setMsg("Syncing to panel streams…");
-    const res = await fetch("/api/admin/integrations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "sync", id: row.id, serverId: serverId || null }),
+    setBusy("sync");
+    setMsg("");
+    setError("");
+    setSyncProgress({
+      jobId: "pending",
+      status: "running",
+      phase: "queued",
+      message: "Starting sync…",
+      current: 0,
+      total: 0,
+      imported: 0,
+      skipped: 0,
+      steps: [{ at: new Date().toISOString(), text: "Starting sync…" }],
+      updatedAt: new Date().toISOString(),
     });
-    const data = await res.json();
-    if (!res.ok) {
-      setMsg(data.error ?? "Sync failed");
-      return;
+    try {
+      const res = await fetch("/api/admin/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync", id: row.id, serverId: serverId || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Sync failed");
+      if (data.progress) setSyncProgress(data.progress);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Sync failed");
+      setBusy(null);
     }
-    setMsg(
-      `Synced ${data.imported ?? 0} stream(s). Content is in the “Plugin imports” bouquet on all active lines.`
-    );
-    load();
   }
 
   return (
@@ -198,8 +323,8 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
             </span>
           </label>
           <div className="flex flex-wrap gap-2 pt-2">
-            <button type="submit" className="btn-positive rounded px-4 py-2 text-sm cursor-pointer">
-              Save integration
+            <button type="submit" disabled={busy === "save"} className="btn-positive rounded px-4 py-2 text-sm cursor-pointer">
+              {busy === "save" ? "Saving…" : "Save integration"}
             </button>
             {row && (
               <>
@@ -208,15 +333,17 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
                   className="rounded px-4 py-2 text-sm border cursor-pointer"
                   style={{ borderColor: "var(--border)" }}
                   onClick={testConnection}
+                  disabled={busy === "test"}
                 >
-                  Test connection
+                  {busy === "test" ? "Testing…" : "Test connection"}
                 </button>
                 <button
                   type="button"
                   className="btn-positive rounded px-4 py-2 text-sm cursor-pointer"
                   onClick={syncToPanel}
+                  disabled={busy === "sync"}
                 >
-                  Sync to panel
+                  {busy === "sync" ? "Syncing…" : "Sync to panel"}
                 </button>
                 <button
                   type="button"
@@ -235,6 +362,13 @@ export function MusicIntegrationPage({ addon }: { addon: MusicAddonDef }) {
               Add addon license
             </Link>
           </div>
+          {addProgress && <IntegrationProgressCard progress={addProgress} title="Save / test" />}
+          {syncProgress && <IntegrationProgressCard progress={syncProgress} title="Sync" />}
+          {error && (
+            <p className="text-sm" style={{ color: "var(--danger)" }}>
+              {error}
+            </p>
+          )}
           {msg && (
             <p className="text-sm" style={{ color: "var(--muted)" }}>
               {msg}

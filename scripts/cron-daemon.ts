@@ -10,6 +10,7 @@
  */
 import { runAllCronJobs, runHourlyCronJobs } from "../src/lib/cron-jobs";
 import { getRedis } from "../src/lib/redis";
+import { plexSyncIsBusy, pumpPlexSyncQueue } from "../src/lib/plex-sync-queue";
 
 const MINUTE_MS = 60_000;
 const LOCK_TTL_S = 300; // 5-minute safety net
@@ -47,6 +48,10 @@ async function releaseLock(key: string) {
 }
 
 function maybeRecycleForMemory() {
+  if (plexSyncIsBusy()) {
+    console.log("[nexlify-cron] skipping RSS recycle while Plex sync is running");
+    return;
+  }
   const rssMb = process.memoryUsage().rss / (1024 * 1024);
   if (rssMb < RECYCLE_RSS_MB) return;
   console.log(
@@ -93,3 +98,11 @@ console.log(
 );
 void tickMinute();
 setInterval(() => void tickMinute(), MINUTE_MS);
+void pumpPlexSyncQueue().catch((e) => {
+  console.error("[nexlify-cron] plex sync pump", e);
+});
+setInterval(() => {
+  void pumpPlexSyncQueue().catch((e) => {
+    console.error("[nexlify-cron] plex sync pump", e);
+  });
+}, 5_000);

@@ -9,6 +9,7 @@ import {
   musicRelayBase,
   spotifyAccessToken,
 } from "@/lib/music-relay";
+import type { IntegrationSyncReporter } from "@/lib/integration-sync-progress";
 
 function resolveIntegrationServerId(cfg: Record<string, unknown>, serverId?: string | null) {
   return serverId ?? (cfg.serverId ? String(cfg.serverId) : null);
@@ -292,19 +293,31 @@ export async function importYoutubeMusic(integrationId: string, serverId?: strin
   return { imported, bouquet: "Plugin imports" };
 }
 
-export async function importMusicAddon(integrationId: string, serverId?: string | null) {
+export async function importMusicAddon(
+  integrationId: string,
+  serverId?: string | null,
+  reporter?: IntegrationSyncReporter
+) {
   const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
   if (!row) throw new Error("Integration not found");
+  await reporter?.step("import", `Importing ${row.type.replace("_", " ")}…`);
+  let result: { imported: number; bouquet?: string; mode?: string };
   switch (row.type) {
     case "spotify":
-      return importSpotifyPlaylist(integrationId, serverId);
+      result = await importSpotifyPlaylist(integrationId, serverId);
+      break;
     case "apple_music":
-      return importAppleMusicPlaylist(integrationId, serverId);
+      result = await importAppleMusicPlaylist(integrationId, serverId);
+      break;
     case "deezer":
-      return importDeezerPlaylist(integrationId, serverId);
+      result = await importDeezerPlaylist(integrationId, serverId);
+      break;
     case "youtube_music":
-      return importYoutubeMusic(integrationId, serverId);
+      result = await importYoutubeMusic(integrationId, serverId);
+      break;
     default:
       throw new Error(`No music import for type ${row.type}`);
   }
+  await reporter?.done(`Synced ${result.imported} stream(s).`, result);
+  return result;
 }

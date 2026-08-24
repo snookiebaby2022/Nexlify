@@ -5,6 +5,7 @@ export type { Line };
 import { prisma } from "./prisma";
 import { cacheGetOrSet } from "./cache";
 import { yieldEventLoop } from "./yield-event-loop";
+import { listVodNewestFirst } from "./stream-order";
 
 function lineCredCacheKey(username: string, password: string) {
   const digest = createHash("sha256").update(`${username}\0${password}`).digest("hex").slice(0, 20);
@@ -208,6 +209,36 @@ function typeList(options?: StreamsForLineOptions): StreamType[] | null {
   return Array.isArray(options.type) ? options.type : [options.type];
 }
 
+function listingUsesNewestFirst(options?: StreamsForLineOptions): boolean {
+  return listVodNewestFirst(typeList(options));
+}
+
+function listingOrderSql(options?: StreamsForLineOptions) {
+  if (listingUsesNewestFirst(options)) {
+    return Prisma.sql`ORDER BY s."createdAt" DESC, s.id DESC`;
+  }
+  return Prisma.sql`ORDER BY s."sortOrder" ASC, s.name ASC, s.id ASC`;
+}
+
+type ListingCursor =
+  | { kind: "order"; sortOrder: number; name: string; id: string }
+  | { kind: "newest"; createdAt: Date; id: string };
+
+function listingCursorSql(cursor: ListingCursor | null): Prisma.Sql {
+  if (!cursor) return Prisma.empty;
+  if (cursor.kind === "newest") {
+    return Prisma.sql`AND (
+      s."createdAt" < ${cursor.createdAt}
+      OR (s."createdAt" = ${cursor.createdAt} AND s.id < ${cursor.id})
+    )`;
+  }
+  return Prisma.sql`AND (
+    s."sortOrder" > ${cursor.sortOrder}
+    OR (s."sortOrder" = ${cursor.sortOrder} AND s.name > ${cursor.name})
+    OR (s."sortOrder" = ${cursor.sortOrder} AND s.name = ${cursor.name} AND s.id > ${cursor.id})
+  )`;
+}
+
 type LeanListingRow = {
   id: string;
   name: string;
@@ -282,12 +313,10 @@ async function loadLeanListingForLine(
             ? Prisma.sql`AND s."categoryId" IN (${Prisma.join(options.categoryIds)})`
             : Prisma.empty
       }
-    ORDER BY s."sortOrder" ASC, s.name ASC, s.id ASC
+    ${listingOrderSql(options)}
   `;
   return rows.map(({ ord: _ord, ...s }) => s as unknown as StreamForLine);
 }
-
-type ListingCursor = { sortOrder: number; name: string; id: string };
 
 function listingFilterSql(line: LineWithBouquets, options?: StreamsForLineOptions) {
   const excludeDisabled = options?.excludeDisabled !== false;
@@ -328,15 +357,10 @@ export async function forEachLeanListingBatch(
   const filter = listingFilterSql(line, options);
   if (!filter.bouquetIds.length) return;
 
+  const newest = listingUsesNewestFirst(options);
   let cursor: ListingCursor | null = null;
   for (;;) {
-    const cursorSql = cursor
-      ? Prisma.sql`AND (
-          s."sortOrder" > ${cursor.sortOrder}
-          OR (s."sortOrder" = ${cursor.sortOrder} AND s.name > ${cursor.name})
-          OR (s."sortOrder" = ${cursor.sortOrder} AND s.name = ${cursor.name} AND s.id > ${cursor.id})
-        )`
-      : Prisma.empty;
+    const cursorSql = listingCursorSql(cursor);
     const rows = (await prisma.$queryRaw`
       SELECT
         s.id,
@@ -365,14 +389,16 @@ export async function forEachLeanListingBatch(
       WHERE 1=1
         ${filter.where}
         ${cursorSql}
-      ORDER BY s."sortOrder" ASC, s.name ASC, s.id ASC
+      ${listingOrderSql(options)}
       LIMIT ${STREAM_BATCH}
     `) as LeanListingRow[];
     if (!rows.length) return;
     const mapped = rows.map(({ ord: _ord, ...s }) => s as unknown as StreamForLine);
     await onBatch(mapped);
     const last = rows[rows.length - 1]!;
-    cursor = { sortOrder: last.sortOrder, name: last.name, id: last.id };
+    cursor = newest
+      ? { kind: "newest", createdAt: last.createdAt, id: last.id }
+      : { kind: "order", sortOrder: last.sortOrder, name: last.name, id: last.id };
     if (rows.length < STREAM_BATCH) return;
     await yieldEventLoop();
   }
@@ -410,7 +436,7 @@ export async function streamIdsForLine(
           ? Prisma.sql`AND s."categoryId" IN (${Prisma.join(options.categoryIds)})`
           : Prisma.empty
     }
-    ORDER BY s."sortOrder" ASC, s.name ASC, s.id ASC
+    ${listingOrderSql(options)}
   `;
   return rows.map((r) => r.id);
 }

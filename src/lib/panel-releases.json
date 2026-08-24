@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.38",
+  "latestVersion": "2.0.39",
   "releases": [
+    {
+      "version": "2.0.39",
+      "date": "2026-08-24",
+      "channel": "stable",
+      "summary": "Reliable Plex sync: live progress, real failure status, and skip-existing so large libraries can finish.",
+      "changelog": [
+        "Plex sync runs in the scheduled-task worker so a panel restart no longer kills the import",
+        "Live progress shows library, title counts, new vs skipped, and last-update time",
+        "If sync stalls or the worker dies, the page shows Failed instead of staying In progress",
+        "Skip titles already on the panel; resume after a stop without rewriting existing rows",
+        "Batch movie/episode inserts and same-origin Plex poster proxy for admin lists"
+      ],
+      "fixes": [
+        "Plex Sync looked idle because progress only updated every 25 titles and died on panel restart",
+        "Stale In progress after a killed sync; lastSync never set until a full pass finished",
+        "Broken Plex posters in Manage Movies when the browser could not reach the Plex host"
+      ]
+    },
     {
       "version": "2.0.38",
       "date": "2026-08-24",

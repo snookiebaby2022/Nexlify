@@ -23,6 +23,7 @@ import { formatUptimeXui, type StreamLiveStat } from "@/lib/stream-live-stats";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
+import { displayStreamIcon } from "@/lib/plex-artwork";
 import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
 
 const StreamVerifyPanel = dynamic(
@@ -483,12 +484,15 @@ export function StreamsList({
           return (
             <article key={s.id} className="panel-mobile-card p-4 space-y-2">
               <div className="flex gap-3">
-                {s.streamIcon ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={s.streamIcon} alt="" className="xui-stream-icon shrink-0" />
-                ) : (
-                  <span className="xui-stream-icon xui-stream-icon--empty shrink-0" />
-                )}
+                {(() => {
+                  const icon = displayStreamIcon(s);
+                  return icon ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={icon} alt="" className="xui-stream-icon shrink-0" />
+                  ) : (
+                    <span className="xui-stream-icon xui-stream-icon--empty shrink-0" />
+                  );
+                })()}
                 <div className="min-w-0 flex-1">
                   <Link href={`/admin/servers/streams?edit=${s.id}`} className="xui-stream-name font-semibold block truncate">
                     {s.name}
@@ -577,15 +581,16 @@ export function StreamsList({
               const rowId = (page - 1) * pageSize + i + 1;
               const isDirect = st?.status === "direct";
               const isOnline = st?.status === "online" && (st.uptimeSeconds ?? 0) > 0;
+              const icon = displayStreamIcon(s);
               const viewers = st?.viewers ?? 0;
 
               return (
                 <tr key={s.id} className={i % 2 === 1 ? "xui-streams-row--alt" : undefined}>
                   <td className="xui-streams-td-id">{rowId}</td>
                   <td className="xui-streams-td-icon">
-                    {s.streamIcon ? (
+                    {icon ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={s.streamIcon} alt="" className="xui-stream-icon" />
+                      <img src={icon} alt="" className="xui-stream-icon" />
                     ) : (
                       <span className="xui-stream-icon xui-stream-icon--empty" />
                     )}

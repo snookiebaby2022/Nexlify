@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
+import { IntegrationProgressCard } from "@/components/integration-progress-card";
+import type { IntegrationSyncProgress } from "@/lib/integration-sync-types";
 
 type PlexItem = {
   id: string;
   name: string;
   isActive: boolean;
   lastSync: string | null;
+  syncProgress?: IntegrationSyncProgress | null;
   config?: {
     host?: string;
     port?: number | string;
@@ -21,6 +24,7 @@ type PlexItem = {
     libraryKey?: string;
     libraryTitle?: string;
     transcodeProfile?: string;
+    skipExistingCatalog?: boolean;
   };
 };
 
@@ -38,8 +42,26 @@ const emptyForm = {
   libraryTitle: "",
   transcodeProfile: "direct",
   directStream: true,
+  skipExistingCatalog: true,
   isActive: true,
 };
+
+type LocalProgress = IntegrationSyncProgress;
+
+function localProgress(jobId: string, message: string, steps: string[]): LocalProgress {
+  return {
+    jobId,
+    status: "running",
+    phase: "add",
+    message,
+    current: steps.length,
+    total: 4,
+    imported: 0,
+    skipped: 0,
+    steps: steps.map((text, i) => ({ at: `${i}`, text })),
+    updatedAt: new Date().toISOString(),
+  };
+}
 
 export default function PlexIntegrationPage() {
   const [items, setItems] = useState<PlexItem[]>([]);
@@ -48,20 +70,69 @@ export default function PlexIntegrationPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [syncing, setSyncing] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [loadingLibs, setLoadingLibs] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [addProgress, setAddProgress] = useState<LocalProgress | null>(null);
+  const [syncProgress, setSyncProgress] = useState<IntegrationSyncProgress | null>(null);
 
   function load() {
     fetch("/api/admin/integrations?type=plex")
       .then((r) => r.json())
-      .then((d) => setItems(d.items ?? []));
+      .then((d) => {
+        const next = (d.items ?? []) as PlexItem[];
+        setItems(next);
+        const running = next.find((i) => i.syncProgress?.status === "running");
+        if (running?.syncProgress) {
+          setError("");
+          setSyncProgress(running.syncProgress);
+          setSyncing(running.id);
+          return;
+        }
+        const failed = next.find((i) => i.syncProgress?.status === "error");
+        if (failed?.syncProgress) {
+          setSyncProgress(failed.syncProgress);
+          setError(failed.syncProgress.error || failed.syncProgress.message || "Plex sync failed");
+        }
+      });
     fetch("/api/admin/servers").then((r) => r.json()).then((d) => setServers(d.servers ?? []));
   }
 
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (!syncing) return;
+    let cancelled = false;
+    const tick = async () => {
+      const res = await fetch("/api/admin/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync-status", id: syncing }),
+      });
+      const data = await res.json();
+      if (cancelled) return;
+      const progress = data.progress as IntegrationSyncProgress | null;
+      if (progress) setSyncProgress(progress);
+      if (progress?.status === "done") {
+        setMessage(progress.message);
+        setSyncing(null);
+        load();
+      } else if (progress?.status === "error") {
+        setError(progress.error || progress.message || "Sync failed");
+        setSyncing(null);
+      }
+    };
+    void tick();
+    const t = setInterval(() => void tick(), 900);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [syncing]);
 
   function loadIntoForm(item: PlexItem) {
     const c = item.config ?? {};
@@ -78,16 +149,18 @@ export default function PlexIntegrationPage() {
       libraryTitle: c.libraryTitle ?? "",
       transcodeProfile: c.transcodeProfile ?? "direct",
       directStream: c.directStream !== false,
+      skipExistingCatalog: c.skipExistingCatalog !== false,
       isActive: item.isActive !== false,
     });
     setLibraries([]);
+    if (item.syncProgress) setSyncProgress(item.syncProgress);
   }
 
   async function refreshLibraries(targetId?: string) {
     const id = targetId ?? editId;
     if (!id) {
       setError("Save the server first, then refresh libraries.");
-      return;
+      return [];
     }
     setLoadingLibs(true);
     setError("");
@@ -99,11 +172,36 @@ export default function PlexIntegrationPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load libraries");
-      setLibraries(data.libraries ?? []);
+      const libs = (data.libraries ?? []) as Library[];
+      setLibraries(libs);
+      return libs;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Library refresh failed");
+      return [];
     } finally {
       setLoadingLibs(false);
+    }
+  }
+
+  async function testSaved(id: string) {
+    setTesting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test", id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Connection test failed");
+      if (Array.isArray(data.libraries)) setLibraries(data.libraries);
+      setMessage(data.message ?? "Plex connection OK.");
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Connection test failed");
+      return false;
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -111,35 +209,83 @@ export default function PlexIntegrationPage() {
     e.preventDefault();
     setError("");
     setMessage("");
-    const payload = {
-      type: "plex",
-      ...form,
-      port: form.port,
-      serverId: form.serverId || null,
-      libraryKey: form.libraryKey || undefined,
-      libraryTitle: form.libraryTitle || undefined,
+    setSaving(true);
+    const steps: string[] = [];
+    const jobId = "add";
+    const push = (text: string) => {
+      steps.push(text);
+      setAddProgress(localProgress(jobId, text, steps));
     };
-    const res = await fetch("/api/admin/integrations", {
-      method: editId ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editId ? { id: editId, ...payload } : payload),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Save failed");
-      return;
+    try {
+      push("Saving Plex server…");
+      const payload = {
+        type: "plex",
+        ...form,
+        port: form.port,
+        serverId: form.serverId || null,
+        libraryKey: form.libraryKey || undefined,
+        libraryTitle: form.libraryTitle || undefined,
+      };
+      const res = await fetch("/api/admin/integrations", {
+        method: editId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editId ? { id: editId, ...payload } : payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Save failed");
+      const id = String(data.item?.id ?? editId);
+      setEditId(id);
+      push("Connecting to Plex…");
+      const ok = await testSaved(id);
+      if (ok) {
+        push("Loading libraries…");
+        const libs = await refreshLibraries(id);
+        push(
+          libs.length
+            ? `Found ${libs.length} librar${libs.length === 1 ? "y" : "ies"}. Ready to sync.`
+            : "Connected. Use Sync to import."
+        );
+        setAddProgress({
+          ...localProgress(jobId, steps[steps.length - 1], steps),
+          status: "done",
+          current: 4,
+          total: 4,
+        });
+      } else {
+        setAddProgress({
+          ...localProgress(jobId, "Saved, but Plex did not accept the connection.", steps),
+          status: "error",
+        });
+      }
+      load();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Save failed";
+      setError(msg);
+      setAddProgress({
+        ...localProgress(jobId, msg, steps),
+        status: "error",
+      });
+    } finally {
+      setSaving(false);
     }
-    setMessage(editId ? "Plex server updated." : "Plex server added.");
-    setEditId(data.item?.id ?? editId);
-    setForm(emptyForm);
-    setEditId(null);
-    load();
   }
 
   async function sync(id: string) {
     setSyncing(id);
     setError("");
     setMessage("");
+    setSyncProgress({
+      jobId: "pending",
+      status: "running",
+      phase: "queued",
+      message: "Starting Plex sync…",
+      current: 0,
+      total: 0,
+      imported: 0,
+      skipped: 0,
+      steps: [{ at: new Date().toISOString(), text: "Starting Plex sync…" }],
+      updatedAt: new Date().toISOString(),
+    });
     try {
       const item = items.find((i) => i.id === id);
       const res = await fetch("/api/admin/integrations", {
@@ -153,13 +299,9 @@ export default function PlexIntegrationPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Sync failed");
-      setMessage(
-        `Sync complete: ${data.imported ?? 0} new · ${data.skipped ?? 0} updated · ${data.episodes ?? 0} episodes`
-      );
-      load();
+      if (data.progress) setSyncProgress(data.progress);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sync failed");
-    } finally {
       setSyncing(null);
     }
   }
@@ -171,9 +313,16 @@ export default function PlexIntegrationPage() {
       </Link>
       <h1 className="text-2xl font-semibold">Plex sync</h1>
       <p className="text-sm opacity-70">
-        XUI-style Plex import: remote Plex server, optional direct stream through your LB, library pick, sync to panel
-        VOD.
+        Connect a remote Plex server, pick a library, and sync only titles that are not already
+        on this panel. Auto-sync runs every 12 or 24 hours from{" "}
+        <Link href="/admin/settings/cron" className="underline" style={{ color: "var(--accent)" }}>
+          Scheduled tasks
+        </Link>
+        .
       </p>
+
+      {addProgress && <IntegrationProgressCard progress={addProgress} title="Add / update" />}
+      {syncProgress && <IntegrationProgressCard progress={syncProgress} title="Library sync" />}
 
       {message && (
         <div className="rounded-lg border px-4 py-3 text-sm" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>
@@ -204,7 +353,7 @@ export default function PlexIntegrationPage() {
             <input
               className="col-span-2 rounded border px-3 py-2 bg-transparent"
               style={{ borderColor: "var(--border)" }}
-              placeholder="IP or hostname"
+              placeholder="IP, hostname, or http://host:port"
               value={form.host}
               onChange={(e) => setForm({ ...form, host: e.target.value })}
               required
@@ -225,7 +374,7 @@ export default function PlexIntegrationPage() {
             <input
               className="rounded border px-3 py-2 bg-transparent"
               style={{ borderColor: "var(--border)" }}
-              placeholder="Plex username (optional)"
+              placeholder="Plex username (optional if you paste a token)"
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
             />
@@ -233,21 +382,21 @@ export default function PlexIntegrationPage() {
               type="password"
               className="rounded border px-3 py-2 bg-transparent"
               style={{ borderColor: "var(--border)" }}
-              placeholder="Plex password (optional)"
+              placeholder="Plex password (optional if you paste a token)"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
             />
             <input
               className="rounded border px-3 py-2 bg-transparent"
               style={{ borderColor: "var(--border)" }}
-              placeholder="X-Plex-Token (required)"
+              placeholder="X-Plex-Token or Plex XML URL"
               value={form.token}
               onChange={(e) => setForm({ ...form, token: e.target.value })}
-              required={!editId}
+              required={!editId && !form.username}
             />
             <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-              Required for Plex API access (library list, sync, playback). Find it in Plex Web → any item →
-              Get Info → View XML — the token is in the URL, or see{" "}
+              Paste the token or the whole XML URL (including <code>?X-Plex-Token=</code>). Find it in Plex Web → any
+              item → Get Info → View XML, or see{" "}
               <a
                 href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/"
                 target="_blank"
@@ -257,7 +406,7 @@ export default function PlexIntegrationPage() {
               >
                 Plex token guide
               </a>
-              .
+              . Username and password can also sign in via plex.tv.
             </p>
           </div>
         </div>
@@ -338,7 +487,19 @@ export default function PlexIntegrationPage() {
             />
             Direct stream
           </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.skipExistingCatalog}
+              onChange={(e) => setForm({ ...form, skipExistingCatalog: e.target.checked })}
+            />
+            Skip titles already on this panel
+          </label>
         </div>
+        <p className="text-xs -mt-2" style={{ color: "var(--muted)" }}>
+          Movies and series that already exist in your IPTV catalog are not imported again (matched by title,
+          ignoring year/quality tags). Already-synced Plex items are not rewritten, which keeps sync fast.
+        </p>
 
         <select
           className="w-full rounded border px-3 py-2 panel-select bg-transparent"
@@ -352,23 +513,40 @@ export default function PlexIntegrationPage() {
           <option value="480p">Transcode 480p</option>
         </select>
 
-        <div className="flex gap-2">
-          <button type="submit" className="rounded px-4 py-2 text-white" style={{ background: "var(--accent)" }}>
-            {editId ? "Update" : "Add Plex server"}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded px-4 py-2 text-white"
+            style={{ background: "var(--accent)" }}
+          >
+            {saving ? "Working…" : editId ? "Update" : "Add Plex server"}
           </button>
           {editId && (
-            <button
-              type="button"
-              className="rounded px-4 py-2 border"
-              style={{ borderColor: "var(--border)" }}
-              onClick={() => {
-                setEditId(null);
-                setForm(emptyForm);
-                setLibraries([]);
-              }}
-            >
-              Cancel
-            </button>
+            <>
+              <button
+                type="button"
+                disabled={testing}
+                className="rounded px-4 py-2 border"
+                style={{ borderColor: "var(--border)" }}
+                onClick={() => void testSaved(editId)}
+              >
+                {testing ? "Testing…" : "Test connection"}
+              </button>
+              <button
+                type="button"
+                className="rounded px-4 py-2 border"
+                style={{ borderColor: "var(--border)" }}
+                onClick={() => {
+                  setEditId(null);
+                  setForm(emptyForm);
+                  setLibraries([]);
+                  setAddProgress(null);
+                }}
+              >
+                Cancel
+              </button>
+            </>
           )}
         </div>
       </form>
@@ -382,12 +560,15 @@ export default function PlexIntegrationPage() {
           >
             <div>
               <span className="font-medium">{i.name}</span>
-              {!i.isActive && (
-                <span className="ml-2 text-xs text-amber-400">Disabled</span>
-              )}
+              {!i.isActive && <span className="ml-2 text-xs text-amber-400">Disabled</span>}
               {i.lastSync && (
                 <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
                   Last sync: {formatDateTime(i.lastSync)}
+                </p>
+              )}
+              {i.syncProgress?.status === "running" && (
+                <p className="text-xs mt-0.5" style={{ color: "var(--accent)" }}>
+                  {i.syncProgress.message}
                 </p>
               )}
             </div>
@@ -398,7 +579,7 @@ export default function PlexIntegrationPage() {
               <button
                 type="button"
                 disabled={syncing === i.id}
-                onClick={() => sync(i.id)}
+                onClick={() => void sync(i.id)}
                 style={{ color: "var(--accent)" }}
               >
                 {syncing === i.id ? "Syncing…" : "Sync"}

@@ -4,12 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Pencil, RefreshCw, Search, Tv, Trash2, Power } from "lucide-react";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
+import { displayStreamIcon } from "@/lib/plex-artwork";
 
 type SeriesRow = {
   id: string;
   name: string;
   episodeCount: number;
   streamIcon: string | null;
+  streamUrl?: string | null;
   isActive: boolean;
   categoryName: string | null;
 };
@@ -166,9 +168,9 @@ export function ManageSeriesTable() {
               <tr key={s.id}>
                 <td className="xui-lines-td">
                   <div className="flex items-center gap-2">
-                    {s.streamIcon ? (
+                    {displayStreamIcon(s) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={s.streamIcon} alt="" className="h-8 w-8 rounded object-cover" />
+                      <img src={displayStreamIcon(s)!} alt="" className="h-8 w-8 rounded object-cover" />
                     ) : (
                       <Tv size={16} style={{ color: "var(--muted)" }} />
                     )}

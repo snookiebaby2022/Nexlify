@@ -9,6 +9,7 @@ type SeriesAggRow = {
   name: string;
   episode_count: bigint | number;
   stream_icon: string | null;
+  stream_url: string | null;
   is_active: boolean;
   category_name: string | null;
   total_count: bigint | number;
@@ -43,10 +44,11 @@ export async function GET(req: NextRequest) {
         SELECT
           MIN(s.id) FILTER (WHERE s."episodeNum" IS NULL OR s."episodeNum" <= 0) AS parent_id,
           MIN(s.id) AS any_id,
-          COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name) AS series_label,
+          MIN(COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name)) AS series_label,
           COUNT(*) FILTER (WHERE s."episodeNum" IS NOT NULL AND s."episodeNum" > 0)::bigint AS episode_count,
           MAX(s."streamIcon") FILTER (WHERE s."episodeNum" IS NULL OR s."episodeNum" <= 0) AS parent_icon,
           MAX(s."streamIcon") AS any_icon,
+          MIN(s."streamUrl") AS any_url,
           BOOL_OR(s."isActive") FILTER (WHERE s."episodeNum" IS NULL OR s."episodeNum" <= 0) AS parent_active,
           BOOL_OR(s."isActive") AS any_active,
           MAX(c.name) FILTER (WHERE s."episodeNum" IS NULL OR s."episodeNum" <= 0) AS parent_cat,
@@ -61,6 +63,7 @@ export async function GET(req: NextRequest) {
         series_label AS name,
         episode_count,
         COALESCE(parent_icon, any_icon) AS stream_icon,
+        any_url AS stream_url,
         COALESCE(parent_active, any_active, true) AS is_active,
         COALESCE(parent_cat, any_cat) AS category_name,
         COUNT(*) OVER()::bigint AS total_count
@@ -75,6 +78,7 @@ export async function GET(req: NextRequest) {
       name: r.name,
       episodeCount: Number(r.episode_count),
       streamIcon: r.stream_icon,
+      streamUrl: r.stream_url,
       isActive: Boolean(r.is_active),
       categoryName: r.category_name,
     }));
@@ -104,6 +108,7 @@ export async function GET(req: NextRequest) {
           seriesName: true,
           episodeNum: true,
           streamIcon: true,
+          streamUrl: true,
           isActive: true,
           category: { select: { name: true } },
         },
@@ -114,6 +119,7 @@ export async function GET(req: NextRequest) {
         name: string;
         episodeCount: number;
         streamIcon: string | null;
+        streamUrl: string | null;
         isActive: boolean;
         categoryName: string | null;
       };
@@ -129,6 +135,7 @@ export async function GET(req: NextRequest) {
             name,
             episodeCount: isEpisode ? 1 : 0,
             streamIcon: row.streamIcon,
+            streamUrl: row.streamUrl,
             isActive: row.isActive,
             categoryName: row.category?.name ?? null,
           });
