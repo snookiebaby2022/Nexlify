@@ -29,7 +29,8 @@ import { readVodTmdbFields } from "@/lib/vod-meta";
 import { XuiFormTabs, type XuiFormTab } from "@/components/xui-form-tabs";
 import { VodInformationTab } from "@/components/vod-information-tab";
 import { integrationSourceLabel, stripIntegrationSourceSuffix } from "@/lib/integration-stream-url";
-import { cleanTitleForTmdb } from "@/lib/vod-tmdb-enrich";
+import { StreamDisplayTitle } from "@/components/stream-display-title";
+import { cleanTitleForTmdb } from "@/lib/vod-title-clean";
 
 type Stream = {
   id: string;

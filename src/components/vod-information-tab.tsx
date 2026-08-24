@@ -5,7 +5,7 @@ import { Eye } from "lucide-react";
 import { TmdbSearch, type TmdbPick } from "@/components/tmdb-search";
 import { formInputClass, formInputStyle } from "@/components/form-page-shell";
 import type { VodTmdbFields } from "@/lib/vod-meta";
-import { cleanTitleForTmdb } from "@/lib/vod-tmdb-enrich";
+import { cleanTitleForTmdb } from "@/lib/vod-title-clean";
 import { stripIntegrationSourceSuffix } from "@/lib/integration-stream-url";
 
 function InfoRow({

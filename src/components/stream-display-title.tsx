@@ -7,9 +7,23 @@ import {
 const badgeClass =
   "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide";
 
-export function streamDisplayName(name: string, streamUrl?: string | null): string {
-  const source = integrationSourceLabel(streamUrl ?? "");
-  return source ? stripIntegrationSourceSuffix(name) : name;
+function integrationSourceFromName(name: string): string | null {
+  const m = String(name ?? "").match(/\((Plex|Emby|Jellyfin|YouTube|Spotify|Deezer|Apple Music)\)\s*$/i);
+  if (!m) return null;
+  const key = m[1].toLowerCase().replace(/\s+/g, " ");
+  if (key === "apple music") return "Apple Music";
+  return m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+}
+
+export function integrationSourceForStream(
+  name: string,
+  streamUrl?: string | null
+): string | null {
+  return integrationSourceLabel(streamUrl ?? "") ?? integrationSourceFromName(name);
+}
+
+export function streamDisplayName(name: string, _streamUrl?: string | null): string {
+  return stripIntegrationSourceSuffix(name);
 }
 
 export function StreamDisplayTitle({
@@ -23,7 +37,7 @@ export function StreamDisplayTitle({
   href?: string;
   className?: string;
 }) {
-  const source = integrationSourceLabel(streamUrl ?? "");
+  const source = integrationSourceForStream(name, streamUrl);
   const displayName = streamDisplayName(name, streamUrl);
   const label = href ? (
     <Link href={href} className={className}>
@@ -49,8 +63,14 @@ export function StreamDisplayTitle({
   );
 }
 
-export function IntegrationSourceBadge({ streamUrl }: { streamUrl?: string | null }) {
-  const source = integrationSourceLabel(streamUrl ?? "");
+export function IntegrationSourceBadge({
+  streamUrl,
+  name,
+}: {
+  streamUrl?: string | null;
+  name?: string;
+}) {
+  const source = integrationSourceForStream(name ?? "", streamUrl);
   if (!source) return null;
   return (
     <span
