@@ -170,14 +170,20 @@ export async function POST(req: NextRequest) {
       );
     } else if (action === "setHostedProvider") {
       const providerId = String(body.providerId ?? "").trim();
-      const data: Prisma.StreamUpdateManyMutationInput = { hostedExternally: true };
       if (providerId) {
         const provider = await prisma.streamProvider.findUnique({ where: { id: providerId } });
         if (!provider) return NextResponse.json({ error: "Selected provider not found" }, { status: 400 });
         if (!provider.isActive) return NextResponse.json({ error: "Selected provider is disabled" }, { status: 400 });
-        data.providerId = providerId;
       }
-      await counted(await prisma.stream.updateMany({ where, data }));
+      await counted(
+        await prisma.stream.updateMany({
+          where,
+          data: {
+            hostedExternally: true,
+            ...(providerId ? { providerId } : {}),
+          },
+        })
+      );
     } else if (action === "fillPosters") {
       const { fillMissingStreamArtwork } = await import("@/lib/artwork-fill");
       const result = await fillMissingStreamArtwork({

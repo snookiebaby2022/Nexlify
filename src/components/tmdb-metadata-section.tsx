@@ -16,6 +16,7 @@ export const emptyTmdbMeta = (): TmdbMetaFields => ({
   tmdbCast: "",
   tmdbGenres: "",
   tmdbPoster: "",
+  tmdbBackdrop: "",
   tmdbRelease: "",
   tmdbRating: "",
   tmdbTrailer: "",
