@@ -69,14 +69,14 @@ export async function linkStreamToPluginBouquet(streamId: string, sortOrder = 90
 /** Movies → Movies bouquet, TV → TV Series bouquet; drop Plugin imports so apps don't list them twice. */
 export async function linkStreamToVodBouquet(
   streamId: string,
-  type: StreamType | "MOVIE" | "SERIES" | "LIVE",
+  type: StreamType,
   sortOrder = 0
 ) {
-  if (type !== StreamType.MOVIE && type !== StreamType.SERIES && type !== "MOVIE" && type !== "SERIES") {
+  if (type !== StreamType.MOVIE && type !== StreamType.SERIES) {
     await linkStreamToPluginBouquet(streamId, sortOrder);
     return;
   }
-  const kind = type === StreamType.SERIES || type === "SERIES" ? "SERIES" : "MOVIE";
+  const kind = type === StreamType.SERIES ? "SERIES" : "MOVIE";
   const bouquetId = await ensureVodBouquetId(kind);
   await prisma.bouquetStream.upsert({
     where: { bouquetId_streamId: { bouquetId, streamId } },

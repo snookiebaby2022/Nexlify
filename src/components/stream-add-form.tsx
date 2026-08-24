@@ -970,8 +970,8 @@ function CompactStreamForm({
         providerId={form.providerId}
         providerPath={form.providerPath}
         useProvider={useProvider}
-        streamType={defaultType === "SERIES" ? "SERIES" : defaultType === "MOVIE" ? "MOVIE" : "LIVE"}
-        vodOnly={defaultType !== "LIVE"}
+        streamType={defaultType}
+        vodOnly
         onChange={({ providerId, providerPath, useProvider: u }) => {
           setUseProvider(u);
           setForm((f) => ({ ...f, providerId, providerPath }));
