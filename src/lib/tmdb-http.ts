@@ -1,4 +1,33 @@
-import { fetchWithRetry } from "@/lib/fetch-retry";
+import { Agent, fetch as undiciFetch } from "undici";
+import { lookup as dnsLookup } from "node:dns";
+import { Resolver } from "node:dns/promises";
+
+const TMDB_HOSTS = new Set(["api.themoviedb.org", "image.tmdb.org"]);
+
+const publicResolver = new Resolver();
+publicResolver.setServers(["8.8.8.8", "1.1.1.1"]);
+
+const tmdbAgent = new Agent({
+  connect: {
+    lookup(hostname, options, callback) {
+      if (TMDB_HOSTS.has(hostname)) {
+        publicResolver
+          .resolve4(hostname)
+          .then((addresses) => {
+            const ip = addresses[0];
+            if (!ip) {
+              callback(new Error(`No A record for ${hostname}`), "", 0);
+              return;
+            }
+            callback(null, ip, 4);
+          })
+          .catch((err) => callback(err instanceof Error ? err : new Error(String(err)), "", 0));
+        return;
+      }
+      dnsLookup(hostname, options, callback);
+    },
+  },
+});
 
 function friendlyTmdbFetchError(e: unknown): Error {
   if (!(e instanceof Error)) return new Error("TMDB request failed");
@@ -12,11 +41,11 @@ function friendlyTmdbFetchError(e: unknown): Error {
     combined.includes("cert_")
   ) {
     return new Error(
-      "TMDB TLS error — server cannot verify HTTPS certificates. Run: apt install ca-certificates && update-ca-certificates, then restart the panel."
+      "TMDB TLS error — this server resolves TMDB to localhost. Panel now bypasses that; restart nexlify if you still see this."
     );
   }
   if (msg === "fetch failed" || combined.includes("econnrefused") || combined.includes("enotfound")) {
-    return new Error("Cannot reach TMDB API from this server (network or firewall).");
+    return new Error("Cannot reach TMDB API from this server (network or DNS block).");
   }
   if (msg.includes("Timeout") || msg.includes("timeout")) {
     return new Error("TMDB request timed out — try again.");
@@ -24,15 +53,26 @@ function friendlyTmdbFetchError(e: unknown): Error {
   return e;
 }
 
-/** Outbound fetch for TMDB with retries and clearer TLS/network errors. */
+/** Outbound fetch for TMDB — bypasses broken local DNS that points TMDB to 127.0.0.1. */
 export async function tmdbFetch(url: string, timeoutMs = 20_000): Promise<Response> {
-  try {
-    return await fetchWithRetry(url, {
-      signal: AbortSignal.timeout(timeoutMs),
-      retries: 3,
-      baseDelayMs: 500,
-    });
-  } catch (e) {
-    throw friendlyTmdbFetchError(e);
+  const attempts = 3;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const res = await undiciFetch(url, {
+        dispatcher: tmdbAgent,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (res.ok || res.status < 500 || attempt === attempts - 1) {
+        return res as unknown as Response;
+      }
+    } catch (e) {
+      lastError = e;
+      if (attempt === attempts - 1) throw friendlyTmdbFetchError(e);
+    }
+    await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
   }
+
+  throw friendlyTmdbFetchError(lastError);
 }
