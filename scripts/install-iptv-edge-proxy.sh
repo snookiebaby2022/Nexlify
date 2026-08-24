@@ -38,10 +38,27 @@ HTTP_PORTS="$(env_val STREAM_HTTP_EXTRA_PORTS)"
 [ -z "$HTTP_PORTS" ] && HTTP_PORTS="$(env_val PANEL_HTTP_EXTRA_PORTS)"
 [ -z "$HTTP_PORTS" ] && HTTP_PORTS="8080,25461"
 
+nginx_owns_public_web() {
+  [ -d /var/www/nexlify ] \
+    || [ -d /var/www/moviestream ] \
+    || [ -f /etc/nginx/sites-enabled/nexlify.live ] \
+    || [ -f /etc/nginx/sites-enabled/panel.nexlify.live ] \
+    || [ -f /etc/nginx/sites-enabled/moviestream ] \
+    || [ -f /etc/nginx/sites-available/moviestream ] \
+    || [ -d /etc/letsencrypt/live/snookiebaby.xyz ]
+}
+
 # IP panels: Node listens on 13000; edge must own public :80 (XUI-style stream splice).
+# Shared hosts (MovieFlix / marketing) keep nginx on :80/:443 — otherwise Cloudflare 521.
 STREAM_PUBLIC="$(env_val STREAM_HTTP_PORT)"
 if [ "$PANEL_LISTEN" != "80" ] && [ "$STREAM_PUBLIC" = "80" ]; then
-  HTTP_PORTS="80,${HTTP_PORTS}"
+  if nginx_owns_public_web; then
+    echo "[iptv-edge] Multi-vhost / MovieFlix host — leaving :80 to nginx"
+    HTTP_PORTS="$(echo "$HTTP_PORTS" | tr ',' '\n' | grep -v '^80$' | grep -v '^$' | paste -sd, -)"
+    [ -z "$HTTP_PORTS" ] && HTTP_PORTS="8080,25461"
+  else
+    HTTP_PORTS="80,${HTTP_PORTS}"
+  fi
 fi
 HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
 [ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="$(env_val PANEL_SSL_PORT)"
@@ -49,13 +66,7 @@ HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
 
 # Hosts where nginx must own :443 (marketing TLS, MovieFlix/FlixNova, other LE sites).
 # Never steal 443 when those vhosts are present — IPTV edge keeps :8080/:25461 only.
-if [ -d /var/www/nexlify ] \
-  || [ -d /var/www/moviestream ] \
-  || [ -f /etc/nginx/sites-enabled/nexlify.live ] \
-  || [ -f /etc/nginx/sites-enabled/panel.nexlify.live ] \
-  || [ -f /etc/nginx/sites-enabled/moviestream ] \
-  || [ -f /etc/nginx/sites-available/moviestream ] \
-  || [ -d /etc/letsencrypt/live/snookiebaby.xyz ]; then
+if nginx_owns_public_web; then
   echo "[iptv-edge] Multi-vhost / MovieFlix / marketing host — leaving :443 to nginx (Let's Encrypt)"
   HTTPS_PORTS=""
   # Restore disk-backed release + installer locations if a previous run removed ssl conf only;

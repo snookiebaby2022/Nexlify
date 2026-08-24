@@ -20,7 +20,8 @@ env_val() {
 
 PANEL_LISTEN="$(env_val PORT)"
 [ -z "$PANEL_LISTEN" ] && PANEL_LISTEN="$(env_val PANEL_PORT)"
-[ -z "$PANEL_LISTEN" ] && PANEL_LISTEN="80"
+# IP panels: Node on 13000, edge on :80 — never default to 80 for the backend target.
+[ -z "$PANEL_LISTEN" ] && PANEL_LISTEN="13000"
 
 # Ensure TLS material exists (self-signed IP cert OK for IPTV apps).
 bash "$PANEL_DIR/scripts/fix-panel-https-default.sh" --certs-only
@@ -37,10 +38,27 @@ HTTP_PORTS="$(env_val STREAM_HTTP_EXTRA_PORTS)"
 [ -z "$HTTP_PORTS" ] && HTTP_PORTS="$(env_val PANEL_HTTP_EXTRA_PORTS)"
 [ -z "$HTTP_PORTS" ] && HTTP_PORTS="8080,25461"
 
+nginx_owns_public_web() {
+  [ -d /var/www/nexlify ] \
+    || [ -d /var/www/moviestream ] \
+    || [ -f /etc/nginx/sites-enabled/nexlify.live ] \
+    || [ -f /etc/nginx/sites-enabled/panel.nexlify.live ] \
+    || [ -f /etc/nginx/sites-enabled/moviestream ] \
+    || [ -f /etc/nginx/sites-available/moviestream ] \
+    || [ -d /etc/letsencrypt/live/snookiebaby.xyz ]
+}
+
 # IP panels: Node listens on 13000; edge must own public :80 (XUI-style stream splice).
+# Shared hosts (MovieFlix / marketing) keep nginx on :80/:443 — otherwise Cloudflare 521.
 STREAM_PUBLIC="$(env_val STREAM_HTTP_PORT)"
 if [ "$PANEL_LISTEN" != "80" ] && [ "$STREAM_PUBLIC" = "80" ]; then
-  HTTP_PORTS="80,${HTTP_PORTS}"
+  if nginx_owns_public_web; then
+    echo "[iptv-edge] Multi-vhost / MovieFlix host — leaving :80 to nginx"
+    HTTP_PORTS="$(echo "$HTTP_PORTS" | tr ',' '\n' | grep -v '^80$' | grep -v '^$' | paste -sd, -)"
+    [ -z "$HTTP_PORTS" ] && HTTP_PORTS="8080,25461"
+  else
+    HTTP_PORTS="80,${HTTP_PORTS}"
+  fi
 fi
 HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
 [ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="$(env_val PANEL_SSL_PORT)"
@@ -48,13 +66,7 @@ HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
 
 # Hosts where nginx must own :443 (marketing TLS, MovieFlix/FlixNova, other LE sites).
 # Never steal 443 when those vhosts are present — IPTV edge keeps :8080/:25461 only.
-if [ -d /var/www/nexlify ] \
-  || [ -d /var/www/moviestream ] \
-  || [ -f /etc/nginx/sites-enabled/nexlify.live ] \
-  || [ -f /etc/nginx/sites-enabled/panel.nexlify.live ] \
-  || [ -f /etc/nginx/sites-enabled/moviestream ] \
-  || [ -f /etc/nginx/sites-available/moviestream ] \
-  || [ -d /etc/letsencrypt/live/snookiebaby.xyz ]; then
+if nginx_owns_public_web; then
   echo "[iptv-edge] Multi-vhost / MovieFlix / marketing host — leaving :443 to nginx (Let's Encrypt)"
   HTTPS_PORTS=""
   # Restore disk-backed release + installer locations if a previous run removed ssl conf only;
@@ -125,6 +137,20 @@ fi
 
 if command -v pm2 >/dev/null 2>&1; then
   pm2 delete nexlify-iptv-edge 2>/dev/null || true
+  set -a
+  # shellcheck disable=SC1091
+  [ -f "$PANEL_DIR/.env" ] && . "$PANEL_DIR/.env"
+  set +a
+  export PANEL_INTERNAL_SECRET="${PANEL_INTERNAL_SECRET:-$(env_val PANEL_API_SECRET)}"
+  export PANEL_API_SECRET="${PANEL_API_SECRET:-$PANEL_INTERNAL_SECRET}"
+  export NEXLIFY_PANEL_API_SECRET="${NEXLIFY_PANEL_API_SECRET:-$PANEL_INTERNAL_SECRET}"
+  if [ -x "$PANEL_DIR/scripts/wait-panel-ready.sh" ]; then
+    echo "[iptv-edge] waiting for panel on 127.0.0.1:${PANEL_LISTEN} before starting edge..."
+    bash "$PANEL_DIR/scripts/wait-panel-ready.sh" || {
+      echo "[iptv-edge] ERROR: panel not ready — refusing to start edge (would 502 on :80)" >&2
+      exit 1
+    }
+  fi
   pm2 start "$PANEL_DIR/scripts/iptv-edge-proxy.mjs" \
     --name nexlify-iptv-edge \
     --cwd "$PANEL_DIR" \

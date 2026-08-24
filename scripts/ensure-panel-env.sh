@@ -93,6 +93,19 @@ else
   echo "Panel env: HTTP domain=${PRIMARY} (nginx → 127.0.0.1:13000)"
 fi
 
+# Shared box with MovieFlix / marketing nginx: never let IPTV edge steal :80/:443
+# (Cloudflare 521 when origin has nothing on 443/80).
+if [ -d /var/www/moviestream ] \
+  || [ -f /etc/nginx/sites-enabled/moviestream ] \
+  || [ -f /etc/nginx/sites-available/moviestream ] \
+  || [ -d /etc/letsencrypt/live/snookiebaby.xyz ]; then
+  set_kv STREAM_HTTP_PORT 8080
+  set_kv STREAM_EDGE_PORT 8080
+  set_kv STREAM_HTTP_EXTRA_PORTS "8080,25461"
+  set_kv PANEL_BEHIND_NGINX 1
+  echo "Panel env: MovieFlix/nginx on this host — edge :8080/:25461, nginx owns :80/:443"
+fi
+
 # Migrate legacy 3000/3001 listen ports on domain installs only.
 if ! is_ip_host "$PRIMARY"; then
   PANEL_LISTEN="$(read_env PORT)"
