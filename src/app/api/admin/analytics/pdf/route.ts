@@ -4,8 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole, Prisma, StreamType } from "@prisma/client";
 import { listActiveConnections } from "@/lib/connections";
 import { buildAnalyticsPdf } from "@/lib/analytics-pdf";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

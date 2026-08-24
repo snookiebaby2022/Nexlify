@@ -7,9 +7,13 @@ import { logActivity } from "@/lib/lines";
 import { PanelRole, Prisma } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, ctx: Ctx) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

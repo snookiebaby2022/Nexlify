@@ -21,10 +21,14 @@ import { normalizeAllowedOutputInput, DEFAULT_ALLOWED_OUTPUT } from "@/lib/line-
 import { LIVE_STALE_MS } from "@/lib/connections";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 5000;
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
@@ -147,6 +151,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([
     PanelRole.ADMIN,

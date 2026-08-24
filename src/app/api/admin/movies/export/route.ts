@@ -3,9 +3,13 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole, StreamType } from "@prisma/client";
 import { parseVodAgentCmd } from "@/lib/vod-meta";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 /** Export movies (MOVIE streams) as JSON — 1-stream import/export movies parity. */
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

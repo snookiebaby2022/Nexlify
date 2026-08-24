@@ -10,6 +10,7 @@ import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 
 import { LIVE_STALE_MS } from "@/lib/connections";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
 
 function durationSeconds(startedAt: Date, lastSeenAt: Date): number {
@@ -28,6 +29,9 @@ export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

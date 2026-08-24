@@ -3,9 +3,13 @@ import { requireSession } from "@/lib/auth";
 import { resolveServerUrls } from "@/lib/server-urls";
 import { publicOriginFromRequest } from "@/lib/public-origin";
 import { PanelRole } from "@prisma/client";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 /** Resolved panel / MAG / Enigma URLs for admin and reseller UIs. */
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,

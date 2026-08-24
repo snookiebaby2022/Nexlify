@@ -3,10 +3,14 @@ import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
 import { getTopEngagedStreams, getChannelTrends, getEngagementDashboard, getStreamEngagement } from "@/lib/viewer-engagement";
 import { iptvCorsPreflight } from "@/lib/iptv-cors";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 export async function OPTIONS() { return iptvCorsPreflight(); }
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const sp = req.nextUrl.searchParams;

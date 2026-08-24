@@ -32,7 +32,10 @@ export function lettersOnly(value: string): string {
 
 /** Keep letters, numbers, and common safe symbols (no spaces / path breakers). */
 export function sanitizeCredentialInput(value: string): string {
-  return String(value ?? "").replace(/\s+/g, "");
+  return String(value ?? "")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+    .replace(/\s+/g, "")
+    .slice(0, 256);
 }
 
 function randomFrom(chars: string, length: number): string {

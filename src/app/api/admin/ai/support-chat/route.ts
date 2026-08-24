@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 const SYSTEM_PROMPT = `You are a helpful AI support assistant for Nexlify IPTV Panel. Answer user questions about:
 
 DEVICE SETUP:
@@ -36,6 +37,9 @@ Bouquet/LINE MANAGEMENT:
 Keep responses concise and helpful. If you don't know the answer, say so honestly.`;
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
     const session = await requireSession([PanelRole.ADMIN]);
     if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

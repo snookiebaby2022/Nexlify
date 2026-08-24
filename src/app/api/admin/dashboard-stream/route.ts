@@ -5,8 +5,12 @@ import { PanelRole } from "@prisma/client";
 import { isTestConnectionIp, listLiveConnections } from "@/lib/connections";
 import { sampleLocalHostMetrics, snapshotWindowToMbps } from "@/lib/host-metrics";
 import { getServerPollIntervals } from "@/lib/perf-polling";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return new Response("Unauthorized", { status: 401 });
 

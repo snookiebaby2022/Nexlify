@@ -10,6 +10,7 @@ import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
 import { LineStatus, PanelRole } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 function applyMassEditPatch(patch: MassEditPatch) {
   const data: {
     password?: string;
@@ -61,6 +62,9 @@ function applyMassEditPatch(patch: MassEditPatch) {
 }
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([
     PanelRole.ADMIN,

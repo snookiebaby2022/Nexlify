@@ -15,6 +15,7 @@ import {
 } from "@/lib/backup-job";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 function backupDirFromSettings(backup: { localPath?: unknown }) {
   const rawPath = String(backup.localPath ?? "").trim();
   return path.resolve(
@@ -24,6 +25,9 @@ function backupDirFromSettings(backup: { localPath?: unknown }) {
 }
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const backup = await getSettingGroup("backup");
@@ -142,6 +146,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -197,6 +204,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -274,6 +284,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

@@ -23,7 +23,8 @@ import {
   licenseEmailMatches,
 } from "@/lib/license";
 import { licenseCookieSecure } from "@/lib/license/cookie-options";
-import { jwtSecretBytes } from "@/lib/jwt-secret";
+import { jwtSecretBytes, jwtSecretStrengthError } from "@/lib/jwt-secret";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 import { parseJsonBody } from "@/lib/parse-json-body";
 /**
@@ -80,6 +81,9 @@ async function buildLicenseCookie(
 
 export async function POST(req: NextRequest) {
   try {
+    const rateLimited = await guardAdminApiRequest(req);
+    if (rateLimited) return rateLimited;
+
     const ip = clientIp(req);
 
     let rate: { ok: true } | { ok: false; error: string } = { ok: true };
@@ -166,6 +170,14 @@ export async function POST(req: NextRequest) {
       console.error("[auth/login] JWT_SECRET is not set");
       return NextResponse.json(
         { error: "Server misconfigured (JWT_SECRET). Run: sudo bash scripts/fix-vendor-login-500.sh" },
+        { status: 503 }
+      );
+    }
+    const jwtWeak = jwtSecretStrengthError(process.env.JWT_SECRET);
+    if (jwtWeak && process.env.NODE_ENV === "production") {
+      console.error("[auth/login] weak JWT_SECRET");
+      return NextResponse.json(
+        { error: "Server misconfigured (weak JWT_SECRET). Generate a random 32+ character secret." },
         { status: 503 }
       );
     }

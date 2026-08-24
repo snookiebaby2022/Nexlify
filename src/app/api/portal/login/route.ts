@@ -3,11 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { createPortalSession, clearPortalSession } from "@/lib/portal-session";
 import { lineIsPlayable } from "@/lib/lines";
 import { checkLoginRateLimit, recordLoginFailure, clearLoginFailures } from "@/lib/login-rate-limit";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { getClientIp } from "@/lib/client-ip";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
   try {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();

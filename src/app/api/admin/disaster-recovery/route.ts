@@ -9,6 +9,7 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { parseJsonBody } from "@/lib/parse-json-body";
 import { confinePathToDir, resolveBackupDir } from "@/lib/backup-path";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 /**
  * POST /api/admin/disaster-recovery
@@ -19,6 +20,9 @@ import { confinePathToDir, resolveBackupDir } from "@/lib/backup-path";
  * 3. Validate restoration
  */
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

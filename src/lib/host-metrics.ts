@@ -1,5 +1,6 @@
 import os from "os";
 import { readFileSync } from "fs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { detectServerHardware, sampleCpuPercent } from "@/lib/server-hardware";
 import { parseServerPanelSettings } from "@/lib/server-panel-settings";
@@ -180,17 +181,15 @@ export async function persistHostMetrics(serverId: string, sample: HostMetricsSa
     downloadMbps: sample.downloadMbps,
     at: sample.at,
   });
-  await prisma.$executeRawUnsafe(
-    `UPDATE "StreamServer"
+  await prisma.$executeRaw(
+    Prisma.sql`UPDATE "StreamServer"
      SET "panelSettings" = jsonb_set(
        COALESCE("panelSettings", '{}'::jsonb),
        '{hostMetrics}',
-       $1::jsonb,
+       ${payload}::jsonb,
        true
      )
-     WHERE id = $2`,
-    payload,
-    serverId
+     WHERE id = ${serverId}`
   );
 }
 

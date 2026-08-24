@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { fillMissingStreamArtwork } from "@/lib/artwork-fill";
 import { PanelRole, StreamType } from "@prisma/client";
 import { apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 /**
  * Batch auto-icons:
@@ -13,6 +14,9 @@ import { apiMutationErrorResponse } from "@/lib/parse-json-body";
  * Body (optional): { type?: "LIVE"|"MOVIE"|"SERIES"|"ALL", tmdbLimit?: number }
  */
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
     const session = await requireSession([PanelRole.ADMIN]);
     if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

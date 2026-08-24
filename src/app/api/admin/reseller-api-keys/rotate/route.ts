@@ -5,11 +5,15 @@ import { PanelRole } from "@prisma/client";
 import { randomBytes } from "crypto";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 function generateKey(): string {
   return `nk_${randomBytes(24).toString("hex")}`;
 }
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

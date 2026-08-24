@@ -5,10 +5,14 @@ import { invalidateDashboardStats, invalidateXtreamCategories } from "@/lib/cach
 import { CategoryType, PanelRole } from "@prisma/client";
 import { normalizeCategoryNamesToXui } from "@/lib/normalize-category-names";
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 const VALID_TYPES = new Set<string>(Object.values(CategoryType));
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
     const session = await requireSession([PanelRole.ADMIN]);
     if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

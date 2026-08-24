@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole, StreamType } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 function parseType(raw: string | null): StreamType {
   const t = String(raw ?? "LIVE").toUpperCase();
   if (t === "MOVIE") return StreamType.MOVIE;
@@ -12,6 +13,9 @@ function parseType(raw: string | null): StreamType {
 }
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -34,6 +38,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

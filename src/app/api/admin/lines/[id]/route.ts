@@ -10,9 +10,13 @@ import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
 import { applyLineRenewDays } from "@/lib/line-renew";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
+  const rateLimited = await guardAdminApiRequest(_req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
@@ -38,6 +42,9 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 }
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([
     PanelRole.ADMIN,
@@ -178,6 +185,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 }
 
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
+  const rateLimited = await guardAdminApiRequest(_req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([
     PanelRole.ADMIN,

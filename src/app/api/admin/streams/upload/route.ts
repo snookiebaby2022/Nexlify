@@ -9,10 +9,14 @@ import {
 } from "@/lib/import-media";
 import { probeMediaFile } from "@/lib/media-probe";
 import path from "path";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 const VIDEO_EXT = new Set([".mp4", ".mkv", ".avi", ".mov", ".wmv", ".m4v", ".ts", ".m3u8"]);
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

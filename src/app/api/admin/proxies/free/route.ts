@@ -6,8 +6,12 @@ import {
   FREE_PROXY_DISCLAIMER,
 } from "@/lib/free-proxies";
 import { PanelRole } from "@prisma/client";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

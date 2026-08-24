@@ -7,6 +7,7 @@ import { bundleFromSql } from "@/lib/panel-migration/map-rows";
 import type { MigrationBundle, MigrationSource } from "@/lib/panel-migration/types";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 /**
  * POST /api/admin/backup-restore
  *
@@ -15,6 +16,9 @@ import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
  * - restore-file: Restore from a file path on the server
  */
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

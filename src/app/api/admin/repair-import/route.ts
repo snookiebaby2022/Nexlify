@@ -10,6 +10,7 @@ import {
   type DuplicateKind,
 } from "@/lib/stream-duplicates";
 import { invalidateXtreamCategories, invalidateDashboardStats } from "@/lib/cache-invalidate";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
@@ -75,6 +76,9 @@ export async function GET() {
 
 /** POST — repair post-import data (activate streams, merge duplicate categories, optional dedupe). */
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

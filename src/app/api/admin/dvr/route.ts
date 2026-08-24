@@ -17,8 +17,12 @@ import {
 import { resolveStreamPlaybackUrl } from "@/lib/resolve-stream-url";
 import { prisma } from "@/lib/prisma";
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session =
     (await requirePermission(PERMS.DVR_READ)) ??
     (await requireSession([PanelRole.ADMIN]));
@@ -41,6 +45,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
     const session =
       (await requirePermission(PERMS.DVR_WRITE)) ??

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole, Prisma, StreamType } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 type SeriesAggRow = {
   id: string;
   name: string;
@@ -16,6 +17,9 @@ type SeriesAggRow = {
 };
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -167,6 +171,9 @@ export async function GET(req: NextRequest) {
 
 /** Enable/disable all streams belonging to a series label. */
 export async function PATCH(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -209,6 +216,9 @@ export async function PATCH(req: NextRequest) {
 
 /** Delete an entire series (parent + all episodes with the same seriesName). */
 export async function DELETE(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

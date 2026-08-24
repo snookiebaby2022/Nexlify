@@ -10,6 +10,7 @@ import { activityFixHref, cronFixHref } from "@/lib/activity-fix-links";
 import { getDashboardServerMetrics, getDashboardSummary, getDashboardKpiExtended } from "@/lib/dashboard-server-metrics";
 import { sampleLocalHostMetrics, snapshotWindowToMbps } from "@/lib/host-metrics";
 import { ensureMainServerOnline } from "@/lib/ensure-main-server-online";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 async function loadHeaderStats() {
   const now = new Date();
@@ -202,6 +203,9 @@ async function loadStats() {
 }
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

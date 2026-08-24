@@ -5,6 +5,7 @@ import { aiChatJSON, isAiConfigured } from "@/lib/ai";
 import { PanelRole } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 interface BouquetRecommendation {
   name: string;
   streams: { streamId: string; streamName: string; reason: string }[];
@@ -13,6 +14,9 @@ interface BouquetRecommendation {
 }
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

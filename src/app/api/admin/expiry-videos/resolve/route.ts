@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const { searchParams } = req.nextUrl;
   const lineStatus = String(searchParams.get("lineStatus") ?? "").trim().toUpperCase();
   const language = String(searchParams.get("language") ?? "en").trim();

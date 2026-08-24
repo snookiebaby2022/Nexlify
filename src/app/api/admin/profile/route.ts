@@ -7,6 +7,7 @@ import { validatePanelPasswordChange } from "@/lib/panel-password";
 import { Prisma } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 export async function GET() {
   const session = await requireSession();
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -33,6 +34,9 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession();
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

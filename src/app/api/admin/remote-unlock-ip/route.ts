@@ -3,6 +3,7 @@ import { requirePanelApiKey } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 /**
  * POST /api/admin/remote-unlock-ip
  * Unlock IP restrictions on one or more lines.
@@ -17,6 +18,9 @@ import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
  * - unlockAll: unlock ALL lines on this panel
  */
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const ok = await requirePanelApiKey(req);
   if (!ok) {
@@ -99,6 +103,9 @@ export async function POST(req: NextRequest) {
  * List lines with IP restrictions on this panel.
  */
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const ok = await requirePanelApiKey(req);
   if (!ok) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

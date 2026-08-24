@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { ImportKind, PanelRole, StreamType } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 async function fetchM3uContent(body: { url?: string; content?: string }) {
   let content = body.content as string | undefined;
   if (body.url) {
@@ -17,6 +18,9 @@ async function fetchM3uContent(body: { url?: string; content?: string }) {
 }
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

@@ -34,8 +34,12 @@ import { canAccessBouquet } from "@/lib/bouquet-access";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { streamListOrderBy } from "@/lib/stream-order";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
 
   const session = await requireSession([
 
@@ -380,6 +384,9 @@ export async function GET(req: NextRequest) {
 
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
 
   const session = await requireSession([PanelRole.ADMIN]);
@@ -515,6 +522,9 @@ export async function POST(req: NextRequest) {
 
 
 export async function PATCH(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
 
   const session = await requireSession([PanelRole.ADMIN]);
@@ -838,6 +848,9 @@ export async function PATCH(req: NextRequest) {
 
 
 export async function DELETE(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
 
   const session = await requireSession([PanelRole.ADMIN]);

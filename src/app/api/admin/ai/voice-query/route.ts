@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
 import { aiChatJSON, aiTranscribe, isAiConfigured } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import {
   AI_PRISMA_MODELS,
   forcedAiTake,
@@ -13,6 +14,9 @@ import {
 } from "@/lib/ai-prisma-plan";
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
     const session = await requireSession([PanelRole.ADMIN]);
     if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

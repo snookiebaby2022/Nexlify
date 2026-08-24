@@ -30,6 +30,8 @@ import {
   isDemoMutationAllowed,
   demoModeBlockedResponse,
 } from "@/lib/panel-demo-mode";
+import { middlewareAdminApiRateLimit } from "@/lib/middleware-api-rate-limit";
+import { applySecurityHeaders } from "@/lib/security-headers";
 function isPlaybackPath(pathname: string): boolean {
   return (
     pathname.startsWith("/live") ||
@@ -139,15 +141,33 @@ function isClientHttps(req: NextRequest): boolean {
 }
 
 function applyStealthHeaders(res: NextResponse): NextResponse {
-  if (!shouldStealthPanel()) return res;
+  let out = applySecurityHeaders(res);
+  if (!shouldStealthPanel()) return out;
   for (const [k, v] of Object.entries(stealthResponseHeaders())) {
-    res.headers.set(k, v);
+    out.headers.set(k, v);
   }
-  return res;
+  return out;
 }
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  if (
+    pathname.startsWith("/api/admin") ||
+    pathname.startsWith("/api/reseller") ||
+    pathname === "/api/auth/login" ||
+    pathname === "/api/portal/login"
+  ) {
+    const ip = clientIp(req);
+    if (!middlewareAdminApiRateLimit(ip, pathname)) {
+      return applyStealthHeaders(
+        NextResponse.json(
+          { error: "API rate limit exceeded. Retry in a minute." },
+          { status: 429, headers: { "Retry-After": "60" } }
+        )
+      );
+    }
+  }
 
   if (shouldBlockBots() && shouldStealthPath(pathname) && isLikelyBot(req)) {
     return new NextResponse(botBlockedBody(), {

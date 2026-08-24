@@ -11,6 +11,7 @@ import {
 } from "@/lib/category-tree";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 const VALID_TYPES = new Set<string>(Object.values(CategoryType));
 
 type IncomingCategory = {
@@ -33,6 +34,9 @@ function resolveType(raw: unknown): CategoryType {
  * Parent links are applied in a second pass (by id or parentName).
  */
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const ok = await requirePanelApiKey(req);
   if (!ok) {
@@ -201,6 +205,9 @@ export async function POST(req: NextRequest) {
  * GET — list current categories on this panel.
  */
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const ok = await requirePanelApiKey(req);
   if (!ok) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -217,6 +224,9 @@ export async function GET(req: NextRequest) {
 
 /** DELETE all categories (safe for self-FK). Requires panel API key + confirm. */
 export async function DELETE(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const ok = await requirePanelApiKey(req);
   if (!ok) {

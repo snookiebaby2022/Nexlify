@@ -11,10 +11,14 @@ import { invalidateDashboardStats, invalidateXtreamCategories } from "@/lib/cach
 import { getStreamBouquetIds, syncStreamBouquets } from "@/lib/stream-bouquets";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const rateLimited = await guardAdminApiRequest(_req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
@@ -36,6 +40,9 @@ export async function PATCH(
   req: NextRequest,
   ctx: { params: Promise<{ id: string }> }
 ) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

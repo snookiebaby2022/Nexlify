@@ -6,8 +6,12 @@ import { canManageSubUsers, directSubUserWhere } from "@/lib/reseller-sub-users"
 import { logActivity } from "@/lib/lines";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 /** Mass enable / disable / setGroup for the reseller’s direct sub-users only. */
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session || !canManageSubUsers(session.role)) {

@@ -4,12 +4,16 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { repairBouquetCategorySplit } from "@/lib/repair-bouquet-category-split";
 import { logActivity } from "@/lib/lines";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 /**
  * POST — merge category-named orphan bouquets into package bouquets,
  * merge duplicate categories, fix sortOrder for IPTV apps.
  */
 export async function POST(_req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(_req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

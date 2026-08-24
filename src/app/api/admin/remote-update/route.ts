@@ -10,6 +10,7 @@ import { readInstalledVersion } from "@/lib/panel-version";
 import { getPanelUpdateStatus } from "@/lib/panel-update-auto";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 /**
  * Remote update trigger — called by the marketing site admin.
  * Requires the panel API secret (x-panel-api-key or Authorization).
@@ -18,6 +19,9 @@ import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
  *   { "force": true } — re-sync even when already on latest
  */
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const ok = await requirePanelApiKey(req);
   if (!ok) {
@@ -72,6 +76,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const ok = await requirePanelApiKey(req);
   if (!ok) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

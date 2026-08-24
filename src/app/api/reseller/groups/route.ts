@@ -5,6 +5,7 @@ import { PanelRole } from "@prisma/client";
 import { canManageSubUsers } from "@/lib/reseller-sub-users";
 import { ensureStandardUserGroups } from "@/lib/ensure-user-groups";
 import { mergeGroupConfig } from "@/lib/group-config";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 function isSubResellerGroupName(name: string): boolean {
   return /sub-?reseller/i.test(name.trim());
@@ -12,6 +13,9 @@ function isSubResellerGroupName(name: string): boolean {
 
 /** Read-only group list for reseller mass setGroup / create sub-reseller. */
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session || !canManageSubUsers(session.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

@@ -6,6 +6,7 @@ import { randomBytes } from "crypto";
 import { ensureStandardUserGroups } from "@/lib/ensure-user-groups";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 function roleLabel(role: PanelRole) {
   if (role === PanelRole.ADMIN) return "admin";
   if (role === PanelRole.SUB_RESELLER) return "sub-reseller";
@@ -23,7 +24,6 @@ function serializeUser(
     notes: string | null;
     updatedAt: Date;
     createdAt: Date;
-    passwordPlain?: string | null;
     parent: { username: string } | null;
     group: { id: string; name: string } | null;
     _count: { lines: number };
@@ -52,6 +52,9 @@ function serializeUser(
 }
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -59,6 +62,13 @@ export async function GET(req: NextRequest) {
   if (singleId) {
     const r = await prisma.panelUser.findUnique({
       where: { id: singleId },
+      omit: {
+        passwordHash: true,
+        passwordPlain: true,
+        totpSecret: true,
+        apiKey: true,
+        accessCode: true,
+      },
       include: {
         _count: { select: { lines: true, children: true } },
         group: { select: { id: true, name: true } },
@@ -90,6 +100,13 @@ export async function GET(req: NextRequest) {
   }
 
   const rows = await prisma.panelUser.findMany({
+    omit: {
+      passwordHash: true,
+      passwordPlain: true,
+      totpSecret: true,
+      apiKey: true,
+      accessCode: true,
+    },
     include: {
       _count: { select: { lines: true, children: true } },
       resellerBouquets: { include: { bouquet: true } },
@@ -111,7 +128,6 @@ export async function GET(req: NextRequest) {
         notes: r.notes,
         updatedAt: r.updatedAt,
         createdAt: r.createdAt,
-        passwordPlain: r.passwordPlain,
         parent: r.parent,
         group: r.group,
         _count: r._count,
@@ -125,6 +141,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -254,6 +273,9 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -281,6 +303,9 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

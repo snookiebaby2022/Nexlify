@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.41",
+  "latestVersion": "2.0.42",
   "releases": [
+    {
+      "version": "2.0.42",
+      "date": "2026-08-24",
+      "channel": "stable",
+      "summary": "Security hardening: admin API rate limits, headers, JWT checks, and safer outbound fetch.",
+      "changelog": [
+        "Admin and reseller API routes enforce configurable rate limits (middleware + Redis)",
+        "Security headers (nosniff, frame deny, referrer policy, HSTS when SSL enabled)",
+        "Production requires PANEL_INTERNAL_SECRET for internal edge routes (separate from marketing API key)",
+        "JWT secret strength validation blocks weak secrets in production",
+        "HTTPS-first outbound fetch with retry/backoff for release feeds and geo lookup",
+        "Reseller API omits password hash/plain fields from database reads"
+      ],
+      "fixes": [
+        "host-metrics used executeRawUnsafe instead of parameterized Prisma.sql",
+        "Geo lookup used plaintext HTTP ip-api.com"
+      ]
+    },
     {
       "version": "2.0.41",
       "date": "2026-08-24",

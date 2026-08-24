@@ -217,7 +217,12 @@ export function requirePanelApiKey(request: Request): boolean {
   const expected =
     process.env.PANEL_API_SECRET?.trim() ??
     process.env.NEXLIFY_PANEL_API_SECRET?.trim();
-  if (!expected) return false;
+  if (!expected) {
+    if (process.env.NODE_ENV === "production") {
+      console.error("[auth] PANEL_API_SECRET is not set — remote admin API blocked");
+    }
+    return false;
+  }
   const provided =
     request.headers.get("x-panel-api-key") ??
     request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");

@@ -5,11 +5,15 @@ import { PanelRole, StreamType } from "@prisma/client";
 import { autoAssignEpgToStream, findBestEpgMatch, listEpgChannelCandidates } from "@/lib/epg-auto-match";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 /**
  * POST { streamId?, name?, channelId?, force? }
  * Auto-match EPG from loaded guide channels (provider/XMLTV imports).
  */
 export async function POST(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   try {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

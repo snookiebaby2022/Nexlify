@@ -1,4 +1,6 @@
 import releasesJson from "./panel-releases.json";
+import { fetchWithRetry } from "@/lib/fetch-retry";
+import { parseHttpOrHttpsUrl } from "@/lib/secure-fetch";
 
 export type NexlifyReleaseChannel = "stable" | "rc" | "beta";
 
@@ -158,19 +160,26 @@ function bundledFeed(): NexlifyReleasesFeed {
 }
 
 async function fetchFeedJson(url: string): Promise<NexlifyReleasesFeed | null> {
+  let feedUrl: string;
+  try {
+    feedUrl = parseHttpOrHttpsUrl(url).toString();
+  } catch {
+    return null;
+  }
   const browserUa =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
   const headers: Record<string, string> = { Accept: "application/json", "User-Agent": browserUa };
   const token = process.env.GITHUB_TOKEN?.trim() || process.env.GH_TOKEN?.trim();
-  if (token && url.includes("githubusercontent.com")) {
+  if (token && feedUrl.includes("githubusercontent.com")) {
     headers.Authorization = `Bearer ${token}`;
   }
-  const sep = url.includes("?") ? "&" : "?";
+  const sep = feedUrl.includes("?") ? "&" : "?";
   try {
-    const res = await fetch(`${url}${sep}cb=${Date.now()}`, {
+    const res = await fetchWithRetry(`${feedUrl}${sep}cb=${Date.now()}`, {
       headers,
       cache: "no-store",
       signal: AbortSignal.timeout(10000),
+      retries: 3,
     });
     if (!res.ok) return null;
     const data = (await res.json()) as NexlifyReleasesFeed & {

@@ -1,3 +1,5 @@
+import { secureFetchWithRetry, sanitizeIpLiteral } from "@/lib/secure-fetch";
+
 /** Approximate map positions (x%, y%) on a 360×180 equirectangular view for connection dots. */
 const COUNTRY_XY: Record<string, [number, number]> = {
   US: [22, 38], CA: [18, 28], MX: [16, 48], BR: [32, 68], AR: [30, 82],
@@ -16,45 +18,29 @@ export function countryMapPosition(code: string | null | undefined): [number, nu
 }
 
 export async function lookupGeoExtended(ip: string) {
-  const { lookupGeo } = await import("./geoip");
-  const geo = await lookupGeo(ip);
-
-  // Try ip-api.com first (more accurate, free, no API key)
-  try {
-    const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,countryCode,lat,lon,city,isp`, {
-      signal: AbortSignal.timeout(4000),
-      headers: { "User-Agent": "NexlifyPanel/1.0" },
-    });
-    if (res.ok) {
-      const data = (await res.json()) as Record<string, unknown>;
-      if (data.status === "success") {
-        const lat = Number(data.lat);
-        const lon = Number(data.lon);
-        const pos =
-          Number.isFinite(lat) && Number.isFinite(lon)
-            ? [((lon + 180) / 360) * 100, ((90 - lat) / 180) * 100] as [number, number]
-            : countryMapPosition(String(data.countryCode ?? geo?.countryCode ?? ""));
-        return {
-          countryCode: geo?.countryCode ?? (data.countryCode ? String(data.countryCode) : null),
-          countryName: geo?.countryName ?? (data.country ? String(data.country) : null),
-          city: data.city ? String(data.city) : null,
-          isp: data.isp ? String(data.isp) : null,
-          lat: Number.isFinite(lat) ? lat : null,
-          lon: Number.isFinite(lon) ? lon : null,
-          mapX: pos?.[0] ?? 50,
-          mapY: pos?.[1] ?? 40,
-        };
-      }
-    }
-  } catch {
-    /* fallback to ipapi.co */
+  const safeIp = sanitizeIpLiteral(ip);
+  if (!safeIp) {
+    return {
+      countryCode: null,
+      countryName: null,
+      city: null,
+      isp: null,
+      lat: null,
+      lon: null,
+      mapX: 50,
+      mapY: 40,
+    };
   }
 
-  // Fallback to ipapi.co
+  const { lookupGeo } = await import("./geoip");
+  const geo = await lookupGeo(safeIp);
+
+  // HTTPS-only providers (no plaintext HTTP geo leaks).
   try {
-    const res = await fetch(`https://ipapi.co/${ip}/json/`, {
+    const res = await secureFetchWithRetry(`https://ipapi.co/${encodeURIComponent(safeIp)}/json/`, {
       signal: AbortSignal.timeout(4000),
       headers: { "User-Agent": "NexlifyPanel/1.0" },
+      retries: 2,
     });
     if (res.ok) {
       const data = (await res.json()) as Record<string, unknown>;
@@ -76,7 +62,7 @@ export async function lookupGeoExtended(ip: string) {
       };
     }
   } catch {
-    /* fallback */
+    /* fallback below */
   }
 
   const pos = countryMapPosition(geo?.countryCode ?? null);

@@ -7,8 +7,12 @@ import {
   buildSubscriptionsExportCsv,
 } from "@/lib/subscription-export";
 import { PanelRole, StreamType } from "@prisma/client";
+import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 export async function GET(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
   const session = await requireSession([
     PanelRole.ADMIN,
     PanelRole.RESELLER,
