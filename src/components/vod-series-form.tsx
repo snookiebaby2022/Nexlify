@@ -16,9 +16,10 @@ import { VodFormSection, VodYesNo } from "@/components/vod-form-section";
 import { ProviderSourceFields } from "@/components/provider-source-fields";
 import { CategorySelect } from "@/components/category-select";
 import type { CategoryOptionInput } from "@/lib/category-options";
+import { encodeVodAgentCmd } from "@/lib/vod-meta";
 
 function encodeSeriesMeta(meta: Record<string, unknown>): string | null {
-  return `NEXLIFY_VOD:${JSON.stringify({ v: 2, kind: "series", ...meta })}`;
+  return encodeVodAgentCmd({ v: 2, kind: "series", ...meta });
 }
 
 export function VodSeriesForm({
@@ -55,8 +56,8 @@ export function VodSeriesForm({
       alert("Series name is required.");
       return;
     }
-    if (useProvider && (!form.providerId || !form.providerPath.trim())) {
-      alert("Select provider and path, or paste a direct URL.");
+    if (useProvider && !form.streamUrl.trim() && !(form.providerId && form.providerPath.trim())) {
+      alert("Paste the provider URL, or pick a provider and path.");
       return;
     }
     setSaving(true);
@@ -69,13 +70,14 @@ export function VodSeriesForm({
         seriesName: form.name,
         seasonNum: 1,
         episodeNum: 1,
-        source: useProvider
-          ? undefined
-          : form.streamUrl.trim() ||
-            `https://panel.local/vod/series/${encodeURIComponent(form.name.trim())}`,
+        source: form.streamUrl.trim()
+          ? form.streamUrl.trim()
+          : useProvider
+            ? undefined
+            : `https://panel.local/vod/series/${encodeURIComponent(form.name.trim())}`,
         hostedExternally: useProvider,
-        providerId: useProvider ? form.providerId : null,
-        providerPath: useProvider ? form.providerPath : null,
+        providerId: useProvider ? form.providerId || null : null,
+        providerPath: useProvider ? form.providerPath || null : null,
         categoryId: form.categoryId || null,
         streamIcon: form.streamIcon || tmdb.tmdbPoster || null,
         serverId: form.serverIds[0] || null,
@@ -161,8 +163,8 @@ export function VodSeriesForm({
 
         <VodFormSection title="Source & delivery">
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          Use a <strong>direct provider URL</strong> for the first episode, or host via a configured provider so
-          playback uses that provider’s URL.
+          Paste the provider URL for the first episode, then tick hosted so it plays through that URL.
+          You do not need to import the rest of the catalog.
         </p>
         <ProviderSourceFields
           providerId={form.providerId}
@@ -173,17 +175,15 @@ export function VodSeriesForm({
             setForm({ ...form, providerId: next.providerId, providerPath: next.providerPath });
           }}
         />
-        {!useProvider && (
-          <FormField label="Direct source URL (first episode, optional)">
-            <input
-              className={`${formInputClass} font-mono text-sm`}
-              style={formInputStyle}
-              placeholder="https://provider…/series/user/pass/1/1.mp4"
-              value={form.streamUrl}
-              onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
-            />
-          </FormField>
-        )}
+        <FormField label="Direct source URL (first episode, optional)">
+          <input
+            className={`${formInputClass} font-mono text-sm`}
+            style={formInputStyle}
+            placeholder="https://provider…/series/user/pass/1/1.mp4"
+            value={form.streamUrl}
+            onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
+          />
+        </FormField>
 
         <ServerTreePicker
           selectedIds={form.serverIds}

@@ -87,16 +87,11 @@ async function resolveEpisodeSource(body: {
   | { ok: true; streamUrl: string; hostedExternally: boolean; providerId: string | null; providerPath: string | null }
   | { ok: false; error: string }
 > {
-  const useProvider =
-    body.hostedExternally === true ||
-    (Boolean(body.providerId) && Boolean(String(body.providerPath ?? "").trim()));
+  const providerId = String(body.providerId ?? "").trim();
+  const providerPath = String(body.providerPath ?? "").trim();
+  const hosted = body.hostedExternally === true || Boolean(providerId && providerPath);
 
-  if (useProvider) {
-    const providerId = String(body.providerId ?? "").trim();
-    const providerPath = String(body.providerPath ?? "").trim();
-    if (!providerId || !providerPath) {
-      return { ok: false, error: "providerId and providerPath required for hosted episode" };
-    }
+  if (hosted && providerId && providerPath) {
     const provider = await prisma.streamProvider.findUnique({ where: { id: providerId } });
     if (!provider) return { ok: false, error: "Selected provider not found" };
     if (!provider.isActive) return { ok: false, error: "Selected provider is disabled" };
@@ -110,13 +105,23 @@ async function resolveEpisodeSource(body: {
   }
 
   const streamUrl = normalizeStreamSource(String(body.streamUrl ?? ""));
-  if (!streamUrl) return { ok: false, error: "streamUrl is required" };
+  if (!streamUrl) {
+    return {
+      ok: false,
+      error: hosted ? "Paste the provider URL, or pick a provider and path" : "streamUrl is required",
+    };
+  }
+  if (hosted && providerId) {
+    const provider = await prisma.streamProvider.findUnique({ where: { id: providerId } });
+    if (!provider) return { ok: false, error: "Selected provider not found" };
+    if (!provider.isActive) return { ok: false, error: "Selected provider is disabled" };
+  }
   return {
     ok: true,
     streamUrl,
-    hostedExternally: false,
-    providerId: null,
-    providerPath: null,
+    hostedExternally: hosted,
+    providerId: hosted ? providerId || null : null,
+    providerPath: hosted ? providerPath || null : null,
   };
 }
 

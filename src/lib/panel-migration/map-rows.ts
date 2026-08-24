@@ -17,6 +17,7 @@ import {
   mapServers,
 } from "./phase2";
 import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
+import { encodeVodMetaFromXuiProperties } from "@/lib/vod-meta";
 import {
   mergeSqlTables,
   parseAllMysqlInserts,
@@ -229,6 +230,10 @@ function mapStreams(
             ? String(r.stream_server_id)
             : undefined,
       notes: r.notes ? String(r.notes) : undefined,
+      agentStartCmd:
+        encodeVodMetaFromXuiProperties(
+          r.movie_properties ?? r.movie_propeties ?? r.series_properties ?? r.properties
+        ) ?? undefined,
       sortOrder: (() => {
         const n = Number(r.order_num ?? r.sort_order ?? r.channel_order ?? r.order ?? r.num ?? NaN);
         // Fall back to dump row position so LIVE list matches SQL INSERT order

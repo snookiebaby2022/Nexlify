@@ -79,15 +79,23 @@ export function ProviderSourceFields({
       {useProvider ? (
         <>
           <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Playback resolves through the selected provider so viewers hit the provider URL directly.
-            Configure providers under sidebar → Providers → Manage Providers.
+            Tick this so playback uses the source URL already on this item (the provider’s URL). You do
+            not need to import or match the rest of the provider catalog. Provider + path below are
+            optional — only fill them if you want the panel to rebuild the URL from a content ID.
           </p>
-          <SourceChannelFinder
-            streamType={streamType}
-            label="Search channel across providers"
-            hint="Type a channel name to see which providers on this panel already carry it — click Use provider to fill provider + path."
-            onPickProvider={pickChannel}
-          />
+          <details className="text-sm">
+            <summary className="cursor-pointer" style={{ color: "var(--muted)" }}>
+              Optional: look up a catalog ID
+            </summary>
+            <div className="mt-2">
+              <SourceChannelFinder
+                streamType={streamType}
+                label="Search channel across providers"
+                hint="Only needed if this provider uses a content ID instead of the URL already on the row."
+                onPickProvider={pickChannel}
+              />
+            </div>
+          </details>
           <input
             type="search"
             placeholder="Filter provider list by name, type, or URL…"
@@ -106,10 +114,10 @@ export function ProviderSourceFields({
           >
             <option value="">
               {filteredProviders.length
-                ? "Select provider"
+                ? "Optional — leave blank if the source URL is already the provider URL"
                 : providerQuery.trim()
                   ? "No providers match your filter"
-                  : "Select provider"}
+                  : "Optional — leave blank if the source URL is already the provider URL"}
             </option>
             {filteredProviders.map((p) => (
               <option key={p.id} value={p.id}>
@@ -124,8 +132,7 @@ export function ProviderSourceFields({
             </p>
           ) : null}
           <input
-            placeholder="Provider path or content ID *"
-            required={useProvider}
+            placeholder="Optional provider path or content ID"
             className="w-full rounded border px-3 py-2 bg-transparent font-mono text-sm"
             style={{ borderColor: "var(--border)" }}
             value={providerPath}

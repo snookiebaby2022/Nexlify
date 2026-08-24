@@ -1,11 +1,51 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { matchVodBouquetId } from "./integration-bouquet";
 import {
   plexAutoSyncIsDue,
   plexCatalogTitleKey,
+  plexGenreName,
   plexScheduleHours,
   plexSeriesTitleKey,
+  plexVodMetaFromItem,
 } from "./plex-catalog-match";
+
+test("matchVodBouquetId picks Movies and TV Series packages", () => {
+  const bouquets = [
+    { id: "p", name: "Plugin imports" },
+    { id: "m", name: "Movies" },
+    { id: "s", name: "TV Series" },
+    { id: "v", name: "VOD" },
+  ];
+  assert.equal(matchVodBouquetId("MOVIE", bouquets), "m");
+  assert.equal(matchVodBouquetId("SERIES", bouquets), "s");
+  assert.equal(matchVodBouquetId("MOVIE", [{ id: "v", name: "VOD" }]), null);
+});
+
+test("plexVodMetaFromItem copies plot, year, duration, and tags", () => {
+  const meta = plexVodMetaFromItem({
+    summary: "A chemistry teacher turns to crime.",
+    year: 2008,
+    audienceRating: 9.5,
+    originallyAvailableAt: "2008-01-20",
+    duration: 2_880_000,
+    Genre: [{ tag: "Crime" }],
+    Role: [{ tag: "Bryan Cranston" }],
+    Director: [{ tag: "Vince Gilligan" }],
+  });
+  assert.equal(meta.plot, "A chemistry teacher turns to crime.");
+  assert.equal(meta.releaseDate, "2008-01-20");
+  assert.equal(meta.cast, "Bryan Cranston");
+  assert.equal(meta.director, "Vince Gilligan");
+  assert.equal(meta.genre, "Crime");
+  assert.equal(meta.durationSecs, 2880);
+});
+
+test("plexGenreName reads Plex Genre tags", () => {
+  assert.equal(plexGenreName({ Genre: [{ tag: "Action" }, { tag: "Sci-Fi" }] }), "Action");
+  assert.equal(plexGenreName({ Genre: ["Drama"] }), "Drama");
+  assert.equal(plexGenreName({}), null);
+});
 
 test("plexCatalogTitleKey matches IPTV and Plex naming", () => {
   assert.equal(plexCatalogTitleKey("Inception"), plexCatalogTitleKey("Inception (Plex)"));

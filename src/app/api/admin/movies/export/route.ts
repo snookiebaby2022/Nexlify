@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole, StreamType } from "@prisma/client";
+import { parseVodAgentCmd } from "@/lib/vod-meta";
 
 /** Export movies (MOVIE streams) as JSON — 1-stream import/export movies parity. */
 export async function GET(req: NextRequest) {
@@ -35,8 +36,7 @@ export async function GET(req: NextRequest) {
     let tmdbId: string | null = null;
     if (m.agentStartCmd?.includes("tmdbId")) {
       try {
-        const raw = m.agentStartCmd.replace(/^NEXLIFY_VOD:/, "");
-        const parsed = JSON.parse(raw) as { tmdbId?: string };
+        const parsed = parseVodAgentCmd(m.agentStartCmd);
         tmdbId = parsed.tmdbId ? String(parsed.tmdbId) : null;
       } catch {
         /* ignore */

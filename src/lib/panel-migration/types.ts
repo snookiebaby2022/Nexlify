@@ -30,6 +30,8 @@ export type MigrationStreamRow = {
   episodeNum?: number;
   serverLegacyId?: string;
   notes?: string;
+  /** Xtream-ready movie/series plot, cast, rating (from XUI movie_properties). */
+  agentStartCmd?: string;
 };
 
 export type MigrationBouquetRow = {

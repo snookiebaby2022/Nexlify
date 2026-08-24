@@ -303,10 +303,10 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     s3Region: "",
     s3AccessKey: "",
     s3SecretKey: "",
-    pgDumpCronEnabled: false,
+    pgDumpCronEnabled: true,
     pgDumpCronSchedule: "0 4 * * *",
     pgDumpKeepDays: 14,
-    pgDumpDocUrl: "/admin/settings/server#pg-dump",
+    pgDumpDocUrl: "/admin/settings/backup#database-backup",
   },
   tmdb: {
     apiKey: "",
@@ -951,11 +951,16 @@ export async function ensureAddonSettingsHealed(): Promise<{
       await setSettingGroup("backup", {
         enabled: backup.enabled !== false,
         fullExportOnBackup: backup.fullExportOnBackup !== false,
-        // Keep pg_dump off unless operator enables it — avoids surprise huge dumps.
-        pgDumpCronEnabled: backup.pgDumpCronEnabled === true,
         _healedV1: true,
       });
       touched.push("backup");
+    }
+    if (!backup._healedV2) {
+      await setSettingGroup("backup", {
+        pgDumpCronEnabled: true,
+        _healedV2: true,
+      });
+      touched.push("backup-db");
     }
   } catch {
     /* ignore */

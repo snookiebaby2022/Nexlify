@@ -4,10 +4,10 @@ const items = [
   { href: "/admin/management/mass-edit/users", label: "Users & resellers", desc: "Group, credits, max lines, enable/disable, delete" },
   { href: "/admin/management/mass-edit/lines", label: "Lines", desc: "Status, restrictions, bouquets, delete" },
   { href: "/admin/resellers/bouquets", label: "Bouquet access", desc: "Bulk assign bouquets to resellers" },
-  { href: "/admin/management/mass-edit/streams", label: "Live streams", desc: "Category, bouquet, server, speed, on-demand, adult" },
-  { href: "/admin/management/mass-edit/movies", label: "Movies", desc: "Category, bouquet, container, speed, adult" },
-  { href: "/admin/management/mass-edit/series", label: "TV series", desc: "Category, bouquet, container, adult" },
-  { href: "/admin/management/mass-edit/episodes", label: "Episodes", desc: "Category, series name, bouquet, container" },
+  { href: "/admin/management/mass-edit/streams", label: "Live streams", desc: "Category, bouquet, server, speed, on-demand, hosted URL, adult" },
+  { href: "/admin/management/mass-edit/movies", label: "Movies", desc: "Category, bouquet, container, speed, hosted URL, adult" },
+  { href: "/admin/management/mass-edit/series", label: "TV series", desc: "Category, bouquet, container, hosted URL, adult" },
+  { href: "/admin/management/mass-edit/episodes", label: "Episodes", desc: "Category, series name, bouquet, container, hosted URL" },
 ];
 
 export default function MassEditHubPage() {

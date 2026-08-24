@@ -216,7 +216,7 @@ export default function BackupRestorePage() {
       try {
         snapshot = JSON.parse(content);
       } catch {
-        setUploadResult("Error: File is not valid JSON. For .sql.gz dumps use Settings → Backup (pg_dump) restore tooling.");
+        setUploadResult("Error: File is not valid JSON. For .sql.gz database backups use Settings → Backup restore tooling.");
         setUploading(false);
         return;
       }

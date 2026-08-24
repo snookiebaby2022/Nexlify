@@ -8,6 +8,7 @@
 import type { MigrationBouquetRow, MigrationSource, MigrationStreamRow } from "./types";
 import { mergeSqlTables, rowToRecord, type SqlTableData } from "./sql-parse";
 import { flattenIdList } from "./sql-junctions";
+import { encodeVodMetaFromXuiProperties, encodeVodAgentCmd } from "@/lib/vod-meta";
 import {
   mergeStreamSourceUrls,
   streamUrlsFromSource,
@@ -231,6 +232,7 @@ type SeriesMeta = {
   name: string;
   categoryLegacyId?: string;
   icon?: string;
+  agentStartCmd?: string;
 };
 
 function loadSeriesMeta(allTables: Map<string, SqlTableData[]>): Map<string, SeriesMeta> {
@@ -258,6 +260,11 @@ function loadSeriesMeta(allTables: Map<string, SqlTableData[]>): Map<string, Ser
           : r.image
             ? String(r.image)
             : undefined,
+      agentStartCmd:
+        encodeVodMetaFromXuiProperties(r.movie_properties ?? r.series_properties ?? r.properties) ??
+        (r.plot || r.description
+          ? encodeVodAgentCmd({ plot: String(r.plot ?? r.description ?? "") })
+          : undefined),
     });
   }
   return out;
@@ -338,6 +345,7 @@ export function mapSeriesEpisodesFromSql(
         s.categoryLegacyId = meta.categoryLegacyId;
       }
       if (!s.streamIcon && meta?.icon) s.streamIcon = meta.icon;
+      if (!s.agentStartCmd && meta?.agentStartCmd) s.agentStartCmd = meta.agentStartCmd;
       if (!s.containerExtension) s.containerExtension = "mp4";
       // Prefer a clear episode label when the stream name is generic
       if (epTitle) {
@@ -387,6 +395,11 @@ export function mapSeriesEpisodesFromSql(
           ? String(r.target_container)
           : "mp4",
       isActive: Number(r.is_deleted ?? 0) !== 1,
+      agentStartCmd:
+        encodeVodMetaFromXuiProperties(r.movie_properties ?? r.properties) ??
+        (r.plot || r.description
+          ? encodeVodAgentCmd({ plot: String(r.plot ?? r.description ?? "") })
+          : meta?.agentStartCmd),
       serverLegacyId:
         r.server_id != null && String(r.server_id) !== "0"
           ? String(r.server_id)

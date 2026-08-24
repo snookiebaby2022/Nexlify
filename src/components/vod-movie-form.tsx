@@ -17,6 +17,7 @@ import {
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
 import { CategorySelect } from "@/components/category-select";
 import type { CategoryOptionInput } from "@/lib/category-options";
+import { encodeVodAgentCmd } from "@/lib/vod-meta";
 
 function YesNo({
   label,
@@ -102,7 +103,7 @@ type VodMeta = {
 
 function encodeVodMeta(meta: VodMeta): string | null {
   const payload = { v: 1, ...meta };
-  return `NEXLIFY_VOD:${JSON.stringify(payload)}`;
+  return encodeVodAgentCmd(payload);
 }
 
 export function VodMovieForm({
@@ -176,12 +177,8 @@ export function VodMovieForm({
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!useProvider && !form.streamUrl.trim()) {
-      alert("Source path or URL is required.");
-      return;
-    }
-    if (useProvider && (!form.providerId || !form.providerPath.trim())) {
-      alert("Select provider and path.");
+    if (!form.streamUrl.trim() && !(useProvider && form.providerId && form.providerPath.trim())) {
+      alert("Source path or URL is required (or pick a provider and path).");
       return;
     }
     setSaving(true);
@@ -191,10 +188,10 @@ export function VodMovieForm({
       body: JSON.stringify({
         name: form.name,
         type: "MOVIE",
-        source: useProvider ? undefined : form.streamUrl,
+        source: form.streamUrl,
         hostedExternally: useProvider,
-        providerId: useProvider ? form.providerId : null,
-        providerPath: useProvider ? form.providerPath : null,
+        providerId: useProvider ? form.providerId || null : null,
+        providerPath: useProvider ? form.providerPath || null : null,
         categoryId: form.categoryId || null,
         streamIcon: form.streamIcon || null,
         playlistUrl: form.notes || null,
@@ -295,7 +292,6 @@ export function VodMovieForm({
                 placeholder="https://provider…/movie/user/pass/123.mp4"
                 value={form.streamUrl}
                 onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
-                disabled={useProvider}
               />
               <label className="shrink-0 text-sm px-3 py-2 rounded border cursor-pointer" style={{ borderColor: "var(--border)" }}>
                 Pick

@@ -367,80 +367,33 @@ export async function jobEpgAutoMap() {
   }
 }
 
-/** Enrich existing VOD streams (movies/series) with TMDB poster and metadata. */
+/** Fill missing live/VOD icons from IPTV provider catalogs, then TMDB. */
 export async function jobVodEnrich() {
   const start = Date.now();
   try {
-    const { enrichVodFromTmdb, isTmdbConfigured } = await import("./vod-tmdb-enrich");
-    if (!(await isTmdbConfigured())) {
-      await logCron("vod_enrich", "ok", "tmdb not configured", Date.now() - start);
-      return;
-    }
-
     const tmdbSettings = await getSettingGroup("tmdb");
-    const doMovies = tmdbSettings.enableMovieMeta !== false;
-    const doSeries = tmdbSettings.enableSeriesMeta !== false;
+    const types: Array<"MOVIE" | "SERIES" | "LIVE"> = ["LIVE"];
+    if (tmdbSettings.enableMovieMeta !== false) types.push("MOVIE");
+    if (tmdbSettings.enableSeriesMeta !== false) types.push("SERIES");
 
-    let enriched = 0;
-    let skipped = 0;
-
-    if (doMovies) {
-      const movies = await prisma.stream.findMany({
-        where: { type: "MOVIE", isActive: true, streamIcon: null },
-        select: { id: true, name: true },
-        take: 200,
-        orderBy: { updatedAt: "desc" },
-      });
-      for (const m of movies) {
-        try {
-          const result = await enrichVodFromTmdb(m.name, "MOVIE");
-          if (result?.streamIcon) {
-            await prisma.stream.update({
-              where: { id: m.id },
-              data: {
-                streamIcon: result.streamIcon,
-                agentStartCmd: result.agentStartCmd || undefined,
-              },
-            });
-            enriched++;
-          } else {
-            skipped++;
-          }
-        } catch {
-          skipped++;
-        }
-      }
-    }
-
-    if (doSeries) {
-      const series = await prisma.stream.findMany({
-        where: { type: "SERIES", isActive: true, streamIcon: null },
-        select: { id: true, name: true },
-        take: 200,
-        orderBy: { updatedAt: "desc" },
-      });
-      for (const s of series) {
-        try {
-          const result = await enrichVodFromTmdb(s.name, "SERIES");
-          if (result?.streamIcon) {
-            await prisma.stream.update({
-              where: { id: s.id },
-              data: {
-                streamIcon: result.streamIcon,
-                agentStartCmd: result.agentStartCmd || undefined,
-              },
-            });
-            enriched++;
-          } else {
-            skipped++;
-          }
-        } catch {
-          skipped++;
-        }
-      }
-    }
-
-    await logCron("vod_enrich", "ok", `enriched ${enriched}, skipped ${skipped}`, Date.now() - start);
+    const { fillMissingStreamArtwork } = await import("./artwork-fill");
+    const { rewriteStoredVodMetaForXtream, fillMissingVodInfoFromTmdb } = await import("./vod-meta-rewrite");
+    const rewritten = await rewriteStoredVodMetaForXtream();
+    const { StreamType } = await import("@prisma/client");
+    const result = await fillMissingStreamArtwork({
+      types: types.map((t) => StreamType[t]),
+      tmdbLimit: 150,
+      liveLogoLimit: 30,
+    });
+    const infoFilled = types.includes("MOVIE") || types.includes("SERIES")
+      ? await fillMissingVodInfoFromTmdb(80)
+      : 0;
+    await logCron(
+      "vod_enrich",
+      "ok",
+      `updated ${result.updated} (iptv ${result.fromProvider}, tmdb ${result.fromTmdb}, meta ${rewritten + infoFilled}, remaining ${result.remaining})`,
+      Date.now() - start
+    );
   } catch (e) {
     await logCron("vod_enrich", "error", String(e), Date.now() - start);
   }
@@ -757,39 +710,24 @@ async function jobPanelAutoUpdate() {
   }
 }
 
-async function jobPgDump() {
+async function jobDbBackup() {
   const start = Date.now();
   try {
+    const { shouldRunScheduledDbBackup, markDbBackupLastRun } = await import("./backup-schedule");
+    if (!(await shouldRunScheduledDbBackup())) {
+      await logCron("db_backup", "ok", "skipped (schedule)", Date.now() - start);
+      return;
+    }
+
     const backup = await getSettingGroup("backup");
-    if (!backup.pgDumpCronEnabled) {
-      await logCron("pg_dump", "skipped", "disabled", Date.now() - start);
-      return;
-    }
+    const { runPgDumpToGzip } = await import("@/lib/pg-dump");
+    const { outPath, bytes } = await runPgDumpToGzip();
 
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) {
-      await logCron("pg_dump", "error", "DATABASE_URL not set", Date.now() - start);
-      return;
-    }
-
-    const { mkdir, writeFile } = await import("fs/promises");
-    const { execSync } = await import("child_process");
-    const path = await import("path");
-
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const dir = path.resolve(process.cwd(), "./backups/pg");
-    await mkdir(dir, { recursive: true });
-    const outPath = path.join(dir, `nexlify-pg-${stamp}.sql.gz`);
-
-    execSync(`pg_dump "${databaseUrl}" | gzip -9 > "${outPath}"`, {
-      timeout: 300_000,
-      env: { ...process.env },
-    });
-
-    // Cleanup old dumps
     const keepDays = Number(backup.pgDumpKeepDays ?? 14);
     try {
+      const path = await import("path");
       const { readdirSync, statSync, unlinkSync } = await import("fs");
+      const dir = path.dirname(outPath);
       const files = readdirSync(dir).filter((f) => f.startsWith("nexlify-pg-") && f.endsWith(".sql.gz"));
       const cutoff = Date.now() - keepDays * 86400000;
       for (const f of files) {
@@ -798,11 +736,14 @@ async function jobPgDump() {
           unlinkSync(path.join(dir, f));
         }
       }
-    } catch { /* best effort cleanup */ }
+    } catch {
+      /* best effort cleanup */
+    }
 
-    await logCron("pg_dump", "ok", `wrote ${outPath}`, Date.now() - start);
+    await markDbBackupLastRun();
+    await logCron("db_backup", "ok", `wrote ${outPath} (${bytes} bytes)`, Date.now() - start);
   } catch (e) {
-    await logCron("pg_dump", "error", String(e), Date.now() - start);
+    await logCron("db_backup", "error", String(e), Date.now() - start);
   }
 }
 
@@ -825,7 +766,7 @@ export async function runHourlyCronJobs() {
   await jobPanelBackup();
   await jobAgentTokenRotation();
   await jobPanelAutoUpdate();
-  await jobPgDump();
+  await jobDbBackup();
   await jobCloudBackup();
   await jobCheckStreamCerts();
   await jobPlexAutoSync();

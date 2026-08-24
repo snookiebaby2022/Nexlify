@@ -5,6 +5,7 @@ export type TmdbDetails = {
   title: string;
   overview: string;
   posterUrl: string | null;
+  backdropUrl: string | null;
   release: string;
   rating: string;
   genres: string;
@@ -67,6 +68,7 @@ export async function fetchTmdbDetails(
     title,
     overview: base.overview ?? "",
     posterUrl: base.poster_path ? `https://image.tmdb.org/t/p/w500${base.poster_path}` : null,
+    backdropUrl: base.backdrop_path ? `https://image.tmdb.org/t/p/w1280${base.backdrop_path}` : null,
     release,
     rating,
     genres,

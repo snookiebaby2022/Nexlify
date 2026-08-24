@@ -558,17 +558,38 @@ export async function PATCH(req: NextRequest) {
   if (hostedRequested) {
     const providerId = String(body.providerId ?? "").trim();
     const providerPath = String(body.providerPath ?? "").trim();
-    if (!providerId || !providerPath) {
-      return NextResponse.json({ error: "providerId and providerPath required for hosted source" }, { status: 400 });
+    if (providerId && providerPath) {
+      const provider = await prisma.streamProvider.findUnique({ where: { id: providerId } });
+      if (!provider) return NextResponse.json({ error: "Selected provider not found" }, { status: 400 });
+      if (!provider.isActive) return NextResponse.json({ error: "Selected provider is disabled" }, { status: 400 });
+      const { resolveProviderUrl } = await import("@/lib/vod-provider-url");
+      data.streamUrl = resolveProviderUrl(provider, providerPath);
+      data.providerId = providerId;
+      data.providerPath = providerPath;
+      data.hostedExternally = true;
+    } else {
+      if (providerId) {
+        const provider = await prisma.streamProvider.findUnique({ where: { id: providerId } });
+        if (!provider) return NextResponse.json({ error: "Selected provider not found" }, { status: 400 });
+        if (!provider.isActive) return NextResponse.json({ error: "Selected provider is disabled" }, { status: 400 });
+        data.providerId = providerId;
+      } else if (body.providerId !== undefined) {
+        data.providerId = null;
+      }
+      data.providerPath = providerPath || null;
+      data.hostedExternally = true;
+      if (body.source != null || body.streamUrl != null) {
+        const rawSource = normalizeStreamSource(String(body.source ?? body.streamUrl ?? ""));
+        if (!rawSource) {
+          return NextResponse.json(
+            { error: "Paste the provider URL, or pick a provider and path" },
+            { status: 400 }
+          );
+        }
+        const { streamUrl } = resolveSourceToStreamUrl(rawSource, getMediaImportRoot());
+        data.streamUrl = streamUrl;
+      }
     }
-    const provider = await prisma.streamProvider.findUnique({ where: { id: providerId } });
-    if (!provider) return NextResponse.json({ error: "Selected provider not found" }, { status: 400 });
-    if (!provider.isActive) return NextResponse.json({ error: "Selected provider is disabled" }, { status: 400 });
-    const { resolveProviderUrl } = await import("@/lib/vod-provider-url");
-    data.streamUrl = resolveProviderUrl(provider, providerPath);
-    data.providerId = providerId;
-    data.providerPath = providerPath;
-    data.hostedExternally = true;
   } else if (body.source != null || body.streamUrl != null) {
     const rawSource = normalizeStreamSource(String(body.source ?? body.streamUrl ?? ""));
     if (rawSource) {
@@ -636,19 +657,54 @@ export async function PATCH(req: NextRequest) {
   if (body.isCreatedChannel !== undefined) data.isCreatedChannel = Boolean(body.isCreatedChannel);
   if (body.autoRestart !== undefined) data.autoRestart = Boolean(body.autoRestart);
 
+  if (body.vodTmdb !== undefined) {
+    const existing = await prisma.stream.findUnique({
+      where: { id },
+      select: { agentStartCmd: true, type: true },
+    });
+    if (existing && (existing.type === StreamType.MOVIE || existing.type === StreamType.SERIES)) {
+      const { mergeVodTmdbFields } = await import("@/lib/vod-meta");
+      const fields =
+        body.vodTmdb && typeof body.vodTmdb === "object" && !Array.isArray(body.vodTmdb)
+          ? (body.vodTmdb as Record<string, unknown>)
+          : {};
+      data.agentStartCmd = mergeVodTmdbFields(existing.agentStartCmd, {
+        tmdbId: String(fields.tmdbId ?? ""),
+        tmdbTitle: String(fields.tmdbTitle ?? ""),
+        tmdbOverview: String(fields.tmdbOverview ?? ""),
+        tmdbCast: String(fields.tmdbCast ?? ""),
+        tmdbGenres: String(fields.tmdbGenres ?? ""),
+        tmdbPoster: String(fields.tmdbPoster ?? ""),
+        tmdbBackdrop: String(fields.tmdbBackdrop ?? ""),
+        tmdbRelease: String(fields.tmdbRelease ?? ""),
+        tmdbRating: String(fields.tmdbRating ?? ""),
+        tmdbTrailer: String(fields.tmdbTrailer ?? ""),
+        tmdbDirector: String(fields.tmdbDirector ?? ""),
+        tmdbRuntime: String(fields.tmdbRuntime ?? ""),
+      });
+    }
+  }
+
   if (body.transcodeProfile !== undefined) {
     const { parseLiveStreamMeta, encodeLiveStreamMeta } = await import("@/lib/stream-live-meta");
     const existing = await prisma.stream.findUnique({
       where: { id },
-      select: { agentStartCmd: true },
+      select: { agentStartCmd: true, type: true },
     });
-    const meta = parseLiveStreamMeta(existing?.agentStartCmd);
     const nextProfile = String(body.transcodeProfile ?? "none");
-    data.agentStartCmd = encodeLiveStreamMeta({
-      ...(meta.raw ?? {}),
-      transcodeProfile: nextProfile,
-      redirectStream: nextProfile === "none",
-    });
+    const isVod = existing?.type === "MOVIE" || existing?.type === "SERIES";
+    if (isVod) {
+      const { parseVodAgentCmd, encodeVodAgentCmd } = await import("@/lib/vod-meta");
+      const meta = parseVodAgentCmd(existing?.agentStartCmd);
+      data.agentStartCmd = encodeVodAgentCmd({ ...meta, transcodeProfile: nextProfile });
+    } else {
+      const meta = parseLiveStreamMeta(existing?.agentStartCmd);
+      data.agentStartCmd = encodeLiveStreamMeta({
+        ...(meta.raw ?? {}),
+        transcodeProfile: nextProfile,
+        redirectStream: nextProfile === "none",
+      });
+    }
     if (nextProfile !== "none") {
       data.autoRestart = true;
     }

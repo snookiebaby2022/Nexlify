@@ -5,7 +5,7 @@ import {
   extractPlexToken,
   normalizePlexConfig,
   plexClientIdentifier,
-  plexRequestHeaders,
+  plexImageRequestHeaders,
 } from "@/lib/plex-config";
 
 export const runtime = "nodejs";
@@ -43,7 +43,7 @@ export async function GET(
   let res: Response;
   try {
     res = await fetch(url, {
-      headers: plexRequestHeaders(token, plexClientIdentifier(cfg)),
+      headers: plexImageRequestHeaders(token, plexClientIdentifier(cfg)),
       signal: AbortSignal.timeout(15_000),
       redirect: "follow",
     });
@@ -52,8 +52,13 @@ export async function GET(
   }
   if (!res.ok) return new NextResponse("Not found", { status: 404 });
 
-  const contentType = res.headers.get("content-type") || "image/jpeg";
-  if (!contentType.toLowerCase().startsWith("image/")) {
+  const rawType = (res.headers.get("content-type") || "").toLowerCase();
+  const contentType = rawType.startsWith("image/")
+    ? rawType
+    : rawType.startsWith("application/octet-stream") || !rawType
+      ? "image/jpeg"
+      : "";
+  if (!contentType) {
     return new NextResponse("Not found", { status: 404 });
   }
   const body = await res.arrayBuffer();
@@ -62,6 +67,7 @@ export async function GET(
     headers: {
       "Content-Type": contentType,
       "Cache-Control": "public, max-age=86400",
+      "Access-Control-Allow-Origin": "*",
     },
   });
 }

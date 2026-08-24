@@ -28,6 +28,17 @@ export function hasProviderSource(body: {
   return Boolean(body.providerId?.trim() && body.providerPath?.trim());
 }
 
+/** Tick “hosted by provider” with an existing URL — no catalog import required. */
+export function hasHostedDirectSource(body: {
+  hostedExternally?: boolean;
+  streamUrl?: string;
+  source?: string;
+}): boolean {
+  if (!body.hostedExternally) return false;
+  const source = normalizeStreamSource(String(body.source ?? body.streamUrl ?? ""));
+  return Boolean(source && isValidStreamSource(source));
+}
+
 export function validateStreamCreate(body: {
   type?: string;
   streamUrl?: string;
@@ -43,12 +54,16 @@ export function validateStreamCreate(body: {
 }): string | null {
   const type = body.type ?? "LIVE";
   const providerSource = hasProviderSource(body);
+  const hostedDirect = hasHostedDirectSource(body);
   const source = normalizeStreamSource(String(body.source ?? body.streamUrl ?? ""));
 
-  if (sourceRequiredForType(type) && !providerSource && !source) {
+  if (body.hostedExternally && !providerSource && !hostedDirect && !source) {
+    return "Paste the provider URL, or pick a provider and path";
+  }
+  if (sourceRequiredForType(type) && !providerSource && !hostedDirect && !source) {
     return "Source or provider hosting is required for movies and episodes";
   }
-  if (!sourceRequiredForType(type) && type === "LIVE" && !providerSource && !source) {
+  if (!sourceRequiredForType(type) && type === "LIVE" && !providerSource && !hostedDirect && !source) {
     return "Stream URL is required";
   }
   if (providerSource && !body.providerId?.trim()) {

@@ -225,14 +225,14 @@ listen ${streamHttps} ssl;  # HTTPS`}</pre>
         </p>
       </SettingsPanel>
 
-      <div id="pg-dump">
+      <div id="database-backup">
         <SettingsPanel
-          title="PostgreSQL backups"
-          info="In-panel nexlify-cron writes gzipped SQL to backups/pg under the panel install. Optional system crontab: scripts/pg-dump-cron.sh."
+          title="Database backup"
+          info="In-panel nexlify-cron writes gzipped SQL to backups/pg under the panel install. Enable and schedule under Settings → Backup."
         >
           <p className="text-sm" style={{ color: "var(--muted)" }}>
-            Enable under Settings → Backup. Dumps use the matching PostgreSQL client (not a raw DATABASE_URL on the shell).
-            Optional crontab:{" "}
+            Scheduled database backups use the matching PostgreSQL client (not a raw DATABASE_URL on the shell).
+            Optional system crontab:{" "}
             <code className="font-mono text-xs">0 4 * * * /home/nexlify/scripts/pg-dump-cron.sh</code>
             {" "}(also works at /home/nexlify-panel or /opt/nexlify-panel).
           </p>

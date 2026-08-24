@@ -26,6 +26,7 @@ type Stream = {
 
 type BouquetOption = { id: string; name: string };
 type ServerOption = { id: string; name: string };
+type ProviderOption = { id: string; name: string; isActive?: boolean };
 
 export function StreamsMassEdit({
   title,
@@ -48,11 +49,13 @@ export function StreamsMassEdit({
   const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [bouquets, setBouquets] = useState<BouquetOption[]>([]);
   const [servers, setServers] = useState<ServerOption[]>([]);
+  const [providers, setProviders] = useState<ProviderOption[]>([]);
   const [action, setAction] = useState("disable");
   const [categoryId, setCategoryId] = useState("");
   const [filterCategoryId, setFilterCategoryId] = useState("");
   const [filterBouquetId, setFilterBouquetId] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [hostedProviderId, setHostedProviderId] = useState("");
   const [minSpeed, setMinSpeed] = useState("");
   const [maxSpeed, setMaxSpeed] = useState("");
   const [clearSpeed, setClearSpeed] = useState(false);
@@ -121,6 +124,15 @@ export function StreamsMassEdit({
     fetch("/api/admin/servers")
       .then((r) => r.json())
       .then((d) => setServers((d.servers ?? []).map((s: ServerOption) => ({ id: s.id, name: s.name }))));
+    fetch("/api/admin/stream-providers")
+      .then((r) => r.json())
+      .then((d) =>
+        setProviders(
+          (d.providers ?? [])
+            .filter((p: ProviderOption) => p.isActive !== false)
+            .map((p: ProviderOption) => ({ id: p.id, name: p.name }))
+        )
+      );
   }, []);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -164,8 +176,18 @@ export function StreamsMassEdit({
     }
   }
 
-  async function apply() {
-    if (!selected.size) return;
+  async function apply(scope: "selected" | "matching" = "selected") {
+    const isFilterAction =
+      action === "setHostedProvider" || action === "clearHostedProvider" || action === "fillPosters";
+    if (scope === "selected" && !selected.size) return;
+    if (scope === "matching" && !isFilterAction) {
+      setMsg("Select rows first, or use Select all matching.");
+      return;
+    }
+    if (scope === "matching" && !typeFilter) {
+      setMsg("Choose a content type before applying to a whole filter.");
+      return;
+    }
     if (action === "delete" && !confirm(`Delete ${selected.size} items?`)) return;
 
     if (action === "setCategory" && !categoryId) {
@@ -201,42 +223,95 @@ export function StreamsMassEdit({
       return;
     }
 
-    setMsg("");
-    progress.start(selected.size, `Processing ${action}…`);
+    const filter =
+      scope === "matching"
+        ? {
+            type: typeFilter,
+            categoryId: filterCategoryId || undefined,
+            bouquetId: filterBouquetId || undefined,
+            status: filterStatus,
+            search: searchDebounced || undefined,
+            radio: radioOnly || undefined,
+            episodesOnly: episodesOnly || undefined,
+            seriesSeedsOnly: isFilterAction ? false : seriesSeedsOnly || undefined,
+          }
+        : undefined;
+
+    const payload: Record<string, unknown> = {
+      ids: scope === "selected" ? [...selected] : undefined,
+      filter,
+      action,
+      categoryId: action === "setCategory" ? categoryId || null : undefined,
+      bouquetIds: action === "addToBouquet" || action === "removeFromBouquet" ? [bouquetId] : undefined,
+      serverId: action === "setServer" ? serverId || null : undefined,
+      isAdult: action === "setAdult" ? isAdult : undefined,
+      containerExtension: action === "setContainerExtension" ? containerExtension : undefined,
+      seriesName: action === "setSeriesName" ? seriesName.trim() : undefined,
+      vodMode: action === "setVodMode" ? vodMode : undefined,
+      archiveDays: action === "setVodMode" && archiveDays ? Number(archiveDays) : undefined,
+      minSpeedKbps:
+        action === "setSpeed"
+          ? clearSpeed && minSpeed.trim() === ""
+            ? null
+            : minSpeed.trim() === ""
+              ? undefined
+              : Number(minSpeed)
+          : undefined,
+      maxSpeedKbps:
+        action === "setSpeed"
+          ? clearSpeed && maxSpeed.trim() === ""
+            ? null
+            : maxSpeed.trim() === ""
+              ? undefined
+              : Number(maxSpeed)
+          : undefined,
+      backupUrl: action === "setBackupUrl" ? backupUrl.trim() : undefined,
+      providerId: action === "setHostedProvider" ? hostedProviderId || undefined : undefined,
+    };
+
+    if (scope === "matching") {
+      setMsg("");
+      const previewRes = await fetch("/api/admin/streams/mass", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, preview: true }),
+      });
+      const preview = await previewRes.json();
+      if (!previewRes.ok) {
+        setMsg(preview.error ?? "Could not count matching items");
+        return;
+      }
+      const n = Number(preview.count ?? 0);
+      if (n === 0) {
+        setMsg("No items match this filter");
+        return;
+      }
+      const catLabel = !filterCategoryId
+        ? "all categories"
+        : filterCategoryId === "0"
+          ? "uncategorized"
+          : "the selected category";
+          const extra =
+            typeFilter === "SERIES" && !episodesOnly
+              ? " This includes series seeds and episodes in that filter."
+              : "";
+          const prompt =
+            action === "fillPosters"
+              ? `Fill missing posters on ${n} item${n === 1 ? "" : "s"} (${catLabel}) from IPTV provider catalogs, then TMDB?${extra}`
+              : `Update ${n} item${n === 1 ? "" : "s"} (${catLabel})? Existing source URLs are kept.${extra}`;
+          if (!confirm(prompt)) {
+            return;
+          }
+      progress.start(n, `Processing ${action}…`);
+    } else {
+      setMsg("");
+      progress.start(selected.size, `Processing ${action}…`);
+    }
 
     const res = await fetch("/api/admin/streams/mass", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ids: [...selected],
-        action,
-        categoryId:
-          action === "setCategory" ? categoryId || null : undefined,
-        bouquetIds: action === "addToBouquet" || action === "removeFromBouquet" ? [bouquetId] : undefined,
-        serverId: action === "setServer" ? serverId || null : undefined,
-        isAdult: action === "setAdult" ? isAdult : undefined,
-        containerExtension: action === "setContainerExtension" ? containerExtension : undefined,
-        seriesName: action === "setSeriesName" ? seriesName.trim() : undefined,
-        vodMode: action === "setVodMode" ? vodMode : undefined,
-        archiveDays: action === "setVodMode" && archiveDays ? Number(archiveDays) : undefined,
-        minSpeedKbps:
-          action === "setSpeed"
-            ? clearSpeed && minSpeed.trim() === ""
-              ? null
-              : minSpeed.trim() === ""
-                ? undefined
-                : Number(minSpeed)
-            : undefined,
-        maxSpeedKbps:
-          action === "setSpeed"
-            ? clearSpeed && maxSpeed.trim() === ""
-              ? null
-              : maxSpeed.trim() === ""
-                ? undefined
-                : Number(maxSpeed)
-            : undefined,
-        backupUrl: action === "setBackupUrl" ? backupUrl.trim() : undefined,
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();
@@ -370,6 +445,9 @@ export function StreamsMassEdit({
           {(episodesOnly || typeFilter === "SERIES") && (
             <option value="setSeriesName">Set series name</option>
           )}
+          <option value="setHostedProvider">Hosted by provider URL</option>
+          <option value="clearHostedProvider">Clear hosted-by-provider</option>
+          <option value="fillPosters">Fill missing posters (IPTV + TMDB)</option>
         </select>
 
         {action === "setCategory" && (
@@ -507,14 +585,56 @@ export function StreamsMassEdit({
           />
         )}
 
+        {action === "setHostedProvider" && (
+          <select
+            className="rounded border px-3 py-2 bg-transparent min-w-[16rem]"
+            style={{ borderColor: "var(--border)" }}
+            value={hostedProviderId}
+            onChange={(e) => setHostedProviderId(e.target.value)}
+          >
+            <option value="">Keep current provider (optional)</option>
+            {providers.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
+
+        {(action === "setHostedProvider" || action === "clearHostedProvider") && (
+          <p className="text-xs basis-full" style={{ color: "var(--muted)" }}>
+            Uses the Category filter above (All categories or one category). Keeps each item’s existing
+            source URL — it does not import the provider catalog.
+            {typeFilter === "SERIES" && !episodesOnly
+              ? " Apply to all matching also covers episodes in that filter."
+              : ""}
+          </p>
+        )}
+        {action === "fillPosters" && (
+          <p className="text-xs basis-full" style={{ color: "var(--muted)" }}>
+            Fills blank posters from the IPTV provider catalog (stream_icon / cover), then TMDB. Existing
+            posters are left alone. Use All categories or one category, then apply to all matching.
+          </p>
+        )}
+
         <button
           type="button"
-          onClick={() => void apply()}
+          onClick={() => void apply("selected")}
           className="rounded px-4 py-2 cursor-pointer"
           style={{ background: "var(--accent)", color: "#fff" }}
         >
           Apply to {selected.size || "…"} selected
         </button>
+        {(action === "setHostedProvider" ||
+          action === "clearHostedProvider" ||
+          action === "fillPosters") && (
+          <button
+            type="button"
+            onClick={() => void apply("matching")}
+            className="rounded px-4 py-2 cursor-pointer border"
+            style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
+          >
+            Apply to all matching this filter
+          </button>
+        )}
       </div>
 
       {msg && <p className="text-sm">{msg}</p>}

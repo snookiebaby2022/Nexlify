@@ -1,4 +1,6 @@
-/** Encode NEXLIFY_VOD agent metadata for bulk VOD imports. */
+/** Encode VOD agent metadata for bulk imports (Xtream-readable JSON). */
+
+import { encodeVodAgentCmd, parseVodAgentCmd } from "./vod-meta";
 
 export type VodImportMetaInput = {
   directSource?: boolean;
@@ -19,7 +21,9 @@ export function encodeImportVodMeta(
   input: VodImportMetaInput,
   existingAgentStartCmd?: string | null
 ): string | null {
-  let base: Record<string, unknown> = {
+  const existing = parseVodAgentCmd(existingAgentStartCmd);
+  const base: Record<string, unknown> = {
+    ...existing,
     v: 1,
     location: "remote",
     doNotEncode: false,
@@ -38,18 +42,6 @@ export function encodeImportVodMeta(
     bouquetIds: input.bouquetIds ?? [],
   };
 
-  if (existingAgentStartCmd?.startsWith("NEXLIFY_VOD:")) {
-    try {
-      const parsed = JSON.parse(existingAgentStartCmd.slice("NEXLIFY_VOD:".length)) as Record<
-        string,
-        unknown
-      >;
-      base = { ...parsed, ...base };
-    } catch {
-      /* use defaults */
-    }
-  }
-
   const hasContent =
     input.directSource ||
     input.nativeFrames ||
@@ -60,8 +52,8 @@ export function encodeImportVodMeta(
     (input.serverIds?.length ?? 0) > 0 ||
     (input.bouquetIds?.length ?? 0) > 0 ||
     input.transcodeProfile !== "none" ||
-    existingAgentStartCmd?.startsWith("NEXLIFY_VOD:");
+    Object.keys(existing).length > 0;
 
   if (!hasContent) return existingAgentStartCmd ?? null;
-  return `NEXLIFY_VOD:${JSON.stringify(base)}`;
+  return encodeVodAgentCmd(base);
 }

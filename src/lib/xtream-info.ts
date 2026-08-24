@@ -12,19 +12,12 @@ import {
   buildCanonicalCategoryMaps,
   canonicalNumericForCategory,
 } from "./xtream-category-canonical";
+import { parseXtreamVodMeta } from "./vod-meta";
 
 export { cuidToNum, resolveStreamIdParam };
 
 function parseMetaJson(raw: string | null | undefined): Record<string, unknown> {
-  if (!raw?.trim()) return {};
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
+  return parseXtreamVodMeta(raw);
 }
 
 function metaText(value: unknown): string {

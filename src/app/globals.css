@@ -3134,6 +3134,124 @@ a.btn-back:hover,
   font-weight: 600;
 }
 
+/* XUI-style form tabs (movie/series edit) */
+.xui-form-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 1.25rem;
+}
+
+.xui-form-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: #f8fafc;
+  color: #64748b;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.8125rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+[data-theme="dark"] .xui-form-tab {
+  background: rgba(15, 23, 42, 0.5);
+  border-color: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+}
+
+.xui-form-tab--active {
+  background: #00c0ef;
+  border-color: #00a8d4;
+  color: #fff;
+  font-weight: 600;
+}
+
+[data-theme="dark"] .xui-form-tab--active {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #fff;
+}
+
+.xui-form-tab-icon {
+  opacity: 0.9;
+}
+
+.xui-vod-info-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.xui-vod-info-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .xui-vod-info-row {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+}
+
+.xui-vod-info-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #64748b;
+  padding-top: 0.55rem;
+}
+
+[data-theme="dark"] .xui-vod-info-label {
+  color: #94a3b8;
+}
+
+.xui-vod-info-field {
+  min-width: 0;
+  position: relative;
+}
+
+.xui-vod-info-preview-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.25rem;
+  border: 1px solid rgba(0, 192, 239, 0.45);
+  background: rgba(0, 192, 239, 0.12);
+  color: #0284c7;
+  cursor: pointer;
+}
+
+.xui-vod-info-preview-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.xui-vod-info-preview-pop {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 20;
+  margin-top: 0.35rem;
+  padding: 0.35rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.xui-vod-info-preview-pop img {
+  display: block;
+  max-width: min(280px, 70vw);
+  max-height: 420px;
+  border-radius: 0.25rem;
+}
+
 .xui-verify-table-wrap {
   overflow-x: auto;
 }

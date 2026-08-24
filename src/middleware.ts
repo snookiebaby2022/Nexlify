@@ -88,6 +88,7 @@ const PUBLIC = [
   "/api/health",
   "/api/panel",
   "/api/public",
+  "/api/artwork",
   "/api/license",
   "/api/internal",
   "/api/admin/remote-update",

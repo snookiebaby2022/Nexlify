@@ -54,6 +54,7 @@ export function cronMatchesThisHour(expression: string, date = new Date()): bool
 }
 
 const BACKUP_LAST_RUN_KEY = "backup_last_run";
+const DB_BACKUP_LAST_RUN_KEY = "db_backup_last_run";
 
 export async function shouldRunScheduledBackup(): Promise<boolean> {
   const backup = await getSettingGroup("backup");
@@ -76,6 +77,30 @@ export async function markBackupLastRun() {
   await prisma.panelSetting.upsert({
     where: { key: BACKUP_LAST_RUN_KEY },
     create: { key: BACKUP_LAST_RUN_KEY, value: iso },
+    update: { value: iso },
+  });
+}
+
+export async function shouldRunScheduledDbBackup(): Promise<boolean> {
+  const backup = await getSettingGroup("backup");
+  if (backup.pgDumpCronEnabled === false) return false;
+
+  const expr = String(backup.pgDumpCronSchedule || "0 4 * * *").trim();
+  if (!cronMatchesThisHour(expr)) return false;
+
+  const last = await prisma.panelSetting.findUnique({ where: { key: DB_BACKUP_LAST_RUN_KEY } });
+  if (last?.value) {
+    const elapsed = Date.now() - new Date(last.value).getTime();
+    if (elapsed < 23 * 60 * 60 * 1000) return false;
+  }
+  return true;
+}
+
+export async function markDbBackupLastRun() {
+  const iso = new Date().toISOString();
+  await prisma.panelSetting.upsert({
+    where: { key: DB_BACKUP_LAST_RUN_KEY },
+    create: { key: DB_BACKUP_LAST_RUN_KEY, value: iso },
     update: { value: iso },
   });
 }

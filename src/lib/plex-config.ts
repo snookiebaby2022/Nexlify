@@ -111,6 +111,13 @@ export function plexRequestHeaders(token: string, clientIdentifier = "nexlify-pa
   return headers;
 }
 
+/** Thumb/art requests must not send Accept: application/json or Plex returns JSON and the proxy 404s. */
+export function plexImageRequestHeaders(token: string, clientIdentifier = "nexlify-panel"): Record<string, string> {
+  const headers = plexRequestHeaders(token, clientIdentifier);
+  headers.Accept = "image/jpeg,image/png,image/webp,image/*,*/*";
+  return headers;
+}
+
 export function normalizePlexConfig(raw: Record<string, unknown>): PlexIntegrationConfig {
   const token = extractPlexToken(String(raw.token ?? ""));
   const parsed = parsePlexHostPort(String(raw.host ?? raw.url ?? ""), raw.port as string | number | undefined);

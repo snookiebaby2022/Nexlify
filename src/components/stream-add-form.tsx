@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Info } from "lucide-react";
+import { Calendar, FileText, Info, Server, Settings } from "lucide-react";
+import { XuiFormTabs, type XuiFormTab } from "@/components/xui-form-tabs";
 import { TmdbSearch } from "@/components/tmdb-search";
 import { ProviderSourceFields, OnDemandStreamFields } from "@/components/provider-source-fields";
 import { ServerTreePicker } from "@/components/server-tree-picker";
@@ -81,6 +82,15 @@ function encodeLiveMeta(meta: LiveMeta & { notes?: string }) {
   return `NEXLIFY_LIVE:${JSON.stringify({ v: 1, ...meta })}`;
 }
 
+type LiveAddTab = "details" | "meta" | "advanced" | "server";
+
+const LIVE_ADD_TABS: XuiFormTab<LiveAddTab>[] = [
+  { id: "details", label: "Details", icon: FileText },
+  { id: "meta", label: "EPG", icon: Calendar },
+  { id: "advanced", label: "Advanced", icon: Settings },
+  { id: "server", label: "Server", icon: Server },
+];
+
 function YesNo({
   label,
   value,
@@ -116,37 +126,6 @@ function YesNo({
   );
 }
 
-function Section({
-  title,
-  children,
-  defaultOpen = true,
-  className = "",
-}: {
-  title: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-  className?: string;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div
-      className={`rounded-lg border overflow-hidden ${className}`}
-      style={{ borderColor: "rgba(0,192,239,0.35)", background: "rgba(0,0,0,0.12)" }}
-    >
-      <button
-        type="button"
-        className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold cursor-pointer"
-        style={{ background: "rgba(0,192,239,0.14)", color: "#7dd3fc" }}
-        onClick={() => setOpen((o) => !o)}
-      >
-        {title}
-        {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-      </button>
-      {open && <div className="p-4 space-y-4 border-t" style={{ borderColor: "rgba(0,192,239,0.2)" }}>{children}</div>}
-    </div>
-  );
-}
-
 function LiveStreamForm({
   backHref,
   title,
@@ -167,6 +146,7 @@ function LiveStreamForm({
   const [saving, setSaving] = useState(false);
   const [iconSearching, setIconSearching] = useState(false);
   const [insertMode, setInsertMode] = useState<"single" | "m3u" | "bulk">("single");
+  const [addTab, setAddTab] = useState<LiveAddTab>("details");
   const [bulkText, setBulkText] = useState("");
   const [meta, setMeta] = useState<LiveMeta>(emptyLiveMeta());
   const [form, setForm] = useState({
@@ -373,21 +353,23 @@ function LiveStreamForm({
         className="border border-t-0 rounded-b-xl p-5 sm:p-6 space-y-5"
         style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
       >
-        <div className="grid lg:grid-cols-2 gap-5">
-          <div className="space-y-4">
-            <FormField label="Insert type">
-              <select
-                className={formSelectClass}
-                style={formInputStyle}
-                value={insertMode}
-                onChange={(e) => setInsertMode(e.target.value as "single" | "m3u" | "bulk")}
-              >
-                <option value="single">Insert single</option>
-                <option value="m3u">Import M3U playlist</option>
-                <option value="bulk">Multiple URLs (one per line)</option>
-              </select>
-            </FormField>
+        <FormField label="Insert type">
+          <select
+            className={formSelectClass}
+            style={formInputStyle}
+            value={insertMode}
+            onChange={(e) => setInsertMode(e.target.value as "single" | "m3u" | "bulk")}
+          >
+            <option value="single">Insert single</option>
+            <option value="m3u">Import M3U playlist</option>
+            <option value="bulk">Multiple URLs (one per line)</option>
+          </select>
+        </FormField>
 
+        <XuiFormTabs tabs={LIVE_ADD_TABS} active={addTab} onChange={setAddTab} />
+
+        {addTab === "details" && (
+          <div className="space-y-4">
             {insertMode === "m3u" && (
               <FormField label="M3U playlist" required>
                 <textarea
@@ -400,7 +382,7 @@ function LiveStreamForm({
                   onChange={(e) => setBulkText(e.target.value)}
                 />
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-                  Channels import as on-demand by default (change under On-demand section).
+                  Channels import as on-demand by default. Set live/on-demand under Advanced after import if needed.
                 </p>
               </FormField>
             )}
@@ -420,133 +402,90 @@ function LiveStreamForm({
             )}
 
             {insertMode === "single" && (
-            <>
-            <SourceChannelFinder
-              streamType="LIVE"
-              showDirectUrl
-              onPickProvider={(m) => {
-                setForm((f) => ({ ...f, name: f.name || m.streamName }));
-                setSources((prev) => {
-                  const next = [...prev];
-                  next[0] = m.streamUrl || prev[0];
-                  return next;
-                });
-              }}
-              onPickDirectUrl={(m) => {
-                setForm((f) => ({ ...f, name: f.name || m.streamName }));
-                setSources((prev) => {
-                  const next = [...prev];
-                  next[0] = m.streamUrl;
-                  return next;
-                });
-              }}
-            />
-            <FormField label="Name" required>
-              <input
-                required
-                className={formInputClass}
-                style={formInputStyle}
-                placeholder="Stream name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-            </FormField>
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm font-medium">
-                  Source <span style={{ color: "#ef4444" }}>*</span>
-                </span>
-                <button
-                  type="button"
-                  className="text-xs px-2.5 py-1 rounded border cursor-pointer"
-                  style={{ borderColor: "#00c0ef", color: "#7dd3fc" }}
-                  onClick={() => setSources((s) => [...s, ""])}
-                >
-                  + 1
-                </button>
-              </div>
-              <div className="space-y-2">
-                {sources.map((src, i) => (
-                  <div key={i} className="flex gap-2">
-                    <input
-                      className={`${formInputClass} flex-1 font-mono text-sm`}
-                      style={formInputStyle}
-                      placeholder={i === 0 ? "http://example.com/stream.m3u8" : "Backup source URL"}
-                      value={src}
-                      onChange={(e) => setSource(i, e.target.value)}
-                      required={i === 0}
-                    />
-                    {sources.length > 1 && (
-                      <button
-                        type="button"
-                        className="text-xs px-3 shrink-0 cursor-pointer rounded border"
-                        style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
-                        onClick={() => setSources((s) => s.filter((_, j) => j !== i))}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {sources[0]?.trim() && (
-                <div className="mt-3 rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.15)" }}>
-                  <p className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>
-                    Check source before saving
-                  </p>
-                  <StreamProbePlayer compact streamUrl={sources[0].trim()} name={form.name || undefined} />
-                </div>
-              )}
-            </div>
-            <FormField label="Icon">
-              <div className="flex gap-2">
-                <input
-                  className={formInputClass + " flex-1"}
-                  style={formInputStyle}
-                  placeholder="Stream icon URL"
-                  value={form.streamIcon}
-                  onChange={(e) => setForm({ ...form, streamIcon: e.target.value })}
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!form.name.trim()) return;
-                    setIconSearching(true);
-                    try {
-                      const res = await fetch(`/api/admin/streams/icon-search?name=${encodeURIComponent(form.name.trim())}`);
-                      const data = await res.json();
-                      if (data.logo) {
-                        setForm({ ...form, streamIcon: data.logo });
-                      }
-                    } finally {
-                      setIconSearching(false);
-                    }
+              <>
+                <SourceChannelFinder
+                  streamType="LIVE"
+                  showDirectUrl
+                  onPickProvider={(m) => {
+                    setForm((f) => ({ ...f, name: f.name || m.streamName }));
+                    setSources((prev) => {
+                      const next = [...prev];
+                      next[0] = m.streamUrl || prev[0];
+                      return next;
+                    });
                   }}
-                  disabled={!form.name.trim() || iconSearching}
-                  className="px-3 py-2 rounded-lg text-xs font-medium border hover:opacity-80 disabled:opacity-40 transition-opacity whitespace-nowrap"
-                  style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.1)" }}
-                  title="Auto-detect icon from channel name"
-                >
-                  {iconSearching ? "Searching…" : "Auto-detect"}
-                </button>
-              </div>
-              {form.streamIcon && (
-                <div className="mt-2 flex items-center gap-2">
-                  <img
-                    src={form.streamIcon}
-                    alt=""
-                    className="w-8 h-8 rounded object-contain bg-white/10"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  onPickDirectUrl={(m) => {
+                    setForm((f) => ({ ...f, name: f.name || m.streamName }));
+                    setSources((prev) => {
+                      const next = [...prev];
+                      next[0] = m.streamUrl;
+                      return next;
+                    });
+                  }}
+                />
+                <FormField label="Name" required>
+                  <input
+                    required
+                    className={formInputClass}
+                    style={formInputStyle}
+                    placeholder="Stream name"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
                   />
-                  <span className="text-xs truncate" style={{ color: "var(--muted)" }}>{form.streamIcon}</span>
+                </FormField>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium">
+                      Source <span style={{ color: "#ef4444" }}>*</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="text-xs px-2.5 py-1 rounded border cursor-pointer"
+                      style={{ borderColor: "#00c0ef", color: "#7dd3fc" }}
+                      onClick={() => setSources((s) => [...s, ""])}
+                    >
+                      + 1
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {sources.map((src, i) => (
+                      <div key={i} className="flex gap-2">
+                        <input
+                          className={`${formInputClass} flex-1 font-mono text-sm`}
+                          style={formInputStyle}
+                          placeholder={i === 0 ? "http://example.com/stream.m3u8" : "Backup source URL"}
+                          value={src}
+                          onChange={(e) => setSource(i, e.target.value)}
+                          required={i === 0}
+                        />
+                        {sources.length > 1 && (
+                          <button
+                            type="button"
+                            className="text-xs px-3 shrink-0 cursor-pointer rounded border"
+                            style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
+                            onClick={() => setSources((s) => s.filter((_, j) => j !== i))}
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {sources[0]?.trim() && (
+                    <div
+                      className="mt-3 rounded-lg border p-3"
+                      style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.15)" }}
+                    >
+                      <p className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>
+                        Check source before saving
+                      </p>
+                      <StreamProbePlayer compact streamUrl={sources[0].trim()} name={form.name || undefined} />
+                    </div>
+                  )}
                 </div>
-              )}
-            </FormField>
-            </>
+              </>
             )}
-          </div>
 
-          <div className="space-y-4">
             <FormField label="Category">
               <CategorySelect
                 className={formSelectClass}
@@ -563,154 +502,253 @@ function LiveStreamForm({
               onChange={(bouquetIds) => setMeta({ ...meta, bouquetIds })}
               selectedTitle="Assigned"
             />
-            <FormField label="Notes">
-              <textarea
-                className={formInputClass}
-                style={formInputStyle}
-                rows={4}
-                placeholder="Stream notes"
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              />
-            </FormField>
-          </div>
-        </div>
-
-        <Section title="Streaming servers">
-          <ServerTreePicker
-            selectedIds={meta.serverIds}
-            onChange={(serverIds) => setMeta({ ...meta, serverIds })}
-          />
-        </Section>
-
-        <div className="grid lg:grid-cols-2 gap-4">
-          <Section title="RTMP">
-            <YesNo
-              label="RTMP output"
-              value={meta.rtmpOutput}
-              onChange={(v) => setMeta({ ...meta, rtmpOutput: v })}
-            />
-          </Section>
-          <Section title="On-demand">
-            <OnDemandStreamFields
-              vodMode={form.vodMode}
-              archiveDays={form.archiveDays}
-              playlistUrl={form.playlistUrl}
-              onChange={(next) => setForm((f) => ({ ...f, ...next }))}
-            />
-            <FormField label="Probesize on-demand">
-              <input
-                className={formInputClass}
-                style={formInputStyle}
-                value={meta.onDemandProbesize}
-                onChange={(e) => setMeta({ ...meta, onDemandProbesize: e.target.value })}
-              />
-            </FormField>
-          </Section>
-        </div>
-
-        <Section title="Stream options">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            <YesNo
-              label="Generate timestamps"
-              value={meta.generateTimestamps}
-              onChange={(v) => setMeta({ ...meta, generateTimestamps: v })}
-            />
-            <YesNo
-              label="Stream all codecs found on the video"
-              value={meta.streamAllCodecs}
-              onChange={(v) => setMeta({ ...meta, streamAllCodecs: v })}
-            />
-            <YesNo
-              label="Read input source in native frames"
-              hint="Use native frame timing for some inputs"
-              value={meta.nativeFrames}
-              onChange={(v) => setMeta({ ...meta, nativeFrames: v })}
-            />
-            <YesNo
-              label="Redirect stream"
-              value={meta.redirectStream}
-              onChange={(v) => setMeta({ ...meta, redirectStream: v })}
-            />
-            <YesNo label="Is adult stream" value={meta.isAdult} onChange={(v) => setMeta({ ...meta, isAdult: v })} />
-          </div>
-          <div className="pt-2 border-t space-y-3" style={{ borderColor: "var(--border)" }}>
-            <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
-              Auto restart stream
-            </p>
-            <div className="flex flex-wrap gap-3 text-sm">
-              {WEEKDAYS.map((day) => (
-                <label key={day} className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={meta.autoRestartDays[day]}
-                    onChange={(e) =>
-                      setMeta({
-                        ...meta,
-                        autoRestartDays: { ...meta.autoRestartDays, [day]: e.target.checked },
-                      })
-                    }
+            {insertMode === "single" && (
+              <>
+                <FormField label="Notes">
+                  <textarea
+                    className={formInputClass}
+                    style={formInputStyle}
+                    rows={4}
+                    placeholder="Stream notes"
+                    value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   />
-                  {day.slice(0, 3)}
-                </label>
-              ))}
-            </div>
-            <input
-              className={formInputClass}
-              style={formInputStyle}
-              placeholder="Format: 00:00 - 23:59"
-              value={meta.autoRestartWindow}
-              onChange={(e) => setMeta({ ...meta, autoRestartWindow: e.target.value })}
-            />
+                </FormField>
+                <OnDemandStreamFields
+                  vodMode={form.vodMode}
+                  archiveDays={form.archiveDays}
+                  playlistUrl={form.playlistUrl}
+                  onChange={(next) => setForm((f) => ({ ...f, ...next }))}
+                />
+              </>
+            )}
           </div>
-          <div className="flex flex-wrap gap-6 pt-2 text-sm">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.isRadio}
-                onChange={(e) => setForm({ ...form, isRadio: e.target.checked })}
-              />
-              Radio station
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.isCreatedChannel}
-                onChange={(e) => setForm({ ...form, isCreatedChannel: e.target.checked })}
-              />
-              Created channel
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.autoRestart}
-                onChange={(e) => setForm({ ...form, autoRestart: e.target.checked })}
-              />
-              Agent auto-restart
-            </label>
-          </div>
-        </Section>
+        )}
 
-        <div className="grid lg:grid-cols-2 gap-4">
-          <Section title="Fetching options">
-            <FormField label="User agent">
+        {addTab === "meta" && insertMode !== "single" && (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Icon and EPG mapping apply to single-channel insert. Imported channels can be edited individually after import.
+          </p>
+        )}
+
+        {addTab === "meta" && insertMode === "single" && (
+          <div className="xui-vod-info-form">
+            <div className="xui-vod-info-row">
+              <div className="xui-vod-info-label">Icon URL</div>
+              <div className="xui-vod-info-field">
+                <div className="flex gap-2 w-full">
+                  <input
+                    className={`${formInputClass} flex-1 font-mono text-xs`}
+                    style={formInputStyle}
+                    placeholder="Stream icon URL"
+                    value={form.streamIcon}
+                    onChange={(e) => setForm({ ...form, streamIcon: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    disabled={!form.name.trim() || iconSearching}
+                    onClick={async () => {
+                      if (!form.name.trim()) return;
+                      setIconSearching(true);
+                      try {
+                        const res = await fetch(
+                          `/api/admin/streams/icon-search?name=${encodeURIComponent(form.name.trim())}`
+                        );
+                        const data = await res.json();
+                        if (data.logo) setForm({ ...form, streamIcon: data.logo });
+                      } finally {
+                        setIconSearching(false);
+                      }
+                    }}
+                    className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+                    style={{ background: "var(--accent)", color: "#fff" }}
+                  >
+                    {iconSearching ? "Searching…" : "Auto-detect"}
+                  </button>
+                </div>
+                {form.streamIcon ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={form.streamIcon}
+                      alt=""
+                      className="w-10 h-10 rounded object-contain bg-white/10"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                    <span className="text-xs truncate" style={{ color: "var(--muted)" }}>
+                      {form.streamIcon}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="xui-vod-info-row">
+              <div className="xui-vod-info-label">EPG source</div>
+              <div className="xui-vod-info-field">
+                <select
+                  className={formSelectClass}
+                  style={formInputStyle}
+                  value={meta.epgSourceId}
+                  onChange={(e) => setMeta({ ...meta, epgSourceId: e.target.value })}
+                >
+                  <option value="">No EPG</option>
+                  {epgSources.map((src) => (
+                    <option key={src.id} value={src.id}>
+                      {src.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="xui-vod-info-row">
+              <div className="xui-vod-info-label">EPG channel ID</div>
+              <div className="xui-vod-info-field">
+                <div className="flex flex-wrap gap-2 w-full">
+                  <input
+                    className={`${formInputClass} flex-1 min-w-[12rem]`}
+                    style={formInputStyle}
+                    placeholder="Channel ID in EPG source"
+                    value={form.epgChannelId}
+                    onChange={(e) => setForm({ ...form, epgChannelId: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+                    style={{ background: "var(--accent)", color: "#fff" }}
+                    disabled={!form.name.trim()}
+                    onClick={async () => {
+                      const res = await fetch("/api/admin/epg/auto-assign", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ name: form.name }),
+                      });
+                      const data = await res.json();
+                      if (!data.ok) {
+                        alert(data.error ?? "Auto EPG failed");
+                        return;
+                      }
+                      setForm((f) => ({ ...f, epgChannelId: String(data.match?.epgChannelId ?? "") }));
+                    }}
+                  >
+                    Auto EPG
+                  </button>
+                </div>
+                <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
+                  Matches this channel name against your imported EPG. Leave blank to auto-assign on save.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {addTab === "advanced" && (
+          <div className="space-y-5">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              <YesNo
+                label="Generate timestamps"
+                value={meta.generateTimestamps}
+                onChange={(v) => setMeta({ ...meta, generateTimestamps: v })}
+              />
+              <YesNo
+                label="Stream all codecs found on the video"
+                value={meta.streamAllCodecs}
+                onChange={(v) => setMeta({ ...meta, streamAllCodecs: v })}
+              />
+              <YesNo
+                label="Read input source in native frames"
+                hint="Use native frame timing for some inputs"
+                value={meta.nativeFrames}
+                onChange={(v) => setMeta({ ...meta, nativeFrames: v })}
+              />
+              <YesNo
+                label="Redirect stream"
+                value={meta.redirectStream}
+                onChange={(v) => setMeta({ ...meta, redirectStream: v })}
+              />
+              <YesNo label="Is adult stream" value={meta.isAdult} onChange={(v) => setMeta({ ...meta, isAdult: v })} />
+              <YesNo
+                label="RTMP output"
+                value={meta.rtmpOutput}
+                onChange={(v) => setMeta({ ...meta, rtmpOutput: v })}
+              />
+            </div>
+            <div className="pt-2 border-t space-y-3" style={{ borderColor: "var(--border)" }}>
+              <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
+                Auto restart stream
+              </p>
+              <div className="flex flex-wrap gap-3 text-sm">
+                {WEEKDAYS.map((day) => (
+                  <label key={day} className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={meta.autoRestartDays[day]}
+                      onChange={(e) =>
+                        setMeta({
+                          ...meta,
+                          autoRestartDays: { ...meta.autoRestartDays, [day]: e.target.checked },
+                        })
+                      }
+                    />
+                    {day.slice(0, 3)}
+                  </label>
+                ))}
+              </div>
               <input
                 className={formInputClass}
                 style={formInputStyle}
-                placeholder="User Agent"
-                value={meta.userAgent}
-                onChange={(e) => setMeta({ ...meta, userAgent: e.target.value })}
+                placeholder="Format: 00:00 - 23:59"
+                value={meta.autoRestartWindow}
+                onChange={(e) => setMeta({ ...meta, autoRestartWindow: e.target.value })}
               />
-            </FormField>
-            <FormField label="Proxy">
-              <input
-                className={formInputClass}
-                style={formInputStyle}
-                placeholder="Format (ip:port)"
-                value={meta.proxy}
-                onChange={(e) => setMeta({ ...meta, proxy: e.target.value })}
-              />
-            </FormField>
+            </div>
+            <div className="flex flex-wrap gap-6 text-sm">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.isRadio}
+                  onChange={(e) => setForm({ ...form, isRadio: e.target.checked })}
+                />
+                Radio station
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.isCreatedChannel}
+                  onChange={(e) => setForm({ ...form, isCreatedChannel: e.target.checked })}
+                />
+                Created channel
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.autoRestart}
+                  onChange={(e) => setForm({ ...form, autoRestart: e.target.checked })}
+                />
+                Agent auto-restart
+              </label>
+            </div>
+            <div className="grid lg:grid-cols-2 gap-4">
+              <FormField label="User agent">
+                <input
+                  className={formInputClass}
+                  style={formInputStyle}
+                  placeholder="User Agent"
+                  value={meta.userAgent}
+                  onChange={(e) => setMeta({ ...meta, userAgent: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Proxy">
+                <input
+                  className={formInputClass}
+                  style={formInputStyle}
+                  placeholder="Format (ip:port)"
+                  value={meta.proxy}
+                  onChange={(e) => setMeta({ ...meta, proxy: e.target.value })}
+                />
+              </FormField>
+            </div>
             <div>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium" style={{ color: "var(--muted)" }}>
@@ -751,117 +789,72 @@ function LiveStreamForm({
                 </div>
               ))}
             </div>
-          </Section>
-
-          <Section title="EPG options">
-            <FormField label="Select EPG source">
-              <select
-                className={formSelectClass}
-                style={formInputStyle}
-                value={meta.epgSourceId}
-                onChange={(e) => setMeta({ ...meta, epgSourceId: e.target.value })}
-              >
-                <option value="">No EPG</option>
-                {epgSources.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-            <FormField label="EPG channel ID">
-              <div className="flex flex-wrap gap-2">
-                <input
-                  className={`${formInputClass} flex-1 min-w-[12rem]`}
+            <div className="grid lg:grid-cols-2 gap-4">
+              <FormField label="Transcode profile">
+                <select
+                  className={formSelectClass}
                   style={formInputStyle}
-                  placeholder="Channel ID in EPG source"
-                  value={form.epgChannelId}
-                  onChange={(e) => setForm({ ...form, epgChannelId: e.target.value })}
-                />
-                <button
-                  type="button"
-                  className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50"
-                  style={{ background: "var(--accent)", color: "#fff" }}
-                  disabled={!form.name.trim()}
-                  onClick={async () => {
-                    const res = await fetch("/api/admin/epg/auto-assign", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ name: form.name }),
-                    });
-                    const data = await res.json();
-                    if (!data.ok) {
-                      alert(data.error ?? "Auto EPG failed");
-                      return;
-                    }
-                    setForm((f) => ({ ...f, epgChannelId: String(data.match?.epgChannelId ?? "") }));
-                  }}
+                  value={meta.transcodeProfile}
+                  onChange={(e) => setMeta({ ...meta, transcodeProfile: e.target.value })}
                 >
-                  Auto EPG
-                </button>
-              </div>
-              <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
-                Matches this channel name against your imported EPG (from providers/XMLTV). Leave blank to auto-assign on save.
-              </p>
-            </FormField>
-          </Section>
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-4">
-          <Section title="Transcode stream">
-            <FormField label="Profile">
-              <select
-                className={formSelectClass}
-                style={formInputStyle}
-                value={meta.transcodeProfile}
-                onChange={(e) => setMeta({ ...meta, transcodeProfile: e.target.value })}
-              >
-                <option value="none">Without transcode</option>
-                <option value="veryfast">Very fast</option>
-                <option value="fast">Fast</option>
-                <option value="medium">Medium</option>
-                <option value="slow">Slow</option>
-              </select>
-            </FormField>
-          </Section>
-
-          <Section title="TV archive">
-            <YesNo
-              label="Active"
-              value={meta.tvArchiveActive}
-              onChange={(v) => setMeta({ ...meta, tvArchiveActive: v })}
-            />
-            <FormField label="Period to keep (days)">
+                  <option value="none">Without transcode</option>
+                  <option value="veryfast">Very fast</option>
+                  <option value="fast">Fast</option>
+                  <option value="medium">Medium</option>
+                  <option value="slow">Slow</option>
+                </select>
+              </FormField>
+              <FormField label="Probesize on-demand">
+                <input
+                  className={formInputClass}
+                  style={formInputStyle}
+                  value={meta.onDemandProbesize}
+                  onChange={(e) => setMeta({ ...meta, onDemandProbesize: e.target.value })}
+                />
+              </FormField>
+            </div>
+            <div className="grid lg:grid-cols-2 gap-4">
+              <YesNo
+                label="TV archive active"
+                value={meta.tvArchiveActive}
+                onChange={(v) => setMeta({ ...meta, tvArchiveActive: v })}
+              />
+              <FormField label="TV archive period (days)">
+                <input
+                  type="number"
+                  min={0}
+                  className={formInputClass}
+                  style={formInputStyle}
+                  placeholder="Period in days"
+                  value={form.archiveDays}
+                  onChange={(e) => setForm({ ...form, archiveDays: e.target.value })}
+                />
+              </FormField>
+            </div>
+            <p className="text-xs rounded-lg px-3 py-2" style={{ background: "rgba(251,191,36,0.12)", color: "#fcd34d" }}>
+              Custom maps and DNS rotator are advanced — only change these if you know what you are doing.
+            </p>
+            <FormField label="Custom map">
               <input
-                type="number"
-                min={0}
                 className={formInputClass}
                 style={formInputStyle}
-                placeholder="Period in days"
-                value={form.archiveDays}
-                onChange={(e) => setForm({ ...form, archiveDays: e.target.value })}
+                placeholder="Prepend value with dash (-)"
+                value={meta.customMap}
+                onChange={(e) => setMeta({ ...meta, customMap: e.target.value })}
               />
             </FormField>
-          </Section>
-        </div>
+            <StreamAdvancedSections adv={advanced} setAdv={setAdvanced} parentOptions={parentStreams} />
+          </div>
+        )}
 
-        <Section title="Advanced" defaultOpen={false}>
-          <p className="text-xs rounded-lg px-3 py-2" style={{ background: "rgba(251,191,36,0.12)", color: "#fcd34d" }}>
-            Custom maps and DNS rotator are advanced — only change these if you know what you are doing.
-          </p>
-          <FormField label="Custom map">
-            <input
-              className={formInputClass}
-              style={formInputStyle}
-              placeholder="Prepend value with dash (-)"
-              value={meta.customMap}
-              onChange={(e) => setMeta({ ...meta, customMap: e.target.value })}
-            />
-          </FormField>
-          <StreamAdvancedSections adv={advanced} setAdv={setAdvanced} parentOptions={parentStreams} />
-        </Section>
+        {addTab === "server" && (
+          <ServerTreePicker
+            selectedIds={meta.serverIds}
+            onChange={(serverIds) => setMeta({ ...meta, serverIds })}
+          />
+        )}
 
-        <div className="flex justify-end gap-3 pt-2">
+                <div className="flex justify-end gap-3 pt-2">
           <Link href={backHref} className="btn-cancel rounded-lg px-5 py-2.5 text-sm font-medium">
             Cancel
           </Link>
@@ -914,16 +907,20 @@ function CompactStreamForm({
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
+    if (!form.streamUrl.trim() && !(useProvider && form.providerId && form.providerPath.trim())) {
+      alert("Paste a source URL, or pick a provider and path.");
+      return;
+    }
     const res = await fetch("/api/admin/streams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
         type: defaultType,
-        source: useProvider ? undefined : form.streamUrl,
+        source: form.streamUrl,
         hostedExternally: useProvider,
-        providerId: useProvider ? form.providerId : null,
-        providerPath: useProvider ? form.providerPath : null,
+        providerId: useProvider ? form.providerId || null : null,
+        providerPath: useProvider ? form.providerPath || null : null,
         categoryId: form.categoryId || null,
         seasonNum: Number(form.seasonNum),
         episodeNum: Number(form.episodeNum),
@@ -973,30 +970,28 @@ function CompactStreamForm({
         providerId={form.providerId}
         providerPath={form.providerPath}
         useProvider={useProvider}
+        streamType={defaultType === "SERIES" ? "SERIES" : defaultType === "MOVIE" ? "MOVIE" : "LIVE"}
+        vodOnly={defaultType !== "LIVE"}
         onChange={({ providerId, providerPath, useProvider: u }) => {
           setUseProvider(u);
           setForm((f) => ({ ...f, providerId, providerPath }));
         }}
       />
-      {!useProvider && (
-        <>
-          <input
-            placeholder="Source URL"
-            required
-            className={formInputClass}
-            style={formInputStyle}
-            value={form.streamUrl}
-            onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
-          />
-          {form.streamUrl.trim() && (
-            <div className="rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.15)" }}>
-              <p className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>
-                Check source before saving
-              </p>
-              <StreamProbePlayer compact streamUrl={form.streamUrl.trim()} name={form.name || undefined} />
-            </div>
-          )}
-        </>
+      <input
+        placeholder="Source URL"
+        required={!(useProvider && form.providerId && form.providerPath.trim())}
+        className={formInputClass}
+        style={formInputStyle}
+        value={form.streamUrl}
+        onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
+      />
+      {form.streamUrl.trim() && (
+        <div className="rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.15)" }}>
+          <p className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>
+            Check source before saving
+          </p>
+          <StreamProbePlayer compact streamUrl={form.streamUrl.trim()} name={form.name || undefined} />
+        </div>
       )}
       {defaultType === "SERIES" && (
         <>

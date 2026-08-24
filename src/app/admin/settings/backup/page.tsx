@@ -191,18 +191,19 @@ export default function BackupSettingsPage() {
         </div>
       </SettingsPanel>
 
+      <div id="database-backup">
       <SettingsPanel
-        title="PostgreSQL dumps"
-        info="Writes a gzipped SQL dump via pg_dump. Uses the matching PostgreSQL client and never puts the database password on the shell. Default: daily at 04:00 UTC."
+        title="Database backup"
+        info="Scheduled gzip SQL backups of PostgreSQL via nexlify-cron. Uses the matching PostgreSQL client and never puts the database password on the shell. Default: daily at 04:00 UTC."
       >
         <div className="grid md:grid-cols-2 gap-4 w-full">
           <YesNo
-            label="Enable PostgreSQL dumps (nexlify-cron)"
-            value={data.pgDumpCronEnabled === true}
+            label="Enable scheduled database backup (nexlify-cron)"
+            value={data.pgDumpCronEnabled !== false}
             onChange={(pgDumpCronEnabled) => setData({ ...data, pgDumpCronEnabled })}
           />
           <label className="block text-sm">
-            <span style={{ color: "var(--muted)" }}>Keep dumps (days)</span>
+            <span style={{ color: "var(--muted)" }}>Keep database backups (days)</span>
             <input
               type="number"
               className={inputClass}
@@ -212,7 +213,7 @@ export default function BackupSettingsPage() {
             />
           </label>
           <label className="block text-sm md:col-span-2">
-            <span style={{ color: "var(--muted)" }}>Dump schedule (UTC hour)</span>
+            <span style={{ color: "var(--muted)" }}>Database backup schedule (UTC)</span>
             <input
               className={inputClass}
               style={inputStyle}
@@ -225,6 +226,7 @@ export default function BackupSettingsPage() {
           </label>
         </div>
       </SettingsPanel>
+      </div>
 
       <SettingsPanel title="Export format">
         <label className="block text-sm">

@@ -10,23 +10,32 @@ export function AutoLogosButton() {
     setBusy(true);
     setMsg("");
     try {
-      const res = await fetch("/api/admin/streams/auto-logos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, limit: 400 }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setMsg(data.error ?? "Failed");
-        return;
+      let totalUpdated = 0;
+      let lastRemaining = 0;
+      for (let i = 0; i < 25; i++) {
+        const res = await fetch("/api/admin/streams/auto-logos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type, tmdbLimit: 250 }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setMsg(data.error ?? "Failed");
+          return;
+        }
+        totalUpdated += Number(data.updated ?? 0);
+        lastRemaining = Number(data.remaining ?? 0);
+        const tmdbNote =
+          data.tmdbConfigured === false
+            ? " Set a TMDB API key under Settings → TMDB for leftovers without an IPTV poster."
+            : "";
+        setMsg(
+          `Updated ${totalUpdated} (IPTV ${data.fromProvider ?? 0}, TMDB ${data.fromTmdb ?? 0}). ${lastRemaining} still missing.${tmdbNote}`
+        );
+        if (lastRemaining <= 0) break;
+        if (!data.fromTmdb && !data.fromProvider && !data.fromLiveLogo && !data.fromSeriesCover) break;
+        if (data.tmdbConfigured === false && !(data.fromProvider > 0) && !(data.fromSeriesCover > 0)) break;
       }
-      const tmdbNote =
-        data.tmdbConfigured === false
-          ? " (set TMDB API key under Settings → TMDB for movie/series posters)"
-          : "";
-      setMsg(
-        `Updated ${data.updated ?? 0} of ${data.scanned ?? 0} items missing icons${tmdbNote}`
-      );
     } catch {
       setMsg("Network error");
     } finally {
@@ -44,7 +53,7 @@ export function AutoLogosButton() {
           className="rounded px-4 py-2 cursor-pointer border disabled:opacity-50"
           style={{ borderColor: "var(--border)" }}
         >
-          {busy ? "Fetching icons…" : "Auto-add icons (live + movies + series)"}
+          {busy ? "Fetching posters…" : "Fill missing posters (IPTV + TMDB)"}
         </button>
         <button
           type="button"

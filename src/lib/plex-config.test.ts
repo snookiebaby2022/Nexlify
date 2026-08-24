@@ -5,6 +5,8 @@ import {
   extractPlexToken,
   normalizePlexConfig,
   parsePlexHostPort,
+  plexImageRequestHeaders,
+  plexRequestHeaders,
 } from "./plex-config";
 
 test("extractPlexToken accepts a raw token", () => {
@@ -59,4 +61,12 @@ test("normalizePlexConfig cleans token and host", () => {
   assert.equal(String(cfg.port), "42400");
   assert.equal(cfg.token, "AbCdEfGhIjKlMnOpQrSt");
   assert.equal(buildPlexBaseUrl(cfg), "http://95.217.58.49:42400");
+});
+
+test("plexImageRequestHeaders asks Plex for an image, not JSON", () => {
+  const json = plexRequestHeaders("token", "id");
+  const img = plexImageRequestHeaders("token", "id");
+  assert.match(json.Accept, /json/i);
+  assert.match(img.Accept, /image\//i);
+  assert.doesNotMatch(img.Accept, /application\/json/i);
 });

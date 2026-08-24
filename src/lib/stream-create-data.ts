@@ -8,7 +8,11 @@ import { normalizeStreamSource } from "./stream-source";
 import { parseStreamAdvancedFields } from "./stream-fields";
 import { categoryForMovie, categoryForSeries } from "./vod-category";
 import { enrichVodFromTmdb } from "./vod-tmdb-enrich";
+import { rewriteVodAgentCmdForXtream } from "./vod-meta";
 import { nextStreamSortOrder } from "./stream-order";
+import { parseIntegrationStreamUrl } from "./integration-stream-url";
+import { plexArtworkUrl } from "./plex-artwork";
+import { resolveServerUrls } from "./server-urls";
 
 export type StreamCreateInput = {
   name: string;
@@ -76,9 +80,18 @@ export async function buildStreamCreateData(body: StreamCreateInput) {
     } else {
       streamUrl = normalizeStreamSource(String(body.streamUrl ?? ""));
     }
-    providerId = null;
-    providerPath = null;
-    hostedExternally = false;
+    if (!hostedExternally) {
+      providerId = null;
+      providerPath = null;
+    } else {
+      hostedExternally = true;
+      providerPath = providerPath || null;
+      if (providerId) {
+        const provider = await prisma.streamProvider.findUnique({ where: { id: providerId } });
+        if (!provider) throw new Error("Selected provider not found");
+        if (!provider.isActive) throw new Error("Selected provider is disabled");
+      }
+    }
   }
 
   const containerExtension =
@@ -89,12 +102,24 @@ export async function buildStreamCreateData(body: StreamCreateInput) {
       : "mp4");
 
   let serverId = body.serverId || null;
-  if (!serverId && type === "LIVE") {
+  if (!serverId && type === "LIVE" && !hostedExternally) {
     const { pickLeastLoadedServerId } = await import("@/lib/server-load");
     serverId = await pickLeastLoadedServerId();
   }
 
   let streamIcon = body.streamIcon?.trim() || null;
+  if (!streamIcon && streamUrl.startsWith("nexlify://plex/")) {
+    const parsed = parseIntegrationStreamUrl(streamUrl);
+    if (parsed?.type === "plex") {
+      let origin = "";
+      try {
+        origin = (await resolveServerUrls()).serverUrl.replace(/\/$/, "");
+      } catch {
+        origin = String(process.env.NEXT_PUBLIC_SERVER_URL ?? "").replace(/\/$/, "");
+      }
+      streamIcon = plexArtworkUrl(parsed.integrationId, parsed.itemId, origin);
+    }
+  }
   let agentStartCmd = body.agentStartCmd ? String(body.agentStartCmd) : null;
   let categoryId = body.categoryId || null;
   let displayName = body.name;
@@ -142,6 +167,10 @@ export async function buildStreamCreateData(body: StreamCreateInput) {
     } catch {
       /* TMDB optional */
     }
+  }
+
+  if ((type === "MOVIE" || type === "SERIES") && agentStartCmd) {
+    agentStartCmd = rewriteVodAgentCmdForXtream(agentStartCmd) ?? agentStartCmd;
   }
 
   return {

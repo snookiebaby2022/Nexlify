@@ -49,12 +49,12 @@ export function VodEpisodeForm({
       alert("Series and title are required.");
       return;
     }
-    if (useProvider && (!form.providerId || !form.providerPath.trim())) {
-      alert("Select provider and path, or paste a direct URL.");
+    if (useProvider && !form.streamUrl.trim() && !(form.providerId && form.providerPath.trim())) {
+      alert("Paste the provider URL, or pick a provider and path.");
       return;
     }
     if (!useProvider && !form.streamUrl.trim()) {
-      alert("Stream URL is required (or enable hosted provider).");
+      alert("Stream URL is required (or enable hosted provider with a URL).");
       return;
     }
     setSaving(true);
@@ -66,10 +66,10 @@ export function VodEpisodeForm({
         season: form.season,
         episode: form.episode,
         title: form.title,
-        streamUrl: useProvider ? undefined : form.streamUrl,
+        streamUrl: form.streamUrl,
         hostedExternally: useProvider,
-        providerId: useProvider ? form.providerId : null,
-        providerPath: useProvider ? form.providerPath : null,
+        providerId: useProvider ? form.providerId || null : null,
+        providerPath: useProvider ? form.providerPath || null : null,
         bouquetIds: form.bouquetIds,
       }),
     });
@@ -147,7 +147,7 @@ export function VodEpisodeForm({
         </VodFormSection>
         <VodFormSection title="Source">
           <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Paste the provider’s direct episode URL, or host via a configured provider.
+            Paste the provider’s direct episode URL, then tick hosted so it plays through that URL.
           </p>
           <ProviderSourceFields
             providerId={form.providerId}
@@ -158,18 +158,16 @@ export function VodEpisodeForm({
               setForm({ ...form, providerId: next.providerId, providerPath: next.providerPath });
             }}
           />
-          {!useProvider && (
-            <FormField label="Direct stream URL" required>
-              <input
-                required={!useProvider}
-                className={`${formInputClass} font-mono`}
-                style={formInputStyle}
-                placeholder="https://provider…/series/user/pass/1/5.mp4"
-                value={form.streamUrl}
-                onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
-              />
-            </FormField>
-          )}
+          <FormField label="Direct stream URL" required>
+            <input
+              required={!(useProvider && form.providerId && form.providerPath.trim())}
+              className={`${formInputClass} font-mono`}
+              style={formInputStyle}
+              placeholder="https://provider…/series/user/pass/1/5.mp4"
+              value={form.streamUrl}
+              onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
+            />
+          </FormField>
         </VodFormSection>
         <VodFormSection title="Bouquets">
           <StreamBouquetSection

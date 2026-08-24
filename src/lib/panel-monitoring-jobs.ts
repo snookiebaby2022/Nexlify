@@ -5,6 +5,7 @@ import { streamProbeErrorWithHint } from "@/lib/stream-probe-fix-hints";
 import { resolveStreamPlaybackUrl } from "@/lib/resolve-stream-url";
 import { sendTelegramAlert } from "@/lib/panel-telegram-alerts";
 import { enqueueAgentCommand } from "@/lib/stream-agent";
+import { findSiblingLiveBackupUrl } from "@/lib/live-channel-backup";
 
 export async function runDeadLinkProbeJob() {
   const settings = await getSettingGroup("streams");
@@ -26,6 +27,17 @@ export async function runDeadLinkProbeJob() {
     const probe = await probeStreamUrl(primaryUrl, { fast: true });
     const ok = probe.status === "online";
     const wasAlreadyFailing = stream.lastProbeOk === false;
+
+    if (!stream.backupUrl?.trim()) {
+      const sibling = await findSiblingLiveBackupUrl(stream);
+      if (sibling) {
+        await prisma.stream.update({
+          where: { id: stream.id },
+          data: { backupUrl: sibling },
+        });
+        stream.backupUrl = sibling;
+      }
+    }
 
     if (!ok && stream.backupUrl?.trim()) {
       const backupProbe = await probeStreamUrl(stream.backupUrl.trim(), { fast: true });

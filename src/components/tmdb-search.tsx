@@ -13,12 +13,14 @@ export type TmdbPick = {
 
 export function TmdbSearch({
   mediaType = "movie",
+  initialQuery = "",
   onSelect,
 }: {
   mediaType?: "movie" | "tv";
+  initialQuery?: string;
   onSelect: (pick: TmdbPick) => void;
 }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQuery);
   const [results, setResults] = useState<TmdbPick[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");

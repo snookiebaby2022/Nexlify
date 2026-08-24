@@ -1,6 +1,7 @@
 import { getSettingGroup } from "./panel-settings";
 import { searchTmdb } from "./tmdb";
 import { fetchTmdbDetails } from "./tmdb-details";
+import { encodeVodAgentCmd } from "./vod-meta";
 
 export type VodEnrichment = {
   streamIcon: string | null;
@@ -42,8 +43,9 @@ function encodeImportedVodMeta(tmdb: {
   trailer: string;
   director: string;
   runtimeMinutes: string;
+  backdropUrl?: string | null;
 }): string {
-  const payload = {
+  return encodeVodAgentCmd({
     v: 1,
     location: "local",
     doNotEncode: false,
@@ -66,13 +68,13 @@ function encodeImportedVodMeta(tmdb: {
     tmdbCast: tmdb.cast,
     tmdbGenres: tmdb.genres,
     tmdbPoster: tmdb.posterUrl ?? "",
+    tmdbBackdrop: tmdb.backdropUrl ?? "",
     tmdbRelease: tmdb.release,
     tmdbRating: tmdb.rating,
     tmdbTrailer: tmdb.trailer,
     tmdbDirector: tmdb.director,
     tmdbRuntime: tmdb.runtimeMinutes,
-  };
-  return `NEXLIFY_VOD:${JSON.stringify(payload)}`;
+  });
 }
 
 export async function isTmdbConfigured(): Promise<boolean> {

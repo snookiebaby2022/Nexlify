@@ -565,6 +565,7 @@ async function applyMigrationBundleInner(
             episodeNum,
             vodMode,
             ...(bitrates ? { bitrates } : {}),
+            agentStartCmd: s.agentStartCmd?.trim() || null,
           },
         });
         streamIdByLegacy.set(s.legacyId, created.id);
