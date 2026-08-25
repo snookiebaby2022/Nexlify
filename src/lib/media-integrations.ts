@@ -33,7 +33,6 @@ import type { IntegrationSyncReporter } from "@/lib/integration-sync-progress";
 import { loadPlexCatalogIndex, plexCatalogTitleKey, plexGenreName, plexVodMetaFromItem } from "@/lib/plex-catalog-match";
 import { categoryForPlexMovie, categoryForPlexSeries } from "@/lib/vod-category";
 import { encodeVodAgentCmd, parseVodAgentCmd } from "@/lib/vod-meta";
-import { encodeVodAgentCmd } from "@/lib/vod-meta";
 
 export async function listIntegrations(type: "plex" | "youtube") {
   return prisma.mediaIntegration.findMany({
