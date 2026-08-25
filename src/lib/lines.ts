@@ -121,19 +121,27 @@ export type StreamForLine = Stream & {
   vodPlot?: string | null;
 };
 
-/** Rating + plot from agentStartCmd without hydrating the full JSON blob. */
+/**
+ * Rating + plot from agentStartCmd without hydrating the full JSON blob.
+ * PostgreSQL POSIX `{m,n}` is capped at 255 — `{0,800}` throws 2201B
+ * (invalid repetition count) and 500s every XCIPTV catalog + Smarters get.php.
+ */
 export const leanVodMetaSql = Prisma.sql`
-      COALESCE(
-        (regexp_match(COALESCE(s."agentStartCmd", ''), '"tmdbRating"[[:space:]]*:[[:space:]]*"?([0-9]+(\\.[0-9]+)?)"?'))[1],
-        (regexp_match(COALESCE(s."agentStartCmd", ''), '"rating"[[:space:]]*:[[:space:]]*"?([0-9]+(\\.[0-9]+)?)"?'))[1]
-      ) AS "vodRating",
-      left(
+      CASE WHEN s.type::text IN ('MOVIE', 'SERIES') THEN
         COALESCE(
-          (regexp_match(COALESCE(s."agentStartCmd", ''), '"tmdbOverview"[[:space:]]*:[[:space:]]*"([^"]{0,800})"'))[1],
-          (regexp_match(COALESCE(s."agentStartCmd", ''), '"plot"[[:space:]]*:[[:space:]]*"([^"]{0,800})"'))[1]
-        ),
-        400
-      ) AS "vodPlot"`;
+          (regexp_match(left(COALESCE(s."agentStartCmd", ''), 4000), '"tmdbRating"[[:space:]]*:[[:space:]]*"?([0-9]+(\\.[0-9]+)?)"?'))[1],
+          (regexp_match(left(COALESCE(s."agentStartCmd", ''), 4000), '"rating"[[:space:]]*:[[:space:]]*"?([0-9]+(\\.[0-9]+)?)"?'))[1]
+        )
+      ELSE NULL END AS "vodRating",
+      CASE WHEN s.type::text IN ('MOVIE', 'SERIES') THEN
+        left(
+          COALESCE(
+            (regexp_match(left(COALESCE(s."agentStartCmd", ''), 4000), '"tmdbOverview"[[:space:]]*:[[:space:]]*"([^"]*)"'))[1],
+            (regexp_match(left(COALESCE(s."agentStartCmd", ''), 4000), '"plot"[[:space:]]*:[[:space:]]*"([^"]*)"'))[1]
+          ),
+          400
+        )
+      ELSE NULL END AS "vodPlot"`;
 
 export type StreamsForLineOptions = {
   excludeDisabled?: boolean;
