@@ -4,17 +4,18 @@ import { prisma } from "@/lib/prisma";
 const PLUGIN_BOUQUET_NAME = "Plugin imports";
 
 export function preferredVodBouquetName(type: "MOVIE" | "SERIES"): string {
-  return type === "MOVIE" ? "Movies" : "TV Series";
+  // Movies live in the VOD package bouquet (not a separate "Movies" bouquet).
+  return type === "MOVIE" ? "VOD" : "TV Series";
 }
 
-/** Pick an existing Movies / TV Series package bouquet (not a generic VOD dump). */
+/** Pick VOD / TV Series package bouquets for Xtream packages. */
 export function matchVodBouquetId(
   type: "MOVIE" | "SERIES",
   bouquets: { id: string; name: string }[]
 ): string | null {
   const patterns =
     type === "MOVIE"
-      ? [/^movies$/i]
+      ? [/^vod$/i, /^movies$/i]
       : [/^tv\s*series$/i, /^tvseries$/i];
   for (const re of patterns) {
     const hit = bouquets.find((b) => re.test(b.name.trim()));
@@ -66,7 +67,7 @@ export async function linkStreamToPluginBouquet(streamId: string, sortOrder = 90
   });
 }
 
-/** Movies → Movies bouquet, TV → TV Series bouquet; drop Plugin imports so apps don't list them twice. */
+/** Movies → VOD bouquet, TV → TV Series bouquet; drop Plugin imports so apps don't list them twice. */
 export async function linkStreamToVodBouquet(
   streamId: string,
   type: StreamType,
@@ -86,6 +87,18 @@ export async function linkStreamToVodBouquet(
   const pluginId = await findPluginImportBouquetId();
   if (pluginId) {
     await prisma.bouquetStream.deleteMany({ where: { bouquetId: pluginId, streamId } });
+  }
+  // Keep movies out of the legacy "Movies" bouquet when using VOD.
+  if (kind === "MOVIE") {
+    const legacyMovies = await prisma.bouquet.findFirst({
+      where: { name: { equals: "Movies", mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (legacyMovies && legacyMovies.id !== bouquetId) {
+      await prisma.bouquetStream.deleteMany({
+        where: { bouquetId: legacyMovies.id, streamId },
+      });
+    }
   }
 }
 
@@ -132,8 +145,8 @@ export async function relinkPlexStreamsToVodBouquets(integrationId: string): Pro
   const movieBq = await ensureVodBouquetId("MOVIE");
   const seriesBq = await ensureVodBouquetId("SERIES");
   const pluginId = await findPluginImportBouquetId();
-  const vodDump = await prisma.bouquet.findFirst({
-    where: { name: { equals: "VOD", mode: "insensitive" } },
+  const legacyMovies = await prisma.bouquet.findFirst({
+    where: { name: { equals: "Movies", mode: "insensitive" } },
     select: { id: true },
   });
 
@@ -157,9 +170,10 @@ export async function relinkPlexStreamsToVodBouquets(integrationId: string): Pro
     if (rows.length < 2000) break;
   }
 
-  const unlinkIds = [pluginId, vodDump && vodDump.id !== movieBq && vodDump.id !== seriesBq ? vodDump.id : null].filter(
-    (id): id is string => Boolean(id)
-  );
+  const unlinkIds = [
+    pluginId,
+    legacyMovies && legacyMovies.id !== movieBq ? legacyMovies.id : null,
+  ].filter((id): id is string => Boolean(id));
 
   const link = async (ids: string[], bouquetId: string) => {
     for (let i = 0; i < ids.length; i += LINK_CHUNK) {
@@ -180,4 +194,61 @@ export async function relinkPlexStreamsToVodBouquets(integrationId: string): Pro
   await link(movieIds, movieBq);
   await link(seriesIds, seriesBq);
   return { movies: movieIds.length, series: seriesIds.length };
+}
+
+/**
+ * Move every MOVIE stream into the VOD bouquet, attach VOD to all lines,
+ * detach/remove the legacy Movies bouquet.
+ */
+export async function migrateMoviesBouquetToVod(): Promise<{
+  moviesLinked: number;
+  linesAttached: number;
+  moviesBouquetRemoved: boolean;
+}> {
+  const vodId = await ensureVodBouquetId("MOVIE");
+  const moviesBq = await prisma.bouquet.findFirst({
+    where: { name: { equals: "Movies", mode: "insensitive" } },
+    select: { id: true },
+  });
+
+  const movieIds: string[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const rows = await prisma.stream.findMany({
+      where: { type: StreamType.MOVIE },
+      select: { id: true },
+      take: 2000,
+      orderBy: { id: "asc" },
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    });
+    if (!rows.length) break;
+    for (const row of rows) movieIds.push(row.id);
+    cursor = rows[rows.length - 1]!.id;
+    if (rows.length < 2000) break;
+  }
+
+  for (let i = 0; i < movieIds.length; i += LINK_CHUNK) {
+    const chunk = movieIds.slice(i, i + LINK_CHUNK);
+    await prisma.bouquetStream.createMany({
+      data: chunk.map((streamId) => ({ bouquetId: vodId, streamId, sortOrder: 0 })),
+      skipDuplicates: true,
+    });
+    if (moviesBq && moviesBq.id !== vodId) {
+      await prisma.bouquetStream.deleteMany({
+        where: { bouquetId: moviesBq.id, streamId: { in: chunk } },
+      });
+    }
+  }
+
+  await attachBouquetToAllActiveLines(vodId);
+
+  let moviesBouquetRemoved = false;
+  if (moviesBq && moviesBq.id !== vodId) {
+    await prisma.lineBouquet.deleteMany({ where: { bouquetId: moviesBq.id } });
+    await prisma.bouquetStream.deleteMany({ where: { bouquetId: moviesBq.id } });
+    await prisma.bouquet.delete({ where: { id: moviesBq.id } });
+    moviesBouquetRemoved = true;
+  }
+
+  return { moviesLinked: movieIds.length, linesAttached: 1, moviesBouquetRemoved };
 }

@@ -1,4 +1,3 @@
-import "server-only";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { tmdbFetch as tmdbHttpFetch } from "@/lib/tmdb-http";
 

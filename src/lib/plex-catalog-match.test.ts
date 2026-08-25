@@ -10,16 +10,17 @@ import {
   plexVodMetaFromItem,
 } from "./plex-catalog-match";
 
-test("matchVodBouquetId picks Movies and TV Series packages", () => {
+test("matchVodBouquetId prefers VOD for movies and TV Series for series", () => {
   const bouquets = [
     { id: "p", name: "Plugin imports" },
     { id: "m", name: "Movies" },
     { id: "s", name: "TV Series" },
     { id: "v", name: "VOD" },
   ];
-  assert.equal(matchVodBouquetId("MOVIE", bouquets), "m");
+  assert.equal(matchVodBouquetId("MOVIE", bouquets), "v");
   assert.equal(matchVodBouquetId("SERIES", bouquets), "s");
-  assert.equal(matchVodBouquetId("MOVIE", [{ id: "v", name: "VOD" }]), null);
+  assert.equal(matchVodBouquetId("MOVIE", [{ id: "m", name: "Movies" }]), "m");
+  assert.equal(matchVodBouquetId("MOVIE", [{ id: "v", name: "VOD" }]), "v");
 });
 
 test("plexVodMetaFromItem copies plot, year, duration, and tags", () => {

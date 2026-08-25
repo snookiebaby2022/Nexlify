@@ -1,4 +1,3 @@
-import "server-only";
 import https from "node:https";
 import { lookup as dnsLookup } from "node:dns";
 import { Resolver } from "node:dns/promises";
