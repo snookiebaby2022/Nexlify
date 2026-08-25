@@ -3,7 +3,6 @@ import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
 import {
   cuidToNum,
-  lineHasStream,
   resolveStreamIdParam,
   seriesEpisodeIdsForLine,
 } from "./xtream-stream-id";
@@ -71,7 +70,6 @@ export async function xtreamVodInfo(
 ) {
   const streamId = await resolveStreamIdParam(streamIdParam, { lineId: line.id });
   if (!streamId) return null;
-  if (!(await lineHasStream(line.id, streamId))) return null;
 
   const full = await prisma.stream.findUnique({
     where: { id: streamId },
@@ -121,7 +119,6 @@ export async function xtreamSeriesInfo(
 ) {
   const streamId = await resolveStreamIdParam(seriesIdParam, { lineId: line.id });
   if (!streamId) return null;
-  if (!(await lineHasStream(line.id, streamId))) return null;
 
   const seed = await prisma.stream.findUnique({
     where: { id: streamId },

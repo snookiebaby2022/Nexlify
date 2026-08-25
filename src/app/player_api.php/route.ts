@@ -165,10 +165,11 @@ async function handlePlayerApiInner(
 
   switch (action) {
     case "get_live_categories": {
-      warmXtreamCatalogs(line);
       const ttl = await getCacheTtls();
-      const payload = await cacheGetOrSet(`xtream:live_categories:v5:${line.id}`, ttl.categories, () =>
-        xtreamLiveCategoriesForLine(line)
+      const payload = await cacheGetOrSet(
+        `xtream:live_categories:v5:${line.id}`,
+        Math.max(300, ttl.categories),
+        () => xtreamLiveCategoriesForLine(line)
       );
       return j(payload);
     }
@@ -192,18 +193,20 @@ async function handlePlayerApiInner(
       return serveXtreamCatalogJson("vod", line, req, vodCategoryId);
     }
     case "get_vod_categories": {
-      warmXtreamCatalogs(line);
       const ttl = await getCacheTtls();
-      const payload = await cacheGetOrSet(`xtream:vod_categories:v3:${line.id}`, ttl.categories, () =>
-        xtreamVodCategoriesForLine(line)
+      const payload = await cacheGetOrSet(
+        `xtream:vod_categories:v3:${line.id}`,
+        Math.max(300, ttl.categories),
+        () => xtreamVodCategoriesForLine(line)
       );
       return j(payload);
     }
     case "get_series_categories": {
-      warmXtreamCatalogs(line);
       const ttl = await getCacheTtls();
-      const payload = await cacheGetOrSet(`xtream:series_categories:v3:${line.id}`, ttl.categories, () =>
-        xtreamSeriesCategoriesForLine(line)
+      const payload = await cacheGetOrSet(
+        `xtream:series_categories:v3:${line.id}`,
+        Math.max(300, ttl.categories),
+        () => xtreamSeriesCategoriesForLine(line)
       );
       return j(payload);
     }
@@ -214,15 +217,22 @@ async function handlePlayerApiInner(
     case "get_vod_info": {
       const vodId = params.get("vod_id") || params.get("stream_id") || "";
       if (!vodId) return j({});
-      const info = await xtreamVodInfo(line, baseUrl, vodId);
+      const info = await cacheGetOrSet(`xtream:vod_info:${line.id}:${vodId}`, 300, () =>
+        xtreamVodInfo(line, baseUrl, vodId)
+      );
       if (info) warmVodPlayback(line.id, vodId, ip, userAgent);
       return j(info ?? {});
     }
     case "get_series_info": {
       const seriesId = params.get("series_id") || params.get("stream_id") || "";
       if (!seriesId) return j(emptyXtreamSeriesInfo());
-      const info = await xtreamSeriesInfo(line, baseUrl, seriesId);
-      if (info) warmVodPlayback(line.id, seriesId, ip, userAgent);
+      const info = await cacheGetOrSet(`xtream:series_info:${line.id}:${seriesId}`, 120, async () => {
+        const row = await xtreamSeriesInfo(line, baseUrl, seriesId);
+        return row ?? emptyXtreamSeriesInfo();
+      });
+      if (info && (info as { info?: { name?: string } }).info?.name) {
+        warmVodPlayback(line.id, seriesId, ip, userAgent);
+      }
       return j(info ?? emptyXtreamSeriesInfo());
     }
     case "get_short_epg": {

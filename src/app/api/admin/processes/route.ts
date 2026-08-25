@@ -13,6 +13,10 @@ export async function GET() {
 
   try {
     const processes = await prisma.streamProcess.findMany({
+      where: {
+        lastSeenAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+        status: { in: ["running", "restarting", "unknown"] },
+      },
       include: {
         server: { select: { id: true, name: true, host: true, agentLastSeen: true } },
         stream: { select: { id: true, name: true, streamUrl: true, autoRestart: true } },

@@ -10,6 +10,7 @@ import { StreamType, Prisma } from "@prisma/client";
 import { getBinPaths } from "./bin-paths";
 import { prisma } from "./prisma";
 import { expandCategoryFilter } from "./category-tree";
+import { isXtreamAllCategoryParam } from "@/lib/xtream-category-canonical";
 import { exportPlaybackUrl } from "./export-playback-url";
 import { parseBitrates } from "./stream-variants";
 import {
@@ -63,7 +64,7 @@ function parsePage(extra: Record<string, string>): number {
 async function categoryFilterOpts(
   genre: string
 ): Promise<Pick<StreamsForLineOptions, "categoryIds" | "uncategorizedOnly">> {
-  if (!genre) return {};
+  if (!genre || isXtreamAllCategoryParam(genre)) return {};
   if (genre === "0") return { uncategorizedOnly: true };
   const allowed = await expandCategoryFilter(genre);
   return { categoryIds: allowed.length ? allowed : [genre] };

@@ -23,26 +23,38 @@ export function plexArtworkUrl(integrationId: string, itemId: string, origin?: s
   return base ? `${base}${path}` : path;
 }
 
+/** Same-origin poster URL for the admin UI (never leave absolute http://panel host). */
 export function displayStreamIcon(stream: {
   streamIcon?: string | null;
   streamUrl?: string | null;
 }): string | null {
+  const icon = String(stream.streamIcon ?? "").trim();
+
+  // Prefer stored poster: Plex sync writes show-level artwork into streamIcon while
+  // streamUrl is often an episode rating key — using streamUrl alone shows stills/wrong art.
+  if (icon) {
+    if (icon.startsWith("/api/artwork/plex/")) return icon;
+
+    const fromIcon = plexIdsFromStreamIcon(icon);
+    if (fromIcon) return plexArtworkPath(fromIcon.integrationId, fromIcon.itemId);
+
+    // Absolute panel artwork URLs → relative (avoids mixed-content on https:// admin)
+    const absProxy = icon.match(/^https?:\/\/[^/]+(\/api\/artwork\/plex\/[^/?#]+)/i);
+    if (absProxy) return absProxy[1];
+
+    if (!icon.includes("/library/metadata/") && !icon.includes("X-Plex-Token=")) {
+      return icon; // TMDB / CDN / other http(s) posters
+    }
+  }
+
   const parsed = stream.streamUrl ? parseIntegrationStreamUrl(stream.streamUrl) : null;
   if (parsed?.type === "plex") {
     return plexArtworkPath(parsed.integrationId, parsed.itemId);
   }
 
-  const icon = String(stream.streamIcon ?? "").trim();
-  if (!icon) return null;
-
   if (icon.includes("/library/metadata/") || icon.includes("X-Plex-Token=")) {
-    return parsed?.type === "plex" ? plexArtworkPath(parsed.integrationId, parsed.itemId) : null;
+    return null;
   }
 
-  if (icon.startsWith("/api/artwork/plex/")) return icon;
-
-  const fromIcon = plexIdsFromStreamIcon(icon);
-  if (fromIcon) return plexArtworkPath(fromIcon.integrationId, fromIcon.itemId);
-
-  return icon;
+  return icon || null;
 }

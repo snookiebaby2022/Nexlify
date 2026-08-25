@@ -3793,14 +3793,17 @@ a.btn-back:hover,
 }
 
 .xui-stream-icon {
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
+  width: 32px;
+  height: 48px;
+  object-fit: cover;
   border-radius: 3px;
   display: block;
+  background: rgba(0, 0, 0, 0.15);
 }
 
 .xui-stream-icon--empty {
+  width: 32px;
+  height: 48px;
   background: #eee;
   border: 1px dashed #ccc;
 }

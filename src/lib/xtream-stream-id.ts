@@ -223,45 +223,10 @@ export async function resolveStreamIdParam(
       LIMIT 1
     `;
     if (rows[0]?.id) return rows[0].id;
-
-    // XCIPTV uses numeric stream_id — scan this line's bouquets in batches (no full-table load).
-    const BATCH = 8000;
-    for (let offset = 0; offset < 500_000; offset += BATCH) {
-      const batch = await prisma.$queryRaw<{ id: string }[]>`
-        SELECT DISTINCT s.id AS id
-        FROM "LineBouquet" lb
-        INNER JOIN "BouquetStream" bs ON bs."bouquetId" = lb."bouquetId"
-        INNER JOIN "Stream" s ON s.id = bs."streamId"
-        WHERE lb."lineId" = ${lineId}
-          AND s."isActive" = true
-        ORDER BY s.id ASC
-        LIMIT ${BATCH} OFFSET ${offset}
-      `;
-      if (!batch.length) break;
-      const match = batch.find((r) => cuidToNum(r.id) === numericId);
-      if (match) {
-        void prisma.stream
-          .update({ where: { id: match.id }, data: { xtreamNum: numericId } })
-          .catch(() => {});
-        return match.id;
-      }
-      if (batch.length < BATCH) break;
-    }
   }
 
-  // Legacy fallback before backfill completes — bounded scan only.
-  const candidates = await prisma.stream.findMany({
-    where: { isActive: true, xtreamNum: null },
-    select: { id: true },
-    take: 5_000,
-    orderBy: { updatedAt: "desc" },
-  });
-  const legacy = candidates.find((s) => cuidToNum(s.id) === numericId)?.id ?? null;
-  if (legacy) {
-    void prisma.stream.update({ where: { id: legacy }, data: { xtreamNum: numericId } }).catch(() => {});
-    return legacy;
-  }
-
+  // Do not scan hundreds of thousands of bouquet rows hashing cuids — that
+  // stalls get_vod_info / movie play. Cron backfills Stream.xtreamNum.
   return null;
 }
 

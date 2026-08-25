@@ -15,7 +15,7 @@ import {
   writeGzipJsonArrayFile,
 } from "@/lib/catalog-disk-cache";
 import { excludeDisabledFromExport } from "@/lib/export-policy";
-import { buildCanonicalCategoryMaps } from "@/lib/xtream-category-canonical";
+import { buildCanonicalCategoryMaps, isXtreamAllCategoryParam } from "@/lib/xtream-category-canonical";
 import {
   catalogStreamType,
   mapXtreamLiveItem,
@@ -35,9 +35,10 @@ async function resolveCategoryFilter(
   kind: XtreamCatalogKind,
   categoryId?: string | null
 ): Promise<CategoryFilter> {
-  if (categoryId == null || categoryId === "") return "all";
+  if (isXtreamAllCategoryParam(categoryId)) return "all";
   const { resolveXtreamCategoryFilter } = await import("@/lib/xtream");
-  return resolveXtreamCategoryFilter(categoryId, catalogStreamType(kind));
+  const resolved = await resolveXtreamCategoryFilter(categoryId!, catalogStreamType(kind));
+  return resolved === "all" ? "all" : resolved;
 }
 
 function filterCachePart(filter: CategoryFilter): string {
@@ -180,19 +181,18 @@ export function warmXtreamCatalogs(line: LineWithBouquets): void {
   void (async () => {
     const excludeDisabled = await excludeDisabledFromExport();
     const token = lineBouquetCacheToken(line, excludeDisabled);
-    await Promise.all(
-      (["live", "vod", "series"] as const).map(async (kind) => {
-        const destPath = catalogBlobPath(xtreamCatalogBlobName(kind, token, "all", excludeDisabled));
-        const age = await catalogFileAgeMs(destPath);
-        if (age != null) return;
-        await withCatalogBuildLock(destPath, async () => {
-          const again = await catalogFileAgeMs(destPath);
-          if (again != null) return "existing" as const;
-          await buildCatalogGzip(destPath, kind, line, "all", excludeDisabled);
-          return "built" as const;
-        });
-      })
-    );
+    // Sequential — parallel live+vod+series SQL rebuilds stall category/info APIs.
+    for (const kind of ["live", "vod", "series"] as const) {
+      const destPath = catalogBlobPath(xtreamCatalogBlobName(kind, token, "all", excludeDisabled));
+      const age = await catalogFileAgeMs(destPath);
+      if (age != null) continue;
+      await withCatalogBuildLock(destPath, async () => {
+        const again = await catalogFileAgeMs(destPath);
+        if (again != null) return "existing" as const;
+        await buildCatalogGzip(destPath, kind, line, "all", excludeDisabled);
+        return "built" as const;
+      });
+    }
   })().catch((err) => {
     console.error("[xtream-catalog] warm failed:", err instanceof Error ? err.message : err);
   });

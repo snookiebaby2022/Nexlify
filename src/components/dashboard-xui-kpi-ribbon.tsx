@@ -153,7 +153,7 @@ export function DashboardXuiKpiRibbon({
         />
         <div className="rounded-lg overflow-hidden shadow-md flex flex-col min-h-[88px]">
           <Link
-            href={streamsHref}
+            href="/admin/content/streams?status=online"
             className="flex-1 px-4 py-3 text-white flex items-center justify-between"
             style={{ background: "linear-gradient(135deg, #00a65a 0%, #008d4c 100%)" }}
           >

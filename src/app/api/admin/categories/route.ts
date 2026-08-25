@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
     });
 
     // Active / inactive counts per category (cached — heavy on large catalogs).
-    const counts = await cacheGetOrSet("categories:stream-counts", 60, async () => {
+    const counts = await cacheGetOrSet("categories:stream-counts", 600, async () => {
       const [activeGroups, inactiveGroups] = await Promise.all([
         prisma.stream.groupBy({
           by: ["categoryId"],

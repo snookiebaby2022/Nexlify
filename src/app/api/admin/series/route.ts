@@ -51,8 +51,13 @@ export async function GET(req: NextRequest) {
           MIN(COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name)) AS series_label,
           COUNT(*) FILTER (WHERE s."episodeNum" IS NOT NULL AND s."episodeNum" > 0)::bigint AS episode_count,
           MAX(s."streamIcon") FILTER (WHERE s."episodeNum" IS NULL OR s."episodeNum" <= 0) AS parent_icon,
-          MAX(s."streamIcon") AS any_icon,
-          MIN(s."streamUrl") AS any_url,
+          -- Prefer a stored show poster (Plex writes show-level artwork into streamIcon)
+          (ARRAY_AGG(s."streamIcon") FILTER (
+            WHERE s."streamIcon" IS NOT NULL AND TRIM(s."streamIcon") <> ''
+          ))[1] AS any_icon,
+          (ARRAY_AGG(s."streamUrl") FILTER (
+            WHERE s."streamUrl" IS NOT NULL AND TRIM(s."streamUrl") <> ''
+          ))[1] AS any_url,
           BOOL_OR(s."isActive") FILTER (WHERE s."episodeNum" IS NULL OR s."episodeNum" <= 0) AS parent_active,
           BOOL_OR(s."isActive") AS any_active,
           MAX(c.name) FILTER (WHERE s."episodeNum" IS NULL OR s."episodeNum" <= 0) AS parent_cat,

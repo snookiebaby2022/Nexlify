@@ -69,15 +69,56 @@ export async function categoryForSeries(
 
 /**
  * Flat series categories for Plex / Xtream apps.
- * Do NOT create a category per show name — that makes Smarters list every series
- * as its own category and breaks "All TV Series". Genre only (or "TV Series").
+ * Do not name a category "TV Series" — that duplicates the TV Series bouquet
+ * in Smarters/XCIPTV. Genre only; missing genre → Other.
  */
 export async function categoryForPlexSeries(genreName?: string | null): Promise<string> {
   const genre = genreName?.trim();
-  if (genre && !/^tv\s*series?$/i.test(genre)) {
+  if (genre && !/^tv\s*series?$/i.test(genre) && !/^other$/i.test(genre)) {
     return findOrCreateCategory(genre, null, "SERIES");
   }
-  return findOrCreateCategory("TV Series", null, "SERIES");
+  return findOrCreateCategory("Other", null, "SERIES");
+}
+
+/** Move streams out of the redundant "TV Series" category, then drop it if empty. */
+export async function reassignTvSeriesNamedCategory(): Promise<{ moved: number; deleted: number }> {
+  const catchAllId = await findOrCreateCategory("Other", null, "SERIES");
+  const generic = await prisma.category.findMany({
+    where: { categoryType: "SERIES", name: { equals: "TV Series", mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (!generic.length) {
+    const deletedEmpty = await prisma.category.deleteMany({
+      where: {
+        categoryType: "SERIES",
+        streams: { none: {} },
+        children: { none: {} },
+        parentId: { not: null },
+      },
+    });
+    return { moved: 0, deleted: deletedEmpty.count };
+  }
+
+  const genericIds = generic.map((c) => c.id);
+  const moved = await prisma.stream.updateMany({
+    where: { type: "SERIES", categoryId: { in: genericIds } },
+    data: { categoryId: catchAllId },
+  });
+
+  await prisma.category.deleteMany({
+    where: {
+      categoryType: "SERIES",
+      streams: { none: {} },
+      children: { none: {} },
+      OR: [{ id: { in: genericIds } }, { parentId: { not: null } }],
+    },
+  });
+
+  const leftover = await prisma.category.deleteMany({
+    where: { id: { in: genericIds }, streams: { none: {} }, children: { none: {} } },
+  });
+
+  return { moved: moved.count, deleted: leftover.count };
 }
 
 export async function categoryFromGroupName(

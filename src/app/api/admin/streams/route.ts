@@ -29,6 +29,7 @@ import { syncStreamBouquets } from "@/lib/stream-bouquets";
 import { expandCategoryFilter } from "@/lib/category-tree";
 import { getResellerBouquetIds } from "@/lib/reseller-bouquet-scope";
 import { canAccessBouquet } from "@/lib/bouquet-access";
+import { listOnlineLiveStreamIds } from "@/lib/connections";
 
 
 
@@ -145,9 +146,12 @@ export async function GET(req: NextRequest) {
     if (!where.type) where.type = StreamType.LIVE;
   }
   if (statusParam === "online") {
+    const onlineIds = await listOnlineLiveStreamIds(
+      session.role === PanelRole.ADMIN ? undefined : session.id
+    );
     where.isActive = true;
-    where.lastProbeOk = true;
     if (!where.type) where.type = StreamType.LIVE;
+    where.id = { in: onlineIds.length ? onlineIds : ["__none__"] };
   }
   if (missingEpg) {
     // Use AND so this does not clash with video/search OR filters

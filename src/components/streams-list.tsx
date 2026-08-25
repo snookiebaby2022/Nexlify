@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -116,6 +117,8 @@ export function StreamsList({
   addHref: string;
   importHref?: string;
 }) {
+  const searchParams = useSearchParams();
+  const statusFromUrl = searchParams.get("status");
   const [streams, setStreams] = useState<Stream[]>([]);
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
   const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
@@ -125,7 +128,14 @@ export function StreamsList({
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [serverId, setServerId] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive" | "online" | "offline">(statusFromSearch);
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive" | "online" | "offline">(
+    statusFromUrl === "active" ||
+      statusFromUrl === "inactive" ||
+      statusFromUrl === "online" ||
+      statusFromUrl === "offline"
+      ? statusFromUrl
+      : ""
+  );
   const [audioFilter, setAudioFilter] = useState("");
   const [videoFilter, setVideoFilter] = useState("");
   const [qualityFilter, setQualityFilter] = useState("");
@@ -141,12 +151,21 @@ export function StreamsList({
     urlInitRef.current = true;
     const sp = new URLSearchParams(window.location.search);
     const cat = sp.get("categoryId");
-    const status = sp.get("status");
     if (cat) setCategoryId(cat);
-    if (status === "active" || status === "inactive" || status === "online" || status === "offline") {
-      setStatusFilter(status);
-    }
   }, []);
+
+  useEffect(() => {
+    if (
+      statusFromUrl === "active" ||
+      statusFromUrl === "inactive" ||
+      statusFromUrl === "online" ||
+      statusFromUrl === "offline"
+    ) {
+      setStatusFilter(statusFromUrl);
+      return;
+    }
+    if (statusFromUrl == null) return;
+  }, [statusFromUrl]);
 
   const [verifyReady, setVerifyReady] = useState(false);
   const [typeTotals, setTypeTotals] = useState<{ LIVE?: number; MOVIE?: number; SERIES?: number }>({});
@@ -489,7 +508,13 @@ export function StreamsList({
                   const icon = displayStreamIcon(s);
                   return icon ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={icon} alt="" className="xui-stream-icon shrink-0" />
+                    <img
+                      src={icon}
+                      alt=""
+                      className="xui-stream-icon shrink-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                    />
                   ) : (
                     <span className="xui-stream-icon xui-stream-icon--empty shrink-0" />
                   );
@@ -594,7 +619,13 @@ export function StreamsList({
                   <td className="xui-streams-td-icon">
                     {icon ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={icon} alt="" className="xui-stream-icon" />
+                      <img
+                        src={icon}
+                        alt=""
+                        className="xui-stream-icon"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
                     ) : (
                       <span className="xui-stream-icon xui-stream-icon--empty" />
                     )}

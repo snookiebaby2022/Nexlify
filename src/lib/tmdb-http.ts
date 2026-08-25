@@ -92,6 +92,10 @@ export async function tmdbFetch(url: string, timeoutMs = 20_000): Promise<Respon
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       const res = await httpsGet(url, timeoutMs);
+      if (res.status === 429 && attempt < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 1500 * 2 ** attempt));
+        continue;
+      }
       if (res.ok || res.status < 500 || attempt === attempts - 1) {
         return res;
       }

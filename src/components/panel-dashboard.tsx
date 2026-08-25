@@ -326,6 +326,7 @@ export function PanelDashboard({
     ? {
         onlineConnections: liveStats.onlineConnections,
         onlineUsers: liveStats.onlineUsers,
+        // Keep probe-based online count from stats (matches Online Stream card click filter)
         onlineStreams: liveStats.onlineStreams,
         totalLiveStreams: d?.totalLiveStreams,
         totalActiveLines: d?.totalActiveLines,

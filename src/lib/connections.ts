@@ -162,6 +162,17 @@ export async function liveViewerStats(ownerId?: string): Promise<{
   };
 }
 
+/** Stream IDs currently playing (live connections). Matches dashboard Online Stream count. */
+export async function listOnlineLiveStreamIds(ownerId?: string): Promise<string[]> {
+  const rows = await listLiveConnections(ownerId);
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (isTestConnectionIp(row.ip)) continue;
+    if (row.streamId) ids.add(row.streamId);
+  }
+  return [...ids];
+}
+
 /** Distinct active sessions: use groupBy instead of loading all rows */
 export async function countLineSessions(lineId: string) {
   const { cacheGetOrSet } = await import("./cache");

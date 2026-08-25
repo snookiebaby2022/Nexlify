@@ -271,9 +271,22 @@ export async function jobAgentAutoRestart() {
   const start = Date.now();
   try {
     const staleBefore = new Date(Date.now() - 120_000);
+    const giveUpBefore = new Date(Date.now() - 15 * 60 * 1000);
+
+    const expired = await prisma.streamProcess.updateMany({
+      where: {
+        lastSeenAt: { lt: giveUpBefore },
+        status: { in: ["running", "restarting", "unknown"] },
+      },
+      data: {
+        status: "stopped",
+        errorMessage: "Agent heartbeat lost — process cleared",
+      },
+    });
+
     const stale = await prisma.streamProcess.findMany({
       where: {
-        lastSeenAt: { lt: staleBefore },
+        lastSeenAt: { lt: staleBefore, gte: giveUpBefore },
         status: { in: ["running", "unknown"] },
         autoRestart: true,
         streamId: { not: null },
@@ -288,7 +301,17 @@ export async function jobAgentAutoRestart() {
     let restarted = 0;
     for (const proc of stale) {
       if (!proc.stream?.autoRestart || !proc.server?.agentToken || !proc.streamId) continue;
-      await enqueueAgentCommand(proc.serverId, "restart_stream", { streamId: proc.streamId });
+      const pending = await prisma.agentCommand.findFirst({
+        where: {
+          serverId: proc.serverId,
+          action: "restart_stream",
+          status: "pending",
+        },
+        select: { id: true },
+      });
+      if (!pending) {
+        await enqueueAgentCommand(proc.serverId, "restart_stream", { streamId: proc.streamId });
+      }
       await prisma.streamProcess.update({
         where: { id: proc.id },
         data: { status: "restarting", errorMessage: "Auto-restart queued" },
@@ -309,7 +332,12 @@ export async function jobAgentAutoRestart() {
       },
     });
 
-    await logCron("agent_auto_restart", "ok", `${restarted} queued`, Date.now() - start);
+    await logCron(
+      "agent_auto_restart",
+      "ok",
+      `${restarted} queued, ${expired.count} stale cleared`,
+      Date.now() - start
+    );
   } catch (e) {
     await logCron("agent_auto_restart", "error", String(e), Date.now() - start);
   }
@@ -382,16 +410,21 @@ export async function jobVodEnrich() {
     const { StreamType } = await import("@prisma/client");
     const result = await fillMissingStreamArtwork({
       types: types.map((t) => StreamType[t]),
-      tmdbLimit: 150,
+      tmdbLimit: 400,
       liveLogoLimit: 30,
     });
-    const infoFilled = types.includes("MOVIE") || types.includes("SERIES")
-      ? await fillMissingVodInfoFromTmdb(80)
+      const infoFilled = types.includes("MOVIE") || types.includes("SERIES")
+      ? await fillMissingVodInfoFromTmdb(400)
       : 0;
+    let tmdbLib = { movies: 0, series: 0, missed: 0 };
+    if (types.includes("MOVIE") || types.includes("SERIES")) {
+      const { backfillTmdbVodBatch } = await import("./vod-tmdb-backfill");
+      tmdbLib = await backfillTmdbVodBatch({ movieLimit: 25, seriesLimit: 25 });
+    }
     await logCron(
       "vod_enrich",
       "ok",
-      `updated ${result.updated} (iptv ${result.fromProvider}, tmdb ${result.fromTmdb}, meta ${rewritten + infoFilled}, remaining ${result.remaining})`,
+      `updated ${result.updated} (iptv ${result.fromProvider}, tmdb ${result.fromTmdb}, meta ${rewritten + infoFilled}, lib ${tmdbLib.movies + tmdbLib.series}, remaining ${result.remaining})`,
       Date.now() - start
     );
   } catch (e) {
@@ -611,18 +644,27 @@ async function jobPlexAutoSync() {
   const start = Date.now();
   try {
     const cron = await getSettingGroup("cron");
-    if (cron.plexSyncEnabled === false) return;
+    if (cron.plexSyncEnabled === false) {
+      await logCron("plex_auto_sync", "ok", "disabled", Date.now() - start);
+      return;
+    }
 
     const rows = await prisma.mediaIntegration.findMany({
       where: { type: "plex", isActive: true },
       select: { id: true, config: true },
     });
-    if (!rows.length) return;
+    if (!rows.length) {
+      await logCron("plex_auto_sync", "ok", "no plex integration", Date.now() - start);
+      return;
+    }
 
     const { plexAutoSyncIsDue, plexScheduleHours } = await import("./plex-catalog-match");
     const intervalHours = plexScheduleHours(cron.plexSyncSchedule);
     const last = await prisma.panelSetting.findUnique({ where: { key: "plex_auto_sync_last_run" } });
-    if (!plexAutoSyncIsDue(last?.value ?? null, intervalHours)) return;
+    if (!plexAutoSyncIsDue(last?.value ?? null, intervalHours)) {
+      await logCron("plex_auto_sync", "ok", `skipped (every ${intervalHours}h)`, Date.now() - start);
+      return;
+    }
 
     const { enqueuePlexSync } = await import("./plex-sync-queue");
     let queued = 0;
@@ -645,6 +687,58 @@ async function jobPlexAutoSync() {
   }
 }
 
+async function jobBackfillXtreamNum() {
+  const start = Date.now();
+  try {
+    const { cuidToNum } = await import("./xtream-stream-id");
+    const rows = await prisma.stream.findMany({
+      where: { xtreamNum: null },
+      select: { id: true },
+      take: 2000,
+    });
+    if (!rows.length) return;
+    for (let i = 0; i < rows.length; i += 80) {
+      const chunk = rows.slice(i, i + 80);
+      await prisma.$transaction(
+        chunk.map((row) =>
+          prisma.stream.update({
+            where: { id: row.id },
+            data: { xtreamNum: cuidToNum(row.id) },
+          })
+        )
+      );
+    }
+    await logCron("xtream_num_backfill", "ok", `updated ${rows.length}`, Date.now() - start);
+  } catch (e) {
+    await logCron("xtream_num_backfill", "error", String(e), Date.now() - start);
+  }
+}
+
+async function jobPlexVodMetaBackfill() {
+  const start = Date.now();
+  try {
+    const { backfillPlexVodMeta } = await import("./plex-vod-meta-backfill");
+    const updated = await backfillPlexVodMeta(25);
+    if (updated) await logCron("plex_vod_meta", "ok", `updated ${updated}`, Date.now() - start);
+  } catch (e) {
+    await logCron("plex_vod_meta", "error", String(e), Date.now() - start);
+  }
+}
+
+async function jobWarmXtreamCatalogs() {
+  try {
+    const line = await prisma.line.findFirst({
+      where: { status: "ACTIVE", expiresAt: { gt: new Date() } },
+      include: { bouquets: { include: { bouquet: true } } },
+    });
+    if (!line) return;
+    const { warmXtreamCatalogs } = await import("./xtream-catalog-blob");
+    warmXtreamCatalogs(line);
+  } catch (e) {
+    await logCron("xtream_catalog_warm", "error", String(e), 0);
+  }
+}
+
 export async function runAllCronJobs() {
   await jobPanelHealthWatchdog();
   await jobCleanupConnections();
@@ -662,6 +756,9 @@ export async function runAllCronJobs() {
   await jobDeadLinkProbe();
   await jobSubscriptionNotify();
   await jobTelegramMonitoring();
+  await jobBackfillXtreamNum();
+  await jobPlexVodMetaBackfill();
+  await jobWarmXtreamCatalogs();
 }
 
 export async function jobAgentTokenRotation() {

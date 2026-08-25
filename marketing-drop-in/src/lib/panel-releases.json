@@ -1,7 +1,90 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.39",
+  "latestVersion": "2.0.44",
   "releases": [
+    {
+      "version": "2.0.44",
+      "date": "2026-08-25",
+      "channel": "stable",
+      "summary": "Smarters All catalogs, TMDB VOD posters/info, and TV Series category vs bouquet fix.",
+      "changelog": [
+        "IPTV Smarters All treats category_id * / all / -1 as the full live, movie, and series lists",
+        "Xtream category folders export with parent_id 0 so nested trees no longer hide All",
+        "TMDB backfill fills movie and series posters plus plot/cast (cron + one-shot script)",
+        "Duplicate TV Series category (same name as the bouquet) is moved to Other and no longer recreated",
+        "Plex auto-sync cron logs skips; 429 retries on TMDB HTTP"
+      ],
+      "fixes": [
+        "Smarters All showed no live / no movies found / no series found because * resolved as a missing category",
+        "Plex titles sat in a TV Series category inside the TV Series bouquet"
+      ]
+    },
+    {
+      "version": "2.0.43",
+      "date": "2026-08-24",
+      "channel": "stable",
+      "summary": "IPTV edge fast lane for panel admin UI — fixes slow/hanging login on port 80.",
+      "changelog": [
+        "Panel login, admin UI, APIs, and Xtream catalog bypass playback auth on iptv-edge",
+        "Panel traffic no longer queues behind capped HTTP agent pools during heavy playback"
+      ],
+      "fixes": [
+        "Admin panel stuck loading when iptv-edge admin socket pool (16) was exhausted by parallel assets"
+      ]
+    },
+    {
+      "version": "2.0.42",
+      "date": "2026-08-24",
+      "channel": "stable",
+      "summary": "Security hardening: admin API rate limits, headers, JWT checks, and safer outbound fetch.",
+      "changelog": [
+        "Admin and reseller API routes enforce configurable rate limits (middleware + Redis)",
+        "Security headers (nosniff, frame deny, referrer policy, HSTS when SSL enabled)",
+        "Production requires PANEL_INTERNAL_SECRET for internal edge routes (separate from marketing API key)",
+        "JWT secret strength validation blocks weak secrets in production",
+        "HTTPS-first outbound fetch with retry/backoff for release feeds and geo lookup",
+        "Reseller API omits password hash/plain fields from database reads"
+      ],
+      "fixes": [
+        "host-metrics used executeRawUnsafe instead of parameterized Prisma.sql",
+        "Geo lookup used plaintext HTTP ip-api.com"
+      ]
+    },
+    {
+      "version": "2.0.41",
+      "date": "2026-08-24",
+      "channel": "stable",
+      "summary": "XUI-style stream forms, VOD media info in apps, database backup on by default.",
+      "changelog": [
+        "Live / movie / series edit and add-live channel use XUI.one tab layout (Details | EPG/Information | Advanced | Server)",
+        "Database backup (PostgreSQL gzip) enabled by default at 04:00 UTC; cron log shows db_backup instead of pg_dump",
+        "Scheduled database backup respects cron schedule and uses secure pg-dump helper (no DATABASE_URL on shell)",
+        "VOD Information tab with TMDB fetch for movies and TV series on edit stream",
+        "get_vod_info / get_series_info parse NEXLIFY_VOD metadata for XCIPTV/Smarters plot and cast",
+        "Plex VOD sorted into Movies / TV Series bouquets with repair on sync"
+      ],
+      "fixes": [
+        "Database backup ran every hour when enabled instead of once daily on schedule",
+        "Live channel edit still used collapsible sections while VOD had tabs"
+      ]
+    },
+    {
+      "version": "2.0.40",
+      "date": "2026-08-24",
+      "channel": "stable",
+      "summary": "VOD media info in apps, Plex sorted into Movies/TV Series bouquets, and IPTV+TMDB poster fill.",
+      "changelog": [
+        "get_vod_info / get_series_info read legacy NEXLIFY_VOD metadata and TMDB field aliases (plot, cast, director, genre, rating)",
+        "Plex movies and TV episodes go into Movies / TV Series bouquets and categories; existing Plex rows are repaired on sync",
+        "One-shot repair script rewrites stored metadata, relinks bouquets, and optionally TMDB-fills empty rows",
+        "Hosted-by-provider: tick + existing URL is enough without wiring every stream through the provider catalog",
+        "Fill missing posters from IPTV provider catalogs first, then TMDB (auto-logos + mass edit + cron)"
+      ],
+      "fixes": [
+        "XCIPTV/Smarters movie and series detail screens empty because agentStartCmd used NEXLIFY_VOD: prefix invalid for JSON.parse",
+        "All Plex VOD stuck in Plugin imports with null categories on large libraries"
+      ]
+    },
     {
       "version": "2.0.39",
       "date": "2026-08-24",

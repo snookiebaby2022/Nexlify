@@ -31,7 +31,7 @@ import {
 } from "@/lib/plex-config";
 import type { IntegrationSyncReporter } from "@/lib/integration-sync-progress";
 import { loadPlexCatalogIndex, plexCatalogTitleKey, plexGenreName, plexVodMetaFromItem } from "@/lib/plex-catalog-match";
-import { categoryForPlexMovie, categoryForPlexSeries } from "@/lib/vod-category";
+import { categoryForPlexMovie, categoryForPlexSeries, reassignTvSeriesNamedCategory } from "@/lib/vod-category";
 import { encodeVodAgentCmd, parseVodAgentCmd } from "@/lib/vod-meta";
 
 export async function listIntegrations(type: "plex" | "youtube") {
@@ -500,6 +500,12 @@ async function backfillPlexCategories(integrationId: string, reporter?: Integrat
       await reporter?.note(`TV Series genres ${seriesDone.toLocaleString()}…`);
     }
     if (rows.length < 800) break;
+  }
+  const catchAll = await reassignTvSeriesNamedCategory();
+  if (catchAll.moved || catchAll.deleted) {
+    await reporter?.note(
+      `Removed duplicate “TV Series” category (${catchAll.moved} titles → Other, ${catchAll.deleted} empty cats deleted)`
+    );
   }
 }
 
@@ -1019,7 +1025,11 @@ export async function importPlexLibrary(
           skippedCatalog++;
           const existingId = catalog.seriesIdByKey.get(titleKey);
           if (existingId) {
-            pendingIcons.push({ id: existingId, streamIcon: posterFor(String(ratingKey)) });
+            pendingIcons.push({
+              id: existingId,
+              streamIcon: posterFor(String(ratingKey)),
+              agentStartCmd: showCmd,
+            });
             catalog.seriesIdByKey.delete(titleKey);
             if (pendingIcons.length >= 20) await flushIcons();
           }
@@ -1061,7 +1071,11 @@ export async function importPlexLibrary(
         skippedCatalog++;
         const existingId = catalog.movieIdByKey.get(titleKey);
         if (existingId) {
-          pendingIcons.push({ id: existingId, streamIcon: posterFor(String(ratingKey)) });
+          pendingIcons.push({
+            id: existingId,
+            streamIcon: posterFor(String(ratingKey)),
+            agentStartCmd: encodeVodAgentCmd(plexVodMetaFromItem(item)),
+          });
           catalog.movieIdByKey.delete(titleKey);
           if (pendingIcons.length >= 20) await flushIcons();
         }

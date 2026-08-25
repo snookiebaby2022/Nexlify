@@ -16,6 +16,18 @@ export function numericCategoryId(cuid?: string | null): string {
   return String(cuidToNum(cuid));
 }
 
+/**
+ * IPTV Smarters / XCIPTV "All" is not a real folder. Apps send *, all, or -1
+ * (or omit the param). Treat those as unfiltered — otherwise the catalog
+ * resolves to "missing" and the app shows no live / movies / series.
+ */
+export function isXtreamAllCategoryParam(categoryId?: string | null): boolean {
+  const raw = String(categoryId ?? "").trim();
+  if (!raw) return true;
+  const s = raw.toLowerCase();
+  return s === "*" || s === "all" || s === "-1" || s === "all_streams" || s === "null" || s === "undefined";
+}
+
 export type CanonicalCategoryEntry = {
   categoryId: string;
   numericId: string;

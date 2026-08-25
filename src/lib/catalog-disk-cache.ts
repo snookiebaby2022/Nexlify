@@ -6,9 +6,9 @@ import { createGzip, type Gzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 
 export const CATALOG_BLOB_VERSION = "v8";
-export const CATALOG_TTL_MS = 5 * 60 * 1000;
-export const CATALOG_STALE_MS = 60 * 60 * 1000;
-const LOCK_STALE_MS = 3 * 60 * 1000;
+export const CATALOG_TTL_MS = 30 * 60 * 1000;
+export const CATALOG_STALE_MS = 6 * 60 * 60 * 1000;
+const LOCK_STALE_MS = 4 * 60 * 1000;
 
 export function catalogCacheDir(): string {
   const env = process.env.NEXLIFY_CATALOG_CACHE_DIR?.trim();
@@ -131,7 +131,7 @@ export async function withCatalogBuildLock<T>(
   build: () => Promise<T>
 ): Promise<T | "existing"> {
   const lockPath = `${destPath}.lock`;
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 1200; i++) {
     try {
       await fs.writeFile(lockPath, String(process.pid), { flag: "wx" });
       break;
@@ -152,6 +152,8 @@ export async function withCatalogBuildLock<T>(
       await new Promise((r) => setTimeout(r, 150));
     }
   }
+  const existing = await catalogFileAgeMs(destPath);
+  if (catalogFileIsUsable(existing)) return "existing";
   try {
     return await build();
   } finally {

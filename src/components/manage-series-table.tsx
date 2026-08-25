@@ -171,7 +171,13 @@ export function ManageSeriesTable() {
                   <div className="flex items-center gap-2">
                     {displayStreamIcon(s) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={displayStreamIcon(s)!} alt="" className="h-8 w-8 rounded object-cover" />
+                      <img
+                        src={displayStreamIcon(s)!}
+                        alt=""
+                        className="h-12 w-8 rounded object-cover bg-black/20"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
                     ) : (
                       <Tv size={16} style={{ color: "var(--muted)" }} />
                     )}

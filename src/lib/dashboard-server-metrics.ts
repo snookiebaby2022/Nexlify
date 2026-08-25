@@ -299,18 +299,12 @@ export async function getDashboardSummary() {
   const staleBefore = new Date(Date.now() - STALE_MS);
   const [
     totalLiveStreams,
-    runningStreamIds,
     totalActiveLines,
     viewer,
     allServers,
     onlineServerCount,
   ] = await Promise.all([
     prisma.stream.count({ where: { type: StreamType.LIVE, isActive: true } }),
-    prisma.streamProcess.findMany({
-      where: { status: "running", lastSeenAt: { gte: staleBefore } },
-      select: { streamId: true },
-      distinct: ["streamId"],
-    }),
     prisma.line.count({
       where: { status: "ACTIVE", expiresAt: { gt: new Date() } },
     }),
@@ -326,15 +320,13 @@ export async function getDashboardSummary() {
     }),
   ]);
 
-  const agentStreams = runningStreamIds.filter((r) => r.streamId).length;
-  const onlineStreams = agentStreams > 0 ? agentStreams : viewer.onlineStreams;
   const streamSettings = await getSettingGroup("streams");
   const perLine = Number(streamSettings.maxConnectionsPerLine ?? 0);
   const maxConnections =
     perLine > 0 && totalActiveLines > 0 ? perLine * totalActiveLines : 0;
 
   return {
-    onlineStreams,
+    onlineStreams: viewer.onlineStreams,
     totalLiveStreams,
     onlineUsers: viewer.onlineUsers,
     totalActiveLines,
@@ -353,18 +345,12 @@ export async function getResellerDashboardSummary(ownerId: string) {
 
   const [
     totalLiveStreams,
-    runningStreamIds,
     totalActiveLines,
     viewer,
     allServers,
     onlineServerCount,
   ] = await Promise.all([
     prisma.stream.count({ where: { type: StreamType.LIVE, isActive: true } }),
-    prisma.streamProcess.findMany({
-      where: { status: "running", lastSeenAt: { gte: staleBefore } },
-      select: { streamId: true },
-      distinct: ["streamId"],
-    }),
     prisma.line.count({
       where: { ...lineWhere, status: "ACTIVE", expiresAt: { gt: now } },
     }),
@@ -385,10 +371,8 @@ export async function getResellerDashboardSummary(ownerId: string) {
   const maxConnections =
     perLine > 0 && totalActiveLines > 0 ? perLine * totalActiveLines : 0;
 
-  const agentStreams = runningStreamIds.filter((r) => r.streamId).length;
-
   return {
-    onlineStreams: agentStreams > 0 ? agentStreams : viewer.onlineStreams,
+    onlineStreams: viewer.onlineStreams,
     totalLiveStreams,
     onlineUsers: viewer.onlineUsers,
     totalActiveLines,

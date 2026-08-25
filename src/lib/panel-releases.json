@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.43",
+  "latestVersion": "2.0.44",
   "releases": [
+    {
+      "version": "2.0.44",
+      "date": "2026-08-25",
+      "channel": "stable",
+      "summary": "Smarters All catalogs, TMDB VOD posters/info, and TV Series category vs bouquet fix.",
+      "changelog": [
+        "IPTV Smarters All treats category_id * / all / -1 as the full live, movie, and series lists",
+        "Xtream category folders export with parent_id 0 so nested trees no longer hide All",
+        "TMDB backfill fills movie and series posters plus plot/cast (cron + one-shot script)",
+        "Duplicate TV Series category (same name as the bouquet) is moved to Other and no longer recreated",
+        "Plex auto-sync cron logs skips; 429 retries on TMDB HTTP"
+      ],
+      "fixes": [
+        "Smarters All showed no live / no movies found / no series found because * resolved as a missing category",
+        "Plex titles sat in a TV Series category inside the TV Series bouquet"
+      ]
+    },
     {
       "version": "2.0.43",
       "date": "2026-08-24",

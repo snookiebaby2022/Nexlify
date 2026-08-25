@@ -10,7 +10,7 @@ export type CacheTtlSettings = {
 const FALLBACK: CacheTtlSettings = {
   stats: 5,
   epg: 120,
-  categories: 30,
+  categories: 300,
   playbackUrl: 60,
 };
 
@@ -31,7 +31,7 @@ export async function getCacheTtls(): Promise<CacheTtlSettings> {
   const ttl: CacheTtlSettings = {
     stats: clamp(Number(settings.statsTtlSeconds), 5, 300),
     epg: clamp(Number(settings.epgTtlSeconds), 30, 3600),
-    categories: clamp(Number(settings.categoriesTtlSeconds), 10, 600),
+    categories: clamp(Number(settings.categoriesTtlSeconds), 30, 3600),
     playbackUrl: clamp(Number(settings.playbackUrlCacheTtlSec), 5, 300),
   };
 
