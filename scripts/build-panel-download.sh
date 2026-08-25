@@ -24,6 +24,12 @@ tar -czf "$OUT" \
   --exclude=.env.broken-install-* \
   --exclude=dist \
   --exclude=marketing-drop-in \
+  --exclude=windows \
+  --exclude=.claude \
+  --exclude=.cursor \
+  --exclude=.agents \
+  --exclude=graft \
+  --exclude=.next.test \
   --exclude=backups \
   --exclude=docs \
   -C "$ROOT" .

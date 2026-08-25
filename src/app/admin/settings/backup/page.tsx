@@ -234,12 +234,12 @@ export default function BackupSettingsPage() {
           <select
             className={inputClass}
             style={{ ...inputStyle, background: "#fff", color: "#111" }}
-            value={data.exportFormat ?? "json"}
+            value={data.exportFormat ?? "zip"}
             onChange={(e) => setData({ ...data, exportFormat: e.target.value })}
           >
-            <option value="json">JSON (default)</option>
-            <option value="zip">ZIP (falls back to gzip if zip CLI missing)</option>
+            <option value="zip">ZIP</option>
             <option value="gzip">Gzip compressed JSON</option>
+            <option value="json">JSON (uncompressed)</option>
           </select>
         </label>
       </SettingsPanel>

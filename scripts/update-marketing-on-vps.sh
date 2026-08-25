@@ -26,31 +26,37 @@ if [ ! -d "$MARKETING" ]; then
   exit 1
 fi
 
-# Prefer local panel git; else shallow clone of marketing-drop-in assets
+# Prefer a throwaway clone of marketing-drop-in so vendor panel checkouts
+# can stay IPTV-only (sparse checkout). Do not git-reset the live panel here.
 SRC=""
-if [ -d "$PANEL/.git" ]; then
-  echo "==> Updating panel checkout at $PANEL ..."
-  git -C "$PANEL" fetch origin "$BRANCH"
-  git -C "$PANEL" reset --hard "origin/$BRANCH"
-  SRC="$PANEL"
-elif [ -d "/home/nexlify-panel/.git" ]; then
-  PANEL="/home/nexlify-panel"
-  echo "==> Updating panel checkout at $PANEL ..."
-  git -C "$PANEL" fetch origin "$BRANCH"
-  git -C "$PANEL" reset --hard "origin/$BRANCH"
-  SRC="$PANEL"
-elif [ -d "/opt/nexlify-panel/.git" ]; then
-  PANEL="/opt/nexlify-panel"
-  echo "==> Updating panel checkout at $PANEL ..."
-  git -C "$PANEL" fetch origin "$BRANCH"
-  git -C "$PANEL" reset --hard "origin/$BRANCH"
-  SRC="$PANEL"
+TMP_MKT=""
+cleanup_mkt() { [ -n "${TMP_MKT:-}" ] && rm -rf "$TMP_MKT"; }
+trap cleanup_mkt EXIT
+
+echo "==> Fetching marketing-drop-in from $REPO_URL ($BRANCH) ..."
+TMP_MKT="$(mktemp -d /tmp/nexlify-marketing-src-XXXXXX)"
+if git clone --depth 1 --filter=blob:none --sparse --branch "$BRANCH" "$REPO_URL" "$TMP_MKT" \
+  && git -C "$TMP_MKT" sparse-checkout set marketing-drop-in scripts src/lib/panel-releases.json package.json; then
+  SRC="$TMP_MKT"
 else
-  TMP="$(mktemp -d)"
-  echo "==> Shallow clone $REPO_URL ($BRANCH) ..."
-  git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$TMP/nexlify"
-  SRC="$TMP/nexlify"
+  echo "WARN: sparse clone failed — full depth-1 clone" >&2
+  rm -rf "$TMP_MKT"
+  TMP_MKT="$(mktemp -d /tmp/nexlify-marketing-src-XXXXXX)"
+  git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$TMP_MKT"
+  SRC="$TMP_MKT"
 fi
+
+if [ ! -d "$SRC/marketing-drop-in" ]; then
+  echo "ERROR: marketing-drop-in missing from clone" >&2
+  exit 1
+fi
+
+# Panel version from the live panel install when present
+PANEL_PKG=""
+for d in /home/nexlify-panel /opt/nexlify-panel /home/nexlify; do
+  if [ -f "$d/package.json" ]; then PANEL_PKG="$d"; break; fi
+done
+
 
 echo "==> Sync marketing-drop-in → $MARKETING ..."
 rsync -a --delete \
@@ -58,7 +64,7 @@ rsync -a --delete \
   "$SRC/marketing-drop-in/" "$MARKETING/"
 
 # Ensure release metadata + installer version match the panel package (never leave stale install-command.json)
-PANEL_VER="$(node -p "try{require('$SRC/package.json').version}catch(e){''}" 2>/dev/null || true)"
+PANEL_VER="$(node -p "try{require('${PANEL_PKG:-$SRC}/package.json').version}catch(e){''}" 2>/dev/null || true)
 if [ -z "${PANEL_VER:-}" ] && [ -f "$SRC/src/lib/panel-releases.json" ]; then
   PANEL_VER="$(node -p "try{require('$SRC/src/lib/panel-releases.json').latestVersion}catch(e){''}" 2>/dev/null || true)"
 fi

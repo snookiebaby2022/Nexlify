@@ -2,6 +2,17 @@ import { getSettingGroup } from "@/lib/panel-settings";
 import { prisma } from "@/lib/prisma";
 
 /** Match a single cron field (minute, hour, etc.) against a value. */
+/** Use the server's local clock so "0 3 * * *" is 03:00 on the VPS, not UTC. */
+function cronDateParts(date: Date) {
+  return {
+    minute: date.getMinutes(),
+    hour: date.getHours(),
+    dom: date.getDate(),
+    month: date.getMonth() + 1,
+    dow: date.getDay(),
+  };
+}
+
 function fieldMatches(field: string, value: number, min: number, max: number): boolean {
   const f = field.trim();
   if (f === "*") return true;
@@ -28,12 +39,13 @@ export function cronMatchesNow(expression: string, date = new Date()): boolean {
   const parts = expression.trim().split(/\s+/);
   if (parts.length !== 5) return false;
   const [minute, hour, dom, month, dow] = parts;
+  const p = cronDateParts(date);
   return (
-    fieldMatches(minute, date.getUTCMinutes(), 0, 59) &&
-    fieldMatches(hour, date.getUTCHours(), 0, 23) &&
-    fieldMatches(dom, date.getUTCDate(), 1, 31) &&
-    fieldMatches(month, date.getUTCMonth() + 1, 1, 12) &&
-    fieldMatches(dow, date.getUTCDay(), 0, 6)
+    fieldMatches(minute, p.minute, 0, 59) &&
+    fieldMatches(hour, p.hour, 0, 23) &&
+    fieldMatches(dom, p.dom, 1, 31) &&
+    fieldMatches(month, p.month, 1, 12) &&
+    fieldMatches(dow, p.dow, 0, 6)
   );
 }
 
@@ -45,11 +57,12 @@ export function cronMatchesThisHour(expression: string, date = new Date()): bool
   const parts = expression.trim().split(/\s+/);
   if (parts.length !== 5) return false;
   const [, hour, dom, month, dow] = parts;
+  const p = cronDateParts(date);
   return (
-    fieldMatches(hour, date.getUTCHours(), 0, 23) &&
-    fieldMatches(dom, date.getUTCDate(), 1, 31) &&
-    fieldMatches(month, date.getUTCMonth() + 1, 1, 12) &&
-    fieldMatches(dow, date.getUTCDay(), 0, 6)
+    fieldMatches(hour, p.hour, 0, 23) &&
+    fieldMatches(dom, p.dom, 1, 31) &&
+    fieldMatches(month, p.month, 1, 12) &&
+    fieldMatches(dow, p.dow, 0, 6)
   );
 }
 

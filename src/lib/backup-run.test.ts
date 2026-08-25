@@ -15,7 +15,7 @@ describe("backup helpers", () => {
   });
 
   it("pg dump hour matching still works", () => {
-    const d = new Date(Date.UTC(2026, 7, 15, 4, 37, 0));
+    const d = new Date(2026, 7, 15, 4, 37, 0);
     assert.equal(cronMatchesThisHour("0 4 * * *", d), true);
     assert.equal(cronMatchesThisHour("0 5 * * *", d), false);
   });

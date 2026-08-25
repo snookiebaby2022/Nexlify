@@ -16,12 +16,10 @@ import {
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { resolveBackupDir } from "@/lib/backup-path";
+
 function backupDirFromSettings(backup: { localPath?: unknown }) {
-  const rawPath = String(backup.localPath ?? "").trim();
-  return path.resolve(
-    process.cwd(),
-    rawPath && !rawPath.startsWith("(") ? rawPath.replace(/^\.\//, "") : "./backups"
-  );
+  return resolveBackupDir(String(backup.localPath ?? ""));
 }
 
 export async function GET(req: NextRequest) {
@@ -162,7 +160,7 @@ export async function POST(req: NextRequest) {
         ? "zip"
         : backup.exportFormat === "gzip"
           ? "gzip"
-          : "json";
+          : "zip";
 
   const includePasswords =
     req.nextUrl.searchParams.get("passwords") === "true" || backup.includePasswords === true;

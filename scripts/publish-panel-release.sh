@@ -12,6 +12,8 @@ if command -v rsync >/dev/null 2>&1; then
   rsync -a \
     --exclude=node_modules --exclude=.next --exclude='.next.*' --exclude=.git \
     --exclude=data --exclude=dist \
+    --exclude=marketing-drop-in --exclude=windows --exclude=.claude --exclude=.cursor \
+    --exclude=.agents --exclude=graft \
     --exclude='.env' --exclude='.env.local' --exclude='.env.production' \
     --exclude='.env.development' --exclude='.env.backup.*' --exclude='.env.broken-install-*' \
     "$ROOT/" "$STAGE/"

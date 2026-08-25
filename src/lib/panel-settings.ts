@@ -299,7 +299,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     keepDays: 7,
     fullExportOnBackup: true,
     allowRestoreUpload: true,
-    exportFormat: "json",
+    exportFormat: "zip",
     s3Bucket: "",
     s3Region: "",
     s3AccessKey: "",
@@ -973,6 +973,13 @@ export async function ensureAddonSettingsHealed(): Promise<{
         _healedV2: true,
       });
       touched.push("backup-db");
+    }
+    if (!backup._healedV3) {
+      await setSettingGroup("backup", {
+        exportFormat: "zip",
+        _healedV3: true,
+      });
+      touched.push("backup-zip");
     }
   } catch {
     /* ignore */

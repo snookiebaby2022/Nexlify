@@ -385,6 +385,11 @@ download_panel_archive() {
   mkdir -p "$PANEL_DIR"
   tar -xzf "$tmp" -C "$PANEL_DIR"
   rm -f "$tmp"
+  if [ -x "$PANEL_DIR/scripts/strip-non-panel-tree.sh" ]; then
+    bash "$PANEL_DIR/scripts/strip-non-panel-tree.sh" "$PANEL_DIR" || true
+  else
+    rm -rf "$PANEL_DIR/marketing-drop-in" "$PANEL_DIR/windows" "$PANEL_DIR/.claude" "$PANEL_DIR/graft" 2>/dev/null || true
+  fi
 }
 
 refuse_vendor_vps_reinstall

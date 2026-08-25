@@ -308,6 +308,7 @@ cmd_sync_git() {
     echo "WARN: git fetch failed — falling back to tarball" >&2
     return 1
   fi
+  bash "$ROOT/scripts/panel-git-sparse.sh" "$ROOT" 2>/dev/null || true
   local force="${PANEL_UPDATE_FORCE:-}"
   force="$(printf '%s' "$force" | tr '[:upper:]' '[:lower:]')"
   if [ "$force" = "1" ] || [ "$force" = "true" ] || [ "$force" = "yes" ]; then
@@ -315,6 +316,7 @@ cmd_sync_git() {
   else
     git -C "$ROOT" merge --ff-only origin/main || git -C "$ROOT" reset --hard origin/main || return 1
   fi
+  bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" 2>/dev/null || true
   normalize_scripts
   local synced_ver
   synced_ver="$(node -e "try{process.stdout.write(require('./package.json').version||'')}catch{}" 2>/dev/null || true)"
@@ -351,11 +353,13 @@ cmd_sync_tarball() {
       --exclude='data/' --exclude='node_modules/' \
       --exclude='.next/' --exclude='.next.backup/' --exclude='.next.staging/' \
       --exclude='.panel-update-cache.json' \
+      --exclude='marketing-drop-in/' --exclude='windows/' --exclude='graft/' \
       "$src/" "$ROOT/"
   else
     find "$src" -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.env' ! -name 'data' ! -name 'node_modules' ! -name '.next' ! -name '.next.backup' ! -name '.next.staging' \
       -exec cp -a {} "$ROOT/" \;
   fi
+  bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" 2>/dev/null || true
   normalize_scripts
   rm -rf "$tmp"
   local synced_ver

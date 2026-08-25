@@ -4,7 +4,8 @@ import { createHash, randomBytes, createCipheriv, createDecipheriv, type Hash } 
 import { createWriteStream } from "fs";
 import { once } from "events";
 import { createGzip } from "zlib";
-import { writeBackupArchive } from "@/lib/backup-archive";
+import { writeBackupArchive, zipJsonFileOnDisk } from "@/lib/backup-archive";
+import { resolveBackupDir } from "@/lib/backup-path";
 
 const ALGORITHM = "aes-256-gcm";
 
@@ -251,9 +252,11 @@ async function writeFullBackupStreaming(options: {
   const path = await import("path");
   await mkdir(dir, { recursive: true });
 
-  // zip of multi-GB payloads is impractical; gzip streams; else plain json
-  const useGzip = options.format === "gzip" || options.format === "zip";
-  const filePath = path.join(dir, useGzip ? `${baseName}.json.gz` : `${baseName}.json`);
+  // Stream JSON; wrap as ZIP when requested (STORE) so the download is always a .zip.
+  const useGzip = options.format === "gzip";
+  const useZip = options.format === "zip";
+  const jsonPath = path.join(dir, `${baseName}.json`);
+  const filePath = useGzip ? path.join(dir, `${baseName}.json.gz`) : jsonPath;
   const sink = createJsonSink(filePath, useGzip);
 
   onProgress?.("building", 0, 100);
@@ -347,30 +350,39 @@ async function writeFullBackupStreaming(options: {
   );
   await sink.end();
 
+  let outPath = filePath;
+  let outFormat: string = useGzip ? "gzip" : "json";
+  if (useZip) {
+    onProgress?.("writing", 97, 100);
+    const zipPath = path.join(dir, `${baseName}.zip`);
+    await zipJsonFileOnDisk(jsonPath, zipPath, `${baseName}.json`);
+    outPath = zipPath;
+    outFormat = "zip";
+  }
+
   const checksum = sink.digest();
-  await writeFile(`${filePath}.sha256`, checksum, "utf8");
+  await writeFile(`${outPath}.sha256`, checksum, "utf8");
 
   // Encryption of multi-GB backups cannot be done in-memory; leave plaintext + sidecar checksum.
   if (options.encryptionPassword) {
     onProgress?.("encrypting", 98, 100);
-    // Best-effort note file so admins know why .enc was not produced
     await writeFile(
-      `${filePath}.encryption-skipped.txt`,
+      `${outPath}.encryption-skipped.txt`,
       "Encryption skipped for large streaming backups (file too large for in-memory AES). SHA-256 sidecar is present.\n",
       "utf8"
     );
   }
 
-  const size = (await stat(filePath)).size;
+  const size = (await stat(outPath)).size;
   onProgress?.("done", 100, 100);
 
   return {
     skipped: false,
-    path: filePath,
+    path: outPath,
     checksum,
     encrypted: false,
     size,
-    format: useGzip ? "gzip" : "json",
+    format: outFormat,
   };
 }
 
@@ -395,15 +407,11 @@ export async function writePanelBackupFile(options?: {
         ? "zip"
         : backup.exportFormat === "gzip"
           ? "gzip"
-          : "json";
+          : "zip";
 
   const { mkdir, writeFile } = await import("fs/promises");
   const path = await import("path");
-  const rawPath = String(backup.localPath ?? "").trim();
-  const dir = path.resolve(
-    process.cwd(),
-    rawPath && !rawPath.startsWith("(") ? rawPath.replace(/^\.\//, "") : "./backups"
-  );
+  const dir = resolveBackupDir(backup.localPath);
   await mkdir(dir, { recursive: true });
   const baseName = `nexlify-backup-${stamp}`;
   const encryptionPassword = String(backup.encryptionPassword ?? "").trim();
@@ -422,17 +430,16 @@ export async function writePanelBackupFile(options?: {
     };
     const payload = JSON.stringify(snapshot);
     const checksum = computeChecksum(payload);
-    const filePath = path.join(dir, `${baseName}.json`);
-    await writeFile(filePath, payload, "utf8");
-    await writeFile(`${filePath}.sha256`, checksum, "utf8");
+    const written = await writeBackupArchive(dir, baseName, payload, format);
+    await writeFile(`${written.filePath}.sha256`, checksum, "utf8");
     options?.onProgress?.("done", 100, 100);
     return {
       skipped: false,
-      path: filePath,
+      path: written.filePath,
       checksum,
       encrypted: false,
       size: Buffer.byteLength(payload),
-      format: "json",
+      format: written.format,
     };
   }
 

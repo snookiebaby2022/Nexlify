@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { buildFullBackupSnapshot, computeChecksum, encryptBackup } from "@/lib/backup-run";
-import { writeBackupArchive } from "@/lib/backup-archive";
+import { resolveBackupDir } from "@/lib/backup-path";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 
@@ -65,11 +65,7 @@ export async function runCloudBackup(): Promise<CloudBackupJob> {
   }
 
   // Write backup file
-  const rawPath = String(backupSettings.localPath ?? "").trim();
-  const dir = path.resolve(
-    process.cwd(),
-    rawPath && !rawPath.startsWith("(") ? rawPath.replace(/^\.\//, "") : "./backups"
-  );
+  const dir = resolveBackupDir(backupSettings.localPath);
   await mkdir(dir, { recursive: true });
 
   let fileContent: string | Buffer = payload;

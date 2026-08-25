@@ -11,20 +11,42 @@
 import { runAllCronJobs, runHourlyCronJobs } from "../src/lib/cron-jobs";
 import { getRedis } from "../src/lib/redis";
 import { plexSyncIsBusy, pumpPlexSyncQueue } from "../src/lib/plex-sync-queue";
+import { writeFileSync } from "fs";
 
 const MINUTE_MS = 60_000;
 const LOCK_TTL_S = 300; // 5-minute safety net
 const MINUTE_LOCK_KEY = "nexlify:cron:minute";
-const HOURLY_LOCK_KEY = "nexlify:cron:hourly";
 /** Exit for PM2 recycle when RSS exceeds this (MB). */
 const RECYCLE_RSS_MB = Number(process.env.NEXLIFY_CRON_RECYCLE_RSS_MB ?? "1200");
 
 /**
- * Seed with the current UTC hour so the first tick after start/restart does NOT
- * fire runHourlyCronJobs. Otherwise every pm2 restart (and memory recycle) re-runs
- * pg_dump / panel_backup mid-deploy while Postgres may still be coming up.
+ * Hourly jobs must survive PM2 recycle. Seeding lastHour to "now" meant a
+ * process that restarts inside the same hour never fired runHourlyCronJobs.
  */
-let lastHour = new Date().getUTCHours();
+function localHourStamp(d = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}`;
+}
+
+async function acquireHourlySlot(): Promise<boolean> {
+  const stamp = localHourStamp();
+  const redis = getRedis();
+  const key = `nexlify:cron:hourly:${stamp}`;
+  if (redis) {
+    try {
+      const ok = await redis.set(key, "1", "EX", 7200, "NX");
+      return ok === "OK";
+    } catch {
+      /* fall through to file slot */
+    }
+  }
+  try {
+    writeFileSync(`/tmp/nexlify-cron-hourly-${stamp}`, "1", { flag: "wx" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function acquireLock(key: string): Promise<boolean> {
   const redis = getRedis();
@@ -69,19 +91,11 @@ async function tickMinute() {
 
   try {
     await runAllCronJobs();
-    const h = new Date().getUTCHours();
-    if (h !== lastHour) {
-      lastHour = h;
-      if (await acquireLock(HOURLY_LOCK_KEY)) {
-        try {
-          await runHourlyCronJobs();
-        } catch (e) {
-          console.error("[nexlify-cron] hourly jobs error", e);
-        } finally {
-          await releaseLock(HOURLY_LOCK_KEY);
-        }
-      } else {
-        console.log("[nexlify-cron] another instance holds the hourly lock — skipping");
+    if (await acquireHourlySlot()) {
+      try {
+        await runHourlyCronJobs();
+      } catch (e) {
+        console.error("[nexlify-cron] hourly jobs error", e);
       }
     }
     console.log(`[nexlify-cron] ${new Date().toISOString()} minute jobs ok`);

@@ -76,7 +76,9 @@ if [ -d .git ]; then
     ensure_nexlify_git_ssh
   fi
   timeout 90 git fetch origin main || git fetch origin main
+  bash "$ROOT/scripts/panel-git-sparse.sh" "$ROOT" || true
   git reset --hard origin/main
+  bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" || true
   chmod +x scripts/*.sh 2>/dev/null || true
 fi
 

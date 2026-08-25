@@ -2,3 +2,12 @@
 *.sh text eol=lf
 *.bash text eol=lf
 scripts/*.mjs text eol=lf
+
+# git archive / GitHub source zip: panel-only. Marketing stays in the git tree
+# for nexlify.live publishes, but is not part of panel archives.
+marketing-drop-in/ export-ignore
+windows/ export-ignore
+.claude/ export-ignore
+.cursor/ export-ignore
+.agents/ export-ignore
+graft/ export-ignore

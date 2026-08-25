@@ -858,6 +858,11 @@ async function jobDbBackup() {
 async function jobCloudBackup() {
   const start = Date.now();
   try {
+    const cloudSettings = await getSettingGroup("cloud-backup");
+    if (!cloudSettings.cloudBackupEnabled) {
+      await logCron("cloud_backup", "ok", "disabled", Date.now() - start);
+      return;
+    }
     const { runCloudBackup, cleanupExpiredBackups } = await import("./cloud-backup");
     await runCloudBackup();
     const cleaned = await cleanupExpiredBackups();
