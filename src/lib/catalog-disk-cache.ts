@@ -8,7 +8,11 @@ import { pipeline } from "node:stream/promises";
 export const CATALOG_BLOB_VERSION = "v9";
 export const CATALOG_TTL_MS = 30 * 60 * 1000;
 export const CATALOG_STALE_MS = 6 * 60 * 60 * 1000;
-const LOCK_STALE_MS = 4 * 60 * 1000;
+/** Dead builders must not pin XCIPTV Update Content for minutes. */
+const LOCK_STALE_MS = 45_000;
+const LOCK_WAIT_MS = 150;
+/** Wait this long for another worker before stealing a lock when no blob exists. */
+const LOCK_MISSING_BLOB_WAIT_MS = 2_000;
 
 export function catalogCacheDir(): string {
   const env = process.env.NEXLIFY_CATALOG_CACHE_DIR?.trim();
@@ -94,7 +98,7 @@ export async function writeGzipJsonArrayFile(
     await writeGzipChunk(gzip, "]");
     gzip.end();
     await done;
-    await fs.rename(tmp, destPath);
+    await replaceCatalogFile(tmp, destPath);
   } catch (err) {
     gzip.destroy();
     out.destroy();
@@ -117,7 +121,7 @@ export async function writeGzipTextFile(
     await iterate((chunk) => writeGzipChunk(gzip, chunk));
     gzip.end();
     await done;
-    await fs.rename(tmp, destPath);
+    await replaceCatalogFile(tmp, destPath);
   } catch (err) {
     gzip.destroy();
     out.destroy();
@@ -126,12 +130,53 @@ export async function writeGzipTextFile(
   }
 }
 
+async function replaceCatalogFile(tmp: string, destPath: string): Promise<void> {
+  try {
+    await fs.rename(tmp, destPath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") throw err;
+    await fs.copyFile(tmp, destPath);
+    await fs.unlink(tmp).catch(() => undefined);
+  }
+}
+
+function lockPidIsAlive(pid: number): boolean {
+  if (!Number.isFinite(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function stealCatalogLockIfIdle(lockPath: string): Promise<boolean> {
+  try {
+    const raw = (await fs.readFile(lockPath, "utf8")).trim();
+    const pid = Number(raw);
+    if (!lockPidIsAlive(pid)) {
+      await fs.unlink(lockPath).catch(() => undefined);
+      return true;
+    }
+    const st = await fs.stat(lockPath);
+    if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+      await fs.unlink(lockPath).catch(() => undefined);
+      return true;
+    }
+  } catch {
+    return true;
+  }
+  return false;
+}
+
 export async function withCatalogBuildLock<T>(
   destPath: string,
   build: () => Promise<T>
 ): Promise<T | "existing"> {
   const lockPath = `${destPath}.lock`;
-  for (let i = 0; i < 1200; i++) {
+  const started = Date.now();
+  for (;;) {
     try {
       await fs.writeFile(lockPath, String(process.pid), { flag: "wx" });
       break;
@@ -140,20 +185,20 @@ export async function withCatalogBuildLock<T>(
       if (code !== "EEXIST") throw err;
       const age = await catalogFileAgeMs(destPath);
       if (catalogFileIsUsable(age)) return "existing";
-      try {
-        const st = await fs.stat(lockPath);
-        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          await fs.unlink(lockPath).catch(() => undefined);
-          continue;
-        }
-      } catch {
+      const stole = await stealCatalogLockIfIdle(lockPath);
+      if (stole) continue;
+      if (Date.now() - started >= LOCK_MISSING_BLOB_WAIT_MS) {
+        await fs.unlink(lockPath).catch(() => undefined);
         continue;
       }
-      await new Promise((r) => setTimeout(r, 150));
+      await new Promise((r) => setTimeout(r, LOCK_WAIT_MS));
     }
   }
   const existing = await catalogFileAgeMs(destPath);
-  if (catalogFileIsUsable(existing)) return "existing";
+  if (catalogFileIsUsable(existing)) {
+    await fs.unlink(lockPath).catch(() => undefined);
+    return "existing";
+  }
   try {
     return await build();
   } finally {
@@ -172,7 +217,8 @@ export async function purgeCatalogDiskCache(filter?: (name: string) => boolean):
   }
   await Promise.all(
     entries.map(async (name) => {
-      if (!name.endsWith(".json.gz") && !name.endsWith(".xml.gz") && !name.endsWith(".lock") && !name.endsWith(".tmp")) {
+      if (name.endsWith(".tmp")) return;
+      if (!name.endsWith(".json.gz") && !name.endsWith(".xml.gz") && !name.endsWith(".lock")) {
         return;
       }
       if (filter && !filter(name)) return;

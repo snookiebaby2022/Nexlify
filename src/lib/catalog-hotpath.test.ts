@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { gunzipSync } from "node:zlib";
@@ -15,7 +15,26 @@ describe("catalog disk cache", () => {
     assert.equal(catalogFileIsUsable(3 * 60 * 60 * 1000), true);
     assert.equal(catalogFileIsUsable(null), false);
     assert.equal(catalogFileIsFresh(60 * 1000), true);
-    assert.equal(catalogFileIsFresh(10 * 60 * 1000), false);
+    assert.equal(catalogFileIsFresh(31 * 60 * 1000), false);
+  });
+
+  it("does not delete in-flight .tmp files when purging catalog cache", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nexlify-purge-"));
+    const prev = process.env.NEXLIFY_CATALOG_CACHE_DIR;
+    process.env.NEXLIFY_CATALOG_CACHE_DIR = dir;
+    try {
+      const { purgeCatalogDiskCache } = await import("./catalog-disk-cache");
+      await writeFile(join(dir, "xtream-live-x.json.gz"), "gz");
+      await writeFile(join(dir, "xtream-live-x.json.gz.1.tmp"), "tmp");
+      await purgeCatalogDiskCache();
+      const left = await readdir(dir);
+      assert.equal(left.includes("xtream-live-x.json.gz.1.tmp"), true);
+      assert.equal(left.includes("xtream-live-x.json.gz"), false);
+    } finally {
+      if (prev == null) delete process.env.NEXLIFY_CATALOG_CACHE_DIR;
+      else process.env.NEXLIFY_CATALOG_CACHE_DIR = prev;
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("hashes bouquet tokens stably", () => {

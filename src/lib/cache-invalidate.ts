@@ -5,7 +5,6 @@ export async function invalidateDashboardStats() {
 }
 
 export async function invalidateXtreamCategories() {
-  const { purgeCatalogDiskCache } = await import("@/lib/catalog-disk-cache");
   await Promise.all([
     cacheDel("xtream:live_categories"),
     cacheDel("xtream:vod_categories"),
@@ -16,7 +15,6 @@ export async function invalidateXtreamCategories() {
     cacheDel("xtream:live_streams:"),
     cacheDel("xtream:vod_streams:"),
     cacheDel("xtream:series:"),
-    purgeCatalogDiskCache(),
   ]);
 }
 
@@ -29,7 +27,7 @@ export async function invalidateEpgCache() {
   await Promise.all([
     cacheDel("epg:"),
     cacheDel("xmltv:"),
-    purgeCatalogDiskCache((name) => name.endsWith(".xml.gz") || name.endsWith(".lock")),
+    purgeCatalogDiskCache((name) => name.startsWith("xmltv-") && name.endsWith(".lock")),
   ]);
 }
 

@@ -23,7 +23,7 @@ import {
   mapXtreamVodItem,
 } from "@/lib/xtream-catalog-items";
 import { forEachSeriesSeedBatch } from "@/lib/xtream-stream-id";
-import { iptvGzipFileResponse } from "@/lib/iptv-json";
+import { iptvGzipFileResponse, iptvJson } from "@/lib/iptv-json";
 import type { NextResponse } from "next/server";
 import { yieldEventLoop } from "@/lib/yield-event-loop";
 
@@ -170,6 +170,10 @@ export async function serveXtreamCatalogJson(
   }
 
   await rebuild();
+  const built = await catalogFileAgeMs(destPath);
+  if (built == null) {
+    return iptvJson([], { compressFor: req });
+  }
   return iptvGzipFileResponse(destPath, req, "application/json; charset=utf-8");
 }
 
