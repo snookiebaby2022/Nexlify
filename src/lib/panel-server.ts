@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
-import { getSettingGroup, setSettingGroup } from "@/lib/panel-settings";
 import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
+import { getSettingGroup, setSettingGroup } from "@/lib/panel-settings";
 import {
   resolvePanelListenPort,
   resolveStreamEdgeHttpPort,
@@ -180,10 +180,12 @@ export function syncPanelServerEnv(settings: PanelServerSettings) {
   process.env.STREAM_EDGE_PORT = String(settings.streamHttpPort);
   process.env.STREAM_HTTP_PORT = String(settings.streamHttpPort);
   process.env.STREAM_HTTPS_PORT = String(settings.streamHttpsPort);
-  if (settings.repoPath) {
-    process.env.PANEL_REPO_PATH = settings.repoPath;
-  } else {
-    delete process.env.PANEL_REPO_PATH;
+  const explicit = settings.repoPath.trim();
+  if (explicit) {
+    process.env.PANEL_REPO_PATH = explicit;
+  } else if (!process.env.PANEL_REPO_PATH?.trim()) {
+    const resolved = resolvePanelRepoPathSync();
+    if (resolved) process.env.PANEL_REPO_PATH = resolved;
   }
 }
 
@@ -203,7 +205,7 @@ function upsertEnvLine(lines: string[], key: string, value: string): string[] {
 
 /** Persist stream / SSL ports to .env so nginx + firewall scripts stay in sync after settings save. */
 export async function persistServerPortsToEnv(settings: PanelServerSettings): Promise<void> {
-  const envPath = path.join(process.cwd(), ".env");
+  const envPath = path.join(resolvePanelRepoPathSync(settings.repoPath), ".env");
   if (!fs.existsSync(envPath)) return;
 
   let raw = fs.readFileSync(envPath, "utf8");
