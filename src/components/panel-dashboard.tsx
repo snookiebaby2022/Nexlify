@@ -759,7 +759,7 @@ export function PanelDashboard({
 
             value={`${liveSummary?.onlineStreams ?? d?.onlineStreams ?? "—"} / ${liveSummary?.totalLiveStreams ?? d?.totalLiveStreams ?? "—"}`}
 
-            label="Online Streams"
+            label="Watching now"
 
             icon={<Play size={28} fill="currentColor" strokeWidth={0} />}
 

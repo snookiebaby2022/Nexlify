@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { cacheGetOrSet } from "@/lib/cache";
-import { bouquetMembershipSql } from "@/lib/lines";
+import { bouquetMembershipSql, leanVodMetaSql } from "@/lib/lines";
 
 /** Stable numeric id for Xtream-compatible APIs (matches historical live/movie routes). */
 export function cuidToNum(id: string): number {
@@ -43,6 +43,8 @@ export type SeriesSeedRow = {
   streamIcon: string | null;
   categoryId: string | null;
   updatedAt: Date;
+  vodRating?: string | null;
+  vodPlot?: string | null;
 };
 
 function seriesSeedCategorySql(opts?: {
@@ -64,7 +66,8 @@ const SERIES_SEED_SELECT = Prisma.sql`
     COALESCE(NULLIF(TRIM(s."seriesName"), ''), s.name) AS name,
     s."streamIcon" AS "streamIcon",
     s."categoryId" AS "categoryId",
-    s."updatedAt" AS "updatedAt"
+    s."updatedAt" AS "updatedAt",
+    ${leanVodMetaSql}
 `;
 
 function seriesSeedFromSql(bouquetIds: string[], categorySql: Prisma.Sql) {

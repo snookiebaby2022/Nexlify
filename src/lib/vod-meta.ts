@@ -110,6 +110,18 @@ export function parseXtreamVodMeta(raw: string | null | undefined): Record<strin
   return withXtreamVodAliases(parsed);
 }
 
+/** Listing-grid rating for Smarters All (TMDB 0–10, or 0–100 percent). */
+export function xtreamListingRating(raw?: string | null): { rating: string; rating_5based: number } {
+  const n = Number(String(raw ?? "").trim());
+  if (!Number.isFinite(n) || n <= 0) return { rating: "0", rating_5based: 0 };
+  const ten = n > 10 && n <= 100 ? n / 10 : Math.min(10, n);
+  const rounded = Math.round(ten * 10) / 10;
+  return {
+    rating: rounded.toFixed(1),
+    rating_5based: Math.round((rounded / 2) * 10) / 10,
+  };
+}
+
 export type VodTmdbFields = {
   tmdbId: string;
   tmdbTitle: string;

@@ -1,4 +1,6 @@
 import { SettingsPanelForm } from "@/components/settings-panel-form";
+import { TmdbBackfillBanner } from "@/components/tmdb-backfill-banner";
+import { PlexAutoSyncStatus } from "@/components/plex-auto-sync-status";
 
 export default function CronSettingsPage() {
   return (
@@ -6,6 +8,12 @@ export default function CronSettingsPage() {
       group="cron"
       title="Scheduled tasks"
       description="Cron schedules for EPG sync, M3U provider sync, Plex library sync, channel refresh, dead-link probes, and subscription notifications."
+      topContent={
+        <div className="space-y-3">
+          <TmdbBackfillBanner />
+          <PlexAutoSyncStatus />
+        </div>
+      }
       sections={[
         {
           title: "EPG & channels",

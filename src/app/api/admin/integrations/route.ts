@@ -94,7 +94,9 @@ export async function GET(req: NextRequest) {
       syncProgress: await resolveSyncProgress(item.config, item.id),
     }))
   );
-  return NextResponse.json({ items: mapped });
+  const plexCron =
+    !type || type === "plex" ? await (await import("@/lib/plex-catalog-match")).plexCronAdminStatus() : undefined;
+  return NextResponse.json({ items: mapped, ...(plexCron ? { plexCron } : {}) });
 }
 
 export async function POST(req: NextRequest) {

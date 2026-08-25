@@ -144,3 +144,36 @@ export function plexAutoSyncIsDue(lastRunIso: string | null | undefined, interva
   const minGapMs = (intervalHours * 60 - 20) * 60_000;
   return now - last >= minGapMs;
 }
+
+export function plexAutoSyncNextDueIso(
+  lastRunIso: string | null | undefined,
+  intervalHours: 12 | 24
+): string | null {
+  if (!lastRunIso) return null;
+  const last = Date.parse(lastRunIso);
+  if (!Number.isFinite(last)) return null;
+  const minGapMs = (intervalHours * 60 - 20) * 60_000;
+  return new Date(last + minGapMs).toISOString();
+}
+
+export async function plexCronAdminStatus() {
+  const { getSettingGroup } = await import("@/lib/panel-settings");
+  const cron = await getSettingGroup("cron");
+  const intervalHours = plexScheduleHours(cron.plexSyncSchedule);
+  const last = await prisma.panelSetting.findUnique({ where: { key: "plex_auto_sync_last_run" } });
+  const lastIso = last?.value ?? null;
+  const lastLog = await prisma.cronRunLog.findFirst({
+    where: { job: "plex_auto_sync" },
+    orderBy: { createdAt: "desc" },
+  });
+  return {
+    enabled: cron.plexSyncEnabled !== false,
+    intervalHours,
+    lastAutoSyncAt: lastIso,
+    nextDueAt: plexAutoSyncNextDueIso(lastIso, intervalHours),
+    dueNow: plexAutoSyncIsDue(lastIso, intervalHours),
+    lastCronStatus: lastLog?.status ?? null,
+    lastCronMessage: lastLog?.message ?? null,
+    lastCronAt: lastLog?.createdAt?.toISOString() ?? null,
+  };
+}

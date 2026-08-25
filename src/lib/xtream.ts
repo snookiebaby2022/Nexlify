@@ -170,9 +170,6 @@ async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType)
   const canonicalMaps = await buildCanonicalCategoryMaps(type);
   const { categoryIds, hasUncategorized } = await categoryIdsForLine(line, { type });
   const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
-  if (hasUncategorized) {
-    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
-  }
   if (categoryIds.length) {
     const cats = await prisma.category.findMany({
       where: { id: { in: categoryIds } },
@@ -194,6 +191,9 @@ async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType)
         created_at: xtreamUnixString(c.createdAt),
       });
     }
+  }
+  if (hasUncategorized) {
+    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
   }
   return rows;
 }

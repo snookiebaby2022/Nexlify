@@ -14,6 +14,7 @@ import {
   xtreamListingExtension,
 } from "@/lib/xtream-safe";
 import { cuidToNum } from "@/lib/xtream-stream-id";
+import { xtreamListingRating } from "@/lib/vod-meta";
 
 export function mapXtreamLiveItem(
   s: StreamForLine,
@@ -51,14 +52,15 @@ export function mapXtreamVodItem(
   canonical: CanonicalCategoryMaps
 ) {
   const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
+  const stars = xtreamListingRating(s.vodRating);
   return {
     num: index + 1,
     name: xtreamSafeText(s.name) || "Movie",
     stream_type: "movie" as const,
     stream_id: cuidToNum(s.id),
     stream_icon: xtreamSafeText(s.streamIcon),
-    rating: "0",
-    rating_5based: 0,
+    rating: stars.rating,
+    rating_5based: stars.rating_5based,
     added: xtreamUnixString(s.createdAt),
     updated_at: xtreamUnix(s.updatedAt),
     is_adult: s.isAdult ? 1 : 0,
@@ -82,20 +84,21 @@ export function mapXtreamSeriesItem(
   const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
   const cover = xtreamSafeText(s.streamIcon);
   const modified = xtreamUnix(s.updatedAt);
+  const stars = xtreamListingRating(s.vodRating);
   return {
     num: index + 1,
     name: xtreamSafeText(s.name) || "Series",
     series_id: cuidToNum(s.id),
     cover,
     cover_big: cover,
-    plot: "",
+    plot: xtreamSafeText(s.vodPlot),
     cast: "",
     director: "",
     genre: "",
     releaseDate: "",
     last_modified: String(modified),
-    rating: "0",
-    rating_5based: 0,
+    rating: stars.rating,
+    rating_5based: stars.rating_5based,
     backdrop_path: [] as string[],
     youtube_trailer: "",
     episode_run_time: "0",

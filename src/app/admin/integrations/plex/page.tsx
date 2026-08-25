@@ -5,6 +5,7 @@ import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { IntegrationProgressCard } from "@/components/integration-progress-card";
+import { PlexAutoSyncStatus } from "@/components/plex-auto-sync-status";
 import type { IntegrationSyncProgress } from "@/lib/integration-sync-types";
 
 type PlexItem = {
@@ -320,6 +321,7 @@ export default function PlexIntegrationPage() {
         </Link>
         .
       </p>
+      <PlexAutoSyncStatus />
 
       {addProgress && <IntegrationProgressCard progress={addProgress} title="Add / update" />}
       {syncProgress && <IntegrationProgressCard progress={syncProgress} title="Library sync" />}

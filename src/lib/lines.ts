@@ -116,7 +116,24 @@ export type StreamForLine = Stream & {
   categoryName?: string | null;
   /** File extension parsed from streamUrl (lean catalog SQL). */
   urlExt?: string | null;
+  /** TMDB/XUI rating scraped from agentStartCmd (lean catalog SQL). */
+  vodRating?: string | null;
+  vodPlot?: string | null;
 };
+
+/** Rating + plot from agentStartCmd without hydrating the full JSON blob. */
+export const leanVodMetaSql = Prisma.sql`
+      COALESCE(
+        (regexp_match(COALESCE(s."agentStartCmd", ''), '"tmdbRating"[[:space:]]*:[[:space:]]*"?([0-9]+(\\.[0-9]+)?)"?'))[1],
+        (regexp_match(COALESCE(s."agentStartCmd", ''), '"rating"[[:space:]]*:[[:space:]]*"?([0-9]+(\\.[0-9]+)?)"?'))[1]
+      ) AS "vodRating",
+      left(
+        COALESCE(
+          (regexp_match(COALESCE(s."agentStartCmd", ''), '"tmdbOverview"[[:space:]]*:[[:space:]]*"([^"]{0,800})"'))[1],
+          (regexp_match(COALESCE(s."agentStartCmd", ''), '"plot"[[:space:]]*:[[:space:]]*"([^"]{0,800})"'))[1]
+        ),
+        400
+      ) AS "vodPlot"`;
 
 export type StreamsForLineOptions = {
   excludeDisabled?: boolean;
@@ -259,6 +276,8 @@ type LeanListingRow = {
   containerExtension: string | null;
   urlExt: string | null;
   categoryName: string | null;
+  vodRating?: string | null;
+  vodPlot?: string | null;
   ord: bigint;
 };
 
@@ -294,6 +313,7 @@ async function loadLeanListingForLine(
       s."containerExtension" AS "containerExtension",
       substring(split_part(s."streamUrl", '?', 1) from '[.]([A-Za-z0-9]{2,4})$') AS "urlExt",
       c.name AS "categoryName",
+      ${leanVodMetaSql},
       s."sortOrder"::bigint AS ord
     FROM ${bouquetMembershipSql(bouquetIds)} m
     INNER JOIN "Stream" s ON s.id = m."streamId"
@@ -382,6 +402,7 @@ export async function forEachLeanListingBatch(
         s."containerExtension" AS "containerExtension",
         substring(split_part(s."streamUrl", '?', 1) from '[.]([A-Za-z0-9]{2,4})$') AS "urlExt",
         c.name AS "categoryName",
+        ${leanVodMetaSql},
         s."sortOrder"::bigint AS ord
       FROM ${bouquetMembershipSql(filter.bouquetIds)} m
       INNER JOIN "Stream" s ON s.id = m."streamId"

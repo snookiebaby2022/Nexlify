@@ -9,6 +9,7 @@ import {
   readVodTmdbFields,
   rewriteVodAgentCmdForXtream,
   vodAgentCmdNeedsXtreamRewrite,
+  xtreamListingRating,
   VOD_META_PREFIX,
 } from "./vod-meta";
 
@@ -107,4 +108,10 @@ test("encodeVodMetaFromXuiProperties maps movie_properties", () => {
   assert.equal(meta.cast, "A, B");
   assert.equal(meta.tmdbId, "603");
   assert.equal(meta.durationSecs, 136);
+});
+
+test("xtreamListingRating maps TMDB 10-scale and percent", () => {
+  assert.deepEqual(xtreamListingRating("8.4"), { rating: "8.4", rating_5based: 4.2 });
+  assert.deepEqual(xtreamListingRating("75"), { rating: "7.5", rating_5based: 3.8 });
+  assert.deepEqual(xtreamListingRating(""), { rating: "0", rating_5based: 0 });
 });

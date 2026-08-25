@@ -82,7 +82,7 @@ export function RealtimeDashboard() {
           href="/admin/servers"
         />
         <KpiCard
-          label="Online Streams"
+          label="Watching now"
           value={data?.onlineStreams ?? 0}
           icon={<Play size={28} />}
           gradient="linear-gradient(135deg, #00a65a 0%, #008d4c 100%)"

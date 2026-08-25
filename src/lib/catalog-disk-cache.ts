@@ -5,7 +5,7 @@ import path from "node:path";
 import { createGzip, type Gzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 
-export const CATALOG_BLOB_VERSION = "v8";
+export const CATALOG_BLOB_VERSION = "v9";
 export const CATALOG_TTL_MS = 30 * 60 * 1000;
 export const CATALOG_STALE_MS = 6 * 60 * 60 * 1000;
 const LOCK_STALE_MS = 4 * 60 * 1000;

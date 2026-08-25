@@ -3,6 +3,7 @@ import test from "node:test";
 import { matchVodBouquetId } from "./integration-bouquet";
 import {
   plexAutoSyncIsDue,
+  plexAutoSyncNextDueIso,
   plexCatalogTitleKey,
   plexGenreName,
   plexScheduleHours,
@@ -78,4 +79,11 @@ test("plexAutoSyncIsDue respects 12h and 24h gaps", () => {
   assert.equal(plexAutoSyncIsDue(new Date(now - 2 * 3600_000).toISOString(), 12, now), false);
   assert.equal(plexAutoSyncIsDue(new Date(now - 20 * 3600_000).toISOString(), 24, now), false);
   assert.equal(plexAutoSyncIsDue(new Date(now - 25 * 3600_000).toISOString(), 24, now), true);
+});
+
+test("plexAutoSyncNextDueIso is last run plus the due gap", () => {
+  const last = "2026-08-24T14:00:00.000Z";
+  const next = plexAutoSyncNextDueIso(last, 12);
+  assert.equal(next, new Date(Date.parse(last) + (12 * 60 - 20) * 60_000).toISOString());
+  assert.equal(plexAutoSyncNextDueIso(null, 12), null);
 });

@@ -167,7 +167,7 @@ async function handlePlayerApiInner(
     case "get_live_categories": {
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(
-        `xtream:live_categories:v5:${line.id}`,
+        `xtream:live_categories:v6:${line.id}`,
         Math.max(300, ttl.categories),
         () => xtreamLiveCategoriesForLine(line)
       );
@@ -195,7 +195,7 @@ async function handlePlayerApiInner(
     case "get_vod_categories": {
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(
-        `xtream:vod_categories:v3:${line.id}`,
+        `xtream:vod_categories:v4:${line.id}`,
         Math.max(300, ttl.categories),
         () => xtreamVodCategoriesForLine(line)
       );
@@ -204,7 +204,7 @@ async function handlePlayerApiInner(
     case "get_series_categories": {
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(
-        `xtream:series_categories:v3:${line.id}`,
+        `xtream:series_categories:v4:${line.id}`,
         Math.max(300, ttl.categories),
         () => xtreamSeriesCategoriesForLine(line)
       );

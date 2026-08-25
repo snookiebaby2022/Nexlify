@@ -27,6 +27,7 @@ import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-
 import { displayStreamIcon } from "@/lib/plex-artwork";
 import { StreamDisplayTitle } from "@/components/stream-display-title";
 import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
+import { TmdbBackfillBanner } from "@/components/tmdb-backfill-banner";
 
 const StreamVerifyPanel = dynamic(
   () => import("@/components/stream-verify-panel").then((m) => m.StreamVerifyPanel),
@@ -315,6 +316,8 @@ export function StreamsList({
           </button>
         </div>
       </div>
+
+      {(type === "MOVIE" || type === "SERIES") && <TmdbBackfillBanner />}
 
       {type === "LIVE" && !statusFilter && verifyReady && <StreamVerifyPanel />}
 

@@ -4,6 +4,83 @@ import { enrichVodFromTmdb, isTmdbConfigured } from "@/lib/vod-tmdb-enrich";
 import { parseXtreamVodMeta } from "@/lib/vod-meta";
 import { cleanTitleForTmdb } from "@/lib/vod-title-clean";
 import { stripIntegrationSourceSuffix } from "@/lib/integration-stream-url";
+import { getSettingGroup, setSettingGroup } from "@/lib/panel-settings";
+
+const TMDB_PROGRESS_KEY = "tmdbVodBackfill";
+const TMDB_STALE_MS = 180_000;
+
+export type TmdbVodBackfillStatus = {
+  running: boolean;
+  movies: number;
+  series: number;
+  missed: number;
+  lastMovies: number;
+  lastSeries: number;
+  lastMissed: number;
+  lastBatchAt: string;
+  done: boolean;
+};
+
+function emptyTmdbStatus(): TmdbVodBackfillStatus {
+  return {
+    running: false,
+    movies: 0,
+    series: 0,
+    missed: 0,
+    lastMovies: 0,
+    lastSeries: 0,
+    lastMissed: 0,
+    lastBatchAt: "",
+    done: false,
+  };
+}
+
+function parseTmdbStatus(raw: unknown): TmdbVodBackfillStatus {
+  if (!raw || typeof raw !== "object") return emptyTmdbStatus();
+  const o = raw as Record<string, unknown>;
+  return {
+    running: Boolean(o.running),
+    movies: Number(o.movies) || 0,
+    series: Number(o.series) || 0,
+    missed: Number(o.missed) || 0,
+    lastMovies: Number(o.lastMovies) || 0,
+    lastSeries: Number(o.lastSeries) || 0,
+    lastMissed: Number(o.lastMissed) || 0,
+    lastBatchAt: String(o.lastBatchAt ?? ""),
+    done: Boolean(o.done),
+  };
+}
+
+export async function loadTmdbVodBackfillStatus(): Promise<TmdbVodBackfillStatus> {
+  const settings = await getSettingGroup("streams");
+  const status = parseTmdbStatus(settings[TMDB_PROGRESS_KEY]);
+  if (status.running && status.lastBatchAt) {
+    const t = Date.parse(status.lastBatchAt);
+    if (Number.isFinite(t) && Date.now() - t > TMDB_STALE_MS) {
+      return { ...status, running: false };
+    }
+  }
+  return status;
+}
+
+async function persistTmdbVodBackfill(next: TmdbVodBackfillStatus): Promise<void> {
+  try {
+    const settings = await getSettingGroup("streams");
+    await setSettingGroup("streams", { ...settings, [TMDB_PROGRESS_KEY]: next });
+  } catch (err) {
+    console.warn("[tmdb-backfill] persist failed:", err instanceof Error ? err.message : err);
+  }
+}
+
+export async function markTmdbVodBackfillRunning(running: boolean): Promise<void> {
+  const prev = await loadTmdbVodBackfillStatus();
+  await persistTmdbVodBackfill({
+    ...prev,
+    running,
+    lastBatchAt: new Date().toISOString(),
+    done: running ? false : prev.done,
+  });
+}
 
 function iconNeedsTmdb(icon: string | null | undefined): boolean {
   const v = String(icon ?? "").trim();
@@ -150,5 +227,22 @@ export async function backfillTmdbVodBatch(opts?: {
     if (episodes.length >= seriesLimit * 20) result.done = false;
   }
 
+  await recordTmdbBatch(result);
   return result;
+}
+
+async function recordTmdbBatch(result: TmdbVodBackfillResult): Promise<void> {
+  const prev = await loadTmdbVodBackfillStatus();
+  const idle = result.done && result.movies === 0 && result.series === 0;
+  await persistTmdbVodBackfill({
+    running: !idle,
+    movies: prev.movies + result.movies,
+    series: prev.series + result.series,
+    missed: prev.missed + result.missed,
+    lastMovies: result.movies,
+    lastSeries: result.series,
+    lastMissed: result.missed,
+    lastBatchAt: new Date().toISOString(),
+    done: idle,
+  });
 }

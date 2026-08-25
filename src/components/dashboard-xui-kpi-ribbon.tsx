@@ -158,7 +158,7 @@ export function DashboardXuiKpiRibbon({
             style={{ background: "linear-gradient(135deg, #00a65a 0%, #008d4c 100%)" }}
           >
             <div>
-              <p className="text-xs uppercase opacity-90">Online Stream</p>
+              <p className="text-xs uppercase opacity-90">Watching now</p>
               <p className="text-2xl font-bold tabular-nums">{onlineStreams.toLocaleString()}</p>
             </div>
             <Play size={24} fill="white" strokeWidth={0} />
@@ -168,7 +168,7 @@ export function DashboardXuiKpiRibbon({
             className="px-4 py-2 text-white text-sm flex items-center justify-between"
             style={{ background: "linear-gradient(135deg, #dd4b39 0%, #c23321 100%)" }}
           >
-            <span className="uppercase text-xs opacity-90">Offline Stream</span>
+            <span className="uppercase text-xs opacity-90">Probe failed</span>
             <span className="font-bold tabular-nums">{offlineStreams.toLocaleString()}</span>
           </Link>
         </div>

@@ -6,6 +6,7 @@ import { Pencil, RefreshCw, Search, Tv, Trash2, Power } from "lucide-react";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
 import { displayStreamIcon } from "@/lib/plex-artwork";
 import { StreamDisplayTitle } from "@/components/stream-display-title";
+import { TmdbBackfillBanner } from "@/components/tmdb-backfill-banner";
 
 type SeriesRow = {
   id: string;
@@ -106,6 +107,8 @@ export function ManageSeriesTable() {
           </Link>
         </div>
       </div>
+
+      <TmdbBackfillBanner />
 
       {error ? (
         <p className="text-sm rounded border px-3 py-2" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>

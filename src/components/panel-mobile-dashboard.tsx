@@ -150,7 +150,7 @@ export function PanelMobileDashboard({
           href={linesHref}
         />
         <StatTile
-          label="Online Streams"
+          label="Watching now"
           value={String(d?.onlineStreams ?? "—")}
           sub={d?.totalLiveStreams != null ? `of ${d.totalLiveStreams}` : undefined}
           href={streamsHref}
