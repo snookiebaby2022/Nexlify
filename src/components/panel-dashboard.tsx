@@ -257,31 +257,37 @@ export function PanelDashboard({
   }, [statsUrl]);
 
   const loadFull = useCallback(() => {
-    const statsPromise = fetch(statsUrl).then((r) => (r.ok ? r.json() : {}));
-    const analyticsPromise = isReseller
-      ? Promise.resolve({})
-      : fetch("/api/admin/analytics")
-          .then((r) => (r.ok ? r.json() : {}))
-          .catch(() => ({}));
+    fetch(statsUrl)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((statsData) => {
+        setStats((prev) => ({
+          ...(prev ?? {}),
+          ...statsData,
+        }));
+      })
+      .catch(() => {});
+  }, [statsUrl]);
 
-    Promise.all([statsPromise, analyticsPromise]).then(([statsData, analytics]) => {
-      const a = (analytics ?? {}) as {
-        topChannels?: { streamId?: string; name?: string; viewers?: number; type?: string; watchCount?: number }[];
-      };
-      const topChannels: TopChannel[] = Array.isArray(a.topChannels)
-        ? a.topChannels.map((ch) => ({
-            streamId: String(ch.streamId ?? ""),
-            name: String(ch.name ?? "Unknown"),
-            type: String(ch.type ?? "LIVE"),
-            watchCount: Number(ch.watchCount ?? ch.viewers ?? 0),
-          }))
-        : [];
-      setStats({
-        ...statsData,
-        topChannels,
-      });
-    });
-  }, [statsUrl, isReseller]);
+  const loadAnalytics = useCallback(() => {
+    if (isReseller) return;
+    fetch("/api/admin/analytics")
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((analytics) => {
+        const a = (analytics ?? {}) as {
+          topChannels?: { streamId?: string; name?: string; viewers?: number; type?: string; watchCount?: number }[];
+        };
+        const topChannels: TopChannel[] = Array.isArray(a.topChannels)
+          ? a.topChannels.map((ch) => ({
+              streamId: String(ch.streamId ?? ""),
+              name: String(ch.name ?? "Unknown"),
+              type: String(ch.type ?? "LIVE"),
+              watchCount: Number(ch.watchCount ?? ch.viewers ?? 0),
+            }))
+          : [];
+        setStats((prev) => ({ ...(prev ?? {}), topChannels }));
+      })
+      .catch(() => {});
+  }, [isReseller]);
 
   useEffect(() => {
     loadHeader();
@@ -295,6 +301,8 @@ export function PanelDashboard({
         : null;
     const timeoutId = idleId == null ? setTimeout(runFull, 120) : null;
     const t = setInterval(loadFull, isReseller ? 45000 : ADMIN_POLLS.dashboardMs);
+    const analyticsId = setTimeout(loadAnalytics, 400);
+    const analyticsT = setInterval(loadAnalytics, 90_000);
     return () => {
       cancelled = true;
       if (idleId != null && typeof cancelIdleCallback !== "undefined") {
@@ -302,8 +310,10 @@ export function PanelDashboard({
       }
       if (timeoutId != null) clearTimeout(timeoutId);
       clearInterval(t);
+      clearTimeout(analyticsId);
+      clearInterval(analyticsT);
     };
-  }, [loadHeader, loadFull, isReseller]);
+  }, [loadHeader, loadFull, loadAnalytics, isReseller]);
 
 
 

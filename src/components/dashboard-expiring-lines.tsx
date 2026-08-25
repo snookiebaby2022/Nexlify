@@ -133,7 +133,7 @@ export function DashboardExpiringLines({
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 30000);
+    const t = setInterval(load, 90_000);
     return () => clearInterval(t);
   }, [load]);
 

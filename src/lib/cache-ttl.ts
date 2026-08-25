@@ -8,7 +8,7 @@ export type CacheTtlSettings = {
 };
 
 const FALLBACK: CacheTtlSettings = {
-  stats: 20,
+  stats: 60,
   epg: 120,
   categories: 600,
   playbackUrl: 60,

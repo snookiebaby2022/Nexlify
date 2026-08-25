@@ -15,10 +15,10 @@ const DEFAULT: AdminPollIntervals = {
 };
 
 const PERF: AdminPollIntervals = {
-  dashboardMs: 30_000,
-  connectionsMs: 10_000,
+  dashboardMs: 60_000,
+  connectionsMs: 15_000,
   streamsMs: 30_000,
-  dashboardSseMs: 3_000,
+  dashboardSseMs: 5_000,
 };
 
 /** Server-side poll intervals for admin APIs (SSE, cron-adjacent). */

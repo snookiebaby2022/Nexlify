@@ -147,15 +147,15 @@ async function loadStats() {
           fixHref: cronFixHref(log.job, log.status),
         }))
       ).catch(() => [] as typeof cronLogs),
-      getDashboardSummary().catch((e) => {
+      cacheGetOrSet("stats:summary", 60, () => getDashboardSummary()).catch((e) => {
         console.error("[stats] getDashboardSummary error:", e);
         return dashboard;
       }),
-      getDashboardKpiExtended().catch((e) => {
+      cacheGetOrSet("stats:kpi", 120, () => getDashboardKpiExtended()).catch((e) => {
         console.error("[stats] getDashboardKpiExtended error:", e);
         return dashboardKpi;
       }),
-      getDashboardServerMetrics().catch((e) => {
+      cacheGetOrSet("stats:server-metrics", 60, () => getDashboardServerMetrics()).catch((e) => {
         console.error("[stats] getDashboardServerMetrics error:", e);
         return [] as Awaited<ReturnType<typeof getDashboardServerMetrics>>;
       }),
