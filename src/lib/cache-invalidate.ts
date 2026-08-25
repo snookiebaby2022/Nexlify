@@ -9,12 +9,26 @@ export async function invalidateXtreamCategories() {
     cacheDel("xtream:live_categories"),
     cacheDel("xtream:vod_categories"),
     cacheDel("xtream:series_categories"),
+    cacheDel("xtream:linecats:"),
     cacheDel("xtream:catnum:"),
     cacheDel("xtream:catcanon:"),
     cacheDel("xtream:catresolve:"),
     cacheDel("xtream:live_streams:"),
     cacheDel("xtream:vod_streams:"),
     cacheDel("xtream:series:"),
+  ]);
+}
+
+/** Plex/VOD repair — do not drop live category cache (Smarters hits that on every open). */
+export async function invalidateXtreamVodAndSeriesCatalogs() {
+  await Promise.all([
+    cacheDel("xtream:vod_categories"),
+    cacheDel("xtream:series_categories"),
+    cacheDel("xtream:linecats:"),
+    cacheDel("xtream:vod_streams:"),
+    cacheDel("xtream:series:"),
+    cacheDel("xtream:catcanon:MOVIE"),
+    cacheDel("xtream:catcanon:SERIES"),
   ]);
 }
 

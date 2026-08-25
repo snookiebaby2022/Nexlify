@@ -19,7 +19,7 @@ import {
 } from "@/lib/integration-bouquet";
 import { maxStreamSortOrder } from "@/lib/stream-order";
 import { resolveServerUrls } from "@/lib/server-urls";
-import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
+import { invalidateXtreamVodAndSeriesCatalogs } from "@/lib/cache-invalidate";
 import {
   buildPlexBaseUrl,
   extractPlexToken,
@@ -31,7 +31,7 @@ import {
 } from "@/lib/plex-config";
 import type { IntegrationSyncReporter } from "@/lib/integration-sync-progress";
 import { loadPlexCatalogIndex, plexCatalogTitleKey, plexGenreName, plexVodMetaFromItem } from "@/lib/plex-catalog-match";
-import { categoryForPlexMovie, categoryForPlexSeries, reassignTvSeriesNamedCategory } from "@/lib/vod-category";
+import { categoryForPlexMovie, categoryForPlexSeries, flattenNestedSeriesCategories, reassignTvSeriesNamedCategory } from "@/lib/vod-category";
 import { encodeVodAgentCmd, parseVodAgentCmd } from "@/lib/vod-meta";
 import { yieldEventLoop } from "@/lib/yield-event-loop";
 
@@ -240,6 +240,7 @@ type PluginStreamRow = {
   episodeNum?: number | null;
   sortOrder: number;
   agentStartCmd?: string | null;
+  containerExtension?: string | null;
 };
 
 async function createPluginStreamsBatch(rows: PluginStreamRow[]) {
@@ -276,6 +277,7 @@ async function createPluginStreamsBatchForBouquet(
         seasonNum: r.seasonNum ?? undefined,
         episodeNum: r.episodeNum ?? undefined,
         agentStartCmd: r.agentStartCmd ?? undefined,
+        containerExtension: r.containerExtension ?? "mp4",
       })),
       skipDuplicates: true,
     });
@@ -554,6 +556,12 @@ async function backfillPlexCategories(integrationId: string, reporter?: Integrat
       `Removed duplicate “TV Series” category (${catchAll.moved} titles → Other, ${catchAll.deleted} empty cats deleted)`
     );
   }
+  const flattened = await flattenNestedSeriesCategories();
+  if (flattened.moved || flattened.deleted) {
+    await reporter?.note(
+      `Flattened nested TV folders (${flattened.moved.toLocaleString()} episodes → genre categories, ${flattened.deleted} empty folders removed)`
+    );
+  }
 }
 
 export async function repairPlexVodPlacement(
@@ -566,7 +574,7 @@ export async function repairPlexVodPlacement(
   await backfillPlexCategories(integrationId, reporter);
   await reporter?.note("Moving Plex titles into the Movies and TV Series bouquets…");
   const linked = await relinkPlexStreamsToVodBouquets(integrationId);
-  await invalidateXtreamCategories();
+  await invalidateXtreamVodAndSeriesCatalogs();
   return linked;
 }
 
@@ -762,7 +770,7 @@ export async function backfillPlexGenresFromLibrary(
     }
   }
 
-  await invalidateXtreamCategories();
+  await invalidateXtreamVodAndSeriesCatalogs();
   await reporter?.note(
     `Done. Movies ${moviesUpdated.toLocaleString()}, shows ${seriesShowsUpdated.toLocaleString()}, episodes ${episodesUpdated.toLocaleString()}.`
   );
@@ -878,6 +886,7 @@ async function importPlexEpisodesForShow(
         seasonNum,
         episodeNum,
         sortOrder: sortCounter.value++,
+        containerExtension: "mp4",
         agentStartCmd: encodeVodAgentCmd({
           ...showMeta,
           ...epMeta,
@@ -1109,7 +1118,6 @@ export async function importPlexLibrary(
         const showCmd = encodeVodAgentCmd(plexVodMetaFromItem(item));
 
         if (skipCatalog && titleKey && catalog.seriesKeys.has(titleKey)) {
-          skipped++;
           skippedCatalog++;
           const existingId = catalog.seriesIdByKey.get(titleKey);
           if (existingId) {
@@ -1121,7 +1129,6 @@ export async function importPlexLibrary(
             catalog.seriesIdByKey.delete(titleKey);
             if (pendingIcons.length >= 20) await flushIcons();
           }
-          continue;
         }
 
         await flushMovies();
@@ -1182,6 +1189,7 @@ export async function importPlexLibrary(
         streamIcon: plexArtworkUrl(integrationId, String(ratingKey), artworkOrigin),
         categoryId: await movieCategory(plexGenreName(item)),
         sortOrder: sortCounter.value++,
+        containerExtension: "mp4",
         agentStartCmd: encodeVodAgentCmd(plexVodMetaFromItem(item)),
       });
       catalog.plexUrls.add(streamUrl);
@@ -1377,7 +1385,22 @@ export async function resolvePlexIntegrationPlayback(
     }>(`${base}/library/metadata/${itemId}?${tokenParam}`, clientIdentifier, 8_000);
     const item = meta.MediaContainer?.Metadata?.[0];
     if (item) {
-      upstream = pickPlexPlaybackUrl(base, token, item, profile);
+      let playItem = item;
+      if (item.type === "show" || item.type === "season") {
+        const leaves = await fetchPlexJson<{
+          MediaContainer?: { Metadata?: PlexJsonMetadata[] };
+        }>(
+          `${base}/library/metadata/${itemId}/allLeaves?${tokenParam}&X-Plex-Container-Start=0&X-Plex-Container-Size=1`,
+          clientIdentifier,
+          8_000
+        );
+        playItem = leaves.MediaContainer?.Metadata?.[0] ?? item;
+      }
+      const playProfile =
+        playItem.type === "episode" || playItem.type === "show" || playItem.type === "season"
+          ? { ...profile, preferDirectPlay: false }
+          : profile;
+      upstream = pickPlexPlaybackUrl(base, token, playItem, playProfile);
     }
   } catch {
     /* fall through to transcode URL */

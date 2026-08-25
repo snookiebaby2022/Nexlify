@@ -526,29 +526,30 @@ export async function categoryIdsForLine(
 
   const types = typeList(options);
   const typeTexts = types?.map((t) => String(t)) ?? null;
-  const rows = await prisma.$queryRaw<{ categoryId: string | null }[]>`
-    SELECT DISTINCT s."categoryId" AS "categoryId"
-    FROM ${bouquetMembershipSql(bouquetIds)} m
-    INNER JOIN "Stream" s ON s.id = m."streamId"
-    WHERE 1=1
-      ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
-      ${listingPlayableSql()}
-    ${
-      typeTexts && typeTexts.length
-        ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
-        : Prisma.empty
+  const typeKey = typeTexts?.slice().sort().join(",") || "all";
+  const token = lineBouquetCacheToken(line, excludeDisabled);
+  return cacheGetOrSet(`xtream:linecats:${typeKey}:${token}`, 180, async () => {
+    const rows = await prisma.$queryRaw<{ categoryId: string | null }[]>`
+      SELECT DISTINCT s."categoryId" AS "categoryId"
+      FROM "BouquetStream" bs
+      INNER JOIN "Stream" s ON s.id = bs."streamId"
+      WHERE bs."bouquetId" IN (${Prisma.join(bouquetIds)})
+        ${excludeDisabled ? Prisma.sql`AND s."isActive" = true` : Prisma.empty}
+        ${listingPlayableSql()}
+      ${
+        typeTexts && typeTexts.length
+          ? Prisma.sql`AND s.type::text IN (${Prisma.join(typeTexts)})`
+          : Prisma.empty
+      }
+    `;
+    const categoryIds: string[] = [];
+    let hasUncategorized = false;
+    for (const r of rows) {
+      if (r.categoryId == null || r.categoryId === "") hasUncategorized = true;
+      else categoryIds.push(r.categoryId);
     }
-  `;
-  const categoryIds: string[] = [];
-  let hasUncategorized = false;
-  for (const r of rows) {
-    if (r.categoryId == null || r.categoryId === "") hasUncategorized = true;
-    else categoryIds.push(r.categoryId);
-  }
-  if (!categoryIds.length) return { categoryIds, hasUncategorized };
-  const { collectCategoryAncestors } = await import("@/lib/category-tree");
-  const withAncestors = await collectCategoryAncestors(categoryIds);
-  return { categoryIds: withAncestors, hasUncategorized };
+    return { categoryIds, hasUncategorized };
+  });
 }
 
 /**

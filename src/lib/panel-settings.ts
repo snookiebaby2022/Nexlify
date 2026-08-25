@@ -276,7 +276,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
   cache: {
     statsTtlSeconds: 15,
     epgTtlSeconds: 120,
-    categoriesTtlSeconds: 30,
+    categoriesTtlSeconds: 600,
     playbackUrlCacheTtlSec: 60,
     redisMode: "single",
     redisClusterNodes: "",

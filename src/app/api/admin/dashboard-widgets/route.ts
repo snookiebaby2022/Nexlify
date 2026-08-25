@@ -8,6 +8,6 @@ export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const data = await cacheGetOrSet("dashboard:admin-widgets", 30, () => getAdminDashboardWidgets());
+  const data = await cacheGetOrSet("dashboard:admin-widgets", 90, () => getAdminDashboardWidgets());
   return NextResponse.json(data);
 }

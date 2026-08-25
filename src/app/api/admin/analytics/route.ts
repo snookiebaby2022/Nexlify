@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   const scope = ownerScope(session);
   const cacheKey = scope ? `analytics:${scope}:${hours}` : `analytics:all:${hours}`;
 
-  const data = await cacheGetOrSet(cacheKey, 15, async () => {
+  const data = await cacheGetOrSet(cacheKey, 45, async () => {
     const watchWhere = scope ? { line: { ownerId: scope } } : undefined;
     const staleBefore = new Date(Date.now() - hours * 60 * 60 * 1000);
 

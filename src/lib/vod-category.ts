@@ -127,6 +127,65 @@ export async function reassignTvSeriesNamedCategory(): Promise<{ moved: number; 
   return { moved: moved.count, deleted: leftover.count };
 }
 
+/**
+ * Smarters lists every SERIES category as a top-level folder (parent_id is always 0).
+ * Nested per-show folders make category load crawl. Move episodes onto flat genre cats.
+ */
+export async function flattenNestedSeriesCategories(): Promise<{ moved: number; deleted: number }> {
+  const nested = await prisma.category.findMany({
+    where: { categoryType: "SERIES", parentId: { not: null } },
+    select: { id: true, parentId: true, name: true },
+  });
+  if (!nested.length) return { moved: 0, deleted: 0 };
+
+  const all = await prisma.category.findMany({
+    where: { categoryType: "SERIES" },
+    select: { id: true, parentId: true, name: true },
+  });
+  const byId = new Map(all.map((c) => [c.id, c]));
+  const rootGenre = (startId: string): string => {
+    let cur = byId.get(startId);
+    let guard = 0;
+    while (cur?.parentId && guard++ < 8) {
+      cur = byId.get(cur.parentId);
+    }
+    const n = cur?.name?.trim() || "Other";
+    if (/^tv\s*series$/i.test(n) || /^other$/i.test(n)) return "Other";
+    return n;
+  };
+
+  const idsByTarget = new Map<string, string[]>();
+  for (const cat of nested) {
+    const targetId = await categoryForPlexSeries(rootGenre(cat.id));
+    if (targetId === cat.id) continue;
+    const list = idsByTarget.get(targetId) ?? [];
+    list.push(cat.id);
+    idsByTarget.set(targetId, list);
+  }
+
+  let moved = 0;
+  for (const [targetId, fromIds] of idsByTarget) {
+    for (let i = 0; i < fromIds.length; i += 200) {
+      const chunk = fromIds.slice(i, i + 200);
+      const res = await prisma.stream.updateMany({
+        where: { type: "SERIES", categoryId: { in: chunk } },
+        data: { categoryId: targetId },
+      });
+      moved += res.count;
+    }
+  }
+
+  const deleted = await prisma.category.deleteMany({
+    where: {
+      categoryType: "SERIES",
+      parentId: { not: null },
+      streams: { none: {} },
+      children: { none: {} },
+    },
+  });
+  return { moved, deleted: deleted.count };
+}
+
 export async function categoryFromGroupName(
   group: string,
   type: StreamType

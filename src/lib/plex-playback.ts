@@ -24,6 +24,7 @@ export type PlexJsonMetadata = {
   ratingKey?: string;
   key?: string;
   title?: string;
+  type?: string;
   Media?: {
     id?: string;
     Part?: { key?: string; file?: string; decision?: string }[];
@@ -52,8 +53,10 @@ export function buildPlexTranscodeM3u8(
     partIndex: "0",
     protocol: "hls",
     fastSeek: "1",
+    copyts: "1",
+    location: "lan",
     directPlay: profile.preferDirectPlay ? "1" : "0",
-    directStream: profile.preferDirectPlay ? "1" : "0",
+    directStream: profile.preferDirectPlay ? "1" : "1",
     subtitleSize: String(profile.subtitleSize ?? 100),
     audioBoost: String(profile.audioBoost ?? 100),
     maxVideoBitrate: String(profile.maxVideoBitrateKbps ?? 12000),
@@ -73,11 +76,13 @@ export function pickPlexPlaybackUrl(
 
   const media = item.Media?.[0];
   const part = media?.Part?.[0];
-  if (profile.preferDirectPlay && part?.key) {
+  const isEpisodeOrShow = item.type === "episode" || item.type === "show" || item.type === "season";
+  const playProfile = isEpisodeOrShow ? { ...profile, preferDirectPlay: false } : profile;
+  if (playProfile.preferDirectPlay && part?.key) {
     return buildPlexDirectPartUrl(base, token, part.key);
   }
 
-  return buildPlexTranscodeM3u8(base, token, String(ratingKey), profile);
+  return buildPlexTranscodeM3u8(base, token, String(ratingKey), playProfile);
 }
 
 function describePlexFetchFailure(e: unknown): string {
