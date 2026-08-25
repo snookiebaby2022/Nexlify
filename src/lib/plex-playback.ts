@@ -97,7 +97,11 @@ function describePlexFetchFailure(e: unknown): string {
   return "Could not reach Plex. Check host, port, and firewall.";
 }
 
-export async function fetchPlexJson<T>(url: string, clientIdentifier = "nexlify-panel"): Promise<T> {
+export async function fetchPlexJson<T>(
+  url: string,
+  clientIdentifier = "nexlify-panel",
+  timeoutMs = 45_000
+): Promise<T> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -109,7 +113,7 @@ export async function fetchPlexJson<T>(url: string, clientIdentifier = "nexlify-
   try {
     res = await fetch(url, {
       headers: plexRequestHeaders(token, clientIdentifier),
-      signal: AbortSignal.timeout(45_000),
+      signal: AbortSignal.timeout(Math.max(3_000, timeoutMs)),
     });
   } catch (e) {
     throw new Error(describePlexFetchFailure(e));

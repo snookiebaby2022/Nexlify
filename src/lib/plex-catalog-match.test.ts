@@ -87,3 +87,8 @@ test("plexAutoSyncNextDueIso is last run plus the due gap", () => {
   assert.equal(next, new Date(Date.parse(last) + (12 * 60 - 20) * 60_000).toISOString());
   assert.equal(plexAutoSyncNextDueIso(null, 12), null);
 });
+
+test("plexVodMetaFromItem truncates huge Plex plots so a title cannot stall the insert", () => {
+  const meta = plexVodMetaFromItem({ summary: "x".repeat(8000) });
+  assert.equal(String(meta.plot).length, 4000);
+});

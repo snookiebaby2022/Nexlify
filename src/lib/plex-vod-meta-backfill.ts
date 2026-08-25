@@ -73,21 +73,8 @@ export async function backfillPlexVodMeta(limit = 30): Promise<number> {
       const plot = String(parseXtreamVodMeta(cmd).plot ?? "").trim();
       if (!plot && !String(parseXtreamVodMeta(cmd).genre ?? "").trim()) continue;
 
-      if (row.type === StreamType.SERIES && row.seriesName?.trim()) {
-        const res = await prisma.stream.updateMany({
-          where: {
-            type: StreamType.SERIES,
-            seriesName: { equals: row.seriesName, mode: "insensitive" },
-            streamUrl: { startsWith: `nexlify://plex/${parsed.integrationId}/` },
-            OR: [{ agentStartCmd: null }, { agentStartCmd: "" }],
-          },
-          data: { agentStartCmd: cmd },
-        });
-        updated += res.count;
-      } else {
-        await prisma.stream.update({ where: { id: row.id }, data: { agentStartCmd: cmd } });
-        updated += 1;
-      }
+      await prisma.stream.update({ where: { id: row.id }, data: { agentStartCmd: cmd } });
+      updated += 1;
     } catch {
       /* skip this rating key */
     }

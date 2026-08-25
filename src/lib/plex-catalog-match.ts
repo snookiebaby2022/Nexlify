@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { StreamType } from "@prisma/client";
 import { NEXLIFY_INTEGRATION } from "@/lib/integration-stream-url";
+import { yieldEventLoop } from "@/lib/yield-event-loop";
 
 /** Collapse a VOD/series title so Plex and IPTV catalog names can match. */
 export function plexCatalogTitleKey(raw: string): string {
@@ -65,7 +66,7 @@ export function plexVodMetaFromItem(item: {
   Role?: unknown;
   Director?: unknown;
 }): Record<string, unknown> {
-  const plot = String(item.summary ?? "").trim();
+  const plot = String(item.summary ?? "").trim().slice(0, 4000);
   const year = item.year != null ? String(item.year).trim() : "";
   const release =
     String(item.originallyAvailableAt ?? "").slice(0, 10) || (year.length === 4 ? `${year}-01-01` : "");
@@ -97,35 +98,45 @@ export type PlexCatalogIndex = {
 
 export async function loadPlexCatalogIndex(integrationId: string): Promise<PlexCatalogIndex> {
   const prefix = `${NEXLIFY_INTEGRATION}plex/${integrationId}/`;
-  const rows = await prisma.stream.findMany({
-    where: { type: { in: [StreamType.MOVIE, StreamType.SERIES] } },
-    select: { id: true, name: true, seriesName: true, streamUrl: true, type: true, streamIcon: true },
-  });
   const movieKeys = new Set<string>();
   const seriesKeys = new Set<string>();
   const plexUrls = new Set<string>();
   const plexByUrl = new Map<string, { id: string; type: StreamType }>();
   const movieIdByKey = new Map<string, string>();
   const seriesIdByKey = new Map<string, string>();
-  for (const row of rows) {
-    if (row.streamUrl.startsWith(prefix)) {
-      plexUrls.add(row.streamUrl);
-      plexByUrl.set(row.streamUrl, { id: row.id, type: row.type });
-    }
-    const hasIcon = Boolean(String(row.streamIcon ?? "").trim());
-    if (row.type === StreamType.MOVIE) {
-      const key = plexCatalogTitleKey(row.name);
-      if (key) {
-        movieKeys.add(key);
-        if (!hasIcon && !movieIdByKey.has(key)) movieIdByKey.set(key, row.id);
+  let cursor: string | undefined;
+  for (;;) {
+    const rows = await prisma.stream.findMany({
+      where: { type: { in: [StreamType.MOVIE, StreamType.SERIES] } },
+      select: { id: true, name: true, seriesName: true, streamUrl: true, type: true, streamIcon: true },
+      take: 2000,
+      orderBy: { id: "asc" },
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    });
+    if (!rows.length) break;
+    for (const row of rows) {
+      if (row.streamUrl.startsWith(prefix)) {
+        plexUrls.add(row.streamUrl);
+        plexByUrl.set(row.streamUrl, { id: row.id, type: row.type });
       }
-    } else {
-      const key = plexSeriesTitleKey(row.name, row.seriesName);
-      if (key) {
-        seriesKeys.add(key);
-        if (!hasIcon && !seriesIdByKey.has(key)) seriesIdByKey.set(key, row.id);
+      const hasIcon = Boolean(String(row.streamIcon ?? "").trim());
+      if (row.type === StreamType.MOVIE) {
+        const key = plexCatalogTitleKey(row.name);
+        if (key) {
+          movieKeys.add(key);
+          if (!hasIcon && !movieIdByKey.has(key)) movieIdByKey.set(key, row.id);
+        }
+      } else {
+        const key = plexSeriesTitleKey(row.name, row.seriesName);
+        if (key) {
+          seriesKeys.add(key);
+          if (!hasIcon && !seriesIdByKey.has(key)) seriesIdByKey.set(key, row.id);
+        }
       }
     }
+    cursor = rows[rows.length - 1]!.id;
+    if (rows.length < 2000) break;
+    await yieldEventLoop();
   }
   return { movieKeys, seriesKeys, plexUrls, plexByUrl, movieIdByKey, seriesIdByKey };
 }

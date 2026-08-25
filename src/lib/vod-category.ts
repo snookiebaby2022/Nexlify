@@ -22,6 +22,12 @@ async function findOrCreateCategory(
   if (existing) return existing.id;
   const created = await prisma.category.create({
     data: { name: trimmed, parentId: parentId ?? null, categoryType },
+  }).catch(async (e) => {
+    const again = await prisma.category.findFirst({
+      where: { name: trimmed, parentId: parentId ?? null, categoryType },
+    });
+    if (again) return again;
+    throw e;
   });
   return created.id;
 }

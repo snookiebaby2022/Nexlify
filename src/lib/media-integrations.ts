@@ -33,6 +33,21 @@ import type { IntegrationSyncReporter } from "@/lib/integration-sync-progress";
 import { loadPlexCatalogIndex, plexCatalogTitleKey, plexGenreName, plexVodMetaFromItem } from "@/lib/plex-catalog-match";
 import { categoryForPlexMovie, categoryForPlexSeries, reassignTvSeriesNamedCategory } from "@/lib/vod-category";
 import { encodeVodAgentCmd, parseVodAgentCmd } from "@/lib/vod-meta";
+import { yieldEventLoop } from "@/lib/yield-event-loop";
+
+async function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export async function listIntegrations(type: "plex" | "youtube") {
   return prisma.mediaIntegration.findMany({
@@ -184,21 +199,31 @@ async function fetchPlexSectionItems(
   clientIdentifier: string,
   onPage?: (loaded: number, total: number) => Promise<void>
 ) {
-  const pageSize = 200;
+  const pageSize = 100;
   const all: PlexItemMeta[] = [];
+  const seen = new Set<string>();
   let start = 0;
+  let emptyPages = 0;
   for (;;) {
     const items = await fetchPlexJson<PlexItemsResponse>(
       `${base}/library/sections/${sectionKey}/all?${tokenParam}&includeMeta=1&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`,
       clientIdentifier
     );
     const metadata = items.MediaContainer?.Metadata ?? [];
-    all.push(...metadata);
-    const total = items.MediaContainer?.totalSize ?? items.MediaContainer?.size ?? metadata.length;
-    start += metadata.length;
-    await onPage?.(all.length, total);
-    if (!metadata.length || start >= total) break;
-    if (all.length >= 100_000) break;
+    let added = 0;
+    for (const item of metadata) {
+      const key = String(item.ratingKey ?? item.key ?? "");
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      all.push(item);
+      added++;
+    }
+    const total = items.MediaContainer?.totalSize ?? items.MediaContainer?.size ?? start + metadata.length;
+    start += metadata.length || pageSize;
+    emptyPages = added === 0 ? emptyPages + 1 : 0;
+    await onPage?.(all.length, Math.max(total, all.length));
+    await yieldEventLoop();
+    if (!metadata.length || emptyPages >= 2 || start >= total + pageSize || all.length >= 100_000) break;
   }
   return all;
 }
@@ -238,7 +263,7 @@ async function createPluginStreamsBatchForBouquet(
     const bouquetId = vodType ? await ensureVodBouquetId(vodType) : await ensurePluginImportBouquetId();
     await prisma.stream.createMany({
       data: rows.map((r) => ({
-        name: r.name,
+        name: r.name.slice(0, 500),
         streamUrl: r.streamUrl,
         type: r.type,
         sortOrder: r.sortOrder,
@@ -252,6 +277,7 @@ async function createPluginStreamsBatchForBouquet(
         episodeNum: r.episodeNum ?? undefined,
         agentStartCmd: r.agentStartCmd ?? undefined,
       })),
+      skipDuplicates: true,
     });
     const created = await prisma.stream.findMany({
       where: { streamUrl: { in: rows.map((r) => r.streamUrl) } },
@@ -278,21 +304,29 @@ async function createPluginStreamsBatchForBouquet(
   } catch (e) {
     console.error("[plex] batch insert failed, falling back", e instanceof Error ? e.message : e);
     for (const r of rows) {
-      await upsertPluginStream(
-        {
-          name: r.name,
-          streamUrl: r.streamUrl,
-          type: r.type,
-          serverId: r.serverId,
-          streamIcon: r.streamIcon,
-          categoryId: r.categoryId,
-          seriesName: r.seriesName,
-          seasonNum: r.seasonNum,
-          episodeNum: r.episodeNum,
-          agentStartCmd: r.agentStartCmd,
-        },
-        r.sortOrder
-      );
+      try {
+        await upsertPluginStream(
+          {
+            name: r.name.slice(0, 500),
+            streamUrl: r.streamUrl,
+            type: r.type,
+            serverId: r.serverId,
+            streamIcon: r.streamIcon,
+            categoryId: r.categoryId,
+            seriesName: r.seriesName,
+            seasonNum: r.seasonNum,
+            episodeNum: r.episodeNum,
+            agentStartCmd: r.agentStartCmd,
+          },
+          r.sortOrder
+        );
+      } catch (rowErr) {
+        console.error(
+          `[plex] skip “${r.name}”:`,
+          rowErr instanceof Error ? rowErr.message : rowErr
+        );
+      }
+      await yieldEventLoop();
     }
     return rows.length;
   }
@@ -355,31 +389,44 @@ async function backfillPlexArtworkIcons(
   origin?: string | null
 ) {
   const prefix = `nexlify://plex/${integrationId}/`;
-  const rows = await prisma.stream.findMany({
-    where: { streamUrl: { startsWith: prefix } },
-    select: { id: true, streamUrl: true, streamIcon: true },
-  });
-  await reporter?.note(`Updating poster links for ${rows.length.toLocaleString()} existing Plex titles…`, {
-    titleCurrent: 0,
-    titleTotal: rows.length,
-  });
+  let cursor: string | undefined;
+  let seen = 0;
   const ops = [];
-  let n = 0;
-  for (const row of rows) {
-    n++;
-    const parsed = parseIntegrationStreamUrl(row.streamUrl);
-    if (!parsed || parsed.type !== "plex") continue;
-    const next = plexArtworkUrl(parsed.integrationId, parsed.itemId, origin);
-    if (row.streamIcon === next) continue;
-    ops.push(prisma.stream.update({ where: { id: row.id }, data: { streamIcon: next } }));
-    if (ops.length >= 20) {
-      await Promise.all(ops);
-      ops.length = 0;
-      await reporter?.note(`Updating poster links… ${n.toLocaleString()}/${rows.length.toLocaleString()}`, {
-        titleCurrent: n,
-        titleTotal: rows.length,
+  for (;;) {
+    const rows = await prisma.stream.findMany({
+      where: { streamUrl: { startsWith: prefix } },
+      select: { id: true, streamUrl: true, streamIcon: true },
+      take: 500,
+      orderBy: { id: "asc" },
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+    });
+    if (!rows.length) break;
+    if (!cursor) {
+      await reporter?.note("Updating poster links for existing Plex titles…", {
+        titleCurrent: 0,
+        titleTotal: 0,
       });
     }
+    for (const row of rows) {
+      seen++;
+      const parsed = parseIntegrationStreamUrl(row.streamUrl);
+      if (!parsed || parsed.type !== "plex") continue;
+      const next = plexArtworkUrl(parsed.integrationId, parsed.itemId, origin);
+      if (row.streamIcon === next) continue;
+      ops.push(prisma.stream.update({ where: { id: row.id }, data: { streamIcon: next } }));
+      if (ops.length >= 20) {
+        await Promise.all(ops);
+        ops.length = 0;
+        await reporter?.note(`Updating poster links… ${seen.toLocaleString()}`, {
+          titleCurrent: seen,
+          titleTotal: seen,
+        });
+        await yieldEventLoop();
+      }
+    }
+    cursor = rows[rows.length - 1]!.id;
+    if (rows.length < 500) break;
+    await yieldEventLoop();
   }
   if (ops.length) await Promise.all(ops);
 }
@@ -613,11 +660,22 @@ export async function backfillPlexGenresFromLibrary(
     );
 
     if (!isShow) {
-      const existing = await prisma.stream.findMany({
-        where: { streamUrl: { startsWith: prefix }, type: StreamType.MOVIE },
-        select: { id: true, streamUrl: true, agentStartCmd: true },
-      });
-      const byUrl = new Map(existing.map((r) => [r.streamUrl, r]));
+      const byUrl = new Map<string, { id: string; agentStartCmd: string | null }>();
+      let movieCursor: string | undefined;
+      for (;;) {
+        const existing = await prisma.stream.findMany({
+          where: { streamUrl: { startsWith: prefix }, type: StreamType.MOVIE },
+          select: { id: true, streamUrl: true, agentStartCmd: true },
+          take: 2000,
+          orderBy: { id: "asc" },
+          ...(movieCursor ? { skip: 1, cursor: { id: movieCursor } } : {}),
+        });
+        if (!existing.length) break;
+        for (const r of existing) byUrl.set(r.streamUrl, r);
+        movieCursor = existing[existing.length - 1]!.id;
+        if (existing.length < 2000) break;
+        await yieldEventLoop();
+      }
       const pending: { id: string; categoryId: string; agentStartCmd: string }[] = [];
       const flush = async () => {
         if (!pending.length) return;
@@ -654,30 +712,52 @@ export async function backfillPlexGenresFromLibrary(
       continue;
     }
 
-    // TV shows: one category update per show → all episodes
+    // TV shows: map existing episodes once, then update by id (never ILIKE seriesName).
+    const byShow = new Map<string, string[]>();
+    let seriesCursor: string | undefined;
+    for (;;) {
+      const existing = await prisma.stream.findMany({
+        where: { streamUrl: { startsWith: prefix }, type: StreamType.SERIES },
+        select: { id: true, seriesName: true },
+        take: 2000,
+        orderBy: { id: "asc" },
+        ...(seriesCursor ? { skip: 1, cursor: { id: seriesCursor } } : {}),
+      });
+      if (!existing.length) break;
+      for (const r of existing) {
+        const key = (r.seriesName ?? "").trim().toLowerCase();
+        if (!key) continue;
+        const list = byShow.get(key) ?? [];
+        list.push(r.id);
+        byShow.set(key, list);
+      }
+      seriesCursor = existing[existing.length - 1]!.id;
+      if (existing.length < 2000) break;
+      await yieldEventLoop();
+    }
     for (let i = 0; i < metadata.length; i++) {
       const item = metadata[i]!;
       const name = item.title?.trim();
       if (!name) continue;
       const genre = plexGenreName(item);
       if (!genre) continue;
+      const ids = byShow.get(name.toLowerCase());
+      if (!ids?.length) continue;
       const categoryId = await seriesCat(genre);
-      const result = await prisma.stream.updateMany({
-        where: {
-          streamUrl: { startsWith: prefix },
-          type: StreamType.SERIES,
-          seriesName: { equals: name, mode: "insensitive" },
-        },
-        data: { categoryId },
-      });
-      if (result.count > 0) {
-        seriesShowsUpdated++;
-        episodesUpdated += result.count;
+      for (let j = 0; j < ids.length; j += 200) {
+        const chunk = ids.slice(j, j + 200);
+        await prisma.stream.updateMany({
+          where: { id: { in: chunk } },
+          data: { categoryId },
+        });
+        episodesUpdated += chunk.length;
       }
+      seriesShowsUpdated++;
       if ((i + 1) % 100 === 0 || i + 1 === metadata.length) {
         await reporter?.note(
           `${libraryName}: genres ${i + 1}/${metadata.length} shows · ${episodesUpdated.toLocaleString()} episodes`
         );
+        await yieldEventLoop();
       }
     }
   }
@@ -729,11 +809,32 @@ async function importPlexEpisodesForShow(
 
   let episodes: PlexItemMeta[] = [];
   try {
-    const leaves = await fetchPlexJson<PlexItemsResponse>(
-      `${base}/library/metadata/${showRatingKey}/allLeaves?${tokenParam}&includeMeta=1`,
-      clientIdentifier
-    );
-    episodes = leaves.MediaContainer?.Metadata ?? [];
+    const pageSize = 100;
+    let start = 0;
+    const seen = new Set<string>();
+    for (;;) {
+      const leaves = await fetchPlexJson<PlexItemsResponse>(
+        `${base}/library/metadata/${showRatingKey}/allLeaves?${tokenParam}&includeMeta=1&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`,
+        clientIdentifier
+      );
+      const page = leaves.MediaContainer?.Metadata ?? [];
+      const total = leaves.MediaContainer?.totalSize ?? leaves.MediaContainer?.size ?? start + page.length;
+      let added = 0;
+      for (const ep of page) {
+        const key = String(ep.ratingKey ?? ep.key ?? "");
+        if (key && seen.has(key)) continue;
+        if (key) seen.add(key);
+        episodes.push(ep);
+        added++;
+      }
+      start += page.length || pageSize;
+      await reporter?.note(
+        `Fetching episodes for ${showTitle}… ${episodes.length.toLocaleString()}/${Math.max(total, episodes.length).toLocaleString()}`,
+        { titleCurrent: episodes.length, titleTotal: Math.max(total, episodes.length), libraryName: showTitle }
+      );
+      await yieldEventLoop();
+      if (!page.length || added === 0 || start >= total || episodes.length >= 50_000) break;
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Plex episode fetch failed";
     await reporter?.note(`Could not load episodes for ${showTitle}: ${msg}`);
@@ -741,7 +842,7 @@ async function importPlexEpisodesForShow(
   }
 
   const pending: PluginStreamRow[] = [];
-  const flushAt = 40;
+  const flushAt = 20;
   const flush = async () => {
     if (!pending.length) return;
     const batch = pending.splice(0, pending.length);
@@ -789,11 +890,12 @@ async function importPlexEpisodesForShow(
       plexUrls?.add(streamUrl);
       if (pending.length >= flushAt) await flush();
     }
-    if (n % 15 === 0 || n === episodes.length) {
+    if (n % 5 === 0 || n === episodes.length) {
       await reporter?.note(
         `${showTitle}: episode ${n.toLocaleString()}/${episodes.length.toLocaleString()} · ${imported} new this show`,
         { titleCurrent: n, titleTotal: episodes.length, libraryName: showTitle }
       );
+      await yieldEventLoop();
     }
   }
   await flush();
@@ -880,11 +982,8 @@ export async function importPlexLibrary(
   };
   await reporter?.step("artwork", "Updating poster URLs for titles already synced…");
   await backfillPlexArtworkIcons(integrationId, reporter, artworkOrigin);
-  await reporter?.step("categories", "Putting Plex titles into Movies and TV Series…");
-  await repairPlexVodPlacement(integrationId, reporter);
   const skipCatalog = cfg.skipExistingCatalog !== false;
   let skippedCatalog = 0;
-  const plexPrefix = `nexlify://plex/${integrationId}/`;
 
   const pendingIcons: {
     id: string;
@@ -963,62 +1062,51 @@ export async function importPlexLibrary(
       n++;
       const name = item.title?.trim();
       const ratingKey = item.ratingKey ?? item.key?.replace("/library/metadata/", "");
-      if (n % 10 === 0 || n === metadata.length) {
-        await reporter?.note(
-          `${libraryName}: ${n.toLocaleString()}/${metadata.length.toLocaleString()}${name ? ` · ${name}` : ""} · ${imported.toLocaleString()} new · ${skipped.toLocaleString()} skipped`,
-          {
-            current: i + 1,
-            total: selected.length,
-            titleCurrent: n,
-            titleTotal: metadata.length,
-            libraryName,
-            imported,
-            skipped,
-            episodes,
-          }
-        );
-      }
+      await reporter?.note(
+        `${libraryName}: ${n.toLocaleString()}/${metadata.length.toLocaleString()}${name ? ` · ${name}` : ""} · ${imported.toLocaleString()} new · ${skipped.toLocaleString()} skipped`,
+        {
+          current: i + 1,
+          total: selected.length,
+          titleCurrent: n,
+          titleTotal: metadata.length,
+          libraryName,
+          imported,
+          skipped,
+          episodes,
+        }
+      );
       if (!name || !ratingKey) continue;
 
-      const isShow = item.type === "show" || section.type === "show";
+      try {
+      const isShow =
+        item.type === "show" ||
+        (section.type === "show" && item.type !== "movie" && item.type !== "episode");
+      if (item.type === "episode" || item.type === "season" || item.type === "collection" || item.type === "folder") {
+        skipped++;
+        continue;
+      }
       const titleKey = plexCatalogTitleKey(name);
       const streamUrl = buildIntegrationStreamUrl("plex", integrationId, String(ratingKey));
       const existingPlex = catalog.plexByUrl.get(streamUrl);
 
       if (existingPlex) {
         skipped++;
-        if (existingPlex.type === StreamType.MOVIE) {
-          pendingIcons.push({
-            id: existingPlex.id,
-            streamIcon: posterFor(String(ratingKey)),
-            categoryId: await movieCategory(plexGenreName(item)),
-            agentStartCmd: encodeVodAgentCmd(plexVodMetaFromItem(item)),
-          });
-          if (pendingIcons.length >= 20) await flushIcons();
-        }
+        pendingIcons.push({
+          id: existingPlex.id,
+          streamIcon: posterFor(String(ratingKey)),
+          categoryId:
+            existingPlex.type === StreamType.MOVIE
+              ? await movieCategory(plexGenreName(item))
+              : undefined,
+          agentStartCmd: encodeVodAgentCmd(plexVodMetaFromItem(item)),
+        });
+        if (pendingIcons.length >= 20) await flushIcons();
         continue;
       }
 
       if (isShow) {
         const showCategoryId = await seriesCategory(name, plexGenreName(item));
         const showCmd = encodeVodAgentCmd(plexVodMetaFromItem(item));
-        await prisma.stream.updateMany({
-          where: {
-            type: StreamType.SERIES,
-            streamUrl: { startsWith: plexPrefix },
-            seriesName: { equals: name, mode: "insensitive" },
-          },
-          data: { categoryId: showCategoryId },
-        });
-        await prisma.stream.updateMany({
-          where: {
-            type: StreamType.SERIES,
-            streamUrl: { startsWith: plexPrefix },
-            seriesName: { equals: name, mode: "insensitive" },
-            OR: [{ agentStartCmd: null }, { agentStartCmd: "" }],
-          },
-          data: { agentStartCmd: showCmd },
-        });
 
         if (skipCatalog && titleKey && catalog.seriesKeys.has(titleKey)) {
           skipped++;
@@ -1039,21 +1127,25 @@ export async function importPlexLibrary(
         await flushMovies();
         const showPoster = posterFor(String(ratingKey));
         try {
-          const epResult = await importPlexEpisodesForShow(
-            base,
-            tokenParam,
-            String(ratingKey),
-            name,
-            integrationId,
-            effectiveServerId,
-            sortCounter,
-            clientIdentifier,
-            catalog.plexUrls,
-            showPoster,
-            reporter,
-            artworkOrigin,
-            showCategoryId,
-            item
+          const epResult = await withTimeout(
+            importPlexEpisodesForShow(
+              base,
+              tokenParam,
+              String(ratingKey),
+              name,
+              integrationId,
+              effectiveServerId,
+              sortCounter,
+              clientIdentifier,
+              catalog.plexUrls,
+              showPoster,
+              reporter,
+              artworkOrigin,
+              showCategoryId,
+              item
+            ),
+            15 * 60_000,
+            name
           );
           imported += epResult.imported;
           skipped += epResult.skipped;
@@ -1094,16 +1186,19 @@ export async function importPlexLibrary(
       });
       catalog.plexUrls.add(streamUrl);
       if (titleKey) catalog.movieKeys.add(titleKey);
-      if (pendingMovies.length >= 40) await flushMovies();
+      if (pendingMovies.length >= 15) await flushMovies();
+      } catch (e) {
+        warnings.push(`${name}: ${e instanceof Error ? e.message : "import failed"}`);
+        skipped++;
+      }
+      if (n % 3 === 0) await yieldEventLoop();
     }
     await flushMovies();
   }
   await flushIcons();
 
-  await reporter?.step("bouquets", "Making synced titles available on all lines…");
-  await attachVodBouquetsToAllLines();
-  await relinkPlexStreamsToVodBouquets(integrationId);
-  await invalidateXtreamCategories();
+  await reporter?.step("categories", "Putting Plex titles into Movies and TV Series…");
+  await repairPlexVodPlacement(integrationId, reporter);
   await reporter?.step("finish", "Saving last sync time…");
 
   await prisma.mediaIntegration.update({
@@ -1279,7 +1374,7 @@ export async function resolvePlexIntegrationPlayback(
   try {
     const meta = await fetchPlexJson<{
       MediaContainer?: { Metadata?: PlexJsonMetadata[] };
-    }>(`${base}/library/metadata/${itemId}?${tokenParam}`, clientIdentifier);
+    }>(`${base}/library/metadata/${itemId}?${tokenParam}`, clientIdentifier, 8_000);
     const item = meta.MediaContainer?.Metadata?.[0];
     if (item) {
       upstream = pickPlexPlaybackUrl(base, token, item, profile);
@@ -1291,17 +1386,6 @@ export async function resolvePlexIntegrationPlayback(
   if (!upstream) {
     const { buildPlexTranscodeM3u8 } = await import("@/lib/plex-playback");
     upstream = buildPlexTranscodeM3u8(base, token, itemId, profile);
-  }
-
-  // Remote LB server: playback egress uses the stream's assigned server proxy (see line-playback).
-  // Imported Plex rows get serverId from integration config during sync.
-  if (cfg.serverId && upstream) {
-    const { prisma } = await import("@/lib/prisma");
-    const server = await prisma.streamServer.findUnique({
-      where: { id: String(cfg.serverId) },
-      select: { id: true, isActive: true },
-    });
-    if (!server?.isActive) return upstream;
   }
 
   return upstream;

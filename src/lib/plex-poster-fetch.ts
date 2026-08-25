@@ -62,7 +62,8 @@ export async function plexPosterCandidateUrls(
   try {
     const meta = await fetchPlexJson<{ MediaContainer?: { Metadata?: PlexMeta[] } }>(
       `${base}/library/metadata/${itemId}?${tokenParam}`,
-      clientId
+      clientId,
+      8_000
     );
     const item = meta.MediaContainer?.Metadata?.[0];
     if (item) {
