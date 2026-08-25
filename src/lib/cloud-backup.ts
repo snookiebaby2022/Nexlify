@@ -65,7 +65,7 @@ export async function runCloudBackup(): Promise<CloudBackupJob> {
   }
 
   // Write backup file
-  const dir = resolveBackupDir(backupSettings.localPath);
+  const dir = resolveBackupDir(typeof backupSettings.localPath === "string" ? backupSettings.localPath : undefined);
   await mkdir(dir, { recursive: true });
 
   let fileContent: string | Buffer = payload;
