@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.45",
+  "latestVersion": "2.0.46",
   "releases": [
+    {
+      "version": "2.0.46",
+      "date": "2026-08-25",
+      "channel": "stable",
+      "summary": "Fast server saves, multi-domain IPTV URLs, and a working DNS rotator.",
+      "changelog": [
+        "Download line and Xtream URLs use every saved stream-server domain, not only the admin IP",
+        "DNS rotator hostnames are normalized and applied to live sources; extras are accepted as panel Hosts",
+        "Server edit Save returns immediately instead of waiting on nginx and IPTV-edge reinstall",
+        "Connection heartbeats no longer SCAN the whole Redis catalog (admin UI stays responsive under load)"
+      ],
+      "fixes": [
+        "Saved, but port sync failed when PANEL_REPO_PATH was cleared under standalone cwd",
+        "Extra listen ports forced a multi-minute sync-panel-ports.sh on every domain/rotator save"
+      ]
+    },
     {
       "version": "2.0.45",
       "date": "2026-08-25",
