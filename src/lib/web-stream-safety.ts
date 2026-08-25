@@ -1,14 +1,17 @@
 /** Abort/cancel races close a Web ReadableStream while Node still pushes chunks. */
 function isClosedController(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
-  const e = err as { code?: string; message?: string; name?: string };
-  return (
-    e.code === "ERR_INVALID_STATE" ||
-    e.name === "TypeError" && /Controller is already closed/i.test(String(e.message ?? ""))
-  );
+  const e = err as { code?: string; message?: string };
+  return e.code === "ERR_INVALID_STATE" || /Controller is already closed/i.test(String(e.message ?? ""));
 }
 
-function patchControllerProto(proto: { enqueue: (...args: unknown[]) => unknown; close: () => unknown; error?: (e?: unknown) => unknown } & { __nexlifyWebStreamPatched?: boolean }) {
+type Patchable = {
+  enqueue: (...args: unknown[]) => unknown;
+  close?: () => unknown;
+  __nexlifyWebStreamPatched?: boolean;
+};
+
+function patchControllerProto(proto: Patchable) {
   if (proto.__nexlifyWebStreamPatched) return;
   proto.__nexlifyWebStreamPatched = true;
 
@@ -22,25 +25,23 @@ function patchControllerProto(proto: { enqueue: (...args: unknown[]) => unknown;
     }
   };
 
-  const origClose = proto.close;
-  proto.close = function () {
-    try {
-      return origClose.call(this);
-    } catch (err) {
-      if (isClosedController(err)) return;
-    }
-  };
+  if (typeof proto.close === "function") {
+    const origClose = proto.close;
+    proto.close = function () {
+      try {
+        return origClose.call(this);
+      } catch (err) {
+        if (isClosedController(err)) return;
+      }
+    };
+  }
 }
 
 /** Stop live/HLS abort races from becoming process-killing uncaughtException. */
 export function installBenignWebStreamGuards(): void {
-  const readable = (globalThis as { ReadableStreamDefaultController?: { prototype: Parameters<typeof patchControllerProto>[0] } })
+  const readable = (globalThis as unknown as { ReadableStreamDefaultController?: { prototype: Patchable } })
     .ReadableStreamDefaultController;
   if (readable?.prototype) patchControllerProto(readable.prototype);
-
-  const transform = (globalThis as { TransformStreamDefaultController?: { prototype: Parameters<typeof patchControllerProto>[0] } })
-    .TransformStreamDefaultController;
-  if (transform?.prototype) patchControllerProto(transform.prototype);
 }
 
 export function isBenignWebStreamClose(err: unknown): boolean {
