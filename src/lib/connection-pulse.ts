@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { cacheDel } from "@/lib/cache";
 import { recordConnectionMediaBytes } from "@/lib/connection-quality-live";
 import {
   connectionIpPrismaFilter,
@@ -44,7 +43,6 @@ export async function pulseLiveConnection(opts: {
       where: { id: row.id },
       data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },
     });
-    void cacheDel("conn:*").catch(() => {});
     return;
   }
 

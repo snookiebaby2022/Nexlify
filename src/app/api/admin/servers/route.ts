@@ -95,8 +95,8 @@ export async function POST(req: NextRequest) {
       panelSettings: body.panelSettings ?? null,
     },
   });
-  const { cacheDel } = await import("@/lib/cache");
-  await cacheDel("stats");
+  const { cacheDelExact } = await import("@/lib/cache");
+  await Promise.all([cacheDelExact("stats:header"), cacheDelExact("stats:dashboard")]);
 
   let portSync: { ok: boolean; message: string; output: string } | undefined;
   if (isLocalPanelServer(server)) {
@@ -123,8 +123,8 @@ export async function DELETE(req: NextRequest) {
 
   await prisma.stream.updateMany({ where: { serverId: id }, data: { serverId: null } });
   await prisma.streamServer.delete({ where: { id } });
-  const { cacheDel } = await import("@/lib/cache");
-  await cacheDel("stats");
+  const { cacheDelExact } = await import("@/lib/cache");
+  await Promise.all([cacheDelExact("stats:header"), cacheDelExact("stats:dashboard")]);
   return NextResponse.json({ ok: true });
   } catch (e) {
     return apiMutationErrorResponse(e);
@@ -185,8 +185,8 @@ export async function PATCH(req: NextRequest) {
       panelSettings: body.panelSettings !== undefined ? body.panelSettings : undefined,
     },
   });
-  const { cacheDel } = await import("@/lib/cache");
-  await cacheDel("stats");
+  const { cacheDelExact } = await import("@/lib/cache");
+  await Promise.all([cacheDelExact("stats:header"), cacheDelExact("stats:dashboard")]);
 
   let portSync: { ok: boolean; message: string; output: string } | undefined;
   let agentConfigQueued = false;

@@ -541,13 +541,6 @@ export function ServerForm({
       alert(data.error ?? "Failed to save");
       return;
     }
-    if (data.portSync && !data.portSync.ok) {
-      alert(`Saved, but port sync failed: ${data.portSync.message}`);
-    } else if (data.portSync?.ok) {
-      // local server — nginx reloaded
-    } else if (data.agentConfigQueued) {
-      // remote server — agent will pick up config
-    }
     if (
       mode === "edit" &&
       serverId &&
@@ -555,15 +548,15 @@ export function ServerForm({
       form.domain.trim() &&
       form.sslCertbotEmail.trim()
     ) {
-      const certRes = await fetch(`/api/admin/servers/${serverId}/certbot`, {
+      void fetch(`/api/admin/servers/${serverId}/certbot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: form.sslCertbotEmail, agreeToTerms: true }),
-      });
-      const certData = await certRes.json().catch(() => ({}));
-      if (!certRes.ok) {
+      }).then(async (certRes) => {
+        if (certRes.ok) return;
+        const certData = await certRes.json().catch(() => ({}));
         alert(certData.error ?? certData.message ?? "Saved server but certbot failed");
-      }
+      });
     }
     router.push("/admin/servers");
   }

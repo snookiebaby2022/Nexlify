@@ -167,9 +167,6 @@ export async function applyLocalServerPortProfile(
   };
 
   const skipReload = localPortProfileUnchanged(current, profile);
-  await setSettingGroup("server", merged as unknown as Record<string, unknown>);
-  syncPanelServerEnv(merged);
-  await persistExtendedPortsToEnv(merged, profile);
   if (skipReload) {
     return {
       ok: true,
@@ -177,5 +174,8 @@ export async function applyLocalServerPortProfile(
       output: "",
     };
   }
+  await setSettingGroup("server", merged as unknown as Record<string, unknown>);
+  syncPanelServerEnv(merged);
+  await persistExtendedPortsToEnv(merged, profile);
   return startPortSyncInBackground();
 }

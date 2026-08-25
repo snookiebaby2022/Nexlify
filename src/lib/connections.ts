@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { cacheGetOrSet, cacheDel, cacheGet, cacheSet } from "./cache";
+import { cacheGetOrSet, cacheDelExact, cacheGet, cacheSet } from "./cache";
 import { clearConnectionQuality, recordConnectionMediaBytes } from "./connection-quality-live";
 import {
   clearConnectionPlaybackOutput,
@@ -15,6 +15,13 @@ export const PLAYBACK_STALE_MS = LIVE_STALE_MS;
 /** Admin Live Connections list — hide rows idle longer than this (HLS gaps tolerated). */
 export const LIVE_LIST_STALE_MS = LIVE_STALE_MS;
 const CONNECTIONS_CACHE_TTL = 1; // seconds — dashboard SSE should reflect disconnects quickly
+
+/** Exact Redis keys only — never SCAN the catalog keyspace with conn:*. */
+function invalidateConnectionCaches(opts?: { lineId?: string; ownerId?: string | null }) {
+  void cacheDelExact("conn:list:all").catch(() => {});
+  if (opts?.ownerId) void cacheDelExact(`conn:list:${opts.ownerId}`).catch(() => {});
+  if (opts?.lineId) void cacheDelExact(`conn:line_sessions:${opts.lineId}`).catch(() => {});
+}
 /** After Kick, block reconnect / track refresh for this long (covers multi-worker via Redis). */
 export const KICK_DENY_TTL_SEC = 120;
 
@@ -237,7 +244,7 @@ async function pruneTestConnectionRows(lineId: string) {
       ],
     },
   });
-  if (result.count > 0) void cacheDel("conn:*").catch(() => {});
+  if (result.count > 0) invalidateConnectionCaches();
 }
 
 function sessionKey(lineId: string, streamId: string | null | undefined, ip?: string | null) {
@@ -274,7 +281,7 @@ async function dedupeLiveConnectionRows(
   }
   if (dropIds.length) {
     await prisma.liveConnection.deleteMany({ where: { id: { in: dropIds } } });
-    void cacheDel("conn:*").catch(() => {});
+    invalidateConnectionCaches();
   }
 }
 
@@ -295,7 +302,7 @@ async function pruneLineStaleConnections(lineId: string, thresholdMs: number = P
   }
   if (!toDelete.length) return 0;
   const result = await prisma.liveConnection.deleteMany({ where: { id: { in: toDelete } } });
-  if (result.count > 0) void cacheDel("conn:*").catch(() => {});
+  if (result.count > 0) invalidateConnectionCaches();
   return result.count;
 }
 
@@ -386,7 +393,7 @@ export async function pruneOtherViewerStreams(
     if (row.streamId) void clearLiveSession(lineId, row.streamId, normalized);
   }
   void setViewerActiveStream(lineId, streamId, normalized);
-  void cacheDel("conn:*").catch(() => {});
+  invalidateConnectionCaches();
 }
 
 export async function trackConnection(opts: {
@@ -500,7 +507,7 @@ export async function trackConnection(opts: {
         where: { id: loose.id },
         data: { lastSeenAt: new Date(), ip: clientIp },
       });
-      void cacheDel("conn:*").catch(() => {});
+      invalidateConnectionCaches();
       void touchLiveSession(opts.lineId, streamId, clientIp);
       touchQuality();
       if (streamId) {
@@ -528,7 +535,7 @@ export async function trackConnection(opts: {
       where: { id: existing.id },
       data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },
     });
-    void cacheDel("conn:*").catch(() => {});
+    invalidateConnectionCaches();
     if (streamId) void touchLiveSession(opts.lineId, streamId, clientIp);
     touchQuality();
     if (streamId) {
@@ -559,7 +566,7 @@ export async function trackConnection(opts: {
         userAgent: opts.userAgent,
       },
     });
-    void cacheDel("conn:*").catch(() => {});
+    invalidateConnectionCaches();
     touchQuality();
     if (streamId) void touchLiveSession(opts.lineId, streamId, clientIp);
     if (streamId) {
@@ -603,7 +610,7 @@ export async function removeConnection(lineId: string, streamId: string, ip: str
   void clearLiveSession(lineId, streamId, ip);
   void clearConnectionQuality(lineId, streamId, ip);
   void clearConnectionPlaybackOutput(lineId, streamId, ip);
-  await cacheDel("conn:*").catch(() => {});
+  invalidateConnectionCaches();
 }
 
 const connectionInclude = {
@@ -653,7 +660,7 @@ export async function pruneStaleConnections(thresholdMs: number = STALE_MS) {
   const result = await prisma.liveConnection.deleteMany({
     where: { id: { in: toDelete } },
   });
-  if (result.count > 0) void cacheDel("conn:*").catch(() => {});
+  if (result.count > 0) invalidateConnectionCaches();
   return result;
 }
 
@@ -713,7 +720,7 @@ export async function deleteActiveConnection(id: string, ownerId?: string) {
   abortLocalProxies(conn.lineId, conn.ip, conn.streamId);
   if (conn.streamId) await clearLiveSession(conn.lineId, conn.streamId, conn.ip);
   await prisma.liveConnection.delete({ where: { id: conn.id } }).catch(() => undefined);
-  void cacheDel("conn:*").catch(() => {});
+  invalidateConnectionCaches();
 }
 
 export async function clearActiveConnections(ownerId?: string) {
@@ -735,7 +742,7 @@ export async function clearActiveConnections(ownerId?: string) {
       where: { id: { in: rows.map((r) => r.id) } },
     });
   }
-  void cacheDel("conn:*").catch(() => {});
+  invalidateConnectionCaches();
 }
 
 /** Wrap a live proxy body so Kick aborts mid-stream and heartbeat respects deny TTL. */
@@ -885,7 +892,7 @@ export async function kickLineConnections(lineId: string, ownerId?: string) {
     abortLocalProxies(row.lineId, row.ip, row.streamId);
   }
   const result = await prisma.liveConnection.deleteMany({ where });
-  void cacheDel("conn:*").catch(() => {});
+  invalidateConnectionCaches();
   return result.count;
 }
 
