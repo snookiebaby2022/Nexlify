@@ -5,7 +5,6 @@ const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 /** Keep timestamp-without-time-zone comparisons in UTC (server OS TZ is often not UTC). */
 function postgresUrlWithUtcTimezone(url: string | undefined): string | undefined {
   if (!url) return url;
-  if (/TimeZone\s*=\s*UTC/i.test(url)) return url;
   try {
     const scheme = url.startsWith("postgresql://")
       ? "postgresql"
@@ -15,8 +14,12 @@ function postgresUrlWithUtcTimezone(url: string | undefined): string | undefined
     if (!scheme) return url;
     const parsed = new URL(url.replace(/^postgres(?:ql)?:\/\//, "http://"));
     const current = parsed.searchParams.get("options") ?? "";
-    if (/TimeZone\s*=\s*UTC/i.test(current)) return url;
-    parsed.searchParams.set("options", `${current} -c TimeZone=UTC`.trim());
+    if (!/TimeZone\s*=\s*UTC/i.test(url) && !/TimeZone\s*=\s*UTC/i.test(current)) {
+      parsed.searchParams.set("options", `${current} -c TimeZone=UTC`.trim());
+    }
+    if (!parsed.searchParams.has("connection_limit")) {
+      parsed.searchParams.set("connection_limit", "8");
+    }
     return parsed.toString().replace(/^http:\/\//, `${scheme}://`);
   } catch {
     const sep = url.includes("?") ? "&" : "?";

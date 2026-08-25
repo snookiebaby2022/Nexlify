@@ -1384,7 +1384,7 @@ export async function resolvePlexIntegrationPlayback(
       MediaContainer?: { Metadata?: PlexJsonMetadata[] };
     }>(`${base}/library/metadata/${itemId}?${tokenParam}`, clientIdentifier, 8_000);
     const item = meta.MediaContainer?.Metadata?.[0];
-    if (item) {
+      if (item) {
       let playItem = item;
       if (item.type === "show" || item.type === "season") {
         const leaves = await fetchPlexJson<{
@@ -1396,11 +1396,7 @@ export async function resolvePlexIntegrationPlayback(
         );
         playItem = leaves.MediaContainer?.Metadata?.[0] ?? item;
       }
-      const playProfile =
-        playItem.type === "episode" || playItem.type === "show" || playItem.type === "season"
-          ? { ...profile, preferDirectPlay: false }
-          : profile;
-      upstream = pickPlexPlaybackUrl(base, token, playItem, playProfile);
+      upstream = pickPlexPlaybackUrl(base, token, playItem, profile);
     }
   } catch {
     /* fall through to transcode URL */
