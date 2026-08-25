@@ -16,6 +16,7 @@ nexlify_load_ports_from_env "$ROOT"
 
 DEST="/etc/nginx/conf.d/nexlify-stream-edge.conf"
 EXTRA_DEST="/etc/nginx/conf.d/nexlify-stream-extra.conf"
+PANEL_HTTP_DEST="/etc/nginx/conf.d/nexlify-panel-http.conf"
 UPSTREAM="/etc/nginx/conf.d/nexlify-upstream.conf"
 STREAM_PORT="$NEXLIFY_PORT_STREAM_HTTP"
 EDGE_OWNED="$(nexlify_iptv_edge_owned_ports "$ROOT")"
@@ -126,10 +127,63 @@ write_stream_locations() {
 LOC
 }
 
+# When Next listens on 127.0.0.1:13000, nginx must own public :80 for /admin and /login.
+# IPTV-edge may own :443/:8080/:25461 — never assume Node still binds :80.
+nginx_other_vhost_listens_80() {
+  local f
+  for f in /etc/nginx/conf.d/*.conf /etc/nginx/sites-enabled/*; do
+    [ -f "$f" ] || continue
+    [ "$(basename "$f")" = "nexlify-panel-http.conf" ] && continue
+    [[ "$f" == *.disabled ]] && continue
+    if grep -Eq '^[[:space:]]*listen[[:space:]]+(\[::\]:)?80([[:space:];]|$)' "$f" 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+write_panel_http80_vhost() {
+  local listen="${PANEL_LISTEN:-13000}"
+  if [ "$listen" = "80" ]; then
+    rm -f "$PANEL_HTTP_DEST" 2>/dev/null || true
+    return 0
+  fi
+  # MovieFlix / marketing already bind :80 — a second default_server would break nginx -t.
+  if nginx_other_vhost_listens_80; then
+    echo "[stream-edge] :80 already has an nginx vhost — leaving it (not writing $PANEL_HTTP_DEST)"
+    return 0
+  fi
+  mkdir -p "$(dirname "$PANEL_HTTP_DEST")"
+  cat > "$PANEL_HTTP_DEST" <<NGINX
+# Panel UI on :80 → Next on 127.0.0.1:${listen} (IPTV-edge keeps 443/8080/25461)
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    client_max_body_size 100m;
+    large_client_header_buffers 8 64k;
+    client_header_buffer_size 32k;
+    location / {
+        proxy_pass http://nexlify_panel;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_read_timeout 300s;
+    }
+}
+NGINX
+  echo "[stream-edge] Panel HTTP vhost :80 → 127.0.0.1:${listen} ($PANEL_HTTP_DEST)"
+}
+
 if [ "${NEXLIFY_USE_STREAM_EDGE_NGINX:-1}" != "1" ] || [ "$STREAM_PORT" = "${NEXLIFY_PORT_HTTP}" ]; then
   echo "[stream-edge] Direct HTTP on :${NEXLIFY_PORT_HTTP} — removing separate stream edge vhost"
   rm -f "$DEST" 2>/dev/null || true
-  # Panel owns :80 — never let the distro default site fight it.
+  # Distro default site must not fight the panel vhost on :80.
   rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
   # Legacy RTMP in conf.d breaks nginx -t
   rm -f /etc/nginx/conf.d/nexlify-rtmp.conf 2>/dev/null || true
@@ -176,6 +230,8 @@ UP
     rm -f "${EXTRA_DEST}.disabled" 2>/dev/null || true
   fi
 
+  write_panel_http80_vhost
+
   if command -v nginx >/dev/null 2>&1; then
     nginx -t
     if systemctl is-active --quiet nginx 2>/dev/null; then
@@ -192,6 +248,7 @@ fi
 if [ -z "$ALL_PORTS" ]; then
   echo "[stream-edge] No nginx stream ports to bind — IPTV edge owns stream HTTP"
   rm -f "$DEST" "$EXTRA_DEST" 2>/dev/null || true
+  write_panel_http80_vhost
   mkdir -p "$(dirname "$UPSTREAM")"
   cat > "$UPSTREAM" <<UP
 upstream nexlify_panel {

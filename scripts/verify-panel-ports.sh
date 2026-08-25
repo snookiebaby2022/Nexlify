@@ -101,6 +101,9 @@ for p in ${HTTPS_EXTRAS//,/ }; do
 done
 
 check_http "http://127.0.0.1:${PANEL_LISTEN}/api/health" "panel upstream :${PANEL_LISTEN}"
+if [ "$PANEL_LISTEN" != "80" ] && [ "$PANEL_LISTEN" != "${NEXLIFY_PORT_HTTP}" ]; then
+  check_http "http://127.0.0.1:${NEXLIFY_PORT_HTTP}/api/health" "panel UI via :${NEXLIFY_PORT_HTTP}"
+fi
 check_http "http://127.0.0.1:${PANEL_LISTEN}/player_api.php?username=__verify__&password=__verify__" "Xtream API :${PANEL_LISTEN}"
 
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi active; then

@@ -48,17 +48,11 @@ nginx_owns_public_web() {
     || [ -d /etc/letsencrypt/live/snookiebaby.xyz ]
 }
 
-# IP panels: Node listens on 13000; edge must own public :80 (XUI-style stream splice).
-# Shared hosts (MovieFlix / marketing) keep nginx on :80/:443 — otherwise Cloudflare 521.
-STREAM_PUBLIC="$(env_val STREAM_HTTP_PORT)"
-if [ "$PANEL_LISTEN" != "80" ] && [ "$STREAM_PUBLIC" = "80" ]; then
-  if nginx_owns_public_web; then
-    echo "[iptv-edge] Multi-vhost / MovieFlix host — leaving :80 to nginx"
-    HTTP_PORTS="$(echo "$HTTP_PORTS" | tr ',' '\n' | grep -v '^80$' | grep -v '^$' | paste -sd, -)"
-    [ -z "$HTTP_PORTS" ] && HTTP_PORTS="8080,25461"
-  else
-    HTTP_PORTS="80,${HTTP_PORTS}"
-  fi
+# Never bind IPTV-edge on :80. Next is on 13000; nginx must keep :80 for /admin and /login.
+HTTP_PORTS="$(echo "$HTTP_PORTS" | tr ',' '\n' | grep -v '^80$' | grep -v '^$' | paste -sd, -)"
+[ -z "$HTTP_PORTS" ] && HTTP_PORTS="8080,25461"
+if [ "$PANEL_LISTEN" != "80" ]; then
+  echo "[iptv-edge] Panel UI stays on nginx :80 (backend 127.0.0.1:${PANEL_LISTEN}); edge will not bind :80"
 fi
 HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
 [ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="$(env_val PANEL_SSL_PORT)"
@@ -99,12 +93,10 @@ export IPTV_EDGE_KEY="$KEY"
 
 # Wait briefly for previous listeners to release sockets
 sleep 1
-# Only free ports we will bind (do not kill :80 while the panel Node still owns it).
+# Only free ports we will bind. Never kill :80 (panel UI / MovieFlix).
 for p in $(echo "$HTTP_PORTS" | tr ',' ' '); do
   [ -z "$p" ] && continue
-  if [ "$p" = "80" ] && [ "$PANEL_LISTEN" = "80" ]; then
-    continue
-  fi
+  [ "$p" = "80" ] && continue
   fuser -k "${p}/tcp" 2>/dev/null || true
 done
 if [ -n "$HTTPS_PORTS" ]; then
@@ -127,6 +119,11 @@ if command -v nginx >/dev/null 2>&1; then
   else
     echo "[iptv-edge] WARN: nginx -t failed — not restarting nginx blindly" >&2
   fi
+fi
+
+# After stripping 8080/443, restore nginx :80 → Next if this host has no other :80 vhost.
+if [ -x "$PANEL_DIR/scripts/install-nginx-stream-edge.sh" ]; then
+  bash "$PANEL_DIR/scripts/install-nginx-stream-edge.sh" || true
 fi
 
 if [ -z "$HTTP_PORTS" ] && [ -z "$HTTPS_PORTS" ]; then
@@ -164,13 +161,18 @@ fi
 
 sleep 1
 ss -tlnp | grep -E ':443\b|:8080\b|:25461\b' || echo "[iptv-edge] WARN: expected ports not listening yet"
-# Confirm nginx survived (panel UI on :80)
 if command -v nginx >/dev/null 2>&1; then
-  if systemctl is-active --quiet nginx 2>/dev/null; then
-    echo "[iptv-edge] nginx still active (panel HTTP intact)"
-  else
+  if ! systemctl is-active --quiet nginx 2>/dev/null; then
     echo "[iptv-edge] WARN: nginx inactive after edge start — attempting start" >&2
     systemctl start nginx 2>/dev/null || true
+  fi
+fi
+if [ "$PANEL_LISTEN" != "80" ]; then
+  if ss -tln 2>/dev/null | grep -qE ':80[[:space:]]'; then
+    echo "[iptv-edge] OK panel HTTP :80 is listening"
+  else
+    echo "[iptv-edge] ERROR: nothing listening on :80 — /admin dashboard would fail" >&2
+    exit 1
   fi
 fi
 echo "[iptv-edge] OK backend=${IPTV_EDGE_BACKEND} http=${HTTP_PORTS:-none} https=${HTTPS_PORTS:-none}"

@@ -103,6 +103,21 @@ for dir in $scan_dirs; do
       fi
     done
     [ "$needs" = "1" ] || continue
+    # Never disable a vhost that still serves panel HTTP on :80.
+    if grep -EqE 'listen[[:space:]]+(\[::\]:)?80([[:space:];]|$)' "$conf" 2>/dev/null; then
+      tmp="${conf}.nexlify-release.tmp"
+      cp -a "$conf" "$tmp"
+      for p in $PORT_LIST; do
+        sed -i -E "s/^([[:space:]]*)listen[[:space:]]+(\[::\]:)?${p}([[:space:];].*)?$/\1# nexlify-release: listen \2${p}\3/" "$tmp" || true
+      done
+      if ! cmp -s "$conf" "$tmp"; then
+        mv -f "$tmp" "$conf"
+        echo "[nginx-release] commented non-80 listen lines in $conf (kept :80)"
+      else
+        rm -f "$tmp"
+      fi
+      continue
+    fi
     # Prefer disabling whole site/conf that only exists for IPTV edge ports
     base="$(basename "$conf")"
     case "$base" in
