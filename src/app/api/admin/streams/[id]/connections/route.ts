@@ -6,6 +6,7 @@ import {
   getConnectionPlaybackOutput,
   resolvePlaybackOutputLabel,
 } from "@/lib/connection-playback-output";
+import { streamServerDisplayName } from "@/lib/stream-server-display";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 
@@ -44,7 +45,7 @@ export async function GET(
     select: {
       id: true,
       name: true,
-      server: { select: { id: true, name: true } },
+      server: { select: { id: true, name: true, host: true, domain: true } },
     },
   });
   if (!stream) return NextResponse.json({ error: "Stream not found" }, { status: 404 });
@@ -61,8 +62,12 @@ export async function GET(
     orderBy: { lastSeenAt: "desc" },
   });
 
+  const serverLabel = stream.server
+    ? streamServerDisplayName(stream.server.name, stream.server.domain || stream.server.host || "")
+    : "Main Server";
+
   return NextResponse.json({
-    stream,
+    stream: { ...stream, server: stream.server ? { ...stream.server, name: serverLabel } : null },
     clients: await Promise.all(
       rows.map(async (c) => {
         const dur = durationSeconds(c.startedAt, c.lastSeenAt);
@@ -80,7 +85,7 @@ export async function GET(
         return {
           id: c.id,
           line: c.line.username,
-          server: stream.server?.name ?? "Main Server",
+          server: serverLabel,
           ip: c.ip,
           duration: formatDuration(dur),
           durationSeconds: dur,

@@ -603,7 +603,7 @@ const connectionInclude = {
       name: true,
       type: true,
       serverId: true,
-      server: { select: { id: true, name: true } },
+      server: { select: { id: true, name: true, host: true, domain: true } },
     },
   },
 } as const;

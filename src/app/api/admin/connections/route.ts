@@ -12,6 +12,7 @@ import {
   batchGetConnectionPlaybackOutputs,
   resolvePlaybackOutputLabel,
 } from "@/lib/connection-playback-output";
+import { streamServerDisplayName } from "@/lib/stream-server-display";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -52,11 +53,15 @@ export async function GET() {
       cached: cachedOutput,
       userAgent: c.userAgent,
     });
+    const srv = c.stream?.server;
+    const serverName = srv
+      ? streamServerDisplayName(srv.name, srv.domain || srv.host || "")
+      : "Main Server";
     return {
       ...c,
       startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
       lastSeenAt: c.lastSeenAt instanceof Date ? c.lastSeenAt.toISOString() : String(c.lastSeenAt),
-      serverName: c.stream?.server?.name ?? "Main Server",
+      serverName,
       quality,
       output,
     };
