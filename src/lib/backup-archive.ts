@@ -1,9 +1,28 @@
-import { deflateRawSync, crc32 } from "node:zlib";
+import { deflateRawSync } from "node:zlib";
 import { createReadStream, createWriteStream } from "node:fs";
 import { writeFile, unlink, stat } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { Writable } from "node:stream";
 import path from "node:path";
+
+// CRC-32 (ISO 3309) — do not import zlib.crc32; @types/node@18 has no export.
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buf: Buffer | Uint8Array, prev = 0): number {
+  let crc = (prev >>> 0) ^ 0xffffffff;
+  for (let i = 0; i < buf.length; i++) {
+    crc = CRC_TABLE[(crc ^ buf[i]!) & 0xff]! ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
 
 function u16(n: number): Buffer {
   const b = Buffer.alloc(2);
