@@ -1,4 +1,4 @@
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { promisify } from "util";
@@ -59,23 +59,12 @@ export async function persistExtendedPortsToEnv(
     lines = upsertEnvLine(lines, "RTMP_PORT", String(profile.rtmpPort));
     lines = upsertEnvLine(lines, "STREAM_HTTP_EXTRA_PORTS", portListEnv(profile.httpExtraPorts));
     lines = upsertEnvLine(lines, "STREAM_HTTPS_EXTRA_PORTS", portListEnv(profile.httpsExtraPorts));
+    process.env.RTMP_PORT = String(profile.rtmpPort);
+    process.env.STREAM_HTTP_EXTRA_PORTS = portListEnv(profile.httpExtraPorts);
+    process.env.STREAM_HTTPS_EXTRA_PORTS = portListEnv(profile.httpsExtraPorts);
   }
 
   fs.writeFileSync(envPath, `${lines.join("\n").replace(/\n+$/, "")}\n`, "utf8");
-}
-
-function portListsEqual(a: number[], b: number[]): boolean {
-  if (a.length !== b.length) return false;
-  const as = [...a].sort((x, y) => x - y);
-  const bs = [...b].sort((x, y) => x - y);
-  return as.every((n, i) => n === bs[i]);
-}
-
-function envPortList(key: string): number[] {
-  return (process.env[key] ?? "")
-    .split(",")
-    .map((s) => Number(s.trim()))
-    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 65535);
 }
 
 function localPortProfileUnchanged(
@@ -87,10 +76,36 @@ function localPortProfileUnchanged(
     settings.streamHttpPort === profile.streamHttpPort &&
     settings.streamHttpsPort === profile.streamHttpsPort &&
     settings.panelSslPort === profile.panelSslPort &&
-    rtmp === profile.rtmpPort &&
-    portListsEqual(envPortList("STREAM_HTTP_EXTRA_PORTS"), profile.httpExtraPorts) &&
-    portListsEqual(envPortList("STREAM_HTTPS_EXTRA_PORTS"), profile.httpsExtraPorts)
+    rtmp === profile.rtmpPort
   );
+}
+
+export function startPortSyncInBackground(): PortSyncResult {
+  const repo = resolvePanelRepoPathSync(process.env.PANEL_REPO_PATH);
+  const script = path.join(repo, "scripts", "sync-panel-ports.sh");
+  if (!fs.existsSync(script)) {
+    return {
+      ok: true,
+      message: "Port sync skipped — panel install scripts were not found.",
+      output: `looked for ${script}`,
+    };
+  }
+  const child = spawn("bash", ["scripts/sync-panel-ports.sh"], {
+    cwd: repo,
+    detached: true,
+    stdio: "ignore",
+    env: {
+      ...process.env,
+      PANEL_REPO_PATH: repo,
+      PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+    },
+  });
+  child.unref();
+  return {
+    ok: true,
+    message: "Port sync started in the background.",
+    output: "",
+  };
 }
 
 export async function runPortSyncScript(): Promise<PortSyncResult> {
@@ -162,5 +177,5 @@ export async function applyLocalServerPortProfile(
       output: "",
     };
   }
-  return runPortSyncScript();
+  return startPortSyncInBackground();
 }

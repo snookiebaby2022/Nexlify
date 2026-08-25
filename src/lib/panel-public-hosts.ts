@@ -103,8 +103,18 @@ export async function syncStreamServerPublicHosts(server: StreamServerHostFields
   }
 
   const extras = new Set(current.extraDomains.filter((d) => d && d !== primary));
+  let extrasChanged = extras.size !== current.extraDomains.filter((d) => d && d !== current.primaryDomain).length;
   for (const h of incoming) {
-    if (h !== primary) extras.add(h);
+    if (h !== primary && !extras.has(h)) {
+      extras.add(h);
+      extrasChanged = true;
+    }
+  }
+
+  const primaryChanged = primary !== current.primaryDomain;
+  if (!primaryChanged && !extrasChanged) {
+    persistPublicHostsToEnv(primary, [...extras]);
+    return;
   }
 
   await savePanelDomainsSettings({
