@@ -18,6 +18,8 @@ import {
 } from "@/lib/credential-generate";
 import { LineStatus, Prisma } from "@prisma/client";
 import { normalizeAllowedOutputInput, DEFAULT_ALLOWED_OUTPUT } from "@/lib/line-access-output";
+import { UNLIMITED_LINE_DAYS } from "@/lib/line-duration-presets";
+import { unlimitedLineExpiresAt } from "@/lib/line-renew";
 import { LIVE_STALE_MS } from "@/lib/connections";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
@@ -210,13 +212,16 @@ export async function POST(req: NextRequest) {
   let totalCost = 1;
 
   try {
-    const resolved = await resolveLineCreateFromPackage(body as {
-      packageId?: string;
-      accessCode?: string;
-      days?: number;
-      maxConnections?: number;
-      bouquetIds?: string[];
-    });
+    const resolved = await resolveLineCreateFromPackage(
+      body as {
+        packageId?: string;
+        accessCode?: string;
+        days?: number;
+        maxConnections?: number;
+        bouquetIds?: string[];
+      },
+      { sellerId: session.role === PanelRole.ADMIN ? null : session.id }
+    );
     days = resolved.days;
     maxConnections = resolved.maxConnections;
     bouquetIds = resolved.bouquetIds;
@@ -253,7 +258,10 @@ export async function POST(req: NextRequest) {
 
   // Explicit expiry from the form calendar overrides package days when provided.
   let expiresAt: Date;
-  if (body.expiresAt && String(body.expiresAt).trim()) {
+  if (body.unlimited === true) {
+    days = UNLIMITED_LINE_DAYS;
+    expiresAt = unlimitedLineExpiresAt();
+  } else if (body.expiresAt && String(body.expiresAt).trim()) {
     const parsed = new Date(String(body.expiresAt));
     if (Number.isNaN(parsed.getTime())) {
       return NextResponse.json({ error: "Invalid expiry date" }, { status: 400 });

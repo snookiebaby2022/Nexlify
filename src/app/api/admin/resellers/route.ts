@@ -86,6 +86,7 @@ export async function GET(req: NextRequest) {
         isActive: r.isActive,
         credits: r.credits,
         maxLines: r.maxLines,
+        profitPercent: r.profitPercent ?? 0,
         notes: r.notes ?? "",
         resellerDns: r.resellerDns ?? "",
         defaultLanguage: r.defaultLanguage,
@@ -174,6 +175,7 @@ export async function PATCH(req: NextRequest) {
     parentId?: string | null;
     maxLines?: number;
     defaultLanguage?: string;
+    profitPercent?: number;
   } = {};
 
   if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
@@ -197,6 +199,9 @@ export async function PATCH(req: NextRequest) {
     data.passwordPlain = null;
   }
   if (body.maxLines != null) data.maxLines = Math.max(0, Number(body.maxLines) || 0);
+  if (body.profitPercent != null) {
+    data.profitPercent = Math.max(0, Math.min(500, Number(body.profitPercent) || 0));
+  }
   if (body.defaultLanguage !== undefined) data.defaultLanguage = String(body.defaultLanguage || "en");
   if (body.groupId !== undefined) data.groupId = body.groupId ? String(body.groupId) : null;
   if (body.parentId !== undefined) data.parentId = body.parentId ? String(body.parentId) : null;
@@ -387,6 +392,7 @@ export async function POST(req: NextRequest) {
       groupId: body.groupId ? String(body.groupId) : defaultGroup ?? null,
       credits: Number(body.credits ?? 0),
       maxLines: Number(body.maxLines ?? 500),
+      profitPercent: Math.max(0, Math.min(500, Number(body.profitPercent ?? 0) || 0)),
       parentId,
       resellerDns,
       notes: body.notes ? String(body.notes) : null,

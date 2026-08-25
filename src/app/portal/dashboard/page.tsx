@@ -42,7 +42,7 @@ type PortalInfo = {
 
   };
 
-  endpoints: { m3u: string; m3uDownload: string; xtream: string; epg: string; stalker: string };
+  endpoints: { m3u: string; m3uDownload: string; xtream: string; epg: string; stalker: string; magPortal?: string; webplayer?: string; portal?: string };
 
   billing: {
 
@@ -427,6 +427,19 @@ export default function PortalDashboardPage() {
           <h2 className="font-semibold">{t(locale, "playlistUrls")}</h2>
 
           <CopyField label="M3U playlist" value={info.endpoints.m3u} />
+          <CopyField label="Xtream player API" value={info.endpoints.xtream} />
+          <CopyField label="MAG / Stalker portal" value={info.endpoints.magPortal ?? info.endpoints.stalker} />
+          {info.endpoints.webplayer ? (
+            <a
+              href={info.endpoints.webplayer}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex rounded px-3 py-1.5 text-sm font-medium"
+              style={{ background: "#22d3ee", color: "#0a1628", width: "fit-content" }}
+            >
+              Watch in browser
+            </a>
+          ) : null}
 
           <div className="flex flex-wrap gap-2">
 

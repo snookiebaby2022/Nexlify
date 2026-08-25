@@ -23,6 +23,16 @@ export function creditCostForDays(days: number): number {
   return Math.max(4, Math.ceil(days / 365) * 4);
 }
 
+export function markedUpCreditCost(
+  baseCost: number,
+  packagePercent: number,
+  resellerPercent: number
+): number {
+  const pkg = 1 + Math.max(0, packagePercent) / 100;
+  const user = 1 + Math.max(0, resellerPercent) / 100;
+  return Math.max(0, Math.ceil(baseCost * pkg * user));
+}
+
 export function packageLabelForDays(days: number): string {
   const t = STANDARD_PACKAGE_TEMPLATES.find((x) => x.days === days);
   if (t) return t.name;

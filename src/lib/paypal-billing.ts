@@ -39,6 +39,7 @@ export async function createPayPalOrder(opts: {
   description: string;
   returnUrl: string;
   cancelUrl: string;
+  customId?: string;
 }): Promise<{ orderId: string; approveUrl?: string }> {
   const cfg = await getPayPalConfig();
   if (!cfg) throw new Error("PayPal not configured");
@@ -55,6 +56,7 @@ export async function createPayPalOrder(opts: {
         {
           amount: { currency_code: opts.currency, value: opts.amount.toFixed(2) },
           description: opts.description,
+          ...(opts.customId ? { custom_id: opts.customId.slice(0, 127) } : {}),
         },
       ],
       application_context: {

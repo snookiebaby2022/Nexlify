@@ -621,6 +621,7 @@ const STEP_PROGRESS: Record<string, number> = {
   // End-of-build assigned %; UI climbs during compile via stdout + heartbeat
   "npm run build": 90,
   "prepare standalone": 94,
+  "pm2 restart all": 98,
   "pm2 restart nexlify": 98,
   // Prebuilt path steps (download → extract → apply replaces the old single step)
   "download update": 30,

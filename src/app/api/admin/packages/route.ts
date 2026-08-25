@@ -93,6 +93,9 @@ export async function POST(req: NextRequest) {
         maxLines: Number(body.maxLines ?? 1),
         extraDeviceSlots: Number(body.extraDeviceSlots ?? 0),
         days: Number(body.days ?? 30),
+        profitPercent: Math.max(0, Number(body.profitPercent ?? 0) || 0),
+        shopEnabled: body.shopEnabled === true,
+        shopPriceCents: Math.max(0, Number(body.shopPriceCents ?? 0) || 0),
         bouquetIds: body.bouquetIds ?? [],
         sortOrder: Number(body.sortOrder ?? 0),
         allowResellers: body.allowResellers !== false,
@@ -132,6 +135,9 @@ export async function PATCH(req: NextRequest) {
     if (body.isActive != null) data.isActive = Boolean(body.isActive);
     if (body.allowResellers != null) data.allowResellers = Boolean(body.allowResellers);
     if (body.allowSubResellers != null) data.allowSubResellers = Boolean(body.allowSubResellers);
+    if (body.profitPercent != null) data.profitPercent = Math.max(0, Number(body.profitPercent) || 0);
+    if (body.shopEnabled != null) data.shopEnabled = Boolean(body.shopEnabled);
+    if (body.shopPriceCents != null) data.shopPriceCents = Math.max(0, Number(body.shopPriceCents) || 0);
 
     const pkg = await prisma.package.update({ where: { id }, data });
     return NextResponse.json({ package: pkg });

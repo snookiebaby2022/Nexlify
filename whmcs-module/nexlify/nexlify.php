@@ -120,6 +120,16 @@ function nexlify_CreateAccount(array $params)
         return $result['error'] ?? 'Create failed';
     }
 
+    if (!empty($result['username']) && isset($params['model'])) {
+        try {
+            $params['model']->serviceProperties->save([
+                'username' => $result['username'],
+                'password' => $result['password'] ?? $password,
+            ]);
+        } catch (\Throwable $e) {
+        }
+    }
+
     return 'success';
 }
 
@@ -152,6 +162,30 @@ function nexlify_Renew(array $params)
         'days' => $days > 0 ? $days : 30,
     ]);
     return empty($result['ok']) ? ($result['error'] ?? 'Renew failed') : 'success';
+}
+
+function nexlify_ChangePackage(array $params)
+{
+    return nexlify_Renew($params);
+}
+
+function nexlify_AdminCustomButtonArray()
+{
+    return [
+        'Add reseller credits' => 'addcredits',
+    ];
+}
+
+function nexlify_addcredits(array $params)
+{
+    $credits = (int) ($params['configoption4'] ?? 1);
+    $result = nexlify_call($params, [
+        'action' => 'add_credits',
+        'reseller' => $params['username'] ?? '',
+        'credits' => $credits > 0 ? $credits : 1,
+        'note' => 'WHMCS custom button',
+    ]);
+    return empty($result['ok']) ? ($result['error'] ?? 'Credits failed') : 'success';
 }
 
 function nexlify_AdminLink(array $params)

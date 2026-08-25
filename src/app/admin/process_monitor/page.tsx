@@ -32,15 +32,32 @@ export default function ProcessMonitorPage() {
     return () => clearInterval(t);
   }, []);
 
+  async function queueStream(action: "restart_stream" | "start_stream", streamId: string, serverId: string) {
+    const res = await fetch(`/api/admin/servers/${serverId}/agent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, streamId }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Agent command failed");
+    }
+  }
+
   async function restartAll() {
     if (!confirm("Restart all streams?")) return;
     const unique = [...new Map(rows.filter((r) => r.stream && r.server).map((r) => [`${r.stream!.id}-${r.server.id}`, r])).values()];
     for (const r of unique) {
-      await fetch(`/api/admin/servers/${r.server.id}/agent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "restart_stream", streamId: r.stream!.id }),
-      });
+      await queueStream("restart_stream", r.stream!.id, r.server.id);
+    }
+    load();
+  }
+
+  async function startAll() {
+    if (!confirm("Start all listed streams?")) return;
+    const unique = [...new Map(rows.filter((r) => r.stream && r.server).map((r) => [`${r.stream!.id}-${r.server.id}`, r])).values()];
+    for (const r of unique) {
+      await queueStream("start_stream", r.stream!.id, r.server.id);
     }
     load();
   }
@@ -57,17 +74,28 @@ export default function ProcessMonitorPage() {
         <div>
           <h1 className="text-2xl font-semibold">Process monitor</h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            Live ffmpeg/nginx processes reported by stream server agents. Updates every 5 seconds. Stale entries trigger auto-restart when enabled (cron).
+            Live ffmpeg/nginx processes reported by stream server agents. Updates every 5 seconds.
+            Start/Restart queues the agent (polls about every 30s). Direct/splice channels with no FFmpeg job will report failed on the agent.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={restartAll}
-          className="text-sm px-4 py-2 rounded border"
-          style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
-        >
-          Restart All
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={startAll}
+            className="text-sm px-4 py-2 rounded border"
+            style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
+          >
+            Start All
+          </button>
+          <button
+            type="button"
+            onClick={restartAll}
+            className="text-sm px-4 py-2 rounded border"
+            style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
+          >
+            Restart All
+          </button>
+        </div>
       </div>
       <DataTable
         headers={["Server", "Stream", "PID", "Status", "CPU %", "RAM MB", "Last seen", ""]}
@@ -84,22 +112,30 @@ export default function ProcessMonitorPage() {
           p.memoryMb?.toFixed(0) ?? "—",
           formatDateTime(p.lastSeenAt),
           p.stream && p.server ? (
-            <button
-              key={`r-${p.id}`}
-              type="button"
-              className="text-xs cursor-pointer"
-              style={{ color: "var(--accent)" }}
-              onClick={async () => {
-                await fetch(`/api/admin/servers/${p.server!.id}/agent`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ action: "restart_stream", streamId: p.stream!.id }),
-                });
-                load();
-              }}
-            >
-              Restart
-            </button>
+            <span key={`r-${p.id}`} className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="text-xs cursor-pointer"
+                style={{ color: "var(--accent)" }}
+                onClick={async () => {
+                  await queueStream("start_stream", p.stream!.id, p.server.id);
+                  load();
+                }}
+              >
+                Start
+              </button>
+              <button
+                type="button"
+                className="text-xs cursor-pointer"
+                style={{ color: "var(--accent)" }}
+                onClick={async () => {
+                  await queueStream("restart_stream", p.stream!.id, p.server.id);
+                  load();
+                }}
+              >
+                Restart
+              </button>
+            </span>
           ) : (
             "—"
           ),

@@ -5,6 +5,7 @@ import { isRemoteM3uUrl } from "@/lib/m3u-watch-sync";
 import { runWatchFolderM3uSync } from "@/lib/m3u-sync-jobs";
 import { prisma } from "@/lib/prisma";
 import { ImportKind, PanelRole, WatchFolderType } from "@prisma/client";
+import { getSettingGroup } from "@/lib/panel-settings";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -13,7 +14,16 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const folders = await prisma.watchFolder.findMany({ orderBy: { name: "asc" } });
-  return NextResponse.json({ folders });
+  const vod = await getSettingGroup("vod-storage");
+  return NextResponse.json({
+    folders,
+    vodStorage: {
+      rcloneRemote: String(vod.rcloneRemote ?? ""),
+      rclonePath: String(vod.rclonePath ?? ""),
+      localMountPath: String(vod.localMountPath ?? ""),
+      s3Bucket: String(vod.s3Bucket ?? ""),
+    },
+  });
 }
 
 export async function POST(req: NextRequest) {

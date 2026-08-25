@@ -63,17 +63,17 @@ export default function StreamErrorsPage() {
     load();
   }
 
-  async function restartStream(streamId: string, serverId: string) {
-    setFixMsg((m) => ({ ...m, [`restart-${streamId}`]: "…" }));
+  async function queueStream(action: "restart_stream" | "start_stream", streamId: string, serverId: string) {
+    setFixMsg((m) => ({ ...m, [`${action}-${streamId}`]: "…" }));
     const res = await fetch(`/api/admin/servers/${serverId}/agent`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "restart_stream", streamId }),
+      body: JSON.stringify({ action, streamId }),
     });
     const data = await res.json();
     setFixMsg((m) => ({
       ...m,
-      [`restart-${streamId}`]: res.ok ? (data.note ?? "Queued") : (data.error ?? "Failed"),
+      [`${action}-${streamId}`]: res.ok ? (data.note ?? "Queued for agent") : (data.error ?? "Failed"),
     }));
     load();
   }
@@ -97,18 +97,32 @@ export default function StreamErrorsPage() {
           Edit
         </Link>
         {serverId && (
-          <button
-            type="button"
-            className="text-xs px-2 py-1 rounded border cursor-pointer"
-            style={{ borderColor: "var(--border)" }}
-            onClick={() => restartStream(streamId, serverId)}
-          >
-            Restart
-          </button>
+          <>
+            <button
+              type="button"
+              className="text-xs px-2 py-1 rounded border cursor-pointer"
+              style={{ borderColor: "var(--border)" }}
+              onClick={() => queueStream("start_stream", streamId, serverId)}
+            >
+              Start
+            </button>
+            <button
+              type="button"
+              className="text-xs px-2 py-1 rounded border cursor-pointer"
+              style={{ borderColor: "var(--border)" }}
+              onClick={() => queueStream("restart_stream", streamId, serverId)}
+            >
+              Restart
+            </button>
+          </>
         )}
-        {(fixMsg[`probe-${streamId}`] || fixMsg[`restart-${streamId}`]) && (
+        {(fixMsg[`probe-${streamId}`] ||
+          fixMsg[`restart_stream-${streamId}`] ||
+          fixMsg[`start_stream-${streamId}`]) && (
           <span className="text-[10px] w-full" style={{ color: "var(--muted)" }}>
-            {fixMsg[`probe-${streamId}`] ?? fixMsg[`restart-${streamId}`]}
+            {fixMsg[`probe-${streamId}`] ??
+              fixMsg[`restart_stream-${streamId}`] ??
+              fixMsg[`start_stream-${streamId}`]}
           </span>
         )}
       </span>

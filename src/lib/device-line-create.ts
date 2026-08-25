@@ -30,11 +30,14 @@ export async function createLineForDevice(opts: {
   packageId?: string;
   ownerId?: string;
 }) {
-  const resolved = await resolveLineCreateFromPackage({
-    packageId: opts.packageId,
-    days: opts.packageId ? undefined : 30,
-    maxConnections: 1,
-  });
+  const resolved = await resolveLineCreateFromPackage(
+    {
+      packageId: opts.packageId,
+      days: opts.packageId ? undefined : 30,
+      maxConnections: 1,
+    },
+    { sellerId: opts.session.role === PanelRole.ADMIN ? null : opts.session.id }
+  );
 
   const paysCredits =
     opts.session.role === PanelRole.RESELLER || opts.session.role === PanelRole.SUB_RESELLER;

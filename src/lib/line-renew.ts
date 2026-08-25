@@ -1,5 +1,6 @@
 import { LineStatus } from "@prisma/client";
 import { prisma } from "./prisma";
+import { UNLIMITED_LINE_DAYS } from "./line-duration-presets";
 
 export type LineRenewResult = {
   expiresAt: Date;
@@ -33,6 +34,44 @@ export function previewExtendedExpiry(
   const current = currentExpiresAt instanceof Date ? currentExpiresAt : new Date(currentExpiresAt);
   if (Number.isNaN(current.getTime())) return computeExtendedExpiry(now, days, now);
   return computeExtendedExpiry(current, days, now);
+}
+
+export function unlimitedLineExpiresAt(now: Date = new Date()): Date {
+  return computeExtendedExpiry(now, UNLIMITED_LINE_DAYS, now);
+}
+
+export async function applyLineUnlimited(
+  lineId: string,
+  opts?: { reactivate?: boolean }
+): Promise<LineRenewResult> {
+  const existing = await prisma.line.findUnique({
+    where: { id: lineId },
+    select: { id: true, expiresAt: true, status: true },
+  });
+  if (!existing) throw new Error("Line not found");
+
+  const expiresAt = unlimitedLineExpiresAt();
+  const reactivate =
+    opts?.reactivate !== false &&
+    existing.status !== LineStatus.BANNED &&
+    (existing.status === LineStatus.EXPIRED || existing.status === LineStatus.DISABLED);
+
+  const line = await prisma.line.update({
+    where: { id: lineId },
+    data: {
+      expiresAt,
+      ...(reactivate ? { status: LineStatus.ACTIVE } : {}),
+    },
+    select: { expiresAt: true, status: true },
+  });
+
+  return {
+    expiresAt: line.expiresAt,
+    previousExpiresAt: existing.expiresAt,
+    daysAdded: UNLIMITED_LINE_DAYS,
+    status: line.status,
+    reactivated: reactivate,
+  };
 }
 
 export async function applyLineRenewDays(

@@ -7,7 +7,7 @@ import { PanelRole } from "@prisma/client";
 import { MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput, validateLinePasswordPolicy } from "@/lib/credential-generate";
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
 import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
-import { applyLineRenewDays } from "@/lib/line-renew";
+import { applyLineRenewDays, applyLineUnlimited } from "@/lib/line-renew";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -126,14 +126,24 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   };
 
   let renewResult: Awaited<ReturnType<typeof applyLineRenewDays>> | null = null;
-  const days = body.days != null ? Number(body.days) : 0;
-  if (Number.isFinite(days) && days > 0) {
-    renewResult = await applyLineRenewDays(existing.id, days, {
+  if (body.unlimited === true) {
+    renewResult = await applyLineUnlimited(existing.id, {
       reactivate: body.reactivate !== false,
     });
     data.expiresAt = renewResult.expiresAt;
     if (renewResult.reactivated) {
       data.status = renewResult.status;
+    }
+  } else {
+    const days = body.days != null ? Number(body.days) : 0;
+    if (Number.isFinite(days) && days > 0) {
+      renewResult = await applyLineRenewDays(existing.id, days, {
+        reactivate: body.reactivate !== false,
+      });
+      data.expiresAt = renewResult.expiresAt;
+      if (renewResult.reactivated) {
+        data.status = renewResult.status;
+      }
     }
   }
 

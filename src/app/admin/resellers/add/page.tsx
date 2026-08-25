@@ -35,6 +35,7 @@ export default function AdminAddUserPage() {
     credits: 0,
     notes: "",
     role: "RESELLER" as "RESELLER" | "SUB_RESELLER",
+    profitPercent: 0,
   });
 
   useEffect(() => {
@@ -89,6 +90,7 @@ export default function AdminAddUserPage() {
         credits: form.credits,
         notes: form.notes || null,
         role: form.role,
+        profitPercent: form.profitPercent,
       }),
     });
     const data = await res.json();
@@ -238,6 +240,20 @@ export default function AdminAddUserPage() {
                   value={form.credits}
                   onChange={(e) => setForm({ ...form, credits: parseInt(e.target.value, 10) || 0 })}
                 />
+              </FormField>
+              <FormField label="Profit % (charged to downline)">
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  className={formInputClass}
+                  style={formInputStyle}
+                  value={form.profitPercent}
+                  onChange={(e) => setForm({ ...form, profitPercent: Number(e.target.value) || 0 })}
+                />
+                <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                  Extra percent on package credits when this reseller sells a line (NXT markup).
+                </p>
               </FormField>
             </>
           )}

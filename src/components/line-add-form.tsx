@@ -18,7 +18,7 @@ import {
   generateLineUsername,
   MIN_LINE_CREDENTIAL_LENGTH,
 } from "@/lib/credential-generate";
-import { LINE_DURATION_PRESETS } from "@/lib/line-duration-presets";
+import { LINE_DURATION_PRESETS, UNLIMITED_LINE_DAYS } from "@/lib/line-duration-presets";
 import { creditCostForDays, packageLabelForDays } from "@/lib/package-credits";
 import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
 import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
@@ -161,29 +161,32 @@ export function LineAddForm({
   }
 
   function applyDurationPreset(preset: (typeof LINE_DURATION_PRESETS)[number]) {
-    const pkg = packages.find((p) => p.days === preset.days);
+    const unlimited = preset.id === "unlimited";
+    const pkg = unlimited ? undefined : packages.find((p) => p.days === preset.days);
     setForm((f) => {
       const next = applyPackageFields(f, pkg);
       return {
         ...next,
         days: preset.days,
         isTrial: preset.isTrial,
-        unlimited: false,
+        unlimited,
         expiresAt: "",
-        packageId: pkg?.id ?? f.packageId,
+        packageId: pkg?.id ?? (unlimited ? "" : f.packageId),
         maxConnections: pkg?.maxLines ?? next.maxConnections,
       };
     });
-    setCreditHint(preset.creditCost);
+    setCreditHint(unlimited ? 0 : preset.creditCost);
   }
 
   useEffect(() => {
     fetch("/api/admin/bouquets")
       .then((r) => r.json())
       .then((d) => {
-        const list = d.bouquets ?? [];
+        const list = (d.bouquets ?? []) as BouquetPickerRow[];
         setBouquets(list);
-        // Do not pre-select every bouquet — operator must choose on the Bouquets step.
+        setForm((f) =>
+          f.bouquetIds.length ? f : { ...f, bouquetIds: list.map((b) => b.id) }
+        );
       });
     fetch("/api/admin/packages")
       .then((r) => r.json())
@@ -282,7 +285,7 @@ export function LineAddForm({
 
     const notes = [form.adminNotes, form.resellerNotes].filter(Boolean).join("\n---\n");
     // Duration comes from package/days — isTrial is a flag only (do not force 1 day).
-    const days = form.unlimited ? 3650 : Math.max(1, Number(form.days) || 1);
+    const days = form.unlimited ? UNLIMITED_LINE_DAYS : Math.max(1, Number(form.days) || 1);
     // Match the expiry the user sees (local datetime → ISO), never force 1 day for trials.
     const expiresAtPayload = form.unlimited
       ? undefined
@@ -301,6 +304,7 @@ export function LineAddForm({
           password,
           maxConnections: form.maxConnections,
           days,
+          unlimited: form.unlimited,
           expiresAt: expiresAtPayload,
           bouquetIds: form.bouquetIds,
           ownerId: mode === "admin" && form.ownerId ? form.ownerId : undefined,
@@ -398,10 +402,13 @@ export function LineAddForm({
               style={{
                 borderColor: "var(--border)",
                 background:
-                  form.days === p.days && form.isTrial === p.isTrial
+                  (p.id === "unlimited" ? form.unlimited : form.days === p.days && form.isTrial === p.isTrial && !form.unlimited)
                     ? "rgba(0,192,239,0.2)"
                     : "transparent",
-                color: form.days === p.days && form.isTrial === p.isTrial ? "#fff" : "var(--muted)",
+                color:
+                  (p.id === "unlimited" ? form.unlimited : form.days === p.days && form.isTrial === p.isTrial && !form.unlimited)
+                    ? "#fff"
+                    : "var(--muted)",
               }}
             >
               {p.label}
@@ -588,7 +595,7 @@ export function LineAddForm({
                 checked={form.unlimited}
                 onChange={(e) => setForm({ ...form, unlimited: e.target.checked })}
               />
-              Mark as unlimited — ignore date input
+              Mark as unlimited
             </label>
             {!form.unlimited && (
               <FormField label="Duration (days)">

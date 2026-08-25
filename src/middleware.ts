@@ -85,6 +85,8 @@ const PUBLIC = [
   "/api/billing",
   "/api/portal",
   "/portal",
+  "/shop",
+  "/api/shop",
   "/api/cron",
   "/api/agent",
   "/api/health",

@@ -40,6 +40,7 @@ export default function AdminEditUserPage() {
     maxLines: 500,
     notes: "",
     role: "RESELLER" as "ADMIN" | "RESELLER" | "SUB_RESELLER",
+    profitPercent: 0,
   });
 
   useEffect(() => {
@@ -80,6 +81,7 @@ export default function AdminEditUserPage() {
           maxLines: Number(u.maxLines ?? 500),
           notes: u.notes ?? "",
           role: (u.role as "ADMIN" | "RESELLER" | "SUB_RESELLER") || "RESELLER",
+          profitPercent: Number(u.profitPercent ?? 0),
         });
       })
       .catch((e) => setMsg(e instanceof Error ? e.message : "Failed to load"))
@@ -115,6 +117,7 @@ export default function AdminEditUserPage() {
         maxLines: form.maxLines,
         notes: form.notes || null,
         role: form.role,
+        profitPercent: form.profitPercent,
       }),
     });
     const j = await res.json().catch(() => ({}));
@@ -248,6 +251,18 @@ export default function AdminEditUserPage() {
             style={formInputStyle}
             value={form.credits}
             onChange={(e) => setForm((f) => ({ ...f, credits: Number(e.target.value) || 0 }))}
+          />
+        </FormField>
+
+        <FormField label="Profit % (NXT markup)">
+          <input
+            type="number"
+            min={0}
+            step={0.5}
+            className={formInputClass}
+            style={formInputStyle}
+            value={form.profitPercent}
+            onChange={(e) => setForm((f) => ({ ...f, profitPercent: Number(e.target.value) || 0 }))}
           />
         </FormField>
 

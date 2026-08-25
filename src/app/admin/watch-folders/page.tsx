@@ -21,6 +21,7 @@ export default function AdminWatchFoldersPage() {
     }[]
   >([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [vodHint, setVodHint] = useState("");
   const [form, setForm] = useState({
     name: "",
     sourceKind: "local" as SourceKind,
@@ -38,7 +39,17 @@ export default function AdminWatchFoldersPage() {
   function load() {
     fetch("/api/admin/watch-folders")
       .then((r) => r.json())
-      .then((d) => setFolders(d.folders));
+      .then((d) => {
+        setFolders(d.folders);
+        const v = d.vodStorage;
+        if (v?.localMountPath) {
+          setVodHint(`rclone/S3 mount: ${v.localMountPath}`);
+        } else if (v?.rcloneRemote) {
+          setVodHint(
+            `rclone remote ${v.rcloneRemote}${v.rclonePath || ""} — mount it locally then add that path here.`
+          );
+        }
+      });
   }
 
   useEffect(() => {
@@ -153,6 +164,14 @@ export default function AdminWatchFoldersPage() {
         <div className="rounded-lg border px-4 py-3 text-sm" style={{ borderColor: "var(--danger)", background: "rgba(239,68,68,0.1)", color: "var(--danger)" }}>
           {error}
         </div>
+      )}
+      {vodHint && (
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          {vodHint}{" "}
+          <Link href="/admin/settings/vod-storage" className="underline" style={{ color: "var(--accent)" }}>
+            Rclone / S3 settings
+          </Link>
+        </p>
       )}
 
       <form

@@ -8,7 +8,8 @@ export type BillingAction =
   | "suspend"
   | "unsuspend"
   | "terminate"
-  | "renew";
+  | "renew"
+  | "add_credits";
 
 export type BillingPayload = {
   action: BillingAction;
@@ -19,6 +20,9 @@ export type BillingPayload = {
   bouquet_ids?: string[];
   days?: number;
   max_connections?: number;
+  credits?: number;
+  reseller?: string;
+  note?: string;
 };
 
 function verifySecret(provided: string | null) {
@@ -49,7 +53,7 @@ export async function handleBillingWebhook(
     line = await prisma.line.findUnique({ where: { username: payload.username } });
   }
 
-  let result: { ok: boolean; lineId?: string; message?: string; error?: string };
+  let result: { ok: boolean; lineId?: string; message?: string; error?: string; username?: string; password?: string; credits?: number };
 
   switch (action) {
     case "create": {
@@ -77,7 +81,7 @@ export async function handleBillingWebhook(
         entityId: created.id,
         meta: { service_id: payload.service_id },
       });
-      result = { ok: true, lineId: created.id, message: "created" };
+      result = { ok: true, lineId: created.id, message: "created", username, password };
       break;
     }
 
@@ -119,6 +123,28 @@ export async function handleBillingWebhook(
         await notifyLineRenewal(line.id);
       } catch { /* notification failure should not abort the billing action */ }
       result = { ok: true, lineId: line.id, message: "renewed" };
+      break;
+    }
+
+    case "add_credits": {
+      const username = payload.reseller ?? payload.username;
+      const amount = Number(payload.credits ?? payload.days ?? 0);
+      if (!username || !amount) return { ok: false, error: "reseller and credits required" };
+      const user = await prisma.panelUser.findUnique({ where: { username } });
+      if (!user) return { ok: false, error: "Reseller not found" };
+      const updated = await prisma.panelUser.update({
+        where: { id: user.id },
+        data: { credits: { increment: amount } },
+      });
+      await prisma.creditTransaction.create({
+        data: {
+          userId: user.id,
+          amount,
+          balanceAfter: updated.credits,
+          note: payload.note ?? "whmcs add_credits",
+        },
+      });
+      result = { ok: true, message: "credits", lineId: user.id };
       break;
     }
 

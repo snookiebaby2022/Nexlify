@@ -1,13 +1,17 @@
 import { prisma } from "@/lib/prisma";
 import { inferPackageDaysFromName } from "@/lib/package-days";
+import { markedUpCreditCost } from "@/lib/package-credits";
 
-export async function resolveLineCreateFromPackage(body: {
-  packageId?: string;
-  accessCode?: string;
-  days?: number;
-  maxConnections?: number;
-  bouquetIds?: string[];
-}) {
+export async function resolveLineCreateFromPackage(
+  body: {
+    packageId?: string;
+    accessCode?: string;
+    days?: number;
+    maxConnections?: number;
+    bouquetIds?: string[];
+  },
+  opts?: { sellerId?: string | null }
+) {
   let days = Number(body.days ?? 30);
   let maxConnections = Number(body.maxConnections ?? 1);
   let bouquetIds: string[] = body.bouquetIds ?? [];
@@ -26,6 +30,7 @@ export async function resolveLineCreateFromPackage(body: {
     if (code.packageId) body.packageId = code.packageId;
   }
 
+  let packageProfit = 0;
   if (body.packageId) {
     const pkg = await prisma.package.findUnique({
       where: { id: String(body.packageId), isActive: true },
@@ -35,7 +40,26 @@ export async function resolveLineCreateFromPackage(body: {
     maxConnections = pkg.maxLines;
     if (pkg.bouquetIds.length) bouquetIds = [...pkg.bouquetIds];
     creditCost = Math.max(0, pkg.creditCost);
+    packageProfit = pkg.profitPercent ?? 0;
   }
+
+  let sellerProfit = 0;
+  if (opts?.sellerId) {
+    const seller = await prisma.panelUser.findUnique({
+      where: { id: opts.sellerId },
+      select: { profitPercent: true, parentId: true },
+    });
+    sellerProfit = seller?.profitPercent ?? 0;
+    if (seller?.parentId) {
+      const parent = await prisma.panelUser.findUnique({
+        where: { id: seller.parentId },
+        select: { profitPercent: true },
+      });
+      sellerProfit += parent?.profitPercent ?? 0;
+    }
+  }
+
+  creditCost = markedUpCreditCost(creditCost, packageProfit, sellerProfit);
 
   return { days, maxConnections, bouquetIds, creditCost, accessCodeId: body.accessCode };
 }

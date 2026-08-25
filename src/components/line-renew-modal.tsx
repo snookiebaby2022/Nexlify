@@ -209,7 +209,7 @@ export function LineRenewModal({
                     color: days === p.days ? "#fff" : "var(--muted)",
                   }}
                 >
-                  +{p.days}d
+                  {p.label}
                 </button>
               ))}
             </div>

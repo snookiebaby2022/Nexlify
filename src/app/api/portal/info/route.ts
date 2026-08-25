@@ -43,7 +43,10 @@ export async function GET(req: Request) {
       m3uDownload: `${m3uUrl}&download=1`,
       xtream: xtreamUrl,
       epg: `${base}/xmltv.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`,
-      stalker: `${base}/stalker_portal/server/load.php`,
+      stalker: `${base}/stalker_portal/c/`,
+      magPortal: `${base}/portal.php`,
+      webplayer: `${base}/webplayer?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`,
+      portal: `${base}/portal`,
     },
     billing: {
       renewUrl,

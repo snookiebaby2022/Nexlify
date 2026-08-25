@@ -557,7 +557,7 @@ cmd_restart() {
     return 1
   fi
   if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
-    bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only
+    bash "$ROOT/scripts/panel-restart-safe.sh"
   elif [ -x "$ROOT/scripts/pm2-start.sh" ]; then
     bash "$ROOT/scripts/pm2-start.sh"
   else
@@ -589,7 +589,7 @@ cmd_restart() {
       bash "$ROOT/scripts/fix-next-distdir-references.sh" "$ROOT/.next" 2>/dev/null || true
       bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
       if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
-        bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only 2>/dev/null || true
+        bash "$ROOT/scripts/panel-restart-safe.sh" 2>/dev/null || true
         sleep 3
       fi
       _code2="$(curl -sS -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' "http://127.0.0.1/_next/static/chunks/${_bn}" 2>/dev/null || echo 000)"

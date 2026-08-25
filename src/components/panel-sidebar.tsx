@@ -145,7 +145,10 @@ function filterNavEntries(entries: SidebarNavEntry[], query: string): SidebarNav
     const groupLabelMatch = labelMatches(entry.group.label, q);
     const matchedItems = groupLabelMatch
       ? entry.group.items
-      : entry.group.items.filter((item) => labelMatches(item.label, q));
+      : entry.group.items.filter(
+          (item) =>
+            labelMatches(item.label, q) || (item.section ? labelMatches(item.section, q) : false)
+        );
 
     if (matchedItems.length === 0) continue;
 

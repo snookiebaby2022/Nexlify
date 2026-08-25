@@ -15,6 +15,9 @@ export type PackageFormValues = {
   allowResellers: boolean;
   allowSubResellers: boolean;
   isActive: boolean;
+  profitPercent: number;
+  shopEnabled: boolean;
+  shopPriceCents: number;
 };
 
 const emptyForm: PackageFormValues = {
@@ -27,6 +30,9 @@ const emptyForm: PackageFormValues = {
   allowResellers: true,
   allowSubResellers: true,
   isActive: true,
+  profitPercent: 0,
+  shopEnabled: false,
+  shopPriceCents: 0,
 };
 
 export function PackageForm({
@@ -76,6 +82,9 @@ export function PackageForm({
           allowResellers: pkg.allowResellers !== false,
           allowSubResellers: pkg.allowSubResellers !== false,
           isActive: pkg.isActive !== false,
+          profitPercent: Number(pkg.profitPercent ?? 0),
+          shopEnabled: pkg.shopEnabled === true,
+          shopPriceCents: Number(pkg.shopPriceCents ?? 0),
         });
       });
   }, [packageId]);
@@ -221,6 +230,33 @@ export function PackageForm({
               }
             />
           </label>
+          <label className="block text-sm md:col-span-2">
+            <span className="mb-1 block" style={{ color: "var(--muted)" }}>
+              Profit % (NXT markup on credits)
+            </span>
+            <input
+              type="number"
+              min={0}
+              step={0.1}
+              className="w-full rounded border px-3 py-2 bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={form.profitPercent}
+              onChange={(e) => setForm({ ...form, profitPercent: Number(e.target.value) || 0 })}
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block" style={{ color: "var(--muted)" }}>
+              Shop price (cents)
+            </span>
+            <input
+              type="number"
+              min={0}
+              className="w-full rounded border px-3 py-2 bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={form.shopPriceCents}
+              onChange={(e) => setForm({ ...form, shopPriceCents: parseInt(e.target.value, 10) || 0 })}
+            />
+          </label>
         </div>
 
         <div className="flex flex-wrap gap-6 text-sm">
@@ -239,6 +275,14 @@ export function PackageForm({
               onChange={(e) => setForm({ ...form, allowSubResellers: e.target.checked })}
             />
             <span>Available to sub-resellers</span>
+          </label>
+          <label className="inline-flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.shopEnabled}
+              onChange={(e) => setForm({ ...form, shopEnabled: e.target.checked })}
+            />
+            <span>List on public /shop</span>
           </label>
           {editing && (
             <label className="inline-flex items-center gap-2 cursor-pointer">

@@ -1,5 +1,8 @@
 import { creditCostForDays } from "@/lib/package-credits";
 
+/** ~10 years — shown as UNLIMITED in Xtream / the lines table (threshold is 8 years). */
+export const UNLIMITED_LINE_DAYS = 3650;
+
 export type LineDurationPreset = {
   id: string;
   label: string;
@@ -17,4 +20,5 @@ export const LINE_DURATION_PRESETS: LineDurationPreset[] = [
   { id: "6-months", label: "6 Months", days: 180, isTrial: false, creditCost: creditCostForDays(180) },
   { id: "12-months", label: "12 Months", days: 365, isTrial: false, creditCost: creditCostForDays(365) },
   { id: "24-months", label: "24 Months", days: 730, isTrial: false, creditCost: creditCostForDays(730) },
+  { id: "unlimited", label: "Unlimited", days: UNLIMITED_LINE_DAYS, isTrial: false, creditCost: 0 },
 ];

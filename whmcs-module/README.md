@@ -19,7 +19,8 @@
 | SuspendAccount | `suspend` |
 | UnsuspendAccount | `unsuspend` |
 | TerminateAccount | `terminate` |
-| Renew (custom) | `renew` |
+| Renew / ChangePackage | `renew` |
+| Add reseller credits (custom button) | `add_credits` |
 
 `service_id` is the WHMCS service ID (stored as line `externalId`).
 

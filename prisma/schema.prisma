@@ -230,6 +230,8 @@ model PanelUser {
   /// Fine-grained module access for STAFF users (e.g. lines:read, streams:write).
   permissions  String[]  @default([])
   credits      Int       @default(0)
+  /// Extra % on package creditCost when this reseller sells lines (NXT-style).
+  profitPercent Float    @default(0)
   apiKey       String?   @unique
   accessCode   String?
   parentId     String?
@@ -941,6 +943,11 @@ model Package {
   name             String
   description      String?
   creditCost       Int      @default(0)
+  /// Extra % on creditCost for downline sales (NXT markup).
+  profitPercent    Float    @default(0)
+  /// When true, package is listed on the public /shop storefront.
+  shopEnabled      Boolean  @default(false)
+  shopPriceCents   Int      @default(0)
   maxLines         Int      @default(1)
   extraDeviceSlots Int      @default(0)
   days             Int      @default(30)

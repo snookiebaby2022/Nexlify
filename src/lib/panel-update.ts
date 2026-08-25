@@ -65,6 +65,7 @@ const STEP_TIMEOUT_MS: Record<string, number> = {
   "npm run build": 25 * 60 * 1000,
   "sync panel files": 5 * 60 * 1000,
   "pm2 restart nexlify": 5 * 60 * 1000,
+  "pm2 restart all": 8 * 60 * 1000,
 };
 
 type RunCommandOptions = {
@@ -251,7 +252,7 @@ export function panelUpdateManualSteps(repoPath: string): string[] {
     "npx prisma db push --accept-data-loss",
     "npx prisma generate",
     "bash scripts/apply-panel-fast-update.sh build-prep && bash scripts/apply-panel-fast-update.sh build-compile && bash scripts/apply-panel-fast-update.sh swap",
-    "bash scripts/panel-restart-safe.sh --nexlify-only",
+    "bash scripts/panel-restart-safe.sh",
   ];
 }
 
@@ -260,20 +261,20 @@ async function resolvePanelRestartStep(repoPath: string): Promise<UpdateStep> {
   try {
     await access(safe);
     return {
-      name: "pm2 restart nexlify",
+      name: "pm2 restart all",
       command: "bash",
-      args: [safe, "--nexlify-only"],
+      args: [safe],
     };
   } catch {
     const pm2Start = path.join(repoPath, "scripts/pm2-start.sh");
     try {
       await access(pm2Start);
-      return { name: "pm2 restart nexlify", command: "bash", args: [pm2Start] };
+      return { name: "pm2 restart all", command: "bash", args: [pm2Start] };
     } catch {
       // Never bare `pm2 restart nexlify` — process may not exist after a failed swap.
       const eco = path.join(repoPath, "ecosystem.config.cjs");
       return {
-        name: "pm2 restart nexlify",
+        name: "pm2 restart all",
         command: "bash",
         args: [
           "-c",
@@ -821,7 +822,7 @@ export async function runPanelRollback(): Promise<PanelUpdateResult> {
   steps.push({ name: restartStep.name, ok: pm2.ok, output: pm2.output });
   if (!pm2.ok) {
     await tryRecoverPanel(repoPath, steps);
-    const msg = "Rollback rebuilt the previous version but PM2 restart failed. Run: bash scripts/panel-restart-safe.sh --nexlify-only";
+    const msg = "Rollback rebuilt the previous version but PM2 restart failed. Run: bash scripts/panel-restart-safe.sh";
     await recordResult(settings, false, msg, fromVersion, fromVersion, "rollback", steps);
     return { ok: false, message: msg, steps, fromVersion, toVersion: fromVersion };
   }

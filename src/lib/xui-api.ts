@@ -192,11 +192,24 @@ export async function handleXuiAction(
     case "create_line": {
       const username = params.get("username");
       const password = params.get("password") ?? generatePassword();
-      const maxConnections = parseBoundedInt(params.get("max_connections"), 1, 1, 1000);
-      const days = parseBoundedInt(params.get("days"), 30, 1, 3650);
-      const bouquetIds = params.getAll("bouquet[]").length
+      let maxConnections = parseBoundedInt(params.get("max_connections"), 1, 1, 1000);
+      let days = parseBoundedInt(params.get("days"), 30, 1, 3650);
+      let bouquetIds = params.getAll("bouquet[]").length
         ? params.getAll("bouquet[]")
-        : (params.get("bouquets")?.split(",") ?? []);
+        : (params.get("bouquets")?.split(",") ?? []).filter(Boolean);
+      const packageId = params.get("package_id") ?? params.get("package");
+      if (packageId) {
+        const { resolveLineCreateFromPackage } = await import("./package-line");
+        const resolved = await resolveLineCreateFromPackage({
+          packageId,
+          days,
+          maxConnections,
+          bouquetIds,
+        });
+        days = resolved.days;
+        maxConnections = resolved.maxConnections;
+        if (resolved.bouquetIds.length) bouquetIds = resolved.bouquetIds;
+      }
       const authMode = params.get("auth_mode") === "active_code" ? "ACTIVE_CODE" : "USERNAME_PASSWORD";
       const activeCode = params.get("active_code")?.trim().toUpperCase() || null;
 

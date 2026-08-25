@@ -54,11 +54,16 @@ export function formatRelativeTime(iso: string) {
   return formatDateTime(iso);
 }
 
+export function isUnlimitedLineExpiry(expiresAt: Date | string, now: Date = new Date()): boolean {
+  const exp = expiresAt instanceof Date ? expiresAt : new Date(expiresAt);
+  if (Number.isNaN(exp.getTime())) return false;
+  return (exp.getTime() - now.getTime()) / (86400000 * 365) > 8;
+}
+
 export function formatExpireXui(iso: string) {
   const exp = new Date(iso);
   const now = new Date();
-  const years = (exp.getTime() - now.getTime()) / (86400000 * 365);
-  if (years > 8) return { kind: "unlimited" as const, text: "UNLIMITED" };
+  if (isUnlimitedLineExpiry(exp, now)) return { kind: "unlimited" as const, text: "UNLIMITED" };
 
   const dateStr = [
     String(exp.getUTCDate()).padStart(2, "0"),

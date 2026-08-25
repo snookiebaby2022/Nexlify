@@ -69,6 +69,7 @@ export const SETTING_GROUPS = [
   "nginx-cache",
   "ip2proxy",
   "vod-burst",
+  "vod-storage",
   "allowed-domains",
 ] as const;
 
@@ -800,6 +801,17 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     proxyBufferSize: "8k",
     proxyBusyBuffersSize: "16k",
     notes: "Burst speed settings for VOD content. Controls how fast VOD segments are delivered to clients. Useful for throttling or boosting VOD delivery.",
+  },
+  "vod-storage": {
+    rcloneRemote: "",
+    rclonePath: "",
+    localMountPath: "",
+    s3Endpoint: "",
+    s3Bucket: "",
+    s3Region: "",
+    s3AccessKey: "",
+    s3SecretKey: "",
+    notes: "Remote VOD library (rclone remote or S3-compatible). Watch folders can pull from this path.",
   },
   "allowed-domains": {
     enabled: false,

@@ -3,26 +3,30 @@
 import Link from "next/link";
 import {
   Activity,
-  Layers,
+  AlertTriangle,
+  Clock,
+  KeyRound,
   Play,
+  Plus,
   Radio,
   Server,
-  Settings,
-  Shield,
+  ShoppingBag,
   Users,
-  Wrench,
+  Wifi,
 } from "lucide-react";
 
 const ACTIONS = [
-  { href: "/admin/content/streams", label: "Streams", icon: Play, color: "#22c55e" },
-  { href: "/admin/lines", label: "Lines", icon: Users, color: "#38bdf8" },
-  { href: "/admin/servers", label: "Servers", icon: Server, color: "#a78bfa" },
-  { href: "/admin/streaming/health", label: "Health", icon: Activity, color: "#f97316" },
-  { href: "/admin/servers/load-balancer", label: "Load balancer", icon: Layers, color: "#06b6d4" },
-  { href: "/admin/streaming/transcoding", label: "Transcode", icon: Radio, color: "#ec4899" },
-  { href: "/admin/settings/geo", label: "GeoIP", icon: Shield, color: "#14b8a6" },
-  { href: "/admin/settings/binaries", label: "FFmpeg / GPU", icon: Wrench, color: "#eab308" },
-  { href: "/admin/settings/general#live-sports", label: "Settings", icon: Settings, color: "#94a3b8" },
+  { href: "/admin/lines/add", label: "Add line", icon: Plus, color: "#38bdf8" },
+  { href: "/admin/streams/add", label: "Add stream", icon: Play, color: "#22c55e" },
+  { href: "/admin/connections", label: "Live connections", icon: Wifi, color: "#22d3ee" },
+  { href: "/admin/lines", label: "Expiring lines", icon: Clock, color: "#f59e0b" },
+  { href: "/admin/stream_errors", label: "Down streams", icon: AlertTriangle, color: "#f97316" },
+  { href: "/admin/streaming/health", label: "Health", icon: Activity, color: "#a78bfa" },
+  { href: "/admin/servers", label: "Servers", icon: Server, color: "#94a3b8" },
+  { href: "/admin/radios", label: "Radio", icon: Radio, color: "#ec4899" },
+  { href: "/admin/settings/api", label: "Admin API", icon: KeyRound, color: "#14b8a6" },
+  { href: "/admin/shop", label: "Shop", icon: ShoppingBag, color: "#eab308" },
+  { href: "/admin/lines", label: "Manage lines", icon: Users, color: "#64748b" },
 ];
 
 export function DashboardQuickActions() {
@@ -30,9 +34,9 @@ export function DashboardQuickActions() {
     <div className="flex flex-wrap gap-2">
       {ACTIONS.map((a) => (
         <Link
-          key={a.href}
+          key={`${a.href}-${a.label}`}
           href={a.href}
-          className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-all hover:scale-[1.02] hover:shadow-sm"
+          className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
           style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
         >
           <a.icon size={14} style={{ color: a.color }} />

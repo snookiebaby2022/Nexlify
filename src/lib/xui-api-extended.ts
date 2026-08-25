@@ -26,6 +26,29 @@ export async function handleXuiExtendedAction(
       return { status: "success", packages };
     }
 
+    case "add_credits": {
+      const username = params.get("username") ?? params.get("reseller");
+      const amount = parseBoundedInt(params.get("credits") ?? params.get("amount"), 0, -1_000_000, 1_000_000);
+      if (!username) return { status: "error", message: "username required" };
+      if (!amount) return { status: "error", message: "credits required" };
+      const user = await prisma.panelUser.findUnique({ where: { username } });
+      if (!user) return { status: "error", message: "not found" };
+      const updated = await prisma.panelUser.update({
+        where: { id: user.id },
+        data: { credits: { increment: amount } },
+      });
+      await prisma.creditTransaction.create({
+        data: {
+          userId: user.id,
+          amount,
+          balanceAfter: updated.credits,
+          note: params.get("note") ?? "api add_credits",
+        },
+      }).catch(() => undefined);
+      await logActivity("api_add_credits", { userId: adminId, entity: "user", entityId: user.id, meta: { amount } });
+      return { status: "success", username, credits: updated.credits };
+    }
+
     case "get_servers": {
       const servers = await prisma.streamServer.findMany({ orderBy: { name: "asc" } });
       return { status: "success", servers };

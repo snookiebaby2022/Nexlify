@@ -14,7 +14,7 @@ import { PasswordInput } from "@/components/password-input";
 import { CopyableCredential } from "@/components/copyable-credential";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { generateLinePassword, MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput } from "@/lib/credential-generate";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, isUnlimitedLineExpiry } from "@/lib/format";
 import { LINE_DURATION_PRESETS } from "@/lib/line-duration-presets";
 import { bouquetsApiRoot, linesApiRoot } from "@/lib/panel-api";
 
@@ -110,6 +110,7 @@ export function LineEditForm({
     password: "",
     maxConnections: 1,
     extendDays: 0,
+    unlimited: false,
     externalId: "",
     bouquetIds: [] as string[],
     lockToIp: false,
@@ -148,6 +149,7 @@ export function LineEditForm({
           password: row.password,
           maxConnections: row.maxConnections,
           extendDays: 0,
+          unlimited: isUnlimitedLineExpiry(row.expiresAt),
           externalId: row.externalId ?? "",
           bouquetIds: row.bouquets.map((b) => b.bouquet.id),
           lockToIp: row.lockToIp,
@@ -210,7 +212,8 @@ export function LineEditForm({
       body: JSON.stringify({
         password: form.password !== line.password ? sanitizeCredentialInput(form.password) : undefined,
         maxConnections: form.maxConnections,
-        days: form.extendDays > 0 ? form.extendDays : undefined,
+        days: form.unlimited ? undefined : form.extendDays > 0 ? form.extendDays : undefined,
+        unlimited: form.unlimited ? true : undefined,
         externalId: form.externalId || null,
         bouquetIds: form.bouquetIds,
         lockToIp: form.lockToIp,
@@ -234,7 +237,7 @@ export function LineEditForm({
     }
     if (data.line) {
       setLine(data.line);
-      setForm((f) => ({ ...f, extendDays: 0 }));
+      setForm((f) => ({ ...f, extendDays: 0, unlimited: isUnlimitedLineExpiry(data.line.expiresAt) }));
     }
     onSaved();
   }
@@ -312,15 +315,35 @@ export function LineEditForm({
             <button
               key={p.id}
               type="button"
-              onClick={() => setForm((f) => ({ ...f, extendDays: p.days }))}
+              onClick={() =>
+                setForm((f) =>
+                  p.id === "unlimited"
+                    ? { ...f, unlimited: true, extendDays: 0 }
+                    : { ...f, unlimited: false, extendDays: p.days }
+                )
+              }
               className="text-xs rounded-full px-3 py-1.5 border cursor-pointer hover:opacity-90"
               style={{
                 borderColor: "var(--border)",
-                background: form.extendDays === p.days ? "rgba(0,192,239,0.2)" : "transparent",
-                color: form.extendDays === p.days ? "#fff" : "var(--muted)",
+                background:
+                  p.id === "unlimited"
+                    ? form.unlimited
+                      ? "rgba(0,192,239,0.2)"
+                      : "transparent"
+                    : !form.unlimited && form.extendDays === p.days
+                      ? "rgba(0,192,239,0.2)"
+                      : "transparent",
+                color:
+                  p.id === "unlimited"
+                    ? form.unlimited
+                      ? "#fff"
+                      : "var(--muted)"
+                    : !form.unlimited && form.extendDays === p.days
+                      ? "#fff"
+                      : "var(--muted)",
               }}
             >
-              +{p.days} days
+              {p.id === "unlimited" ? "Unlimited" : `+${p.days} days`}
             </button>
           ))}
         </div>
@@ -404,11 +427,29 @@ export function LineEditForm({
                 <input
                   className={formInputClass}
                   style={formInputStyle}
-                  value={formatDateTime(line.expiresAt)}
+                  value={
+                    form.unlimited || isUnlimitedLineExpiry(line.expiresAt)
+                      ? "UNLIMITED"
+                      : formatDateTime(line.expiresAt)
+                  }
                   readOnly
                   disabled
                 />
               </FormField>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.unlimited}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      unlimited: e.target.checked,
+                      extendDays: e.target.checked ? 0 : form.extendDays,
+                    })
+                  }
+                />
+                Unlimited
+              </label>
               <FormField label="Extend subscription (days)">
                 <input
                   type="number"
@@ -416,9 +457,14 @@ export function LineEditForm({
                   className={formInputClass}
                   style={formInputStyle}
                   placeholder="0 = no change"
+                  disabled={form.unlimited}
                   value={form.extendDays || ""}
                   onChange={(e) =>
-                    setForm({ ...form, extendDays: parseInt(e.target.value, 10) || 0 })
+                    setForm({
+                      ...form,
+                      unlimited: false,
+                      extendDays: parseInt(e.target.value, 10) || 0,
+                    })
                   }
                 />
               </FormField>

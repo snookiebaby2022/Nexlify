@@ -188,6 +188,27 @@ function buildTree(cats: CategoryRow[]): CategoryNode[] {
   return roots;
 }
 
+function filterCategoryTree(nodes: CategoryNode[], q: string): CategoryNode[] {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return nodes;
+  const out: CategoryNode[] = [];
+  for (const n of nodes) {
+    const children = filterCategoryTree(n.children, needle);
+    if (n.name.toLowerCase().includes(needle) || children.length) {
+      out.push({ ...n, children });
+    }
+  }
+  return out;
+}
+
+function collectTreeIds(nodes: CategoryNode[], into: Set<string> = new Set()): Set<string> {
+  for (const n of nodes) {
+    into.add(n.id);
+    collectTreeIds(n.children, into);
+  }
+  return into;
+}
+
 function flattenTree(nodes: CategoryNode[], expanded: Set<string>): CategoryNode[] {
   const result: CategoryNode[] = [];
   function walk(n: CategoryNode) {
@@ -1126,6 +1147,7 @@ function ManagementCategoriesInner() {
   const [msg, setMsg] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [catQuery, setCatQuery] = useState("");
 
   function load() {
     fetch("/api/admin/categories")
@@ -1178,8 +1200,15 @@ function ManagementCategoriesInner() {
     return counts;
   }, [allCategories]);
 
-  const tree = useMemo(() => buildTree(tabCategories), [tabCategories]);
-  const flat = useMemo(() => flattenTree(tree, expanded), [tree, expanded]);
+  const tree = useMemo(() => {
+    const built = buildTree(tabCategories);
+    return filterCategoryTree(built, catQuery);
+  }, [tabCategories, catQuery]);
+  const displayExpanded = useMemo(() => {
+    if (!catQuery.trim()) return expanded;
+    return collectTreeIds(tree);
+  }, [catQuery, tree, expanded]);
+  const flat = useMemo(() => flattenTree(tree, displayExpanded), [tree, displayExpanded]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -1341,6 +1370,17 @@ function ManagementCategoriesInner() {
       <PredefinedCategories tab={tab} existingNames={tabCategories.map((c) => c.name.toLowerCase())} onAdded={load} />
 
       <CategoryRemoveDuplicatesPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+
+      <label className="block text-sm max-w-md">
+        <span className="font-medium">Find subcategory</span>
+        <input
+          className="mt-1.5 w-full rounded border px-3 py-2 bg-transparent"
+          style={{ borderColor: "var(--border)" }}
+          placeholder="Type a name — parents stay open so nested folders are easy to find"
+          value={catQuery}
+          onChange={(e) => setCatQuery(e.target.value)}
+        />
+      </label>
       <CategoryRemoveDuplicateStreamsPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
       <CategoryNameNormalizePanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
 
@@ -1446,7 +1486,7 @@ function ManagementCategoriesInner() {
           <TreeRow
             key={node.id}
             node={node}
-            expanded={expanded.has(node.id)}
+            expanded={displayExpanded.has(node.id)}
             allCategories={tabCategories}
             dragId={dragId}
             dropTargetId={dropTargetId}
