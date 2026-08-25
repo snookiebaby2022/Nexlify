@@ -36,7 +36,8 @@ trap cleanup_mkt EXIT
 echo "==> Fetching marketing-drop-in from $REPO_URL ($BRANCH) ..."
 TMP_MKT="$(mktemp -d /tmp/nexlify-marketing-src-XXXXXX)"
 if git clone --depth 1 --filter=blob:none --sparse --branch "$BRANCH" "$REPO_URL" "$TMP_MKT" \
-  && git -C "$TMP_MKT" sparse-checkout set marketing-drop-in scripts src/lib/panel-releases.json package.json; then
+  && git -C "$TMP_MKT" sparse-checkout set marketing-drop-in scripts src; then
+  git -C "$TMP_MKT" checkout HEAD -- package.json 2>/dev/null || true
   SRC="$TMP_MKT"
 else
   echo "WARN: sparse clone failed — full depth-1 clone" >&2
@@ -61,12 +62,13 @@ done
 echo "==> Sync marketing-drop-in → $MARKETING ..."
 rsync -a --delete \
   --exclude node_modules --exclude .next --exclude .env --exclude src/generated \
+  --exclude public/downloads \
   "$SRC/marketing-drop-in/" "$MARKETING/"
 
 # Ensure release metadata + installer version match the panel package (never leave stale install-command.json)
-PANEL_VER="$(node -p "try{require('${PANEL_PKG:-$SRC}/package.json').version}catch(e){''}" 2>/dev/null || true)
+PANEL_VER="$(node -e 'try{process.stdout.write(require(process.argv[1]+"/package.json").version||"")}catch(e){}' "${PANEL_PKG:-$SRC}" 2>/dev/null || true)"
 if [ -z "${PANEL_VER:-}" ] && [ -f "$SRC/src/lib/panel-releases.json" ]; then
-  PANEL_VER="$(node -p "try{require('$SRC/src/lib/panel-releases.json').latestVersion}catch(e){''}" 2>/dev/null || true)"
+  PANEL_VER="$(node -e 'try{process.stdout.write(require(process.argv[1]).latestVersion||"")}catch(e){}' "$SRC/src/lib/panel-releases.json" 2>/dev/null || true)"
 fi
 if [ -z "${PANEL_VER:-}" ]; then
   PANEL_VER="0.0.0"
@@ -133,13 +135,24 @@ pm2 restart nexlify-web --update-env 2>/dev/null || \
   pm2 start npm --name nexlify-web --cwd "$MARKETING" -- start -- -H 127.0.0.1 -p "$PORT"
 pm2 save 2>/dev/null || true
 
-# Publish panel tarball when panel source is present
-if [ -f "$SRC/scripts/publish-panel-release.sh" ]; then
-  echo "==> Publishing panel release tarball ..."
+# Publish from the live IPTV panel tree (full source). Do not package the
+# throwaway marketing clone — that checkout is sparse and incomplete.
+PUBLISH_ROOT=""
+for d in /home/nexlify-panel /opt/nexlify-panel /home/nexlify; do
+  if [ -f "$d/scripts/publish-panel-release.sh" ] && [ -f "$d/package.json" ] && [ -d "$d/src" ]; then
+    PUBLISH_ROOT="$d"
+    break
+  fi
+done
+if [ -n "$PUBLISH_ROOT" ]; then
+  echo "==> Publishing panel release tarball from $PUBLISH_ROOT ..."
+  (cd "$PUBLISH_ROOT" && bash scripts/publish-panel-release.sh) || echo "WARN: publish-panel-release failed (non-fatal)"
+elif [ -f "$SRC/scripts/publish-panel-release.sh" ]; then
+  echo "==> Publishing panel release tarball from clone ..."
   (cd "$SRC" && bash scripts/publish-panel-release.sh) || echo "WARN: publish-panel-release failed (non-fatal)"
 fi
 
-VER="$(node -p "try{require('./public/install-command.json').version}catch(e){'?'}")"
+VER="$(node -e 'try{process.stdout.write(require("./public/install-command.json").version||"?")}catch(e){process.stdout.write("?")}')"
 echo "=========================================="
 echo " Done. install-command version: $VER"
 echo " Verify: curl -sk -H 'Host: nexlify.live' https://127.0.0.1/install-command.json"
