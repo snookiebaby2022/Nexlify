@@ -411,7 +411,7 @@ export async function writePanelBackupFile(options?: {
 
   const { mkdir, writeFile } = await import("fs/promises");
   const path = await import("path");
-  const dir = resolveBackupDir(backup.localPath);
+  const dir = resolveBackupDir(typeof backup.localPath === "string" ? backup.localPath : undefined);
   await mkdir(dir, { recursive: true });
   const baseName = `nexlify-backup-${stamp}`;
   const encryptionPassword = String(backup.encryptionPassword ?? "").trim();
