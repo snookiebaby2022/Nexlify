@@ -4,9 +4,12 @@ import {
   buildPlexBaseUrl,
   extractPlexToken,
   normalizePlexConfig,
-  plexClientIdentifier,
-  plexImageRequestHeaders,
 } from "@/lib/plex-config";
+import { fetchPlexPosterResponse } from "@/lib/plex-poster-fetch";
+import { buildIntegrationStreamUrl } from "@/lib/integration-stream-url";
+import { searchTmdb } from "@/lib/tmdb";
+import { tmdbFetch } from "@/lib/tmdb-http";
+import { cleanTitleForTmdb } from "@/lib/vod-title-clean";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +19,33 @@ function safeItemId(raw: string): string | null {
   if (!id || id.length > 64) return null;
   if (!/^[\w.-]+$/.test(id)) return null;
   return id;
+}
+
+async function tmdbPosterForStream(name: string, type: string): Promise<Response | null> {
+  const mediaType = type === "SERIES" ? "tv" : "movie";
+  const query = cleanTitleForTmdb(name);
+  if (!query) return null;
+  try {
+    const hits = await searchTmdb(query, mediaType);
+    const posterUrl = hits[0]?.posterUrl;
+    if (!posterUrl) return null;
+    const res = await tmdbFetch(posterUrl.replace("/w185", "/w500"));
+    if (!res.ok) return null;
+    return res;
+  } catch {
+    return null;
+  }
+}
+
+function imageResponse(body: ArrayBuffer, contentType: string): NextResponse {
+  return new NextResponse(body, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": "public, max-age=86400",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
 }
 
 export async function GET(
@@ -39,18 +69,21 @@ export async function GET(
   const token = extractPlexToken(String(cfg.token ?? ""));
   if (!base || !token) return new NextResponse("Not found", { status: 404 });
 
-  const url = `${base}/library/metadata/${itemId}/thumb?X-Plex-Token=${encodeURIComponent(token)}`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      headers: plexImageRequestHeaders(token, plexClientIdentifier(cfg)),
-      signal: AbortSignal.timeout(15_000),
-      redirect: "follow",
+  let res = await fetchPlexPosterResponse(cfg, itemId);
+
+  if (!res) {
+    const streamUrl = buildIntegrationStreamUrl("plex", integrationId, itemId);
+    const stream = await prisma.stream.findFirst({
+      where: { streamUrl },
+      select: { name: true, type: true, seriesName: true },
     });
-  } catch {
-    return new NextResponse("Unavailable", { status: 502 });
+    const lookupName = stream?.seriesName || stream?.name || "";
+    if (lookupName) {
+      res = await tmdbPosterForStream(lookupName, stream?.type ?? "MOVIE");
+    }
   }
-  if (!res.ok) return new NextResponse("Not found", { status: 404 });
+
+  if (!res) return new NextResponse("Not found", { status: 404 });
 
   const rawType = (res.headers.get("content-type") || "").toLowerCase();
   const contentType = rawType.startsWith("image/")
@@ -58,16 +91,8 @@ export async function GET(
     : rawType.startsWith("application/octet-stream") || !rawType
       ? "image/jpeg"
       : "";
-  if (!contentType) {
-    return new NextResponse("Not found", { status: 404 });
-  }
+  if (!contentType) return new NextResponse("Not found", { status: 404 });
+
   const body = await res.arrayBuffer();
-  return new NextResponse(body, {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Cache-Control": "public, max-age=86400",
-      "Access-Control-Allow-Origin": "*",
-    },
-  });
+  return imageResponse(body, contentType);
 }
