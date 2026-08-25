@@ -2,7 +2,6 @@ import { gzip } from "zlib";
 import { promisify } from "util";
 import { createReadStream, statSync } from "node:fs";
 import { Readable } from "node:stream";
-import { createGunzip } from "node:zlib";
 import { NextResponse } from "next/server";
 import { withIptvCors } from "@/lib/iptv-cors";
 
@@ -29,7 +28,7 @@ export function iptvGzipFileResponse(
   filePath: string,
   compressFor: Request | null,
   contentType: string,
-  opts?: { asGzipFile?: boolean }
+  opts?: { asGzipFile?: boolean; forceGzip?: boolean }
 ): NextResponse {
   const headers = new Headers();
   headers.set("Cache-Control", "private, no-cache, no-store, must-revalidate");
@@ -42,7 +41,9 @@ export function iptvGzipFileResponse(
     } catch {
       /* size unknown */
     }
-  } else if (clientAcceptsGzip(compressFor)) {
+  } else {
+    // Pre-gzipped catalog/xmltv files. Never gunzip on the request path —
+    // 8–20MB uncompressed bodies make Smarters All and XCIPTV Update Content crawl.
     headers.set("Content-Type", contentType);
     headers.set("Content-Encoding", "gzip");
     headers.set("Vary", "Accept-Encoding");
@@ -52,10 +53,6 @@ export function iptvGzipFileResponse(
     } catch {
       /* size unknown */
     }
-  } else {
-    headers.set("Content-Type", contentType);
-    headers.set("Vary", "Accept-Encoding");
-    nodeStream = createReadStream(filePath).pipe(createGunzip());
   }
   return withIptvCors(
     new NextResponse(Readable.toWeb(nodeStream) as unknown as ReadableStream, { headers })

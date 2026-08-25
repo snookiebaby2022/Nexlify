@@ -143,6 +143,15 @@ export const leanVodMetaSql = Prisma.sql`
         )
       ELSE NULL END AS "vodPlot"`;
 
+/** Catalog gzip builds skip 4× regexp_match per row — ratings stay on existing blobs until rebuild. */
+export const leanVodMetaSkipSql = Prisma.sql`
+      NULL::text AS "vodRating",
+      NULL::text AS "vodPlot"`;
+
+function vodMetaSelectSql(options?: StreamsForLineOptions) {
+  return options?.skipVodMeta === true ? leanVodMetaSkipSql : leanVodMetaSql;
+}
+
 export type StreamsForLineOptions = {
   excludeDisabled?: boolean;
   type?: StreamType | StreamType[];
@@ -150,6 +159,8 @@ export type StreamsForLineOptions = {
   categoryIds?: string[] | null;
   /** When true, only streams with no category (NULL or empty). */
   uncategorizedOnly?: boolean;
+  /** Skip TMDB rating/plot regex on agentStartCmd (Xtream catalog blob speed). */
+  skipVodMeta?: boolean;
   /** Skip provider/server joins (enough for M3U live paths and listings). */
   lean?: boolean;
   /** Process streams in ordered batches without holding the full catalog in RAM. */
@@ -159,7 +170,7 @@ export type StreamsForLineOptions = {
   limit?: number;
 };
 
-const STREAM_BATCH = 1500;
+const STREAM_BATCH = 4000;
 
 /** Listing columns only — skip streamUrl/backupUrl/playlistUrl (often huge) on live catalogs. */
 const LEAN_LISTING_SELECT = {
@@ -321,7 +332,7 @@ async function loadLeanListingForLine(
       s."containerExtension" AS "containerExtension",
       substring(split_part(s."streamUrl", '?', 1) from '[.]([A-Za-z0-9]{2,4})$') AS "urlExt",
       c.name AS "categoryName",
-      ${leanVodMetaSql},
+      ${vodMetaSelectSql(options)},
       s."sortOrder"::bigint AS ord
     FROM ${bouquetMembershipSql(bouquetIds)} m
     INNER JOIN "Stream" s ON s.id = m."streamId"
@@ -410,7 +421,7 @@ export async function forEachLeanListingBatch(
         s."containerExtension" AS "containerExtension",
         substring(split_part(s."streamUrl", '?', 1) from '[.]([A-Za-z0-9]{2,4})$') AS "urlExt",
         c.name AS "categoryName",
-        ${leanVodMetaSql},
+        ${vodMetaSelectSql(options)},
         s."sortOrder"::bigint AS ord
       FROM ${bouquetMembershipSql(filter.bouquetIds)} m
       INNER JOIN "Stream" s ON s.id = m."streamId"

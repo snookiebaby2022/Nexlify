@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { cacheGetOrSet } from "@/lib/cache";
-import { bouquetMembershipSql, leanVodMetaSql } from "@/lib/lines";
+import { bouquetMembershipSql, leanVodMetaSkipSql } from "@/lib/lines";
 
 /** Stable numeric id for Xtream-compatible APIs (matches historical live/movie routes). */
 export function cuidToNum(id: string): number {
@@ -67,7 +67,7 @@ const SERIES_SEED_SELECT = Prisma.sql`
     s."streamIcon" AS "streamIcon",
     s."categoryId" AS "categoryId",
     s."updatedAt" AS "updatedAt",
-    ${leanVodMetaSql}
+    ${leanVodMetaSkipSql}
 `;
 
 function seriesSeedFromSql(bouquetIds: string[], categorySql: Prisma.Sql) {
@@ -142,10 +142,10 @@ export async function forEachSeriesSeedBatch(
           ${seriesSeedFromSql(bouquetIds, categorySql)}
         `;
         for (;;) {
-          const rows = await tx.$queryRaw<SeriesSeedRow[]>`FETCH 1500 FROM series_seed_cur`;
+          const rows = await tx.$queryRaw<SeriesSeedRow[]>`FETCH 3000 FROM series_seed_cur`;
           if (!rows.length) break;
           await onBatch(rows);
-          if (rows.length < 1500) break;
+          if (rows.length < 3000) break;
           await yieldEventLoop();
         }
       },
@@ -158,10 +158,10 @@ export async function forEachSeriesSeedBatch(
     );
     let offset = 0;
     for (;;) {
-      const rows = await seriesSeedsForBouquets(bouquetIds, { ...opts, limit: 1500, offset });
+      const rows = await seriesSeedsForBouquets(bouquetIds, { ...opts, limit: 3000, offset });
       if (!rows.length) break;
       await onBatch(rows);
-      if (rows.length < 1500) break;
+      if (rows.length < 3000) break;
       offset += rows.length;
       await yieldEventLoop();
     }

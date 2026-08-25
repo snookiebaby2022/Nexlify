@@ -726,16 +726,27 @@ async function jobPlexVodMetaBackfill() {
 }
 
 async function jobWarmXtreamCatalogs() {
+  const start = Date.now();
   try {
-    const line = await prisma.line.findFirst({
+    const lines = await prisma.line.findMany({
       where: { status: "ACTIVE", expiresAt: { gt: new Date() } },
       include: { bouquets: { include: { bouquet: true } } },
+      take: 80,
     });
-    if (!line) return;
-    const { warmXtreamCatalogs } = await import("./xtream-catalog-blob");
-    warmXtreamCatalogs(line);
+    if (!lines.length) return;
+    const { lineBouquetCacheToken } = await import("./lines");
+    const { warmXtreamCatalogsNow } = await import("./xtream-catalog-blob");
+    const seen = new Set<string>();
+    for (const line of lines) {
+      const token = lineBouquetCacheToken(line, true);
+      if (!token || seen.has(token)) continue;
+      seen.add(token);
+      await warmXtreamCatalogsNow(line);
+      if (seen.size >= 6) break;
+    }
+    await logCron("xtream_catalog_warm", "ok", `tokens ${seen.size}`, Date.now() - start);
   } catch (e) {
-    await logCron("xtream_catalog_warm", "error", String(e), 0);
+    await logCron("xtream_catalog_warm", "error", String(e), Date.now() - start);
   }
 }
 

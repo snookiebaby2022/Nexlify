@@ -11,8 +11,8 @@ export const CATALOG_STALE_MS = 6 * 60 * 60 * 1000;
 /** Dead builders must not pin XCIPTV Update Content for minutes. */
 const LOCK_STALE_MS = 45_000;
 const LOCK_WAIT_MS = 150;
-/** Wait this long for another worker before stealing a lock when no blob exists. */
-const LOCK_MISSING_BLOB_WAIT_MS = 2_000;
+/** Wait for an in-flight builder instead of stealing after 2s (duplicate VOD SQL). */
+const LOCK_MISSING_BLOB_WAIT_MS = 120_000;
 
 export function catalogCacheDir(): string {
   const env = process.env.NEXLIFY_CATALOG_CACHE_DIR?.trim();
@@ -188,7 +188,10 @@ export async function withCatalogBuildLock<T>(
       const stole = await stealCatalogLockIfIdle(lockPath);
       if (stole) continue;
       if (Date.now() - started >= LOCK_MISSING_BLOB_WAIT_MS) {
-        await fs.unlink(lockPath).catch(() => undefined);
+        const stillAlive = await stealCatalogLockIfIdle(lockPath);
+        if (!stillAlive) {
+          await fs.unlink(lockPath).catch(() => undefined);
+        }
         continue;
       }
       await new Promise((r) => setTimeout(r, LOCK_WAIT_MS));

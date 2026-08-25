@@ -81,6 +81,7 @@ async function buildCatalogGzip(
     excludeDisabled,
     type: catalogStreamType(kind),
     lean: true as const,
+    skipVodMeta: true,
     uncategorizedOnly: filter === "uncategorized",
     categoryIds: Array.isArray(filter) ? filter : undefined,
   };
@@ -166,7 +167,9 @@ export async function serveXtreamCatalogJson(
         console.error("[xtream-catalog] background rebuild failed:", err instanceof Error ? err.message : err);
       });
     }
-    return iptvGzipFileResponse(destPath, req, "application/json; charset=utf-8");
+    return iptvGzipFileResponse(destPath, req, "application/json; charset=utf-8", {
+      forceGzip: true,
+    });
   }
 
   await rebuild();
@@ -174,30 +177,48 @@ export async function serveXtreamCatalogJson(
   if (built == null) {
     return iptvJson([], { compressFor: req });
   }
-  return iptvGzipFileResponse(destPath, req, "application/json; charset=utf-8");
+  return iptvGzipFileResponse(destPath, req, "application/json; charset=utf-8", {
+    forceGzip: true,
+  });
 }
 
 /**
  * XCIPTV Update Content calls user_info / categories before get_live_streams.
  * Start gzip blobs then so the catalog request is a file stream, not a cold SQL build.
  */
+async function ensureCatalogKind(
+  kind: XtreamCatalogKind,
+  line: LineWithBouquets,
+  token: string,
+  excludeDisabled: boolean
+): Promise<void> {
+  const destPath = catalogBlobPath(xtreamCatalogBlobName(kind, token, "all", excludeDisabled));
+  const age = await catalogFileAgeMs(destPath);
+  if (age != null) return;
+  await withCatalogBuildLock(destPath, async () => {
+    const again = await catalogFileAgeMs(destPath);
+    if (again != null) return "existing" as const;
+    await buildCatalogGzip(destPath, kind, line, "all", excludeDisabled);
+    return "built" as const;
+  });
+}
+
+/**
+ * XCIPTV Update Content calls user_info / categories before get_live_streams.
+ * Live first (small), then VOD + series together so first open is not live-then-vod serial.
+ */
+export async function warmXtreamCatalogsNow(line: LineWithBouquets): Promise<void> {
+  const excludeDisabled = await excludeDisabledFromExport();
+  const token = lineBouquetCacheToken(line, excludeDisabled);
+  await ensureCatalogKind("live", line, token, excludeDisabled);
+  await Promise.all([
+    ensureCatalogKind("vod", line, token, excludeDisabled),
+    ensureCatalogKind("series", line, token, excludeDisabled),
+  ]);
+}
+
 export function warmXtreamCatalogs(line: LineWithBouquets): void {
-  void (async () => {
-    const excludeDisabled = await excludeDisabledFromExport();
-    const token = lineBouquetCacheToken(line, excludeDisabled);
-    // Sequential — parallel live+vod+series SQL rebuilds stall category/info APIs.
-    for (const kind of ["live", "vod", "series"] as const) {
-      const destPath = catalogBlobPath(xtreamCatalogBlobName(kind, token, "all", excludeDisabled));
-      const age = await catalogFileAgeMs(destPath);
-      if (age != null) continue;
-      await withCatalogBuildLock(destPath, async () => {
-        const again = await catalogFileAgeMs(destPath);
-        if (again != null) return "existing" as const;
-        await buildCatalogGzip(destPath, kind, line, "all", excludeDisabled);
-        return "built" as const;
-      });
-    }
-  })().catch((err) => {
+  void warmXtreamCatalogsNow(line).catch((err) => {
     console.error("[xtream-catalog] warm failed:", err instanceof Error ? err.message : err);
   });
 }
