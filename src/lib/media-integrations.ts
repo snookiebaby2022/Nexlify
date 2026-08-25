@@ -32,7 +32,7 @@ import {
 import type { IntegrationSyncReporter } from "@/lib/integration-sync-progress";
 import { loadPlexCatalogIndex, plexCatalogTitleKey, plexGenreName, plexVodMetaFromItem } from "@/lib/plex-catalog-match";
 import { categoryForPlexMovie, categoryForPlexSeries } from "@/lib/vod-category";
-import { parseVodAgentCmd } from "@/lib/vod-meta";
+import { encodeVodAgentCmd, parseVodAgentCmd } from "@/lib/vod-meta";
 import { encodeVodAgentCmd } from "@/lib/vod-meta";
 
 export async function listIntegrations(type: "plex" | "youtube") {
@@ -538,6 +538,168 @@ export async function repairAllPlexVodPlacement(reporter?: IntegrationSyncReport
   for (const row of rows) {
     await reporter?.note(`Sorting Plex library “${row.name}”…`);
     results.push({ name: row.name, ...(await repairPlexVodPlacement(row.id, reporter)) });
+  }
+  return results;
+}
+
+/**
+ * Pull Genre tags from Plex libraries and assign flat Xtream categories
+ * (Action, Comedy, …) without re-importing every episode.
+ */
+export async function backfillPlexGenresFromLibrary(
+  integrationId: string,
+  reporter?: IntegrationSyncReporter
+): Promise<{ moviesUpdated: number; seriesShowsUpdated: number; episodesUpdated: number }> {
+  await reporter?.note("Connecting to Plex for genre tags…");
+  const { cfg, base, clientIdentifier } = await ensurePlexAccess(integrationId);
+  const tokenParam = plexTokenParam(cfg);
+  const prefix = `nexlify://plex/${integrationId}/`;
+
+  const sections = await fetchPlexJson<PlexSectionResponse>(
+    `${base}/library/sections?${tokenParam}`,
+    clientIdentifier
+  );
+  let dirs = sections.MediaContainer?.Directory ?? [];
+  if (cfg.libraryKey) {
+    dirs = dirs.filter((d) => String(d.key) === String(cfg.libraryKey));
+  }
+  dirs = dirs.filter((d) => !d.type || d.type === "movie" || d.type === "show");
+
+  const catCache = new Map<string, string>();
+  const movieCat = async (genre?: string | null) => {
+    const key = `m:${genre ?? ""}`;
+    let id = catCache.get(key);
+    if (!id) {
+      id = await categoryForPlexMovie(genre);
+      catCache.set(key, id);
+    }
+    return id;
+  };
+  const seriesCat = async (genre?: string | null) => {
+    const key = `s:${genre ?? ""}`;
+    let id = catCache.get(key);
+    if (!id) {
+      id = await categoryForPlexSeries(genre);
+      catCache.set(key, id);
+    }
+    return id;
+  };
+
+  let moviesUpdated = 0;
+  let seriesShowsUpdated = 0;
+  let episodesUpdated = 0;
+
+  for (const section of dirs) {
+    const libraryName = section.title ?? section.key;
+    const isShow = section.type === "show";
+    await reporter?.note(`Loading ${isShow ? "shows" : "movies"} from “${libraryName}”…`);
+    const metadata = await fetchPlexSectionItems(
+      base,
+      tokenParam,
+      section.key,
+      clientIdentifier,
+      async (loaded, total) => {
+        if (loaded % 1000 === 0 || loaded === total) {
+          await reporter?.note(
+            `${libraryName}: ${loaded.toLocaleString()}/${total.toLocaleString()} titles…`
+          );
+        }
+      }
+    );
+
+    if (!isShow) {
+      const existing = await prisma.stream.findMany({
+        where: { streamUrl: { startsWith: prefix }, type: StreamType.MOVIE },
+        select: { id: true, streamUrl: true, agentStartCmd: true },
+      });
+      const byUrl = new Map(existing.map((r) => [r.streamUrl, r]));
+      const pending: { id: string; categoryId: string; agentStartCmd: string }[] = [];
+      const flush = async () => {
+        if (!pending.length) return;
+        const batch = pending.splice(0, pending.length);
+        await Promise.all(
+          batch.map((row) =>
+            prisma.stream.update({
+              where: { id: row.id },
+              data: { categoryId: row.categoryId, agentStartCmd: row.agentStartCmd },
+            })
+          )
+        );
+        moviesUpdated += batch.length;
+      };
+
+      for (const item of metadata) {
+        const ratingKey = item.ratingKey ?? item.key?.replace("/library/metadata/", "");
+        if (!ratingKey) continue;
+        const genre = plexGenreName(item);
+        if (!genre) continue;
+        const streamUrl = buildIntegrationStreamUrl("plex", integrationId, String(ratingKey));
+        const row = byUrl.get(streamUrl);
+        if (!row) continue;
+        const categoryId = await movieCat(genre);
+        const meta = parseVodAgentCmd(row.agentStartCmd);
+        const agentStartCmd = encodeVodAgentCmd({
+          ...meta,
+          genre,
+          tmdbGenres: genre,
+        });
+        pending.push({ id: row.id, categoryId, agentStartCmd });
+        if (pending.length >= 40) await flush();
+      }
+      await flush();
+      await reporter?.note(`Movies updated from genres: ${moviesUpdated.toLocaleString()}`);
+      continue;
+    }
+
+    // TV shows: one category update per show → all episodes
+    for (let i = 0; i < metadata.length; i++) {
+      const item = metadata[i]!;
+      const name = item.title?.trim();
+      if (!name) continue;
+      const genre = plexGenreName(item);
+      if (!genre) continue;
+      const categoryId = await seriesCat(genre);
+      const result = await prisma.stream.updateMany({
+        where: {
+          streamUrl: { startsWith: prefix },
+          type: StreamType.SERIES,
+          seriesName: { equals: name, mode: "insensitive" },
+        },
+        data: { categoryId },
+      });
+      if (result.count > 0) {
+        seriesShowsUpdated++;
+        episodesUpdated += result.count;
+      }
+      if ((i + 1) % 100 === 0 || i + 1 === metadata.length) {
+        await reporter?.note(
+          `${libraryName}: genres ${i + 1}/${metadata.length} shows · ${episodesUpdated.toLocaleString()} episodes`
+        );
+      }
+    }
+  }
+
+  await invalidateXtreamCategories();
+  await reporter?.note(
+    `Done. Movies ${moviesUpdated.toLocaleString()}, shows ${seriesShowsUpdated.toLocaleString()}, episodes ${episodesUpdated.toLocaleString()}.`
+  );
+  return { moviesUpdated, seriesShowsUpdated, episodesUpdated };
+}
+
+export async function backfillAllPlexGenresFromLibrary(reporter?: IntegrationSyncReporter) {
+  const rows = await prisma.mediaIntegration.findMany({
+    where: { type: "plex" },
+    select: { id: true, name: true },
+  });
+  const results: {
+    name: string;
+    moviesUpdated: number;
+    seriesShowsUpdated: number;
+    episodesUpdated: number;
+  }[] = [];
+  for (const row of rows) {
+    await reporter?.note(`Genre sync for “${row.name}”…`);
+    results.push({ name: row.name, ...(await backfillPlexGenresFromLibrary(row.id, reporter)) });
   }
   return results;
 }
