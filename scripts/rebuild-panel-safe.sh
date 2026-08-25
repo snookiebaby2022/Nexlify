@@ -29,6 +29,13 @@ ROOT="$(find_panel)" || {
   exit 1
 }
 cd "$ROOT"
+if command -v flock >/dev/null 2>&1; then
+  exec 9>/tmp/nexlify-rebuild.lock
+  if ! flock -n 9; then
+    echo "ERROR: another rebuild-panel-safe.sh is already running — not starting a second copy" >&2
+    exit 1
+  fi
+fi
 echo "=== Safe rebuild at $ROOT ==="
 
 if [ -f "$ROOT/scripts/nexlify-migrate-guard.sh" ]; then
@@ -56,7 +63,7 @@ rm -f .update-progress.pid .update-in-progress .update-progress.json
 rm -rf .next.staging
 
 export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
-export NEXT_PRIVATE_WORKER_THREADS=false
+unset NEXT_PRIVATE_WORKER_THREADS 2>/dev/null || true
 export GIT_TERMINAL_PROMPT=0
 
 if [ -d .git ]; then

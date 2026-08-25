@@ -419,7 +419,9 @@ cmd_build_prep() {
 cmd_build_compile() {
   echo "Building panel (staging) ..."
   export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
-  export NEXT_PRIVATE_WORKER_THREADS=false
+  # Do not force NEXT_PRIVATE_WORKER_THREADS=false here: Next 15.5 minify then
+  # throws "WebpackError is not a constructor" and the real minify error is lost.
+  unset NEXT_PRIVATE_WORKER_THREADS 2>/dev/null || true
   export NEXLIFY_DIST_DIR=".next.staging"
   # Call next directly — do not use `npm run build` (that wrapper routes back here).
   if [ ! -f ./node_modules/next/dist/bin/next ]; then
