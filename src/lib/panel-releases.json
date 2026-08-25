@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.44",
+  "latestVersion": "2.0.45",
   "releases": [
+    {
+      "version": "2.0.45",
+      "date": "2026-08-25",
+      "channel": "stable",
+      "summary": "Public shop, WHMCS/API line and credit create, reseller profit markup, and compact admin nav.",
+      "changelog": [
+        "Documented admin API and WHMCS module for create line, renew, and add_credits",
+        "Reseller and package profit % markup on credit cost when selling lines",
+        "Customer portal copy Xtream/M3U/MAG and watch in browser; public /shop PayPal checkout",
+        "Rclone/S3 VOD storage settings; compact XUI-style sidebar and dashboard shortcuts",
+        "Faster Smarters All and XCIPTV catalog updates via gzip blobs and parallel cache warm"
+      ],
+      "fixes": [
+        "Category tree search finds nested folders; duplicate category links removed from nav"
+      ]
+    },
     {
       "version": "2.0.44",
       "date": "2026-08-25",
