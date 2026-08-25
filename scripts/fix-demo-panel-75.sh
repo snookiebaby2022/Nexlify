@@ -38,6 +38,19 @@ server {
     listen [::]:80 default_server;
     server_name ${SERVER_IP} panel.demo.nexlify.live;
     client_max_body_size 100m;
+    location ~ ^/(player_api\.php|panel_api\.php|get\.php|xmltv\.php|live/|timeshift/|movie/|series/|c/|stalker_portal/) {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_set_header X-Nexlify-Client-Port \$server_port;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 300s;
+        proxy_buffering off;
+    }
     location / {
         proxy_pass http://nexlify_panel;
         proxy_http_version 1.1;
