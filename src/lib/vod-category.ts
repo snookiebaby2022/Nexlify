@@ -36,6 +36,19 @@ export async function categoryForMovie(genreName?: string | null): Promise<strin
   return rootId;
 }
 
+/**
+ * Flat movie categories for Plex / Xtream apps (Smarters, XCIPTV).
+ * Nested Movies→Genre + broken parent_id trees make "All" empty and hide content.
+ * Genre becomes a top-level MOVIE category; missing genre → "Movies".
+ */
+export async function categoryForPlexMovie(genreName?: string | null): Promise<string> {
+  const genre = genreName?.trim();
+  if (genre && !/^movies?$/i.test(genre)) {
+    return findOrCreateCategory(genre, null, "MOVIE");
+  }
+  return findOrCreateCategory("Movies", null, "MOVIE");
+}
+
 /** Root "TV Series" → Genre (optional) → show name. */
 export async function categoryForSeries(
   seriesName?: string | null,
@@ -52,6 +65,19 @@ export async function categoryForSeries(
     return findOrCreateCategory(show, parentId, "SERIES");
   }
   return parentId;
+}
+
+/**
+ * Flat series categories for Plex / Xtream apps.
+ * Do NOT create a category per show name — that makes Smarters list every series
+ * as its own category and breaks "All TV Series". Genre only (or "TV Series").
+ */
+export async function categoryForPlexSeries(genreName?: string | null): Promise<string> {
+  const genre = genreName?.trim();
+  if (genre && !/^tv\s*series?$/i.test(genre)) {
+    return findOrCreateCategory(genre, null, "SERIES");
+  }
+  return findOrCreateCategory("TV Series", null, "SERIES");
 }
 
 export async function categoryFromGroupName(

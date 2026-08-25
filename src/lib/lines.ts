@@ -505,7 +505,10 @@ export async function categoryIdsForLine(
     if (r.categoryId == null || r.categoryId === "") hasUncategorized = true;
     else categoryIds.push(r.categoryId);
   }
-  return { categoryIds, hasUncategorized };
+  if (!categoryIds.length) return { categoryIds, hasUncategorized };
+  const { collectCategoryAncestors } = await import("@/lib/category-tree");
+  const withAncestors = await collectCategoryAncestors(categoryIds);
+  return { categoryIds: withAncestors, hasUncategorized };
 }
 
 /**
