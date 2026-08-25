@@ -12,6 +12,7 @@ import {
   serverPortProfile,
 } from "@/lib/panel-local-server";
 import { applyLocalServerPortProfile } from "@/lib/panel-port-sync";
+import { syncStreamServerPublicHosts } from "@/lib/panel-public-hosts";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -101,6 +102,7 @@ export async function POST(req: NextRequest) {
   if (isLocalPanelServer(server)) {
     portSync = await applyLocalServerPortProfile(serverPortProfile(server));
   }
+  await syncStreamServerPublicHosts(server);
 
   return NextResponse.json({ server, portSync });
   } catch (e) {
@@ -195,6 +197,9 @@ export async function PATCH(req: NextRequest) {
     const { bumpConfigRevision } = await import("@/lib/stream-agent");
     await bumpConfigRevision(server.id);
     agentConfigQueued = true;
+  }
+  if (body.domain !== undefined || body.dnsRotator !== undefined) {
+    await syncStreamServerPublicHosts(server);
   }
 
   return NextResponse.json({ server, portSync, agentConfigQueued });

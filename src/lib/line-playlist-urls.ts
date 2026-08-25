@@ -1,3 +1,5 @@
+import { isIpHost } from "./public-origin";
+
 export type LinePlaylistFormat = {
   label: string;
   type: string;
@@ -50,6 +52,85 @@ export const LINE_PLAYLIST_FORMAT_GROUPS: LinePlaylistFormatGroup[] = [
 
 export function allLinePlaylistFormats(): LinePlaylistFormat[] {
   return [...LINE_PLAYLIST_FORMATS, ...LINE_ENIGMA_FORMATS];
+}
+
+const INTERNAL_PANEL_PORTS = new Set(["3000", "3001", "13000", "13001"]);
+
+/** Hostname only from a domain field (`tv.example.com` or `https://tv.example.com:443`). */
+export function playlistHostnameFromDomain(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+  try {
+    const u = new URL(t.includes("://") ? t : `http://${t}`);
+    return u.hostname.toLowerCase();
+  } catch {
+    return t.replace(/^https?:\/\//i, "").split("/")[0]?.split(":")[0]?.toLowerCase() ?? "";
+  }
+}
+
+/**
+ * Customer playlist / Xtream URLs should use the configured domain, not the IP
+ * the admin happened to open the panel on. Extra IPTV ports (8080, 25461, …) are kept.
+ */
+export function playlistOriginFromPreferredHost(preferredHost: string, requestOrigin: string): string {
+  const req = requestOrigin.trim().replace(/\/+$/, "");
+  const hostname = playlistHostnameFromDomain(preferredHost);
+  if (!hostname || !req) return req;
+  try {
+    const u = new URL(req.includes("://") ? req : `http://${req}`);
+    const port =
+      u.port && !INTERNAL_PANEL_PORTS.has(u.port) && u.port !== "80" && u.port !== "443"
+        ? `:${u.port}`
+        : "";
+    return `${u.protocol}//${hostname}${port}`;
+  } catch {
+    return req;
+  }
+}
+
+export function pickPlaylistOrigin(requestOrigin: string, publicHosts: string[]): string {
+  const req = requestOrigin.trim().replace(/\/+$/, "");
+  const names = publicHosts.map((h) => playlistHostnameFromDomain(h)).filter(Boolean);
+  if (!req) {
+    const first = names.find((h) => !isIpHost(h));
+    return first ? `http://${first}` : "";
+  }
+  const reqHost = playlistHostnameFromDomain(req);
+  if (reqHost && names.includes(reqHost)) {
+    return playlistOriginFromPreferredHost(reqHost, req);
+  }
+  const firstDomain = names.find((h) => !isIpHost(h));
+  if (firstDomain) return playlistOriginFromPreferredHost(firstDomain, req);
+  return req;
+}
+
+export function originHostAndProto(origin: string): { host: string; proto: string; origin: string } {
+  const t = origin.trim().replace(/\/+$/, "");
+  try {
+    const u = new URL(t.includes("://") ? t : `http://${t}`);
+    const host = u.port ? `${u.hostname}:${u.port}` : u.hostname;
+    const proto = u.protocol;
+    return { host, proto, origin: `${proto}//${host}` };
+  } catch {
+    return { host: t, proto: "http:", origin: t };
+  }
+}
+
+export function playlistFetchPath(publicUrl: string): string {
+  try {
+    const u = new URL(publicUrl);
+    return `${u.pathname}${u.search}`;
+  } catch {
+    return publicUrl;
+  }
+}
+
+/** Rewrite panel origin inside a downloaded M3U / Enigma script. */
+export function rewritePlaylistTextOrigins(text: string, fromOrigin: string, toOrigin: string): string {
+  const from = fromOrigin.replace(/\/+$/, "");
+  const to = toOrigin.replace(/\/+$/, "");
+  if (!from || !to || from === to) return text;
+  return text.split(from).join(to);
 }
 
 export function buildLinePlaylistUrl(

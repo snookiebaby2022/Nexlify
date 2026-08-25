@@ -747,7 +747,8 @@ export function ServerForm({
                   placeholder="stream.example.com"
                 />
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-                  Shown under the server IP on Manage Servers when enabled.
+                  Shown under the server IP on Manage Servers. Apps, Download line, and Xtream
+                  URLs use this name (and any extra rotator hosts) instead of the IP.
                 </p>
               </FormField>
               <FormField label="DNS rotator hosts (one per line)">
@@ -759,6 +760,10 @@ export function ServerForm({
                   onChange={(e) => setForm({ ...form, dnsRotatorHosts: e.target.value })}
                   placeholder={"cdn1.example.com\ncdn2.example.com"}
                 />
+                <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                  One hostname per line. Live sources rotate across these hosts; the names are also
+                  accepted as panel domains for apps and Download line.
+                </p>
               </FormField>
               <FormField label="Rotator mode">
                 <select

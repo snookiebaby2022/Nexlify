@@ -10,7 +10,10 @@ import {
   buildLinePlaylistUrl,
   buildStalkerPortalUrl,
   buildWebPlayerUrl,
+  originHostAndProto,
   playlistDownloadFilename,
+  playlistFetchPath,
+  rewritePlaylistTextOrigins,
   type LinePlaylistFormat,
 } from "@/lib/line-playlist-urls";
 
@@ -54,6 +57,8 @@ export function DownloadPlaylistModal({
   const [dlStatus, setDlStatus] = useState("");
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [playlistOrigin, setPlaylistOrigin] = useState("");
+
   useEffect(() => {
     if (!open) {
       if (tickRef.current) clearInterval(tickRef.current);
@@ -62,15 +67,40 @@ export function DownloadPlaylistModal({
       setDlProgress(0);
       setDlLabel("");
       setDlStatus("");
+      return;
     }
+    fetch("/api/admin/portal-urls", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { playlistOrigin?: string; playlistOrigins?: string[] }) => {
+        const origins = Array.isArray(d.playlistOrigins) ? d.playlistOrigins.filter(Boolean) : [];
+        const here =
+          typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+        const match = origins.find((o) => {
+          try {
+            return new URL(o).hostname.toLowerCase() === here;
+          } catch {
+            return false;
+          }
+        });
+        const next = String(match || d.playlistOrigin || "").replace(/\/+$/, "");
+        if (next) setPlaylistOrigin(next);
+      })
+      .catch(() => {});
+  }, [open]);
+
+  const windowOrigin = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return window.location.origin;
   }, [open]);
 
   const { host, proto, origin } = useMemo(() => {
-    if (typeof window === "undefined") return { host: "", proto: "https:", origin: "" };
-    const host = window.location.host;
-    const proto = window.location.protocol;
-    return { host, proto, origin: `${proto}//${host}` };
-  }, [open]);
+    const fallback =
+      typeof window === "undefined"
+        ? { host: "", proto: "https:", origin: "" }
+        : originHostAndProto(window.location.origin);
+    if (playlistOrigin) return originHostAndProto(playlistOrigin);
+    return fallback;
+  }, [open, playlistOrigin]);
 
   const selectedFormat = useMemo(() => {
     for (const group of LINE_PLAYLIST_FORMAT_GROUPS) {
@@ -116,7 +146,8 @@ export function DownloadPlaylistModal({
     }, 160);
 
     try {
-      const res = await fetch(url, { cache: "no-store" });
+      const fetchUrl = playlistFetchPath(url);
+      const res = await fetch(fetchUrl, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       if (tickRef.current) {
         clearInterval(tickRef.current);
@@ -152,9 +183,14 @@ export function DownloadPlaylistModal({
 
       setDlProgress(99);
       setDlStatus("Finishing…");
-      const blob = new Blob(chunks as BlobPart[], { type: "application/octet-stream" });
+      const raw = new Blob(chunks as BlobPart[], { type: "application/octet-stream" });
+      let body: Blob = raw;
+      if (origin && windowOrigin && origin !== windowOrigin) {
+        const text = rewritePlaylistTextOrigins(await raw.text(), windowOrigin, origin);
+        body = new Blob([text], { type: "application/octet-stream" });
+      }
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
+      a.href = URL.createObjectURL(body);
       a.download = filename;
       a.click();
       URL.revokeObjectURL(a.href);
