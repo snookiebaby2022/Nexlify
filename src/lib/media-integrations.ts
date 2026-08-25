@@ -617,14 +617,12 @@ export async function backfillPlexGenresFromLibrary(
       const flush = async () => {
         if (!pending.length) return;
         const batch = pending.splice(0, pending.length);
-        await Promise.all(
-          batch.map((row) =>
-            prisma.stream.update({
-              where: { id: row.id },
-              data: { categoryId: row.categoryId, agentStartCmd: row.agentStartCmd },
-            })
-          )
-        );
+        for (const row of batch) {
+          await prisma.stream.update({
+            where: { id: row.id },
+            data: { categoryId: row.categoryId, agentStartCmd: row.agentStartCmd },
+          });
+        }
         moviesUpdated += batch.length;
       };
 
