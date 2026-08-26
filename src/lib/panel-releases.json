@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.48",
+  "latestVersion": "2.0.49",
   "releases": [
+    {
+      "version": "2.0.49",
+      "date": "2026-08-26",
+      "channel": "stable",
+      "summary": "SQL panel migration resume and import no longer stick at 0%.",
+      "changelog": [
+        "Import worker runs as a bundled Node script instead of npx tsx",
+        "Migrated line passwords hash without loading the Next.js login stack",
+        "A crashed import is no longer treated as still running, so Resume last upload can start"
+      ],
+      "fixes": [
+        "Resume last upload stayed at 0% after the worker died on missing jose/tsx",
+        "Stale migrate lock blocked a new import of a dump already on the server"
+      ]
+    },
     {
       "version": "2.0.48",
       "date": "2026-08-26",
