@@ -168,7 +168,8 @@ server {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
-    client_max_body_size 100m;
+    # Panel SQL dumps are ~1GB; 100m 413s POST /api/admin/migrate.
+    client_max_body_size 2048m;
     large_client_header_buffers 8 64k;
     client_header_buffer_size 32k;
 
@@ -200,6 +201,23 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 300s;
         proxy_buffering off;
+    }
+
+    location /api/admin/migrate {
+        client_max_body_size 2048m;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_pass http://nexlify_panel;
     }
 
     location / {

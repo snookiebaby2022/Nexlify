@@ -153,16 +153,73 @@ write_panel_http80_vhost() {
     echo "[stream-edge] :80 already has an nginx vhost — leaving it (not writing $PANEL_HTTP_DEST)"
     return 0
   fi
+  local edge_port="8080"
+  for p in $EDGE_OWNED; do
+    case "$p" in
+      8080) edge_port=8080; break ;;
+      25461) edge_port=25461 ;;
+    esac
+  done
   mkdir -p "$(dirname "$PANEL_HTTP_DEST")"
   cat > "$PANEL_HTTP_DEST" <<NGINX
-# Panel UI on :80 → Next on 127.0.0.1:${listen} (IPTV-edge keeps 443/8080/25461)
+# :80 — admin UI → Next :${listen}; IPTV apps → local edge :${edge_port}
+# (Sending /live through Next crash-loops workers and makes Smarters crawl.)
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
-    client_max_body_size 100m;
+    # Panel SQL dumps are ~1GB; 100m 413s POST /api/admin/migrate.
+    client_max_body_size 2048m;
     large_client_header_buffers 8 64k;
     client_header_buffer_size 32k;
+
+    location = /xmltv.php {
+        gzip off;
+        proxy_pass http://127.0.0.1:${edge_port};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_set_header X-Nexlify-Client-Port \$server_port;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Accept-Encoding "";
+        proxy_read_timeout 300s;
+        proxy_buffering off;
+    }
+
+    location ~ ^/(player_api\.php|panel_api\.php|get\.php|xmltv\.php|live/|timeshift/|movie/|series/|c/|stalker_portal/) {
+        proxy_pass http://127.0.0.1:${edge_port};
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_set_header X-Nexlify-Client-Port \$server_port;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 300s;
+        proxy_buffering off;
+    }
+
+    location /api/admin/migrate {
+        client_max_body_size 2048m;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_pass http://nexlify_panel;
+    }
+
     location / {
         proxy_pass http://nexlify_panel;
         proxy_http_version 1.1;
@@ -177,7 +234,7 @@ server {
     }
 }
 NGINX
-  echo "[stream-edge] Panel HTTP vhost :80 → 127.0.0.1:${listen} ($PANEL_HTTP_DEST)"
+  echo "[stream-edge] Panel HTTP vhost :80 UI → :${listen}, IPTV → 127.0.0.1:${edge_port} ($PANEL_HTTP_DEST)"
 }
 
 if [ "${NEXLIFY_USE_STREAM_EDGE_NGINX:-1}" != "1" ] || [ "$STREAM_PORT" = "${NEXLIFY_PORT_HTTP}" ]; then
