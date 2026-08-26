@@ -52,7 +52,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   // middlewareClientMaxBodySize belongs under experimental (Next 15).
-  serverExternalPackages: ["ioredis"],
+  serverExternalPackages: ["ioredis", "ssh2", "cpu-features"],
   images: {
     formats: ['image/avif', 'image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
