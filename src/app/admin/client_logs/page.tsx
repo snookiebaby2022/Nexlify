@@ -43,7 +43,8 @@ export default function ClientLogsPage() {
     load();
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- search applies on Refresh/Enter
+  }, [pageSize]);
 
   return (
     <div className="space-y-6">

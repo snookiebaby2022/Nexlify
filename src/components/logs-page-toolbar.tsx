@@ -44,14 +44,18 @@ export function LogsPageToolbar({
 
   async function changeRetention(next: number) {
     const parsed = parseLogAutoClearHours(next);
+    const prev = hours;
     setHours(parsed);
     setSaving(true);
     try {
-      await fetch("/api/admin/logs/retention", {
+      const r = await fetch("/api/admin/logs/retention", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hours: parsed }),
       });
+      if (!r.ok) setHours(prev);
+    } catch {
+      setHours(prev);
     } finally {
       setSaving(false);
     }

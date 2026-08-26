@@ -36,12 +36,15 @@ export default function ManagementLogsPage() {
       .then((d) => {
         setLogs(Array.isArray(d.logs) ? d.logs : []);
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   }, [action, q, pageSize]);
 
   useEffect(() => {
     load();
-  }, [load]);
+    // Search fields apply on Refresh; only page size auto-reloads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- q/action used when Refresh calls load()
+  }, [pageSize]);
 
   return (
     <div className="space-y-6">

@@ -33,12 +33,14 @@ export default function LoginLogsPage() {
       .then((d) => {
         setLogs(d.logs ?? []);
         setLoading(false);
-      });
+      })
+      .catch(() => setLoading(false));
   }, [q, pageSize]);
 
   useEffect(() => {
     load();
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- search applies on Refresh/Enter
+  }, [pageSize]);
 
   return (
     <div className="space-y-6">
