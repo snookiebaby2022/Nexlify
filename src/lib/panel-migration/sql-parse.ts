@@ -315,6 +315,7 @@ export async function parseSqlDumpFile(
 
   const stream = createReadStream(filePath, { encoding: "utf8" });
   const rl = createInterface({ input: stream, crlfDelay: Infinity });
+  if (onProgress) onProgress(0, totalBytes);
 
   for await (const line of rl) {
     bytesRead += Buffer.byteLength(line, "utf8") + 1; // +1 for newline
@@ -377,7 +378,7 @@ export async function parseSqlDumpFile(
       }
     }
 
-    if (onProgress && bytesRead - lastProgressBytes > 10 * 1024 * 1024) {
+    if (onProgress && bytesRead - lastProgressBytes > 2 * 1024 * 1024) {
       lastProgressBytes = bytesRead;
       onProgress(bytesRead, totalBytes);
     }

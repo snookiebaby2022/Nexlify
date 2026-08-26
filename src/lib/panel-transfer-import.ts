@@ -6,7 +6,7 @@ import {
   type Prisma,
 } from "@prisma/client";
 import { prisma as globalPrisma } from "@/lib/prisma";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword } from "@/lib/password-hash";
 import { generateLinePassword } from "@/lib/credential-generate";
 import { resolveProviderUrl } from "@/lib/vod-provider-url";
 import type { PanelTransferBundle } from "./panel-transfer-export";

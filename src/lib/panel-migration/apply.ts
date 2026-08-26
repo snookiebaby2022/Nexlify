@@ -1,6 +1,6 @@
 import { LineStatus, PanelRole, StreamType, VodMode } from "@prisma/client";
 import { prisma } from "../prisma";
-import { hashPassword } from "../auth";
+import { hashPassword } from "../password-hash";
 import {
   extraSourcesToBitrates,
   fillMissingStreamFields,

@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "./password-hash";
 import { prisma } from "./prisma";
 import { jwtSecretBytes } from "@/lib/jwt-secret";
 import { panelSessionCookieOptions, panelSessionCookieSecure } from "@/lib/session-cookie";
@@ -134,7 +134,7 @@ async function repairAdminPasswordHash(password: string) {
   });
   if (!user) return null;
 
-  const hash = await bcrypt.hash(password, 12);
+  const hash = await hashPassword(password);
   await prisma.panelUser.update({
     where: { id: user.id },
     data: { passwordHash: hash, passwordPlain: null, isActive: true, role: "ADMIN" },
@@ -148,7 +148,7 @@ const ADMIN_IDENTIFIERS = new Set(["admin", "admin@nexlify.live"]);
 async function upgradeLegacyPasswordHash(userId: string, password: string, storedHash: string) {
   if (BCRYPT_HASH_RE.test(storedHash)) return;
   try {
-    const hash = await bcrypt.hash(password, 12);
+    const hash = await hashPassword(password);
     await prisma.panelUser.update({
       where: { id: userId },
       data: { passwordHash: hash, passwordPlain: null },
@@ -209,9 +209,7 @@ export async function verifyPanelLogin(identifier: string, password: string) {
   return user;
 }
 
-export async function hashPassword(password: string) {
-  return bcrypt.hash(password, 12);
-}
+export { hashPassword } from "./password-hash";
 
 export function requirePanelApiKey(request: Request): boolean {
   const expected =

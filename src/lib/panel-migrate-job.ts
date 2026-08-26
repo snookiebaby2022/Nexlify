@@ -103,23 +103,32 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
+function isMigrateWorkerProcessAlive(): boolean {
+  try {
+    const out = execSync("ps -eo args= 2>/dev/null || true", {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    return out.split("\n").some((line) => {
+      const t = line.trim();
+      if (!t) return false;
+      if (t.startsWith("ps ") || /\bpgrep\b/.test(t)) return false;
+      return (
+        t.includes("panel-migrate-background.bundle.cjs") ||
+        t.includes("panel-migrate-background.ts")
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
 export async function reconcileMigrateJob(): Promise<MigrateJob | null> {
   const job = await readMigrateJob();
   if (!job) return null;
   if (job.status !== "running") return job;
-  const started = Date.parse(job.startedAt);
-  const elapsed = Number.isFinite(started) ? Date.now() - started : 0;
   if (job.pid && isPidAlive(job.pid)) return job;
-  // Look for detached worker by name
-  try {
-    const out = execSync("pgrep -f 'panel-migrate-background' 2>/dev/null || true", {
-      encoding: "utf8",
-      timeout: 5000,
-    }).trim();
-    if (out) return job;
-  } catch {
-    /* ignore */
-  }
+  if (isMigrateWorkerProcessAlive()) return job;
   job.status = "failed";
   job.finishedAt = new Date().toISOString();
   job.error =
@@ -182,8 +191,10 @@ export async function startMigrateBackgroundJob(input: {
   await writeMigrateJob(job);
 
   const workerTs = path.join(repoPath, "scripts", "panel-migrate-background.ts");
+  const workerBundle = path.join(repoPath, "scripts", "panel-migrate-background.bundle.cjs");
+  const localTsx = path.join(repoPath, "node_modules", ".bin", "tsx");
   const logFile = "/tmp/nexlify-migrate-worker.log";
-  const launcher = `cd ${JSON.stringify(repoPath)} && exec >>${JSON.stringify(logFile)} 2>&1 && echo "[$(date -Is)] start ${JSON.stringify(id)}" && (command -v tsx >/dev/null && exec tsx ${JSON.stringify(workerTs)} ${JSON.stringify(MIGRATE_JOB_PATH)} || exec npx --yes tsx ${JSON.stringify(workerTs)} ${JSON.stringify(MIGRATE_JOB_PATH)})`;
+  const launcher = `cd ${JSON.stringify(repoPath)} && exec >>${JSON.stringify(logFile)} 2>&1 && echo "[$(date -Is)] start ${JSON.stringify(id)}" && if [ -f ${JSON.stringify(workerBundle)} ]; then exec node ${JSON.stringify(workerBundle)} ${JSON.stringify(MIGRATE_JOB_PATH)}; elif [ -x ${JSON.stringify(localTsx)} ]; then exec ${JSON.stringify(localTsx)} ${JSON.stringify(workerTs)} ${JSON.stringify(MIGRATE_JOB_PATH)}; elif command -v tsx >/dev/null; then exec tsx ${JSON.stringify(workerTs)} ${JSON.stringify(MIGRATE_JOB_PATH)}; else echo "ERROR: no migrate worker runtime (bundle/tsx missing)" >&2; exit 127; fi`;
   const child = spawn("bash", ["-c", launcher], {
     cwd: repoPath,
     detached: true,

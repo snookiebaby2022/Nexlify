@@ -41,7 +41,8 @@ async function main() {
   const job = JSON.parse(await readFile(jobPath, "utf8")) as Job;
   job.pid = process.pid;
   job.status = "running";
-  job.message = job.dryRun ? "Scanning dump for preview…" : "Scanning dump for import…";
+    job.message = job.dryRun ? "Scanning dump for preview…" : "Scanning dump for import…";
+  job.progress = { phase: "scanning", current: 0, total: 100 };
   await writeJob(job);
   await writeFile(lockPath, `${Date.now()}:${job.id}:${process.pid}`, "utf8");
 

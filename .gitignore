@@ -28,6 +28,7 @@ lint-out.txt
 public/downloads/*.tar.gz
 dist/
 scripts/cron-daemon.bundle.cjs
+scripts/panel-migrate-background.bundle.cjs
 
 marketing-drop-in/scripts/vps-full-update.sh
 **/install/panel-github-deploy-key.env
