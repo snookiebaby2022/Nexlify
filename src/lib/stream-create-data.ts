@@ -106,6 +106,10 @@ export async function buildStreamCreateData(body: StreamCreateInput) {
     const { pickLeastLoadedServerId } = await import("@/lib/server-load");
     serverId = await pickLeastLoadedServerId();
   }
+  if (!serverId && (type === "MOVIE" || type === "SERIES")) {
+    const { pickVodLoadBalancerId } = await import("@/lib/server-load");
+    serverId = await pickVodLoadBalancerId();
+  }
 
   let streamIcon = body.streamIcon?.trim() || null;
   if (!streamIcon && streamUrl.startsWith("nexlify://plex/")) {

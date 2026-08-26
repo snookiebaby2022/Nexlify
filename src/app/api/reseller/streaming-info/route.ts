@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { publicOriginFromRequest } from "@/lib/public-origin";
 import { PanelRole } from "@prisma/client";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { getResellerGroupFlags } from "@/lib/reseller-group-flags";
 
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
@@ -10,6 +11,11 @@ export async function GET(req: NextRequest) {
 
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const flags = await getResellerGroupFlags(session.id);
+  if (!flags.showStreamingApi) {
+    return NextResponse.json({ error: "Streaming API is disabled for your group" }, { status: 403 });
+  }
 
   const baseUrl = publicOriginFromRequest(req.url, req.headers).replace(/\/$/, "");
 

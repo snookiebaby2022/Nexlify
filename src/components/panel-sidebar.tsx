@@ -11,6 +11,7 @@ import {
   type SidebarNavLink,
 } from "@/lib/admin-sidebar-nav";
 import { getResellerSidebarNav } from "@/lib/reseller-sidebar-nav";
+import type { ResellerGroupFlags } from "@/lib/reseller-group-flags";
 import { withSidebarItemIcons } from "@/lib/panel-nav-bridge";
 import { PanelBrandMark } from "@/components/panel-brand-mark";
 import { PanelSidebarVersion } from "@/components/panel-sidebar-version";
@@ -534,15 +535,17 @@ export function ResellerPanelSidebar({
   brand,
   brandHref = "/reseller/dashboard",
   username,
+  flags,
 }: {
   brand?: string;
   brandHref?: string;
   username?: string;
+  flags?: Partial<ResellerGroupFlags>;
 } = {}) {
   return (
     <Suspense fallback={<aside className="panel-sidebar" aria-hidden />}>
       <PanelSidebar
-        entries={withSidebarItemIcons(getResellerSidebarNav())}
+        entries={withSidebarItemIcons(getResellerSidebarNav(flags))}
         brand={brand}
         brandHref={brandHref}
         showReport

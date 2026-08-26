@@ -10,8 +10,17 @@ type Group = {
   color: string | null;
   isReseller: boolean;
   isBanned: boolean;
+  config?: { groupRole?: string };
   _count?: { users: number };
 };
+
+function typeLabel(g: Group) {
+  const role = g.config?.groupRole;
+  if (role === "admin") return "Administrator";
+  if (role === "sub_reseller") return "Sub-reseller";
+  if (role === "reseller") return "Reseller";
+  return g.isReseller ? "Reseller" : "Administrator";
+}
 
 export default function ManagementGroupsPage() {
   const [groups, setGroups] = useState<Group[]>([]);
@@ -43,7 +52,7 @@ export default function ManagementGroupsPage() {
         </Link>
       </div>
       <p className="text-sm" style={{ color: "var(--muted)" }}>
-        Reseller groups with permissions, trial limits, and credit rules (XUI-style).
+        Administrators, resellers, and sub-resellers. Permissions, packages, and menu modules are set per group.
       </p>
       <div className="rounded-lg border overflow-auto" style={{ borderColor: "var(--border)" }}>
         <table className="w-full text-sm">
@@ -53,7 +62,7 @@ export default function ManagementGroupsPage() {
               <th className="text-left p-3">Type</th>
               <th className="text-left p-3">Users</th>
               <th className="text-left p-3">Status</th>
-              <th className="p-3" />
+              <th className="text-left p-3">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -68,13 +77,27 @@ export default function ManagementGroupsPage() {
                     {g.name}
                   </Link>
                 </td>
-                <td className="p-3">{g.isReseller ? "Reseller" : "User"}</td>
+                <td className="p-3">{typeLabel(g)}</td>
                 <td className="p-3">{g._count?.users ?? 0}</td>
                 <td className="p-3">{g.isBanned ? "Banned" : "Active"}</td>
                 <td className="p-3">
-                  <button type="button" className="text-xs cursor-pointer" style={{ color: "var(--danger)" }} onClick={() => remove(g.id)}>
-                    Delete
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href={`/admin/management/groups/${g.id}`}
+                      className="text-xs font-medium px-2 py-1 rounded border cursor-pointer"
+                      style={{ borderColor: "var(--border)", color: "var(--accent)" }}
+                    >
+                      Edit
+                    </Link>
+                    <button
+                      type="button"
+                      className="text-xs cursor-pointer"
+                      style={{ color: "var(--danger)" }}
+                      onClick={() => remove(g.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

@@ -27,6 +27,12 @@ import { displayStreamIcon } from "@/lib/plex-artwork";
 import { StreamDisplayTitle } from "@/components/stream-display-title";
 import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
 import { TmdbBackfillBanner } from "@/components/tmdb-backfill-banner";
+import {
+  ColumnPickerList,
+  ToolbarDropdown,
+  useStoredColumnVisibility,
+} from "@/components/table-toolbar-menus";
+import { useResellerGroupFlags } from "@/components/reseller-group-flags-context";
 
 const StreamVerifyPanel = dynamic(
   () => import("@/components/stream-verify-panel").then((m) => m.StreamVerifyPanel),
@@ -65,6 +71,18 @@ function statusFromSearch(): "" | "active" | "inactive" | "online" | "offline" {
 }
 
 const PAGE_SIZES = LIST_PAGE_SIZE_OPTIONS;
+
+const STREAM_COLUMN_DEFAULTS: Record<string, boolean> = {
+  id: true,
+  icon: true,
+  name: true,
+  servers: true,
+  clients: true,
+  uptime: true,
+  actions: true,
+  epg: true,
+  streamInfo: true,
+};
 
 function serverLabel(s: Stream) {
   const name = s.server?.name ?? "Main Server";
@@ -148,6 +166,7 @@ export function StreamsList({
   importHref?: string;
 }) {
   const searchParams = useSearchParams();
+  const { hideAllUrls } = useResellerGroupFlags();
   const statusFromUrl = searchParams.get("status");
   const [streams, setStreams] = useState<Stream[]>([]);
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
@@ -172,6 +191,23 @@ export function StreamsList({
   const [qualityFilter, setQualityFilter] = useState("");
   const [clientsModal, setClientsModal] = useState<{ id: string; name: string } | null>(null);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const streamCols = useStoredColumnVisibility(
+    `nexlify.streams.columns.${type ?? "all"}`,
+    STREAM_COLUMN_DEFAULTS
+  );
+  const streamColumnOptions = [
+    { id: "id", label: "ID" },
+    { id: "icon", label: "Icon" },
+    { id: "name", label: "Name", locked: true },
+    { id: "servers", label: "Servers" },
+    { id: "clients", label: "Clients" },
+    { id: "uptime", label: "Uptime" },
+    { id: "actions", label: "Actions", locked: true },
+    { id: "epg", label: "EPG" },
+    { id: "streamInfo", label: "Stream Info" },
+  ];
   const countedKeyRef = useRef("");
   const urlInitRef = useRef(false);
 
@@ -350,15 +386,67 @@ export function StreamsList({
           <Link href={addHref} className="xui-streams-btn xui-streams-btn--add">
             Add Stream
           </Link>
-          <button type="button" className="xui-streams-icon-btn xui-streams-icon-btn--filter" title="Filters">
+          <button
+            type="button"
+            className={`xui-streams-icon-btn xui-streams-icon-btn--filter ${showFilters ? "xui-streams-icon-btn--active" : ""}`}
+            title="Filters"
+            aria-pressed={showFilters}
+            onClick={() => {
+              if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+                setMobileFiltersOpen(true);
+                return;
+              }
+              setShowFilters((v) => !v);
+            }}
+          >
             <Filter size={16} />
           </button>
           <button type="button" className="xui-streams-icon-btn xui-streams-icon-btn--refresh" title="Refresh" onClick={load}>
             <RefreshCw size={16} />
           </button>
-          <button type="button" className="xui-streams-icon-btn xui-streams-icon-btn--menu" title="More">
-            <ChevronDown size={16} />
-          </button>
+          <ToolbarDropdown
+            open={moreOpen}
+            onClose={() => setMoreOpen(false)}
+            trigger={
+              <button
+                type="button"
+                className={`xui-streams-icon-btn xui-streams-icon-btn--menu ${moreOpen ? "xui-streams-icon-btn--active" : ""}`}
+                title="More"
+                aria-expanded={moreOpen}
+                onClick={() => setMoreOpen((o) => !o)}
+              >
+                <ChevronDown size={16} />
+              </button>
+            }
+          >
+            <button
+              type="button"
+              className="xui-toolbar-menu-action"
+              onClick={() => {
+                setSearch("");
+                setCategoryId("");
+                setServerId("");
+                setStatusFilter("");
+                setModeFilter("");
+                setAudioFilter("");
+                setVideoFilter("");
+                setQualityFilter("");
+                setPage(1);
+                setMoreOpen(false);
+              }}
+            >
+              Reset filters
+            </button>
+            {importHref ? (
+              <Link href={importHref} className="xui-toolbar-menu-action" onClick={() => setMoreOpen(false)}>
+                Import
+              </Link>
+            ) : null}
+            <Link href={addHref} className="xui-toolbar-menu-action" onClick={() => setMoreOpen(false)}>
+              Add stream
+            </Link>
+            <ColumnPickerList columns={streamColumnOptions} show={streamCols.show} onToggle={streamCols.toggle} />
+          </ToolbarDropdown>
         </div>
       </div>
 
@@ -470,7 +558,9 @@ export function StreamsList({
         </p>
       )}
 
-      <div className="xui-streams-filters xui-streams-filters--desktop">
+      <div
+        className={`xui-streams-filters xui-streams-filters--desktop ${showFilters ? "" : "xui-streams-filters--hidden"}`}
+      >
         <div className="xui-streams-search-wrap">
           <Search size={14} className="xui-streams-search-icon" />
           <input
@@ -602,7 +692,7 @@ export function StreamsList({
                 <div className="min-w-0 flex-1">
                   <StreamDisplayTitle
                     name={s.name}
-                    streamUrl={s.streamUrl}
+                    streamUrl={hideAllUrls ? "" : s.streamUrl}
                     href={`/admin/servers/streams?edit=${s.id}`}
                     className="xui-stream-name font-semibold block truncate"
                   />
@@ -663,15 +753,15 @@ export function StreamsList({
         <table className="xui-streams-table">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Icon</th>
-              <th>Name</th>
-              <th>Servers</th>
-              <th>Clients</th>
-              <th title="How playback is served right now">Uptime</th>
-              <th>Actions</th>
-              <th>EPG</th>
-              <th>Stream Info</th>
+              {streamCols.show("id") ? <th>ID</th> : null}
+              {streamCols.show("icon") ? <th>Icon</th> : null}
+              {streamCols.show("name") ? <th>Name</th> : null}
+              {streamCols.show("servers") ? <th>Servers</th> : null}
+              {streamCols.show("clients") ? <th>Clients</th> : null}
+              {streamCols.show("uptime") ? <th title="How playback is served right now">Uptime</th> : null}
+              {streamCols.show("actions") ? <th>Actions</th> : null}
+              {streamCols.show("epg") ? <th>EPG</th> : null}
+              {streamCols.show("streamInfo") ? <th>Stream Info</th> : null}
             </tr>
           </thead>
           <tbody>
@@ -684,99 +774,115 @@ export function StreamsList({
 
               return (
                 <tr key={s.id} className={i % 2 === 1 ? "xui-streams-row--alt" : undefined}>
-                  <td className="xui-streams-td-id">{rowId}</td>
-                  <td className="xui-streams-td-icon">
-                    {icon ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={icon}
-                        alt=""
-                        className="xui-stream-icon"
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
+                  {streamCols.show("id") ? <td className="xui-streams-td-id">{rowId}</td> : null}
+                  {streamCols.show("icon") ? (
+                    <td className="xui-streams-td-icon">
+                      {icon ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={icon}
+                          alt=""
+                          className="xui-stream-icon"
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <span className="xui-stream-icon xui-stream-icon--empty" />
+                      )}
+                    </td>
+                  ) : null}
+                  {streamCols.show("name") ? (
+                    <td className="xui-streams-td-name">
+                      <StreamDisplayTitle
+                        name={s.name}
+                        streamUrl={hideAllUrls ? "" : s.streamUrl}
+                        href={`/admin/servers/streams?edit=${s.id}`}
+                        className="xui-stream-name"
                       />
-                    ) : (
-                      <span className="xui-stream-icon xui-stream-icon--empty" />
-                    )}
-                  </td>
-                  <td className="xui-streams-td-name">
-                    <StreamDisplayTitle
-                      name={s.name}
-                      streamUrl={s.streamUrl}
-                      href={`/admin/servers/streams?edit=${s.id}`}
-                      className="xui-stream-name"
-                    />
-                    {s.category?.name && (
-                      <span className="xui-stream-category">{s.category.name}</span>
-                    )}
-                  </td>
-                  <td className="xui-streams-td-server">
-                    <span className="xui-stream-server-name">{serverName}</span>
-                    {serverHost && <span className="xui-stream-server-host">{serverHost}</span>}
-                    {type === "LIVE" && (
-                      <StreamTranscodeQuickActions
-                        streamId={s.id}
-                        serverId={s.server?.id}
-                        playbackStatus={st?.status}
-                        onRefresh={load}
-                      />
-                    )}
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      className={`xui-clients-badge ${viewers > 0 ? "xui-clients-badge--active" : ""}`}
-                      onClick={() => setClientsModal({ id: s.id, name: s.name })}
-                      title="View clients"
-                    >
-                      {viewers}
-                    </button>
-                  </td>
-                  <td>
-                    <StreamUptimeBadge stream={s} listType={type} />
-                  </td>
-                  <td className="xui-streams-td-actions">
-                    {type === "SERIES" ? (
-                      <Link
-                        href={`/admin/content/episodes?seriesId=${s.id}`}
-                        className="text-xs px-1.5 py-1 rounded hover:bg-white/10"
-                        title="Edit episodes"
+                      {s.category?.name && (
+                        <span className="xui-stream-category">{s.category.name}</span>
+                      )}
+                    </td>
+                  ) : null}
+                  {streamCols.show("servers") ? (
+                    <td className="xui-streams-td-server">
+                      <span className="xui-stream-server-name">{serverName}</span>
+                      {serverHost && !hideAllUrls && <span className="xui-stream-server-host">{serverHost}</span>}
+                      {type === "LIVE" && (
+                        <StreamTranscodeQuickActions
+                          streamId={s.id}
+                          serverId={s.server?.id}
+                          playbackStatus={st?.status}
+                          onRefresh={load}
+                        />
+                      )}
+                    </td>
+                  ) : null}
+                  {streamCols.show("clients") ? (
+                    <td>
+                      <button
+                        type="button"
+                        className={`xui-clients-badge ${viewers > 0 ? "xui-clients-badge--active" : ""}`}
+                        onClick={() => setClientsModal({ id: s.id, name: s.name })}
+                        title="View clients"
                       >
-                        Episodes
+                        {viewers}
+                      </button>
+                    </td>
+                  ) : null}
+                  {streamCols.show("uptime") ? (
+                    <td>
+                      <StreamUptimeBadge stream={s} listType={type} />
+                    </td>
+                  ) : null}
+                  {streamCols.show("actions") ? (
+                    <td className="xui-streams-td-actions">
+                      {type === "SERIES" ? (
+                        <Link
+                          href={`/admin/content/episodes?seriesId=${s.id}`}
+                          className="text-xs px-1.5 py-1 rounded hover:bg-white/10"
+                          title="Edit episodes"
+                        >
+                          Episodes
+                        </Link>
+                      ) : null}
+                      <StreamRowActionsMenu
+                        streamId={s.id}
+                        streamType={type}
+                        isActive={s.isActive}
+                        onRefresh={load}
+                        onDelete={() => remove(s.id)}
+                      />
+                    </td>
+                  ) : null}
+                  {streamCols.show("epg") ? (
+                    <td>
+                      <Link
+                        href={`/admin/servers/streams?edit=${s.id}#epg`}
+                        className={`xui-stream-epg-btn ${
+                          s.epgChannelId
+                            ? s.epgWorking
+                              ? "xui-stream-epg-btn--working"
+                              : "xui-stream-epg-btn--on"
+                            : ""
+                        }`}
+                        title={
+                          !s.epgChannelId
+                            ? "No EPG linked — click to map"
+                            : s.epgWorking
+                              ? "EPG linked with active guide data"
+                              : "EPG linked — no current guide data (check XMLTV import)"
+                        }
+                      >
+                        <Square size={12} fill="currentColor" />
                       </Link>
-                    ) : null}
-                    <StreamRowActionsMenu
-                      streamId={s.id}
-                      streamType={type}
-                      isActive={s.isActive}
-                      onRefresh={load}
-                      onDelete={() => remove(s.id)}
-                    />
-                  </td>
-                  <td>
-                    <Link
-                      href={`/admin/servers/streams?edit=${s.id}#epg`}
-                      className={`xui-stream-epg-btn ${
-                        s.epgChannelId
-                          ? s.epgWorking
-                            ? "xui-stream-epg-btn--working"
-                            : "xui-stream-epg-btn--on"
-                          : ""
-                      }`}
-                      title={
-                        !s.epgChannelId
-                          ? "No EPG linked — click to map"
-                          : s.epgWorking
-                            ? "EPG linked with active guide data"
-                            : "EPG linked — no current guide data (check XMLTV import)"
-                      }
-                    >
-                      <Square size={12} fill="currentColor" />
-                    </Link>
-                  </td>
-                  <td>
-                    <StreamInfoCell stream={s} />
-                  </td>
+                    </td>
+                  ) : null}
+                  {streamCols.show("streamInfo") ? (
+                    <td>
+                      <StreamInfoCell stream={s} />
+                    </td>
+                  ) : null}
                 </tr>
               );
             })}

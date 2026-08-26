@@ -16,6 +16,11 @@ import { getResellerSidebarNav } from "@/lib/reseller-sidebar-nav";
 import { getAdminSidebarNav } from "@/lib/admin-sidebar-nav";
 import { PanelMobileBottomNav } from "@/components/panel-mobile-bottom-nav";
 import type { ResellerWhiteLabel } from "@/lib/reseller-white-label";
+import {
+  DEFAULT_RESELLER_GROUP_FLAGS,
+  type ResellerGroupFlags,
+} from "@/lib/reseller-group-flags";
+import { ResellerGroupFlagsProvider } from "@/components/reseller-group-flags-context";
 
 export function PanelShell({
   title,
@@ -23,6 +28,7 @@ export function PanelShell({
   username,
   isDemo = false,
   whiteLabel = null,
+  resellerFlags = DEFAULT_RESELLER_GROUP_FLAGS,
   children,
 }: {
   title: string;
@@ -30,6 +36,7 @@ export function PanelShell({
   username?: string;
   isDemo?: boolean;
   whiteLabel?: ResellerWhiteLabel | null;
+  resellerFlags?: ResellerGroupFlags;
   children: React.ReactNode;
 }) {
   const [mobileNav, setMobileNav] = useState(false);
@@ -42,13 +49,14 @@ export function PanelShell({
     };
   }, [mobileNav]);
   const resellerSidebar =
-    role === "RESELLER" ? withSidebarItemIcons(getResellerSidebarNav()) : null;
+    role === "RESELLER" ? withSidebarItemIcons(getResellerSidebarNav(resellerFlags)) : null;
   const adminEntries = role === "ADMIN" ? withSidebarItemIcons(getAdminSidebarNav()) : null;
   const dashboardHref = role === "ADMIN" ? "/admin/dashboard" : "/reseller/dashboard";
   const accent = whiteLabel?.accentColor;
   const brandLogo = whiteLabel?.logoUrl;
 
   return (
+    <ResellerGroupFlagsProvider flags={role === "RESELLER" ? resellerFlags : DEFAULT_RESELLER_GROUP_FLAGS}>
     <PanelUpdateJobProvider>
     <DashboardLiveMetricsProvider enabled={role === "ADMIN"}>
     <div
@@ -102,7 +110,12 @@ export function PanelShell({
           {role === "ADMIN" ? (
             <AdminPanelSidebar brand={title} brandHref={dashboardHref} username={username} />
           ) : (
-            <ResellerPanelSidebar brand={title} brandHref={dashboardHref} username={username} />
+            <ResellerPanelSidebar
+              brand={title}
+              brandHref={dashboardHref}
+              username={username}
+              flags={resellerFlags}
+            />
           )}
         </div>
 
@@ -135,5 +148,6 @@ export function PanelShell({
     </div>
     </DashboardLiveMetricsProvider>
     </PanelUpdateJobProvider>
+    </ResellerGroupFlagsProvider>
   );
 }

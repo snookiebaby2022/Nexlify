@@ -226,38 +226,31 @@ export default function AdminServersPage() {
   function roleBadge(s: ServerRow) {
     const role = resolveServerRole(s, roleCtx);
     const online = isServerOnline(s);
+    const unknown = !online && !["offline", "degraded", "down"].includes(String(s.healthStatus ?? "").toLowerCase());
+    const state = online ? "Online" : unknown ? "Unknown" : "Offline";
     const label = role === "main" ? "Main" : role === "lb" ? "LB" : "Standard";
+    const tone = online
+      ? role === "main"
+        ? { bg: "rgba(168,85,247,0.15)", color: "#a855f7", border: "rgba(168,85,247,0.3)" }
+        : role === "lb"
+          ? { bg: "rgba(34,197,94,0.15)", color: "#16a34a", border: "rgba(34,197,94,0.3)" }
+          : { bg: "rgba(59,130,246,0.1)", color: "#3b82f6", border: "rgba(59,130,246,0.2)" }
+      : unknown
+        ? { bg: "rgba(148,163,184,0.15)", color: "#94a3b8", border: "rgba(148,163,184,0.35)" }
+        : { bg: "rgba(239,68,68,0.15)", color: "#dc2626", border: "rgba(239,68,68,0.3)" };
     return (
       <span
         className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase px-2 py-1 rounded-md"
         style={{
-          background: online
-            ? role === "main"
-              ? "rgba(168,85,247,0.15)"
-              : role === "lb"
-                ? "rgba(34,197,94,0.15)"
-                : "rgba(59,130,246,0.1)"
-            : "rgba(239,68,68,0.15)",
-          color: online
-            ? role === "main"
-              ? "#a855f7"
-              : role === "lb"
-                ? "#16a34a"
-                : "#3b82f6"
-            : "#dc2626",
-          border: `1px solid ${online
-            ? role === "main"
-              ? "rgba(168,85,247,0.3)"
-              : role === "lb"
-                ? "rgba(34,197,94,0.3)"
-                : "rgba(59,130,246,0.2)"
-            : "rgba(239,68,68,0.3)"}`,
+          background: tone.bg,
+          color: tone.color,
+          border: `1px solid ${tone.border}`,
         }}
       >
         {role === "main" && <Shield size={10} />}
         {role === "lb" && <ArrowUpDown size={10} />}
         {role === "standard" && <Server size={10} />}
-        {label} {online ? "· Online" : "· Offline"}
+        {label} · {state}
       </span>
     );
   }

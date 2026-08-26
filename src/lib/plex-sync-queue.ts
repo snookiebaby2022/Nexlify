@@ -10,6 +10,7 @@ import {
 } from "@/lib/integration-sync-progress";
 import type { IntegrationSyncProgress } from "@/lib/integration-sync-types";
 import { importPlexLibrary } from "@/lib/media-integrations";
+import { resolvePlaybackLoadBalancerId } from "@/lib/server-load";
 
 function asConfig(raw: unknown): Record<string, unknown> {
   return raw && typeof raw === "object" && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
@@ -56,9 +57,13 @@ export async function enqueuePlexSync(
   const jobId = randomUUID();
   const progress = queuedProgress(jobId);
   const cfg = asConfig(row.config);
+  const resolved = await resolvePlaybackLoadBalancerId(
+    serverId ?? (cfg.serverId ? String(cfg.serverId) : null)
+  );
   cfg.syncQueued = true;
   cfg.syncJobId = jobId;
-  cfg.syncServerId = serverId ?? (cfg.serverId ? String(cfg.serverId) : null);
+  cfg.syncServerId = resolved;
+  cfg.serverId = resolved;
   cfg.syncProgress = progress;
   await prisma.mediaIntegration.update({
     where: { id: integrationId },
@@ -106,7 +111,9 @@ async function claimNextPlexSync(): Promise<{
         where: { id: row.id },
         data: { config: cfg as Prisma.InputJsonValue },
       });
-      const serverId = cfg.syncServerId ? String(cfg.syncServerId) : cfg.serverId ? String(cfg.serverId) : null;
+      const serverId =
+        (cfg.syncServerId ? String(cfg.syncServerId) : null) ||
+        (cfg.serverId ? String(cfg.serverId) : null);
       return { id: row.id, jobId, serverId };
     },
     { timeout: 15_000 }

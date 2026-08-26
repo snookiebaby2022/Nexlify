@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { PanelShell } from "@/components/panel-shell";
 import { isPanelDemoHost } from "@/lib/panel-demo-host";
 import { getWhiteLabelForUserId } from "@/lib/reseller-white-label";
+import { getResellerGroupFlags } from "@/lib/reseller-group-flags";
 import { PanelRole } from "@prisma/client";
 
 export default async function ResellerLayout({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,7 @@ export default async function ResellerLayout({ children }: { children: React.Rea
 
   const host = (await headers()).get("host") ?? "";
   const whiteLabel = await getWhiteLabelForUserId(session.id);
+  const groupFlags = await getResellerGroupFlags(session.id);
   const brandTitle = whiteLabel?.brandTitle ?? process.env.NEXT_PUBLIC_PANEL_NAME ?? "Nexlify";
 
   return (
@@ -25,6 +27,7 @@ export default async function ResellerLayout({ children }: { children: React.Rea
       username={session.username}
       isDemo={isPanelDemoHost(host)}
       whiteLabel={whiteLabel}
+      resellerFlags={groupFlags}
     >
       {children}
     </PanelShell>

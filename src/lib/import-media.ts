@@ -351,24 +351,42 @@ function mergeImportResults(
   return out;
 }
 
+async function flushXtreamAfterImport<T extends { imported: number; updated?: number }>(
+  result: T,
+  vodOnly = false
+): Promise<T> {
+  if ((result.imported ?? 0) + (result.updated ?? 0) <= 0) return result;
+  const { invalidateXtreamCategories, invalidateXtreamVodAndSeriesCatalogs } = await import(
+    "./cache-invalidate"
+  );
+  if (vodOnly) await invalidateXtreamVodAndSeriesCatalogs();
+  else await invalidateXtreamCategories();
+  return result;
+}
+
 export async function importM3uEntries(entries: M3uEntry[], opts: ImportM3uOpts) {
   clearTmdbImportCache();
+  const explicitServer = opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null;
+  const { pickVodLoadBalancerId } = await import("@/lib/server-load");
+  const vodServerId = explicitServer ?? (await pickVodLoadBalancerId());
 
   // Fast path for live IPTV playlists (provider get.php / m3u_plus).
   if (opts.defaultType === "LIVE") {
     const { importLiveM3uEntriesFast } = await import("./import-live-m3u");
-    return importLiveM3uEntriesFast(entries, {
-      categoryId: opts.categoryId,
-      serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
-      defaultOnDemand: opts.defaultOnDemand,
-      selectedUrls: opts.selectedUrls,
-      autoCategory: opts.autoCategory,
-      bouquetIds: opts.bouquetIds ?? opts.importMeta?.bouquetIds,
-      autoBouquetFromGroup: opts.autoBouquetFromGroup,
-      sortOrderStart: opts.sortOrderStart,
-      reorderExisting: opts.reorderExisting,
-      updateNamesOnSync: opts.updateNamesOnSync,
-    });
+    return flushXtreamAfterImport(
+      await importLiveM3uEntriesFast(entries, {
+        categoryId: opts.categoryId,
+        serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
+        defaultOnDemand: opts.defaultOnDemand,
+        selectedUrls: opts.selectedUrls,
+        autoCategory: opts.autoCategory,
+        bouquetIds: opts.bouquetIds ?? opts.importMeta?.bouquetIds,
+        autoBouquetFromGroup: opts.autoBouquetFromGroup,
+        sortOrderStart: opts.sortOrderStart,
+        reorderExisting: opts.reorderExisting,
+        updateNamesOnSync: opts.updateNamesOnSync,
+      })
+    );
   }
 
   // MIXED playlists: route live-looking rows through the normalized LIVE fast path
@@ -401,14 +419,20 @@ export async function importM3uEntries(entries: M3uEntry[], opts: ImportM3uOpts)
     const vodResult = vodEntries.length
       ? await importM3uEntriesTyped(vodEntries, { ...opts, selectedUrls: undefined })
       : emptyImportResult();
-    return mergeImportResults(liveResult, vodResult);
+    return flushXtreamAfterImport(mergeImportResults(liveResult, vodResult));
   }
 
-  return importM3uEntriesTyped(entries, opts);
+  return flushXtreamAfterImport(
+    await importM3uEntriesTyped(entries, opts),
+    opts.defaultType === "MOVIE" || opts.defaultType === "SERIES"
+  );
 }
 
 /** MOVIE / SERIES (or remaining VOD rows from MIXED) — normalized URL match + accurate rename counts. */
 async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
+  const explicitServer = opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null;
+  const { pickVodLoadBalancerId } = await import("@/lib/server-load");
+  const vodServerId = explicitServer ?? (await pickVodLoadBalancerId());
   let imported = 0;
   let skipped = 0;
   let reordered = 0;
@@ -554,7 +578,7 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
             type,
             sortOrder: entrySortOrder,
             categoryId: meta.categoryId,
-            serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
+            serverId: type === "LIVE" ? explicitServer : vodServerId,
             epgChannelId: entry.tvgId || entry.tvgName || entry.channelId || null,
             seriesName:
               seriesMeta?.seriesName ?? (type === StreamType.SERIES ? entry.name : null),
@@ -617,6 +641,8 @@ export async function importFromFolder(
   let imported = 0;
   let skipped = 0;
   const isAdult = opts.isAdult === true;
+  const { pickVodLoadBalancerId } = await import("@/lib/server-load");
+  const folderServerId = opts.serverId ?? (await pickVodLoadBalancerId());
 
   const m3uFiles = walkVideos(safe).filter((f) => f.endsWith(".m3u") || f.endsWith(".m3u8"));
   for (const m3uFile of m3uFiles) {
@@ -624,7 +650,7 @@ export async function importFromFolder(
     const r = await importFromM3uContent(content, {
       defaultType: opts.mode === "SERIES" ? "SERIES" : opts.mode === "MOVIE" ? "MOVIE" : undefined,
       categoryId: opts.categoryId,
-      serverId: opts.serverId,
+      serverId: folderServerId,
       importMeta: isAdult ? { isAdult: true } : undefined,
     });
     imported += r.imported;
@@ -669,7 +695,7 @@ export async function importFromFolder(
           streamIcon: meta.streamIcon,
           type,
           categoryId: meta.categoryId,
-          serverId: opts.serverId ?? null,
+          serverId: folderServerId,
           seriesName: series?.seriesName,
           seasonNum: series?.seasonNum,
           episodeNum: series?.episodeNum,
@@ -687,7 +713,7 @@ export async function importFromFolder(
     }
   }
 
-  return { imported, skipped };
+  return flushXtreamAfterImport({ imported, skipped }, true);
 }
 
 export async function importFromVodRows(
@@ -704,6 +730,8 @@ export async function importFromVodRows(
   let imported = 0;
   let skipped = 0;
   const errors: string[] = [];
+  const { pickVodLoadBalancerId } = await import("@/lib/server-load");
+  const defaultServerId = opts.serverId ?? (await pickVodLoadBalancerId());
 
   for (const row of rows) {
     try {
@@ -759,7 +787,7 @@ export async function importFromVodRows(
           streamIcon: meta.streamIcon ?? row.stream_icon ?? null,
           type,
           categoryId: meta.categoryId,
-          serverId: opts.serverId ?? null,
+          serverId: defaultServerId,
           seriesName: type === StreamType.SERIES ? row.series_name ?? row.name : null,
           seasonNum: type === StreamType.SERIES ? row.season_num ?? 1 : null,
           episodeNum: type === StreamType.SERIES ? row.episode_num ?? 1 : null,
@@ -779,5 +807,5 @@ export async function importFromVodRows(
     }
   }
 
-  return { imported, skipped, errors };
+  return flushXtreamAfterImport({ imported, skipped, errors }, true);
 }

@@ -24,6 +24,7 @@ function applyMassEditPatch(patch: MassEditPatch) {
     canWatchAdult?: boolean;
     allowedOutput?: string;
     lockToIp?: boolean;
+    ownerId?: string | null;
   } = {};
 
   if (patch.password && !patch.password.unchanged && patch.password.value.trim()) {
@@ -57,6 +58,9 @@ function applyMassEditPatch(patch: MassEditPatch) {
   }
   if (patch.lockToIp === "yes") data.lockToIp = true;
   if (patch.lockToIp === "no") data.lockToIp = false;
+  if (patch.ownerId && !patch.ownerId.unchanged) {
+    data.ownerId = patch.ownerId.value.trim() || null;
+  }
 
   return data;
 }
@@ -152,6 +156,9 @@ export async function POST(req: NextRequest) {
       break;
     case "mass_edit": {
       const patch = (body.patch ?? {}) as MassEditPatch;
+      if (session.role !== PanelRole.ADMIN) {
+        delete patch.ownerId;
+      }
       const data = applyMassEditPatch(patch);
       const hasResellerNotes = patch.resellerNotes && !patch.resellerNotes.unchanged;
       const staticKeys = Object.keys(data).filter((k) => k !== "notes");
@@ -160,6 +167,44 @@ export async function POST(req: NextRequest) {
       }
 
       const lines = await prisma.line.findMany({ where });
+
+      if (Object.prototype.hasOwnProperty.call(data, "ownerId")) {
+        const destId = data.ownerId;
+        if (destId) {
+          const dest = await prisma.panelUser.findUnique({
+            where: { id: destId },
+            select: {
+              id: true,
+              role: true,
+              isActive: true,
+              maxLines: true,
+              _count: { select: { lines: true } },
+            },
+          });
+          if (
+            !dest ||
+            (dest.role !== PanelRole.RESELLER && dest.role !== PanelRole.SUB_RESELLER)
+          ) {
+            return NextResponse.json(
+              { error: "Destination must be a reseller or sub-reseller" },
+              { status: 400 }
+            );
+          }
+          if (!dest.isActive) {
+            return NextResponse.json({ error: "Destination reseller is inactive" }, { status: 400 });
+          }
+          const incoming = lines.filter((l) => l.ownerId !== destId).length;
+          if (dest.maxLines > 0 && dest._count.lines + incoming > dest.maxLines) {
+            return NextResponse.json(
+              {
+                error: `Destination line limit is ${dest.maxLines}; moving ${incoming} more would exceed it.`,
+              },
+              { status: 400 }
+            );
+          }
+        }
+      }
+
       for (const line of lines) {
         const rowData = { ...data };
         if (hasResellerNotes && patch.resellerNotes && !patch.resellerNotes.unchanged) {

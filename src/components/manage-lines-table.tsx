@@ -21,6 +21,11 @@ import { linesApiRoot } from "@/lib/panel-api";
 import { ConnInfoCell, LastWatchedCell } from "@/components/line-last-watched-cell";
 import { formatDateTime, formatExpireXui } from "@/lib/format";
 import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
+import {
+  ColumnPickerList,
+  ToolbarDropdown,
+  useStoredColumnVisibility,
+} from "@/components/table-toolbar-menus";
 
 export type ManageLineRow = {
   id: string;
@@ -50,6 +55,23 @@ export type ManageLineRow = {
   _count?: { channelWatches?: number; liveConnections?: number };
 };
 const PAGE_SIZES = [10, 25, 50, 100];
+
+const LINE_COLUMN_DEFAULTS: Record<string, boolean> = {
+  sta: true,
+  username: true,
+  password: true,
+  owner: true,
+  expire: true,
+  ban: true,
+  bouquet: true,
+  trial: true,
+  conns: true,
+  connInfo: true,
+  lastWatched: true,
+  notes: true,
+  created: true,
+  actions: true,
+};
 
 function splitNotes(notes: string | null | undefined) {
   if (!notes?.trim()) return { admin: "", reseller: "" };
@@ -124,6 +146,27 @@ export function ManageLinesTable({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [createdBanner, setCreatedBanner] = useState("");
   const [mobileToolbarOpen, setMobileToolbarOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "ACTIVE" | "DISABLED" | "BANNED">("all");
+  const [trialFilter, setTrialFilter] = useState<"all" | "yes" | "no">("all");
+  const columns = useStoredColumnVisibility(`nexlify.lines.columns.${panel}`, LINE_COLUMN_DEFAULTS);
+  const lineColumnOptions = [
+    { id: "sta", label: "Status" },
+    { id: "username", label: "Username", locked: true },
+    { id: "password", label: "Password" },
+    ...(panel === "admin" ? [{ id: "owner", label: "Owner" }] : []),
+    { id: "expire", label: "Expire" },
+    { id: "ban", label: "Ban" },
+    { id: "bouquet", label: "Bouquet" },
+    { id: "trial", label: "Trial" },
+    { id: "conns", label: "Conns" },
+    { id: "connInfo", label: "Conn Info" },
+    { id: "lastWatched", label: "Last Watched" },
+    { id: "notes", label: "Notes" },
+    { id: "created", label: "Created" },
+    { id: "actions", label: "Actions", locked: true },
+  ];
 
   useEffect(() => {
     if (typeof serverSearch === "string") setSearch(serverSearch);
@@ -185,6 +228,11 @@ export function ManageLinesTable({
         );
       }
     }
+    if (statusFilter !== "all") {
+      list = list.filter((l) => l.status === statusFilter);
+    }
+    if (trialFilter === "yes") list = list.filter((l) => isTrialLine(l));
+    if (trialFilter === "no") list = list.filter((l) => !isTrialLine(l));
     list.sort((a, b) => {
       let av: string | number = "";
       let bv: string | number = "";
@@ -206,7 +254,7 @@ export function ManageLinesTable({
       return 0;
     });
     return list;
-  }, [lines, search, sortKey, sortDir, serverMode]);
+  }, [lines, search, sortKey, sortDir, serverMode, statusFilter, trialFilter]);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -294,80 +342,106 @@ export function ManageLinesTable({
             }}
           />
         </td>
-        <td className="xui-lines-td text-center">
-          <span
-            className="inline-block w-2.5 h-2.5 rounded-full"
-            title={isActive ? "Active" : l.status}
-            style={{ background: isActive ? "#22c55e" : l.status === "BANNED" ? "#ef4444" : "#9ca3af" }}
-          />
-        </td>
-        <td className="xui-lines-td min-w-[7rem]">
-          <span className="inline-flex items-center gap-1 min-w-0 max-w-full">
-            <Link href={`${base}/lines?edit=${l.id}`} className="xui-lines-username truncate">
-              {l.username}
-            </Link>
-            <CopyableCredential value={l.username} className="shrink-0 [&>code]:sr-only" />
-          </span>
-        </td>
-        <td className="xui-lines-td min-w-[6rem]">
-          <CopyableCredential value={l.password} masked />
-        </td>
-        {panel === "admin" ? (
+        {columns.show("sta") ? (
+          <td className="xui-lines-td text-center">
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-full"
+              title={isActive ? "Active" : l.status}
+              style={{ background: isActive ? "#22c55e" : l.status === "BANNED" ? "#ef4444" : "#9ca3af" }}
+            />
+          </td>
+        ) : null}
+        {columns.show("username") ? (
+          <td className="xui-lines-td min-w-[7rem]">
+            <span className="inline-flex items-center gap-1 min-w-0 max-w-full">
+              <Link href={`${base}/lines?edit=${l.id}`} className="xui-lines-username truncate">
+                {l.username}
+              </Link>
+              <CopyableCredential value={l.username} className="shrink-0 [&>code]:sr-only" />
+            </span>
+          </td>
+        ) : null}
+        {columns.show("password") ? (
+          <td className="xui-lines-td min-w-[6rem]">
+            <CopyableCredential value={l.password} masked />
+          </td>
+        ) : null}
+        {panel === "admin" && columns.show("owner") ? (
           <td className="xui-lines-td text-xs" style={{ color: "var(--muted)" }}>
             {l.owner?.username ?? "admin"}
           </td>
         ) : null}
-        <td className="xui-lines-td whitespace-nowrap text-xs">
-          {exp.kind === "unlimited" ? (
-            <XuiPill value="UNLIMITED" variant="unlimited" />
-          ) : exp.kind === "expired" ? (
-            <span className="text-red-400">{exp.text}</span>
-          ) : (
-            <span>{exp.text}</span>
-          )}
-        </td>
-        <td className="xui-lines-td">
-          <XuiPill value={l.status === "BANNED" ? "YES" : "NO"} variant={l.status === "BANNED" ? "yes" : "no"} />
-        </td>
-        <td className="xui-lines-td text-xs max-w-[8rem] truncate" title={pkg}>
-          {pkg}
-        </td>
-        <td className="xui-lines-td">
-          <XuiPill value={isTrialLine(l) ? "YES" : "NO"} variant={isTrialLine(l) ? "yes" : "no"} />
-        </td>
-        <td className="xui-lines-td tabular-nums text-xs text-center whitespace-nowrap">
-          {activeConn}/{l.maxConnections}
-        </td>
-        <td className="xui-lines-td min-w-[9rem]">
-          <ConnInfoCell activeConnection={l.activeConnection} />
-        </td>
-        <td className="xui-lines-td min-w-[11rem]">
-          <LastWatchedCell
-            streamName={l.lastWatchedStream?.name}
-            ip={l.lastWatchedIp ?? l.activeConnection?.ip}
-            watchedAt={l.lastWatchedAt}
-          />
-        </td>
-        <td className="xui-lines-td">
-          <div className="flex flex-col gap-0.5">
-            {panel === "admin" && <NoteBtn label="Admin" hasNote={Boolean(notes.admin)} />}
-            <NoteBtn label={panel === "reseller" ? "Note" : "Reseller"} hasNote={Boolean(notes.reseller)} />
-          </div>
-        </td>
-        <td className="xui-lines-td text-xs whitespace-nowrap" style={{ color: "var(--muted)" }}>
-          {formatDateTime(l.createdAt)}
-        </td>
-        <td className="xui-lines-td xui-lines-td--actions">
-          <LineRowActionsMenu
-            line={l}
-            panel={panel}
-            onUpdated={onRefresh}
-            open={openMenuId === l.id}
-            onToggle={() => setOpenMenuId(openMenuId === l.id ? null : l.id)}
-            onClose={() => setOpenMenuId(null)}
-            portalEnabled={isMdUp}
-          />
-        </td>
+        {columns.show("expire") ? (
+          <td className="xui-lines-td whitespace-nowrap text-xs">
+            {exp.kind === "unlimited" ? (
+              <XuiPill value="UNLIMITED" variant="unlimited" />
+            ) : exp.kind === "expired" ? (
+              <span className="text-red-400">{exp.text}</span>
+            ) : (
+              <span>{exp.text}</span>
+            )}
+          </td>
+        ) : null}
+        {columns.show("ban") ? (
+          <td className="xui-lines-td">
+            <XuiPill value={l.status === "BANNED" ? "YES" : "NO"} variant={l.status === "BANNED" ? "yes" : "no"} />
+          </td>
+        ) : null}
+        {columns.show("bouquet") ? (
+          <td className="xui-lines-td text-xs max-w-[8rem] truncate" title={pkg}>
+            {pkg}
+          </td>
+        ) : null}
+        {columns.show("trial") ? (
+          <td className="xui-lines-td">
+            <XuiPill value={isTrialLine(l) ? "YES" : "NO"} variant={isTrialLine(l) ? "yes" : "no"} />
+          </td>
+        ) : null}
+        {columns.show("conns") ? (
+          <td className="xui-lines-td tabular-nums text-xs text-center whitespace-nowrap">
+            {activeConn}/{l.maxConnections}
+          </td>
+        ) : null}
+        {columns.show("connInfo") ? (
+          <td className="xui-lines-td min-w-[9rem]">
+            <ConnInfoCell activeConnection={l.activeConnection} />
+          </td>
+        ) : null}
+        {columns.show("lastWatched") ? (
+          <td className="xui-lines-td min-w-[11rem]">
+            <LastWatchedCell
+              streamName={l.lastWatchedStream?.name}
+              ip={l.lastWatchedIp ?? l.activeConnection?.ip}
+              watchedAt={l.lastWatchedAt}
+            />
+          </td>
+        ) : null}
+        {columns.show("notes") ? (
+          <td className="xui-lines-td">
+            <div className="flex flex-col gap-0.5">
+              {panel === "admin" && <NoteBtn label="Admin" hasNote={Boolean(notes.admin)} />}
+              <NoteBtn label={panel === "reseller" ? "Note" : "Reseller"} hasNote={Boolean(notes.reseller)} />
+            </div>
+          </td>
+        ) : null}
+        {columns.show("created") ? (
+          <td className="xui-lines-td text-xs whitespace-nowrap" style={{ color: "var(--muted)" }}>
+            {formatDateTime(l.createdAt)}
+          </td>
+        ) : null}
+        {columns.show("actions") ? (
+          <td className="xui-lines-td xui-lines-td--actions">
+            <LineRowActionsMenu
+              line={l}
+              panel={panel}
+              onUpdated={onRefresh}
+              open={openMenuId === l.id}
+              onToggle={() => setOpenMenuId(openMenuId === l.id ? null : l.id)}
+              onClose={() => setOpenMenuId(null)}
+              portalEnabled={isMdUp}
+            />
+          </td>
+        ) : null}
       </>
     );
   }
@@ -476,6 +550,31 @@ export function ManageLinesTable({
             />
           </label>
           <label className="mt-3">
+            Status
+            <select
+              className="xui-lines-select w-full"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            >
+              <option value="all">All</option>
+              <option value="ACTIVE">Active</option>
+              <option value="DISABLED">Disabled</option>
+              <option value="BANNED">Banned</option>
+            </select>
+          </label>
+          <label className="mt-3">
+            Trial
+            <select
+              className="xui-lines-select w-full"
+              value={trialFilter}
+              onChange={(e) => setTrialFilter(e.target.value as typeof trialFilter)}
+            >
+              <option value="all">All</option>
+              <option value="yes">Trial</option>
+              <option value="no">Paid</option>
+            </select>
+          </label>
+          <label className="mt-3">
             Show entries
             <select
               className="xui-lines-select w-full"
@@ -520,14 +619,75 @@ export function ManageLinesTable({
           <button type="button" className="xui-lines-icon-btn" onClick={onRefresh} title="Refresh">
             <RefreshCw size={16} />
           </button>
-          <button type="button" className="xui-lines-icon-btn" title="Filters">
+          <button
+            type="button"
+            className={`xui-lines-icon-btn ${filtersOpen ? "xui-lines-icon-btn--active" : ""}`}
+            title="Filters"
+            aria-pressed={filtersOpen}
+            onClick={() => {
+              setFiltersOpen((o) => !o);
+              setColumnsOpen(false);
+            }}
+          >
             <Filter size={16} />
           </button>
-          <button type="button" className="xui-lines-icon-btn" title="Columns">
-            <List size={16} />
-          </button>
+          <ToolbarDropdown
+            open={columnsOpen}
+            onClose={() => setColumnsOpen(false)}
+            trigger={
+              <button
+                type="button"
+                className={`xui-lines-icon-btn ${columnsOpen ? "xui-lines-icon-btn--active" : ""}`}
+                title="Columns"
+                aria-pressed={columnsOpen}
+                onClick={() => {
+                  setColumnsOpen((o) => !o);
+                  setFiltersOpen(false);
+                }}
+              >
+                <List size={16} />
+              </button>
+            }
+          >
+            <ColumnPickerList columns={lineColumnOptions} show={columns.show} onToggle={columns.toggle} />
+          </ToolbarDropdown>
         </div>
       </div>
+      {filtersOpen ? (
+        <div className="xui-lines-extra-filters">
+          <label className="flex items-center gap-2">
+            <span style={{ color: "var(--muted)" }}>Status</span>
+            <select
+              className="xui-lines-select"
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as typeof statusFilter);
+                setPage(1);
+              }}
+            >
+              <option value="all">All</option>
+              <option value="ACTIVE">Active</option>
+              <option value="DISABLED">Disabled</option>
+              <option value="BANNED">Banned</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
+            <span style={{ color: "var(--muted)" }}>Trial</span>
+            <select
+              className="xui-lines-select"
+              value={trialFilter}
+              onChange={(e) => {
+                setTrialFilter(e.target.value as typeof trialFilter);
+                setPage(1);
+              }}
+            >
+              <option value="all">All</option>
+              <option value="yes">Trial</option>
+              <option value="no">Paid</option>
+            </select>
+          </label>
+        </div>
+      ) : null}
       <div className="md:hidden panel-mobile-activity-list py-1">
         {pageRows.map((l) => {
           const exp = formatExpireXui(l.expiresAt);
@@ -564,26 +724,34 @@ export function ManageLinesTable({
                   onChange={(e) => toggleAll(e.target.checked)}
                 />
               </th>
-              <th className="xui-lines-th">Sta</th>
-              <SortHead label="Username" col="username" />
-              <th className="xui-lines-th">Password</th>
-              {panel === "admin" ? <SortHead label="Owner" col="owner" /> : null}
-              <SortHead label="Expire" col="expiresAt" />
-              <th className="xui-lines-th">Ban</th>
-              <th className="xui-lines-th" title="Assigned bouquet(s)">Bouquet</th>
-              <th className="xui-lines-th">Trial</th>
-              <th className="xui-lines-th">Conns</th>
-              <th className="xui-lines-th">Conn Info</th>
-              <th className="xui-lines-th">Last Watched</th>
-              <th className="xui-lines-th">Notes</th>
-              <SortHead label="Created" col="createdAt" />
-              <th className="xui-lines-th">Actions</th>
+              {columns.show("sta") ? <th className="xui-lines-th">Sta</th> : null}
+              {columns.show("username") ? <SortHead label="Username" col="username" /> : null}
+              {columns.show("password") ? <th className="xui-lines-th">Password</th> : null}
+              {panel === "admin" && columns.show("owner") ? <SortHead label="Owner" col="owner" /> : null}
+              {columns.show("expire") ? <SortHead label="Expire" col="expiresAt" /> : null}
+              {columns.show("ban") ? <th className="xui-lines-th">Ban</th> : null}
+              {columns.show("bouquet") ? (
+                <th className="xui-lines-th" title="Assigned bouquet(s)">
+                  Bouquet
+                </th>
+              ) : null}
+              {columns.show("trial") ? <th className="xui-lines-th">Trial</th> : null}
+              {columns.show("conns") ? <th className="xui-lines-th">Conns</th> : null}
+              {columns.show("connInfo") ? <th className="xui-lines-th">Conn Info</th> : null}
+              {columns.show("lastWatched") ? <th className="xui-lines-th">Last Watched</th> : null}
+              {columns.show("notes") ? <th className="xui-lines-th">Notes</th> : null}
+              {columns.show("created") ? <SortHead label="Created" col="createdAt" /> : null}
+              {columns.show("actions") ? <th className="xui-lines-th">Actions</th> : null}
             </tr>
           </thead>
           <tbody>
             {pageRows.length === 0 ? (
               <tr>
-                <td colSpan={panel === "admin" ? 15 : 14} className="px-4 py-10 text-center" style={{ color: "var(--muted)" }}>
+                <td
+                  colSpan={1 + lineColumnOptions.filter((c) => columns.show(c.id)).length}
+                  className="px-4 py-10 text-center"
+                  style={{ color: "var(--muted)" }}
+                >
                   No lines found
                 </td>
               </tr>

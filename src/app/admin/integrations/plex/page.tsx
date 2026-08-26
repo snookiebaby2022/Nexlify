@@ -31,6 +31,23 @@ type PlexItem = {
 
 type Library = { key: string; title: string; type: string };
 
+type ServerOpt = {
+  id: string;
+  name: string;
+  panelSettings?: { advanced?: { serverRole?: string } };
+};
+
+function isMainStreamingServer(s: ServerOpt) {
+  if (s.panelSettings?.advanced?.serverRole === "main") return true;
+  return /^main(\s+server)?$/i.test(s.name.trim());
+}
+
+function pickDefaultLbServerId(servers: ServerOpt[]) {
+  const lbs = servers.filter((s) => !isMainStreamingServer(s));
+  const named = lbs.find((s) => /10\s*gbs?/i.test(s.name) || /10\s*gbps/i.test(s.name));
+  return named?.id ?? lbs[0]?.id ?? "";
+}
+
 const emptyForm = {
   name: "",
   host: "",
@@ -66,7 +83,7 @@ function localProgress(jobId: string, message: string, steps: string[]): LocalPr
 
 export default function PlexIntegrationPage() {
   const [items, setItems] = useState<PlexItem[]>([]);
-  const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
+  const [servers, setServers] = useState<ServerOpt[]>([]);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -104,6 +121,13 @@ export default function PlexIntegrationPage() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (editId) return;
+    const lbId = pickDefaultLbServerId(servers);
+    if (!lbId) return;
+    setForm((f) => (f.serverId ? f : { ...f, serverId: lbId }));
+  }, [servers, editId]);
 
   useEffect(() => {
     if (!syncing) return;
@@ -145,7 +169,7 @@ export default function PlexIntegrationPage() {
       username: c.username ?? "",
       password: "",
       token: c.token ?? "",
-      serverId: c.serverId ?? "",
+      serverId: c.serverId || pickDefaultLbServerId(servers),
       libraryKey: c.libraryKey ?? "",
       libraryTitle: c.libraryTitle ?? "",
       transcodeProfile: c.transcodeProfile ?? "direct",
@@ -421,15 +445,17 @@ export default function PlexIntegrationPage() {
             value={form.serverId}
             onChange={(e) => setForm({ ...form, serverId: e.target.value })}
           >
-            <option value="">— Panel default —</option>
-            {servers.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
+            <option value="">Auto (load balancer)</option>
+            {servers
+              .filter((s) => !isMainStreamingServer(s))
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
           </select>
           <span className="text-xs mt-1 block" style={{ color: "var(--muted)" }}>
-            Imported streams use this server for playback routing (provider LB).
+            Plex movies and series sync onto a load balancer, never Main. Defaults to the 10Gbps LB.
           </span>
         </label>
 

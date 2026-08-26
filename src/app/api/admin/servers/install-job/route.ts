@@ -1,18 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { PanelRole } from "@prisma/client";
-import { generateAgentToken } from "@/lib/stream-agent";
-import fs from "fs";
-import path from "path";
 import {
   createInstallJob,
   getInstallJob,
   pruneInstallJobs,
-  runInstallJobSimulation,
 } from "@/lib/server-install-job";
+import { runRemoteServerInstall } from "@/lib/server-remote-install";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
   if (rateLimited) return rateLimited;
@@ -41,66 +39,47 @@ export async function POST(req: NextRequest) {
   if (rateLimited) return rateLimited;
 
   try {
-  const session = await requireSession([PanelRole.ADMIN]);
-  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const session = await requireSession([PanelRole.ADMIN]);
+    if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  pruneInstallJobs();
-  const parsed = await parseJsonBody(req);
-  if (!parsed.ok) return parsed.response;
-  const body = parsed.data;
+    pruneInstallJobs();
+    const parsed = await parseJsonBody(req);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
 
-  const panelUrl = String(body.panelUrl ?? process.env.NEXT_PUBLIC_SERVER_URL ?? "").replace(/\/$/, "");
-  const serverName = String(body.serverName ?? "Stream-1");
-  const host = String(body.host ?? "").trim();
-  const sshPort = String(body.sshPort ?? "22").trim() || "22";
-  const sshUser = String(body.sshUser ?? "root").trim() || "root";
+    const panelUrl = String(body.panelUrl ?? process.env.NEXT_PUBLIC_SERVER_URL ?? "").replace(
+      /\/$/,
+      ""
+    );
+    const serverName = String(body.serverName ?? "Stream-1");
+    const host = String(body.host ?? "").trim();
+    const sshPort = String(body.sshPort ?? "22").trim() || "22";
+    const sshUser = String(body.sshUser ?? "root").trim() || "root";
+    const sshPassword = String(body.sshPassword ?? body.agentSshPassword ?? "");
+    const updateSysctl = body.updateSysctl !== false;
 
-  const jobId = createInstallJob();
-
-  const logLines = host
-    ? [
-        `Connecting to ${host}:${sshPort}`,
-        `Connected! Authenticating as ${sshUser} user`,
-        "Stopping any previous Nexlify agent",
-        "Updating system packages",
-        "Installing FFmpeg and nginx",
-        "Configuring stream agent token",
-        "Preparing bootstrap script",
-      ]
-    : ["Validating panel URL…", "Preparing agent token…"];
-
-  runInstallJobSimulation(
-    jobId,
-    async () => {
-    const token = generateAgentToken();
-    const scriptPath = path.join(process.cwd(), "scripts", "nexlify-server-install.sh");
-    let script = "";
-    if (fs.existsSync(scriptPath)) {
-      script = fs.readFileSync(scriptPath, "utf8");
+    if (!host) return NextResponse.json({ error: "Server IP is required" }, { status: 400 });
+    if (!sshPassword) {
+      return NextResponse.json(
+        { error: "SSH password is required to install from the panel" },
+        { status: 400 }
+      );
     }
-    const installCommand = panelUrl
-      ? `curl -fsSL ${panelUrl}/scripts/nexlify-server-install.sh | sudo PANEL_URL="${panelUrl}" AGENT_TOKEN="${token}" bash`
-      : "";
 
-    return {
-      serverName,
-      host,
-      agentToken: token,
-      panelUrl,
-      installCommand,
-      script,
-      steps: [
-        "SSH into the stream VPS as root",
-        "Run the install command below",
-        "In Nexlify Admin → Servers → Add server, enter host and paste agent token",
-        "Save server — agent should appear online within 1–2 minutes",
-      ],
-    };
-  },
-    logLines
-  );
+    const jobId = createInstallJob();
+    after(() => {
+      void runRemoteServerInstall(jobId, {
+        panelUrl,
+        host,
+        serverName,
+        sshPort,
+        sshUser,
+        sshPassword,
+        updateSysctl,
+      });
+    });
 
-  return NextResponse.json({ jobId });
+    return NextResponse.json({ jobId });
   } catch (e) {
     return apiMutationErrorResponse(e);
   }

@@ -1,17 +1,22 @@
-import type { SidebarNavEntry } from "@/lib/admin-sidebar-nav";
-
+import type { SidebarNavEntry, SidebarNavItem } from "@/lib/admin-sidebar-nav";
 import { LayoutDashboard, Wifi } from "lucide-react";
-
 import { coloredGroupIcon, coloredIcon } from "@/lib/nav-item-icons";
-
-
+import type { ResellerGroupFlags } from "@/lib/reseller-group-flags";
+import { DEFAULT_GROUP_NAV } from "@/lib/group-config";
 
 /** XUI-style reseller / sub-reseller sidebar (matches admin layout). */
+export function getResellerSidebarNav(opts?: Partial<ResellerGroupFlags>): SidebarNavEntry[] {
+  const showStreamingApi = opts?.showStreamingApi !== false;
+  const nav = { ...DEFAULT_GROUP_NAV, ...(opts?.nav ?? {}) };
+  const accountItems = [
+    { href: "/reseller/profile", label: "My Profile" },
+    ...(nav.credits ? [{ href: "/reseller/credits", label: "My Credits" }] : []),
+    { href: "/reseller/user_logs", label: "Activity Log" },
+    ...(showStreamingApi ? [{ href: "/reseller/api", label: "Streaming API" }] : []),
+    { href: "/reseller/session", label: "Session" },
+  ];
 
-export function getResellerSidebarNav(): SidebarNavEntry[] {
-
-  return [
-
+  const entries: SidebarNavEntry[] = [
     {
 
       kind: "link",
@@ -126,7 +131,7 @@ export function getResellerSidebarNav(): SidebarNavEntry[] {
 
         id: "sub-resellers",
 
-        label: "Subresellers",
+        label: "Sub-resellers",
 
         icon: coloredGroupIcon("users"),
 
@@ -156,19 +161,7 @@ export function getResellerSidebarNav(): SidebarNavEntry[] {
 
         icon: coloredGroupIcon("settings"),
 
-        items: [
-
-          { href: "/reseller/profile", label: "My Profile" },
-
-          { href: "/reseller/credits", label: "My Credits" },
-
-          { href: "/reseller/user_logs", label: "Activity Log" },
-
-          { href: "/reseller/api", label: "Streaming API" },
-
-          { href: "/reseller/session", label: "Session" },
-
-        ],
+        items: accountItems,
 
       },
 
@@ -202,5 +195,40 @@ export function getResellerSidebarNav(): SidebarNavEntry[] {
 
   ];
 
+  return filterResellerNav(entries, nav);
+}
+
+function filterResellerNav(entries: SidebarNavEntry[], nav: typeof DEFAULT_GROUP_NAV): SidebarNavEntry[] {
+  const dropHref = (href: string) => {
+    if (!nav.liveConnections && href.includes("/live_connections")) return true;
+    if (!nav.massEdit && href.includes("/mass-edit")) return true;
+    if (!nav.devices && (href.includes("/mags") || href.includes("/enigmas") || href.includes("/mag_events"))) {
+      return true;
+    }
+    if (!nav.epg && href.includes("/epg_view")) return true;
+    if (!nav.tickets && href.includes("/tickets")) return true;
+    return false;
+  };
+
+  const out: SidebarNavEntry[] = [];
+  for (const entry of entries) {
+    if (entry.kind === "link") {
+      if (!nav.liveConnections && entry.link.href.includes("/live_connections")) continue;
+      out.push(entry);
+      continue;
+    }
+    if (entry.group.id === "content" && !nav.content) continue;
+    if (entry.group.id === "sub-resellers" && !nav.subResellers) continue;
+    if (entry.group.id === "subscriptions" && !nav.lines && !nav.devices) continue;
+    const items = entry.group.items.filter((item: SidebarNavItem) => {
+      if (!nav.lines && item.href.includes("/lines") && !item.href.includes("/mass-edit")) return false;
+      if (!nav.lines && item.href.includes("/bouquets")) return false;
+      if (!nav.lines && item.href.includes("/line_activity")) return false;
+      return !dropHref(item.href);
+    });
+    if (!items.length) continue;
+    out.push({ kind: "group", group: { ...entry.group, items } });
+  }
+  return out;
 }
 

@@ -14,6 +14,8 @@ export type MassEditPatch = {
   blockedIsps?: TextFieldState;
   allowedOutputs?: TextFieldState;
   lockToIp?: TriState;
+  /** Admin only. Empty string = unassign (admin-owned). Reseller/sub-reseller user id otherwise. */
+  ownerId?: TextFieldState;
 };
 
 export function splitLineNotes(notes: string | null | undefined) {

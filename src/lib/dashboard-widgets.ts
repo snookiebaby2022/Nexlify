@@ -806,7 +806,7 @@ export async function getAdminDashboardWidgets(): Promise<DashboardWidgetsPayloa
     },
     {
       id: "sub-subs",
-      title: "Subresellers Subscriptions",
+      title: "Sub-reseller subscriptions",
       total: subSubs.total,
       variant: "emerald",
       href: "/admin/resellers",
@@ -818,7 +818,7 @@ export async function getAdminDashboardWidgets(): Promise<DashboardWidgetsPayloa
     },
     {
       id: "sub-conn",
-      title: "Subresellers Connections",
+      title: "Sub-reseller connections",
       total: subConn.total,
       variant: "teal",
       href: "/admin/connections",
@@ -943,7 +943,7 @@ export async function getResellerDashboardWidgets(
     cards.push(
       {
         id: "sub-subs",
-        title: "Subresellers Subscriptions",
+        title: "Sub-reseller subscriptions",
         total: subSubs.total,
         variant: "emerald",
         href: "/reseller/users",
@@ -955,7 +955,7 @@ export async function getResellerDashboardWidgets(
       },
       {
         id: "sub-conn",
-        title: "Subresellers Connections",
+        title: "Sub-reseller connections",
         total: subConn.total,
         variant: "teal",
         href: "/reseller/live_connections",

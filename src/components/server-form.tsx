@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/form-page-shell";
 import { TagInput } from "@/components/tag-input";
 import { ServerAgentPanel } from "@/components/server-agent-panel";
+import { InstallProgressBar } from "@/components/install-progress-bar";
 import { IpWithFlag } from "@/components/ip-with-flag";
 import {
   PANEL_HTTP_PORT,
@@ -372,11 +373,32 @@ export function ServerForm({
   const [sshTesting, setSshTesting] = useState(false);
   const [sshTestMsg, setSshTestMsg] = useState("");
   const [hostGeo, setHostGeo] = useState<{ ip: string | null; countryName: string | null } | null>(null);
+  const [installProgress, setInstallProgress] = useState(0);
+  const [installStep, setInstallStep] = useState("");
+  const [installLogs, setInstallLogs] = useState<string[]>([]);
+  const [installError, setInstallError] = useState("");
+  const installPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (installPollRef.current) clearInterval(installPollRef.current);
+    };
+  }, []);
 
   async function autoDetectHardware(scope: "network" | "performance" | "all" = "all") {
     setDetecting(true);
     try {
-      const res = await fetch("/api/admin/servers/detect");
+      const res = await fetch("/api/admin/servers/detect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serverId: mode === "edit" ? serverId : undefined,
+          host: form.agentSshHost.trim() || form.host.trim(),
+          port: form.agentSshPort || 22,
+          username: form.agentSshUser.trim() || "root",
+          password: form.agentSshPassword,
+        }),
+      });
       const d = await res.json();
       if (!res.ok) {
         alert(d.error ?? "Could not auto-detect this server");
@@ -384,6 +406,8 @@ export function ServerForm({
       }
       setForm((f) => ({
         ...f,
+        healthStatus: "online",
+        ...(d.ipv4?.[0] ? { privateIp: String(d.ipv4[0]) } : {}),
         ...(scope !== "performance"
           ? {
               netInterface: d.primaryInterface || f.netInterface,
@@ -564,6 +588,53 @@ export function ServerForm({
 
     const payload = buildPayload(form, panelSettings);
 
+    if (mode === "create" && form.agentSshPassword.trim()) {
+      setInstallError("");
+      setInstallLogs([]);
+      setInstallProgress(0);
+      setInstallStep("Starting install…");
+      const res = await fetch("/api/admin/servers/install-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          panelUrl: panelSummary?.panelUrl || (typeof window !== "undefined" ? window.location.origin : ""),
+          host: form.host.trim(),
+          serverName: form.name.trim() || "Stream-1",
+          sshPort: String(form.agentSshPort || 22),
+          sshUser: form.agentSshUser.trim() || "root",
+          sshPassword: form.agentSshPassword,
+          updateSysctl: true,
+        }),
+      });
+      const started = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSaving(false);
+        setInstallError(started.error ?? "Failed to start install");
+        return;
+      }
+      const jobId = String(started.jobId ?? "");
+      if (installPollRef.current) clearInterval(installPollRef.current);
+      installPollRef.current = setInterval(async () => {
+        const jr = await fetch(`/api/admin/servers/install-job?jobId=${encodeURIComponent(jobId)}`);
+        const j = await jr.json().catch(() => ({}));
+        if (!jr.ok) return;
+        setInstallProgress(j.progress ?? 0);
+        setInstallStep(j.step ?? "");
+        if (Array.isArray(j.logs)) setInstallLogs(j.logs);
+        if (j.error) setInstallError(j.error);
+        if (j.done) {
+          if (installPollRef.current) clearInterval(installPollRef.current);
+          setSaving(false);
+          if (!j.error) setInstallProgress(100);
+          const sid = j.result?.serverId;
+          if (!j.error && sid) {
+            router.push(`/admin/servers/${sid}/edit`);
+          }
+        }
+      }, 350);
+      return;
+    }
+
     if (mode === "create") {
       const res = await fetch("/api/admin/servers", {
         method: "POST",
@@ -653,6 +724,21 @@ export function ServerForm({
           </Link>
         </div>
       </div>
+
+      {mode === "create" && (saving || installLogs.length > 0 || installError) ? (
+        <div
+          className="border border-t-0 px-5 py-4 space-y-3"
+          style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+        >
+          <InstallProgressBar progress={installProgress} step={installStep || "Installing…"} error={installError} />
+          <pre
+            className="xui-install-log text-left max-h-48 overflow-y-auto m-0"
+            style={{ minHeight: 80 }}
+          >
+            {installLogs.length ? installLogs.join("\n") : "Waiting for install log…"}
+          </pre>
+        </div>
+      ) : null}
 
       <div
         className="border border-t-0 rounded-b-lg overflow-hidden"
@@ -783,6 +869,16 @@ export function ServerForm({
                   />
                 </FormField>
               </div>
+              {mode === "create" ? (
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  With an SSH password, Create installs on the VPS (detect NIC, agent, nginx/FFmpeg) and shows a
+                  live progress bar. Without a password, only the panel record is saved — use{" "}
+                  <Link href="/admin/servers/install" className="underline">
+                    Install Wizard
+                  </Link>{" "}
+                  for a full remote install.
+                </p>
+              ) : null}
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <button
                   type="button"
@@ -933,6 +1029,10 @@ export function ServerForm({
               >
                 {detecting ? "Detecting…" : "Auto-detect primary interface"}
               </button>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Uses SSH on a remote VPS (saved or typed password). For this panel machine it reads the local NIC.
+                A successful SSH detect also marks the server online.
+              </p>
               <FormField label="Primary interface">
                 <input
                   className={formInputClass}
@@ -1438,7 +1538,15 @@ export function ServerForm({
                 disabled={saving}
                 className="btn-positive rounded px-5 py-2 text-sm font-medium cursor-pointer disabled:opacity-60"
               >
-                {saving ? "Saving…" : mode === "create" ? "Create server" : "Save server"}
+                {saving
+                  ? mode === "create" && form.agentSshPassword.trim()
+                    ? "Installing…"
+                    : "Saving…"
+                  : mode === "create"
+                    ? form.agentSshPassword.trim()
+                      ? "Install server"
+                      : "Create server"
+                    : "Save server"}
               </button>
             </>
           )}

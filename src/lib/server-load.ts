@@ -72,6 +72,61 @@ export async function pickLeastLoadedServerId(clientIp?: string): Promise<string
   return sorted[0]?.server.id ?? null;
 }
 
+function isTenGigLbLabel(name: string, host: string): boolean {
+  const s = `${name} ${host}`.toLowerCase();
+  return /10\s*gbs?\b/.test(s) || /10\s*gbps/.test(s);
+}
+
+function roleCtxFromScores(scores: Awaited<ReturnType<typeof getServerLoadScores>>) {
+  return buildServerRoleContext(
+    scores.map((x) => ({
+      id: x.server.id,
+      host: x.server.host,
+      sortOrder: x.server.sortOrder,
+      panelSettings: x.server.panelSettings,
+      geoLbCountries: x.server.geoLbCountries,
+      geoLbIsps: x.server.geoLbIsps,
+      name: x.server.name,
+    }))
+  );
+}
+
+function pickNamedOrLeastLb(
+  scores: Awaited<ReturnType<typeof getServerLoadScores>>
+): string | null {
+  const roleCtx = roleCtxFromScores(scores);
+  const lbs = scores.filter((x) => {
+    if (!x.online || !x.server.isActive) return false;
+    return resolveServerRole(x.server, roleCtx) !== "main";
+  });
+  if (!lbs.length) return null;
+  const named = lbs
+    .filter((x) => isTenGigLbLabel(String(x.server.name ?? ""), String(x.server.host ?? "")))
+    .sort((a, b) => b.slots - a.slots);
+  if (named[0]) return named[0].server.id;
+  const sorted = [...lbs].sort((a, b) => a.score - b.score);
+  return sorted[0]?.server.id ?? null;
+}
+
+/** Prefer an explicit LB; if missing or Main, use the 10Gbps LB. */
+export async function resolvePlaybackLoadBalancerId(preferred?: string | null): Promise<string | null> {
+  const scores = await getServerLoadScores();
+  const roleCtx = roleCtxFromScores(scores);
+  const id = preferred?.trim() || "";
+  if (id) {
+    const hit = scores.find((x) => x.server.id === id);
+    if (hit?.server.isActive && resolveServerRole(hit.server, roleCtx) !== "main") {
+      return id;
+    }
+  }
+  return pickNamedOrLeastLb(scores);
+}
+
+/** Movies/series go to the 10Gbps LB when present; never default onto Main. */
+export async function pickVodLoadBalancerId(): Promise<string | null> {
+  return resolvePlaybackLoadBalancerId(null);
+}
+
 export async function reassignStreamsFromOfflineServers() {
   const offline = await prisma.streamServer.findMany({
     where: {

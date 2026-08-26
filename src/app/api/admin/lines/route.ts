@@ -40,9 +40,18 @@ export async function GET(req: NextRequest) {
 
   const url = new URL(req.url);
   const search = url.searchParams.get("search")?.trim() ?? "";
+  const ownerFilter = url.searchParams.get("ownerId")?.trim() ?? "";
 
   const where: Prisma.LineWhereInput =
     session.role === PanelRole.ADMIN ? {} : { ownerId: session.id };
+
+  if (session.role === PanelRole.ADMIN && ownerFilter) {
+    if (ownerFilter === "admin" || ownerFilter === "__none__") {
+      where.ownerId = null;
+    } else {
+      where.ownerId = ownerFilter;
+    }
+  }
 
   if (search) {
     where.AND = [

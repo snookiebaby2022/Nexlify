@@ -21,7 +21,7 @@ export default function AdminEditUserPage() {
   const params = useParams();
   const id = String(params.id ?? "");
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
-  const [parents, setParents] = useState<{ id: string; username: string }[]>([]);
+  const [parents, setParents] = useState<{ id: string; username: string; role: string }[]>([]);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -52,8 +52,15 @@ export default function AdminEditUserPage() {
       .then((d) =>
         setParents(
           (d.users ?? d.resellers ?? [])
-            .filter((u: { id: string; role?: string }) => u.id !== id && u.role !== "SUB_RESELLER")
-            .map((u: { id: string; username: string }) => ({ id: u.id, username: u.username }))
+            .filter((u: { id: string; role?: string }) => {
+              if (u.id === id) return false;
+              return u.role === "ADMIN" || u.role === "RESELLER" || u.role === "SUB_RESELLER";
+            })
+            .map((u: { id: string; username: string; role?: string }) => ({
+              id: u.id,
+              username: u.username,
+              role: u.role ?? "RESELLER",
+            }))
         )
       );
   }, [id]);
@@ -111,7 +118,7 @@ export default function AdminEditUserPage() {
         isActive: form.isActive,
         defaultLanguage: form.defaultLanguage,
         groupId: form.groupId || null,
-        parentId: form.role === "SUB_RESELLER" ? form.parentId : null,
+        parentId: form.role === "ADMIN" ? null : form.parentId || null,
         resellerDns: form.resellerDns || null,
         credits: form.credits,
         maxLines: form.maxLines,
@@ -225,24 +232,24 @@ export default function AdminEditUserPage() {
           </select>
         </FormField>
 
-        {form.role === "SUB_RESELLER" ? (
-          <FormField label="Parent reseller" required>
+        {form.role === "ADMIN" ? null : (
+          <FormField label="Owner" required={form.role === "SUB_RESELLER"}>
             <select
               className={formSelectClass}
               style={{ ...formInputStyle, background: "#fff", color: "#111" }}
               value={form.parentId}
               onChange={(e) => setForm((f) => ({ ...f, parentId: e.target.value }))}
-              required
+              required={form.role === "SUB_RESELLER"}
             >
-              <option value="">Select parent…</option>
+              <option value="">{form.role === "SUB_RESELLER" ? "Select owner…" : "— none —"}</option>
               {parents.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.username}
+                  {p.username} ({p.role === "ADMIN" ? "admin" : p.role === "SUB_RESELLER" ? "sub-reseller" : "reseller"})
                 </option>
               ))}
             </select>
           </FormField>
-        ) : null}
+        )}
 
         <FormField label="Credits">
           <input

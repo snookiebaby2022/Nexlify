@@ -23,7 +23,7 @@ const STANDARD_GROUPS = [
     description: "Resellers under a parent reseller",
     isReseller: true,
     sortOrder: 20,
-    color: "#e67e22",
+    color: "#7c3aed",
     groupRole: "sub_reseller" as const,
   },
 ] as const;
@@ -34,17 +34,22 @@ const SUB_RESELLER_GROUP_ALIASES = [
   "sub reseller",
   "subreseller",
   "subresellers",
+  "subsellers",
+  "subseller",
+  "sub sellers",
+  "sub seller",
 ];
+
+function isSubResellerGroupName(name: string): boolean {
+  return SUB_RESELLER_GROUP_ALIASES.includes(name.trim().toLowerCase());
+}
 
 async function dedupeSubResellerGroups(prisma: PrismaClient) {
   const all = await prisma.userGroup.findMany({
-    where: { isReseller: true },
     orderBy: { createdAt: "asc" },
   });
-  const matches = all.filter((g) =>
-    SUB_RESELLER_GROUP_ALIASES.includes(g.name.trim().toLowerCase())
-  );
-  if (matches.length <= 1) return;
+  const matches = all.filter((g) => isSubResellerGroupName(g.name));
+  if (matches.length === 0) return;
 
   const canonical =
     matches.find((g) => g.name === "Sub-resellers") ??
@@ -62,7 +67,12 @@ async function dedupeSubResellerGroups(prisma: PrismaClient) {
 
   await prisma.userGroup.update({
     where: { id: canonical.id },
-    data: { name: "Sub-resellers", description: "Resellers under a parent reseller" },
+    data: {
+      name: "Sub-resellers",
+      description: "Resellers under a parent reseller",
+      isReseller: true,
+      color: "#7c3aed",
+    },
   });
 }
 
@@ -87,6 +97,9 @@ export async function ensureStandardUserGroups(prisma: PrismaClient) {
             ? [
                 { name: { equals: "Sub-reseller", mode: "insensitive" as const } },
                 { name: { equals: "Sub Reseller", mode: "insensitive" as const } },
+                { name: { equals: "Subresellers", mode: "insensitive" as const } },
+                { name: { equals: "Subsellers", mode: "insensitive" as const } },
+                { name: { equals: "Subseller", mode: "insensitive" as const } },
               ]
             : []),
         ],
@@ -110,7 +123,7 @@ export async function ensureStandardUserGroups(prisma: PrismaClient) {
           description: existing.description || g.description,
           isReseller: g.isReseller,
           sortOrder: g.sortOrder,
-          color: existing.color || g.color,
+          color: g.name === "Sub-resellers" ? g.color : existing.color || g.color,
           config: { ...cfg, packageIds: merged, groupRole: g.groupRole },
         },
       });

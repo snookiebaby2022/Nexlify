@@ -934,7 +934,12 @@ export async function importPlexLibrary(
   const access = await ensurePlexAccess(integrationId);
   const { cfg, base, clientIdentifier } = access;
   const tokenParam = plexTokenParam(cfg);
-  const effectiveServerId = serverId ?? cfg.serverId ?? null;
+  const { resolvePlaybackLoadBalancerId } = await import("@/lib/server-load");
+  const effectiveServerId = await resolvePlaybackLoadBalancerId(serverId ?? cfg.serverId ?? null);
+  if (effectiveServerId && String(cfg.serverId ?? "") !== effectiveServerId) {
+    cfg.serverId = effectiveServerId;
+    await persistPlexConfig(integrationId, cfg);
+  }
 
   await reporter?.step("libraries", "Loading Plex libraries…");
   const sections = await fetchPlexJson<PlexSectionResponse>(

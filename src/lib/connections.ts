@@ -6,11 +6,11 @@ import {
   resolvePlaybackOutputLabel,
   setConnectionPlaybackOutput,
 } from "./connection-playback-output";
-import { clearLiveSession, batchIsLiveSessionActive, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
+import { clearLiveSession, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
 
 export const STALE_MS = 5 * 60 * 1000; // cron safety net for orphaned rows
-/** Live Connections UI + dashboard counts — align with playback heartbeat, not cron stale. */
-export const LIVE_STALE_MS = 12 * 1000;
+/** Live Connections UI + dashboard — HLS/Smarters often gap 10–30s between segment/playlist hits. */
+export const LIVE_STALE_MS = 45 * 1000;
 export const PLAYBACK_STALE_MS = LIVE_STALE_MS;
 /** Admin Live Connections list — hide rows idle longer than this (HLS gaps tolerated). */
 export const LIVE_LIST_STALE_MS = LIVE_STALE_MS;
@@ -144,7 +144,7 @@ export async function countActiveConnections(ownerId?: string): Promise<number> 
 }
 
 /**
- * Open connections + online users from the same Redis-verified session list.
+ * Open connections + online users from the same lastSeen-fresh session list.
  * Dashboard KPIs must not mix a cached groupBy with a raw COUNT DISTINCT.
  */
 export async function liveViewerStats(ownerId?: string): Promise<{
@@ -668,7 +668,9 @@ export async function deleteStaleConnections() {
   return pruneStaleConnections(STALE_MS);
 }
 
-/** List connections that are actually live right now */
+/** List connections with a recent lastSeenAt. Redis session keys are a 12–45s TTL
+ *  on a multi-worker panel — requiring them AND lastSeen made Open Connections /
+ *  Watching now drop to 0 between HLS segments. Kick still deletes the DB row. */
 export async function listLiveConnections(ownerId?: string, take = 5000) {
   const staleBefore = new Date(Date.now() - LIVE_LIST_STALE_MS);
   const baseWhere = {
@@ -683,21 +685,7 @@ export async function listLiveConnections(ownerId?: string, take = 5000) {
     orderBy: { lastSeenAt: "desc" },
     take: Math.min(Math.max(1, take), 5000),
   });
-  const checkItems: Array<{ lineId: string; streamId: string; ip?: string | null; rowIndex: number }> =
-    [];
-  const keep = new Array<boolean>(rows.length).fill(false);
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]!;
-    if (isTestConnectionIp(row.ip) || !row.streamId) continue;
-    checkItems.push({ lineId: row.lineId, streamId: row.streamId, ip: row.ip, rowIndex: i });
-  }
-  if (checkItems.length) {
-    const activeFlags = await batchIsLiveSessionActive(checkItems);
-    for (let j = 0; j < checkItems.length; j++) {
-      if (activeFlags[j]) keep[checkItems[j]!.rowIndex] = true;
-    }
-  }
-  const live = rows.filter((_, i) => keep[i]);
+  const live = rows.filter((row) => row.streamId && !isTestConnectionIp(row.ip));
   const seen = new Set<string>();
   const deduped: typeof live = [];
   for (const row of live) {

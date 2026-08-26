@@ -1857,6 +1857,10 @@ button {
     display: flex !important;
   }
 
+  .xui-streams-filters--desktop.xui-streams-filters--hidden {
+    display: none !important;
+  }
+
   .xui-lines-toolbar--desktop-search {
     display: flex !important;
   }
@@ -2050,6 +2054,91 @@ button {
 
 .xui-lines-icon-btn:hover {
   background: #e2e8f0;
+}
+
+.xui-lines-icon-btn--active {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.xui-toolbar-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.xui-toolbar-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  min-width: 11.5rem;
+  padding: 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.xui-toolbar-menu--left {
+  right: auto;
+  left: 0;
+}
+
+.xui-toolbar-menu-title {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 0.2rem 0.35rem 0.4rem;
+}
+
+.xui-toolbar-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.xui-toolbar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.xui-toolbar-menu-item:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.xui-toolbar-menu-action {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 0.8125rem;
+  padding: 0.4rem 0.45rem;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.xui-toolbar-menu-action:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.xui-lines-extra-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8125rem;
 }
 
 .xui-lines-table {
@@ -3469,6 +3558,22 @@ a.btn-back:hover,
   line-height: 1.5;
 }
 
+.xui-install-progress {
+  height: 12px;
+  width: 100%;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.2);
+  border: 1px solid var(--border);
+}
+
+.xui-install-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #00c0ef 0%, #22c55e 100%);
+  transition: width 0.25s ease;
+}
+
 .xui-install-log {
   margin-top: 1rem;
   background: #1a2332;
@@ -3661,6 +3766,10 @@ a.btn-back:hover,
 
 .xui-streams-icon-btn--menu {
   background: #001f3f;
+}
+
+.xui-streams-icon-btn--active {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
 .xui-streams-filters {

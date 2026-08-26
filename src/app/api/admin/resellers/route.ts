@@ -13,6 +13,31 @@ function roleLabel(role: PanelRole) {
   return "reseller";
 }
 
+const OWNER_ROLES: PanelRole[] = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER];
+
+async function assertValidOwner(userId: string, parentId: string | null): Promise<string | null> {
+  if (!parentId) return null;
+  if (parentId === userId) return "A user cannot be their own owner";
+  const parent = await prisma.panelUser.findUnique({
+    where: { id: parentId },
+    select: { id: true, role: true, parentId: true },
+  });
+  if (!parent) return "Owner not found";
+  if (!OWNER_ROLES.includes(parent.role)) return "Owner must be an admin, reseller, or sub-reseller";
+  let current = parent.parentId;
+  const seen = new Set<string>([userId, parentId]);
+  while (current) {
+    if (seen.has(current)) return "That owner would create a circular hierarchy";
+    seen.add(current);
+    const row = await prisma.panelUser.findUnique({
+      where: { id: current },
+      select: { parentId: true },
+    });
+    current = row?.parentId ?? null;
+  }
+  return null;
+}
+
 function serializeUser(
   u: {
     id: string;
@@ -241,11 +266,18 @@ export async function PATCH(req: NextRequest) {
       data.role = PanelRole.RESELLER;
       const groups = await ensureStandardUserGroups(prisma);
       if (!data.groupId) data.groupId = groups.get("Resellers") ?? null;
-      if (body.parentId === null || body.parentId === "") data.parentId = null;
+      if (body.parentId !== undefined) data.parentId = body.parentId ? String(body.parentId) : null;
     } else {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
   }
+
+  const nextRole = data.role ?? existing.role;
+  if (nextRole === PanelRole.ADMIN) data.parentId = null;
+
+  const nextParentId = data.parentId !== undefined ? data.parentId : existing.parentId;
+  const ownerErr = await assertValidOwner(id, nextParentId ?? null);
+  if (ownerErr) return NextResponse.json({ error: ownerErr }, { status: 400 });
 
   try {
     const user = await prisma.panelUser.update({

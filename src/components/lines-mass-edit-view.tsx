@@ -13,6 +13,11 @@ import {
 import { CopyableCredential } from "@/components/copyable-credential";
 import type { ManageLineRow } from "@/components/manage-lines-table";
 import {
+  ColumnPickerList,
+  ToolbarDropdown,
+  useStoredColumnVisibility,
+} from "@/components/table-toolbar-menus";
+import {
   formatMassEditExpire,
   type MassEditPatch,
   type TextFieldState,
@@ -26,6 +31,17 @@ import {
   type AccessOutputId,
 } from "@/lib/line-access-output";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
+
+const MASS_PAGE_SIZE_OPTIONS = [...LIST_PAGE_SIZE_OPTIONS, 500, 2000] as const;
+
+const MASS_COLUMN_DEFAULTS: Record<string, boolean> = {
+  sta: true,
+  username: true,
+  password: true,
+  owner: true,
+  expire: true,
+  ban: true,
+};
 
 function XuiPill({ value, variant }: { value: string; variant: "yes" | "no" }) {
   return <span className={`xui-pill xui-pill--${variant}`}>{value}</span>;
@@ -110,6 +126,7 @@ function MassEditTextField({
 const DEFAULT_FORM = {
   password: { unchanged: true } as TextFieldState,
   resellerNotes: { unchanged: true } as TextFieldState,
+  ownerId: { unchanged: true } as TextFieldState,
   enabled: "unchanged" as TriState,
   canWatchAdult: "unchanged" as TriState,
   allowedCountries: { unchanged: true } as TextFieldState,
@@ -138,6 +155,19 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
   const [form, setForm] = useState(DEFAULT_FORM);
   const [sort, setSort] = useState<"username" | "expiresAt" | "owner" | "createdAt" | "status">("expiresAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [owners, setOwners] = useState<{ id: string; username: string; role: string }[]>([]);
+  const [filterOwners, setFilterOwners] = useState<{ id: string; username: string; role: string }[]>([]);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const columns = useStoredColumnVisibility(`nexlify.mass-edit.columns.${panel}`, MASS_COLUMN_DEFAULTS);
+  const massColumnOptions = [
+    { id: "sta", label: "Status" },
+    { id: "username", label: "Username", locked: true },
+    { id: "password", label: "Password" },
+    ...(panel === "admin" ? [{ id: "owner", label: "Owner" }] : []),
+    { id: "expire", label: "Expire" },
+    { id: "ban", label: "Ban" },
+  ];
 
   function load() {
     const params = new URLSearchParams({
@@ -147,6 +177,7 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
       sortDir,
     });
     if (search.trim()) params.set("search", search.trim());
+    if (panel === "admin" && ownerFilter) params.set("ownerId", ownerFilter);
     fetch(`/api/admin/lines?${params}`)
       .then((r) => r.json())
       .then((d) => {
@@ -154,6 +185,25 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
         setTotal(d.pagination?.total ?? d.lines?.length ?? 0);
       });
   }
+
+  useEffect(() => {
+    if (panel !== "admin") return;
+    fetch("/api/admin/resellers")
+      .then((r) => r.json())
+      .then((d) => {
+        const users = (d.users ?? []) as { id: string; username: string; role: string }[];
+        setFilterOwners(
+          users.filter(
+            (u) => u.role === "ADMIN" || u.role === "RESELLER" || u.role === "SUB_RESELLER"
+          )
+        );
+        setOwners(users.filter((u) => u.role === "RESELLER" || u.role === "SUB_RESELLER"));
+      })
+      .catch(() => {
+        setOwners([]);
+        setFilterOwners([]);
+      });
+  }, [panel]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -169,7 +219,7 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on page/size/search/sort
-  }, [page, pageSize, search, sort, sortDir]);
+  }, [page, pageSize, search, sort, sortDir, ownerFilter]);
 
   function toggleSort(key: typeof sort) {
     if (sort === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -215,6 +265,7 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
       patch.allowedOutputs = form.allowedOutputs;
     }
     if (form.lockToIp !== "unchanged") patch.lockToIp = form.lockToIp;
+    if (panel === "admin" && !form.ownerId.unchanged) patch.ownerId = form.ownerId;
     return patch;
   }
 
@@ -227,6 +278,20 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
     if (Object.keys(patch).length === 0) {
       setMsg("Change at least one field in the Mass Edit Form");
       return;
+    }
+    if (patch.ownerId && !patch.ownerId.unchanged) {
+      const ownerPatch = patch.ownerId;
+      const dest =
+        ownerPatch.value.trim() === ""
+          ? "admin (no reseller)"
+          : owners.find((o) => o.id === ownerPatch.value)?.username ?? "selected reseller";
+      if (
+        !window.confirm(
+          `Move ${selected.size} line${selected.size === 1 ? "" : "s"} to ${dest}?\n\nUsernames and passwords stay the same. Streams keep playing.`
+        )
+      ) {
+        return;
+      }
     }
 
     setBusy(true);
@@ -251,7 +316,7 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
     load();
   }
 
-  const colSpan = panel === "admin" ? 7 : 6;
+  const colSpan = 1 + massColumnOptions.filter((c) => columns.show(c.id)).length;
 
   return (
     <div className="xui-lines-panel xui-mass-edit-panel rounded-lg overflow-hidden border" style={{ borderColor: "var(--border)" }}>
@@ -287,13 +352,14 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
               >
                 <Search size={16} />
               </button>
-              {(searchOpen || search) && (
+              {(searchOpen || search || ownerFilter) && (
                 <button
                   type="button"
                   className="xui-lines-icon-btn"
                   onClick={() => {
                     setSearch("");
                     setSearchInput("");
+                    setOwnerFilter("");
                     setSearchOpen(false);
                     setPage(1);
                   }}
@@ -302,11 +368,55 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                   <FilterX size={16} />
                 </button>
               )}
-              <button type="button" className="xui-lines-icon-btn" title="Table view">
-                <LayoutList size={16} />
-              </button>
+              <ToolbarDropdown
+                open={columnsOpen}
+                onClose={() => setColumnsOpen(false)}
+                trigger={
+                  <button
+                    type="button"
+                    className={`xui-lines-icon-btn ${columnsOpen ? "xui-lines-icon-btn--active" : ""}`}
+                    title="Table columns"
+                    aria-pressed={columnsOpen}
+                    onClick={() => setColumnsOpen((o) => !o)}
+                  >
+                    <LayoutList size={16} />
+                  </button>
+                }
+              >
+                <ColumnPickerList columns={massColumnOptions} show={columns.show} onToggle={columns.toggle} />
+              </ToolbarDropdown>
             </div>
           </div>
+
+          {panel === "admin" && (
+            <div
+              className="px-4 py-2 border-b flex flex-wrap items-center gap-3 text-sm"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <label className="flex items-center gap-2 min-w-[240px]">
+                <span style={{ color: "var(--muted)" }}>Current owner</span>
+                <select
+                  className="flex-1 rounded border px-3 py-1.5 text-sm bg-transparent"
+                  style={{ borderColor: "var(--border)" }}
+                  value={ownerFilter}
+                  onChange={(e) => {
+                    setOwnerFilter(e.target.value);
+                    setPage(1);
+                    setSelected(new Set());
+                  }}
+                >
+                  <option value="">All</option>
+                  <option value="admin">Unassigned (no owner)</option>
+                  {filterOwners.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.username}
+                      {o.role === "ADMIN" ? " (admin)" : o.role === "SUB_RESELLER" ? " (sub)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
 
           {(searchOpen || search) && (
             <div
@@ -338,15 +448,17 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                       onChange={(e) => toggleAll(e.target.checked)}
                     />
                   </th>
-                  <th className="xui-lines-th w-8">Sta</th>
-                  <th
-                    className="xui-lines-th cursor-pointer select-none"
-                    onClick={() => toggleSort("username")}
-                  >
-                    Username{sort === "username" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </th>
-                  <th className="xui-lines-th">Password</th>
-                  {panel === "admin" ? (
+                  {columns.show("sta") ? <th className="xui-lines-th w-8">Sta</th> : null}
+                  {columns.show("username") ? (
+                    <th
+                      className="xui-lines-th cursor-pointer select-none"
+                      onClick={() => toggleSort("username")}
+                    >
+                      Username{sort === "username" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                    </th>
+                  ) : null}
+                  {columns.show("password") ? <th className="xui-lines-th">Password</th> : null}
+                  {panel === "admin" && columns.show("owner") ? (
                     <th
                       className="xui-lines-th cursor-pointer select-none"
                       onClick={() => toggleSort("owner")}
@@ -354,18 +466,22 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                       Owner{sort === "owner" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
                     </th>
                   ) : null}
-                  <th
-                    className="xui-lines-th cursor-pointer select-none"
-                    onClick={() => toggleSort("expiresAt")}
-                  >
-                    Expire{sort === "expiresAt" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </th>
-                  <th
-                    className="xui-lines-th cursor-pointer select-none"
-                    onClick={() => toggleSort("status")}
-                  >
-                    Ban{sort === "status" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                  </th>
+                  {columns.show("expire") ? (
+                    <th
+                      className="xui-lines-th cursor-pointer select-none"
+                      onClick={() => toggleSort("expiresAt")}
+                    >
+                      Expire{sort === "expiresAt" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                    </th>
+                  ) : null}
+                  {columns.show("ban") ? (
+                    <th
+                      className="xui-lines-th cursor-pointer select-none"
+                      onClick={() => toggleSort("status")}
+                    >
+                      Ban{sort === "status" ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+                    </th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
@@ -384,35 +500,45 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                         <td className="xui-lines-td xui-lines-td--check">
                           <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} />
                         </td>
-                        <td className="xui-lines-td text-center">
-                          <span
-                            className="inline-block w-2.5 h-2.5 rounded-full"
-                            title={l.status}
-                            style={{
-                              background: isActive ? "#22c55e" : l.status === "BANNED" ? "#ef4444" : "#9ca3af",
-                            }}
-                          />
-                        </td>
-                        <td className="xui-lines-td">
-                          <CopyableCredential value={l.username} className="text-xs" />
-                        </td>
-                        <td className="xui-lines-td">
-                          <CopyableCredential value={l.password} className="text-xs font-mono" />
-                        </td>
-                        {panel === "admin" ? (
+                        {columns.show("sta") ? (
+                          <td className="xui-lines-td text-center">
+                            <span
+                              className="inline-block w-2.5 h-2.5 rounded-full"
+                              title={l.status}
+                              style={{
+                                background: isActive ? "#22c55e" : l.status === "BANNED" ? "#ef4444" : "#9ca3af",
+                              }}
+                            />
+                          </td>
+                        ) : null}
+                        {columns.show("username") ? (
+                          <td className="xui-lines-td">
+                            <CopyableCredential value={l.username} className="text-xs" />
+                          </td>
+                        ) : null}
+                        {columns.show("password") ? (
+                          <td className="xui-lines-td">
+                            <CopyableCredential value={l.password} className="text-xs font-mono" />
+                          </td>
+                        ) : null}
+                        {panel === "admin" && columns.show("owner") ? (
                           <td className="xui-lines-td" style={{ color: "var(--muted)" }}>
                             {l.owner?.username ?? "admin"}
                           </td>
                         ) : null}
-                        <td className="xui-lines-td whitespace-nowrap text-xs">
-                          <span>
-                            {exp.dateTime}{" "}
-                            <span className={exp.expired ? "text-red-500" : ""}>({exp.relative})</span>
-                          </span>
-                        </td>
-                        <td className="xui-lines-td">
-                          <XuiPill value={l.status === "BANNED" ? "YES" : "NO"} variant={l.status === "BANNED" ? "yes" : "no"} />
-                        </td>
+                        {columns.show("expire") ? (
+                          <td className="xui-lines-td whitespace-nowrap text-xs">
+                            <span>
+                              {exp.dateTime}{" "}
+                              <span className={exp.expired ? "text-red-500" : ""}>({exp.relative})</span>
+                            </span>
+                          </td>
+                        ) : null}
+                        {columns.show("ban") ? (
+                          <td className="xui-lines-td">
+                            <XuiPill value={l.status === "BANNED" ? "YES" : "NO"} variant={l.status === "BANNED" ? "yes" : "no"} />
+                          </td>
+                        ) : null}
                       </tr>
                     );
                   })
@@ -440,7 +566,7 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
                     setPage(1);
                   }}
                 >
-                  {LIST_PAGE_SIZE_OPTIONS.map((n) => (
+                  {MASS_PAGE_SIZE_OPTIONS.map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
@@ -488,6 +614,39 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
             multiline
             placeholder="Notes visible to resellers"
           />
+          {panel === "admin" && (
+            <div className="xui-mass-field">
+              <div className="xui-mass-field-label">Move to reseller</div>
+              <label className="xui-mass-checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.ownerId.unchanged}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      ownerId: e.target.checked ? { unchanged: true } : { unchanged: false, value: "" },
+                    })
+                  }
+                />
+                <span>Do Not Change</span>
+              </label>
+              {!form.ownerId.unchanged && (
+                <select
+                  className="xui-mass-input"
+                  value={form.ownerId.value}
+                  onChange={(e) => setForm({ ...form, ownerId: { unchanged: false, value: e.target.value } })}
+                >
+                  <option value="">Unassigned (admin pool)</option>
+                  {owners.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.username}
+                      {o.role === "SUB_RESELLER" ? " (sub)" : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
           <MassEditTriStateField
             label="Enabled"
             value={form.enabled}

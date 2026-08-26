@@ -724,9 +724,7 @@ async function jobPlexAutoSync() {
     let queued = 0;
     let already = 0;
     for (const row of rows) {
-      const cfg = (row.config ?? {}) as Record<string, unknown>;
-      const serverId = cfg.serverId ? String(cfg.serverId) : null;
-      const result = await enqueuePlexSync(row.id, serverId);
+      const result = await enqueuePlexSync(row.id);
       if (result.alreadyRunning) already++;
       else queued++;
     }

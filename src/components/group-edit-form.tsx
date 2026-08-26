@@ -8,8 +8,11 @@ import {
   RECOMMENDED_RESELLER_PERMISSIONS,
   RECOMMENDED_SUB_RESELLER_PERMISSIONS,
   RESELLER_PERMISSIONS,
+  PERMISSION_LABELS,
+  GROUP_NAV_OPTIONS,
   type GroupConfig,
   type GroupDashboardConfig,
+  type GroupNavConfig,
   type GroupRole,
 } from "@/lib/group-config";
 import { creditCostForDays, STANDARD_PACKAGE_TEMPLATES } from "@/lib/package-credits";
@@ -19,15 +22,16 @@ import {
   formInputStyle,
   formSelectClass,
 } from "@/components/form-page-shell";
-import { FileText, LayoutDashboard, Package, Shield, Users } from "lucide-react";
+import { FileText, LayoutDashboard, Menu, Package, Shield, Users } from "lucide-react";
 
-type TabId = "details" | "packages" | "permissions" | "subresellers" | "dashboard";
+type TabId = "details" | "modules" | "packages" | "permissions" | "subresellers" | "dashboard";
 
 const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "details", label: "Details", icon: <FileText size={16} /> },
+  { id: "modules", label: "Modules", icon: <Menu size={16} /> },
   { id: "packages", label: "Packages", icon: <Package size={16} /> },
   { id: "permissions", label: "Permissions", icon: <Shield size={16} /> },
-  { id: "subresellers", label: "Subresellers", icon: <Users size={16} /> },
+  { id: "subresellers", label: "Sub-resellers", icon: <Users size={16} /> },
   { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={16} /> },
 ];
 
@@ -190,6 +194,13 @@ export function GroupEditForm({
     setForm((f) => ({
       ...f,
       config: { ...f.config, dashboard: { ...f.config.dashboard, [key]: value } },
+    }));
+  }
+
+  function setNav<K extends keyof GroupNavConfig>(key: K, value: boolean) {
+    setForm((f) => ({
+      ...f,
+      config: { ...f.config, nav: { ...f.config.nav, [key]: value } },
     }));
   }
 
@@ -457,6 +468,29 @@ export function GroupEditForm({
             </div>
           )}
 
+          {tab === "modules" && (
+            <div className="space-y-4 max-w-2xl">
+              <p className="text-sm" style={{ color: "var(--muted)" }}>
+                Tick what this group can see in the panel menu. Applies to administrators, resellers, and
+                sub-resellers in this group (reseller portal modules; admin CP access is still controlled on
+                Details).
+              </p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                {GROUP_NAV_OPTIONS.map((opt) => (
+                  <Toggle
+                    key={opt.key}
+                    label={opt.label}
+                    checked={form.config.nav[opt.key]}
+                    onChange={(v) => setNav(opt.key, v)}
+                  />
+                ))}
+              </div>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                {GROUP_NAV_OPTIONS.map((o) => `${o.label}: ${o.hint}`).join(" · ")}
+              </p>
+            </div>
+          )}
+
           {tab === "packages" && (
             <div className="space-y-4">
               <p className="text-sm" style={{ color: "var(--muted)" }}>
@@ -552,13 +586,8 @@ export function GroupEditForm({
 
           {tab === "permissions" && (
             <div className="space-y-4 max-w-2xl">
-              {!form.isReseller && (
-                <p className="text-sm rounded border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
-                  Enable <strong>Is reseller</strong> on the Details tab for these settings to apply.
-                </p>
-              )}
               <p className="text-sm" style={{ color: "var(--muted)" }}>
-                The below permissions will only take effect if the group has the Reseller permission set.
+                These rules apply to everyone in this group (administrators, resellers, and sub-resellers).
               </p>
               <div className="grid sm:grid-cols-2 gap-4">
                 <FormField label="Allowed trials">
@@ -651,9 +680,22 @@ export function GroupEditForm({
                   checked={form.config.showM3uDownload}
                   onChange={(v) => setConfig("showM3uDownload", v)}
                 />
+                <Toggle
+                  label="Show Streaming API"
+                  checked={form.config.showStreamingApi}
+                  onChange={(v) => setConfig("showStreamingApi", v)}
+                />
+                <Toggle
+                  label="Hide all URLs / domain names"
+                  checked={form.config.hideAllUrls}
+                  onChange={(v) => setConfig("hideAllUrls", v)}
+                />
               </div>
-              {form.isReseller && (
-                <div className="pt-4 border-t space-y-3" style={{ borderColor: "var(--border)" }}>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Hide all URLs / domain names removes Streaming API, playlist download links, and server
+                hostnames from the reseller panel even if the other two are on.
+              </p>
+              <div className="pt-4 border-t space-y-3" style={{ borderColor: "var(--border)" }}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-medium">Module permissions</span>
                     <div className="flex flex-wrap gap-2">
@@ -686,7 +728,7 @@ export function GroupEditForm({
                           checked={form.config.permissions.includes(p)}
                           onChange={() => togglePermission(p)}
                         />
-                        {p}
+                        {PERMISSION_LABELS[p] ?? p}
                       </label>
                     ))}
                   </div>
@@ -701,7 +743,6 @@ export function GroupEditForm({
                     </button>
                   )}
                 </div>
-              )}
             </div>
           )}
 
@@ -790,7 +831,7 @@ export function GroupEditForm({
           {tab === "dashboard" && (
             <div className="space-y-4 max-w-2xl">
               <p className="text-sm" style={{ color: "var(--muted)" }}>
-                Choose which stats appear on the reseller dashboard for users in this group.
+                Choose which stats appear on the dashboard for users in this group.
               </p>
               <Toggle
                 label="Show online streams"
@@ -811,6 +852,21 @@ export function GroupEditForm({
                 label="Show credits"
                 checked={form.config.dashboard.showCredits}
                 onChange={(v) => setDashboard("showCredits", v)}
+              />
+              <Toggle
+                label="Show expiring lines"
+                checked={form.config.dashboard.showExpiring}
+                onChange={(v) => setDashboard("showExpiring", v)}
+              />
+              <Toggle
+                label="Show MAG / devices"
+                checked={form.config.dashboard.showDevices}
+                onChange={(v) => setDashboard("showDevices", v)}
+              />
+              <Toggle
+                label="Show tickets"
+                checked={form.config.dashboard.showTickets}
+                onChange={(v) => setDashboard("showTickets", v)}
               />
             </div>
           )}

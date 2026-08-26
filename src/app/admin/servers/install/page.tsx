@@ -19,7 +19,14 @@ export default function ServerInstallWizardPage() {
   const [step, setStep] = useState("");
   const [logs, setLogs] = useState<string[]>([]);
   const [error, setError] = useState("");
-  const [out, setOut] = useState<{ installCommand?: string; agentToken?: string } | null>(null);
+  const [out, setOut] = useState<{
+    installCommand?: string;
+    agentToken?: string;
+    serverId?: string;
+    primaryInterface?: string;
+    agentOnline?: boolean;
+    online?: boolean;
+  } | null>(null);
   const [running, setRunning] = useState(false);
   const [monitorTab, setMonitorTab] = useState<MonitorTab>("resources");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -64,12 +71,16 @@ export default function ServerInstallWizardPage() {
       setError("Server IP is required.");
       return;
     }
+    if (!sshPassword.trim()) {
+      setError("SSH password is required so the panel can log in and show real install progress.");
+      return;
+    }
     setRunning(true);
     setError("");
     setOut(null);
     setLogs([]);
     setProgress(0);
-    setStep("Installing…");
+    setStep("Starting…");
 
     const res = await fetch("/api/admin/servers/install-job", {
       method: "POST",
@@ -80,6 +91,7 @@ export default function ServerInstallWizardPage() {
         serverName: serverName.trim(),
         sshPort,
         sshUser,
+        sshPassword,
         updateSysctl,
       }),
     });
@@ -122,6 +134,13 @@ export default function ServerInstallWizardPage() {
             )}
           </div>
 
+          <div className="xui-install-progress" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+            <div className="xui-install-progress-bar" style={{ width: `${Math.max(2, progress)}%` }} />
+          </div>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            {step || (running ? "Installing…" : error ? "Install failed" : "Install complete")}
+          </p>
+
           <div className="xui-install-stat-row">
             <div className="xui-install-stat xui-install-stat--purple">
               <div className="text-2xl font-bold">0</div>
@@ -146,13 +165,27 @@ export default function ServerInstallWizardPage() {
             style={{ borderColor: "rgba(0,192,239,0.35)", background: "rgba(0,192,239,0.08)" }}
           >
             <Sparkles className="mx-auto mb-2 opacity-80" size={28} style={{ color: "#7dd3fc" }} />
-            <p className="font-semibold mb-3">{running ? "Installing…" : error ? "Install failed" : "Install ready"}</p>
+            <p className="font-semibold mb-3">{running ? "Installing…" : error ? "Install failed" : "Install complete"}</p>
             <div ref={logRef} className="xui-install-log text-left">
               {logs.length ? logs.join("\n") : "Waiting for install log…"}
             </div>
             {error && <p className="text-sm mt-3 text-red-400">{error}</p>}
             {out?.installCommand && !running && (
               <pre className="xui-install-log text-left mt-3">{out.installCommand}</pre>
+            )}
+            {out?.primaryInterface && !running && (
+              <p className="text-sm mt-3">
+                Primary interface: <code className="font-mono">{out.primaryInterface}</code>
+                {out.online ? " · marked online after SSH" : ""}
+                {out.agentOnline ? " · agent heartbeat received" : ""}
+              </p>
+            )}
+            {out?.serverId && !running && (
+              <p className="mt-3">
+                <Link href={`/admin/servers/${out.serverId}`} className="text-sm underline">
+                  Open server settings
+                </Link>
+              </p>
             )}
             {out?.agentToken && !running && (
               <p className="text-xs mt-3" style={{ color: "var(--muted)" }}>
@@ -243,14 +276,15 @@ export default function ServerInstallWizardPage() {
               </div>
               <div className="xui-install-field">
                 <label htmlFor="sshPassword">SSH Password</label>
-                <input
-                  id="sshPassword"
-                  type="password"
-                  value={sshPassword}
-                  onChange={(e) => setSshPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="new-password"
-                />
+              <input
+                id="sshPassword"
+                type="password"
+                value={sshPassword}
+                onChange={(e) => setSshPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                required
+              />
               </div>
             </div>
             <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -264,8 +298,9 @@ export default function ServerInstallWizardPage() {
           </div>
 
           <div className="xui-install-note">
-            Installation will begin immediately; progress appears above. After installation completes you can
-            amend ports and other server settings in Manage Servers.
+            The panel SSHs into the VPS, detects the primary network interface, installs nginx / FFmpeg / the
+            stream agent, and marks the server online when SSH succeeds. Live progress appears above. After it
+            finishes you can amend ports in Manage Servers.
             {updateSysctl && (
               <>
                 {" "}

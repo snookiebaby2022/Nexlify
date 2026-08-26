@@ -30,6 +30,7 @@ import {
 } from "@/lib/integration-sync-progress";
 import { enqueuePlexSync } from "@/lib/plex-sync-queue";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { resolvePlaybackLoadBalancerId } from "@/lib/server-load";
 
 export const maxDuration = 300;
 
@@ -47,6 +48,12 @@ function plexConfigFromBody(body: Record<string, unknown>, prev?: Record<string,
     token: keepSecret(body.token, prev?.token),
     password: keepSecret(body.password, prev?.password),
   });
+}
+
+async function plexConfigForSave(body: Record<string, unknown>, prev?: Record<string, unknown>) {
+  const cfg = plexConfigFromBody(body, prev);
+  cfg.serverId = await resolvePlaybackLoadBalancerId(cfg.serverId);
+  return cfg;
 }
 
 async function runIntegrationSync(
@@ -208,11 +215,9 @@ export async function POST(req: NextRequest) {
       const row = await prisma.mediaIntegration.findUnique({ where: { id } });
       if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
       const cfg = (row.config ?? {}) as Record<string, unknown>;
-      const serverId = body.serverId
-        ? String(body.serverId)
-        : cfg.serverId
-          ? String(cfg.serverId)
-          : null;
+      const serverId = await resolvePlaybackLoadBalancerId(
+        body.serverId ? String(body.serverId) : cfg.serverId ? String(cfg.serverId) : null
+      );
       if (row.type === "plex") {
         const result = await enqueuePlexSync(id, serverId);
         return NextResponse.json({ started: true, ...result });
@@ -274,7 +279,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ item });
     }
 
-    const plexCfg = type === "plex" ? plexConfigFromBody(body) : null;
+    const plexCfg = type === "plex" ? await plexConfigForSave(body) : null;
     const item = await prisma.mediaIntegration.create({
       data: {
         type,
@@ -327,7 +332,7 @@ export async function PATCH(req: NextRequest) {
         ? body.config
         : existing.type === "plex"
           ? {
-              ...plexConfigFromBody(body, prev),
+              ...(await plexConfigForSave(body, prev)),
               syncProgress: prev.syncProgress,
             }
           : {

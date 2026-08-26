@@ -42,18 +42,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ group: serializeGroup(group) });
   }
 
+  await ensureStandardUserGroups(prisma);
   const groups = await prisma.userGroup.findMany({
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: { _count: { select: { users: true } } },
   });
-  if (groups.length < 3) {
-    await ensureStandardUserGroups(prisma);
-    const refreshed = await prisma.userGroup.findMany({
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      include: { _count: { select: { users: true } } },
-    });
-    return NextResponse.json({ groups: refreshed.map(serializeGroup) });
-  }
   return NextResponse.json({ groups: groups.map(serializeGroup) });
 }
 

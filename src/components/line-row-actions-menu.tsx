@@ -22,6 +22,7 @@ import { DownloadPlaylistModal } from "@/components/download-playlist-modal";
 import { LineRecentlyWatchedDialog } from "@/components/line-recently-watched-dialog";
 import { LineRenewModal } from "@/components/line-renew-modal";
 import { linesApiRoot, type PanelKind } from "@/lib/panel-api";
+import { useResellerGroupFlags } from "@/components/reseller-group-flags-context";
 
 export type LineRowForMenu = {
   id: string;
@@ -62,6 +63,8 @@ export function LineRowActionsMenu({
   const [renewOpen, setRenewOpen] = useState(false);
 
   const linesApi = linesApiRoot(panel);
+  const { showM3uDownload } = useResellerGroupFlags();
+  const allowPlaylistDownload = panel !== "reseller" || showM3uDownload;
 
   async function apiCall(url: string, options?: RequestInit) {
     const res = await fetch(url, options);
@@ -234,6 +237,7 @@ export function LineRowActionsMenu({
         >
           <div className="xui-lines-action-menu-head">Line actions</div>
 
+          {allowPlaylistDownload ? (
           <button
             type="button"
             role="menuitem"
@@ -248,6 +252,7 @@ export function LineRowActionsMenu({
             </span>
             <span className="flex-1 text-left">Download line</span>
           </button>
+          ) : null}
 
           {items.map((item) => (
             <button
@@ -290,12 +295,14 @@ export function LineRowActionsMenu({
         onClose={() => setRecentOpen(false)}
         apiRoot={linesApi}
       />
+      {allowPlaylistDownload ? (
       <DownloadPlaylistModal
         open={downloadModalOpen}
         onClose={() => setDownloadModalOpen(false)}
         username={line.username}
         password={line.password}
       />
+      ) : null}
       <LineRenewModal
         open={renewOpen}
         lineId={line.id}
