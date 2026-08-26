@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
+import { LogsPageToolbar } from "@/components/logs-page-toolbar";
+import { DEFAULT_LOG_PAGE_SIZE } from "@/lib/log-page";
 
 type ClientLogRow = {
   id: string;
@@ -21,7 +23,8 @@ export default function ClientLogsPage() {
   const [logs, setLogs] = useState<ClientLogRow[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
-  const [pageSize, setPageSize] = useState(100);
+  const [pageSize, setPageSize] = useState(DEFAULT_LOG_PAGE_SIZE);
+  const [clearBusy, setClearBusy] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -51,7 +54,23 @@ export default function ClientLogsPage() {
         </p>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <LogsPageToolbar
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        onRefresh={load}
+        clearBusy={clearBusy}
+        clearLabel="Clear ended"
+        onClear={async () => {
+          if (!confirm("Remove ended client sessions from this list? Live viewers stay connected.")) return;
+          setClearBusy(true);
+          try {
+            await fetch("/api/admin/client-logs", { method: "DELETE" });
+            load();
+          } finally {
+            setClearBusy(false);
+          }
+        }}
+      >
         <input
           className="rounded-lg border px-3 py-2 text-sm flex-1 min-w-[200px]"
           style={{ borderColor: "var(--border)" }}
@@ -60,30 +79,10 @@ export default function ClientLogsPage() {
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
         />
-        <select
-          className="rounded-lg border px-3 py-2 text-sm"
-          style={{ borderColor: "var(--border)" }}
-          value={pageSize}
-          onChange={(e) => setPageSize(Number(e.target.value))}
-        >
-          {[50, 100, 200, 500].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={load}
-          className="rounded-lg px-4 py-2 text-sm font-medium cursor-pointer"
-          style={{ background: "var(--accent)", color: "#fff" }}
-        >
-          Refresh
-        </button>
         <Link href="/admin/line_activity" className="rounded-lg px-4 py-2 text-sm border" style={{ borderColor: "var(--border)" }}>
           Line activity
         </Link>
-      </div>
+      </LogsPageToolbar>
 
       <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border)" }}>
         <table className="w-full text-sm">

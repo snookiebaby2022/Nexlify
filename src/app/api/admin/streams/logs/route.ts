@@ -1,12 +1,14 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
+import { parseLogLimit } from "@/lib/log-page";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const take = parseLogLimit(req.nextUrl.searchParams.get("limit"));
   const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const [processes, activity, liveViews, relayErrorsRaw] = await Promise.all([
@@ -17,7 +19,7 @@ export async function GET() {
         server: { select: { id: true, name: true } },
       },
       orderBy: { lastSeenAt: "desc" },
-      take: 200,
+      take,
     }),
     prisma.activityLog.findMany({
       where: {
@@ -25,7 +27,7 @@ export async function GET() {
         OR: [{ entity: "stream" }, { action: { contains: "stream" } }],
       },
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take,
     }),
     prisma.liveConnection.findMany({
       where: { lastSeenAt: { gte: staleBefore }, streamId: { not: null } },
@@ -34,7 +36,7 @@ export async function GET() {
         line: { select: { username: true } },
       },
       orderBy: { lastSeenAt: "desc" },
-      take: 100,
+      take,
     }),
     prisma.activityLog.findMany({
       where: {
@@ -42,7 +44,7 @@ export async function GET() {
         action: "stream_hls_relay_error",
       },
       orderBy: { createdAt: "desc" },
-      take: 50,
+      take,
     }),
   ]);
 
@@ -67,4 +69,15 @@ export async function GET() {
   }));
 
   return NextResponse.json({ processes, activity, liveViews, relayErrors });
+}
+
+export async function DELETE() {
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const result = await prisma.activityLog.deleteMany({
+    where: {
+      OR: [{ entity: "stream" }, { action: { contains: "stream" } }],
+    },
+  });
+  return NextResponse.json({ ok: true, deleted: result.count });
 }

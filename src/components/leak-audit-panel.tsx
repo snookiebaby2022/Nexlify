@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { LogsPageToolbar } from "@/components/logs-page-toolbar";
+import { DEFAULT_LOG_PAGE_SIZE } from "@/lib/log-page";
 
 type LogRow = {
   id: string;
@@ -15,9 +17,11 @@ type LogRow = {
 
 export function LeakAuditPanel() {
   const [logs, setLogs] = useState<LogRow[]>([]);
+  const [pageSize, setPageSize] = useState(DEFAULT_LOG_PAGE_SIZE);
+  const [clearBusy, setClearBusy] = useState(false);
 
   function load() {
-    fetch("/api/admin/leak-audit?limit=50")
+    fetch(`/api/admin/leak-audit?limit=${pageSize}`)
       .then((r) => r.json())
       .then((d) => setLogs(d.logs ?? []))
       .catch(() => {});
@@ -25,27 +29,27 @@ export function LeakAuditPanel() {
 
   useEffect(() => {
     load();
-  }, []);
-
-  async function purge() {
-    if (!confirm("Delete logs older than retention setting?")) return;
-    await fetch("/api/admin/leak-audit", { method: "DELETE" });
-    load();
-  }
+  }, [pageSize]);
 
   return (
     <section className="rounded-lg border p-4 space-y-3" style={{ borderColor: "var(--border)" }}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">Stream leak audit log</h2>
-        <button
-          type="button"
-          onClick={purge}
-          className="text-xs rounded border px-2 py-1 cursor-pointer"
-          style={{ borderColor: "var(--border)" }}
-        >
-          Purge old entries
-        </button>
-      </div>
+      <h2 className="text-lg font-semibold">Stream leak audit log</h2>
+      <LogsPageToolbar
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        onRefresh={load}
+        clearBusy={clearBusy}
+        onClear={async () => {
+          if (!confirm("Delete all leak audit log entries? This cannot be undone.")) return;
+          setClearBusy(true);
+          try {
+            await fetch("/api/admin/leak-audit?all=1", { method: "DELETE" });
+            load();
+          } finally {
+            setClearBusy(false);
+          }
+        }}
+      />
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>

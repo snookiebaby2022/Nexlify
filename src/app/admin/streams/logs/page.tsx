@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { DataTable } from "@/components/data-table";
 import { formatDateTime } from "@/lib/format";
 import { formatUptime } from "@/lib/stream-live-stats";
+import { LogsPageToolbar } from "@/components/logs-page-toolbar";
+import { DEFAULT_LOG_PAGE_SIZE } from "@/lib/log-page";
 
 type ProcessLog = {
   id: string;
@@ -39,9 +41,11 @@ export default function StreamLogsPage() {
   const [activity, setActivity] = useState<ActivityLog[]>([]);
   const [liveViews, setLiveViews] = useState<LiveView[]>([]);
   const [relayErrors, setRelayErrors] = useState<ActivityLog[]>([]);
+  const [pageSize, setPageSize] = useState(DEFAULT_LOG_PAGE_SIZE);
+  const [clearBusy, setClearBusy] = useState(false);
 
-  function load() {
-    fetch("/api/admin/streams/logs")
+  const load = useCallback(() => {
+    fetch(`/api/admin/streams/logs?limit=${pageSize}`)
       .then((r) => r.json())
       .then((d) => {
         setProcesses(d.processes ?? []);
@@ -49,13 +53,13 @@ export default function StreamLogsPage() {
         setLiveViews(d.liveViews ?? []);
         setRelayErrors(d.relayErrors ?? []);
       });
-  }
+  }, [pageSize]);
 
   useEffect(() => {
     load();
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
-  }, []);
+  }, [load]);
 
   return (
     <div className="space-y-8">
@@ -69,6 +73,24 @@ export default function StreamLogsPage() {
           </Link>
         </p>
       </div>
+
+      <LogsPageToolbar
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        onRefresh={load}
+        clearBusy={clearBusy}
+        clearLabel="Clear stream activity"
+        onClear={async () => {
+          if (!confirm("Delete stream-related panel activity and HLS relay error logs? Live viewers are not disconnected.")) return;
+          setClearBusy(true);
+          try {
+            await fetch("/api/admin/streams/logs", { method: "DELETE" });
+            load();
+          } finally {
+            setClearBusy(false);
+          }
+        }}
+      />
 
       {relayErrors.length > 0 && (
         <section>

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { PLAYBACK_STALE_MS } from "@/lib/connections";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { parseLogLimit } from "@/lib/log-page";
 
 /** Client connection log — active + recently ended sessions (24h window). */
 export async function GET(req: NextRequest) {
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const limit = Math.min(Number(req.nextUrl.searchParams.get("limit") ?? 100), 500);
+  const limit = parseLogLimit(req.nextUrl.searchParams.get("limit"));
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
@@ -55,4 +56,16 @@ export async function GET(req: NextRequest) {
       active: now - c.lastSeenAt.getTime() < PLAYBACK_STALE_MS,
     })),
   });
+}
+
+export async function DELETE(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
+  const result = await prisma.liveConnection.deleteMany({
+    where: { lastSeenAt: { lt: staleBefore } },
+  });
+  return NextResponse.json({ ok: true, deleted: result.count });
 }

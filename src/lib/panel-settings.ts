@@ -170,6 +170,8 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     disableTrial: false,
     /** When true, feature packs (LB Pro, transcoding, archive, security) work without WHMCS addon licenses. */
     bundledFeaturePacks: true,
+    /** Hours before panel logs are deleted by cron. 0 = never. */
+    logAutoClearHours: 72,
   },
   community: {
     telegramUrl: "",

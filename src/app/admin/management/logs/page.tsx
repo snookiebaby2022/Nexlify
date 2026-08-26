@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/format";
 import { formatAuditAction, formatAuditMeta } from "@/lib/audit-log";
+import { LogsPageToolbar } from "@/components/logs-page-toolbar";
+import { DEFAULT_LOG_PAGE_SIZE } from "@/lib/log-page";
 
 type LogRow = {
   id: string;
@@ -20,20 +22,22 @@ export default function ManagementLogsPage() {
   const [action, setAction] = useState("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
+  const [pageSize, setPageSize] = useState(DEFAULT_LOG_PAGE_SIZE);
+  const [clearBusy, setClearBusy] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams();
     if (action) params.set("action", action);
     if (q) params.set("q", q);
-    params.set("limit", "200");
+    params.set("limit", String(pageSize));
     fetch(`/api/admin/logs?${params}`)
       .then((r) => r.json())
       .then((d) => {
         setLogs(Array.isArray(d.logs) ? d.logs : []);
         setLoading(false);
       });
-  }, [action, q]);
+  }, [action, q, pageSize]);
 
   useEffect(() => {
     load();
@@ -43,10 +47,28 @@ export default function ManagementLogsPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Audit log</h1>
       <p className="text-sm" style={{ color: "var(--muted)" }}>
-        Panel actions with user, line, and detail metadata. Entries older than 3 days are removed automatically by the cron job.
+        Panel actions with user, line, and detail metadata. Use auto-clear to drop old rows on a schedule, or Clear logs to wipe them now.
       </p>
 
-      <div className="flex flex-wrap gap-3">
+      <LogsPageToolbar
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        onRefresh={load}
+        clearBusy={clearBusy}
+        onClear={async () => {
+          if (!confirm("Delete all matching audit log entries? This cannot be undone.")) return;
+          setClearBusy(true);
+          try {
+            const params = new URLSearchParams();
+            if (action) params.set("action", action);
+            if (q) params.set("q", q);
+            await fetch(`/api/admin/logs?${params}`, { method: "DELETE" });
+            load();
+          } finally {
+            setClearBusy(false);
+          }
+        }}
+      >
         <input
           placeholder="Filter action (e.g. create_line)"
           className="rounded border px-3 py-2 bg-transparent text-sm min-w-[200px]"
@@ -61,15 +83,7 @@ export default function ManagementLogsPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <button
-          type="button"
-          onClick={load}
-          className="rounded px-4 py-2 text-sm cursor-pointer"
-          style={{ background: "var(--accent)", color: "#fff" }}
-        >
-          Refresh
-        </button>
-      </div>
+      </LogsPageToolbar>
 
       <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border)" }}>
         <table className="w-full text-sm">

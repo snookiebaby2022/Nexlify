@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { DataTable } from "@/components/data-table";
 import { formatDateTime } from "@/lib/format";
+import { LogsPageToolbar } from "@/components/logs-page-toolbar";
+import { DEFAULT_LOG_PAGE_SIZE } from "@/lib/log-page";
 
 export function ActivityLogsPage({
   title,
@@ -28,9 +30,11 @@ export function ActivityLogsPage({
     }[]
   >([]);
   const [q, setQ] = useState("");
+  const [pageSize, setPageSize] = useState(DEFAULT_LOG_PAGE_SIZE);
+  const [clearBusy, setClearBusy] = useState(false);
 
   function load() {
-    const params = new URLSearchParams({ limit: "200" });
+    const params = new URLSearchParams({ limit: String(pageSize) });
     if (actionFilter) params.set("action", actionFilter);
     if (q.trim()) params.set("q", q.trim());
     fetch(`/api/admin/logs?${params}`)
@@ -40,7 +44,7 @@ export function ActivityLogsPage({
 
   useEffect(() => {
     load();
-  }, []);
+  }, [pageSize]);
 
   return (
     <div className="space-y-6">
@@ -50,7 +54,25 @@ export function ActivityLogsPage({
           {description}
         </p>
       </div>
-      <div className="flex gap-2 flex-wrap">
+      <LogsPageToolbar
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        onRefresh={load}
+        clearBusy={clearBusy}
+        onClear={async () => {
+          if (!confirm("Delete matching log entries? This cannot be undone.")) return;
+          setClearBusy(true);
+          try {
+            const params = new URLSearchParams();
+            if (actionFilter) params.set("action", actionFilter);
+            if (q.trim()) params.set("q", q.trim());
+            await fetch(`/api/admin/logs?${params}`, { method: "DELETE" });
+            load();
+          } finally {
+            setClearBusy(false);
+          }
+        }}
+      >
         <input
           className="rounded-lg border px-3 py-2 text-sm flex-1 min-w-[200px]"
           style={{ borderColor: "var(--border)" }}
@@ -59,15 +81,7 @@ export function ActivityLogsPage({
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
         />
-        <button
-          type="button"
-          onClick={load}
-          className="rounded-lg px-4 py-2 text-sm font-medium cursor-pointer"
-          style={{ background: "var(--accent)", color: "#fff" }}
-        >
-          Search
-        </button>
-      </div>
+      </LogsPageToolbar>
       <DataTable
         headers={["Time", "Action", "User", "Line", "Entity", "Details"]}
         rows={logs.map((log) => [

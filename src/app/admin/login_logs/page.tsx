@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/format";
+import { LogsPageToolbar } from "@/components/logs-page-toolbar";
+import { DEFAULT_LOG_PAGE_SIZE } from "@/lib/log-page";
 
 type LoginLogRow = {
   id: string;
@@ -18,10 +20,12 @@ export default function LoginLogsPage() {
   const [logs, setLogs] = useState<LoginLogRow[]>([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
+  const [pageSize, setPageSize] = useState(DEFAULT_LOG_PAGE_SIZE);
+  const [clearBusy, setClearBusy] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
-    const params = new URLSearchParams({ limit: "200" });
+    const params = new URLSearchParams({ limit: String(pageSize) });
     params.set("action", "login");
     if (q.trim()) params.set("q", q.trim());
     fetch(`/api/admin/logs?${params}`)
@@ -30,7 +34,7 @@ export default function LoginLogsPage() {
         setLogs(d.logs ?? []);
         setLoading(false);
       });
-  }, [q]);
+  }, [q, pageSize]);
 
   useEffect(() => {
     load();
@@ -45,7 +49,24 @@ export default function LoginLogsPage() {
         </p>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <LogsPageToolbar
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        onRefresh={load}
+        clearBusy={clearBusy}
+        onClear={async () => {
+          if (!confirm("Delete all login log entries matching this search? This cannot be undone.")) return;
+          setClearBusy(true);
+          try {
+            const params = new URLSearchParams({ action: "login" });
+            if (q.trim()) params.set("q", q.trim());
+            await fetch(`/api/admin/logs?${params}`, { method: "DELETE" });
+            load();
+          } finally {
+            setClearBusy(false);
+          }
+        }}
+      >
         <input
           className="rounded-lg border px-3 py-2 text-sm flex-1 min-w-[200px]"
           style={{ borderColor: "var(--border)" }}
@@ -54,15 +75,7 @@ export default function LoginLogsPage() {
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
         />
-        <button
-          type="button"
-          onClick={load}
-          className="rounded-lg px-4 py-2 text-sm font-medium cursor-pointer"
-          style={{ background: "var(--accent)", color: "#fff" }}
-        >
-          Search
-        </button>
-      </div>
+      </LogsPageToolbar>
 
       <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border)" }}>
         <table className="w-full text-sm">

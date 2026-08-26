@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { parseLogLimit } from "@/lib/log-page";
 
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const limit = Math.min(Number(req.nextUrl.searchParams.get("limit") ?? 200), 500);
+  const limit = parseLogLimit(req.nextUrl.searchParams.get("limit"));
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
 
   const where: Record<string, unknown> = {};
@@ -54,4 +55,13 @@ export async function GET(req: NextRequest) {
       completedAt: j.completedAt?.toISOString() ?? null,
     })),
   });
+}
+
+export async function DELETE(req: NextRequest) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+  const session = await requireSession([PanelRole.ADMIN]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const result = await prisma.importJob.deleteMany({ where: { status: { not: "running" } } });
+  return NextResponse.json({ ok: true, deleted: result.count });
 }

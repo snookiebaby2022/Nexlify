@@ -561,21 +561,12 @@ export async function jobTheftDetection() {
 export async function jobCleanupActivityLogs() {
   const start = Date.now();
   try {
-    const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-    const [activity, cron] = await Promise.all([
-      prisma.activityLog.deleteMany({
-        where: { createdAt: { lt: cutoff } },
-      }),
-      prisma.cronRunLog.deleteMany({
-        where: { createdAt: { lt: cutoff } },
-      }),
-    ]);
-    await logCron(
-      "cleanup_activity",
-      "ok",
-      `${activity.count} activity + ${cron.count} cron log rows removed (>3 days)`,
-      Date.now() - start
-    );
+    const { purgeExpiredLogs } = await import("./log-maintenance");
+    const r = await purgeExpiredLogs();
+    const msg = r.skipped
+      ? "auto-clear disabled"
+      : `${r.activity} activity + ${r.cron} cron + ${r.leak} leak + ${r.imports} import rows removed (>${r.hours}h)`;
+    await logCron("cleanup_activity", "ok", msg, Date.now() - start);
   } catch (e) {
     await logCron("cleanup_activity", "error", String(e), Date.now() - start);
   }

@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { DataTable } from "@/components/data-table";
 import { formatDateTime } from "@/lib/format";
 import { formatAuditAction } from "@/lib/audit-log";
+import { LogsPageToolbar } from "@/components/logs-page-toolbar";
+import { DEFAULT_LOG_PAGE_SIZE } from "@/lib/log-page";
 
 type LogRow = {
   id: string;
@@ -17,16 +19,17 @@ type LogRow = {
 export function ResellerActivityLogsPage() {
   const [rows, setRows] = useState<LogRow[]>([]);
   const [error, setError] = useState("");
+  const [pageSize, setPageSize] = useState(DEFAULT_LOG_PAGE_SIZE);
 
   useEffect(() => {
-    fetch("/api/reseller/activity-logs")
+    fetch(`/api/reseller/activity-logs?limit=${pageSize}`)
       .then((r) => {
         if (!r.ok) throw new Error("load");
         return r.json();
       })
       .then((d) => setRows(d.logs ?? []))
       .catch(() => setError("Could not load activity log."));
-  }, []);
+  }, [pageSize]);
 
   return (
     <div className="space-y-6">
@@ -41,6 +44,7 @@ export function ResellerActivityLogsPage() {
           {error}
         </p>
       )}
+      <LogsPageToolbar pageSize={pageSize} onPageSizeChange={setPageSize} showRetention={false} />
       <DataTable
         headers={["When", "Action", "Line", "Entity"]}
         rows={rows.map((r) => [
