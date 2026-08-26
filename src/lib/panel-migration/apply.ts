@@ -87,6 +87,105 @@ function pushWarning(warnings: string[], msg: string) {
   warnings.push(msg);
 }
 
+type ExistingStreamRow = {
+  id: string;
+  streamUrl: string;
+  name: string;
+  type: StreamType;
+  categoryId: string | null;
+  sortOrder: number;
+  vodMode: VodMode;
+  isOnDemand: boolean;
+  autoRestart: boolean;
+  isRadio: boolean;
+  isAdult: boolean;
+  seriesName: string | null;
+  seasonNum: number | null;
+  episodeNum: number | null;
+  serverId: string | null;
+  backupUrl: string | null;
+  streamIcon: string | null;
+  containerExtension: string | null;
+  epgChannelId: string | null;
+  channelId: string | null;
+};
+
+/** Omit streamIcon — huge/invalid values crash Prisma (`napi string`) and abort the whole import. */
+const MIGRATE_STREAM_PRELOAD_SELECT = {
+  id: true,
+  streamUrl: true,
+  name: true,
+  type: true,
+  categoryId: true,
+  sortOrder: true,
+  vodMode: true,
+  isOnDemand: true,
+  autoRestart: true,
+  isRadio: true,
+  isAdult: true,
+  seriesName: true,
+  seasonNum: true,
+  episodeNum: true,
+  serverId: true,
+  backupUrl: true,
+  containerExtension: true,
+  epgChannelId: true,
+  channelId: true,
+} as const;
+
+const STREAM_PRELOAD_BATCH = 1500;
+
+async function loadExistingMigrateStreams(
+  onProgress?: (phase: string, current: number, total: number) => void,
+  warnings: string[] = []
+): Promise<ExistingStreamRow[]> {
+  const total = await prisma.stream.count();
+  const rows: ExistingStreamRow[] = [];
+  if (total === 0) return rows;
+
+  let cursor: string | undefined;
+  while (rows.length < total) {
+    let take = STREAM_PRELOAD_BATCH;
+    let batch: Array<Omit<ExistingStreamRow, "streamIcon">> | null = null;
+    while (take >= 1) {
+      try {
+        batch = await prisma.stream.findMany({
+          take,
+          ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+          orderBy: { id: "asc" },
+          select: MIGRATE_STREAM_PRELOAD_SELECT,
+        });
+        break;
+      } catch (e) {
+        if (take === 1) {
+          const skipped = await prisma.stream.findMany({
+            take: 1,
+            ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+            orderBy: { id: "asc" },
+            select: { id: true },
+          });
+          if (!skipped.length) {
+            pushWarning(warnings, `Stream preload stopped: ${shortErr(e)}`);
+            return rows;
+          }
+          cursor = skipped[0]!.id;
+          pushWarning(warnings, `Skipped unreadable stream ${cursor} during preload (${shortErr(e)})`);
+          batch = [];
+          break;
+        }
+        take = Math.max(1, Math.floor(take / 4));
+      }
+    }
+    if (!batch) break;
+    if (batch.length === 0) continue;
+    for (const row of batch) rows.push({ ...row, streamIcon: null });
+    cursor = batch[batch.length - 1]!.id;
+    onProgress?.("streams", rows.length, total);
+    if (batch.length < take && take === STREAM_PRELOAD_BATCH) break;
+  }
+  return rows;
+}
+
 /**
  * Import each row independently. NEVER wrap many Prisma writes in one
  * interactive transaction — a single unique/FK failure aborts the Postgres
@@ -190,6 +289,10 @@ export async function applyMigrationBundle(
     return await applyMigrationBundleInner(bundle, options, result);
   } catch (e) {
     pushWarning(result.warnings, `Import recovered from unexpected error: ${shortErr(e)}`);
+    const processed = result.streams.imported + result.streams.skipped;
+    if (processed === 0 && (bundle.streams?.length ?? 0) > 0) {
+      throw e;
+    }
     return result;
   }
 }
@@ -289,52 +392,7 @@ async function applyMigrationBundleInner(
     // Preload URL → stream so Skip existing does not run findFirst+update per row
     // (that path was ~10 streams/sec on large panels).
     options.onProgress?.("streams", 0, bundle.streams.length);
-    type ExistingStreamRow = {
-      id: string;
-      streamUrl: string;
-      name: string;
-      type: StreamType;
-      categoryId: string | null;
-      sortOrder: number;
-      vodMode: VodMode;
-      isOnDemand: boolean;
-      autoRestart: boolean;
-      isRadio: boolean;
-      isAdult: boolean;
-      seriesName: string | null;
-      seasonNum: number | null;
-      episodeNum: number | null;
-      serverId: string | null;
-      backupUrl: string | null;
-      streamIcon: string | null;
-      containerExtension: string | null;
-      epgChannelId: string | null;
-      channelId: string | null;
-    };
-    const existingRows = (await prisma.stream.findMany({
-      select: {
-        id: true,
-        streamUrl: true,
-        name: true,
-        type: true,
-        categoryId: true,
-        sortOrder: true,
-        vodMode: true,
-        isOnDemand: true,
-        autoRestart: true,
-        isRadio: true,
-        isAdult: true,
-        seriesName: true,
-        seasonNum: true,
-        episodeNum: true,
-        serverId: true,
-        backupUrl: true,
-        streamIcon: true,
-        containerExtension: true,
-        epgChannelId: true,
-        channelId: true,
-      },
-    })) as ExistingStreamRow[];
+    const existingRows = await loadExistingMigrateStreams(options.onProgress, result.warnings);
     const byKey = new Map<string, ExistingStreamRow>();
     const rememberStream = (row: ExistingStreamRow, extraLegacy?: string | null) => {
       for (const k of migrationStreamIdentityKeys({
