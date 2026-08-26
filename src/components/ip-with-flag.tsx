@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  countryCodeToFlag,
+  extractHostname,
   extractIpAddress,
   isPublicIp,
   normalizeCountryCode,
@@ -77,28 +77,30 @@ export function IpWithFlag({
 }) {
   const text = ip?.trim() || "—";
   const literalIp = extractIpAddress(text);
+  const host = extractHostname(text);
   const preset = normalizeCountryCode(countryCode);
   const [resolved, setResolved] = useState<string | null>(preset);
-  const canLookup = Boolean(literalIp && isPublicIp(literalIp) && !preset);
+  const lookupKey = literalIp && isPublicIp(literalIp) ? literalIp : host && !literalIp ? host : null;
+  const canLookup = Boolean(lookupKey && !preset);
 
   useEffect(() => {
     if (preset) {
       setResolved(preset);
       return;
     }
-    if (!canLookup || !literalIp) {
+    if (!canLookup || !lookupKey) {
       setResolved(null);
       return;
     }
 
     let cancelled = false;
-    fetchCountryCode(literalIp).then((code) => {
+    fetchCountryCode(lookupKey).then((code) => {
       if (!cancelled) setResolved(code);
     });
     return () => {
       cancelled = true;
     };
-  }, [preset, canLookup, literalIp]);
+  }, [preset, canLookup, lookupKey]);
 
   const displayCode = preset ?? resolved;
 

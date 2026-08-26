@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { getStreamLiveStatsMap, type StreamStatsInput } from "@/lib/stream-live-stats";
-import { getStreamPlaybackMode } from "@/lib/stream-playback-mode";
+import { getStreamPlaybackPolicy } from "@/lib/stream-playback-policy";
 import { isTranscodingPackEnabled } from "@/lib/gpu-transcode";
 import { isLbProEnabled } from "@/lib/intelligent-lb";
 
@@ -54,8 +54,9 @@ export async function getStreamingEngineSnapshot() {
   let transcode = 0;
   let online = 0;
   for (const s of streams) {
-    const mode = getStreamPlaybackMode(s);
+    const mode = getStreamPlaybackPolicy(s);
     if (mode === "direct") direct += 1;
+    else if (mode === "relay") onDemand += 1;
     else if (mode === "on_demand" || mode === "created" || mode === "catchup") onDemand += 1;
     else transcode += 1;
     const st = statsMap.get(s.id);

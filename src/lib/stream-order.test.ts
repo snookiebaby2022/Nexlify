@@ -13,9 +13,11 @@ test("listVodNewestFirst is true for movies and series only", () => {
   assert.equal(listVodNewestFirst([]), false);
 });
 
-test("streamListOrderBy defaults to newest createdAt", () => {
-  assert.deepEqual(streamListOrderBy(), [{ createdAt: "desc" }, { id: "desc" }]);
+test("streamListOrderBy uses channel order for live and newest for VOD", () => {
+  assert.deepEqual(streamListOrderBy(), [{ sortOrder: "asc" }, { name: "asc" }]);
+  assert.deepEqual(streamListOrderBy(null, StreamType.LIVE), [{ sortOrder: "asc" }, { name: "asc" }]);
+  assert.deepEqual(streamListOrderBy(null, StreamType.MOVIE), [{ createdAt: "desc" }, { id: "desc" }]);
   assert.deepEqual(streamListOrderBy("newest"), [{ createdAt: "desc" }, { id: "desc" }]);
-  assert.deepEqual(streamListOrderBy("order"), [{ sortOrder: "asc" }, { name: "asc" }]);
+  assert.deepEqual(streamListOrderBy("order", StreamType.MOVIE), [{ sortOrder: "asc" }, { name: "asc" }]);
   assert.deepEqual(streamListOrderBy("name"), [{ sortOrder: "asc" }, { name: "asc" }]);
 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
+import { publicStreamServer } from "@/lib/server-public";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 export async function GET(
@@ -21,7 +22,7 @@ export async function GET(
       include: { proxy: true, _count: { select: { streams: true } } },
     });
     if (!server) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json({ server });
+    return NextResponse.json({ server: publicStreamServer(server) });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to load server" },

@@ -97,6 +97,8 @@ export type ServerFormState = {
   agentSshHost: string;
   agentSshPort: number;
   agentSshUser: string;
+  agentSshPassword: string;
+  sshPasswordSet: boolean;
   geoLbCountries: string;
   geoLbIsps: string;
   dnsRotatorHosts: string;
@@ -143,10 +145,12 @@ export const defaultServerForm = (): ServerFormState => ({
   timeshiftOnly: false,
   isActive: true,
   proxied: false,
-  agentUseSsh: false,
+  agentUseSsh: true,
   agentSshHost: "",
   agentSshPort: 22,
   agentSshUser: "root",
+  agentSshPassword: "",
+  sshPasswordSet: false,
   geoLbCountries: "",
   geoLbIsps: "",
   dnsRotatorHosts: "",
@@ -251,10 +255,12 @@ function serverToForm(s: Record<string, unknown>): ServerFormState {
     timeshiftOnly: Boolean(s.timeshiftOnly),
     isActive: Boolean(s.isActive !== false),
     proxied: Boolean(s.proxyId),
-    agentUseSsh: Boolean(s.agentUseSsh),
+    agentUseSsh: s.agentUseSsh !== false,
     agentSshHost: String(s.agentSshHost ?? ""),
     agentSshPort: Number(s.agentSshPort ?? 22),
     agentSshUser: String(s.agentSshUser ?? "root"),
+    agentSshPassword: "",
+    sshPasswordSet: Boolean(s.sshPasswordSet),
     geoLbCountries: listToText(s.geoLbCountries),
     geoLbIsps: listToText(s.geoLbIsps),
     dnsRotatorHosts: dns?.hosts?.join("\n") ?? "",
@@ -315,9 +321,10 @@ function buildPayload(form: ServerFormState, panelSettings: object | null) {
     rtmpPort: form.rtmpPort ? Number(form.rtmpPort) : null,
     bandwidthMbps: form.bandwidthMbps ? Number(form.bandwidthMbps) : null,
     agentUseSsh: form.agentUseSsh,
-    agentSshHost: form.agentUseSsh ? form.agentSshHost || form.host : null,
-    agentSshPort: form.agentUseSsh ? form.agentSshPort : null,
-    agentSshUser: form.agentUseSsh ? form.agentSshUser : null,
+    agentSshHost: form.agentSshHost || form.host,
+    agentSshPort: form.agentSshPort || 22,
+    agentSshUser: form.agentSshUser || "root",
+    ...(form.agentSshPassword.trim() ? { agentSshPassword: form.agentSshPassword } : {}),
     geoLbCountries: (() => {
       const c = parseList(form.geoLbCountries);
       return c.length ? c : null;
@@ -362,6 +369,9 @@ export function ServerForm({
   const [certbotBusy, setCertbotBusy] = useState(false);
   const [knownInterfaces, setKnownInterfaces] = useState<{ name: string; servers: string[] }[]>([]);
   const [detecting, setDetecting] = useState(false);
+  const [sshTesting, setSshTesting] = useState(false);
+  const [sshTestMsg, setSshTestMsg] = useState("");
+  const [hostGeo, setHostGeo] = useState<{ ip: string | null; countryName: string | null } | null>(null);
 
   async function autoDetectHardware(scope: "network" | "performance" | "all" = "all") {
     setDetecting(true);
@@ -452,6 +462,50 @@ export function ServerForm({
     // Detect once when adding a server so Network + Performance start populated.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
+
+  useEffect(() => {
+    const host = form.host.trim();
+    if (!host) {
+      setHostGeo(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      fetch(`/api/admin/ip-country?ip=${encodeURIComponent(host)}`)
+        .then((r) => r.json())
+        .then((d) =>
+          setHostGeo({
+            ip: typeof d.ip === "string" ? d.ip : null,
+            countryName: typeof d.countryName === "string" ? d.countryName : null,
+          })
+        )
+        .catch(() => setHostGeo(null));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [form.host]);
+
+  async function testSsh() {
+    setSshTesting(true);
+    setSshTestMsg("");
+    try {
+      const res = await fetch("/api/admin/servers/ssh-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serverId: mode === "edit" ? serverId : undefined,
+          host: form.agentSshHost.trim() || form.host.trim(),
+          port: form.agentSshPort || 22,
+          username: form.agentSshUser.trim() || "root",
+          password: form.agentSshPassword,
+        }),
+      });
+      const d = await res.json();
+      setSshTestMsg(d.message ?? (res.ok ? "SSH OK" : "SSH test failed"));
+    } catch {
+      setSshTestMsg("SSH test failed");
+    } finally {
+      setSshTesting(false);
+    }
+  }
 
   function nextTab() {
     const idx = TABS.findIndex((t) => t.id === tab);
@@ -640,7 +694,7 @@ export function ServerForm({
                 />
               </FormField>
               <FormField
-                label="Server IP"
+                label="Server IP / hostname"
                 required
               >
                 <input
@@ -652,12 +706,99 @@ export function ServerForm({
                   required
                 />
                 {form.host.trim() && (
-                  <p className="mt-1.5">
-                    <IpWithFlag ip={form.host} />
+                  <p className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <IpWithFlag ip={form.host} countryCode={undefined} showCode />
+                    {hostGeo?.ip && hostGeo.ip !== form.host.trim() && (
+                      <span className="text-xs" style={{ color: "var(--muted)" }}>
+                        resolves to {hostGeo.ip}
+                        {hostGeo.countryName ? ` · ${hostGeo.countryName}` : ""}
+                      </span>
+                    )}
+                    {hostGeo?.ip && hostGeo.ip === form.host.trim() && hostGeo.countryName && (
+                      <span className="text-xs" style={{ color: "var(--muted)" }}>
+                        {hostGeo.countryName}
+                      </span>
+                    )}
                   </p>
                 )}
-                <InfoTip title="Main server IP used for streaming and agent connections." />
+                <InfoTip title="Public IP or hostname of this load-balancer. Country flag is looked up from the resolved public IP." />
               </FormField>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <FormField label="HTTP broadcast port" required>
+                  <input
+                    type="number"
+                    className={formInputClass}
+                    style={formInputStyle}
+                    value={form.port}
+                    onChange={(e) =>
+                      setForm({ ...form, port: parseInt(e.target.value, 10) || STREAM_HTTP_PORT })
+                    }
+                  />
+                </FormField>
+                <FormField label="HTTPS broadcast port">
+                  <input
+                    type="number"
+                    className={formInputClass}
+                    style={formInputStyle}
+                    value={form.httpsPort}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        httpsPort: parseInt(e.target.value, 10) || STREAM_HTTPS_PORT,
+                      })
+                    }
+                  />
+                </FormField>
+              </div>
+              <div className="grid sm:grid-cols-3 gap-3">
+                <FormField label="SSH port">
+                  <input
+                    type="number"
+                    className={formInputClass}
+                    style={formInputStyle}
+                    value={form.agentSshPort}
+                    onChange={(e) =>
+                      setForm({ ...form, agentSshPort: parseInt(e.target.value, 10) || 22 })
+                    }
+                  />
+                </FormField>
+                <FormField label="SSH username">
+                  <input
+                    className={formInputClass}
+                    style={formInputStyle}
+                    value={form.agentSshUser}
+                    onChange={(e) => setForm({ ...form, agentSshUser: e.target.value })}
+                    placeholder="root"
+                  />
+                </FormField>
+                <FormField label="SSH password">
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    className={formInputClass}
+                    style={formInputStyle}
+                    value={form.agentSshPassword}
+                    onChange={(e) => setForm({ ...form, agentSshPassword: e.target.value })}
+                    placeholder={form.sshPasswordSet ? "Leave blank to keep" : "root password"}
+                  />
+                </FormField>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  className="text-sm px-3 py-1.5 rounded border cursor-pointer"
+                  style={{ borderColor: "var(--border)" }}
+                  disabled={sshTesting || !form.host.trim()}
+                  onClick={() => void testSsh()}
+                >
+                  {sshTesting ? "Testing SSH…" : "Test SSH"}
+                </button>
+                {sshTestMsg ? (
+                  <span className="text-sm" style={{ color: "var(--muted)" }}>
+                    {sshTestMsg}
+                  </span>
+                ) : null}
+              </div>
               <FormField label="Private IP">
                 <input
                   className={formInputClass}

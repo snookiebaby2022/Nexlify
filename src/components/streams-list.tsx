@@ -5,8 +5,6 @@ import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
-  AlertCircle,
-  CheckCircle2,
   ChevronDown,
   Filter,
   RefreshCw,
@@ -20,7 +18,8 @@ import { resolveClientPollIntervals } from "@/lib/perf-polling";
 const ADMIN_POLLS = resolveClientPollIntervals();
 import { StreamTranscodeQuickActions } from "@/components/stream-transcode-quick-actions";
 import { StreamClientsModal } from "@/components/stream-clients-modal";
-import { formatUptimeXui, type StreamLiveStat } from "@/lib/stream-live-stats";
+import { type StreamLiveStat } from "@/lib/stream-live-stats";
+import { streamUptimeColumnLabel } from "@/lib/stream-playback-policy";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
@@ -71,6 +70,29 @@ function serverLabel(s: Stream) {
   const name = s.server?.name ?? "Main Server";
   const host = s.server?.domain || s.server?.host || "";
   return { name, host };
+}
+
+function streamUptimeKind(s: Stream, listType?: string): "DIRECT" | "LIVE" | "ON-DEMAND" | "CATCHUP" {
+  if (s.liveStats?.playbackMode) {
+    return streamUptimeColumnLabel(s.liveStats.playbackMode);
+  }
+  if (s.hostedExternally) return "DIRECT";
+  if (s.vodMode === "CATCHUP") return "CATCHUP";
+  if (s.isOnDemand || s.vodMode === "ON_DEMAND" || listType === "MOVIE" || listType === "SERIES") {
+    return "ON-DEMAND";
+  }
+  return "LIVE";
+}
+
+function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
+  const kind = streamUptimeKind(stream, listType);
+  const cls =
+    kind === "DIRECT"
+      ? "xui-uptime-badge xui-uptime-badge--direct"
+      : kind === "LIVE"
+        ? "xui-uptime-badge xui-uptime-badge--ok"
+        : "xui-uptime-badge xui-uptime-badge--idle";
+  return <span className={cls}>{kind}</span>;
 }
 
 function StreamInfoCell({ stream }: { stream: Stream }) {
@@ -142,8 +164,6 @@ export function StreamsList({
   const [qualityFilter, setQualityFilter] = useState("");
   const [clientsModal, setClientsModal] = useState<{ id: string; name: string } | null>(null);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-  const [tick, setTick] = useState(0);
-  const fetchTimeRef = useRef(0);
   const countedKeyRef = useRef("");
   const urlInitRef = useRef(false);
 
@@ -214,6 +234,7 @@ export function StreamsList({
       params.set("withStats", "1");
     }
     if (type) params.set("type", type);
+    if (type === "LIVE") params.set("sort", "order");
     if (categoryId) params.set("categoryId", categoryId);
     if (serverId) params.set("serverId", serverId);
     if (search.trim()) params.set("search", search.trim());
@@ -228,7 +249,6 @@ export function StreamsList({
           setTotal(d.total);
           countedKeyRef.current = loadKey;
         }
-        fetchTimeRef.current = Date.now();
       });
   }, [type, categoryId, serverId, search, page, pageSize, statusFilter]);
 
@@ -250,13 +270,6 @@ export function StreamsList({
     const t = setInterval(load, ADMIN_POLLS.streamsMs);
     return () => clearInterval(t);
   }, [load, type]);
-
-  // Tick every second for live uptime only — movies/series lists don't show it.
-  useEffect(() => {
-    if (type === "MOVIE" || type === "SERIES") return;
-    const t = setInterval(() => setTick((n) => n + 1), 1000);
-    return () => clearInterval(t);
-  }, [type]);
 
   const filtered = useMemo(() => {
     return streams.filter((s) => {
@@ -502,7 +515,6 @@ export function StreamsList({
         {filtered.map((s, i) => {
           const st = s.liveStats;
           const { name: serverName } = serverLabel(s);
-          const isOnline = st?.status === "online" && (st.uptimeSeconds ?? 0) > 0;
           const viewers = st?.viewers ?? 0;
           return (
             <article key={s.id} className="panel-mobile-card p-4 space-y-2">
@@ -553,16 +565,7 @@ export function StreamsList({
                 </div>
                 <div className="col-span-2">
                   <p className="panel-mobile-card-label">Uptime</p>
-                  {isOnline || (st?.uptimeSeconds ?? 0) > 0 ? (
-                    <span className="xui-uptime-badge xui-uptime-badge--ok">
-                      {formatUptimeXui(
-                        (st?.uptimeSeconds ?? 0) +
-                          (st?.uptimeSeconds != null ? Math.floor((Date.now() - fetchTimeRef.current) / 1000) : 0)
-                      )}
-                    </span>
-                  ) : (
-                    <span className="xui-uptime-badge xui-uptime-badge--idle">—</span>
-                  )}
+                  <StreamUptimeBadge stream={s} listType={type} />
                 </div>
               </div>
               <div className="panel-mobile-card-actions">
@@ -611,8 +614,6 @@ export function StreamsList({
               const st = s.liveStats;
               const { name: serverName, host: serverHost } = serverLabel(s);
               const rowId = (page - 1) * pageSize + i + 1;
-              const isDirect = st?.status === "direct";
-              const isOnline = st?.status === "online" && (st.uptimeSeconds ?? 0) > 0;
               const icon = displayStreamIcon(s);
               const viewers = st?.viewers ?? 0;
 
@@ -640,18 +641,6 @@ export function StreamsList({
                       href={`/admin/servers/streams?edit=${s.id}`}
                       className="xui-stream-name"
                     />
-                    <span className="flex flex-wrap gap-1 mt-0.5">
-                      {s.hostedExternally && !s.streamUrl?.startsWith("nexlify://") ? (
-                        <span className="xui-uptime-badge xui-uptime-badge--direct text-[10px]">PROVIDER</span>
-                      ) : null}
-                      {s.isOnDemand || s.vodMode === "ON_DEMAND" ? (
-                        <span className="xui-uptime-badge xui-uptime-badge--idle text-[10px]">ON DEMAND</span>
-                      ) : s.vodMode === "CATCHUP" ? (
-                        <span className="xui-uptime-badge xui-uptime-badge--idle text-[10px]">CATCHUP</span>
-                      ) : type === "LIVE" ? (
-                        <span className="xui-uptime-badge xui-uptime-badge--ok text-[10px]">LIVE</span>
-                      ) : null}
-                    </span>
                     {s.category?.name && (
                       <span className="xui-stream-category">{s.category.name}</span>
                     )}
@@ -679,20 +668,7 @@ export function StreamsList({
                     </button>
                   </td>
                   <td>
-                    {isDirect ? (
-                      <span className="xui-uptime-badge xui-uptime-badge--direct">DIRECT</span>
-                    ) : isOnline || (st?.uptimeSeconds ?? 0) > 0 ? (
-                      <span className="xui-uptime-badge xui-uptime-badge--ok">
-                        {st?.status === "error" ? (
-                          <AlertCircle size={14} className="xui-uptime-icon-warn" />
-                        ) : (
-                          <CheckCircle2 size={14} className="xui-uptime-icon-ok" />
-                        )}
-                        {formatUptimeXui((st?.uptimeSeconds ?? 0) + (st?.uptimeSeconds != null ? Math.floor((Date.now() - fetchTimeRef.current) / 1000) : 0))}
-                      </span>
-                    ) : (
-                      <span className="xui-uptime-badge xui-uptime-badge--idle">—</span>
-                    )}
+                    <StreamUptimeBadge stream={s} listType={type} />
                   </td>
                   <td className="xui-streams-td-actions">
                     {type === "SERIES" ? (

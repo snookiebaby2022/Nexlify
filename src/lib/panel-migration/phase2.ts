@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isLocalPanelHost } from "@/lib/panel-local-server";
 import { pgRowsToTableData } from "./map-rows";
 import { rowToRecord, type SqlTableData } from "./sql-parse";
 import type { Prisma } from "@prisma/client";
@@ -400,6 +401,7 @@ export async function applyMigrationPhase2(
             continue;
           }
         }
+        const local = isLocalPanelHost(host);
         const created = await prisma.streamServer.create({
           data: {
             name: name || host,
@@ -409,6 +411,9 @@ export async function applyMigrationPhase2(
             domain: s.domain?.trim() || null,
             maxClients: Number(s.maxClients) || 1000,
             privateIp: s.privateIp?.trim() || null,
+            isActive: local,
+            healthStatus: local ? "online" : "offline",
+            healthMessage: local ? "Imported panel host" : "Imported from dump — no Nexlify agent on this host",
             ...(Number.isFinite(s.httpsPort) && s.httpsPort
               ? { httpsPort: Number(s.httpsPort) }
               : {}),
@@ -416,11 +421,9 @@ export async function applyMigrationPhase2(
               ? { rtmpPort: Number(s.rtmpPort) }
               : {}),
             sortOrder: i,
-            // First imported = main (panel); all others default to load balancers.
-            panelSettings:
-              i === 0
-                ? ({ advanced: { serverRole: "main" } } as Prisma.InputJsonValue)
-                : ({ advanced: { serverRole: "lb" } } as Prisma.InputJsonValue),
+            panelSettings: local
+              ? ({ advanced: { serverRole: "main" } } as Prisma.InputJsonValue)
+              : ({ advanced: { serverRole: "lb" } } as Prisma.InputJsonValue),
           },
         });
         serverIdByLegacy.set(s.legacyId, created.id);

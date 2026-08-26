@@ -13,6 +13,8 @@ import {
 } from "@/lib/panel-local-server";
 import { applyLocalServerPortProfile } from "@/lib/panel-port-sync";
 import { syncStreamServerPublicHosts } from "@/lib/panel-public-hosts";
+import { publicStreamServer } from "@/lib/server-public";
+import { encodeSshPasswordOrThrow, serverGeoFields } from "@/lib/server-save-fields";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -38,7 +40,7 @@ export async function GET(req: NextRequest) {
     },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
-  return NextResponse.json({ servers: sortServersMainFirst(servers) });
+  return NextResponse.json({ servers: sortServersMainFirst(servers).map(publicStreamServer) });
 }
 
 export async function POST(req: NextRequest) {
@@ -64,6 +66,19 @@ export async function POST(req: NextRequest) {
 
   await ensurePanelCategory();
 
+  const geo = await serverGeoFields(String(body.host ?? ""));
+  let agentSshPasswordEnc: string | undefined;
+  try {
+    agentSshPasswordEnc = encodeSshPasswordOrThrow(body.agentSshPassword);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Cannot encrypt SSH password" },
+      { status: 400 }
+    );
+  }
+
+  const useSsh = body.agentUseSsh !== false;
+
   const server = await prisma.streamServer.create({
     data: {
       name: body.name,
@@ -79,16 +94,18 @@ export async function POST(req: NextRequest) {
       domain: body.domain || null,
       panelPort: Number(body.panelPort ?? PANEL_HTTP_PORT),
       timeshiftOnly: body.timeshiftOnly === true,
-      region: null,
+      region: geo.region,
+      countryCode: geo.countryCode,
       rtmpPort: body.rtmpPort != null ? Number(body.rtmpPort) : null,
       bandwidthMbps: body.bandwidthMbps != null ? Number(body.bandwidthMbps) : null,
       healthStatus: body.healthStatus ?? "unknown",
       healthMessage: body.healthMessage || null,
       dnsRotator: body.dnsRotator || null,
-      agentSshHost: body.agentSshHost || null,
-      agentSshPort: body.agentSshPort != null ? Number(body.agentSshPort) : undefined,
-      agentSshUser: body.agentSshUser || null,
-      agentUseSsh: body.agentUseSsh === true,
+      agentSshHost: body.agentSshHost || body.host || null,
+      agentSshPort: body.agentSshPort != null ? Number(body.agentSshPort) : 22,
+      agentSshUser: body.agentSshUser || "root",
+      agentSshPasswordEnc,
+      agentUseSsh: useSsh,
       httpsPort: body.httpsPort != null ? Number(body.httpsPort) : STREAM_HTTPS_PORT,
       geoLbCountries: body.geoLbCountries ?? null,
       geoLbIsps: body.geoLbIsps ?? null,
@@ -104,7 +121,7 @@ export async function POST(req: NextRequest) {
   }
   await syncStreamServerPublicHosts(server);
 
-  return NextResponse.json({ server, portSync });
+  return NextResponse.json({ server: publicStreamServer(server), portSync });
   } catch (e) {
     return apiMutationErrorResponse(e);
   }
@@ -152,6 +169,20 @@ export async function PATCH(req: NextRequest) {
     if (err) return NextResponse.json({ error: err }, { status: 400 });
   }
 
+  const geo =
+    body.host != null
+      ? await serverGeoFields(String(body.host))
+      : null;
+  let agentSshPasswordEnc: string | undefined;
+  try {
+    agentSshPasswordEnc = encodeSshPasswordOrThrow(body.agentSshPassword);
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Cannot encrypt SSH password" },
+      { status: 400 }
+    );
+  }
+
   const server = await prisma.streamServer.update({
     where: { id },
     data: {
@@ -178,11 +209,18 @@ export async function PATCH(req: NextRequest) {
       agentSshHost: body.agentSshHost !== undefined ? body.agentSshHost || null : undefined,
       agentSshPort: body.agentSshPort != null ? Number(body.agentSshPort) : undefined,
       agentSshUser: body.agentSshUser !== undefined ? body.agentSshUser || null : undefined,
+      ...(agentSshPasswordEnc ? { agentSshPasswordEnc } : {}),
       agentUseSsh: body.agentUseSsh !== undefined ? Boolean(body.agentUseSsh) : undefined,
       httpsPort: body.httpsPort != null ? Number(body.httpsPort) : undefined,
       geoLbCountries: body.geoLbCountries !== undefined ? body.geoLbCountries : undefined,
       geoLbIsps: body.geoLbIsps !== undefined ? body.geoLbIsps : undefined,
       panelSettings: body.panelSettings !== undefined ? body.panelSettings : undefined,
+      ...(geo
+        ? {
+            countryCode: geo.countryCode,
+            region: geo.region,
+          }
+        : {}),
     },
   });
   const { cacheDelExact } = await import("@/lib/cache");
@@ -202,7 +240,7 @@ export async function PATCH(req: NextRequest) {
     await syncStreamServerPublicHosts(server);
   }
 
-  return NextResponse.json({ server, portSync, agentConfigQueued });
+  return NextResponse.json({ server: publicStreamServer(server), portSync, agentConfigQueued });
   } catch (e) {
     return apiMutationErrorResponse(e);
   }

@@ -7,9 +7,9 @@ import { isThisPanelMachine } from "@/lib/panel-local-server";
 import {
   readStoredHostMetrics,
   sampleLocalHostMetrics,
-  snapshotWindowToMbps,
   type HostMetricsSample,
 } from "@/lib/host-metrics";
+import { dashboardPlaybackBandwidthMbps } from "@/lib/server-load-metrics";
 import {
   classifyTicketSubject,
   emptyBreakdown,
@@ -29,8 +29,12 @@ export type ServerMetricsRow = {
   cpu: number;
   connections?: number;
   users?: number;
+  /** Active LIVE channels assigned to this server. */
   streamsOn?: number;
+  /** LIVE channels whose last source probe failed. */
   streamsOff?: number;
+  /** Active movies + series assigned to this server. */
+  vodStreams?: number;
   maxClients?: number;
 };
 
@@ -90,11 +94,21 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     },
   });
 
-  const [liveRows, streamProbeCounts] = await Promise.all([
+  const [liveRows, catalogCounts, probeFailed] = await Promise.all([
     listLiveConnections(),
     prisma.stream.groupBy({
-      by: ["serverId", "lastProbeOk"],
-      where: { isActive: true, type: StreamType.LIVE, serverId: { not: null } },
+      by: ["serverId", "type"],
+      where: { isActive: true, serverId: { not: null } },
+      _count: true,
+    }),
+    prisma.stream.groupBy({
+      by: ["serverId"],
+      where: {
+        isActive: true,
+        type: StreamType.LIVE,
+        serverId: { not: null },
+        lastProbeOk: false,
+      },
       _count: true,
     }),
   ]);
@@ -114,13 +128,20 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     users.add(row.lineId);
   }
 
-  const onByServer = new Map<string, number>();
-  const offByServer = new Map<string, number>();
-  for (const row of streamProbeCounts) {
+  const liveByServer = new Map<string, number>();
+  const vodByServer = new Map<string, number>();
+  for (const row of catalogCounts) {
     if (!row.serverId) continue;
-    if (row.lastProbeOk === true) onByServer.set(row.serverId, row._count);
-    else if (row.lastProbeOk === false) offByServer.set(row.serverId, row._count);
+    if (row.type === StreamType.LIVE) {
+      liveByServer.set(row.serverId, (liveByServer.get(row.serverId) ?? 0) + row._count);
+    } else if (row.type === StreamType.MOVIE || row.type === StreamType.SERIES) {
+      vodByServer.set(row.serverId, (vodByServer.get(row.serverId) ?? 0) + row._count);
+    }
   }
+
+  const offByServer = new Map(
+    probeFailed.filter((r) => r.serverId).map((r) => [r.serverId as string, r._count])
+  );
 
   const ordered = sortServersMainFirst(servers);
   let localSample: HostMetricsSample | null = null;
@@ -132,8 +153,9 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
       (s.agentToken != null && s.agentLastSeen != null && s.agentLastSeen >= staleBefore);
     const connections = connsByServer.get(s.id) ?? 0;
     const users = usersByServer.get(s.id)?.size ?? 0;
-    const streamsOn = onByServer.get(s.id) ?? 0;
+    const streamsOn = liveByServer.get(s.id) ?? 0;
     const streamsOff = offByServer.get(s.id) ?? 0;
+    const vodStreams = vodByServer.get(s.id) ?? 0;
 
     if (!managed) {
       rows.push({
@@ -150,6 +172,7 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
         users,
         streamsOn,
         streamsOff,
+        vodStreams,
         maxClients: s.maxClients,
       });
       continue;
@@ -179,6 +202,7 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
       users,
       streamsOn,
       streamsOff,
+      vodStreams,
       maxClients: s.maxClients,
     });
   }
@@ -197,7 +221,7 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     trialUsers,
     deadStreams,
     unstableStreams,
-    snapshots,
+    viewers,
     tickets,
     inactiveByType,
     openTicketCount,
@@ -233,7 +257,7 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
         AND: [{ backupUrl: { not: null } }, { backupUrl: { not: "" } }],
       },
     }),
-    prisma.bandwidthSnapshot.findMany({ take: 1, orderBy: { createdAt: "desc" } }),
+    liveViewerStats(),
     prisma.ticket.findMany({
       where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
       select: { subject: true },
@@ -261,14 +285,9 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
   const reportedChannels = sumBreakdown(reportedBreakdown);
   const channelRequests = sumBreakdown(requestBreakdown);
 
-  const liveNic = sampleLocalHostMetrics();
-  let networkInMbps = liveNic.downloadMbps;
-  let networkOutMbps = liveNic.uploadMbps;
-  const snap = snapshots[0];
-  if (networkInMbps <= 0 && networkOutMbps <= 0 && snap) {
-    networkInMbps = snapshotWindowToMbps(snap.bytesIn);
-    networkOutMbps = snapshotWindowToMbps(snap.bytesOut);
-  }
+  const { networkInMbps, networkOutMbps } = dashboardPlaybackBandwidthMbps(
+    viewers.onlineConnections
+  );
 
   const inactiveMap = new Map(inactiveByType.map((r) => [r.type, r._count]));
   const inactiveLive = inactiveMap.get(StreamType.LIVE) ?? 0;

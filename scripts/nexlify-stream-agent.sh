@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Nexlify stream server agent v2.2 — argv ffmpeg start/stop (no eval of panel commands)
+# Nexlify stream server agent v2.3 — stop leftover ffmpeg even if the stream left agent config
 set -euo pipefail
 
 PANEL_URL="${PANEL_URL:?Set PANEL_URL}"
@@ -33,6 +33,16 @@ stop_stream_pid() {
   fi
 }
 
+stop_leftover_by_stream_id() {
+  local sid="$1"
+  [[ "$sid" =~ ^[A-Za-z0-9_-]{8,80}$ ]] || return 0
+  shopt -s nullglob
+  local f
+  for f in /var/run/nexlify/stream-*-"$sid".pid; do
+    stop_stream_pid "$f"
+  done
+}
+
 start_ffmpeg_argv() {
   local entry="$1"
   local ffmpeg pid_file log_file
@@ -58,13 +68,20 @@ run_stream_cmd() {
   local action="$1" stream_id="$2"
   local entry
   entry="$(jq -c --arg id "$stream_id" '.config.streams[] | select(.id==$id)' "$CONFIG_DIR/poll.json" 2>/dev/null | head -1)"
-  [[ -z "$entry" ]] && return 1
+  if [[ -z "$entry" ]]; then
+    if [[ "$action" == "stop_stream" ]]; then
+      stop_leftover_by_stream_id "$stream_id"
+      return 0
+    fi
+    return 1
+  fi
   case "$action" in
     start_stream|restart_stream)
       start_ffmpeg_argv "$entry"
       ;;
     stop_stream)
       stop_stream_pid "$(echo "$entry" | jq -r '.pidFile // empty')"
+      stop_leftover_by_stream_id "$stream_id"
       ;;
     probe_stream)
       # Reachability check from this stream server (not the panel host)
@@ -166,7 +183,7 @@ report_heartbeat() {
 
   curl -fsS -X POST -H "$auth_hdr" -H "Content-Type: application/json" \
     "${PANEL_URL}/api/agent/heartbeat" \
-    -d "{\"version\":\"2.2.0\",\"processes\":${procs},\"cpu\":${cpu:-0},\"memory\":${mem:-0},\"storage\":${disk:-0},\"upload\":${upload},\"download\":${download}}" >/dev/null || true
+    -d "{\"version\":\"2.3.0\",\"processes\":${procs},\"cpu\":${cpu:-0},\"memory\":${mem:-0},\"storage\":${disk:-0},\"upload\":${upload},\"download\":${download}}" >/dev/null || true
 }
 
 while true; do

@@ -10,6 +10,8 @@ import {
 import { applyMigrationPhase2 } from "./phase2";
 import { applyMigrationPhase3 } from "./apply-phase3";
 import { urlsFromPhpSerialized, looksLikePlayableUrl } from "./sql-junctions";
+import { migrationCreditBalance, resellerCreditUpdate } from "./map-rows";
+import { pickMigrateStreamServerId, usableMigrateStreamServerIds, streamServerUsableForPlayback } from "./migrate-stream-server";
 import { normalizeUserAgentField } from "../line-restrictions";
 import { normalizeAllowedOutputInput } from "../line-access-output";
 import type {
@@ -335,6 +337,33 @@ async function applyMigrationBundleInner(
     }
   }
 
+  let fallbackServerId = options.defaultServerId?.trim() || undefined;
+  const usableServerIds = await usableMigrateStreamServerIds([
+    ...serverIdByLegacy.values(),
+    fallbackServerId ?? "",
+  ]);
+  if (!fallbackServerId || !usableServerIds.has(fallbackServerId)) {
+    const panelServers = await prisma.streamServer.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        host: true,
+        isActive: true,
+        healthStatus: true,
+        agentToken: true,
+        sortOrder: true,
+      },
+      orderBy: { sortOrder: "asc" },
+    });
+    const local = panelServers.find((s) => streamServerUsableForPlayback(s));
+    if (local) {
+      usableServerIds.add(local.id);
+      if (!fallbackServerId || !usableServerIds.has(fallbackServerId)) {
+        fallbackServerId = local.id;
+      }
+    }
+  }
+
   const bouquetIdByLegacy = new Map<string, string>();
   const streamIdByLegacy = new Map<string, string>();
   const resellerIdByLegacy = new Map<string, string>();
@@ -384,10 +413,8 @@ async function applyMigrationBundleInner(
       const exists = await prisma.streamServer.findUnique({ where: { id: serverId } }).catch(() => null);
       if (!exists) serverId = undefined;
     }
-    if (!serverId) {
-      const first = await prisma.streamServer.findFirst().catch(() => null);
-      serverId = first?.id ?? undefined;
-    }
+    if (serverId) usableServerIds.add(serverId);
+    if (!serverId) serverId = fallbackServerId;
 
     // Preload URL → stream so Skip existing does not run findFirst+update per row
     // (that path was ~10 streams/sec on large panels).
@@ -448,9 +475,11 @@ async function applyMigrationBundleInner(
         const type =
           s.type === "MOVIE" ? StreamType.MOVIE : s.type === "SERIES" ? StreamType.SERIES : StreamType.LIVE;
         const categoryId = s.categoryLegacyId ? categoryIdByLegacy.get(s.categoryLegacyId) : undefined;
-        const mappedServerId = s.serverLegacyId
-          ? serverIdByLegacy.get(s.serverLegacyId)
-          : undefined;
+        const mappedServerId = pickMigrateStreamServerId(
+          s.serverLegacyId ? serverIdByLegacy.get(s.serverLegacyId) : undefined,
+          usableServerIds,
+          serverId
+        );
         const onDemand = options.importStreamsOnDemand !== false;
         const vodMode = onDemand
           ? VodMode.ON_DEMAND
@@ -720,7 +749,8 @@ async function applyMigrationBundleInner(
     }
   }
 
-  if (options.importResellers !== false && bundle.resellers?.length) {
+          if (options.importResellers !== false && bundle.resellers?.length) {
+    let resellerCreditsUpdated = 0;
     await runEach(
       bundle.resellers,
       async (r) => {
@@ -743,6 +773,27 @@ async function applyMigrationBundleInner(
           } catch {
             /* non-fatal */
           }
+          // Skip-existing does not skip credit balances — a new SQL dump is the source of truth.
+          const nextCredits = resellerCreditUpdate(exists.role, exists.credits, r.credits);
+          if (nextCredits != null) {
+            try {
+              await prisma.panelUser.update({
+                where: { id: exists.id },
+                data: { credits: nextCredits },
+              });
+              await prisma.creditTransaction.create({
+                data: {
+                  userId: exists.id,
+                  amount: nextCredits - exists.credits,
+                  balanceAfter: nextCredits,
+                  note: "SQL migration import",
+                },
+              });
+              resellerCreditsUpdated++;
+            } catch (e) {
+              pushWarning(result.warnings, `Update credits ${username}: ${shortErr(e)}`);
+            }
+          }
           return false;
         }
         const { isPrehashedPassword } = await import("@/lib/password-verify");
@@ -754,7 +805,7 @@ async function applyMigrationBundleInner(
             username,
             passwordHash: pw,
             role,
-            credits: Number(r.credits) || 0,
+            credits: migrationCreditBalance(r.credits),
             isActive: r.isActive !== false,
             email: r.email?.trim() || null,
             notes: r.notes?.trim() || null,
@@ -770,6 +821,12 @@ async function applyMigrationBundleInner(
       result.warnings,
       "Reseller"
     );
+    if (resellerCreditsUpdated > 0) {
+      pushWarning(
+        result.warnings,
+        `Updated credit balances on ${resellerCreditsUpdated} existing reseller(s) from the dump.`
+      );
+    }
 
     // Second pass: parent tree links + promote sub-resellers
     for (const r of bundle.resellers) {

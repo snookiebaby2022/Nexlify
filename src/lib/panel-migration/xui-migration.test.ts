@@ -3,13 +3,27 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { parseMigrationInput } from "./index";
-import { xuiDurationToDays } from "./map-rows";
+import { migrationCreditBalance, resellerCreditUpdate, xuiDurationToDays } from "./map-rows";
 import { flattenIdList } from "./sql-junctions";
 
 test("xuiDurationToDays converts months/hours", () => {
   assert.equal(xuiDurationToDays(12, "months"), 360);
   assert.equal(xuiDurationToDays(24, "hours"), 1);
   assert.equal(xuiDurationToDays(7, "days"), 7);
+});
+
+test("migrationCreditBalance rounds XUI float credits", () => {
+  assert.equal(migrationCreditBalance(100), 100);
+  assert.equal(migrationCreditBalance("10.4"), 10);
+  assert.equal(migrationCreditBalance("1,250"), 1250);
+  assert.equal(migrationCreditBalance(null), 0);
+});
+
+test("resellerCreditUpdate applies dump balances to existing resellers", () => {
+  assert.equal(resellerCreditUpdate("RESELLER", 10, 100), 100);
+  assert.equal(resellerCreditUpdate("RESELLER", 100, 100), null);
+  assert.equal(resellerCreditUpdate("ADMIN", 0, 999), null);
+  assert.equal(resellerCreditUpdate("SUB_RESELLER", 5, 0), 0);
 });
 
 test("flattenIdList accepts plain XUI bouquet arrays", () => {
@@ -46,6 +60,9 @@ test("modern XUI fixture maps lines, bouquets, packages, providers, mag", () => 
   const mag = (bundle.magDevices ?? []).find((m) => m.mac.includes("00:1A:79"));
   assert.ok(mag, "MAG device");
   assert.equal(mag!.lineUsername, "line1");
+  const reseller = (bundle.resellers ?? []).find((r) => r.username === "reseller1");
+  assert.ok(reseller, "reseller1 mapped");
+  assert.equal(reseller!.credits, 100);
   const phase3 = bundle.phase3;
   assert.ok(phase3?.providers?.length, "providers");
   const prov = phase3!.providers.find((p) => p.baseUrl.includes("provider.example.com"));

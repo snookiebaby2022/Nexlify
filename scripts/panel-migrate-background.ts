@@ -137,7 +137,7 @@ async function main() {
     job.finishedAt = new Date().toISOString();
     job.message = "Import complete.";
     job.preview = preview;
-    job.result = result;
+    job.result = { ...result, appliedOptions: applyOpts };
     job.progress = { phase: "done", current: 1, total: 1 };
     await writeJob(job);
   } catch (e) {

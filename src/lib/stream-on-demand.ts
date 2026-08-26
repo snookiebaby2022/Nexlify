@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { enqueueAgentCommand } from "@/lib/stream-agent";
-import { getStreamPlaybackMode, type StreamForPlaybackMode } from "@/lib/stream-playback-mode";
+import { getStreamPlaybackPolicy, type StreamForPlaybackPolicy } from "@/lib/stream-playback-policy";
 import type { VodMode } from "@prisma/client";
 
 const START_COOLDOWN_MS = 5_000;
@@ -20,7 +20,7 @@ export async function ensureOnDemandStreamStarted(
     hostedExternally: boolean;
   }
 ): Promise<void> {
-  const forMode: StreamForPlaybackMode = {
+  const forMode: StreamForPlaybackPolicy = {
     vodMode: stream.vodMode as VodMode,
     isOnDemand: stream.isOnDemand,
     isCreatedChannel: stream.isCreatedChannel,
@@ -29,8 +29,16 @@ export async function ensureOnDemandStreamStarted(
     streamUrl: stream.streamUrl,
     hostedExternally: stream.hostedExternally,
   };
-  const mode = getStreamPlaybackMode(forMode);
-  if (mode !== "on_demand" && mode !== "created" && mode !== "catchup") return;
+  const mode = getStreamPlaybackPolicy(forMode);
+  if (mode === "direct" || mode === "relay") return;
+  if (
+    mode !== "on_demand" &&
+    mode !== "created" &&
+    mode !== "catchup" &&
+    mode !== "transcode"
+  ) {
+    return;
+  }
   if (!stream.serverId) return;
 
   const key = `${stream.serverId}:${stream.id}`;

@@ -269,7 +269,11 @@ export function ManageLinesTable({
   function renderRowCells(l: ManageLineRow) {
     const exp = formatExpireXui(l.expiresAt);
     const notes = splitNotes(l.notes);
-    const pkg = l.bouquets?.[0]?.bouquet?.name ?? "—";
+    const pkg =
+      (l.bouquets ?? [])
+        .map((b) => b.bouquet?.name)
+        .filter(Boolean)
+        .join(", ") || "—";
     const activeConn =
       (l as { activeConnectionCount?: number }).activeConnectionCount ?? 0;
     const isActive = l.status === "ACTIVE" && new Date(l.expiresAt) > new Date();
@@ -566,7 +570,7 @@ export function ManageLinesTable({
               {panel === "admin" ? <SortHead label="Owner" col="owner" /> : null}
               <SortHead label="Expire" col="expiresAt" />
               <th className="xui-lines-th">Ban</th>
-              <th className="xui-lines-th">Package</th>
+              <th className="xui-lines-th" title="Assigned bouquet(s)">Bouquet</th>
               <th className="xui-lines-th">Trial</th>
               <th className="xui-lines-th">Conns</th>
               <th className="xui-lines-th">Conn Info</th>

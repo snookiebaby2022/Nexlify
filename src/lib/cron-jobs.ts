@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { StreamType } from "@prisma/client";
-import { listActiveConnections, countActiveConnections, deleteStaleConnections } from "./connections";
+import { LIVE_STALE_MS, listActiveConnections, countActiveConnections, deleteStaleConnections } from "./connections";
 import { importFromFolder } from "./import-media";
 import { syncEpgSource } from "./epg";
 import { enqueueAgentCommand, generateAgentToken } from "./stream-agent";
@@ -43,39 +43,65 @@ export async function jobCleanupConnections() {
 export async function jobStopIdleStreams() {
   const start = Date.now();
   try {
-    // Find all running stream processes
-    const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
+    const viewerFresh = new Date(Date.now() - Math.max(LIVE_STALE_MS, 60_000));
     const runningProcesses = await prisma.streamProcess.findMany({
       where: {
-        status: "running",
-        lastSeenAt: { gte: staleBefore },
+        status: { in: ["running", "restarting", "unknown"] },
       },
       select: {
         id: true,
         streamId: true,
         serverId: true,
+        stream: {
+          select: {
+            vodMode: true,
+            isOnDemand: true,
+            isCreatedChannel: true,
+            agentStartCmd: true,
+            autoRestart: true,
+            streamUrl: true,
+            hostedExternally: true,
+          },
+        },
       },
+      take: 800,
     });
 
-    let stopped = 0;
-    for (const proc of runningProcesses) {
-      // Check if this stream has any active connections
-      const connectionCount = await prisma.liveConnection.count({
-        where: {
-          streamId: proc.streamId,
-          lastSeenAt: { gte: staleBefore },
-        },
-      });
+    const streamIds = [...new Set(runningProcesses.map((p) => p.streamId).filter(Boolean))] as string[];
+    const viewerRows =
+      streamIds.length > 0
+        ? await prisma.liveConnection.groupBy({
+            by: ["streamId"],
+            where: {
+              streamId: { in: streamIds },
+              lastSeenAt: { gte: viewerFresh },
+            },
+            _count: true,
+          })
+        : [];
+    const viewers = new Map(viewerRows.map((r) => [r.streamId, r._count]));
 
-      // If no active connections, stop the stream
-      if (connectionCount === 0) {
-        await prisma.streamProcess.update({
-          where: { id: proc.id },
-          data: { status: "stopped" },
-        });
+    const { getStreamPlaybackPolicy, shouldStopIdleAgentProcess } = await import("./stream-playback-policy");
+    const MAX_STOPS = 200;
+    let stopped = 0;
+    const queued = new Set<string>();
+
+    for (const proc of runningProcesses) {
+      if (stopped >= MAX_STOPS) break;
+      const viewerCount = proc.streamId ? (viewers.get(proc.streamId) ?? 0) : 0;
+      const mode = proc.stream ? getStreamPlaybackPolicy(proc.stream) : "relay";
+      if (!shouldStopIdleAgentProcess(mode, viewerCount)) continue;
+
+      await prisma.streamProcess.update({
+        where: { id: proc.id },
+        data: { status: "stopped", errorMessage: "Stopped — no viewers" },
+      });
+      const key = `${proc.serverId}:${proc.streamId ?? proc.id}`;
+      if (proc.streamId && !queued.has(key)) {
+        queued.add(key);
         await enqueueAgentCommand(proc.serverId, "stop_stream", { streamId: proc.streamId });
-        stopped++;
       }
+      stopped++;
     }
 
     await logCron("stop_idle_streams", "ok", `stopped ${stopped} idle streams`, Date.now() - start);
@@ -292,15 +318,43 @@ export async function jobAgentAutoRestart() {
         streamId: { not: null },
       },
       include: {
-        stream: { select: { autoRestart: true, serverId: true } },
-        server: { select: { agentToken: true, id: true } },
+        stream: {
+          select: {
+            autoRestart: true,
+            serverId: true,
+            vodMode: true,
+            isOnDemand: true,
+            isCreatedChannel: true,
+            agentStartCmd: true,
+            streamUrl: true,
+            hostedExternally: true,
+          },
+        },
+        server: { select: { agentToken: true, id: true, healthStatus: true } },
       },
       take: 20,
     });
 
+    const viewerFresh = new Date(Date.now() - Math.max(LIVE_STALE_MS, 60_000));
+    const staleIds = stale.map((p) => p.streamId).filter(Boolean) as string[];
+    const viewerRows =
+      staleIds.length > 0
+        ? await prisma.liveConnection.groupBy({
+            by: ["streamId"],
+            where: { streamId: { in: staleIds }, lastSeenAt: { gte: viewerFresh } },
+            _count: true,
+          })
+        : [];
+    const viewersByStream = new Map(viewerRows.map((r) => [r.streamId, r._count]));
+    const { getStreamPlaybackPolicy, shouldStopIdleAgentProcess } = await import("./stream-playback-policy");
+
     let restarted = 0;
     for (const proc of stale) {
       if (!proc.stream?.autoRestart || !proc.server?.agentToken || !proc.streamId) continue;
+      const health = String(proc.server.healthStatus ?? "").toLowerCase();
+      if (health === "offline" || health === "down") continue;
+      const mode = getStreamPlaybackPolicy(proc.stream);
+      if (shouldStopIdleAgentProcess(mode, viewersByStream.get(proc.streamId) ?? 0)) continue;
       const pending = await prisma.agentCommand.findFirst({
         where: {
           serverId: proc.serverId,

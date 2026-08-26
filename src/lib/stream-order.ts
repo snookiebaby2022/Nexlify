@@ -20,11 +20,20 @@ export function listVodNewestFirst(types?: StreamType | StreamType[] | null): bo
   return list.every((t) => t === StreamType.MOVIE || t === StreamType.SERIES);
 }
 
-/** Admin Streams / Movies / Series pages default to newest uploaded first. */
-export function streamListOrderBy(sort?: string | null): Prisma.StreamOrderByWithRelationInput[] {
+/** Live lists use bouquet/channel order; movies/series default to newest first. */
+export function streamListOrderBy(
+  sort?: string | null,
+  types?: StreamType | StreamType[] | null
+): Prisma.StreamOrderByWithRelationInput[] {
   const s = String(sort ?? "").trim().toLowerCase();
+  if (s === "newest" || s === "created") {
+    return [{ createdAt: "desc" }, { id: "desc" }];
+  }
   if (s === "order" || s === "name" || s === "sort") {
     return [{ sortOrder: "asc" }, { name: "asc" }];
   }
-  return [{ createdAt: "desc" }, { id: "desc" }];
+  if (listVodNewestFirst(types)) {
+    return [{ createdAt: "desc" }, { id: "desc" }];
+  }
+  return [{ sortOrder: "asc" }, { name: "asc" }];
 }

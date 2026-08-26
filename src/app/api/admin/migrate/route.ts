@@ -21,6 +21,7 @@ import {
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { normalizeMigrateApplyOptions } from "@/lib/panel-migration/migrate-flags";
 const SOURCES = new Set(MIGRATION_SOURCES.map((s) => s.id));
 
 /** Large SQL dumps are uploaded as multipart/form-data to avoid loading them in the browser. */
@@ -73,6 +74,7 @@ function sseWatchJob(jobId: string, keepFile: boolean, filePath?: string): Respo
               preview: job.preview,
               result: job.result,
               jobId: job.id,
+              appliedOptions: job.options,
             });
             await cleanup();
             controller.close();
@@ -125,38 +127,7 @@ async function startBackgroundAndWatch(
 }
 
 function applyOptions(body: Record<string, unknown>) {
-  return {
-    dryRun: Boolean(body.dryRun),
-    importBouquets: body.importBouquets !== false,
-    importStreams: body.importStreams !== false,
-    importLines: body.importLines !== false,
-    importResellers: body.importResellers !== false,
-    importMag: body.importMag !== false,
-    importEnigma: body.importEnigma !== false,
-    importCategories: body.importCategories !== false,
-    importServers: body.importServers !== false,
-    importEpg: body.importEpg !== false,
-    importPackages: body.importPackages !== false,
-    importProviders: body.importProviders !== false,
-    importWatchFolders: body.importWatchFolders !== false,
-    importTickets: body.importTickets !== false,
-    /** Full EPG guide on by default; uncheck for source URLs only. */
-    importEpgGuide: body.importEpgGuide !== false,
-    importBlockedAsns: body.importBlockedAsns !== false,
-    importLogs: body.importLogs !== false,
-    importStats: body.importStats !== false,
-    importSettings: body.importSettings !== false,
-    importExtras: body.importExtras !== false,
-    skipExistingLines: body.skipExistingLines !== false,
-    skipExistingStreams: body.skipExistingStreams !== false,
-    clearDataBeforeImport: Boolean(body.clearDataBeforeImport),
-    /** Opt-in: import streams stopped for URL verification before go-live. */
-    importStreamsStopped: body.importStreamsStopped === true,
-    /** Default on: all streams (live/movies/series) import as on-demand. */
-    importStreamsOnDemand: body.importStreamsOnDemand !== false,
-    defaultServerId: (body.defaultServerId as string) ?? null,
-    ownerId: (body.ownerId as string) ?? null,
-  };
+  return normalizeMigrateApplyOptions(body);
 }
 
 function parseBodyRecord(raw: unknown): Record<string, unknown> | null {

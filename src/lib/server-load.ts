@@ -1,34 +1,55 @@
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { buildServerRoleContext, resolveServerRole } from "@/lib/ensure-main-server-online";
+import {
+  estimatedLiveBandwidthMbps,
+  viewerSlotsUsed,
+} from "@/lib/server-load-metrics";
 
 const STALE_MS = 5 * 60 * 1000;
 
 export async function getServerLoadScores() {
   const staleBefore = new Date(Date.now() - STALE_MS);
-  const servers = await prisma.streamServer.findMany({
-    where: { isActive: true },
-    include: {
-      _count: { select: { streams: true } },
-      processes: { where: { status: "running", lastSeenAt: { gte: staleBefore } } },
-    },
-  });
+  const [servers, connRows] = await Promise.all([
+    prisma.streamServer.findMany({
+      where: { isActive: true },
+      include: {
+        _count: { select: { streams: true } },
+        processes: { where: { status: "running", lastSeenAt: { gte: staleBefore } } },
+      },
+    }),
+    prisma.liveConnection.findMany({
+      where: { lastSeenAt: { gte: staleBefore }, stream: { serverId: { not: null } } },
+      select: { stream: { select: { serverId: true } } },
+    }),
+  ]);
+
+  const liveByServer = new Map<string, number>();
+  for (const c of connRows) {
+    const sid = c.stream?.serverId;
+    if (!sid) continue;
+    liveByServer.set(sid, (liveByServer.get(sid) ?? 0) + 1);
+  }
 
   return servers.map((s) => {
-    const streamCount = s._count.streams;
+    const catalogAssigned = s._count.streams;
     const running = s.processes.length;
-    const slotsUsed = Math.max(streamCount, running);
+    const liveConnections = liveByServer.get(s.id) ?? 0;
+    const slotsUsed = viewerSlotsUsed(liveConnections, running);
     const slots = s.maxClients > 0 ? s.maxClients : 1000;
+    const bitrateSum = s.processes.reduce((acc, p) => acc + (p.bitrateKbps ?? 0), 0);
     return {
       server: s,
       slotsUsed,
+      catalogAssigned,
+      liveConnections,
       slots,
       score: slotsUsed / slots,
+      bandwidthMbps: estimatedLiveBandwidthMbps(liveConnections, bitrateSum),
       online: s.healthStatus === "online" || s.healthStatus === "healthy",
     };
   });
 }
-
 export async function pickLeastLoadedServerId(clientIp?: string): Promise<string | null> {
   if (clientIp) {
     const { pickServerForClient } = await import("@/lib/server-geo-lb");
@@ -39,23 +60,21 @@ export async function pickLeastLoadedServerId(clientIp?: string): Promise<string
   const mode = String(settings.loadBalancing ?? "server_slots");
   const scores = await getServerLoadScores();
   const online = scores.filter((x) => x.online);
-  const pool = online.length ? online : scores;
-  if (!pool.length) return null;
+  if (!online.length) return null;
 
   if (mode === "round_robin") {
-    const sorted = [...pool].sort((a, b) => a.server.sortOrder - b.server.sortOrder);
+    const sorted = [...online].sort((a, b) => a.server.sortOrder - b.server.sortOrder);
     return sorted[0]?.server.id ?? null;
   }
 
-  const sorted = [...pool].sort((a, b) => a.score - b.score);
+  const sorted = [...online].sort((a, b) => a.score - b.score);
   return sorted[0]?.server.id ?? null;
 }
 
 export async function reassignStreamsFromOfflineServers() {
   const offline = await prisma.streamServer.findMany({
     where: {
-      isActive: true,
-      healthStatus: { in: ["offline", "degraded"] },
+      OR: [{ isActive: false }, { healthStatus: { in: ["offline", "degraded"] } }],
     },
     select: { id: true },
   });
@@ -63,11 +82,11 @@ export async function reassignStreamsFromOfflineServers() {
 
   const targetId = await pickLeastLoadedServerId();
   if (!targetId) return 0;
+  if (offline.some((s) => s.id === targetId)) return 0;
 
   const r = await prisma.stream.updateMany({
     where: {
       serverId: { in: offline.map((s) => s.id) },
-      type: "LIVE",
     },
     data: { serverId: targetId },
   });
@@ -113,7 +132,7 @@ export async function rebalanceLiveStreamsAcrossServers(opts?: {
   if (online.length < 2) return { moved: 0, servers: online.length };
 
   const maxMoves = Math.max(1, Math.min(opts?.maxMoves ?? 80, 400));
-  const totalLive = online.reduce((n, s) => n + s.slotsUsed, 0);
+  const totalLive = online.reduce((n, s) => n + s.catalogAssigned, 0);
   if (totalLive === 0) return { moved: 0, servers: online.length };
 
   // Target proportional to capacity (maxClients)
@@ -130,18 +149,18 @@ export async function rebalanceLiveStreamsAcrossServers(opts?: {
 
   // Donors = over target; receivers = under target
   const donors = online
-    .filter((s) => s.slotsUsed > (targets.get(s.server.id) ?? 0))
-    .sort((a, b) => b.slotsUsed - a.slotsUsed);
+    .filter((s) => s.catalogAssigned > (targets.get(s.server.id) ?? 0))
+    .sort((a, b) => b.catalogAssigned - a.catalogAssigned);
   const receivers = online
-    .filter((s) => s.slotsUsed < (targets.get(s.server.id) ?? 0))
-    .sort((a, b) => a.slotsUsed - b.slotsUsed);
+    .filter((s) => s.catalogAssigned < (targets.get(s.server.id) ?? 0))
+    .sort((a, b) => a.catalogAssigned - b.catalogAssigned);
 
   if (!donors.length || !receivers.length) return { moved: 0, servers: online.length };
 
   for (const donor of donors) {
     if (moves.length >= maxMoves) break;
     const targetCount = targets.get(donor.server.id) ?? 0;
-    const excess = donor.slotsUsed - targetCount;
+    const excess = donor.catalogAssigned - targetCount;
     if (excess <= 0) continue;
 
     const take = Math.min(excess, maxMoves - moves.length, 40);
@@ -165,8 +184,7 @@ export async function rebalanceLiveStreamsAcrossServers(opts?: {
         const recv = receivers[(i + r) % receivers.length]!;
         const want = targets.get(recv.server.id) ?? 0;
         const already = moves.filter((m) => m.toServerId === recv.server.id).length;
-        if (recv.slotsUsed + already >= want) continue;
-        moves.push({ streamId: stream.id, toServerId: recv.server.id });
+        if (recv.catalogAssigned + already >= want) continue;        moves.push({ streamId: stream.id, toServerId: recv.server.id });
         placed = true;
         i++;
         break;

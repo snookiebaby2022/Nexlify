@@ -8,14 +8,14 @@ import { PanelRole, StreamType } from "@prisma/client";
 import { formatAuditAction } from "@/lib/audit-log";
 import { activityFixHref, cronFixHref } from "@/lib/activity-fix-links";
 import { getDashboardServerMetrics, getDashboardSummary, getDashboardKpiExtended } from "@/lib/dashboard-server-metrics";
-import { sampleLocalHostMetrics, snapshotWindowToMbps } from "@/lib/host-metrics";
+import { dashboardPlaybackBandwidthMbps } from "@/lib/server-load-metrics";
 import { ensureMainServerOnline } from "@/lib/ensure-main-server-online";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 async function loadHeaderStats() {
   const now = new Date();
   try {
-    const [lines, activeLines, liveStreams, onlineConnections, totalIn, totalOut, snapshots] =
+    const [lines, activeLines, liveStreams, onlineConnections, totalIn, totalOut] =
       await Promise.all([
         prisma.line.count(),
         prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
@@ -23,16 +23,9 @@ async function loadHeaderStats() {
         countActiveConnections(),
         prisma.panelSetting.findUnique({ where: { key: "network_bytes_in_total" } }),
         prisma.panelSetting.findUnique({ where: { key: "network_bytes_out_total" } }),
-        prisma.bandwidthSnapshot.findMany({ take: 2, orderBy: { createdAt: "desc" } }),
       ]);
 
-    const nic = sampleLocalHostMetrics();
-    let networkInMbps = nic.downloadMbps;
-    let networkOutMbps = nic.uploadMbps;
-    if (networkInMbps <= 0 && networkOutMbps <= 0 && snapshots[0]) {
-      networkInMbps = snapshotWindowToMbps(snapshots[0].bytesIn);
-      networkOutMbps = snapshotWindowToMbps(snapshots[0].bytesOut);
-    }
+    const { networkInMbps, networkOutMbps } = dashboardPlaybackBandwidthMbps(onlineConnections);
 
     return {
       lines,
@@ -68,7 +61,6 @@ async function loadStats() {
   const now = new Date();
 
   let onlineConnections = 0;
-  let snapshots: { bytesIn: bigint; bytesOut: bigint }[] = [];
   let totalIn: { value: string } | null = null;
   let totalOut: { value: string } | null = null;
   let lines = 0, activeLines = 0, liveStreams = 0, magDevices = 0;
@@ -84,7 +76,6 @@ async function loadStats() {
       countActiveConnections(),
       prisma.activityLog.findMany({ take: 8, orderBy: { createdAt: "desc" }, where: { createdAt: { gte: new Date(Date.now() - 3 * 60 * 60 * 1000) } } }),
       prisma.panelSetting.findUnique({ where: { key: "cron_last_run" } }),
-      prisma.bandwidthSnapshot.findMany({ take: 2, orderBy: { createdAt: "desc" } }),
       prisma.panelSetting.findUnique({ where: { key: "network_bytes_in_total" } }),
       prisma.panelSetting.findUnique({ where: { key: "network_bytes_out_total" } }),
     ]);
@@ -95,21 +86,13 @@ async function loadStats() {
     onlineConnections = results[4] as number;
     logs = results[5];
     cronLast = results[6];
-    snapshots = results[7];
-    totalIn = results[8];
-    totalOut = results[9];
+    totalIn = results[7];
+    totalOut = results[8];
   } catch (e) {
     console.error("[stats] loadStats primary query error:", e);
   }
 
-
-  const nic = sampleLocalHostMetrics();
-  let networkInMbps = nic.downloadMbps;
-  let networkOutMbps = nic.uploadMbps;
-  if (networkInMbps <= 0 && networkOutMbps <= 0 && snapshots[0]) {
-    networkInMbps = snapshotWindowToMbps(snapshots[0].bytesIn);
-    networkOutMbps = snapshotWindowToMbps(snapshots[0].bytesOut);
-  }
+  const { networkInMbps, networkOutMbps } = dashboardPlaybackBandwidthMbps(onlineConnections);
   const networkInPerMin = networkInMbps;
   const networkOutPerMin = networkOutMbps;
 

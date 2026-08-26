@@ -136,10 +136,21 @@ export async function buildAgentConfigForServer(
     })
   );
 
-  const { streamNeedsAlwaysOnProcess } = await import("@/lib/stream-playback-mode");
+  const { streamNeedsAlwaysOnProcessPolicy } = await import("@/lib/stream-playback-policy");
   const { parseLiveStreamMeta } = await import("@/lib/stream-live-meta");
   const { FFMPEG_TRANSCODE_PROFILES, buildFfmpegTranscodeArgs } = await import("@/lib/ffmpeg-transcode-profiles");
-  const alwaysOnStreams = rawStreams.filter((s) => streamNeedsAlwaysOnProcess(s));
+  const runningProcStreams = await prisma.stream.findMany({
+    where: {
+      serverId,
+      processes: { some: { status: { in: ["running", "restarting", "unknown"] } } },
+    },
+    select: { id: true },
+  });
+  const keepIds = new Set([
+    ...rawStreams.filter((s) => streamNeedsAlwaysOnProcessPolicy(s)).map((s) => s.id),
+    ...runningProcStreams.map((s) => s.id),
+  ]);
+  const alwaysOnStreams = rawStreams.filter((s) => keepIds.has(s.id));
 
   const streams: AgentStreamEntry[] = alwaysOnStreams.map((s) => {
     const liveMeta = parseLiveStreamMeta(s.agentStartCmd);

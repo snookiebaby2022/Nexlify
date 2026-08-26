@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Plus, Wifi, Users, Radio } from "lucide-react";
+import { Plus, Wifi, Users, Radio, Clapperboard } from "lucide-react";
 import { streamServerDisplayName } from "@/lib/stream-server-display";
 import { DashboardMetricBar } from "@/components/dashboard-metric-bar";
 import { IpWithFlag } from "@/components/ip-with-flag";
@@ -20,6 +20,7 @@ export type ServerDashboardMetrics = {
   users?: number;
   streamsOn?: number;
   streamsOff?: number;
+  vodStreams?: number;
   maxClients?: number;
 };
 
@@ -80,7 +81,7 @@ export function DashboardServerCard({ server }: { server: ServerDashboardMetrics
         <IpWithFlag ip={server.host} className="mb-2 text-xs" />
 
         {/* Quick stats */}
-        <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="grid grid-cols-4 gap-1.5 mb-3">
           <div className="text-center p-1.5 rounded-lg" style={{ background: "rgba(0,0,0,0.2)" }}>
             <Wifi size={12} className="mx-auto mb-0.5" style={{ color: "var(--accent)" }} />
             <div className="text-xs font-bold tabular-nums">{server.connections ?? 0}</div>
@@ -91,10 +92,23 @@ export function DashboardServerCard({ server }: { server: ServerDashboardMetrics
             <div className="text-xs font-bold tabular-nums">{server.users ?? 0}</div>
             <div className="text-[9px]" style={{ color: "var(--muted)" }}>Users</div>
           </div>
-          <div className="text-center p-1.5 rounded-lg" style={{ background: "rgba(0,0,0,0.2)" }}>
+          <div
+            className="text-center p-1.5 rounded-lg"
+            style={{ background: "rgba(0,0,0,0.2)" }}
+            title="Active live channels assigned to this server"
+          >
             <Radio size={12} className="mx-auto mb-0.5" style={{ color: "var(--accent)" }} />
             <div className="text-xs font-bold tabular-nums">{server.streamsOn ?? 0}</div>
-            <div className="text-[9px]" style={{ color: "var(--muted)" }}>Streams</div>
+            <div className="text-[9px]" style={{ color: "var(--muted)" }}>Live</div>
+          </div>
+          <div
+            className="text-center p-1.5 rounded-lg"
+            style={{ background: "rgba(0,0,0,0.2)" }}
+            title="Movies and TV series assigned to this server"
+          >
+            <Clapperboard size={12} className="mx-auto mb-0.5" style={{ color: "var(--accent)" }} />
+            <div className="text-xs font-bold tabular-nums">{server.vodStreams ?? 0}</div>
+            <div className="text-[9px]" style={{ color: "var(--muted)" }}>VOD/TV</div>
           </div>
         </div>
 

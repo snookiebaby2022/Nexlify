@@ -106,7 +106,7 @@ export function DashboardXuiServerTiles({ servers }: { servers: ServerDashboardM
                   </div>
                   <div>
                     <p className="font-bold tabular-nums">{s.streamsOn ?? 0}</p>
-                    <p style={{ color: "var(--muted)" }}>StreamOn</p>
+                    <p style={{ color: "var(--muted)" }}>Live</p>
                   </div>
                   <div>
                     <p className="font-bold tabular-nums">{s.download}%</p>
@@ -117,8 +117,8 @@ export function DashboardXuiServerTiles({ servers }: { servers: ServerDashboardM
                     <p style={{ color: "var(--muted)" }}>Input</p>
                   </div>
                   <div>
-                    <p className="font-bold tabular-nums">{s.streamsOff ?? 0}</p>
-                    <p style={{ color: "var(--muted)" }}>StreamOff</p>
+                    <p className="font-bold tabular-nums">{s.vodStreams ?? 0}</p>
+                    <p style={{ color: "var(--muted)" }}>VOD/Series</p>
                   </div>
                 </div>
                 <div className="flex justify-around pt-1">

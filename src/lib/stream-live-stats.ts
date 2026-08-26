@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import {
-  getStreamPlaybackMode,
-  type StreamPlaybackMode,
-  type StreamForPlaybackMode,
-} from "@/lib/stream-playback-mode";
+  getStreamPlaybackPolicy,
+  type StreamPlaybackPolicyMode,
+  type StreamForPlaybackPolicy,
+} from "@/lib/stream-playback-policy";
 
 const STALE_MS = 24 * 60 * 60 * 1000; // Match connection tracking 24h window
 
@@ -12,14 +12,14 @@ export type StreamLiveStat = {
   uptimeSeconds: number | null;
   status: "online" | "offline" | "error" | "direct" | "ready";
   displayStatus: string;
-  playbackMode: StreamPlaybackMode;
+  playbackMode: StreamPlaybackPolicyMode;
   servers: { serverId: string; serverName: string; viewers: number; uptimeSeconds: number | null }[];
   audioCodec?: string | null;
   videoCodec?: string | null;
   quality?: string | null;
 };
 
-export type StreamStatsInput = StreamForPlaybackMode & {
+export type StreamStatsInput = StreamForPlaybackPolicy & {
   id: string;
   isActive: boolean;
   lastProbeOk: boolean | null;
@@ -54,7 +54,7 @@ function resolveDisplayStatus(
   errored: boolean,
   running: boolean,
   viewers: number,
-  playbackMode: StreamPlaybackMode
+  playbackMode: StreamPlaybackPolicyMode
 ): { status: StreamLiveStat["status"]; displayStatus: string } {
   if (!stream.isActive) {
     return { status: "offline", displayStatus: "Off" };
@@ -73,11 +73,19 @@ function resolveDisplayStatus(
     return { status: "direct", displayStatus: "Direct" };
   }
 
-  if (playbackMode === "on_demand" || playbackMode === "created" || playbackMode === "catchup") {
+  if (
+    playbackMode === "relay" ||
+    playbackMode === "on_demand" ||
+    playbackMode === "created" ||
+    playbackMode === "catchup"
+  ) {
     if (stream.lastProbeOk === false) {
-      return { status: "offline", displayStatus: "Standby" };
+      return { status: "offline", displayStatus: playbackMode === "relay" ? "Source down" : "Standby" };
     }
-    return { status: "ready", displayStatus: "Ready" };
+    return {
+      status: "ready",
+      displayStatus: playbackMode === "relay" ? "Live" : "Ready",
+    };
   }
 
   return { status: "offline", displayStatus: "Offline" };
@@ -140,7 +148,7 @@ export async function getStreamLiveStatsMap(
       uptimeSeconds: uptimeFromStarted(p.startedAt),
     }));
     const viewers = viewersByStream.get(id) ?? 0;
-    const playbackMode = getStreamPlaybackMode(stream);
+    const playbackMode = getStreamPlaybackPolicy(stream);
     const { status, displayStatus } = resolveDisplayStatus(
       stream,
       errored,

@@ -9,6 +9,7 @@ import {
   type MigrationGuidePath,
 } from "@/lib/panel-migration/guide-paths";
 import type { MigrationSource } from "@/lib/panel-migration/types";
+import { summarizeMigrateOptions } from "@/lib/panel-migration/migrate-flags";
 
 const SOURCE_OPTIONS = MIGRATION_GUIDE_PATHS.map((p) => ({
   id: p.id,
@@ -525,7 +526,6 @@ export function PanelMigrateForm() {
       // on the server, reuse it (Resume) instead of sending ~1GB again.
       if (
         !usePostgres &&
-        skipExisting &&
         !clearData &&
         uploadFile &&
         uploadFile.size > MAX_INLINE_BYTES &&
@@ -533,7 +533,7 @@ export function PanelMigrateForm() {
         Math.abs(lastUpload.size - uploadFile.size) <= 4096
       ) {
         appendLiveLog(
-          `Dump already on server (${formatBytes(lastUpload.size)}) — skipping re-upload (Skip existing).`
+          `Dump already on server (${formatBytes(lastUpload.size)}) — not re-uploading. Current checkboxes still apply.`
         );
         setResult("Using dump already on server — no re-upload…");
         await resumeLastUpload(dryRun, { preserveLog: true });
@@ -794,8 +794,11 @@ export function PanelMigrateForm() {
 
     const r = data.result as (Record<string, { imported: number; skipped: number }> & {
       warnings?: string[];
+      appliedOptions?: Record<string, unknown>;
     }) | undefined;
     if (r) {
+      const appliedOpts =
+        (data.appliedOptions as Record<string, unknown> | undefined) ?? r.appliedOptions;
       const warnings = r.warnings ?? [];
       const visibleWarnings = showAllWarnings ? warnings : warnings.slice(0, 8);
       const totalImported =
@@ -880,6 +883,9 @@ export function PanelMigrateForm() {
           r.extrasBlobs
             ? `Extra blobs (epg_api/crontab/profiles/…): +${r.extrasBlobs.imported} / skipped ${r.extrasBlobs.skipped}`
             : null,
+          ...(appliedOpts
+            ? ["", "Options that were actually applied:", ...summarizeMigrateOptions(appliedOpts)]
+            : []),
           visibleWarnings.length ? `Warnings: ${visibleWarnings.join("; ")}` : null,
           !showAllWarnings && warnings.length > 8 ? `... and ${warnings.length - 8} more warnings` : null,
         ]
@@ -1316,7 +1322,7 @@ export function PanelMigrateForm() {
         </label>
         <label>
           <input type="checkbox" checked={skipExisting} onChange={(e) => setSkipExisting(e.target.checked)} />{" "}
-          Skip existing usernames / stream URLs / dump ids (add missing only — does not wipe the panel or overwrite existing records; missing bouquet links are still added)
+          Skip existing usernames / stream URLs / dump ids (add missing only — does not wipe the panel. Untick to overwrite existing streams/lines from the dump. Reseller credit balances always follow the dump.)
         </label>
         <label>
           <input type="checkbox" checked={clearData} onChange={(e) => setClearData(e.target.checked)} />{" "}

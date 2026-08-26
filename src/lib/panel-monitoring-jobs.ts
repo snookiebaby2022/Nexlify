@@ -81,7 +81,19 @@ export async function runDeadLinkProbeJob() {
 
     if (!ok) {
       failed++;
-      if (stream.autoRestart && stream.serverId && stream.server?.agentToken) {
+      const { getStreamPlaybackPolicy, streamPlaysInstantThroughServers } = await import("@/lib/stream-playback-policy");
+      const forPolicy = {
+        vodMode: stream.vodMode,
+        isOnDemand: stream.isOnDemand,
+        isCreatedChannel: stream.isCreatedChannel,
+        agentStartCmd: stream.agentStartCmd,
+        autoRestart: stream.autoRestart,
+        streamUrl: stream.streamUrl,
+        hostedExternally: stream.hostedExternally,
+      };
+      const skipFfmpegRestart =
+        streamPlaysInstantThroughServers(forPolicy) || getStreamPlaybackPolicy(forPolicy) !== "transcode";
+      if (stream.autoRestart && stream.serverId && stream.server?.agentToken && !skipFfmpegRestart) {
         await enqueueAgentCommand(stream.serverId, "restart_stream", { streamId: stream.id });
         restarted++;
       }

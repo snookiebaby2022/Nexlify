@@ -39,6 +39,8 @@ type ServerRow = {
   privateIp: string | null;
   rtmpPort: number | null;
   httpsPort?: number;
+  countryCode?: string | null;
+  region?: string | null;
   bandwidthMbps: number | null;
   healthStatus: string;
   healthMessage: string | null;
@@ -264,7 +266,10 @@ export default function AdminServersPage() {
     const httpsPort = s.httpsPort ?? STREAM_HTTPS_PORT;
     return (
       <div key={`addr-${s.id}`} className="text-sm">
-        <IpWithFlag ip={`${s.host}:${httpPort}`} />
+        <IpWithFlag ip={s.host} countryCode={s.countryCode} showCode />
+        <span className="text-[10px] ml-1" style={{ color: "var(--muted)" }}>
+          :{httpPort}
+        </span>
         {s.isActive && s.domain && (
           <div className="text-xs mt-0.5" style={{ color: "var(--accent)" }}>
             {s.domain}

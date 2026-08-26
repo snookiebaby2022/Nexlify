@@ -79,6 +79,7 @@ export function extractIpAddress(input: string): string | null {
 
   s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
   s = s.split("/")[0] ?? s;
+  s = s.split("@").pop() ?? s;
 
   const bracket = s.match(/^\[([^\]]+)\](?::\d+)?$/);
   if (bracket) {
@@ -100,6 +101,29 @@ export function extractIpAddress(input: string): string | null {
   if (isIpv6(lower)) return lower;
 
   return null;
+}
+
+/** Hostname or IP without port/scheme — used for DNS + GeoIP of stream servers. */
+export function extractHostname(input: string): string | null {
+  let s = input.trim();
+  if (!s || s === "—" || s === "-") return null;
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  s = s.split("/")[0] ?? s;
+  s = s.split("@").pop() ?? s;
+
+  const bracket = s.match(/^\[([^\]]+)\](?::\d+)?$/);
+  if (bracket?.[1]) return bracket[1].toLowerCase();
+
+  if (s.includes(":") && !s.includes("::")) {
+    const idx = s.lastIndexOf(":");
+    const hostPart = s.slice(0, idx);
+    const portPart = s.slice(idx + 1);
+    if (/^\d+$/.test(portPart) && hostPart) return hostPart.toLowerCase();
+  }
+
+  const host = s.replace(/\.$/, "").toLowerCase();
+  if (!host || host.includes(" ")) return null;
+  return host;
 }
 
 export function isPublicIp(input: string): boolean {

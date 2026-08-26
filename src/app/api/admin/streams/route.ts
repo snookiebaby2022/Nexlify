@@ -35,6 +35,7 @@ import { listOnlineLiveStreamIds } from "@/lib/connections";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { streamListOrderBy } from "@/lib/stream-order";
+import { attachStreamEpgWorking } from "@/lib/epg-working-status";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 export async function GET(req: NextRequest) {
@@ -258,7 +259,12 @@ export async function GET(req: NextRequest) {
 
   const skip = paginate ? (page - 1) * pageSize : undefined;
   const take = paginate ? pageSize : undefined;
-  const orderBy = streamListOrderBy(req.nextUrl.searchParams.get("sort"));
+  const orderBy = streamListOrderBy(
+    req.nextUrl.searchParams.get("sort"),
+    typeParam && Object.values(StreamType).includes(typeParam as StreamType)
+      ? (typeParam as StreamType)
+      : null
+  );
 
   const streams = lite
     ? await prisma.stream.findMany({
@@ -326,8 +332,10 @@ export async function GET(req: NextRequest) {
 
 
 
-  if (withStats && streams.length) {
-    const statsInputs = streams.map((s) => ({
+  const listed = await attachStreamEpgWorking(streams);
+
+  if (withStats && listed.length) {
+    const statsInputs = listed.map((s) => ({
       id: s.id,
       isActive: s.isActive,
       lastProbeOk: "lastProbeOk" in s ? s.lastProbeOk : null,
@@ -341,7 +349,7 @@ export async function GET(req: NextRequest) {
     }));
     const statsMap = await getStreamLiveStatsMap(statsInputs);
     const enriched = redactStreams(
-      streams.map((s) => ({
+      listed.map((s) => ({
         ...s,
         liveStats: statsMap.get(s.id) ?? null,
       })),
@@ -375,7 +383,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ liveStats: statsMap.get(singleStatsId) ?? null });
   }
 
-  const safeStreams = redactStreams(streams, session.role);
+  const safeStreams = redactStreams(listed, session.role);
 
   if (paginate) {
     const total = skipTotal ? undefined : await prisma.stream.count({ where });

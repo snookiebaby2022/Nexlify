@@ -141,13 +141,12 @@ export async function startMigrateBackgroundJob(input: {
 }): Promise<{ ok: true; job: MigrateJob; alreadyRunning?: boolean } | { ok: false; error: string; job?: MigrateJob }> {
   const existing = await reconcileMigrateJob();
   if (existing?.status === "running") {
-    if (existing.filePath === input.filePath) {
-      return { ok: true, job: existing, alreadyRunning: true };
-    }
     return {
       ok: false,
       error:
-        "A SQL migration is already running. Wait for it to finish, or use Resume last upload to reattach to the same dump.",
+        existing.filePath === input.filePath
+          ? "A SQL migration is already running on this dump. Wait for it to finish — Import with different checkboxes cannot attach to a job that already started."
+          : "A SQL migration is already running. Wait for it to finish, or use Resume last upload after it completes.",
       job: existing,
     };
   }
@@ -170,7 +169,12 @@ export async function startMigrateBackgroundJob(input: {
   if (!locked) {
     const raced = await reconcileMigrateJob();
     if (raced?.status === "running") {
-      return { ok: true, job: raced, alreadyRunning: true };
+      return {
+        ok: false,
+        error:
+          "A SQL migration is already running. Wait for it to finish before starting another import.",
+        job: raced,
+      };
     }
     return { ok: false, error: "Could not acquire migration lock. Try again." };
   }

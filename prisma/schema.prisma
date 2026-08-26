@@ -383,7 +383,9 @@ model StreamServer {
   agentSshHost  String?
   agentSshPort  Int       @default(22)
   agentSshUser  String?
+  agentSshPasswordEnc String?
   agentUseSsh   Boolean   @default(false)
+  countryCode   String?
   httpsPort     Int       @default(443)
   geoLbCountries Json?
   geoLbIsps     Json?

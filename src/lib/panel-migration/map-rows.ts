@@ -390,7 +390,7 @@ function mapResellers(data: SqlTableData | null): MigrationResellerRow[] {
       legacyId: r.id != null ? String(r.id) : undefined,
       username,
       password,
-      credits: Number(r.credits ?? 0) || 0,
+      credits: migrationCreditBalance(r.credits ?? r.credit ?? r.credit_balance),
       isActive: Number(r.status ?? 1) !== 0 && String(r.status ?? "") !== "0",
       email: r.email ? String(r.email) : undefined,
       notes: r.notes ? String(r.notes) : r.admin_notes ? String(r.admin_notes) : undefined,
@@ -409,6 +409,27 @@ function mapResellers(data: SqlTableData | null): MigrationResellerRow[] {
     });
   }
   return out;
+}
+
+/** XUI stores reseller credits as float; Nexlify PanelUser.credits is Int. */
+export function migrationCreditBalance(raw: unknown): number {
+  if (raw == null || raw === "") return 0;
+  const n = Number(String(raw).trim().replace(/,/g, ""));
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.round(n));
+}
+
+/** Existing panel users are skipped as creates; credits still follow the dump. */
+export function resellerCreditUpdate(
+  existingRole: string,
+  existingCredits: number,
+  dumpCredits: number | undefined
+): number | null {
+  if (existingRole === "ADMIN") return null;
+  if (dumpCredits == null || !Number.isFinite(Number(dumpCredits))) return null;
+  const next = migrationCreditBalance(dumpCredits);
+  if (next === existingCredits) return null;
+  return next;
 }
 
 /** Convert XUI package duration (amount + unit) to whole days. */

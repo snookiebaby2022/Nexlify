@@ -1,7 +1,23 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.46",
+  "latestVersion": "2.0.47",
   "releases": [
+    {
+      "version": "2.0.47",
+      "date": "2026-08-26",
+      "channel": "stable",
+      "summary": "Per-server live vs VOD counts, XUI-style server add, and accurate load metrics.",
+      "changelog": [
+        "Dashboard server cards show assigned live channels and movies/TV series separately",
+        "Add server matches XUI One: SSH test, HTTP/HTTPS ports, hostname geo flags",
+        "Load balancer uses live connections, not catalog size; idle leftover ffmpeg is stopped",
+        "Dashboard bandwidth is viewer-based when nobody is watching"
+      ],
+      "fixes": [
+        "Offline load-balancer boxes showed 0 streams or mixed probe-only live counts",
+        "Hostnames saved without a country flag; SSH password was not stored encrypted"
+      ]
+    },
     {
       "version": "2.0.46",
       "date": "2026-08-25",

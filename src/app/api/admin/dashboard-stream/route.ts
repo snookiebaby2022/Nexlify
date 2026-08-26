@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { isTestConnectionIp, listLiveConnections } from "@/lib/connections";
-import { sampleLocalHostMetrics, snapshotWindowToMbps } from "@/lib/host-metrics";
+import { dashboardPlaybackBandwidthMbps } from "@/lib/server-load-metrics";
 import { getServerPollIntervals } from "@/lib/perf-polling";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
@@ -27,9 +27,8 @@ export async function GET(req: NextRequest) {
       const update = async () => {
         try {
           const now = new Date();
-          const [rows, bandwidthSnap, activeLines] = await Promise.all([
+          const [rows, activeLines] = await Promise.all([
             listLiveConnections(ownerId),
-            prisma.bandwidthSnapshot.findFirst({ orderBy: { createdAt: "desc" } }),
             prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
           ]);
 
@@ -37,13 +36,7 @@ export async function GET(req: NextRequest) {
           const users = new Set(live.map((r) => r.lineId));
           const streams = new Set(live.map((r) => r.streamId).filter(Boolean));
 
-          const nic = sampleLocalHostMetrics();
-          let networkOutMbps = nic.uploadMbps;
-          let networkInMbps = nic.downloadMbps;
-          if (networkOutMbps <= 0 && networkInMbps <= 0 && bandwidthSnap) {
-            networkOutMbps = snapshotWindowToMbps(bandwidthSnap.bytesOut);
-            networkInMbps = snapshotWindowToMbps(bandwidthSnap.bytesIn);
-          }
+          const { networkInMbps, networkOutMbps } = dashboardPlaybackBandwidthMbps(live.length);
 
           send({
             timestamp: now.toISOString(),

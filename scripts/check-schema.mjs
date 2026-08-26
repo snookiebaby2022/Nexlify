@@ -76,8 +76,8 @@ if (missing.length) {
 }
 
 const streamServer = modelBody("StreamServer");
-if (!streamServer || !/description\s+String\?/.test(streamServer) || !/rtmpPort\s+Int\?/.test(streamServer)) {
-  console.error("\nERROR: model StreamServer must include description, region, rtmpPort, health fields\n");
+if (!streamServer || !/description\s+String\?/.test(streamServer) || !/rtmpPort\s+Int\?/.test(streamServer) || !/countryCode\s+String\?/.test(streamServer) || !/agentSshPasswordEnc\s+String\?/.test(streamServer)) {
+  console.error("\nERROR: model StreamServer must include description, region, rtmpPort, countryCode, agentSshPasswordEnc, health fields\n");
   process.exit(1);
 }
 

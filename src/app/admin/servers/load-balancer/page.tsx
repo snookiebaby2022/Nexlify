@@ -61,7 +61,10 @@ export default function LoadBalancerPage() {
     return () => clearInterval(t);
   }, [load]);
 
-  const maxConn = useMemo(() => Math.max(1, ...servers.map((s) => s.connections || 0)), [servers]);
+  const maxConn = useMemo(
+    () => Math.max(1, ...servers.map((s) => Math.max(s.maxCapacity || 0, s.connections || 0))),
+    [servers]
+  );
 
   async function saveConfig() {
     if (!config) return;
@@ -296,7 +299,7 @@ export default function LoadBalancerPage() {
 
       <div className="space-y-3">
         {servers.map((s) => {
-          const pct = ((s.connections || 0) / maxConn) * 100;
+          const pct = Math.min(100, ((s.connections || 0) / Math.max(1, s.maxCapacity || maxConn)) * 100);
           const healthy = s.online || s.healthStatus === "online" || s.healthStatus === "healthy";
           return (
             <div key={s.id} className="rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
