@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+/** Keep this route cheap. Extra table scans here compete with catalog work and make nginx time out. */
 export async function GET() {
   const checks: Record<string, string> = { app: "ok" };
-  const detail: Record<string, unknown> = {};
 
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -14,50 +14,20 @@ export async function GET() {
 
   try {
     const { redisPing } = await import("@/lib/redis");
-    const ok = await redisPing();
+    const ok = await Promise.race([
+      redisPing(),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 400)),
+    ]);
     checks.redis = ok ? "ok" : "skipped";
   } catch {
     checks.redis = "skipped";
   }
 
-  try {
-    const since = new Date(Date.now() - 15 * 60_000);
-    const recent = await prisma.cronRunLog.findFirst({
-      where: { createdAt: { gte: since } },
-      orderBy: { createdAt: "desc" },
-      select: { job: true, status: true, createdAt: true },
-    });
-    checks.cron = recent ? "ok" : "stale";
-    detail.cron = recent;
-  } catch {
-    checks.cron = "unknown";
-  }
-
-  try {
-    const cutoff = new Date(Date.now() - 5 * 60_000);
-    const [servers, onlineAgents, activeCdns] = await Promise.all([
-      prisma.streamServer.count({ where: { isActive: true } }),
-      prisma.streamServer.count({
-        where: { isActive: true, agentToken: { not: null }, agentLastSeen: { gte: cutoff } },
-      }),
-      prisma.cdnEndpoint.count({ where: { isActive: true } }),
-    ]);
-    checks.edge = servers === 0 ? "none" : onlineAgents > 0 ? "ok" : "degraded";
-    detail.servers = { active: servers, agentsOnline: onlineAgents, cdnEndpoints: activeCdns };
-  } catch {
-    checks.edge = "unknown";
-  }
-
   const healthy = checks.database === "ok";
-  const degraded =
-    healthy &&
-    (checks.cron === "stale" || checks.edge === "degraded" || checks.redis === "error");
-
   return NextResponse.json(
     {
-      status: !healthy ? "degraded" : degraded ? "degraded" : "healthy",
+      status: healthy ? "healthy" : "degraded",
       checks,
-      detail,
       at: new Date().toISOString(),
     },
     { status: healthy ? 200 : 503 }

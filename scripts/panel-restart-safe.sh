@@ -39,6 +39,18 @@ verify_panel() {
   return 1
 }
 
+# Only warm cheap panel routes. Hitting player_api.php / live-auth on Next with a
+# million-row catalog pins every cluster worker so /login and /api/health stop answering.
+warmup_playback_routes() {
+  local port="${PORT:-13000}"
+  local i
+  log "Warming panel routes on :${port} (health + login only) ..."
+  for i in 1 2 3 4; do
+    curl -sS -m 8 -o /dev/null "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1 || true
+    curl -sS -m 8 -o /dev/null "http://127.0.0.1:${port}/login" >/dev/null 2>&1 || true
+  done
+}
+
 nexlify_only_restart() {
   load_env
 
@@ -95,6 +107,7 @@ nexlify_only_restart() {
   pm2 save >>"$LOG_FILE" 2>&1 || true
 
   if verify_panel; then
+    warmup_playback_routes
     log "nexlify-only restart OK"
     return 0
   fi
@@ -110,6 +123,8 @@ full_restart() {
     npm install --no-audit --no-fund --loglevel=error >>"$LOG_FILE" 2>&1 || true
   fi
   bash "$ROOT/scripts/pm2-start.sh" >>"$LOG_FILE" 2>&1
+  load_env
+  warmup_playback_routes || true
 }
 
 run_restart() {

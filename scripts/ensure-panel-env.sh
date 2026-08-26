@@ -148,6 +148,12 @@ if [ -z "$(read_env REDIS_URL)" ]; then
   set_kv REDIS_URL "redis://127.0.0.1:6379"
   echo "Panel env: set REDIS_URL=redis://127.0.0.1:6379"
 fi
+# Node/ioredis on redis://localhost often waits on IPv6 ::1 (~5–8s per command) and IPTV live-auth times out.
+redis_url="$(read_env REDIS_URL)"
+if echo "$redis_url" | grep -qE '^redis://localhost(:|/)'; then
+  set_kv REDIS_URL "redis://127.0.0.1:6379"
+  echo "Panel env: REDIS_URL localhost → 127.0.0.1 (avoid IPv6 hang)"
+fi
 
 # Disk-backed DVR / catch-up recordings (created on every install + panel restart env sync).
 if [ -f scripts/setup-dvr-storage.sh ]; then

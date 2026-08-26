@@ -44,18 +44,28 @@ export function OpsStatusGlance() {
       label: "Redis",
       state: data.checks.redis === "ok" ? true : data.checks.redis === "skipped" ? "warn" : false,
     },
-    {
+  ];
+  if (data.checks.cron) {
+    items.push({
       key: "cron",
       label: "Cron",
       state: data.checks.cron === "ok" ? true : data.checks.cron === "stale" ? "warn" : "warn",
-    },
-    {
+    });
+  }
+  if (data.checks.edge) {
+    items.push({
       key: "edge",
       label: "Edge / agents",
       state:
-        data.checks.edge === "ok" ? true : data.checks.edge === "none" ? "warn" : data.checks.edge === "degraded" ? "warn" : false,
-    },
-  ];
+        data.checks.edge === "ok"
+          ? true
+          : data.checks.edge === "none"
+            ? "warn"
+            : data.checks.edge === "degraded"
+              ? "warn"
+              : false,
+    });
+  }
 
   return (
     <div

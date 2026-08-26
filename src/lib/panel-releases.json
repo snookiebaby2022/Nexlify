@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.50",
+  "latestVersion": "2.0.51",
   "releases": [
+    {
+      "version": "2.0.51",
+      "date": "2026-08-26",
+      "channel": "stable",
+      "summary": "Keep the panel answering when a large catalog is warming; do not pin Next workers on playback warmup.",
+      "changelog": [
+        "Health check only verifies the app, database, and Redis",
+        "Safe restart warms /login and /api/health instead of player_api.php on Next",
+        "REDIS_URL localhost is rewritten to 127.0.0.1 so live-auth does not wait on IPv6"
+      ],
+      "fixes": [
+        "Large catalogs made Next workers hang so the panel went blank and streams stopped",
+        "Restart warmup of player_api.php and live-auth on Next pinned every cluster worker"
+      ]
+    },
     {
       "version": "2.0.50",
       "date": "2026-08-26",
