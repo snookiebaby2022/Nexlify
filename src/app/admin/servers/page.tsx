@@ -12,6 +12,7 @@ import {
   resolveServerRole,
   sortServersMainFirst,
 } from "@/lib/ensure-main-server-online";
+import { isServerHealthOnline } from "@/lib/server-tree";
 import {
   Server,
   Activity,
@@ -55,7 +56,7 @@ type ServerRow = {
 };
 
 function isServerOnline(s: ServerRow): boolean {
-  return s.healthStatus === "online" || s.healthStatus === "healthy";
+  return isServerHealthOnline(s.healthStatus);
 }
 
 export default function AdminServersPage() {

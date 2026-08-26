@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Plus, Ticket, Play, Radio, Activity } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
+import { startVisibleInterval } from "@/lib/perf-polling";
 import type { ExpiringLineRow } from "@/lib/dashboard-widgets";
 
 type MobileDashProps = {
@@ -100,8 +101,7 @@ export function PanelMobileDashboard({
 
   useEffect(() => {
     loadWidgets();
-    const t = setInterval(loadWidgets, 30000);
-    return () => clearInterval(t);
+    return startVisibleInterval(loadWidgets, 60_000);
   }, [loadWidgets]);
 
   const connMax = d && d.maxConnections && d.maxConnections > 0 ? String(d.maxConnections) : "∞";

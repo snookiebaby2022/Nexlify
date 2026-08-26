@@ -1,9 +1,10 @@
 import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
-import { STALE_MS, isTestConnectionIp, liveViewerStats, listLiveConnections } from "@/lib/connections";
+import { isTestConnectionIp, liveViewerStats, listLiveConnections } from "@/lib/connections";
 import { sortServersMainFirst } from "@/lib/ensure-main-server-online";
 import { isThisPanelMachine } from "@/lib/panel-local-server";
+import { isServerHealthOnline } from "@/lib/server-tree";
 import {
   readStoredHostMetrics,
   sampleLocalHostMetrics,
@@ -29,11 +30,11 @@ export type ServerMetricsRow = {
   cpu: number;
   connections?: number;
   users?: number;
-  /** Active LIVE channels assigned to this server. */
+  /** LIVE channels assigned to this server (same assignment as Manage Servers). */
   streamsOn?: number;
   /** LIVE channels whose last source probe failed. */
   streamsOff?: number;
-  /** Active movies + series assigned to this server. */
+  /** Movies + series (+ other non-live) assigned to this server. */
   vodStreams?: number;
   maxClients?: number;
 };
@@ -77,7 +78,6 @@ function emptyHostSample(): HostMetricsSample {
 }
 
 export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
-  const staleBefore = new Date(Date.now() - STALE_MS);
   const servers = await prisma.streamServer.findMany({
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: {
@@ -85,8 +85,6 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
       name: true,
       host: true,
       healthStatus: true,
-      agentToken: true,
-      agentLastSeen: true,
       bandwidthMbps: true,
       panelSettings: true,
       maxClients: true,
@@ -98,7 +96,7 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     listLiveConnections(),
     prisma.stream.groupBy({
       by: ["serverId", "type"],
-      where: { isActive: true, serverId: { not: null } },
+      where: { serverId: { not: null } },
       _count: true,
     }),
     prisma.stream.groupBy({
@@ -134,7 +132,7 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     if (!row.serverId) continue;
     if (row.type === StreamType.LIVE) {
       liveByServer.set(row.serverId, (liveByServer.get(row.serverId) ?? 0) + row._count);
-    } else if (row.type === StreamType.MOVIE || row.type === StreamType.SERIES) {
+    } else {
       vodByServer.set(row.serverId, (vodByServer.get(row.serverId) ?? 0) + row._count);
     }
   }
@@ -148,35 +146,12 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
 
   const rows: ServerMetricsRow[] = [];
   for (const s of ordered) {
-    const managed =
-      isThisPanelMachine(s) ||
-      (s.agentToken != null && s.agentLastSeen != null && s.agentLastSeen >= staleBefore);
+    const online = isServerHealthOnline(s.healthStatus);
     const connections = connsByServer.get(s.id) ?? 0;
     const users = usersByServer.get(s.id)?.size ?? 0;
     const streamsOn = liveByServer.get(s.id) ?? 0;
     const streamsOff = offByServer.get(s.id) ?? 0;
     const vodStreams = vodByServer.get(s.id) ?? 0;
-
-    if (!managed) {
-      rows.push({
-        id: s.id,
-        name: s.name,
-        host: s.host,
-        online: false,
-        upload: 0,
-        download: 0,
-        memory: 0,
-        storage: 0,
-        cpu: 0,
-        connections,
-        users,
-        streamsOn,
-        streamsOff,
-        vodStreams,
-        maxClients: s.maxClients,
-      });
-      continue;
-    }
 
     let host = emptyHostSample();
     if (isThisPanelMachine(s)) {
@@ -185,14 +160,14 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
       }
       host = localSample;
     } else {
-      host = readStoredHostMetrics(s.panelSettings) ?? emptyHostSample();
+      host = readStoredHostMetrics(s.panelSettings, online) ?? emptyHostSample();
     }
 
     rows.push({
       id: s.id,
       name: s.name,
       host: s.host,
-      online: true,
+      online,
       upload: clampPct(host.upload),
       download: clampPct(host.download),
       memory: clampPct(host.memory),
@@ -315,7 +290,6 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
 }
 
 export async function getDashboardSummary() {
-  const staleBefore = new Date(Date.now() - STALE_MS);
   const [
     totalLiveStreams,
     totalActiveLines,
@@ -330,12 +304,7 @@ export async function getDashboardSummary() {
     liveViewerStats(),
     prisma.streamServer.count(),
     prisma.streamServer.count({
-      where: {
-        OR: [
-          { healthStatus: { in: ["online", "healthy"] } },
-          { agentLastSeen: { gte: staleBefore } },
-        ],
-      },
+      where: { healthStatus: { in: ["online", "healthy"] } },
     }),
   ]);
 
@@ -358,7 +327,6 @@ export async function getDashboardSummary() {
 
 /** Dashboard summary scoped to a reseller/sub-reseller's owned lines. */
 export async function getResellerDashboardSummary(ownerId: string) {
-  const staleBefore = new Date(Date.now() - STALE_MS);
   const now = new Date();
   const lineWhere = { ownerId };
 
@@ -376,12 +344,7 @@ export async function getResellerDashboardSummary(ownerId: string) {
     liveViewerStats(ownerId),
     prisma.streamServer.count(),
     prisma.streamServer.count({
-      where: {
-        OR: [
-          { healthStatus: { in: ["online", "healthy"] } },
-          { agentLastSeen: { gte: staleBefore } },
-        ],
-      },
+      where: { healthStatus: { in: ["online", "healthy"] } },
     }),
   ]);
 

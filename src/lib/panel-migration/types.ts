@@ -423,8 +423,8 @@ export type MigrationApplyOptions = {
    */
   importStreamsStopped?: boolean;
   /**
-   * When true (default), every imported stream is marked on-demand (`isOnDemand` + `vodMode: ON_DEMAND`)
-   * so live/VOD/series start when a client requests them.
+   * Kept for installer compatibility. Live channels import as LIVE (panel relay);
+   * movies/series stay on-demand. XUI ondemand_check is applied in phase 3.
    */
   importStreamsOnDemand?: boolean;
   defaultServerId?: string | null;

@@ -111,7 +111,7 @@ export function sampleLocalHostMetrics(bandwidthMbps = 1000): HostMetricsSample 
   return sample;
 }
 
-export function parseHostMetrics(raw: unknown): HostMetricsSample | null {
+export function parseHostMetrics(raw: unknown, allowStale = false): HostMetricsSample | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const m = raw as Record<string, unknown>;
   const cpu = Number(m.cpu);
@@ -119,7 +119,7 @@ export function parseHostMetrics(raw: unknown): HostMetricsSample | null {
   const storage = Number(m.storage);
   const at = Number(m.at);
   if (!Number.isFinite(cpu) && !Number.isFinite(memory)) return null;
-  if (Number.isFinite(at) && at > 0 && Date.now() - at > HOST_METRICS_STALE_MS) return null;
+  if (Number.isFinite(at) && at > 0 && Date.now() - at > HOST_METRICS_STALE_MS && !allowStale) return null;
   return {
     cpu: clampPct(cpu),
     memory: clampPct(memory),
@@ -132,9 +132,9 @@ export function parseHostMetrics(raw: unknown): HostMetricsSample | null {
   };
 }
 
-export function readStoredHostMetrics(panelSettings: unknown): HostMetricsSample | null {
+export function readStoredHostMetrics(panelSettings: unknown, allowStale = false): HostMetricsSample | null {
   const { rest } = parseServerPanelSettings(panelSettings);
-  return parseHostMetrics(rest.hostMetrics);
+  return parseHostMetrics(rest.hostMetrics, allowStale);
 }
 
 export function hostMetricsFromHeartbeat(body: Record<string, unknown>): HostMetricsSample | null {

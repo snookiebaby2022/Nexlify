@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Play, Users, Zap, Layers, ChevronDown, ChevronRight } from "lucide-react";
-import { resolveClientPollIntervals } from "@/lib/perf-polling";
+import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
 
@@ -300,18 +300,18 @@ export function PanelDashboard({
         ? requestIdleCallback(runFull, { timeout: 1500 })
         : null;
     const timeoutId = idleId == null ? setTimeout(runFull, 120) : null;
-    const t = setInterval(loadFull, isReseller ? 45000 : ADMIN_POLLS.dashboardMs);
+    const t = startVisibleInterval(loadFull, isReseller ? 45000 : ADMIN_POLLS.dashboardMs);
     const analyticsId = setTimeout(loadAnalytics, 400);
-    const analyticsT = setInterval(loadAnalytics, 90_000);
+    const analyticsT = startVisibleInterval(loadAnalytics, 90_000);
     return () => {
       cancelled = true;
       if (idleId != null && typeof cancelIdleCallback !== "undefined") {
         cancelIdleCallback(idleId);
       }
       if (timeoutId != null) clearTimeout(timeoutId);
-      clearInterval(t);
+      t();
       clearTimeout(analyticsId);
-      clearInterval(analyticsT);
+      analyticsT();
     };
   }, [loadHeader, loadFull, loadAnalytics, isReseller]);
 

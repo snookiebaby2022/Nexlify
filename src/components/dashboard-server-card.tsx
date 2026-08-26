@@ -95,7 +95,7 @@ export function DashboardServerCard({ server }: { server: ServerDashboardMetrics
           <div
             className="text-center p-1.5 rounded-lg"
             style={{ background: "rgba(0,0,0,0.2)" }}
-            title="Active live channels assigned to this server"
+            title="Live channels assigned to this server"
           >
             <Radio size={12} className="mx-auto mb-0.5" style={{ color: "var(--accent)" }} />
             <div className="text-xs font-bold tabular-nums">{server.streamsOn ?? 0}</div>

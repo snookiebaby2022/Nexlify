@@ -11,7 +11,7 @@ import {
   type ConnectionQuality,
 } from "@/lib/connection-quality";
 import type { PlaybackOutputLabel } from "@/lib/connection-playback-output";
-import { resolveClientPollIntervals } from "@/lib/perf-polling";
+import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
 
@@ -177,13 +177,11 @@ export default function AdminConnectionsPage() {
   useEffect(() => {
     load();
     if (!autoRefresh) return;
-    const t = setInterval(load, ADMIN_POLLS.connectionsMs);
-    return () => clearInterval(t);
+    return startVisibleInterval(load, ADMIN_POLLS.connectionsMs);
   }, [autoRefresh]);
 
   useEffect(() => {
-    const t = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(t);
+    return startVisibleInterval(() => setNowMs(Date.now()), 5_000);
   }, []);
 
   async function kick(id: string) {

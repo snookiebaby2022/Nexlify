@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { formatUptime } from "@/lib/stream-live-stats";
 import { formatDateTime } from "@/lib/format";
+import { startVisibleInterval } from "@/lib/perf-polling";
 
 type Tab = "servers" | "sources" | "errors";
 
@@ -49,14 +50,20 @@ export function StreamVerifyPanel() {
   const [errors, setErrors] = useState<ErrorRow[]>([]);
 
   const load = useCallback(() => {
-    fetch("/api/admin/processes")
-      .then((r) => r.json())
-      .then((d) => setProcesses(d.processes ?? []))
-      .catch(() => {});
-    fetch("/api/admin/streams?pageSize=50&withStats=1&type=LIVE&skipTotal=1")
-      .then((r) => r.json())
-      .then((d) => setSources(d.streams ?? []))
-      .catch(() => {});
+    if (tab === "servers") {
+      fetch("/api/admin/processes")
+        .then((r) => r.json())
+        .then((d) => setProcesses(d.processes ?? []))
+        .catch(() => {});
+      return;
+    }
+    if (tab === "sources") {
+      fetch("/api/admin/streams?pageSize=50&withStats=1&type=LIVE&skipTotal=1&skipEpg=1")
+        .then((r) => r.json())
+        .then((d) => setSources(d.streams ?? []))
+        .catch(() => {});
+      return;
+    }
     fetch("/api/admin/stream-errors")
       .then((r) => r.json())
       .then((d) => {
@@ -73,12 +80,11 @@ export function StreamVerifyPanel() {
         ]);
       })
       .catch(() => {});
-  }, []);
+  }, [tab]);
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 30000);
-    return () => clearInterval(t);
+    return startVisibleInterval(load, 30_000);
   }, [load]);
 
   const tabs: { id: Tab; label: string }[] = [

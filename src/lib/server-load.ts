@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { buildServerRoleContext, resolveServerRole } from "@/lib/ensure-main-server-online";
+import { isServerHealthOnline } from "@/lib/server-tree";
 import {
   estimatedLiveBandwidthMbps,
   viewerSlotsUsed,
@@ -46,7 +47,7 @@ export async function getServerLoadScores() {
       slots,
       score: slotsUsed / slots,
       bandwidthMbps: estimatedLiveBandwidthMbps(liveConnections, bitrateSum),
-      online: s.healthStatus === "online" || s.healthStatus === "healthy",
+      online: isServerHealthOnline(s.healthStatus),
     };
   });
 }

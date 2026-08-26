@@ -13,7 +13,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { StreamRowActionsMenu } from "@/components/stream-row-actions-menu";
-import { resolveClientPollIntervals } from "@/lib/perf-polling";
+import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
 import { StreamTranscodeQuickActions } from "@/components/stream-transcode-quick-actions";
@@ -84,14 +84,6 @@ function streamUptimeKind(s: Stream, listType?: string): "DIRECT" | "LIVE" | "ON
   return "LIVE";
 }
 
-/** Catalog flag (Live / On demand / Catch-up). Independent of how playback is served. */
-function streamCatalogMode(s: Stream, listType?: string): "LIVE" | "ON-DEMAND" | "CATCHUP" {
-  if (listType === "MOVIE" || listType === "SERIES") return "ON-DEMAND";
-  if (s.vodMode === "CATCHUP") return "CATCHUP";
-  if (s.isOnDemand || s.vodMode === "ON_DEMAND") return "ON-DEMAND";
-  return "LIVE";
-}
-
 function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
   const kind = streamUptimeKind(stream, listType);
   const cls =
@@ -105,21 +97,6 @@ function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: st
       className={cls}
       title="How playback is served: LIVE = through this panel, DIRECT = apps hit the provider URL, ON-DEMAND = ffmpeg on tune-in"
     >
-      {kind}
-    </span>
-  );
-}
-
-function StreamCatalogModeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
-  const kind = streamCatalogMode(stream, listType);
-  const cls =
-    kind === "LIVE"
-      ? "xui-uptime-badge xui-uptime-badge--ok"
-      : kind === "CATCHUP"
-        ? "xui-uptime-badge xui-uptime-badge--idle"
-        : "xui-uptime-badge xui-uptime-badge--ondemand";
-  return (
-    <span className={cls} title="Catalog mode: Live (always-on) vs On demand vs Catch-up">
       {kind}
     </span>
   );
@@ -223,11 +200,27 @@ export function StreamsList({
   const [typeTotals, setTypeTotals] = useState<{ LIVE?: number; MOVIE?: number; SERIES?: number }>({});
 
   useEffect(() => {
-    const idle =
-      typeof requestIdleCallback !== "undefined"
-        ? requestIdleCallback(() => setVerifyReady(true), { timeout: 800 })
-        : window.setTimeout(() => setVerifyReady(true), 200);
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 768px)");
+    const arm = () => {
+      if (!mq.matches) {
+        setVerifyReady(false);
+        return;
+      }
+      const idle =
+        typeof requestIdleCallback !== "undefined"
+          ? requestIdleCallback(() => setVerifyReady(true), { timeout: 800 })
+          : window.setTimeout(() => setVerifyReady(true), 200);
+      return idle;
+    };
+    let idle: ReturnType<typeof arm> | undefined = arm();
+    const onChange = () => {
+      idle = arm();
+    };
+    mq.addEventListener("change", onChange);
     return () => {
+      mq.removeEventListener("change", onChange);
+      if (idle == null) return;
       if (typeof cancelIdleCallback !== "undefined" && typeof idle === "number") {
         try {
           cancelIdleCallback(idle);
@@ -272,11 +265,19 @@ export function StreamsList({
     if (statusFilter) params.set("status", statusFilter);
     if (type === "LIVE" && modeFilter) params.set("vodMode", modeFilter);
     const loadKey = `${type}|${categoryId}|${serverId}|${search}|${statusFilter}|${modeFilter}`;
-    if (countedKeyRef.current === loadKey) params.set("skipTotal", "1");
+    if (countedKeyRef.current === loadKey) {
+      params.set("skipTotal", "1");
+      params.set("skipEpg", "1");
+    }
     fetch(`/api/admin/streams?${params}`)
       .then((r) => r.json())
       .then((d) => {
-        setStreams(d.streams ?? []);
+        const next = (d.streams ?? []) as Stream[];
+        setStreams((prev) => {
+          if (!params.has("skipEpg")) return next;
+          const epgById = new Map(prev.map((s) => [s.id, s.epgWorking]));
+          return next.map((s) => ({ ...s, epgWorking: epgById.get(s.id) ?? s.epgWorking }));
+        });
         if (typeof d.total === "number") {
           setTotal(d.total);
           countedKeyRef.current = loadKey;
@@ -299,8 +300,7 @@ export function StreamsList({
     if (type === "MOVIE" || type === "SERIES") {
       return;
     }
-    const t = setInterval(load, ADMIN_POLLS.streamsMs);
-    return () => clearInterval(t);
+    return startVisibleInterval(load, ADMIN_POLLS.streamsMs);
   }, [load, type]);
 
   const filtered = useMemo(() => {
@@ -632,10 +632,6 @@ export function StreamsList({
                   <p className="panel-mobile-card-label">Uptime</p>
                   <StreamUptimeBadge stream={s} listType={type} />
                 </div>
-                <div>
-                  <p className="panel-mobile-card-label">Mode</p>
-                  <StreamCatalogModeBadge stream={s} listType={type} />
-                </div>
               </div>
               <div className="panel-mobile-card-actions">
                 <StreamRowActionsMenu
@@ -662,7 +658,6 @@ export function StreamsList({
         {type === "LIVE" ? (
           <p className="text-[10px] px-2 pb-1" style={{ color: "var(--muted)" }}>
             EPG: gray = not linked · orange = linked · green = linked with active guide data.
-            Mode is the catalog setting (Live vs On demand); Uptime is how the panel serves playback.
           </p>
         ) : null}
         <table className="xui-streams-table">
@@ -674,7 +669,6 @@ export function StreamsList({
               <th>Servers</th>
               <th>Clients</th>
               <th title="How playback is served right now">Uptime</th>
-              <th title="Catalog setting: Live vs On demand vs Catch-up">Mode</th>
               <th>Actions</th>
               <th>EPG</th>
               <th>Stream Info</th>
@@ -740,9 +734,6 @@ export function StreamsList({
                   </td>
                   <td>
                     <StreamUptimeBadge stream={s} listType={type} />
-                  </td>
-                  <td>
-                    <StreamCatalogModeBadge stream={s} listType={type} />
                   </td>
                   <td className="xui-streams-td-actions">
                     {type === "SERIES" ? (

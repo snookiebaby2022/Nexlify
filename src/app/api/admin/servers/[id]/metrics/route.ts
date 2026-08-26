@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { LIVE_STALE_MS } from "@/lib/connections";
 import { isThisPanelMachine } from "@/lib/panel-local-server";
+import { isServerHealthOnline } from "@/lib/server-tree";
 import {
   persistHostMetrics,
   readStoredHostMetrics,
@@ -28,6 +29,7 @@ export async function GET(
         port: true,
         agentLastSeen: true,
         isActive: true,
+        healthStatus: true,
         panelSettings: true,
         bandwidthMbps: true,
       },
@@ -44,7 +46,9 @@ export async function GET(
       : 0;
 
     const local = server ? isThisPanelMachine(server) : false;
-    const stored = server ? readStoredHostMetrics(server.panelSettings) : null;
+    const stored = server
+      ? readStoredHostMetrics(server.panelSettings, isServerHealthOnline(server.healthStatus))
+      : null;
     const sample = local
       ? sampleLocalHostMetrics(server?.bandwidthMbps ?? 1000)
       : stored;

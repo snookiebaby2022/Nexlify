@@ -100,6 +100,7 @@ export async function GET(req: NextRequest) {
   const picker = req.nextUrl.searchParams.get("picker") === "1";
   const withStats = req.nextUrl.searchParams.get("withStats") === "1";
   const skipTotal = req.nextUrl.searchParams.get("skipTotal") === "1";
+  const skipEpg = req.nextUrl.searchParams.get("skipEpg") === "1";
   const paginate = true;
   const lite = req.nextUrl.searchParams.get("full") !== "1";
   const search = req.nextUrl.searchParams.get("search")?.trim();
@@ -332,7 +333,9 @@ export async function GET(req: NextRequest) {
 
 
 
-  const listed = await attachStreamEpgWorking(streams);
+  const listed = skipEpg
+    ? streams.map((s) => ({ ...s, epgWorking: false }))
+    : await attachStreamEpgWorking(streams);
 
   if (withStats && listed.length) {
     const statsInputs = listed.map((s) => ({

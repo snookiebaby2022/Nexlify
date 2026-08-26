@@ -50,7 +50,13 @@ export function buildServerTreeGroups(servers: ServerTreeNode[]): ServerTreeGrou
 }
 
 export function serverHealthColor(status?: string) {
-  if (status === "online" || status === "healthy") return "#22c55e";
-  if (status === "offline" || status === "degraded") return "#ef4444";
+  if (isServerHealthOnline(status)) return "#22c55e";
+  if (status === "offline" || status === "degraded" || status === "down") return "#ef4444";
   return "#94a3b8";
+}
+
+/** Same online/offline rule as Manage Servers. */
+export function isServerHealthOnline(status?: string | null) {
+  const s = String(status ?? "").toLowerCase();
+  return s === "online" || s === "healthy";
 }

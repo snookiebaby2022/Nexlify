@@ -5,7 +5,8 @@ import {
   type StreamForPlaybackPolicy,
 } from "@/lib/stream-playback-policy";
 
-const STALE_MS = 24 * 60 * 60 * 1000; // Match connection tracking 24h window
+/** Live clients/ffmpeg only — keep in sync with LIVE_STALE_MS in connections.ts. */
+const STALE_MS = 12 * 1000;
 
 export type StreamLiveStat = {
   viewers: number;

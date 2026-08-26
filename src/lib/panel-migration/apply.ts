@@ -480,14 +480,10 @@ async function applyMigrationBundleInner(
           usableServerIds,
           serverId
         );
-        const onDemand = options.importStreamsOnDemand !== false;
-        const vodMode = onDemand
-          ? VodMode.ON_DEMAND
-          : type === StreamType.MOVIE || type === StreamType.SERIES
-            ? VodMode.ON_DEMAND
-            : VodMode.LIVE;
-        const isOnDemand = onDemand || type !== StreamType.LIVE;
-        const autoRestart = onDemand || type !== StreamType.LIVE;
+        const isVod = type === StreamType.MOVIE || type === StreamType.SERIES;
+        const vodMode = isVod ? VodMode.ON_DEMAND : VodMode.LIVE;
+        const isOnDemand = isVod;
+        const autoRestart = true;
         const isRadio = s.isRadio === true;
         const isAdult = s.isAdult === true;
         const seriesName = s.seriesName?.trim() || null;

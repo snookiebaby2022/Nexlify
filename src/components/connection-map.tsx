@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { CountryFlag } from "@/components/ip-with-flag";
+import { startVisibleInterval } from "@/lib/perf-polling";
 
 const MAP_COLLAPSE_KEY = "nx-dash-collapse-connmap";
 
@@ -56,14 +57,14 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
         .catch(() => setData(null));
     }
     load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
+    return startVisibleInterval(load, 15_000);
   }, [apiUrl]);
 
   // Canvas-based map rendering
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !data) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -243,10 +244,21 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
   }, [data, hoveredPoint]);
 
   useEffect(() => {
-    if (!collapsed && data) {
+    if (collapsed || !data) return;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    animRef.current = requestAnimationFrame(draw);
+    const onVis = () => {
+      if (document.visibilityState === "hidden") {
+        cancelAnimationFrame(animRef.current);
+        return;
+      }
       animRef.current = requestAnimationFrame(draw);
-    }
-    return () => cancelAnimationFrame(animRef.current);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      cancelAnimationFrame(animRef.current);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [draw, collapsed, data]);
 
   // Mouse hit test for canvas

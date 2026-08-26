@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.49",
+  "latestVersion": "2.0.50",
   "releases": [
+    {
+      "version": "2.0.50",
+      "date": "2026-08-26",
+      "channel": "stable",
+      "summary": "Dashboard server cards match Manage Servers; playback connection slots unchanged.",
+      "changelog": [
+        "Dashboard Online/Offline uses the same healthStatus rule as Manage Servers",
+        "Server CPU, RAM, disk, and assigned Live/VOD counts match Manage Servers",
+        "Live import still uses LIVE mode; Manage Streams polls less often"
+      ],
+      "fixes": [
+        "Main/LB boxes showed Offline on the dashboard while Manage Servers showed Online",
+        "A title-based connection experiment could deny channel changes on 1-connection lines"
+      ]
+    },
     {
       "version": "2.0.49",
       "date": "2026-08-26",
