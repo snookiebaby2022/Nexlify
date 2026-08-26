@@ -3886,6 +3886,11 @@ a.btn-back:hover,
   color: #999;
 }
 
+.xui-uptime-badge--ondemand {
+  background: #f39c12;
+  color: #fff;
+}
+
 .xui-uptime-icon-ok {
   flex-shrink: 0;
 }

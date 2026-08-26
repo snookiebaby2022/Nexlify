@@ -84,6 +84,14 @@ function streamUptimeKind(s: Stream, listType?: string): "DIRECT" | "LIVE" | "ON
   return "LIVE";
 }
 
+/** Catalog flag (Live / On demand / Catch-up). Independent of how playback is served. */
+function streamCatalogMode(s: Stream, listType?: string): "LIVE" | "ON-DEMAND" | "CATCHUP" {
+  if (listType === "MOVIE" || listType === "SERIES") return "ON-DEMAND";
+  if (s.vodMode === "CATCHUP") return "CATCHUP";
+  if (s.isOnDemand || s.vodMode === "ON_DEMAND") return "ON-DEMAND";
+  return "LIVE";
+}
+
 function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
   const kind = streamUptimeKind(stream, listType);
   const cls =
@@ -92,7 +100,29 @@ function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: st
       : kind === "LIVE"
         ? "xui-uptime-badge xui-uptime-badge--ok"
         : "xui-uptime-badge xui-uptime-badge--idle";
-  return <span className={cls}>{kind}</span>;
+  return (
+    <span
+      className={cls}
+      title="How playback is served: LIVE = through this panel, DIRECT = apps hit the provider URL, ON-DEMAND = ffmpeg on tune-in"
+    >
+      {kind}
+    </span>
+  );
+}
+
+function StreamCatalogModeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
+  const kind = streamCatalogMode(stream, listType);
+  const cls =
+    kind === "LIVE"
+      ? "xui-uptime-badge xui-uptime-badge--ok"
+      : kind === "CATCHUP"
+        ? "xui-uptime-badge xui-uptime-badge--idle"
+        : "xui-uptime-badge xui-uptime-badge--ondemand";
+  return (
+    <span className={cls} title="Catalog mode: Live (always-on) vs On demand vs Catch-up">
+      {kind}
+    </span>
+  );
 }
 
 function StreamInfoCell({ stream }: { stream: Stream }) {
@@ -159,6 +189,7 @@ export function StreamsList({
       ? statusFromUrl
       : ""
   );
+  const [modeFilter, setModeFilter] = useState<"" | "LIVE" | "ON_DEMAND" | "CATCHUP">("");
   const [audioFilter, setAudioFilter] = useState("");
   const [videoFilter, setVideoFilter] = useState("");
   const [qualityFilter, setQualityFilter] = useState("");
@@ -239,7 +270,8 @@ export function StreamsList({
     if (serverId) params.set("serverId", serverId);
     if (search.trim()) params.set("search", search.trim());
     if (statusFilter) params.set("status", statusFilter);
-    const loadKey = `${type}|${categoryId}|${serverId}|${search}|${statusFilter}`;
+    if (type === "LIVE" && modeFilter) params.set("vodMode", modeFilter);
+    const loadKey = `${type}|${categoryId}|${serverId}|${search}|${statusFilter}|${modeFilter}`;
     if (countedKeyRef.current === loadKey) params.set("skipTotal", "1");
     fetch(`/api/admin/streams?${params}`)
       .then((r) => r.json())
@@ -250,7 +282,7 @@ export function StreamsList({
           countedKeyRef.current = loadKey;
         }
       });
-  }, [type, categoryId, serverId, search, page, pageSize, statusFilter]);
+  }, [type, categoryId, serverId, search, page, pageSize, statusFilter, modeFilter]);
 
   useEffect(() => {
     fetch(`/api/admin/categories?lite=1${type ? `&type=${type}` : ""}`)
@@ -407,6 +439,23 @@ export function StreamsList({
             <option value="inactive">Disabled</option>
           </select>
         </label>
+        {type === "LIVE" ? (
+          <label className="mt-3">
+            Mode
+            <select
+              value={modeFilter}
+              onChange={(e) => {
+                setModeFilter(e.target.value as typeof modeFilter);
+                setPage(1);
+              }}
+            >
+              <option value="">All modes</option>
+              <option value="LIVE">Live</option>
+              <option value="ON_DEMAND">On demand</option>
+              <option value="CATCHUP">Catch-up</option>
+            </select>
+          </label>
+        ) : null}
         <div className="panel-mobile-sheet-actions">
           <button type="button" className="xui-streams-btn xui-streams-btn--add" onClick={() => setMobileFiltersOpen(false)}>
             Apply
@@ -475,6 +524,22 @@ export function StreamsList({
           <option value="active">Active</option>
           <option value="inactive">Disabled</option>
         </select>
+        {type === "LIVE" ? (
+          <select
+            className="xui-streams-filter-select"
+            value={modeFilter}
+            onChange={(e) => {
+              setModeFilter(e.target.value as typeof modeFilter);
+              setPage(1);
+            }}
+            title="Catalog mode: Live vs On demand vs Catch-up"
+          >
+            <option value="">All modes</option>
+            <option value="LIVE">Live</option>
+            <option value="ON_DEMAND">On demand</option>
+            <option value="CATCHUP">Catch-up</option>
+          </select>
+        ) : null}
         <select className="xui-streams-filter-select" value={audioFilter} onChange={(e) => { setAudioFilter(e.target.value); setPage(1); }}>
           <option value="">Audio</option>
           {["aac", "mp3", "ac3", "eac3", "opus", "flac", "dts"].map((c) => (
@@ -563,9 +628,13 @@ export function StreamsList({
                     {viewers}
                   </button>
                 </div>
-                <div className="col-span-2">
+                <div>
                   <p className="panel-mobile-card-label">Uptime</p>
                   <StreamUptimeBadge stream={s} listType={type} />
+                </div>
+                <div>
+                  <p className="panel-mobile-card-label">Mode</p>
+                  <StreamCatalogModeBadge stream={s} listType={type} />
                 </div>
               </div>
               <div className="panel-mobile-card-actions">
@@ -592,7 +661,8 @@ export function StreamsList({
       <div className="xui-streams-table-wrap hidden md:block">
         {type === "LIVE" ? (
           <p className="text-[10px] px-2 pb-1" style={{ color: "var(--muted)" }}>
-            EPG: gray = not linked · orange = linked · green = linked with active guide data
+            EPG: gray = not linked · orange = linked · green = linked with active guide data.
+            Mode is the catalog setting (Live vs On demand); Uptime is how the panel serves playback.
           </p>
         ) : null}
         <table className="xui-streams-table">
@@ -603,7 +673,8 @@ export function StreamsList({
               <th>Name</th>
               <th>Servers</th>
               <th>Clients</th>
-              <th>Uptime</th>
+              <th title="How playback is served right now">Uptime</th>
+              <th title="Catalog setting: Live vs On demand vs Catch-up">Mode</th>
               <th>Actions</th>
               <th>EPG</th>
               <th>Stream Info</th>
@@ -669,6 +740,9 @@ export function StreamsList({
                   </td>
                   <td>
                     <StreamUptimeBadge stream={s} listType={type} />
+                  </td>
+                  <td>
+                    <StreamCatalogModeBadge stream={s} listType={type} />
                   </td>
                   <td className="xui-streams-td-actions">
                     {type === "SERIES" ? (
