@@ -1,7 +1,22 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.47",
+  "latestVersion": "2.0.48",
   "releases": [
+    {
+      "version": "2.0.48",
+      "date": "2026-08-26",
+      "channel": "stable",
+      "summary": "Manage Streams Mode column, and Tailwind installed on production rebuilds.",
+      "changelog": [
+        "Manage Streams shows catalog Mode (Live / On demand / Catch-up) next to Uptime",
+        "tailwindcss, postcss, and autoprefixer are production dependencies so NODE_ENV=production installs still build",
+        "Panel build reinstalls those CSS tools if they are missing before next build"
+      ],
+      "fixes": [
+        "Cannot find module tailwindcss on customer VPS when NODE_ENV=production omits devDependencies",
+        "Uptime LIVE was confused with catalog on-demand vs always-on live"
+      ]
+    },
     {
       "version": "2.0.47",
       "date": "2026-08-26",

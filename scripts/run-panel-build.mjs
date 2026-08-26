@@ -23,8 +23,21 @@ function run(cmd, args, env = process.env) {
     cwd: root,
     stdio: "inherit",
     env: { ...env },
+    shell: process.platform === "win32",
   });
   return r.status ?? 1;
+}
+
+function ensureBuildDeps() {
+  const needed = ["tailwindcss", "postcss", "autoprefixer"];
+  const missing = needed.filter(
+    (p) => !existsSync(resolve(root, "node_modules", p, "package.json"))
+  );
+  if (missing.length === 0) return 0;
+  console.log(
+    `Build deps missing (${missing.join(", ")}) — npm install --include=dev --include=optional`
+  );
+  return run("npm", ["install", "--include=dev", "--include=optional", "--no-audit", "--no-fund"]);
 }
 
 function runNextBuild(env = process.env) {
@@ -60,6 +73,8 @@ function stageBuildAndSwap(reason) {
 const updating = existsSync(resolve(root, ".update-in-progress"));
 const alreadyStaging = Boolean(process.env.NEXLIFY_DIST_DIR?.trim());
 const forceDirect = process.env.NEXLIFY_BUILD_DIRECT === "1";
+
+if (ensureBuildDeps() !== 0) process.exit(1);
 
 if (!alreadyStaging && !forceDirect && existsSync(fastUpdate)) {
   if (updating) {
