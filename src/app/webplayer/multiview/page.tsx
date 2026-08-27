@@ -1,3 +1,5 @@
+"use client";
+
 import dynamic from "next/dynamic";
 
 const MultiviewGrid = dynamic(() => import("./multiview-grid"), { ssr: false });
