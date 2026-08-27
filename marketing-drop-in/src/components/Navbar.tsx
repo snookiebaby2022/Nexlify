@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { NexlifyLogo } from "@/components/NexlifyLogo";
 import { SUPPORT_NAV_LINKS } from "@/components/SupportNav";
+import { AdminTicketNavBadge } from "@/components/AdminTicketAlerts";
 import type { SessionUser } from "@/lib/auth";
 import { DEMO_PANEL_URL } from "@/lib/demo";
 import { FACEBOOK_URL, TELEGRAM_CHANNEL_URL } from "@/lib/marketing-constants";
@@ -140,13 +141,18 @@ export function Navbar({ user }: { user: SessionUser | null }) {
                     Licenses
                   </Link>
                   {user.role === "ADMIN" && (
-                    <Link
-                      href="/admin"
-                      className="rounded-lg px-3 py-3 text-amber-300 hover:bg-white/5 transition-colors"
-                      onClick={close}
-                    >
-                      Admin panel
-                    </Link>
+                    <>
+                      <div className="px-3 py-2">
+                        <AdminTicketNavBadge />
+                      </div>
+                      <Link
+                        href="/admin"
+                        className="rounded-lg px-3 py-3 text-amber-300 hover:bg-white/5 transition-colors"
+                        onClick={close}
+                      >
+                        Admin panel
+                      </Link>
+                    </>
                   )}
                   <Link
                     href="/admin/profile"
@@ -252,9 +258,12 @@ function AuthNavDesktop({ user }: { user: SessionUser | null }) {
           Licenses
         </Link>
         {user.role === "ADMIN" && (
-          <Link href="/admin" className="text-amber-300 hover:text-amber-200 transition-colors">
-            Admin
-          </Link>
+          <>
+            <AdminTicketNavBadge />
+            <Link href="/admin" className="text-amber-300 hover:text-amber-200 transition-colors">
+              Admin
+            </Link>
+          </>
         )}
         <Link href="/admin/profile" className="hover:text-white transition-colors">
           Profile

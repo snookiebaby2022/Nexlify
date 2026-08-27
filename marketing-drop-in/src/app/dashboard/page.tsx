@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { TRIAL_PLAN_SLUG } from "@/lib/plans";
 import { TrialCouponBanner } from "@/components/TrialCouponBanner";
 import { TrialCouponRedirect } from "@/components/TrialCouponRedirect";
+import { ManageBillingButton } from "@/components/ManageBillingButton";
 import { pageSeo } from "@/lib/seo-pages";
 
 export const metadata = pageSeo("/dashboard");
@@ -27,16 +28,23 @@ export default async function DashboardPage() {
   );
   const trialExpired =
     trialLicense?.expiresAt && trialLicense.expiresAt < new Date();
+  const hasStripeSub = licenses.some((l) => Boolean(l.stripeSubscriptionId));
 
   return (
     <div className="mesh-bg mx-auto max-w-6xl px-4 py-16 md:py-24">
       <Suspense fallback={null}>
         <TrialCouponRedirect />
       </Suspense>
-            <h1 className="font-display text-3xl font-bold text-white">My licenses</h1>
+      <h1 className="font-display text-3xl font-bold text-white">My licenses</h1>
       <p className="mt-2 text-[var(--muted)]">
         Signed in as {user.email}. Keys from WHMCS or checkout — paste into your panel activation.
       </p>
+
+      {hasStripeSub ? (
+        <div className="mt-6">
+          <ManageBillingButton />
+        </div>
+      ) : null}
 
       {trialLicense && !trialExpired && (
         <>

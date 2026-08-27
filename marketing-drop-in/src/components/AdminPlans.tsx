@@ -229,7 +229,7 @@ export function AdminPlans() {
                 onClick={() => syncStripe(plan.id)}
                 className="rounded-full border border-cyan-500/40 px-4 py-2 text-sm text-cyan-300 hover:bg-cyan-500/10 disabled:opacity-50"
               >
-                Create Stripe price
+                Create monthly Stripe price
               </button>
             </div>
           </div>

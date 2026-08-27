@@ -251,6 +251,22 @@ export default function AdminEditUserPage() {
           </FormField>
         )}
 
+        {form.role === "ADMIN" ? null : (
+          <FormField label="Reseller DNS (IPTV + portal)">
+            <input
+              className={formInputClass}
+              style={formInputStyle}
+              placeholder="iptv.reseller-domain.com"
+              value={form.resellerDns}
+              onChange={(e) => setForm((f) => ({ ...f, resellerDns: e.target.value }))}
+            />
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              Point this hostname at the panel IP. Used for playlists and MAG/Stalker portal (
+              <span className="font-mono">/c/</span>).
+            </p>
+          </FormField>
+        )}
+
         <FormField label="Credits">
           <input
             type="number"

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 
 async function requireAdmin() {
   const user = await getSessionUser();
@@ -9,12 +10,28 @@ async function requireAdmin() {
   return user;
 }
 
+const statusFilterSchema = z.enum(["OPEN", "IN_PROGRESS", "WAITING_CUSTOMER", "CLOSED"]);
+const priorityFilterSchema = z.enum(["LOW", "NORMAL", "HIGH", "URGENT"]);
+
 export async function GET(request: Request) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
+    const { searchParams } = new URL(request.url);
+    const statusRaw = searchParams.get("status");
+    const priorityRaw = searchParams.get("priority");
+    const openOnly = searchParams.get("open") === "1";
+
+    const where: Prisma.TicketWhereInput = {};
+    const statusParsed = statusRaw ? statusFilterSchema.safeParse(statusRaw) : null;
+    const priorityParsed = priorityRaw ? priorityFilterSchema.safeParse(priorityRaw) : null;
+    if (statusParsed?.success) where.status = statusParsed.data;
+    else if (openOnly) where.status = { not: "CLOSED" };
+    if (priorityParsed?.success) where.priority = priorityParsed.data;
+
     const tickets = await prisma.ticket.findMany({
+      where,
       orderBy: { updatedAt: "desc" },
       take: 50,
       include: {
@@ -30,12 +47,18 @@ export async function GET(request: Request) {
       },
     });
 
-    const openCount = await prisma.ticket.count({
-      where: { status: { not: "CLOSED" } },
-    });
+    const [openCount, needsAttention] = await Promise.all([
+      prisma.ticket.count({
+        where: { status: { not: "CLOSED" } },
+      }),
+      prisma.ticket.count({
+        where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
+      }),
+    ]);
 
     return NextResponse.json({
       openCount,
+      needsAttention,
       tickets: tickets.map((t) => ({
         id: t.id,
         subject: t.subject,
@@ -57,7 +80,7 @@ export async function GET(request: Request) {
     });
   } catch (e) {
     console.error("[admin/tickets GET]", e);
-    return NextResponse.json({ openCount: 0, tickets: [] });
+    return NextResponse.json({ openCount: 0, needsAttention: 0, tickets: [] });
   }
 }
 

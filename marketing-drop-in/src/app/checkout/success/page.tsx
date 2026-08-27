@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { issueLicenseForOrder } from "@/lib/licensing";
 import { prisma } from "@/lib/prisma";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
+import { fulfillCheckoutSession } from "@/lib/stripe-billing";
 import { pageSeo } from "@/lib/seo-pages";
 
 export const metadata = pageSeo("/checkout/success");
@@ -43,12 +44,13 @@ export default async function CheckoutSuccessPage({
       const order = await prisma.order.findFirst({
         where: { id: orderId, userId: user.id },
       });
-      if (order && order.status !== "COMPLETED" && session.payment_status === "paid") {
-        await prisma.order.update({
-          where: { id: orderId },
-          data: { status: "COMPLETED" },
-        });
-        await issueLicenseForOrder(orderId);
+      if (
+        order &&
+        (session.payment_status === "paid" ||
+          session.status === "complete" ||
+          (session.mode === "subscription" && session.status === "complete"))
+      ) {
+        await fulfillCheckoutSession(session);
       }
       license = await prisma.license.findFirst({
         where: { orderId },
@@ -57,10 +59,14 @@ export default async function CheckoutSuccessPage({
     }
   }
 
+  const isSub = Boolean(license?.stripeSubscriptionId);
+
   return (
     <div className="mx-auto max-w-lg px-4 py-20 text-center">
       <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-10">
-        <h1 className="text-2xl font-bold text-white">Payment successful</h1>
+        <h1 className="text-2xl font-bold text-white">
+          {isSub ? "Subscription started" : "Payment successful"}
+        </h1>
         {license ? (
           <>
             <p className="mt-4 text-slate-400">Your panel license key:</p>
@@ -71,6 +77,12 @@ export default async function CheckoutSuccessPage({
             <p className="mt-4 text-sm text-slate-500">
               Plan: {license.plan.name} · enter this key in your panel setup wizard.
             </p>
+            {isSub ? (
+              <p className="mt-3 text-sm text-emerald-200/80">
+                Monthly billing is active. Stripe will email invoices on each renewal. You can
+                update your card from My Licenses.
+              </p>
+            ) : null}
           </>
         ) : (
           <p className="mt-4 text-slate-400">

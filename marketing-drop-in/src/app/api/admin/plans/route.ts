@@ -145,22 +145,43 @@ export async function POST(request: Request) {
     }
 
     const unitAmount = gbpToUsdCents(plan.priceCents);
-    const price = await stripe.prices.create({
-      product: productId,
-      unit_amount: unitAmount,
-      currency: "usd",
-      metadata: { nexlifyPlanId: plan.id, nexlifySlug: plan.slug },
-    });
+    // Recurring monthly price — required for subscription checkout + invoices.
+    let priceId = plan.stripePriceId?.trim() || undefined;
+    if (priceId) {
+      try {
+        const existing = await stripe.prices.retrieve(priceId);
+        if (!(existing.active && existing.type === "recurring" && existing.recurring?.interval === "month")) {
+          priceId = undefined;
+        }
+      } catch {
+        priceId = undefined;
+      }
+    }
+    if (!priceId) {
+      const price = await stripe.prices.create({
+        product: productId,
+        unit_amount: unitAmount,
+        currency: "usd",
+        recurring: { interval: "month" },
+        metadata: { nexlifyPlanId: plan.id, nexlifySlug: plan.slug },
+      });
+      priceId = price.id;
+    }
 
     const updated = await prisma.plan.update({
       where: { id: plan.id },
       data: {
         stripeProductId: productId,
-        stripePriceId: price.id,
+        stripePriceId: priceId,
       },
     });
 
-    return NextResponse.json({ plan: updated, stripePriceId: price.id, stripeProductId: productId });
+    return NextResponse.json({
+      plan: updated,
+      stripePriceId: priceId,
+      stripeProductId: productId,
+      recurring: "month",
+    });
   } catch (e) {
     if (e instanceof z.ZodError) {
       return NextResponse.json({ error: e.message }, { status: 400 });

@@ -168,38 +168,83 @@ export async function POST(request: Request) {
         ? `${plan.description} (${appliedCoupon}, ${licenseDurationDays} days)`
         : plan.description;
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      customer_email: user.email,
-      line_items: [
-        plan.stripePriceId
-          ? { price: plan.stripePriceId, quantity: 1 }
-          : {
-              price_data: {
-                currency: "usd",
-                unit_amount: amountCents,
-                product_data: {
-                  name: plan.name,
-                  description,
-                },
+    // Prefer monthly subscription (invoices + auto renew/suspend). Coupons that
+    // change duration still use one-time payment when a custom day length is set.
+    const useSubscription = !licenseDurationDays;
+
+    const session = await stripe.checkout.sessions.create(
+      useSubscription
+        ? {
+            mode: "subscription",
+            customer_email: user.email,
+            line_items: [
+              plan.stripePriceId
+                ? { price: plan.stripePriceId, quantity: 1 }
+                : {
+                    price_data: {
+                      currency: "usd",
+                      unit_amount: amountCents,
+                      recurring: { interval: "month" },
+                      product_data: {
+                        name: plan.name,
+                        description,
+                      },
+                    },
+                    quantity: 1,
+                  },
+            ],
+            subscription_data: {
+              metadata: {
+                orderId: order.id,
+                userId: user.id,
+                planId: plan.id,
               },
-              quantity: 1,
             },
-      ],
-      metadata: {
-        orderId: order.id,
-        userId: user.id,
-        planId: plan.id,
-        couponCode: appliedCoupon ?? "",
-        licenseDurationDays: licenseDurationDays ? String(licenseDurationDays) : "",
-      },
-      success_url: `${getAppUrl()}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${getAppUrl()}/pricing?canceled=1`,
-    });
+            metadata: {
+              orderId: order.id,
+              userId: user.id,
+              planId: plan.id,
+              couponCode: appliedCoupon ?? "",
+              billingMode: "subscription",
+            },
+            success_url: `${getAppUrl()}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${getAppUrl()}/pricing?canceled=1`,
+          }
+        : {
+            mode: "payment",
+            customer_email: user.email,
+            line_items: [
+              {
+                price_data: {
+                  currency: "usd",
+                  unit_amount: amountCents,
+                  product_data: {
+                    name: plan.name,
+                    description,
+                  },
+                },
+                quantity: 1,
+              },
+            ],
+            metadata: {
+              orderId: order.id,
+              userId: user.id,
+              planId: plan.id,
+              couponCode: appliedCoupon ?? "",
+              licenseDurationDays: licenseDurationDays ? String(licenseDurationDays) : "",
+              billingMode: "payment",
+            },
+            success_url: `${getAppUrl()}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${getAppUrl()}/pricing?canceled=1`,
+          }
+    );
 
     await prisma.order.update({
       where: { id: order.id },
-      data: { stripeSessionId: session.id },
+      data: {
+        stripeSessionId: session.id,
+        billingMode: useSubscription ? "subscription" : "payment",
+      },
     });
 
     return NextResponse.json({ url: session.url });

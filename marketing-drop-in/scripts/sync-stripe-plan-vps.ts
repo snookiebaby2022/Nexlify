@@ -59,13 +59,15 @@ async function main() {
   }
 
   const unitAmount = gbpToUsdCents(plan.priceCents);
+  // Monthly recurring — required for subscription checkout + invoices.
   const price = await stripe.prices.create({
     product: productId,
     unit_amount: unitAmount,
     currency: "usd",
+    recurring: { interval: "month" },
     metadata: { nexlifyPlanId: plan.id, nexlifySlug: plan.slug },
   });
-  console.log(`Created price: ${price.id} (${unitAmount} USD cents)`);
+  console.log(`Created monthly price: ${price.id} (${unitAmount} USD cents / month)`);
 
   await prisma.plan.update({
     where: { id: plan.id },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Bell,
@@ -14,6 +14,7 @@ import {
   Megaphone,
   Package,
   Radio,
+  Receipt,
   ScrollText,
   Settings,
   Ticket,
@@ -29,6 +30,7 @@ import { AdminTickets } from "@/components/AdminTickets";
 import { AdminNewsletter } from "@/components/AdminNewsletter";
 import { AdminMarketing } from "@/components/AdminMarketing";
 import { AdminPlans } from "@/components/AdminPlans";
+import { AdminBilling } from "@/components/AdminBilling";
 import { AdminDeploy } from "@/components/AdminDeploy";
 import { AdminHealth } from "@/components/AdminHealth";
 import { AdminSiteSettings } from "@/components/AdminSiteSettings";
@@ -39,6 +41,11 @@ import { AdminRemoteUpdate } from "@/components/AdminRemoteUpdate";
 import { AdminCategories } from "@/components/AdminCategories";
 import { AdminUnlockIP } from "@/components/AdminUnlockIP";
 import { AdminAnnouncements } from "@/components/AdminAnnouncements";
+import {
+  AdminTicketAlertsBanner,
+  TicketAttentionBadge,
+} from "@/components/AdminTicketAlerts";
+import { useAdminTicketAlerts } from "@/hooks/useAdminTicketAlerts";
 
 const NAV_GROUPS = [
   {
@@ -54,6 +61,7 @@ const NAV_GROUPS = [
     items: [
       { id: "licenses", label: "Licenses", icon: KeyRound },
       { id: "plans", label: "Plans & Stripe", icon: CreditCard },
+      { id: "billing", label: "Billing", icon: Receipt },
       { id: "orders", label: "Orders", icon: Package },
       { id: "coupons", label: "Coupons", icon: Megaphone },
     ],
@@ -92,9 +100,21 @@ const TAB_LABELS: Record<TabId, string> = Object.fromEntries(
   NAV_GROUPS.flatMap((g) => g.items.map((i) => [i.id, i.label]))
 ) as Record<TabId, string>;
 
+function isTabId(value: string): value is TabId {
+  return Object.prototype.hasOwnProperty.call(TAB_LABELS, value);
+}
+
 export function AdminDashboard() {
   const [tab, setTab] = useState<TabId>("overview");
   const [navQuery, setNavQuery] = useState("");
+  const { alerts } = useAdminTicketAlerts({ pollMs: 25_000, desktopNotify: true });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get("tab");
+    if (fromQuery && isTabId(fromQuery)) setTab(fromQuery);
+  }, []);
 
   const filteredGroups = useMemo(() => {
     const q = navQuery.trim().toLowerCase();
@@ -140,7 +160,10 @@ export function AdminDashboard() {
                         }`}
                       >
                         <Icon className="h-4 w-4 shrink-0 opacity-80" />
-                        {item.label}
+                        <span className="flex-1 text-left">{item.label}</span>
+                        {item.id === "tickets" ? (
+                          <TicketAttentionBadge count={alerts.needsAttention} className="ml-auto" />
+                        ) : null}
                       </button>
                     </li>
                   );
@@ -152,6 +175,8 @@ export function AdminDashboard() {
       </aside>
 
       <main className="min-w-0 flex-1 space-y-6">
+        <AdminTicketAlertsBanner onOpenTickets={() => setTab("tickets")} />
+
         <header className="border-b border-slate-800 pb-4">
           <h1 className="text-xl font-bold text-white">{TAB_LABELS[tab]}</h1>
           <p className="mt-1 text-sm text-slate-500">Nexlify marketing admin</p>
@@ -159,6 +184,7 @@ export function AdminDashboard() {
 
         {tab === "overview" && <AdminStats />}
         {tab === "plans" && <AdminPlans />}
+        {tab === "billing" && <AdminBilling />}
         {tab === "licenses" && <AdminPanel />}
         {tab === "orders" && <AdminOrders />}
         {tab === "coupons" && <AdminCoupons />}

@@ -32,6 +32,7 @@ type TicketRow = {
 export function AdminTickets() {
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [openCount, setOpenCount] = useState(0);
+  const [needsAttention, setNeedsAttention] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
@@ -50,6 +51,7 @@ export function AdminTickets() {
       .then((d) => {
         setTickets(d.tickets ?? []);
         setOpenCount(d.openCount ?? 0);
+        setNeedsAttention(d.needsAttention ?? 0);
       })
       .finally(() => setLoading(false));
   }, [statusFilter, priorityFilter, openOnly]);
@@ -90,7 +92,12 @@ export function AdminTickets() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="font-display text-xl font-semibold text-white">Support tickets</h2>
-          <p className="text-sm text-[var(--muted)]">{openCount} open</p>
+          <p className="text-sm text-[var(--muted)]">
+            {openCount} open
+            {needsAttention > 0 ? (
+              <span className="ml-2 text-amber-300">· {needsAttention} need reply</span>
+            ) : null}
+          </p>
         </div>
         <Link
           href="/admin/tickets"

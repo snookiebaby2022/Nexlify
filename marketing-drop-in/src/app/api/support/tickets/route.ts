@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { TicketPriority } from "@/generated/prisma/client";
+import { notifyAdminsOfTicketEvent } from "@/lib/ticket-admin-notify";
 
 const createSchema = z.object({
   subject: z.string().min(3).max(200),
@@ -53,6 +54,17 @@ export async function POST(request: Request) {
         }),
       ]);
 
+      if (user.role !== "ADMIN") {
+        void notifyAdminsOfTicketEvent({
+          kind: "customer_reply",
+          ticketId,
+          subject: ticket.subject,
+          priority: ticket.priority,
+          customerEmail: user.email,
+          preview: body,
+        });
+      }
+
       return NextResponse.json({ ok: true });
     }
 
@@ -75,6 +87,15 @@ export async function POST(request: Request) {
         },
       });
       return created;
+    });
+
+    void notifyAdminsOfTicketEvent({
+      kind: "new",
+      ticketId: ticket.id,
+      subject: ticket.subject,
+      priority: ticket.priority,
+      customerEmail: user.email,
+      preview: body,
     });
 
     return NextResponse.json({ ticket: { id: ticket.id } });

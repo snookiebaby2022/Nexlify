@@ -114,6 +114,8 @@ model Order {
   plan            Plan        @relation(fields: [planId], references: [id])
   stripeSessionId String?     @unique
   stripePaymentId String?
+  stripeSubscriptionId String?
+  billingMode     String?     // "payment" | "subscription"
   amountCents          Int
   couponCode           String?
   licenseDurationDays  Int?
@@ -135,6 +137,9 @@ model License {
   orderId         String?       @unique
   order           Order?        @relation(fields: [orderId], references: [id])
   whmcsServiceId  String?       @unique
+  stripeSubscriptionId String?  @unique
+  stripeCustomerId     String?
+  stripeSubscriptionStatus String?
   status          LicenseStatus @default(UNUSED)
   expiresAt       DateTime?
   activatedAt     DateTime?
@@ -151,6 +156,9 @@ model License {
   updatedAt       DateTime      @updatedAt
   addonEntitlements AddonEntitlement[]
   activationCodes   ActivationCode[]
+
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionStatus])
 }
 
 /** WHMCS product → panel plugin service (Plex, Emby, etc.). */
