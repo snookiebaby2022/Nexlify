@@ -11,6 +11,7 @@ import {
   type SidebarNavLink,
 } from "@/lib/admin-sidebar-nav";
 import { getResellerSidebarNav } from "@/lib/reseller-sidebar-nav";
+import { withSidebarItemIcons } from "@/lib/panel-nav-bridge";
 import type { ResellerGroupFlags } from "@/lib/reseller-group-flags";
 import { searchOperatorFeatures } from "@/lib/operator-feature-index";
 import { PanelBrandMark } from "@/components/panel-brand-mark";
