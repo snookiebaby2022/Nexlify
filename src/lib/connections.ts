@@ -8,7 +8,7 @@ import {
 } from "./connection-playback-output";
 import { clearLiveSession, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
 
-export const STALE_MS = 5 * 60 * 1000; // cron safety net for orphaned rows
+export const STALE_MS = 90 * 1000; // cron safety net — free maxConnections slots after edge/panel restarts
 /** Live Connections UI + dashboard — HLS/Smarters often gap 10–30s between segment/playlist hits. */
 export const LIVE_STALE_MS = 45 * 1000;
 export const PLAYBACK_STALE_MS = LIVE_STALE_MS;

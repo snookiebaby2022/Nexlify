@@ -19,6 +19,7 @@ import https from "node:https";
 import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -52,28 +53,42 @@ const adminAgent = new http.Agent({
 });
 const apiAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: Number(process.env.IPTV_EDGE_API_SOCKETS || 64),
-  maxFreeSockets: 16,
+  maxSockets: Number(process.env.IPTV_EDGE_API_SOCKETS || 512),
+  maxFreeSockets: 64,
   timeout: 300_000,
 });
 const liveAgent = new http.Agent({
-  // Do not keepAlive: a wedged live-auth socket used to stall every /live zap
-  // (max 12 sockets, no first byte to the player). Fresh connections recover
-  // as soon as the panel is healthy again.
+  // Short panel auth calls only — never used for upstream video bytes.
   keepAlive: false,
-  maxSockets: Number(process.env.IPTV_EDGE_LIVE_SOCKETS || 64),
+  maxSockets: Number(process.env.IPTV_EDGE_LIVE_SOCKETS || 512),
   timeout: 20_000,
+});
+/** Upstream CDN sockets for live MPEG-TS splice (high concurrency). */
+const upstreamLiveHttpAgent = new http.Agent({
+  keepAlive: true,
+  maxSockets: Number(process.env.IPTV_EDGE_UPSTREAM_SOCKETS || 4096),
+  maxFreeSockets: 512,
+  keepAliveMsecs: 30_000,
+  timeout: 300_000,
+});
+const upstreamLiveHttpsAgent = new https.Agent({
+  keepAlive: true,
+  maxSockets: Number(process.env.IPTV_EDGE_UPSTREAM_SOCKETS || 4096),
+  maxFreeSockets: 512,
+  keepAliveMsecs: 30_000,
+  timeout: 300_000,
+  rejectUnauthorized: false,
 });
 const vodHttpAgent = new http.Agent({
   keepAlive: true,
-  maxSockets: Number(process.env.IPTV_EDGE_VOD_SOCKETS || 48),
+  maxSockets: Number(process.env.IPTV_EDGE_VOD_SOCKETS || 256),
   maxFreeSockets: 16,
   keepAliveMsecs: 15_000,
   timeout: 300_000,
 });
 const vodHttpsAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: Number(process.env.IPTV_EDGE_VOD_SOCKETS || 48),
+  maxSockets: Number(process.env.IPTV_EDGE_VOD_SOCKETS || 256),
   maxFreeSockets: 16,
   keepAliveMsecs: 15_000,
   timeout: 300_000,
@@ -127,8 +142,18 @@ const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
 const LIVE_TS_PEEK_BYTES = 188;
 const LIVE_TS_OPEN_MS = Number(process.env.IPTV_EDGE_TS_OPEN_MS || 2000);
 /** Cache live-auth at edge so channel zaps skip panel round-trip (45s default). */
-const AUTH_CACHE_TTL_MS = Number(process.env.IPTV_EDGE_AUTH_CACHE_MS || 90_000);
+const AUTH_CACHE_TTL_MS = Number(process.env.IPTV_EDGE_AUTH_CACHE_MS || 120_000);
+const CATALOG_CACHE_MS = Number(process.env.IPTV_EDGE_CATALOG_CACHE_MS || 300_000);
+const CATALOG_STALE_MS = Number(process.env.IPTV_EDGE_CATALOG_STALE_MS || 600_000);
+const EDGE_DISK_HLS_WAIT_MS = Number(process.env.IPTV_EDGE_DISK_HLS_WAIT_MS || 6000);
+const EDGE_HLS_SEG_WAIT_MS = Number(process.env.IPTV_EDGE_HLS_SEG_WAIT_MS || 12_000);
+const MAX_EDGE_HLS_REMUX = Number(process.env.IPTV_EDGE_MAX_HLS_REMUX || 64);
+const MAX_EDGE_DISK_PACK = Number(process.env.IPTV_EDGE_MAX_DISK_PACK || 48);
+const edgeHlsRemuxProcs = new Map();
+const edgeDiskPackagers = new Map();
 const authCache = new Map();
+const catalogCache = new Map();
+const catalogInflight = new Map();
 const PLAYBACK_RE = /^\/(live|movie|series)\//;
 const HLS_RE = /\.m3u8(?:[?#]|$)/i;
 const HLS_SEG_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\/hls\/(seg\d+\.ts)$/i;
@@ -547,6 +572,366 @@ function looksLikeMpegTs(buf) {
   if (!buf?.length || buf[0] !== 0x47) return false;
   if (buf.length >= 376 && buf[188] === 0x47) return true;
   return buf.length >= 188;
+}
+
+function isHlsPlaybackUrl(url) {
+  return /\.m3u8([?#]|$)/i.test(String(url || "").trim());
+}
+
+function resolveFfmpegPath() {
+  const env = process.env.NEXLIFY_FFMPEG_PATH || process.env.FFMPEG_PATH;
+  if (env && fs.existsSync(env)) return env;
+  const candidates = [
+    "/home/nexlify/bin/ffmpeg_bin/8.0/ffmpeg",
+    "/usr/bin/ffmpeg",
+    "/usr/local/bin/ffmpeg",
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return "ffmpeg";
+}
+
+function stopEdgeHlsRemux(key) {
+  const proc = edgeHlsRemuxProcs.get(key);
+  if (!proc) return;
+  try {
+    proc.kill("SIGTERM");
+  } catch {
+    /* ignore */
+  }
+  edgeHlsRemuxProcs.delete(key);
+}
+
+/**
+ * Remux provider HLS → MPEG-TS at the edge (never through Next.js workers).
+ */
+function spawnEdgeHlsToMpegTs(hlsUrl, clientReq, clientRes, pulseCtx) {
+  const key = pulseCtx?.streamId || hlsUrl;
+  stopEdgeHlsRemux(key);
+  if (edgeHlsRemuxProcs.size >= MAX_EDGE_HLS_REMUX) {
+    const oldest = edgeHlsRemuxProcs.keys().next().value;
+    if (oldest) stopEdgeHlsRemux(oldest);
+  }
+
+  const ffmpegPath = resolveFfmpegPath();
+  const ua = String(clientReq.headers["user-agent"] || UPSTREAM_UA);
+  const args = [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-fflags",
+    "+nobuffer+discardcorrupt",
+    "-flags",
+    "low_delay",
+    "-probesize",
+    "32768",
+    "-analyzeduration",
+    "100000",
+    "-user_agent",
+    ua,
+    "-reconnect",
+    "1",
+    "-reconnect_streamed",
+    "1",
+    "-reconnect_delay_max",
+    "5",
+    "-i",
+    hlsUrl,
+    "-map",
+    "0:v:0?",
+    "-map",
+    "0:a:0?",
+    "-c",
+    "copy",
+    "-flush_packets",
+    "1",
+    "-muxdelay",
+    "0",
+    "-muxpreload",
+    "0",
+    "-mpegts_flags",
+    "+resend_headers",
+    "-f",
+    "mpegts",
+    "pipe:1",
+  ];
+
+  const proc = spawn(ffmpegPath, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  if (!proc.stdout) {
+    proc.kill();
+    if (!clientRes.headersSent) {
+      clientRes.writeHead(502, { "content-type": "text/plain" });
+      clientRes.end("ffmpeg remux failed");
+    }
+    return;
+  }
+  edgeHlsRemuxProcs.set(key, proc);
+
+  const meter = pulseCtx ? createLiveByteMeter(pulseCtx) : null;
+  let stopKickWatch = () => undefined;
+  const cleanup = () => {
+    stopKickWatch();
+    if (edgeHlsRemuxProcs.get(key) === proc) edgeHlsRemuxProcs.delete(key);
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const stopStream = () => {
+    cleanup();
+    endPlaybackSession(pulseCtx);
+    try {
+      if (!clientRes.writableEnded) clientRes.end();
+    } catch {
+      /* ignore */
+    }
+  };
+  stopKickWatch = watchSessionKick(pulseCtx, stopStream);
+  registerPipeTeardown(pulseCtx, stopStream);
+  clientReq.once("close", stopStream);
+  clientReq.once("aborted", stopStream);
+
+  proc.stderr?.on("data", () => undefined);
+  proc.on("error", () => {
+    if (!clientRes.headersSent) {
+      clientRes.writeHead(502, { "content-type": "text/plain" });
+      clientRes.end("ffmpeg error");
+    } else {
+      clientRes.end();
+    }
+    cleanup();
+  });
+  proc.on("close", (code) => {
+    if (code !== 0 && !clientRes.writableEnded) {
+      if (!clientRes.headersSent) {
+        clientRes.writeHead(502, { "content-type": "text/plain" });
+      }
+      clientRes.end();
+    }
+    cleanup();
+  });
+
+  clientRes.writeHead(200, liveTsHeaders());
+  if (meter) proc.stdout.on("data", meter);
+  proc.stdout.pipe(clientRes);
+}
+
+function stopEdgeDiskPackager(streamId) {
+  const proc = edgeDiskPackagers.get(streamId);
+  if (!proc) return;
+  try {
+    proc.kill("SIGTERM");
+  } catch {
+    /* ignore */
+  }
+  edgeDiskPackagers.delete(streamId);
+}
+
+/** XUI-style: ffmpeg writes HLS segments on disk at edge — XCIPTV/Smarters never hit Next.js for .m3u8. */
+function startEdgeDiskPackager(streamId, upstreamUrl, ua) {
+  if (!streamId || !upstreamUrl) return;
+  stopEdgeDiskPackager(streamId);
+  if (edgeDiskPackagers.size >= MAX_EDGE_DISK_PACK) {
+    const oldest = edgeDiskPackagers.keys().next().value;
+    if (oldest) stopEdgeDiskPackager(oldest);
+  }
+  const dir = hlsStreamDir(streamId);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+  } catch {
+    return;
+  }
+  const segPattern = path.join(dir, "seg%d.ts");
+  const indexPath = path.join(dir, "index.m3u8");
+  const ffmpegPath = resolveFfmpegPath();
+  const args = [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-fflags",
+    "+nobuffer+discardcorrupt",
+    "-flags",
+    "low_delay",
+    "-probesize",
+    "32768",
+    "-analyzeduration",
+    "100000",
+    "-user_agent",
+    String(ua || UPSTREAM_UA),
+    "-reconnect",
+    "1",
+    "-reconnect_streamed",
+    "1",
+    "-reconnect_delay_max",
+    "5",
+    "-i",
+    upstreamUrl,
+    "-map",
+    "0:v:0?",
+    "-map",
+    "0:a:0?",
+    "-c",
+    "copy",
+    "-f",
+    "hls",
+    "-hls_time",
+    "4",
+    "-hls_list_size",
+    "8",
+    "-hls_flags",
+    "delete_segments+append_list+omit_endlist",
+    "-hls_segment_filename",
+    segPattern,
+    indexPath,
+  ];
+  const proc = spawn(ffmpegPath, args, {
+    stdio: ["ignore", "ignore", "pipe"],
+    windowsHide: true,
+  });
+  edgeDiskPackagers.set(streamId, proc);
+  proc.stderr?.on("data", () => undefined);
+  proc.on("close", () => {
+    if (edgeDiskPackagers.get(streamId) === proc) edgeDiskPackagers.delete(streamId);
+  });
+}
+
+function pruneCatalogCache(now) {
+  if (catalogCache.size <= 512) return;
+  for (const [key, hit] of catalogCache) {
+    if (hit.expires <= now) catalogCache.delete(key);
+  }
+  while (catalogCache.size > 1024) {
+    const oldest = catalogCache.keys().next().value;
+    if (!oldest) break;
+    catalogCache.delete(oldest);
+  }
+}
+
+function catalogActionCacheable(url) {
+  const q = String(url || "").split("?")[1] || "";
+  if (!q) return true;
+  const m = /(?:^|&)action=([^&]+)/i.exec(q);
+  if (!m) return true;
+  const action = decodeURIComponent(m[1]).toLowerCase();
+  return /^(get_live_categories|get_vod_categories|get_series_categories|get_live_streams|get_vod_streams|get_series|get_series_info|get_simple_data_table|get_epg_channels)$/.test(
+    action
+  );
+}
+
+function catalogCacheKey(url) {
+  return String(url || "/").split("#")[0];
+}
+
+function catalogResponseHeaders(hdrs, fromCache) {
+  const out = { ...hdrs };
+  delete out["transfer-encoding"];
+  if (fromCache) {
+    out["x-nexlify-edge-catalog"] = "hit";
+    out["cache-control"] = "private, max-age=300";
+  }
+  return out;
+}
+
+function storeCatalogCache(key, now, status, hdrs, body) {
+  if (status !== 200 || !body?.length) return;
+  catalogCache.set(key, {
+    expires: now + CATALOG_CACHE_MS,
+    staleUntil: now + CATALOG_STALE_MS,
+    status,
+    headers: hdrs,
+    body,
+  });
+  pruneCatalogCache(now);
+}
+
+function fetchCatalogFromPanel(url, clientReq, ctx, onDone) {
+  const cleanHost = sanitizeHostHeader(clientReq.headers.host) || backendHost;
+  const headers = { ...clientReq.headers };
+  headers.host = cleanHost;
+  headers["x-forwarded-host"] = cleanHost.split(":")[0];
+  headers["x-forwarded-proto"] = ctx.proto;
+  headers["x-forwarded-port"] = String(ctx.listenPort);
+  headers["x-nexlify-client-port"] = String(ctx.listenPort);
+  headers["x-forwarded-for"] = clientIp(clientReq);
+
+  return new Promise((resolve) => {
+    const proxyReq = http.request(
+      {
+        hostname: backendHost,
+        port: backendPort,
+        path: url,
+        method: "GET",
+        agent: apiAgent,
+        headers,
+        timeout: 120_000,
+      },
+      (proxyRes) => {
+        const chunks = [];
+        proxyRes.on("data", (c) => chunks.push(c));
+        proxyRes.on("end", () => {
+          const body = Buffer.concat(chunks);
+          const hdrs = { ...proxyRes.headers };
+          const status = proxyRes.statusCode || 502;
+          const now = Date.now();
+          const cacheKey = catalogCacheKey(url);
+          storeCatalogCache(cacheKey, now, status, hdrs, body);
+          onDone?.({ status, headers: hdrs, body });
+          resolve({ status, headers: hdrs, body });
+        });
+      }
+    );
+    proxyReq.on("error", () => {
+      const err = { status: 502, headers: { "content-type": "text/plain" }, body: Buffer.from("iptv-edge catalog error") };
+      onDone?.(err);
+      resolve(err);
+    });
+    proxyReq.on("timeout", () => {
+      proxyReq.destroy();
+      const err = { status: 504, headers: { "content-type": "text/plain" }, body: Buffer.from("catalog timeout") };
+      onDone?.(err);
+      resolve(err);
+    });
+    proxyReq.end();
+  });
+}
+
+function refreshCatalogInBackground(key, url, clientReq, ctx) {
+  if (catalogInflight.has(key)) return;
+  const p = fetchCatalogFromPanel(url, clientReq, ctx).finally(() => catalogInflight.delete(key));
+  catalogInflight.set(key, p);
+}
+
+function forwardCatalogCached(clientReq, clientRes, ctx) {
+  const method = String(clientReq.method || "GET").toUpperCase();
+  const url = clientReq.url || "/";
+  if (method !== "GET" || !catalogActionCacheable(url)) {
+    forward(clientReq, clientRes, ctx);
+    return;
+  }
+  const key = catalogCacheKey(url);
+  const now = Date.now();
+  const hit = catalogCache.get(key);
+  if (hit && hit.expires > now) {
+    clientRes.writeHead(hit.status, catalogResponseHeaders(hit.headers, true));
+    clientRes.end(hit.body);
+    return;
+  }
+  if (hit && hit.staleUntil > now) {
+    clientRes.writeHead(hit.status, catalogResponseHeaders(hit.headers, true));
+    clientRes.end(hit.body);
+    refreshCatalogInBackground(key, url, clientReq, ctx);
+    return;
+  }
+
+  fetchCatalogFromPanel(url, clientReq, ctx, (res) => {
+    if (!clientRes.headersSent) {
+      clientRes.writeHead(res.status, catalogResponseHeaders(res.headers, false));
+      clientRes.end(res.body);
+    }
+  });
 }
 
 function touchHlsDaemon(streamId) {
@@ -969,6 +1354,25 @@ function serveInstantTsPlaylist(clientReq, clientRes, pulseCtx) {
   clientRes.end(body);
 }
 
+/** Smarters/LibVLC: return playlist immediately; segments arrive from edge disk packager (XUI-style). */
+function serveBootstrapHlsPlaylist(clientReq, clientRes, pulseCtx) {
+  const pathOnly = String(clientReq.url || "/").split("?")[0];
+  const base = pathOnly.replace(/\.m3u8$/i, "");
+  const body = [
+    "#EXTM3U",
+    "#EXT-X-VERSION:3",
+    "#EXT-X-ALLOW-CACHE:NO",
+    "#EXT-X-TARGETDURATION:4",
+    "#EXT-X-MEDIA-SEQUENCE:0",
+    "#EXTINF:4.000,",
+    `${base}/hls/seg0.ts`,
+    "",
+  ].join("\n");
+  if (pulseCtx) pulseConnection(pulseCtx, Buffer.byteLength(body));
+  clientRes.writeHead(200, hlsPlaylistHeaders());
+  clientRes.end(body);
+}
+
 function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, onUnplayable) {
   const meter = pulseCtx ? createLiveByteMeter(pulseCtx) : null;
   let stopKickWatch = () => undefined;
@@ -1146,6 +1550,9 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
   if (!live && !proxy) {
     reqOpts.agent = parsed.protocol === "https:" ? vodHttpsAgent : vodHttpAgent;
   }
+  if (live) {
+    reqOpts.agent = parsed.protocol === "https:" ? upstreamLiveHttpsAgent : upstreamLiveHttpAgent;
+  }
   if (proxy) {
     reqOpts.createConnection = (_opts, cb) => {
       connectOriginSocket(parsed.toString(), proxy, 30_000)
@@ -1202,7 +1609,7 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
           /* fall through */
         }
       }
-      // Provider auth errors: fall back to Next.js (HLS remux, outbound proxy, disk packager).
+      // Provider auth errors: fall back to Next.js (outbound proxy edge cases).
       if (live && (status === 401 || status === 403 || status === 407)) {
         forward(clientReq, clientRes, { listenPort, proto });
         return;
@@ -1217,10 +1624,15 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
     if (live) {
       const ct = String(upRes.headers["content-type"] || "").toLowerCase();
       const loc2 = String(upRes.headers.location || "");
-      if (/mpegurl|x-mpegurl/.test(ct) || /\.m3u8/i.test(loc2)) {
+      if (/mpegurl|x-mpegurl/.test(ct) || /\.m3u8/i.test(loc2) || isHlsPlaybackUrl(targetUrl)) {
         upRes.resume();
         up.destroy();
-        forward(clientReq, clientRes, { listenPort, proto });
+        spawnEdgeHlsToMpegTs(
+          loc2 && /\.m3u8/i.test(loc2) ? new URL(loc2, parsed).toString() : targetUrl,
+          clientReq,
+          clientRes,
+          pulseCtx
+        );
         return;
       }
       if (ct.includes("html") || ct.includes("json") || ct.startsWith("text/")) {
@@ -1313,64 +1725,64 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
       : null;
   const isHead = String(clientReq.method || "GET").toUpperCase() === "HEAD";
   if (pulseCtx && !isHead) touchPlaybackSession(pulseCtx, { hls: true });
-  // Provider-native .m3u8 must relay through Next (rewritten manifest + upstream segments).
-  if (auth.hlsNative) {
-    forward(clientReq, clientRes, ctx);
-    return;
-  }
   if (auth.passthrough || auth.status !== 200 || !auth.streamId) {
     forward(clientReq, clientRes, ctx);
     return;
   }
   const streamId = auth.streamId;
-  touchHlsDaemon(streamId);
-  let fresh = hlsDirFresh(streamId);
-  if (!fresh && kind === "playlist" && !isHead && auth.upstream && !auth.hlsNative) {
-    if (userAgentAllowsInstantTsWrap(clientReq.headers["user-agent"])) {
-      serveInstantTsPlaylist(clientReq, clientRes, pulseCtx);
-      return;
-    }
+  const packUrl = auth.upstream || "";
+  if (packUrl && !isHead) {
+    startEdgeDiskPackager(streamId, packUrl, clientReq.headers["user-agent"]);
+    touchHlsDaemon(streamId);
   }
-  if (!fresh && kind === "playlist" && !isHead) {
-    const deadline = Date.now() + 800;
-    while (!fresh && Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 150));
-      fresh = hlsDirFresh(streamId);
-    }
-  }
-  if (!fresh) {
+  if (auth.hlsNative && !packUrl) {
     forward(clientReq, clientRes, ctx);
     return;
   }
+
   if (kind === "seg") {
-    if (clientReq.method === "HEAD") {
-      const segPath = hlsSegPath(streamId, segName);
-      try {
-        if (segPath) {
-          const st = fs.statSync(segPath);
-          if (st.isFile() && st.size > 0) {
-            clientRes.writeHead(200, hlsSegHeaders(st.size));
-            clientRes.end();
-            return;
+    const deadline = Date.now() + EDGE_HLS_SEG_WAIT_MS;
+    while (Date.now() < deadline) {
+      if (clientReq.method === "HEAD") {
+        const segPath = hlsSegPath(streamId, segName);
+        try {
+          if (segPath) {
+            const st = fs.statSync(segPath);
+            if (st.isFile() && st.size > 0) {
+              clientRes.writeHead(200, hlsSegHeaders(st.size));
+              clientRes.end();
+              return;
+            }
           }
+        } catch {
+          /* keep polling */
         }
-      } catch {
-        /* miss → Next */
+      } else if (serveHlsSegment(streamId, segName, clientRes, pulseCtx)) {
+        return;
       }
-      forward(clientReq, clientRes, ctx);
-      return;
+      await new Promise((r) => setTimeout(r, 80));
     }
-    if (serveHlsSegment(streamId, segName, clientRes, pulseCtx)) return;
-    forward(clientReq, clientRes, ctx);
+    clientRes.writeHead(503, { "content-type": "text/plain", "retry-after": "1" });
+    clientRes.end("Segment not ready");
     return;
   }
+
   if (clientReq.method === "HEAD") {
     clientRes.writeHead(200, hlsPlaylistHeaders());
     clientRes.end();
     return;
   }
   if (serveHlsPlaylist(streamId, clientReq, clientRes, pulseCtx)) return;
-  forward(clientReq, clientRes, ctx);
+  if (packUrl && userAgentAllowsInstantTsWrap(clientReq.headers["user-agent"])) {
+    serveInstantTsPlaylist(clientReq, clientRes, pulseCtx);
+    return;
+  }
+  if (packUrl) {
+    serveBootstrapHlsPlaylist(clientReq, clientRes, pulseCtx);
+    return;
+  }
+  clientRes.writeHead(502, { "content-type": "text/plain" });
+  clientRes.end("No upstream");
 }
 
 async function onRequest(clientReq, clientRes, ctx) {
@@ -1388,7 +1800,8 @@ async function onRequest(clientReq, clientRes, ctx) {
 
   // Fast lane: panel login, admin UI, APIs, Xtream catalog — skip playback auth/HLS.
   if (isPanelPriorityPath(pathOnly)) {
-    forward(clientReq, clientRes, ctx);
+    if (isCatalogPath(pathOnly)) forwardCatalogCached(clientReq, clientRes, ctx);
+    else forward(clientReq, clientRes, ctx);
     return;
   }
 
@@ -1437,6 +1850,10 @@ async function onRequest(clientReq, clientRes, ctx) {
     if (isLiveRangeProbe || (clientReq.method === "HEAD" && auth.live)) {
       clientRes.writeHead(200, liveTsHeaders());
       clientRes.end();
+      return;
+    }
+    if (auth.live && isHlsPlaybackUrl(auth.upstream)) {
+      spawnEdgeHlsToMpegTs(auth.upstream, clientReq, clientRes, pulseCtx);
       return;
     }
     pipeUpstream(auth.upstream, clientReq, clientRes, {

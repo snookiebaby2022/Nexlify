@@ -222,3 +222,42 @@ export async function snapshotNicTrafficForCron(): Promise<{ bytesIn: bigint; by
     bytesOut: BigInt(Math.floor(txDelta * scale)),
   };
 }
+
+/** Dashboard KPI / top nav: real NIC ingress (provider rx) vs egress (viewer tx), not estimated viewer load. */
+export async function getDashboardNicBandwidthMbps(): Promise<{
+  networkInMbps: number;
+  networkOutMbps: number;
+}> {
+  let cap = 1000;
+  try {
+    const main = await prisma.streamServer.findFirst({
+      where: { isMain: true },
+      select: { bandwidthMbps: true },
+    });
+    if (main?.bandwidthMbps && main.bandwidthMbps > 0) cap = main.bandwidthMbps;
+  } catch {
+    /* main server optional */
+  }
+
+  const sample = sampleLocalHostMetrics(cap);
+  if (sample.downloadMbps > 0 || sample.uploadMbps > 0) {
+    return { networkInMbps: sample.downloadMbps, networkOutMbps: sample.uploadMbps };
+  }
+
+  try {
+    const snap = await prisma.bandwidthSnapshot.findFirst({
+      orderBy: { createdAt: "desc" },
+      select: { bytesIn: true, bytesOut: true },
+    });
+    if (snap) {
+      return {
+        networkInMbps: snapshotWindowToMbps(snap.bytesIn),
+        networkOutMbps: snapshotWindowToMbps(snap.bytesOut),
+      };
+    }
+  } catch {
+    /* snapshot optional */
+  }
+
+  return { networkInMbps: 0, networkOutMbps: 0 };
+}

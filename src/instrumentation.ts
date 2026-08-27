@@ -51,5 +51,15 @@ export async function register() {
     } catch {
       /* DB unavailable during build / early boot */
     }
+    try {
+      const { ensureRedisConnected } = await import("@/lib/redis");
+      if (await ensureRedisConnected()) {
+        console.log("[redis] connected at worker startup");
+      } else {
+        console.warn("[redis] not ready at worker startup — cache will retry on demand");
+      }
+    } catch {
+      /* REDIS_URL unset or ioredis unavailable */
+    }
   }
 }

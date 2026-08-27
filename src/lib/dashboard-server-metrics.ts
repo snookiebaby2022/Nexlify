@@ -8,9 +8,9 @@ import { isServerHealthOnline } from "@/lib/server-tree";
 import {
   readStoredHostMetrics,
   sampleLocalHostMetrics,
+  getDashboardNicBandwidthMbps,
   type HostMetricsSample,
 } from "@/lib/host-metrics";
-import { dashboardPlaybackBandwidthMbps } from "@/lib/server-load-metrics";
 import {
   classifyTicketSubject,
   emptyBreakdown,
@@ -260,9 +260,7 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
   const reportedChannels = sumBreakdown(reportedBreakdown);
   const channelRequests = sumBreakdown(requestBreakdown);
 
-  const { networkInMbps, networkOutMbps } = dashboardPlaybackBandwidthMbps(
-    viewers.onlineConnections
-  );
+  const { networkInMbps, networkOutMbps } = await getDashboardNicBandwidthMbps();
 
   const inactiveMap = new Map(inactiveByType.map((r) => [r.type, r._count]));
   const inactiveLive = inactiveMap.get(StreamType.LIVE) ?? 0;

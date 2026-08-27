@@ -59,13 +59,20 @@ const standaloneDir = resolve(__dirname, ".next/standalone");
 const useStandalone = existsSync(resolve(standaloneDir, "server.js"));
 
 const cpuCount = cpus().length;
+const streamingOptimized =
+  process.env.NEXLIFY_STREAMING_OPTIMIZED === "1" || fileEnv.NEXLIFY_STREAMING_OPTIMIZED === "1";
 const panelInstancesRaw = process.env.PANEL_INSTANCES || fileEnv.PANEL_INSTANCES;
 const parsedInstances = parseInt(String(panelInstancesRaw || ""), 10);
-const panelInstances = Number.isFinite(parsedInstances)
-  ? Math.min(8, Math.max(1, parsedInstances))
-  : cpuCount >= 4
-    ? 2
-    : 1;
+let panelInstances = Number.isFinite(parsedInstances)
+  ? Math.min(12, Math.max(1, parsedInstances))
+  : cpuCount >= 8
+    ? 6
+    : cpuCount >= 4
+      ? 4
+      : 1;
+// IPTV on edge — cap only when streaming profile active and instances not explicitly set.
+const explicitInstances = Number.isFinite(parsedInstances) && panelInstancesRaw;
+if (streamingOptimized && panelInstances > 2 && !explicitInstances) panelInstances = 2;
 const panelExecMode = panelInstances > 1 ? "cluster" : "fork";
 
 const sharedPanelEnv = {
@@ -75,7 +82,8 @@ const sharedPanelEnv = {
   PORT: panelPort,
   PANEL_PORT: panelPort,
   WEBSITE_PORT: websitePort,
-  STREAM_HTTP_PORT: websitePort,
+  STREAM_HTTP_PORT: fileEnv.STREAM_HTTP_PORT || fileEnv.STREAM_EDGE_PORT || "8080",
+  STREAM_EDGE_PORT: fileEnv.STREAM_EDGE_PORT || fileEnv.STREAM_HTTP_PORT || "8080",
   PANEL_BEHIND_NGINX: fileEnv.PANEL_BEHIND_NGINX || "1",
   PANEL_BIND_HOST: bindHost,
   HOSTNAME: bindHost,
@@ -120,12 +128,11 @@ module.exports = {
           instances: panelInstances,
           exec_mode: panelExecMode,
           autorestart: true,
-          max_restarts: 15,
-          min_uptime: "15s",
+          max_restarts: 25,
+          min_uptime: "30s",
           kill_timeout: 8000,
-          // PM2 RSS kill must stay above large dump parse peaks (was 700M–1800M and
-          // aborted ~1GB SQL preview mid-request → browser "Upload failed").
-          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "8192M",
+          // Recycle individual workers before they wedge the event loop (~2.5GB+ under IPTV load).
+          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "4096M",
           env: sharedPanelEnv,
         }
       : {
@@ -136,11 +143,11 @@ module.exports = {
           instances: panelInstances,
           exec_mode: panelExecMode,
           autorestart: true,
-          max_restarts: 10,
-          min_uptime: "10s",
-          kill_timeout: 5000,
-          listen_timeout: 60000,
-          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "8192M",
+          max_restarts: 25,
+          min_uptime: "30s",
+          kill_timeout: 8000,
+          listen_timeout: 90000,
+          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "4096M",
           env: sharedPanelEnv,
         },
     {

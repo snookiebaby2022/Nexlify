@@ -281,7 +281,8 @@ export async function resolvePlaybackUrlCandidatesForLine(
       })
     );
   }
-  const expanded = expandHlsPlaybackCandidates(signed);
+  const playable = await filterPlayablePlaybackUrls(signed, ctx);
+  const expanded = expandHlsPlaybackCandidates(playable);
   await cacheSet(cacheKey, expanded, ttl);
   // Keep single-URL cache in sync for zap prefetch / redirects
   if (expanded[0]) await cacheSet(`playback:url:${lineId}:${streamId}`, expanded[0], ttl);

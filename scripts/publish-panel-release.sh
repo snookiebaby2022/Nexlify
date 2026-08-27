@@ -79,6 +79,8 @@ cp -f "$ROOT/scripts/fix-panel-auto-update.sh" "$INSTALL_DEST/fix-panel-auto-upd
 cp -f "$ROOT/scripts/fix-panel-restart.sh" "$INSTALL_DEST/fix-panel-restart.sh"
 cp -f "$ROOT/scripts/fix-stream-edge-now.sh" "$INSTALL_DEST/fix-stream-edge-now.sh"
 cp -f "$ROOT/scripts/panel-restart-safe.sh" "$INSTALL_DEST/scripts/panel-restart-safe.sh"
+cp -f "$ROOT/scripts/rematch-iptv-edge-auth.sh" "$INSTALL_DEST/scripts/rematch-iptv-edge-auth.sh"
+cp -f "$ROOT/scripts/sync-internal-secret-env.sh" "$INSTALL_DEST/scripts/sync-internal-secret-env.sh"
 cp -f "$ROOT/scripts/panel-update-recover.sh" "$INSTALL_DEST/scripts/panel-update-recover.sh"
 cp -f "$ROOT/scripts/panel-update-background.sh" "$INSTALL_DEST/scripts/panel-update-background.sh"
 cp -f "$ROOT/scripts/panel-update-background.ts" "$INSTALL_DEST/scripts/panel-update-background.ts"

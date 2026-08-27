@@ -24,6 +24,7 @@ import {
   portFromPanelBaseUrl,
   resolvePanelListenPort,
   resolveStreamHttpsPort,
+  resolveAdvertisedStreamHttpPort,
   resolveWebsiteHttpPort,
 } from "./server-ports";
 import { formatPanelClock, normalizeTimeFormat } from "./epg-time";
@@ -115,7 +116,7 @@ export async function xtreamUserInfo(
   const streamHttpsPort = serverSettings.streamHttpsPort || resolveStreamHttpsPort();
   // Smarters follows server_info.port for every API call after login. Never redirect
   // HTTPS :443 clients to :8080 — player_api is on 443 and many hosts block 8080 externally.
-  const httpPort = useHttps ? String(streamHttpsPort) : publicPort;
+  const httpPort = useHttps ? String(streamHttpsPort) : String(resolveAdvertisedStreamHttpPort(publicPort));
   const httpsPort = String(streamHttpsPort);
   const formats = preferLiveOutputFormats(
     xtreamOutputFormats(line.allowedOutput),

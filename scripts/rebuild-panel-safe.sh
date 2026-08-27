@@ -46,6 +46,14 @@ if [ -f "$ROOT/scripts/nexlify-migrate-guard.sh" ]; then
   fi
 fi
 
+if [ -f "$ROOT/scripts/nexlify-streaming-guard.sh" ]; then
+  # shellcheck disable=SC1091
+  . "$ROOT/scripts/nexlify-streaming-guard.sh"
+  if ! nexlify_refuse_build_if_streaming_busy; then
+    exit 1
+  fi
+fi
+
 # Do not recycle the panel while a large SQL import is in progress
 if [ -f /tmp/nexlify-migrate-in-progress ]; then
   age=$(( $(date +%s) - $(stat -c %Y /tmp/nexlify-migrate-in-progress 2>/dev/null || echo 0) ))
@@ -66,7 +74,7 @@ export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
 unset NEXT_PRIVATE_WORKER_THREADS 2>/dev/null || true
 export GIT_TERMINAL_PROMPT=0
 
-if [ -d .git ]; then
+if [ -d .git ] && [ "${NEXLIFY_SKIP_GIT_RESET:-}" != "1" ]; then
   echo "==> git fetch + reset --hard origin/main"
   if [ -f "$ROOT/scripts/vps-git-auth.sh" ]; then
     # shellcheck source=scripts/vps-git-auth.sh

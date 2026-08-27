@@ -155,6 +155,37 @@ if echo "$redis_url" | grep -qE '^redis://localhost(:|/)'; then
   echo "Panel env: REDIS_URL localhost → 127.0.0.1 (avoid IPv6 hang)"
 fi
 
+# nginx terminates HTTPS; edge must not steal :443 (self-signed TLS breaks Smarters HTTPS URLs).
+if [ "$(read_env PANEL_BEHIND_NGINX)" = "1" ] && ! is_ip_host "$PRIMARY"; then
+  set_kv STREAM_HTTPS_PORT ""
+  set_kv IPTV_EDGE_HTTPS_PORTS ""
+  echo "Panel env: nginx owns :443 TLS — IPTV edge HTTP only (:8080/:25461)"
+fi
+
+# Streaming profile: IPTV bytes on nexlify-iptv-edge — panel workers for admin/auth only.
+if [ "$(read_env NEXLIFY_USE_IPTV_EDGE)" = "1" ]; then
+  inst="$(read_env PANEL_INSTANCES)"
+  if [ -n "$inst" ] && [ "$inst" -gt 6 ] 2>/dev/null; then
+    set_kv PANEL_INSTANCES 6
+    echo "Panel env: capped PANEL_INSTANCES=6 (IPTV via edge — panel is not the video proxy)"
+  elif [ -z "$inst" ]; then
+    set_kv PANEL_INSTANCES 4
+    echo "Panel env: default PANEL_INSTANCES=4 (IPTV via edge)"
+  fi
+  set_kv NEXLIFY_STREAMING_OPTIMIZED 1
+  set_kv NEXLIFY_CONN_STALE_SEC "${NEXLIFY_CONN_STALE_SEC:-60}"
+  set_kv NEXLIFY_MAX_MEMORY_RESTART "${NEXLIFY_MAX_MEMORY_RESTART:-4096M}"
+  set_kv NEXLIFY_PANEL_WORKER_SPARE "${NEXLIFY_PANEL_WORKER_SPARE:-1}"
+  set_kv NEXLIFY_PANEL_INSTANCES_MAX "${NEXLIFY_PANEL_INSTANCES_MAX:-6}"
+  set_kv IPTV_EDGE_UPSTREAM_SOCKETS "${IPTV_EDGE_UPSTREAM_SOCKETS:-4096}"
+  set_kv IPTV_EDGE_LIVE_SOCKETS "${IPTV_EDGE_LIVE_SOCKETS:-512}"
+  set_kv IPTV_EDGE_ADMIN_SOCKETS "${IPTV_EDGE_ADMIN_SOCKETS:-256}"
+  set_kv IPTV_EDGE_VOD_SOCKETS "${IPTV_EDGE_VOD_SOCKETS:-256}"
+  set_kv IPTV_EDGE_AUTH_CACHE_MS "${IPTV_EDGE_AUTH_CACHE_MS:-120000}"
+  set_kv IPTV_EDGE_MAX_HLS_REMUX "${IPTV_EDGE_MAX_HLS_REMUX:-64}"
+  set_kv UV_THREADPOOL_SIZE "${UV_THREADPOOL_SIZE:-32}"
+fi
+
 # Disk-backed DVR / catch-up recordings (created on every install + panel restart env sync).
 if [ -f scripts/setup-dvr-storage.sh ]; then
   bash scripts/setup-dvr-storage.sh

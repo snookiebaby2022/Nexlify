@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { isTestConnectionIp, listLiveConnections } from "@/lib/connections";
-import { dashboardPlaybackBandwidthMbps } from "@/lib/server-load-metrics";
+import { getDashboardNicBandwidthMbps } from "@/lib/host-metrics";
 import { getServerPollIntervals } from "@/lib/perf-polling";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
           const users = new Set(live.map((r) => r.lineId));
           const streams = new Set(live.map((r) => r.streamId).filter(Boolean));
 
-          const { networkInMbps, networkOutMbps } = dashboardPlaybackBandwidthMbps(live.length);
+          const { networkInMbps, networkOutMbps } = await getDashboardNicBandwidthMbps();
 
           send({
             timestamp: now.toISOString(),

@@ -200,6 +200,8 @@ bootstrap_patch_scripts() {
   }
   fetch_one "${base}/apply-panel-fast-update.sh?${cache}" "$ROOT/scripts/apply-panel-fast-update.sh"
   fetch_one "${base}/scripts/panel-restart-safe.sh?${cache}" "$ROOT/scripts/panel-restart-safe.sh"
+  fetch_one "${base}/scripts/rematch-iptv-edge-auth.sh?${cache}" "$ROOT/scripts/rematch-iptv-edge-auth.sh"
+  fetch_one "${base}/scripts/sync-internal-secret-env.sh?${cache}" "$ROOT/scripts/sync-internal-secret-env.sh"
   fetch_one "${base}/scripts/panel-update-recover.sh?${cache}" "$ROOT/scripts/panel-update-recover.sh"
   fetch_one "${base}/scripts/panel-update-background.sh?${cache}" "$ROOT/scripts/panel-update-background.sh"
   fetch_one "${base}/scripts/ensure-fleet-deploy-key.sh?${cache}" "$ROOT/scripts/ensure-fleet-deploy-key.sh"
@@ -406,6 +408,11 @@ cmd_prisma() {
 }
 
 cmd_build_prep() {
+  if [ -f "$ROOT/scripts/nexlify-streaming-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-streaming-guard.sh"
+    nexlify_refuse_build_if_streaming_busy || exit 1
+  fi
   if [ -x "$ROOT/scripts/ensure-customer-ip-env.sh" ]; then
     bash "$ROOT/scripts/ensure-customer-ip-env.sh" || true
   fi

@@ -54,9 +54,25 @@ HTTP_PORTS="$(echo "$HTTP_PORTS" | tr ',' '\n' | grep -v '^80$' | grep -v '^$' |
 if [ "$PANEL_LISTEN" != "80" ]; then
   echo "[iptv-edge] Panel UI stays on nginx :80 (backend 127.0.0.1:${PANEL_LISTEN}); edge will not bind :80"
 fi
-HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
-[ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="$(env_val PANEL_SSL_PORT)"
-[ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="443"
+
+PANEL_BEHIND="$(env_val PANEL_BEHIND_NGINX)"
+PRIMARY_DOM="$(env_val PANEL_PRIMARY_DOMAIN)"
+
+HTTPS_PORTS="$(env_val IPTV_EDGE_HTTPS_PORTS)"
+[ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
+# Domain panels behind nginx: never fall back to PANEL_SSL_PORT — nginx owns :443.
+if [ -z "$HTTPS_PORTS" ] && [ "$PANEL_BEHIND" != "1" ]; then
+  HTTPS_PORTS="$(env_val PANEL_SSL_PORT)"
+fi
+[ -z "$HTTPS_PORTS" ] && [ "$PANEL_BEHIND" != "1" ] && HTTPS_PORTS="443"
+
+if [ "$PANEL_BEHIND" = "1" ] && [ -n "$PRIMARY_DOM" ] && ! echo "$PRIMARY_DOM" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+  echo "[iptv-edge] Domain panel behind nginx — nginx owns :443, edge HTTP only (:8080/:25461)"
+  HTTPS_PORTS=""
+  if [ -x "$PANEL_DIR/scripts/install-nginx-panel-https.sh" ]; then
+    bash "$PANEL_DIR/scripts/install-nginx-panel-https.sh" || true
+  fi
+fi
 
 # Hosts where nginx must own :443 (marketing TLS, MovieFlix/FlixNova, other LE sites).
 # Never steal 443 when those vhosts are present — IPTV edge keeps :8080/:25461 only.
@@ -69,6 +85,10 @@ if nginx_owns_public_web; then
 fi
 
 RELEASE_PORTS="$(echo "$HTTP_PORTS $HTTPS_PORTS" | tr ',' ' ' | xargs)"
+# When nginx serves panel HTTPS, never strip :443 from nginx configs.
+if [ "$PANEL_BEHIND" = "1" ] && [ -n "$PRIMARY_DOM" ] && ! echo "$PRIMARY_DOM" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+  RELEASE_PORTS="$(echo "$RELEASE_PORTS" | tr ' ' '\n' | grep -vx '443' | xargs)"
+fi
 
 # Strip nginx listen directives for edge-owned ports BEFORE killing sockets.
 # Otherwise a later nginx restart tries to re-bind 8080 and takes down :80 too.
@@ -148,6 +168,12 @@ if command -v pm2 >/dev/null 2>&1; then
       exit 1
     }
   fi
+  export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-32}"
+  export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
+  export IPTV_EDGE_UPSTREAM_SOCKETS="${IPTV_EDGE_UPSTREAM_SOCKETS:-4096}"
+  export IPTV_EDGE_LIVE_SOCKETS="${IPTV_EDGE_LIVE_SOCKETS:-512}"
+  export IPTV_EDGE_ADMIN_SOCKETS="${IPTV_EDGE_ADMIN_SOCKETS:-256}"
+  export IPTV_EDGE_AUTH_CACHE_MS="${IPTV_EDGE_AUTH_CACHE_MS:-120000}"
   pm2 start "$PANEL_DIR/scripts/iptv-edge-proxy.mjs" \
     --name nexlify-iptv-edge \
     --cwd "$PANEL_DIR" \

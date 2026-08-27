@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.51",
+  "latestVersion": "2.0.52",
   "releases": [
+    {
+      "version": "2.0.52",
+      "date": "2026-08-27",
+      "channel": "stable",
+      "summary": "IPTV edge owns playback bytes; dashboard shows real NIC ingress vs egress.",
+      "changelog": [
+        "IPTV edge proxies live/HLS at :8080 — panel workers auth only, not video pipes",
+        "XCIPTV/Smarters get instant edge HLS playlists and cached player_api catalog",
+        "Dashboard bandwidth KPI uses real NIC rx/tx (provider ingress vs viewer egress)",
+        "live-auth returns upstream URLs to edge; dead upstream probe skips bad provider URLs",
+        "player_api advertises nginx port 80/443 when behind stream edge"
+      ],
+      "fixes": [
+        "Streams dropped under load when Next.js workers proxied tens of MB/s per viewer",
+        "XCIPTV playlist refresh was slow and .m3u8 zaps timed out on panel HLS packager",
+        "Dashboard input and output Mbps showed the same estimated viewer number"
+      ]
+    },
     {
       "version": "2.0.51",
       "date": "2026-08-26",

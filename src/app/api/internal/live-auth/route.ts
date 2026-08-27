@@ -168,8 +168,8 @@ export async function GET(req: NextRequest) {
         "X-Nexlify-Stream-Id": cleanId,
         "X-Nexlify-Live": "1",
         "X-Nexlify-Hls": "1",
-        ...(hlsNative ? { "X-Nexlify-Hls-Native": "1" } : {}),
-        ...(tsUrl ? { "X-Nexlify-Upstream": tsUrl } : {}),
+        ...(hlsNative && !tsUrl ? { "X-Nexlify-Hls-Native": "1" } : {}),
+        ...((tsUrl ?? hlsNative) ? { "X-Nexlify-Upstream": tsUrl ?? hlsNative! } : {}),
         "Cache-Control": "no-store",
         ...proxyAuthHeaders(outboundProxy),
       } as Record<string, string>,
@@ -193,8 +193,9 @@ export async function GET(req: NextRequest) {
     if (tsList.length) {
       upstream = tsList[0]!;
       altUpstreams = tsList.slice(1, 4);
-    } else if (candidates.some((u) => isHlsPlaybackUrl(u))) {
-      return new NextResponse(null, { status: 204, headers: { "X-Nexlify-Passthrough": "1" } });
+    } else {
+      const hlsUrl = candidates.find((u) => isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
+      if (hlsUrl) upstream = hlsUrl;
     }
   } else {
     upstream =

@@ -8,7 +8,7 @@ import { PanelRole, StreamType } from "@prisma/client";
 import { formatAuditAction } from "@/lib/audit-log";
 import { activityFixHref, cronFixHref } from "@/lib/activity-fix-links";
 import { getDashboardServerMetrics, getDashboardSummary, getDashboardKpiExtended } from "@/lib/dashboard-server-metrics";
-import { dashboardPlaybackBandwidthMbps } from "@/lib/server-load-metrics";
+import { getDashboardNicBandwidthMbps } from "@/lib/host-metrics";
 import { ensureMainServerOnline } from "@/lib/ensure-main-server-online";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
@@ -25,7 +25,7 @@ async function loadHeaderStats() {
         prisma.panelSetting.findUnique({ where: { key: "network_bytes_out_total" } }),
       ]);
 
-    const { networkInMbps, networkOutMbps } = dashboardPlaybackBandwidthMbps(onlineConnections);
+    const { networkInMbps, networkOutMbps } = await getDashboardNicBandwidthMbps();
 
     return {
       lines,
@@ -92,7 +92,7 @@ async function loadStats() {
     console.error("[stats] loadStats primary query error:", e);
   }
 
-  const { networkInMbps, networkOutMbps } = dashboardPlaybackBandwidthMbps(onlineConnections);
+  const { networkInMbps, networkOutMbps } = await getDashboardNicBandwidthMbps();
   const networkInPerMin = networkInMbps;
   const networkOutPerMin = networkOutMbps;
 

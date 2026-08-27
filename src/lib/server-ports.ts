@@ -79,6 +79,21 @@ export function portFromPanelBaseUrl(baseUrl: string): string {
   }
 }
 
+/** Port advertised in server_info — nginx :80/:443, not internal edge :8080. */
+export function resolveAdvertisedStreamHttpPort(clientPortFromUrl?: string): number {
+  const edgePort = resolveStreamEdgeHttpPort();
+  const useEdge = process.env.NEXLIFY_USE_IPTV_EDGE === "1";
+  const behind = process.env.PANEL_BEHIND_NGINX === "1";
+  if (!useEdge || !behind) return edgePort;
+
+  const pub = parsePort(process.env.PANEL_PUBLIC_PORT, 80);
+  const cp = clientPortFromUrl ? Number(clientPortFromUrl) : 0;
+  const internalEdge = new Set([8080, 25461, 13000, 3000, 3001]);
+  if (cp && internalEdge.has(cp)) return pub;
+  if (cp && cp >= 1 && cp <= 65535) return cp;
+  return pub;
+}
+
 /** Client-facing marketing website origin. */
 export function websiteBaseUrl(panelBaseUrl?: string): string {
   const env = process.env.NEXT_PUBLIC_WEBSITE_URL?.trim();
