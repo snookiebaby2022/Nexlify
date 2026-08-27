@@ -8,6 +8,9 @@
  *    build-manifest.json / apple-icon collect failures).
  * 3) When `NEXLIFY_DIST_DIR` is already set (fast-update `build-compile`),
  *    just run `next build` (no recursion).
+ *
+ * Concurrent `next build` processes corrupt `.next` (ENOENT manifests / SIGKILL
+ * on low-RAM boxes). Exclusive flock via bash wraps the whole entry on Linux.
  */
 import { existsSync } from "fs";
 import { spawnSync } from "child_process";
@@ -17,6 +20,7 @@ import { fileURLToPath } from "url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nextBin = resolve(root, "node_modules/next/dist/bin/next");
 const fastUpdate = resolve(root, "scripts/apply-panel-fast-update.sh");
+const buildLock = "/tmp/nexlify-panel-build.lock";
 
 function run(cmd, args, env = process.env) {
   const r = spawnSync(cmd, args, {
@@ -70,45 +74,77 @@ function stageBuildAndSwap(reason) {
   return run("bash", [fastUpdate, "swap"]);
 }
 
-const updating = existsSync(resolve(root, ".update-in-progress"));
-const alreadyStaging = Boolean(process.env.NEXLIFY_DIST_DIR?.trim());
-const forceDirect = process.env.NEXLIFY_BUILD_DIRECT === "1";
+function mainUnlocked() {
+  if (ensureBuildDeps() !== 0) return 1;
 
-if (ensureBuildDeps() !== 0) process.exit(1);
+  const updating = existsSync(resolve(root, ".update-in-progress"));
+  const alreadyStaging = Boolean(process.env.NEXLIFY_DIST_DIR?.trim());
+  const forceDirect = process.env.NEXLIFY_BUILD_DIRECT === "1";
 
-if (!alreadyStaging && !forceDirect && existsSync(fastUpdate)) {
-  if (updating) {
-    process.exit(stageBuildAndSwap("In-panel update detected") ?? 1);
+  if (!alreadyStaging && !forceDirect && existsSync(fastUpdate)) {
+    if (updating) {
+      return stageBuildAndSwap("In-panel update detected") ?? 1;
+    }
+    if (hasLiveNext()) {
+      // Avoid racing a running panel that is serving / writing the same .next tree.
+      return stageBuildAndSwap("Live .next present") ?? 1;
+    }
   }
-  if (hasLiveNext()) {
-    // Avoid racing a running panel that is serving / writing the same .next tree.
-    process.exit(stageBuildAndSwap("Live .next present") ?? 1);
+
+  if (updating && !alreadyStaging) {
+    console.log("In-panel update — using NEXLIFY_DIST_DIR=.next.staging");
+    const code = runNextBuild({
+      ...process.env,
+      NEXLIFY_DIST_DIR: ".next.staging",
+    });
+    if (code !== 0) return code;
+    // Best-effort swap without fast-update script
+    return run("bash", [
+      "-c",
+      'if [ -f .next.staging/BUILD_ID ] || [ -f .next.staging/standalone/server.js ]; then ' +
+        "export NEXLIFY_DIST_DIR=.next.staging; bash scripts/prepare-standalone.sh 2>/dev/null || true; " +
+        "rm -rf .next.old; " +
+        "[ -d .next ] && mv .next .next.old; " +
+        "mv .next.staging .next; " +
+        "export NEXLIFY_DIST_DIR=.next; " +
+        "bash scripts/fix-next-distdir-references.sh .next 2>/dev/null || true; " +
+        "bash scripts/prepare-standalone.sh 2>/dev/null || true; " +
+        "rm -rf .next.old; " +
+        "echo Swapped .next.staging → .next; " +
+        "else echo ERROR: staging build invalid; exit 1; fi",
+    ]);
   }
+
+  return runNextBuild(process.env);
 }
 
-if (updating && !alreadyStaging) {
-  console.log("In-panel update — using NEXLIFY_DIST_DIR=.next.staging");
-  const code = runNextBuild({
-    ...process.env,
-    NEXLIFY_DIST_DIR: ".next.staging",
-  });
-  if (code !== 0) process.exit(code);
-  // Best-effort swap without fast-update script
-  run("bash", [
-    "-c",
-    'if [ -f .next.staging/BUILD_ID ] || [ -f .next.staging/standalone/server.js ]; then ' +
-      "export NEXLIFY_DIST_DIR=.next.staging; bash scripts/prepare-standalone.sh 2>/dev/null || true; " +
-      "rm -rf .next.old; " +
-      "[ -d .next ] && mv .next .next.old; " +
-      "mv .next.staging .next; " +
-      "export NEXLIFY_DIST_DIR=.next; " +
-      "bash scripts/fix-next-distdir-references.sh .next 2>/dev/null || true; " +
-      "bash scripts/prepare-standalone.sh 2>/dev/null || true; " +
-      "rm -rf .next.old; " +
-      "echo Swapped .next.staging → .next; " +
-      "else echo ERROR: staging build invalid; exit 1; fi",
-  ]);
-  process.exit(0);
+// Single-flight lock: watchdog + manual update + deploy must not stack next build.
+if (
+  process.platform !== "win32" &&
+  process.env.NEXLIFY_SKIP_BUILD_LOCK !== "1" &&
+  process.env.NEXLIFY_BUILD_LOCK_HELD !== "1"
+) {
+  const r = spawnSync(
+    "bash",
+    [
+      "-c",
+      'exec 9>"$1"; if ! flock -n 9; then echo "ERROR: another panel build holds $1 — aborting to avoid corrupting .next" >&2; exit 75; fi; export NEXLIFY_BUILD_LOCK_HELD=1; exec "$2" "$3"',
+      "_",
+      buildLock,
+      process.execPath,
+      resolve(root, "scripts/run-panel-build.mjs"),
+    ],
+    {
+      cwd: root,
+      stdio: "inherit",
+      env: { ...process.env, NEXLIFY_BUILD_LOCK_HELD: "1" },
+    }
+  );
+  if (r.error && /ENOENT|spawn bash/i.test(String(r.error.message || r.error))) {
+    console.warn("WARN: flock/bash unavailable — building without mutex");
+    process.exit(mainUnlocked());
+  }
+  process.exit(r.status ?? 1);
 }
 
-process.exit(runNextBuild(process.env));
+process.exit(mainUnlocked());

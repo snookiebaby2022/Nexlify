@@ -427,6 +427,16 @@ cmd_build_compile() {
   # throws "WebpackError is not a constructor" and the real minify error is lost.
   unset NEXT_PRIVATE_WORKER_THREADS 2>/dev/null || true
   export NEXLIFY_DIST_DIR=".next.staging"
+  # Single-flight: stacked next builds corrupt .next / OOM low-RAM hosts (e.g. 75).
+  # Skip if run-panel-build.mjs (or another caller) already holds the same lock.
+  if [ "${NEXLIFY_BUILD_LOCK_HELD:-}" != "1" ] && command -v flock >/dev/null 2>&1; then
+    exec 8>/tmp/nexlify-panel-build.lock
+    if ! flock -n 8; then
+      echo "ERROR: another panel build holds /tmp/nexlify-panel-build.lock — aborting" >&2
+      return 75
+    fi
+    export NEXLIFY_BUILD_LOCK_HELD=1
+  fi
   # Call next directly — do not use `npm run build` (that wrapper routes back here).
   if [ ! -f ./node_modules/next/dist/bin/next ]; then
     echo "WARN: next binary missing — reinstalling deps before build ..." >&2
