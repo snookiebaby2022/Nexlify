@@ -152,14 +152,21 @@ export async function buildAgentConfigForServer(
   ]);
   const alwaysOnStreams = rawStreams.filter((s) => keepIds.has(s.id));
 
+  const { applyVideoOverlayFilter, getOverlaySettings, captureDeviceInputArgs } = await import("@/lib/ffmpeg-overlay");
+  const overlay = await getOverlaySettings();
+  const panelName = String((await getSettingGroup("general")).panelName ?? "Nexlify");
+
   const streams: AgentStreamEntry[] = alwaysOnStreams.map((s) => {
     const liveMeta = parseLiveStreamMeta(s.agentStartCmd);
     const cpuProfile =
       liveMeta.transcodeProfile && liveMeta.transcodeProfile !== "none"
         ? FFMPEG_TRANSCODE_PROFILES.find((p) => p.id === liveMeta.transcodeProfile)
         : undefined;
+    const capture = captureDeviceInputArgs(s.streamUrl);
     const transcodeArgs =
-      cpuProfile
+      capture
+        ? undefined
+        : cpuProfile
         ? buildFfmpegTranscodeArgs(cpuProfile, s.streamUrl)
         : transcodeProfile && transcodeSettings
           ? buildGpuFfmpegArgs(
@@ -177,6 +184,12 @@ export async function buildAgentConfigForServer(
       threads,
       transcodeArgs,
     });
+    if (overlay.enabled) {
+      spec.args = applyVideoOverlayFilter(spec.args, overlay, {
+        streamName: s.name,
+        panelName,
+      });
+    }
     return {
       id: s.id,
       name: s.name,

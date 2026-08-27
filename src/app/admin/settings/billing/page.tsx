@@ -60,6 +60,18 @@ export default function BillingSettingsPage() {
           ],
         },
         {
+          title: "Reseller rewards",
+          info: "Cashback when a reseller or sub-reseller spends credits on a new line (1-Stream reward plugin). 0 = off. Max 50%.",
+          fields: [
+            {
+              key: "rewardPercentOnLineCreate",
+              label: "Credit cashback % on new lines",
+              type: "number",
+              hint: "Example: 10 means a 10-credit line costs 9 after rebate.",
+            },
+          ],
+        },
+        {
           title: "Coupons",
           fields: [
             {

@@ -1,5 +1,6 @@
 import { LineStatus } from "@prisma/client";
 import { prisma } from "./prisma";
+import { isUnlimitedLineExpiry } from "./format";
 import { UNLIMITED_LINE_DAYS } from "./line-duration-presets";
 
 export type LineRenewResult = {
@@ -20,7 +21,9 @@ export function computeExtendedExpiry(
   if (!Number.isFinite(add) || add <= 0) {
     throw new Error("Days must be a positive number");
   }
-  const baseMs = Math.max(currentExpiresAt.getTime(), now.getTime());
+  // Far-future "unlimited" dates must not be the add-from base — that keeps the line unlimited.
+  const from = isUnlimitedLineExpiry(currentExpiresAt, now) ? now : currentExpiresAt;
+  const baseMs = Math.max(from.getTime(), now.getTime());
   const next = new Date(baseMs);
   next.setUTCDate(next.getUTCDate() + add);
   return next;
@@ -69,6 +72,46 @@ export async function applyLineUnlimited(
     expiresAt: line.expiresAt,
     previousExpiresAt: existing.expiresAt,
     daysAdded: UNLIMITED_LINE_DAYS,
+    status: line.status,
+    reactivated: reactivate,
+  };
+}
+
+export async function applyLineSetExpiry(
+  lineId: string,
+  expiresAt: Date,
+  opts?: { reactivate?: boolean }
+): Promise<LineRenewResult> {
+  const existing = await prisma.line.findUnique({
+    where: { id: lineId },
+    select: { id: true, expiresAt: true, status: true },
+  });
+  if (!existing) throw new Error("Line not found");
+  if (Number.isNaN(expiresAt.getTime())) throw new Error("Invalid expiry date");
+
+  const reactivate =
+    opts?.reactivate !== false &&
+    existing.status !== LineStatus.BANNED &&
+    (existing.status === LineStatus.EXPIRED || existing.status === LineStatus.DISABLED);
+
+  const line = await prisma.line.update({
+    where: { id: lineId },
+    data: {
+      expiresAt,
+      ...(reactivate ? { status: LineStatus.ACTIVE } : {}),
+    },
+    select: { expiresAt: true, status: true },
+  });
+
+  const daysAdded = Math.max(
+    1,
+    Math.round((expiresAt.getTime() - Date.now()) / 86400000)
+  );
+
+  return {
+    expiresAt: line.expiresAt,
+    previousExpiresAt: existing.expiresAt,
+    daysAdded,
     status: line.status,
     reactivated: reactivate,
   };

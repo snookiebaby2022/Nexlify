@@ -29,7 +29,7 @@ export function PanelLanguageSwitcher() {
   return (
     <select
       aria-label="Language"
-      className="rounded border px-2 py-1 text-xs bg-transparent cursor-pointer"
+      className="rounded border px-2.5 py-1.5 text-sm bg-transparent cursor-pointer"
       style={{ borderColor: "var(--border)", color: "var(--muted)" }}
       value={locale}
       onChange={(e) => change(normalizeLocale(e.target.value))}

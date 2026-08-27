@@ -517,11 +517,6 @@ export async function getLicenseStatus(panelHost: string): Promise<LicenseStatus
   }
 
   if (process.env.NEXLIFY_LICENSE_REQUIRE !== "0") {
-    const { getSettingGroup } = await import("@/lib/panel-settings");
-    const general = await getSettingGroup("general");
-    if (Boolean(general.disableTrial)) {
-      return { valid: false, reason: "Trial disabled — enter a license key" };
-    }
     const start = await ensureTrialStarted();
     const end = new Date(start);
     end.setDate(end.getDate() + trialDays());

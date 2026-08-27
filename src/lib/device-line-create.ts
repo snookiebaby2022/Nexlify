@@ -39,24 +39,43 @@ export async function createLineForDevice(opts: {
     { sellerId: opts.session.role === PanelRole.ADMIN ? null : opts.session.id }
   );
 
+  const { assertIptvTrialAllowed } = await import("@/lib/iptv-trial-lines");
+  const trialGuard = await assertIptvTrialAllowed({ days: resolved.days });
+  if (!trialGuard.ok) throw new Error(trialGuard.error);
+
   const paysCredits =
     opts.session.role === PanelRole.RESELLER || opts.session.role === PanelRole.SUB_RESELLER;
 
   if (paysCredits && resolved.creditCost > 0) {
+    const { getResellerLineRewardPercent, applyResellerLineReward } = await import(
+      "@/lib/reseller-rewards"
+    );
+    const rewardPercent = await getResellerLineRewardPercent();
     const owner = await prisma.panelUser.findUnique({ where: { id: opts.session.id } });
     if (!owner) throw new Error("Forbidden");
     if (owner.credits < resolved.creditCost) throw new Error("Insufficient credits");
-    await prisma.panelUser.update({
-      where: { id: opts.session.id },
-      data: { credits: { decrement: resolved.creditCost } },
-    });
-    await prisma.creditTransaction.create({
-      data: {
-        userId: opts.session.id,
-        amount: -resolved.creditCost,
-        balanceAfter: owner.credits - resolved.creditCost,
-        note: `${opts.deviceKind.toUpperCase()} ${opts.mac}`,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.panelUser.update({
+        where: { id: opts.session.id },
+        data: { credits: { decrement: resolved.creditCost } },
+      });
+      await tx.creditTransaction.create({
+        data: {
+          userId: opts.session.id,
+          amount: -resolved.creditCost,
+          balanceAfter: owner.credits - resolved.creditCost,
+          note: `${opts.deviceKind.toUpperCase()} ${opts.mac}`,
+        },
+      });
+      if (rewardPercent > 0) {
+        await applyResellerLineReward(tx, {
+          userId: opts.session.id,
+          spent: resolved.creditCost,
+          percent: rewardPercent,
+          lineUsername: opts.mac,
+          currentBalance: owner.credits,
+        });
+      }
     });
   }
 

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FormPageShell, FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { PasswordInput } from "@/components/password-input";
+import { generateLinePassword, generateLineUsername, MIN_LINE_CREDENTIAL_LENGTH } from "@/lib/credential-generate";
+import { RefreshCw } from "lucide-react";
 
 export default function ResellerAddUserPage() {
   const router = useRouter();
@@ -12,6 +14,7 @@ export default function ResellerAddUserPage() {
   const [myCredits, setMyCredits] = useState(0);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  const [autoGenerate, setAutoGenerate] = useState(false);
   const [form, setForm] = useState({
     username: "",
     password: "",
@@ -26,15 +29,27 @@ export default function ResellerAddUserPage() {
     Promise.all([
       fetch("/api/admin/profile").then((r) => r.json()),
       fetch("/api/reseller/groups?role=sub_reseller").then((r) => r.json()),
+      fetch("/api/admin/settings?group=security").then((r) => r.json()),
     ])
-      .then(([profile, groupsData]) => {
+      .then(([profile, groupsData, security]) => {
         setMyCredits(profile.user?.credits ?? 0);
         const list = (groupsData.groups ?? []) as { id: string; name: string; groupRole?: string }[];
         setGroups(list);
         const subGroup =
           list.find((g) => g.groupRole === "sub_reseller" || /sub-?reseller/i.test(g.name)) ??
           list[0];
-        if (subGroup) setForm((f) => ({ ...f, groupId: subGroup.id }));
+        const on = security.settings?.autoGenerateResellerCredentials === true;
+        setAutoGenerate(on);
+        const generated = on
+          ? { username: generateLineUsername(), password: generateLinePassword() }
+          : null;
+        setForm((f) => ({
+          ...f,
+          groupId: subGroup ? subGroup.id : f.groupId,
+          ...(generated
+            ? { username: generated.username, password: generated.password, confirmPassword: generated.password }
+            : {}),
+        }));
       })
       .catch(() => {});
   }, []);
@@ -46,8 +61,8 @@ export default function ResellerAddUserPage() {
       setMsg("Password and confirm password do not match.");
       return;
     }
-    if (form.username.trim().length < 6 || form.password.length < 6) {
-      setMsg("Username and password must each be at least 6 characters.");
+    if (form.username.trim().length < MIN_LINE_CREDENTIAL_LENGTH || form.password.length < MIN_LINE_CREDENTIAL_LENGTH) {
+      setMsg(`Username and password must each be at least ${MIN_LINE_CREDENTIAL_LENGTH} characters.`);
       return;
     }
     setSaving(true);
@@ -84,13 +99,36 @@ export default function ResellerAddUserPage() {
           Sub-users inherit your bouquet access automatically so they can create lines.
         </p>
         <FormField label="Username" required>
-          <input
-            required
-            className={formInputClass}
-            style={formInputStyle}
-            value={form.username}
-            onChange={(e) => setForm({ ...form, username: e.target.value })}
-          />
+          <div className="flex gap-2">
+            <input
+              required
+              minLength={MIN_LINE_CREDENTIAL_LENGTH}
+              className={`${formInputClass} flex-1`}
+              style={formInputStyle}
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+            />
+            {autoGenerate && (
+              <button
+                type="button"
+                title="Generate username & password"
+                onClick={() => {
+                  const username = generateLineUsername();
+                  const password = generateLinePassword();
+                  setForm((f) => ({ ...f, username, password, confirmPassword: password }));
+                }}
+                className="shrink-0 rounded border px-3 cursor-pointer hover:bg-white/5"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <RefreshCw size={18} />
+              </button>
+            )}
+          </div>
+          {autoGenerate && (
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              Logins are generated from the admin security setting. You can regenerate or edit before saving.
+            </p>
+          )}
         </FormField>
         <FormField label="Password" required>
           <PasswordInput

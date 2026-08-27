@@ -18,7 +18,12 @@ import {
   generateLineUsername,
   MIN_LINE_CREDENTIAL_LENGTH,
 } from "@/lib/credential-generate";
-import { LINE_DURATION_PRESETS, UNLIMITED_LINE_DAYS } from "@/lib/line-duration-presets";
+import {
+  UNLIMITED_LINE_DAYS,
+  isUnlimitedDurationDays,
+  lineDurationPresetsForPanel,
+  type LineDurationPreset,
+} from "@/lib/line-duration-presets";
 import { creditCostForDays, packageLabelForDays } from "@/lib/package-credits";
 import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
 import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
@@ -85,6 +90,7 @@ export function LineAddForm({
   >([]);
   const [templateId, setTemplateId] = useState("");
   const [autoGenerate, setAutoGenerate] = useState(false);
+  const [allowTrials, setAllowTrials] = useState(true);
   const [creditHint, setCreditHint] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -160,8 +166,8 @@ export function LineAddForm({
     };
   }
 
-  function applyDurationPreset(preset: (typeof LINE_DURATION_PRESETS)[number]) {
-    const unlimited = preset.id === "unlimited";
+  function applyDurationPreset(preset: LineDurationPreset) {
+    const unlimited = mode === "admin" && preset.id === "unlimited";
     const pkg = unlimited ? undefined : packages.find((p) => p.days === preset.days);
     setForm((f) => {
       const next = applyPackageFields(f, pkg);
@@ -208,11 +214,25 @@ export function LineAddForm({
             packageDurationSortKey(a.days, a.name) - packageDurationSortKey(b.days, b.name) ||
             a.name.localeCompare(b.name)
         );
-        setPackages(list);
+        setPackages(mode === "admin" ? list : list.filter((p) => !isUnlimitedDurationDays(p.days)));
       });
     fetch("/api/admin/lines/templates")
       .then((r) => r.json())
       .then((d) => setTemplates(d.templates ?? []));
+    fetch("/api/admin/settings?group=general")
+      .then((r) => r.json())
+      .then((d) => {
+        const trialsOff = d.settings?.disableTrial === true;
+        setAllowTrials(!trialsOff);
+        if (trialsOff) {
+          setForm((f) =>
+            f.isTrial || f.days === 1 || f.days === 2
+              ? { ...f, isTrial: false, days: f.days === 1 || f.days === 2 ? 30 : f.days }
+              : f
+          );
+        }
+      })
+      .catch(() => {});
     fetch("/api/admin/settings?group=security")
       .then((r) => r.json())
       .then((d) => {
@@ -285,9 +305,13 @@ export function LineAddForm({
 
     const notes = [form.adminNotes, form.resellerNotes].filter(Boolean).join("\n---\n");
     // Duration comes from package/days — isTrial is a flag only (do not force 1 day).
-    const days = form.unlimited ? UNLIMITED_LINE_DAYS : Math.max(1, Number(form.days) || 1);
-    // Match the expiry the user sees (local datetime → ISO), never force 1 day for trials.
-    const expiresAtPayload = form.unlimited
+    const unlimited = mode === "admin" && form.unlimited;
+    const days = unlimited ? UNLIMITED_LINE_DAYS : Math.max(1, Number(form.days) || 1);
+    if (!allowTrials && (form.isTrial || days === 1 || days === 2)) {
+      alert("Trial subscriptions (24 hours / 48 hours) are disabled.");
+      return;
+    }
+    const expiresAtPayload = unlimited
       ? undefined
       : new Date(
           form.expiresAt || toDatetimeLocalValue(expiryFromDays(days))
@@ -304,7 +328,7 @@ export function LineAddForm({
           password,
           maxConnections: form.maxConnections,
           days,
-          unlimited: form.unlimited,
+          unlimited,
           expiresAt: expiresAtPayload,
           bouquetIds: form.bouquetIds,
           ownerId: mode === "admin" && form.ownerId ? form.ownerId : undefined,
@@ -347,6 +371,7 @@ export function LineAddForm({
   const expiryValue =
     form.expiresAt ||
     toDatetimeLocalValue(expiryFromDays(form.unlimited ? 3650 : form.days));
+  const selectablePackages = packages.filter((p) => allowTrials || p.days > 2);
 
   return (
     <form onSubmit={submit} className="max-w-6xl space-y-4 panel-form-mobile-tight">
@@ -386,14 +411,16 @@ export function LineAddForm({
               }}
             >
               <option value="">Line template…</option>
-              {templates.map((t) => (
+              {templates
+                .filter((t) => allowTrials || (!t.isTrial && t.days > 2))
+                .map((t) => (
                 <option key={t.id} value={t.id} title={t.description}>
                   {t.label}
                 </option>
               ))}
             </select>
           )}
-          {LINE_DURATION_PRESETS.map((p) => (
+          {lineDurationPresetsForPanel(mode, { allowTrials }).map((p) => (
             <button
               key={p.id}
               type="button"
@@ -510,11 +537,11 @@ export function LineAddForm({
                 </select>
               </FormField>
             )}
-            {packages.length > 0 && (
+            {selectablePackages.length > 0 && (
               <FormField label="Group packages">
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
-                    {packages.map((p) => (
+                    {selectablePackages.map((p) => (
                       <button
                         key={p.id}
                         type="button"
@@ -540,7 +567,7 @@ export function LineAddForm({
                     style={formInputStyle}
                     value={form.packageId}
                     onChange={(e) => {
-                      const pkg = packages.find((p) => p.id === e.target.value);
+                      const pkg = selectablePackages.find((p) => p.id === e.target.value);
                       setForm((f) =>
                         pkg
                           ? applyPackageFields(f, pkg)
@@ -550,7 +577,7 @@ export function LineAddForm({
                     }}
                   >
                     <option value="">Package (optional)</option>
-                    {packages.map((p) => (
+                    {selectablePackages.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.creditCost} cr, {packageLabelForDays(p.days)}, max {p.maxLines} conn)
                       </option>
@@ -589,6 +616,7 @@ export function LineAddForm({
                 </p>
               )}
             </FormField>
+            {mode === "admin" && (
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input
                 type="checkbox"
@@ -597,11 +625,13 @@ export function LineAddForm({
               />
               Mark as unlimited
             </label>
+            )}
             {!form.unlimited && (
               <FormField label="Duration (days)">
                 <input
                   type="number"
                   min={1}
+                  max={mode === "admin" ? undefined : 730}
                   className={formInputClass}
                   style={formInputStyle}
                   value={form.days}
@@ -640,7 +670,9 @@ export function LineAddForm({
 
           <Card title="Status">
             <YesNo label="Is enabled" value={form.isEnabled} onChange={(v) => setForm({ ...form, isEnabled: v })} />
-            <YesNo label="Is trial account" value={form.isTrial} onChange={(v) => setForm({ ...form, isTrial: v })} />
+            {allowTrials ? (
+              <YesNo label="Is trial account" value={form.isTrial} onChange={(v) => setForm({ ...form, isTrial: v })} />
+            ) : null}
             <YesNo
               label="Is restreamer"
               value={form.isRestreamer}

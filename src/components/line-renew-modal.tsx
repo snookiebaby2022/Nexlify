@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Calendar, CheckCircle2 } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
-import { LINE_DURATION_PRESETS } from "@/lib/line-duration-presets";
+import { isUnlimitedDurationDays, lineDurationPresetsForPanel } from "@/lib/line-duration-presets";
 import { previewExtendedExpiry } from "@/lib/line-renew";
 import { linesApiRoot, type PanelKind } from "@/lib/panel-api";
 
@@ -55,7 +55,12 @@ export function LineRenewModal({
     setReactivate(true);
     fetch("/api/admin/packages")
       .then((r) => r.json())
-      .then((d) => setPackages(d.packages ?? []))
+      .then((d) => {
+        const list = (d.packages ?? []) as PackageRow[];
+        setPackages(
+          panel === "admin" ? list : list.filter((p) => !isUnlimitedDurationDays(p.days))
+        );
+      })
       .catch(() => {});
   }, [open, lineId]);
 
@@ -65,6 +70,10 @@ export function LineRenewModal({
     e.preventDefault();
     if (days < 1) {
       setError("Enter at least 1 day to extend.");
+      return;
+    }
+    if (panel !== "admin" && isUnlimitedDurationDays(days)) {
+      setError("Only administrators can set unlimited lines.");
       return;
     }
     setBusy(true);
@@ -197,7 +206,7 @@ export function LineRenewModal({
             </label>
 
             <div className="flex flex-wrap gap-2">
-              {LINE_DURATION_PRESETS.map((p) => (
+              {lineDurationPresetsForPanel(panel).map((p) => (
                 <button
                   key={p.label}
                   type="button"

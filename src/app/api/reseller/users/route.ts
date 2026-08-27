@@ -86,17 +86,16 @@ export async function POST(req: NextRequest) {
 
   const body = parsed.data;
 
-  const username = String(body.username ?? "").trim();
-  const password = String(body.password ?? "");
-  if (!username || !password) {
-    return NextResponse.json({ error: "username and password required" }, { status: 400 });
+  const { resolveNewPanelUserCredentials } = await import("@/lib/reseller-credentials");
+  const creds = await resolveNewPanelUserCredentials({
+    role: PanelRole.SUB_RESELLER,
+    username: String(body.username ?? ""),
+    password: String(body.password ?? ""),
+  });
+  if (!creds.ok) {
+    return NextResponse.json({ error: creds.error }, { status: 400 });
   }
-
-  const { validatePanelAccountCredentials } = await import("@/lib/credential-generate");
-  const credErr = validatePanelAccountCredentials(username, password);
-  if (credErr) {
-    return NextResponse.json({ error: credErr }, { status: 400 });
-  }
+  const { username, password } = creds;
 
   const parent = await prisma.panelUser.findUnique({
     where: { id: session.id },

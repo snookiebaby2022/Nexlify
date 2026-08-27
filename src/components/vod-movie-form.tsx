@@ -149,6 +149,15 @@ export function VodMovieForm({
 
   useEffect(() => {
     fetch("/api/admin/categories?lite=1").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+    fetch("/api/admin/bouquets")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.bouquets ?? []) as { id: string; name: string }[];
+        const vod = list.find((b) => /^vod$/i.test(b.name.trim()));
+        if (!vod) return;
+        setMeta((m) => (m.bouquetIds.length ? m : { ...m, bouquetIds: [vod.id] }));
+      })
+      .catch(() => {});
   }, []);
 
   async function onVideoFile(e: React.ChangeEvent<HTMLInputElement>) {

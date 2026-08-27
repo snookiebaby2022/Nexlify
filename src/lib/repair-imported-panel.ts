@@ -274,12 +274,10 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
   result.bouquetsAlphaSorted = 0;
   result.categoriesAlphaSorted = 0;
 
-  // Import often maps only live/movie IDs into bouquets — series episodes never appear in players.
-  // Attach orphan SERIES (and unlinked MOVIE) streams into VOD-like bouquets.
-  const vodBouquet =
-    bouquets.find((b) => /^vod$/i.test(b.name.trim())) ||
-    bouquets.find((b) => /vod|movie|series|film/i.test(b.name)) ||
-    null;
+  // Import often maps only live IDs into bouquets — movies/series never appear in IPTV apps.
+  const { ensureVodBouquetId, attachVodBouquetsToAllLines } = await import("./integration-bouquet");
+  const movieBouquetId = await ensureVodBouquetId("MOVIE");
+  const seriesBouquetId = await ensureVodBouquetId("SERIES");
 
   async function linkOrphansToBouquet(
     type: "SERIES" | "MOVIE",
@@ -312,13 +310,9 @@ export async function repairImportedPanel(prisma: PrismaClient): Promise<RepairI
     return linked;
   }
 
-  if (vodBouquet) {
-    result.seriesLinkedToBouquets = await linkOrphansToBouquet("SERIES", vodBouquet.id);
-    result.moviesLinkedToBouquets = await linkOrphansToBouquet("MOVIE", vodBouquet.id);
-  } else if (bouquets[0]) {
-    result.seriesLinkedToBouquets = await linkOrphansToBouquet("SERIES", bouquets[0].id);
-    result.moviesLinkedToBouquets = await linkOrphansToBouquet("MOVIE", bouquets[0].id);
-  }
+  result.moviesLinkedToBouquets = await linkOrphansToBouquet("MOVIE", movieBouquetId);
+  result.seriesLinkedToBouquets = await linkOrphansToBouquet("SERIES", seriesBouquetId);
+  await attachVodBouquetsToAllLines();
 
   const liveOrphans = await prisma.stream.findMany({
     where: { type: "LIVE", isActive: true, bouquets: { none: {} } },

@@ -29,6 +29,31 @@ export default function FingerprintSettingsPage() {
             ],
           },
           {
+            title: "On-video overlay (1-Stream fingerprint)",
+            info: "Burns text onto restreamed channels that run through FFmpeg on the stream agent (transcode / capture / always-on). Direct proxy channels are not modified. Placeholders: {panel} {stream}.",
+            fields: [
+              { key: "overlayEnabled", label: "Burn overlay on FFmpeg restreams", type: "yesno" },
+              {
+                key: "overlayText",
+                label: "Overlay text",
+                placeholder: "{panel} {stream}",
+                colSpan: 2,
+              },
+              {
+                key: "overlayPosition",
+                label: "Position",
+                type: "select",
+                options: [
+                  { value: "tl", label: "Top left" },
+                  { value: "tr", label: "Top right" },
+                  { value: "bl", label: "Bottom left" },
+                  { value: "br", label: "Bottom right" },
+                ],
+              },
+              { key: "overlayFontSize", label: "Font size", type: "number" },
+            ],
+          },
+          {
             title: "Leak audit log",
             fields: [
               { key: "leakAuditEnabled", label: "Log playback signatures", type: "yesno" },

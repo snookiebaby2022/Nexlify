@@ -15,7 +15,8 @@ import { CopyableCredential } from "@/components/copyable-credential";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { generateLinePassword, MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput } from "@/lib/credential-generate";
 import { formatDateTime, isUnlimitedLineExpiry } from "@/lib/format";
-import { LINE_DURATION_PRESETS } from "@/lib/line-duration-presets";
+import { lineDurationPresetsForPanel } from "@/lib/line-duration-presets";
+import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
 import { bouquetsApiRoot, linesApiRoot } from "@/lib/panel-api";
 
 type LineDetail = {
@@ -106,11 +107,15 @@ export function LineEditForm({
   const [line, setLine] = useState<LineDetail | null>(null);
   const [bouquets, setBouquets] = useState<BouquetPickerRow[]>([]);
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
+  const [owners, setOwners] = useState<{ id: string; username: string }[]>([]);
+  const [allowTrials, setAllowTrials] = useState(true);
   const [form, setForm] = useState({
     password: "",
     maxConnections: 1,
     extendDays: 0,
     unlimited: false,
+    expiresAtLocal: "",
+    ownerId: "",
     externalId: "",
     bouquetIds: [] as string[],
     lockToIp: false,
@@ -138,18 +143,30 @@ export function LineEditForm({
     ];
     if (panel === "admin") {
       tasks.push(fetch("/api/admin/servers").then((r) => r.json()));
+      tasks.push(fetch("/api/admin/resellers").then((r) => r.json()));
     }
+    fetch("/api/admin/settings?group=general")
+      .then((r) => r.json())
+      .then((d) => setAllowTrials(d.settings?.disableTrial !== true))
+      .catch(() => {});
     Promise.all(tasks)
-      .then(([lineRes, bouquetRes, serverRes]) => {
+      .then(([lineRes, bouquetRes, serverRes, resellerRes]) => {
         const row = (lineRes as { line?: LineDetail }).line;
         if (!row) return;
         setLine(row);
         const notes = splitNotes(row.notes);
+        const unlimited = isUnlimitedLineExpiry(row.expiresAt);
         setForm({
           password: row.password,
           maxConnections: row.maxConnections,
           extendDays: 0,
-          unlimited: isUnlimitedLineExpiry(row.expiresAt),
+          unlimited,
+          expiresAtLocal: unlimited
+            ? panel === "admin"
+              ? toDatetimeLocalValue(expiryFromDays(30))
+              : ""
+            : toDatetimeLocalValue(new Date(row.expiresAt)),
+          ownerId: row.owner?.id ?? "",
           externalId: row.externalId ?? "",
           bouquetIds: row.bouquets.map((b) => b.bouquet.id),
           lockToIp: row.lockToIp,
@@ -176,6 +193,14 @@ export function LineEditForm({
             name: s.name,
           }))
         );
+        setOwners(
+          ((resellerRes as { users?: { id: string; username: string; role: string }[]; resellers?: { id: string; username: string; role: string }[] } | undefined)
+            ?.users ??
+            (resellerRes as { resellers?: { id: string; username: string; role: string }[] } | undefined)?.resellers ??
+            [])
+            .filter((u) => u.role === "RESELLER" || u.role === "SUB_RESELLER")
+            .map((u) => ({ id: u.id, username: u.username }))
+        );
       })
       .finally(() => setLoading(false));
   }, [lineId, panel]);
@@ -199,6 +224,22 @@ export function LineEditForm({
       }
     }
 
+    const canUnlimited = panel === "admin";
+    const unlimited = canUnlimited && form.unlimited;
+    if (!allowTrials && form.isTrial && !line.isTrial) {
+      alert("Trial subscriptions (24 hours / 48 hours) are disabled.");
+      return;
+    }
+    let expiresAt: string | undefined;
+    if (!unlimited && form.extendDays <= 0 && form.expiresAtLocal) {
+      const parsed = new Date(form.expiresAtLocal);
+      if (Number.isNaN(parsed.getTime())) {
+        alert("Invalid expiry date");
+        return;
+      }
+      expiresAt = parsed.toISOString();
+    }
+
     setSaving(true);
     const targetStatus = form.isEnabled ? "ACTIVE" : "DISABLED";
     if (targetStatus !== line.status && line.status !== "BANNED") {
@@ -212,8 +253,10 @@ export function LineEditForm({
       body: JSON.stringify({
         password: form.password !== line.password ? sanitizeCredentialInput(form.password) : undefined,
         maxConnections: form.maxConnections,
-        days: form.unlimited ? undefined : form.extendDays > 0 ? form.extendDays : undefined,
-        unlimited: form.unlimited ? true : undefined,
+        days: unlimited || expiresAt ? undefined : form.extendDays > 0 ? form.extendDays : undefined,
+        unlimited: unlimited ? true : undefined,
+        expiresAt,
+        ownerId: panel === "admin" ? form.ownerId || null : undefined,
         externalId: form.externalId || null,
         bouquetIds: form.bouquetIds,
         lockToIp: form.lockToIp,
@@ -237,7 +280,20 @@ export function LineEditForm({
     }
     if (data.line) {
       setLine(data.line);
-      setForm((f) => ({ ...f, extendDays: 0, unlimited: isUnlimitedLineExpiry(data.line.expiresAt) }));
+      setForm((f) => {
+        const nextUnlimited = isUnlimitedLineExpiry(data.line.expiresAt);
+        return {
+          ...f,
+          extendDays: 0,
+          unlimited: nextUnlimited,
+          expiresAtLocal: nextUnlimited
+            ? panel === "admin"
+              ? toDatetimeLocalValue(expiryFromDays(30))
+              : ""
+            : toDatetimeLocalValue(new Date(data.line.expiresAt)),
+          ownerId: data.line.owner?.id ?? f.ownerId,
+        };
+      });
     }
     onSaved();
   }
@@ -311,7 +367,7 @@ export function LineEditForm({
         style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
       >
         <div className="flex flex-wrap gap-2">
-          {LINE_DURATION_PRESETS.map((p) => (
+          {lineDurationPresetsForPanel(panel, { allowTrials }).map((p) => (
             <button
               key={p.id}
               type="button"
@@ -319,7 +375,12 @@ export function LineEditForm({
                 setForm((f) =>
                   p.id === "unlimited"
                     ? { ...f, unlimited: true, extendDays: 0 }
-                    : { ...f, unlimited: false, extendDays: p.days }
+                    : {
+                        ...f,
+                        unlimited: false,
+                        extendDays: 0,
+                        expiresAtLocal: toDatetimeLocalValue(expiryFromDays(p.days)),
+                      }
                 )
               }
               className="text-xs rounded-full px-3 py-1.5 border cursor-pointer hover:opacity-90"
@@ -330,20 +391,16 @@ export function LineEditForm({
                     ? form.unlimited
                       ? "rgba(0,192,239,0.2)"
                       : "transparent"
-                    : !form.unlimited && form.extendDays === p.days
-                      ? "rgba(0,192,239,0.2)"
-                      : "transparent",
+                    : "transparent",
                 color:
                   p.id === "unlimited"
                     ? form.unlimited
                       ? "#fff"
                       : "var(--muted)"
-                    : !form.unlimited && form.extendDays === p.days
-                      ? "#fff"
-                      : "var(--muted)",
+                    : "var(--muted)",
               }}
             >
-              {p.id === "unlimited" ? "Unlimited" : `+${p.days} days`}
+              {p.id === "unlimited" ? "Unlimited" : `Set ${p.days} days`}
             </button>
           ))}
         </div>
@@ -400,15 +457,21 @@ export function LineEditForm({
                   </button>
                 </div>
               </FormField>
-              {panel === "admin" && line.owner && (
+              {panel === "admin" && (
                 <FormField label="Owner">
-                  <input
-                    className={formInputClass}
+                  <select
+                    className={formSelectClass}
                     style={formInputStyle}
-                    value={line.owner.username}
-                    readOnly
-                    disabled
-                  />
+                    value={form.ownerId}
+                    onChange={(e) => setForm({ ...form, ownerId: e.target.value })}
+                  >
+                    <option value="">Admin (unassigned)</option>
+                    {owners.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.username}
+                      </option>
+                    ))}
+                  </select>
                 </FormField>
               )}
               <FormField label="Max connections">
@@ -436,20 +499,46 @@ export function LineEditForm({
                   disabled
                 />
               </FormField>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.unlimited}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      unlimited: e.target.checked,
-                      extendDays: e.target.checked ? 0 : form.extendDays,
-                    })
-                  }
-                />
-                Unlimited
-              </label>
+              {panel === "admin" && (
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.unlimited}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        unlimited: e.target.checked,
+                        extendDays: e.target.checked ? 0 : form.extendDays,
+                        expiresAtLocal: e.target.checked
+                          ? form.expiresAtLocal || toDatetimeLocalValue(expiryFromDays(30))
+                          : form.expiresAtLocal || toDatetimeLocalValue(expiryFromDays(30)),
+                      })
+                    }
+                  />
+                  Unlimited
+                </label>
+              )}
+              {!form.unlimited && (
+                <FormField label="Set expiry date">
+                  <input
+                    type="datetime-local"
+                    className={formInputClass}
+                    style={formInputStyle}
+                    value={form.expiresAtLocal.slice(0, 16)}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        unlimited: false,
+                        expiresAtLocal: e.target.value,
+                        extendDays: 0,
+                      })
+                    }
+                  />
+                  <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                    Uncheck unlimited (admin) or pick a date to convert an unlimited line.
+                  </p>
+                </FormField>
+              )}
               <FormField label="Extend subscription (days)">
                 <input
                   type="number"
@@ -525,11 +614,13 @@ export function LineEditForm({
                 value={form.isEnabled}
                 onChange={(v) => setForm({ ...form, isEnabled: v })}
               />
-              <YesNo
-                label="Is trial account"
-                value={form.isTrial}
-                onChange={(v) => setForm({ ...form, isTrial: v })}
-              />
+              {allowTrials || line.isTrial ? (
+                <YesNo
+                  label="Is trial account"
+                  value={form.isTrial}
+                  onChange={(v) => setForm({ ...form, isTrial: allowTrials ? v : false })}
+                />
+              ) : null}
               <YesNo
                 label="Is restreamer"
                 value={form.isRestreamer}

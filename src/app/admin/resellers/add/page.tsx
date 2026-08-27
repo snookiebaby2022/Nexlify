@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { FormPageShell, FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { PasswordInput } from "@/components/password-input";
+import { generateLinePassword, generateLineUsername, MIN_LINE_CREDENTIAL_LENGTH } from "@/lib/credential-generate";
+import { RefreshCw } from "lucide-react";
 
 const LANGUAGES = [
   { value: "en", label: "English" },
@@ -22,6 +24,7 @@ export default function AdminAddUserPage() {
   const [parents, setParents] = useState<{ id: string; username: string }[]>([]);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  const [autoGenerate, setAutoGenerate] = useState(false);
   const [form, setForm] = useState({
     username: "",
     password: "",
@@ -51,6 +54,18 @@ export default function AdminAddUserPage() {
             .map((u: { id: string; username: string }) => ({ id: u.id, username: u.username }))
         )
       );
+    fetch("/api/admin/settings?group=security")
+      .then((r) => r.json())
+      .then((d) => {
+        const on = d.settings?.autoGenerateResellerCredentials === true;
+        setAutoGenerate(on);
+        if (on) {
+          const username = generateLineUsername();
+          const password = generateLinePassword();
+          setForm((f) => ({ ...f, username, password, confirmPassword: password }));
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -66,8 +81,8 @@ export default function AdminAddUserPage() {
       setMsg("Password and confirm password do not match.");
       return;
     }
-    if (form.username.trim().length < 6 || (form.password && form.password.length < 6)) {
-      setMsg("Username and password must each be at least 6 characters.");
+    if (form.username.trim().length < MIN_LINE_CREDENTIAL_LENGTH || (form.password && form.password.length < MIN_LINE_CREDENTIAL_LENGTH)) {
+      setMsg(`Username and password must each be at least ${MIN_LINE_CREDENTIAL_LENGTH} characters.`);
       return;
     }
     if (!form.groupId) {
@@ -118,14 +133,37 @@ export default function AdminAddUserPage() {
         </p>
         <div className="grid md:grid-cols-2 gap-4">
           <FormField label="Username" required>
-            <input
-              className={formInputClass}
-              style={formInputStyle}
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
-              placeholder="test456654"
-              required
-            />
+            <div className="flex gap-2">
+              <input
+                className={`${formInputClass} flex-1`}
+                style={formInputStyle}
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                placeholder="test456654"
+                required
+                minLength={MIN_LINE_CREDENTIAL_LENGTH}
+              />
+              {autoGenerate && (
+                <button
+                  type="button"
+                  title="Generate username & password"
+                  onClick={() => {
+                    const username = generateLineUsername();
+                    const password = generateLinePassword();
+                    setForm((f) => ({ ...f, username, password, confirmPassword: password }));
+                  }}
+                  className="shrink-0 rounded border px-3 cursor-pointer hover:bg-white/5"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <RefreshCw size={18} />
+                </button>
+              )}
+            </div>
+            {autoGenerate && (
+              <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                Admin setting: generate reseller logins. You can regenerate or edit before saving.
+              </p>
+            )}
           </FormField>
           <FormField label="Password" required>
             <PasswordInput

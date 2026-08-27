@@ -7,7 +7,8 @@ import { PanelRole } from "@prisma/client";
 import { MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput, validateLinePasswordPolicy } from "@/lib/credential-generate";
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
 import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
-import { applyLineRenewDays, applyLineUnlimited } from "@/lib/line-renew";
+import { applyLineRenewDays, applyLineSetExpiry, applyLineUnlimited } from "@/lib/line-renew";
+import { assertRoleMaySetUnlimited } from "@/lib/reseller-line-guards";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -73,6 +74,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     if (passErr) return NextResponse.json({ error: passErr }, { status: 400 });
   }
 
+  if (body.isTrial === true && existing.isTrial !== true) {
+    const { assertIptvTrialAllowed } = await import("@/lib/iptv-trial-lines");
+    const trialGuard = await assertIptvTrialAllowed({ isTrial: true });
+    if (!trialGuard.ok) {
+      return NextResponse.json({ error: trialGuard.error }, { status: 400 });
+    }
+  }
+
   const data: Record<string, unknown> = {
     lockToIp: body.lockToIp !== undefined ? Boolean(body.lockToIp) : undefined,
     allowedIps:
@@ -125,9 +134,70 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         : undefined,
   };
 
+  if (session.role === PanelRole.ADMIN && body.ownerId !== undefined) {
+    const destId = body.ownerId ? String(body.ownerId).trim() : "";
+    if (!destId) {
+      data.ownerId = null;
+    } else {
+      const dest = await prisma.panelUser.findUnique({
+        where: { id: destId },
+        select: {
+          id: true,
+          role: true,
+          isActive: true,
+          maxLines: true,
+          _count: { select: { lines: true } },
+        },
+      });
+      if (
+        !dest ||
+        (dest.role !== PanelRole.RESELLER && dest.role !== PanelRole.SUB_RESELLER)
+      ) {
+        return NextResponse.json(
+          { error: "Owner must be a reseller or sub-reseller" },
+          { status: 400 }
+        );
+      }
+      if (!dest.isActive) {
+        return NextResponse.json({ error: "Destination reseller is inactive" }, { status: 400 });
+      }
+      if (
+        dest.maxLines > 0 &&
+        existing.ownerId !== dest.id &&
+        dest._count.lines + 1 > dest.maxLines
+      ) {
+        return NextResponse.json(
+          { error: `Destination line limit is ${dest.maxLines}` },
+          { status: 400 }
+        );
+      }
+      data.ownerId = dest.id;
+    }
+  }
+
   let renewResult: Awaited<ReturnType<typeof applyLineRenewDays>> | null = null;
   if (body.unlimited === true) {
+    const unlimitedGuard = assertRoleMaySetUnlimited(session.role, { unlimited: true });
+    if (!unlimitedGuard.ok) {
+      return NextResponse.json({ error: unlimitedGuard.error }, { status: 400 });
+    }
     renewResult = await applyLineUnlimited(existing.id, {
+      reactivate: body.reactivate !== false,
+    });
+    data.expiresAt = renewResult.expiresAt;
+    if (renewResult.reactivated) {
+      data.status = renewResult.status;
+    }
+  } else if (body.expiresAt && String(body.expiresAt).trim()) {
+    const parsedExpiry = new Date(String(body.expiresAt));
+    if (Number.isNaN(parsedExpiry.getTime())) {
+      return NextResponse.json({ error: "Invalid expiry date" }, { status: 400 });
+    }
+    const expiryGuard = assertRoleMaySetUnlimited(session.role, { expiresAt: parsedExpiry });
+    if (!expiryGuard.ok) {
+      return NextResponse.json({ error: expiryGuard.error }, { status: 400 });
+    }
+    renewResult = await applyLineSetExpiry(existing.id, parsedExpiry, {
       reactivate: body.reactivate !== false,
     });
     data.expiresAt = renewResult.expiresAt;
@@ -137,6 +207,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   } else {
     const days = body.days != null ? Number(body.days) : 0;
     if (Number.isFinite(days) && days > 0) {
+      const daysGuard = assertRoleMaySetUnlimited(session.role, { days });
+      if (!daysGuard.ok) {
+        return NextResponse.json({ error: daysGuard.error }, { status: 400 });
+      }
       renewResult = await applyLineRenewDays(existing.id, days, {
         reactivate: body.reactivate !== false,
       });

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession, hashPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
-import { randomBytes } from "crypto";
 import { ensureStandardUserGroups } from "@/lib/ensure-user-groups";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
@@ -353,23 +352,23 @@ export async function POST(req: NextRequest) {
 
   const body = parsed.data;
 
-  const password = typeof body.password === "string" && body.password.trim()
-    ? body.password.trim()
-    : randomBytes(12).toString("hex");
-  const username = String(body.username ?? "").trim();
-
-  const { validatePanelAccountCredentials } = await import("@/lib/credential-generate");
-  const credErr = validatePanelAccountCredentials(username, password);
-  if (credErr) {
-    return NextResponse.json({ error: credErr }, { status: 400 });
-  }
-
   const role =
     body.role === "ADMIN"
       ? PanelRole.ADMIN
       : body.role === "SUB_RESELLER"
         ? PanelRole.SUB_RESELLER
         : PanelRole.RESELLER;
+
+  const { resolveNewPanelUserCredentials } = await import("@/lib/reseller-credentials");
+  const creds = await resolveNewPanelUserCredentials({
+    role,
+    username: String(body.username ?? ""),
+    password: typeof body.password === "string" ? body.password : "",
+  });
+  if (!creds.ok) {
+    return NextResponse.json({ error: creds.error }, { status: 400 });
+  }
+  const { username, password } = creds;
 
   const groups = await ensureStandardUserGroups(prisma);
   const defaultGroup =

@@ -12,7 +12,7 @@ import {
 } from "@/lib/admin-sidebar-nav";
 import { getResellerSidebarNav } from "@/lib/reseller-sidebar-nav";
 import type { ResellerGroupFlags } from "@/lib/reseller-group-flags";
-import { withSidebarItemIcons } from "@/lib/panel-nav-bridge";
+import { searchOperatorFeatures } from "@/lib/operator-feature-index";
 import { PanelBrandMark } from "@/components/panel-brand-mark";
 import { PanelSidebarVersion } from "@/components/panel-sidebar-version";
 import { PanelSidebarReport } from "@/components/panel-sidebar-report";
@@ -132,24 +132,37 @@ function labelMatches(label: string, query: string) {
   return label.toLowerCase().includes(query);
 }
 
+function itemMatches(item: { label: string; section?: string; keywords?: string; href: string }, query: string) {
+  if (labelMatches(item.label, query)) return true;
+  if (item.section && labelMatches(item.section, query)) return true;
+  if (item.keywords && labelMatches(item.keywords, query)) return true;
+  if (labelMatches(item.href, query)) return true;
+  return false;
+}
+
 function filterNavEntries(entries: SidebarNavEntry[], query: string): SidebarNavEntry[] {
   const q = query.trim().toLowerCase();
   if (!q) return entries;
 
+  const aliasHrefs = new Set(
+    searchOperatorFeatures(q).map((f) => (f.href.split("?")[0] ?? f.href).replace(/\/$/, ""))
+  );
+
   const result: SidebarNavEntry[] = [];
   for (const entry of entries) {
     if (entry.kind === "link") {
-      if (labelMatches(entry.link.label, q)) result.push(entry);
+      const href = (entry.link.href.split("?")[0] ?? entry.link.href).replace(/\/$/, "");
+      if (labelMatches(entry.link.label, q) || aliasHrefs.has(href)) result.push(entry);
       continue;
     }
 
     const groupLabelMatch = labelMatches(entry.group.label, q);
     const matchedItems = groupLabelMatch
       ? entry.group.items
-      : entry.group.items.filter(
-          (item) =>
-            labelMatches(item.label, q) || (item.section ? labelMatches(item.section, q) : false)
-        );
+      : entry.group.items.filter((item) => {
+          const href = (item.href.split("?")[0] ?? item.href).replace(/\/$/, "");
+          return itemMatches(item, q) || aliasHrefs.has(href);
+        });
 
     if (matchedItems.length === 0) continue;
 
@@ -438,7 +451,7 @@ export function PanelSidebar({
           <input
             type="search"
             className="panel-sidebar-search"
-            placeholder="Search…"
+            placeholder="Find a feature…"
             value={navFilter}
             onChange={(e) => setNavFilter(e.target.value)}
             aria-label="Search navigation"
@@ -478,6 +491,15 @@ export function PanelSidebar({
             />
           );
         })}
+        {showReport && !effectiveCollapsed && !isFiltering && (
+          <div className="panel-sidebar-support mt-2 pt-2">
+            <p className="panel-sidebar-support-label">Support</p>
+            {username && <PanelLiveChat username={username} variant="sidebar" />}
+            <ChatAssistant variant="sidebar" />
+            <PanelSidebarSuggestions />
+            <PanelSidebarReport />
+          </div>
+        )}
       </nav>
 
       {!isMobileDrawer && (
@@ -496,15 +518,6 @@ export function PanelSidebar({
       )}
 
       {!effectiveCollapsed && <PanelSidebarVersion />}
-
-      {showReport && !effectiveCollapsed && (
-        <div className="panel-sidebar-footer-actions space-y-1">
-          {username && <PanelLiveChat username={username} variant="sidebar" />}
-          <ChatAssistant variant="sidebar" />
-          <PanelSidebarSuggestions />
-          <PanelSidebarReport />
-        </div>
-      )}
     </aside>
   );
 }

@@ -67,7 +67,16 @@ export async function linkStreamToPluginBouquet(streamId: string, sortOrder = 90
   });
 }
 
-/** Movies → VOD bouquet, TV → TV Series bouquet; drop Plugin imports so apps don't list them twice. */
+/** Movies/series must sit on the VOD / TV Series bouquet or IPTV apps never list them. */
+export async function ensureIptvVodBouquetMembership(
+  streamId: string,
+  type: StreamType,
+  sortOrder = 0
+) {
+  if (type !== StreamType.MOVIE && type !== StreamType.SERIES) return;
+  await linkStreamToVodBouquet(streamId, type, sortOrder);
+}
+
 export async function linkStreamToVodBouquet(
   streamId: string,
   type: StreamType,

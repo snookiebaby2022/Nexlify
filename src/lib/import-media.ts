@@ -531,6 +531,10 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
               });
             }
           }
+          if (type === StreamType.MOVIE || type === StreamType.SERIES) {
+            const { ensureIptvVodBouquetMembership } = await import("./integration-bouquet");
+            await ensureIptvVodBouquetMembership(existing.id, type, entrySortOrder);
+          }
           reordered++;
         }
         if (metaChanged) updated++;
@@ -600,6 +604,10 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
             })),
             skipDuplicates: true,
           });
+        }
+        if (type === StreamType.MOVIE || type === StreamType.SERIES) {
+          const { ensureIptvVodBouquetMembership } = await import("./integration-bouquet");
+          await ensureIptvVodBouquetMembership(stream.id, type, entrySortOrder);
         }
         imported++;
       } catch (e) {

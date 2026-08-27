@@ -1,5 +1,28 @@
 import { PanelRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isUnlimitedLineExpiry } from "@/lib/format";
+import { isUnlimitedDurationDays } from "@/lib/line-duration-presets";
+
+export const RESELLER_UNLIMITED_LINE_ERROR =
+  "Only administrators can create or set unlimited lines";
+
+/** Resellers and sub-resellers cannot mint far-future / unlimited expiry. */
+export function assertRoleMaySetUnlimited(
+  role: PanelRole,
+  opts: { unlimited?: boolean; days?: number; expiresAt?: Date | null }
+): { ok: true } | { ok: false; error: string } {
+  if (role === PanelRole.ADMIN) return { ok: true };
+  if (opts.unlimited === true) {
+    return { ok: false, error: RESELLER_UNLIMITED_LINE_ERROR };
+  }
+  if (opts.days != null && isUnlimitedDurationDays(opts.days)) {
+    return { ok: false, error: RESELLER_UNLIMITED_LINE_ERROR };
+  }
+  if (opts.expiresAt && isUnlimitedLineExpiry(opts.expiresAt)) {
+    return { ok: false, error: RESELLER_UNLIMITED_LINE_ERROR };
+  }
+  return { ok: true };
+}
 
 export async function assertResellerCanCreateLine(
   session: { id: string; role: PanelRole },

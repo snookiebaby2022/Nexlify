@@ -272,13 +272,13 @@ export function PanelTopNav({
           </div>
         )}
 
-        <div className="panel-header-end flex items-center gap-1.5 sm:gap-2 ml-auto shrink-0">
-        <div className="panel-header-controls flex items-center gap-1.5 sm:gap-2">
+        <div className="panel-header-end flex items-center gap-2 sm:gap-3 ml-auto shrink-0">
+        <div className="panel-header-controls flex items-center gap-2 sm:gap-3">
           <div
-            className="panel-header-toggle-bar hidden sm:flex items-center gap-2 rounded-lg px-2 py-1 shrink-0"
+            className="panel-header-toggle-bar hidden sm:flex items-center gap-2.5 rounded-lg px-3 py-1.5 shrink-0"
             title="Logo accent and theme"
           >
-            <span className="hidden md:inline text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            <span className="hidden md:inline text-xs font-semibold uppercase tracking-wider text-slate-300">
               Logo
             </span>
             <LogoAccentToggle />
@@ -298,7 +298,7 @@ export function PanelTopNav({
             {coloredIcon(Search, "#22d3ee", 18)}
           </button>
           <div className="panel-header-search hidden sm:flex">
-            {coloredIcon(Search, "#22d3ee", 14)}
+            {coloredIcon(Search, "#22d3ee", 18)}
             <input
               type="search"
               placeholder="Search panel…"
@@ -377,7 +377,7 @@ export function PanelTopNav({
       {mobileSearchOpen && (
         <div className="panel-header-mobile-search sm:hidden">
           <div className="panel-header-search w-full">
-            {coloredIcon(Search, "#22d3ee", 14)}
+            {coloredIcon(Search, "#22d3ee", 18)}
             <input
               type="search"
               placeholder="Search panel…"

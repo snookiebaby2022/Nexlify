@@ -37,8 +37,15 @@ export default function GeneralSettingsPage() {
           ],
         },
         {
-          title: "Disable free trial",
-          fields: [{ key: "disableTrial", label: "Disable free trial", type: "yesno" }],
+          title: "Disable trial subscriptions",
+          info: "Stops new 24-hour and 48-hour trial lines. Existing trial lines keep working until they expire. This does not affect the Nexlify panel license.",
+          fields: [
+            {
+              key: "disableTrial",
+              label: "Disable 24h / 48h trial subscriptions",
+              type: "yesno",
+            },
+          ],
         },
         {
           title: "Maintenance",

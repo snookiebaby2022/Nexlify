@@ -22,3 +22,22 @@ export const LINE_DURATION_PRESETS: LineDurationPreset[] = [
   { id: "24-months", label: "24 Months", days: 730, isTrial: false, creditCost: creditCostForDays(730) },
   { id: "unlimited", label: "Unlimited", days: UNLIMITED_LINE_DAYS, isTrial: false, creditCost: 0 },
 ];
+
+/** Resellers / sub-resellers never see Unlimited — only admins may mint ~10-year lines. */
+export function lineDurationPresetsForPanel(
+  panel: "admin" | "reseller",
+  opts?: { allowTrials?: boolean }
+): LineDurationPreset[] {
+  let list =
+    panel === "admin"
+      ? LINE_DURATION_PRESETS
+      : LINE_DURATION_PRESETS.filter((p) => p.id !== "unlimited");
+  if (opts?.allowTrials === false) {
+    list = list.filter((p) => !p.isTrial);
+  }
+  return list;
+}
+
+export function isUnlimitedDurationDays(days: number): boolean {
+  return Number.isFinite(days) && days >= UNLIMITED_LINE_DAYS;
+}

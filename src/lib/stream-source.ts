@@ -1,4 +1,5 @@
-const SOURCE_SCHEMES = /^(https?:\/\/|file:\/\/|rtmp:\/\/|rtmps:\/\/|srt:\/\/|udp:\/\/)/i;
+const SOURCE_SCHEMES =
+  /^(https?:\/\/|file:\/\/|rtmp:\/\/|rtmps:\/\/|srt:\/\/|udp:\/\/|v4l2:\/\/|video4linux2:\/\/|dshow:\/\/|decklink:\/\/|avfoundation:\/\/)/i;
 
 /** Trim and fix common URL typos (e.g. https:/host → https://host). */
 export function normalizeStreamSource(input: string): string {
@@ -73,7 +74,7 @@ export function validateStreamCreate(body: {
     return "Provider path or ID is required";
   }
   if (source && !providerSource && !isValidStreamSource(source)) {
-    return "Source must be a URL (http/https/rtmp) or a file path";
+    return "Source must be a URL (http/https/rtmp), a capture device (v4l2://, dshow://), or a file path";
   }
   if (type === "SERIES") {
     if (!body.seriesName?.trim()) return "Series name is required for episodes";

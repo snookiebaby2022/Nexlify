@@ -70,6 +70,12 @@ export default function SecuritySettingsPage() {
               type: "yesno",
             },
             {
+              key: "autoGenerateResellerCredentials",
+              label: "Auto-generate reseller & sub-reseller logins",
+              type: "yesno",
+              hint: "When on, add-reseller / add-sub-reseller fills a generated username and password. When off, they must be typed.",
+            },
+            {
               key: "lineCredentialMinLength",
               label: "Minimum username/password length",
               type: "number",

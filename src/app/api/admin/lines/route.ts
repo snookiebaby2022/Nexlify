@@ -281,9 +281,29 @@ export async function POST(req: NextRequest) {
     expiresAt.setDate(expiresAt.getDate() + Math.max(1, days));
   }
 
-  const guard = await import("@/lib/reseller-line-guards").then((m) =>
-    m.assertResellerCanCreateLine(session, bouquetIds)
+  const { assertResellerCanCreateLine, assertRoleMaySetUnlimited } = await import(
+    "@/lib/reseller-line-guards"
   );
+  const unlimitedGuard = assertRoleMaySetUnlimited(session.role, {
+    unlimited: body.unlimited === true,
+    days,
+    expiresAt,
+  });
+  if (!unlimitedGuard.ok) {
+    return NextResponse.json({ error: unlimitedGuard.error }, { status: 400 });
+  }
+
+  const { assertIptvTrialAllowed } = await import("@/lib/iptv-trial-lines");
+  const trialGuard = await assertIptvTrialAllowed({
+    isTrial: Boolean(body.isTrial),
+    days: body.unlimited === true ? undefined : days,
+    expiresAt: body.unlimited === true ? null : expiresAt,
+  });
+  if (!trialGuard.ok) {
+    return NextResponse.json({ error: trialGuard.error }, { status: 400 });
+  }
+
+  const guard = await assertResellerCanCreateLine(session, bouquetIds);
   if (!guard.ok) {
     return NextResponse.json({ error: guard.error }, { status: 400 });
   }
@@ -297,6 +317,10 @@ export async function POST(req: NextRequest) {
 
   const paysCredits =
     session.role === PanelRole.RESELLER || session.role === PanelRole.SUB_RESELLER;
+  const { getResellerLineRewardPercent, applyResellerLineReward } = await import(
+    "@/lib/reseller-rewards"
+  );
+  const rewardPercent = paysCredits ? await getResellerLineRewardPercent() : 0;
 
   const statusRaw = String(body.status ?? "ACTIVE").toUpperCase();
   const status =
@@ -331,6 +355,15 @@ export async function POST(req: NextRequest) {
             note: `Line ${username}`,
           },
         });
+        if (rewardPercent > 0) {
+          await applyResellerLineReward(tx, {
+            userId: session.id,
+            spent: totalCost,
+            percent: rewardPercent,
+            lineUsername: username,
+            currentBalance: owner.credits,
+          });
+        }
       }
 
       return tx.line.create({

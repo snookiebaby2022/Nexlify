@@ -1,3 +1,5 @@
+import { captureDeviceInputArgs } from "@/lib/ffmpeg-overlay";
+
 export function agentPidFile(serverId: string, streamId: string) {
   return `/var/run/nexlify/stream-${serverId}-${streamId}.pid`;
 }
@@ -35,10 +37,13 @@ export function buildFfmpegArgv(opts: {
       ? ["-preset", opts.preset]
       : [];
 
+  const capture = captureDeviceInputArgs(opts.inputUrl);
   const transcodeBody =
     opts.transcodeArgs && opts.transcodeArgs.length > 0
       ? opts.transcodeArgs.filter((a) => typeof a === "string")
-      : ["-i", opts.inputUrl, "-c", "copy", "-f", "mpegts"];
+      : capture
+        ? ["-f", capture.format, "-i", capture.device, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", "-f", "mpegts"]
+        : ["-i", opts.inputUrl, "-c", "copy", "-f", "mpegts"];
 
   const args = ["-hide_banner", "-loglevel", "warning", "-re", ...transcodeBody, "pipe:1", ...preset, ...threads];
   return {

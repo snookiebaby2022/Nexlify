@@ -184,6 +184,8 @@ export async function POST(req: NextRequest) {
   });
 
   await syncStreamBouquets(stream.id, bouquetIds);
+  const { ensureIptvVodBouquetMembership } = await import("@/lib/integration-bouquet");
+  await ensureIptvVodBouquetMembership(stream.id, StreamType.SERIES, stream.sortOrder ?? 0);
   await invalidateXtreamCategories();
   await invalidateDashboardStats();
 
@@ -253,6 +255,9 @@ export async function PATCH(req: NextRequest) {
   if (body.bouquetIds !== undefined) {
     await syncStreamBouquets(id, Array.isArray(body.bouquetIds) ? body.bouquetIds : []);
   }
+
+  const { ensureIptvVodBouquetMembership } = await import("@/lib/integration-bouquet");
+  await ensureIptvVodBouquetMembership(stream.id, StreamType.SERIES, stream.sortOrder ?? 0);
 
   await invalidatePlaybackUrls(id);
   await invalidateXtreamCategories();

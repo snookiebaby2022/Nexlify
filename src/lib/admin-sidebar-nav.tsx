@@ -1,9 +1,15 @@
 import type { ReactNode } from "react";
-import { LayoutDashboard, Megaphone, Wifi } from "lucide-react";
+import { LayoutDashboard, Megaphone, Search, Wifi } from "lucide-react";
 import { CONTENT_FOLDERS } from "@/lib/content-folders";
 import { coloredGroupIcon, coloredIcon } from "@/lib/nav-item-icons";
 
-export type SidebarNavItem = { href: string; label: string; section?: string; icon?: ReactNode };
+export type SidebarNavItem = {
+  href: string;
+  label: string;
+  section?: string;
+  icon?: ReactNode;
+  keywords?: string;
+};
 
 export type SidebarNavGroup = {
   id: string;
@@ -41,6 +47,14 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         href: "/admin/dashboard",
         label: "Dashboard",
         icon: coloredIcon(LayoutDashboard, "#38bdf8", 18),
+      },
+    },
+    {
+      kind: "link",
+      link: {
+        href: "/admin/find",
+        label: "Find a feature",
+        icon: coloredIcon(Search, "#a3e635", 18),
       },
     },
     {
@@ -115,6 +129,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         icon: coloredGroupIcon("live"),
         items: [
           { href: "/admin/streams/add", label: "Add Stream", section: "Streams" },
+          { href: "/admin/streams/capture", label: "Capture / CCTV", section: "Streams", keywords: "hdmi v4l2 dshow ingest xui" },
           { href: "/admin/content/streams", label: "Manage Streams", section: "Streams" },
           ...LIVE_NAV_FOLDERS.filter((f) => f.slug !== "streams").map((f) => ({
             href: `/admin/content/${f.slug}`,
@@ -213,7 +228,8 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/management/packages", label: "Packages & markup", section: "Packages" },
           { href: "/admin/management/packages/add", label: "Add Package", section: "Packages" },
           { href: "/admin/resellers/credits", label: "Credit Log", section: "Credits" },
-          { href: "/admin/shop", label: "Customer shop", section: "Shop" },
+          { href: "/admin/shop", label: "Customer shop", section: "Shop", keywords: "storefront stripe paypal" },
+          { href: "/admin/settings/billing", label: "Reseller rewards", section: "Shop", keywords: "cashback reward plugin credit rebate" },
         ],
       },
     },
@@ -244,11 +260,12 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         label: "Security",
         icon: coloredGroupIcon("security"),
         items: [
-          { href: "/admin/settings/security", label: "Security Settings", section: "Locks" },
+          { href: "/admin/settings/security", label: "Security Settings", section: "Locks", keywords: "2fa totp generate reseller logins" },
+          { href: "/admin/settings/security-shield", label: "VPN / proxy shield", section: "Locks", keywords: "ipqs datacenter tor autoblock" },
           { href: "/admin/settings/server-guard", label: "Server Guard", section: "Locks" },
           { href: "/admin/settings/device-binding", label: "Device Binding", section: "Locks" },
           { href: "/admin/settings/apps-lock", label: "Apps Lock", section: "Locks" },
-          { href: "/admin/settings/fingerprint", label: "Playback Fingerprint", section: "Fingerprint" },
+          { href: "/admin/settings/fingerprint", label: "Playback Fingerprint", section: "Fingerprint", keywords: "overlay watermark drawtext leak" },
           { href: "/admin/settings/stream-fingerprint", label: "Stream Fingerprint", section: "Fingerprint" },
           { href: "/admin/settings/same-ip-detection", label: "Same-IP Detection", section: "Locks" },
           { href: "/admin/settings/vod-proxy", label: "Hide VOD URLs", section: "Locks" },
@@ -327,13 +344,14 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/settings/binaries", label: "FFmpeg", section: "Panel" },
           { href: "/admin/settings/cache", label: "Cache / Redis", section: "Panel" },
           { href: "/admin/settings/billing", label: "Billing & PayPal", section: "Billing" },
-          { href: "/admin/settings/api", label: "Admin API & WHMCS", section: "Billing" },
+          { href: "/admin/settings/api", label: "Admin API & WHMCS", section: "Billing", keywords: "create_line hmac xui billing" },
           { href: "/admin/settings/notifications", label: "Email & SMTP", section: "Billing" },
           { href: "/admin/settings/tmdb", label: "TMDB", section: "Content" },
           { href: "/admin/settings/cron", label: "Scheduled tasks", section: "Maintenance" },
           { href: "/admin/settings/backup", label: "Backup", section: "Maintenance" },
           { href: "/admin/settings/updates", label: "Panel update", section: "Maintenance" },
           { href: "/admin/settings/white-label", label: "White-label", section: "Branding" },
+          { href: "/admin/player/multiview", label: "Multi-view player", section: "Branding", keywords: "grid webplayer 1-stream" },
           { href: "/admin/profile", label: "My Profile", section: "Account" },
         ],
       },

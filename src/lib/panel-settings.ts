@@ -167,6 +167,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     timeFormat: "24",
     defaultLanguage: "en",
     maintenanceMode: false,
+    /** Block new 24h / 48h IPTV trial subscriptions (not the panel software license). */
     disableTrial: false,
     /** When true, feature packs (LB Pro, transcoding, archive, security) work without WHMCS addon licenses. */
     bundledFeaturePacks: true,
@@ -386,6 +387,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     binanceWebhookSecret: "",
     binanceTestMode: true,
     couponCheckoutEnabled: true,
+    rewardPercentOnLineCreate: 0,
     notes: "Payment credentials for website checkout integration (WHMCS or custom store).",
   },
   cron: {
@@ -410,6 +412,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     loginFloodPerMin: 30,
     requireStrongPasswords: false,
     autoGenerateLineCredentials: true,
+    autoGenerateResellerCredentials: false,
     lineCredentialMinLength: 6,
     linePasswordRequireLetterAndDigit: false,
     linePasswordBlockCommon: true,
@@ -437,6 +440,10 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     secret: "",
     leakAuditEnabled: true,
     leakAuditRetentionDays: 30,
+    overlayEnabled: false,
+    overlayText: "{panel} {stream}",
+    overlayPosition: "br",
+    overlayFontSize: 22,
   },
   domains: {
     primaryDomain: "",

@@ -40,6 +40,10 @@ export async function createLineFromShopPackage(opts: {
   const existing = await prisma.line.findUnique({ where: { username } });
   if (existing) throw new Error("Username taken");
 
+  const { assertIptvTrialAllowed } = await import("@/lib/iptv-trial-lines");
+  const trialGuard = await assertIptvTrialAllowed({ days: pkg.days });
+  if (!trialGuard.ok) throw new Error(trialGuard.error);
+
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + Math.max(1, pkg.days));
 

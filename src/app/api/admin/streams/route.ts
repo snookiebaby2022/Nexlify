@@ -432,12 +432,17 @@ export async function POST(req: NextRequest) {
 
   try {
     if (body.isCreatedChannel) {
-      const { isRestreamAllowed } = await import("@/lib/restream-policy");
-      if (!(await isRestreamAllowed())) {
-        return NextResponse.json(
-          { error: "Restreaming is disabled. Enable it under Settings → Streaming." },
-          { status: 400 }
-        );
+      const { captureDeviceInputArgs } = await import("@/lib/ffmpeg-overlay");
+      const src = String(body.source ?? body.streamUrl ?? "");
+      const isCapture = Boolean(captureDeviceInputArgs(src));
+      if (!isCapture) {
+        const { isRestreamAllowed } = await import("@/lib/restream-policy");
+        if (!(await isRestreamAllowed())) {
+          return NextResponse.json(
+            { error: "Restreaming is disabled. Enable it under Settings → Streaming." },
+            { status: 400 }
+          );
+        }
       }
     }
 
@@ -472,6 +477,11 @@ export async function POST(req: NextRequest) {
         })),
         skipDuplicates: true,
       });
+    }
+
+    if (stream.type === StreamType.MOVIE || stream.type === StreamType.SERIES) {
+      const { ensureIptvVodBouquetMembership } = await import("@/lib/integration-bouquet");
+      await ensureIptvVodBouquetMembership(stream.id, stream.type, stream.sortOrder ?? 0);
     }
 
     void Promise.allSettled([invalidateXtreamCategories(), invalidateDashboardStats()]);
@@ -799,6 +809,11 @@ export async function PATCH(req: NextRequest) {
 
     if (body.bouquetIds !== undefined) {
       await syncStreamBouquets(id, Array.isArray(body.bouquetIds) ? body.bouquetIds : []);
+    }
+
+    if (stream.type === StreamType.MOVIE || stream.type === StreamType.SERIES) {
+      const { ensureIptvVodBouquetMembership } = await import("@/lib/integration-bouquet");
+      await ensureIptvVodBouquetMembership(stream.id, stream.type, stream.sortOrder ?? 0);
     }
 
     // Cache invalidation must never block the save response
