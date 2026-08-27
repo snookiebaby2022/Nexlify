@@ -1,4 +1,4 @@
-# Deploy streaming stack v2.0.52 to customer panel hosts (75, 45, etc.)
+# Deploy streaming stack v2.0.52 to customer panel hosts.
 param(
   [string[]]$Hosts = @("75.119.137.174"),
   [hashtable]$Passwords = @{
@@ -38,17 +38,20 @@ $files = @(
   "src/app/api/admin/dashboard-stream/route.ts"
 )
 
-foreach ($host in $Hosts) {
-  $pw = $Passwords[$host]
-  if (-not $pw) { Write-Warning "No password for $host — skip"; continue }
-  Write-Host "=== Deploy streaming to $host ===" -ForegroundColor Cyan
+foreach ($targetHost in $Hosts) {
+  $pw = $Passwords[$targetHost]
+  if (-not $pw) {
+    Write-Warning "No password for $targetHost - skip"
+    continue
+  }
+  Write-Host "=== Deploy streaming to $targetHost ===" -ForegroundColor Cyan
   foreach ($rel in $files) {
     $local = Join-Path $root $rel
     if (-not (Test-Path -LiteralPath $local)) { continue }
     $remote = "$RemotePath/$($rel -replace '\\','/')"
-    & $pscp -batch -pw $pw $local "root@${host}:$remote"
+    & $pscp -batch -pw $pw $local "root@${targetHost}:$remote"
   }
-  $cmd = "cd $RemotePath && sed -i 's/\r$//' scripts/*.sh scripts/*.mjs scripts/*.cjs 2>/dev/null; chmod +x scripts/*.sh; chattr -i src/app/api/internal/live-auth/route.ts src/lib/line-playback.ts 2>/dev/null; export NEXLIFY_SKIP_GIT_RESET=1 NEXLIFY_FORCE_BUILD=1 FORCE=1; bash scripts/apply-streaming-reapply-local.sh"
-  & $plink -batch -ssh "root@$host" -pw $pw $cmd
-  Write-Host "=== Done $host ===" -ForegroundColor Green
+  $cmd = "cd $RemotePath; sed -i 's/\r$//' scripts/*.sh scripts/*.mjs scripts/*.cjs 2>/dev/null; chmod +x scripts/*.sh; chattr -i src/app/api/internal/live-auth/route.ts src/lib/line-playback.ts 2>/dev/null; export NEXLIFY_SKIP_GIT_RESET=1 NEXLIFY_FORCE_BUILD=1 FORCE=1; bash scripts/apply-streaming-reapply-local.sh"
+  & $plink -batch -ssh "root@$targetHost" -pw $pw $cmd
+  Write-Host "=== Done $targetHost ===" -ForegroundColor Green
 }

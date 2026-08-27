@@ -230,13 +230,13 @@ export async function getDashboardNicBandwidthMbps(): Promise<{
 }> {
   let cap = 1000;
   try {
-    const main = await prisma.streamServer.findFirst({
-      where: { isMain: true },
+    const row = await prisma.streamServer.findFirst({
+      orderBy: { sortOrder: "asc" },
       select: { bandwidthMbps: true },
     });
-    if (main?.bandwidthMbps && main.bandwidthMbps > 0) cap = main.bandwidthMbps;
+    if (row?.bandwidthMbps && row.bandwidthMbps > 0) cap = row.bandwidthMbps;
   } catch {
-    /* main server optional */
+    /* cap optional */
   }
 
   const sample = sampleLocalHostMetrics(cap);
