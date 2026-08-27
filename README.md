@@ -228,7 +228,7 @@ npm run start
 
 Or run `./scripts/deploy-vps.sh` (same steps).
 
-**Cron** (not in-process): `GET /api/cron` with `CRON_SECRET`, or `npm run cron`. Jobs include watch-folder queue, import queue, agent auto-restart, and line expiry. See [docs/STREAM-AGENT.md](docs/STREAM-AGENT.md), [docs/OPS.md](docs/OPS.md).
+**Cron** (not in-process): `GET /api/cron` with `CRON_SECRET`, or `npm run cron`. Jobs include watch-folder queue, import queue, agent auto-restart, and line expiry. See [docs/STREAM-AGENT.md](docs/STREAM-AGENT.md), [docs/OPS.md](docs/OPS.md), [docs/IPTV-SCALE.md](docs/IPTV-SCALE.md) (production edge architecture & 20k rollout).
 
 | Variable | Purpose |
 |----------|---------|

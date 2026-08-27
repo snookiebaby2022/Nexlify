@@ -50,7 +50,24 @@ STREAM_PROBE_TIMEOUT_MS=4000
 curl -s https://panel.example.com/api/health
 ```
 
+## IPTV production scale
+
+Full rollout blueprint (edge architecture, multi-server LB, Cloudflare, probes, 20k path):
+
+- **[IPTV-SCALE.md](./IPTV-SCALE.md)**
+
+One-shot on a server:
+
+```bash
+PHASE=safe bash scripts/apply-iptv-production-stack.sh
+PHASE=full FORCE=1 bash scripts/apply-iptv-production-stack.sh   # maintenance window
+bash scripts/verify-iptv-playback.sh USER PASS http://127.0.0.1:8080
+```
+
+Env template: `scripts/iptv-production.env.example`
+
 ## Related
 
+- [IPTV-SCALE.md](./IPTV-SCALE.md)
 - [STREAM-AGENT.md](./STREAM-AGENT.md)
 - [NGINX.md](./NGINX.md)
