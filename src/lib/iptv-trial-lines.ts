@@ -9,19 +9,26 @@ export function isIptvTrialDurationDays(days: number): boolean {
   return n === 1 || n === 2;
 }
 
+/** Paid 1–2 day SKUs are not trials; free short packages and names containing "trial" are. */
+export function isIptvTrialPackageMeta(pkg: {
+  name?: string;
+  days: number;
+  creditCost: number;
+  shopPriceCents?: number;
+}): boolean {
+  if (/\btrial\b/i.test(String(pkg.name ?? ""))) return true;
+  const paid = pkg.creditCost > 0 || (pkg.shopPriceCents ?? 0) > 0;
+  if (paid) return false;
+  return isIptvTrialDurationDays(pkg.days);
+}
+
 export function isIptvTrialSubscription(opts: {
   isTrial?: boolean;
   days?: number;
   expiresAt?: Date | null;
   now?: Date;
 }): boolean {
-  if (opts.isTrial === true) return true;
-  if (opts.days != null && isIptvTrialDurationDays(opts.days)) return true;
-  if (opts.expiresAt && !Number.isNaN(opts.expiresAt.getTime())) {
-    const hours = (opts.expiresAt.getTime() - (opts.now ?? new Date()).getTime()) / 3600000;
-    if (hours > 0 && hours <= 49) return true;
-  }
-  return false;
+  return opts.isTrial === true;
 }
 
 export async function iptvTrialLinesDisabled(): Promise<boolean> {

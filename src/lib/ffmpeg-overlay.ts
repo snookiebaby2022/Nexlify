@@ -9,14 +9,20 @@ export type OverlaySettings = {
   fontSize: number;
 };
 
-/** Strip characters that break FFmpeg drawtext filter graphs. */
-export function sanitizeOverlayText(raw: string, maxLen = 64): string {
+/** Escape for FFmpeg drawtext text='…' after template substitution. */
+export function escapeDrawtext(raw: string, maxLen = 64): string {
   return String(raw ?? "")
     .replace(/[\r\n\0]/g, " ")
-    .replace(/[':\\]/g, "")
-    .replace(/[^\w\s.@#\-]/g, "")
+    .replace(/\\/g, " ")
+    .replace(/[:'%]/g, " ")
+    .replace(/\s+/g, " ")
     .trim()
     .slice(0, maxLen);
+}
+
+/** @deprecated use escapeDrawtext — kept for existing tests. */
+export function sanitizeOverlayText(raw: string, maxLen = 64): string {
+  return escapeDrawtext(raw, maxLen);
 }
 
 export function overlayXy(position: OverlayPosition): { x: string; y: string } {
@@ -32,11 +38,19 @@ export function overlayXy(position: OverlayPosition): { x: string; y: string } {
   }
 }
 
+function drawtextFontPrefix(): string {
+  const fromEnv = String(process.env.NEXLIFY_DRAWTEXT_FONT ?? "").trim();
+  if (fromEnv && /^\/[A-Za-z0-9._/\-]+$/.test(fromEnv) && !fromEnv.includes("..")) {
+    return `fontfile=${fromEnv}:`;
+  }
+  return "font=Sans:";
+}
+
 export function drawtextFilter(text: string, position: OverlayPosition, fontSize: number): string {
-  const safe = sanitizeOverlayText(text) || "NEXLIFY";
+  const safe = escapeDrawtext(text) || "NEXLIFY";
   const size = Number.isFinite(fontSize) ? Math.min(72, Math.max(12, Math.floor(fontSize))) : 22;
   const { x, y } = overlayXy(position);
-  return `drawtext=text='${safe}':fontsize=${size}:fontcolor=white@0.85:x=${x}:y=${y}:box=1:boxcolor=black@0.45:boxborderw=8`;
+  return `drawtext=${drawtextFontPrefix()}text='${safe}':fontsize=${size}:fontcolor=white@0.85:x=${x}:y=${y}:box=1:boxcolor=black@0.45:boxborderw=8`;
 }
 
 export function resolveOverlayText(template: string, vars: { streamName?: string; panelName?: string }): string {
@@ -82,17 +96,48 @@ function forceEncodeIfCopy(args: string[]): string[] {
   return args;
 }
 
+function sanitizeCaptureDevice(format: string, raw: string): string | null {
+  const d = String(raw ?? "").trim();
+  if (!d || /[\0\n\r;]/.test(d) || d.includes("..")) return null;
+  if (format === "v4l2") {
+    const path = d.replace(/^\/\//, "");
+    return /^\/dev\/video\d{1,3}$/.test(path) ? path : null;
+  }
+  if (format === "dshow") {
+    if (d.includes(":")) return null;
+    return /^(video|audio)=[A-Za-z0-9][A-Za-z0-9 _.-]{0,80}$/.test(d) ? d : null;
+  }
+  if (format === "decklink" || format === "avfoundation") {
+    if (d.includes(":")) return null;
+    if (/^\d{1,3}$/.test(d)) return d;
+    return /^[A-Za-z0-9][A-Za-z0-9 _.-]{0,80}$/.test(d) ? d : null;
+  }
+  return null;
+}
+
 /** v4l2 / DirectShow / DeckLink capture URLs → ffmpeg -f … -i … */
 export function captureDeviceInputArgs(inputUrl: string): { format: string; device: string } | null {
   const u = String(inputUrl ?? "").trim();
   const v4l = u.match(/^(?:v4l2|video4linux2):\/\/(.+)$/i);
-  if (v4l) return { format: "v4l2", device: v4l[1]!.replace(/^\/\//, "") || v4l[1]! };
+  if (v4l) {
+    const device = sanitizeCaptureDevice("v4l2", v4l[1]!);
+    return device ? { format: "v4l2", device } : null;
+  }
   const dshow = u.match(/^dshow:\/\/(.+)$/i);
-  if (dshow) return { format: "dshow", device: dshow[1]! };
+  if (dshow) {
+    const device = sanitizeCaptureDevice("dshow", dshow[1]!);
+    return device ? { format: "dshow", device } : null;
+  }
   const deck = u.match(/^decklink:\/\/(.+)$/i);
-  if (deck) return { format: "decklink", device: deck[1]! };
+  if (deck) {
+    const device = sanitizeCaptureDevice("decklink", deck[1]!);
+    return device ? { format: "decklink", device } : null;
+  }
   const avf = u.match(/^avfoundation:\/\/(.+)$/i);
-  if (avf) return { format: "avfoundation", device: avf[1]! };
+  if (avf) {
+    const device = sanitizeCaptureDevice("avfoundation", avf[1]!);
+    return device ? { format: "avfoundation", device } : null;
+  }
   return null;
 }
 

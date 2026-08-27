@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           ok: true,
           line: { id: line.id, username: line.username, password: line.password, expiresAt: line.expiresAt },
-          ...shopUrls(origin, line.username, line.password),
+          ...(await shopUrls(origin, line)),
         });
       }
     }
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       line: { id: line.id, username: line.username, password: line.password, expiresAt: line.expiresAt },
-      ...shopUrls(origin, line.username, line.password),
+      ...(await shopUrls(origin, line)),
     });
   } catch (e) {
     return apiMutationErrorResponse(e, { exposeMessage: true });

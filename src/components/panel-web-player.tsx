@@ -169,14 +169,56 @@ function PanelWebPlayerInner() {
   }, [apiBase, loadCategoryStreams]);
 
   useEffect(() => {
+    const stripQueryCreds = () => {
+      if (typeof window === "undefined") return;
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has("username") && !url.searchParams.has("password") && !url.searchParams.has("t")) {
+        return;
+      }
+      url.searchParams.delete("username");
+      url.searchParams.delete("password");
+      url.searchParams.delete("t");
+      const qs = url.searchParams.toString();
+      window.history.replaceState(null, "", `${url.pathname}${qs ? `?${qs}` : ""}${url.hash}`);
+    };
+
+    const t = params.get("t");
+    if (t) {
+      void (async () => {
+        try {
+          const res = await fetch(`${apiBase}/api/webplayer/credentials?t=${encodeURIComponent(t)}`, {
+            cache: "no-store",
+          });
+          const data = (await res.json().catch(() => ({}))) as {
+            username?: string;
+            password?: string;
+            error?: string;
+          };
+          stripQueryCreds();
+          if (!res.ok || !data.username || !data.password) {
+            setError(data.error || "Invalid or expired player link");
+            return;
+          }
+          setUsername(data.username);
+          setPassword(data.password);
+          await loadPlaylist(data.username, data.password);
+        } catch {
+          stripQueryCreds();
+          setError("Could not open player link");
+        }
+      })();
+      return;
+    }
+
     const u = params.get("username");
     const p = params.get("password");
     if (u && p) {
       setUsername(u);
       setPassword(p);
+      stripQueryCreds();
       void loadPlaylist(u, p);
     }
-  }, [params, loadPlaylist]);
+  }, [params, loadPlaylist, apiBase]);
 
   useEffect(() => {
     if (!loggedIn || tab !== "all" || !username || !password) return;

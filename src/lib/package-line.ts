@@ -31,6 +31,7 @@ export async function resolveLineCreateFromPackage(
   }
 
   let packageProfit = 0;
+  let isTrial = false;
   if (body.packageId) {
     const pkg = await prisma.package.findUnique({
       where: { id: String(body.packageId), isActive: true },
@@ -41,6 +42,13 @@ export async function resolveLineCreateFromPackage(
     if (pkg.bouquetIds.length) bouquetIds = [...pkg.bouquetIds];
     creditCost = Math.max(0, pkg.creditCost);
     packageProfit = pkg.profitPercent ?? 0;
+    const { isIptvTrialPackageMeta } = await import("@/lib/iptv-trial-lines");
+    isTrial = isIptvTrialPackageMeta({
+      name: pkg.name,
+      days,
+      creditCost: pkg.creditCost,
+      shopPriceCents: pkg.shopPriceCents,
+    });
   }
 
   let sellerProfit = 0;
@@ -61,7 +69,7 @@ export async function resolveLineCreateFromPackage(
 
   creditCost = markedUpCreditCost(creditCost, packageProfit, sellerProfit);
 
-  return { days, maxConnections, bouquetIds, creditCost, accessCodeId: body.accessCode };
+  return { days, maxConnections, bouquetIds, creditCost, accessCodeId: body.accessCode, isTrial };
 }
 
 export async function incrementAccessCodeUse(code: string) {

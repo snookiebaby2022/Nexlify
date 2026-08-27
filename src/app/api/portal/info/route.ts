@@ -4,6 +4,7 @@ import { getPortalSession } from "@/lib/portal-session";
 import { lineIsPlayable } from "@/lib/lines";
 import { serverBaseUrl } from "@/lib/xtream";
 import { getSettingGroup } from "@/lib/panel-settings";
+import { createWebplayerLinkToken } from "@/lib/webplayer-link";
 
 export async function GET(req: Request) {
   const session = await getPortalSession();
@@ -28,6 +29,7 @@ export async function GET(req: Request) {
 
   const xtreamUrl = `${base}/player_api.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`;
   const m3uUrl = `${base}/get.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}&type=m3u_plus&output=ts`;
+  const webplayerToken = await createWebplayerLinkToken(line.id);
 
   return NextResponse.json({
     line: {
@@ -45,7 +47,7 @@ export async function GET(req: Request) {
       epg: `${base}/xmltv.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`,
       stalker: `${base}/stalker_portal/c/`,
       magPortal: `${base}/portal.php`,
-      webplayer: `${base}/webplayer?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`,
+      webplayer: `${base}/webplayer?t=${encodeURIComponent(webplayerToken)}`,
       portal: `${base}/portal`,
     },
     billing: {

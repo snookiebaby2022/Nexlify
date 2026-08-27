@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
         ok: true,
         paid: true,
         line: { id: line.id, username: line.username, password: line.password, expiresAt: line.expiresAt },
-        ...shopUrls(origin, line.username, line.password),
+        ...(await shopUrls(origin, line)),
       });
     }
 

@@ -86,6 +86,7 @@ const PUBLIC = [
   "/api/portal",
   "/portal",
   "/webplayer",
+  "/api/webplayer",
   "/shop",
   "/api/shop",
   "/api/cron",

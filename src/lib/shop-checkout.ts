@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
 import { validateLineCredential } from "@/lib/credential-generate";
 import { generatePassword } from "@/lib/xui-api-utils";
+import { createWebplayerLinkToken } from "@/lib/webplayer-link";
 
 export type ShopLineResult = {
   id: string;
@@ -11,11 +12,16 @@ export type ShopLineResult = {
   shopPriceCents: number;
 };
 
-export function shopUrls(origin: string, username: string, password: string) {
+/** M3U still needs Xtream creds; webplayer uses a short-lived token so the password stays out of the page URL. */
+export async function shopUrls(
+  origin: string,
+  line: { id: string; username: string; password: string }
+) {
+  const t = await createWebplayerLinkToken(line.id);
   return {
     portal: `${origin}/portal`,
-    m3u: `${origin}/get.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&type=m3u_plus&output=ts`,
-    webplayer: `${origin}/webplayer?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+    m3u: `${origin}/get.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}&type=m3u_plus&output=ts`,
+    webplayer: `${origin}/webplayer?t=${encodeURIComponent(t)}`,
   };
 }
 
@@ -40,8 +46,14 @@ export async function createLineFromShopPackage(opts: {
   const existing = await prisma.line.findUnique({ where: { username } });
   if (existing) throw new Error("Username taken");
 
-  const { assertIptvTrialAllowed } = await import("@/lib/iptv-trial-lines");
-  const trialGuard = await assertIptvTrialAllowed({ days: pkg.days });
+  const { assertIptvTrialAllowed, isIptvTrialPackageMeta } = await import("@/lib/iptv-trial-lines");
+  const isTrial = isIptvTrialPackageMeta({
+    name: pkg.name,
+    days: pkg.days,
+    creditCost: pkg.creditCost,
+    shopPriceCents: pkg.shopPriceCents,
+  });
+  const trialGuard = await assertIptvTrialAllowed({ isTrial });
   if (!trialGuard.ok) throw new Error(trialGuard.error);
 
   const expiresAt = new Date();
@@ -53,6 +65,7 @@ export async function createLineFromShopPackage(opts: {
       password,
       maxConnections: Math.max(1, pkg.maxLines),
       expiresAt,
+      isTrial,
       bouquets: {
         create: pkg.bouquetIds.map((bouquetId) => ({ bouquetId })),
       },

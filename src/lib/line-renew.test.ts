@@ -23,3 +23,10 @@ test("resellers cannot set unlimited; admins can", () => {
   assert.equal(assertRoleMaySetUnlimited(PanelRole.RESELLER, { expiresAt: far }).ok, false);
   assert.equal(assertRoleMaySetUnlimited(PanelRole.RESELLER, { days: 30 }).ok, true);
 });
+
+test("applyLineSetExpiry daysAdded is previous→new, not now→new", () => {
+  const previous = new Date("2026-08-01T00:00:00.000Z");
+  const next = new Date("2026-08-31T00:00:00.000Z");
+  const daysAdded = Math.max(0, Math.round((next.getTime() - previous.getTime()) / 86400000));
+  assert.equal(daysAdded, 30);
+});

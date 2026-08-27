@@ -343,15 +343,16 @@ export async function POST(req: NextRequest) {
         const owner = await tx.panelUser.findUnique({ where: { id: session.id } });
         if (!owner) throw new Error("Forbidden");
         if (owner.credits < totalCost) throw new Error("Insufficient credits");
-        await tx.panelUser.update({
+        const afterDebit = await tx.panelUser.update({
           where: { id: session.id },
           data: { credits: { decrement: totalCost } },
+          select: { credits: true },
         });
         await tx.creditTransaction.create({
           data: {
             userId: session.id,
             amount: -totalCost,
-            balanceAfter: owner.credits - totalCost,
+            balanceAfter: afterDebit.credits,
             note: `Line ${username}`,
           },
         });
@@ -361,7 +362,6 @@ export async function POST(req: NextRequest) {
             spent: totalCost,
             percent: rewardPercent,
             lineUsername: username,
-            currentBalance: owner.credits,
           });
         }
       }

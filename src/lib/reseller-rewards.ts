@@ -16,20 +16,20 @@ export async function applyResellerLineReward(
     spent: number;
     percent: number;
     lineUsername: string;
-    currentBalance: number;
   }
 ): Promise<number> {
   const rebate = Math.floor((opts.spent * Math.max(0, opts.percent)) / 100);
   if (rebate <= 0) return 0;
-  await tx.panelUser.update({
+  const updated = await tx.panelUser.update({
     where: { id: opts.userId },
     data: { credits: { increment: rebate } },
+    select: { credits: true },
   });
   await tx.creditTransaction.create({
     data: {
       userId: opts.userId,
       amount: rebate,
-      balanceAfter: opts.currentBalance - opts.spent + rebate,
+      balanceAfter: updated.credits,
       note: `Reward ${opts.percent}% on line ${opts.lineUsername}`,
     },
   });

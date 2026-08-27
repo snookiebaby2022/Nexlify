@@ -4,6 +4,7 @@ import { resolveLineCreateFromPackage } from "@/lib/package-line";
 import { generateLinePassword } from "@/lib/credential-generate";
 import type { SessionUser } from "@/lib/auth";
 import { LineStatus, PanelRole } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 export type DeviceKind = "mag" | "enigma";
 
@@ -11,16 +12,19 @@ function macHex(mac: string): string {
   return mac.replace(/[^a-fA-F0-9]/g, "").toLowerCase();
 }
 
-async function uniqueUsername(prefix: DeviceKind, mac: string): Promise<string> {
+async function uniqueUsername(
+  tx: Prisma.TransactionClient,
+  prefix: DeviceKind,
+  mac: string
+): Promise<string> {
   const hex = macHex(mac);
-  const base = `${prefix}${hex.slice(-10) || "device"}`.slice(0, 32);
-  let candidate = base;
-  let n = 0;
-  while (await prisma.line.findUnique({ where: { username: candidate } })) {
-    n += 1;
-    candidate = `${base}${n}`.slice(0, 32);
+  const stem = `${prefix}${hex.slice(-10) || "device"}`.slice(0, 24);
+  for (let n = 0; n < 50; n++) {
+    const candidate = (n === 0 ? stem : `${stem}${n}`).slice(0, 32);
+    const exists = await tx.line.findUnique({ where: { username: candidate } });
+    if (!exists) return candidate;
   }
-  return candidate;
+  return `${stem}${Date.now().toString(36)}`.slice(0, 32);
 }
 
 export async function createLineForDevice(opts: {
@@ -40,30 +44,32 @@ export async function createLineForDevice(opts: {
   );
 
   const { assertIptvTrialAllowed } = await import("@/lib/iptv-trial-lines");
-  const trialGuard = await assertIptvTrialAllowed({ days: resolved.days });
+  const trialGuard = await assertIptvTrialAllowed({ isTrial: resolved.isTrial });
   if (!trialGuard.ok) throw new Error(trialGuard.error);
 
   const paysCredits =
     opts.session.role === PanelRole.RESELLER || opts.session.role === PanelRole.SUB_RESELLER;
 
-  if (paysCredits && resolved.creditCost > 0) {
-    const { getResellerLineRewardPercent, applyResellerLineReward } = await import(
-      "@/lib/reseller-rewards"
-    );
-    const rewardPercent = await getResellerLineRewardPercent();
-    const owner = await prisma.panelUser.findUnique({ where: { id: opts.session.id } });
-    if (!owner) throw new Error("Forbidden");
-    if (owner.credits < resolved.creditCost) throw new Error("Insufficient credits");
-    await prisma.$transaction(async (tx) => {
-      await tx.panelUser.update({
+  const { getResellerLineRewardPercent, applyResellerLineReward } = await import(
+    "@/lib/reseller-rewards"
+  );
+  const rewardPercent = paysCredits && resolved.creditCost > 0 ? await getResellerLineRewardPercent() : 0;
+
+  const line = await prisma.$transaction(async (tx) => {
+    if (paysCredits && resolved.creditCost > 0) {
+      const owner = await tx.panelUser.findUnique({ where: { id: opts.session.id } });
+      if (!owner) throw new Error("Forbidden");
+      if (owner.credits < resolved.creditCost) throw new Error("Insufficient credits");
+      const afterDebit = await tx.panelUser.update({
         where: { id: opts.session.id },
         data: { credits: { decrement: resolved.creditCost } },
+        select: { credits: true },
       });
       await tx.creditTransaction.create({
         data: {
           userId: opts.session.id,
           amount: -resolved.creditCost,
-          balanceAfter: owner.credits - resolved.creditCost,
+          balanceAfter: afterDebit.credits,
           note: `${opts.deviceKind.toUpperCase()} ${opts.mac}`,
         },
       });
@@ -73,33 +79,33 @@ export async function createLineForDevice(opts: {
           spent: resolved.creditCost,
           percent: rewardPercent,
           lineUsername: opts.mac,
-          currentBalance: owner.credits,
         });
       }
-    });
-  }
+    }
 
-  const username = await uniqueUsername(opts.deviceKind, opts.mac);
-  const password = generateLinePassword();
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + resolved.days);
+    const username = await uniqueUsername(tx, opts.deviceKind, opts.mac);
+    const password = generateLinePassword();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + resolved.days);
 
-  const line = await prisma.line.create({
-    data: {
-      username,
-      password,
-      status: LineStatus.ACTIVE,
-      maxConnections: resolved.maxConnections,
-      expiresAt,
-      notes: `${opts.deviceKind === "mag" ? "MAG" : "Enigma2"} · ${opts.mac}`,
-      ownerId:
-        opts.session.role === PanelRole.ADMIN
-          ? opts.ownerId || undefined
-          : opts.session.id,
-      bouquets: {
-        create: resolved.bouquetIds.map((bouquetId) => ({ bouquetId })),
+    return tx.line.create({
+      data: {
+        username,
+        password,
+        status: LineStatus.ACTIVE,
+        maxConnections: resolved.maxConnections,
+        expiresAt,
+        isTrial: resolved.isTrial,
+        notes: `${opts.deviceKind === "mag" ? "MAG" : "Enigma2"} · ${opts.mac}`,
+        ownerId:
+          opts.session.role === PanelRole.ADMIN
+            ? opts.ownerId || undefined
+            : opts.session.id,
+        bouquets: {
+          create: resolved.bouquetIds.map((bouquetId) => ({ bouquetId })),
+        },
       },
-    },
+    });
   });
 
   await logActivity("create_line", {

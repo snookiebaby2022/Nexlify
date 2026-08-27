@@ -104,8 +104,8 @@ export async function applyLineSetExpiry(
   });
 
   const daysAdded = Math.max(
-    1,
-    Math.round((expiresAt.getTime() - Date.now()) / 86400000)
+    0,
+    Math.round((expiresAt.getTime() - existing.expiresAt.getTime()) / 86400000)
   );
 
   return {
