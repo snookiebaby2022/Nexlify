@@ -40,7 +40,7 @@ cd /opt/nexlify-panel
 git fetch origin main 2>/dev/null || true
 git reset --hard origin/main 2>/dev/null || true
 sed -i 's/\r$//' scripts/*.sh 2>/dev/null || true
-chmod +x scripts/apply-iptv-production-stack.sh scripts/verify-iptv-playback.sh
+chmod +x scripts/*.sh
 PHASE=$Phase $forceFlag VERIFY_USER=$VerifyUser VERIFY_PASS=$VerifyPass bash scripts/apply-iptv-production-stack.sh
 "@
 
