@@ -71,7 +71,10 @@ function inboxWhereForUser(user: SessionUser): Prisma.PanelNotificationWhereInpu
       notDismissed,
       {
         OR: [
-          { target: PanelNotificationTarget.ALL_RESELLERS },
+          {
+            target: PanelNotificationTarget.ALL_RESELLERS,
+            kind: { in: [PanelNotificationKind.UPDATE, PanelNotificationKind.MESSAGE] },
+          },
           { target: PanelNotificationTarget.SPECIFIC_USER, recipientId: user.id },
         ],
       },

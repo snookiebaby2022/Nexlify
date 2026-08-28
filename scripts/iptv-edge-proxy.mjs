@@ -557,6 +557,15 @@ function shouldSniffLiveTs(upRes) {
   return true;
 }
 
+function proxyToHttpProxyUrl(proxy) {
+  if (!proxy?.host) return "";
+  const auth =
+    proxy.username || proxy.password
+      ? `${encodeURIComponent(proxy.username || "")}:${encodeURIComponent(proxy.password || "")}@`
+      : "";
+  return `http://${auth}${proxy.host}:${proxy.port || 80}`;
+}
+
 function normalizeUpstreamUrl(url) {
   try {
     const u = new URL(String(url || "").trim());
@@ -731,7 +740,7 @@ function stopEdgeDiskPackager(streamId) {
 }
 
 /** XUI-style: ffmpeg writes HLS segments on disk at edge — XCIPTV/Smarters never hit Next.js for .m3u8. */
-function startEdgeDiskPackager(streamId, upstreamUrl, ua) {
+function startEdgeDiskPackager(streamId, upstreamUrl, ua, proxy) {
   if (!streamId || !upstreamUrl) return;
   stopEdgeDiskPackager(streamId);
   if (edgeDiskPackagers.size >= MAX_EDGE_DISK_PACK) {
@@ -747,6 +756,7 @@ function startEdgeDiskPackager(streamId, upstreamUrl, ua) {
   const segPattern = path.join(dir, "seg%d.ts");
   const indexPath = path.join(dir, "index.m3u8");
   const ffmpegPath = resolveFfmpegPath();
+  const httpProxy = proxyToHttpProxyUrl(proxy);
   const args = [
     "-hide_banner",
     "-loglevel",
@@ -756,9 +766,9 @@ function startEdgeDiskPackager(streamId, upstreamUrl, ua) {
     "-flags",
     "low_delay",
     "-probesize",
-    "32768",
+    "524288",
     "-analyzeduration",
-    "100000",
+    "1500000",
     "-user_agent",
     String(ua || UPSTREAM_UA),
     "-reconnect",
@@ -767,14 +777,23 @@ function startEdgeDiskPackager(streamId, upstreamUrl, ua) {
     "1",
     "-reconnect_delay_max",
     "5",
+    ...(httpProxy ? ["-http_proxy", httpProxy] : []),
     "-i",
     upstreamUrl,
     "-map",
     "0:v:0?",
     "-map",
     "0:a:0?",
-    "-c",
+    "-c:v",
     "copy",
+    "-c:a",
+    "aac",
+    "-ar",
+    "48000",
+    "-ac",
+    "2",
+    "-b:a",
+    "128k",
     "-f",
     "hls",
     "-hls_time",
@@ -1314,7 +1333,7 @@ function serveHlsSegment(streamId, segName, clientRes, pulseCtx) {
 }
 
 /** When disk HLS is cold, splice ~2MB MPEG-TS from upstream as seg0 (Smarters bootstrap). */
-function serveUpstreamTsSnippet(upstreamUrl, ua, clientRes, pulseCtx, maxBytes = 2_000_000) {
+function serveUpstreamTsSnippet(upstreamUrl, ua, clientRes, pulseCtx, proxy, maxBytes = 2_000_000) {
   return new Promise((resolve) => {
     let parsed;
     try {
@@ -1328,17 +1347,29 @@ function serveUpstreamTsSnippet(upstreamUrl, ua, clientRes, pulseCtx, maxBytes =
       return;
     }
     const lib = parsed.protocol === "https:" ? https : http;
-    const req = lib.request(
-      parsed,
-      {
-        method: "GET",
-        headers: {
-          "User-Agent": String(ua || UPSTREAM_UA),
-          Accept: "*/*",
-          Connection: "close",
-        },
-        timeout: 15_000,
+    const reqOpts = {
+      hostname: parsed.hostname,
+      port: Number(parsed.port || (parsed.protocol === "https:" ? 443 : 80)),
+      method: "GET",
+      path: `${parsed.pathname}${parsed.search}`,
+      headers: {
+        "User-Agent": String(ua || UPSTREAM_UA),
+        Accept: "*/*",
+        Connection: "close",
+        Host: parsed.host,
       },
+      timeout: 15_000,
+    };
+    if (parsed.protocol === "https:") reqOpts.rejectUnauthorized = false;
+    if (proxy) {
+      reqOpts.createConnection = (_opts, cb) => {
+        connectOriginSocket(parsed.toString(), proxy, 30_000)
+          .then((socket) => cb(null, socket))
+          .catch((err) => cb(err, undefined));
+      };
+    }
+    const req = lib.request(
+      reqOpts,
       (upRes) => {
         if (upRes.statusCode && upRes.statusCode >= 400) {
           upRes.resume();
@@ -1804,8 +1835,9 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
   }
   const streamId = auth.streamId;
   const packUrl = auth.upstream || "";
+  const outboundProxy = auth.outboundProxy || null;
   if (packUrl && !isHead) {
-    startEdgeDiskPackager(streamId, packUrl, clientReq.headers["user-agent"]);
+    startEdgeDiskPackager(streamId, packUrl, clientReq.headers["user-agent"], outboundProxy);
     touchHlsDaemon(streamId);
   }
   if (auth.hlsNative && !packUrl) {
@@ -1836,7 +1868,13 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
       await new Promise((r) => setTimeout(r, 80));
     }
     if (packUrl && /^seg0\.ts$/i.test(segName)) {
-      const ok = await serveUpstreamTsSnippet(packUrl, clientReq.headers["user-agent"], clientRes, pulseCtx);
+      const ok = await serveUpstreamTsSnippet(
+        packUrl,
+        clientReq.headers["user-agent"],
+        clientRes,
+        pulseCtx,
+        outboundProxy
+      );
       if (ok) return;
     }
     clientRes.writeHead(503, { "content-type": "text/plain", "retry-after": "1" });
