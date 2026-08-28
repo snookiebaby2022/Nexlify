@@ -1,23 +1,12 @@
-"use client";
+import { getSession } from "@/lib/auth";
+import { loadAdminDashboardStats } from "@/lib/dashboard-stats";
+import { AdminDashboardClient } from "./dashboard-client";
 
-import { PanelDashboard } from "@/components/panel-dashboard";
-import { OpsStatusGlance } from "@/components/ops-status-glance";
+export default async function AdminDashboardPage() {
+  const session = await getSession();
+  if (!session) return null;
 
-export default function AdminDashboardPage() {
-  return (
-    <div className="space-y-6">
-      <OpsStatusGlance />
-      <PanelDashboard
-        statsUrl="/api/admin/stats"
-        widgetsUrl="/api/admin/dashboard-widgets"
-        linesHref="/admin/lines"
-        streamsHref="/admin/streams"
-        connectionsHref="/admin/connections"
-        serversHref="/admin/servers"
-        addServerHref="/admin/servers/add"
-        showActivity
-      />
-    </div>
-  );
+  const initialStats = await loadAdminDashboardStats();
+
+  return <AdminDashboardClient initialStats={initialStats} />;
 }
-

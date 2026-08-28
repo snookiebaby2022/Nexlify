@@ -1,0 +1,404 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { DataTable } from "@/components/data-table";
+import { formatDateTime } from "@/lib/format";
+import { ServerTreePicker } from "@/components/server-tree-picker";
+
+type SourceKind = "local" | "m3u";
+
+type WatchFolderRow = {
+  id: string;
+  name: string;
+  path: string;
+  type: string;
+  importedCount: number;
+  lastScan: string | null;
+  isActive: boolean;
+  autoScanMins: number;
+};
+
+function folderSourceLabel(path: string): string {
+  return /^https?:\/\//i.test(path) ? "M3U URL" : "Local folder";
+}
+
+function scanIntervalLabel(mins: number): string {
+  if (!mins || mins <= 0) return "Manual only";
+  if (mins < 60) return `Every ${mins} min`;
+  if (mins % 60 === 0) return `Every ${mins / 60}h`;
+  return `Every ${mins} min`;
+}
+
+export function AdminWatchFoldersClient({
+  initialFolders = [],
+  initialVodHint = "",
+}: {
+  initialFolders?: WatchFolderRow[];
+  initialVodHint?: string;
+}) {
+  const [folders, setFolders] = useState<WatchFolderRow[]>(initialFolders);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [vodHint, setVodHint] = useState(initialVodHint);
+  const [form, setForm] = useState({
+    name: "",
+    sourceKind: "local" as SourceKind,
+    path: "",
+    m3uUrl: "",
+    type: "MIXED",
+    categoryId: "",
+    serverIds: [] as string[],
+    autoScanMins: 0,
+    isAdult: false,
+  });
+  const [scanning, setScanning] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  function load() {
+    fetch("/api/admin/watch-folders")
+      .then((r) => r.json())
+      .then((d) => {
+        setFolders(d.folders);
+        const v = d.vodStorage;
+        if (v?.localMountPath) {
+          setVodHint(`rclone/S3 mount: ${v.localMountPath}`);
+        } else if (v?.rcloneRemote) {
+          setVodHint(
+            `rclone remote ${v.rcloneRemote}${v.rclonePath || ""} — mount it locally then add that path here.`
+          );
+        }
+      });
+  }
+
+  useEffect(() => {
+    if (initialFolders.length) return;
+    load();
+  }, [initialFolders.length]);
+
+  useEffect(() => {
+    fetch("/api/admin/categories").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+  }, []);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    const path =
+      form.sourceKind === "m3u"
+        ? form.m3uUrl.trim()
+        : form.path.trim();
+    if (!path) {
+      setError(form.sourceKind === "m3u" ? "M3U URL is required." : "Local folder path is required.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/watch-folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name,
+          path,
+          type: form.type,
+          sourceKind: form.sourceKind,
+          categoryId: form.categoryId || null,
+          serverId: form.serverIds[0] || null,
+          autoScanMins: form.autoScanMins,
+          isAdult: form.isAdult,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Failed to add watch folder");
+        return;
+      }
+      setForm({
+        name: "",
+        sourceKind: "local",
+        path: "",
+        m3uUrl: "",
+        type: "MIXED",
+        categoryId: "",
+        serverIds: [],
+        autoScanMins: 0,
+        isAdult: false,
+      });
+      load();
+    } catch {
+      setError("Network error while adding watch folder");
+    }
+  }
+
+  async function scan(id: string) {
+    setScanning(id);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/watch-folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scan: true, id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Scan failed");
+      }
+    } catch {
+      setError("Network error during scan");
+    } finally {
+      setScanning(null);
+      load();
+    }
+  }
+
+  async function remove(id: string) {
+    if (!confirm("Remove this watch folder?")) return;
+    setError("");
+    try {
+      const res = await fetch(`/api/admin/watch-folders?id=${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Failed to remove watch folder");
+        return;
+      }
+      load();
+    } catch {
+      setError("Network error while removing watch folder");
+    }
+  }
+
+  return (
+    <div className="space-y-6 max-w-5xl">
+      <div>
+        <h1 className="text-2xl font-semibold" style={{ color: "#00c0ef" }}>
+          Watch folders
+        </h1>
+        <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
+          Auto-import movies, TV series, or live channels from a local directory or upstream M3U URL.
+          Live M3U watches pull new channels and refresh stream names on each scan (requires nexlify-cron).
+        </p>
+        <p className="text-sm mt-2">
+          <Link href="/admin/m3u-sync" className="underline" style={{ color: "var(--accent)" }}>
+            M3U auto-sync jobs
+          </Link>{" "}
+          — dedicated scheduled sync with custom intervals per provider URL.
+        </p>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border px-4 py-3 text-sm" style={{ borderColor: "var(--danger)", background: "rgba(239,68,68,0.1)", color: "var(--danger)" }}>
+          {error}
+        </div>
+      )}
+      {vodHint && (
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          {vodHint}{" "}
+          <Link href="/admin/settings/vod-storage" className="underline" style={{ color: "var(--accent)" }}>
+            Rclone / S3 settings
+          </Link>
+        </p>
+      )}
+
+      <form
+        onSubmit={add}
+        className="rounded-lg border p-5 space-y-4"
+        style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+      >
+        <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: "#00c0ef" }}>
+          Add watch source
+        </h2>
+        <div className="grid md:grid-cols-2 gap-4">
+          <label className="block space-y-1">
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              Label
+            </span>
+            <input
+              placeholder="My movies library"
+              className="w-full rounded border px-3 py-2 bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              Content type
+            </span>
+            <select
+              className="w-full rounded border px-3 py-2 bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={form.type}
+              onChange={(e) => setForm({ ...form, type: e.target.value })}
+            >
+              <option value="MIXED">Mixed (movies + series)</option>
+              <option value="MOVIE">Movies only</option>
+              <option value="SERIES">TV series only</option>
+              {form.sourceKind === "m3u" && (
+                <option value="LIVE">Live channels (auto-add + rename)</option>
+              )}
+              {form.sourceKind === "local" && <option value="M3U">Local M3U file in folder</option>}
+            </select>
+          </label>
+        </div>
+
+        <div className="flex flex-wrap gap-4 text-sm">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              checked={form.sourceKind === "local"}
+              onChange={() =>
+                setForm({
+                  ...form,
+                  sourceKind: "local",
+                  type: form.type === "LIVE" ? "MIXED" : form.type,
+                })
+              }
+            />
+            Local folder (on server)
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              checked={form.sourceKind === "m3u"}
+              onChange={() =>
+                setForm({
+                  ...form,
+                  sourceKind: "m3u",
+                  type: form.type === "M3U" ? "LIVE" : form.type,
+                })
+              }
+            />
+            Remote M3U URL (provider playlist)
+          </label>
+        </div>
+
+        {form.sourceKind === "local" ? (
+          <label className="block space-y-1">
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              Folder path (under MEDIA_IMPORT_ROOT)
+            </span>
+            <input
+              placeholder="/media/vod/movies"
+              className="w-full rounded border px-3 py-2 bg-transparent font-mono text-sm"
+              style={{ borderColor: "var(--border)" }}
+              value={form.path}
+              onChange={(e) => setForm({ ...form, path: e.target.value })}
+            />
+          </label>
+        ) : (
+          <label className="block space-y-1">
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              M3U playlist URL
+            </span>
+            <input
+              placeholder="https://provider.example/get.php?username=...&type=m3u_plus&output=ts"
+              className="w-full rounded border px-3 py-2 bg-transparent font-mono text-sm"
+              style={{ borderColor: "var(--border)" }}
+              value={form.m3uUrl}
+              onChange={(e) => setForm({ ...form, m3uUrl: e.target.value })}
+            />
+          </label>
+        )}
+
+        <div className="grid md:grid-cols-2 gap-4">
+          <label className="block space-y-1">
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              Default category
+            </span>
+            <select
+              className="w-full rounded border px-3 py-2 bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={form.categoryId}
+              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+            >
+              <option value="">Without category</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              Auto-scan interval (minutes, 0 = manual)
+            </span>
+            <input
+              type="number"
+              min={0}
+              className="w-full rounded border px-3 py-2 bg-transparent"
+              style={{ borderColor: "var(--border)" }}
+              value={form.autoScanMins}
+              onChange={(e) => setForm({ ...form, autoScanMins: parseInt(e.target.value, 10) || 0 })}
+            />
+          </label>
+        </div>
+
+        <ServerTreePicker
+          label="Target streaming server"
+          selectedIds={form.serverIds}
+          onChange={(serverIds) => setForm({ ...form, serverIds })}
+        />
+
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            checked={form.isAdult}
+            onChange={(e) => setForm({ ...form, isAdult: e.target.checked })}
+          />
+          Mark imported content as adult
+        </label>
+
+        <button
+          type="submit"
+          className="rounded py-2.5 px-5 font-medium cursor-pointer"
+          style={{ background: "var(--accent)", color: "#fff" }}
+        >
+          Add watch folder
+        </button>
+      </form>
+
+      <DataTable
+        headers={["Name", "Status", "Source", "Type", "Schedule", "Imported", "Last scan", "Actions"]}
+        rows={folders.map((f) => [
+          f.name,
+          <span
+            key={`st-${f.id}`}
+            className="text-xs px-2 py-0.5 rounded-full inline-block"
+            style={{
+              background: f.isActive ? "rgba(34,197,94,0.15)" : "rgba(148,163,184,0.15)",
+              color: f.isActive ? "#22c55e" : "var(--muted)",
+            }}
+          >
+            {f.isActive ? "Active" : "Paused"}
+          </span>,
+          <span key={`src-${f.id}`} className="text-xs truncate max-w-xs block" title={f.path}>
+            <span className="opacity-70">{folderSourceLabel(f.path)} · </span>
+            <span className="font-mono">{f.path}</span>
+          </span>,
+          f.type,
+          scanIntervalLabel(f.autoScanMins ?? 0),
+          f.importedCount.toLocaleString(),
+          f.lastScan ? formatDateTime(f.lastScan) : "Never",
+          <span key={`a-${f.id}`} className="flex gap-2">
+            <button
+              type="button"
+              className="text-xs px-2 py-1 rounded cursor-pointer"
+              style={{ background: "var(--accent)", color: "#fff" }}
+              disabled={scanning === f.id}
+              onClick={() => scan(f.id)}
+            >
+              {scanning === f.id ? "Scanning…" : "Scan now"}
+            </button>
+            <button
+              type="button"
+              className="text-xs cursor-pointer"
+              style={{ color: "var(--danger)" }}
+              onClick={() => remove(f.id)}
+            >
+              Remove
+            </button>
+          </span>,
+        ])}
+      />
+    </div>
+  );
+}

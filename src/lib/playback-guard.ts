@@ -8,6 +8,7 @@ import { checkPlaybackBlocklist } from "@/lib/playback-blocklist";
 import { lookupGeo, lineCountryAllowed } from "@/lib/geoip";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { checkDdosShield } from "@/lib/ddos-shield";
+import { checkLineDeviceLock, extractDeviceIdentity } from "@/lib/line-device-lock";
 
 export type PlaybackDenyReason =
   | "ip"
@@ -20,7 +21,8 @@ export type PlaybackDenyReason =
   | "ddos"
   | "reputation"
   | "isp"
-  | "kicked";
+  | "kicked"
+  | "device";
 
 export type PlaybackGuardLine = {
   id: string;
@@ -32,6 +34,8 @@ export type PlaybackGuardLine = {
   allowedUserAgents: string | null;
   disallowedUserAgents: string | null;
   blockedIsps: string | null;
+  lockMac?: string | null;
+  lockDeviceId?: string | null;
 };
 
 export function asPlaybackGuardLine(
@@ -42,6 +46,8 @@ export function asPlaybackGuardLine(
     allowedUserAgents?: string | null;
     disallowedUserAgents?: string | null;
     blockedIsps?: string | null;
+    lockMac?: string | null;
+    lockDeviceId?: string | null;
   }
 ): PlaybackGuardLine {
   return {
@@ -54,6 +60,8 @@ export function asPlaybackGuardLine(
     allowedUserAgents: line.allowedUserAgents ?? null,
     disallowedUserAgents: line.disallowedUserAgents ?? null,
     blockedIsps: line.blockedIsps ?? null,
+    lockMac: line.lockMac ?? null,
+    lockDeviceId: line.lockDeviceId ?? null,
   };
 }
 
@@ -64,6 +72,8 @@ export type PlaybackGuardOptions = {
   streamId?: string;
   /** HLS media segments: skip geo/VPN/reputation (those add seconds per segment). */
   hotPath?: boolean;
+  requestHeaders?: Headers | Record<string, string | null | undefined>;
+  searchParams?: URLSearchParams;
 };
 
 export async function assertPlaybackAllowed(
@@ -104,6 +114,15 @@ async function assertPlaybackAllowedInner(
   if (hotPath) {
     if (!checkLineIpAccess(line, clientIp)) return "ip";
     if (!checkLineUserAgent(line, userAgent)) return "user_agent";
+    if (
+      (line.lockMac || line.lockDeviceId) &&
+      !checkLineDeviceLock(
+        line,
+        extractDeviceIdentity(options?.requestHeaders ?? {}, options?.searchParams)
+      )
+    ) {
+      return "device";
+    }
     return null;
   }
 
@@ -136,6 +155,16 @@ async function assertPlaybackAllowedInner(
   }
   if (!checkLineIpAccess(line, clientIp)) return "ip";
   if (!checkLineUserAgent(line, userAgent)) return "user_agent";
+  if (
+    !options?.listingOnly &&
+    (line.lockMac || line.lockDeviceId) &&
+    !checkLineDeviceLock(
+      line,
+      extractDeviceIdentity(options?.requestHeaders ?? {}, options?.searchParams)
+    )
+  ) {
+    return "device";
+  }
 
   let geo: Awaited<ReturnType<typeof lookupGeo>> | null = null;
   if (clientIp) {
@@ -192,6 +221,8 @@ export function playbackDenyMessage(reason: PlaybackDenyReason): string {
       return "VPN or hosting not allowed";
     case "user_agent":
       return "User-Agent not allowed for this line";
+    case "device":
+      return "Line is locked to another device";
     case "isp":
       return "ISP not allowed for this line";
     case "ddos":

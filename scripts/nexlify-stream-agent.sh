@@ -21,6 +21,16 @@ write_nginx_snippet() {
   fi
 }
 
+write_nginx_vhost_from_cmd() {
+  local vhost
+  vhost="$(echo "$1" | jq -r '.payload.vhost // empty' 2>/dev/null || true)"
+  if [[ -z "$vhost" ]]; then return 0; fi
+  local out="${NGINX_VHOST_PATH:-/etc/nexlify-agent/stream-server.conf}"
+  mkdir -p "$(dirname "$out")"
+  printf '%s\n' "$vhost" > "$out"
+  write_nginx_snippet
+}
+
 stop_stream_pid() {
   local pid_file="$1"
   if [[ -n "$pid_file" && "$pid_file" == /var/run/nexlify/* && -f "$pid_file" ]]; then
@@ -111,6 +121,9 @@ poll_commands() {
     stream_id="$(echo "$cmd" | jq -r '.payload.streamId // empty')"
     if [[ "$action" == "apply_config" ]]; then
       write_nginx_snippet
+    elif [[ "$action" == "write_nginx_vhost" ]]; then
+      write_nginx_vhost_from_cmd "$cmd"
+      result="nginx vhost written"
     elif [[ "$action" == "clear_cache" ]]; then
       rm -rf /var/cache/nginx/* 2>/dev/null || true
       rm -rf "${CONFIG_DIR}/cache"/* 2>/dev/null || true

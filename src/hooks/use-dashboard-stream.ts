@@ -25,33 +25,56 @@ export function useDashboardStream(enabled = true) {
   const eventSourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || typeof document === "undefined") {
       setConnected(false);
       return;
     }
 
-    const es = new EventSource("/api/admin/dashboard-stream");
-    eventSourceRef.current = es;
+    let es: EventSource | null = null;
 
-    es.onopen = () => setConnected(true);
+    const connect = () => {
+      if (document.visibilityState === "hidden") return;
+      es?.close();
+      es = new EventSource("/api/admin/dashboard-stream");
+      eventSourceRef.current = es;
 
-    es.onmessage = (event) => {
-      try {
-        const parsed = JSON.parse(event.data) as DashboardStreamData;
-        setData(parsed);
-      } catch {
-        // ignore parse errors
+      es.onopen = () => setConnected(true);
+
+      es.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data) as DashboardStreamData;
+          setData(parsed);
+        } catch {
+          // ignore parse errors
+        }
+      };
+
+      es.onerror = () => {
+        setConnected(false);
+      };
+    };
+
+    const disconnect = () => {
+      es?.close();
+      es = null;
+      eventSourceRef.current = null;
+      setConnected(false);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        disconnect();
+      } else {
+        connect();
       }
     };
 
-    es.onerror = () => {
-      setConnected(false);
-      // EventSource auto-reconnects
-    };
+    connect();
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
-      es.close();
-      eventSourceRef.current = null;
+      document.removeEventListener("visibilitychange", onVisibility);
+      disconnect();
     };
   }, [enabled]);
 

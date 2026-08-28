@@ -512,6 +512,8 @@ model WatchFolder {
   /// Tag imported content as adult (1-stream parity).
   isAdult       Boolean         @default(false)
   autoScanMins  Int             @default(0)
+  /// Import movies via symlink/hardlink instead of copying bytes.
+  useSymlinks   Boolean         @default(false)
   lastScan      DateTime?
   importedCount Int             @default(0)
   createdAt     DateTime        @default(now())
@@ -653,6 +655,10 @@ model Line {
   disallowedUserAgents String?
   /// Comma-separated ISP names to block for this line (e.g. "Verizon,AT&T"). Empty = no restriction.
   blockedIsps     String?
+  /// XUI-style MAC lock (MAG/Stalker device id or colon MAC).
+  lockMac         String?
+  /// Lock line to a single device fingerprint / stalker device id.
+  lockDeviceId    String?
   /// When false, adult-tagged streams are blocked for this line.
   canWatchAdult    Boolean    @default(true)
   isRestreamer     Boolean    @default(false)
@@ -996,6 +1002,8 @@ model StreamProvider {
   lastCheckAt   DateTime?
   lastLatencyMs Int?
   isActive      Boolean   @default(true)
+  /// Map upstream Xtream category_id → local bouquet id (JSON object).
+  bouquetCategoryMap Json?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

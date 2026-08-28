@@ -109,6 +109,21 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       });
       return NextResponse.json({ ok: true, revision });
     }
+    case "apply_full_nginx": {
+      if (!server.agentToken) {
+        return NextResponse.json({ error: "Generate agent token first" }, { status: 400 });
+      }
+      const { buildStreamServerNginxConfig } = await import("@/lib/nginx-stream-server-config");
+      const vhost = await buildStreamServerNginxConfig();
+      await enqueueAgentCommand(id, "write_nginx_vhost", { vhost });
+      await bumpConfigRevision(id);
+      await logActivity("agent_apply_full_nginx", {
+        userId: session.id,
+        entity: "server",
+        entityId: id,
+      });
+      return NextResponse.json({ ok: true, note: "Full nginx vhost queued for agent" });
+    }
     case "restart_stream": {
       const streamId = String(body.streamId ?? "");
       if (!streamId) return NextResponse.json({ error: "streamId required" }, { status: 400 });

@@ -449,6 +449,20 @@ export async function jobEpgAutoMap() {
   }
 }
 
+/** XUI-style: rename LIVE streams from current EPG programme when enabled per stream. */
+async function jobStreamEpgNameSync() {
+  const start = Date.now();
+  try {
+    const { syncStreamNamesFromEpg } = await import("./stream-epg-name-sync");
+    const updated = await syncStreamNamesFromEpg(50);
+    if (updated) {
+      await logCron("stream_epg_name_sync", "ok", `updated ${updated}`, Date.now() - start);
+    }
+  } catch (e) {
+    await logCron("stream_epg_name_sync", "error", String(e), Date.now() - start);
+  }
+}
+
 /** Fill missing live/VOD icons from IPTV provider catalogs, then TMDB. */
 export async function jobVodEnrich() {
   const start = Date.now();
@@ -601,7 +615,7 @@ export async function jobDeadLinkProbe() {
     await logCron(
       "dead_link_probe",
       "ok",
-      `probed ${result.probed}, failed ${result.failed}, restarted ${result.restarted}`,
+      `probed ${result.probed}, failed ${result.failed}, restarted ${result.restarted}, logged ${result.logged}`,
       Date.now() - start
     );
   } catch (e) {
@@ -674,7 +688,7 @@ async function jobPanelHealthWatchdog() {
 async function jobM3uSync() {
   const start = Date.now();
   try {
-    const result = await runDueM3uSyncJobs(5);
+    const result = await runDueM3uSyncJobs(12);
     const msg =
       result.errors.length > 0
         ? `processed ${result.processed}, +${result.imported} new, ${result.errors.length} err`
@@ -802,17 +816,96 @@ async function jobWarmXtreamCatalogs() {
     if (!lines.length) return;
     const { lineBouquetCacheToken } = await import("./lines");
     const { warmXtreamCatalogsNow } = await import("./xtream-catalog-blob");
+    const { excludeDisabledFromExport } = await import("./export-policy");
+    const excludeDisabled = await excludeDisabledFromExport();
     const seen = new Set<string>();
     for (const line of lines) {
-      const token = lineBouquetCacheToken(line, true);
+      const token = lineBouquetCacheToken(line, excludeDisabled);
       if (!token || seen.has(token)) continue;
       seen.add(token);
       await warmXtreamCatalogsNow(line);
-      if (seen.size >= 6) break;
+      if (seen.size >= 16) break;
     }
     await logCron("xtream_catalog_warm", "ok", `tokens ${seen.size}`, Date.now() - start);
   } catch (e) {
     await logCron("xtream_catalog_warm", "error", String(e), Date.now() - start);
+  }
+}
+
+export async function jobServerHostMetrics() {
+  const start = Date.now();
+  try {
+    const { syncAllServerHostMetrics } = await import("./server-host-metrics-sync");
+    const result = await syncAllServerHostMetrics();
+    await logCron(
+      "server_host_metrics",
+      "ok",
+      `${result.synced}/${result.total} servers`,
+      Date.now() - start
+    );
+  } catch (e) {
+    await logCron("server_host_metrics", "error", String(e), Date.now() - start);
+  }
+}
+
+async function jobProviderHealthCheck() {
+  const start = Date.now();
+  try {
+    const providers = await prisma.streamProvider.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        baseUrl: true,
+        apiKey: true,
+        remoteUsername: true,
+        remotePassword: true,
+        lastCheckAt: true,
+      },
+      take: 20,
+      orderBy: [{ lastCheckAt: "asc" }, { name: "asc" }],
+    });
+    if (!providers.length) {
+      await logCron("provider_health", "ok", "no providers", Date.now() - start);
+      return;
+    }
+    const { probeStreamProvider } = await import("./stream-provider-probe");
+    let updated = 0;
+    for (const p of providers) {
+      const probe = await probeStreamProvider(p.baseUrl, {
+        apiKey: p.apiKey,
+        remoteUsername: p.remoteUsername,
+        remotePassword: p.remotePassword,
+      });
+      await prisma.streamProvider.update({
+        where: { id: p.id },
+        data: {
+          status: probe.status,
+          statusMessage: probe.message,
+          lastCheckAt: new Date(),
+          lastLatencyMs: probe.latencyMs ?? null,
+        },
+      });
+      updated++;
+    }
+    await logCron("provider_health", "ok", `checked ${updated}`, Date.now() - start);
+  } catch (e) {
+    await logCron("provider_health", "error", String(e), Date.now() - start);
+  }
+}
+
+async function jobProviderXtreamSync() {
+  const start = Date.now();
+  try {
+    const { runDueProviderXtreamSync } = await import("./provider-xtream-sync");
+    const result = await runDueProviderXtreamSync(2);
+    await logCron(
+      "provider_xtream_sync",
+      result.errors.length ? "warn" : "ok",
+      `providers ${result.processed}, +${result.imported} ~${result.updated}${result.errors.length ? `, err ${result.errors.length}` : ""}`,
+      Date.now() - start
+    );
+  } catch (e) {
+    await logCron("provider_xtream_sync", "error", String(e), Date.now() - start);
   }
 }
 
@@ -821,9 +914,12 @@ export async function runAllCronJobs() {
   await jobCleanupConnections();
   await jobStopIdleStreams();
   await jobBandwidthSnapshot();
+  await jobServerHostMetrics();
   await jobWatchFolders();
   await jobImportQueue();
   await jobM3uSync();
+  await jobProviderXtreamSync();
+  await jobProviderHealthCheck();
   await jobAgentAutoRestart();
   await jobServerRebalance();
   await jobTheftDetection();
@@ -836,6 +932,7 @@ export async function runAllCronJobs() {
   await jobBackfillXtreamNum();
   await jobPlexVodMetaBackfill();
   await jobWarmXtreamCatalogs();
+  await jobStreamEpgNameSync();
 }
 
 export async function jobAgentTokenRotation() {
@@ -941,6 +1038,7 @@ async function jobCloudBackup() {
 export async function runHourlyCronJobs() {
   await jobEpgSync();
   await jobEpgAutoMap();
+  await jobStreamEpgNameSync();
   await jobVodEnrich();
   await jobPanelBackup();
   await jobAgentTokenRotation();

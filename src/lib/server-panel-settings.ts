@@ -16,6 +16,10 @@ export type ServerPerformanceSettings = {
   enableTimeshiftBuffer: boolean;
   sortOrder: number;
   sysctlConf: string;
+  /** Global transcoding profile override for streams on this server. */
+  transcodeProfileId?: string;
+  /** Enable local ffmpeg restream on this node (XUI-style). */
+  edgeFfmpegEnabled?: boolean;
 };
 
 export type ServerAdvancedSettings = {

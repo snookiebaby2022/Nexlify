@@ -13,24 +13,6 @@ import { cacheGet, cacheSet } from "@/lib/cache";
 import { applyPlaybackFingerprint } from "@/lib/playback-fingerprint";
 import { lineCanWatchStream } from "@/lib/line-restrictions";
 
-async function filterPlayablePlaybackUrls(
-  urls: string[],
-  ctx?: PlaybackContext
-): Promise<string[]> {
-  if (urls.length <= 1) return urls;
-  const { probeUpstreamPlayable } = await import("@/lib/live-upstream-proxy");
-  const ua = ctx?.userAgent;
-  const slice = urls.slice(0, 4);
-  const results = await Promise.all(
-    slice.map(async (u) => {
-      const kind = await probeUpstreamPlayable(u, { userAgent: ua, timeoutMs: 1800 });
-      return kind !== "none" ? u : null;
-    })
-  );
-  const good = results.filter((u): u is string => Boolean(u));
-  return good.length ? [...good, ...urls.filter((x) => !good.includes(x))] : urls;
-}
-
 async function preferGeoMatchedStream<T extends { id: string; serverId: string | null; name: string; type: string; epgChannelId: string | null }>(
   stream: T & { provider: unknown; server: unknown; category: { name: string } | null },
   lineId: string,
@@ -109,11 +91,20 @@ export type PlaybackContext = {
 };
 
 export async function getLineForPlaybackAuth(username: string): Promise<LinePlaybackAuth | null> {
-  const key = username.trim().toLowerCase();
-  if (!key) return null;
+  const raw = username.trim();
+  if (!raw) return null;
+  const key = raw.toLowerCase();
   const { cacheGetOrSet } = await import("@/lib/cache");
   return cacheGetOrSet(`line:auth:${key}`, 45, async () => {
-    const row = await prisma.line.findUnique({ where: { username: key } });
+    let row = await prisma.line.findUnique({ where: { username: raw } });
+    if (!row && raw !== key) {
+      row = await prisma.line.findUnique({ where: { username: key } });
+    }
+    if (!row) {
+      row = await prisma.line.findFirst({
+        where: { username: { equals: raw, mode: "insensitive" } },
+      });
+    }
     if (!row) return null;
     return {
       id: row.id,
@@ -276,7 +267,8 @@ export async function resolvePlaybackUrlCandidatesForLine(
     const backup = effectiveStream.backupUrl?.trim();
     if (backup && backup !== resolved) urls.push(backup);
   } else {
-    urls = listStreamPlaybackUrls(
+    const { listStreamPlaybackUrlsWithChain } = await import("@/lib/stream-failover-chain");
+    urls = await listStreamPlaybackUrlsWithChain(
       effectiveStream as StreamWithProvider,
       `${lineId}:${effectiveStream.id}`
     );
@@ -304,8 +296,9 @@ export async function resolvePlaybackUrlCandidatesForLine(
       })
     );
   }
-  const playable = await filterPlayablePlaybackUrls(signed, ctx);
-  const expanded = expandHlsPlaybackCandidates(playable);
+  // XUI/1-stream: pick primary + backup URLs without blocking auth on upstream probes.
+  // Edge proxy failovers handle dead sources; probing here stalled live-auth for seconds.
+  const expanded = expandHlsPlaybackCandidates(signed);
   await cacheSet(cacheKey, expanded, ttl);
   // Keep single-URL cache in sync for zap prefetch / redirects
   if (expanded[0]) await cacheSet(`playback:url:${lineId}:${streamId}`, expanded[0], ttl);

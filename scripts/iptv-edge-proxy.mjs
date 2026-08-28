@@ -21,6 +21,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import {
+  edgeRedisEnabled,
+  edgeRedisGetAuth,
+  edgeRedisSetAuth,
+  edgeRedisGetSeg,
+  edgeRedisSetSeg,
+} from "./edge-redis-auth.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -140,9 +147,11 @@ const HLS_LIVE_MAX_AGE_MS = Number(process.env.NEXLIFY_HLS_LIVE_MAX_AGE_MS || 12
 const HLS_DAEMON_PORT = Number(process.env.NEXLIFY_HLS_DAEMON_PORT || 13081);
 const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
 const LIVE_TS_PEEK_BYTES = 188;
-const LIVE_TS_OPEN_MS = Number(process.env.IPTV_EDGE_TS_OPEN_MS || 2000);
-/** Cache live-auth at edge so channel zaps skip panel round-trip (45s default). */
-const AUTH_CACHE_TTL_MS = Number(process.env.IPTV_EDGE_AUTH_CACHE_MS || 120_000);
+const LIVE_TS_OPEN_MS = Number(process.env.IPTV_EDGE_TS_OPEN_MS || 1200);
+const IPTV_EDGE_AGENT_TOKEN = (process.env.IPTV_EDGE_AGENT_TOKEN || "").trim();
+const IPTV_EDGE_SERVER_ID = (process.env.IPTV_EDGE_SERVER_ID || "").trim();
+/** Cache live-auth at edge so channel zaps skip panel round-trip (XUI-style local auth). */
+const AUTH_CACHE_TTL_MS = Number(process.env.IPTV_EDGE_AUTH_CACHE_MS || 180_000);
 const CATALOG_CACHE_MS = Number(process.env.IPTV_EDGE_CATALOG_CACHE_MS || 300_000);
 const CATALOG_STALE_MS = Number(process.env.IPTV_EDGE_CATALOG_STALE_MS || 600_000);
 const EDGE_DISK_HLS_WAIT_MS = Number(process.env.IPTV_EDGE_DISK_HLS_WAIT_MS || 6000);
@@ -156,7 +165,8 @@ const edgeHlsRemuxProcs = new Map();
 const edgeDiskPackagers = new Map();
 /** streamId -> shared MPEG-TS restream */
 const liveFans = new Map();
-const authCache = new Map();
+const EDGE_HLS_SEG_CACHE_MB = Number(process.env.IPTV_EDGE_HLS_SEG_CACHE_MB || 256);
+const hlsSegMemCache = new Map();
 const catalogCache = new Map();
 const catalogInflight = new Map();
 const PLAYBACK_RE = /^\/(live|movie|series)\//;
@@ -390,7 +400,7 @@ function endPlaybackSession(ctx) {
 const playbackSessions = new Map();
 const SESSION_KEEPALIVE_MS = 8_000;
 /** HLS playlist polls stop when the app exits — close the panel row quickly. */
-const SESSION_IDLE_MS = Number(process.env.IPTV_EDGE_SESSION_IDLE_MS || 3_000);
+const SESSION_IDLE_MS = Number(process.env.IPTV_EDGE_SESSION_IDLE_MS || 120_000);
 
 function playbackSessionKey(ctx) {
   return `${ctx.lineId}|${ctx.ip ?? ""}|${ctx.streamId}`;
@@ -436,7 +446,9 @@ function touchPlaybackSession(ctx, opts = {}) {
           }
         }
         endPlaybackSession(session.ctx);
+        return;
       }
+      sendConnectionPulse(session.ctx, 48_000);
     }, tickMs);
     playbackSessions.set(key, session);
     pulseConnection(ctx, 72_000);
@@ -971,9 +983,10 @@ function pruneCatalogCache(now) {
 
 function catalogActionCacheable(url) {
   const q = String(url || "").split("?")[1] || "";
-  if (!q) return true;
+  if (!q) return false;
   const m = /(?:^|&)action=([^&]+)/i.exec(q);
-  if (!m) return true;
+  // Xtream login (username/password, no action) must not wait on catalog cache/build.
+  if (!m) return false;
   const action = decodeURIComponent(m[1]).toLowerCase();
   return /^(get_live_categories|get_vod_categories|get_series_categories|get_live_streams|get_vod_streams|get_series|get_series_info|get_simple_data_table|get_epg_channels)$/.test(
     action
@@ -1025,7 +1038,7 @@ function fetchCatalogFromPanel(url, clientReq, ctx, onDone) {
         method: "GET",
         agent: apiAgent,
         headers,
-        timeout: 120_000,
+        timeout: 45_000,
       },
       (proxyRes) => {
         const chunks = [];
@@ -1319,16 +1332,22 @@ function authCacheKey(clientReq) {
 
 function authLive(clientReq) {
   return new Promise((resolve, reject) => {
+    const useAgentAuth = Boolean(IPTV_EDGE_AGENT_TOKEN && IPTV_EDGE_SERVER_ID);
     const headers = {
       "x-original-uri": clientReq.url || "/",
       "x-original-method": clientReq.method || "GET",
       "x-original-range": String(clientReq.headers.range || ""),
-      "x-panel-internal-secret": INTERNAL_SECRET,
       "x-forwarded-for": clientIp(clientReq),
       "x-real-ip": clientIp(clientReq),
       "user-agent": clientReq.headers["user-agent"] || "",
       connection: "close",
     };
+    if (useAgentAuth) {
+      headers.authorization = `Bearer ${IPTV_EDGE_AGENT_TOKEN}`;
+      headers["x-nexlify-agent-server-id"] = IPTV_EDGE_SERVER_ID;
+    } else {
+      headers["x-panel-internal-secret"] = INTERNAL_SECRET;
+    }
     let attempt = 0;
     const retryStarted = Date.now();
 
@@ -1342,7 +1361,7 @@ function authLive(clientReq) {
           method: "GET",
           agent: liveAgent,
           headers,
-          timeout: 15_000,
+          timeout: 8_000,
         },
         (res) => {
           res.resume();
@@ -1394,11 +1413,26 @@ async function authLiveCached(clientReq) {
   const key = authCacheKey(clientReq);
   const now = Date.now();
   const hit = authCache.get(key);
-  if (hit && hit.expires > now) return hit.data;
+  if (hit && hit.expires > now) {
+    if (hit.data?.upstream) touchHlsDaemon(hit.data.streamId);
+    return hit.data;
+  }
+  if (edgeRedisEnabled()) {
+    const redisHit = await edgeRedisGetAuth(key);
+    if (redisHit) {
+      authCache.set(key, { expires: now + AUTH_CACHE_TTL_MS, data: redisHit });
+      if (redisHit.streamId) touchHlsDaemon(redisHit.streamId);
+      return redisHit;
+    }
+  }
   const data = await authLive(clientReq);
   if (data.status === 200 && data.upstream) {
     authCache.set(key, { expires: now + AUTH_CACHE_TTL_MS, data });
+    if (edgeRedisEnabled()) {
+      void edgeRedisSetAuth(key, data, AUTH_CACHE_TTL_MS);
+    }
     pruneAuthCache(now);
+    if (data.streamId) touchHlsDaemon(data.streamId);
   }
   return data;
 }
@@ -1451,13 +1485,48 @@ function hlsSegPath(streamId, segName) {
   return path.join(hlsStreamDir(streamId), segName);
 }
 
-function serveHlsSegment(streamId, segName, clientRes, pulseCtx) {
+function pruneHlsSegMemCache() {
+  const maxBytes = EDGE_HLS_SEG_CACHE_MB * 1024 * 1024;
+  let total = 0;
+  for (const v of hlsSegMemCache.values()) total += v.buf.length;
+  while (total > maxBytes && hlsSegMemCache.size) {
+    const oldest = hlsSegMemCache.keys().next().value;
+    if (!oldest) break;
+    const entry = hlsSegMemCache.get(oldest);
+    if (entry) total -= entry.buf.length;
+    hlsSegMemCache.delete(oldest);
+  }
+}
+
+async function serveHlsSegment(streamId, segName, clientRes, pulseCtx) {
+  const cacheKey = `${streamId}:${segName}`;
+  const mem = hlsSegMemCache.get(cacheKey);
+  if (mem?.buf?.length) {
+    if (pulseCtx) pulseConnection(pulseCtx, mem.buf.length);
+    clientRes.writeHead(200, hlsSegHeaders(mem.buf.length));
+    clientRes.end(mem.buf);
+    return true;
+  }
+  if (edgeRedisEnabled()) {
+    const redisBuf = await edgeRedisGetSeg(streamId, segName);
+    if (redisBuf?.length) {
+      hlsSegMemCache.set(cacheKey, { buf: redisBuf, at: Date.now() });
+      pruneHlsSegMemCache();
+      if (pulseCtx) pulseConnection(pulseCtx, redisBuf.length);
+      clientRes.writeHead(200, hlsSegHeaders(redisBuf.length));
+      clientRes.end(redisBuf);
+      return true;
+    }
+  }
   const segPath = hlsSegPath(streamId, segName);
   if (!segPath) return false;
   try {
     if (!fs.existsSync(segPath)) return false;
     const buf = fs.readFileSync(segPath);
     if (!buf.length) return false;
+    hlsSegMemCache.set(cacheKey, { buf, at: Date.now() });
+    pruneHlsSegMemCache();
+    if (edgeRedisEnabled()) void edgeRedisSetSeg(streamId, segName, buf);
     if (pulseCtx) pulseConnection(pulseCtx, buf.length);
     clientRes.writeHead(200, hlsSegHeaders(buf.length));
     clientRes.end(buf);
@@ -2150,7 +2219,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
         } catch {
           /* keep polling */
         }
-      } else if (serveHlsSegment(streamId, segName, clientRes, pulseCtx)) {
+      } else if (await serveHlsSegment(streamId, segName, clientRes, pulseCtx)) {
         return;
       }
       await new Promise((r) => setTimeout(r, 80));
@@ -2202,10 +2271,14 @@ async function onRequest(clientReq, clientRes, ctx) {
     return;
   }
 
-  // Fast lane: panel login, admin UI, APIs, Xtream catalog — skip playback auth/HLS.
+  // Fast lane: login + admin skip catalog cache; catalog actions use edge gzip cache.
   if (isPanelPriorityPath(pathOnly)) {
-    if (isCatalogPath(pathOnly)) forwardCatalogCached(clientReq, clientRes, ctx);
-    else forward(clientReq, clientRes, ctx);
+    const url = clientReq.url || "/";
+    if (isCatalogPath(pathOnly) && catalogActionCacheable(url)) {
+      forwardCatalogCached(clientReq, clientRes, ctx);
+    } else {
+      forward(clientReq, clientRes, ctx);
+    }
     return;
   }
 

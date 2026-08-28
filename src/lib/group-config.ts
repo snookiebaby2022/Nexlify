@@ -24,6 +24,12 @@ export type GroupWhiteLabelConfig = {
   logoUrl: string;
   accentColor: string;
   supportEmail: string;
+  /** Reseller sub-panel theme (XUI-style skin). */
+  themeMode?: "dark" | "light" | "auto";
+  backgroundColor?: string;
+  sidebarColor?: string;
+  customCss?: string;
+  faviconUrl?: string;
 };
 
 export type GroupRole = "admin" | "reseller" | "sub_reseller";
@@ -66,6 +72,11 @@ export const DEFAULT_GROUP_WHITE_LABEL: GroupWhiteLabelConfig = {
   logoUrl: "",
   accentColor: "#22d3ee",
   supportEmail: "",
+  themeMode: "dark",
+  backgroundColor: "",
+  sidebarColor: "",
+  customCss: "",
+  faviconUrl: "",
 };
 
 export const DEFAULT_GROUP_DASHBOARD: GroupDashboardConfig = {

@@ -3,16 +3,9 @@ import { requireSession } from "@/lib/auth";
 import {
   clearActiveConnections,
   deleteActiveConnection,
-  listLiveConnections,
-  pruneStaleConnections,
   PLAYBACK_STALE_MS,
 } from "@/lib/connections";
-import { computeConnectionQualityWithLive, batchGetLiveQualitySamples } from "@/lib/connection-quality-live";
-import {
-  batchGetConnectionPlaybackOutputs,
-  resolvePlaybackOutputLabel,
-} from "@/lib/connection-playback-output";
-import { streamServerDisplayName } from "@/lib/stream-server-display";
+import { listAdminConnections } from "@/lib/admin-connections-list";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -23,50 +16,8 @@ export async function GET() {
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  void pruneStaleConnections(PLAYBACK_STALE_MS);
-  const connections = await listLiveConnections(ownerScope(session));
-  const now = Date.now();
-  const qualityItems = connections.map((c) => ({
-    lineId: c.lineId,
-    streamId: c.streamId ?? "",
-    ip: c.ip,
-  }));
-  const outputItems = connections.map((c) => ({
-    lineId: c.lineId,
-    streamId: c.streamId ?? "",
-    ip: c.ip,
-  }));
-  const [liveSamples, cachedOutputs] = await Promise.all([
-    batchGetLiveQualitySamples(qualityItems, now),
-    batchGetConnectionPlaybackOutputs(outputItems),
-  ]);
-  const mapped = connections.map((c, i) => {
-    const live = c.streamId ? liveSamples[i] : null;
-    const quality = computeConnectionQualityWithLive({
-      startedAt: c.startedAt,
-      lastSeenAt: c.lastSeenAt,
-      now,
-      live,
-    });
-    const cachedOutput = c.streamId ? cachedOutputs[i] : null;
-    const output = resolvePlaybackOutputLabel({
-      cached: cachedOutput,
-      userAgent: c.userAgent,
-    });
-    const srv = c.stream?.server;
-    const serverName = srv
-      ? streamServerDisplayName(srv.name, srv.domain || srv.host || "")
-      : "Main Server";
-    return {
-      ...c,
-      startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
-      lastSeenAt: c.lastSeenAt instanceof Date ? c.lastSeenAt.toISOString() : String(c.lastSeenAt),
-      serverName,
-      quality,
-      output,
-    };
-  });
-  return NextResponse.json({ connections: mapped });
+  const connections = await listAdminConnections(session);
+  return NextResponse.json({ connections });
 }
 
 export async function DELETE(req: NextRequest) {

@@ -160,21 +160,31 @@ export function StreamsList({
   title,
   addHref,
   importHref,
+  initialBootstrap,
 }: {
   type?: "LIVE" | "MOVIE" | "SERIES";
   title: string;
   addHref: string;
   importHref?: string;
+  initialBootstrap?: {
+    streams: Stream[];
+    total: number;
+    page: number;
+    pageSize: number;
+    categories: CategoryOptionInput[];
+    servers: { id: string; name: string }[];
+    typeTotals: { LIVE?: number; MOVIE?: number; SERIES?: number };
+  };
 }) {
   const searchParams = useSearchParams();
   const { hideAllUrls } = useResellerGroupFlags();
   const statusFromUrl = searchParams.get("status");
-  const [streams, setStreams] = useState<Stream[]>([]);
-  const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
-  const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(DEFAULT_LIST_PAGE_SIZE);
+  const [streams, setStreams] = useState<Stream[]>(initialBootstrap?.streams ?? []);
+  const [servers, setServers] = useState<{ id: string; name: string }[]>(initialBootstrap?.servers ?? []);
+  const [categories, setCategories] = useState<CategoryOptionInput[]>(initialBootstrap?.categories ?? []);
+  const [total, setTotal] = useState(initialBootstrap?.total ?? 0);
+  const [page, setPage] = useState(initialBootstrap?.page ?? 1);
+  const [pageSize, setPageSize] = useState<number>(initialBootstrap?.pageSize ?? DEFAULT_LIST_PAGE_SIZE);
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [serverId, setServerId] = useState("");
@@ -234,7 +244,10 @@ export function StreamsList({
   }, [statusFromUrl]);
 
   const [verifyReady, setVerifyReady] = useState(false);
-  const [typeTotals, setTypeTotals] = useState<{ LIVE?: number; MOVIE?: number; SERIES?: number }>({});
+  const [typeTotals, setTypeTotals] = useState<{ LIVE?: number; MOVIE?: number; SERIES?: number }>(
+    initialBootstrap?.typeTotals ?? {}
+  );
+  const skipInitialLoadRef = useRef(Boolean(initialBootstrap));
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -271,6 +284,7 @@ export function StreamsList({
   }, []);
 
   useEffect(() => {
+    if (initialBootstrap?.typeTotals) return;
     fetch("/api/admin/streams?totals=1")
       .then((r) => r.json())
       .then((d) =>
@@ -323,17 +337,23 @@ export function StreamsList({
   }, [type, categoryId, serverId, search, page, pageSize, statusFilter, modeFilter]);
 
   useEffect(() => {
+    if (initialBootstrap?.categories?.length) return;
     fetch(`/api/admin/categories?lite=1${type ? `&type=${type}` : ""}`)
       .then((r) => r.json())
       .then((d) => setCategories(d.categories ?? []));
+    if (initialBootstrap?.servers?.length) return;
     fetch("/api/admin/servers?lite=1")
       .then((r) => r.json())
       .then((d) => setServers(d.servers ?? []));
-  }, [type]);
+  }, [type, initialBootstrap?.categories?.length, initialBootstrap?.servers?.length]);
 
   useEffect(() => {
+    if (skipInitialLoadRef.current) {
+      skipInitialLoadRef.current = false;
+      if (type === "MOVIE" || type === "SERIES") return;
+      return startVisibleInterval(load, ADMIN_POLLS.streamsMs);
+    }
     load();
-    // Live streams refresh often; VOD lists only on filter/page change.
     if (type === "MOVIE" || type === "SERIES") {
       return;
     }

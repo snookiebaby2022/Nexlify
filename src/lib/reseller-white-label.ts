@@ -6,6 +6,11 @@ export type ResellerWhiteLabel = {
   accentColor: string;
   supportEmail: string;
   brandTitle: string;
+  themeMode?: string;
+  backgroundColor?: string;
+  sidebarColor?: string;
+  customCss?: string;
+  faviconUrl?: string;
 };
 
 export async function getWhiteLabelForUserId(userId: string): Promise<ResellerWhiteLabel | null> {
@@ -34,6 +39,11 @@ function whiteLabelFromGroup(groupName: string, config: unknown): ResellerWhiteL
     logoUrl: wl.logoUrl,
     accentColor: wl.accentColor || "#22d3ee",
     supportEmail: wl.supportEmail,
+    themeMode: wl.themeMode,
+    backgroundColor: wl.backgroundColor,
+    sidebarColor: wl.sidebarColor,
+    customCss: wl.customCss,
+    faviconUrl: wl.faviconUrl,
     brandTitle: wl.logoUrl ? groupName : process.env.NEXT_PUBLIC_PANEL_NAME ?? "Nexlify",
   };
 }

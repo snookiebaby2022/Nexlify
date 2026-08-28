@@ -1,19 +1,11 @@
-"use client";
+import { requireResellerSession, loadResellerDashboardStats } from "@/lib/reseller-dashboard-stats";
+import { ResellerDashboardClient } from "./dashboard-client";
 
-import { PanelDashboard } from "@/components/panel-dashboard";
+export default async function ResellerDashboardPage() {
+  const session = await requireResellerSession();
+  if (!session) return null;
 
-export default function ResellerDashboardPage() {
-  return (
-    <PanelDashboard
-      variant="reseller"
-      statsUrl="/api/reseller/stats"
-      widgetsUrl="/api/reseller/dashboard-widgets"
-      linesHref="/reseller/lines"
-      streamsHref="/reseller/streams"
-      connectionsHref="/reseller/live_connections"
-      serversHref="/reseller/dashboard"
-      addServerHref=""
-      showActivity={true}
-    />
-  );
+  const initialStats = await loadResellerDashboardStats(session);
+
+  return <ResellerDashboardClient initialStats={initialStats} />;
 }

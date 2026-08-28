@@ -92,7 +92,7 @@ export async function buildAgentConfigForServer(
   let transcodeProfile: import("@/lib/gpu-transcode").GpuTranscodeProfile | null = null;
   let transcodeLadder: import("@/lib/gpu-transcode").GpuTranscodeProfile[] = [];
   if (transcodeEnabled && transcodeSettings && transcodeSettings.enabled !== false) {
-    const ladderId = String(transcodeSettings.ladderProfile ?? "1080p-nvenc");
+    const ladderId = String(serverPerf.transcodeProfileId || transcodeSettings.ladderProfile || "1080p-nvenc");
     transcodeLadder = bitrateLadderForStream(ladderId);
     transcodeProfile = pickAdaptiveProfile(transcodeLadder, {
       preferHevc: transcodeSettings.enableHevc === true,

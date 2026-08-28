@@ -88,6 +88,14 @@ export function ServerAgentPanel({ serverId }: { serverId: string }) {
           type="button"
           className="rounded px-3 py-1.5 text-xs border cursor-pointer"
           style={{ borderColor: "var(--border)" }}
+          onClick={() => act("apply_full_nginx")}
+        >
+          Apply full nginx vhost
+        </button>
+        <button
+          type="button"
+          className="rounded px-3 py-1.5 text-xs border cursor-pointer"
+          style={{ borderColor: "var(--border)" }}
           onClick={() => act("apply_config")}
         >
           Push config

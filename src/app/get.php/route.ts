@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLineByCredentials, lineIsPlayable, type LineWithBouquets } from "@/lib/lines";
 import { buildM3uStream, serverBaseUrl } from "@/lib/xtream";
+import { warmXtreamCatalogsNow } from "@/lib/xtream-catalog-blob";
 import { getClientIp } from "@/lib/client-ip";
 import { asPlaybackGuardLine, assertPlaybackAllowed, playbackDenyMessage } from "@/lib/playback-guard";
 import { rejectDemoIptvPlayback } from "@/lib/iptv-route-guard";
@@ -65,6 +66,7 @@ export async function GET(req: NextRequest) {
   const auth = await authorizeGetPhp(req);
   if (auth.error) return auth.error;
   const { line, username } = auth;
+  void warmXtreamCatalogsNow(line).catch(() => undefined);
   const type = req.nextUrl.searchParams.get("type") ?? "m3u_plus";
   const outputRaw = (req.nextUrl.searchParams.get("output") ?? "ts").toLowerCase();
   const output: "hls" | "ts" =

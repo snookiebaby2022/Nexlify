@@ -210,6 +210,8 @@ export type PanelDashboardProps = {
 
   variant?: "admin" | "reseller";
 
+  initialStats?: Stats | null;
+
 };
 
 
@@ -234,11 +236,13 @@ export function PanelDashboard({
 
   variant = "admin",
 
+  initialStats = null,
+
 }: PanelDashboardProps) {
 
   const isReseller = variant === "reseller";
 
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats] = useState<Stats | null>(initialStats);
   const [stackItems, setStackItems] = useState<StackComponentStatus[]>([]);
   const { data: liveStats, connected: liveConnected } = useDashboardLiveMetrics();
 
@@ -290,18 +294,20 @@ export function PanelDashboard({
   }, [isReseller]);
 
   useEffect(() => {
-    loadHeader();
+    if (!initialStats) {
+      loadHeader();
+    }
     let cancelled = false;
     const runFull = () => {
       if (!cancelled) loadFull();
     };
     const idleId =
       typeof requestIdleCallback !== "undefined"
-        ? requestIdleCallback(runFull, { timeout: 1500 })
+        ? requestIdleCallback(runFull, { timeout: initialStats ? 3000 : 1500 })
         : null;
-    const timeoutId = idleId == null ? setTimeout(runFull, 120) : null;
+    const timeoutId = idleId == null ? setTimeout(runFull, initialStats ? 2500 : 120) : null;
     const t = startVisibleInterval(loadFull, isReseller ? 45000 : ADMIN_POLLS.dashboardMs);
-    const analyticsId = setTimeout(loadAnalytics, 400);
+    const analyticsId = initialStats ? null : setTimeout(loadAnalytics, 400);
     const analyticsT = startVisibleInterval(loadAnalytics, 90_000);
     return () => {
       cancelled = true;
@@ -310,10 +316,10 @@ export function PanelDashboard({
       }
       if (timeoutId != null) clearTimeout(timeoutId);
       t();
-      clearTimeout(analyticsId);
+      if (analyticsId != null) clearTimeout(analyticsId);
       analyticsT();
     };
-  }, [loadHeader, loadFull, loadAnalytics, isReseller]);
+  }, [loadHeader, loadFull, loadAnalytics, isReseller, initialStats]);
 
 
 

@@ -3,6 +3,9 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { Sparkline } from "@/components/server-resource-sparkline";
+import { ServerAgentPanel } from "@/components/server-agent-panel";
+import { ServerEdgeAuthPanel } from "@/components/server-edge-auth-panel";
+import { ServerFfmpegPanel } from "@/components/server-ffmpeg-panel";
 
 export default function AdminServerViewPage({
   params,
@@ -94,6 +97,9 @@ export default function AdminServerViewPage({
         <Sparkline values={metrics.ram} color="#a78bfa" max={100} label="RAM Usage" />
         <Sparkline values={metrics.disk} color="#fbbf24" max={100} label="Disk Usage" />
       </div>
+      <ServerEdgeAuthPanel serverId={id} serverName={server.name} />
+      <ServerFfmpegPanel serverId={id} />
+      <ServerAgentPanel serverId={id} />
     </div>
   );
 }
