@@ -149,21 +149,22 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        await prisma.$transaction(async (tx) => {
-          for (const line of lines) {
-            if (paysCredits && perLineCost > 0) {
+        if (paysCredits && perLineCost > 0) {
+          await prisma.$transaction(async (tx) => {
+            for (const line of lines) {
               await chargeLineRenewCredits(tx, session, {
                 days,
                 packageId: body.packageId ? String(body.packageId) : undefined,
                 lineUsername: line.username,
               });
             }
-            await applyLineRenewDays(line.id, days, {
-              reactivate: body.reactivate !== false,
-              db: tx,
-            });
-          }
-        });
+          });
+        }
+        for (const line of lines) {
+          await applyLineRenewDays(line.id, days, {
+            reactivate: body.reactivate !== false,
+          });
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg === "Insufficient credits" || msg === "Forbidden") {
