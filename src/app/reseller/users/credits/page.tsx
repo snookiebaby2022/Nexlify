@@ -10,6 +10,7 @@ function ResellerCreditsContent() {
   const searchParams = useSearchParams();
   const preselect = searchParams.get("userId") ?? "";
   const [users, setUsers] = useState<User[]>([]);
+  const [myCredits, setMyCredits] = useState<number | null>(null);
   const [form, setForm] = useState({
     userId: preselect,
     action: "add" as "add" | "refund" | "deduct",
@@ -19,6 +20,12 @@ function ResellerCreditsContent() {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
+    fetch("/api/reseller/credits")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && typeof d.credits === "number") setMyCredits(d.credits);
+      })
+      .catch(() => setMyCredits(null));
     fetch("/api/reseller/users")
       .then((r) => r.json())
       .then((d) => {
@@ -52,9 +59,35 @@ function ResellerCreditsContent() {
       prev.map((u) => (u.id === data.user.id ? { ...u, credits: data.balanceAfter } : u))
     );
     setForm((f) => ({ ...f, note: "" }));
+    setMyCredits((prev) => {
+      if (prev == null) return prev;
+      const next =
+        form.action === "add"
+          ? Math.max(0, prev - transferAmount)
+          : form.action === "refund"
+            ? prev + transferAmount
+            : prev;
+      window.dispatchEvent(new CustomEvent("nexlify-credits-updated", { detail: { credits: next } }));
+      return next;
+    });
   }
 
   const selected = users.find((u) => u.id === form.userId);
+  const transferAmount = Math.max(0, Math.floor(form.amount) || 0);
+  const myBalanceAfterAdd =
+    myCredits != null && form.action === "add"
+      ? Math.max(0, myCredits - transferAmount)
+      : null;
+  const myBalanceAfterRefund =
+    myCredits != null && form.action === "refund"
+      ? myCredits + transferAmount
+      : null;
+  const subBalanceAfter =
+    selected && transferAmount > 0
+      ? form.action === "deduct"
+        ? Math.max(0, selected.credits - transferAmount)
+        : selected.credits + transferAmount
+      : null;
 
   return (
     <div className="space-y-6">
@@ -134,6 +167,37 @@ function ResellerCreditsContent() {
         {selected && (
           <p className="text-sm" style={{ color: "var(--muted)" }}>
             Current balance for <strong>{selected.username}</strong>: {selected.credits} credits
+            {subBalanceAfter != null && transferAmount > 0 ? (
+              <>
+                {" "}
+                → <strong>{subBalanceAfter}</strong> after {form.action}
+              </>
+            ) : null}
+          </p>
+        )}
+        {myCredits != null && form.action === "add" && transferAmount > 0 && (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Your balance: <strong>{myCredits}</strong>
+            {myBalanceAfterAdd != null ? (
+              <>
+                {" "}
+                → <strong>{myBalanceAfterAdd}</strong> left after transfer
+              </>
+            ) : null}
+            {myCredits != null && myCredits < transferAmount ? (
+              <span className="text-red-400"> (insufficient credits)</span>
+            ) : null}
+          </p>
+        )}
+        {myCredits != null && form.action === "refund" && transferAmount > 0 && (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Your balance: <strong>{myCredits}</strong>
+            {myBalanceAfterRefund != null ? (
+              <>
+                {" "}
+                → <strong>{myBalanceAfterRefund}</strong> after refund
+              </>
+            ) : null}
           </p>
         )}
         <div className="flex flex-wrap gap-2">

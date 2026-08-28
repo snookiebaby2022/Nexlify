@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDate } from "@/lib/format";
 import { isLicenseDeletable } from "@/lib/license-deletable";
+import { licensePanelEndpoints } from "@/lib/license-endpoints";
 
 type LicenseRow = {
   id: string;
@@ -13,12 +14,15 @@ type LicenseRow = {
   notes: string | null;
   machineId: string | null;
   panelUrl: string | null;
+  panelHost?: string | null;
   lastSyncAt: string | null;
   lastSyncError: string | null;
   pendingSyncAction: string | null;
   user: { email: string; name: string | null };
   plan: { name: string; slug: string };
 };
+
+const PAGE_SIZES = [10, 25, 50, 100] as const;
 
 const STATUS_OPTIONS = ["", "ACTIVE", "UNUSED", "SUSPENDED", "EXPIRED", "REVOKED"];
 
@@ -55,16 +59,21 @@ export function AdminPanel() {
 
   const [extendId, setExtendId] = useState<string | null>(null);
   const [extendDays, setExtendDays] = useState(30);
+  const [upgradeToMonthly, setUpgradeToMonthly] = useState(false);
   const [notesEdit, setNotesEdit] = useState<{ id: string; notes: string } | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalPages, setTotalPages] = useState(1);
 
   const query = useMemo(() => {
     const p = new URLSearchParams();
     if (search.trim()) p.set("q", search.trim());
     if (statusFilter) p.set("status", statusFilter);
     if (planFilter) p.set("plan", planFilter);
-    const s = p.toString();
-    return s ? `?${s}` : "";
-  }, [search, statusFilter, planFilter]);
+    p.set("page", String(page));
+    p.set("pageSize", String(pageSize));
+    return `?${p.toString()}`;
+  }, [search, statusFilter, planFilter, page, pageSize]);
 
   const notify = (message: string, type: "ok" | "err" = "ok") => {
     setFlash({ message, type });
@@ -78,9 +87,14 @@ export function AdminPanel() {
       const data = await res.json();
       setLicenses(data.licenses);
       setTotalCount(data.summary?.total ?? data.licenses.length);
+      setTotalPages(data.summary?.totalPages ?? 1);
     }
     setLoading(false);
   }, [query]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, planFilter]);
 
   useEffect(() => {
     load();
@@ -225,6 +239,9 @@ export function AdminPanel() {
 
   const planSlugs = [...new Set(plans.map((p) => p.slug))];
   const now = Date.now();
+  const extendingLic = extendId ? licenses.find((l) => l.id === extendId) : null;
+  const canUpgradeTrial = extendingLic?.plan.slug === "trial";
+
   const activeLicenses = licenses.filter((l) => l.status === "ACTIVE");
   const onlineCount = activeLicenses.filter((l) => {
     if (!l.lastSyncAt) return false;
@@ -389,9 +406,49 @@ export function AdminPanel() {
       ) : (
         <>
           <p className="text-xs text-slate-500">
-            Showing {licenses.length} of {totalCount} licenses
-            {totalCount > licenses.length ? " — narrow filters or increase limit in API" : ""}
+            Showing {licenses.length} of {totalCount} licenses (page {page} of {totalPages})
           </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+            <label className="flex items-center gap-2">
+              Show
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-white"
+              >
+                {PAGE_SIZES.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              entries
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded border border-slate-700 px-2 py-1 disabled:opacity-40"
+              >
+                Prev
+              </button>
+              <span>
+                {page} / {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded border border-slate-700 px-2 py-1 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
           <div className="overflow-x-auto rounded-xl border border-slate-800">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-800 bg-slate-900/80 text-slate-400">
@@ -423,6 +480,7 @@ export function AdminPanel() {
                     status: lic.status,
                     expiresAt: lic.expiresAt ? new Date(lic.expiresAt) : null,
                   });
+                  const endpoints = licensePanelEndpoints(lic);
                   return (
                     <tr
                       key={lic.id}
@@ -441,13 +499,18 @@ export function AdminPanel() {
                         <button
                           type="button"
                           onClick={() => copyKey(lic.key)}
-                          className="font-mono text-xs text-cyan-300 hover:underline text-left"
+                          className="font-mono text-xs text-cyan-300 hover:underline text-left break-all"
                         >
                           {lic.key}
                         </button>
-                        {lic.panelUrl && (
-                          <p className="mt-1 text-[10px] text-emerald-500/80 truncate max-w-[160px]" title={lic.panelUrl}>
-                            {lic.panelUrl}
+                        {endpoints.domain && (
+                          <p className="mt-1 text-[10px] text-emerald-500/80 truncate max-w-[200px]" title={endpoints.domain}>
+                            {endpoints.domain}
+                          </p>
+                        )}
+                        {endpoints.ip && (
+                          <p className="mt-0.5 text-[10px] text-emerald-500/80 truncate max-w-[200px]" title={endpoints.ip}>
+                            {endpoints.ip}
                           </p>
                         )}
                         {lic.pendingSyncAction && (
@@ -493,7 +556,8 @@ export function AdminPanel() {
                             type="button"
                             onClick={() => {
                               setExtendId(lic.id);
-                              setExtendDays(30);
+                              setExtendDays(lic.plan.slug === "trial" ? 30 : 30);
+                              setUpgradeToMonthly(lic.plan.slug === "trial");
                             }}
                             className="text-emerald-400 hover:underline"
                           >
@@ -556,12 +620,29 @@ export function AdminPanel() {
             onSubmit={async (e) => {
               e.preventDefault();
               if (!extendId) return;
-              await patchLicense(extendId, { extendDays });
+              const body: Record<string, unknown> = { extendDays };
+              if (upgradeToMonthly && canUpgradeTrial) {
+                body.upgradePlanSlug = "nexlify";
+              }
+              await patchLicense(extendId, body);
               setExtendId(null);
+              setUpgradeToMonthly(false);
             }}
             className="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 p-6 space-y-4"
           >
             <h3 className="font-semibold text-white">Extend license</h3>
+            <p className="text-xs text-slate-400">Keeps the same license key — expiry is updated on the vendor side.</p>
+            {canUpgradeTrial && (
+              <label className="flex items-center gap-2 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={upgradeToMonthly}
+                  onChange={(e) => setUpgradeToMonthly(e.target.checked)}
+                  className="rounded border-slate-600"
+                />
+                Upgrade 7-day trial to monthly (nexlify plan)
+              </label>
+            )}
             <input
               type="number"
               min={1}

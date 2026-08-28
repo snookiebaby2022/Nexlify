@@ -75,7 +75,6 @@ const nextConfig: NextConfig = {
     // The license-session middleware clones the request body before it reaches
     // Route Handlers. Default 10MB truncates migration uploads. Cap below 2GB.
     middlewareClientMaxBodySize: "512mb",
-    ...({ proxyClientMaxBodySize: "512mb" } as Record<string, string>),
   },
 };
 

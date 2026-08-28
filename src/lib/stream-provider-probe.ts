@@ -1,3 +1,9 @@
+import { looksLikePlayableMediaPayload } from "@/lib/live-upstream-proxy";
+import { normalizeProviderUrl } from "@/lib/stream-provider-url";
+
+export { normalizeProviderUrl, inferRemoteConnectionFromUrl } from "@/lib/stream-provider-url";
+export type { InferredRemoteConnection } from "@/lib/stream-provider-url";
+
 export type ProbeResult = {
   status: "online" | "degraded" | "offline" | "unknown";
   message: string;
@@ -11,22 +17,6 @@ export type ProbeResult = {
   durationSec?: number;
   format?: string;
 };
-
-export function normalizeProviderUrl(raw: string): { ok: true; url: string } | { ok: false; error: string } {
-  const trimmed = raw.trim();
-  if (!trimmed) return { ok: false, error: "Base URL is required" };
-  try {
-    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
-    const url = new URL(withScheme);
-    if (!["http:", "https:"].includes(url.protocol)) {
-      return { ok: false, error: "URL must use http or https" };
-    }
-    if (!url.hostname) return { ok: false, error: "URL must include a valid host" };
-    return { ok: true, url: url.toString().replace(/\/$/, "") || url.origin };
-  } catch {
-    return { ok: false, error: "Invalid URL format" };
-  }
-}
 
 function friendlyFetchError(e: unknown): string {
   if (!(e instanceof Error)) return "Connection failed";
@@ -47,6 +37,51 @@ function probeTimeoutMs(): number {
   return Number.isFinite(n) && n > 500 ? n : 4000;
 }
 
+/** Match live playback / ffprobe — provider CDNs often 404 generic probe UAs. */
+const PROBE_UA = "VLC/3.0.20 LibVLC/3.0.20";
+
+async function fetchBodySample(
+  url: string,
+  timeoutMs: number
+): Promise<{ ok: boolean; message: string; httpStatus?: number }> {
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        "User-Agent": PROBE_UA,
+        Range: "bytes=0-8191",
+        Accept: "*/*",
+      },
+    });
+    if (res.status === 404 || res.status >= 500) {
+      return { ok: false, message: `GET HTTP ${res.status}`, httpStatus: res.status };
+    }
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, message: `Auth required (HTTP ${res.status})`, httpStatus: res.status };
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length === 0) {
+      return { ok: false, message: "Empty body (HEAD-only check is not enough)", httpStatus: res.status };
+    }
+    if (!looksLikePlayableMediaPayload(buf)) {
+      const head = buf.subarray(0, 48).toString("utf8");
+      if (head.trimStart().startsWith("<") || /html/i.test(head)) {
+        return { ok: false, message: "HTML error page, not media" };
+      }
+      return { ok: false, message: "Response is not playable media" };
+    }
+    return {
+      ok: true,
+      message: `Playable · ${buf.length}B sample · HTTP ${res.status}`,
+      httpStatus: res.status,
+    };
+  } catch (e) {
+    return { ok: false, message: friendlyFetchError(e) };
+  }
+}
+
 async function fetchProbe(
   url: string,
   method: "HEAD" | "GET",
@@ -57,7 +92,7 @@ async function fetchProbe(
     method,
     signal: AbortSignal.timeout(timeoutMs ?? probeTimeoutMs()),
     redirect: "follow",
-    headers: { "User-Agent": "Nexlify-Provider-Probe/1.0" },
+    headers: { "User-Agent": PROBE_UA },
   });
   return { res, latencyMs: Date.now() - start };
 }
@@ -74,22 +109,51 @@ export async function probeStreamProvider(
   const url = normalized.url;
   const fast = opts?.fast === true;
   const timeout = fast ? Math.min(probeTimeoutMs(), 2500) : Math.max(probeTimeoutMs(), 12_000);
+  const sampleTimeout = fast ? Math.min(timeout + 2000, 6000) : Math.max(timeout, 14_000);
   const direct = /\.(m3u8|ts|mp4|m4v)(\?|$)/i.test(url);
+
+  const finishWithBodyCheck = async (
+    headResult: { status: "online" | "degraded"; message: string; httpStatus?: number; latencyMs?: number }
+  ): Promise<ProbeResult> => {
+    const sample = await fetchBodySample(url, sampleTimeout);
+    if (sample.ok) {
+      return {
+        status: "online",
+        message: `${headResult.message} · ${sample.message}`,
+        httpStatus: sample.httpStatus ?? headResult.httpStatus,
+        latencyMs: headResult.latencyMs,
+      };
+    }
+    return {
+      status: "offline",
+      message: `${headResult.message} · ${sample.message}`,
+      httpStatus: sample.httpStatus ?? headResult.httpStatus,
+      latencyMs: headResult.latencyMs,
+    };
+  };
 
   if (fast && direct) {
     try {
       const result = await fetchProbe(url, "HEAD", timeout);
       const code = result.res.status;
-      if ((code >= 200 && code < 500) || code === 405 || code === 501) {
-        return {
-          status: code >= 200 && code < 300 ? "online" : "degraded",
+      if (code >= 200 && code < 500) {
+        const len = Number(result.res.headers.get("content-length") ?? "0");
+        const headStatus: "online" | "degraded" = code >= 200 && code < 300 ? "online" : "degraded";
+        const headOk = {
+          status: headStatus,
           message: `Fast probe HTTP ${code} · ${result.latencyMs}ms`,
           httpStatus: code,
           latencyMs: result.latencyMs,
         };
+        if (code >= 200 && code < 300 && len === 0) {
+          return finishWithBodyCheck(headOk);
+        }
+        if (headOk.status === "online") {
+          return finishWithBodyCheck(headOk);
+        }
+        return headOk as ProbeResult;
       }
     } catch {
-      // Fast probe must not claim "online/degraded" just because the URL looks playable.
       return {
         status: "offline",
         message: "Fast probe: HEAD failed (try Full probe)",
@@ -114,7 +178,12 @@ export async function probeStreamProvider(
     const code = res.status;
 
     if (code >= 200 && code < 300) {
-      return { status: "online", message: `OK (${code}) · ${latencyMs}ms`, httpStatus: code, latencyMs };
+      return finishWithBodyCheck({
+        status: "online",
+        message: `OK (${code}) · ${latencyMs}ms`,
+        httpStatus: code,
+        latencyMs,
+      });
     }
     if (code === 401 || code === 403) {
       return {
@@ -148,38 +217,6 @@ export async function probeStreamProvider(
     };
   } catch (e) {
     return { status: "offline", message: friendlyFetchError(e) };
-  }
-}
-
-export type InferredRemoteConnection = {
-  remoteHost: string | null;
-  remotePort: number | null;
-  remoteProtocol: string | null;
-  remotePanelUrl: string | null;
-};
-
-/** Derive SSH/panel host details from the stream base URL (hostname, port, protocol, origin). */
-export function inferRemoteConnectionFromUrl(raw: string): InferredRemoteConnection {
-  const normalized = normalizeProviderUrl(raw);
-  if (!normalized.ok) {
-    return { remoteHost: null, remotePort: null, remoteProtocol: null, remotePanelUrl: null };
-  }
-
-  try {
-    const url = new URL(normalized.url);
-    const remoteHost = url.hostname || null;
-    const defaultPort = url.protocol === "https:" ? 443 : url.protocol === "http:" ? 80 : null;
-    const remotePort = url.port ? Number(url.port) : defaultPort;
-    const remoteProtocol =
-      url.protocol === "https:" ? "https" : url.protocol === "http:" ? "http" : "other";
-    return {
-      remoteHost,
-      remotePort,
-      remoteProtocol,
-      remotePanelUrl: url.origin,
-    };
-  } catch {
-    return { remoteHost: null, remotePort: null, remoteProtocol: null, remotePanelUrl: null };
   }
 }
 

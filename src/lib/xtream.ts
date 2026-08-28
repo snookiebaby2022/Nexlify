@@ -93,7 +93,7 @@ export async function xtreamUserInfo(
   const playable = lineIsPlayable(line);
   const { countLineSessions } = await import("@/lib/connections");
   const activeCons = playable ? await countLineSessions(line.id) : 0;
-  const atCapacity = playable && line.maxConnections > 0 && activeCons >= line.maxConnections;
+  const atCapacity = false;
   const streams = await getSettingGroup("streams");
   const general = await getSettingGroup("general");
   const panelTimezone = String(general.timezone || "Europe/London");
@@ -142,7 +142,7 @@ export async function xtreamUserInfo(
       is_trial: "0",
       active_cons: String(activeCons),
       created_at: String(Math.floor(lineDateMs(line.createdAt) / 1000)),
-      max_connections: line.maxConnections.toString(),
+      max_connections: "0",
       allowed_output_formats: formats,
       allowed_outputs: formats,
     },

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ManageLinesTable, type ManageLineRow } from "@/components/manage-lines-table";
 import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/list-page-sizes";
@@ -16,47 +16,61 @@ function ResellerLinesContent() {
   const [pageSize, setPageSize] = useState(DEFAULT_LIST_PAGE_SIZE);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const loadGen = useRef(0);
 
-  const load = useCallback(() => {
-    setError("");
-    setLoading(true);
-    const params = new URLSearchParams({
-      page: String(page),
-      pageSize: String(pageSize),
-    });
-    if (search.trim()) params.set("search", search.trim());
-    Promise.all([
-      fetch(`/api/reseller/lines?${params}`).then(async (r) => {
-        if (!r.ok) throw new Error("lines");
-        return r.json();
-      }),
-      fetch("/api/reseller/bouquets").then(async (r) => {
-        if (!r.ok) throw new Error("bouquets");
-        return r.json();
-      }),
-    ])
-      .then(([linesData, bouquetData]) => {
-        setLines(linesData.lines ?? []);
-        setTotal(linesData.pagination?.total ?? linesData.lines?.length ?? 0);
-        setBouquets(bouquetData.bouquets ?? []);
-      })
-      .catch(() => {
-        setError("Could not load lines. Refresh the page or sign in again.");
-        setLines([]);
-        setBouquets([]);
-      })
-      .finally(() => setLoading(false));
-  }, [page, pageSize, search]);
+  const load = useCallback(
+    (opts?: { soft?: boolean }) => {
+      const soft = opts?.soft === true;
+      setError("");
+      if (!soft) setLoading(true);
+      const gen = ++loadGen.current;
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+      });
+      if (search.trim()) params.set("search", search.trim());
+
+      fetch(`/api/reseller/lines?${params}`)
+        .then(async (r) => {
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(d.error || `Failed to load lines (${r.status})`);
+          if (gen !== loadGen.current) return;
+          setLines(d.lines ?? []);
+          setTotal(d.pagination?.total ?? d.lines?.length ?? 0);
+        })
+        .catch((e) => {
+          if (gen !== loadGen.current) return;
+          // Keep previous rows so intermittent refresh failures don't blank the table.
+          setError(e instanceof Error ? e.message : "Could not load lines. Refresh or sign in again.");
+        })
+        .finally(() => {
+          if (gen === loadGen.current) setLoading(false);
+        });
+    },
+    [page, pageSize, search]
+  );
 
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    fetch("/api/reseller/bouquets")
+      .then((r) => r.json())
+      .then((d) => setBouquets(d.bouquets ?? []))
+      .catch(() => {});
+  }, []);
+
+  const softRefresh = useCallback(() => load({ soft: true }), [load]);
+
   return (
     <>
       {error && (
         <p className="text-sm mb-4 px-1" style={{ color: "var(--danger)" }}>
-          {error}
+          {error}{" "}
+          <button type="button" className="underline" onClick={() => load()}>
+            Retry
+          </button>
         </p>
       )}
       {loading ? (
@@ -73,7 +87,7 @@ function ResellerLinesContent() {
         lines={lines}
         bouquets={bouquets}
         editLineId={editId}
-        onRefresh={load}
+        onRefresh={softRefresh}
         serverTotal={total}
         serverPage={page}
         serverPageSize={pageSize}

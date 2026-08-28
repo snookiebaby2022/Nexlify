@@ -26,6 +26,28 @@ function vendorWebBase(): string | null {
   return fromLicense.replace(/\/v1$/i, "");
 }
 
+/** Vendor DB expiry (may exceed JWT exp after admin extend on same key). */
+export async function fetchVendorLicenseExpiry(licenseKey: string): Promise<Date | null> {
+  const base = vendorWebBase();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}/api/licenses/validate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ licenseKey: licenseKey.trim() }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { ok?: boolean; expiresAt?: string | null };
+    if (!data.ok || !data.expiresAt) return null;
+    const d = new Date(data.expiresAt);
+    return Number.isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+}
+
 function panelApiSecret(): string | null {
   return (
     process.env.NEXLIFY_PANEL_API_SECRET?.trim() ??

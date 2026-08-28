@@ -1,7 +1,7 @@
 import type { Line } from "@prisma/client";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { checkLineIpAccess } from "@/lib/line-ip-lock";
-import { lineHasConnectionCapacity } from "@/lib/connections";
+import { lineHasConnectionCapacity, isTestConnectionIp } from "@/lib/connections";
 import { checkPlaybackRateLimit } from "@/lib/playback-rate-limit";
 import { cacheGetOrSet } from "@/lib/cache";
 import { checkPlaybackBlocklist } from "@/lib/playback-blocklist";
@@ -73,7 +73,7 @@ export async function assertPlaybackAllowed(
   options?: PlaybackGuardOptions
 ): Promise<PlaybackDenyReason | null> {
   // Global timeout — fail-open if checks take too long to avoid blocking IPTV apps
-  const GUARD_TIMEOUT_MS = 2000;
+  const GUARD_TIMEOUT_MS = 1500;
   const guardPromise = assertPlaybackAllowedInner(line, clientIp, userAgent, options);
   const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), GUARD_TIMEOUT_MS));
   return Promise.race([guardPromise, timeoutPromise]);
@@ -89,16 +89,21 @@ async function assertPlaybackAllowedInner(
   const { isSessionKicked } = await import("@/lib/connections");
   if (await isSessionKicked(line.id, clientIp)) return "kicked";
 
-  if (options?.hotPath) {
+  // Live/VOD playback with a stream id — skip geo/DDoS/reputation (HLS seg path already does this).
+  const hotPath =
+    options?.hotPath ||
+    (Boolean(options?.streamId) && !options?.listingOnly);
+
+  // RFC5737 load-test / smoke IPs — skip geo, DDoS, and DB-heavy checks.
+  if (isTestConnectionIp(clientIp)) {
     if (!checkLineIpAccess(line, clientIp)) return "ip";
     if (!checkLineUserAgent(line, userAgent)) return "user_agent";
-    if (!options?.listingOnly) {
-      const hasCapacity = await lineHasConnectionCapacity(line.id, line.maxConnections, {
-        streamId: options?.streamId,
-        clientIp,
-      });
-      if (!hasCapacity) return "connections";
-    }
+    return null;
+  }
+
+  if (hotPath) {
+    if (!checkLineIpAccess(line, clientIp)) return "ip";
+    if (!checkLineUserAgent(line, userAgent)) return "user_agent";
     return null;
   }
 
@@ -167,13 +172,6 @@ async function assertPlaybackAllowedInner(
     }
   }
 
-  if (!options?.listingOnly) {
-    const hasCapacity = await lineHasConnectionCapacity(line.id, line.maxConnections, {
-      streamId: options?.streamId,
-      clientIp,
-    });
-    if (!hasCapacity) return "connections";
-  }
   if (clientIp && !checkPlaybackRateLimit(line.id, clientIp)) return "rate";
   return null;
 }

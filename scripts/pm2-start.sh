@@ -17,6 +17,10 @@ bash scripts/ensure-pg-dump.sh || {
 
 bash scripts/ensure-panel-env.sh
 
+if [ -x scripts/tune-streaming-host.sh ]; then
+  bash scripts/tune-streaming-host.sh || echo "WARN: tune-streaming-host failed"
+fi
+
 set -a
 [ -f .env ] && . ./.env
 set +a

@@ -14,6 +14,7 @@ export default function JellyfinIntegrationPage() {
         urlPlaceholder: "http://jellyfin.local:8096",
         tokenLabel: "API key",
         tokenPlaceholder: "Jellyfin API key (Dashboard → Advanced → API key)",
+        supportsLibraries: true,
       }}
     />
   );

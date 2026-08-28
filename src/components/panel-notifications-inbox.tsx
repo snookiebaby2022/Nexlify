@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Bell, Megaphone, Pin, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { TicketBadge } from "@/components/ticket-ui";
+import { TablePager } from "@/components/table-pager";
 import type { PanelNotificationRow } from "@/lib/panel-notifications";
 
 const KIND_LABEL: Record<string, string> = {
@@ -18,14 +19,21 @@ export function PanelNotificationsInbox() {
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [total, setTotal] = useState(0);
 
   const load = useCallback(() => {
     setLoading(true);
-    fetch("/api/panel/notifications")
+    const offset = (page - 1) * pageSize;
+    fetch(`/api/panel/notifications?limit=${pageSize}&offset=${offset}`)
       .then((r) => r.json())
-      .then((d) => setNotifications(d.notifications ?? []))
+      .then((d) => {
+        setNotifications(d.notifications ?? []);
+        setTotal(typeof d.total === "number" ? d.total : (d.notifications ?? []).length);
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, pageSize]);
 
   useEffect(() => {
     load();
@@ -80,8 +88,8 @@ export function PanelNotificationsInbox() {
   }
 
   async function clearAll() {
-    if (!notifications.length) return;
-    if (!confirm(`Clear all ${notifications.length} notification(s) from your inbox?`)) return;
+    if (!total) return;
+    if (!confirm(`Clear all ${total} notification(s) from your inbox?`)) return;
     setBusy(true);
     const res = await fetch("/api/panel/notifications/bulk", {
       method: "POST",
@@ -120,6 +128,14 @@ export function PanelNotificationsInbox() {
 
   return (
     <div className="space-y-4">
+      <TablePager
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+        disabled={loading || busy}
+      />
       {notifications.length > 0 && (
         <div
           className="flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3"

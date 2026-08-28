@@ -10,6 +10,12 @@ test("normalizeCategoryName treats XUI pipe names as the same folder", () => {
 
 test("categoryMergeKey merges renamed migration duplicates", () => {
   assert.equal(categoryMergeKey("UK | Documentries"), categoryMergeKey("UK Documentry"));
-  assert.equal(categoryMergeKey("Kids channels"), categoryMergeKey("UK | Kids"));
-  assert.equal(categoryMergeKey("sky sports"), categoryMergeKey("UK | sky sports"));
+  assert.equal(categoryMergeKey("UK | Kids"), categoryMergeKey("UK Kids"));
+  assert.equal(categoryMergeKey("sky sports"), categoryMergeKey("sky sports channels"));
+});
+
+test("categoryMergeKey keeps country folders separate", () => {
+  assert.notEqual(categoryMergeKey("UK | Entertainment"), categoryMergeKey("USA Entertainment"));
+  assert.notEqual(categoryMergeKey("UK | Kids"), categoryMergeKey("Kids channels"));
+  assert.notEqual(categoryMergeKey("UK | sky sports"), categoryMergeKey("sky sports"));
 });

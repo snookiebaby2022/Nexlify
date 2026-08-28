@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
 import { formatDateTime } from "@/lib/format";
-import { inferRemoteConnectionFromUrl } from "@/lib/stream-provider-probe";
+import { inferRemoteConnectionFromUrl } from "@/lib/stream-provider-url";
 import { SourceChannelFinder } from "@/components/source-channel-finder";
 
 type Provider = {

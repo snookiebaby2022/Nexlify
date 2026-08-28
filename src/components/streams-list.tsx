@@ -27,6 +27,7 @@ import { displayStreamIcon } from "@/lib/plex-artwork";
 import { StreamDisplayTitle } from "@/components/stream-display-title";
 import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
 import { TmdbBackfillBanner } from "@/components/tmdb-backfill-banner";
+import { DuplicateStreamNamesBanner } from "@/components/duplicate-stream-names-banner";
 import {
   ColumnPickerList,
   ToolbarDropdown,
@@ -451,6 +452,8 @@ export function StreamsList({
       </div>
 
       {(type === "MOVIE" || type === "SERIES") && <TmdbBackfillBanner />}
+
+      {type === "LIVE" && <DuplicateStreamNamesBanner type="LIVE" />}
 
       {type === "LIVE" && !statusFilter && verifyReady && <StreamVerifyPanel />}
 

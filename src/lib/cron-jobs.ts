@@ -694,15 +694,6 @@ async function jobPlexAutoSync() {
       return;
     }
 
-    const rows = await prisma.mediaIntegration.findMany({
-      where: { type: "plex", isActive: true },
-      select: { id: true, config: true },
-    });
-    if (!rows.length) {
-      await logCron("plex_auto_sync", "ok", "no plex integration", Date.now() - start);
-      return;
-    }
-
     const { plexAutoSyncIsDue, plexScheduleHours } = await import("./plex-catalog-match");
     const intervalHours = plexScheduleHours(cron.plexSyncSchedule);
     const last = await prisma.panelSetting.findUnique({ where: { key: "plex_auto_sync_last_run" } });
@@ -711,18 +702,50 @@ async function jobPlexAutoSync() {
       return;
     }
 
+    const rows = await prisma.mediaIntegration.findMany({
+      where: { type: { in: ["plex", "emby", "jellyfin"] }, isActive: true },
+      select: { id: true, type: true, config: true },
+    });
+    if (!rows.length) {
+      await logCron("plex_auto_sync", "ok", "no hosted media integrations", Date.now() - start);
+      return;
+    }
+
     const { enqueuePlexSync } = await import("./plex-sync-queue");
+    const { importEmbyLibrary, importJellyfinLibrary } = await import("./emby-jellyfin-import");
+    const { createSyncReporter, isSyncJobActive, readSyncProgress } = await import("./integration-sync-progress");
     let queued = 0;
     let already = 0;
+    let synced = 0;
     for (const row of rows) {
-      const result = await enqueuePlexSync(row.id);
-      if (result.alreadyRunning) already++;
-      else queued++;
+      if (row.type === "plex") {
+        const result = await enqueuePlexSync(row.id);
+        if (result.alreadyRunning) already++;
+        else queued++;
+        continue;
+      }
+      if (isSyncJobActive(readSyncProgress(row.config))) {
+        already++;
+        continue;
+      }
+      const reporter = createSyncReporter(row.id, `auto-${row.type}-${Date.now()}`);
+      try {
+        if (row.type === "emby") await importEmbyLibrary(row.id, null, reporter);
+        else await importJellyfinLibrary(row.id, null, reporter);
+        synced++;
+      } catch (e) {
+        await reporter.fail(e instanceof Error ? e.message : "Auto-sync failed");
+      }
     }
+    await prisma.panelSetting.upsert({
+      where: { key: "plex_auto_sync_last_run" },
+      update: { value: new Date().toISOString() },
+      create: { key: "plex_auto_sync_last_run", value: new Date().toISOString() },
+    });
     await logCron(
       "plex_auto_sync",
       "ok",
-      `every ${intervalHours}h · queued ${queued} · already running ${already}`,
+      `every ${intervalHours}h · plex queued ${queued} · hosted synced ${synced} · busy ${already}`,
       Date.now() - start
     );
   } catch (e) {

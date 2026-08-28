@@ -1,7 +1,9 @@
-import { LineStatus } from "@prisma/client";
+import { LineStatus, type Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { isUnlimitedLineExpiry } from "./format";
 import { UNLIMITED_LINE_DAYS } from "./line-duration-presets";
+
+type Db = Prisma.TransactionClient | typeof prisma;
 
 export type LineRenewResult = {
   expiresAt: Date;
@@ -45,9 +47,10 @@ export function unlimitedLineExpiresAt(now: Date = new Date()): Date {
 
 export async function applyLineUnlimited(
   lineId: string,
-  opts?: { reactivate?: boolean }
+  opts?: { reactivate?: boolean; db?: Db }
 ): Promise<LineRenewResult> {
-  const existing = await prisma.line.findUnique({
+  const db = opts?.db ?? prisma;
+  const existing = await db.line.findUnique({
     where: { id: lineId },
     select: { id: true, expiresAt: true, status: true },
   });
@@ -59,7 +62,7 @@ export async function applyLineUnlimited(
     existing.status !== LineStatus.BANNED &&
     (existing.status === LineStatus.EXPIRED || existing.status === LineStatus.DISABLED);
 
-  const line = await prisma.line.update({
+  const line = await db.line.update({
     where: { id: lineId },
     data: {
       expiresAt,
@@ -80,9 +83,10 @@ export async function applyLineUnlimited(
 export async function applyLineSetExpiry(
   lineId: string,
   expiresAt: Date,
-  opts?: { reactivate?: boolean }
+  opts?: { reactivate?: boolean; db?: Db }
 ): Promise<LineRenewResult> {
-  const existing = await prisma.line.findUnique({
+  const db = opts?.db ?? prisma;
+  const existing = await db.line.findUnique({
     where: { id: lineId },
     select: { id: true, expiresAt: true, status: true },
   });
@@ -94,7 +98,7 @@ export async function applyLineSetExpiry(
     existing.status !== LineStatus.BANNED &&
     (existing.status === LineStatus.EXPIRED || existing.status === LineStatus.DISABLED);
 
-  const line = await prisma.line.update({
+  const line = await db.line.update({
     where: { id: lineId },
     data: {
       expiresAt,
@@ -120,9 +124,10 @@ export async function applyLineSetExpiry(
 export async function applyLineRenewDays(
   lineId: string,
   days: number,
-  opts?: { reactivate?: boolean }
+  opts?: { reactivate?: boolean; db?: Db }
 ): Promise<LineRenewResult> {
-  const existing = await prisma.line.findUnique({
+  const db = opts?.db ?? prisma;
+  const existing = await db.line.findUnique({
     where: { id: lineId },
     select: { id: true, expiresAt: true, status: true },
   });
@@ -139,7 +144,7 @@ export async function applyLineRenewDays(
     existing.status !== LineStatus.BANNED &&
     (existing.status === LineStatus.EXPIRED || existing.status === LineStatus.DISABLED);
 
-  const line = await prisma.line.update({
+  const line = await db.line.update({
     where: { id: lineId },
     data: {
       expiresAt,

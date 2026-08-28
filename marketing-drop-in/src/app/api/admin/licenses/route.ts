@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser, UNUSABLE_PASSWORD_HASH } from "@/lib/auth";
+import { getSessionUser, isValidBcryptHash, UNUSABLE_PASSWORD_HASH } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { issueLicenseForOrder } from "@/lib/licensing";
 import {
   deleteLicensesSafely,
   findBulkDeletableTrialIds,
 } from "@/lib/license-admin";
+import { syncLicenseToPanel } from "@/lib/panel-sync";
+
+function isRegisteredAccount(passwordHash: string): boolean {
+  return isValidBcryptHash(passwordHash) && passwordHash !== UNUSABLE_PASSWORD_HASH;
+}
 
 async function requireAdmin() {
   const user = await getSessionUser();
@@ -22,7 +27,9 @@ export async function GET(request: Request) {
   const q = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status")?.trim() ?? "";
   const plan = searchParams.get("plan")?.trim() ?? "";
-  const limit = Math.min(Number(searchParams.get("limit") ?? 200), 500);
+  const page = Math.max(1, Number(searchParams.get("page") ?? 1));
+  const pageSize = Math.min(100, Math.max(10, Number(searchParams.get("pageSize") ?? 25)));
+  const skip = (page - 1) * pageSize;
 
   const where: Record<string, unknown> = {};
   if (status) where.status = status;
@@ -44,7 +51,8 @@ export async function GET(request: Request) {
         plan: { select: { name: true, slug: true, priceCents: true } },
       },
       orderBy: { updatedAt: "desc" },
-      take: limit,
+      skip,
+      take: pageSize,
     }),
   ]);
 
@@ -57,6 +65,7 @@ export async function GET(request: Request) {
     notes: l.notes,
     machineId: l.machineId,
     panelUrl: l.panelUrl,
+    panelHost: l.panelHost,
     lastSyncAt: l.lastSyncAt?.toISOString() ?? null,
     lastSyncError: l.lastSyncError,
     pendingSyncAction: l.pendingSyncAction,
@@ -84,6 +93,7 @@ export async function GET(request: Request) {
       plan: l.plan.name,
       machineId: l.machineId ?? "",
       panelUrl: l.panelUrl,
+      panelHost: l.panelHost,
       status: l.status,
       maxLines: l.maxLines,
       activatedAt: l.activatedAt?.toISOString() ?? null,
@@ -97,6 +107,9 @@ export async function GET(request: Request) {
   const summary = {
     total,
     shown: licenses.length,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
     active: licenses.filter((l) => l.status === "ACTIVE").length,
     expired: licenses.filter((l) => l.status === "EXPIRED").length,
     revoked: licenses.filter((l) => l.status === "REVOKED").length,
@@ -141,16 +154,34 @@ export async function PATCH(request: Request) {
       if (!lic) return NextResponse.json({ error: "Not found" }, { status: 404 });
       const base = lic.expiresAt && lic.expiresAt > new Date() ? lic.expiresAt : new Date();
       updateData.expiresAt = new Date(base.getTime() + data.extendDays * 86400000);
+      if (lic.status === "EXPIRED") updateData.status = "ACTIVE";
+    }
+    if (data.upgradePlanSlug) {
+      const plan = await prisma.plan.findUnique({ where: { slug: String(data.upgradePlanSlug) } });
+      if (!plan) return NextResponse.json({ error: "Plan not found" }, { status: 404 });
+      updateData.planId = plan.id;
+      if (!data.extendDays) {
+        const lic = await prisma.license.findUnique({ where: { id } });
+        if (!lic) return NextResponse.json({ error: "Not found" }, { status: 404 });
+        const base = lic.expiresAt && lic.expiresAt > new Date() ? lic.expiresAt : new Date();
+        updateData.expiresAt = new Date(base.getTime() + 30 * 86400000);
+        if (lic.status === "EXPIRED") updateData.status = "ACTIVE";
+      }
     }
     if (data.clearMachineId) {
       updateData.machineId = null;
       updateData.panelUrl = null;
+      updateData.panelHost = null;
     }
     if (data.reactivate) {
       updateData.status = "ACTIVE";
     }
 
     const license = await prisma.license.update({ where: { id }, data: updateData });
+
+    if (data.extendDays || data.upgradePlanSlug || data.reactivate) {
+      await syncLicenseToPanel(id, "REPLACE", { licenseKey: license.key }).catch(() => null);
+    }
 
     await logAudit({
       userId: admin.id,
@@ -194,11 +225,13 @@ export async function POST(request: Request) {
       expiresAt = new Date(Date.now() + licenseDurationDays * 86400000);
     }
 
-    let user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      user = await prisma.user.create({
-        data: { email, name: email.split("@")[0], role: "USER", passwordHash: UNUSABLE_PASSWORD_HASH },
-      });
+    const normalizedEmail = String(email).trim().toLowerCase();
+    let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user || !isRegisteredAccount(user.passwordHash)) {
+      return NextResponse.json(
+        { error: "No registered account for this email — customer must sign up first" },
+        { status: 400 }
+      );
     }
 
     const order = await prisma.order.create({

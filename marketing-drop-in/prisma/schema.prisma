@@ -145,6 +145,7 @@ model License {
   activatedAt     DateTime?
   machineId       String?
   panelUrl        String?
+  panelHost       String?
   panelApiSecret  String?
   pendingSyncAction String?
   pendingSyncKey    String?

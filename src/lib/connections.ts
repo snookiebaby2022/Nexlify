@@ -325,11 +325,32 @@ export async function lineHasConnectionCapacity(
   maxConnections: number,
   opts?: { streamId?: string; clientIp?: string }
 ) {
+  void lineId;
+  void maxConnections;
+  void opts;
+  return true;
+}
+
+async function lineHasConnectionCapacityInner(
+  lineId: string,
+  maxConnections: number,
+  opts?: { streamId?: string; clientIp?: string }
+) {
   if (maxConnections <= 0) return true;
-  await pruneTestConnectionRows(lineId);
-  await pruneLineStaleConnections(lineId);
   const clientIp = normalizeConnectionIp(opts?.clientIp);
   if (isTestConnectionIp(clientIp)) return true;
+
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  const cacheKey = `conn:cap:${lineId}:${clientIp ?? ""}:${opts?.streamId ?? ""}`;
+  return cacheGetOrSet(cacheKey, 3, async () => lineHasConnectionCapacityDb(lineId, maxConnections, opts));
+}
+
+async function lineHasConnectionCapacityDb(
+  lineId: string,
+  maxConnections: number,
+  opts?: { streamId?: string; clientIp?: string }
+) {
+  const clientIp = normalizeConnectionIp(opts?.clientIp);
   const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
 
   // Same stream refresh / HLS segment from an existing viewer — always allow.
@@ -425,12 +446,43 @@ export async function trackConnection(opts: {
       const resolved = await resolveStreamIdParam(streamId, { lineId: opts.lineId });
       if (!resolved) return null;
       streamId = resolved;
-    } else {
+    } else if (!/^[a-z0-9]{20,}$/i.test(streamId)) {
       const exists = await prisma.stream.findUnique({
         where: { id: streamId },
         select: { id: true },
       });
       if (!exists) return null;
+    }
+  }
+
+  if (streamId && clientIp && opts.pruneOthers) {
+    const byIp = await prisma.liveConnection.findFirst({
+      where: { lineId: opts.lineId, ip: clientIp },
+      orderBy: { lastSeenAt: "desc" },
+      select: { id: true, streamId: true },
+    });
+    if (byIp) {
+      await prisma.liveConnection.update({
+        where: { id: byIp.id },
+        data: {
+          streamId,
+          lastSeenAt: new Date(),
+          ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
+        },
+      });
+      if (byIp.streamId && byIp.streamId !== streamId) {
+        await prisma.liveConnection.deleteMany({
+          where: {
+            lineId: opts.lineId,
+            ip: clientIp,
+            id: { not: byIp.id },
+          },
+        });
+      }
+      invalidateConnectionCaches();
+      void touchLiveSession(opts.lineId, streamId, clientIp);
+      void setViewerActiveStream(opts.lineId, streamId, clientIp);
+      return byIp.id;
     }
   }
 
@@ -531,6 +583,16 @@ export async function trackConnection(opts: {
   }
 
   if (existing) {
+    const { cacheGet, cacheSet } = await import("@/lib/cache");
+    const debounceKey = `conn:touch:${opts.lineId}:${clientIp ?? ""}:${streamId ?? ""}`;
+    const recentlyTouched = await cacheGet<boolean>(debounceKey);
+    if (recentlyTouched) {
+      if (streamId) void touchLiveSession(opts.lineId, streamId, clientIp);
+      touchQuality();
+      return existing.id;
+    }
+    await cacheSet(debounceKey, true, 12);
+
     await prisma.liveConnection.updateMany({
       where: { id: existing.id },
       data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },

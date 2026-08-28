@@ -221,7 +221,7 @@ export default function BackupSettingsPage() {
               onChange={(e) => setData({ ...data, pgDumpCronSchedule: e.target.value })}
             />
             <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-              Files land in <code className="font-mono">backups/pg/</code> under the panel install.
+              Files land in <code className="font-mono">backups/</code> as <code className="font-mono">nexlify-pg-*.sql.gz</code>.
             </p>
           </label>
         </div>

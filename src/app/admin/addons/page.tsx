@@ -374,7 +374,9 @@ export default function AddonsOverviewPage() {
   ).length;
 
   const isFeaturePackActive = useMemo(() => {
+    const bundled = panelSettings.general?.bundledFeaturePacks !== false;
     return (pack: (typeof FEATURE_PACKS)[number]) => {
+      if (bundled) return true;
       if (configuredIds.has(pack.serviceId) || configuredIds.has(pack.id)) return true;
       const group = panelSettings[pack.settingGroup];
       if (!group || typeof group !== "object") return false;
@@ -509,7 +511,7 @@ export default function AddonsOverviewPage() {
                         color: isFeaturePackActive(pack) ? "#22c55e" : "var(--muted)",
                       }}
                     >
-                      {isFeaturePackActive(pack) ? "Active" : "Not licensed"}
+                      {isFeaturePackActive(pack) ? (panelSettings.general?.bundledFeaturePacks !== false ? "Included" : "Active") : "Configure"}
                     </span>
                   </div>
                 </div>

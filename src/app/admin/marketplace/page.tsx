@@ -7,16 +7,21 @@ import { FEATURE_PACKS } from "@/lib/feature-packs";
 
 export default function MarketplacePage() {
   const [licensed, setLicensed] = useState<Record<string, boolean>>({});
+  const [bundled, setBundled] = useState(true);
 
   useEffect(() => {
-    fetch("/api/admin/addon-licenses")
-      .then((r) => r.json())
-      .then((d) => {
+    Promise.all([
+      fetch("/api/admin/addon-licenses").then((r) => r.json()),
+      fetch("/api/admin/settings").then((r) => r.json()),
+    ])
+      .then(([addonData, settingsRes]) => {
         const map: Record<string, boolean> = {};
-        for (const l of d.licenses ?? []) {
+        for (const l of addonData.licenses ?? []) {
           if (l.isActive) map[l.service] = true;
         }
         setLicensed(map);
+        const general = settingsRes.settings?.general ?? {};
+        setBundled(general.bundledFeaturePacks !== false);
       })
       .catch(() => {});
   }, []);
@@ -24,12 +29,13 @@ export default function MarketplacePage() {
   return (
     <FormPageShell title="Feature Pack Marketplace" manageHref="/admin/addons" manageLabel="All Addons">
       <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
-        Premium monthly packs via WHMCS — Transcoding, LB, Archive, Security, Analytics, DVR, or Full Enterprise
-        bundle (£80–100/mo).
+        {bundled
+          ? "All feature packs are included with your Nexlify license — configure each pack below. Optional WHMCS billing applies only when bundled packs are disabled on your plan."
+          : "Premium monthly packs via WHMCS — Transcoding, LB, Archive, Security, Analytics, DVR, or Full Enterprise bundle (£80–100/mo)."}
       </p>
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {FEATURE_PACKS.map((pack) => {
-          const active = licensed[pack.serviceId] || licensed.full_enterprise;
+          const active = bundled || licensed[pack.serviceId] || licensed.full_enterprise;
           return (
             <div
               key={pack.id}
@@ -42,7 +48,7 @@ export default function MarketplacePage() {
                     {pack.name}
                   </h3>
                   <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-                    £{pack.monthlyGbp.min}–{pack.monthlyGbp.max}/mo
+                    {bundled ? "Included with license" : `£${pack.monthlyGbp.min}–${pack.monthlyGbp.max}/mo`}
                   </p>
                 </div>
                 <span
@@ -52,7 +58,7 @@ export default function MarketplacePage() {
                     color: active ? "#22c55e" : "var(--muted)",
                   }}
                 >
-                  {active ? "Licensed" : "Not licensed"}
+                  {active ? (bundled ? "Included" : "Licensed") : "Not licensed"}
                 </span>
               </div>
               <p className="text-sm" style={{ color: "var(--muted)" }}>

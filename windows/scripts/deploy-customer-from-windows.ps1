@@ -4,37 +4,24 @@ param(
   [string]$CustomerPassword = "CkfUCKD6blClbTegdE9jYoO0vB7fR",
   [string]$CustomerPath = "/opt/nexlify-panel",
   [switch]$SyncOnly,
-  [switch]$Full
+  [switch]$Full,
+  [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
 . "$PSScriptRoot\Get-DeployConfig.ps1"
 $cfg = Get-NexlifyDeployConfig
 
-$hostKeyOpt = ""
-if ($cfg.AcceptHostKey) { $hostKeyOpt = ' -hostkey="*"' }
-
-# Exclude heavy local folders (.opencode alone is 1000+ files and slows every deploy).
-$filemask = "|node_modules/;.next/;.next.staging/;.next.backup/;.git/;.env;*.db;dist/;windows/;.license-keys/;marketing-drop-in/;promo-for-nexlify-web/;.opencode/;.cursor/;docs/;agent-transcripts/;src/instrumentation.ts;src/lib/cron-scheduler.ts"
-
-$winscpScript = @"
-option batch continue
-option confirm off
-open sftp://root:$CustomerPassword@${CustomerHost}:22/$hostKeyOpt
-lcd "$($cfg.ProjectRoot)"
-cd "$CustomerPath"
-synchronize remote -delete=none -filemask="$filemask" -transfer=binary
-call rm -f src/instrumentation.ts src/lib/cron-scheduler.ts
-call sed -i 's/\r$//' scripts/*.sh scripts/*.mjs 2>/dev/null || true
-exit
-"@
-
-$scriptFile = Join-Path $env:TEMP "nexlify-customer-sync.txt"
-Set-Content -LiteralPath $scriptFile -Value $winscpScript -Encoding ASCII
-Write-Host "Syncing $($cfg.ProjectRoot) -> root@${CustomerHost}:$CustomerPath ..."
-& $cfg.WinScp "/ini=nul" "/script=$scriptFile"
-Remove-Item -LiteralPath $scriptFile -Force -ErrorAction SilentlyContinue
-if ($LASTEXITCODE -ne 0) { throw "Customer WinSCP sync failed ($LASTEXITCODE)" }
+Sync-NexlifyPanelToRemote `
+  -HostName $CustomerHost `
+  -RemotePath $CustomerPath `
+  -ProjectRoot $cfg.ProjectRoot `
+  -Password $CustomerPassword `
+  -PrivateKey $cfg.PrivateKey `
+  -WinScp $cfg.WinScp `
+  -Port 22 `
+  -Username root `
+  -AcceptHostKey:$cfg.AcceptHostKey
 
 if ($SyncOnly) {
   Write-Host "Customer sync complete (files only)." -ForegroundColor Green
@@ -46,12 +33,25 @@ if ($Full) {
   $remoteCmd = "cd $CustomerPath && rm -f .update-progress.json .update-progress.pid && sed -i 's/\r$//' scripts/*.sh ecosystem.config.cjs 2>/dev/null && chmod +x scripts/*.sh && ./scripts/deploy-vps.sh"
   Write-Host "Full rebuild on customer (git pull + npm install) ..."
 } else {
-  $remoteCmd = "cd $CustomerPath && rm -f .update-progress.json .update-progress.pid && sed -i 's/\r$//' scripts/*.sh scripts/*.mjs ecosystem.config.cjs 2>/dev/null; chmod +x scripts/*.sh; npx prisma generate && npx prisma migrate deploy && (bash scripts/verify-db-schema.sh 2>/dev/null || node scripts/audit-db-schema.cjs) && npm run build && bash scripts/panel-restart-safe.sh --nexlify-only && (bash scripts/install-iptv-edge-proxy.sh 2>/dev/null || pm2 restart nexlify-iptv-edge 2>/dev/null || true) && echo DEPLOY_OK"
-  Write-Host "Fast rebuild on customer (synced files only, no npm install) ..."
+  $forceFlag = if ($Force) { "1" } else { "0" }
+  $remoteCmd = "cd $CustomerPath && export NEXLIFY_FORCE_BUILD=$forceFlag && bash scripts/deploy-customer-remote.sh"
+  if ($Force) {
+    Write-Host "Fast rebuild on customer (Force: bypass streaming guard) ..." -ForegroundColor Yellow
+  } else {
+    Write-Host "Fast rebuild on customer (synced files only, no npm install) ..."
+  }
 }
 $plinkArgs += $remoteCmd
 & $cfg.Plink @plinkArgs
-if ($LASTEXITCODE -ne 0) { throw "Customer rebuild failed ($LASTEXITCODE)" }
+if ($LASTEXITCODE -ne 0) {
+  Write-Host ""
+  Write-Host "Deploy failed on the SERVER (not a PowerShell bug)." -ForegroundColor Red
+  Write-Host "Common fixes:" -ForegroundColor Yellow
+  Write-Host "  - Add -Force if build was blocked by streaming guard (active viewers)" -ForegroundColor Yellow
+  Write-Host "  - Stop load test first if postgres says 'connection slots' exhausted" -ForegroundColor Yellow
+  Write-Host "  - Or sync only:  ... -SyncOnly" -ForegroundColor Yellow
+  throw "Customer rebuild failed ($LASTEXITCODE)"
+}
 
 Write-Host ""
 Write-Host "Customer panel updated at http://${CustomerHost}" -ForegroundColor Green

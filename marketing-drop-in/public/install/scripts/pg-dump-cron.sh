@@ -27,7 +27,7 @@ detect_root() {
 }
 
 ROOT="$(detect_root)"
-BACKUP_DIR="${PG_DUMP_DIR:-$ROOT/backups/pg}"
+BACKUP_DIR="${PG_DUMP_DIR:-$ROOT/backups}"
 KEEP_DAYS="${PG_DUMP_KEEP_DAYS:-14}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 

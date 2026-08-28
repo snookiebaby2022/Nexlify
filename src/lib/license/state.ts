@@ -144,8 +144,14 @@ export async function activateLicenseKey(
   if (!parsed) return { ok: false, error: "Invalid or forged license key" };
 
   const { payload, key } = parsed;
+  let effectivePayload = payload;
   if (payload.exp * 1000 < Date.now()) {
-    return { ok: false, error: "License expired" };
+    const { fetchVendorLicenseExpiry } = await import("./remote-sync");
+    const vendorExp = await fetchVendorLicenseExpiry(key);
+    if (!vendorExp || vendorExp.getTime() <= Date.now()) {
+      return { ok: false, error: "License expired" };
+    }
+    effectivePayload = { ...payload, exp: Math.floor(vendorExp.getTime() / 1000) };
   }
 
   if (!hostAllowed(payload, panelHost) && panelHost !== "localhost" && panelHost !== "127.0.0.1") {
@@ -172,7 +178,7 @@ export async function activateLicenseKey(
   const online = await verifyOnlineIfRequired(key, instanceId, panelHost);
   if (!online.ok) return { ok: false, error: online.error ?? "Online license check failed" };
 
-  await saveLicenseActivation(key, payload, instanceId);
+  await saveLicenseActivation(key, effectivePayload, instanceId);
 
   try {
     const { syncAddonLicensesFromBilling } = await import("@/lib/billing-addon-sync");
@@ -183,7 +189,7 @@ export async function activateLicenseKey(
 
   return {
     ok: true,
-    status: await buildStatus(payload, instanceId, true),
+    status: await buildStatus(effectivePayload, instanceId, true),
   };
 }
 
@@ -477,7 +483,18 @@ export async function getLicenseStatus(panelHost: string): Promise<LicenseStatus
   }
 
   const stored = await getStoredLicense();
-  if (stored && stored.exp * 1000 > Date.now()) {
+  let storedExpMs = stored ? stored.exp * 1000 : 0;
+  if (stored) {
+    const rawKey = await readLicenseRawKey();
+    if (rawKey) {
+      const { fetchVendorLicenseExpiry } = await import("./remote-sync");
+      const vendorExp = await fetchVendorLicenseExpiry(rawKey);
+      if (vendorExp && vendorExp.getTime() > storedExpMs) {
+        storedExpMs = vendorExp.getTime();
+      }
+    }
+  }
+  if (stored && storedExpMs > Date.now()) {
     if (isEmailBoundLicense() && !licenseEmailMatches(stored)) {
       return { valid: false, reason: "License email does not match the configured licensee" };
     }
@@ -499,7 +516,7 @@ export async function getLicenseStatus(panelHost: string): Promise<LicenseStatus
         tier: stored.tier,
         term,
         termLabel: licenseTermLabel(term),
-        expiresAt: new Date(stored.exp * 1000).toISOString(),
+        expiresAt: new Date(storedExpMs).toISOString(),
         licensee: stored.sub,
         licenseId: stored.lid,
         instanceBound: !isEmailBoundLicense(),

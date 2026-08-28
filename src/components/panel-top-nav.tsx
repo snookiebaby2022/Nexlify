@@ -168,8 +168,17 @@ export function PanelTopNav({
           })
           .catch(() => {});
       load();
+      const onCredits = (e: Event) => {
+        const detail = (e as CustomEvent<{ credits?: number }>).detail;
+        if (typeof detail?.credits === "number") setResellerCredits(detail.credits);
+        else load();
+      };
+      window.addEventListener("nexlify-credits-updated", onCredits);
       const t = setInterval(load, 60000);
-      return () => clearInterval(t);
+      return () => {
+        clearInterval(t);
+        window.removeEventListener("nexlify-credits-updated", onCredits);
+      };
     }
   }, [role]);
 

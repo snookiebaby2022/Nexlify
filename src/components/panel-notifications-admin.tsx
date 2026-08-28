@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Megaphone, Pin, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { TicketBadge } from "@/components/ticket-ui";
+import { TablePager } from "@/components/table-pager";
 import type { PanelNotificationRow } from "@/lib/panel-notifications";
 
 type ResellerOption = {
@@ -37,19 +38,28 @@ export function PanelNotificationsAdmin() {
     expiresAt: "",
   });
 
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [total, setTotal] = useState(0);
+  const [listLoading, setListLoading] = useState(true);
+
   function load() {
-    fetch("/api/admin/notifications")
+    setListLoading(true);
+    fetch(`/api/admin/notifications?page=${page}&pageSize=${pageSize}`)
       .then((r) => r.json())
       .then((d) => {
         setNotifications(Array.isArray(d.notifications) ? d.notifications : []);
+        setTotal(typeof d.total === "number" ? d.total : 0);
         setResellers(d.resellers ?? []);
       })
-      .catch(() => setError("Failed to load notifications"));
+      .catch(() => setError("Failed to load notifications"))
+      .finally(() => setListLoading(false));
   }
 
   useEffect(() => {
     load();
-  }, []);
+  }, [page, pageSize]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -254,7 +264,19 @@ export function PanelNotificationsAdmin() {
 
       <div className="space-y-3">
         <h2 className="text-lg font-bold">Sent notifications</h2>
-        {notifications.length === 0 ? (
+        <TablePager
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          disabled={listLoading}
+        />
+        {listLoading ? (
+          <p className="text-sm py-8 text-center" style={{ color: "var(--muted)" }}>
+            Loading…
+          </p>
+        ) : notifications.length === 0 ? (
           <div
             className="rounded-xl border p-10 text-center"
             style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}

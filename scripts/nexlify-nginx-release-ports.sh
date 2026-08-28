@@ -68,7 +68,7 @@ disable_conf() {
   echo "[nginx-release] disabled $path → ${path}.disabled"
 }
 
-# Known Nexlify confs that historically bind IPTV ports
+# Never disable nginx panel HTTPS vhost — edge must not steal :443 on domain installs.
 for f in \
   /etc/nginx/conf.d/nexlify-stream-edge.conf \
   /etc/nginx/conf.d/nexlify-stream-extra.conf \
@@ -95,6 +95,11 @@ for dir in $scan_dirs; do
   [ -d "$dir" ] || continue
   while IFS= read -r -d '' conf; do
     [[ "$conf" == *.disabled ]] && continue
+    base="$(basename "$conf")"
+  # nexlify-panel-https.conf is nginx TLS for panel+IPTV — never comment/disable on port release.
+    if [ "$base" = "nexlify-panel-https.conf" ]; then
+      continue
+    fi
     needs=0
     for p in $PORT_LIST; do
       if grep -EqE "listen[[:space:]]+(\[::\]:)?${p}([[:space:];]|$)" "$conf" 2>/dev/null; then

@@ -289,7 +289,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     notes: "",
   },
   backup: {
-    enabled: true,
+    enabled: false,
     scheduleCron: "0 3 * * *",
     target: "local",
     localPath: "",
@@ -300,7 +300,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     remotePassword: "",
     remotePath: "/backups/nexlify",
     keepDays: 7,
-    fullExportOnBackup: true,
+    fullExportOnBackup: false,
     allowRestoreUpload: true,
     exportFormat: "zip",
     s3Bucket: "",
@@ -989,6 +989,14 @@ export async function ensureAddonSettingsHealed(): Promise<{
         _healedV3: true,
       });
       touched.push("backup-zip");
+    }
+    if (!backup._healedV4) {
+      await setSettingGroup("backup", {
+        enabled: backup.enabled === true,
+        fullExportOnBackup: backup.fullExportOnBackup === true,
+        _healedV4: true,
+      });
+      touched.push("backup-json-off");
     }
   } catch {
     /* ignore */

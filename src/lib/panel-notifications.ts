@@ -123,24 +123,30 @@ function serialize(n: {
 
 export async function listInboxForUser(
   user: SessionUser,
-  opts?: { limit?: number }
+  opts?: { limit?: number; offset?: number }
 ) {
-  const limit = opts?.limit ?? 50;
-  const rows = await prisma.panelNotification.findMany({
-    where: inboxWhereForUser(user),
-    include: {
-      ...notificationInclude,
-      reads: {
-        where: { userId: user.id },
-        select: { readAt: true },
-        take: 1,
+  const limit = Math.min(100, Math.max(1, opts?.limit ?? 25));
+  const offset = Math.max(0, opts?.offset ?? 0);
+  const where = inboxWhereForUser(user);
+  const [total, rows] = await Promise.all([
+    prisma.panelNotification.count({ where }),
+    prisma.panelNotification.findMany({
+      where,
+      include: {
+        ...notificationInclude,
+        reads: {
+          where: { userId: user.id },
+          select: { readAt: true },
+          take: 1,
+        },
       },
-    },
-    orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
-    take: limit,
-  });
+      orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+      skip: offset,
+      take: limit,
+    }),
+  ]);
 
-  return rows.map((n) => {
+  const notifications = rows.map((n) => {
     const readAt = n.reads[0]?.readAt ?? null;
     return {
       id: n.id,
@@ -161,21 +167,17 @@ export async function listInboxForUser(
       recipient: n.recipient,
     } satisfies PanelNotificationRow;
   });
+
+  return { notifications, total, limit, offset };
 }
 
 export async function getUnreadCount(user: SessionUser) {
-  const notifications = await prisma.panelNotification.findMany({
-    where: inboxWhereForUser(user),
-    select: {
-      id: true,
-      reads: {
-        where: { userId: user.id },
-        select: { id: true },
-        take: 1,
-      },
+  return prisma.panelNotification.count({
+    where: {
+      ...inboxWhereForUser(user),
+      reads: { none: { userId: user.id } },
     },
   });
-  return notifications.filter((n) => n.reads.length === 0).length;
 }
 
 export async function markNotificationRead(notificationId: string, userId: string) {
@@ -196,16 +198,30 @@ export async function markNotificationRead(notificationId: string, userId: strin
   return read;
 }
 
-export async function listAdminNotifications() {
-  const rows = await prisma.panelNotification.findMany({
-    include: {
-      ...notificationInclude,
-      _count: { select: { reads: true } },
-    },
-    orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
-  });
+export async function listAdminNotifications(opts?: { page?: number; pageSize?: number }) {
+  const pageSize = Math.min(100, Math.max(10, opts?.pageSize ?? 25));
+  const page = Math.max(1, opts?.page ?? 1);
+  const skip = (page - 1) * pageSize;
 
-  return rows.map((n) => serialize(n));
+  const [total, rows] = await Promise.all([
+    prisma.panelNotification.count(),
+    prisma.panelNotification.findMany({
+      include: {
+        ...notificationInclude,
+        _count: { select: { reads: true } },
+      },
+      orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+      skip,
+      take: pageSize,
+    }),
+  ]);
+
+  return {
+    notifications: rows.map((n) => serialize(n)),
+    total,
+    page,
+    pageSize,
+  };
 }
 
 export type CreateNotificationInput = {
@@ -326,48 +342,72 @@ export async function dismissNotificationForUser(notificationId: string, user: S
   });
 }
 
-/** Mark all inbox notifications read for the user. */
+/** Mark all inbox notifications read for the user (batched). */
 export async function markAllNotificationsRead(user: SessionUser) {
-  const rows = await prisma.panelNotification.findMany({
-    where: inboxWhereForUser(user),
-    select: { id: true },
-  });
-  if (!rows.length) return 0;
+  const where = inboxWhereForUser(user);
+  let marked = 0;
   const now = new Date();
-  await prisma.$transaction(
-    rows.map((n) =>
-      prisma.panelNotificationRead.upsert({
-        where: {
-          notificationId_userId: { notificationId: n.id, userId: user.id },
-        },
-        create: { notificationId: n.id, userId: user.id, readAt: now },
-        update: { readAt: now },
-      })
-    )
-  );
-  return rows.length;
+  for (;;) {
+    const rows = await prisma.panelNotification.findMany({
+      where: {
+        ...where,
+        reads: { none: { userId: user.id } },
+      },
+      select: { id: true },
+      take: 100,
+    });
+    if (!rows.length) break;
+    await prisma.$transaction(
+      rows.map((n) =>
+        prisma.panelNotificationRead.upsert({
+          where: {
+            notificationId_userId: { notificationId: n.id, userId: user.id },
+          },
+          create: { notificationId: n.id, userId: user.id, readAt: now },
+          update: { readAt: now },
+        })
+      )
+    );
+    marked += rows.length;
+    if (rows.length < 100) break;
+  }
+  return marked;
 }
 
-/** Clear (dismiss) all inbox notifications for the user. */
+/** Clear (dismiss) all inbox notifications for the user (batched). */
 export async function dismissAllNotificationsForUser(user: SessionUser) {
-  const rows = await prisma.panelNotification.findMany({
-    where: inboxWhereForUser(user),
-    select: { id: true },
-  });
-  if (!rows.length) return 0;
+  const where = inboxWhereForUser(user);
+  let dismissed = 0;
   const now = new Date();
-  await prisma.$transaction(
-    rows.map((n) =>
-      prisma.panelNotificationRead.upsert({
-        where: {
-          notificationId_userId: { notificationId: n.id, userId: user.id },
+  for (;;) {
+    const rows = await prisma.panelNotification.findMany({
+      where: {
+        ...where,
+        NOT: {
+          reads: {
+            some: { userId: user.id, dismissedAt: { not: null } },
+          },
         },
-        create: { notificationId: n.id, userId: user.id, readAt: now, dismissedAt: now },
-        update: { dismissedAt: now, readAt: now },
-      })
-    )
-  );
-  return rows.length;
+      },
+      select: { id: true },
+      take: 100,
+    });
+    if (!rows.length) break;
+    await prisma.$transaction(
+      rows.map((n) =>
+        prisma.panelNotificationRead.upsert({
+          where: {
+            notificationId_userId: { notificationId: n.id, userId: user.id },
+          },
+          create: { notificationId: n.id, userId: user.id, readAt: now, dismissedAt: now },
+          update: { dismissedAt: now, readAt: now },
+        })
+      )
+    );
+    dismissed += rows.length;
+    if (rows.length < 100) break;
+  }
+  return dismissed;
 }
 
 /** Dismiss selected notifications for the user (must be in their inbox). */

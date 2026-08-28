@@ -228,7 +228,7 @@ listen ${streamHttps} ssl;  # HTTPS`}</pre>
       <div id="database-backup">
         <SettingsPanel
           title="Database backup"
-          info="In-panel nexlify-cron writes gzipped SQL to backups/pg under the panel install. Enable and schedule under Settings → Backup."
+          info="In-panel nexlify-cron writes gzipped SQL to backups/ under the panel install. Enable and schedule under Settings → Backup."
         >
           <p className="text-sm" style={{ color: "var(--muted)" }}>
             Scheduled database backups use the matching PostgreSQL client (not a raw DATABASE_URL on the shell).

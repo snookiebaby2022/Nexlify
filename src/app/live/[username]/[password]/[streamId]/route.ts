@@ -131,6 +131,7 @@ async function authorizeLivePlayback(
 
   const deny = await assertPlaybackAllowed(asPlaybackGuardLine(line), ip, ua, {
     streamId: cleanId,
+    hotPath: true,
   });
   if (deny) {
     const status = deny === "ddos" ? 429 : 403;

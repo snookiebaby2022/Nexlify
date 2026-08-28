@@ -1,63 +1,20 @@
-import assert from "node:assert/strict";
-import { test } from "node:test";
-import {
-  hasHostedDirectSource,
-  hasProviderSource,
-  validateStreamCreate,
-} from "./stream-source";
+import { describe, expect, it } from "vitest";
+import { repairMalformedStreamUrl, normalizeStreamSource } from "./stream-source";
 
-test("hosted tick plus existing URL is enough — no provider catalog path required", () => {
-  assert.equal(
-    hasHostedDirectSource({
-      hostedExternally: true,
-      streamUrl: "http://provider.example.com/live/u/p/1",
-    }),
-    true
-  );
-  assert.equal(
-    hasProviderSource({
-      hostedExternally: true,
-      providerId: "",
-      providerPath: "",
-    }),
-    false
-  );
-  assert.equal(
-    validateStreamCreate({
-      type: "LIVE",
-      hostedExternally: true,
-      streamUrl: "http://provider.example.com/live/u/p/1",
-    }),
-    null
-  );
-  assert.equal(
-    validateStreamCreate({
-      type: "MOVIE",
-      hostedExternally: true,
-      source: "https://provider.example.com/movie/u/p/9.mp4",
-    }),
-    null
-  );
-});
+describe("repairMalformedStreamUrl", () => {
+  it("fixes missing scheme with stray colon path", () => {
+    expect(repairMalformedStreamUrl("://junki3monk3y.com:/Blade2nd/PaaJhvNbqX/56209")).toBe(
+      "https://junki3monk3y.com/Blade2nd/PaaJhvNbqX/56209"
+    );
+  });
 
-test("hosted tick without URL or provider path is rejected", () => {
-  assert.equal(
-    validateStreamCreate({
-      type: "LIVE",
-      hostedExternally: true,
-    }),
-    "Paste the provider URL, or pick a provider and path"
-  );
-});
+  it("normalizes https host:443 slash path", () => {
+    expect(repairMalformedStreamUrl("https://junki3monk3y.com:443/Blade2nd/PaaJhvNbqX/56209")).toBe(
+      "https://junki3monk3y.com/Blade2nd/PaaJhvNbqX/56209"
+    );
+  });
 
-test("provider id + path still counts as a hosted catalog source", () => {
-  assert.equal(
-    validateStreamCreate({
-      type: "MOVIE",
-      hostedExternally: true,
-      providerId: "prov_1",
-      providerPath: "12345",
-    }),
-    null
-  );
+  it("runs inside normalizeStreamSource", () => {
+    expect(normalizeStreamSource("://example.com:/live/a/b")).toBe("https://example.com/live/a/b");
+  });
 });

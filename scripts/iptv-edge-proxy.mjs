@@ -147,10 +147,15 @@ const CATALOG_CACHE_MS = Number(process.env.IPTV_EDGE_CATALOG_CACHE_MS || 300_00
 const CATALOG_STALE_MS = Number(process.env.IPTV_EDGE_CATALOG_STALE_MS || 600_000);
 const EDGE_DISK_HLS_WAIT_MS = Number(process.env.IPTV_EDGE_DISK_HLS_WAIT_MS || 6000);
 const EDGE_HLS_SEG_WAIT_MS = Number(process.env.IPTV_EDGE_HLS_SEG_WAIT_MS || 5_000);
-const MAX_EDGE_HLS_REMUX = Number(process.env.IPTV_EDGE_MAX_HLS_REMUX || 64);
-const MAX_EDGE_DISK_PACK = Number(process.env.IPTV_EDGE_MAX_DISK_PACK || 48);
+const MAX_EDGE_HLS_REMUX = Number(process.env.IPTV_EDGE_MAX_HLS_REMUX || 256);
+const MAX_EDGE_DISK_PACK = Number(process.env.IPTV_EDGE_MAX_DISK_PACK || 256);
+/** One provider pull per live channel while anyone is watching (XUI on-demand restream). */
+const MAX_LIVE_FANS = Number(process.env.IPTV_EDGE_MAX_LIVE_FANS || 8000);
+const LIVE_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_LIVE_FAN_LINGER_MS || 12000);
 const edgeHlsRemuxProcs = new Map();
 const edgeDiskPackagers = new Map();
+/** streamId -> shared MPEG-TS restream */
+const liveFans = new Map();
 const authCache = new Map();
 const catalogCache = new Map();
 const catalogInflight = new Map();
@@ -601,6 +606,135 @@ function resolveFfmpegPath() {
   return "ffmpeg";
 }
 
+function destroyLiveFan(fan) {
+  if (!fan) return;
+  if (fan.linger) {
+    clearTimeout(fan.linger);
+    fan.linger = null;
+  }
+  liveFans.delete(fan.streamId);
+  for (const w of fan.waiters.splice(0, fan.waiters.length)) {
+    try {
+      if (!w.clientRes.headersSent) {
+        w.clientRes.writeHead(502, { "content-type": "text/plain" });
+      }
+      if (!w.clientRes.writableEnded) w.clientRes.end();
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const slot of [...fan.clients]) detachLiveFanClient(fan, slot, { closingFan: true });
+  try {
+    fan.destroySrc?.();
+  } catch {
+    /* ignore */
+  }
+}
+
+function detachLiveFanClient(fan, slot, opts) {
+  if (!fan.clients.has(slot)) return;
+  fan.clients.delete(slot);
+  try {
+    slot.stopKick?.();
+  } catch {
+    /* ignore */
+  }
+  endPlaybackSession(slot.pulseCtx);
+  try {
+    if (!slot.clientRes.writableEnded) slot.clientRes.end();
+  } catch {
+    /* ignore */
+  }
+  if (opts?.closingFan) return;
+  if (fan.clients.size === 0 && fan.waiters.length === 0) {
+    if (fan.linger) clearTimeout(fan.linger);
+    fan.linger = setTimeout(() => destroyLiveFan(fan), LIVE_FAN_LINGER_MS);
+  }
+}
+
+function attachLiveFanClient(fan, clientReq, clientRes, pulseCtx) {
+  if (fan.linger) {
+    clearTimeout(fan.linger);
+    fan.linger = null;
+  }
+  if (!clientRes.headersSent) {
+    clientRes.writeHead(200, liveTsHeaders());
+    if (fan.prefix && fan.prefix.length) {
+      try {
+        clientRes.write(fan.prefix);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  const slot = {
+    clientReq,
+    clientRes,
+    pulseCtx,
+    stopKick: () => undefined,
+    meter: pulseCtx ? createLiveByteMeter(pulseCtx) : null,
+  };
+  const drop = () => detachLiveFanClient(fan, slot);
+  slot.stopKick = watchSessionKick(pulseCtx, drop);
+  registerPipeTeardown(pulseCtx, drop);
+  clientReq.once("close", drop);
+  clientReq.once("aborted", drop);
+  fan.clients.add(slot);
+}
+
+function broadcastFanChunk(fan, chunk) {
+  if (!chunk || !chunk.length) return;
+  const keep = 188 * 24;
+  if (!fan.prefix || !fan.prefix.length) {
+    fan.prefix = chunk.length <= keep ? chunk : chunk.subarray(chunk.length - keep);
+  } else {
+    const next = Buffer.concat([fan.prefix, chunk]);
+    fan.prefix = next.length <= keep ? next : next.subarray(next.length - keep);
+  }
+  for (const slot of [...fan.clients]) {
+    try {
+      if (slot.meter) slot.meter(chunk);
+      slot.clientRes.write(chunk);
+    } catch {
+      detachLiveFanClient(fan, slot);
+    }
+  }
+}
+
+function tryJoinLiveFan(streamId, clientReq, clientRes, pulseCtx) {
+  if (!streamId) return false;
+  const fan = liveFans.get(streamId);
+  if (!fan?.broadcasting) return false;
+  attachLiveFanClient(fan, clientReq, clientRes, pulseCtx);
+  return true;
+}
+
+function ensureLiveFan(streamId) {
+  if (!streamId) return null;
+  let fan = liveFans.get(streamId);
+  if (fan) return fan;
+  if (liveFans.size >= MAX_LIVE_FANS) return null;
+  fan = {
+    streamId,
+    broadcasting: false,
+    waiters: [],
+    clients: new Set(),
+    destroySrc: null,
+    starterTaken: false,
+    prefix: Buffer.alloc(0),
+    linger: null,
+  };
+  liveFans.set(streamId, fan);
+  return fan;
+}
+
+function fanGoLive(fan, destroySrc) {
+  fan.destroySrc = destroySrc;
+  fan.broadcasting = true;
+  const pending = fan.waiters.splice(0, fan.waiters.length);
+  for (const w of pending) attachLiveFanClient(fan, w.clientReq, w.clientRes, w.pulseCtx);
+}
+
 function stopEdgeHlsRemux(key) {
   const proc = edgeHlsRemuxProcs.get(key);
   if (!proc) return;
@@ -614,6 +748,7 @@ function stopEdgeHlsRemux(key) {
 
 /**
  * Remux provider HLS → MPEG-TS at the edge (never through Next.js workers).
+ * XUI-style: one ffmpeg per channel; extra viewers join the same pipe.
  */
 function spawnEdgeHlsToMpegTs(hlsUrl, clientReq, clientRes, pulseCtx) {
   const key = pulseCtx?.streamId || hlsUrl;
@@ -1528,11 +1663,104 @@ function serveBootstrapHlsPlaylist(clientReq, clientRes, pulseCtx) {
   clientRes.end(body);
 }
 
+function pipeLiveMpegTsShared(fan, upRes, clientReq, clientRes, pulseCtx, onUnplayable) {
+  const destroySrc = () => {
+    try {
+      upRes.destroy();
+    } catch {
+      /* ignore */
+    }
+  };
+  const fail = (msg) => {
+    destroyLiveFan(fan);
+    if (typeof onUnplayable === "function" && !clientRes.headersSent) {
+      onUnplayable(msg);
+      return;
+    }
+    if (!clientRes.headersSent) {
+      clientRes.writeHead(502, { "content-type": "text/plain" });
+      clientRes.end(msg);
+    }
+  };
+
+  const goLive = (prefix) => {
+    fan.prefix = prefix && prefix.length ? prefix : fan.prefix;
+    fanGoLive(fan, destroySrc);
+    attachLiveFanClient(fan, clientReq, clientRes, pulseCtx);
+    upRes.on("data", (chunk) => broadcastFanChunk(fan, chunk));
+    upRes.once("end", () => destroyLiveFan(fan));
+    upRes.once("close", () => {
+      if (liveFans.get(fan.streamId) === fan) destroyLiveFan(fan);
+    });
+    upRes.once("error", () => destroyLiveFan(fan));
+  };
+
+  if (!shouldSniffLiveTs(upRes)) {
+    goLive(null);
+    return;
+  }
+
+  const chunks = [];
+  let total = 0;
+  let started = false;
+  const openTimer = setTimeout(() => {
+    if (!started) fail("Upstream timeout before MPEG-TS data");
+  }, LIVE_TS_OPEN_MS);
+
+  const onData = (chunk) => {
+    if (started) return;
+    chunks.push(chunk);
+    total += chunk.length;
+    if (total < LIVE_TS_PEEK_BYTES) return;
+    started = true;
+    clearTimeout(openTimer);
+    upRes.removeListener("data", onData);
+    const prefix = Buffer.concat(chunks);
+    if (!looksLikeMpegTs(prefix)) {
+      fail("Upstream is not MPEG-TS");
+      return;
+    }
+    goLive(prefix);
+  };
+  upRes.on("data", onData);
+  upRes.once("error", (err) => {
+    if (!started) fail(`upstream error: ${err.message}`);
+  });
+  upRes.once("end", () => {
+    if (started) return;
+    clearTimeout(openTimer);
+    const prefix = Buffer.concat(chunks);
+    if (looksLikeMpegTs(prefix)) {
+      started = true;
+      goLive(prefix);
+      return;
+    }
+    fail("Upstream closed before MPEG-TS data");
+  });
+}
+
+function feedLiveFanFromUpstream(fan, upRes, clientReq, clientRes, pulseCtx) {
+  fanGoLive(fan, () => {
+    try {
+      upRes.destroy();
+    } catch {
+      /* ignore */
+    }
+  });
+  attachLiveFanClient(fan, clientReq, clientRes, pulseCtx);
+  upRes.on("data", (chunk) => broadcastFanChunk(fan, chunk));
+  upRes.once("end", () => destroyLiveFan(fan));
+  upRes.once("error", () => destroyLiveFan(fan));
+}
+
 function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, onUnplayable) {
   const meter = pulseCtx ? createLiveByteMeter(pulseCtx) : null;
+  const streamId = pulseCtx?.streamId;
+  const fan = streamId ? liveFans.get(streamId) || ensureLiveFan(streamId) : null;
   let stopKickWatch = () => undefined;
   const stopStream = () => {
     stopKickWatch();
+    if (fan) return;
     try {
       upRes.destroy();
     } catch {
@@ -1555,6 +1783,10 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, onUnplayable) {
     endPlaybackSession(pulseCtx);
   });
   if (!shouldSniffLiveTs(upRes)) {
+    if (fan) {
+      feedLiveFanFromUpstream(fan, upRes, clientReq, clientRes, pulseCtx);
+      return;
+    }
     clientRes.writeHead(200, liveTsHeaders());
     if (meter) upRes.on("data", meter);
     upRes.pipe(clientRes);
@@ -1592,8 +1824,13 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, onUnplayable) {
       fail("Upstream is not MPEG-TS");
       return;
     }
-    clientRes.writeHead(200, liveTsHeaders());
     headersSent = true;
+    if (fan) {
+      fan.prefix = prefix;
+      feedLiveFanFromUpstream(fan, upRes, clientReq, clientRes, pulseCtx);
+      return;
+    }
+    clientRes.writeHead(200, liveTsHeaders());
     clientRes.write(prefix);
     if (meter) {
       meter(prefix);
@@ -2017,6 +2254,9 @@ async function onRequest(clientReq, clientRes, ctx) {
     if (isLiveRangeProbe || (clientReq.method === "HEAD" && auth.live)) {
       clientRes.writeHead(200, liveTsHeaders());
       clientRes.end();
+      return;
+    }
+    if (auth.live && auth.streamId && tryJoinLiveFan(auth.streamId, clientReq, clientRes, pulseCtx)) {
       return;
     }
     if (auth.live && isHlsPlaybackUrl(auth.upstream)) {

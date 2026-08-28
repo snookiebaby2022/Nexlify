@@ -61,6 +61,7 @@ async function main() {
         panelName: "Nexlify",
         timezone: "Europe/London",
         defaultLanguage: "en",
+        bundledFeaturePacks: true,
       }),
     },
   });

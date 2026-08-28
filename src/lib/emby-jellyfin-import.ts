@@ -77,7 +77,8 @@ async function importEmbyEpisodes(
   seriesName: string,
   kind: "emby" | "jellyfin",
   integrationId: string,
-  serverId: string | null
+  serverId: string | null,
+  skipExistingCatalog: boolean
 ) {
   let imported = 0;
   let skipped = 0;
@@ -93,6 +94,10 @@ async function importEmbyEpisodes(
     const streamUrl = buildIntegrationStreamUrl(kind, integrationId, ep.Id);
     const existing = await prisma.stream.findFirst({ where: { streamUrl } });
     if (existing) {
+      if (skipExistingCatalog) {
+        skipped++;
+        continue;
+      }
       await prisma.stream.update({
         where: { id: existing.id },
         data: {
@@ -128,6 +133,27 @@ async function importEmbyEpisodes(
   return { imported, skipped };
 }
 
+export async function listEmbyJellyfinLibraries(integrationId: string, kind: "emby" | "jellyfin") {
+  const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
+  if (!row || row.type !== kind) throw new Error(`${kind} integration not found`);
+  const cfg = row.config as Record<string, unknown>;
+  const token = String(cfg.token ?? "").trim();
+  const url = String(cfg.url ?? "").trim();
+  if (!url || !token) throw new Error("Server URL and API key required");
+  const { base } = await resolveEmbyBase(url, token, kind);
+  const folders = await fetchEmbyJson<{ Name?: string; ItemId?: string; CollectionType?: string }[]>(
+    `${base}/Library/VirtualFolders`,
+    token
+  );
+  return (folders ?? [])
+    .filter((f) => f.ItemId && f.Name)
+    .map((f) => ({
+      key: String(f.ItemId),
+      title: String(f.Name),
+      type: f.CollectionType ?? "mixed",
+    }));
+}
+
 async function importEmbyStyleLibrary(
   integrationId: string,
   kind: "emby" | "jellyfin",
@@ -141,6 +167,7 @@ async function importEmbyStyleLibrary(
   const url = String(cfg.url ?? "").trim();
   if (!url || !token) throw new Error("Server URL and API key required");
   const effectiveServerId = serverId ?? (cfg.serverId ? String(cfg.serverId) : null);
+  const skipExistingCatalog = cfg.skipExistingCatalog !== false;
 
   await reporter?.step("connect", `Connecting to ${kind}…`);
   const { base, users } = await resolveEmbyBase(url, token, kind);
@@ -149,7 +176,9 @@ async function importEmbyStyleLibrary(
 
   await reporter?.step("import", "Loading movies and series…");
   const items = await fetchEmbyJson<{ Items?: EmbyItem[] }>(
-    `${base}/Users/${userId}/Items?Recursive=true&IncludeItemTypes=Movie,Series&Fields=Path&Limit=1500`,
+    `${base}/Users/${userId}/Items?Recursive=true&IncludeItemTypes=Movie,Series&Fields=Path&Limit=1500${
+      cfg.libraryKey ? `&ParentId=${encodeURIComponent(String(cfg.libraryKey))}` : ""
+    }`,
     token
   );
 
@@ -178,7 +207,8 @@ async function importEmbyStyleLibrary(
         name,
         kind,
         integrationId,
-        effectiveServerId
+        effectiveServerId,
+        skipExistingCatalog
       );
       imported += ep.imported;
       skipped += ep.skipped;
@@ -188,6 +218,10 @@ async function importEmbyStyleLibrary(
     const streamUrl = buildIntegrationStreamUrl(kind, integrationId, id);
     const existing = await prisma.stream.findFirst({ where: { streamUrl } });
     if (existing) {
+      if (skipExistingCatalog) {
+        skipped++;
+        continue;
+      }
       await prisma.stream.update({
         where: { id: existing.id },
         data: { name: `${name} (${kind})`, isActive: true, hostedExternally: true, serverId: effectiveServerId ?? undefined },

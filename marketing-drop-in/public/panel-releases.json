@@ -1,7 +1,44 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.52",
+  "latestVersion": "2.0.54",
   "releases": [
+    {
+      "version": "2.0.54",
+      "date": "2026-08-28",
+      "channel": "stable",
+      "summary": "Faster live playback, unlimited line connections, and missing channels restored in live folders.",
+      "changelog": [
+        "First viewer opens the live pipe immediately; extra viewers on the same channel share it",
+        "Line connection caps no longer stop playback (treated as unlimited)",
+        "Country live folders stay separate so UK and USA Entertainment are not merged",
+        "Playable bouquet channels that were inactive are listed again",
+        "Broken :// stream URLs stay out of Xtream and M3U lists",
+        "Load-test defaults to HEAD so tests do not open real upstreams"
+      ],
+      "fixes": [
+        "IPTV apps sat on an empty socket when a restream wait queued the first viewer",
+        "Channels such as BBC One FHD and 24/7 series were missing from their folders",
+        "Xtream cache bust missed Redis keys that use the panel prefix"
+      ]
+    },
+    {
+      "version": "2.0.53",
+      "date": "2026-08-28",
+      "channel": "stable",
+      "summary": "Flat SQL backups, Emby/Jellyfin Plex parity, load-test kit, probe and duplicate fixes.",
+      "changelog": [
+        "Database backups write nexlify-pg-*.sql.gz directly to backups/ (no JSON/ZIP auto-export by default)",
+        "Emby/Jellyfin: library picker, skip-existing, transcode profile, LB defaults, and shared auto-sync cron",
+        "Installer seeds bundledFeaturePacks: true; marketplace shows included feature packs by default",
+        "Load-test scripts: 10 public HLS streams + 5000 lines without touching IPTV providers",
+        "Stream probe uses VLC UA and rejects empty HEAD; malformed ://host:/ URLs are repaired"
+      ],
+      "fixes": [
+        "Admin notifications and EPG calendar pagination crashes on large datasets",
+        "Duplicate Young Dracula stream with junk URL could fail playback while probe showed green",
+        "JSON panel backups piled up beside SQL dumps under backups/pg/"
+      ]
+    },
     {
       "version": "2.0.52",
       "date": "2026-08-27",

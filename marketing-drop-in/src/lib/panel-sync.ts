@@ -266,6 +266,7 @@ export async function registerPanelActivation(opts: {
   const parsedUrl = parsePublicPanelUrl(opts.panelUrl);
   if (!parsedUrl.ok) return { ok: false as const, error: parsedUrl.error };
   const panelUrl = parsedUrl.url;
+  const panelHost = String(opts.domain ?? "").trim().toLowerCase() || null;
 
   const license = await prisma.license.findUnique({ where: { key } });
   if (!license) return { ok: false as const, error: "License not found" };
@@ -284,6 +285,7 @@ export async function registerPanelActivation(opts: {
       activatedAt: new Date(),
       machineId: opts.instanceId,
       panelUrl,
+      panelHost,
       pendingSyncAction: null,
       pendingSyncKey: null,
       lastSyncError: null,
@@ -298,7 +300,7 @@ export async function registerPanelActivation(opts: {
       id: { not: license.id },
       panelUrl: null,
     },
-    data: { panelUrl, machineId: opts.instanceId },
+    data: { panelUrl, panelHost, machineId: opts.instanceId },
   });
 
   return { ok: true as const, licenseId: license.id, keyHash: hash };

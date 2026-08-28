@@ -53,25 +53,15 @@ export async function createLineForDevice(opts: {
   const { getResellerLineRewardPercent, applyResellerLineReward } = await import(
     "@/lib/reseller-rewards"
   );
+  const { debitResellerCredits } = await import("@/lib/reseller-credit-charge");
   const rewardPercent = paysCredits && resolved.creditCost > 0 ? await getResellerLineRewardPercent() : 0;
 
   const line = await prisma.$transaction(async (tx) => {
     if (paysCredits && resolved.creditCost > 0) {
-      const owner = await tx.panelUser.findUnique({ where: { id: opts.session.id } });
-      if (!owner) throw new Error("Forbidden");
-      if (owner.credits < resolved.creditCost) throw new Error("Insufficient credits");
-      const afterDebit = await tx.panelUser.update({
-        where: { id: opts.session.id },
-        data: { credits: { decrement: resolved.creditCost } },
-        select: { credits: true },
-      });
-      await tx.creditTransaction.create({
-        data: {
-          userId: opts.session.id,
-          amount: -resolved.creditCost,
-          balanceAfter: afterDebit.credits,
-          note: `${opts.deviceKind.toUpperCase()} ${opts.mac}`,
-        },
+      await debitResellerCredits(tx, {
+        userId: opts.session.id,
+        amount: resolved.creditCost,
+        note: `${opts.deviceKind.toUpperCase()} ${opts.mac}`,
       });
       if (rewardPercent > 0) {
         await applyResellerLineReward(tx, {

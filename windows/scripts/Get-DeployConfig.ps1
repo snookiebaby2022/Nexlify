@@ -110,3 +110,152 @@ Path: $configPath
     SyncOnly      = [bool]$cfg.syncOnly
   }
 }
+
+# WinSCP filemask: pipe prefix = exclude from sync/compare (keeps deploy fast).
+function Get-NexlifyDeployFilemask {
+  @(
+    "node_modules/"
+    ".next/"
+    ".next.staging/"
+    ".next.backup/"
+    ".next.test/"
+    ".next.old/"
+    ".git/"
+    ".env"
+    "*.db"
+    "dist/"
+    "windows/"
+    ".license-keys/"
+    "marketing-drop-in/"
+    "promo-for-nexlify-web/"
+    ".opencode/"
+    ".cursor/"
+    ".claude/"
+    "docs/"
+    "agent-transcripts/"
+    "graft/"
+    "tmp/"
+    "backups/"
+    ".vscode/"
+    "assets/"
+    "license-server/"
+    "*.tar"
+    "*.tar.gz"
+    "*.zip"
+    "*.sql.gz"
+    "src/instrumentation.ts"
+    "src/lib/cron-scheduler.ts"
+    "tsconfig.tsbuildinfo"
+    ".update-progress.json"
+    ".update-progress.pid"
+  ) -join ";"
+}
+
+function Get-NexlifyOpenSshKey {
+  param([string]$Preferred)
+  foreach ($candidate in @($Preferred, "$env:USERPROFILE\.ssh\nexlify_deploy", "$env:USERPROFILE\.ssh\id_ed25519")) {
+    if ($candidate -and (Test-Path -LiteralPath $candidate) -and $candidate -notlike "*.ppk") {
+      return $candidate
+    }
+  }
+  return $null
+}
+
+function Sync-NexlifyPanelToRemote {
+  param(
+    [Parameter(Mandatory)][string]$HostName,
+    [Parameter(Mandatory)][string]$RemotePath,
+    [Parameter(Mandatory)][string]$ProjectRoot,
+    [string]$Password = "",
+    [string]$PrivateKey = $null,
+    [Parameter(Mandatory)][string]$WinScp,
+    [int]$Port = 22,
+    [string]$Username = "root",
+    [switch]$AcceptHostKey
+  )
+
+  $sshKey = if ($Password) { $null } else { Get-NexlifyOpenSshKey -Preferred $PrivateKey }
+  if ($sshKey) {
+    Write-Host "Sync via OpenSSH tar stream (fast) -> ${Username}@${HostName}:${RemotePath} ..."
+    $excludes = @(
+      "--exclude=node_modules"
+      "--exclude=.next"
+      "--exclude=.next.staging"
+      "--exclude=.next.backup"
+      "--exclude=.next.test"
+      "--exclude=.next.old"
+      "--exclude=.git"
+      "--exclude=windows"
+      "--exclude=graft"
+      "--exclude=marketing-drop-in"
+      "--exclude=.opencode"
+      "--exclude=.cursor"
+      "--exclude=.claude"
+      "--exclude=agent-transcripts"
+      "--exclude=tmp"
+      "--exclude=backups"
+      "--exclude=.vscode"
+      "--exclude=assets"
+    )
+    Push-Location $ProjectRoot
+    try {
+      $sshTarget = "${Username}@${HostName}"
+      $sshOpts = @("-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-p", "$Port", "-i", $sshKey)
+      $sedFix = 'sed -i ''s/\r$//'' scripts/*.sh scripts/*.mjs 2>/dev/null || true'
+      $remote = "mkdir -p '$RemotePath' && cd '$RemotePath' && tar -xzf - && rm -f src/instrumentation.ts src/lib/cron-scheduler.ts && $sedFix"
+      & tar -czf - @excludes . | & ssh.exe @sshOpts $sshTarget $remote
+      if ($LASTEXITCODE -eq 0) {
+        Write-Host "OpenSSH sync complete."
+        return
+      }
+      Write-Host "OpenSSH sync failed ($LASTEXITCODE) - falling back to WinSCP..." -ForegroundColor Yellow
+    } finally {
+      Pop-Location
+    }
+  }
+
+  $hostKeyOpt = if ($AcceptHostKey) { ' -hostkey="*"' } else { "" }
+  $filemask = Get-NexlifyDeployFilemask
+  # Sync code dirs one at a time — avoids WinSCP "Comparing..." walking .next / license-server on the VPS.
+  $syncDirs = @("scripts", "src", "prisma", "public")
+  $rootFiles = @(
+    "package.json", "package-lock.json", "next.config.ts", "tsconfig.json",
+    "ecosystem.config.cjs", "middleware.ts", "postcss.config.mjs", "tailwind.config.ts"
+  )
+  $winscpLines = @(
+    "option batch continue",
+    "option confirm off",
+    "option transfer binary",
+    "open sftp://${Username}:${Password}@${HostName}:${Port}/$hostKeyOpt"
+  )
+  foreach ($dir in $syncDirs) {
+    $localDir = Join-Path $ProjectRoot $dir
+    if (-not (Test-Path -LiteralPath $localDir)) { continue }
+    $winscpLines += @(
+      "lcd `"$localDir`"",
+      "cd `"$RemotePath/$dir`"",
+      "synchronize remote -delete=none -criteria=time -filemask=`"|$filemask`""
+    )
+  }
+  $winscpLines += @(
+    "lcd `"$ProjectRoot`"",
+    "cd `"$RemotePath`""
+  )
+  foreach ($f in $rootFiles) {
+    if (Test-Path -LiteralPath (Join-Path $ProjectRoot $f)) {
+      $winscpLines += "put `"$f`""
+    }
+  }
+  $winscpLines += @(
+    "call rm -f src/instrumentation.ts src/lib/cron-scheduler.ts",
+    'call sed -i ''s/\r$//'' scripts/*.sh scripts/*.mjs 2>/dev/null || true',
+    "exit"
+  )
+  $winscpScript = $winscpLines -join "`n"
+  $scriptFile = Join-Path $env:TEMP "nexlify-customer-sync.txt"
+  Set-Content -LiteralPath $scriptFile -Value $winscpScript -Encoding ASCII
+  Write-Host "Sync via WinSCP -> ${Username}@${HostName}:${RemotePath} ..."
+  & $WinScp "/ini=nul" "/batch" "/script=$scriptFile"
+  Remove-Item -LiteralPath $scriptFile -Force -ErrorAction SilentlyContinue
+  if ($LASTEXITCODE -ne 0) { throw "WinSCP sync failed ($LASTEXITCODE)" }
+}

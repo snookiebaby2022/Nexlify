@@ -77,13 +77,21 @@ export function redisModeFromEnv(): "cluster" | "single" | "memory" {
 export async function ensureRedisConnected(): Promise<boolean> {
   const r = getRedis();
   if (!r) return false;
-  try {
-    if (r.status === "ready") return true;
-    await r.connect();
-    return (await r.ping()) === "PONG";
-  } catch {
-    return false;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      if (r.status === "ready" && (await r.ping()) === "PONG") return true;
+      if (r.status !== "ready" && r.status !== "connecting") {
+        await r.connect();
+      }
+      if ((await r.ping()) === "PONG") return true;
+    } catch {
+      /* Redis may still be starting after panel restart */
+    }
+    if (attempt < 5) {
+      await new Promise((res) => setTimeout(res, 250 * (attempt + 1)));
+    }
   }
+  return false;
 }
 
 export async function redisPing() {

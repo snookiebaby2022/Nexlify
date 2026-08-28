@@ -14,16 +14,28 @@ import {
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const [notifications, resellers] = await Promise.all([
-    listAdminNotifications(),
+  const page = Math.max(1, Number(req.nextUrl.searchParams.get("page") ?? 1));
+  const pageSize = Math.min(
+    100,
+    Math.max(10, Number(req.nextUrl.searchParams.get("pageSize") ?? 25))
+  );
+
+  const [adminList, resellers] = await Promise.all([
+    listAdminNotifications({ page, pageSize }),
     listResellerOptions(),
   ]);
 
-  return NextResponse.json({ notifications, resellers });
+  return NextResponse.json({
+    notifications: adminList.notifications,
+    total: adminList.total,
+    page: adminList.page,
+    pageSize: adminList.pageSize,
+    resellers,
+  });
 }
 
 export async function POST(req: NextRequest) {

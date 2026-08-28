@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole, StreamType } from "@prisma/client";
 import { probeStreamUrl } from "@/lib/stream-probe-server";
+import { resolveProbeTargetUrl } from "@/lib/resolve-probe-url";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -112,17 +113,20 @@ export async function POST(req: NextRequest) {
 
     const stream = await prisma.stream.findUnique({
       where: { id: streamId },
-      select: { id: true, name: true, streamUrl: true, backupUrl: true },
+      include: { provider: true, server: true },
     });
     if (!stream) return NextResponse.json({ error: "Stream not found" }, { status: 404 });
 
-    const primaryProbe = await probeStreamUrl(stream.streamUrl, { fast: true });
+    const resolved = await resolveProbeTargetUrl(stream.streamUrl, stream);
+    const probeUrl = resolved.url || stream.streamUrl;
+    const primaryProbe = await probeStreamUrl(probeUrl, { fast: true });
     let backupProbe = null;
     if (stream.backupUrl) {
-      backupProbe = await probeStreamUrl(stream.backupUrl, { fast: true });
+      const backupResolved = await resolveProbeTargetUrl(stream.backupUrl.trim(), stream);
+      backupProbe = await probeStreamUrl(backupResolved.url || stream.backupUrl.trim(), { fast: true });
     }
 
-    const lastProbeOk = primaryProbe.status === "online" || primaryProbe.status === "degraded";
+    const lastProbeOk = primaryProbe.status === "online";
     const lastProbeError = lastProbeOk ? null : primaryProbe.message ?? "Probe failed";
 
     await prisma.stream.update({

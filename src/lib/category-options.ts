@@ -9,13 +9,11 @@ export function normalizeCategoryName(name: string): string {
     .trim();
 }
 
-const COUNTRY_PREFIX_RE =
-  /^(uk|us|ie|au|ca|de|fr|it|es|pl|tr|nl|pt|bg|ro|ar|za|jp|hk|my|nz|indian|international)\s+/;
-
-/** Aggressive key for merging near-duplicate category folders after migration. */
+/** Aggressive key for merging near-duplicate category folders after migration.
+ *  Keep country/region prefixes so "UK Entertainment" and "USA Entertainment"
+ *  stay separate folders in IPTV apps. */
 export function categoryMergeKey(name: string): string {
   let n = normalizeCategoryName(name);
-  n = n.replace(COUNTRY_PREFIX_RE, "");
   n = n.replace(/\s+(channels?|tv|live)\s*$/i, "");
   n = n.replace(/documentr(?:y|ies)/g, "documentary");
   return n.replace(/\s+/g, " ").trim();

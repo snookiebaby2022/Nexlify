@@ -184,11 +184,14 @@ export function ManageLinesTable({
     const created = sp.get("created")?.trim();
     const q = sp.get("q")?.trim();
     if (created) {
-      setSearch(created);
-      onServerSearchChange?.(created);
-      setCreatedBanner(`Line “${created}” created — showing at top of search.`);
+      setSearch("");
+      onServerSearchChange?.("");
+      onServerPageChange?.(1);
+      setCreatedBanner(`Line “${created}” created successfully.`);
       setSortKey("createdAt");
       setSortDir("desc");
+      router.replace(`${base}/lines`, { scroll: false });
+      onRefresh();
     } else if (q) {
       setSearch(q);
       onServerSearchChange?.(q);

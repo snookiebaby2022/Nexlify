@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
 
@@ -16,26 +16,49 @@ export default function ResellerMyCreditsPage() {
   const [credits, setCredits] = useState<number | null>(null);
   const [transactions, setTransactions] = useState<CreditTx[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError("");
     fetch("/api/reseller/credits")
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load credits");
-        return r.json();
+      .then(async (r) => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(typeof d.error === "string" ? d.error : "Failed to load credits");
+        return d;
       })
       .then((d) => {
-        setCredits(d.credits ?? null);
-        setTransactions(d.transactions ?? []);
+        const bal = typeof d.credits === "number" ? d.credits : 0;
+        setCredits(bal);
+        setTransactions(Array.isArray(d.transactions) ? d.transactions : []);
+        window.dispatchEvent(
+          new CustomEvent("nexlify-credits-updated", { detail: { credits: bal } })
+        );
       })
-      .catch(() => {
-        setError("Could not load credit balance.");
-        setCredits(null);
-      });
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : "Could not load credit balance.");
+      })
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <h1 className="text-2xl font-semibold">My credits</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">My credits</h1>
+        <button
+          type="button"
+          onClick={load}
+          className="rounded border px-3 py-1.5 text-sm"
+          style={{ borderColor: "var(--border)" }}
+          disabled={loading}
+        >
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
       {error && (
         <p className="text-sm" style={{ color: "var(--danger)" }}>
           {error}
@@ -49,10 +72,11 @@ export default function ResellerMyCreditsPage() {
           Available balance
         </p>
         <p className="text-4xl font-bold tabular-nums mt-2">
-          {credits === null ? "—" : credits}
+          {loading && credits === null ? "…" : credits === null ? "—" : credits}
         </p>
         <p className="text-xs mt-3" style={{ color: "var(--muted)" }}>
-          Credits are used when you create lines and allocate balance to sub-resellers.
+          Credits are deducted when you create or renew lines, and when you allocate balance to
+          sub-resellers. Free trials (24h/48h) and 1-week packages do not charge credits.
         </p>
       </div>
 
@@ -80,9 +104,15 @@ export default function ResellerMyCreditsPage() {
               </div>
             </li>
           ))}
-          {!transactions.length && (
+          {!transactions.length && !loading && (
             <li className="px-4 py-6 text-center" style={{ color: "var(--muted)" }}>
-              No transactions yet
+              No credit transactions yet. Creating or renewing a paid line (1 month+) will appear
+              here.
+            </li>
+          )}
+          {loading && !transactions.length && (
+            <li className="px-4 py-6 text-center" style={{ color: "var(--muted)" }}>
+              Loading…
             </li>
           )}
         </ul>

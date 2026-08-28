@@ -76,6 +76,8 @@ export async function checkDdosShield(
   ip: string | undefined
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   if (!ip) return { ok: true };
+  const { isTestConnectionIp } = await import("@/lib/connections");
+  if (isTestConnectionIp(ip)) return { ok: true };
   const security = await getSettingGroup("security");
   if (security.ddosShieldEnabled === false) return { ok: true };
 

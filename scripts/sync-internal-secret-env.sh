@@ -60,7 +60,11 @@ export PANEL_INTERNAL_SECRET="$CANON"
 export PANEL_API_SECRET="$CANON"
 export NEXLIFY_PANEL_API_SECRET="$CANON"
 
-if [ -x scripts/install-iptv-edge-proxy.sh ]; then
+# Prefer soft rematch (restart edge with matching env). Full install only if rematch missing.
+# Guard against rematch→sync recursion via REMATCH_IPTV_EDGE_AUTH=1.
+if [ -x scripts/rematch-iptv-edge-auth.sh ]; then
+  REMATCH_IPTV_EDGE_AUTH=1 bash scripts/rematch-iptv-edge-auth.sh
+elif [ -x scripts/install-iptv-edge-proxy.sh ]; then
   bash scripts/install-iptv-edge-proxy.sh
 else
   pm2 restart nexlify-iptv-edge --update-env 2>/dev/null || true

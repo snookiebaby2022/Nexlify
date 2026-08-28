@@ -109,24 +109,29 @@ export type PlaybackContext = {
 };
 
 export async function getLineForPlaybackAuth(username: string): Promise<LinePlaybackAuth | null> {
-  const row = await prisma.line.findUnique({ where: { username } });
-  if (!row) return null;
-  return {
-    id: row.id,
-    password: row.password,
-    status: row.status,
-    expiresAt: row.expiresAt,
-    lockToIp: row.lockToIp,
-    allowedIps: row.allowedIps,
-    maxConnections: row.maxConnections,
-    allowedCountries: row.allowedCountries,
-    blockedCountries: row.blockedCountries,
-    canWatchAdult: (row as Line & { canWatchAdult?: boolean }).canWatchAdult ?? true,
-    forcedServerId: row.forcedServerId,
-    allowedUserAgents: (row as Line & { allowedUserAgents?: string | null }).allowedUserAgents ?? null,
-    disallowedUserAgents:
-      (row as Line & { disallowedUserAgents?: string | null }).disallowedUserAgents ?? null,
-  };
+  const key = username.trim().toLowerCase();
+  if (!key) return null;
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  return cacheGetOrSet(`line:auth:${key}`, 45, async () => {
+    const row = await prisma.line.findUnique({ where: { username: key } });
+    if (!row) return null;
+    return {
+      id: row.id,
+      password: row.password,
+      status: row.status,
+      expiresAt: row.expiresAt,
+      lockToIp: row.lockToIp,
+      allowedIps: row.allowedIps,
+      maxConnections: row.maxConnections,
+      allowedCountries: row.allowedCountries,
+      blockedCountries: row.blockedCountries,
+      canWatchAdult: (row as Line & { canWatchAdult?: boolean }).canWatchAdult ?? true,
+      forcedServerId: row.forcedServerId,
+      allowedUserAgents: (row as Line & { allowedUserAgents?: string | null }).allowedUserAgents ?? null,
+      disallowedUserAgents:
+        (row as Line & { disallowedUserAgents?: string | null }).disallowedUserAgents ?? null,
+    };
+  });
 }
 
 /** Cached resolved URL for authorized stream (default 60s; configurable in stream settings). */

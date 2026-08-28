@@ -102,7 +102,9 @@ export async function GET(req: NextRequest) {
     }))
   );
   const plexCron =
-    !type || type === "plex" ? await (await import("@/lib/plex-catalog-match")).plexCronAdminStatus() : undefined;
+    !type || type === "plex" || type === "emby" || type === "jellyfin"
+      ? await (await import("@/lib/plex-catalog-match")).plexCronAdminStatus()
+      : undefined;
   return NextResponse.json({ items: mapped, ...(plexCron ? { plexCron } : {}) });
 }
 
@@ -206,8 +208,18 @@ export async function POST(req: NextRequest) {
     if (body.action === "libraries") {
       const id = String(body.id ?? "");
       if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-      const libraries = await listPlexLibraries(id);
-      return NextResponse.json({ libraries });
+      const row = await prisma.mediaIntegration.findUnique({ where: { id } });
+      if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      if (row.type === "plex") {
+        const libraries = await listPlexLibraries(id);
+        return NextResponse.json({ libraries });
+      }
+      if (row.type === "emby" || row.type === "jellyfin") {
+        const { listEmbyJellyfinLibraries } = await import("@/lib/emby-jellyfin-import");
+        const libraries = await listEmbyJellyfinLibraries(id, row.type);
+        return NextResponse.json({ libraries });
+      }
+      return NextResponse.json({ error: "Libraries not supported for this integration" }, { status: 400 });
     }
 
     if (body.action === "sync") {
@@ -297,6 +309,7 @@ export async function POST(req: NextRequest) {
           directStream: body.directStream !== false,
           libraryKey: body.libraryKey ? String(body.libraryKey) : null,
           libraryTitle: body.libraryTitle ? String(body.libraryTitle) : null,
+          skipExistingCatalog: body.skipExistingCatalog !== false,
         }) as Prisma.InputJsonValue,
         isActive: body.isActive !== false,
       },
@@ -348,6 +361,10 @@ export async function PATCH(req: NextRequest) {
               directStream: body.directStream !== undefined ? body.directStream === true : prev.directStream,
               libraryKey: body.libraryKey ?? prev.libraryKey,
               libraryTitle: body.libraryTitle ?? prev.libraryTitle,
+              skipExistingCatalog:
+                body.skipExistingCatalog !== undefined
+                  ? body.skipExistingCatalog !== false
+                  : prev.skipExistingCatalog,
               syncProgress: prev.syncProgress,
             };
     const item = await prisma.mediaIntegration.update({

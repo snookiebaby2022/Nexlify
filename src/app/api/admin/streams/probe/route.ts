@@ -48,9 +48,9 @@ export async function POST(req: NextRequest) {
       where: { id: stream.id },
       data: {
         lastProbeAt: new Date(),
-        lastProbeOk: probe.status === "online" || probe.status === "degraded",
+        lastProbeOk: probe.status === "online",
         lastProbeError:
-          probe.status === "online" || probe.status === "degraded"
+          probe.status === "online"
             ? null
             : probe.message ?? "Probe failed",
       },

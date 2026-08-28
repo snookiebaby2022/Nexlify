@@ -1,6 +1,7 @@
 import type { Stream, StreamProvider, StreamServer, VodMode } from "@prisma/client";
 import { resolveProviderUrl } from "./vod-provider-url";
 import { parseBitrates, resolveStreamPlayUrl } from "./stream-variants";
+import { repairMalformedStreamUrl } from "./stream-source";
 
 export type StreamWithProvider = Stream & {
   provider?: StreamProvider | null;
@@ -9,7 +10,7 @@ export type StreamWithProvider = Stream & {
 
 /** Some XUI providers break on explicit :443 in https URLs (empty 200 body from Cloudflare). */
 export function normalizeUpstreamStreamUrl(url: string): string {
-  const t = url.trim();
+  const t = repairMalformedStreamUrl(url.trim());
   if (!t) return t;
   try {
     const u = new URL(t);

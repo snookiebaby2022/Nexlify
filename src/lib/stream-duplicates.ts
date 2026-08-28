@@ -276,3 +276,86 @@ export async function deleteDuplicateStreams(ids: string[]): Promise<{ deleted: 
   }
   return { deleted, skipped: unique.length - okIds.length };
 }
+
+export type DuplicateNameCollision = {
+  nameKey: string;
+  displayName: string;
+  streamCount: number;
+  sharedCategories: string[];
+  sharedBouquets: string[];
+  streamIds: string[];
+};
+
+/**
+ * Live channels with the same display name that overlap in a category or bouquet.
+ * Causes wrong stream_id / probe vs playback mismatches (e.g. duplicate "24-7 …" rows).
+ */
+export async function findDuplicateNameCollisions(
+  type: StreamType = StreamType.LIVE
+): Promise<{ collisions: DuplicateNameCollision[]; collisionCount: number; extraCopies: number }> {
+  const rows = await prisma.stream.findMany({
+    where: { type, ...(type === StreamType.LIVE ? { isRadio: false } : {}) },
+    select: {
+      id: true,
+      name: true,
+      category: { select: { name: true } },
+      bouquets: { select: { bouquet: { select: { name: true } } } },
+    },
+  });
+
+  const byName = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const key = normalizeDuplicateTitle(row.name);
+    if (!key) continue;
+    const list = byName.get(key) ?? [];
+    list.push(row);
+    byName.set(key, list);
+  }
+
+  const collisions: DuplicateNameCollision[] = [];
+
+  for (const [nameKey, members] of byName) {
+    if (members.length < 2) continue;
+
+    const categoryHits = new Map<string, number>();
+    for (const m of members) {
+      const cat = m.category?.name?.trim();
+      if (!cat) continue;
+      categoryHits.set(cat, (categoryHits.get(cat) ?? 0) + 1);
+    }
+    const sharedCategories = [...categoryHits.entries()]
+      .filter(([, n]) => n >= 2)
+      .map(([name]) => name);
+
+    const bouquetHits = new Map<string, number>();
+    for (const m of members) {
+      for (const link of m.bouquets) {
+        const b = link.bouquet?.name?.trim();
+        if (!b) continue;
+        bouquetHits.set(b, (bouquetHits.get(b) ?? 0) + 1);
+      }
+    }
+    const sharedBouquets = [...bouquetHits.entries()]
+      .filter(([, n]) => n >= 2)
+      .map(([name]) => name);
+
+    if (!sharedCategories.length && !sharedBouquets.length) continue;
+
+    collisions.push({
+      nameKey,
+      displayName: members[0]!.name,
+      streamCount: members.length,
+      sharedCategories,
+      sharedBouquets,
+      streamIds: members.map((m) => m.id),
+    });
+  }
+
+  collisions.sort(
+    (a, b) =>
+      b.streamCount - a.streamCount || a.displayName.localeCompare(b.displayName)
+  );
+
+  const extraCopies = collisions.reduce((n, c) => n + Math.max(0, c.streamCount - 1), 0);
+  return { collisions, collisionCount: collisions.length, extraCopies };
+}

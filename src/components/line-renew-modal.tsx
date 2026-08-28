@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Calendar, CheckCircle2 } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
+import { effectiveCreditCost } from "@/lib/package-credits";
 import { isUnlimitedDurationDays, lineDurationPresetsForPanel } from "@/lib/line-duration-presets";
 import { previewExtendedExpiry } from "@/lib/line-renew";
 import { linesApiRoot, type PanelKind } from "@/lib/panel-api";
@@ -26,7 +27,12 @@ export function LineRenewModal({
   status?: string;
   panel?: PanelKind;
   onClose: () => void;
-  onRenewed: (result?: { expiresAt: string; status: string }) => void;
+  onRenewed: (result?: {
+    expiresAt: string;
+    status: string;
+    creditsCharged?: number;
+    creditsRemaining?: number;
+  }) => void;
 }) {
   const [packages, setPackages] = useState<PackageRow[]>([]);
   const [packageId, setPackageId] = useState("");
@@ -34,9 +40,25 @@ export function LineRenewModal({
   const [reactivate, setReactivate] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState<{ expiresAt: string; status: string } | null>(null);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [success, setSuccess] = useState<{
+    expiresAt: string;
+    status: string;
+    creditsCharged?: number;
+    creditsRemaining?: number;
+  } | null>(null);
 
+  const paysCredits = panel === "reseller";
   const expiredOrDisabled = status === "EXPIRED" || status === "DISABLED";
+  const selectedPkg = useMemo(
+    () => (packageId ? packages.find((p) => p.id === packageId) ?? null : null),
+    [packageId, packages]
+  );
+  const creditCost = useMemo(
+    () => (paysCredits ? effectiveCreditCost(days, selectedPkg?.creditCost, false) : 0),
+    [paysCredits, days, selectedPkg]
+  );
+  const balanceAfter = creditBalance != null ? Math.max(0, creditBalance - creditCost) : null;
   const previewExpiry = useMemo(() => {
     if (!days || days < 1) return null;
     try {
@@ -62,7 +84,15 @@ export function LineRenewModal({
         );
       })
       .catch(() => {});
-  }, [open, lineId]);
+    if (paysCredits) {
+      fetch("/api/reseller/credits")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d && typeof d.credits === "number") setCreditBalance(d.credits);
+        })
+        .catch(() => setCreditBalance(null));
+    }
+  }, [open, lineId, panel, paysCredits]);
 
   if (!open) return null;
 
@@ -76,12 +106,20 @@ export function LineRenewModal({
       setError("Only administrators can set unlimited lines.");
       return;
     }
+    if (paysCredits && creditBalance != null && creditCost > creditBalance) {
+      setError(`Insufficient credits (need ${creditCost}, have ${creditBalance}).`);
+      return;
+    }
     setBusy(true);
     setError("");
     const res = await fetch(`${linesApiRoot(panel)}/${lineId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ days, reactivate }),
+      body: JSON.stringify({
+        days,
+        reactivate,
+        ...(packageId ? { packageId } : {}),
+      }),
     });
     const data = await res.json().catch(() => ({}));
     setBusy(false);
@@ -89,9 +127,31 @@ export function LineRenewModal({
       setError(typeof data.error === "string" ? data.error : "Renew failed");
       return;
     }
+    const charged =
+      typeof data.creditsCharged === "number"
+        ? data.creditsCharged
+        : typeof data.renew?.creditsCharged === "number"
+          ? data.renew.creditsCharged
+          : creditCost;
+    const remaining =
+      typeof data.creditsRemaining === "number"
+        ? data.creditsRemaining
+        : typeof data.renew?.creditsRemaining === "number"
+          ? data.renew.creditsRemaining
+          : creditBalance != null
+            ? Math.max(0, creditBalance - charged)
+            : undefined;
+    if (typeof remaining === "number") {
+      setCreditBalance(remaining);
+      window.dispatchEvent(
+        new CustomEvent("nexlify-credits-updated", { detail: { credits: remaining } })
+      );
+    }
     const renewed = {
       expiresAt: data.line?.expiresAt ?? data.renew?.expiresAt ?? previewExpiry ?? expiresAt,
       status: data.line?.status ?? data.renew?.status ?? (reactivate ? "ACTIVE" : status ?? "ACTIVE"),
+      creditsCharged: charged,
+      creditsRemaining: remaining,
     };
     setSuccess(renewed);
     onRenewed(renewed);
@@ -140,6 +200,17 @@ export function LineRenewModal({
                 Status: {success.status}
               </p>
             ) : null}
+            {paysCredits ? (
+              <p className="text-sm" style={{ color: "var(--text)" }}>
+                Credits deducted: <strong>{success.creditsCharged ?? 0}</strong>
+                {typeof success.creditsRemaining === "number" ? (
+                  <>
+                    {" "}
+                    · Remaining: <strong>{success.creditsRemaining}</strong>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
             <div className="flex justify-end pt-1">
               <button
                 type="button"
@@ -179,6 +250,32 @@ export function LineRenewModal({
                   </div>
                 </div>
               ) : null}
+              {paysCredits ? (
+                <div
+                  className="sm:col-span-2 pt-1 border-t space-y-1"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <div className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+                    Credits
+                  </div>
+                  <p className="font-medium">
+                    This renew will deduct <strong>{creditCost}</strong> credit
+                    {creditCost === 1 ? "" : "s"}
+                    {creditBalance != null ? (
+                      <>
+                        {" "}
+                        · Your balance: <strong>{creditBalance}</strong>
+                        {balanceAfter != null ? (
+                          <>
+                            {" "}
+                            → <strong>{balanceAfter}</strong> left
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </p>
+                </div>
+              ) : null}
             </div>
 
             <label className="block text-sm">
@@ -196,62 +293,76 @@ export function LineRenewModal({
                   if (pkg) setDays(pkg.days);
                 }}
               >
-                <option value="">Custom days…</option>
+                <option value="">Custom days</option>
                 {packages.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} · {p.days}d{p.creditCost > 0 ? ` · ${p.creditCost} cr` : ""}
+                    {p.name} ({p.days}d
+                    {paysCredits
+                      ? ` · ${effectiveCreditCost(p.days, p.creditCost)} cr`
+                      : p.creditCost
+                        ? ` · ${p.creditCost} cr`
+                        : ""}
+                    )
                   </option>
                 ))}
               </select>
             </label>
 
-            <div className="flex flex-wrap gap-2">
-              {lineDurationPresetsForPanel(panel).map((p) => (
-                <button
-                  key={p.label}
-                  type="button"
-                  onClick={() => setDays(p.days)}
-                  className="text-xs rounded-full px-3 py-1 border cursor-pointer"
-                  style={{
-                    borderColor: days === p.days ? "#00c0ef" : "var(--border)",
-                    background: days === p.days ? "rgba(0,192,239,0.18)" : "transparent",
-                    color: days === p.days ? "#fff" : "var(--muted)",
-                  }}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+            <label className="block text-sm">
+              <span className="mb-1 block" style={{ color: "var(--muted)" }}>
+                Or pick a duration
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {lineDurationPresetsForPanel(panel)
+                  .filter((p) => p.id !== "unlimited" || panel === "admin")
+                  .map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className="rounded border px-2.5 py-1 text-xs"
+                      style={{
+                        borderColor: days === p.days ? "var(--accent)" : "var(--border)",
+                        background:
+                          days === p.days ? "rgba(0,192,239,0.12)" : "transparent",
+                      }}
+                      onClick={() => {
+                        const match = packages.find((row) => row.days === p.days);
+                        setPackageId(match?.id ?? "");
+                        setDays(p.days);
+                      }}
+                    >
+                      {p.label}
+                      {paysCredits && p.creditCost > 0 ? ` (${p.creditCost} cr)` : ""}
+                    </button>
+                  ))}
+              </div>
+            </label>
 
             <label className="block text-sm">
               <span className="mb-1 block" style={{ color: "var(--muted)" }}>
-                Extend by (days)
+                Days to add
               </span>
               <input
                 type="number"
                 min={1}
-                required
-                className="w-full rounded border px-3 py-2 bg-transparent"
+                className="w-full rounded border px-3 py-2 bg-transparent text-sm"
                 style={{ borderColor: "var(--border)" }}
                 value={days}
-                onChange={(e) => setDays(parseInt(e.target.value, 10) || 0)}
+                onChange={(e) => {
+                  setPackageId("");
+                  setDays(Math.max(1, Number(e.target.value) || 1));
+                }}
               />
             </label>
 
             {expiredOrDisabled ? (
-              <label className="flex items-start gap-2 text-sm cursor-pointer">
+              <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  className="mt-0.5"
                   checked={reactivate}
                   onChange={(e) => setReactivate(e.target.checked)}
                 />
-                <span>
-                  Reactivate line (set status to <strong>ACTIVE</strong>)
-                  <span className="block text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-                    Required for playback after an expired or disabled subscription.
-                  </span>
-                </span>
+                Reactivate line (set status to Active)
               </label>
             ) : null}
 
@@ -261,7 +372,7 @@ export function LineRenewModal({
               </p>
             ) : null}
 
-            <div className="flex gap-2 justify-end pt-1">
+            <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"
                 onClick={onClose}
@@ -276,7 +387,11 @@ export function LineRenewModal({
                 className="rounded px-4 py-2 text-sm font-medium disabled:opacity-60"
                 style={{ background: "var(--accent)", color: "#fff" }}
               >
-                {busy ? "Renewing…" : `Renew +${days} days`}
+                {busy
+                  ? "Renewing…"
+                  : paysCredits
+                    ? `Renew +${days} days (−${creditCost} cr)`
+                    : `Renew +${days} days`}
               </button>
             </div>
           </>

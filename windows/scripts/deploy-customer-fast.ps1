@@ -92,10 +92,12 @@ if ($SkipBuild) {
   exit 0
 }
 
-if ($SkipEdge) {
-  $remoteCmd = "cd $CustomerPath && sed -i 's/\r$//' scripts/*.sh scripts/*.mjs 2>/dev/null; chmod +x scripts/*.sh; npm run build && bash scripts/panel-restart-safe.sh --nexlify-only && echo FAST_DEPLOY_OK"
-} else {
-  $remoteCmd = "cd $CustomerPath && sed -i 's/\r$//' scripts/*.sh scripts/*.mjs 2>/dev/null; chmod +x scripts/*.sh; npm run build && bash scripts/panel-restart-safe.sh --nexlify-only && (bash scripts/sync-internal-secret-env.sh 2>/dev/null || bash scripts/install-iptv-edge-proxy.sh 2>/dev/null || pm2 restart nexlify-iptv-edge 2>/dev/null || true) && echo FAST_DEPLOY_OK"
+# SkipEdge = do not reinstall/replace iptv-edge-proxy.mjs.
+# panel-restart-safe always rematches PANEL_INTERNAL_SECRET + soft-restarts edge
+# so panel-only hotfixes cannot leave UI up with dead playback again.
+$remoteCmd = "cd $CustomerPath && sed -i 's/\r$//' scripts/*.sh scripts/*.mjs 2>/dev/null; chmod +x scripts/*.sh; npm run build && bash scripts/panel-restart-safe.sh --nexlify-only && echo FAST_DEPLOY_OK"
+if (-not $SkipEdge) {
+  $remoteCmd = "cd $CustomerPath && sed -i 's/\r$//' scripts/*.sh scripts/*.mjs 2>/dev/null; chmod +x scripts/*.sh; npm run build && bash scripts/panel-restart-safe.sh --nexlify-only && (bash scripts/sync-internal-secret-env.sh 2>/dev/null || bash scripts/install-iptv-edge-proxy.sh 2>/dev/null || true) && echo FAST_DEPLOY_OK"
 }
 
 Write-Host "Building on $CustomerHost (no git pull, no npm install) ..."
@@ -104,3 +106,6 @@ if ($LASTEXITCODE -ne 0) { throw "Remote build failed ($LASTEXITCODE)" }
 
 Write-Host ""
 Write-Host "Fast deploy OK: http://${CustomerHost}" -ForegroundColor Green
+if ($SkipEdge) {
+  Write-Host "SkipEdge: edge binary not redeployed; auth rematch ran via panel-restart-safe." -ForegroundColor DarkGray
+}

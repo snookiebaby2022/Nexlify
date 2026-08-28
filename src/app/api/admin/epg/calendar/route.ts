@@ -5,6 +5,9 @@ import { getSettingGroup } from "@/lib/panel-settings";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
+const MAX_PROGRAMS = 400;
+const MAX_CHANNELS = 80;
+
 export async function GET(req: Request) {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -12,6 +15,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const start = searchParams.get("start");
   const end = searchParams.get("end");
+  const channelId = searchParams.get("channelId")?.trim() ?? "";
 
   if (!start || !end) {
     return NextResponse.json({ error: "Missing start or end date" }, { status: 400 });
@@ -28,14 +32,29 @@ export async function GET(req: Request) {
       timeFormat: normalizeTimeFormat(general.timeFormat),
     };
 
-    const programs = await prisma.epgProgram.findMany({
-      where: {
-        start: { gte: startDate },
-        stop: { lte: endDate },
-      },
-      orderBy: { start: "asc" },
-      take: 5000,
-    });
+    const where: {
+      start: { gte: Date; lte: Date };
+      channelId?: string;
+    } = {
+      start: { gte: startDate, lte: endDate },
+    };
+    if (channelId) where.channelId = channelId;
+
+    const [programs, channelRows, totalInRange] = await Promise.all([
+      prisma.epgProgram.findMany({
+        where,
+        orderBy: { start: "asc" },
+        take: MAX_PROGRAMS,
+      }),
+      prisma.epgProgram.findMany({
+        where: { start: { gte: startDate, lte: endDate } },
+        select: { channelId: true },
+        distinct: ["channelId"],
+        take: MAX_CHANNELS,
+        orderBy: { channelId: "asc" },
+      }),
+      prisma.epgProgram.count({ where }),
+    ]);
 
     const mapped = programs.map((p) => ({
       id: p.id,
@@ -47,9 +66,17 @@ export async function GET(req: Request) {
       description: p.description,
     }));
 
-    const channels = [...new Set(mapped.map((p) => p.channelName))].sort();
+    const channels = channelRows.map((r) => r.channelId).filter(Boolean).sort();
 
-    return NextResponse.json({ programs: mapped, channels, start, end, display });
+    return NextResponse.json({
+      programs: mapped,
+      channels,
+      start,
+      end,
+      display,
+      truncated: totalInRange > programs.length,
+      totalInRange,
+    });
   } catch (e) {
     console.error("EPG calendar query error:", e);
     return NextResponse.json({ error: "Failed to load EPG programs" }, { status: 500 });

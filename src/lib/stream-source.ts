@@ -6,6 +6,23 @@ export function normalizeStreamSource(input: string): string {
   let s = input.trim();
   // Single slash after scheme — must run before path resolution or URL becomes file:///media/https:/...
   s = s.replace(/^(https?):\/(?!\/)/i, "$1://");
+  s = repairMalformedStreamUrl(s);
+  return s;
+}
+
+/** Fix XUI/import typos like "://host:/path" or "https://host:/path". */
+export function repairMalformedStreamUrl(input: string): string {
+  let s = input.trim();
+  if (!s) return s;
+  if (s.startsWith("://")) {
+    s = `https${s}`;
+  }
+  s = s.replace(/^(https?):\/\/([^:/]+):\//i, "$1://$2/");
+  s = s.replace(/^(https?):\/\/([^:/]+):(\d+)\/(.*)$/i, (_, scheme, host, port, rest) => {
+    if (port === "443" && scheme.toLowerCase() === "https") return `https://${host}/${rest}`;
+    if (port === "80" && scheme.toLowerCase() === "http") return `http://${host}/${rest}`;
+    return `${scheme}://${host}:${port}/${rest}`;
+  });
   return s;
 }
 

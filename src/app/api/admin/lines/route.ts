@@ -251,7 +251,10 @@ export async function POST(req: NextRequest) {
       if (body.maxConnections == null || body.maxConnections === "") {
         maxConnections = tpl.maxConnections;
       }
-      if (body.packageId == null || body.packageId === "") totalCost = tpl.creditCost;
+      if (body.packageId == null || body.packageId === "") {
+        const { effectiveCreditCost } = await import("@/lib/package-credits");
+        totalCost = effectiveCreditCost(tpl.days, tpl.creditCost, tpl.isTrial);
+      }
       body.lockToIp = body.lockToIp ?? tpl.lockToIp;
       body.allowedCountries = body.allowedCountries || tpl.allowedCountries || body.allowedCountries;
       body.blockedCountries = body.blockedCountries || tpl.blockedCountries || body.blockedCountries;
@@ -308,6 +311,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: guard.error }, { status: 400 });
   }
 
+  const paysCredits =
+    session.role === PanelRole.RESELLER || session.role === PanelRole.SUB_RESELLER;
+  if (paysCredits) {
+    const { effectiveCreditCost } = await import("@/lib/package-credits");
+    totalCost = effectiveCreditCost(days, totalCost, Boolean(body.isTrial));
+  }
+
   if (!bouquetIds.length && session.role !== PanelRole.ADMIN) {
     return NextResponse.json(
       { error: "Select at least one bouquet for this line" },
@@ -315,11 +325,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const paysCredits =
-    session.role === PanelRole.RESELLER || session.role === PanelRole.SUB_RESELLER;
-  const { getResellerLineRewardPercent, applyResellerLineReward } = await import(
-    "@/lib/reseller-rewards"
-  );
+  const { getResellerLineRewardPercent } = await import("@/lib/reseller-rewards");
+  const { debitResellerCredits } = await import("@/lib/reseller-credit-charge");
   const rewardPercent = paysCredits ? await getResellerLineRewardPercent() : 0;
 
   const statusRaw = String(body.status ?? "ACTIVE").toUpperCase();
@@ -339,34 +346,29 @@ export async function POST(req: NextRequest) {
 
   try {
     const line = await prisma.$transaction(async (tx) => {
+      let charged = 0;
+      let balanceAfter: number | null = null;
       if (paysCredits && totalCost > 0) {
-        const owner = await tx.panelUser.findUnique({ where: { id: session.id } });
-        if (!owner) throw new Error("Forbidden");
-        if (owner.credits < totalCost) throw new Error("Insufficient credits");
-        const afterDebit = await tx.panelUser.update({
-          where: { id: session.id },
-          data: { credits: { decrement: totalCost } },
-          select: { credits: true },
+        const debit = await debitResellerCredits(tx, {
+          userId: session.id,
+          amount: totalCost,
+          note: `Line ${username}`,
         });
-        await tx.creditTransaction.create({
-          data: {
-            userId: session.id,
-            amount: -totalCost,
-            balanceAfter: afterDebit.credits,
-            note: `Line ${username}`,
-          },
-        });
+        charged = debit.charged;
+        balanceAfter = debit.balanceAfter;
         if (rewardPercent > 0) {
-          await applyResellerLineReward(tx, {
+          const { applyResellerLineReward } = await import("@/lib/reseller-rewards");
+          const rebate = await applyResellerLineReward(tx, {
             userId: session.id,
             spent: totalCost,
             percent: rewardPercent,
             lineUsername: username,
           });
+          if (rebate > 0 && balanceAfter != null) balanceAfter += rebate;
         }
       }
 
-      return tx.line.create({
+      const created = await tx.line.create({
         data: {
           username,
           password,
@@ -390,6 +392,7 @@ export async function POST(req: NextRequest) {
         },
         include: { bouquets: { include: { bouquet: true } } },
       });
+      return { line: created, charged, balanceAfter };
     });
 
     if (body.accessCode) {
@@ -398,9 +401,9 @@ export async function POST(req: NextRequest) {
 
     await logActivity("create_line", {
       userId: session.id,
-      lineId: line.id,
+      lineId: line.line.id,
       entity: "line",
-      entityId: line.id,
+      entityId: line.line.id,
     });
 
     await invalidateXtreamCategories();
@@ -412,13 +415,17 @@ export async function POST(req: NextRequest) {
     if (panelUrl) {
       const { notifyLineWelcome } = await import("@/lib/panel-notification-events");
       void notifyLineWelcome({
-        lineId: line.id,
+        lineId: line.line.id,
         panelUrl,
         clientEmail: body.clientEmail ? String(body.clientEmail) : null,
       });
     }
 
-    return NextResponse.json({ line });
+    return NextResponse.json({
+      line: line.line,
+      creditsCharged: line.charged,
+      creditsRemaining: line.balanceAfter ?? undefined,
+    });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return NextResponse.json(

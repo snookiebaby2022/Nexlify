@@ -180,14 +180,58 @@ export async function rebalanceLiveStreamsAcrossServers(opts?: {
       name: x.server.name,
     }))
   );
+  const mainIds = new Set(
+    scores
+      .filter((x) => resolveServerRole(x.server, roleCtx) === "main")
+      .map((x) => x.server.id)
+  );
   const online = scores.filter((x) => {
     if (!x.online || !x.server.isActive) return false;
-    if (!includeMain && resolveServerRole(x.server, roleCtx) === "main") return false;
+    if (!includeMain && mainIds.has(x.server.id)) return false;
     return true;
   });
-  if (online.length < 2) return { moved: 0, servers: online.length };
+  if (online.length < 1) return { moved: 0, servers: 0 };
 
   const maxMoves = Math.max(1, Math.min(opts?.maxMoves ?? 80, 400));
+
+  // Drain live catalog off the panel/main host onto LB nodes.
+  if (!includeMain && mainIds.size && online.length >= 1) {
+    const drainMoves: { streamId: string; toServerId: string }[] = [];
+    for (const mainId of mainIds) {
+      if (drainMoves.length >= maxMoves) break;
+      const take = Math.min(maxMoves - drainMoves.length, 400);
+      const streams = await prisma.stream.findMany({
+        where: { type: "LIVE", isActive: true, serverId: mainId },
+        select: { id: true },
+        orderBy: { updatedAt: "asc" },
+        take,
+      });
+      let i = 0;
+      for (const stream of streams) {
+        const dest = online[i % online.length]!;
+        drainMoves.push({ streamId: stream.id, toServerId: dest.server.id });
+        i++;
+      }
+    }
+    if (drainMoves.length) {
+      const byDest = new Map<string, string[]>();
+      for (const m of drainMoves) {
+        const list = byDest.get(m.toServerId) ?? [];
+        list.push(m.streamId);
+        byDest.set(m.toServerId, list);
+      }
+      for (const [serverId, ids] of byDest) {
+        await prisma.stream.updateMany({
+          where: { id: { in: ids } },
+          data: { serverId },
+        });
+      }
+      return { moved: drainMoves.length, servers: online.length };
+    }
+  }
+
+  if (online.length < 2) return { moved: 0, servers: online.length };
+
   const totalLive = online.reduce((n, s) => n + s.catalogAssigned, 0);
   if (totalLive === 0) return { moved: 0, servers: online.length };
 

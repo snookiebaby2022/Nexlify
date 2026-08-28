@@ -7,7 +7,7 @@ import { parseXtreamPlaybackPath } from "@/lib/xtream-playback-path";
 import { stripLiveStreamExtension, isHlsPlaybackUrl, isSafeUpstreamUrl, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
 import { getAntiFreezeSettings, schedulePlaybackUpstreamWarm } from "@/lib/anti-freeze";
 import { checkLineUserAgent } from "@/lib/line-restrictions";
-import { isSessionKicked, trackConnection } from "@/lib/connections";
+import { isSessionKicked, trackConnection, isTestConnectionIp } from "@/lib/connections";
 import { outboundProxyHeaderValue, resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
 import { isTinyLiveRangeProbe } from "@/lib/live-http-range";
 
@@ -98,6 +98,22 @@ export async function GET(req: NextRequest) {
 
   const isHlsSegment = parsed.wantsHls && /\/hls\/seg\d+\.ts$/i.test(parsed.streamKey);
   const liveProbe = isLiveByteProbe(req, parsed, isHlsSegment);
+  const testIp = isTestConnectionIp(ip);
+
+  // Load-test / smoke IPs: auth only — no slots, no upstream probes on HEAD.
+  if (testIp && (liveProbe || originalMethod(req) === "HEAD")) {
+    return new NextResponse(null, {
+      status: 200,
+      headers: {
+        "X-Nexlify-Line-Id": line.id,
+        "X-Nexlify-Stream-Id": cleanId,
+        "X-Nexlify-Live": "1",
+        ...(parsed.wantsHls ? { "X-Nexlify-Hls": "1" } : {}),
+        "Cache-Control": "no-store",
+      } as Record<string, string>,
+    });
+  }
+
   if (liveProbe && parsed.spliceLiveTs && !parsed.wantsHls) {
     return new NextResponse(null, {
       status: 200,
@@ -121,6 +137,19 @@ export async function GET(req: NextRequest) {
   }
 
   if (parsed.wantsHls) {
+    const method = originalMethod(req);
+    if (liveProbe || method === "HEAD") {
+      return new NextResponse(null, {
+        status: 200,
+        headers: {
+          "X-Nexlify-Line-Id": line.id,
+          "X-Nexlify-Stream-Id": cleanId,
+          "X-Nexlify-Live": "1",
+          "X-Nexlify-Hls": "1",
+          "Cache-Control": "no-store",
+        } as Record<string, string>,
+      });
+    }
     const antiFreeze = await getAntiFreezeSettings();
     const ctx = { clientIp: ip, userAgent: ua, skipGeo: true };
     const candidates = await resolvePlaybackUrlCandidatesForLine(
@@ -137,7 +166,6 @@ export async function GET(req: NextRequest) {
     const hlsNative = tsUrl
       ? undefined
       : candidates.find((u) => isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
-    const method = originalMethod(req);
     // MPEG-TS live is spliced as .ts (or an instant HLS wrapper). Do not spawn
     // ffmpeg per zap — that is why only a warm channel (e.g. BBC One FHD) played.
     if (hlsNative) {

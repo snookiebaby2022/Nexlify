@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
@@ -24,7 +24,7 @@ import {
   lineDurationPresetsForPanel,
   type LineDurationPreset,
 } from "@/lib/line-duration-presets";
-import { creditCostForDays, packageLabelForDays } from "@/lib/package-credits";
+import { effectiveCreditCost, packageLabelForDays } from "@/lib/package-credits";
 import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
 import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
 
@@ -91,7 +91,7 @@ export function LineAddForm({
   const [templateId, setTemplateId] = useState("");
   const [autoGenerate, setAutoGenerate] = useState(false);
   const [allowTrials, setAllowTrials] = useState(true);
-  const [creditHint, setCreditHint] = useState<number | null>(null);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     username: "",
@@ -117,6 +117,20 @@ export function LineAddForm({
     accessOutputs: defaultAccessOutputSelection(),
   });
 
+  const selectedPackage = useMemo(
+    () => packages.find((p) => p.id === form.packageId),
+    [packages, form.packageId]
+  );
+  const lineCreditCost = useMemo(() => {
+    if (mode !== "reseller" || form.unlimited) return 0;
+    if (form.isTrial || form.days <= 7) return 0;
+    return effectiveCreditCost(form.days, selectedPackage?.creditCost, form.isTrial);
+  }, [mode, form.unlimited, form.isTrial, form.days, selectedPackage]);
+  const creditBalanceAfter =
+    creditBalance != null && lineCreditCost > 0
+      ? Math.max(0, creditBalance - lineCreditCost)
+      : null;
+
   function applyGenerated() {
     setForm((f) => ({
       ...f,
@@ -140,7 +154,6 @@ export function LineAddForm({
       unlimited: false,
       expiresAt: "",
     }));
-    setCreditHint(tpl.creditCost);
   }
 
   function applyPackageFields(
@@ -181,7 +194,6 @@ export function LineAddForm({
         maxConnections: pkg?.maxLines ?? next.maxConnections,
       };
     });
-    setCreditHint(unlimited ? 0 : preset.creditCost);
   }
 
   useEffect(() => {
@@ -247,6 +259,14 @@ export function LineAddForm({
         }
       })
       .catch(() => {});
+    if (mode === "reseller") {
+      fetch("/api/reseller/credits")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d && typeof d.credits === "number") setCreditBalance(d.credits);
+        })
+        .catch(() => setCreditBalance(null));
+    }
     if (mode === "admin") {
       fetch("/api/admin/resellers")
         .then((r) => r.json())
@@ -303,6 +323,11 @@ export function LineAddForm({
       if (!confirm("No bouquets selected. Create the line with an empty bouquet list?")) return;
     }
 
+    if (mode === "reseller" && creditBalance != null && lineCreditCost > creditBalance) {
+      alert(`Insufficient credits (need ${lineCreditCost}, have ${creditBalance}).`);
+      return;
+    }
+
     const notes = [form.adminNotes, form.resellerNotes].filter(Boolean).join("\n---\n");
     // Duration comes from package/days — isTrial is a flag only (do not force 1 day).
     const unlimited = mode === "admin" && form.unlimited;
@@ -357,6 +382,13 @@ export function LineAddForm({
       if (!res.ok) {
         alert(data.error ?? `Failed to create line (${res.status})`);
         return;
+      }
+      const remaining = (data as { creditsRemaining?: number }).creditsRemaining;
+      if (typeof remaining === "number") {
+        setCreditBalance(remaining);
+        window.dispatchEvent(
+          new CustomEvent("nexlify-credits-updated", { detail: { credits: remaining } })
+        );
       }
       const createdName =
         (data as { line?: { username?: string } }).line?.username?.trim() || username;
@@ -445,10 +477,37 @@ export function LineAddForm({
             </button>
           ))}
         </div>
-        {mode === "reseller" && creditHint !== null && (
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Credits for this duration: <strong>{creditHint}</strong> (from your group packages)
-          </p>
+        {mode === "reseller" && (
+          <div
+            className="rounded-lg border px-3 py-2 text-sm space-y-1"
+            style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.12)" }}
+          >
+            <div className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>
+              Credits
+            </div>
+            <p>
+              {lineCreditCost > 0 ? (
+                <>
+                  This line will deduct <strong>{lineCreditCost}</strong> credit
+                  {lineCreditCost === 1 ? "" : "s"}
+                </>
+              ) : (
+                <>No credits charged for this duration.</>
+              )}
+              {creditBalance != null ? (
+                <>
+                  {" "}
+                  · Your balance: <strong>{creditBalance}</strong>
+                  {creditBalanceAfter != null && lineCreditCost > 0 ? (
+                    <>
+                      {" "}
+                      → <strong>{creditBalanceAfter}</strong> left
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+            </p>
+          </div>
         )}
         <div className="flex flex-wrap gap-1 border-b pb-0" style={{ borderColor: "var(--border)" }}>
           {(
@@ -547,7 +606,6 @@ export function LineAddForm({
                         type="button"
                         onClick={() => {
                           setForm((f) => applyPackageFields(f, p));
-                          setCreditHint(p.creditCost);
                         }}
                         className="text-xs rounded-full px-3 py-1.5 border cursor-pointer hover:opacity-90"
                         style={{
@@ -557,7 +615,7 @@ export function LineAddForm({
                           color: form.packageId === p.id ? "#fff" : "var(--muted)",
                         }}
                       >
-                        {p.name} · {p.creditCost} cr · {packageLabelForDays(p.days)}
+                        {p.name} · {effectiveCreditCost(p.days, p.creditCost)} cr · {packageLabelForDays(p.days)}
                       </button>
                     ))}
                   </div>
@@ -573,13 +631,12 @@ export function LineAddForm({
                           ? applyPackageFields(f, pkg)
                           : { ...f, packageId: "" }
                       );
-                      setCreditHint(pkg ? pkg.creditCost : creditCostForDays(form.days));
                     }}
                   >
                     <option value="">Package (optional)</option>
                     {selectablePackages.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.creditCost} cr, {packageLabelForDays(p.days)}, max {p.maxLines} conn)
+                        {p.name} ({effectiveCreditCost(p.days, p.creditCost)} cr, {packageLabelForDays(p.days)}, max {p.maxLines} conn)
                       </option>
                     ))}
                   </select>
@@ -638,7 +695,6 @@ export function LineAddForm({
                   onChange={(e) => {
                     const days = parseInt(e.target.value, 10) || 30;
                     setForm({ ...form, days, expiresAt: "", unlimited: false });
-                    setCreditHint(creditCostForDays(days));
                   }}
                 />
               </FormField>

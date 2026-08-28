@@ -10,6 +10,20 @@ export const STANDARD_PACKAGE_TEMPLATES = [
   { name: "24 Months", days: 730, creditCost: 6 },
 ] as const;
 
+/**
+ * Credit cost for a package/duration — never under-charge standard paid tiers when
+ * DB package rows have stale creditCost (e.g. 24 months stored as 1 cr).
+ */
+export function effectiveCreditCost(
+  days: number,
+  packageCreditCost?: number | null,
+  isTrial = false
+): number {
+  const fromPkg = Math.max(0, Number(packageCreditCost) || 0);
+  if (isTrial || days <= 7) return fromPkg;
+  return Math.max(fromPkg, creditCostForDays(days));
+}
+
 /** Credit cost from duration in days (falls back to tiered months). */
 export function creditCostForDays(days: number): number {
   const exact = STANDARD_PACKAGE_TEMPLATES.find((t) => t.days === days);

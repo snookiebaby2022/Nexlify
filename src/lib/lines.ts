@@ -228,7 +228,15 @@ async function loadStreamChunk(
 }
 
 function listingPlayableSql() {
-  return Prisma.sql`AND (s."streamUrl" IS NULL OR s."streamUrl" NOT LIKE 'pending://%')`;
+  return Prisma.sql`AND (
+    s."streamUrl" IS NULL
+    OR (
+      s."streamUrl" NOT LIKE 'pending://%'
+      AND s."streamUrl" NOT LIKE '://%'
+      AND s."streamUrl" NOT LIKE 'http://:%'
+      AND s."streamUrl" NOT LIKE 'https://:%'
+    )
+  )`;
 }
 
 /** Indexed membership for a line's bouquets — avoids a 981k BouquetStream join. */

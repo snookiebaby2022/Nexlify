@@ -46,5 +46,7 @@ export async function pulseLiveConnection(opts: {
     return;
   }
 
-  // Edge pulse only refreshes rows opened by live-auth / trackConnection — never insert duplicates.
+  await prisma.liveConnection.create({
+    data: { lineId, streamId, ip: clientIp || null },
+  }).catch(() => undefined);
 }

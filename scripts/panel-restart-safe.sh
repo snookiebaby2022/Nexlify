@@ -26,6 +26,9 @@ load_env() {
   set -a
   [ -f .env ] && . ./.env
   set +a
+  if [ -x scripts/prune-stale-live-connections.sh ]; then
+    bash scripts/prune-stale-live-connections.sh >>"$LOG_FILE" 2>&1 || true
+  fi
 }
 
 verify_panel() {
@@ -59,6 +62,15 @@ nexlify_only_restart() {
     . "$ROOT/scripts/nexlify-migrate-guard.sh"
     if ! nexlify_refuse_restart_if_migrating; then
       log "SKIP: nexlify restart blocked — SQL migration in progress"
+      return 1
+    fi
+  fi
+
+  if [ -f "$ROOT/scripts/nexlify-streaming-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-streaming-guard.sh"
+    if ! nexlify_refuse_restart_if_streaming_busy; then
+      log "SKIP: nexlify restart blocked — IPTV streaming load (use NEXLIFY_FORCE_RESTART=1)"
       return 1
     fi
   fi
@@ -108,6 +120,15 @@ nexlify_only_restart() {
 
   if verify_panel; then
     warmup_playback_routes
+    # Panel-only restarts used to leave nexlify-iptv-edge on a stale
+    # PANEL_INTERNAL_SECRET (or hung sockets) → UI works, nothing plays.
+    if [ -x scripts/rematch-iptv-edge-auth.sh ]; then
+      if bash scripts/rematch-iptv-edge-auth.sh >>"$LOG_FILE" 2>&1; then
+        log "iptv-edge auth rematch OK"
+      else
+        log "WARN: iptv-edge auth rematch failed — playback may 403 until fixed"
+      fi
+    fi
     log "nexlify-only restart OK"
     return 0
   fi
@@ -125,6 +146,9 @@ full_restart() {
   bash "$ROOT/scripts/pm2-start.sh" >>"$LOG_FILE" 2>&1
   load_env
   warmup_playback_routes || true
+  if [ -x scripts/rematch-iptv-edge-auth.sh ]; then
+    bash scripts/rematch-iptv-edge-auth.sh >>"$LOG_FILE" 2>&1 || log "WARN: iptv-edge auth rematch failed"
+  fi
 }
 
 run_restart() {

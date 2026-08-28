@@ -15,17 +15,23 @@ type PlexCron = {
   lastCronAt: string | null;
 };
 
-export function PlexAutoSyncStatus() {
+export function PlexAutoSyncStatus({
+  title = "Plex auto-sync",
+  integrationType = "plex",
+}: {
+  title?: string;
+  integrationType?: string;
+}) {
   const [cron, setCron] = useState<PlexCron | null>(null);
 
   useEffect(() => {
-    fetch("/api/admin/integrations?type=plex")
+    fetch(`/api/admin/integrations?type=${integrationType}`)
       .then((r) => r.json())
       .then((d) => {
         if (d.plexCron) setCron(d.plexCron as PlexCron);
       })
       .catch(() => {});
-  }, []);
+  }, [integrationType]);
 
   if (!cron) return null;
 
@@ -36,7 +42,7 @@ export function PlexAutoSyncStatus() {
       className="rounded-lg border px-3 py-2 text-sm space-y-1"
       style={{ borderColor: err ? "var(--danger)" : "var(--border)" }}
     >
-      <p className="font-medium">Plex auto-sync</p>
+      <p className="font-medium">{title}</p>
       <p className="text-xs" style={{ color: "var(--muted)" }}>
         {cron.enabled ? `Every ${cron.intervalHours} hours` : "Disabled"}
         {cron.lastAutoSyncAt ? ` · last run ${formatDateTime(cron.lastAutoSyncAt)}` : " · never run"}

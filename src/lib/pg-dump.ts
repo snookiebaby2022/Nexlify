@@ -152,7 +152,7 @@ export function resolvePgDumpDir(explicit?: string): string {
   if (fromArg) return fromArg;
   const fromEnv = process.env.PG_DUMP_DIR?.trim();
   if (fromEnv) return fromEnv;
-  return path.join(resolvePanelRepoPathSync(), "backups", "pg");
+  return path.join(resolvePanelRepoPathSync(), "backups");
 }
 
 export function cleanupOldPgDumps(dir: string, keepDays: number): number {

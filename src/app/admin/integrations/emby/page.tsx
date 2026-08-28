@@ -14,6 +14,7 @@ export default function EmbyIntegrationPage() {
         urlPlaceholder: "http://emby.local:8096",
         tokenLabel: "API key",
         tokenPlaceholder: "Emby API key (Dashboard → Advanced → API key)",
+        supportsLibraries: true,
       }}
     />
   );

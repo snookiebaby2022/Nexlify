@@ -18,7 +18,28 @@ function postgresUrlWithUtcTimezone(url: string | undefined): string | undefined
       parsed.searchParams.set("options", `${current} -c TimeZone=UTC`.trim());
     }
     if (!parsed.searchParams.has("connection_limit")) {
-      parsed.searchParams.set("connection_limit", "8");
+      const instances = Math.max(
+        1,
+        Number(process.env.PANEL_INSTANCES || process.env.NEXLIFY_PM2_INSTANCES || "2") || 2
+      );
+      const postgresMax = Math.max(
+        20,
+        Number(process.env.NEXLIFY_POSTGRES_MAX_CONNECTIONS || "100") || 100
+      );
+      const reserved = Math.max(10, Number(process.env.NEXLIFY_DB_RESERVED_CONNECTIONS || "20") || 20);
+      const perWorker = Math.max(
+        5,
+        Math.min(
+          25,
+          Math.floor((postgresMax - reserved) / instances) ||
+            Number(process.env.NEXLIFY_DB_CONNECTION_LIMIT || "12") ||
+            12
+        )
+      );
+      parsed.searchParams.set("connection_limit", String(perWorker));
+    }
+    if (!parsed.searchParams.has("pool_timeout")) {
+      parsed.searchParams.set("pool_timeout", String(process.env.NEXLIFY_DB_POOL_TIMEOUT_SEC || "20"));
     }
     return parsed.toString().replace(/^http:\/\//, `${scheme}://`);
   } catch {

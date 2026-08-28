@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { inferPackageDaysFromName } from "@/lib/package-days";
-import { markedUpCreditCost } from "@/lib/package-credits";
+import { creditCostForDays, effectiveCreditCost, markedUpCreditCost } from "@/lib/package-credits";
 
 export async function resolveLineCreateFromPackage(
   body: {
@@ -13,9 +13,16 @@ export async function resolveLineCreateFromPackage(
   opts?: { sellerId?: string | null }
 ) {
   let days = Number(body.days ?? 30);
+  const explicitDays =
+    body.days != null &&
+    Number.isFinite(Number(body.days)) &&
+    Number(body.days) > 0
+      ? Math.max(1, Math.floor(Number(body.days)))
+      : null;
   let maxConnections = Number(body.maxConnections ?? 1);
   let bouquetIds: string[] = body.bouquetIds ?? [];
-  let creditCost = 1;
+  // Duration-based default so renew/create without a package still charges correctly.
+  let creditCost = creditCostForDays(explicitDays ?? days);
 
   if (body.accessCode) {
     const code = await prisma.accessCode.findFirst({
@@ -28,6 +35,7 @@ export async function resolveLineCreateFromPackage(
     maxConnections = code.maxConnections;
     bouquetIds = code.bouquetIds.length ? [...code.bouquetIds] : bouquetIds;
     if (code.packageId) body.packageId = code.packageId;
+    creditCost = creditCostForDays(days);
   }
 
   let packageProfit = 0;
@@ -37,18 +45,25 @@ export async function resolveLineCreateFromPackage(
       where: { id: String(body.packageId), isActive: true },
     });
     if (!pkg) throw new Error("Package not found");
-    days = inferPackageDaysFromName(pkg.name, pkg.days) ?? pkg.days;
+    const pkgDays = inferPackageDaysFromName(pkg.name, pkg.days) ?? pkg.days;
+    // Renew/custom extend sends explicit days — use those for billing even when packageId is set.
+    days = explicitDays ?? pkgDays;
     maxConnections = pkg.maxLines;
     if (pkg.bouquetIds.length) bouquetIds = [...pkg.bouquetIds];
-    creditCost = Math.max(0, pkg.creditCost);
     packageProfit = pkg.profitPercent ?? 0;
     const { isIptvTrialPackageMeta } = await import("@/lib/iptv-trial-lines");
     isTrial = isIptvTrialPackageMeta({
       name: pkg.name,
-      days,
+      days: pkgDays,
       creditCost: pkg.creditCost,
       shopPriceCents: pkg.shopPriceCents,
     });
+    creditCost = effectiveCreditCost(days, pkg.creditCost, isTrial);
+  }
+
+  // Renew/create by days alone (no package): never leave paid months at 0 for resellers.
+  if (!body.packageId && !body.accessCode && !isTrial && days > 7) {
+    creditCost = effectiveCreditCost(days, creditCost, false);
   }
 
   let sellerProfit = 0;
