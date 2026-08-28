@@ -1363,7 +1363,7 @@ function serveUpstreamTsSnippet(
       headers: {
         "User-Agent": String(ua || UPSTREAM_UA),
         Accept: "*/*",
-        Connection: "close",
+        Connection: "keep-alive",
         Host: parsed.host,
       },
       timeout: 15_000,
