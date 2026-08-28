@@ -1333,7 +1333,15 @@ function serveHlsSegment(streamId, segName, clientRes, pulseCtx) {
 }
 
 /** When disk HLS is cold, splice ~2MB MPEG-TS from upstream as seg0 (Smarters bootstrap). */
-function serveUpstreamTsSnippet(upstreamUrl, ua, clientRes, pulseCtx, proxy, maxBytes = 2_000_000) {
+function serveUpstreamTsSnippet(
+  upstreamUrl,
+  ua,
+  clientRes,
+  pulseCtx,
+  proxy,
+  maxBytes = 2_000_000,
+  redirectsLeft = 5
+) {
   return new Promise((resolve) => {
     let parsed;
     try {
@@ -1367,42 +1375,62 @@ function serveUpstreamTsSnippet(upstreamUrl, ua, clientRes, pulseCtx, proxy, max
           .then((socket) => cb(null, socket))
           .catch((err) => cb(err, undefined));
       };
+    } else {
+      reqOpts.agent = parsed.protocol === "https:" ? upstreamLiveHttpsAgent : upstreamLiveHttpAgent;
     }
-    const req = lib.request(
-      reqOpts,
-      (upRes) => {
-        if (upRes.statusCode && upRes.statusCode >= 400) {
-          upRes.resume();
+    const req = lib.request(reqOpts, (upRes) => {
+      const status = upRes.statusCode || 0;
+      const loc = upRes.headers.location;
+      if (status >= 300 && status < 400 && loc && redirectsLeft > 0) {
+        upRes.resume();
+        let next;
+        try {
+          next = new URL(loc, parsed).toString();
+        } catch {
           resolve(false);
           return;
         }
-        const chunks = [];
-        let total = 0;
-        upRes.on("data", (chunk) => {
-          if (total >= maxBytes) return;
-          chunks.push(chunk);
-          total += chunk.length;
-          if (total >= maxBytes) {
-            upRes.destroy();
-          }
-        });
-        upRes.on("end", () => finish());
-        upRes.on("close", () => finish());
-        upRes.on("error", () => resolve(false));
-
-        function finish() {
-          const buf = Buffer.concat(chunks);
-          if (buf.length < 188 || !looksLikeMpegTs(buf)) {
-            resolve(false);
-            return;
-          }
-          if (pulseCtx) pulseConnection(pulseCtx, buf.length);
-          clientRes.writeHead(200, hlsSegHeaders(buf.length));
-          clientRes.end(buf);
-          resolve(true);
-        }
+        serveUpstreamTsSnippet(next, ua, clientRes, pulseCtx, proxy, maxBytes, redirectsLeft - 1).then(resolve);
+        return;
       }
-    );
+      if (status >= 400) {
+        upRes.resume();
+        resolve(false);
+        return;
+      }
+      const chunks = [];
+      let total = 0;
+      let settled = false;
+      upRes.on("data", (chunk) => {
+        if (total >= maxBytes) return;
+        chunks.push(chunk);
+        total += chunk.length;
+        if (total >= maxBytes) upRes.destroy();
+      });
+      upRes.on("end", () => finish());
+      upRes.on("close", () => finish());
+      upRes.on("error", () => {
+        if (!settled) {
+          settled = true;
+          resolve(false);
+        }
+      });
+
+      function finish() {
+        if (settled) return;
+        const buf = Buffer.concat(chunks);
+        if (buf.length < 188 || !looksLikeMpegTs(buf)) {
+          settled = true;
+          resolve(false);
+          return;
+        }
+        settled = true;
+        if (pulseCtx) pulseConnection(pulseCtx, buf.length);
+        clientRes.writeHead(200, hlsSegHeaders(buf.length));
+        clientRes.end(buf);
+        resolve(true);
+      }
+    });
     req.on("timeout", () => {
       req.destroy();
       resolve(false);
