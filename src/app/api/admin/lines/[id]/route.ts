@@ -205,29 +205,23 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     const daysAdded = renewDaysFromExpiryChange(existing.expiresAt, parsedExpiry);
 
     try {
-      const txResult = await prisma.$transaction(async (tx) => {
-        let charged = 0;
-        let balanceAfter: number | null = null;
-        if (daysAdded > 0) {
-          const credit = await chargeLineRenewCredits(tx, session, {
+      let charged = 0;
+      let balanceAfter: number | null = null;
+      if (daysAdded > 0) {
+        const credit = await prisma.$transaction(async (tx) =>
+          chargeLineRenewCredits(tx, session, {
             days: daysAdded,
             packageId: body.packageId ? String(body.packageId) : undefined,
             lineUsername: existing.username,
-          });
-          charged = credit.charged;
-          balanceAfter = credit.balanceAfter;
-        }
-        const renew = await applyLineSetExpiry(existing.id, parsedExpiry, {
-          reactivate: body.reactivate !== false,
-          db: tx,
-        });
-        return { renew, charged, balanceAfter };
+          })
+        );
+        charged = credit.charged;
+        balanceAfter = credit.balanceAfter;
+      }
+      renewResult = await applyLineSetExpiry(existing.id, parsedExpiry, {
+        reactivate: body.reactivate !== false,
       });
-      renewResult = txResult.renew;
-      creditCharge = {
-        charged: txResult.charged,
-        balanceAfter: txResult.balanceAfter,
-      };
+      creditCharge = { charged, balanceAfter };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg === "Insufficient credits" || msg === "Forbidden") {
