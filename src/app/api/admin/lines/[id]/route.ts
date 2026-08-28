@@ -244,26 +244,19 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       const { chargeLineRenewCredits } = await import("@/lib/line-renew-credits");
 
       try {
-        const txResult = await prisma.$transaction(async (tx) => {
-          const credit = await chargeLineRenewCredits(tx, session, {
+        const credit = await prisma.$transaction(async (tx) =>
+          chargeLineRenewCredits(tx, session, {
             days,
             packageId: body.packageId ? String(body.packageId) : undefined,
             lineUsername: existing.username,
-          });
-          const renew = await applyLineRenewDays(existing.id, days, {
-            reactivate: body.reactivate !== false,
-            db: tx,
-          });
-          return {
-            renew,
-            charged: credit.charged,
-            balanceAfter: credit.balanceAfter,
-          };
+          })
+        );
+        renewResult = await applyLineRenewDays(existing.id, days, {
+          reactivate: body.reactivate !== false,
         });
-        renewResult = txResult.renew;
         creditCharge = {
-          charged: txResult.charged,
-          balanceAfter: txResult.balanceAfter,
+          charged: credit.charged,
+          balanceAfter: credit.balanceAfter,
         };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
