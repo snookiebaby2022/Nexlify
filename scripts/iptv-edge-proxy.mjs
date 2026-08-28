@@ -792,7 +792,12 @@ function startEdgeDiskPackager(streamId, upstreamUrl, ua) {
     windowsHide: true,
   });
   edgeDiskPackagers.set(streamId, proc);
-  proc.stderr?.on("data", () => undefined);
+  proc.stderr?.on("data", (chunk) => {
+    const msg = String(chunk || "").trim();
+    if (msg && !msg.includes("frame=")) {
+      console.warn(`[iptv-edge] hls-pack ${streamId.slice(0, 12)}: ${msg.slice(0, 200)}`);
+    }
+  });
   proc.on("close", () => {
     if (edgeDiskPackagers.get(streamId) === proc) edgeDiskPackagers.delete(streamId);
   });
@@ -1308,6 +1313,74 @@ function serveHlsSegment(streamId, segName, clientRes, pulseCtx) {
   }
 }
 
+/** When disk HLS is cold, splice ~2MB MPEG-TS from upstream as seg0 (Smarters bootstrap). */
+function serveUpstreamTsSnippet(upstreamUrl, ua, clientRes, pulseCtx, maxBytes = 2_000_000) {
+  return new Promise((resolve) => {
+    let parsed;
+    try {
+      parsed = new URL(normalizeUpstreamUrl(upstreamUrl));
+    } catch {
+      resolve(false);
+      return;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      resolve(false);
+      return;
+    }
+    const lib = parsed.protocol === "https:" ? https : http;
+    const req = lib.request(
+      parsed,
+      {
+        method: "GET",
+        headers: {
+          "User-Agent": String(ua || UPSTREAM_UA),
+          Accept: "*/*",
+          Connection: "close",
+        },
+        timeout: 15_000,
+      },
+      (upRes) => {
+        if (upRes.statusCode && upRes.statusCode >= 400) {
+          upRes.resume();
+          resolve(false);
+          return;
+        }
+        const chunks = [];
+        let total = 0;
+        upRes.on("data", (chunk) => {
+          if (total >= maxBytes) return;
+          chunks.push(chunk);
+          total += chunk.length;
+          if (total >= maxBytes) {
+            upRes.destroy();
+          }
+        });
+        upRes.on("end", () => finish());
+        upRes.on("close", () => finish());
+        upRes.on("error", () => resolve(false));
+
+        function finish() {
+          const buf = Buffer.concat(chunks);
+          if (buf.length < 188 || !looksLikeMpegTs(buf)) {
+            resolve(false);
+            return;
+          }
+          if (pulseCtx) pulseConnection(pulseCtx, buf.length);
+          clientRes.writeHead(200, hlsSegHeaders(buf.length));
+          clientRes.end(buf);
+          resolve(true);
+        }
+      }
+    );
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on("error", () => resolve(false));
+    req.end();
+  });
+}
+
 function serveHlsPlaylist(streamId, clientReq, clientRes, pulseCtx) {
   const dir = hlsStreamDir(streamId);
   const indexPath = path.join(dir, "index.m3u8");
@@ -1761,6 +1834,10 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
         return;
       }
       await new Promise((r) => setTimeout(r, 80));
+    }
+    if (packUrl && /^seg0\.ts$/i.test(segName)) {
+      const ok = await serveUpstreamTsSnippet(packUrl, clientReq.headers["user-agent"], clientRes, pulseCtx);
+      if (ok) return;
     }
     clientRes.writeHead(503, { "content-type": "text/plain", "retry-after": "1" });
     clientRes.end("Segment not ready");

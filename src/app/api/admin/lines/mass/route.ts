@@ -127,9 +127,49 @@ export async function POST(req: NextRequest) {
       if (!Number.isFinite(days) || days <= 0) {
         return NextResponse.json({ error: "days must be positive" }, { status: 400 });
       }
-      const lines = await prisma.line.findMany({ where, select: { id: true } });
-      for (const line of lines) {
-        await applyLineRenewDays(line.id, days, { reactivate: body.reactivate !== false });
+      const lines = await prisma.line.findMany({
+        where,
+        select: { id: true, username: true },
+      });
+
+      const { chargeLineRenewCredits } = await import("@/lib/line-renew-credits");
+      const { sessionPaysLineCredits } = await import("@/lib/reseller-credit-charge");
+      const paysCredits = sessionPaysLineCredits(session.role);
+      let perLineCost = 0;
+      if (paysCredits) {
+        const { resolveLineCreateFromPackage } = await import("@/lib/package-line");
+        const resolved = await resolveLineCreateFromPackage(
+          {
+            packageId: body.packageId ? String(body.packageId) : undefined,
+            days,
+          },
+          { sellerId: session.id }
+        );
+        perLineCost = resolved.creditCost;
+      }
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          for (const line of lines) {
+            if (paysCredits && perLineCost > 0) {
+              await chargeLineRenewCredits(tx, session, {
+                days,
+                packageId: body.packageId ? String(body.packageId) : undefined,
+                lineUsername: line.username,
+              });
+            }
+            await applyLineRenewDays(line.id, days, {
+              reactivate: body.reactivate !== false,
+              db: tx,
+            });
+          }
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg === "Insufficient credits" || msg === "Forbidden") {
+          return NextResponse.json({ error: msg }, { status: 400 });
+        }
+        throw e;
       }
       affected = lines.length;
       break;

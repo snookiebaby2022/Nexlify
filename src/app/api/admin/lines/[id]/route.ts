@@ -176,6 +176,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   }
 
   let renewResult: Awaited<ReturnType<typeof applyLineRenewDays>> | null = null;
+  let creditCharge: { charged: number; balanceAfter: number | null } | null = null;
   if (body.unlimited === true) {
     const unlimitedGuard = assertRoleMaySetUnlimited(session.role, { unlimited: true });
     if (!unlimitedGuard.ok) {
@@ -197,9 +198,43 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     if (!expiryGuard.ok) {
       return NextResponse.json({ error: expiryGuard.error }, { status: 400 });
     }
-    renewResult = await applyLineSetExpiry(existing.id, parsedExpiry, {
-      reactivate: body.reactivate !== false,
-    });
+
+    const { renewDaysFromExpiryChange, chargeLineRenewCredits } = await import(
+      "@/lib/line-renew-credits"
+    );
+    const daysAdded = renewDaysFromExpiryChange(existing.expiresAt, parsedExpiry);
+
+    try {
+      const txResult = await prisma.$transaction(async (tx) => {
+        let charged = 0;
+        let balanceAfter: number | null = null;
+        if (daysAdded > 0) {
+          const credit = await chargeLineRenewCredits(tx, session, {
+            days: daysAdded,
+            packageId: body.packageId ? String(body.packageId) : undefined,
+            lineUsername: existing.username,
+          });
+          charged = credit.charged;
+          balanceAfter = credit.balanceAfter;
+        }
+        const renew = await applyLineSetExpiry(existing.id, parsedExpiry, {
+          reactivate: body.reactivate !== false,
+          db: tx,
+        });
+        return { renew, charged, balanceAfter };
+      });
+      renewResult = txResult.renew;
+      creditCharge = {
+        charged: txResult.charged,
+        balanceAfter: txResult.balanceAfter,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg === "Insufficient credits" || msg === "Forbidden") {
+        return NextResponse.json({ error: msg }, { status: 400 });
+      }
+      throw e;
+    }
     data.expiresAt = renewResult.expiresAt;
     if (renewResult.reactivated) {
       data.status = renewResult.status;
@@ -211,9 +246,38 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       if (!daysGuard.ok) {
         return NextResponse.json({ error: daysGuard.error }, { status: 400 });
       }
-      renewResult = await applyLineRenewDays(existing.id, days, {
-        reactivate: body.reactivate !== false,
-      });
+
+      const { chargeLineRenewCredits } = await import("@/lib/line-renew-credits");
+
+      try {
+        const txResult = await prisma.$transaction(async (tx) => {
+          const credit = await chargeLineRenewCredits(tx, session, {
+            days,
+            packageId: body.packageId ? String(body.packageId) : undefined,
+            lineUsername: existing.username,
+          });
+          const renew = await applyLineRenewDays(existing.id, days, {
+            reactivate: body.reactivate !== false,
+            db: tx,
+          });
+          return {
+            renew,
+            charged: credit.charged,
+            balanceAfter: credit.balanceAfter,
+          };
+        });
+        renewResult = txResult.renew;
+        creditCharge = {
+          charged: txResult.charged,
+          balanceAfter: txResult.balanceAfter,
+        };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg === "Insufficient credits" || msg === "Forbidden") {
+          return NextResponse.json({ error: msg }, { status: 400 });
+        }
+        throw e;
+      }
       data.expiresAt = renewResult.expiresAt;
       if (renewResult.reactivated) {
         data.status = renewResult.status;
@@ -260,8 +324,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
           daysAdded: renewResult.daysAdded,
           status: renewResult.status,
           reactivated: renewResult.reactivated,
+          creditsCharged: creditCharge?.charged ?? 0,
+          creditsRemaining: creditCharge?.balanceAfter ?? undefined,
         }
       : undefined,
+    creditsCharged: creditCharge?.charged ?? 0,
+    creditsRemaining: creditCharge?.balanceAfter ?? undefined,
   });
   } catch (e) {
     return apiMutationErrorResponse(e);

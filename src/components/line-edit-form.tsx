@@ -231,13 +231,17 @@ export function LineEditForm({
       return;
     }
     let expiresAt: string | undefined;
+    const currentExpiryMs = new Date(line.expiresAt).getTime();
     if (!unlimited && form.extendDays <= 0 && form.expiresAtLocal) {
       const parsed = new Date(form.expiresAtLocal);
       if (Number.isNaN(parsed.getTime())) {
         alert("Invalid expiry date");
         return;
       }
-      expiresAt = parsed.toISOString();
+      // Only send absolute expiry when the user changed it (not the loaded default).
+      if (Math.abs(parsed.getTime() - currentExpiryMs) > 60_000) {
+        expiresAt = parsed.toISOString();
+      }
     }
 
     setSaving(true);
@@ -378,8 +382,7 @@ export function LineEditForm({
                     : {
                         ...f,
                         unlimited: false,
-                        extendDays: 0,
-                        expiresAtLocal: toDatetimeLocalValue(expiryFromDays(p.days)),
+                        extendDays: p.days,
                       }
                 )
               }

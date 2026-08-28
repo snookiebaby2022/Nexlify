@@ -4,6 +4,14 @@ import { sendPanelEmail } from "@/lib/panel-email";
 import { sendPanelSms } from "@/lib/panel-sms";
 import { PanelNotificationKind, PanelNotificationPriority, PanelNotificationTarget } from "@prisma/client";
 
+async function adminRecipientIds(): Promise<string[]> {
+  const rows = await prisma.panelUser.findMany({
+    where: { role: "ADMIN", isActive: true },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
 async function createInPanelAlert(opts: {
   title: string;
   body: string;
@@ -19,32 +27,35 @@ async function createInPanelAlert(opts: {
   });
   if (!admin) return;
 
-  // Dedupe identical alerts for 24h (prevents minute-cron spam after large imports).
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const dup = await prisma.panelNotification.findFirst({
-    where: {
-      title: opts.title,
-      body: opts.body,
-      recipientId: opts.recipientId ?? null,
-      createdAt: { gte: since },
-    },
-    select: { id: true },
-  });
-  if (dup) return;
+  const recipientIds = opts.recipientId ? [opts.recipientId] : await adminRecipientIds();
+  if (!recipientIds.length) return;
 
-  await prisma.panelNotification.create({
-    data: {
-      title: opts.title,
-      body: opts.body,
-      kind: PanelNotificationKind.ALERT,
-      priority: opts.priority ?? PanelNotificationPriority.NORMAL,
-      target: opts.recipientId
-        ? PanelNotificationTarget.SPECIFIC_USER
-        : PanelNotificationTarget.ALL_RESELLERS,
-      recipientId: opts.recipientId ?? null,
-      createdById: admin.id,
-    },
-  });
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  for (const recipientId of recipientIds) {
+    const dup = await prisma.panelNotification.findFirst({
+      where: {
+        title: opts.title,
+        body: opts.body,
+        recipientId,
+        createdAt: { gte: since },
+      },
+      select: { id: true },
+    });
+    if (dup) continue;
+
+    await prisma.panelNotification.create({
+      data: {
+        title: opts.title,
+        body: opts.body,
+        kind: PanelNotificationKind.ALERT,
+        priority: opts.priority ?? PanelNotificationPriority.NORMAL,
+        target: PanelNotificationTarget.SPECIFIC_USER,
+        recipientId,
+        createdById: admin.id,
+      },
+    });
+  }
 }
 
 async function notifyEmailTo(subject: string, text: string, html: string | undefined, to: string) {
