@@ -146,7 +146,7 @@ const AUTH_CACHE_TTL_MS = Number(process.env.IPTV_EDGE_AUTH_CACHE_MS || 120_000)
 const CATALOG_CACHE_MS = Number(process.env.IPTV_EDGE_CATALOG_CACHE_MS || 300_000);
 const CATALOG_STALE_MS = Number(process.env.IPTV_EDGE_CATALOG_STALE_MS || 600_000);
 const EDGE_DISK_HLS_WAIT_MS = Number(process.env.IPTV_EDGE_DISK_HLS_WAIT_MS || 6000);
-const EDGE_HLS_SEG_WAIT_MS = Number(process.env.IPTV_EDGE_HLS_SEG_WAIT_MS || 12_000);
+const EDGE_HLS_SEG_WAIT_MS = Number(process.env.IPTV_EDGE_HLS_SEG_WAIT_MS || 5_000);
 const MAX_EDGE_HLS_REMUX = Number(process.env.IPTV_EDGE_MAX_HLS_REMUX || 64);
 const MAX_EDGE_DISK_PACK = Number(process.env.IPTV_EDGE_MAX_DISK_PACK || 48);
 const edgeHlsRemuxProcs = new Map();
@@ -1332,26 +1332,18 @@ function serveHlsSegment(streamId, segName, clientRes, pulseCtx) {
   }
 }
 
-/** When disk HLS is cold, splice ~2MB MPEG-TS from upstream as seg0 (Smarters bootstrap). */
-function serveUpstreamTsSnippet(
-  upstreamUrl,
-  ua,
-  clientRes,
-  pulseCtx,
-  proxy,
-  maxBytes = 2_000_000,
-  redirectsLeft = 5
-) {
+/** Fetch ~2MB MPEG-TS from upstream (follows redirects; respects outbound proxy). */
+function fetchUpstreamTsBuffer(upstreamUrl, ua, proxy, maxBytes = 2_000_000, redirectsLeft = 5) {
   return new Promise((resolve) => {
     let parsed;
     try {
       parsed = new URL(normalizeUpstreamUrl(upstreamUrl));
     } catch {
-      resolve(false);
+      resolve(null);
       return;
     }
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      resolve(false);
+      resolve(null);
       return;
     }
     const lib = parsed.protocol === "https:" ? https : http;
@@ -1387,15 +1379,15 @@ function serveUpstreamTsSnippet(
         try {
           next = new URL(loc, parsed).toString();
         } catch {
-          resolve(false);
+          resolve(null);
           return;
         }
-        serveUpstreamTsSnippet(next, ua, clientRes, pulseCtx, proxy, maxBytes, redirectsLeft - 1).then(resolve);
+        fetchUpstreamTsBuffer(next, ua, proxy, maxBytes, redirectsLeft - 1).then(resolve);
         return;
       }
       if (status >= 400) {
         upRes.resume();
-        resolve(false);
+        resolve(null);
         return;
       }
       const chunks = [];
@@ -1415,7 +1407,7 @@ function serveUpstreamTsSnippet(
       upRes.on("error", () => {
         if (!settled) {
           settled = true;
-          resolve(false);
+          resolve(null);
         }
       });
 
@@ -1424,23 +1416,51 @@ function serveUpstreamTsSnippet(
         const buf = Buffer.concat(chunks);
         if (buf.length < 188 || !looksLikeMpegTs(buf)) {
           settled = true;
-          resolve(false);
+          resolve(null);
           return;
         }
         settled = true;
-        if (pulseCtx) pulseConnection(pulseCtx, buf.length);
-        clientRes.writeHead(200, hlsSegHeaders(buf.length));
-        clientRes.end(buf);
-        resolve(true);
+        resolve(buf);
       }
     });
     req.on("timeout", () => {
       req.destroy();
-      resolve(false);
+      resolve(null);
     });
-    req.on("error", () => resolve(false));
+    req.on("error", () => resolve(null));
     req.end();
   });
+}
+
+/** Write seg0.ts to disk while the client waits on the playlist (Smarters bootstrap). */
+function prewarmHlsSeg0(streamId, packUrl, ua, proxy) {
+  const segPath = hlsSegPath(streamId, "seg0.ts");
+  if (!segPath || !packUrl) return;
+  try {
+    const st = fs.statSync(segPath);
+    if (st.isFile() && st.size >= 188) return;
+  } catch {
+    /* cold */
+  }
+  void fetchUpstreamTsBuffer(packUrl, ua, proxy).then((buf) => {
+    if (!buf) return;
+    try {
+      fs.mkdirSync(path.dirname(segPath), { recursive: true });
+      fs.writeFileSync(segPath, buf);
+    } catch {
+      /* ignore */
+    }
+  });
+}
+
+/** When disk HLS is cold, splice ~2MB MPEG-TS from upstream as seg0 (Smarters bootstrap). */
+async function serveUpstreamTsSnippet(upstreamUrl, ua, clientRes, pulseCtx, proxy, maxBytes = 2_000_000) {
+  const buf = await fetchUpstreamTsBuffer(upstreamUrl, ua, proxy, maxBytes);
+  if (!buf) return false;
+  if (pulseCtx) pulseConnection(pulseCtx, buf.length);
+  clientRes.writeHead(200, hlsSegHeaders(buf.length));
+  clientRes.end(buf);
+  return true;
 }
 
 function serveHlsPlaylist(streamId, clientReq, clientRes, pulseCtx) {
@@ -1924,6 +1944,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     return;
   }
   if (packUrl) {
+    prewarmHlsSeg0(streamId, packUrl, clientReq.headers["user-agent"], outboundProxy);
     serveBootstrapHlsPlaylist(clientReq, clientRes, pulseCtx);
     return;
   }

@@ -79,7 +79,7 @@ m3u8_code=$(curl -sS -o /tmp/iptv-live.m3u8 -w '%{http_code}' --max-time 10 \
 log "live.m3u8 HTTP $m3u8_code"
 if [ "$m3u8_code" != "200" ]; then fail=1; fi
 
-seg_code=$(curl -sS -o /tmp/iptv-seg0.ts -w '%{http_code}' --max-time 20 \
+seg_code=$(curl -sS -o /tmp/iptv-seg0.ts -w '%{http_code}' --max-time 35 \
   -H "User-Agent: IPTV Smarters" "$B/live/$U/$P/${LIVE_ID}/hls/seg0.ts" || echo 000)
 seg_size=$(wc -c < /tmp/iptv-seg0.ts 2>/dev/null | tr -d ' ' || echo 0)
 log "seg0.ts HTTP $seg_code ${seg_size}B"
