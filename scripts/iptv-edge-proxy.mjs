@@ -1405,7 +1405,10 @@ function serveUpstreamTsSnippet(
         if (total >= maxBytes) return;
         chunks.push(chunk);
         total += chunk.length;
-        if (total >= maxBytes) upRes.destroy();
+        if (total >= maxBytes) {
+          upRes.destroy();
+          finish();
+        }
       });
       upRes.on("end", () => finish());
       upRes.on("close", () => finish());
