@@ -68,7 +68,8 @@ check_magic() {
 
 log "=== LIVE $LIVE_ID ==="
 code=$(curl -sS -o /tmp/iptv-live.ts -w '%{http_code}' --max-time 15 \
-  -H "User-Agent: IPTV Smarters" "$B/live/$U/$P/${LIVE_ID}.ts" || echo 000)
+  -H "User-Agent: IPTV Smarters" "$B/live/$U/$P/${LIVE_ID}.ts" 2>/dev/null || true)
+code=${code:-000}
 size=$(wc -c < /tmp/iptv-live.ts | tr -d ' ')
 log "live.ts HTTP $code ${size}B"
 if [ "$code" != "200" ] || [ "${size:-0}" -lt 100000 ]; then fail=1; fi
