@@ -76,7 +76,10 @@ if npx prisma generate >/dev/null 2>&1; then pass "prisma generate"; else fail "
 
 echo "[6] production build"
 MEM_AVAIL="$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 9999999)"
-if [ "${MEM_AVAIL:-0}" -lt 2500000 ] && ! swapon --show 2>/dev/null | grep -q .; then
+if command -v swapon >/dev/null 2>&1 &&
+  command -v mkswap >/dev/null 2>&1 &&
+  [ "${MEM_AVAIL:-0}" -lt 2500000 ] &&
+  ! swapon --show 2>/dev/null | grep -q .; then
   echo "  .. adding 2G swap for build"
   fallocate -l 2G /tmp/nexlify-dryrun-swap 2>/dev/null || dd if=/dev/zero of=/tmp/nexlify-dryrun-swap bs=1M count=2048 status=none
   chmod 600 /tmp/nexlify-dryrun-swap
