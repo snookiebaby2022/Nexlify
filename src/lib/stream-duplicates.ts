@@ -1,4 +1,4 @@
-import { StreamType } from "@prisma/client";
+import { StreamType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export type DuplicateKind = "movies" | "series" | "live";
@@ -42,7 +42,7 @@ export type DuplicateGroup = {
   members: DuplicateMember[];
 };
 
-/** Lowercase URL without credentials or trailing slash â€” same file, different auth still matches. */
+/** Lowercase URL without credentials or trailing slash — same file, different auth still matches. */
 export function normalizeDuplicateUrl(url: string): string {
   const raw = url.trim();
   if (!raw) return "";
@@ -210,17 +210,264 @@ export function buildDuplicateGroups(rows: DuplicateScanRow[], kind: DuplicateKi
   return groups;
 }
 
-export async function findDuplicateGroups(kind: DuplicateKind): Promise<{
+export type DuplicateScanOptions = {
+  /** url = same streamUrl only; all = url then title/episode heuristics */
+  match?: "url" | "all";
+  categoryId?: string;
+  /** e.g. `UK |%` or `US |%` */
+  categoryNameLike?: string;
+  limit?: number;
+  offset?: number;
+};
+
+function streamTypeForKind(kind: DuplicateKind): StreamType {
+  return kind === "movies" ? StreamType.MOVIE : kind === "live" ? StreamType.LIVE : StreamType.SERIES;
+}
+
+async function countStreamsForDuplicateScan(
+  kind: DuplicateKind,
+  opts?: DuplicateScanOptions
+): Promise<number> {
+  const type = streamTypeForKind(kind);
+  const categoryId = opts?.categoryId?.trim();
+  const categoryNameLike = opts?.categoryNameLike?.trim();
+  const rows = await prisma.$queryRaw<{ count: bigint }[]>`
+    SELECT COUNT(*)::bigint AS count
+    FROM "Stream" s
+    LEFT JOIN "Category" c ON c.id = s."categoryId"
+    WHERE s.type = ${type}::"StreamType"
+      ${kind === "live" ? Prisma.sql`AND s."isRadio" = false` : Prisma.empty}
+      AND s."streamUrl" IS NOT NULL AND length(trim(s."streamUrl")) > 0
+      ${categoryId ? Prisma.sql`AND s."categoryId" = ${categoryId}` : Prisma.empty}
+      ${
+        categoryNameLike
+          ? Prisma.sql`AND c.name ILIKE ${categoryNameLike}`
+          : Prisma.empty
+      }
+  `;
+  return Number(rows[0]?.count ?? 0);
+}
+
+/** SQL grouping key — close to normalizeDuplicateUrl (host + path, no trailing slash). */
+function urlGroupKeySql() {
+  return Prisma.sql`lower(regexp_replace(split_part(s."streamUrl", '?', 1), '/+$', ''))`;
+}
+
+async function findUrlDuplicateGroupsPaged(
+  kind: DuplicateKind,
+  opts: DuplicateScanOptions
+): Promise<{
   groups: DuplicateGroup[];
   scanned: number;
   extraCopies: number;
+  totalGroups: number;
 }> {
-  const type =
-    kind === "movies" ? StreamType.MOVIE : kind === "live" ? StreamType.LIVE : StreamType.SERIES;
+  const type = streamTypeForKind(kind);
+  const limit = Math.min(200, Math.max(1, opts.limit ?? 50));
+  const offset = Math.max(0, opts.offset ?? 0);
+  const categoryId = opts.categoryId?.trim();
+  const categoryNameLike = opts.categoryNameLike?.trim();
+
+  const scanned = await countStreamsForDuplicateScan(kind, opts);
+
+  const dupKeys = await prisma.$queryRaw<{ url_key: string; cnt: number }[]>`
+    SELECT ${urlGroupKeySql()} AS url_key, count(*)::int AS cnt
+    FROM "Stream" s
+    LEFT JOIN "Category" c ON c.id = s."categoryId"
+    WHERE s.type = ${type}::"StreamType"
+      ${kind === "live" ? Prisma.sql`AND s."isRadio" = false` : Prisma.empty}
+      AND s."streamUrl" IS NOT NULL AND length(trim(s."streamUrl")) > 0
+      ${categoryId ? Prisma.sql`AND s."categoryId" = ${categoryId}` : Prisma.empty}
+      ${
+        categoryNameLike
+          ? Prisma.sql`AND c.name ILIKE ${categoryNameLike}`
+          : Prisma.empty
+      }
+    GROUP BY url_key
+    HAVING count(*) > 1
+    ORDER BY cnt DESC, url_key ASC
+    LIMIT ${limit} OFFSET ${offset}
+  `;
+
+  const totalRow = await prisma.$queryRaw<{ count: bigint }[]>`
+    SELECT COUNT(*)::bigint AS count FROM (
+      SELECT ${urlGroupKeySql()} AS url_key
+      FROM "Stream" s
+      LEFT JOIN "Category" c ON c.id = s."categoryId"
+      WHERE s.type = ${type}::"StreamType"
+        ${kind === "live" ? Prisma.sql`AND s."isRadio" = false` : Prisma.empty}
+        AND s."streamUrl" IS NOT NULL AND length(trim(s."streamUrl")) > 0
+        ${categoryId ? Prisma.sql`AND s."categoryId" = ${categoryId}` : Prisma.empty}
+        ${
+          categoryNameLike
+            ? Prisma.sql`AND c.name ILIKE ${categoryNameLike}`
+            : Prisma.empty
+        }
+      GROUP BY url_key
+      HAVING count(*) > 1
+    ) dup
+  `;
+  const totalGroups = Number(totalRow[0]?.count ?? 0);
+
+  if (!dupKeys.length) {
+    return { groups: [], scanned, extraCopies: 0, totalGroups };
+  }
+
+  const keys = dupKeys.map((r) => r.url_key);
+  const rows = await prisma.$queryRaw<
+    {
+      id: string;
+      name: string;
+      streamUrl: string;
+      type: string;
+      seriesName: string | null;
+      seasonNum: number | null;
+      episodeNum: number | null;
+      isActive: boolean;
+      categoryId: string | null;
+      categoryName: string | null;
+      bouquetCount: bigint;
+      createdAt: Date;
+      url_key: string;
+    }[]
+  >`
+    SELECT
+      s.id,
+      s.name,
+      s."streamUrl" AS "streamUrl",
+      s.type::text AS type,
+      s."seriesName" AS "seriesName",
+      s."seasonNum" AS "seasonNum",
+      s."episodeNum" AS "episodeNum",
+      s."isActive" AS "isActive",
+      s."categoryId" AS "categoryId",
+      c.name AS "categoryName",
+      (SELECT COUNT(*)::bigint FROM "BouquetStream" bs WHERE bs."streamId" = s.id) AS "bouquetCount",
+      s."createdAt" AS "createdAt",
+      ${urlGroupKeySql()} AS url_key
+    FROM "Stream" s
+    LEFT JOIN "Category" c ON c.id = s."categoryId"
+    WHERE s.type = ${type}::"StreamType"
+      ${kind === "live" ? Prisma.sql`AND s."isRadio" = false` : Prisma.empty}
+      AND ${urlGroupKeySql()} IN (${Prisma.join(keys)})
+      ${categoryId ? Prisma.sql`AND s."categoryId" = ${categoryId}` : Prisma.empty}
+      ${
+        categoryNameLike
+          ? Prisma.sql`AND c.name ILIKE ${categoryNameLike}`
+          : Prisma.empty
+      }
+  `;
+
+  const mapped: DuplicateScanRow[] = rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    streamUrl: r.streamUrl,
+    type: r.type,
+    seriesName: r.seriesName,
+    seasonNum: r.seasonNum,
+    episodeNum: r.episodeNum,
+    isActive: r.isActive,
+    categoryId: r.categoryId,
+    categoryName: r.categoryName,
+    bouquetCount: Number(r.bouquetCount),
+    createdAt: r.createdAt,
+  }));
+
+  const byKey = new Map<string, DuplicateScanRow[]>();
+  for (const row of mapped) {
+    const key = normalizeDuplicateUrl(row.streamUrl) || row.streamUrl.toLowerCase();
+    const list = byKey.get(key) ?? [];
+    list.push(row);
+    byKey.set(key, list);
+  }
+
+  const groups: DuplicateGroup[] = [];
+  for (const { url_key, cnt } of dupKeys) {
+    const members =
+      byKey.get(url_key) ??
+      [...byKey.entries()].find(([k]) => k.includes(url_key) || url_key.includes(k))?.[1] ??
+      [];
+    if (members.length < 2) continue;
+    const keepId = pickKeepId(members);
+    groups.push({
+      key: `url:${url_key}`,
+      reason: "url",
+      label: members[0]!.streamUrl,
+      keepId,
+      members: members.map((m) => toMember(m, keepId)),
+    });
+    if (groups.length >= limit) break;
+    void cnt;
+  }
+
+  const extraCopies = groups.reduce((n, g) => n + Math.max(0, g.members.length - 1), 0);
+  return { groups, scanned, extraCopies, totalGroups };
+}
+
+/** Delete duplicate URL copies in UK / USA live categories (keeps best row per URL). */
+export async function purgeUkUsaUrlDuplicateLive(): Promise<{ deleted: number; groups: number }> {
+  let deleted = 0;
+  let groups = 0;
+  const patterns = ["UK |%", "US |%", "USA |%", "UK|%", "US|%", "USA|%"];
+  const pageSize = 50;
+
+  for (const pattern of patterns) {
+    let offset = 0;
+    for (let page = 0; page < 40; page++) {
+      const { groups: batch, totalGroups } = await findUrlDuplicateGroupsPaged("live", {
+        match: "url",
+        categoryNameLike: pattern,
+        limit: pageSize,
+        offset,
+      });
+      if (!batch.length) break;
+
+      const ids: string[] = [];
+      for (const g of batch) {
+        groups++;
+        for (const m of g.members) {
+          if (m.id !== g.keepId) ids.push(m.id);
+        }
+      }
+      if (ids.length) {
+        const r = await deleteDuplicateStreams(ids);
+        deleted += r.deleted;
+      }
+
+      offset += pageSize;
+      if (offset >= totalGroups) break;
+    }
+  }
+  return { deleted, groups };
+}
+export async function findDuplicateGroups(
+  kind: DuplicateKind,
+  opts?: DuplicateScanOptions
+): Promise<{
+  groups: DuplicateGroup[];
+  scanned: number;
+  extraCopies: number;
+  totalGroups?: number;
+}> {
+  const match = opts?.match ?? (kind === "live" ? "url" : "all");
+  if (match === "url") {
+    return findUrlDuplicateGroupsPaged(kind, opts ?? {});
+  }
+
+  const type = streamTypeForKind(kind);
+  const categoryId = opts?.categoryId?.trim();
+  const categoryNameLike = opts?.categoryNameLike?.trim();
+  const limit = Math.min(200, Math.max(1, opts?.limit ?? 50));
+  const offset = Math.max(0, opts?.offset ?? 0);
+
   const rows = await prisma.stream.findMany({
     where: {
       type,
       ...(kind === "live" ? { isRadio: false } : {}),
+      ...(categoryId ? { categoryId } : {}),
+      ...(categoryNameLike
+        ? { category: { name: { contains: categoryNameLike.replace(/%/g, ""), mode: "insensitive" } } }
+        : {}),
     },
     select: {
       id: true,
@@ -253,9 +500,11 @@ export async function findDuplicateGroups(kind: DuplicateKind): Promise<{
     createdAt: r.createdAt,
   }));
 
-  const groups = buildDuplicateGroups(mapped, kind);
-  const extraCopies = groups.reduce((n, g) => n + Math.max(0, g.members.length - 1), 0);
-  return { groups, scanned: mapped.length, extraCopies };
+  const allGroups = buildDuplicateGroups(mapped, kind);
+  const totalGroups = allGroups.length;
+  const groups = allGroups.slice(offset, offset + limit);
+  const extraCopies = allGroups.reduce((n, g) => n + Math.max(0, g.members.length - 1), 0);
+  return { groups, scanned: mapped.length, extraCopies, totalGroups };
 }
 
 export async function deleteDuplicateStreams(ids: string[]): Promise<{ deleted: number; skipped: number }> {
@@ -288,7 +537,7 @@ export type DuplicateNameCollision = {
 
 /**
  * Live channels with the same display name that overlap in a category or bouquet.
- * Causes wrong stream_id / probe vs playback mismatches (e.g. duplicate "24-7 â€¦" rows).
+ * Causes wrong stream_id / probe vs playback mismatches (e.g. duplicate "24-7 …" rows).
  */
 export async function findDuplicateNameCollisions(
   type: StreamType = StreamType.LIVE

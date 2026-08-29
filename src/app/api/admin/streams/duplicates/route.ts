@@ -14,8 +14,13 @@ import {
   invalidateXtreamCategories,
 } from "@/lib/cache-invalidate";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
 function parseKind(value: string | null): DuplicateKind | null {
   if (value === "movies" || value === "series" || value === "live") return value;
   return null;
@@ -40,14 +45,18 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(200, Math.max(1, parseInt(req.nextUrl.searchParams.get("limit") ?? "50", 10) || 50));
   const offset = Math.max(0, parseInt(req.nextUrl.searchParams.get("offset") ?? "0", 10) || 0);
 
-  const result = await findDuplicateGroups(kind, {
-    match,
-    categoryId,
-    categoryNameLike: category,
-    limit,
-    offset,
-  });
-  return NextResponse.json(result);
+  try {
+    const result = await findDuplicateGroups(kind, {
+      match,
+      categoryId,
+      categoryNameLike: category,
+      limit,
+      offset,
+    });
+    return NextResponse.json(result);
+  } catch (e) {
+    return apiMutationErrorResponse(e, { exposeMessage: true });
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -101,6 +110,6 @@ export async function POST(req: NextRequest) {
   await invalidateDashboardStats();
   return NextResponse.json({ ok: true, ...result });
   } catch (e) {
-    return apiMutationErrorResponse(e);
+    return apiMutationErrorResponse(e, { exposeMessage: true });
   }
 }

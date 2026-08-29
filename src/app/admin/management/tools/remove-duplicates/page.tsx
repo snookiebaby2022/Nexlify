@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type DuplicateKind = "movies" | "series" | "live";
 type DuplicateReason = "url" | "title" | "episode";
+type MatchMode = "url" | "all";
 
 type DuplicateMember = {
   id: string;
@@ -34,11 +35,26 @@ const REASON_LABEL: Record<DuplicateReason, string> = {
   episode: "Same episode",
 };
 
+const DEFAULT_PAGE_SIZE = 50;
+
+function categoryTypeForKind(kind: DuplicateKind): "LIVE" | "MOVIE" | "SERIES" {
+  if (kind === "movies") return "MOVIE";
+  if (kind === "series") return "SERIES";
+  return "LIVE";
+}
+
 export default function RemoveDuplicatesPage() {
-  const [kind, setKind] = useState<DuplicateKind>("movies");
+  const [kind, setKind] = useState<DuplicateKind>("live");
+  const [match, setMatch] = useState<MatchMode>("url");
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [categoryId, setCategoryId] = useState("");
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categoriesError, setCategoriesError] = useState("");
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
   const [scanned, setScanned] = useState(0);
   const [extraCopies, setExtraCopies] = useState(0);
+  const [totalGroups, setTotalGroups] = useState(0);
+  const [page, setPage] = useState(0);
   const [keepByGroup, setKeepByGroup] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -46,41 +62,114 @@ export default function RemoveDuplicatesPage() {
   const [msg, setMsg] = useState("");
   const [scannedKind, setScannedKind] = useState<DuplicateKind | null>(null);
 
-  const scan = useCallback(async (nextKind: DuplicateKind) => {
-    setLoading(true);
+  useEffect(() => {
+    let cancelled = false;
+    setCategoriesError("");
+    const type = categoryTypeForKind(kind);
+    fetch(`/api/admin/categories?type=${type}&lite=1`, { credentials: "same-origin" })
+      .then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error ?? `Categories HTTP ${r.status}`);
+        if (!cancelled) {
+          setCategories(
+            (d.categories ?? []).map((c: { id: string; name: string }) => ({
+              id: c.id,
+              name: c.name,
+            }))
+          );
+        }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setCategories([]);
+          setCategoriesError(e instanceof Error ? e.message : "Failed to load categories");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [kind]);
+
+  const scan = useCallback(
+    async (nextKind: DuplicateKind, nextPage = 0) => {
+      setLoading(true);
+      setMsg("");
+      setKind(nextKind);
+      setPage(nextPage);
+      try {
+        const params = new URLSearchParams({
+          kind: nextKind,
+          match,
+          limit: String(pageSize),
+          offset: String(nextPage * pageSize),
+        });
+        if (categoryId) params.set("categoryId", categoryId);
+        const res = await fetch(`/api/admin/streams/duplicates?${params}`, {
+          credentials: "same-origin",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setMsg(data.error ?? `Scan failed (HTTP ${res.status})`);
+          setGroups([]);
+          setKeepByGroup({});
+          setSelected(new Set());
+          return;
+        }
+        const nextGroups = (data.groups ?? []) as DuplicateGroup[];
+        const keep: Record<string, string> = {};
+        const del = new Set<string>();
+        for (const group of nextGroups) {
+          keep[group.key] = group.keepId;
+          for (const member of group.members) {
+            if (member.id !== group.keepId) del.add(member.id);
+          }
+        }
+        setGroups(nextGroups);
+        setKeepByGroup(keep);
+        setSelected(del);
+        setScanned(data.scanned ?? 0);
+        setExtraCopies(data.extraCopies ?? 0);
+        setTotalGroups(data.totalGroups ?? nextGroups.length);
+        setScannedKind(nextKind);
+      } catch (e) {
+        setMsg(e instanceof Error ? e.message : "Network error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [categoryId, match, pageSize]
+  );
+
+  async function purgeUkUsa() {
+    if (
+      !confirm(
+        "Remove duplicate live streams with the same URL in UK and USA categories?\n\nKeeps the best copy in each group."
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
     setMsg("");
-    setKind(nextKind);
     try {
-      const res = await fetch(`/api/admin/streams/duplicates?kind=${nextKind}`);
-      const data = await res.json();
+      const res = await fetch("/api/admin/streams/duplicates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ purgeUkUsa: true, confirm: true }),
+      });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMsg(data.error ?? "Scan failed");
-        setGroups([]);
-        setKeepByGroup({});
-        setSelected(new Set());
+        setMsg(data.error ?? `Purge failed (HTTP ${res.status})`);
         return;
       }
-      const nextGroups = (data.groups ?? []) as DuplicateGroup[];
-      const keep: Record<string, string> = {};
-      const del = new Set<string>();
-      for (const group of nextGroups) {
-        keep[group.key] = group.keepId;
-        for (const member of group.members) {
-          if (member.id !== group.keepId) del.add(member.id);
-        }
-      }
-      setGroups(nextGroups);
-      setKeepByGroup(keep);
-      setSelected(del);
-      setScanned(data.scanned ?? 0);
-      setExtraCopies(data.extraCopies ?? 0);
-      setScannedKind(nextKind);
-    } catch {
-      setMsg("Network error");
+      setMsg(`Removed ${data.deleted ?? 0} duplicate URL(s) across ${data.groups ?? 0} groups.`);
+      await scan(kind, page);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Network error");
     } finally {
-      setLoading(false);
+      setDeleting(false);
     }
-  }, []);
+  }
 
   function setKeep(groupKey: string, id: string) {
     const prevKeep = keepByGroup[groupKey];
@@ -143,7 +232,7 @@ export default function RemoveDuplicatesPage() {
         return;
       }
       setMsg(`Deleted ${data.deleted ?? 0} duplicate stream(s).`);
-      await scan(kind);
+      await scan(kind, page);
     } catch {
       setMsg("Network error");
     } finally {
@@ -153,13 +242,14 @@ export default function RemoveDuplicatesPage() {
 
   const selectedCount = selected.size;
   const empty = scannedKind && !loading && groups.length === 0;
+  const totalPages = Math.max(1, Math.ceil(totalGroups / pageSize));
 
   const summary = useMemo(() => {
     if (!scannedKind) return null;
     const label =
       scannedKind === "movies" ? "movies" : scannedKind === "live" ? "live streams" : "series and episodes";
-    return `${scanned.toLocaleString()} ${label} scanned · ${groups.length.toLocaleString()} duplicate groups · ${extraCopies.toLocaleString()} extra copies`;
-  }, [scannedKind, scanned, groups.length, extraCopies]);
+    return `${scanned.toLocaleString()} ${label} scanned · ${totalGroups.toLocaleString()} duplicate groups · ${extraCopies.toLocaleString()} extra copies · showing ${groups.length} groups (page ${page + 1}/${totalPages})`;
+  }, [scannedKind, scanned, totalGroups, extraCopies, groups.length, page, totalPages]);
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -167,8 +257,8 @@ export default function RemoveDuplicatesPage() {
         <div className="flex-1 min-w-[200px]">
           <h1 className="text-2xl font-semibold">Remove duplicates</h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            Scan movies, TV series/episodes, or live streams by URL/title, review each group, then delete
-            extras. Suggested keep is the copy in the most bouquets, then categorized, then oldest.
+            Match by same URL (recommended for live) or title/episode. Results are paginated so large catalogs do not
+            crash the panel.
           </p>
         </div>
         <Link href="/admin/management/tools" className="text-sm" style={{ color: "var(--accent)" }}>
@@ -176,10 +266,64 @@ export default function RemoveDuplicatesPage() {
         </Link>
       </div>
 
+      <div className="flex flex-wrap gap-3 items-end">
+        <label className="text-sm space-y-1">
+          <span style={{ color: "var(--muted)" }}>Category</span>
+          <select
+            className="block rounded border px-2 py-1.5 text-sm min-w-[200px]"
+            style={{ borderColor: "var(--border)" }}
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+          >
+            <option value="">All categories</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          {categoriesError && (
+            <span className="block text-xs text-red-400">{categoriesError}</span>
+          )}
+          {!categoriesError && categories.length === 0 && (
+            <span className="block text-xs" style={{ color: "var(--muted)" }}>
+              No categories loaded for {categoryTypeForKind(kind)}.
+            </span>
+          )}
+        </label>
+        <label className="text-sm space-y-1">
+          <span style={{ color: "var(--muted)" }}>Show entries</span>
+          <select
+            className="block rounded border px-2 py-1.5 text-sm"
+            style={{ borderColor: "var(--border)" }}
+            value={pageSize}
+            onChange={(e) => setPageSize(Number(e.target.value) || DEFAULT_PAGE_SIZE)}
+          >
+            {[25, 50, 100, 200].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm space-y-1">
+          <span style={{ color: "var(--muted)" }}>Match</span>
+          <select
+            className="block rounded border px-2 py-1.5 text-sm"
+            style={{ borderColor: "var(--border)" }}
+            value={match}
+            onChange={(e) => setMatch(e.target.value as MatchMode)}
+          >
+            <option value="url">Same URL only</option>
+            <option value="all">URL + title/episode</option>
+          </select>
+        </label>
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => scan("movies")}
+          onClick={() => scan("movies", 0)}
           disabled={loading || deleting}
           className="rounded px-4 py-2 text-sm font-medium cursor-pointer disabled:opacity-50"
           style={{
@@ -192,7 +336,7 @@ export default function RemoveDuplicatesPage() {
         </button>
         <button
           type="button"
-          onClick={() => scan("series")}
+          onClick={() => scan("series", 0)}
           disabled={loading || deleting}
           className="rounded px-4 py-2 text-sm font-medium cursor-pointer disabled:opacity-50"
           style={{
@@ -205,7 +349,7 @@ export default function RemoveDuplicatesPage() {
         </button>
         <button
           type="button"
-          onClick={() => scan("live")}
+          onClick={() => scan("live", 0)}
           disabled={loading || deleting}
           className="rounded px-4 py-2 text-sm font-medium cursor-pointer disabled:opacity-50"
           style={{
@@ -216,12 +360,47 @@ export default function RemoveDuplicatesPage() {
         >
           {loading && kind === "live" ? "Scanning…" : "Scan live streams"}
         </button>
+        <button
+          type="button"
+          onClick={() => void purgeUkUsa()}
+          disabled={loading || deleting}
+          className="rounded px-4 py-2 text-sm font-medium cursor-pointer disabled:opacity-50 border"
+          style={{ borderColor: "var(--border)", color: "var(--accent)" }}
+        >
+          Clean UK & USA URL duplicates
+        </button>
       </div>
 
       {summary && (
         <p className="text-sm" style={{ color: "var(--muted)" }}>
           {summary}
         </p>
+      )}
+
+      {totalGroups > pageSize && scannedKind && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <button
+            type="button"
+            disabled={page <= 0 || loading}
+            onClick={() => void scan(kind, page - 1)}
+            className="text-xs rounded px-3 py-1.5 border disabled:opacity-40"
+            style={{ borderColor: "var(--border)" }}
+          >
+            Previous
+          </button>
+          <span className="text-xs tabular-nums" style={{ color: "var(--muted)" }}>
+            Page {page + 1} / {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={page + 1 >= totalPages || loading}
+            onClick={() => void scan(kind, page + 1)}
+            className="text-xs rounded px-3 py-1.5 border disabled:opacity-40"
+            style={{ borderColor: "var(--border)" }}
+          >
+            Next
+          </button>
+        </div>
       )}
 
       {groups.length > 0 && (
@@ -232,7 +411,7 @@ export default function RemoveDuplicatesPage() {
             className="text-xs rounded px-3 py-1.5 border cursor-pointer"
             style={{ borderColor: "var(--border)" }}
           >
-            Select all extras
+            Select all extras on page
           </button>
           <button
             type="button"
@@ -273,7 +452,10 @@ export default function RemoveDuplicatesPage() {
                 className="px-3 py-2 flex flex-wrap gap-2 items-center border-b text-sm"
                 style={{ borderColor: "var(--border)" }}
               >
-                <span className="text-xs uppercase tracking-wide px-2 py-0.5 rounded border" style={{ borderColor: "var(--border)" }}>
+                <span
+                  className="text-xs uppercase tracking-wide px-2 py-0.5 rounded border"
+                  style={{ borderColor: "var(--border)" }}
+                >
                   {REASON_LABEL[group.reason]}
                 </span>
                 <span className="font-medium flex-1 min-w-[140px] break-all">{group.label}</span>
