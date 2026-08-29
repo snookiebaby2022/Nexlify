@@ -15,24 +15,29 @@ verify_playback() {
   FIX=$(cat /root/.nexlify-75-playback-fixture.json 2>/dev/null || node scripts/ensure-smoke-synthetic-fixture.cjs 2>/dev/null | tail -1)
   U=$(node -e "console.log(JSON.parse(process.argv[1]).username)" "$FIX")
   P=$(node -e "console.log(JSON.parse(process.argv[1]).password)" "$FIX")
-  SID=$(node -e "console.log(JSON.parse(process.argv[1]).streamId)" "$FIX")
+  SID=$(node -e "const f=JSON.parse(process.argv[1]); console.log(f.playbackId ?? f.streamId)" "$FIX")
   TS_URL="http://127.0.0.1:8080/live/${U}/${P}/${SID}.ts"
   HLS_URL="http://127.0.0.1:8080/live/${U}/${P}/${SID}.m3u8"
 
-  TS_CODE=$(curl -sS -m 20 -A "$UA" -o /tmp/nexlify-smoke.ts -w '%{http_code}' "$TS_URL" || echo 000)
+  TS_CODE=$(curl -sS -m 20 -A "$UA" -o /tmp/nexlify-smoke.ts -w '%{http_code}' "$TS_URL" || true)
+  TS_CODE="${TS_CODE:-000}"
   TS_BYTES=$(wc -c < /tmp/nexlify-smoke.ts 2>/dev/null || echo 0)
   TS_MAGIC=$(head -c 1 /tmp/nexlify-smoke.ts 2>/dev/null | od -An -t x1 | tr -d ' ')
   test "$TS_CODE" = "200" || { echo "FAIL ts http=$TS_CODE"; return 1; }
   test "$TS_BYTES" -gt 10000 || { echo "FAIL ts bytes=$TS_BYTES"; return 1; }
   test "$TS_MAGIC" = "47" || { echo "FAIL ts sync=$TS_MAGIC"; return 1; }
 
-  HLS_CODE=$(curl -sS -m 20 -A "$UA" -o /tmp/nexlify-smoke.m3u8 -w '%{http_code}' "$HLS_URL" || echo 000)
+  HLS_CODE=$(curl -sS -m 20 -A "$UA" -o /tmp/nexlify-smoke.m3u8 -w '%{http_code}' "$HLS_URL" || true)
+  HLS_CODE="${HLS_CODE:-000}"
   test "$HLS_CODE" = "200" || { echo "FAIL hls http=$HLS_CODE"; return 1; }
   grep -q '\.ts' /tmp/nexlify-smoke.m3u8 || { echo "FAIL hls playlist empty"; return 1; }
   SEG=$(grep -m1 '\.ts' /tmp/nexlify-smoke.m3u8 | tr -d '\r')
   SEG_URL="http://127.0.0.1:8080${SEG#*http://127.0.0.1:8080}"
   [[ "$SEG" == http* ]] && SEG_URL="$SEG" || SEG_URL="http://127.0.0.1:8080${SEG}"
-  SEG_CODE=$(curl -sS -m 20 -A "$UA" -o /tmp/nexlify-smoke-seg.ts -w '%{http_code}' "$SEG_URL" || echo 000)
+  sleep 8
+  rm -f /tmp/nexlify-smoke-seg.ts
+  SEG_CODE=$(curl -sS -m 20 -A "$UA" -o /tmp/nexlify-smoke-seg.ts -w '%{http_code}' "$SEG_URL" || true)
+  SEG_CODE="${SEG_CODE:-000}"
   SEG_BYTES=$(wc -c < /tmp/nexlify-smoke-seg.ts 2>/dev/null || echo 0)
   test "$SEG_CODE" = "200" || { echo "FAIL seg http=$SEG_CODE"; return 1; }
   test "$SEG_BYTES" -gt 1000 || { echo "FAIL seg bytes=$SEG_BYTES"; return 1; }

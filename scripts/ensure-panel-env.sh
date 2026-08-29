@@ -162,21 +162,22 @@ if [ "$(read_env PANEL_BEHIND_NGINX)" = "1" ] && ! is_ip_host "$PRIMARY"; then
   echo "Panel env: nginx owns :443 TLS — IPTV edge HTTP only (:8080/:25461)"
 fi
 
-# Streaming profile: IPTV bytes on nexlify-iptv-edge — panel workers for admin/auth only.
+# Streaming profile: IPTV bytes on remote edge — panel workers for admin/auth only (not video).
 if [ "$(read_env NEXLIFY_USE_IPTV_EDGE)" = "1" ]; then
   inst="$(read_env PANEL_INSTANCES)"
   if [ -n "$inst" ] && [ "$inst" -gt 6 ] 2>/dev/null; then
     set_kv PANEL_INSTANCES 6
     echo "Panel env: capped PANEL_INSTANCES=6 (IPTV via edge — panel is not the video proxy)"
   elif [ -z "$inst" ]; then
-    set_kv PANEL_INSTANCES 4
-    echo "Panel env: default PANEL_INSTANCES=4 (IPTV via edge)"
+    set_kv PANEL_INSTANCES 2
+    echo "Panel env: default PANEL_INSTANCES=2 (IPTV via edge — API/auth only)"
   fi
   set_kv NEXLIFY_STREAMING_OPTIMIZED 1
   set_kv NEXLIFY_CONN_STALE_SEC "${NEXLIFY_CONN_STALE_SEC:-60}"
-  set_kv NEXLIFY_MAX_MEMORY_RESTART "${NEXLIFY_MAX_MEMORY_RESTART:-4096M}"
-  set_kv NEXLIFY_PANEL_WORKER_SPARE "${NEXLIFY_PANEL_WORKER_SPARE:-1}"
-  set_kv NEXLIFY_PANEL_INSTANCES_MAX "${NEXLIFY_PANEL_INSTANCES_MAX:-6}"
+  set_kv NEXLIFY_MAX_MEMORY_RESTART "${NEXLIFY_MAX_MEMORY_RESTART:-1800M}"
+  final_inst="$(read_env PANEL_INSTANCES)"
+  set_kv NEXLIFY_PANEL_WORKER_SPARE 0
+  set_kv NEXLIFY_PANEL_INSTANCES_MAX "${final_inst:-2}"
   set_kv IPTV_EDGE_UPSTREAM_SOCKETS "${IPTV_EDGE_UPSTREAM_SOCKETS:-4096}"
   set_kv IPTV_EDGE_LIVE_SOCKETS "${IPTV_EDGE_LIVE_SOCKETS:-512}"
   set_kv IPTV_EDGE_ADMIN_SOCKETS "${IPTV_EDGE_ADMIN_SOCKETS:-256}"

@@ -99,3 +99,24 @@ export async function GET(
     ),
   });
 }
+
+export async function DELETE(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const rateLimited = await guardAdminApiRequest(req);
+  if (rateLimited) return rateLimited;
+
+  const session = await requireSession([...ROLES]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const { id: streamId } = await ctx.params;
+  const scope = ownerScope(session);
+
+  const stream = await prisma.stream.findUnique({ where: { id: streamId }, select: { id: true } });
+  if (!stream) return NextResponse.json({ error: "Stream not found" }, { status: 404 });
+
+  const { kickStreamConnections } = await import("@/lib/connections");
+  const killed = await kickStreamConnections(streamId, scope ?? undefined);
+  return NextResponse.json({ ok: true, killed });
+}

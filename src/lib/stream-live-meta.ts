@@ -6,6 +6,8 @@ export type ParsedLiveMeta = {
   isAdult: boolean;
   onDemandProbesize: string;
   transcodeProfile: string;
+  /** When true, cron syncs stream.name from the current EPG programme title. */
+  autoSyncNameFromEpg: boolean;
   raw: Record<string, unknown> | null;
 };
 
@@ -18,6 +20,7 @@ export function parseLiveStreamMeta(agentStartCmd: string | null | undefined): P
     isAdult: false,
     onDemandProbesize: "512000",
     transcodeProfile: "none",
+    autoSyncNameFromEpg: false,
     raw: null,
   };
   if (!agentStartCmd?.startsWith(PREFIX)) return empty;
@@ -29,6 +32,7 @@ export function parseLiveStreamMeta(agentStartCmd: string | null | undefined): P
       isAdult: raw.isAdult === true,
       onDemandProbesize: String(raw.onDemandProbesize ?? "512000"),
       transcodeProfile: String(raw.transcodeProfile ?? "none"),
+      autoSyncNameFromEpg: raw.autoSyncNameFromEpg === true,
       raw,
     };
   } catch {

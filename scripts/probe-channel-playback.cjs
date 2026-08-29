@@ -9,6 +9,19 @@ const nameQuery = process.argv[2] || "Young Dracula";
 const streamIdArg = process.argv[3] || "";
 const p = new PrismaClient();
 
+function repairMalformedStreamUrl(input) {
+  let s = String(input ?? "").trim();
+  if (!s) return s;
+  if (s.startsWith("://")) s = `https${s}`;
+  s = s.replace(/^(https?):\/\/([^:/]+):\//i, "$1://$2/");
+  s = s.replace(/^(https?):\/\/([^:/]+):(\d+)\/(.*)$/i, (_, scheme, host, port, rest) => {
+    if (port === "443" && scheme.toLowerCase() === "https") return `https://${host}/${rest}`;
+    if (port === "80" && scheme.toLowerCase() === "http") return `http://${host}/${rest}`;
+    return `${scheme}://${host}:${port}/${rest}`;
+  });
+  return s;
+}
+
 function streamNumericId(id) {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
@@ -39,7 +52,7 @@ function fetchBytes(url, maxBytes = 8192, timeoutMs = 15000) {
       {
         method: "GET",
         timeout: timeoutMs,
-        headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", Range: "bytes=0-8191" },
+        headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", Range: "bytes=0-" },
       },
       (res) => {
         const chunks = [];
@@ -105,8 +118,8 @@ function fetchBytes(url, maxBytes = 8192, timeoutMs = 15000) {
     select: { status: true, errorMessage: true, lastSeenAt: true, serverId: true },
   });
 
-  const upstream = stream.streamUrl?.trim() || "";
-  const playlist = stream.playlistUrl?.trim() || "";
+  const upstream = repairMalformedStreamUrl(stream.streamUrl?.trim() || "");
+  const playlist = repairMalformedStreamUrl(stream.playlistUrl?.trim() || "");
   const probeTarget = playlist || upstream;
 
   const [upstreamHead, upstreamGet, playlistHead, panelTs, panelM3u8] = await Promise.all([

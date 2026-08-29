@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
@@ -15,6 +15,7 @@ const installerPath = path.join(
   "scripts",
   "iptv-edge-proxy.mjs"
 );
+const installerAvailable = existsSync(installerPath);
 
 function readEdgeSource(filePath) {
   return readFileSync(filePath, "utf8");
@@ -30,17 +31,21 @@ function forwardMediaGuard(source) {
 }
 
 describe("edge proxy installer parity", () => {
-  it("installer artifact documents canonical source", () => {
+  it("installer artifact documents canonical source", { skip: !installerAvailable }, () => {
     const installer = readEdgeSource(installerPath);
     assert.match(installer, /canonical scripts\/iptv-edge-proxy\.mjs/i);
   });
 
-  it("installer forward() blocks media paths before proxying to panel (502 loop)", () => {
+  it(
+    "installer forward() blocks media paths before proxying to panel (502 loop)",
+    { skip: !installerAvailable },
+    () => {
     const installer = readEdgeSource(installerPath);
     const guard = forwardMediaGuard(installer);
     assert.match(guard, /live\|timeshift\|movie\|series/);
     assert.match(guard, /media must splice locally/);
-  });
+    }
+  );
 
   it("canonical forward() also blocks media paths (reference)", () => {
     const canonical = readEdgeSource(canonicalPath);
@@ -48,9 +53,19 @@ describe("edge proxy installer parity", () => {
     assert.match(guard, /live\|timeshift\|movie\|series/);
   });
 
-  it("installer does not forward /live/ by calling forward() without a media guard", () => {
+  it("canonical destroys a live fan when its provider socket closes", () => {
+    const canonical = readEdgeSource(canonicalPath);
+    assert.match(canonical, /upRes\.once\("close", \(\) => destroyLiveFan\(fan\)\)/);
+    assert.match(canonical, /if \(!fan \|\| fan\.destroyed\) return/);
+  });
+
+  it(
+    "installer does not forward /live/ by calling forward() without a media guard",
+    { skip: !installerAvailable },
+    () => {
     const installer = readEdgeSource(installerPath);
     const guard = forwardMediaGuard(installer);
     assert.ok(guard.length > 80, "forward() must include a media-path guard before backend proxy");
-  });
+    }
+  );
 });

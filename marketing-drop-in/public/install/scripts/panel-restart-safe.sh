@@ -26,6 +26,9 @@ load_env() {
   set -a
   [ -f .env ] && . ./.env
   set +a
+  if [ -x scripts/prune-stale-live-connections.sh ]; then
+    bash scripts/prune-stale-live-connections.sh >>"$LOG_FILE" 2>&1 || true
+  fi
 }
 
 verify_panel() {
@@ -39,6 +42,18 @@ verify_panel() {
   return 1
 }
 
+# Only warm cheap panel routes. Hitting player_api.php / live-auth on Next with a
+# million-row catalog pins every cluster worker so /login and /api/health stop answering.
+warmup_playback_routes() {
+  local port="${PORT:-13000}"
+  local i
+  log "Warming panel routes on :${port} (health + login only) ..."
+  for i in 1 2 3 4; do
+    curl -sS -m 8 -o /dev/null "http://127.0.0.1:${port}/api/health" >/dev/null 2>&1 || true
+    curl -sS -m 8 -o /dev/null "http://127.0.0.1:${port}/login" >/dev/null 2>&1 || true
+  done
+}
+
 nexlify_only_restart() {
   load_env
 
@@ -47,6 +62,15 @@ nexlify_only_restart() {
     . "$ROOT/scripts/nexlify-migrate-guard.sh"
     if ! nexlify_refuse_restart_if_migrating; then
       log "SKIP: nexlify restart blocked — SQL migration in progress"
+      return 1
+    fi
+  fi
+
+  if [ -f "$ROOT/scripts/nexlify-streaming-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-streaming-guard.sh"
+    if ! nexlify_refuse_restart_if_streaming_busy; then
+      log "SKIP: nexlify restart blocked — IPTV streaming load (use NEXLIFY_FORCE_RESTART=1)"
       return 1
     fi
   fi
@@ -95,6 +119,16 @@ nexlify_only_restart() {
   pm2 save >>"$LOG_FILE" 2>&1 || true
 
   if verify_panel; then
+    warmup_playback_routes
+    # Panel-only restarts used to leave nexlify-iptv-edge on a stale
+    # PANEL_INTERNAL_SECRET (or hung sockets) → UI works, nothing plays.
+    if [ -x scripts/rematch-iptv-edge-auth.sh ]; then
+      if bash scripts/rematch-iptv-edge-auth.sh >>"$LOG_FILE" 2>&1; then
+        log "iptv-edge auth rematch OK"
+      else
+        log "WARN: iptv-edge auth rematch failed — playback may 403 until fixed"
+      fi
+    fi
     log "nexlify-only restart OK"
     return 0
   fi
@@ -110,6 +144,11 @@ full_restart() {
     npm install --no-audit --no-fund --loglevel=error >>"$LOG_FILE" 2>&1 || true
   fi
   bash "$ROOT/scripts/pm2-start.sh" >>"$LOG_FILE" 2>&1
+  load_env
+  warmup_playback_routes || true
+  if [ -x scripts/rematch-iptv-edge-auth.sh ]; then
+    bash scripts/rematch-iptv-edge-auth.sh >>"$LOG_FILE" 2>&1 || log "WARN: iptv-edge auth rematch failed"
+  fi
 }
 
 run_restart() {

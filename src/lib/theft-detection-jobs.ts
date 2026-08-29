@@ -36,6 +36,25 @@ async function disableLines(lineIds: Iterable<string>) {
   }
 }
 
+async function alertAlreadyLogged(opts: {
+  action: "theft_detection_alert" | "theft_vod_alert" | "theft_stream_alert";
+  entityId: string;
+  since: Date;
+  ip?: string;
+}) {
+  return Boolean(
+    await prisma.activityLog.findFirst({
+      where: {
+        action: opts.action,
+        entityId: opts.entityId,
+        createdAt: { gte: opts.since },
+        ...(opts.ip ? { meta: { path: ["ip"], equals: opts.ip } } : {}),
+      },
+      select: { id: true },
+    })
+  );
+}
+
 /** Multiple lines from one IP (live connections). */
 export async function runLineTheftJob(settings: TheftSettings) {
   let alerts = 0;
@@ -53,6 +72,15 @@ export async function runLineTheftJob(settings: TheftSettings) {
   }
   for (const [ip, lines] of byIp) {
     if (lines.size < settings.sameIpLineThreshold) continue;
+    if (
+      await alertAlreadyLogged({
+        action: "theft_detection_alert",
+        entityId: ip,
+        since: staleBefore,
+      })
+    ) {
+      continue;
+    }
     alerts++;
     await prisma.activityLog.create({
       data: {
@@ -88,6 +116,15 @@ export async function runVodTheftJob(settings: TheftSettings) {
   }
   for (const [ip, lines] of byIp) {
     if (lines.size < settings.vodSameIpLineThreshold) continue;
+    if (
+      await alertAlreadyLogged({
+        action: "theft_vod_alert",
+        entityId: ip,
+        since: staleBefore,
+      })
+    ) {
+      continue;
+    }
     alerts++;
     await prisma.activityLog.create({
       data: {
@@ -124,6 +161,16 @@ export async function runStreamTheftJob(settings: TheftSettings) {
   for (const [key, lines] of byIpStream) {
     if (lines.size < settings.streamSameIpLineThreshold) continue;
     const [ip, streamId] = key.split("::");
+    if (
+      await alertAlreadyLogged({
+        action: "theft_stream_alert",
+        entityId: streamId,
+        since: staleBefore,
+        ip,
+      })
+    ) {
+      continue;
+    }
     alerts++;
     await prisma.activityLog.create({
       data: {

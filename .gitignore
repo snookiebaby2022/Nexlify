@@ -1,5 +1,7 @@
 node_modules
 .next
+.next.test/
+.next.staging/
 .next.backup/
 .next.old/
 .env
@@ -40,6 +42,17 @@ scripts/.panel-releases-website-snippet.ts
 
 # OpenCode config
 .opencode/
+opencode.json
+
+# Local agent/MCP configuration and generated context
+.claude/
+.cursor/mcp.json
+.mcp.json
+.ignore
+
+# One-off operator diagnostics (never release credentials or host scratch files)
+tmp-*.cjs
+windows/scripts/_*
 
 # Temp scripts
 tmp-*.sh

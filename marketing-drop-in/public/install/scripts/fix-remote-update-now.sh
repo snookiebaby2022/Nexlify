@@ -79,12 +79,19 @@ export GCM_INTERACTIVE=never
 export GIT_HTTP_LOW_SPEED_LIMIT="${GIT_HTTP_LOW_SPEED_LIMIT:-1000}"
 export GIT_HTTP_LOW_SPEED_TIME="${GIT_HTTP_LOW_SPEED_TIME:-45}"
 
+if [ -f "$ROOT/scripts/vps-git-auth.sh" ]; then
+  # shellcheck source=scripts/vps-git-auth.sh
+  . "$ROOT/scripts/vps-git-auth.sh"
+  configure_nexlify_git_origin "$ROOT"
+  ensure_nexlify_git_ssh
+fi
+
 if [ -d .git ]; then
   echo "==> git fetch origin main (90s timeout)"
   if command -v timeout >/dev/null 2>&1; then
     timeout 90 git fetch origin main || {
-      echo "WARN: git fetch timed out or failed — trying GitHub HTTPS remote"
-      git remote set-url origin https://github.com/snookiebaby2022/Nexlify.git 2>/dev/null || true
+      echo "WARN: git fetch timed out or failed — retrying with resolved remote"
+      configure_nexlify_git_origin "$ROOT"
       timeout 90 git fetch origin main
     }
   else
@@ -95,10 +102,14 @@ if [ -d .git ]; then
 else
   echo "WARN: not a git checkout — cloning into staging then swapping (keeps .env + data + .git)"
   TMP="$(mktemp -d)"
+  CLONE_URL="https://github.com/snookiebaby2022/Nexlify.git"
+  if [ -f "$ROOT/scripts/vps-git-auth.sh" ]; then
+    CLONE_URL="$(resolve_nexlify_git_url)"
+  fi
   if command -v timeout >/dev/null 2>&1; then
-    timeout 180 git clone --depth 1 --branch main https://github.com/snookiebaby2022/Nexlify.git "$TMP/nexlify"
+    timeout 180 git clone --depth 1 --branch main "$CLONE_URL" "$TMP/nexlify"
   else
-    git clone --depth 1 --branch main https://github.com/snookiebaby2022/Nexlify.git "$TMP/nexlify"
+    git clone --depth 1 --branch main "$CLONE_URL" "$TMP/nexlify"
   fi
   rsync -a --delete \
     --exclude node_modules --exclude .next --exclude .next.backup --exclude .next.staging \

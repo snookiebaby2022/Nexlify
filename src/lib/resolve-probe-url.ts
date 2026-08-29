@@ -1,6 +1,7 @@
 import { isIntegrationStreamUrl } from "@/lib/integration-stream-url";
 import { resolveIntegrationPlaybackUrl } from "@/lib/integration-playback";
 import { resolveStreamPlaybackUrl, type StreamWithProvider } from "@/lib/resolve-stream-url";
+import { repairMalformedStreamUrl } from "@/lib/stream-source";
 
 /** Resolve a stream row or raw URL to an HTTP(S) URL suitable for probing. */
 export async function resolveProbeTargetUrl(
@@ -31,8 +32,9 @@ export async function resolveProbeTargetUrl(
     return { url: source, label: "integration-unresolved" };
   }
 
-  if (/^https?:\/\//i.test(source)) {
-    return { url: source, label: "direct" };
+  const repaired = repairMalformedStreamUrl(source);
+  if (/^https?:\/\//i.test(repaired)) {
+    return { url: repaired, label: repaired !== source ? "repaired" : "direct" };
   }
 
   return { url: source, label: "unsupported" };

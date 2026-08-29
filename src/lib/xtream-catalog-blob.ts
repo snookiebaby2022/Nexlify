@@ -9,13 +9,17 @@ import {
   catalogBlobPath,
   catalogFileAgeMs,
   catalogFileIsFresh,
+  catalogFileIsUsable,
   CATALOG_BLOB_VERSION,
   hashCatalogKey,
   withCatalogBuildLock,
   writeGzipJsonArrayFile,
 } from "@/lib/catalog-disk-cache";
 import { excludeDisabledFromExport } from "@/lib/export-policy";
-import { buildCanonicalCategoryMaps, isXtreamAllCategoryParam } from "@/lib/xtream-category-canonical";
+import {
+  buildCanonicalCategoryMaps,
+  isXtreamAllCategoryParam,
+} from "@/lib/xtream-category-canonical";
 import {
   catalogStreamType,
   mapXtreamLiveItem,
@@ -26,6 +30,32 @@ import { forEachSeriesSeedBatch } from "@/lib/xtream-stream-id";
 import { iptvGzipFileResponse, iptvJson } from "@/lib/iptv-json";
 import type { NextResponse } from "next/server";
 import { yieldEventLoop } from "@/lib/yield-event-loop";
+import {
+  xtreamLiveStreams,
+  xtreamVodStreams,
+  xtreamSeriesForLine,
+} from "@/lib/xtream";
+
+async function serveXtreamCatalogInline(
+  kind: XtreamCatalogKind,
+  line: LineWithBouquets,
+  req: Request,
+  categoryId?: string | null,
+): Promise<NextResponse> {
+  if (kind === "live") {
+    return iptvJson(await xtreamLiveStreams(line, "", categoryId), {
+      compressFor: req,
+    });
+  }
+  if (kind === "vod") {
+    return iptvJson(await xtreamVodStreams(line, "", categoryId), {
+      compressFor: req,
+    });
+  }
+  return iptvJson(await xtreamSeriesForLine(line, categoryId), {
+    compressFor: req,
+  });
+}
 
 export type XtreamCatalogKind = "live" | "vod" | "series";
 
@@ -33,11 +63,14 @@ type CategoryFilter = string[] | "uncategorized" | "all" | "missing";
 
 async function resolveCategoryFilter(
   kind: XtreamCatalogKind,
-  categoryId?: string | null
+  categoryId?: string | null,
 ): Promise<CategoryFilter> {
   if (isXtreamAllCategoryParam(categoryId)) return "all";
   const { resolveXtreamCategoryFilter } = await import("@/lib/xtream");
-  const resolved = await resolveXtreamCategoryFilter(categoryId!, catalogStreamType(kind));
+  const resolved = await resolveXtreamCategoryFilter(
+    categoryId!,
+    catalogStreamType(kind),
+  );
   return resolved === "all" ? "all" : resolved;
 }
 
@@ -52,7 +85,7 @@ export function xtreamCatalogBlobName(
   kind: XtreamCatalogKind,
   bouquetToken: string,
   filter: CategoryFilter,
-  excludeDisabled: boolean
+  excludeDisabled: boolean,
 ): string {
   const key = hashCatalogKey([
     CATALOG_BLOB_VERSION,
@@ -70,7 +103,7 @@ async function buildCatalogGzip(
   line: LineWithBouquets,
   filter: CategoryFilter,
   excludeDisabled: boolean,
-  onFirstLiveIds?: (ids: string[]) => void
+  onFirstLiveIds?: (ids: string[]) => void,
 ): Promise<void> {
   if (filter === "missing") {
     await writeGzipJsonArrayFile(destPath, async () => undefined);
@@ -102,14 +135,14 @@ async function buildCatalogGzip(
             await writeItem(mapXtreamSeriesItem(seed, index, canonical));
             index += 1;
           }
-        }
+        },
       );
     });
     return;
   }
 
   const canonical = await buildCanonicalCategoryMaps(
-    kind === "vod" ? StreamType.MOVIE : StreamType.LIVE
+    kind === "vod" ? StreamType.MOVIE : StreamType.LIVE,
   );
   let index = 0;
   const firstLiveIds: string[] = [];
@@ -121,7 +154,8 @@ async function buildCatalogGzip(
             ? mapXtreamVodItem(stream, index, canonical)
             : mapXtreamLiveItem(stream, index, canonical);
         await writeItem(mapped);
-        if (kind === "live" && firstLiveIds.length < 5) firstLiveIds.push(stream.id);
+        if (kind === "live" && firstLiveIds.length < 5)
+          firstLiveIds.push(stream.id);
         index += 1;
       }
     });
@@ -140,59 +174,94 @@ export async function serveXtreamCatalogJson(
   line: LineWithBouquets,
   req: Request,
   categoryId?: string | null,
-  onFirstLiveIds?: (ids: string[]) => void
+  onFirstLiveIds?: (ids: string[]) => void,
 ): Promise<NextResponse> {
   const excludeDisabled = await excludeDisabledFromExport();
   const filter = await resolveCategoryFilter(kind, categoryId);
+
   const name = xtreamCatalogBlobName(
     kind,
     lineBouquetCacheToken(line, excludeDisabled),
     filter,
-    excludeDisabled
+    excludeDisabled,
   );
   const destPath = catalogBlobPath(name);
   const age = await catalogFileAgeMs(destPath);
 
   const rebuild = async () => {
     const result = await withCatalogBuildLock(destPath, async () => {
-      await buildCatalogGzip(destPath, kind, line, filter, excludeDisabled, onFirstLiveIds);
+      await buildCatalogGzip(
+        destPath,
+        kind,
+        line,
+        filter,
+        excludeDisabled,
+        onFirstLiveIds,
+      );
       return "built" as const;
     });
     if (result === "existing") return;
   };
 
-  if (age != null) {
+  if (catalogFileIsUsable(age)) {
     if (!catalogFileIsFresh(age)) {
       void rebuild().catch((err) => {
-        console.error("[xtream-catalog] background rebuild failed:", err instanceof Error ? err.message : err);
+        console.error(
+          "[xtream-catalog] background rebuild failed:",
+          err instanceof Error ? err.message : err,
+        );
       });
     }
-    return iptvGzipFileResponse(destPath, req, "application/json; charset=utf-8", {
-      forceGzip: true,
-    });
+    return iptvGzipFileResponse(
+      destPath,
+      req,
+      "application/json; charset=utf-8",
+      {
+        forceGzip: true,
+      },
+    );
   }
 
-  await rebuild();
-  const built = await catalogFileAgeMs(destPath);
-  if (built == null) {
-    return iptvJson([], { compressFor: req });
+  // Cold miss: all workers wait on the shared file lock. Exactly one process
+  // performs the SQL build; the others serve the resulting blob instead of
+  // falling back to duplicate million-row queries after an arbitrary timeout.
+  try {
+    await rebuild();
+    const ready = await catalogFileAgeMs(destPath);
+    if (catalogFileIsUsable(ready)) {
+      return iptvGzipFileResponse(
+        destPath,
+        req,
+        "application/json; charset=utf-8",
+        {
+          forceGzip: true,
+        },
+      );
+    }
+  } catch (err) {
+    console.error(
+      "[xtream-catalog] cold build failed:",
+      err instanceof Error ? err.message : err,
+    );
   }
-  return iptvGzipFileResponse(destPath, req, "application/json; charset=utf-8", {
-    forceGzip: true,
-  });
+
+  // Preserve compatibility if disk storage itself is unavailable.
+  return serveXtreamCatalogInline(kind, line, req, categoryId);
 }
 
 /**
  * XCIPTV Update Content calls user_info / categories before get_live_streams.
  * Start gzip blobs then so the catalog request is a file stream, not a cold SQL build.
  */
-async function ensureCatalogKind(
+export async function ensureCatalogKind(
   kind: XtreamCatalogKind,
   line: LineWithBouquets,
   token: string,
-  excludeDisabled: boolean
+  excludeDisabled: boolean,
 ): Promise<void> {
-  const destPath = catalogBlobPath(xtreamCatalogBlobName(kind, token, "all", excludeDisabled));
+  const destPath = catalogBlobPath(
+    xtreamCatalogBlobName(kind, token, "all", excludeDisabled),
+  );
   const age = await catalogFileAgeMs(destPath);
   if (age != null) return;
   await withCatalogBuildLock(destPath, async () => {
@@ -207,7 +276,9 @@ async function ensureCatalogKind(
  * XCIPTV Update Content calls user_info / categories before get_live_streams.
  * Live first (small), then VOD + series together so first open is not live-then-vod serial.
  */
-export async function warmXtreamCatalogsNow(line: LineWithBouquets): Promise<void> {
+export async function warmXtreamCatalogsNow(
+  line: LineWithBouquets,
+): Promise<void> {
   const excludeDisabled = await excludeDisabledFromExport();
   const token = lineBouquetCacheToken(line, excludeDisabled);
   await ensureCatalogKind("live", line, token, excludeDisabled);
@@ -217,8 +288,19 @@ export async function warmXtreamCatalogsNow(line: LineWithBouquets): Promise<voi
   ]);
 }
 
+export async function warmXtreamLiveCatalogNow(
+  line: LineWithBouquets,
+): Promise<void> {
+  const excludeDisabled = await excludeDisabledFromExport();
+  const token = lineBouquetCacheToken(line, excludeDisabled);
+  await ensureCatalogKind("live", line, token, excludeDisabled);
+}
+
 export function warmXtreamCatalogs(line: LineWithBouquets): void {
   void warmXtreamCatalogsNow(line).catch((err) => {
-    console.error("[xtream-catalog] warm failed:", err instanceof Error ? err.message : err);
+    console.error(
+      "[xtream-catalog] warm failed:",
+      err instanceof Error ? err.message : err,
+    );
   });
 }

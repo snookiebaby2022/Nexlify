@@ -185,6 +185,9 @@ function Sync-NexlifyPanelToRemote {
       "--exclude=.next.test"
       "--exclude=.next.old"
       "--exclude=.git"
+      "--exclude=.env"
+      "--exclude=.env.*"
+      "--exclude=.license-keys"
       "--exclude=windows"
       "--exclude=graft"
       "--exclude=marketing-drop-in"
@@ -202,13 +205,27 @@ function Sync-NexlifyPanelToRemote {
       $sshTarget = "${Username}@${HostName}"
       $sshOpts = @("-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-p", "$Port", "-i", $sshKey)
       $sedFix = 'sed -i ''s/\r$//'' scripts/*.sh scripts/*.mjs 2>/dev/null || true'
-      $remote = "mkdir -p '$RemotePath' && cd '$RemotePath' && tar -xzf - && rm -f src/instrumentation.ts src/lib/cron-scheduler.ts && $sedFix"
-      & tar -czf - @excludes . | & ssh.exe @sshOpts $sshTarget $remote
-      if ($LASTEXITCODE -eq 0) {
+      $remote = "mkdir -p '$RemotePath' && cd '$RemotePath' && tar -xf /tmp/nexlify-panel-sync.tar && rm -f /tmp/nexlify-panel-sync.tar src/instrumentation.ts src/lib/cron-scheduler.ts && $sedFix"
+      # Windows tar.exe (libarchive) has no --force-local; pipe LASTEXITCODE is unreliable in Windows PowerShell.
+      $tmpTar = Join-Path $env:TEMP "nexlify-panel-sync.tar"
+      if (Test-Path -LiteralPath $tmpTar) { Remove-Item -LiteralPath $tmpTar -Force }
+      Write-Host "Creating sync archive (this can take a minute)..."
+      & tar.exe @excludes -cf $tmpTar .
+      if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $tmpTar) -or (Get-Item -LiteralPath $tmpTar).Length -lt 1024) {
+        throw "tar create failed (exit $LASTEXITCODE)"
+      }
+      Write-Host ("Archive size: {0:N1} MB" -f ((Get-Item -LiteralPath $tmpTar).Length / 1MB))
+      $scpOpts = @("-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-P", "$Port", "-i", $sshKey)
+      & scp.exe @scpOpts $tmpTar "${sshTarget}:/tmp/nexlify-panel-sync.tar"
+      if ($LASTEXITCODE -ne 0) { throw "scp of sync archive failed ($LASTEXITCODE)" }
+      & ssh.exe @sshOpts $sshTarget $remote
+      $sshCode = $LASTEXITCODE
+      Remove-Item -LiteralPath $tmpTar -Force -ErrorAction SilentlyContinue
+      if ($sshCode -eq 0) {
         Write-Host "OpenSSH sync complete."
         return
       }
-      Write-Host "OpenSSH sync failed ($LASTEXITCODE) - falling back to WinSCP..." -ForegroundColor Yellow
+      Write-Host "OpenSSH sync failed ($sshCode) - falling back to WinSCP..." -ForegroundColor Yellow
     } finally {
       Pop-Location
     }

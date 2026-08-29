@@ -10,35 +10,47 @@
 #   bash /home/nexlify-panel/scripts/vps-init-panel-git.sh
 set -euo pipefail
 
-# --- git auth (inline so curl | bash works) ---
-resolve_nexlify_git_url() {
-  local base="${NEXLIFY_GIT_REPO:-https://github.com/snookiebaby2022/Nexlify.git}"
-  local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
-  if [ -n "$token" ]; then
-    echo "https://${token}@github.com/snookiebaby2022/Nexlify.git"
-    return 0
-  fi
-  if [ -n "${NEXLIFY_GIT_SSH:-}" ] || [ -f "${HOME}/.ssh/id_ed25519" ] || [ -f "${HOME}/.ssh/id_rsa" ]; then
-    if ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 | grep -qi 'successfully authenticated'; then
-      echo "git@github.com:snookiebaby2022/Nexlify.git"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/vps-git-auth.sh" ]; then
+  # shellcheck source=scripts/vps-git-auth.sh
+  . "$SCRIPT_DIR/vps-git-auth.sh"
+else
+  # --- git auth (inline fallback when script run via curl | bash) ---
+  resolve_nexlify_git_url() {
+    local base="${NEXLIFY_GIT_REPO:-https://github.com/snookiebaby2022/Nexlify.git}"
+    local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+    if [ -n "$token" ]; then
+      echo "https://${token}@github.com/snookiebaby2022/Nexlify.git"
       return 0
     fi
-  fi
-  echo "$base"
-}
-require_git_auth_hint() {
-  cat <<'EOF'
+    if [ -n "${NEXLIFY_GIT_SSH:-}" ] || [ -f "${HOME}/.ssh/id_ed25519" ] || [ -f "${HOME}/.ssh/id_rsa" ]; then
+      if ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -T git@github.com 2>&1 | grep -qi 'successfully authenticated'; then
+        echo "git@github.com:snookiebaby2022/Nexlify.git"
+        return 0
+      fi
+    fi
+    echo "$base"
+  }
+  require_git_auth_hint() {
+    cat <<'EOF'
 ERROR: Cannot access private GitHub repo snookiebaby2022/Nexlify.
 
 Fix one of:
-  1) export GITHUB_TOKEN=ghp_...   # PAT with repo read scope, then re-run
-  2) Add SSH deploy key to GitHub, export NEXLIFY_GIT_SSH=1, then re-run
+  1) cat nexlify-fleet | bash scripts/install-fleet-deploy-key.sh
+  2) export GITHUB_TOKEN=ghp_...   # PAT with repo read scope, then re-run
   3) WinSCP upload scripts from your PC instead of curl GitHub raw URLs
 EOF
-}
-git_fetch_ok() {
-  git ls-remote "$1" "refs/heads/${2:-main}" >/dev/null 2>&1
-}
+  }
+  git_fetch_ok() {
+    git ls-remote "$1" "refs/heads/${2:-main}" >/dev/null 2>&1
+  }
+  configure_nexlify_git_origin() {
+    local dir="${1:-.}"
+    [ -d "$dir/.git" ] || return 0
+    git -C "$dir" remote set-url origin "$(resolve_nexlify_git_url)"
+  }
+fi
+
 # --- end git auth ---
 
 PANEL="${NEXLIFY_PANEL_DIR:-/home/nexlify}"
@@ -67,7 +79,7 @@ if [ -d "$PANEL/.git" ]; then
   echo "Already a git repo."
   cd "$PANEL"
   git remote get-url origin >/dev/null 2>&1 || git remote add origin "$REPO_URL"
-  git remote set-url origin "$REPO_URL"
+  configure_nexlify_git_origin "$PANEL" 2>/dev/null || git remote set-url origin "$REPO_URL"
   if ! git fetch origin "$BRANCH" --depth 1 2>/dev/null; then
     require_git_auth_hint
     exit 1

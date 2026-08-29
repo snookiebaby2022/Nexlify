@@ -1,0 +1,22 @@
+---
+description: Do not break Xtream live playback routing (no 302, no live forward-loop)
+globs: scripts/{iptv-edge-proxy.mjs,restore-live-proxy-45.sh,route-45-live-to-remote-edge.sh,offload-live-from-panel-45.sh,stabilize-panel-complete-45.sh,lock-live-routing-45.sh}
+alwaysApply: true
+---
+
+# Live playback lock
+
+Working path (do not "improve" this):
+
+- nginx `:80` / `:443` / `:8080` **proxy** `/live/` to **10gbs** `209.237.141.15:8080`
+- Return **200 + MPEG-TS/HLS bytes** — **never** `return 302` for `/live/`, `/timeshift/`, `/movie/`, `/series/`
+- Xtream apps do not follow redirects for `.ts` / `.m3u8`
+- Edge must **splice locally**; never `forward()` `/live/` to `IPTV_EDGE_BACKEND` (panel nginx sends it back → 502 loop)
+- Do not `fuser -k 8080` (kills nginx)
+- Do not start `nexlify-iptv-edge` on the panel (nginx owns `:8080`)
+
+Canonical apply + immutable lock:
+
+`bash scripts/lock-live-routing-45.sh`
+
+Unlock only if the operator asks: `bash scripts/lock-live-routing-45.sh unlock`

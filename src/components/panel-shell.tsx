@@ -21,6 +21,7 @@ import {
   type ResellerGroupFlags,
 } from "@/lib/reseller-group-flags";
 import { ResellerGroupFlagsProvider } from "@/components/reseller-group-flags-context";
+import { useMediaQuery } from "@/lib/use-media-query";
 
 export function PanelShell({
   title,
@@ -40,6 +41,7 @@ export function PanelShell({
   children: React.ReactNode;
 }) {
   const [mobileNav, setMobileNav] = useState(false);
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   useEffect(() => {
     if (!mobileNav) return;
     const prev = document.body.style.overflow;
@@ -58,7 +60,7 @@ export function PanelShell({
   return (
     <ResellerGroupFlagsProvider flags={role === "RESELLER" ? resellerFlags : DEFAULT_RESELLER_GROUP_FLAGS}>
     <PanelUpdateJobProvider>
-    <DashboardLiveMetricsProvider enabled={role === "ADMIN"}>
+    <DashboardLiveMetricsProvider enabled={role === "ADMIN" && isDesktop}>
     <div
       className={`panel-shell${mobileNav ? " panel-shell--mobile-nav-open" : ""}`}
       style={accent ? ({ ["--accent" as string]: accent } as React.CSSProperties) : undefined}

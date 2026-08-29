@@ -3,13 +3,14 @@ import { getFfprobePath, runCommand } from "@/lib/bin-tools";
 import { formatFfprobeSummary, parseFfprobeJson } from "@/lib/ffprobe-media";
 import { isIntegrationStreamUrl } from "@/lib/integration-stream-url";
 import { resolveIntegrationPlaybackUrl } from "@/lib/integration-playback";
+import { repairMalformedStreamUrl } from "@/lib/stream-source";
 
 export type { ProbeResult };
 
 const UPSTREAM_UA = "VLC/3.0.20 LibVLC/3.0.20";
 
 async function resolveForProbe(url: string): Promise<{ target: string; hint?: string }> {
-  const trimmed = url.trim();
+  const trimmed = repairMalformedStreamUrl(url.trim());
   if (!trimmed) return { target: "" };
   if (isIntegrationStreamUrl(trimmed)) {
     const resolved = await resolveIntegrationPlaybackUrl(trimmed);

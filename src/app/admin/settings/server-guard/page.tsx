@@ -27,8 +27,8 @@ export default function ServerGuardSettingsPage() {
         {
           title: "Thresholds",
           fields: [
-            { key: "guardCpuThreshold", label: "CPU threshold (%)", type: "number", placeholder: "85", hint: "Trigger cooldown when CPU exceeds this." },
-            { key: "guardRamThreshold", label: "RAM threshold (%)", type: "number", placeholder: "90", hint: "Trigger cooldown when RAM exceeds this." },
+            { key: "guardCpuThreshold", label: "CPU threshold (%)", type: "number", placeholder: "75", hint: "Trigger cooldown when CPU exceeds this." },
+            { key: "guardRamThreshold", label: "RAM threshold (%)", type: "number", placeholder: "75", hint: "Trigger cooldown when RAM exceeds this." },
             { key: "guardCooldownSeconds", label: "Cooldown duration (seconds)", type: "number", placeholder: "60", hint: "How long to throttle connections." },
           ],
         },

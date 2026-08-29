@@ -57,14 +57,28 @@ export async function getLineByCredentials(
   username: string,
   password: string
 ): Promise<LineWithBouquets | null> {
-  const line = await cacheGetOrSet(lineCredCacheKey(username, password), 45, async () => {
-    const row = await prisma.line.findUnique({
-      where: { username },
+  const raw = username.trim();
+  if (!raw) return null;
+  const line = await cacheGetOrSet(lineCredCacheKey(raw, password), 45, async () => {
+    let row = await prisma.line.findUnique({
+      where: { username: raw },
       include: lineAuthInclude,
     });
+    if (!row && raw !== raw.toLowerCase()) {
+      row = await prisma.line.findUnique({
+        where: { username: raw.toLowerCase() },
+        include: lineAuthInclude,
+      });
+    }
+    if (!row) {
+      row = await prisma.line.findFirst({
+        where: { username: { equals: raw, mode: "insensitive" } },
+        include: lineAuthInclude,
+      });
+    }
     if (row && row.password === password) return row;
 
-    const code = username.trim().toUpperCase();
+    const code = raw.toUpperCase();
     if (!code) return null;
 
     const activeLine = await prisma.line.findFirst({
@@ -114,6 +128,8 @@ export type StreamForLine = Stream & {
   server?: { host?: string | null } | null;
   /** Category display name for XUI-style M3U group-title. */
   categoryName?: string | null;
+  /** Category folder type — used to avoid mis-filing streams after XUI imports. */
+  categoryType?: string | null;
   /** File extension parsed from streamUrl (lean catalog SQL). */
   urlExt?: string | null;
   /** TMDB/XUI rating scraped from agentStartCmd (lean catalog SQL). */
@@ -303,6 +319,7 @@ type LeanListingRow = {
   containerExtension: string | null;
   urlExt: string | null;
   categoryName: string | null;
+  categoryType: string | null;
   vodRating?: string | null;
   vodPlot?: string | null;
   ord: bigint;
@@ -340,6 +357,7 @@ async function loadLeanListingForLine(
       s."containerExtension" AS "containerExtension",
       substring(split_part(s."streamUrl", '?', 1) from '[.]([A-Za-z0-9]{2,4})$') AS "urlExt",
       c.name AS "categoryName",
+      c."categoryType"::text AS "categoryType",
       ${vodMetaSelectSql(options)},
       s."sortOrder"::bigint AS ord
     FROM ${bouquetMembershipSql(bouquetIds)} m
@@ -429,6 +447,7 @@ export async function forEachLeanListingBatch(
         s."containerExtension" AS "containerExtension",
         substring(split_part(s."streamUrl", '?', 1) from '[.]([A-Za-z0-9]{2,4})$') AS "urlExt",
         c.name AS "categoryName",
+      c."categoryType"::text AS "categoryType",
         ${vodMetaSelectSql(options)},
         s."sortOrder"::bigint AS ord
       FROM ${bouquetMembershipSql(filter.bouquetIds)} m

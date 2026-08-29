@@ -14,7 +14,7 @@ PANEL_ARCHIVE_URL="${PANEL_ARCHIVE_URL:-https://nexlify.live/downloads/nexlify-p
 PANEL_VENDOR_URL="${PANEL_VENDOR_URL:-https://nexlify.live}"
 PANEL_INSTALL_BASE="${PANEL_INSTALL_BASE:-${PANEL_VENDOR_URL}/install}"
 _PV="$(bash "$ROOT/scripts/panel-version.sh" 2>/dev/null || echo 0)"
-PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v2.0.17}"
+PANEL_CACHE_BUST="${PANEL_CACHE_BUST:-v2.0.56}"
 CACHE_FILE="$ROOT/.panel-update-cache.json"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
@@ -200,8 +200,13 @@ bootstrap_patch_scripts() {
   }
   fetch_one "${base}/apply-panel-fast-update.sh?${cache}" "$ROOT/scripts/apply-panel-fast-update.sh"
   fetch_one "${base}/scripts/panel-restart-safe.sh?${cache}" "$ROOT/scripts/panel-restart-safe.sh"
+  fetch_one "${base}/scripts/rematch-iptv-edge-auth.sh?${cache}" "$ROOT/scripts/rematch-iptv-edge-auth.sh"
+  fetch_one "${base}/scripts/sync-internal-secret-env.sh?${cache}" "$ROOT/scripts/sync-internal-secret-env.sh"
   fetch_one "${base}/scripts/panel-update-recover.sh?${cache}" "$ROOT/scripts/panel-update-recover.sh"
   fetch_one "${base}/scripts/panel-update-background.sh?${cache}" "$ROOT/scripts/panel-update-background.sh"
+  fetch_one "${base}/scripts/ensure-fleet-deploy-key.sh?${cache}" "$ROOT/scripts/ensure-fleet-deploy-key.sh"
+  fetch_one "${base}/scripts/vps-git-auth.sh?${cache}" "$ROOT/scripts/vps-git-auth.sh"
+  fetch_one "${base}/scripts/install-fleet-deploy-key.sh?${cache}" "$ROOT/scripts/install-fleet-deploy-key.sh"
   fetch_one "${base}/scripts/has-valid-next-build.sh?${cache}" "$ROOT/scripts/has-valid-next-build.sh"
   normalize_scripts
   # Auto-install tsx if not available (needed for background update worker)
@@ -305,6 +310,7 @@ cmd_sync_git() {
     echo "WARN: git fetch failed — falling back to tarball" >&2
     return 1
   fi
+  bash "$ROOT/scripts/panel-git-sparse.sh" "$ROOT" 2>/dev/null || true
   local force="${PANEL_UPDATE_FORCE:-}"
   force="$(printf '%s' "$force" | tr '[:upper:]' '[:lower:]')"
   if [ "$force" = "1" ] || [ "$force" = "true" ] || [ "$force" = "yes" ]; then
@@ -312,6 +318,7 @@ cmd_sync_git() {
   else
     git -C "$ROOT" merge --ff-only origin/main || git -C "$ROOT" reset --hard origin/main || return 1
   fi
+  bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" 2>/dev/null || true
   normalize_scripts
   local synced_ver
   synced_ver="$(node -e "try{process.stdout.write(require('./package.json').version||'')}catch{}" 2>/dev/null || true)"
@@ -348,11 +355,13 @@ cmd_sync_tarball() {
       --exclude='data/' --exclude='node_modules/' \
       --exclude='.next/' --exclude='.next.backup/' --exclude='.next.staging/' \
       --exclude='.panel-update-cache.json' \
+      --exclude='marketing-drop-in/' --exclude='windows/' --exclude='graft/' \
       "$src/" "$ROOT/"
   else
     find "$src" -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.env' ! -name 'data' ! -name 'node_modules' ! -name '.next' ! -name '.next.backup' ! -name '.next.staging' \
       -exec cp -a {} "$ROOT/" \;
   fi
+  bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" 2>/dev/null || true
   normalize_scripts
   rm -rf "$tmp"
   local synced_ver
@@ -399,6 +408,11 @@ cmd_prisma() {
 }
 
 cmd_build_prep() {
+  if [ -f "$ROOT/scripts/nexlify-streaming-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-streaming-guard.sh"
+    nexlify_refuse_build_if_streaming_busy || exit 1
+  fi
   if [ -x "$ROOT/scripts/ensure-customer-ip-env.sh" ]; then
     bash "$ROOT/scripts/ensure-customer-ip-env.sh" || true
   fi
@@ -416,8 +430,20 @@ cmd_build_prep() {
 cmd_build_compile() {
   echo "Building panel (staging) ..."
   export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
-  export NEXT_PRIVATE_WORKER_THREADS=false
+  # Do not force NEXT_PRIVATE_WORKER_THREADS=false here: Next 15.5 minify then
+  # throws "WebpackError is not a constructor" and the real minify error is lost.
+  unset NEXT_PRIVATE_WORKER_THREADS 2>/dev/null || true
   export NEXLIFY_DIST_DIR=".next.staging"
+  # Single-flight: stacked next builds corrupt .next / OOM low-RAM hosts (e.g. 75).
+  # Skip if run-panel-build.mjs (or another caller) already holds the same lock.
+  if [ "${NEXLIFY_BUILD_LOCK_HELD:-}" != "1" ] && command -v flock >/dev/null 2>&1; then
+    exec 8>/tmp/nexlify-panel-build.lock
+    if ! flock -n 8; then
+      echo "ERROR: another panel build holds /tmp/nexlify-panel-build.lock — aborting" >&2
+      return 75
+    fi
+    export NEXLIFY_BUILD_LOCK_HELD=1
+  fi
   # Call next directly — do not use `npm run build` (that wrapper routes back here).
   if [ ! -f ./node_modules/next/dist/bin/next ]; then
     echo "WARN: next binary missing — reinstalling deps before build ..." >&2
@@ -554,7 +580,7 @@ cmd_restart() {
     return 1
   fi
   if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
-    bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only
+    bash "$ROOT/scripts/panel-restart-safe.sh"
   elif [ -x "$ROOT/scripts/pm2-start.sh" ]; then
     bash "$ROOT/scripts/pm2-start.sh"
   else
@@ -586,7 +612,7 @@ cmd_restart() {
       bash "$ROOT/scripts/fix-next-distdir-references.sh" "$ROOT/.next" 2>/dev/null || true
       bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
       if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
-        bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only 2>/dev/null || true
+        bash "$ROOT/scripts/panel-restart-safe.sh" 2>/dev/null || true
         sleep 3
       fi
       _code2="$(curl -sS -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' "http://127.0.0.1/_next/static/chunks/${_bn}" 2>/dev/null || echo 000)"

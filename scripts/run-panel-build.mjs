@@ -23,11 +23,24 @@ const fastUpdate = resolve(root, "scripts/apply-panel-fast-update.sh");
 const buildLock = "/tmp/nexlify-panel-build.lock";
 
 function run(cmd, args, env = process.env) {
-  const r = spawnSync(cmd, args, {
+  let executable = cmd;
+  let shell = false;
+  if (process.platform === "win32" && cmd === "bash") {
+    const candidates = [
+      env.NEXLIFY_BASH_BIN,
+      "C:\\Program Files\\Git\\bin\\bash.exe",
+      "C:\\Program Files (x86)\\Git\\bin\\bash.exe",
+    ].filter(Boolean);
+    executable = candidates.find((candidate) => existsSync(candidate)) || cmd;
+  } else if (process.platform === "win32" && cmd === "npm") {
+    // npm is a .cmd shim on Windows and requires cmd.exe.
+    shell = true;
+  }
+  const r = spawnSync(executable, args, {
     cwd: root,
     stdio: "inherit",
     env: { ...env },
-    shell: process.platform === "win32",
+    shell,
   });
   return r.status ?? 1;
 }

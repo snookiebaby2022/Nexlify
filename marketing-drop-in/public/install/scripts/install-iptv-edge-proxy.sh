@@ -54,9 +54,25 @@ HTTP_PORTS="$(echo "$HTTP_PORTS" | tr ',' '\n' | grep -v '^80$' | grep -v '^$' |
 if [ "$PANEL_LISTEN" != "80" ]; then
   echo "[iptv-edge] Panel UI stays on nginx :80 (backend 127.0.0.1:${PANEL_LISTEN}); edge will not bind :80"
 fi
-HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
-[ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="$(env_val PANEL_SSL_PORT)"
-[ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="443"
+
+PANEL_BEHIND="$(env_val PANEL_BEHIND_NGINX)"
+PRIMARY_DOM="$(env_val PANEL_PRIMARY_DOMAIN)"
+
+HTTPS_PORTS="$(env_val IPTV_EDGE_HTTPS_PORTS)"
+[ -z "$HTTPS_PORTS" ] && HTTPS_PORTS="$(env_val STREAM_HTTPS_PORT)"
+# Domain panels behind nginx: never fall back to PANEL_SSL_PORT — nginx owns :443.
+if [ -z "$HTTPS_PORTS" ] && [ "$PANEL_BEHIND" != "1" ]; then
+  HTTPS_PORTS="$(env_val PANEL_SSL_PORT)"
+fi
+[ -z "$HTTPS_PORTS" ] && [ "$PANEL_BEHIND" != "1" ] && HTTPS_PORTS="443"
+
+if [ "$PANEL_BEHIND" = "1" ] && [ -n "$PRIMARY_DOM" ] && ! echo "$PRIMARY_DOM" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+  echo "[iptv-edge] Domain panel behind nginx — nginx owns :443, edge HTTP only (:8080/:25461)"
+  HTTPS_PORTS=""
+  if [ -x "$PANEL_DIR/scripts/install-nginx-panel-https.sh" ]; then
+    bash "$PANEL_DIR/scripts/install-nginx-panel-https.sh" || true
+  fi
+fi
 
 # Hosts where nginx must own :443 (marketing TLS, MovieFlix/FlixNova, other LE sites).
 # Never steal 443 when those vhosts are present — IPTV edge keeps :8080/:25461 only.
@@ -69,6 +85,10 @@ if nginx_owns_public_web; then
 fi
 
 RELEASE_PORTS="$(echo "$HTTP_PORTS $HTTPS_PORTS" | tr ',' ' ' | xargs)"
+# When nginx serves panel HTTPS, never strip :443 from nginx configs.
+if [ "$PANEL_BEHIND" = "1" ] && [ -n "$PRIMARY_DOM" ] && ! echo "$PRIMARY_DOM" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; then
+  RELEASE_PORTS="$(echo "$RELEASE_PORTS" | tr ' ' '\n' | grep -vx '443' | xargs)"
+fi
 
 # Strip nginx listen directives for edge-owned ports BEFORE killing sockets.
 # Otherwise a later nginx restart tries to re-bind 8080 and takes down :80 too.
@@ -85,7 +105,11 @@ else
   fi
 fi
 
-export IPTV_EDGE_BACKEND="127.0.0.1:${PANEL_LISTEN}"
+export IPTV_EDGE_BACKEND="${IPTV_EDGE_BACKEND:-$(env_val IPTV_EDGE_BACKEND)}"
+if [ -z "$IPTV_EDGE_BACKEND" ]; then
+  export IPTV_EDGE_BACKEND="127.0.0.1:${PANEL_LISTEN}"
+fi
+IPTV_EDGE_REMOTE_NODE="${IPTV_EDGE_REMOTE_NODE:-$(env_val IPTV_EDGE_REMOTE_NODE)}"
 export IPTV_EDGE_HTTP_PORTS="$HTTP_PORTS"
 export IPTV_EDGE_HTTPS_PORTS="$HTTPS_PORTS"
 export IPTV_EDGE_CERT="$CERT"
@@ -122,7 +146,7 @@ if command -v nginx >/dev/null 2>&1; then
 fi
 
 # After stripping 8080/443, restore nginx :80 → Next if this host has no other :80 vhost.
-if [ -x "$PANEL_DIR/scripts/install-nginx-stream-edge.sh" ]; then
+if [ "$IPTV_EDGE_REMOTE_NODE" != "1" ] && [ -x "$PANEL_DIR/scripts/install-nginx-stream-edge.sh" ]; then
   bash "$PANEL_DIR/scripts/install-nginx-stream-edge.sh" || true
 fi
 
@@ -141,13 +165,35 @@ if command -v pm2 >/dev/null 2>&1; then
   export PANEL_INTERNAL_SECRET="${PANEL_INTERNAL_SECRET:-$(env_val PANEL_API_SECRET)}"
   export PANEL_API_SECRET="${PANEL_API_SECRET:-$PANEL_INTERNAL_SECRET}"
   export NEXLIFY_PANEL_API_SECRET="${NEXLIFY_PANEL_API_SECRET:-$PANEL_INTERNAL_SECRET}"
-  if [ -x "$PANEL_DIR/scripts/wait-panel-ready.sh" ]; then
+  if [ -x "$PANEL_DIR/scripts/wait-panel-ready.sh" ] && [ "$IPTV_EDGE_REMOTE_NODE" != "1" ]; then
     echo "[iptv-edge] waiting for panel on 127.0.0.1:${PANEL_LISTEN} before starting edge..."
     bash "$PANEL_DIR/scripts/wait-panel-ready.sh" || {
       echo "[iptv-edge] ERROR: panel not ready — refusing to start edge (would 502 on :80)" >&2
       exit 1
     }
+  elif [ "$IPTV_EDGE_REMOTE_NODE" = "1" ]; then
+    REMOTE_HEALTH="http://${IPTV_EDGE_BACKEND}/api/health"
+    echo "[iptv-edge] remote node — waiting for panel at ${REMOTE_HEALTH}..."
+    ready=0
+    for _ in $(seq 1 45); do
+      code="$(curl -sS -o /dev/null -w '%{http_code}' -m 8 "$REMOTE_HEALTH" 2>/dev/null || echo 000)"
+      if [ "$code" = "200" ]; then
+        echo "[iptv-edge] OK remote panel health HTTP 200"
+        ready=1
+        break
+      fi
+      sleep 2
+    done
+    if [ "$ready" != "1" ]; then
+      echo "[iptv-edge] WARN: remote panel health not confirmed — starting edge anyway" >&2
+    fi
   fi
+  export UV_THREADPOOL_SIZE="${UV_THREADPOOL_SIZE:-32}"
+  export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
+  export IPTV_EDGE_UPSTREAM_SOCKETS="${IPTV_EDGE_UPSTREAM_SOCKETS:-4096}"
+  export IPTV_EDGE_LIVE_SOCKETS="${IPTV_EDGE_LIVE_SOCKETS:-512}"
+  export IPTV_EDGE_ADMIN_SOCKETS="${IPTV_EDGE_ADMIN_SOCKETS:-256}"
+  export IPTV_EDGE_AUTH_CACHE_MS="${IPTV_EDGE_AUTH_CACHE_MS:-120000}"
   pm2 start "$PANEL_DIR/scripts/iptv-edge-proxy.mjs" \
     --name nexlify-iptv-edge \
     --cwd "$PANEL_DIR" \
@@ -167,7 +213,7 @@ if command -v nginx >/dev/null 2>&1; then
     systemctl start nginx 2>/dev/null || true
   fi
 fi
-if [ "$PANEL_LISTEN" != "80" ]; then
+if [ "$PANEL_LISTEN" != "80" ] && [ "$IPTV_EDGE_REMOTE_NODE" != "1" ]; then
   if ss -tln 2>/dev/null | grep -qE ':80[[:space:]]'; then
     echo "[iptv-edge] OK panel HTTP :80 is listening"
   else
@@ -175,4 +221,8 @@ if [ "$PANEL_LISTEN" != "80" ]; then
     exit 1
   fi
 fi
-echo "[iptv-edge] OK backend=${IPTV_EDGE_BACKEND} http=${HTTP_PORTS:-none} https=${HTTPS_PORTS:-none}"
+if [ "$IPTV_EDGE_REMOTE_NODE" = "1" ]; then
+  echo "[iptv-edge] OK remote stream node — backend=${IPTV_EDGE_BACKEND} http=${HTTP_PORTS:-none}"
+else
+  echo "[iptv-edge] OK backend=${IPTV_EDGE_BACKEND} http=${HTTP_PORTS:-none} https=${HTTPS_PORTS:-none}"
+fi

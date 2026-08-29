@@ -290,6 +290,7 @@ export default function StreamProvidersPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [checkingId, setCheckingId] = useState<string | null>(null);
+  const [checkingAll, setCheckingAll] = useState(false);
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pageTab, setPageTab] = useState<"manage" | "search">("manage");
@@ -375,6 +376,29 @@ export default function StreamProvidersPage() {
       setFormError("Network error while saving");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function checkAll() {
+    setCheckingAll(true);
+    setFormError("");
+    try {
+      const res = await fetch("/api/admin/stream-providers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checkAll: true }),
+      });
+      if (!res.ok) {
+        setFormError(await parseApiError(res));
+        return;
+      }
+      const data = await res.json();
+      setFormSuccess(`Re-checked ${data.updated ?? 0} provider(s)`);
+      await load();
+    } catch {
+      setFormError("Check all failed — network error");
+    } finally {
+      setCheckingAll(false);
     }
   }
 
@@ -557,6 +581,20 @@ export default function StreamProvidersPage() {
 
       {pageTab === "manage" ? (
       <>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          Status uses Xtream login when credentials are set — not a direct stream URL probe.
+        </p>
+        <button
+          type="button"
+          disabled={checkingAll || loading || !providers.length}
+          onClick={() => void checkAll()}
+          className="rounded px-3 py-1.5 text-sm font-medium border disabled:opacity-50"
+          style={{ borderColor: "var(--border)" }}
+        >
+          {checkingAll ? "Checking all…" : "Check all providers"}
+        </button>
+      </div>
       <div
         className="rounded-lg border p-4 text-sm space-y-3"
         style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}

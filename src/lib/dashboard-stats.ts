@@ -15,23 +15,34 @@ import { ensureMainServerOnline } from "@/lib/ensure-main-server-online";
 export async function loadHeaderStats() {
   const now = new Date();
   try {
-    const [lines, activeLines, liveStreams, onlineConnections, totalIn, totalOut] =
-      await Promise.all([
-        prisma.line.count(),
-        prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
-        prisma.stream.count({ where: { type: StreamType.LIVE, isActive: true } }),
-        countActiveConnections(),
-        prisma.panelSetting.findUnique({ where: { key: "network_bytes_in_total" } }),
-        prisma.panelSetting.findUnique({ where: { key: "network_bytes_out_total" } }),
-      ]);
+    const [counts, totalIn, totalOut] = await Promise.all([
+      cacheGetOrSet("stats:header-counts:v2", 15, async () => {
+        const [lines, activeLines, liveStreams, onlineConnections] =
+          await Promise.all([
+            prisma.line.count(),
+            prisma.line.count({
+              where: { status: "ACTIVE", expiresAt: { gt: now } },
+            }),
+            prisma.stream.count({
+              where: { type: StreamType.LIVE, isActive: true },
+            }),
+            countActiveConnections(),
+          ]);
+        return { lines, activeLines, liveStreams, onlineConnections };
+      }),
+      prisma.panelSetting.findUnique({
+        where: { key: "network_bytes_in_total" },
+      }),
+      prisma.panelSetting.findUnique({
+        where: { key: "network_bytes_out_total" },
+      }),
+    ]);
 
-    const { networkInMbps, networkOutMbps } = await getDashboardNicBandwidthMbps();
+    const { networkInMbps, networkOutMbps } =
+      await getDashboardNicBandwidthMbps();
 
     return {
-      lines,
-      activeLines,
-      liveStreams,
-      onlineConnections,
+      ...counts,
       networkInMbps,
       networkOutMbps,
       networkInPerMin: networkInMbps,
@@ -71,39 +82,74 @@ export async function loadAdminDashboardStats() {
   let cronLast: { value: string } | null = null;
 
   try {
-    const results = await Promise.all([
-      prisma.line.count(),
-      prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
-      prisma.stream.count({ where: { type: StreamType.LIVE, isActive: true } }),
-      prisma.magDevice.count({ where: { isActive: true } }),
-      countActiveConnections(),
-      prisma.activityLog.findMany({
-        take: 8,
-        orderBy: { createdAt: "desc" },
-        where: { createdAt: { gte: new Date(Date.now() - 3 * 60 * 60 * 1000) } },
+    const [counts, results] = await Promise.all([
+      cacheGetOrSet("stats:admin-primary-counts:v2", 15, async () => {
+        const [
+          lineCount,
+          activeLineCount,
+          liveStreamCount,
+          magDeviceCount,
+          connectionCount,
+        ] = await Promise.all([
+          prisma.line.count(),
+          prisma.line.count({
+            where: { status: "ACTIVE", expiresAt: { gt: now } },
+          }),
+          prisma.stream.count({
+            where: { type: StreamType.LIVE, isActive: true },
+          }),
+          prisma.magDevice.count({ where: { isActive: true } }),
+          countActiveConnections(),
+        ]);
+        return {
+          lines: lineCount,
+          activeLines: activeLineCount,
+          liveStreams: liveStreamCount,
+          magDevices: magDeviceCount,
+          onlineConnections: connectionCount,
+        };
       }),
-      prisma.panelSetting.findUnique({ where: { key: "cron_last_run" } }),
-      prisma.panelSetting.findUnique({ where: { key: "network_bytes_in_total" } }),
-      prisma.panelSetting.findUnique({ where: { key: "network_bytes_out_total" } }),
+      Promise.all([
+        prisma.activityLog.findMany({
+          take: 8,
+          orderBy: { createdAt: "desc" },
+          where: {
+            createdAt: { gte: new Date(Date.now() - 3 * 60 * 60 * 1000) },
+          },
+        }),
+        prisma.panelSetting.findUnique({ where: { key: "cron_last_run" } }),
+        prisma.panelSetting.findUnique({
+          where: { key: "network_bytes_in_total" },
+        }),
+        prisma.panelSetting.findUnique({
+          where: { key: "network_bytes_out_total" },
+        }),
+      ]),
     ]);
-    lines = results[0];
-    activeLines = results[1];
-    liveStreams = results[2];
-    magDevices = results[3];
-    onlineConnections = results[4] as number;
-    logs = results[5];
-    cronLast = results[6];
-    totalIn = results[7];
-    totalOut = results[8];
+    lines = counts.lines;
+    activeLines = counts.activeLines;
+    liveStreams = counts.liveStreams;
+    magDevices = counts.magDevices;
+    onlineConnections = counts.onlineConnections;
+    logs = results[0];
+    cronLast = results[1];
+    totalIn = results[2];
+    totalOut = results[3];
   } catch (e) {
     console.error("[stats] loadStats primary query error:", e);
   }
 
-  const { networkInMbps, networkOutMbps } = await getDashboardNicBandwidthMbps();
+  const { networkInMbps, networkOutMbps } =
+    await getDashboardNicBandwidthMbps();
   const networkInPerMin = networkInMbps;
   const networkOutPerMin = networkOutMbps;
 
-  let cronLogs: { job: string; status: string; createdAt: Date; fixHref: string | null }[] = [];
+  let cronLogs: {
+    job: string;
+    status: string;
+    createdAt: Date;
+    fixHref: string | null;
+  }[] = [];
   let dashboard = {
     onlineStreams: 0,
     totalLiveStreams: 0,
@@ -146,24 +192,32 @@ export async function loadAdminDashboardStats() {
             status: log.status,
             createdAt: log.createdAt,
             fixHref: cronFixHref(log.job, log.status),
-          }))
+          })),
         )
         .catch(() => [] as typeof cronLogs),
-      cacheGetOrSet("stats:summary", 60, () => getDashboardSummary()).catch((e) => {
-        console.error("[stats] getDashboardSummary error:", e);
-        return dashboard;
-      }),
-      cacheGetOrSet("stats:kpi", 120, () => getDashboardKpiExtended()).catch((e) => {
-        console.error("[stats] getDashboardKpiExtended error:", e);
-        return dashboardKpi;
-      }),
-      cacheGetOrSet("stats:server-metrics", 60, () => getDashboardServerMetrics()).catch((e) => {
+      cacheGetOrSet("stats:summary", 60, () => getDashboardSummary()).catch(
+        (e) => {
+          console.error("[stats] getDashboardSummary error:", e);
+          return dashboard;
+        },
+      ),
+      cacheGetOrSet("stats:kpi", 120, () => getDashboardKpiExtended()).catch(
+        (e) => {
+          console.error("[stats] getDashboardKpiExtended error:", e);
+          return dashboardKpi;
+        },
+      ),
+      cacheGetOrSet("stats:server-metrics", 60, () =>
+        getDashboardServerMetrics(),
+      ).catch((e) => {
         console.error("[stats] getDashboardServerMetrics error:", e);
         return [] as Awaited<ReturnType<typeof getDashboardServerMetrics>>;
       }),
       prisma.bouquet.count().catch(() => 0),
       prisma.panelUser
-        .count({ where: { role: { in: [PanelRole.RESELLER, PanelRole.SUB_RESELLER] } } })
+        .count({
+          where: { role: { in: [PanelRole.RESELLER, PanelRole.SUB_RESELLER] } },
+        })
         .catch(() => 0),
     ]);
     cronLogs = extras[0];
@@ -191,12 +245,18 @@ export async function loadAdminDashboardStats() {
     cronLastRun: cronLast?.value ?? null,
     cronLogs: cronLogs.map((log) => ({
       ...log,
-      createdAt: log.createdAt instanceof Date ? log.createdAt.toISOString() : String(log.createdAt),
+      createdAt:
+        log.createdAt instanceof Date
+          ? log.createdAt.toISOString()
+          : String(log.createdAt),
     })),
     logs: logs.map((log) => ({
       action: log.action,
       label: formatAuditAction(log.action),
-      createdAt: log.createdAt instanceof Date ? log.createdAt.toISOString() : String(log.createdAt),
+      createdAt:
+        log.createdAt instanceof Date
+          ? log.createdAt.toISOString()
+          : String(log.createdAt),
       entity: log.entity,
       entityId: log.entityId,
       fixHref: activityFixHref(log),

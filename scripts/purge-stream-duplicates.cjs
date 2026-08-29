@@ -1,10 +1,22 @@
 #!/usr/bin/env node
 /** CLI: purge UK/USA URL duplicate live streams + optional full live URL dedupe. */
 const path = require("path");
-process.chdir(path.join(__dirname, ".."));
+const projectRoot = path.join(__dirname, "..");
+process.chdir(projectRoot);
+
+require("tsx/cjs");
+try {
+  const tsconfigPaths = require("tsconfig-paths");
+  const tsconfig = require(path.join(projectRoot, "tsconfig.json"));
+  tsconfigPaths.register({
+    baseUrl: projectRoot,
+    paths: tsconfig.compilerOptions?.paths ?? { "@/*": ["./src/*"] },
+  });
+} catch {
+  /* tsconfig-paths optional */
+}
 
 async function main() {
-  require("tsx/cjs");
   const { purgeUkUsaUrlDuplicateLive, findDuplicateGroups, deleteDuplicateStreams } = await import(
     "../src/lib/stream-duplicates.ts"
   );

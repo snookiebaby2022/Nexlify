@@ -2,6 +2,7 @@
 
 import type { BitrateVariant } from "@/lib/stream-variants";
 import type { DnsRotatorConfig } from "@/lib/dns-rotator";
+import { parseLiveStreamMeta } from "@/lib/stream-live-meta";
 
 export type StreamAdvancedState = {
   isShifted: boolean;
@@ -10,6 +11,7 @@ export type StreamAdvancedState = {
   dnsRotatorMode: "round_robin" | "random";
   dnsRotatorHosts: string;
   bitrates: BitrateVariant[];
+  autoSyncNameFromEpg: boolean;
 };
 
 export const emptyAdvancedState = (): StreamAdvancedState => ({
@@ -19,6 +21,7 @@ export const emptyAdvancedState = (): StreamAdvancedState => ({
   dnsRotatorMode: "round_robin",
   dnsRotatorHosts: "",
   bitrates: [],
+  autoSyncNameFromEpg: false,
 });
 
 export function advancedFromStream(stream: {
@@ -27,11 +30,13 @@ export function advancedFromStream(stream: {
   parentStreamId?: string | null;
   dnsRotator?: unknown;
   bitrates?: unknown;
+  agentStartCmd?: string | null;
 }): StreamAdvancedState {
   const rotator = stream.dnsRotator as DnsRotatorConfig | null;
   const bitrates = Array.isArray(stream.bitrates)
     ? (stream.bitrates as BitrateVariant[])
     : [];
+  const liveMeta = parseLiveStreamMeta(stream.agentStartCmd);
   return {
     isShifted: Boolean(stream.isShifted),
     timeshiftSeconds: stream.timeshiftSeconds != null ? String(stream.timeshiftSeconds) : "",
@@ -39,6 +44,7 @@ export function advancedFromStream(stream: {
     dnsRotatorMode: rotator?.mode === "random" ? "random" : "round_robin",
     dnsRotatorHosts: rotator?.hosts?.join("\n") ?? "",
     bitrates,
+    autoSyncNameFromEpg: liveMeta.autoSyncNameFromEpg,
   };
 }
 
@@ -97,6 +103,23 @@ export function StreamAdvancedSections({
 
   return (
     <div className="space-y-4">
+      {showShifted && (
+        <div className="rounded border p-4 space-y-3" style={sectionStyle()}>
+          <p className="text-sm font-medium">EPG title sync (fixtures / events)</p>
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            Like XUI watch folders: when enabled, the panel renames this channel from the current EPG
+            programme title (e.g. football fixtures) every few minutes.
+          </p>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={adv.autoSyncNameFromEpg}
+              onChange={(e) => setAdv({ ...adv, autoSyncNameFromEpg: e.target.checked })}
+            />
+            Auto-update stream name from EPG
+          </label>
+        </div>
+      )}
       {showShifted && (
         <div className="rounded border p-4 space-y-3" style={sectionStyle()}>
           <p className="text-sm font-medium">Time-shift / delayed live</p>

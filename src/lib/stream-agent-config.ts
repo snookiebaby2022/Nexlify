@@ -1,6 +1,10 @@
 import { getSettingGroup } from "@/lib/panel-settings";
 import { pathsFromBinRoot, NEXLIFY_BIN_LAYOUT } from "@/lib/bin-paths-layout";
-import { buildFfmpegArgv, buildFfmpegStartCmd, buildFfmpegStopCmd } from "@/lib/ffmpeg-agent";
+import {
+  buildFfmpegArgv,
+  buildFfmpegStartCmd,
+  buildFfmpegStopCmd,
+} from "@/lib/ffmpeg-agent";
 import { buildNginxAgentSnippet } from "@/lib/nginx-agent-snippet";
 
 export type AgentNginxConfig = {
@@ -33,6 +37,7 @@ export type AgentStreamEntry = {
 
 export type AgentStreamConfig = {
   revision: number;
+  bandwidthMbps: number;
   nginx: AgentNginxConfig;
   nginxSnippet: string;
   nginxSnippetPath: string;
@@ -58,7 +63,7 @@ export type AgentStreamConfig = {
 
 export async function buildAgentConfigForServer(
   serverId: string,
-  revision: number
+  revision: number,
 ): Promise<AgentStreamConfig> {
   const [streamsSettings, binaries] = await Promise.all([
     getSettingGroup("streams"),
@@ -66,12 +71,15 @@ export async function buildAgentConfigForServer(
   ]);
 
   const { prisma } = await import("@/lib/prisma");
-  const { parseServerPanelSettings } = await import("@/lib/server-panel-settings");
+  const { parseServerPanelSettings } =
+    await import("@/lib/server-panel-settings");
   const serverRow = await prisma.streamServer.findUnique({
     where: { id: serverId },
-    select: { panelSettings: true },
+    select: { panelSettings: true, bandwidthMbps: true },
   });
-  const serverPerf = parseServerPanelSettings(serverRow?.panelSettings).performance;
+  const serverPerf = parseServerPanelSettings(
+    serverRow?.panelSettings,
+  ).performance;
 
   const binRoot = String(binaries.binRoot ?? NEXLIFY_BIN_LAYOUT.binRoot);
   const paths = pathsFromBinRoot(binRoot);
@@ -85,14 +93,31 @@ export async function buildAgentConfigForServer(
         ? globalThreads
         : 0;
 
-  const { isTranscodingPackEnabled, getTranscodingPackSettings, GPU_TRANSCODE_LADDER, pickAdaptiveProfile, buildGpuFfmpegArgs, bitrateLadderForStream } =
-    await import("@/lib/gpu-transcode");
+  const {
+    isTranscodingPackEnabled,
+    getTranscodingPackSettings,
+    GPU_TRANSCODE_LADDER,
+    pickAdaptiveProfile,
+    buildGpuFfmpegArgs,
+    bitrateLadderForStream,
+  } = await import("@/lib/gpu-transcode");
   const transcodeEnabled = await isTranscodingPackEnabled();
-  const transcodeSettings = transcodeEnabled ? await getTranscodingPackSettings() : null;
-  let transcodeProfile: import("@/lib/gpu-transcode").GpuTranscodeProfile | null = null;
+  const transcodeSettings = transcodeEnabled
+    ? await getTranscodingPackSettings()
+    : null;
+  let transcodeProfile:
+    import("@/lib/gpu-transcode").GpuTranscodeProfile | null = null;
   let transcodeLadder: import("@/lib/gpu-transcode").GpuTranscodeProfile[] = [];
-  if (transcodeEnabled && transcodeSettings && transcodeSettings.enabled !== false) {
-    const ladderId = String(serverPerf.transcodeProfileId || transcodeSettings.ladderProfile || "1080p-nvenc");
+  if (
+    transcodeEnabled &&
+    transcodeSettings &&
+    transcodeSettings.enabled !== false
+  ) {
+    const ladderId = String(
+      serverPerf.transcodeProfileId ||
+        transcodeSettings.ladderProfile ||
+        "1080p-nvenc",
+    );
     transcodeLadder = bitrateLadderForStream(ladderId);
     transcodeProfile = pickAdaptiveProfile(transcodeLadder, {
       preferHevc: transcodeSettings.enableHevc === true,
@@ -133,46 +158,59 @@ export async function buildAgentConfigForServer(
         hostedExternally: true,
       },
       orderBy: { sortOrder: "asc" },
-    })
+    }),
   );
 
-  const { streamNeedsAlwaysOnProcessPolicy } = await import("@/lib/stream-playback-policy");
+  const { streamNeedsAlwaysOnProcessPolicy } =
+    await import("@/lib/stream-playback-policy");
   const { parseLiveStreamMeta } = await import("@/lib/stream-live-meta");
-  const { FFMPEG_TRANSCODE_PROFILES, buildFfmpegTranscodeArgs } = await import("@/lib/ffmpeg-transcode-profiles");
+  const { FFMPEG_TRANSCODE_PROFILES, buildFfmpegTranscodeArgs } =
+    await import("@/lib/ffmpeg-transcode-profiles");
   const runningProcStreams = await prisma.stream.findMany({
     where: {
       serverId,
-      processes: { some: { status: { in: ["running", "restarting", "unknown"] } } },
+      processes: {
+        some: { status: { in: ["running", "restarting", "unknown"] } },
+      },
     },
     select: { id: true },
   });
   const keepIds = new Set([
-    ...rawStreams.filter((s) => streamNeedsAlwaysOnProcessPolicy(s)).map((s) => s.id),
+    ...rawStreams
+      .filter((s) => streamNeedsAlwaysOnProcessPolicy(s))
+      .map((s) => s.id),
     ...runningProcStreams.map((s) => s.id),
   ]);
   const alwaysOnStreams = rawStreams.filter((s) => keepIds.has(s.id));
 
-  const { applyVideoOverlayFilter, getOverlaySettings, captureDeviceInputArgs } = await import("@/lib/ffmpeg-overlay");
+  const {
+    applyVideoOverlayFilter,
+    getOverlaySettings,
+    captureDeviceInputArgs,
+  } = await import("@/lib/ffmpeg-overlay");
   const overlay = await getOverlaySettings();
-  const panelName = String((await getSettingGroup("general")).panelName ?? "Nexlify");
+  const panelName = String(
+    (await getSettingGroup("general")).panelName ?? "Nexlify",
+  );
 
   const streams: AgentStreamEntry[] = alwaysOnStreams.map((s) => {
     const liveMeta = parseLiveStreamMeta(s.agentStartCmd);
     const cpuProfile =
       liveMeta.transcodeProfile && liveMeta.transcodeProfile !== "none"
-        ? FFMPEG_TRANSCODE_PROFILES.find((p) => p.id === liveMeta.transcodeProfile)
+        ? FFMPEG_TRANSCODE_PROFILES.find(
+            (p) => p.id === liveMeta.transcodeProfile,
+          )
         : undefined;
     const capture = captureDeviceInputArgs(s.streamUrl);
-    const transcodeArgs =
-      capture
-        ? undefined
-        : cpuProfile
+    const transcodeArgs = capture
+      ? undefined
+      : cpuProfile
         ? buildFfmpegTranscodeArgs(cpuProfile, s.streamUrl)
         : transcodeProfile && transcodeSettings
           ? buildGpuFfmpegArgs(
               transcodeProfile,
               s.streamUrl,
-              String(transcodeSettings.vaapiDevice ?? "/dev/dri/renderD128")
+              String(transcodeSettings.vaapiDevice ?? "/dev/dri/renderD128"),
             )
           : undefined;
     const spec = buildFfmpegArgv({
@@ -208,15 +246,19 @@ export async function buildAgentConfigForServer(
 
   const { isArchivePackEnabled } = await import("@/lib/archive-recorder");
   const archiveEnabled = await isArchivePackEnabled();
-  const archiveSettings = archiveEnabled ? await getSettingGroup("archive-pack" as never) : null;
-  const archiveStorage = String(archiveSettings?.storagePath ?? "/var/nexlify/archive");
+  const archiveSettings = archiveEnabled
+    ? await getSettingGroup("archive-pack" as never)
+    : null;
+  const archiveStorage = String(
+    archiveSettings?.storagePath ?? "/var/nexlify/archive",
+  );
   const defaultRetention = Number(archiveSettings?.defaultRetentionDays ?? 7);
   const rollingArchive = archiveEnabled
     ? rawStreams
         .filter(
           (s) =>
             s.vodMode === "CATCHUP" ||
-            (s.archiveDays != null && Number(s.archiveDays) > 0)
+            (s.archiveDays != null && Number(s.archiveDays) > 0),
         )
         .map((s) => ({
           streamId: s.id,
@@ -228,6 +270,7 @@ export async function buildAgentConfigForServer(
 
   return {
     revision,
+    bandwidthMbps: Math.max(1, serverRow?.bandwidthMbps ?? 1000),
     nginx,
     nginxSnippet: buildNginxAgentSnippet(nginx),
     nginxSnippetPath: "/etc/nexlify-agent/nginx-snippet.conf",

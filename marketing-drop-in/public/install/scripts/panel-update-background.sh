@@ -57,6 +57,16 @@ cd "$ROOT"
 export PANEL_REPO_PATH="$ROOT"
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${ROOT}/node_modules/.bin:${PATH:-}"
 
+if [ -f "${ROOT}/scripts/vps-git-auth.sh" ]; then
+  # shellcheck source=scripts/vps-git-auth.sh
+  . "${ROOT}/scripts/vps-git-auth.sh"
+  if [ -f "${ROOT}/scripts/ensure-fleet-deploy-key.sh" ]; then
+    bash "${ROOT}/scripts/ensure-fleet-deploy-key.sh" >>"$ERR_LOG" 2>&1 || true
+  fi
+  configure_nexlify_git_origin "$ROOT"
+  ensure_nexlify_git_ssh
+fi
+
 ERR_LOG="${ROOT}/.update-worker-err.log"
 TS_SCRIPT="${ROOT}/scripts/panel-update-background.ts"
 

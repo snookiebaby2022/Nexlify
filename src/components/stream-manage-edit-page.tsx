@@ -252,6 +252,7 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           autoRestart: form.autoRestart,
           isCreatedChannel: form.type === "LIVE" ? form.isCreatedChannel : false,
           autoEpg: isLiveType && !form.epgChannelId.trim(),
+          ...(isLiveType ? { autoSyncNameFromEpg: advanced.autoSyncNameFromEpg } : {}),
           ...advancedToPayload(advanced),
           ...(form.type === "MOVIE" || form.type === "SERIES"
             ? {

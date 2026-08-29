@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
  * IPTV edge — Host sanitizer + XUI-style live/VOD byte pipe + disk HLS.
+ * Canonical scripts/iptv-edge-proxy.mjs source; installer copies must be generated from this file.
  *
  * Xtream apps hit :80/:8080/:25461. Auth stays on the panel; MPEG-TS/MP4 is
  * fetched from stream_source with a VLC UA so the origin sees the panel IP.
@@ -11,6 +12,7 @@
  *   IPTV_EDGE_HTTP_PORTS=80,8080,25461
  *   IPTV_EDGE_HTTPS_PORTS=
  *   IPTV_EDGE_TRUST_XFF=loopback
+ *   # Or a comma-separated list of trusted reverse-proxy IPs.
  *   PANEL_INTERNAL_SECRET=...
  *   NEXLIFY_HLS_DIR=/var/lib/nexlify/hls
  *
@@ -257,20 +259,33 @@ function socketIp(req) {
 }
 
 /**
- * Prefer the TCP peer. Only honor X-Forwarded-For when the hop is loopback
- * (nginx on this host) or IPTV_EDGE_TRUST_XFF=always. Direct clients can
- * otherwise spoof IP locks / geo / DDoS.
+ * Prefer the TCP peer. Only honor X-Forwarded-For when the hop is loopback,
+ * explicitly listed in IPTV_EDGE_TRUST_XFF, or trust is set to always.
+ * Direct clients cannot spoof IP locks / geo / DDoS when an allowlist is used.
  */
 function clientIp(req) {
   const peer = socketIp(req);
   const trust = String(process.env.IPTV_EDGE_TRUST_XFF || "loopback").toLowerCase();
+  const trustedPeers = new Set(
+    trust
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter((ip) => isValidIpLiteral(ip))
+  );
   const allowXff =
     trust === "1" ||
     trust === "true" ||
     trust === "always" ||
+    trustedPeers.has(peer) ||
     ((trust === "loopback" || trust === "") && isLoopbackIp(peer));
   if (allowXff) {
-    const fwd = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+    const forwarded = String(req.headers["x-forwarded-for"] || "")
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter(Boolean);
+    // A trusted nginx appends its direct client as the right-most hop.
+    // Taking that hop prevents a client-supplied XFF prefix from being trusted.
+    const fwd = forwarded.at(-1) || "";
     const real = String(req.headers["x-real-ip"] || "").trim();
     const candidate = fwd || real;
     let ip = candidate.startsWith("::ffff:") ? candidate.slice(7) : candidate;
@@ -769,7 +784,8 @@ function resolveFfmpegPath() {
 }
 
 function destroyLiveFan(fan) {
-  if (!fan) return;
+  if (!fan || fan.destroyed) return;
+  fan.destroyed = true;
   if (fan.linger) {
     clearTimeout(fan.linger);
     fan.linger = null;
@@ -902,6 +918,7 @@ function ensureLiveFan(streamId) {
     starterLock: false,
     prefix: Buffer.alloc(0),
     linger: null,
+    destroyed: false,
   };
   liveFans.set(streamId, fan);
   return fan;
@@ -1614,6 +1631,11 @@ function authLive(clientReq) {
 
     function go() {
       attempt++;
+      if (process.env.IPTV_EDGE_DEBUG_UPSTREAM === "1") {
+        console.log(
+          `[iptv-edge-auth-req] uri=${JSON.stringify(headers["x-original-uri"])} method=${headers["x-original-method"]} ip=${headers["x-forwarded-for"]} agent=${useAgentAuth}`
+        );
+      }
       const req = http.request(
         {
           hostname: backendHost,
@@ -2082,6 +2104,10 @@ function feedLiveFanFromUpstream(fan, upRes, clientReq, clientRes, pulseCtx) {
   upRes.on("data", (chunk) => broadcastFanChunk(fan, chunk));
   upRes.once("end", () => destroyLiveFan(fan));
   upRes.once("error", () => destroyLiveFan(fan));
+  // Abrupt provider/socket disconnects commonly emit close without end/error.
+  // Never leave a dead fan marked broadcasting: new viewers would join it and
+  // receive only the stale prefix, making the channel look permanently hung.
+  upRes.once("close", () => destroyLiveFan(fan));
 }
 
 function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, onUnplayable, fan) {

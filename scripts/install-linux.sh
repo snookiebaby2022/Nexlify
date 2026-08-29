@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.17' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.56' | sudo bash
 #
 # Server IP/hostname is detected automatically. Then open the login URL, sign in
 # with the admin password shown at the end, and paste your license key under Admin → License.
@@ -34,7 +34,7 @@ usage() {
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.17' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.56' | sudo bash
 
 Options:
   --ip IP                Override auto-detected server IP or hostname
@@ -48,9 +48,9 @@ Options:
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.17' | sudo bash
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.17' | sudo bash -s -- --license NXLF1-XXXXX
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.17' | sudo bash -s -- --domain panel.example.com --email admin@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.56' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.56' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.56' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 
@@ -822,6 +822,15 @@ if [ -f scripts/nexlify-watchdog.sh ]; then
   crontab "$_cron_tmp" >/dev/null 2>&1 || true
   rm -f "$_cron_tmp"
   log "Watchdog cron installed (auto-heals every 5 minutes)"
+fi
+
+# Reserve host headroom for PostgreSQL/nginx and prevent panel workers from
+# consuming all CPU/RAM. Limits apply live and do not restart playback.
+if [ -f scripts/install-resource-headroom.sh ]; then
+  chmod +x scripts/install-resource-headroom.sh scripts/nexlify-resource-guard.sh
+  PANEL_DIR="$PANEL_DIR" NEXLIFY_RESOURCE_HEADROOM_PERCENT=75 \
+    bash scripts/install-resource-headroom.sh >>"$INSTALL_LOG" 2>&1 ||
+    log "WARN: resource headroom guard could not be installed"
 fi
 
 if [ "$SKIP_NGINX" -eq 0 ] && [ "${NEXLIFY_USE_NGINX:-1}" = "1" ] && [ -n "$DOMAIN" ] && [ "$DOMAIN" != "localhost" ]; then

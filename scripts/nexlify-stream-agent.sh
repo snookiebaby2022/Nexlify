@@ -166,10 +166,16 @@ report_heartbeat() {
   [[ "$cores" -lt 1 ]] && cores=1
   load="$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo 0)"
   cpu="$(awk -v l="$load" -v c="$cores" 'BEGIN { p=int((l/c)*100+0.5); if (p<0) p=0; if (p>100) p=100; print p }')"
-  mem="$(awk '/MemTotal/{t=$2} /MemAvailable/{a=$2} END { if (t>0) print int(((t-a)/t)*100+0.5); else print 0 }' /proc/meminfo 2>/dev/null || echo 0)"
+  mem="$(awk '/MemTotal/{t=$2} /AnonPages/{ap=$2} /Shmem/{sh=$2} /MemAvailable/{av=$2} END { if (t>0 && ap>0) { p=int((ap/t)*100+0.5) } else if (t>0 && av>0) { p=int(((t-av)/t)*100+0.5) } else { p=0 }; if (p<0) p=0; if (p>100) p=100; print p }' /proc/meminfo 2>/dev/null || echo 0)"
   disk="$(df -P / 2>/dev/null | awk 'NR==2 { gsub(/%/,""); print $5+0 }' || echo 0)"
 
-  local iface rx tx now dt download=0 upload=0 cap_mbps=1000
+  local iface rx tx now dt download=0 upload=0 rx_mbps=0 tx_mbps=0
+  local cap_mbps="${BANDWIDTH_MBPS:-}"
+  if [[ -z "$cap_mbps" && -f "$CONFIG_DIR/poll.json" ]] && command -v jq >/dev/null 2>&1; then
+    cap_mbps="$(jq -r '.config.bandwidthMbps // empty' "$CONFIG_DIR/poll.json" 2>/dev/null || true)"
+  fi
+  [[ "$cap_mbps" =~ ^[0-9]+$ ]] || cap_mbps=1000
+  [[ "$cap_mbps" -lt 1 ]] && cap_mbps=1000
   iface="$(awk '$2=="00000000" {print $1; exit}' /proc/net/route 2>/dev/null || echo eth0)"
   rx="$(awk -v i="$iface" '$1==i":" {print $2; exit}' /proc/net/dev 2>/dev/null || echo 0)"
   tx="$(awk -v i="$iface" '$1==i":" {print $10; exit}' /proc/net/dev 2>/dev/null || echo 0)"
@@ -180,7 +186,6 @@ report_heartbeat() {
     if [[ "${prev_iface:-}" == "$iface" && "${prev_at:-0}" -gt 0 ]]; then
       dt=$((now - prev_at))
       if [[ "$dt" -ge 1 ]]; then
-        local rx_mbps tx_mbps
         rx_mbps=$(( (rx - prev_rx) * 8 / dt / 1000000 ))
         tx_mbps=$(( (tx - prev_tx) * 8 / dt / 1000000 ))
         [[ "$rx_mbps" -lt 0 ]] && rx_mbps=0
@@ -196,7 +201,7 @@ report_heartbeat() {
 
   curl -fsS -X POST -H "$auth_hdr" -H "Content-Type: application/json" \
     "${PANEL_URL}/api/agent/heartbeat" \
-    -d "{\"version\":\"2.3.0\",\"processes\":${procs},\"cpu\":${cpu:-0},\"memory\":${mem:-0},\"storage\":${disk:-0},\"upload\":${upload},\"download\":${download}}" >/dev/null || true
+    -d "{\"version\":\"2.4.0\",\"processes\":${procs},\"cpu\":${cpu:-0},\"memory\":${mem:-0},\"storage\":${disk:-0},\"upload\":${upload},\"download\":${download},\"uploadMbps\":${tx_mbps},\"downloadMbps\":${rx_mbps}}" >/dev/null || true
 }
 
 while true; do

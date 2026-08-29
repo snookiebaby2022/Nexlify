@@ -83,10 +83,10 @@ if [[ -f "$ROOT/scripts/enable-nginx-json-gzip.sh" ]]; then
   bash "$ROOT/scripts/enable-nginx-json-gzip.sh" || true
 fi
 
-# https://PANEL_IP + extra IPTV ports with Host sanitization (http:// / https:// in DNS)
-# Runs last so edge can release any nginx listens on 8080/25461/443 and keep nginx on :80.
-if [[ -f "$ROOT/scripts/install-iptv-edge-proxy.sh" ]]; then
+# IPTV edge is installed by deploy / install-iptv-edge-proxy.sh — not on every
+# Admin → Servers save (that blocked the panel for minutes while waiting on health).
+if [[ "${SYNC_IPTV_EDGE:-0}" == "1" && -f "$ROOT/scripts/install-iptv-edge-proxy.sh" ]]; then
   bash "$ROOT/scripts/install-iptv-edge-proxy.sh" || true
-elif [[ -f "$ROOT/scripts/fix-panel-https-default.sh" ]]; then
+elif [[ "${SYNC_IPTV_EDGE:-0}" == "1" && -f "$ROOT/scripts/fix-panel-https-default.sh" ]]; then
   bash "$ROOT/scripts/fix-panel-https-default.sh" || true
 fi

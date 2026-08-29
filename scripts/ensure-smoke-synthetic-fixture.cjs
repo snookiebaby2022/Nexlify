@@ -19,8 +19,9 @@ async function main() {
   const prisma = new PrismaClient();
   const host = process.env.PANEL_PRIMARY_DOMAIN?.trim() || "127.0.0.1";
   const rtmpBase = `rtmp://${host}/live`;
-  const hlsUrl = `http://${host}/hls/smoke-test/index.m3u8`;
-  const streamUrl = hlsUrl;
+  // Private MPEG-TS source installed by harden-75-playback-fixture.sh.
+  // The edge uses the same TS source to prove raw MPEG-TS and packaged HLS.
+  const streamUrl = `http://${host}:8091/smoke.ts`;
 
   let server = await prisma.streamServer.findFirst({
     where: { isActive: true },
@@ -113,6 +114,7 @@ async function main() {
     host,
     providerId: provider.id,
     streamId: stream.id,
+    playbackId: stream.xtreamNum,
     bouquetId: bouquet.id,
     streamUrl,
     rtmpPublish: `${rtmpBase}/smoke-test`,

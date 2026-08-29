@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { DataTable } from "@/components/data-table";
+import type { ServerDashboardMetrics } from "@/components/dashboard-server-card";
 import { formatDateTime } from "@/lib/format";
+import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
 import { PANEL_HTTP_PORT, STREAM_HTTP_PORT, STREAM_HTTPS_PORT } from "@/lib/server-ports";
 import { IpWithFlag } from "@/components/ip-with-flag";
 import { ServerActionsMenu } from "@/components/server-actions-menu";
@@ -15,17 +17,15 @@ import {
 import { isServerHealthOnline } from "@/lib/server-tree";
 import {
   Server,
-  Activity,
   Globe,
   Wifi,
   WifiOff,
-  AlertTriangle,
   Layers,
-  Zap,
   Shield,
-  HardDrive,
   ArrowUpDown,
 } from "lucide-react";
+
+const ADMIN_POLLS = resolveClientPollIntervals();
 
 type ServerRow = {
   id: string;
@@ -72,7 +72,18 @@ export function AdminServersClient({ initialServers = [] }: { initialServers?: S
   const [moveMsg, setMoveMsg] = useState("");
   const [moveBusy, setMoveBusy] = useState(false);
   const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
+  const [serverMetrics, setServerMetrics] = useState<Record<string, ServerDashboardMetrics>>({});
+
+  const loadMetrics = useCallback(() => {
+    fetch("/api/admin/stats", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((data: { serverMetrics?: ServerDashboardMetrics[] }) => {
+        const rows = Array.isArray(data.serverMetrics) ? data.serverMetrics : [];
+        setServerMetrics(Object.fromEntries(rows.map((row) => [row.id, row])));
+      })
+      .catch(() => {});
+  }, []);
 
   function load() {
     fetch("/api/admin/servers")
@@ -92,6 +103,11 @@ export function AdminServersClient({ initialServers = [] }: { initialServers?: S
         .then((d) => setProxies(d.proxies ?? []));
     }
   }, [initialServers.length]);
+
+  useEffect(() => {
+    loadMetrics();
+    return startVisibleInterval(loadMetrics, ADMIN_POLLS.dashboardMs);
+  }, [loadMetrics]);
 
   async function setProxy(serverId: string, proxyId: string) {
     await fetch("/api/admin/servers", {
@@ -317,98 +333,196 @@ export function AdminServersClient({ initialServers = [] }: { initialServers?: S
     );
   }
 
+  function metricValue(value: number | undefined) {
+    return value == null ? "—" : value.toLocaleString();
+  }
+
+  function metricPercent(value: number | undefined) {
+    if (value == null) return null;
+    return Math.min(100, Math.max(0, Math.round(value)));
+  }
+
+  function CircularMetric({
+    label,
+    value,
+  }: {
+    label: string;
+    value: number | null;
+  }) {
+    const fill = value ?? 0;
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <div
+          className="grid h-[78px] w-[78px] place-items-center rounded-full"
+          style={{
+            background: `conic-gradient(#08ad62 ${fill * 3.6}deg, rgba(71, 85, 105, 0.55) 0deg)`,
+          }}
+        >
+          <div
+            className="grid h-[66px] w-[66px] place-items-center rounded-full text-sm font-bold tabular-nums"
+            style={{ background: "var(--bg-card)" }}
+          >
+            {value == null ? "—" : `${value}%`}
+          </div>
+        </div>
+        <span className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+          {label}
+        </span>
+      </div>
+    );
+  }
+
+  function UsageBar({ label, value }: { label: string; value: number | null }) {
+    return (
+      <div>
+        <div className="mb-1.5 flex items-center justify-between text-xs">
+          <span style={{ color: "var(--muted)" }}>{label}</span>
+          <span className="font-medium tabular-nums" style={{ color: "var(--muted)" }}>
+            {value == null ? "—" : `${value}%`}
+          </span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full" style={{ background: "rgba(71, 85, 105, 0.62)" }}>
+          <div
+            className="h-full rounded-full transition-[width] duration-500"
+            style={{
+              width: `${value ?? 0}%`,
+              background: "linear-gradient(90deg, #0ea5e9, #08ad62)",
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   function ServerCard({ s }: { s: ServerRow }) {
     const online = isServerOnline(s);
-    const role = resolveServerRole(s, roleCtx);
-    const streamCount = s._count?.streams ?? 0;
-    const lbCount = s._count?.lbSessions ?? 0;
+    const metrics = serverMetrics[s.id];
+    const connections = metrics?.connections;
+    const maxClients = metrics?.maxClients ?? s.maxClients;
+    const connectionLoad =
+      connections == null || !maxClients
+        ? null
+        : metricPercent((connections / maxClients) * 100);
+    const output = metricPercent(metrics?.upload);
+    const input = metricPercent(metrics?.download);
+    const cpu = metricPercent(metrics?.cpu);
+    const memory = metricPercent(metrics?.memory);
+    const storage = metricPercent(metrics?.storage);
+
     return (
       <div
-        className="rounded-xl border overflow-hidden"
+        className="overflow-hidden rounded-xl border shadow-sm"
         style={{
-          borderColor: online ? "var(--border)" : "rgba(239,68,68,0.3)",
+          borderColor: online ? "rgba(8, 173, 98, 0.35)" : "rgba(239,68,68,0.35)",
           background: "var(--bg-card)",
         }}
       >
         <div
-          className="px-4 py-3 border-b flex items-center justify-between"
-          style={{ borderColor: "var(--border)" }}
+          className="flex items-center justify-between gap-3 px-5 py-4 text-white"
+          style={{ background: online ? "#08ad62" : "#b91c1c" }}
         >
-          <div className="flex items-center gap-2">
-            <div
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{
-                background: online ? "#22c55e" : "#ef4444",
-                boxShadow: online ? "0 0 8px #22c55e" : "0 0 8px #ef4444",
-              }}
-            />
+          <div className="flex min-w-0 items-center gap-2">
             <Link
               href={`/admin/servers/${s.id}/edit`}
-              className="font-semibold text-sm hover:underline"
-              style={{ color: "var(--accent)" }}
+              className="truncate text-lg font-bold hover:underline"
             >
               {s.name}
             </Link>
-            {roleBadge(s)}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-3">
+            <span className="text-sm font-medium tabular-nums">
+              {metricValue(connections)} conns
+            </span>
             <input
               type="checkbox"
               checked={selected.has(s.id)}
               onChange={() => toggle(s.id)}
-              className="cursor-pointer"
+              className="cursor-pointer accent-white"
+              aria-label={`Select ${s.name}`}
             />
           </div>
         </div>
-        <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between text-sm">
-            <span style={{ color: "var(--muted)" }}>Host</span>
-            {addressCell(s)}
+
+        <div className="px-5 pt-5">
+          <div
+            className="h-1 rounded-full"
+            style={{ background: online ? "#08ad62" : "rgba(239,68,68,0.7)" }}
+          />
+        </div>
+
+        <div className="space-y-5 p-5">
+          <div className="grid grid-cols-3 gap-x-3 gap-y-4 text-center">
+            {[
+              ["Conns", connections],
+              ["Users", metrics?.users],
+              ["Live", metrics?.streamsOn],
+              ["Output", output == null ? undefined : `${output}%`],
+              ["Input", input == null ? undefined : `${input}%`],
+              ["VOD/Series", metrics?.vodStreams],
+            ].map(([label, value]) => (
+              <div key={String(label)}>
+                <div className="text-base font-bold tabular-nums">
+                  {typeof value === "number" ? value.toLocaleString() : (value ?? "—")}
+                </div>
+                <div className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
+                  {label}
+                </div>
+              </div>
+            ))}
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <span style={{ color: "var(--muted)" }}>Health</span>
-            <span style={{ color: healthColor(s.healthStatus) }} className="font-medium">
-              {s.healthStatus}
-            </span>
+
+          <div className="grid grid-cols-3 gap-3">
+            <CircularMetric label="CPU" value={cpu} />
+            <CircularMetric label="RAM" value={memory} />
+            <CircularMetric label="CONX" value={connectionLoad} />
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <span style={{ color: "var(--muted)" }}>Streams</span>
-            <span className="font-medium">{streamCount}</span>
+
+          <div className="space-y-3">
+            <UsageBar label="Bandwidth" value={output} />
+            <UsageBar label="Disk" value={storage} />
           </div>
-          <div className="flex items-center justify-between text-sm">
-            <span style={{ color: "var(--muted)" }}>Max Clients</span>
-            <span className="font-medium">{s.maxClients.toLocaleString()}</span>
-          </div>
-          {s.bandwidthMbps && (
-            <div className="flex items-center justify-between text-sm">
-              <span style={{ color: "var(--muted)" }}>Bandwidth</span>
-              <span className="font-medium">{s.bandwidthMbps} Mbps</span>
+
+          <div className="space-y-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+            <div className="flex items-start justify-between gap-3 text-sm">
+              <span className="shrink-0" style={{ color: "var(--muted)" }}>Host</span>
+              <div className="text-right">{addressCell(s)}</div>
             </div>
-          )}
-          <div className="flex items-center justify-between text-sm">
-            <span style={{ color: "var(--muted)" }}>Proxy</span>
-            <select
-              className="panel-select rounded border px-2 py-1 text-xs cursor-pointer"
-              style={{ borderColor: "var(--border)" }}
-              value={s.proxyId ?? ""}
-              onChange={(e) => setProxy(s.id, e.target.value)}
-            >
-              <option value="">None</option>
-              {proxies.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="pt-2 border-t flex items-center gap-2 flex-wrap" style={{ borderColor: "var(--border)" }}>
-            <ServerActionsMenu
-              serverId={s.id}
-              isActive={s.isActive}
-              onAction={(action) => serverAction(s.id, action)}
-              onDelete={() => remove(s.id)}
-              actionMsg={actionMsg[s.id]}
-            />
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span style={{ color: "var(--muted)" }}>Role / health</span>
+              {roleBadge(s)}
+            </div>
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span style={{ color: "var(--muted)" }}>Proxy</span>
+              <select
+                className="panel-select cursor-pointer rounded border px-2 py-1 text-xs"
+                style={{ borderColor: "var(--border)" }}
+                value={s.proxyId ?? ""}
+                onChange={(e) => setProxy(s.id, e.target.value)}
+              >
+                <option value="">None</option>
+                {proxies.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <ServerActionsMenu
+                serverId={s.id}
+                isActive={s.isActive}
+                onAction={(action) => serverAction(s.id, action)}
+                onDelete={() => remove(s.id)}
+                actionMsg={actionMsg[s.id]}
+              />
+              <Link
+                href={`/admin/servers/${s.id}/edit`}
+                className="rounded border px-3 py-1.5 text-xs font-medium"
+                style={{ borderColor: "var(--border)", color: "var(--accent)" }}
+              >
+                Edit server
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -684,7 +798,7 @@ export function AdminServersClient({ initialServers = [] }: { initialServers?: S
       </div>
 
       {viewMode === "cards" ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-3">
           {servers.map((s) => (
             <ServerCard key={s.id} s={s} />
           ))}

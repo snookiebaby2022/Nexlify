@@ -1,7 +1,7 @@
 # Sync local panel source to customer VPS and rebuild (same as vendor deploy, not nexlify.live tarball).
 param(
   [string]$CustomerHost = "75.119.137.174",
-  [string]$CustomerPassword = "CkfUCKD6blClbTegdE9jYoO0vB7fR",
+  [string]$CustomerPassword = $env:NEXLIFY_CUSTOMER_SSH_PASSWORD,
   [string]$CustomerPath = "/opt/nexlify-panel",
   [switch]$SyncOnly,
   [switch]$Full,
@@ -28,7 +28,14 @@ if ($SyncOnly) {
   exit 0
 }
 
-$plinkArgs = @("-batch", "-ssh", "root@$CustomerHost", "-pw", $CustomerPassword)
+$sshKey = Get-NexlifyOpenSshKey -Preferred $cfg.PrivateKey
+if ($sshKey -and -not $CustomerPassword) {
+  $sshArgs = @("-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", "-i", $sshKey, "root@$CustomerHost")
+} elseif ($CustomerPassword) {
+  $plinkArgs = @("-batch", "-ssh", "root@$CustomerHost", "-pw", $CustomerPassword)
+} else {
+  throw "No SSH key or NEXLIFY_CUSTOMER_SSH_PASSWORD is available"
+}
 if ($Full) {
   $remoteCmd = "cd $CustomerPath && rm -f .update-progress.json .update-progress.pid && sed -i 's/\r$//' scripts/*.sh ecosystem.config.cjs 2>/dev/null && chmod +x scripts/*.sh && ./scripts/deploy-vps.sh"
   Write-Host "Full rebuild on customer (git pull + npm install) ..."
@@ -41,8 +48,12 @@ if ($Full) {
     Write-Host "Fast rebuild on customer (synced files only, no npm install) ..."
   }
 }
-$plinkArgs += $remoteCmd
-& $cfg.Plink @plinkArgs
+if ($sshArgs) {
+  & ssh.exe @sshArgs $remoteCmd
+} else {
+  $plinkArgs += $remoteCmd
+  & $cfg.Plink @plinkArgs
+}
 if ($LASTEXITCODE -ne 0) {
   Write-Host ""
   Write-Host "Deploy failed on the SERVER (not a PowerShell bug)." -ForegroundColor Red

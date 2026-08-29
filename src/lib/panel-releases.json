@@ -1,7 +1,27 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.54",
+  "latestVersion": "2.0.56",
   "releases": [
+    {
+      "version": "2.0.56",
+      "date": "2026-08-29",
+      "channel": "stable",
+      "summary": "Protected panel headroom, hardened live playback, accurate viewer IPs, and a faster server dashboard.",
+      "changelog": [
+        "Panel PM2 workloads reserve 25% CPU and RAM headroom without restarting playback",
+        "A sustained-load guard monitors CPU, RAM, and disk every minute and safely cleans pressure",
+        "Live fan sessions recover immediately after abrupt provider socket closure",
+        "Manage Servers uses metric-rich cards with CPU, RAM, connection, bandwidth, and disk indicators",
+        "Viewer IP forwarding trusts only the panel proxy and supports Cloudflare real client addresses",
+        "Server 75 deployment, synthetic MPEG-TS/HLS playback, and reboot recovery are hardened"
+      ],
+      "fixes": [
+        "A broken cron rewrite could discard existing stability jobs",
+        "Dead live fans could leave new viewers attached to a stale stream",
+        "Theft detection could repeat alerts caused by incorrectly attributed proxy IPs",
+        "Release tooling no longer embeds customer SSH passwords"
+      ]
+    },
     {
       "version": "2.0.54",
       "date": "2026-08-28",

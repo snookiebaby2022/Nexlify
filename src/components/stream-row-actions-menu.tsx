@@ -27,6 +27,13 @@ export function StreamRowActionsMenu({
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  async function killViewers() {
+    if (!confirm("Kick all viewers watching this stream?")) return;
+    const res = await fetch(`/api/admin/streams/${streamId}/connections`, { method: "DELETE" });
+    const data = await res.json();
+    alert(res.ok ? `Kicked ${data.killed ?? 0} connection(s)` : (data.error ?? "Failed"));
+  }
+
   async function toggleActive() {
     await fetch("/api/admin/streams", {
       method: "PATCH",
@@ -93,6 +100,19 @@ export function StreamRowActionsMenu({
             <Link href={episodesHref} className="xui-lines-action-menu-item" onClick={() => setOpen(false)} role="menuitem">
               Manage episodes
             </Link>
+          )}
+          {streamType === "LIVE" && (
+            <button
+              type="button"
+              className="xui-lines-action-menu-item"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                void killViewers();
+              }}
+            >
+              Kill all viewers
+            </button>
           )}
           <button
             type="button"

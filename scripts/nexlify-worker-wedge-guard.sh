@@ -154,16 +154,15 @@ const n=JSON.parse(require("fs").readFileSync(0,"utf8")).filter(p=>p.name==="nex
 console.log(n);
 ' 2>/dev/null || echo 0)"
 
-if [ "${online_count:-0}" -le 2 ]; then
-  log "SKIP recycle: only ${online_count} worker(s) online — scale up instead"
-  if [ -x "$PANEL_DIR/scripts/scale-panel-workers-live.sh" ]; then
-    bash "$PANEL_DIR/scripts/scale-panel-workers-live.sh" >>"$LOG" 2>&1 || true
-  fi
-  write_state
-  exit 0
+want="${PANEL_INSTANCES:-2}"
+if [ "${NEXLIFY_STREAMING_OPTIMIZED:-0}" != "1" ]; then
+  want=$(( ${PANEL_INSTANCES:-4} + ${NEXLIFY_PANEL_WORKER_SPARE:-1} ))
 fi
-
-log "RECYCLE wedged worker pid=${pid} rss=${rss_mb}MB (health=${code} time=${time_s}s)"
+if [ "${online_count:-0}" -le "${want}" ]; then
+  log "RECYCLE at worker cap (${online_count}/${want}) pid=${pid} rss=${rss_mb}MB (health=${code} time=${time_s}s)"
+else
+  log "RECYCLE wedged worker pid=${pid} rss=${rss_mb}MB (health=${code} time=${time_s}s)"
+fi
 kill -9 "$pid" 2>/dev/null || true
 last_recycle=$now
 fail_streak=0

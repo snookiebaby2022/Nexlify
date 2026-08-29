@@ -23,6 +23,10 @@ set -a
 [ -f .env ] && . ./.env
 set +a
 
+if [ -x "$PANEL_DIR/scripts/prune-stale-live-connections.sh" ]; then
+  bash "$PANEL_DIR/scripts/prune-stale-live-connections.sh" >>"$LOG" 2>&1 || true
+fi
+
 PORT="${PORT:-${PANEL_PORT:-13000}}"
 HOST="${PANEL_BIND_HOST:-127.0.0.1}"
 [ "$HOST" = "0.0.0.0" ] && HOST="127.0.0.1"
@@ -159,7 +163,9 @@ safe_restart_panel() {
 
 # --- Check 1: PM2 processes ---
 STATUS="$(pm2_status "$PM2_APP")"
-if [ "$STATUS" != "online" ]; then
+if [ "$STATUS" = "stopping" ] || [ "$STATUS" = "launching" ]; then
+  log "SKIP: $PM2_APP is $STATUS (planned restart — not intervening)"
+elif [ "$STATUS" != "online" ]; then
   log "WARN: $PM2_APP is $STATUS"
   safe_restart_panel
 fi
@@ -183,7 +189,7 @@ if [ -f "$PANEL_DIR/.license-keys/private.pem" ] || [ -n "${LICENSE_SERVER_PRIVA
 fi
 
 # --- Check 2: Upstream health (never assume public :80 is the Node bind port) ---
-HTTP_CODE="$(curl -sS -o /tmp/nexlify-watchdog-health.json -w '%{http_code}' -m 5 "$HEALTH_URL" 2>/dev/null || echo 000)"
+HTTP_CODE="$(curl -sS -o /tmp/nexlify-watchdog-health.json -w '%{http_code}' -m 20 "$HEALTH_URL" 2>/dev/null || echo 000)"
 APP_OK=0
 if grep -q '"app":"ok"' /tmp/nexlify-watchdog-health.json 2>/dev/null; then
   APP_OK=1
@@ -191,14 +197,25 @@ fi
 rm -f /tmp/nexlify-watchdog-health.json
 
 if [ "$HTTP_CODE" != "200" ] && [ "$APP_OK" != "1" ]; then
-  log "WARN: upstream health $HEALTH_URL → HTTP $HTTP_CODE — safe restart"
-  safe_restart_panel
-  sleep 5
-  HTTP_CODE="$(curl -sS -o /dev/null -w '%{http_code}' -m 5 "$HEALTH_URL" 2>/dev/null || echo 000)"
-  if [ "$HTTP_CODE" != "200" ]; then
-    log "ERROR: still unhealthy after safe restart ($HTTP_CODE) — running panel-update-recover --quick"
-    if [ -f "$PANEL_DIR/scripts/panel-update-recover.sh" ]; then
-      bash "$PANEL_DIR/scripts/panel-update-recover.sh" --quick >>"$LOG" 2>&1 || true
+  STATUS="$(pm2_status "$PM2_APP")"
+  if [ "$STATUS" = "online" ]; then
+    log "WARN: upstream health $HEALTH_URL → HTTP $HTTP_CODE but $PM2_APP is online — wedge guard + scale"
+    if [ -x "$PANEL_DIR/scripts/nexlify-worker-wedge-guard.sh" ]; then
+      PANEL_DIR="$PANEL_DIR" bash "$PANEL_DIR/scripts/nexlify-worker-wedge-guard.sh" >>"$LOG" 2>&1 || true
+    fi
+    if [ -x "$PANEL_DIR/scripts/scale-panel-workers-live.sh" ]; then
+      PANEL_DIR="$PANEL_DIR" bash "$PANEL_DIR/scripts/scale-panel-workers-live.sh" >>"$LOG" 2>&1 || true
+    fi
+  else
+    log "WARN: upstream health $HEALTH_URL → HTTP $HTTP_CODE — safe restart"
+    safe_restart_panel
+    sleep 5
+    HTTP_CODE="$(curl -sS -o /dev/null -w '%{http_code}' -m 20 "$HEALTH_URL" 2>/dev/null || echo 000)"
+    if [ "$HTTP_CODE" != "200" ]; then
+      log "ERROR: still unhealthy after safe restart ($HTTP_CODE) — running panel-update-recover --quick"
+      if [ -f "$PANEL_DIR/scripts/panel-update-recover.sh" ]; then
+        bash "$PANEL_DIR/scripts/panel-update-recover.sh" --quick >>"$LOG" 2>&1 || true
+      fi
     fi
   fi
 fi

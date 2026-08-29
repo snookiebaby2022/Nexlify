@@ -2,7 +2,10 @@
 function isClosedController(err: unknown): boolean {
   if (!err || typeof err !== "object") return false;
   const e = err as { code?: string; message?: string };
-  return e.code === "ERR_INVALID_STATE" || /Controller is already closed/i.test(String(e.message ?? ""));
+  return (
+    e.code === "ERR_INVALID_STATE" ||
+    /Controller is already closed|Invalid state.*Controller/i.test(String(e.message ?? ""))
+  );
 }
 
 type Patchable = {

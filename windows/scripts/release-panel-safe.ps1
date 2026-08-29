@@ -16,7 +16,7 @@ param(
   [switch]$CustomerOnly,
   [switch]$TarballOnly,
   [string]$CustomerHost = "75.119.137.174",
-  [string]$CustomerPassword = "CkfUCKD6blClbTegdE9jYoO0vB7fR",
+  [string]$CustomerPassword = $env:NEXLIFY_CUSTOMER_SSH_PASSWORD,
   [string]$CustomerPath = "/opt/nexlify-panel"
 )
 
@@ -59,9 +59,15 @@ function Invoke-VendorPlink {
 
 function Invoke-CustomerPlink {
   param([string]$Command)
-  $args = @("-batch", "-ssh", "root@$CustomerHost", "-pw", $CustomerPassword)
-  $args += $Command
-  & $cfg.Plink @args
+  $sshKey = Get-NexlifyOpenSshKey -Preferred $cfg.PrivateKey
+  if ($sshKey -and -not $CustomerPassword) {
+    & ssh.exe -o BatchMode=yes -o StrictHostKeyChecking=accept-new -i $sshKey "root@$CustomerHost" $Command
+  } elseif ($CustomerPassword) {
+    $args = @("-batch", "-ssh", "root@$CustomerHost", "-pw", $CustomerPassword, $Command)
+    & $cfg.Plink @args
+  } else {
+    throw "No SSH key or NEXLIFY_CUSTOMER_SSH_PASSWORD is available"
+  }
   if ($LASTEXITCODE -ne 0) { throw "Customer remote failed (exit $LASTEXITCODE)" }
 }
 

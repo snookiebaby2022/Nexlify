@@ -29,6 +29,11 @@ ROOT="$(find_panel)" || {
   exit 1
 }
 cd "$ROOT"
+PROTECTION_FILE="/etc/nexlify/server-45-protected"
+if [ -f "$PROTECTION_FILE" ] && [ "${NEXLIFY_ALLOW_PROTECTED_45:-0}" != "1" ]; then
+  echo "ERROR: server 45 is protected; set NEXLIFY_ALLOW_PROTECTED_45=1 only for an operator-approved update" >&2
+  exit 78
+fi
 if command -v flock >/dev/null 2>&1; then
   exec 9>/tmp/nexlify-rebuild.lock
   if ! flock -n 9; then

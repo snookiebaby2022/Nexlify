@@ -291,6 +291,14 @@ export async function POST(req: NextRequest) {
       await counted(await prisma.stream.updateMany({ where, data: { backupUrl } }));
     } else if (action === "clearBackupUrl") {
       await counted(await prisma.stream.updateMany({ where, data: { backupUrl: null } }));
+    } else if (action === "killConnections") {
+      if (!ids.length) return NextResponse.json({ error: "ids required" }, { status: 400 });
+      const { kickStreamConnections } = await import("@/lib/connections");
+      let killed = 0;
+      for (const streamId of ids) {
+        killed += await kickStreamConnections(streamId);
+      }
+      count = killed;
     } else {
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }

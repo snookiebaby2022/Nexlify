@@ -720,6 +720,19 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  if (body.autoSyncNameFromEpg !== undefined) {
+    const { parseLiveStreamMeta, encodeLiveStreamMeta } = await import("@/lib/stream-live-meta");
+    const existing = await prisma.stream.findUnique({
+      where: { id },
+      select: { agentStartCmd: true },
+    });
+    const meta = parseLiveStreamMeta(existing?.agentStartCmd);
+    data.agentStartCmd = encodeLiveStreamMeta({
+      ...(meta.raw ?? {}),
+      autoSyncNameFromEpg: body.autoSyncNameFromEpg === true,
+    });
+  }
+
   if (body.transcodeProfile !== undefined) {
     const { parseLiveStreamMeta, encodeLiveStreamMeta } = await import("@/lib/stream-live-meta");
     const existing = await prisma.stream.findUnique({

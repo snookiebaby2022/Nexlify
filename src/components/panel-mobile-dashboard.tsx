@@ -101,7 +101,7 @@ export function PanelMobileDashboard({
 
   useEffect(() => {
     loadWidgets();
-    return startVisibleInterval(loadWidgets, 60_000);
+    return startVisibleInterval(loadWidgets, 120_000);
   }, [loadWidgets]);
 
   const connMax = d && d.maxConnections && d.maxConnections > 0 ? String(d.maxConnections) : "∞";
