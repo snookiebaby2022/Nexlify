@@ -263,7 +263,14 @@ ensure_pm2_app nexlify
 ensure_pm2_app nexlify-cron
 ensure_pm2_app nexlify-hls
 
-if [ "${NEXLIFY_USE_IPTV_EDGE:-1}" = "1" ] && [ -f "$ROOT/scripts/install-iptv-edge-proxy.sh" ]; then
+LIVE_EDGE_MODE="${NEXLIFY_LIVE_EDGE_MODE:-local}"
+LIVE_EDGE_MODE="$(echo "$LIVE_EDGE_MODE" | tr '[:upper:]' '[:lower:]')"
+if [ -f /etc/nexlify/server-45-protected ] || [ -f /etc/nexlify/live-routing.lock ]; then
+  echo "Skip topology refresh — protected production routing"
+elif [ -f "$ROOT/scripts/apply-live-edge-topology.sh" ]; then
+  echo "Applying live-edge topology (${LIVE_EDGE_MODE})..."
+  PANEL_DIR="$ROOT" bash "$ROOT/scripts/apply-live-edge-topology.sh" || echo "WARN: live-edge topology apply failed"
+elif [ "${NEXLIFY_USE_IPTV_EDGE:-1}" = "1" ] && [ -f "$ROOT/scripts/install-iptv-edge-proxy.sh" ]; then
   echo "Refreshing IPTV edge (Xtream/live splice)..."
   bash "$ROOT/scripts/install-iptv-edge-proxy.sh" || echo "WARN: iptv-edge install failed"
 fi

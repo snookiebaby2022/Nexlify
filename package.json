@@ -1,6 +1,6 @@
 {
   "name": "nexlify",
-  "version": "2.0.56",
+  "version": "2.0.57",
   "private": true,
   "engines": {
     "node": ">=18.17.0"
@@ -21,6 +21,7 @@
     "sync:releases": "cp -f src/lib/panel-releases.json marketing-drop-in/src/lib/panel-releases.json && npm run releases:sync",
     "cleanup:local": "bash scripts/nexlify-local-cleanup.sh",
     "verify:sync": "bash scripts/nexlify-verify-sync.sh",
+    "verify:playback": "bash scripts/verify-playback-parity.sh",
     "fix:all": "bash scripts/nexlify-fix-all.sh",
     "db:generate": "prisma generate",
     "db:push": "prisma db push --accept-data-loss",

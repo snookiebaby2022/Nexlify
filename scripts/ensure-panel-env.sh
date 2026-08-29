@@ -42,6 +42,18 @@ set_kv PANEL_SSL_PORT 443
 # IPTV apps often use :8080/:25461; Node edge owns these (nginx cannot share the same TCP port).
 set_kv STREAM_HTTP_EXTRA_PORTS "8080,25461"
 set_kv NEXLIFY_USE_IPTV_EDGE 1
+LIVE_EDGE_MODE="$(read_env NEXLIFY_LIVE_EDGE_MODE)"
+[ -z "$LIVE_EDGE_MODE" ] && LIVE_EDGE_MODE="local"
+LIVE_EDGE_MODE="$(echo "$LIVE_EDGE_MODE" | tr '[:upper:]' '[:lower:]')"
+set_kv NEXLIFY_LIVE_EDGE_MODE "$LIVE_EDGE_MODE"
+REMOTE_EDGE_VAL="$(read_env NEXLIFY_REMOTE_EDGE)"
+if [ "$LIVE_EDGE_MODE" = "remote" ] || [ "$LIVE_EDGE_MODE" = "split" ] || [ "$LIVE_EDGE_MODE" = "remote-edge" ]; then
+  if [ -z "$REMOTE_EDGE_VAL" ]; then
+    echo "WARN: NEXLIFY_LIVE_EDGE_MODE=${LIVE_EDGE_MODE} but NEXLIFY_REMOTE_EDGE is empty" >&2
+  else
+    set_kv NEXLIFY_REMOTE_EDGE "$REMOTE_EDGE_VAL"
+  fi
+fi
 set_kv PANEL_PRIMARY_DOMAIN "${PRIMARY}"
 set_kv PANEL_COOKIE_SECURE 0
 set_kv NEXLIFY_LICENSE_COOKIE_SECURE 0

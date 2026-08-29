@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.56",
+  "latestVersion": "2.0.57",
   "releases": [
+    {
+      "version": "2.0.57",
+      "date": "2026-08-29",
+      "channel": "stable",
+      "summary": "Adaptive local/remote live-edge topology with identical MPEG-TS/HLS playback for every install.",
+      "changelog": [
+        "Installations default to local edge mode; optional remote-edge mode routes live bytes to a dedicated stream server",
+        "Topology-aware PM2 and nginx wiring prevents local edge conflicts in split deployments",
+        "Installer and tarball parity gates verify canonical edge scripts before every release",
+        "Playback parity verification enforces 200 + media bytes and rejects redirects on live paths",
+        "Trusted client IP forwarding is consistent across nginx and the IPTV edge for accurate viewer attribution"
+      ],
+      "fixes": [
+        "pm2-start could revive a local edge on hosts configured for remote live routing",
+        "Install smoke checks did not validate MPEG-TS sync bytes or HLS segment delivery",
+        "Install dry-run was pinned to a stale public version",
+        "Marketing tarball drift could ship an edge script that differed from the canonical source"
+      ]
+    },
     {
       "version": "2.0.56",
       "date": "2026-08-29",

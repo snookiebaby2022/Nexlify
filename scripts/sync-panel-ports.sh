@@ -76,6 +76,15 @@ if [ -f scripts/verify-panel-ports.sh ]; then
   bash scripts/verify-panel-ports.sh || echo "[sync-panel-ports] WARN: port verification reported issues (see above)"
 fi
 
+LIVE_EDGE_MODE="${NEXLIFY_LIVE_EDGE_MODE:-local}"
+LIVE_EDGE_MODE="$(echo "$LIVE_EDGE_MODE" | tr '[:upper:]' '[:lower:]')"
+if [ ! -f /etc/nexlify/server-45-protected ] && [ ! -f /etc/nexlify/live-routing.lock ]; then
+  if [ -f "$ROOT/scripts/apply-live-edge-topology.sh" ]; then
+    echo "[sync-panel-ports] Applying live-edge topology (${LIVE_EDGE_MODE})…"
+    PANEL_DIR="$ROOT" bash "$ROOT/scripts/apply-live-edge-topology.sh" || echo "[sync-panel-ports] WARN: topology apply failed"
+  fi
+fi
+
 echo "[sync-panel-ports] Complete."
 
 # Gzip large Xtream JSON (get_series / get_vod_streams) for XCIPTV

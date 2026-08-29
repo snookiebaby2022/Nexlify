@@ -68,6 +68,11 @@ if [ "$BEHIND" != "0" ] && [ "$BEHIND" != "false" ] && [ "$STREAM_PORT" != "80" 
   echo "  stream edge HTTP ${code} (401/400 expected without credentials)"
 fi
 
+if [ -f scripts/verify-playback-parity.sh ]; then
+  echo "==> Smoke: playback parity contract"
+  bash scripts/verify-playback-parity.sh || exit 1
+fi
+
 if [ -f scripts/verify-panel-ports.sh ]; then
   echo "==> Smoke: verify panel ports"
   bash scripts/verify-panel-ports.sh || true

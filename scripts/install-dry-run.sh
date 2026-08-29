@@ -3,8 +3,9 @@
 # Usage: bash scripts/install-dry-run.sh
 set -euo pipefail
 
-PANEL_SH_URL="${PANEL_SH_URL:-https://nexlify.live/install/panel.sh?v=2.0.17}"
-TARBALL_URL="${TARBALL_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz?v=2.0.17}"
+PANEL_VER="$(node -p "require('./package.json').version" 2>/dev/null || echo 2.0.56)"
+PANEL_SH_URL="${PANEL_SH_URL:-https://nexlify.live/install/panel.sh?v=${PANEL_VER}}"
+TARBALL_URL="${TARBALL_URL:-https://nexlify.live/downloads/nexlify-panel.tar.gz?v=${PANEL_VER}}"
 WORKDIR="$(mktemp -d /tmp/nexlify-dryrun.XXXXXX)"
 PANEL_DIR="$WORKDIR/panel"
 FAIL=0

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.56' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.57' | sudo bash
 #
 # Server IP/hostname is detected automatically. Then open the login URL, sign in
 # with the admin password shown at the end, and paste your license key under Admin → License.
@@ -28,13 +28,15 @@ SKIP_SSL=0
 SKIP_FIREWALL=0
 FORCE_FRESH=0
 MONOLITHIC=0
+LIVE_EDGE_MODE="${NEXLIFY_LIVE_EDGE_MODE:-local}"
+REMOTE_EDGE=""
 
 usage() {
   cat <<'EOF'
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.56' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.57' | sudo bash
 
 Options:
   --ip IP                Override auto-detected server IP or hostname
@@ -45,12 +47,14 @@ Options:
   --fresh                Wipe the install directory before install (keeps /home/nexlify/bin)
   --skip-firewall        Do not open ufw ports
   --monolithic           Panel + stream engine on this host (main server + local agent)
+  --live-edge-mode MODE  local (default) or remote split-edge routing
+  --remote-edge HOST:PORT Remote edge for --live-edge-mode remote
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.56' | sudo bash
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.56' | sudo bash -s -- --license NXLF1-XXXXX
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.56' | sudo bash -s -- --domain panel.example.com --email admin@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.57' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.57' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.57' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 
@@ -66,6 +70,8 @@ while [ $# -gt 0 ]; do
     --skip-firewall) SKIP_FIREWALL=1; shift ;;
     --fresh) FORCE_FRESH=1; shift ;;
     --monolithic) MONOLITHIC=1; shift ;;
+    --live-edge-mode) LIVE_EDGE_MODE="${2:-local}"; shift 2 ;;
+    --remote-edge) REMOTE_EDGE="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
@@ -874,6 +880,22 @@ if [ "$SKIP_FIREWALL" -eq 0 ]; then
   progress_step "Configuring IPTV ports, nginx stream edge, and firewall"
   bash scripts/installer-finalize-ports.sh >>"$INSTALL_LOG" 2>&1 || {
     echo "WARN: port finalize failed — run: sudo bash scripts/sync-panel-ports.sh" >&2
+  }
+fi
+
+if [ -f scripts/apply-live-edge-topology.sh ]; then
+  progress_step "Applying live-edge topology (${LIVE_EDGE_MODE})"
+  grep -q '^NEXLIFY_LIVE_EDGE_MODE=' "$PANEL_DIR/.env" 2>/dev/null && \
+    sed -i "s/^NEXLIFY_LIVE_EDGE_MODE=.*/NEXLIFY_LIVE_EDGE_MODE=${LIVE_EDGE_MODE}/" "$PANEL_DIR/.env" || \
+    echo "NEXLIFY_LIVE_EDGE_MODE=${LIVE_EDGE_MODE}" >> "$PANEL_DIR/.env"
+  if [ -n "$REMOTE_EDGE" ]; then
+    grep -q '^NEXLIFY_REMOTE_EDGE=' "$PANEL_DIR/.env" 2>/dev/null && \
+      sed -i "s|^NEXLIFY_REMOTE_EDGE=.*|NEXLIFY_REMOTE_EDGE=${REMOTE_EDGE}|" "$PANEL_DIR/.env" || \
+      echo "NEXLIFY_REMOTE_EDGE=${REMOTE_EDGE}" >> "$PANEL_DIR/.env"
+  fi
+  NEXLIFY_LIVE_EDGE_MODE="$LIVE_EDGE_MODE" NEXLIFY_REMOTE_EDGE="$REMOTE_EDGE" \
+    bash scripts/apply-live-edge-topology.sh >>"$INSTALL_LOG" 2>&1 || {
+    echo "WARN: live-edge topology apply failed — run: sudo bash scripts/apply-live-edge-topology.sh" >&2
   }
 fi
 

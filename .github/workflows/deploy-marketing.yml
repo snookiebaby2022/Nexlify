@@ -25,6 +25,15 @@ jobs:
           echo "Skipping deploy — add VPS_HOST, VPS_USER, and VPS_SSH_KEY repository secrets to enable."
           exit 0
 
+      - name: Verify release parity gates
+        if: ${{ secrets.VPS_SSH_KEY != '' }}
+        run: |
+          set -euo pipefail
+          npm run sync:install
+          npm run verify:sync
+          node --test scripts/edge-proxy-parity.test.mjs
+          npm run package:panel
+
       - name: Generate VPS bundle
         if: ${{ secrets.VPS_SSH_KEY != '' }}
         run: bash marketing-drop-in/scripts/generate-vps-bundle.sh

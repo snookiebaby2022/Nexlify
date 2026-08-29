@@ -3,9 +3,13 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="${1:-$ROOT/dist/nexlify-panel.tar.gz}"
+cd "$ROOT"
+OUT="${1:-dist/nexlify-panel.tar.gz}"
+case "$OUT" in
+  /*|[A-Za-z]:*) OUT="$(basename "$OUT")" ;;
+esac
 
-mkdir -p "$(dirname "$OUT")"
+mkdir -p dist
 rm -f "$OUT"
 
 tar -czf "$OUT" \
@@ -32,9 +36,9 @@ tar -czf "$OUT" \
   --exclude=.next.test \
   --exclude=backups \
   --exclude=docs \
-  -C "$ROOT" .
+  -C . .
 
-echo "Built $OUT ($(du -h "$OUT" | cut -f1))"
+echo "Built $ROOT/$OUT ($(du -h "$OUT" | cut -f1))"
 TAR_BYTES="$(wc -c < "$OUT" | tr -d '[:space:]')"
 # Source tarball should be a few MB (no node_modules / .next*). ~3MB typical; fail if bloated.
 if [ "${TAR_BYTES:-0}" -gt 40000000 ]; then
@@ -47,7 +51,7 @@ if [ "${TAR_BYTES:-0}" -lt 500000 ]; then
 fi
 
 missing=""
-for f in .env.example src/lib/panel-releases.json src/lib/lines.ts scripts/set-admin-password.cjs scripts/load-env.cjs scripts/panel-port-config.sh scripts/sync-license-env.mjs scripts/ensure-panel-env.sh scripts/tune-streaming-host.sh scripts/prune-stale-live-connections.sh scripts/fix-panel-ip-login.sh scripts/verify-install-smoke.sh scripts/verify-install-login.sh scripts/verify-panel-admin-login.cjs scripts/reset-panel-admin.sh scripts/apply-panel-fast-update.sh scripts/apply-prebuilt-update.sh scripts/panel-restart-safe.sh scripts/rematch-iptv-edge-auth.sh scripts/sync-internal-secret-env.sh scripts/panel-update-background.sh scripts/panel-update-background.ts scripts/fix-update-worker-now.sh nginx/nexlify-stream-edge.conf scripts/nexlify-port-registry.sh scripts/nexlify-firewall-ports.sh scripts/nexlify-nginx-release-ports.sh scripts/sync-panel-ports.sh scripts/install-nginx-stream-edge.sh scripts/install-iptv-edge-proxy.sh scripts/iptv-edge-proxy.mjs scripts/install-nginx-rtmp.sh scripts/install-nginx-https-extra-ports.sh scripts/install-monolithic-profile.sh scripts/install-local-stream-agent.sh scripts/ensure-monolithic-server.ts scripts/fix-stream-edge-now.sh scripts/verify-panel-ports.sh scripts/installer-finalize-ports.sh; do
+for f in .env.example src/lib/panel-releases.json src/lib/lines.ts scripts/set-admin-password.cjs scripts/load-env.cjs scripts/panel-port-config.sh scripts/sync-license-env.mjs scripts/ensure-panel-env.sh scripts/tune-streaming-host.sh scripts/prune-stale-live-connections.sh scripts/fix-panel-ip-login.sh scripts/verify-install-smoke.sh scripts/verify-install-login.sh scripts/verify-panel-admin-login.cjs scripts/reset-panel-admin.sh scripts/apply-panel-fast-update.sh scripts/apply-prebuilt-update.sh scripts/panel-restart-safe.sh scripts/rematch-iptv-edge-auth.sh scripts/sync-internal-secret-env.sh scripts/panel-update-background.sh scripts/panel-update-background.ts scripts/fix-update-worker-now.sh nginx/nexlify-stream-edge.conf scripts/nexlify-port-registry.sh scripts/nexlify-firewall-ports.sh scripts/nexlify-nginx-release-ports.sh scripts/sync-panel-ports.sh scripts/install-nginx-stream-edge.sh scripts/install-iptv-edge-proxy.sh scripts/iptv-edge-proxy.mjs scripts/route-live-to-remote-edge.sh scripts/apply-live-edge-topology.sh scripts/verify-playback-parity.sh scripts/install-nginx-rtmp.sh scripts/install-nginx-https-extra-ports.sh scripts/install-monolithic-profile.sh scripts/install-local-stream-agent.sh scripts/ensure-monolithic-server.ts scripts/fix-stream-edge-now.sh scripts/verify-panel-ports.sh scripts/installer-finalize-ports.sh; do
   if ! grep -qF "$f" < <(tar -tzf "$OUT"); then
     missing="${missing}\n  - ${f}"
   fi

@@ -88,6 +88,9 @@ check_install() {
 check_install install-linux.sh panel.sh
 check_install install-iptv-edge-proxy.sh scripts/install-iptv-edge-proxy.sh
 check_install iptv-edge-proxy.mjs scripts/iptv-edge-proxy.mjs
+check_install route-live-to-remote-edge.sh scripts/route-live-to-remote-edge.sh
+check_install apply-live-edge-topology.sh scripts/apply-live-edge-topology.sh
+check_install verify-playback-parity.sh scripts/verify-playback-parity.sh
 check_install ensure-panel-env.sh scripts/ensure-panel-env.sh
 for f in apply-panel-fast-update.sh fix-panel-auto-update.sh fix-panel-restart.sh \
   fix-panel-license-sync.sh fix-stream-edge-now.sh; do
@@ -125,6 +128,19 @@ for f in \
   marketing-drop-in/deploy/nginx-security-headers.conf; do
   [ -f "$f" ] && ok "$(basename "$f")" || fail "Missing: $f"
 done
+
+section "Tarball playback scripts"
+TAR="$ROOT/dist/nexlify-panel.tar.gz"
+if [ ! -f "$TAR" ]; then
+  warn "dist/nexlify-panel.tar.gz missing — run: npm run package:panel"
+else
+  for f in scripts/iptv-edge-proxy.mjs scripts/route-live-to-remote-edge.sh scripts/apply-live-edge-topology.sh scripts/verify-playback-parity.sh; do
+    if tar -tzf "$TAR" | grep -qF "$f"; then ok "tarball contains $f"; else fail "tarball missing $f"; fi
+  done
+  CANON="$(sha256sum "$SCRIPTS/iptv-edge-proxy.mjs" | awk '{print $1}')"
+  TAR_HASH="$(tar -xOzf "$TAR" scripts/iptv-edge-proxy.mjs 2>/dev/null | sha256sum | awk '{print $1}')"
+  if [ "$CANON" = "$TAR_HASH" ]; then ok "tarball edge matches canonical iptv-edge-proxy.mjs"; else fail "tarball edge drift"; fi
+fi
 
 section "Summary"
 echo ""
