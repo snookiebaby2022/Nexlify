@@ -42,7 +42,7 @@ export type DuplicateGroup = {
   members: DuplicateMember[];
 };
 
-/** Lowercase URL without credentials or trailing slash — same file, different auth still matches. */
+/** Lowercase URL without credentials or trailing slash -- same file, different auth still matches. */
 export function normalizeDuplicateUrl(url: string): string {
   const raw = url.trim();
   if (!raw) return "";
@@ -248,7 +248,7 @@ async function countStreamsForDuplicateScan(
   return Number(rows[0]?.count ?? 0);
 }
 
-/** SQL grouping key — close to normalizeDuplicateUrl (host + path, no trailing slash). */
+/** SQL grouping key -- close to normalizeDuplicateUrl (host + path, no trailing slash). */
 function urlGroupKeySql() {
   return Prisma.sql`lower(regexp_replace(split_part(s."streamUrl", '?', 1), '/+$', ''))`;
 }
@@ -537,7 +537,7 @@ export type DuplicateNameCollision = {
 
 /**
  * Live channels with the same display name that overlap in a category or bouquet.
- * Causes wrong stream_id / probe vs playback mismatches (e.g. duplicate "24-7 …" rows).
+ * Causes wrong stream_id / probe vs playback mismatches (e.g. duplicate "24-7 ..." rows).
  */
 export async function findDuplicateNameCollisions(
   type: StreamType = StreamType.LIVE
