@@ -37,6 +37,112 @@ function probeTimeoutMs(): number {
   return Number.isFinite(n) && n > 500 ? n : 4000;
 }
 
+function isDirectMediaUrl(url: string): boolean {
+  return /\.(m3u8|ts|mp4|m4v|mkv|avi)(\?|$)/i.test(url);
+}
+
+function isXtreamPanelUrl(url: string): boolean {
+  if (isDirectMediaUrl(url)) return false;
+  try {
+    const u = new URL(url);
+    const path = u.pathname.toLowerCase();
+    if (
+      path.includes("player_api.php") ||
+      path.includes("panel_api.php") ||
+      path.includes("get.php") ||
+      path.includes("xmltv.php")
+    ) {
+      return true;
+    }
+    return path === "/" || path === "";
+  } catch {
+    return false;
+  }
+}
+
+export type ProviderProbeOptions = {
+  fast?: boolean;
+  apiKey?: string | null;
+  remoteUsername?: string | null;
+  remotePassword?: string | null;
+};
+
+async function probeXtreamPanelHealth(
+  baseUrl: string,
+  opts?: ProviderProbeOptions
+): Promise<ProbeResult | null> {
+  if (!isXtreamPanelUrl(baseUrl)) return null;
+
+  const creds = resolveProviderXtreamCreds({
+    baseUrl,
+    apiKey: opts?.apiKey,
+    remoteUsername: opts?.remoteUsername,
+    remotePassword: opts?.remotePassword,
+  });
+  const start = Date.now();
+
+  if (creds.username && creds.password && creds.origin) {
+    const apiUrl = `${creds.origin}/player_api.php?username=${encodeURIComponent(creds.username)}&password=${encodeURIComponent(creds.password)}`;
+    try {
+      const res = await fetch(apiUrl, {
+        signal: AbortSignal.timeout(probeTimeoutMs()),
+        headers: { "User-Agent": "Nexlify-Provider-Probe/1.0" },
+      });
+      const latencyMs = Date.now() - start;
+      if (!res.ok) {
+        return {
+          status: res.status === 401 || res.status === 403 ? "degraded" : "offline",
+          message: `Xtream API HTTP ${res.status} · ${latencyMs}ms`,
+          httpStatus: res.status,
+          latencyMs,
+        };
+      }
+      const data = (await res.json()) as { user_info?: { auth?: number; message?: string } };
+      if (data.user_info?.auth === 1) {
+        return {
+          status: "online",
+          message: `Xtream login OK · ${latencyMs}ms`,
+          httpStatus: res.status,
+          latencyMs,
+        };
+      }
+      const msg = data.user_info?.message?.trim() || "Invalid Xtream credentials";
+      return {
+        status: "degraded",
+        message: `${msg} · ${latencyMs}ms`,
+        httpStatus: res.status,
+        latencyMs,
+      };
+    } catch (e) {
+      return { status: "offline", message: friendlyFetchError(e), latencyMs: Date.now() - start };
+    }
+  }
+
+  try {
+    const normalized = normalizeProviderUrl(baseUrl);
+    if (!normalized.ok) return null;
+    const target = creds.origin ?? normalized.url;
+    const { res, latencyMs } = await fetchProbe(target, "HEAD", probeTimeoutMs());
+    const code = res.status;
+    if (code >= 200 && code < 500) {
+      return {
+        status: "degraded",
+        message: `Panel reachable (HTTP ${code}) — add credentials for full Xtream check · ${latencyMs}ms`,
+        httpStatus: code,
+        latencyMs,
+      };
+    }
+    return {
+      status: "offline",
+      message: `Panel HTTP ${code} · ${latencyMs}ms`,
+      httpStatus: code,
+      latencyMs,
+    };
+  } catch (e) {
+    return { status: "offline", message: friendlyFetchError(e), latencyMs: Date.now() - start };
+  }
+}
+
 /** Match live playback / ffprobe — provider CDNs often 404 generic probe UAs. */
 const PROBE_UA = "VLC/3.0.20 LibVLC/3.0.20";
 
@@ -70,6 +176,9 @@ async function fetchBodySample(
       if (head.trimStart().startsWith("<") || /html/i.test(head)) {
         return { ok: false, message: "HTML error page, not media" };
       }
+      if (res.status >= 200 && res.status < 300) {
+        return { ok: false, message: "Could not verify media signature (HTTP OK)", httpStatus: res.status };
+      }
       return { ok: false, message: "Response is not playable media" };
     }
     return {
@@ -99,22 +208,34 @@ async function fetchProbe(
 
 export async function probeStreamProvider(
   baseUrl: string,
-  opts?: { fast?: boolean }
+  opts?: ProviderProbeOptions
 ): Promise<ProbeResult> {
   const normalized = normalizeProviderUrl(baseUrl);
   if (!normalized.ok) {
     return { status: "offline", message: normalized.error };
   }
 
+  const panelProbe = await probeXtreamPanelHealth(baseUrl, opts);
+  if (panelProbe) return panelProbe;
+
   const url = normalized.url;
   const fast = opts?.fast === true;
   const timeout = fast ? Math.min(probeTimeoutMs(), 2500) : Math.max(probeTimeoutMs(), 12_000);
   const sampleTimeout = fast ? Math.min(timeout + 2000, 6000) : Math.max(timeout, 14_000);
-  const direct = /\.(m3u8|ts|mp4|m4v)(\?|$)/i.test(url);
+  const direct = isDirectMediaUrl(url);
+  const verifyBody = direct || isDirectMediaUrl(url);
 
   const finishWithBodyCheck = async (
     headResult: { status: "online" | "degraded"; message: string; httpStatus?: number; latencyMs?: number }
   ): Promise<ProbeResult> => {
+    if (!verifyBody) {
+      return {
+        status: headResult.status,
+        message: headResult.message,
+        httpStatus: headResult.httpStatus,
+        latencyMs: headResult.latencyMs,
+      };
+    }
     const sample = await fetchBodySample(url, sampleTimeout);
     if (sample.ok) {
       return {
@@ -124,8 +245,9 @@ export async function probeStreamProvider(
         latencyMs: headResult.latencyMs,
       };
     }
+    const httpOk = (sample.httpStatus ?? headResult.httpStatus ?? 0) >= 200 && (sample.httpStatus ?? headResult.httpStatus ?? 0) < 300;
     return {
-      status: "offline",
+      status: httpOk ? "degraded" : "offline",
       message: `${headResult.message} · ${sample.message}`,
       httpStatus: sample.httpStatus ?? headResult.httpStatus,
       latencyMs: headResult.latencyMs,

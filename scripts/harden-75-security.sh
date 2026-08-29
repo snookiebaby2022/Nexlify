@@ -53,8 +53,8 @@ ALTER USER nexlify WITH PASSWORD '${POSTGRES_PASSWORD}';
 SQL
 OLD_DB=$(grep '^DATABASE_URL=' .env | cut -d= -f2-)
 NEW_DB_URL=$(node -e "
-const u=new URL(process.argv[1]);
-u.password=process.argv[2];
+const u = new URL(process.argv[1]);
+u.password = process.argv[2];
 console.log(u.toString());
 " "$OLD_DB" "$POSTGRES_PASSWORD")
 set_kv DATABASE_URL "$NEW_DB_URL"
