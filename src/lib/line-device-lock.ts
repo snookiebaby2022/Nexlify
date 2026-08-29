@@ -33,7 +33,7 @@ export function extractDeviceIdentity(
 }
 
 export function checkLineDeviceLock(
-  line: Pick<Line, "lockMac" | "lockDeviceId">,
+  line: { lockMac?: string | null; lockDeviceId?: string | null },
   identity: { mac: string; deviceId: string }
 ): boolean {
   const lockMac = normalizeMac(line.lockMac);

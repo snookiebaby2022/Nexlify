@@ -34,8 +34,8 @@ export type PlaybackGuardLine = {
   allowedUserAgents: string | null;
   disallowedUserAgents: string | null;
   blockedIsps: string | null;
-  lockMac?: string | null;
-  lockDeviceId?: string | null;
+  lockMac: string | null;
+  lockDeviceId: string | null;
 };
 
 export function asPlaybackGuardLine(
