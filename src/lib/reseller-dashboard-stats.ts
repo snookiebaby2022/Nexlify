@@ -36,7 +36,7 @@ export async function loadResellerDashboardStats(session: SessionUser) {
     logs: logs.map((log) => ({
       action: log.action,
       label: formatAuditAction(log.action),
-      createdAt: log.createdAt,
+      createdAt: log.createdAt instanceof Date ? log.createdAt.toISOString() : String(log.createdAt),
       fixHref: null,
     })),
   };

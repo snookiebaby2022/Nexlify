@@ -189,11 +189,14 @@ export async function loadAdminDashboardStats() {
     networkBytesInTotal: totalIn?.value ?? "0",
     networkBytesOutTotal: totalOut?.value ?? "0",
     cronLastRun: cronLast?.value ?? null,
-    cronLogs,
+    cronLogs: cronLogs.map((log) => ({
+      ...log,
+      createdAt: log.createdAt instanceof Date ? log.createdAt.toISOString() : String(log.createdAt),
+    })),
     logs: logs.map((log) => ({
       action: log.action,
       label: formatAuditAction(log.action),
-      createdAt: log.createdAt,
+      createdAt: log.createdAt instanceof Date ? log.createdAt.toISOString() : String(log.createdAt),
       entity: log.entity,
       entityId: log.entityId,
       fixHref: activityFixHref(log),
