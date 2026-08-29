@@ -18,6 +18,12 @@ import { signLicensePayload } from "../scripts/license-sign.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.LICENSE_SERVER_PORT ?? "8787");
 const API_SECRET = process.env.LICENSE_SERVER_API_SECRET?.trim() ?? "";
+const BIND = process.env.LICENSE_SERVER_BIND?.trim() || "127.0.0.1";
+
+if (!API_SECRET) {
+  console.error("FATAL: LICENSE_SERVER_API_SECRET is required");
+  process.exit(1);
+}
 const DATA_FILE =
   process.env.LICENSE_SERVER_DATA ??
   path.join(__dirname, "activations.json");
@@ -78,7 +84,6 @@ function readBody(req) {
 }
 
 function checkSecret(req) {
-  if (!API_SECRET) return true;
   const h = req.headers["x-license-secret"] ?? req.headers.authorization ?? "";
   const token = String(h).replace(/^Bearer\s+/i, "").trim();
   return token === API_SECRET;
@@ -342,9 +347,6 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ ok: false, error: "Not found" }));
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Nexlify license server listening on 0.0.0.0:${PORT}`);
-  if (!API_SECRET) {
-    console.warn("WARN: LICENSE_SERVER_API_SECRET not set — /v1/issue is open");
-  }
+server.listen(PORT, BIND, () => {
+  console.log(`Nexlify license server listening on ${BIND}:${PORT}`);
 });

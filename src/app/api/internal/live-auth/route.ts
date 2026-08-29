@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedInternalRequest } from "@/lib/internal-request";
 import { getClientIp } from "@/lib/client-ip";
-import { getLineForPlaybackAuth, resolvePlaybackUrlCandidatesForLine, resolvePlaybackUrlForLine } from "@/lib/line-playback";
+import { getLineForPlaybackAuth, resolvePlaybackUrlCandidatesForLine, resolvePlaybackUrlForLine, type PlaybackContext } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
 import { parseXtreamPlaybackPath } from "@/lib/xtream-playback-path";
 import { stripLiveStreamExtension, isHlsPlaybackUrl, isSafeUpstreamUrl, UPSTREAM_HLS_UA } from "@/lib/hls-playback";
@@ -10,6 +10,36 @@ import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { isSessionKicked, trackConnection, isTestConnectionIp } from "@/lib/connections";
 import { outboundProxyHeaderValue, resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
 import { isTinyLiveRangeProbe } from "@/lib/live-http-range";
+import { getServerByAgentToken } from "@/lib/stream-agent";
+import {
+  getLiveAuthCache,
+  setLiveAuthCache,
+  type LiveAuthCacheEntry,
+  type LiveAuthOutputMode,
+} from "@/lib/live-auth-cache";
+
+const LIVE_AUTH_RESOLVE_MS = 2500;
+
+async function resolvePlaybackCandidatesFast(
+  lineId: string,
+  streamId: string,
+  ctx: PlaybackContext,
+  cacheTtlSec: number
+): Promise<string[]> {
+  try {
+    return await Promise.race([
+      resolvePlaybackUrlCandidatesForLine(lineId, streamId, ctx, cacheTtlSec),
+      new Promise<string[]>((_, reject) =>
+        setTimeout(() => reject(new Error("playback resolve timeout")), LIVE_AUTH_RESOLVE_MS)
+      ),
+    ]);
+  } catch {
+    const cached = await import("@/lib/cache").then(({ cacheGet }) =>
+      cacheGet<string[]>(`playback:urls:${lineId}:${streamId}`)
+    );
+    return cached ?? [];
+  }
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +77,9 @@ function isLiveByteProbe(
   return isTinyLiveRangeProbe(originalRange(req));
 }
 
-async function resolveStreamOutboundProxy(streamId: string) {
+async function resolveStreamOutboundProxy(streamId: string, agentServerScope: string | null = null) {
+  // Stream-server edge already uses the LB IP; proxy is only for panel-local edge egress.
+  if (agentServerScope) return null;
   return resolveOutboundProxyForStream(streamId);
 }
 
@@ -56,11 +88,43 @@ function proxyAuthHeaders(proxy: Awaited<ReturnType<typeof resolveStreamOutbound
   return value ? { "X-Nexlify-Outbound-Proxy": value } : {};
 }
 
+function liveAuthResponseFromCache(entry: LiveAuthCacheEntry): NextResponse {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "X-Nexlify-Line-Id": entry.lineId,
+      "X-Nexlify-Stream-Id": entry.streamId,
+      "X-Nexlify-Upstream": entry.upstream,
+      ...(entry.alts.length
+        ? { "X-Nexlify-Alts": entry.alts.map((u) => encodeURIComponent(u)).join(",") }
+        : {}),
+      "X-Nexlify-Live": entry.live ? "1" : "0",
+      ...(entry.wantsHls ? { "X-Nexlify-Hls": "1" } : {}),
+      ...(entry.hlsNative ? { "X-Nexlify-Hls-Native": "1" } : {}),
+      "Cache-Control": "no-store",
+      ...(entry.outboundProxy ? { "X-Nexlify-Outbound-Proxy": entry.outboundProxy } : {}),
+    } as Record<string, string>,
+  });
+}
+
+function liveAuthOutputMode(parsed: { wantsHls?: boolean }): LiveAuthOutputMode {
+  return parsed.wantsHls ? "hls" : "ts";
+}
+
 /**
  * Loopback auth for the IPTV edge (XUI-style): 200 + X-Nexlify-Upstream, or passthrough to Next.
  */
 export async function GET(req: NextRequest) {
-  if (!isAuthorizedInternalRequest(req)) {
+  const agentToken = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const agentServerId = req.headers.get("x-nexlify-agent-server-id")?.trim() ?? "";
+  let agentServerScope: string | null = null;
+  if (agentToken && agentServerId) {
+    const server = await getServerByAgentToken(agentToken);
+    if (!server || server.id !== agentServerId) {
+      return new NextResponse(null, { status: 403 });
+    }
+    agentServerScope = server.id;
+  } else if (!isAuthorizedInternalRequest(req)) {
     return new NextResponse(null, { status: 403 });
   }
 
@@ -83,6 +147,18 @@ export async function GET(req: NextRequest) {
       return new NextResponse("Not found", { status: 404 });
     }
     cleanId = resolved;
+  }
+
+  if (agentServerScope) {
+    const assigned = await import("@/lib/prisma").then(({ prisma }) =>
+      prisma.stream.findFirst({
+        where: { id: cleanId, serverId: agentServerScope, isActive: true },
+        select: { id: true },
+      })
+    );
+    if (!assigned) {
+      return new NextResponse("Stream not on this server", { status: 404 });
+    }
   }
 
   const line = await getLineForPlaybackAuth(parsed.username);
@@ -136,8 +212,31 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const method = originalMethod(req);
+  const authOutputMode = liveAuthOutputMode(parsed);
+  if (!liveProbe && method !== "HEAD" && !isHlsSegment) {
+    const cached = await getLiveAuthCache(
+      line.id,
+      cleanId,
+      ip,
+      authOutputMode,
+      agentServerScope
+    );
+    if (cached?.upstream && isSafeUpstreamUrl(cached.upstream)) {
+      void trackConnection({
+        lineId: line.id,
+        streamId: cleanId,
+        ip,
+        userAgent: ua,
+        playbackPath: originalPath(req),
+        mediaBytes: parsed.wantsHls ? 48_000 : 220_000,
+        pruneOthers: true,
+      });
+      return liveAuthResponseFromCache(cached);
+    }
+  }
+
   if (parsed.wantsHls) {
-    const method = originalMethod(req);
     if (liveProbe || method === "HEAD") {
       return new NextResponse(null, {
         status: 200,
@@ -152,13 +251,13 @@ export async function GET(req: NextRequest) {
     }
     const antiFreeze = await getAntiFreezeSettings();
     const ctx = { clientIp: ip, userAgent: ua, skipGeo: true };
-    const candidates = await resolvePlaybackUrlCandidatesForLine(
+    const candidates = await resolvePlaybackCandidatesFast(
       line.id,
       cleanId,
       ctx,
       antiFreeze.playbackUrlCacheTtlSec
     );
-    const outboundProxy = await resolveStreamOutboundProxy(cleanId);
+    const outboundProxy = await resolveStreamOutboundProxy(cleanId, agentServerScope);
     const tsUrl = candidates.find((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
     // Prefer MPEG-TS splice + instant playlist. Advertising native HLS here
     // forwarded every zap into Next.js (dead .m3u8 probe / ffmpeg packager),
@@ -189,6 +288,21 @@ export async function GET(req: NextRequest) {
         });
       }
     }
+    const hlsUpstream = tsUrl ?? hlsNative;
+    if (hlsUpstream) {
+      void setLiveAuthCache(line.id, cleanId, ip, {
+        upstream: hlsUpstream,
+        alts: [],
+        live: true,
+        hlsNative: Boolean(hlsNative && !tsUrl),
+        wantsHls: true,
+        lineId: line.id,
+        streamId: cleanId,
+        outputMode: "hls",
+        serverId: agentServerScope,
+        outboundProxy: outboundProxyHeaderValue(outboundProxy) ?? null,
+      });
+    }
     return new NextResponse(null, {
       status: 200,
       headers: {
@@ -204,14 +318,14 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const outboundProxy = await resolveStreamOutboundProxy(cleanId);
+  const outboundProxy = await resolveStreamOutboundProxy(cleanId, agentServerScope);
   const antiFreeze = await getAntiFreezeSettings();
   const ctx = { clientIp: ip, userAgent: ua, skipGeo: true };
 
   let upstream = "";
   let altUpstreams: string[] = [];
   if (parsed.spliceLiveTs) {
-    const candidates = await resolvePlaybackUrlCandidatesForLine(
+    const candidates = await resolvePlaybackCandidatesFast(
       line.id,
       cleanId,
       ctx,
@@ -248,6 +362,17 @@ export async function GET(req: NextRequest) {
       pruneOthers: true,
     });
   }
+
+  void setLiveAuthCache(line.id, cleanId, ip, {
+    upstream,
+    alts: altUpstreams,
+    live: parsed.spliceLiveTs,
+    lineId: line.id,
+    streamId: cleanId,
+    outputMode: authOutputMode,
+    serverId: agentServerScope,
+    outboundProxy: outboundProxyHeaderValue(outboundProxy) ?? null,
+  });
 
   return new NextResponse(null, {
     status: 200,

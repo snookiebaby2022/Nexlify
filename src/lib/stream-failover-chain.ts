@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import {
-  listStreamPlaybackUrls,
+  listStreamPlaybackUrlsWithFailover,
   type StreamWithProvider,
 } from "@/lib/resolve-stream-url";
 
@@ -18,7 +18,7 @@ export async function listStreamPlaybackUrlsWithChain(
     }
   };
 
-  addAll(listStreamPlaybackUrls(stream, seed));
+  addAll(await listStreamPlaybackUrlsWithFailover(stream, seed));
 
   let parentId = stream.parentStreamId;
   let depth = 0;
@@ -32,7 +32,7 @@ export async function listStreamPlaybackUrlsWithChain(
       include: { provider: true, server: true },
     });
     if (!parent) break;
-    addAll(listStreamPlaybackUrls(parent as StreamWithProvider, `${seed ?? ""}:p${depth}`));
+    addAll(await listStreamPlaybackUrlsWithFailover(parent as StreamWithProvider, `${seed ?? ""}:p${depth}`));
     parentId = parent.parentStreamId;
   }
 

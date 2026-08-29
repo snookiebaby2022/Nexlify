@@ -2,7 +2,13 @@ import { randomBytes } from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { buildAgentConfigForServer } from "@/lib/stream-agent-config";
-import { hostMetricsFromHeartbeat, persistHostMetrics } from "@/lib/host-metrics";
+import {
+  hostMetricsFromHeartbeat,
+  persistHostMetrics,
+  type HostMetricsSample,
+} from "@/lib/host-metrics";
+import { pushServerMetricsCache } from "@/lib/server-host-metrics-sync";
+import { LIVE_STALE_MS } from "@/lib/connections";
 
 export function generateAgentToken(): string {
   return randomBytes(32).toString("hex");
@@ -52,6 +58,15 @@ export type HeartbeatProcess = {
   errorMessage?: string | null;
 };
 
+function enrichHostMetricsSample(sample: HostMetricsSample, bandwidthMbps: number): HostMetricsSample {
+  const cap = Math.max(1, bandwidthMbps);
+  let uploadMbps = sample.uploadMbps;
+  let downloadMbps = sample.downloadMbps;
+  if (uploadMbps <= 0 && sample.upload > 0) uploadMbps = Math.round(((sample.upload / 100) * cap) * 10) / 10;
+  if (downloadMbps <= 0 && sample.download > 0) downloadMbps = Math.round(((sample.download / 100) * cap) * 10) / 10;
+  return { ...sample, uploadMbps, downloadMbps };
+}
+
 export async function handleAgentHeartbeat(
   serverId: string,
   data: {
@@ -61,8 +76,7 @@ export async function handleAgentHeartbeat(
   }
 ) {
   const now = new Date();
-  const hostSample = hostMetricsFromHeartbeat(data);
-  await prisma.streamServer.update({
+  const serverRow = await prisma.streamServer.update({
     where: { id: serverId },
     data: {
       agentLastSeen: now,
@@ -71,27 +85,60 @@ export async function handleAgentHeartbeat(
       healthMessage: typeof data.version === "string" ? `Agent ${data.version}` : "Agent online",
       lastHealthAt: now,
     },
+    select: { bandwidthMbps: true },
   });
-  if (hostSample) {
+  const hostSampleRaw = hostMetricsFromHeartbeat(data);
+  if (hostSampleRaw) {
+    const hostSample = enrichHostMetricsSample(hostSampleRaw, serverRow.bandwidthMbps ?? 1000);
     await persistHostMetrics(serverId, hostSample).catch(() => {});
+    const liveBefore = new Date(Date.now() - LIVE_STALE_MS);
+    const [connections, streams] = await Promise.all([
+      prisma.liveConnection.count({
+        where: { lastSeenAt: { gte: liveBefore }, stream: { serverId } },
+      }),
+      prisma.stream.count({ where: { serverId, isActive: true } }),
+    ]);
+    await pushServerMetricsCache(serverId, hostSample, connections, streams);
   }
 
   const processes = (Array.isArray(data.processes) ? data.processes : [])
     .slice(0, 200) as HeartbeatProcess[];
   if (processes.length > 0) {
-    // Batch update agentPid on streams
-    const pidUpdates = processes
+    const candidateStreamIds = [
+      ...new Set(
+        processes
+          .map((p) => p.streamId?.trim())
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+    const ownedStreamIds = new Set(
+      candidateStreamIds.length
+        ? (
+            await prisma.stream.findMany({
+              where: { id: { in: candidateStreamIds }, serverId },
+              select: { id: true },
+            })
+          ).map((s) => s.id)
+        : []
+    );
+    const scopedProcesses = processes.filter((p) => {
+      const streamId = p.streamId?.trim();
+      return streamId && ownedStreamIds.has(streamId);
+    });
+
+    // Batch update agentPid on streams assigned to this server
+    const pidUpdates = scopedProcesses
       .filter((p) => p.pid != null && p.pid > 0 && p.streamId?.trim())
       .map((p) =>
-        prisma.stream.update({
-          where: { id: p.streamId!.trim() },
+        prisma.stream.updateMany({
+          where: { id: p.streamId!.trim(), serverId },
           data: { agentPid: p.pid! },
         })
       );
     await Promise.all(pidUpdates);
 
     // Batch upsert stream processes
-    const processData = processes
+    const processData = scopedProcesses
       .filter((p) => p.streamId?.trim())
       .map((p) => ({
         serverId,

@@ -2,6 +2,9 @@
 # Quick deploy - run ON the VPS after git pull
 # Usage: bash scripts/deploy-vps.sh [panel|marketing|all]
 #
+# HOST GUARD: resolves panel path via PANEL_DIR / repo root / known install dirs.
+# Confirm the resolved path matches the intended VPS before rebuilding.
+#
 # Panel path resolution (first match wins):
 #   1. PANEL_DIR env
 #   2. Directory containing this script's repo root
@@ -41,27 +44,16 @@ deploy_panel() {
   if [ -x scripts/ensure-pg-dump.sh ]; then
     bash scripts/ensure-pg-dump.sh || echo "WARN: pg_dump helper skipped"
   fi
-  git pull origin main || true
-  chmod +x scripts/*.sh 2>/dev/null || true
-  npm install --include=dev --no-audit --no-fund
-  if command -v npx >/dev/null 2>&1 && [ -d prisma ]; then
-    npx prisma generate
-    npx prisma migrate deploy
-    if [ -x scripts/verify-db-schema.sh ]; then
-      bash scripts/verify-db-schema.sh
-    else
-      node scripts/audit-db-schema.cjs
-    fi
-  fi
-  # Always stage when a live .next exists (run-panel-build.mjs) — never race PM2.
-  npm run build
-  if [ -x scripts/pm2-start.sh ]; then
-    bash scripts/pm2-start.sh
-  elif [ -x scripts/panel-restart-safe.sh ]; then
-    bash scripts/panel-restart-safe.sh
+  if [ "${NEXLIFY_SKIP_GIT:-0}" = "1" ]; then
+    echo "Skipping git pull (NEXLIFY_SKIP_GIT=1 — using synced files)"
+    export NEXLIFY_SKIP_GIT_RESET=1
   else
-    pm2 restart nexlify || pm2 start npm --name nexlify -- start
+    git stash push -u -m "deploy-vps pre-pull" >/dev/null 2>&1 || true
+    git pull origin main || true
+    export NEXLIFY_SKIP_GIT_RESET=1
   fi
+  chmod +x scripts/*.sh 2>/dev/null || true
+  bash scripts/rebuild-panel-safe.sh
   echo "✅ Panel deployed ($dir)"
 }
 

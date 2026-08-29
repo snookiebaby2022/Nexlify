@@ -1,9 +1,10 @@
-import Hls from "hls.js";
-import { attachMpegTsIfSupported } from "@/lib/attach-mpegts";
+import type Hls from "hls.js";
 
 export type StreamPlayerHandle = {
   destroy: () => void;
 };
+
+const noopHandle: StreamPlayerHandle = { destroy() {} };
 
 /**
  * Attach a URL (HLS or native video) to a <video> element.
@@ -15,20 +16,27 @@ export async function attachUrlToVideo(
   onError?: (msg: string) => void,
   onLevelSwitch?: (level: number) => void
 ): Promise<StreamPlayerHandle> {
+  if (typeof window === "undefined") return noopHandle;
+
+  const [{ default: HlsLib }, { attachMpegTsIfSupported }] = await Promise.all([
+    import("hls.js"),
+    import("@/lib/attach-mpegts"),
+  ]);
+
   const isHls = url.includes(".m3u8") || url.includes("/hls/");
 
   // Destroy any existing hls instance
-  const prevHls = (video as any).__hlsInstance as Hls | undefined;
+  const prevHls = (video as HTMLVideoElement & { __hlsInstance?: Hls }).__hlsInstance;
   if (prevHls) {
     prevHls.destroy();
-    (video as any).__hlsInstance = null;
+    (video as HTMLVideoElement & { __hlsInstance?: Hls }).__hlsInstance = undefined;
   }
 
   const mpeg = attachMpegTsIfSupported(video, url, onError);
   if (mpeg) return mpeg;
 
-  if (isHls && Hls.isSupported()) {
-    const hls = new Hls({
+  if (isHls && HlsLib.isSupported()) {
+    const hls = new HlsLib({
       enableWorker: true,
       lowLatencyMode: true,
       backBufferLength: 10,
@@ -39,26 +47,26 @@ export async function attachUrlToVideo(
       debug: false,
     });
 
-    (video as any).__hlsInstance = hls;
+    (video as HTMLVideoElement & { __hlsInstance?: Hls }).__hlsInstance = hls;
 
     return new Promise<StreamPlayerHandle>((resolve) => {
       hls.loadSource(url);
       hls.attachMedia(video);
 
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      hls.on(HlsLib.Events.MANIFEST_PARSED, () => {
         video.play().catch(() => {
           // Autoplay blocked — play overlay will handle user click
         });
       });
 
-      hls.on(Hls.Events.ERROR, (_event, data) => {
+      hls.on(HlsLib.Events.ERROR, (_event, data) => {
         if (data.fatal) {
           switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
+            case HlsLib.ErrorTypes.NETWORK_ERROR:
               onError?.("Network error — retrying...");
               hls.startLoad();
               break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
+            case HlsLib.ErrorTypes.MEDIA_ERROR:
               onError?.("Media error — recovering...");
               hls.recoverMediaError();
               break;
@@ -70,14 +78,14 @@ export async function attachUrlToVideo(
         }
       });
 
-      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+      hls.on(HlsLib.Events.LEVEL_SWITCHED, (_event, data) => {
         onLevelSwitch?.(data.level);
       });
 
       resolve({
         destroy() {
           hls.destroy();
-          (video as any).__hlsInstance = null;
+          (video as HTMLVideoElement & { __hlsInstance?: Hls }).__hlsInstance = undefined;
         },
       });
     });

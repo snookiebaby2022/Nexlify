@@ -1,18 +1,24 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { getStreamPlaybackMode, streamUsesDirectRelay } from "./stream-playback-mode";
+import type { VodMode } from "@prisma/client";
+import {
+  getStreamPlaybackMode,
+  streamUsesDirectRelay,
+  type StreamForPlaybackMode,
+} from "./stream-playback-mode";
 
-function base(over: Record<string, unknown> = {}) {
-  return {
-    vodMode: "ON_DEMAND",
-    isOnDemand: true,
-    isCreatedChannel: false,
-    agentStartCmd: null,
-    autoRestart: true,
-    streamUrl: "https://junki3monk3y.com/live/u/p/1",
-    hostedExternally: false,
-    ...over,
-  };
+const defaults = {
+  vodMode: "ON_DEMAND",
+  isOnDemand: true,
+  isCreatedChannel: false,
+  agentStartCmd: null,
+  autoRestart: true,
+  streamUrl: "https://junki3monk3y.com/live/u/p/1",
+  hostedExternally: false,
+} satisfies StreamForPlaybackMode;
+
+function base(over: Partial<StreamForPlaybackMode> = {}): StreamForPlaybackMode {
+  return { ...defaults, ...over };
 }
 
 describe("getStreamPlaybackMode", () => {
@@ -26,14 +32,14 @@ describe("getStreamPlaybackMode", () => {
   });
 
   it("keeps catch-up on the catchup path", () => {
-    assert.equal(getStreamPlaybackMode(base({ vodMode: "CATCHUP" })), "catchup");
+    assert.equal(getStreamPlaybackMode(base({ vodMode: "CATCHUP" as VodMode })), "catchup");
   });
 
   it("transcodes when a profile is attached", () => {
     assert.equal(
       getStreamPlaybackMode(
         base({
-          vodMode: "LIVE",
+          vodMode: "LIVE" as VodMode,
           isOnDemand: false,
           agentStartCmd: 'NEXLIFY_LIVE:{"transcodeProfile":"1080p"}',
         })

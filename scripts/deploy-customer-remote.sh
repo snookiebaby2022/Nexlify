@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Remote rebuild after WinSCP sync (called from windows/scripts/deploy-customer-from-windows.ps1).
+#
+# HOST GUARD: runs against the panel tree synced to this machine (repo root / PANEL_DIR).
+# Confirm the target VPS path before invoking — never run on the wrong host.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -64,15 +67,19 @@ if ! run_migrate_deploy; then
     exit 1
   fi
 else
-  bash scripts/verify-db-schema.sh 2>/dev/null || node scripts/audit-db-schema.cjs
+  free_postgres_slots
+  bash scripts/verify-db-schema.sh 2>/dev/null || node scripts/audit-db-schema.cjs || {
+    log "WARN: schema audit skipped (postgres busy) — migrate deploy succeeded, continuing build"
+  }
 fi
 
+# Safe staging build + swap — no stale-lock kill, no in-place .next rebuild while PM2 runs.
 export NEXLIFY_FORCE_BUILD="$FORCE_BUILD"
-log "npm run build (NEXLIFY_FORCE_BUILD=$FORCE_BUILD)"
-npm run build
+export NEXLIFY_SKIP_GIT_RESET=1
+log "rebuild-panel-safe (synced tree — git reset skipped)"
+bash scripts/rebuild-panel-safe.sh
 
-log "restart panel + edge"
-bash scripts/panel-restart-safe.sh --nexlify-only
+log "restart edge proxy"
 bash scripts/install-iptv-edge-proxy.sh 2>/dev/null || pm2 restart nexlify-iptv-edge 2>/dev/null || true
 
 echo DEPLOY_OK

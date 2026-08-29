@@ -2,6 +2,9 @@ import type { Stream, StreamProvider, StreamServer, VodMode } from "@prisma/clie
 import { resolveProviderUrl } from "./vod-provider-url";
 import { parseBitrates, resolveStreamPlayUrl } from "./stream-variants";
 import { repairMalformedStreamUrl } from "./stream-source";
+import { getActiveSource, getUpstreamAttempts } from "./source-failover";
+
+const MAX_FAILOVER_ATTEMPTS = 3;
 
 export type StreamWithProvider = Stream & {
   provider?: StreamProvider | null;
@@ -90,9 +93,7 @@ function resolveEffectiveStreamUrl(stream: StreamWithProvider, streamUrl: string
 
 /** Effective playback URL for a stream (local, provider-hosted, on-demand, rotator, backup failover, or ABR primary). */
 export function resolveStreamPlaybackUrl(stream: StreamWithProvider, seed?: string): string {
-  const useBackup = stream.lastProbeOk === false && stream.backupUrl?.trim();
-  const url = useBackup ? stream.backupUrl!.trim() : stream.streamUrl;
-  return resolveEffectiveStreamUrl(stream, url, seed);
+  return resolveEffectiveStreamUrl(stream, stream.streamUrl, seed);
 }
 
 /** Ordered candidate URLs for live playback (primary then backup). Used when upstream fetch fails at request time. */
@@ -133,10 +134,58 @@ export function listStreamPlaybackUrls(stream: StreamWithProvider, seed?: string
       if (!withAlternates.includes(alt)) withAlternates.push(alt);
     }
   }
-  if (stream.lastProbeOk === false && withAlternates.length > 1) {
-    return [withAlternates[1]!, withAlternates[0]!, ...withAlternates.slice(2)];
-  }
   return withAlternates;
+}
+
+/** Reorder playback URLs when the primary has recent upstream failures (source-failover). */
+export async function preferHealthyPlaybackUrls(
+  streamId: string,
+  urls: string[]
+): Promise<string[]> {
+  if (!streamId || urls.length < 2) return urls;
+  const active = await getActiveSource(streamId);
+  if (active.source === "failover" && active.url) {
+    const activeNorm = normalizeUpstreamStreamUrl(active.url);
+    const idx = urls.findIndex((u) => normalizeUpstreamStreamUrl(u) === activeNorm);
+    if (idx > 0) {
+      const out = [...urls];
+      const [preferred] = out.splice(idx, 1);
+      out.unshift(preferred);
+      return out;
+    }
+  }
+  const primary = urls[0];
+  const primaryAttempts = await getUpstreamAttempts(streamId, primary);
+  if (primaryAttempts < MAX_FAILOVER_ATTEMPTS) return urls;
+  for (let i = 1; i < urls.length; i++) {
+    const alt = urls[i]!;
+    const altAttempts = await getUpstreamAttempts(streamId, alt);
+    if (altAttempts < MAX_FAILOVER_ATTEMPTS) {
+      const out = [...urls];
+      const [preferred] = out.splice(i, 1);
+      out.unshift(preferred);
+      return out;
+    }
+  }
+  return urls;
+}
+
+/** Like listStreamPlaybackUrls but prefers a healthy backup when primary is known-bad. */
+export async function listStreamPlaybackUrlsWithFailover(
+  stream: StreamWithProvider,
+  seed?: string
+): Promise<string[]> {
+  const urls = listStreamPlaybackUrls(stream, seed);
+  return preferHealthyPlaybackUrls(stream.id, urls);
+}
+
+/** Like resolveStreamPlaybackUrl but prefers a healthy backup when primary is known-bad. */
+export async function resolveStreamPlaybackUrlWithFailover(
+  stream: StreamWithProvider,
+  seed?: string
+): Promise<string> {
+  const urls = await listStreamPlaybackUrlsWithFailover(stream, seed);
+  return urls[0] ?? resolveStreamPlaybackUrl(stream, seed);
 }
 export function vodModeLabel(mode: VodMode | string): string {
   switch (mode) {

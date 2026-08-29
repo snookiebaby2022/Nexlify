@@ -4,7 +4,8 @@ import {
   connectionIpPrismaFilter,
   normalizeConnectionIp,
 } from "@/lib/connections";
-import { getViewerActiveStream, touchLiveSession } from "@/lib/live-session";
+import { touchLiveSession } from "@/lib/live-session";
+import { lineIsPlayable } from "@/lib/lines";
 
 /** Edge / proxy heartbeat: refresh lastSeenAt and optional throughput samples. */
 export async function pulseLiveConnection(opts: {
@@ -21,15 +22,9 @@ export async function pulseLiveConnection(opts: {
 
   const clientIp = normalizeConnectionIp(opts.ip);
   const bytes = Math.max(0, Math.floor(opts.bytes ?? 0));
-  // Zero-byte keepalives must not refresh lastSeenAt or Redis — HLS idle close relies on that.
-  if (bytes <= 0) return;
-
-  if (clientIp) {
-    const active = await getViewerActiveStream(lineId, clientIp);
-    if (active && active !== streamId) return;
+  if (bytes > 0) {
+    void recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", bytes);
   }
-
-  void recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", bytes);
   void touchLiveSession(lineId, streamId, clientIp);
 
   const row = await prisma.liveConnection.findFirst({
@@ -45,6 +40,18 @@ export async function pulseLiveConnection(opts: {
     });
     return;
   }
+
+  const [stream, line] = await Promise.all([
+    prisma.stream.findFirst({
+      where: { id: streamId, isActive: true },
+      select: { id: true },
+    }),
+    prisma.line.findUnique({
+      where: { id: lineId },
+      select: { status: true, expiresAt: true },
+    }),
+  ]);
+  if (!stream || !line || !lineIsPlayable(line)) return;
 
   await prisma.liveConnection.create({
     data: { lineId, streamId, ip: clientIp || null },

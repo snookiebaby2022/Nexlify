@@ -12,6 +12,35 @@ import { PanelRole, Prisma } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { redactStreamProviders } from "@/lib/stream-redact";
+
+const CHECK_ALL_CONCURRENCY = 3;
+
+async function runCheckAllProviders(
+  providers: Array<{
+    id: string;
+    baseUrl: string;
+    apiKey: string | null;
+    remoteUsername?: string | null;
+    remotePassword?: string | null;
+  }>
+) {
+  let updated = 0;
+  for (let i = 0; i < providers.length; i += CHECK_ALL_CONCURRENCY) {
+    const batch = providers.slice(i, i + CHECK_ALL_CONCURRENCY);
+    await Promise.all(
+      batch.map(async (p) => {
+        const { probe, remote, account } = await runProviderCheck(p);
+        await prisma.streamProvider.update({
+          where: { id: p.id },
+          data: checkUpdateData(probe, remote, account),
+        });
+        updated++;
+      })
+    );
+  }
+  return updated;
+}
 function prismaError(e: unknown) {
   if (e instanceof Prisma.PrismaClientKnownRequestError) {
     if (e.code === "P2025") return { status: 404, error: "Provider not found" };
@@ -51,9 +80,18 @@ async function panelConnectionCounts(providerIds: string[]) {
   return new Map([...sessions.entries()].map(([id, set]) => [id, set.size]));
 }
 
-async function runProviderCheck(p: { baseUrl: string; apiKey: string | null }) {
+async function runProviderCheck(p: {
+  baseUrl: string;
+  apiKey: string | null;
+  remoteUsername?: string | null;
+  remotePassword?: string | null;
+}) {
   const [probe, remote, account] = await Promise.all([
-    probeStreamProvider(p.baseUrl),
+    probeStreamProvider(p.baseUrl, {
+      apiKey: p.apiKey,
+      remoteUsername: p.remoteUsername,
+      remotePassword: p.remotePassword,
+    }),
     Promise.resolve(inferRemoteConnectionFromUrl(p.baseUrl)),
     probeProviderAccountInfo(p.baseUrl, p.apiKey),
   ]);
@@ -109,7 +147,11 @@ export async function GET(req: NextRequest) {
       ...p,
       panelConnectionCount: panelCounts.get(p.id) ?? 0,
     }));
-    return NextResponse.json({ providers: enriched, readOnly: session.role !== PanelRole.ADMIN });
+    const responseProviders =
+      session.role === PanelRole.ADMIN
+        ? enriched
+        : redactStreamProviders(enriched, session.role);
+    return NextResponse.json({ providers: responseProviders, readOnly: session.role !== PanelRole.ADMIN });
   } catch (e) {
     const err = prismaError(e);
     return NextResponse.json({ error: err.error }, { status: err.status });
@@ -129,6 +171,17 @@ export async function POST(req: NextRequest) {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (body.checkAll === true) {
+    try {
+      const providers = await prisma.streamProvider.findMany({ orderBy: { name: "asc" } });
+      const updated = await runCheckAllProviders(providers);
+      return NextResponse.json({ ok: true, updated });
+    } catch (e) {
+      const err = prismaError(e);
+      return NextResponse.json({ error: err.error }, { status: err.status });
+    }
   }
 
   if (body.check && body.id) {
@@ -159,6 +212,8 @@ export async function POST(req: NextRequest) {
     const { probe, remote, account } = await runProviderCheck({
       baseUrl: validated.data.baseUrl,
       apiKey: body.apiKey ? String(body.apiKey) : null,
+      remoteUsername: body.remoteUsername ? String(body.remoteUsername).trim() : null,
+      remotePassword: body.remotePassword ? String(body.remotePassword) : null,
     });
     const provider = await prisma.streamProvider.create({
       data: {
@@ -235,6 +290,14 @@ export async function PATCH(req: NextRequest) {
             ? existing.apiKey
             : body.apiKey
               ? String(body.apiKey)
+              : null,
+        remoteUsername:
+          body.remoteUsername === undefined ? existing.remoteUsername : body.remoteUsername ? String(body.remoteUsername).trim() : null,
+        remotePassword:
+          body.remotePassword === undefined
+            ? existing.remotePassword
+            : body.remotePassword
+              ? String(body.remotePassword)
               : null,
       });
       status = checked.probe.status;

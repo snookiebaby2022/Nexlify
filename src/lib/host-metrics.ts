@@ -1,5 +1,6 @@
-import os from "os";
-import { readFileSync } from "fs";
+import os, { tmpdir } from "os";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
+import { join } from "path";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { detectServerHardware, sampleCpuPercent } from "@/lib/server-hardware";
@@ -16,7 +17,7 @@ export type HostMetricsSample = {
   at: number;
 };
 
-const HOST_METRICS_STALE_MS = 2 * 60 * 1000;
+export const HOST_METRICS_STALE_MS = 2 * 60 * 1000;
 const NIC_COUNTERS_KEY = "nic_counters";
 
 function clampPct(n: number) {
@@ -34,15 +35,34 @@ export function snapshotWindowToMbps(bytes: number | bigint | null | undefined):
   return clampMbps(Number(bytes ?? 0) / 125_000 / 60);
 }
 
+type MeminfoKv = Record<string, number>;
+
+function parseMeminfo(text: string): MeminfoKv {
+  const out: MeminfoKv = {};
+  for (const line of text.split("\n")) {
+    const m = line.match(/^(\w+):\s+(\d+)/);
+    if (m) out[m[1]] = parseInt(m[2], 10);
+  }
+  return out;
+}
+
+/** Process RAM (AnonPages) — excludes Linux page cache and SysV shared segments on stream nodes. */
+export function memProcessUsedPercentFromMeminfo(kv: MeminfoKv): number | null {
+  const total = kv.MemTotal ?? 0;
+  if (total <= 0) return null;
+  const anon = kv.AnonPages ?? 0;
+  if (anon <= 0) return null;
+  return (anon / total) * 100;
+}
+
 function memUsedPercent(): number {
   try {
     const text = readFileSync("/proc/meminfo", "utf8");
-    let total = 0;
-    let avail = 0;
-    for (const line of text.split("\n")) {
-      if (line.startsWith("MemTotal:")) total = parseInt(line.replace(/[^\d]/g, ""), 10);
-      else if (line.startsWith("MemAvailable:")) avail = parseInt(line.replace(/[^\d]/g, ""), 10);
-    }
+    const kv = parseMeminfo(text);
+    const processPct = memProcessUsedPercentFromMeminfo(kv);
+    if (processPct != null) return processPct;
+    const total = kv.MemTotal ?? 0;
+    const avail = kv.MemAvailable ?? 0;
     if (total > 0 && avail >= 0) return ((total - avail) / total) * 100;
   } catch {
     /* fall through */
@@ -132,9 +152,32 @@ export function parseHostMetrics(raw: unknown, allowStale = false): HostMetricsS
   };
 }
 
+export function metricsFresh(
+  sample: HostMetricsSample | null,
+  staleMs = HOST_METRICS_STALE_MS
+): boolean {
+  if (!sample) return false;
+  return sample.at > 0 && Date.now() - sample.at <= staleMs;
+}
+
+function hostMetricsSettingsDir() {
+  return join(tmpdir(), "nexlify-host-metrics");
+}
+
+function atomicWriteJson(filePath: string, data: unknown): void {
+  const dir = join(filePath, "..");
+  mkdirSync(dir, { recursive: true });
+  const tmp = `${filePath}.tmp`;
+  writeFileSync(tmp, JSON.stringify(data), "utf8");
+  renameSync(tmp, filePath);
+}
+
 export function readStoredHostMetrics(panelSettings: unknown, allowStale = false): HostMetricsSample | null {
   const { rest } = parseServerPanelSettings(panelSettings);
-  return parseHostMetrics(rest.hostMetrics, allowStale);
+  const sample = parseHostMetrics(rest.hostMetrics, allowStale);
+  if (!sample) return null;
+  if (!allowStale && !metricsFresh(sample)) return null;
+  return sample;
 }
 
 export function hostMetricsFromHeartbeat(body: Record<string, unknown>): HostMetricsSample | null {
@@ -171,26 +214,20 @@ export function mergeHostMetricsSettings(existing: unknown, sample: HostMetricsS
 }
 
 export async function persistHostMetrics(serverId: string, sample: HostMetricsSample): Promise<void> {
-  const payload = JSON.stringify({
-    cpu: sample.cpu,
-    memory: sample.memory,
-    storage: sample.storage,
-    upload: sample.upload,
-    download: sample.download,
-    uploadMbps: sample.uploadMbps,
-    downloadMbps: sample.downloadMbps,
-    at: sample.at,
+  const row = await prisma.streamServer.findUnique({
+    where: { id: serverId },
+    select: { panelSettings: true },
   });
-  await prisma.$executeRaw(
-    Prisma.sql`UPDATE "StreamServer"
-     SET "panelSettings" = jsonb_set(
-       COALESCE("panelSettings", '{}'::jsonb),
-       '{hostMetrics}',
-       ${payload}::jsonb,
-       true
-     )
-     WHERE id = ${serverId}`
-  );
+  const merged = mergeHostMetricsSettings(row?.panelSettings, sample);
+  try {
+    atomicWriteJson(join(hostMetricsSettingsDir(), `${serverId}.panelSettings.json`), merged);
+  } catch {
+    /* disk cache is best-effort */
+  }
+  await prisma.streamServer.update({
+    where: { id: serverId },
+    data: { panelSettings: merged as Prisma.InputJsonValue },
+  });
 }
 
 /** Bytes transferred on the primary NIC, scaled to a 60-second window for bandwidthSnapshot. */

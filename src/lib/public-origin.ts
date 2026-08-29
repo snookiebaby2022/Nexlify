@@ -1,5 +1,14 @@
 import { resolveStreamEdgeHttpPort } from "./server-ports";
 
+/** Bracket bare IPv6 addresses for origin URL host segments. */
+export function formatHostForOrigin(hostname: string): string {
+  const h = hostname.trim();
+  if (!h) return h;
+  if (h.startsWith("[") && h.endsWith("]")) return h;
+  if (h.includes(":") && !/^\d{1,3}(\.\d{1,3}){3}$/.test(h)) return `[${h}]`;
+  return h;
+}
+
 /** Host is IPv4 or bracketed IPv6 — not a customer domain. */
 export function isIpHost(host: string): boolean {
   const h = host.toLowerCase();
@@ -151,7 +160,7 @@ export function publicOriginFromRequest(
     headers?.get("host")?.trim() ||
     url.host;
   const parsed = parseRequestHostHeader(hostHeader);
-  const hostOnly = parsed.hostname || url.hostname;
+  const hostOnly = formatHostForOrigin(parsed.hostname || url.hostname);
   const hostPort = parsed.port || (url.port && !isInternalUpstreamPort(url.port) ? url.port : "");
   const fwdPort =
     headers?.get("x-nexlify-client-port")?.split(",")[0]?.trim() ||
@@ -251,10 +260,11 @@ export function pickPublicOrigin(requestOrigin: string, configuredOrigin?: strin
 
     // IPTV apps on extra ports (8080, 25461, …) must keep that port in server_info / M3U URLs.
     if (reqPort !== "80" && reqPort !== "443") {
-      const host =
+      const host = formatHostForOrigin(
         reqHost === "127.0.0.1" || reqHost === "localhost" || reqHost === "::1"
           ? cfgHost
-          : reqHost;
+          : reqHost
+      );
       return `${req.protocol}//${host}:${reqPort}`;
     }
 

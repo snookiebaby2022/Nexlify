@@ -19,6 +19,20 @@ function redactServer(server: unknown) {
   return { id: s.id, name: s.name };
 }
 
+/** Strip provider API credentials from list/detail payloads for non-admin roles. */
+export function redactStreamProvider<T>(provider: T, role: PanelRole): T {
+  if (isPanelAdmin(role)) return provider;
+
+  const out = { ...(provider as JsonRecord) };
+  out.apiKey = null;
+  out.remotePassword = null;
+  return out as T;
+}
+
+export function redactStreamProviders<T>(providers: T[], role: PanelRole): T[] {
+  return providers.map((p) => redactStreamProvider(p, role));
+}
+
 /** Strip upstream URLs, provider credentials, and server infra from stream payloads for non-admin roles. */
 export function redactStream<T>(stream: T, role: PanelRole): T {
   if (isPanelAdmin(role)) return stream;

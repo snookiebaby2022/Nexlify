@@ -56,6 +56,10 @@ export type ManageLineRow = {
 };
 const PAGE_SIZES = [10, 25, 50, 100];
 
+type LineSortKey = "username" | "expiresAt" | "owner" | "createdAt";
+type StatusFilter = "all" | "ACTIVE" | "DISABLED" | "BANNED";
+type TrialFilter = "all" | "yes" | "no";
+
 const LINE_COLUMN_DEFAULTS: Record<string, boolean> = {
   sta: true,
   username: true,
@@ -115,20 +119,36 @@ export function ManageLinesTable({
   onServerPageChange,
   onServerPageSizeChange,
   onServerSearchChange,
+  serverSort,
+  serverSortDir,
+  serverStatusFilter,
+  serverTrialFilter,
+  onServerSortChange,
+  onServerStatusFilterChange,
+  onServerTrialFilterChange,
+  loading = false,
 }: {
   lines: ManageLineRow[];
   bouquets: { id: string; name: string }[];
   editLineId?: string | null;
   onRefresh: () => void;
   panel?: "admin" | "reseller";
+  loading?: boolean;
   /** When set, pagination/search are server-driven (avoid loading thousands of rows). */
   serverTotal?: number;
   serverPage?: number;
   serverPageSize?: number;
   serverSearch?: string;
+  serverSort?: LineSortKey;
+  serverSortDir?: "asc" | "desc";
+  serverStatusFilter?: StatusFilter;
+  serverTrialFilter?: TrialFilter;
   onServerPageChange?: (page: number) => void;
   onServerPageSizeChange?: (size: number) => void;
   onServerSearchChange?: (q: string) => void;
+  onServerSortChange?: (key: LineSortKey, dir: "asc" | "desc") => void;
+  onServerStatusFilterChange?: (value: StatusFilter) => void;
+  onServerTrialFilterChange?: (value: TrialFilter) => void;
 }) {
   const router = useRouter();
   const base = panel === "reseller" ? "/reseller" : "/admin";
@@ -142,14 +162,14 @@ export function ManageLinesTable({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const isMdUp = useMediaQuery("(min-width: 768px)");
   const [bulk, setBulk] = useState("");
-  const [sortKey, setSortKey] = useState<"username" | "expiresAt" | "owner" | "createdAt">("createdAt");
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortKey, setSortKey] = useState<LineSortKey>(serverSort ?? "createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(serverSortDir ?? "desc");
   const [createdBanner, setCreatedBanner] = useState("");
   const [mobileToolbarOpen, setMobileToolbarOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [columnsOpen, setColumnsOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<"all" | "ACTIVE" | "DISABLED" | "BANNED">("all");
-  const [trialFilter, setTrialFilter] = useState<"all" | "yes" | "no">("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(serverStatusFilter ?? "all");
+  const [trialFilter, setTrialFilter] = useState<TrialFilter>(serverTrialFilter ?? "all");
   const columns = useStoredColumnVisibility(`nexlify.lines.columns.${panel}`, LINE_COLUMN_DEFAULTS);
   const lineColumnOptions = [
     { id: "sta", label: "Status" },
@@ -177,6 +197,18 @@ export function ManageLinesTable({
   useEffect(() => {
     if (typeof serverPageSize === "number") setPageSize(serverPageSize);
   }, [serverPageSize]);
+  useEffect(() => {
+    if (serverSort) setSortKey(serverSort);
+  }, [serverSort]);
+  useEffect(() => {
+    if (serverSortDir) setSortDir(serverSortDir);
+  }, [serverSortDir]);
+  useEffect(() => {
+    if (serverStatusFilter) setStatusFilter(serverStatusFilter);
+  }, [serverStatusFilter]);
+  useEffect(() => {
+    if (serverTrialFilter) setTrialFilter(serverTrialFilter);
+  }, [serverTrialFilter]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -188,8 +220,11 @@ export function ManageLinesTable({
       onServerSearchChange?.("");
       onServerPageChange?.(1);
       setCreatedBanner(`Line “${created}” created successfully.`);
-      setSortKey("createdAt");
-      setSortDir("desc");
+      if (serverMode && onServerSortChange) onServerSortChange("createdAt", "desc");
+      else {
+        setSortKey("createdAt");
+        setSortDir("desc");
+      }
       router.replace(`${base}/lines`, { scroll: false });
       onRefresh();
     } else if (q) {
@@ -213,9 +248,8 @@ export function ManageLinesTable({
   }
 
   const filtered = useMemo(() => {
-    // Server mode already filtered/paginated — keep sort for current page only.
+    if (serverMode) return lines;
     let list = [...lines];
-    if (!serverMode) {
       const q = search.trim().toLowerCase();
       if (q) {
         list = list.filter(
@@ -230,7 +264,6 @@ export function ManageLinesTable({
             (l.bouquets ?? []).some((b) => b.bouquet?.name?.toLowerCase().includes(q))
         );
       }
-    }
     if (statusFilter !== "all") {
       list = list.filter((l) => l.status === statusFilter);
     }
@@ -272,13 +305,31 @@ export function ManageLinesTable({
     ? filtered
     : filtered.slice((safePage - 1) * effectivePageSize, (safePage - 1) * effectivePageSize + effectivePageSize);
 
-  function toggleSort(key: typeof sortKey) {
+  function toggleSort(key: LineSortKey) {
+    const nextDir =
+      sortKey === key ? (sortDir === "asc" ? "desc" : "asc") : key === "createdAt" || key === "expiresAt" ? "desc" : "asc";
+    if (serverMode && onServerSortChange) {
+      onServerSortChange(key, nextDir);
+      onServerPageChange?.(1);
+      return;
+    }
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
       setSortKey(key);
-      // Newest / latest-first for date columns; A→Z for names
-      setSortDir(key === "createdAt" || key === "expiresAt" ? "desc" : "asc");
+      setSortDir(nextDir);
     }
+  }
+
+  function applyStatusFilter(value: StatusFilter) {
+    setStatusFilter(value);
+    if (serverMode && onServerStatusFilterChange) onServerStatusFilterChange(value);
+    else setPage(1);
+  }
+
+  function applyTrialFilter(value: TrialFilter) {
+    setTrialFilter(value);
+    if (serverMode && onServerTrialFilterChange) onServerTrialFilterChange(value);
+    else setPage(1);
   }
 
   function toggleAll(checked: boolean) {
@@ -308,7 +359,7 @@ export function ManageLinesTable({
     onRefresh();
   }
 
-  const SortHead = ({ label, col }: { label: string; col: typeof sortKey }) => (
+  const SortHead = ({ label, col }: { label: string; col: LineSortKey }) => (
     <th className="xui-lines-th" onClick={() => toggleSort(col)}>
       <span className="inline-flex items-center gap-0.5">
         {label}
@@ -402,7 +453,7 @@ export function ManageLinesTable({
         ) : null}
         {columns.show("conns") ? (
           <td className="xui-lines-td tabular-nums text-xs text-center whitespace-nowrap">
-            {activeConn}/{l.maxConnections}
+            {activeConn}/{Math.max(1, l.maxConnections)}
           </td>
         ) : null}
         {columns.show("connInfo") ? (
@@ -557,7 +608,7 @@ export function ManageLinesTable({
             <select
               className="xui-lines-select w-full"
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+              onChange={(e) => applyStatusFilter(e.target.value as StatusFilter)}
             >
               <option value="all">All</option>
               <option value="ACTIVE">Active</option>
@@ -570,7 +621,7 @@ export function ManageLinesTable({
             <select
               className="xui-lines-select w-full"
               value={trialFilter}
-              onChange={(e) => setTrialFilter(e.target.value as typeof trialFilter)}
+              onChange={(e) => applyTrialFilter(e.target.value as TrialFilter)}
             >
               <option value="all">All</option>
               <option value="yes">Trial</option>
@@ -664,7 +715,7 @@ export function ManageLinesTable({
               className="xui-lines-select"
               value={statusFilter}
               onChange={(e) => {
-                setStatusFilter(e.target.value as typeof statusFilter);
+                applyStatusFilter(e.target.value as StatusFilter);
                 setPage(1);
               }}
             >
@@ -680,7 +731,7 @@ export function ManageLinesTable({
               className="xui-lines-select"
               value={trialFilter}
               onChange={(e) => {
-                setTrialFilter(e.target.value as typeof trialFilter);
+                applyTrialFilter(e.target.value as TrialFilter);
                 setPage(1);
               }}
             >
@@ -748,7 +799,18 @@ export function ManageLinesTable({
             </tr>
           </thead>
           <tbody>
-            {pageRows.length === 0 ? (
+            {loading ? (
+              Array.from({ length: Math.min(pageSize, 8) }).map((_, idx) => (
+                <tr key={`sk-${idx}`} className={idx % 2 === 0 ? "xui-lines-row--even" : "xui-lines-row--odd"}>
+                  <td colSpan={1 + lineColumnOptions.filter((c) => columns.show(c.id)).length} className="px-4 py-3">
+                    <div
+                      className="h-4 rounded animate-pulse"
+                      style={{ background: "var(--border)", width: `${60 + (idx % 3) * 12}%` }}
+                    />
+                  </td>
+                </tr>
+              ))
+            ) : pageRows.length === 0 ? (
               <tr>
                 <td
                   colSpan={1 + lineColumnOptions.filter((c) => columns.show(c.id)).length}

@@ -9,8 +9,12 @@ import {
   readStoredHostMetrics,
   sampleLocalHostMetrics,
   getDashboardNicBandwidthMbps,
+  persistHostMetrics,
+  metricsFresh,
   type HostMetricsSample,
 } from "@/lib/host-metrics";
+import { getServerMetrics } from "@/lib/load-balancer";
+import { scheduleServerHostMetricsSync } from "@/lib/server-host-metrics-sync";
 import {
   classifyTicketSubject,
   emptyBreakdown,
@@ -62,6 +66,36 @@ export type DashboardKpiExtended = {
 
 function clampPct(n: number) {
   return Math.min(100, Math.max(0, Math.round(n)));
+}
+
+function hostSampleFromLbCache(
+  cached: Awaited<ReturnType<typeof getServerMetrics>>,
+  bandwidthMbps: number
+): HostMetricsSample | null {
+  if (!cached) return null;
+  const cap = Math.max(1, bandwidthMbps);
+  const sample: HostMetricsSample = {
+    cpu: clampPct(cached.cpu),
+    memory: clampPct(cached.memory),
+    storage: 0,
+    upload: clampPct(cached.networkOut),
+    download: clampPct(cached.networkIn),
+    uploadMbps: Math.round(((cached.networkOut / 100) * cap) * 10) / 10,
+    downloadMbps: Math.round(((cached.networkIn / 100) * cap) * 10) / 10,
+    at: cached.lastUpdated,
+  };
+  return metricsFresh(sample) ? sample : null;
+}
+
+function metricsMissingOrZero(sample: HostMetricsSample | null): boolean {
+  if (!sample) return true;
+  return (
+    sample.cpu === 0 &&
+    sample.memory === 0 &&
+    sample.storage === 0 &&
+    sample.upload === 0 &&
+    sample.download === 0
+  );
 }
 
 function emptyHostSample(): HostMetricsSample {
@@ -154,13 +188,28 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
     const vodStreams = vodByServer.get(s.id) ?? 0;
 
     let host = emptyHostSample();
+    const cap = s.bandwidthMbps ?? 1000;
     if (isThisPanelMachine(s)) {
       if (!localSample) {
-        localSample = sampleLocalHostMetrics(s.bandwidthMbps ?? 1000);
+        localSample = sampleLocalHostMetrics(cap);
+        await persistHostMetrics(s.id, localSample).catch(() => {});
       }
       host = localSample;
     } else {
-      host = readStoredHostMetrics(s.panelSettings, online) ?? emptyHostSample();
+      host = readStoredHostMetrics(s.panelSettings) ?? emptyHostSample();
+      if (!metricsFresh(host)) {
+        host = emptyHostSample();
+        const cached = await getServerMetrics(s.id);
+        const fromCache = hostSampleFromLbCache(cached, cap);
+        if (fromCache && !metricsMissingOrZero(fromCache)) host = fromCache;
+      } else if (metricsMissingOrZero(host)) {
+        const cached = await getServerMetrics(s.id);
+        const fromCache = hostSampleFromLbCache(cached, cap);
+        if (fromCache && !metricsMissingOrZero(fromCache)) host = fromCache;
+      }
+      if (online && (!metricsFresh(host) || metricsMissingOrZero(host))) {
+        scheduleServerHostMetricsSync(s.id);
+      }
     }
 
     rows.push({

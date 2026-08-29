@@ -35,6 +35,15 @@ function pgBinPath() {
 }
 
 const fileEnv = loadEnv();
+
+function envVar(key, fallback = "") {
+  const fromProcess = process.env[key];
+  if (fromProcess !== undefined && fromProcess !== "") return fromProcess;
+  const fromFile = fileEnv[key];
+  if (fromFile !== undefined && fromFile !== "") return fromFile;
+  return fallback;
+}
+
 const panelPort = String(
   process.env.PORT || process.env.PANEL_PORT || fileEnv.PORT || fileEnv.PANEL_PORT || "13000"
 );
@@ -61,7 +70,7 @@ const useStandalone = existsSync(resolve(standaloneDir, "server.js"));
 const cpuCount = cpus().length;
 const streamingOptimized =
   process.env.NEXLIFY_STREAMING_OPTIMIZED === "1" || fileEnv.NEXLIFY_STREAMING_OPTIMIZED === "1";
-const panelInstancesRaw = process.env.PANEL_INSTANCES || fileEnv.PANEL_INSTANCES;
+const panelInstancesRaw = envVar("PANEL_INSTANCES");
 const parsedInstances = parseInt(String(panelInstancesRaw || ""), 10);
 let panelInstances = Number.isFinite(parsedInstances)
   ? Math.min(12, Math.max(1, parsedInstances))
@@ -104,7 +113,9 @@ const sharedPanelEnv = {
   SMTP_FROM: fileEnv.SMTP_FROM || "",
   PANEL_API_SECRET: fileEnv.PANEL_API_SECRET || "",
   NEXLIFY_PANEL_API_SECRET: fileEnv.NEXLIFY_PANEL_API_SECRET || "",
-  PANEL_INTERNAL_SECRET: fileEnv.PANEL_INTERNAL_SECRET || "",
+  PANEL_INTERNAL_SECRET: envVar("PANEL_INTERNAL_SECRET"),
+  NEXLIFY_LIVE_AUTH_CACHE_SEC: envVar("NEXLIFY_LIVE_AUTH_CACHE_SEC"),
+  NEXLIFY_WORKER_WEDGE_RSS_MB: envVar("NEXLIFY_WORKER_WEDGE_RSS_MB"),
   NEXLIFY_LICENSE_SKIP_HOST_CHECK: fileEnv.NEXLIFY_LICENSE_SKIP_HOST_CHECK || "",
   REDIS_URL: fileEnv.REDIS_URL || process.env.REDIS_URL || "redis://127.0.0.1:6379",
   REDIS_CLUSTER_NODES: fileEnv.REDIS_CLUSTER_NODES || process.env.REDIS_CLUSTER_NODES || "",
@@ -119,9 +130,8 @@ const sharedPanelEnv = {
   NEXLIFY_STREAMING_OPTIMIZED: fileEnv.NEXLIFY_STREAMING_OPTIMIZED || (streamingOptimized ? "1" : "0"),
 };
 
-/** @type {import('pm2').StartOptions} */
-module.exports = {
-  apps: [
+/** @type {import('pm2').StartOptions[]} */
+const pm2Apps = [
     useStandalone
       ? {
           name: "nexlify",
@@ -174,20 +184,6 @@ module.exports = {
       },
     },
     {
-      name: "nexlify-license",
-      cwd: __dirname,
-      script: "license-server/server.mjs",
-      instances: 1,
-      exec_mode: "fork",
-      autorestart: true,
-      max_restarts: 10,
-      min_uptime: "10s",
-      env: {
-        NODE_ENV: "production",
-        LICENSE_SERVER_PORT: "8787",
-      },
-    },
-    {
       name: "nexlify-hls",
       cwd: __dirname,
       script: "scripts/run-hls-restream-daemon.sh",
@@ -197,12 +193,12 @@ module.exports = {
       autorestart: true,
       max_restarts: 20,
       min_uptime: "5s",
-          max_memory_restart: "2048M",
+      max_memory_restart: "2048M",
       env: {
         NODE_ENV: "production",
         DATABASE_URL: fileEnv.DATABASE_URL || "",
         JWT_SECRET: fileEnv.JWT_SECRET || "",
-        PANEL_INTERNAL_SECRET: fileEnv.PANEL_INTERNAL_SECRET || "",
+        PANEL_INTERNAL_SECRET: envVar("PANEL_INTERNAL_SECRET"),
         NEXLIFY_HLS_DIR: fileEnv.NEXLIFY_HLS_DIR || "/var/lib/nexlify/hls",
         NEXLIFY_HLS_DAEMON_PORT: "13081",
         PATH: pgBinPath(),
@@ -232,5 +228,28 @@ module.exports = {
         NEXLIFY_PANEL_API_SECRET: fileEnv.NEXLIFY_PANEL_API_SECRET || "",
       },
     },
-  ],
+];
+
+if (envVar("NEXLIFY_ENABLE_LICENSE_SERVER") === "1") {
+  pm2Apps.push({
+    name: "nexlify-license",
+    cwd: __dirname,
+    script: "license-server/server.mjs",
+    instances: 1,
+    exec_mode: "fork",
+    autorestart: true,
+    max_restarts: 10,
+    min_uptime: "10s",
+    env: {
+      NODE_ENV: "production",
+      LICENSE_SERVER_PORT: envVar("LICENSE_SERVER_PORT", "8787"),
+      LICENSE_SERVER_API_SECRET: envVar("LICENSE_SERVER_API_SECRET"),
+      LICENSE_SERVER_BIND: envVar("LICENSE_SERVER_BIND", "127.0.0.1"),
+    },
+  });
+}
+
+/** @type {import('pm2').StartOptions} */
+module.exports = {
+  apps: pm2Apps,
 };

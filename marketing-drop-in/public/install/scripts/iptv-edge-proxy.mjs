@@ -2,9 +2,15 @@
 /**
  * IPTV edge — Host sanitizer + XUI-style live/VOD byte pipe + disk HLS.
  *
+ * INSTALLER ARTIFACT — keep in sync with canonical scripts/iptv-edge-proxy.mjs
+ * (copy critical playback fixes here when the canonical edge proxy changes).
+ *
  * Xtream apps hit :80/:8080/:25461. Auth stays on the panel; MPEG-TS/MP4 is
  * fetched from stream_source with a VLC UA so the origin sees the panel IP.
  * HLS segments are served directly from /var/lib/nexlify/hls (no Next.js hop).
+ *
+ * LOCKED playback rules: splice /live/ on this process. Never forward
+ * /live|/timeshift|/movie|/series to IPTV_EDGE_BACKEND (502 loop).
  *
  * Env:
  *   IPTV_EDGE_BACKEND=127.0.0.1:13000
@@ -129,7 +135,7 @@ const LIVE_TS_OPEN_MS = Number(process.env.IPTV_EDGE_TS_OPEN_MS || 2000);
 /** Cache live-auth at edge so channel zaps skip panel round-trip (45s default). */
 const AUTH_CACHE_TTL_MS = Number(process.env.IPTV_EDGE_AUTH_CACHE_MS || 90_000);
 const authCache = new Map();
-const PLAYBACK_RE = /^\/(live|movie|series)\//;
+const PLAYBACK_RE = /^\/(live|timeshift|movie|series)\//;
 const HLS_RE = /\.m3u8(?:[?#]|$)/i;
 const HLS_SEG_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\/hls\/(seg\d+\.ts)$/i;
 const LIVE_M3U8_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\.m3u8$/i;
@@ -298,7 +304,13 @@ function querySessionKicked(lineId, ip) {
   });
 }
 
-/** Abort upstream/client pipes within ~1s when admin kicks the session. */
+/** Polling every stream each second overwhelms the panel and starves live-auth. */
+const KICK_POLL_MS = Math.max(
+  5_000,
+  Number(process.env.IPTV_EDGE_KICK_POLL_MS || 15_000)
+);
+
+/** Abort upstream/client pipes promptly without flooding the panel API. */
 function watchSessionKick(pulseCtx, onKicked) {
   if (!pulseCtx?.lineId || !INTERNAL_SECRET) return () => undefined;
   let stopped = false;
@@ -309,7 +321,7 @@ function watchSessionKick(pulseCtx, onKicked) {
     });
   };
   tick();
-  const timer = setInterval(tick, 1000);
+  const timer = setInterval(tick, KICK_POLL_MS);
   return () => {
     stopped = true;
     clearInterval(timer);
@@ -358,7 +370,10 @@ function endPlaybackSession(ctx) {
 
 /** Keep panel live rows fresh while MPEG-TS/HLS clients are connected (XUI-style). */
 const playbackSessions = new Map();
-const SESSION_KEEPALIVE_MS = 8_000;
+const SESSION_KEEPALIVE_MS = Math.max(
+  5_000,
+  Number(process.env.IPTV_EDGE_SESSION_KEEPALIVE_MS || 15_000)
+);
 /** HLS playlist polls stop when the app exits — close the panel row quickly. */
 const SESSION_IDLE_MS = Number(process.env.IPTV_EDGE_SESSION_IDLE_MS || 3_000);
 
@@ -392,7 +407,7 @@ function touchPlaybackSession(ctx, opts = {}) {
   let session = playbackSessions.get(key);
   if (!session) {
     session = { ctx, lastClientAt: now, teardown: null, hls: Boolean(opts.hls || ctx.hls) };
-    const tickMs = session.hls ? 1_000 : SESSION_KEEPALIVE_MS;
+    const tickMs = SESSION_KEEPALIVE_MS;
     session.timer = setInterval(() => {
       const idle = Date.now() - session.lastClientAt;
       if (idle > SESSION_IDLE_MS) {
@@ -433,7 +448,7 @@ function createLiveByteMeter(pulseCtx) {
     pending += n;
     const now = Date.now();
     if (lastPulse === 0) lastPulse = now;
-    if (now - lastPulse >= 3_000 || pending >= 128_000) {
+    if (now - lastPulse >= SESSION_KEEPALIVE_MS) {
       pulseConnection(pulseCtx, pending);
       pending = 0;
       lastPulse = now;
@@ -694,6 +709,20 @@ async function waitForBackendReady() {
 }
 
 function forward(clientReq, clientRes, { listenPort, proto }) {
+  const pathOnly = String(clientReq.url || "/").split("?")[0];
+  // nginx on the panel proxies /live/ back to this edge. Never bounce media to
+  // IPTV_EDGE_BACKEND or we 502-loop and players hang.
+  if (/^\/(live|timeshift|movie|series)\//i.test(pathOnly)) {
+    if (!clientRes.headersSent) {
+      clientRes.writeHead(502, { "content-type": "text/plain", connection: "close" });
+    }
+    try {
+      clientRes.end("edge: media must splice locally");
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
   const cleanHost = sanitizeHostHeader(clientReq.headers.host) || backendHost;
   const headers = { ...clientReq.headers };
   headers.host = cleanHost;

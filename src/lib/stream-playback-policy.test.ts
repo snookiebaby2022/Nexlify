@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { VodMode } from "@prisma/client";
 import {
   getStreamPlaybackPolicy,
   streamPlaysInstantThroughServers,
   streamUptimeColumnLabel,
   shouldStopIdleAgentProcess,
+  type StreamForPlaybackPolicy,
 } from "./stream-playback-policy";
 
-function base(over: Record<string, unknown> = {}) {
+function base(over: Partial<StreamForPlaybackPolicy> = {}): StreamForPlaybackPolicy {
   return {
-    vodMode: "ON_DEMAND",
+    vodMode: VodMode.ON_DEMAND,
     isOnDemand: true,
     isCreatedChannel: false,
     agentStartCmd: null,
@@ -33,14 +35,14 @@ describe("getStreamPlaybackPolicy", () => {
   });
 
   it("keeps catch-up on the catchup path", () => {
-    assert.equal(getStreamPlaybackPolicy(base({ vodMode: "CATCHUP" })), "catchup");
+    assert.equal(getStreamPlaybackPolicy(base({ vodMode: VodMode.CATCHUP })), "catchup");
   });
 
   it("transcodes when a profile is attached", () => {
     assert.equal(
       getStreamPlaybackPolicy(
         base({
-          vodMode: "LIVE",
+          vodMode: VodMode.LIVE,
           isOnDemand: false,
           agentStartCmd: 'NEXLIFY_LIVE:{"transcodeProfile":"1080p"}',
         })

@@ -20,7 +20,7 @@ import { LineStatus, Prisma } from "@prisma/client";
 import { normalizeAllowedOutputInput, DEFAULT_ALLOWED_OUTPUT } from "@/lib/line-access-output";
 import { UNLIMITED_LINE_DAYS } from "@/lib/line-duration-presets";
 import { unlimitedLineExpiresAt } from "@/lib/line-renew";
-import { LIVE_STALE_MS } from "@/lib/connections";
+import { listManageLinesPage } from "@/lib/manage-lines-list";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -39,116 +39,25 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const url = new URL(req.url);
-  const search = url.searchParams.get("search")?.trim() ?? "";
-  const ownerFilter = url.searchParams.get("ownerId")?.trim() ?? "";
-
-  const where: Prisma.LineWhereInput =
-    session.role === PanelRole.ADMIN ? {} : { ownerId: session.id };
-
-  if (session.role === PanelRole.ADMIN && ownerFilter) {
-    if (ownerFilter === "admin" || ownerFilter === "__none__") {
-      where.ownerId = null;
-    } else {
-      where.ownerId = ownerFilter;
-    }
-  }
-
-  if (search) {
-    where.AND = [
-      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
-      {
-        OR: [
-          { username: { contains: search, mode: "insensitive" } },
-          { password: { contains: search, mode: "insensitive" } },
-          { id: { contains: search, mode: "insensitive" } },
-          { externalId: { contains: search, mode: "insensitive" } },
-          { notes: { contains: search, mode: "insensitive" } },
-          { owner: { username: { contains: search, mode: "insensitive" } } },
-        ],
-      },
-    ];
-  }
-
-  // Pagination
   const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
-  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(url.searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE)));
-  const skip = (page - 1) * pageSize;
-  const sortRaw = (url.searchParams.get("sort") ?? "createdAt").trim();
-  const sortDir = url.searchParams.get("sortDir") === "asc" ? "asc" : "desc";
-  const orderBy =
-    sortRaw === "username"
-      ? { username: sortDir as "asc" | "desc" }
-      : sortRaw === "expiresAt"
-        ? { expiresAt: sortDir as "asc" | "desc" }
-        : sortRaw === "owner"
-          ? { owner: { username: sortDir as "asc" | "desc" } }
-          : sortRaw === "status"
-            ? { status: sortDir as "asc" | "desc" }
-            : { createdAt: sortDir as "asc" | "desc" };
-
-  const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
+  const pageSize = Math.min(
+    MAX_PAGE_SIZE,
+    Math.max(1, Number(url.searchParams.get("pageSize") ?? DEFAULT_PAGE_SIZE))
+  );
 
   try {
-  const [lines, total] = await Promise.all([
-    prisma.line.findMany({
-      where,
-      include: {
-        bouquets: { include: { bouquet: true } },
-        owner: { select: { id: true, username: true } },
-        lastWatchedStream: { select: { id: true, name: true } },
-        _count: { select: { liveConnections: true } },
-      },
-      orderBy,
-      skip,
-      take: pageSize,
-    }),
-    prisma.line.count({ where }),
-  ]);
-  const lineIds = lines.map((l) => l.id);
-  const activeConnections = lineIds.length
-    ? await prisma.liveConnection.findMany({
-        where: {
-          lastSeenAt: { gte: staleBefore },
-          lineId: { in: lineIds },
-        },
-        select: { lineId: true, ip: true, stream: { select: { name: true } }, userAgent: true, lastSeenAt: true },
-        orderBy: { lastSeenAt: "desc" },
-        take: 2000,
-      })
-    : [];
-
-  const activeConnByLineId = new Map<string, (typeof activeConnections)[number]>();
-  const activeConnCountByLineId = new Map<string, number>();
-  for (const conn of activeConnections) {
-    if (!activeConnByLineId.has(conn.lineId)) activeConnByLineId.set(conn.lineId, conn);
-    activeConnCountByLineId.set(conn.lineId, (activeConnCountByLineId.get(conn.lineId) ?? 0) + 1);
-  }
-
-  return NextResponse.json({
-    lines: lines.map((line, index) => {
-      const active = activeConnByLineId.get(line.id);
-      const activeCount = activeConnCountByLineId.get(line.id) ?? 0;
-      return {
-        ...line,
-        displayId: skip + index + 1,
-        activeConnectionCount: activeCount,
-        activeConnection: active
-          ? {
-              ip: active.ip,
-              streamName: active.stream?.name ?? null,
-              userAgent: active.userAgent,
-              lastSeenAt: active.lastSeenAt,
-            }
-          : null,
-      };
-    }),
-    pagination: {
+    const result = await listManageLinesPage({
+      session,
       page,
       pageSize,
-      total,
-      totalPages: Math.ceil(total / pageSize) || 1,
-    },
-  });
+      search: url.searchParams.get("search")?.trim() ?? "",
+      ownerFilter: url.searchParams.get("ownerId")?.trim() ?? "",
+      statusFilter: url.searchParams.get("status")?.trim() ?? "",
+      trialFilter: url.searchParams.get("trial")?.trim() ?? "",
+      sort: url.searchParams.get("sort") ?? "createdAt",
+      sortDir: url.searchParams.get("sortDir") === "asc" ? "asc" : "desc",
+    });
+    return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json(
       {

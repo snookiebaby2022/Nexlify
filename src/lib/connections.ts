@@ -325,10 +325,20 @@ export async function lineHasConnectionCapacity(
   maxConnections: number,
   opts?: { streamId?: string; clientIp?: string }
 ) {
-  void lineId;
-  void maxConnections;
-  void opts;
-  return true;
+  if (maxConnections <= 0) return true;
+  const clientIp = normalizeConnectionIp(opts?.clientIp);
+  if (isTestConnectionIp(clientIp)) return true;
+  // Never block live-auth / zap on housekeeping (XUI-style instant auth).
+  void pruneTestConnectionRows(lineId).catch(() => {});
+  void pruneLineStaleConnections(lineId).catch(() => {});
+  try {
+    return await Promise.race([
+      lineHasConnectionCapacityInner(lineId, maxConnections, opts),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 800)),
+    ]);
+  } catch {
+    return false;
+  }
 }
 
 async function lineHasConnectionCapacityInner(
@@ -462,14 +472,19 @@ export async function trackConnection(opts: {
       select: { id: true, streamId: true },
     });
     if (byIp) {
-      await prisma.liveConnection.update({
-        where: { id: byIp.id },
-        data: {
-          streamId,
-          lastSeenAt: new Date(),
-          ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
-        },
-      });
+      try {
+        await prisma.liveConnection.update({
+          where: { id: byIp.id },
+          data: {
+            streamId,
+            lastSeenAt: new Date(),
+            ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
+          },
+        });
+      } catch (err) {
+        const code = (err as { code?: string })?.code;
+        if (code !== "P2025") throw err;
+      }
       if (byIp.streamId && byIp.streamId !== streamId) {
         await prisma.liveConnection.deleteMany({
           where: {
@@ -923,6 +938,25 @@ export function attachKickAwareProxyBody(opts: {
       abort();
     },
   });
+}
+
+/** Kick every active session watching a stream (XUI-style "kill all on stream"). */
+export async function kickStreamConnections(streamId: string, ownerId?: string) {
+  const where = ownerId
+    ? { streamId, line: { ownerId } }
+    : { streamId };
+  const rows = await prisma.liveConnection.findMany({
+    where,
+    select: { id: true, lineId: true, ip: true, streamId: true },
+    take: 5000,
+  });
+  for (const row of rows) {
+    await markSessionKicked(row.lineId, row.ip);
+    abortLocalProxies(row.lineId, row.ip, row.streamId);
+  }
+  const result = await prisma.liveConnection.deleteMany({ where });
+  invalidateConnectionCaches();
+  return result.count;
 }
 
 /** Kick every active session on a line (used by line “Kill connections”). */
