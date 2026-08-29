@@ -28,6 +28,9 @@ export function buildFfmpegArgv(opts: {
   preset?: string;
   threads?: number;
   transcodeArgs?: string[];
+  probesize?: number;
+  generateTimestamps?: boolean;
+  nativeFrames?: boolean;
 }): FfmpegArgvSpec {
   const ffmpegPath = isAbsoluteBin(opts.ffmpegPath) ? opts.ffmpegPath : "/usr/bin/ffmpeg";
   const threads =
@@ -36,6 +39,20 @@ export function buildFfmpegArgv(opts: {
     opts.preset && opts.preset !== "none" && /^[A-Za-z0-9_-]+$/.test(opts.preset)
       ? ["-preset", opts.preset]
       : [];
+  const probe = Number.isFinite(opts.probesize) && (opts.probesize ?? 0) > 0
+    ? Math.min(4_000_000, Math.max(32_768, Math.floor(opts.probesize!)))
+    : 256_000;
+  const startFlags = [
+    "-fflags",
+    opts.generateTimestamps === false ? "+nobuffer+discardcorrupt" : "+genpts+nobuffer+discardcorrupt",
+    "-flags",
+    "low_delay",
+    "-probesize",
+    String(probe),
+    "-analyzeduration",
+    String(Math.min(500_000, Math.max(80_000, Math.floor(probe / 2)))),
+    ...(opts.nativeFrames ? ["-use_wallclock_as_timestamps", "0"] : []),
+  ];
 
   const capture = captureDeviceInputArgs(opts.inputUrl);
   const transcodeBody =
@@ -43,9 +60,9 @@ export function buildFfmpegArgv(opts: {
       ? opts.transcodeArgs.filter((a) => typeof a === "string")
       : capture
         ? ["-f", capture.format, "-i", capture.device, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", "-f", "mpegts"]
-        : ["-re", "-i", opts.inputUrl, "-c", "copy", "-f", "mpegts"];
+        : ["-re", "-i", opts.inputUrl, "-c", "copy", "-flush_packets", "1", "-muxdelay", "0", "-f", "mpegts"];
 
-  const args = ["-hide_banner", "-loglevel", "warning", ...transcodeBody, "pipe:1", ...preset, ...threads];
+  const args = ["-hide_banner", "-loglevel", "warning", ...startFlags, ...transcodeBody, "pipe:1", ...preset, ...threads];
   return {
     ffmpegPath,
     args,

@@ -221,6 +221,9 @@ export async function buildAgentConfigForServer(
       preset: cpuProfile?.preset ?? transcodeProfile?.preset ?? preset,
       threads,
       transcodeArgs,
+      probesize: Number(liveMeta.onDemandProbesize) || 256000,
+      generateTimestamps: liveMeta.raw?.generateTimestamps !== false,
+      nativeFrames: liveMeta.raw?.nativeFrames === true,
     });
     if (overlay.enabled) {
       spec.args = applyVideoOverlayFilter(spec.args, overlay, {

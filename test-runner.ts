@@ -13,6 +13,7 @@ import { join } from "path";
 
 // ===== CONFIG =====
 const PANEL = process.env.PANEL_URL || "http://localhost:3000";
+const PLAYBACK = process.env.PLAYBACK_URL || PANEL;
 const XUI   = process.env.XUI_URL   || "";
 const ADMIN_USER = process.env.ADMIN_USER || process.env.TEST_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || process.env.TEST_PASS || "admin";
@@ -172,7 +173,7 @@ function xtream(action: string) {
 }
 
 function xtreamStream(type: string, id: string | number, ext = "m3u8") {
-  return `${PANEL}/${type}/${encodeURIComponent(lineUser)}/${encodeURIComponent(linePass)}/${id}.${ext}`;
+  return `${PLAYBACK}/${type}/${encodeURIComponent(lineUser)}/${encodeURIComponent(linePass)}/${id}.${ext}`;
 }
 
 async function xtreamRaw(action: string): Promise<{ status: number; json: any; raw: string }> {
@@ -365,7 +366,12 @@ async function testStreams() {
   });
 
   await test("GET get_server_info", async () => {
-    const r = await xtreamRaw("get_server_info");
+    // Xtream returns server_info on the standard auth request without an action.
+    // action=get_server_info is not part of the common XUI contract.
+    const r = await http(
+      `${PANEL}/player_api.php?username=${encodeURIComponent(lineUser)}&password=${encodeURIComponent(linePass)}`,
+      { headers: {} }
+    );
     ok(r.status === 200, `HTTP ${r.status}`);
     ok(r.json?.server_info, "Missing server_info");
     const si = r.json.server_info;
@@ -399,7 +405,12 @@ async function testPlayback() {
   if (liveId) {
     await test("Live HLS manifest (valid M3U8)", async () => {
       const url = xtreamStream("live", liveId);
-      const r = await http(url, { headers: {} });
+      const r = await http(url, {
+        headers: {
+          "User-Agent": "ExoPlayer/2.19.1",
+          Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+        },
+      });
       log(`    HTTP ${r.status}, size: ${r.raw.length}`);
       ok(r.status === 200 || r.status === 206, `HTTP ${r.status}`);
       ok(r.raw.includes("#EXTM3U"), `Not M3U8: ${r.raw.slice(0, 200)}`);
@@ -558,7 +569,13 @@ async function testXuiCompat() {
 
   for (const [action, expected] of Object.entries(xuiSpecs)) {
     await test(`XUI field check: ${action}`, async () => {
-      const r = await xtreamRaw(action);
+      const r =
+        action === "get_server_info"
+          ? await http(
+              `${PANEL}/player_api.php?username=${encodeURIComponent(lineUser)}&password=${encodeURIComponent(linePass)}`,
+              { headers: {} }
+            )
+          : await xtreamRaw(action);
       ok(r.status === 200, `HTTP ${r.status}`);
       // Handle both flat and nested responses
       let item: any;
@@ -626,7 +643,7 @@ async function testSecurity() {
       const r = await http(`${PANEL}/api/auth/login`, {
         method: "POST",
         body: JSON.stringify({ username: "__nexlify_rate_limit_probe__", password: pw }),
-        headers: {},
+        headers: { "X-Forwarded-For": "203.0.113.99" },
         noSession: true,
       });
       statuses.push(r.status);

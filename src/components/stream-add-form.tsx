@@ -48,6 +48,13 @@ type LiveMeta = {
   epgSourceId: string;
   transcodeProfile: string;
   tvArchiveActive: boolean;
+  allowRecording: boolean;
+  restartOnFpsDrop: boolean;
+  fpsThreshold: string;
+  customSid: string;
+  minuteDelay: string;
+  cookie: string;
+  directStream: boolean;
   serverIds: string[];
   bouquetIds: string[];
   autoRestartDays: Record<string, boolean>;
@@ -62,10 +69,17 @@ const emptyLiveMeta = (): LiveMeta => ({
   isAdult: false,
   generateTimestamps: true,
   streamAllCodecs: true,
-  nativeFrames: false,
+  nativeFrames: true,
   rtmpOutput: false,
-  onDemandProbesize: "512000",
-  userAgent: "",
+  onDemandProbesize: "256000",
+  userAgent: "Mozilla/5.0",
+  allowRecording: false,
+  restartOnFpsDrop: false,
+  fpsThreshold: "90",
+  customSid: "",
+  minuteDelay: "0",
+  cookie: "",
+  directStream: false,
   proxy: "",
   headers: [""],
   epgSourceId: "",
@@ -112,16 +126,19 @@ function YesNo({
           </span>
         )}
       </div>
-      <div className="flex gap-5">
-        <label className="flex items-center gap-1.5 cursor-pointer">
-          <input type="radio" name={`yn-${label}`} checked={value} onChange={() => onChange(true)} />
-          Yes
-        </label>
-        <label className="flex items-center gap-1.5 cursor-pointer">
-          <input type="radio" name={`yn-${label}`} checked={!value} onChange={() => onChange(false)} />
-          No
-        </label>
-      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        onClick={() => onChange(!value)}
+        className="relative h-6 w-11 rounded-full transition-colors cursor-pointer"
+        style={{ background: value ? "#2563eb" : "rgba(148,163,184,0.35)" }}
+      >
+        <span
+          className="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform"
+          style={{ transform: value ? "translateX(1.25rem)" : "translateX(0)" }}
+        />
+      </button>
     </div>
   );
 }
@@ -673,6 +690,72 @@ function LiveStreamForm({
                 value={meta.rtmpOutput}
                 onChange={(v) => setMeta({ ...meta, rtmpOutput: v })}
               />
+              <YesNo
+                label="Allow recording"
+                hint="Permit catch-up / archive recording for this channel"
+                value={meta.allowRecording}
+                onChange={(v) => setMeta({ ...meta, allowRecording: v })}
+              />
+              <YesNo
+                label="Direct stream"
+                hint="Serve the source URL without remux when the player can play it natively"
+                value={meta.directStream}
+                onChange={(v) => setMeta({ ...meta, directStream: v })}
+              />
+              <YesNo
+                label="Restart on FPS drop"
+                hint="Restart the process if FPS falls below the threshold"
+                value={meta.restartOnFpsDrop}
+                onChange={(v) => setMeta({ ...meta, restartOnFpsDrop: v })}
+              />
+            </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <FormField label="FPS threshold %">
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  className={formInputClass}
+                  style={formInputStyle}
+                  value={meta.fpsThreshold}
+                  onChange={(e) => setMeta({ ...meta, fpsThreshold: e.target.value })}
+                />
+              </FormField>
+              <FormField label="On demand probesize">
+                <input
+                  className={formInputClass}
+                  style={formInputStyle}
+                  value={meta.onDemandProbesize}
+                  onChange={(e) => setMeta({ ...meta, onDemandProbesize: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Minute delay">
+                <input
+                  type="number"
+                  min={0}
+                  className={formInputClass}
+                  style={formInputStyle}
+                  value={meta.minuteDelay}
+                  onChange={(e) => setMeta({ ...meta, minuteDelay: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Custom channel SID">
+                <input
+                  className={formInputClass}
+                  style={formInputStyle}
+                  value={meta.customSid}
+                  onChange={(e) => setMeta({ ...meta, customSid: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Cookie">
+                <input
+                  className={formInputClass}
+                  style={formInputStyle}
+                  placeholder="PHPSESSID=…"
+                  value={meta.cookie}
+                  onChange={(e) => setMeta({ ...meta, cookie: e.target.value })}
+                />
+              </FormField>
             </div>
             <div className="pt-2 border-t space-y-3" style={{ borderColor: "var(--border)" }}>
               <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
@@ -803,14 +886,6 @@ function LiveStreamForm({
                   <option value="medium">Medium</option>
                   <option value="slow">Slow</option>
                 </select>
-              </FormField>
-              <FormField label="Probesize on-demand">
-                <input
-                  className={formInputClass}
-                  style={formInputStyle}
-                  value={meta.onDemandProbesize}
-                  onChange={(e) => setMeta({ ...meta, onDemandProbesize: e.target.value })}
-                />
               </FormField>
             </div>
             <div className="grid lg:grid-cols-2 gap-4">

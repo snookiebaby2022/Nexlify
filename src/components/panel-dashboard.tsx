@@ -822,14 +822,12 @@ export function PanelDashboard({
 
 
 
-      <div className="grid lg:grid-cols-2 gap-5">
-        <LazyDashboardSection minHeight="12rem">
-          <ConnectionMap />
-        </LazyDashboardSection>
-        <LazyDashboardSection minHeight="12rem">
-          <DashboardMostWatchedByCountry widgetsUrl={widgetsUrl} />
-        </LazyDashboardSection>
-      </div>
+      <LazyDashboardSection minHeight="16rem">
+        <ConnectionMap />
+      </LazyDashboardSection>
+      <LazyDashboardSection minHeight="12rem">
+        <DashboardMostWatchedByCountry widgetsUrl={widgetsUrl} />
+      </LazyDashboardSection>
 
       {!isReseller && (
         <LazyDashboardSection minHeight="10rem">

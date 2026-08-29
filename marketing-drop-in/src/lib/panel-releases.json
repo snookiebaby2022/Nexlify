@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.57",
+  "latestVersion": "2.0.58",
   "releases": [
+    {
+      "version": "2.0.58",
+      "date": "2026-08-29",
+      "channel": "stable",
+      "summary": "Live 3D connection globe, XUI-style stream Advanced controls, and faster MPEG-TS start.",
+      "changelog": [
+        "Dashboard connection map is a real-time rotating 3D globe with live viewer dots and country counts",
+        "Stream Advanced uses XUI-style toggles plus recording, direct stream, FPS restart, SID, delay, and cookie fields",
+        "Agent ffmpeg starts with genpts, low_delay, and the channel on-demand probesize so zapping and first picture are faster",
+        "Loopback login probes are no longer blocked by bot stealth; installer publish works from a sparse vendor checkout"
+      ],
+      "fixes": [
+        "Bare curl to :13000/login returned a stealth 404 during health checks",
+        "Vendor publish failed when /home/nexlify lacked marketing-drop-in",
+        "Windows tarball parity checks failed on pipefail SIGPIPE and ./ tar paths"
+      ]
+    },
     {
       "version": "2.0.57",
       "date": "2026-08-29",

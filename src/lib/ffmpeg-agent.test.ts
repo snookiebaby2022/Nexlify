@@ -11,6 +11,8 @@ test("buildFfmpegArgv uses argv not shell and rejects relative binaries", () => 
   });
   assert.equal(spec.ffmpegPath, "/usr/bin/ffmpeg");
   assert.ok(spec.args.includes("-re"));
+  assert.ok(spec.args.includes("-probesize"));
+  assert.ok(spec.args.includes("low_delay"));
   assert.ok(spec.args.includes("http://example.com/live'; rm -rf /"));
   assert.equal(spec.pidFile, "/var/run/nexlify/stream-srv1-s1.pid");
   const relative = buildFfmpegArgv({

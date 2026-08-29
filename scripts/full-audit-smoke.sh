@@ -37,7 +37,9 @@ BASE="http://127.0.0.1:${PORT}"
 echo ""
 echo "--- Panel upstream ($BASE) ---"
 for path in /api/health /login /player_api.php /get.php /webplayer; do
-  code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$BASE$path" 2>/dev/null || echo 000)
+  CURL_UA="Nexlify-Audit/1.0"
+  [ "$path" = "/login" ] && CURL_UA="Mozilla/5.0 (Nexlify Audit)"
+  code=$(curl -sS -A "$CURL_UA" -o /dev/null -w '%{http_code}' --max-time 10 "$BASE$path" 2>/dev/null || echo 000)
   case "$path" in
     /player_api.php|/get.php) [ "$code" = "400" ] || [ "$code" = "401" ] && ok "$path HTTP $code" || fail "$path HTTP $code (expected 400/401)" ;;
     *) [ "$code" = "200" ] || [ "$code" = "307" ] || [ "$code" = "308" ] && ok "$path HTTP $code" || fail "$path HTTP $code" ;;
