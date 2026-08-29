@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
         try {
           const now = new Date();
           const [rows, activeLines] = await Promise.all([
-            listLiveConnections(ownerId),
+            listLiveConnections(ownerId, 400),
             prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
           ]);
 

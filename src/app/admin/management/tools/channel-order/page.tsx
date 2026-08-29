@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { ListPagination } from "@/components/list-pagination";
 
 const PAGE_SIZES = [25, 50, 100, 200] as const;
 type ContentType = "LIVE" | "MOVIE" | "SERIES";
@@ -250,51 +251,12 @@ export default function ChannelOrderPage() {
         ))}
       </ul>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm gap-2 flex-wrap">
-          <span style={{ color: "var(--muted)" }}>
-            Page {safePage} of {totalPages}
-          </span>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              disabled={safePage <= 1}
-              onClick={() => setPage(1)}
-              className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40"
-              style={{ borderColor: "var(--border)" }}
-            >
-              «
-            </button>
-            <button
-              type="button"
-              disabled={safePage <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40"
-              style={{ borderColor: "var(--border)" }}
-            >
-              ‹
-            </button>
-            <button
-              type="button"
-              disabled={safePage >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40"
-              style={{ borderColor: "var(--border)" }}
-            >
-              ›
-            </button>
-            <button
-              type="button"
-              disabled={safePage >= totalPages}
-              onClick={() => setPage(totalPages)}
-              className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40"
-              style={{ borderColor: "var(--border)" }}
-            >
-              »
-            </button>
-          </div>
-        </div>
-      )}
+      <ListPagination
+        page={safePage}
+        pageSize={pageSize}
+        total={filtered.length}
+        onPageChange={setPage}
+      />
 
       {msg && <p className="text-sm">{msg}</p>}
     </div>

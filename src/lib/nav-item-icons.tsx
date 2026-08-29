@@ -132,6 +132,7 @@ function registerIcons() {
     ["/admin/management/tools/stream-tools", Wrench],
     ["/admin/management/tools/remove-duplicates", CopyMinus],
     ["/admin/streams/add", Plus],
+    ["/admin/streams/sources", Globe],
     ["/admin/created_channels", Radio],
     ["/admin/radios", Radio],
     ["/admin/epg/sources", Tv],

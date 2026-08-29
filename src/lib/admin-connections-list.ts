@@ -23,6 +23,7 @@ export type AdminConnectionRow = {
   stream: { id: string; name: string; type: string } | null;
   quality: ReturnType<typeof computeConnectionQualityWithLive>;
   output: ReturnType<typeof resolvePlaybackOutputLabel>;
+  qoe: { firstPictureMs: number | null; stallCount: number; mbps: number } | null;
 };
 
 export async function listAdminConnections(session: SessionUser): Promise<AdminConnectionRow[]> {
@@ -56,6 +57,18 @@ export async function listAdminConnections(session: SessionUser): Promise<AdminC
       cached: cachedOutput,
       userAgent: c.userAgent,
     });
+    const startedMs = c.startedAt instanceof Date ? c.startedAt.getTime() : new Date(c.startedAt).getTime();
+    const qoe =
+      live?.hasSamples
+        ? {
+            firstPictureMs:
+              Number.isFinite(startedMs) && live.firstByteAt
+                ? Math.max(0, live.firstByteAt - startedMs)
+                : null,
+            stallCount: live.stallCount ?? 0,
+            mbps: Math.round((live.bytesPerSec * 8) / 10000) / 100,
+          }
+        : null;
     const srv = c.stream?.server;
     const serverName = srv
       ? streamServerDisplayName(srv.name, srv.domain || srv.host || "")
@@ -67,6 +80,7 @@ export async function listAdminConnections(session: SessionUser): Promise<AdminC
       serverName,
       quality,
       output,
+      qoe,
     };
   });
 }

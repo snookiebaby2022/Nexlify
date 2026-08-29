@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowUpDown, Plus, RefreshCw, Search } from "lucide-react";
 import { BouquetRowActionsMenu } from "@/components/bouquet-row-actions-menu";
+import { ListPagination } from "@/components/list-pagination";
 
 export type ManageBouquetRow = {
   id: string;
@@ -316,37 +317,7 @@ export function ManageBouquetsTable({
         </table>
       </div>
 
-      <div
-        className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t text-sm"
-        style={{ borderColor: "var(--border)" }}
-      >
-        <span style={{ color: "var(--muted)" }}>
-          Showing {total === 0 ? 0 : (safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, total)} of {total}
-        </span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="px-3 py-1 rounded border disabled:opacity-40"
-            style={{ borderColor: "var(--border)" }}
-            disabled={safePage <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            Prev
-          </button>
-          <span className="tabular-nums">
-            {safePage} / {totalPages}
-          </span>
-          <button
-            type="button"
-            className="px-3 py-1 rounded border disabled:opacity-40"
-            style={{ borderColor: "var(--border)" }}
-            disabled={safePage >= totalPages}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            Next
-          </button>
-        </div>
-      </div>
+      <ListPagination page={safePage} pageSize={pageSize} total={total} onPageChange={setPage} noun="bouquets" />
     </div>
   );
 }

@@ -4,6 +4,8 @@ import {
   dashboardPlaybackBandwidthMbps,
   estimatedLiveBandwidthMbps,
   loadScorePercent,
+  preferHeadroomPool,
+  serverEgressHeadroom,
   viewerSlotsUsed,
 } from "./server-load-metrics";
 
@@ -32,5 +34,30 @@ describe("server load scoring", () => {
     assert.equal(idle.networkOutMbps, 0);
     const live = dashboardPlaybackBandwidthMbps(4, 0);
     assert.equal(live.networkOutMbps, 10);
+  });
+
+  it("flags a box as saturated when egress or slots are exhausted", () => {
+    const full = serverEgressHeadroom({ usedMbps: 960, nicCapMbps: 1000, slotRatio: 0.4 });
+    assert.equal(full.saturated, true);
+    assert.equal(full.headroomMbps, 40);
+    const slots = serverEgressHeadroom({ usedMbps: 100, nicCapMbps: 1000, slotRatio: 0.95 });
+    assert.equal(slots.saturated, true);
+    const ok = serverEgressHeadroom({ usedMbps: 200, nicCapMbps: 1000, slotRatio: 0.2 });
+    assert.equal(ok.saturated, false);
+    assert.equal(ok.headroomPct, 80);
+  });
+
+  it("keeps assigning only when every online box is already saturated", () => {
+    const pool = preferHeadroomPool([
+      { online: true, saturated: true, id: "a" },
+      { online: true, saturated: false, id: "b" },
+      { online: false, saturated: false, id: "c" },
+    ]);
+    assert.deepEqual(pool.map((x) => x.id), ["b"]);
+    const allFull = preferHeadroomPool([
+      { online: true, saturated: true, id: "a" },
+      { online: true, saturated: true, id: "b" },
+    ]);
+    assert.equal(allFull.length, 2);
   });
 });

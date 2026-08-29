@@ -10,7 +10,9 @@ test("buildFfmpegArgv uses argv not shell and rejects relative binaries", () => 
     serverId: "srv1",
   });
   assert.equal(spec.ffmpegPath, "/usr/bin/ffmpeg");
-  assert.ok(spec.args.includes("-re"));
+  assert.equal(spec.args.includes("-re"), false);
+  assert.ok(spec.args.includes("-reconnect"));
+  assert.ok(spec.args.includes("-rw_timeout"));
   assert.ok(spec.args.includes("-probesize"));
   assert.ok(spec.args.includes("low_delay"));
   assert.ok(spec.args.includes("http://example.com/live'; rm -rf /"));

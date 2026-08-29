@@ -65,9 +65,9 @@ function MiniStat({
   href?: string;
 }) {
   const body = (
-    <div className="xui-dash-kpi-mini rounded-lg border p-4 bg-white dark:bg-slate-800/50" style={{ borderColor: "var(--border)" }}>
+    <div className="xui-dash-kpi-mini rounded-lg border p-4" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
       <div className="flex items-center gap-2 mb-2">
-        <span className="w-8 h-8 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-lg">{label.slice(0, 1)}</span>
+        <span className="w-8 h-8 rounded flex items-center justify-center text-lg" style={{ background: "rgba(148,163,184,0.12)" }}>{label.slice(0, 1)}</span>
         <div>
           <p className="text-xs uppercase tracking-wide" style={{ color: "var(--muted)" }}>
             {label}
@@ -187,11 +187,12 @@ export function DashboardXuiKpiRibbon({
         <MiniStat label="Dead Stream" value={kpi?.deadStreams ?? 0} pct={deadPct} barColor="#dd4b39" href="/admin/stream_errors" />
       </div>
 
+      {(kpi?.reportedChannels || kpi?.channelRequests) ? (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Link
           href="/admin/tickets?status=OPEN"
-          className="rounded-lg border px-4 py-3 flex flex-col gap-2 bg-white dark:bg-slate-800/50 hover:opacity-95"
-          style={{ borderColor: "var(--border)" }}
+          className="rounded-lg border px-4 py-3 flex flex-col gap-2 hover:opacity-95"
+          style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
         >
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-medium">User Reported Channels</span>
@@ -220,8 +221,8 @@ export function DashboardXuiKpiRibbon({
         </Link>
         <Link
           href="/admin/tickets?status=OPEN"
-          className="rounded-lg border px-4 py-3 flex flex-col gap-2 bg-white dark:bg-slate-800/50 hover:opacity-95"
-          style={{ borderColor: "var(--border)" }}
+          className="rounded-lg border px-4 py-3 flex flex-col gap-2 hover:opacity-95"
+          style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
         >
           <div className="flex items-center justify-between gap-2">
             <span className="text-sm font-medium">New Channels Add Request</span>
@@ -249,6 +250,7 @@ export function DashboardXuiKpiRibbon({
           </div>
         </Link>
       </div>
+      ) : null}
     </section>
   );
 }

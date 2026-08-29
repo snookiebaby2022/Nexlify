@@ -2,6 +2,7 @@ import type { StreamServer } from "@prisma/client";
 import { lookupGeo } from "@/lib/geoip";
 import { getServerLoadScores } from "@/lib/server-load";
 import { getSettingGroup } from "@/lib/panel-settings";
+import { preferHeadroomPool } from "@/lib/server-load-metrics";
 
 function parseJsonStringList(raw: unknown): string[] {
   if (!raw) return [];
@@ -49,7 +50,7 @@ export async function pickServerForClient(clientIp?: string): Promise<string | n
   const geoEnabled = settings.geoLoadBalancing !== false;
   const mode = String(settings.loadBalancing ?? "server_slots");
 
-  const online = scores.filter((x) => x.online);
+  const online = preferHeadroomPool(scores);
   let pool = online.length ? online : scores;
   if (!pool.length) return null;
 

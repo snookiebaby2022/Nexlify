@@ -131,6 +131,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/streams/add", label: "Add Stream", section: "Streams" },
           { href: "/admin/streams/capture", label: "Capture / CCTV", section: "Streams", keywords: "hdmi v4l2 dshow ingest xui" },
           { href: "/admin/content/streams", label: "Manage Streams", section: "Streams" },
+          { href: "/admin/streams/sources", label: "Sources", section: "Streams", keywords: "xui source host replace origin" },
           ...LIVE_NAV_FOLDERS.filter((f) => f.slug !== "streams").map((f) => ({
             href: `/admin/content/${f.slug}`,
             label: f.title,

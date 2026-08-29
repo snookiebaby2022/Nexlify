@@ -10,6 +10,10 @@ type LbServer = {
   region?: string | null;
   connections: number;
   bandwidthMbps: number;
+  capMbps?: number;
+  headroomMbps?: number;
+  headroomPct?: number;
+  saturated?: boolean;
   maxCapacity: number;
   loadScore: number;
   healthStatus: string;
@@ -113,7 +117,8 @@ export default function LoadBalancerPage() {
         <div>
           <h1 className="text-2xl font-semibold">Load Balancer</h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            Real-time distribution + XUI-style routing rules. {config?.lbProEnabled ? "Intelligent LB Pro active." : "Enable LB Pro for geo + bandwidth-aware routing."}
+            New live assignments skip saturated boxes (under 8% NIC headroom or 92%+ slots).{" "}
+            {config?.lbProEnabled ? "Intelligent LB Pro active." : "Enable LB Pro for geo + bandwidth-aware routing."}
           </p>
         </div>
         <Link href="/admin/settings/lb-pro" className="text-sm underline" style={{ color: "var(--accent)" }}>
@@ -315,11 +320,12 @@ export default function LoadBalancerPage() {
                   )}
                 </div>
                 <span className="text-xs tabular-nums">
-                  {s.connections} conn · {s.bandwidthMbps} Mbps · load {s.loadScore}%
+                  {s.connections} conn · {s.bandwidthMbps}/{s.capMbps ?? "?"} Mbps · {s.headroomPct ?? "—"}% free
+                  {s.saturated ? " · SATURATED" : ""} · load {s.loadScore}%
                 </span>
               </div>
-              <div className="h-2 rounded-full bg-white/10 overflow-hidden mb-2">
-                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: "#38bdf8" }} />
+                <div className="h-2 rounded-full bg-white/10 overflow-hidden mb-2">
+                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: s.saturated ? "#f97316" : "#38bdf8" }} />
               </div>
               {s.rankReasons?.length > 0 && (
                 <p className="text-[10px]" style={{ color: "var(--muted)" }}>

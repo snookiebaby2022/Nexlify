@@ -4,6 +4,8 @@ import { buildServerRoleContext, resolveServerRole } from "@/lib/ensure-main-ser
 import { isServerHealthOnline } from "@/lib/server-tree";
 import {
   estimatedLiveBandwidthMbps,
+  preferHeadroomPool,
+  serverEgressHeadroom,
   viewerSlotsUsed,
 } from "@/lib/server-load-metrics";
 
@@ -39,6 +41,13 @@ export async function getServerLoadScores() {
     const slotsUsed = viewerSlotsUsed(liveConnections, running);
     const slots = s.maxClients > 0 ? s.maxClients : 1000;
     const bitrateSum = s.processes.reduce((acc, p) => acc + (p.bitrateKbps ?? 0), 0);
+    const usedMbps = estimatedLiveBandwidthMbps(liveConnections, bitrateSum);
+    const nicCap = s.bandwidthMbps && s.bandwidthMbps > 0 ? s.bandwidthMbps : 1000;
+    const egress = serverEgressHeadroom({
+      usedMbps,
+      nicCapMbps: nicCap,
+      slotRatio: slotsUsed / slots,
+    });
     return {
       server: s,
       slotsUsed,
@@ -46,7 +55,11 @@ export async function getServerLoadScores() {
       liveConnections,
       slots,
       score: slotsUsed / slots,
-      bandwidthMbps: estimatedLiveBandwidthMbps(liveConnections, bitrateSum),
+      bandwidthMbps: usedMbps,
+      capMbps: egress.capMbps,
+      headroomMbps: egress.headroomMbps,
+      headroomPct: egress.headroomPct,
+      saturated: egress.saturated,
       online: isServerHealthOnline(s.healthStatus),
     };
   });
@@ -60,7 +73,7 @@ export async function pickLeastLoadedServerId(clientIp?: string): Promise<string
   const settings = await getSettingGroup("streams");
   const mode = String(settings.loadBalancing ?? "server_slots");
   const scores = await getServerLoadScores();
-  const online = scores.filter((x) => x.online);
+  const online = preferHeadroomPool(scores);
   if (!online.length) return null;
 
   if (mode === "round_robin") {
@@ -95,10 +108,12 @@ function pickNamedOrLeastLb(
   scores: Awaited<ReturnType<typeof getServerLoadScores>>
 ): string | null {
   const roleCtx = roleCtxFromScores(scores);
-  const lbs = scores.filter((x) => {
-    if (!x.online || !x.server.isActive) return false;
-    return resolveServerRole(x.server, roleCtx) !== "main";
-  });
+  const lbs = preferHeadroomPool(
+    scores.filter((x) => {
+      if (!x.server.isActive) return false;
+      return resolveServerRole(x.server, roleCtx) !== "main";
+    })
+  );
   if (!lbs.length) return null;
   const named = lbs
     .filter((x) => isTenGigLbLabel(String(x.server.name ?? ""), String(x.server.host ?? "")))
@@ -115,7 +130,7 @@ export async function resolvePlaybackLoadBalancerId(preferred?: string | null): 
   const id = preferred?.trim() || "";
   if (id) {
     const hit = scores.find((x) => x.server.id === id);
-    if (hit?.server.isActive && resolveServerRole(hit.server, roleCtx) !== "main") {
+    if (hit?.server.isActive && !hit.saturated && resolveServerRole(hit.server, roleCtx) !== "main") {
       return id;
     }
   }
@@ -185,11 +200,13 @@ export async function rebalanceLiveStreamsAcrossServers(opts?: {
       .filter((x) => resolveServerRole(x.server, roleCtx) === "main")
       .map((x) => x.server.id)
   );
-  const online = scores.filter((x) => {
-    if (!x.online || !x.server.isActive) return false;
-    if (!includeMain && mainIds.has(x.server.id)) return false;
-    return true;
-  });
+  const online = preferHeadroomPool(
+    scores.filter((x) => {
+      if (!x.online || !x.server.isActive) return false;
+      if (!includeMain && mainIds.has(x.server.id)) return false;
+      return true;
+    })
+  );
   if (online.length < 1) return { moved: 0, servers: 0 };
 
   const maxMoves = Math.max(1, Math.min(opts?.maxMoves ?? 80, 400));

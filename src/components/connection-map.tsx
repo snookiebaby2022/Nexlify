@@ -66,11 +66,12 @@ const LANDMASSES: number[][][] = [
 export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl?: string }) {
   const [data, setData] = useState<MapData | null>(null);
   const [hoveredPoint, setHoveredPoint] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animRef = useRef(0);
   const timeRef = useRef(0);
+  const lastFrameRef = useRef(0);
   const projRef = useRef<Map<string, Proj>>(new Map());
 
   useEffect(() => {
@@ -101,7 +102,7 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
         .catch(() => setData(null));
     }
     load();
-    return startVisibleInterval(load, 3_000);
+    return startVisibleInterval(load, 12_000);
   }, [apiUrl]);
 
   const draw = useCallback(() => {
@@ -110,6 +111,12 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
     if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (now - lastFrameRef.current < 50) {
+      animRef.current = requestAnimationFrame(draw);
+      return;
+    }
+    lastFrameRef.current = now;
 
     const w = canvas.width;
     const h = canvas.height;

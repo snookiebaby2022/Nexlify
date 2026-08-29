@@ -21,8 +21,10 @@ type IssueStats = {
 export function DashboardIssuesPanel({
   statsUrl = "/api/admin/stats",
   kpi,
+  hideWhenHealthy = false,
 }: {
   statsUrl?: string;
+  hideWhenHealthy?: boolean;
   kpi?: {
     deadStreams?: number;
     unstableStreams?: number;
@@ -104,6 +106,7 @@ export function DashboardIssuesPanel({
   }
 
   if (totalIssues === 0 && !msg) {
+    if (hideWhenHealthy) return null;
     return (
       <div
         className="rounded-xl border p-4 flex items-center gap-3"

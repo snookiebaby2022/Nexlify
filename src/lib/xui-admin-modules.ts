@@ -33,6 +33,8 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "edit_profile", title: "Edit profile", category: "Account", redirect: "/admin/profile" },
 
   { slug: "streams", title: "Streams", category: "Streams", redirect: "/admin/content/streams" },
+  { slug: "sources", title: "Sources", category: "Streams", redirect: "/admin/streams/sources" },
+  { slug: "stream_sources", title: "Stream sources", category: "Streams", redirect: "/admin/streams/sources" },
   { slug: "stream", title: "Add stream", category: "Streams", redirect: "/admin/streams/add" },
   { slug: "stream_mass", title: "Mass edit streams", category: "Streams", redirect: "/admin/management/mass-edit/streams" },
   { slug: "stream_tools", title: "Stream tools", category: "Streams", redirect: "/admin/management/tools/stream-tools" },

@@ -60,7 +60,30 @@ export function buildFfmpegArgv(opts: {
       ? opts.transcodeArgs.filter((a) => typeof a === "string")
       : capture
         ? ["-f", capture.format, "-i", capture.device, "-c:v", "libx264", "-preset", "veryfast", "-c:a", "aac", "-f", "mpegts"]
-        : ["-re", "-i", opts.inputUrl, "-c", "copy", "-flush_packets", "1", "-muxdelay", "0", "-f", "mpegts"];
+        : [
+            "-reconnect",
+            "1",
+            "-reconnect_streamed",
+            "1",
+            "-reconnect_at_eof",
+            "1",
+            "-reconnect_delay_max",
+            "2",
+            "-rw_timeout",
+            "20000000",
+            "-i",
+            opts.inputUrl,
+            "-c",
+            "copy",
+            "-flush_packets",
+            "1",
+            "-muxdelay",
+            "0",
+            "-muxpreload",
+            "0",
+            "-f",
+            "mpegts",
+          ];
 
   const args = ["-hide_banner", "-loglevel", "warning", ...startFlags, ...transcodeBody, "pipe:1", ...preset, ...threads];
   return {

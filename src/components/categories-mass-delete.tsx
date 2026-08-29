@@ -9,6 +9,7 @@ import {
 } from "@/components/category-type-tabs";
 import { CategorySelect } from "@/components/category-select";
 import type { CategoryOptionInput } from "@/lib/category-options";
+import { ListPagination } from "@/components/list-pagination";
 
 const PAGE_SIZES = [25, 50, 100] as const;
 
@@ -66,7 +67,6 @@ export function CategoriesMassDeletePanel() {
     );
   }, [categories, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
   const allOnPage = paged.length > 0 && paged.every((c) => selected.has(c.id));
 
@@ -289,15 +289,13 @@ export function CategoriesMassDeletePanel() {
         </table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <span style={{ color: "var(--muted)" }}>Page {page} of {totalPages}</span>
-          <div className="flex gap-1">
-            <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>‹</button>
-            <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>›</button>
-          </div>
-        </div>
-      )}
+      <ListPagination
+        page={page}
+        pageSize={pageSize}
+        total={filtered.length}
+        onPageChange={setPage}
+        noun="categories"
+      />
     </div>
   );
 }

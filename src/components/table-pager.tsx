@@ -60,7 +60,7 @@ export function TablePager({
           <button
             type="button"
             disabled={disabled || safePage <= 1}
-            className="rounded border px-2 py-1 text-xs disabled:opacity-40"
+            className="rounded border px-3 py-2 text-sm disabled:opacity-40 cursor-pointer min-w-[4.5rem]"
             style={{ borderColor: "var(--border)" }}
             onClick={() => onPageChange(safePage - 1)}
           >
@@ -72,7 +72,7 @@ export function TablePager({
           <button
             type="button"
             disabled={disabled || safePage >= totalPages}
-            className="rounded border px-2 py-1 text-xs disabled:opacity-40"
+            className="rounded border px-3 py-2 text-sm disabled:opacity-40 cursor-pointer min-w-[4.5rem]"
             style={{ borderColor: "var(--border)" }}
             onClick={() => onPageChange(safePage + 1)}
           >

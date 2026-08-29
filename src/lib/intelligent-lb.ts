@@ -1,4 +1,5 @@
 import { getServerLoadScores } from "@/lib/server-load";
+import { preferHeadroomPool } from "@/lib/server-load-metrics";
 import { pickServerForClient, serverMatchesGeo } from "@/lib/server-geo-lb";
 import { lookupGeo } from "@/lib/geoip";
 import { getSettingGroup, isBundledFeaturePacksEnabled } from "@/lib/panel-settings";
@@ -35,7 +36,7 @@ export async function pickIntelligentServer(
   const bandwidthAware = lbSettings.bandwidthAware !== false;
   const failoverOnly = lbSettings.failoverOnDegraded !== false;
 
-  let pool = scores.filter((x) => x.online);
+  let pool = preferHeadroomPool(scores);
   if (!pool.length && failoverOnly) {
     pool = scores.filter((x) => x.server.healthStatus !== "offline");
   }
@@ -103,9 +104,12 @@ export async function rankServersForClient(clientIp?: string): Promise<LbServerS
       reasons.push("healthy");
       score -= 0.05;
     }
-    if (x.server.bandwidthMbps && x.server.bandwidthMbps > 0) {
-      const headroom = 1 - x.score;
-      reasons.push(`bw-headroom-${Math.round(headroom * 100)}%`);
+    if (x.saturated) {
+      reasons.push("saturated");
+      score += 0.45;
+    } else if (x.server.bandwidthMbps && x.server.bandwidthMbps > 0) {
+      reasons.push(`egress-headroom-${x.headroomPct}%`);
+      score -= Math.min(0.2, x.headroomPct / 500);
     }
 
     return {

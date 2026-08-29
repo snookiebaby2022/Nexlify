@@ -28,3 +28,36 @@ export function dashboardPlaybackBandwidthMbps(
   const out = estimatedLiveBandwidthMbps(liveConnections, processBitrateKbpsSum);
   return { networkInMbps: out, networkOutMbps: out };
 }
+
+export const SATURATED_SLOT_RATIO = 0.92;
+export const SATURATED_HEADROOM_RATIO = 0.08;
+
+export type ServerEgressHeadroom = {
+  capMbps: number;
+  usedMbps: number;
+  headroomMbps: number;
+  headroomPct: number;
+  saturated: boolean;
+};
+
+/** NIC truth: leftover Mbps and whether this box should take new live assignments. */
+export function serverEgressHeadroom(opts: {
+  usedMbps: number;
+  nicCapMbps: number;
+  slotRatio: number;
+}): ServerEgressHeadroom {
+  const capMbps = opts.nicCapMbps > 0 ? opts.nicCapMbps : 1000;
+  const usedMbps = Math.max(0, opts.usedMbps);
+  const headroomMbps = Math.max(0, Math.round((capMbps - usedMbps) * 10) / 10);
+  const headroomPct = Math.round((headroomMbps / capMbps) * 100);
+  const saturated =
+    opts.slotRatio >= SATURATED_SLOT_RATIO || headroomMbps / capMbps < SATURATED_HEADROOM_RATIO;
+  return { capMbps, usedMbps, headroomMbps, headroomPct, saturated };
+}
+
+/** Prefer boxes with leftover egress; if every box is full, still pick among online. */
+export function preferHeadroomPool<T extends { online: boolean; saturated: boolean }>(rows: T[]): T[] {
+  const online = rows.filter((r) => r.online);
+  const room = online.filter((r) => !r.saturated);
+  return room.length ? room : online;
+}

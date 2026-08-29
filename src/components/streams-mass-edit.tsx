@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ProgressBar, useProgress } from "@/components/progress-bar";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
+import { ListPagination } from "@/components/list-pagination";
 
 const PAGE_SIZES = [25, 50, 100, 250, 500] as const;
 
@@ -135,7 +136,6 @@ export function StreamsMassEdit({
       );
   }, []);
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const allOnPageSelected = streams.length > 0 && streams.every((s) => selected.has(s.id));
   const isVod = typeFilter === "MOVIE" || typeFilter === "SERIES";
 
@@ -720,19 +720,7 @@ export function StreamsMassEdit({
         </table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <span style={{ color: "var(--muted)" }}>
-            Page {page} of {totalPages} ({total} total)
-          </span>
-          <div className="flex gap-1">
-            <button type="button" disabled={page <= 1} onClick={() => setPage(1)} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>«</button>
-            <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>‹</button>
-            <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>›</button>
-            <button type="button" disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="px-2 py-1 rounded border cursor-pointer disabled:opacity-40" style={{ borderColor: "var(--border)" }}>»</button>
-          </div>
-        </div>
-      )}
+      <ListPagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
     </div>
   );
 }

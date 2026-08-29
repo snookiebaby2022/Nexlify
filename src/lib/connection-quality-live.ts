@@ -12,22 +12,66 @@ export type LiveQualitySample = {
   lastByteAt: number;
   totalBytes: number;
   stallSec: number;
+  stallCount: number;
+  firstByteAt: number;
   hasSamples: boolean;
 };
 
-type QualityWindow = {
+export type QualityWindow = {
   windowStart: number;
   windowBytes: number;
   totalBytes: number;
   lastByteAt: number;
   peakBytesPerSec: number;
+  firstByteAt: number;
+  stallCount: number;
 };
+
+export const STALL_GAP_MS = 2_500;
 
 const QUALITY_TTL_SEC = 180;
 const WINDOW_MS = 10_000;
 
 export function connectionQualityKey(lineId: string, streamId: string, ip: string) {
   return `conn:q:${lineId}:${streamId}:${ip || "*"}`;
+}
+
+/** Apply inbound media bytes to a QoE window (stalls = gaps longer than STALL_GAP_MS). */
+export function applyMediaByteWindow(
+  prev: QualityWindow | null | undefined,
+  now: number,
+  byteLen: number
+): QualityWindow {
+  if (!prev || prev.totalBytes <= 0) {
+    return {
+      windowStart: now,
+      windowBytes: Math.max(0, byteLen),
+      totalBytes: Math.max(0, byteLen),
+      lastByteAt: now,
+      peakBytesPerSec: 0,
+      firstByteAt: now,
+      stallCount: 0,
+    };
+  }
+  const gap = now - prev.lastByteAt;
+  const stallCount = gap >= STALL_GAP_MS ? (prev.stallCount ?? 0) + 1 : prev.stallCount ?? 0;
+  const window: QualityWindow = {
+    windowStart: prev.windowStart,
+    windowBytes: prev.windowBytes + Math.max(0, byteLen),
+    totalBytes: prev.totalBytes + Math.max(0, byteLen),
+    lastByteAt: now,
+    peakBytesPerSec: prev.peakBytesPerSec,
+    firstByteAt: prev.firstByteAt || now,
+    stallCount,
+  };
+  const elapsed = Math.max(1, now - window.windowStart);
+  if (elapsed >= WINDOW_MS) {
+    const bps = Math.round((window.windowBytes * 1000) / elapsed);
+    window.peakBytesPerSec = Math.max(window.peakBytesPerSec, bps);
+    window.windowStart = now;
+    window.windowBytes = 0;
+  }
+  return window;
 }
 
 /** Record media bytes flowing through a live proxy (called from attachKickAwareProxyBody). */
@@ -41,27 +85,7 @@ export async function recordConnectionMediaBytes(
   const key = connectionQualityKey(lineId, streamId, ip);
   const now = Date.now();
   const prev = await cacheGet<QualityWindow>(key);
-  let window: QualityWindow = prev ?? {
-    windowStart: now,
-    windowBytes: 0,
-    totalBytes: 0,
-    lastByteAt: now,
-    peakBytesPerSec: 0,
-  };
-
-  window.windowBytes += byteLen;
-  window.totalBytes += byteLen;
-  window.lastByteAt = now;
-
-  const elapsed = Math.max(1, now - window.windowStart);
-  if (elapsed >= WINDOW_MS) {
-    const bps = Math.round((window.windowBytes * 1000) / elapsed);
-    window.peakBytesPerSec = Math.max(window.peakBytesPerSec, bps);
-    window.windowStart = now;
-    window.windowBytes = 0;
-  }
-
-  await cacheSet(key, window, QUALITY_TTL_SEC);
+  await cacheSet(key, applyMediaByteWindow(prev, now, byteLen), QUALITY_TTL_SEC);
 }
 
 export async function clearConnectionQuality(lineId: string, streamId: string, ip: string) {
@@ -92,19 +116,7 @@ export async function getLiveQualitySample(
   }
   if (!window) return null;
 
-  const stallSec = Math.max(0, (now - window.lastByteAt) / 1000);
-  const elapsed = Math.max(1, now - window.windowStart);
-  const currentBps =
-    window.windowBytes > 0 ? Math.round((window.windowBytes * 1000) / elapsed) : 0;
-  const bytesPerSec = Math.max(window.peakBytesPerSec, currentBps);
-
-  return {
-    bytesPerSec,
-    lastByteAt: window.lastByteAt,
-    totalBytes: window.totalBytes,
-    stallSec,
-    hasSamples: true,
-  };
+  return qualitySampleFromWindow(window, now);
 }
 
 function qualitySampleFromWindow(window: QualityWindow, now: number): LiveQualitySample {
@@ -118,6 +130,8 @@ function qualitySampleFromWindow(window: QualityWindow, now: number): LiveQualit
     lastByteAt: window.lastByteAt,
     totalBytes: window.totalBytes,
     stallSec,
+    stallCount: window.stallCount ?? 0,
+    firstByteAt: window.firstByteAt || window.lastByteAt,
     hasSamples: true,
   };
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { computeConnectionQualityWithLive } from "./connection-quality-live";
+import { applyMediaByteWindow, computeConnectionQualityWithLive } from "./connection-quality-live";
 
 test("computeConnectionQualityWithLive uses throughput when samples exist", () => {
   const now = Date.now();
@@ -13,6 +13,8 @@ test("computeConnectionQualityWithLive uses throughput when samples exist", () =
       lastByteAt: now - 1_000,
       totalBytes: 50_000_000,
       stallSec: 1,
+      stallCount: 0,
+      firstByteAt: now - 119_000,
       hasSamples: true,
     },
   });
@@ -31,6 +33,8 @@ test("computeConnectionQualityWithLive — HLS gap between segments stays green"
       lastByteAt: now - 18_000,
       totalBytes: 10_000_000,
       stallSec: 18,
+      stallCount: 1,
+      firstByteAt: now - 119_000,
       hasSamples: true,
     },
   });
@@ -49,6 +53,8 @@ test("computeConnectionQualityWithLive — stale byte window does not downgrade 
       lastByteAt: now - 120_000,
       totalBytes: 10_000_000,
       stallSec: 120,
+      stallCount: 2,
+      firstByteAt: now - 119_000,
       hasSamples: true,
     },
   });
@@ -67,6 +73,8 @@ test("computeConnectionQualityWithLive marks disconnected sessions poor", () => 
       lastByteAt: now - 120_000,
       totalBytes: 10_000_000,
       stallSec: 120,
+      stallCount: 2,
+      firstByteAt: now - 119_000,
       hasSamples: true,
     },
   });
@@ -95,4 +103,16 @@ test("computeConnectionQualityWithLive — new session starts green not yellow",
   });
   assert.equal(q.level, "excellent");
   assert.ok(q.score >= 98);
+});
+
+test("applyMediaByteWindow counts a stall after a 2.5s byte gap", () => {
+  const t0 = 1_000_000;
+  const first = applyMediaByteWindow(null, t0, 188);
+  assert.equal(first.stallCount, 0);
+  assert.equal(first.firstByteAt, t0);
+  const later = applyMediaByteWindow(first, t0 + 800, 188);
+  assert.equal(later.stallCount, 0);
+  const stalled = applyMediaByteWindow(later, t0 + 4_000, 188);
+  assert.equal(stalled.stallCount, 1);
+  assert.equal(stalled.firstByteAt, t0);
 });

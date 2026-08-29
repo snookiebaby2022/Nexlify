@@ -156,10 +156,10 @@ export function PanelMobileDashboard({
           href={streamsHref}
         />
         <StatTile
-          label="Expiring Today"
-          value={String(expiring.filter((l) => l.daysLeft <= 1).length)}
-          sub="next 7 days"
-          href={linesHref}
+          label="Live connections"
+          value={String(d?.onlineConnections ?? "—")}
+          sub={d?.maxConnections ? `max ${d.maxConnections}` : "watching now"}
+          href={connectionsHref}
         />
         <StatTile
           label={isReseller ? "Connections" : "Server Status"}

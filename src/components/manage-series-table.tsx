@@ -7,6 +7,7 @@ import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-
 import { displayStreamIcon } from "@/lib/plex-artwork";
 import { StreamDisplayTitle } from "@/components/stream-display-title";
 import { TmdbBackfillBanner } from "@/components/tmdb-backfill-banner";
+import { ListPagination } from "@/components/list-pagination";
 
 type SeriesRow = {
   id: string;
@@ -84,10 +85,6 @@ export function ManageSeriesTable() {
     load();
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const from = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
-  const to = Math.min(safePage * pageSize, total);
 
   return (
     <div className="space-y-4">
@@ -253,20 +250,13 @@ export function ManageSeriesTable() {
         </table>
       </div>
 
-      <div className="xui-streams-footer">
-        <span>
-          Showing {from} to {to} of {total} series
-        </span>
-        <div className="xui-streams-pagination">
-          <button type="button" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            ‹
-          </button>
-          <span className="xui-streams-page-num">{safePage}</span>
-          <button type="button" disabled={safePage >= totalPages} onClick={() => setPage((p) => p + 1)}>
-            ›
-          </button>
-        </div>
-      </div>
+      <ListPagination
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+        noun="series"
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Play, Users, Zap, Layers, ChevronDown, ChevronRight } from "lucide-react";
+import { Play, Users, Zap, ChevronDown, ChevronRight } from "lucide-react";
 import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
 import { useMediaQuery } from "@/lib/use-media-query";
 
@@ -70,7 +70,8 @@ function DashboardCard({
 
 import { DashboardStatBox } from "@/components/dashboard-stat-box";
 
-import { DashboardServerCard, type ServerDashboardMetrics } from "@/components/dashboard-server-card";
+import { type ServerDashboardMetrics } from "@/components/dashboard-server-card";
+import { DashboardXuiServerTiles } from "@/components/dashboard-xui-server-tiles";
 
 import { formatDateTime } from "@/lib/format";
 
@@ -88,9 +89,8 @@ import { DashboardCacheRebuild } from "@/components/dashboard-cache-rebuild";
 import { DashboardXuiResourceMonitor } from "@/components/dashboard-xui-resource-monitor";
 
 import { DashboardXuiKpiRibbon } from "@/components/dashboard-xui-kpi-ribbon";
+import { DashboardCapacityStrip } from "@/components/dashboard-capacity-strip";
 import { useDashboardLiveMetrics } from "@/components/dashboard-live-metrics";
-
-import { DashboardXuiServerTiles } from "@/components/dashboard-xui-server-tiles";
 
 import { DashboardLiveSports } from "@/components/dashboard-live-sports";
 
@@ -407,344 +407,52 @@ export function PanelDashboard({
 
     <div className="dashboard-v2 space-y-5 hidden md:block">
 
-      <header
-
-        className="rounded-2xl border overflow-hidden"
-
-        style={{ borderColor: "var(--border)" }}
-
-      >
-
-        <div
-
-          className="px-5 py-5 sm:px-6"
-
-          style={{
-
-            background:
-
-              "linear-gradient(135deg, rgba(0,192,239,0.15) 0%, rgba(168,85,247,0.12) 50%, transparent 100%)",
-
-          }}
-
-        >
-
-          <div className="flex flex-wrap items-start justify-between gap-4">
-
-            <div>
-
-              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "var(--accent)" }}>
-
-                Control center
-
-              </p>
-
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mt-1">Dashboard</h1>
-
-              <p className="text-sm mt-1 max-w-xl" style={{ color: "var(--muted)" }}>
-
-                {isReseller
-
-                  ? "Lines, connections, and subscriptions at a glance."
-
-                  : "Streams, servers, transcoding, and GeoIP — one clean overview."}
-
-              </p>
-
-            </div>
-
-            {!isReseller && (
-
-              <Link
-
-                href="/admin/streaming/health"
-
-                className="text-xs px-3 py-2 rounded-lg border font-medium shrink-0"
-
-                style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
-
-              >
-
-                Open stream health →
-
-              </Link>
-
-            )}
-
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
+        {!isReseller && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/admin/streaming/health"
+              className="text-xs px-3 py-1.5 rounded-lg border font-medium"
+              style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+            >
+              Stream health
+            </Link>
+            <DashboardQuickActions />
           </div>
-
-          {!isReseller && (
-
-            <div className="mt-4 pt-4 border-t" style={{ borderColor: "var(--border)" }}>
-
-              <DashboardQuickActions />
-
-            </div>
-
-          )}
-
-        </div>
-
+        )}
       </header>
 
-
-
       {!isReseller && (
-
         <>
-
-          <DashboardStackStrip items={stackItems} />
-
           <DashboardXuiKpiRibbon
-
             summary={liveSummary}
-
             kpi={liveKpi}
-
             connectionsHref={connectionsHref}
-
             linesHref={linesHref}
-
             streamsHref={streamsHref}
-
           />
-
-          <LazyDashboardSection minHeight="6rem">
-            <DashboardIssuesPanel statsUrl={statsUrl} kpi={stats?.dashboardKpi} />
-          </LazyDashboardSection>
-
-          <LazyDashboardSection minHeight="5rem">
-            <DashboardXuiSummaryCards widgetsUrl={widgetsUrl} />
-          </LazyDashboardSection>
-
-        </>
-
-      )}
-
-
-
-      {!isReseller && servers.length > 0 && (
-
-        <details open className="rounded-xl border text-sm group" style={{ borderColor: "var(--border)" }}>
-
-          <summary className="px-4 py-3 cursor-pointer font-medium select-none flex items-center gap-2">
-
-            <Layers size={16} style={{ color: "var(--accent)" }} />
-
-            All servers ({servers.length})
-
-          </summary>
-
-          <div className="p-4 pt-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-
-            {servers.map((s) => (
-
-              <DashboardServerCard key={s.id} server={s} />
-
-            ))}
-
-          </div>
-
-        </details>
-
-      )}
-
-
-
-      {!isReseller && !servers.length && (
-
-        <div
-
-          className="rounded-xl border p-6 text-center text-sm"
-
-          style={{ borderColor: "var(--border)", color: "var(--muted)" }}
-
-        >
-
-          No stream servers yet.{" "}
-
-          <Link href={addServerHref} className="underline" style={{ color: "var(--accent)" }}>
-
-            Install your first server
-
-          </Link>
-
-        </div>
-
-      )}
-
-
-
-      {showActivity && !isReseller && (
-
-        <details open className="rounded-xl border text-sm" style={{ borderColor: "var(--border)" }}>
-
-          <summary className="px-4 py-3 cursor-pointer font-medium select-none">
-
-            Activity & cron
-
-            {stats?.cronLastRun && (
-
-              <span className="ml-2 font-normal text-xs" style={{ color: "var(--muted)" }}>
-
-                · Cron {formatDateTime(stats.cronLastRun)}
-
-              </span>
-
-            )}
-
-          </summary>
-
-          <div
-
-            className="grid lg:grid-cols-3 gap-4 p-4 pt-0 border-t"
-
-            style={{ borderColor: "var(--border)" }}
-
-          >
-
-            <div>
-
-              <h3 className="text-sm font-medium mb-2">Recent activity</h3>
-
-              <ul className="divide-y rounded border max-h-48 overflow-auto" style={{ borderColor: "var(--border)" }}>
-
-                {(stats?.logs ?? []).map((log, i) => (
-
-                  <li key={i} className="px-3 py-2 flex justify-between gap-2 text-xs">
-
-                    {log.fixHref ? (
-
-                      <Link href={log.fixHref} className="hover:underline truncate" style={{ color: "var(--accent)" }}>
-
-                        {log.label}
-
-                      </Link>
-
-                    ) : (
-
-                      <span className="truncate">{log.label}</span>
-
-                    )}
-
-                    <span className="shrink-0" style={{ color: "var(--muted)" }}>
-
-                      {formatDateTime(log.createdAt)}
-
-                    </span>
-
-                  </li>
-
-                ))}
-
-                {!stats?.logs?.length && (
-
-                  <li className="px-3 py-4 text-center" style={{ color: "var(--muted)" }}>
-
-                    No recent activity
-
-                  </li>
-
-                )}
-
-              </ul>
-
-            </div>
-
-            <div>
-
-              <h3 className="text-sm font-medium mb-2">Cron jobs</h3>
-
-              <ul className="divide-y rounded border max-h-48 overflow-auto" style={{ borderColor: "var(--border)" }}>
-
-                {(stats?.cronLogs ?? []).map((log, i) => (
-
-                  <li key={i} className="px-3 py-2 flex justify-between gap-2 text-xs">
-
-                    <span className="truncate">
-
-                      {log.fixHref && log.status !== "ok" ? (
-
-                        <Link href={log.fixHref} style={{ color: "var(--accent)" }}>
-
-                          {log.job}
-
-                        </Link>
-
-                      ) : (
-
-                        log.job
-
-                      )}{" "}
-
-                      <span style={{ color: log.status === "ok" ? "var(--success)" : "var(--danger)" }}>
-
-                        ({log.status})
-
-                      </span>
-
-                    </span>
-
-                    <span className="shrink-0" style={{ color: "var(--muted)" }}>
-
-                      {formatDateTime(log.createdAt)}
-
-                    </span>
-
-                  </li>
-
-                ))}
-
-                {!stats?.cronLogs?.length && (
-
-                  <li className="px-3 py-4 text-center" style={{ color: "var(--muted)" }}>
-
-                    No cron runs yet
-
-                  </li>
-
-                )}
-
-              </ul>
-
-            </div>
-
-            <DashboardCacheRebuild />
-
-          </div>
-
-        </details>
-
-      )}
-
-
-
-      {!isReseller ? (
-
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
-
-          <div className="xl:col-span-8 space-y-5">
-
+          <DashboardCapacityStrip />
+          <DashboardIssuesPanel statsUrl={statsUrl} kpi={stats?.dashboardKpi} hideWhenHealthy />
+          {servers.length > 0 ? (
             <DashboardXuiServerTiles servers={servers} />
-
-            <LazyDashboardSection minHeight="10rem">
-              <DashboardXuiResourceMonitor serverMetrics={servers} summary={d ?? undefined} />
-            </LazyDashboardSection>
-
-            <LazyDashboardSection minHeight="8rem">
-              <DashboardLiveSports />
-            </LazyDashboardSection>
-
-          </div>
-
-          <aside className="xl:col-span-4 space-y-5">
-
+          ) : (
+            <div
+              className="rounded-xl border p-6 text-center text-sm"
+              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+            >
+              No stream servers yet.{" "}
+              <Link href={addServerHref} className="underline" style={{ color: "var(--accent)" }}>
+                Install your first server
+              </Link>
+            </div>
+          )}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <DashboardCard id="expiring-lines" title="Expiring in 7 days">
               <LazyDashboardSection minHeight="6rem">
                 <DashboardExpiringLines widgetsUrl={widgetsUrl} linesHref={linesHref} />
               </LazyDashboardSection>
             </DashboardCard>
-
             <DashboardCard id="top-channels" title="Top channels">
               <ul className="divide-y text-sm" style={{ borderColor: "var(--border)" }}>
                 {(stats?.topChannels ?? []).slice(0, 6).map((ch) => (
@@ -763,12 +471,95 @@ export function PanelDashboard({
                 Video log →
               </Link>
             </DashboardCard>
+          </div>
+          <details className="rounded-xl border text-sm" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+            <summary className="px-4 py-3 cursor-pointer font-medium select-none">
+              More — stack, activity, globe, insights
+            </summary>
+            <div className="p-4 pt-0 space-y-4 border-t" style={{ borderColor: "var(--border)" }}>
+              <DashboardStackStrip items={stackItems} />
+              {showActivity ? (
+                <div className="grid lg:grid-cols-3 gap-4">
+                  <div>
+                    <h3 className="text-sm font-medium mb-2">Recent activity</h3>
+                    <ul className="divide-y rounded border max-h-48 overflow-auto" style={{ borderColor: "var(--border)" }}>
+                      {(stats?.logs ?? []).map((log, i) => (
+                        <li key={i} className="px-3 py-2 flex justify-between gap-2 text-xs">
+                          {log.fixHref ? (
+                            <Link href={log.fixHref} className="hover:underline truncate" style={{ color: "var(--accent)" }}>
+                              {log.label}
+                            </Link>
+                          ) : (
+                            <span className="truncate">{log.label}</span>
+                          )}
+                          <span className="shrink-0" style={{ color: "var(--muted)" }}>
+                            {formatDateTime(log.createdAt)}
+                          </span>
+                        </li>
+                      ))}
+                      {!stats?.logs?.length && (
+                        <li className="px-3 py-4 text-center" style={{ color: "var(--muted)" }}>
+                          No recent activity
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium mb-2">Cron jobs</h3>
+                    <ul className="divide-y rounded border max-h-48 overflow-auto" style={{ borderColor: "var(--border)" }}>
+                      {(stats?.cronLogs ?? []).map((log, i) => (
+                        <li key={i} className="px-3 py-2 flex justify-between gap-2 text-xs">
+                          <span className="truncate">
+                            {log.fixHref && log.status !== "ok" ? (
+                              <Link href={log.fixHref} style={{ color: "var(--accent)" }}>
+                                {log.job}
+                              </Link>
+                            ) : (
+                              log.job
+                            )}{" "}
+                            <span style={{ color: log.status === "ok" ? "var(--success)" : "var(--danger)" }}>
+                              ({log.status})
+                            </span>
+                          </span>
+                          <span className="shrink-0" style={{ color: "var(--muted)" }}>
+                            {formatDateTime(log.createdAt)}
+                          </span>
+                        </li>
+                      ))}
+                      {!stats?.cronLogs?.length && (
+                        <li className="px-3 py-4 text-center" style={{ color: "var(--muted)" }}>
+                          No cron runs yet
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                  <DashboardCacheRebuild />
+                </div>
+              ) : null}
+              <LazyDashboardSection minHeight="8rem">
+                <DashboardLiveSports />
+              </LazyDashboardSection>
+              <LazyDashboardSection minHeight="16rem">
+                <ConnectionMap />
+              </LazyDashboardSection>
+              <LazyDashboardSection minHeight="12rem">
+                <DashboardMostWatchedByCountry widgetsUrl={widgetsUrl} />
+              </LazyDashboardSection>
+              <LazyDashboardSection minHeight="10rem">
+                <DashboardXuiResourceMonitor serverMetrics={servers} summary={d ?? undefined} />
+              </LazyDashboardSection>
+              <LazyDashboardSection minHeight="5rem">
+                <DashboardXuiSummaryCards widgetsUrl={widgetsUrl} />
+              </LazyDashboardSection>
+              <LazyDashboardSection minHeight="10rem">
+                <DashboardInsightsPanels widgetsUrl={widgetsUrl} linesHref={linesHref} />
+              </LazyDashboardSection>
+            </div>
+          </details>
+        </>
+      )}
 
-          </aside>
-
-        </div>
-
-      ) : (
+      {isReseller ? (
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 xl:grid-cols-3">
 
@@ -818,22 +609,7 @@ export function PanelDashboard({
 
         </div>
 
-      )}
-
-
-
-      <LazyDashboardSection minHeight="16rem">
-        <ConnectionMap />
-      </LazyDashboardSection>
-      <LazyDashboardSection minHeight="12rem">
-        <DashboardMostWatchedByCountry widgetsUrl={widgetsUrl} />
-      </LazyDashboardSection>
-
-      {!isReseller && (
-        <LazyDashboardSection minHeight="10rem">
-          <DashboardInsightsPanels widgetsUrl={widgetsUrl} linesHref={linesHref} />
-        </LazyDashboardSection>
-      )}
+      ) : null}
 
     </div>
     </>

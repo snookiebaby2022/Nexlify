@@ -12,6 +12,7 @@ import {
 } from "@/lib/connection-quality";
 import type { PlaybackOutputLabel } from "@/lib/connection-playback-output";
 import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
+import { ListPagination } from "@/components/list-pagination";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
 
@@ -26,15 +27,30 @@ type ConnectionRow = {
   stream: { id: string; name: string; type: string } | null;
   quality: ConnectionQuality;
   output: PlaybackOutputLabel;
+  qoe?: { firstPictureMs: number | null; stallCount: number; mbps: number } | null;
 };
 
-function formatConnDuration(startedAt: string | Date, nowMs: number): string {
-  const sec = Math.max(0, Math.floor((nowMs - new Date(startedAt).getTime()) / 1000));
+function formatConnDuration(
+  startedAt: string | Date,
+  lastSeenAt: string | Date | undefined,
+  nowMs: number
+): string {
+  const start = new Date(startedAt).getTime();
+  if (!Number.isFinite(start)) return "—";
+  const last = lastSeenAt ? new Date(lastSeenAt).getTime() : NaN;
+  const end = Number.isFinite(last) && nowMs - last > 8_000 ? last : nowMs;
+  const sec = Math.max(0, Math.floor((end - start) / 1000));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
   if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
   return `${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
+}
+
+function formatQoe(qoe: ConnectionRow["qoe"]): string {
+  if (!qoe) return "—";
+  const ttfp = qoe.firstPictureMs != null ? `${(qoe.firstPictureMs / 1000).toFixed(1)}s` : "—";
+  return `${ttfp} · ${qoe.stallCount} stall · ${qoe.mbps.toFixed(1)} Mb/s`;
 }
 
 function CompactConnectionRow({
@@ -106,7 +122,7 @@ function ConnectionCard({
         </div>
         <div>
           <p className="panel-mobile-card-label">Duration</p>
-          <span className="xui-duration-badge">{formatConnDuration(c.startedAt, nowMs)}</span>
+          <span className="xui-duration-badge">{formatConnDuration(c.startedAt, c.lastSeenAt, nowMs)}</span>
         </div>
         <div>
           <p className="panel-mobile-card-label">Server</p>
@@ -115,6 +131,10 @@ function ConnectionCard({
         <div>
           <p className="panel-mobile-card-label">Output</p>
           <p className="text-sm">{c.output}</p>
+        </div>
+        <div>
+          <p className="panel-mobile-card-label">QoE</p>
+          <p className="text-sm">{formatQoe(c.qoe)}</p>
         </div>
       </div>
       <div className="panel-mobile-card-actions">
@@ -150,6 +170,7 @@ export function AdminConnectionsClient({
   const [connections, setConnections] = useState<ConnectionRow[]>(initialConnections);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(50);
+  const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -214,7 +235,10 @@ export function AdminConnectionsClient({
     );
   });
 
-  const shown = filtered.slice(0, pageSize);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const startIdx = (safePage - 1) * pageSize;
+  const shown = filtered.slice(startIdx, startIdx + pageSize);
 
   return (
     <div className="xui-streams-page space-y-4">
@@ -249,7 +273,13 @@ export function AdminConnectionsClient({
       <div className="xui-clients-toolbar">
         <label className="xui-clients-show">
           Show{" "}
-          <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+          >
             {[10, 25, 50, 100].map((n) => (
               <option key={n} value={n}>
                 {n}
@@ -263,7 +293,10 @@ export function AdminConnectionsClient({
           <input
             type="search"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             className="xui-clients-search-input"
           />
         </label>
@@ -298,6 +331,7 @@ export function AdminConnectionsClient({
               <th>Server</th>
               <th>IP</th>
               <th>Duration</th>
+              <th>QoE</th>
               <th>Output</th>
               <th>Restreamer</th>
               <th>Actions</th>
@@ -321,7 +355,10 @@ export function AdminConnectionsClient({
                 <td>{c.serverName ?? "Main Server"}</td>
                 <td>{c.ip ? <IpWithFlag ip={c.ip} /> : "—"}</td>
                 <td>
-                  <span className="xui-duration-badge">{formatConnDuration(c.startedAt, nowMs)}</span>
+                  <span className="xui-duration-badge">{formatConnDuration(c.startedAt, c.lastSeenAt, nowMs)}</span>
+                </td>
+                <td className="text-xs tabular-nums whitespace-nowrap" title="Time to first picture · stalls · bitrate">
+                  {formatQoe(c.qoe)}
                 </td>
                 <td>{c.output}</td>
                 <td>
@@ -357,20 +394,12 @@ export function AdminConnectionsClient({
         {shown.length === 0 && <p className="xui-streams-empty">No active connections.</p>}
       </div>
 
-      <div className="xui-streams-footer">
-        <span>
-          Showing {shown.length ? 1 : 0} to {shown.length} of {filtered.length} entries
-        </span>
-        <div className="xui-streams-pagination">
-          <button type="button" disabled>
-            Previous
-          </button>
-          <span className="xui-streams-page-num">1</span>
-          <button type="button" disabled>
-            Next
-          </button>
-        </div>
-      </div>
+      <ListPagination
+        page={safePage}
+        pageSize={pageSize}
+        total={filtered.length}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

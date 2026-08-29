@@ -8,17 +8,17 @@ export type AdminPollIntervals = {
 };
 
 const DEFAULT: AdminPollIntervals = {
-  dashboardMs: 30_000,
-  connectionsMs: 10_000,
+  dashboardMs: 45_000,
+  connectionsMs: 12_000,
   streamsMs: 30_000,
-  dashboardSseMs: 5_000,
+  dashboardSseMs: 10_000,
 };
 
 const PERF: AdminPollIntervals = {
-  dashboardMs: 60_000,
+  dashboardMs: 90_000,
   connectionsMs: 15_000,
-  streamsMs: 30_000,
-  dashboardSseMs: 5_000,
+  streamsMs: 45_000,
+  dashboardSseMs: 12_000,
 };
 
 /** Server-side poll intervals for admin APIs (SSE, cron-adjacent). */

@@ -28,6 +28,7 @@ import { StreamDisplayTitle } from "@/components/stream-display-title";
 import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
 import { TmdbBackfillBanner } from "@/components/tmdb-backfill-banner";
 import { DuplicateStreamNamesBanner } from "@/components/duplicate-stream-names-banner";
+import { ListPagination } from "@/components/list-pagination";
 import {
   ColumnPickerList,
   ToolbarDropdown,
@@ -228,6 +229,8 @@ export function StreamsList({
     const sp = new URLSearchParams(window.location.search);
     const cat = sp.get("categoryId");
     if (cat) setCategoryId(cat);
+    const q = sp.get("search");
+    if (q) setSearch(q);
   }, []);
 
   useEffect(() => {
@@ -375,9 +378,6 @@ export function StreamsList({
     load();
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, total);
 
   return (
     <div className="xui-streams-page space-y-4">
@@ -920,20 +920,7 @@ export function StreamsList({
         )}
       </div>
 
-      <div className="xui-streams-footer">
-        <span>
-          Showing {from} to {to} of {total} entries
-        </span>
-        <div className="xui-streams-pagination">
-          <button type="button" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            ‹
-          </button>
-          <span className="xui-streams-page-num">{page}</span>
-          <button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-            ›
-          </button>
-        </div>
-      </div>
+      <ListPagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
 
       {clientsModal && (
         <StreamClientsModal
