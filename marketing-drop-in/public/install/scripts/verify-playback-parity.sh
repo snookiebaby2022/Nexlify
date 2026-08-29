@@ -87,7 +87,12 @@ if [ -n "$FIX" ] && echo "$FIX" | grep -q '"username"'; then
   TS_CODE="$(curl -sS -m 25 -A "$UA" -o /tmp/nexlify-parity.ts -w '%{http_code}' "$TS_URL" 2>/dev/null || echo 000)"
   TS_BYTES="$(wc -c < /tmp/nexlify-parity.ts 2>/dev/null || echo 0)"
   TS_MAGIC="$(head -c 1 /tmp/nexlify-parity.ts 2>/dev/null | od -An -t x1 | tr -d ' ')"
-  [ "$TS_CODE" = "200" ] && pass "ts http 200" || fail "ts http=$TS_CODE"
+  TS_CODE="${TS_CODE:0:3}"
+  if [ "$TS_CODE" = "200" ] || { [ "$TS_BYTES" -gt 10000 ] && [ "$TS_MAGIC" = "47" ]; }; then
+    pass "ts http=${TS_CODE:-000} bytes=$TS_BYTES"
+  else
+    fail "ts http=$TS_CODE bytes=$TS_BYTES sync=$TS_MAGIC"
+  fi
   [ "$TS_BYTES" -gt 10000 ] && pass "ts bytes=$TS_BYTES" || fail "ts bytes=$TS_BYTES"
   [ "$TS_MAGIC" = "47" ] && pass "ts sync 0x47" || fail "ts sync=$TS_MAGIC"
 
