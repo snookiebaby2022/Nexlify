@@ -10,8 +10,18 @@ if (!url) {
   process.exit(1);
 }
 
+function psqlUrl(raw) {
+  try {
+    const u = new URL(raw);
+    u.search = "";
+    return u.href;
+  } catch {
+    return String(raw).replace(/\?.*$/, "");
+  }
+}
+
 function psql(sql) {
-  return execSync(`psql ${JSON.stringify(url)} -At -c ${JSON.stringify(sql)}`, {
+  return execSync(`psql ${JSON.stringify(psqlUrl(url))} -At -c ${JSON.stringify(sql)}`, {
     encoding: "utf8",
   }).trim();
 }
