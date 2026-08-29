@@ -115,6 +115,10 @@ const sharedPanelEnv = {
   // Override via NODE_OPTIONS in .env when a box is memory-constrained.
   NEXLIFY_CATALOG_CACHE_DIR: fileEnv.NEXLIFY_CATALOG_CACHE_DIR || "/var/lib/nexlify/catalog-cache",
   NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=8192",
+  PANEL_INSTANCES: String(panelInstances),
+  NEXLIFY_PM2_INSTANCES: String(panelInstances),
+  NEXLIFY_DB_CONNECTION_LIMIT: fileEnv.NEXLIFY_DB_CONNECTION_LIMIT || "8",
+  NEXLIFY_STREAMING_OPTIMIZED: fileEnv.NEXLIFY_STREAMING_OPTIMIZED || (streamingOptimized ? "1" : "0"),
 };
 
 /** @type {import('pm2').StartOptions} */
@@ -164,6 +168,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         DATABASE_URL: fileEnv.DATABASE_URL || "",
+        NEXLIFY_DB_CONNECTION_LIMIT: fileEnv.NEXLIFY_CRON_DB_CONNECTION_LIMIT || "3",
         REDIS_URL: fileEnv.REDIS_URL || process.env.REDIS_URL || "redis://127.0.0.1:6379",
         REDIS_CLUSTER_NODES: fileEnv.REDIS_CLUSTER_NODES || process.env.REDIS_CLUSTER_NODES || "",
         PATH: pgBinPath(),
