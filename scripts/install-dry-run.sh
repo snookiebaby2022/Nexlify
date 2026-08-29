@@ -75,7 +75,8 @@ if npm ci --no-audit --no-fund --loglevel=error >/dev/null 2>&1; then pass "npm 
 if npx prisma generate >/dev/null 2>&1; then pass "prisma generate"; else fail "prisma generate"; fi
 
 echo "[6] production build"
-if [ "$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)" -lt 2500000 ] && ! swapon --show 2>/dev/null | grep -q .; then
+MEM_AVAIL="$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 9999999)"
+if [ "${MEM_AVAIL:-0}" -lt 2500000 ] && ! swapon --show 2>/dev/null | grep -q .; then
   echo "  .. adding 2G swap for build"
   fallocate -l 2G /tmp/nexlify-dryrun-swap 2>/dev/null || dd if=/dev/zero of=/tmp/nexlify-dryrun-swap bs=1M count=2048 status=none
   chmod 600 /tmp/nexlify-dryrun-swap

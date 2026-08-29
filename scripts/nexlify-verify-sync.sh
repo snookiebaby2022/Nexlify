@@ -134,11 +134,14 @@ TAR="$ROOT/dist/nexlify-panel.tar.gz"
 if [ ! -f "$TAR" ]; then
   warn "dist/nexlify-panel.tar.gz missing — run: npm run package:panel"
 else
+  TAR_LIST="$(tar -tzf "$TAR" 2>/dev/null || true)"
   for f in scripts/iptv-edge-proxy.mjs scripts/route-live-to-remote-edge.sh scripts/apply-live-edge-topology.sh scripts/verify-playback-parity.sh; do
-    if tar -tzf "$TAR" | grep -qF "$f"; then ok "tarball contains $f"; else fail "tarball missing $f"; fi
+    if grep -qF "$f" <<< "$TAR_LIST"; then ok "tarball contains $f"; else fail "tarball missing $f"; fi
   done
   CANON="$(sha256sum "$SCRIPTS/iptv-edge-proxy.mjs" | awk '{print $1}')"
-  TAR_HASH="$(tar -xOzf "$TAR" scripts/iptv-edge-proxy.mjs 2>/dev/null | sha256sum | awk '{print $1}')"
+  TAR_EDGE="./scripts/iptv-edge-proxy.mjs"
+  grep -qF "$TAR_EDGE" <<< "$TAR_LIST" || TAR_EDGE="scripts/iptv-edge-proxy.mjs"
+  TAR_HASH="$(tar -xOzf "$TAR" "$TAR_EDGE" 2>/dev/null | sha256sum | awk '{print $1}')"
   if [ "$CANON" = "$TAR_HASH" ]; then ok "tarball edge matches canonical iptv-edge-proxy.mjs"; else fail "tarball edge drift"; fi
 fi
 

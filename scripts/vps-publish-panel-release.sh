@@ -56,7 +56,7 @@ command -v node >/dev/null || { echo "ERROR: node not installed"; exit 1; }
 WORK_DIR=""
 
 resolve_source() {
-  if [ -d "$PANEL/.git" ] && [ -f "$PANEL/scripts/publish-panel-release.sh" ]; then
+  if [ -d "$PANEL/.git" ] && [ -f "$PANEL/scripts/publish-panel-release.sh" ] && [ -d "$PANEL/marketing-drop-in" ]; then
     echo "-> Updating existing git checkout at $PANEL" >&2
     git -C "$PANEL" remote set-url origin "$REPO_URL" 2>/dev/null || true
     if ! git -C "$PANEL" fetch origin "$BRANCH" --depth 1 >/dev/null 2>&1; then
