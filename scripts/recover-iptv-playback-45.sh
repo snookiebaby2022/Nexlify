@@ -5,9 +5,9 @@ cd /opt/nexlify-panel
 echo "=== Flush stale connections ==="
 node scripts/flush-stale-connections.cjs
 
-echo "=== Cap DB pool / workers ==="
-grep -q '^PANEL_INSTANCES=' .env && sed -i 's/^PANEL_INSTANCES=.*/PANEL_INSTANCES=3/' .env || echo 'PANEL_INSTANCES=3' >> .env
-grep -q '^NEXLIFY_DB_CONNECTION_LIMIT=' .env && sed -i 's/^NEXLIFY_DB_CONNECTION_LIMIT=.*/NEXLIFY_DB_CONNECTION_LIMIT=8/' .env || echo 'NEXLIFY_DB_CONNECTION_LIMIT=8' >> .env
+echo "=== XUI-style worker cap (edge serves IPTV, panel stays lean) ==="
+grep -q '^PANEL_INSTANCES=' .env && sed -i 's/^PANEL_INSTANCES=.*/PANEL_INSTANCES=2/' .env || echo 'PANEL_INSTANCES=2' >> .env
+grep -q '^NEXLIFY_STREAMING_OPTIMIZED=' .env && sed -i 's/^NEXLIFY_STREAMING_OPTIMIZED=.*/NEXLIFY_STREAMING_OPTIMIZED=1/' .env || echo 'NEXLIFY_STREAMING_OPTIMIZED=1' >> .env
 
 echo "=== Purge duplicate streams ==="
 node scripts/purge-stream-duplicates.cjs --all-live-url
