@@ -1,5 +1,3 @@
-import type { Line } from "@prisma/client";
-
 function normalizeMac(raw: string | null | undefined): string {
   return String(raw ?? "")
     .trim()
