@@ -2,6 +2,14 @@
 # Topology-independent playback contract: 200 + media bytes, never 302 for IPTV paths.
 set -euo pipefail
 
+if [ -z "${PANEL_DIR:-}" ]; then
+  for d in /home/nexlify /opt/nexlify-panel "$(cd "$(dirname "$0")/.." && pwd)"; do
+    if [ -f "$d/scripts/iptv-edge-proxy.mjs" ]; then
+      PANEL_DIR="$d"
+      break
+    fi
+  done
+fi
 PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
 [ -d "$PANEL_DIR" ] && cd "$PANEL_DIR"
 

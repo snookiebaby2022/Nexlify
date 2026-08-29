@@ -173,7 +173,14 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  if (shouldBlockBots() && shouldStealthPath(pathname) && isLikelyBot(req)) {
+  const host = hostName(req);
+  // Loopback probes (audit/smoke/curl on :13000) must see real pages; public scanners still get a stealth 404.
+  if (
+    shouldBlockBots() &&
+    shouldStealthPath(pathname) &&
+    isLikelyBot(req) &&
+    !isLocalHost(host)
+  ) {
     return new NextResponse(botBlockedBody(), {
       status: 404,
       headers: {
@@ -182,8 +189,6 @@ export async function middleware(req: NextRequest) {
       },
     });
   }
-
-  const host = hostName(req);
 
   if (isPanelDemoHost(host)) {
     if (isDemoPlaybackPath(pathname)) {
