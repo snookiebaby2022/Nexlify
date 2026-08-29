@@ -24,7 +24,7 @@ export function buildAbrMasterPlaylist(
   });
 
   for (const v of parseBitrates(bitrates)) {
-    const bw = Number(v.bitrate ?? v.bandwidth ?? 0) || 1_500_000;
+    const bw = (Number(v.bandwidthKbps ?? 0) || 1500) * 1000;
     variants.push({
       name: v.label || `${Math.round(bw / 1000)}k`,
       bandwidth: bw,

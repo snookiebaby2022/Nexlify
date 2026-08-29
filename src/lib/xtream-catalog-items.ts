@@ -16,6 +16,26 @@ import {
 import { cuidToNum } from "@/lib/xtream-stream-id";
 import { xtreamListingRating } from "@/lib/vod-meta";
 
+function exportCategoryNumericId(
+  stream: { type: StreamType; categoryId?: string | null; categoryType?: string | null },
+  canonical: CanonicalCategoryMaps,
+  expected: "LIVE" | "MOVIE" | "SERIES" | "RADIO"
+): string {
+  if (!stream.categoryId) return "0";
+  const folderType = stream.categoryType?.toUpperCase();
+  if (folderType && folderType !== expected) return "0";
+  if (expected === "LIVE") {
+    if (stream.type !== StreamType.LIVE) return "0";
+    if (folderType === "RADIO") return "0";
+  }
+  if (expected === "MOVIE" && stream.type !== StreamType.MOVIE) return "0";
+  if (expected === "SERIES" && stream.type !== StreamType.SERIES) return "0";
+  if (expected === "RADIO") {
+    if (stream.type !== StreamType.LIVE || folderType !== "RADIO") return "0";
+  }
+  return canonicalNumericForCategory(canonical, stream.categoryId);
+}
+
 export function mapXtreamLiveItem(
   s: StreamForLine,
   index: number,
@@ -25,7 +45,7 @@ export function mapXtreamLiveItem(
   const archiveDays = s.archiveDays ?? 0;
   const timeshiftHours = s.timeshiftSeconds ? Math.ceil(s.timeshiftSeconds / 3600) : 0;
   const shiftLabel = formatTimeshiftLabel(s.timeshiftSeconds);
-  const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
+  const numCategoryId = exportCategoryNumericId(s, canonical, "LIVE");
   const name = xtreamSafeText(shiftLabel ? `${s.name} (${shiftLabel})` : s.name) || "Live";
   return {
     num: index + 1,
@@ -51,7 +71,7 @@ export function mapXtreamVodItem(
   index: number,
   canonical: CanonicalCategoryMaps
 ) {
-  const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
+  const numCategoryId = exportCategoryNumericId(s, canonical, "MOVIE");
   const stars = xtreamListingRating(s.vodRating);
   return {
     num: index + 1,
@@ -81,10 +101,14 @@ export function mapXtreamSeriesItem(
   index: number,
   canonical: CanonicalCategoryMaps
 ) {
-  const numCategoryId = canonicalNumericForCategory(canonical, s.categoryId);
-  const cover = xtreamSafeText(s.streamIcon);
+  const numCategoryId = exportCategoryNumericId(
+    { type: StreamType.SERIES, categoryId: s.categoryId },
+    canonical,
+    "SERIES"
+  );
   const modified = xtreamUnix(s.updatedAt);
   const stars = xtreamListingRating(s.vodRating);
+  const cover = xtreamSafeText(s.streamIcon);
   return {
     num: index + 1,
     name: xtreamSafeText(s.name) || "Series",
