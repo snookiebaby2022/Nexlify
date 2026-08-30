@@ -6,18 +6,29 @@
       "version": "2.0.60",
       "date": "2026-08-30",
       "channel": "stable",
-      "summary": "Collapsed dashboard quick actions, safer catalog names, LIVE-first stream create, and duplicate/on-demand cleanup.",
+      "summary": "Collapsed dashboard chips, safer catalog names, XUI-style per-stream Sources, faster What’s on now, and a durable Plex / Postgres pool.",
       "changelog": [
         "Dashboard quick-action chips stay hidden until opened",
         "EPG now-playing is stored without renaming the catalog channel name",
         "New live streams default to LIVE relay instead of on-demand",
         "Duplicate-name cleanup prefers LIVE rows with logos and drops iconless on-demand copies",
-        "What's on now, public LB status, stream sources panel, and line QoE on tickets"
+        "What’s on now reads current EPG titles with a short cache instead of scanning every live row",
+        "Add / edit stream Sources tab is primary + backup URLs (XUI-style); host replace stays on Manage Streams",
+        "Sources is no longer a Live TV sidebar item",
+        "Live-auth prefers public viewer IPs from CF-Connecting-IP, X-Real-IP, and X-Forwarded-For",
+        "Prisma limits connections per worker; Plex library sync updates titles one at a time",
+        "Remote-live hosts keep nginx on :8080 to 10gbs so a panel rebuild cannot drop playback",
+        "What’s on now, public LB status, and line QoE on tickets"
       ],
       "fixes": [
         "Panel update worker could die before rebuild when ERR_LOG was unset",
         "Empty stream icons rendered as a large white rectangle",
-        "Plex sync skipped too many IPTV titles and dropped year from the match key"
+        "Plex sync skipped too many IPTV titles and dropped year from the match key",
+        "What’s on now felt empty or hung while it scanned streams with no loading state",
+        "Plex Library sync failed with FATAL: sorry, too many clients already",
+        "Many Live Connections rows stored no viewer IP",
+        "Weak or placeholder JWT_SECRET blocked admin login",
+        "A production rebuild could comment nginx listen 8080 and 502 /live/ on the panel host"
       ]
     },
     {
