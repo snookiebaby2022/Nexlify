@@ -8,7 +8,7 @@ import { resolveEpgId } from "@/lib/subscription-export";
 import {
   xtreamSafeText,
   xtreamUnix,
-  xtreamUnixString,
+  xtreamAddedUnix,
   xtreamCategoryIds,
   xtreamCatalogDirectSource,
   xtreamListingExtension,
@@ -73,16 +73,20 @@ export function mapXtreamVodItem(
 ) {
   const numCategoryId = exportCategoryNumericId(s, canonical, "MOVIE");
   const stars = xtreamListingRating(s.vodRating);
+  const icon = xtreamSafeText(s.streamIcon);
+  const added = xtreamAddedUnix(s.createdAt, s.updatedAt);
   return {
     num: index + 1,
     name: xtreamSafeText(s.name) || "Movie",
     stream_type: "movie" as const,
     stream_id: cuidToNum(s.id),
-    stream_icon: xtreamSafeText(s.streamIcon),
+    stream_icon: icon,
+    movie_image: icon,
     rating: stars.rating,
     rating_5based: stars.rating_5based,
-    added: xtreamUnixString(s.createdAt),
-    updated_at: xtreamUnix(s.updatedAt),
+    added: String(added),
+    updated_at: added,
+    last_modified: String(added),
     is_adult: s.isAdult ? 1 : 0,
     category_id: numCategoryId,
     category_ids: xtreamCategoryIds(numCategoryId),

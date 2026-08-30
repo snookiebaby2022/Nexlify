@@ -26,6 +26,14 @@ export function xtreamUnixString(date: Date | string | number | null | undefined
   return String(xtreamUnix(date));
 }
 
+/** XCIPTV Latest Movies sorts/filters on `added`. Use the later of created/updated so Plex syncs appear. */
+export function xtreamAddedUnix(
+  createdAt: Date | string | number | null | undefined,
+  updatedAt?: Date | string | number | null
+): number {
+  return Math.max(xtreamUnix(createdAt), xtreamUnix(updatedAt));
+}
+
 /** XCIPTV iterates JSON arrays. Delta/timestamp must still return an array, never a wrapper object. */
 export function xtreamDeltaArray<T>(
   payload: T[],

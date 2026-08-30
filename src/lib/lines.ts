@@ -275,21 +275,21 @@ function listingUsesNewestFirst(options?: StreamsForLineOptions): boolean {
 
 function listingOrderSql(options?: StreamsForLineOptions) {
   if (listingUsesNewestFirst(options)) {
-    return Prisma.sql`ORDER BY s."createdAt" DESC, s.id DESC`;
+    return Prisma.sql`ORDER BY GREATEST(s."createdAt", s."updatedAt") DESC, s.id DESC`;
   }
   return Prisma.sql`ORDER BY s."sortOrder" ASC, s.name ASC, s.id ASC`;
 }
 
 type ListingCursor =
   | { kind: "order"; sortOrder: number; name: string; id: string }
-  | { kind: "newest"; createdAt: Date; id: string };
+  | { kind: "newest"; at: Date; id: string };
 
 function listingCursorSql(cursor: ListingCursor | null): Prisma.Sql {
   if (!cursor) return Prisma.empty;
   if (cursor.kind === "newest") {
     return Prisma.sql`AND (
-      s."createdAt" < ${cursor.createdAt}
-      OR (s."createdAt" = ${cursor.createdAt} AND s.id < ${cursor.id})
+      GREATEST(s."createdAt", s."updatedAt") < ${cursor.at}
+      OR (GREATEST(s."createdAt", s."updatedAt") = ${cursor.at} AND s.id < ${cursor.id})
     )`;
   }
   return Prisma.sql`AND (
@@ -464,7 +464,15 @@ export async function forEachLeanListingBatch(
     await onBatch(mapped);
     const last = rows[rows.length - 1]!;
     cursor = newest
-      ? { kind: "newest", createdAt: last.createdAt, id: last.id }
+      ? {
+          kind: "newest",
+          at: (() => {
+            const created = new Date(last.createdAt).getTime();
+            const updated = new Date(last.updatedAt).getTime();
+            return updated > created ? last.updatedAt : last.createdAt;
+          })(),
+          id: last.id,
+        }
       : { kind: "order", sortOrder: last.sortOrder, name: last.name, id: last.id };
     if (rows.length < STREAM_BATCH) return;
     await yieldEventLoop();

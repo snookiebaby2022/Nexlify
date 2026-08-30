@@ -26,6 +26,7 @@
         "Plex sync skipped too many IPTV titles and dropped year from the match key",
         "What’s on now felt empty or hung while it scanned streams with no loading state",
         "Plex Library sync failed with FATAL: sorry, too many clients already",
+        "XCIPTV Latest Movies ignored titles Smarters showed because `added` stayed on the original create date after Plex/library updates",
         "Many Live Connections rows stored no viewer IP",
         "Weak or placeholder JWT_SECRET blocked admin login",
         "A production rebuild could comment nginx listen 8080 and 502 /live/ on the panel host"

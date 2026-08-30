@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   xtreamSafeText,
   xtreamUnix,
+  xtreamAddedUnix,
   xtreamDeltaArray,
   xtreamOutputFormats,
   xtreamCategoryIds,
@@ -18,6 +19,12 @@ import {
 describe("xtream-safe", () => {
   it("strips control characters that crash XCIPTV JSON parsers", () => {
     assert.equal(xtreamSafeText("Sky\u0000 Sport\u0007"), "Sky Sport");
+  });
+
+  it("uses the later of created and updated for Xtream added (XCIPTV Latest Movies)", () => {
+    const created = new Date("2020-01-01T00:00:00Z");
+    const updated = new Date("2026-08-30T12:00:00Z");
+    assert.equal(xtreamAddedUnix(created, updated), Math.floor(updated.getTime() / 1000));
   });
 
   it("never emits NaN unix timestamps", () => {
