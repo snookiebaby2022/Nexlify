@@ -5,9 +5,9 @@ import path from "node:path";
 import { createGzip, type Gzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 
-export const CATALOG_BLOB_VERSION = "v11";
-export const CATALOG_TTL_MS = 30 * 60 * 1000;
-export const CATALOG_STALE_MS = 6 * 60 * 60 * 1000;
+export const CATALOG_BLOB_VERSION = "v12";
+export const CATALOG_TTL_MS = 2 * 60 * 1000;
+export const CATALOG_STALE_MS = 20 * 60 * 1000;
 /** Dead builders must not pin XCIPTV Update Content for minutes. */
 const LOCK_STALE_MS = 45_000;
 const LOCK_WAIT_MS = 150;

@@ -205,12 +205,23 @@ export async function serveXtreamCatalogJson(
 
   if (catalogFileIsUsable(age)) {
     if (!catalogFileIsFresh(age)) {
-      void rebuild().catch((err) => {
-        console.error(
-          "[xtream-catalog] background rebuild failed:",
-          err instanceof Error ? err.message : err,
-        );
-      });
+      if (kind === "vod" || kind === "series") {
+        try {
+          await rebuild();
+        } catch (err) {
+          console.error(
+            "[xtream-catalog] vod/series rebuild failed:",
+            err instanceof Error ? err.message : err,
+          );
+        }
+      } else {
+        void rebuild().catch((err) => {
+          console.error(
+            "[xtream-catalog] background rebuild failed:",
+            err instanceof Error ? err.message : err,
+          );
+        });
+      }
     }
     return iptvGzipFileResponse(
       destPath,
@@ -263,7 +274,7 @@ export async function ensureCatalogKind(
     xtreamCatalogBlobName(kind, token, "all", excludeDisabled),
   );
   const age = await catalogFileAgeMs(destPath);
-  if (age != null) return;
+  if (catalogFileIsFresh(age)) return;
   await withCatalogBuildLock(destPath, async () => {
     const again = await catalogFileAgeMs(destPath);
     if (again != null) return "existing" as const;

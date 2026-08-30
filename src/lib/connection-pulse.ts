@@ -28,7 +28,9 @@ export async function pulseLiveConnection(opts: {
   void touchLiveSession(lineId, streamId, clientIp);
 
   const row = await prisma.liveConnection.findFirst({
-    where: { lineId, streamId, ...connectionIpPrismaFilter(clientIp) },
+    where: clientIp
+      ? { lineId, streamId, ...connectionIpPrismaFilter(clientIp) }
+      : { lineId, streamId },
     orderBy: { lastSeenAt: "desc" },
     select: { id: true },
   });
@@ -39,6 +41,25 @@ export async function pulseLiveConnection(opts: {
       data: { lastSeenAt: new Date(), ...(clientIp ? { ip: clientIp } : {}) },
     });
     return;
+  }
+
+  if (clientIp) {
+    const loose = await prisma.liveConnection.findFirst({
+      where: {
+        lineId,
+        streamId,
+        OR: [{ ip: null }, { ip: "" }, { ip: "209.237.141.15" }, { ip: "45.88.138.18" }],
+      },
+      orderBy: { lastSeenAt: "desc" },
+      select: { id: true },
+    });
+    if (loose) {
+      await prisma.liveConnection.updateMany({
+        where: { id: loose.id },
+        data: { lastSeenAt: new Date(), ip: clientIp },
+      });
+      return;
+    }
   }
 
   const [stream, line] = await Promise.all([

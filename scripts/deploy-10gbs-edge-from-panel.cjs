@@ -82,6 +82,7 @@ async function main() {
     `STREAM_HTTP_EXTRA_PORTS=8080,25461`,
     `IPTV_EDGE_HTTP_PORTS=8080,25461`,
     `IPTV_EDGE_HTTPS_PORTS=`,
+    `IPTV_EDGE_TRUST_XFF=loopback,45.88.138.18`,
   ].join("\n");
 
   console.log(`Deploying edge to ${host} (server ${server.name}, ${server.id})…`);

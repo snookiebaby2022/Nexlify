@@ -275,7 +275,7 @@ function listingUsesNewestFirst(options?: StreamsForLineOptions): boolean {
 
 function listingOrderSql(options?: StreamsForLineOptions) {
   if (listingUsesNewestFirst(options)) {
-    return Prisma.sql`ORDER BY s."createdAt" DESC, s.id DESC`;
+    return Prisma.sql`ORDER BY s."updatedAt" DESC, s.id DESC`;
   }
   return Prisma.sql`ORDER BY s."sortOrder" ASC, s.name ASC, s.id ASC`;
 }
@@ -288,8 +288,8 @@ function listingCursorSql(cursor: ListingCursor | null): Prisma.Sql {
   if (!cursor) return Prisma.empty;
   if (cursor.kind === "newest") {
     return Prisma.sql`AND (
-      s."createdAt" < ${cursor.at}
-      OR (s."createdAt" = ${cursor.at} AND s.id < ${cursor.id})
+      s."updatedAt" < ${cursor.at}
+      OR (s."updatedAt" = ${cursor.at} AND s.id < ${cursor.id})
     )`;
   }
   return Prisma.sql`AND (
@@ -464,7 +464,7 @@ export async function forEachLeanListingBatch(
     await onBatch(mapped);
     const last = rows[rows.length - 1]!;
     cursor = newest
-      ? { kind: "newest", at: last.createdAt, id: last.id }
+      ? { kind: "newest", at: last.updatedAt, id: last.id }
       : { kind: "order", sortOrder: last.sortOrder, name: last.name, id: last.id };
     if (rows.length < STREAM_BATCH) return;
     await yieldEventLoop();

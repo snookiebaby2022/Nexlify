@@ -515,7 +515,14 @@ export async function trackConnection(opts: {
       where: {
         lineId: opts.lineId,
         streamId,
-        OR: [{ ip: null }, { ip: "" }, { ip: "127.0.0.1" }, { ip: "::1" }],
+        OR: [
+          { ip: null },
+          { ip: "" },
+          { ip: "127.0.0.1" },
+          { ip: "::1" },
+          { ip: "209.237.141.15" },
+          { ip: "45.88.138.18" },
+        ],
       },
     });
   }
@@ -573,7 +580,14 @@ export async function trackConnection(opts: {
       where: {
         lineId: opts.lineId,
         streamId,
-        OR: [{ ip: null }, { ip: "" }, { ip: "127.0.0.1" }, { ip: "::1" }],
+        OR: [
+          { ip: null },
+          { ip: "" },
+          { ip: "127.0.0.1" },
+          { ip: "::1" },
+          { ip: "209.237.141.15" },
+          { ip: "45.88.138.18" },
+        ],
       },
       orderBy: { lastSeenAt: "desc" },
     });

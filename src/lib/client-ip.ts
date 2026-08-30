@@ -20,7 +20,25 @@ function isPublicish(ip: string): boolean {
   return true;
 }
 
-/** Viewer IP for live-auth / connections. Prefer public hops; ignore loopback. */
+const DEFAULT_INFRA_IPS = new Set([
+  "209.237.141.15", // 10gbs edge
+  "45.88.138.18", // panel 45
+]);
+
+/** Panel / stream-node hops — never show these as the viewer IP. */
+export function isInfraHopIp(ip?: string | null): boolean {
+  const n = cleanIp(ip);
+  if (!n) return false;
+  if (DEFAULT_INFRA_IPS.has(n)) return true;
+  const extra = process.env.NEXLIFY_INFRA_IPS ?? "";
+  for (const part of extra.split(",")) {
+    const hop = cleanIp(part);
+    if (hop && hop === n) return true;
+  }
+  return false;
+}
+
+/** Viewer IP for live-auth / connections. Skip loopback and fleet edge/panel hops. */
 export function getClientIp(req: NextRequest): string | undefined {
   const named = [
     req.headers.get("cf-connecting-ip"),
@@ -41,8 +59,8 @@ export function getClientIp(req: NextRequest): string | undefined {
     if (ip) hops.push(ip);
   }
 
-  const publicHop = hops.find((ip) => isPublicish(ip));
+  const publicHop = hops.find((ip) => isPublicish(ip) && !isInfraHopIp(ip));
   if (publicHop) return publicHop;
-  const any = hops.find((ip) => !isLoopback(ip));
+  const any = hops.find((ip) => !isLoopback(ip) && !isInfraHopIp(ip));
   return any;
 }

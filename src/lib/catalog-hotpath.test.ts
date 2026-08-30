@@ -15,7 +15,7 @@ describe("catalog disk cache", () => {
     assert.equal(catalogFileIsUsable(3 * 60 * 60 * 1000), true);
     assert.equal(catalogFileIsUsable(null), false);
     assert.equal(catalogFileIsFresh(60 * 1000), true);
-    assert.equal(catalogFileIsFresh(31 * 60 * 1000), false);
+    assert.equal(catalogFileIsFresh(3 * 60 * 1000), false);
   });
 
   it("does not delete in-flight .tmp files when purging catalog cache", async () => {

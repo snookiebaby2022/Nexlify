@@ -9,6 +9,7 @@ import {
   xtreamSafeText,
   xtreamUnix,
   xtreamUnixString,
+  xtreamAddedUnix,
   xtreamCategoryIds,
   xtreamCatalogDirectSource,
   xtreamListingExtension,
@@ -74,7 +75,7 @@ export function mapXtreamVodItem(
   const numCategoryId = exportCategoryNumericId(s, canonical, "MOVIE");
   const stars = xtreamListingRating(s.vodRating);
   const icon = xtreamSafeText(s.streamIcon);
-  const added = xtreamUnix(s.createdAt) || xtreamUnix(s.updatedAt);
+  const added = xtreamAddedUnix(s.createdAt, s.updatedAt);
   return {
     num: index + 1,
     name: xtreamSafeText(s.name) || "Movie",

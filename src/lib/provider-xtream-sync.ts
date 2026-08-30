@@ -5,7 +5,7 @@ import type { RemoteKind } from "@/lib/provider-remote-catalog";
 import { xtreamListingExtension } from "@/lib/xtream-safe";
 import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { resolvePlaybackLoadBalancerId, pickVodLoadBalancerId } from "@/lib/server-load";
-import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
+import { invalidateXtreamCategories, invalidateXtreamVodAndSeriesCatalogs } from "@/lib/cache-invalidate";
 
 function providerPlaybackUrl(
   origin: string,
@@ -156,6 +156,7 @@ export async function syncProviderXtreamCatalog(
 
   if (imported || updated) {
     await invalidateXtreamCategories();
+    await invalidateXtreamVodAndSeriesCatalogs();
   }
 
   return { providerId, kind, imported, updated, skipped };

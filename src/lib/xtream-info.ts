@@ -102,7 +102,12 @@ export async function xtreamVodInfo(
     movie_data: {
       stream_id: cuidToNum(full.id),
       name: xtreamSafeText(full.name) || "Movie",
-      added: Math.floor(full.createdAt.getTime() / 1000).toString(),
+      added: String(
+        Math.max(
+          Math.floor(full.createdAt.getTime() / 1000),
+          Math.floor(full.updatedAt.getTime() / 1000),
+        ),
+      ),
       category_id: canonicalNumericForCategory(canonical, full.categoryId),
       container_extension: ext,
       custom_sid: "",

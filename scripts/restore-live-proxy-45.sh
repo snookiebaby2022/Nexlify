@@ -56,8 +56,10 @@ server {
         proxy_set_header X-Original-Uri \$http_x_original_uri;
         proxy_set_header X-Original-Method \$http_x_original_method;
         proxy_set_header X-Original-Range \$http_x_original_range;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Real-IP \$http_x_real_ip;
+        proxy_set_header X-Forwarded-For \$http_x_forwarded_for;
+        proxy_set_header X-Nexlify-Client-Ip \$http_x_nexlify_client_ip;
+        proxy_set_header X-Nexlify-Viewer-Ip \$http_x_nexlify_viewer_ip;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_connect_timeout 10s;
         proxy_read_timeout 300s;

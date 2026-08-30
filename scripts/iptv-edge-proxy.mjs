@@ -265,7 +265,7 @@ function socketIp(req) {
  */
 function clientIp(req) {
   const peer = socketIp(req);
-  const trust = String(process.env.IPTV_EDGE_TRUST_XFF || "loopback").toLowerCase();
+  const trust = String(process.env.IPTV_EDGE_TRUST_XFF || "loopback,45.88.138.18").toLowerCase();
   const trustedPeers = new Set(
     trust
       .split(",")
@@ -1667,6 +1667,8 @@ function authLive(clientReq) {
       "x-original-range": String(clientReq.headers.range || ""),
       "x-forwarded-for": clientIp(clientReq),
       "x-real-ip": clientIp(clientReq),
+      "x-nexlify-client-ip": clientIp(clientReq),
+      "x-nexlify-viewer-ip": clientIp(clientReq),
       "user-agent": clientReq.headers["user-agent"] || "",
       connection: "close",
     };
