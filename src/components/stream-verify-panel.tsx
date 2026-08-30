@@ -188,6 +188,7 @@ export function StreamVerifyPanel() {
                 const ok =
                   st?.displayStatus === "Online" ||
                   st?.displayStatus === "Direct" ||
+                  st?.displayStatus === "On-demand" ||
                   st?.displayStatus === "Live on-demand";
                 return (
                   <tr key={s.id}>

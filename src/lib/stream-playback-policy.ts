@@ -47,19 +47,33 @@ export function getStreamPlaybackPolicy(stream: StreamForPlaybackPolicy): Stream
 export function playbackPolicyLabel(mode: StreamPlaybackPolicyMode): string {
   switch (mode) {
     case "direct":
-      return "Live on-demand";
+      return "Direct";
     case "relay":
+    case "transcode":
       return "Live";
     case "on_demand":
-      return "Live on-demand";
-    case "transcode":
-      return "Transcode";
+    case "created":
+      return "On-demand";
     case "catchup":
       return "Catch-up";
-    case "created":
-      return "Created";
     default:
       return mode;
+  }
+}
+
+/** Manage Streams Uptime badge — short words operators can scan. */
+export function streamUptimeDisplayLabel(
+  kind: "DIRECT" | "LIVE" | "ON-DEMAND" | "CATCHUP"
+): string {
+  switch (kind) {
+    case "DIRECT":
+      return "Direct";
+    case "ON-DEMAND":
+      return "On-demand";
+    case "CATCHUP":
+      return "Catch-up";
+    default:
+      return "Live";
   }
 }
 

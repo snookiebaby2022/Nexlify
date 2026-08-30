@@ -14,7 +14,11 @@ import {
 import { StreamRowActionsMenu } from "@/components/stream-row-actions-menu";
 import { normalizeCategoryName } from "@/lib/category-options";
 import { parseLiveStreamMeta } from "@/lib/stream-live-meta";
-import { playbackPolicyLabel } from "@/lib/stream-playback-policy";
+import {
+  playbackPolicyLabel,
+  streamUptimeColumnLabel,
+  streamUptimeDisplayLabel,
+} from "@/lib/stream-playback-policy";
 import { formatUptime } from "@/lib/stream-live-stats";
 import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
 
@@ -22,7 +26,6 @@ const ADMIN_POLLS = resolveClientPollIntervals();
 import { StreamTranscodeQuickActions } from "@/components/stream-transcode-quick-actions";
 import { StreamClientsModal } from "@/components/stream-clients-modal";
 import { type StreamLiveStat } from "@/lib/stream-live-stats";
-import { streamUptimeColumnLabel } from "@/lib/stream-playback-policy";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
@@ -110,15 +113,7 @@ function streamUptimeKind(s: Stream, listType?: string): "DIRECT" | "LIVE" | "ON
 
 function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
   const kind = streamUptimeKind(stream, listType);
-  const label = stream.liveStats?.playbackMode
-    ? playbackPolicyLabel(stream.liveStats.playbackMode).toUpperCase()
-    : kind === "ON-DEMAND"
-      ? "ON-DEMAND"
-      : kind === "DIRECT"
-        ? "DIRECT"
-        : kind === "CATCHUP"
-          ? "CATCHUP"
-          : "LIVE / RELAY";
+  const label = streamUptimeDisplayLabel(kind);
   const cls =
     kind === "DIRECT"
       ? "xui-uptime-badge xui-uptime-badge--direct"
@@ -128,7 +123,7 @@ function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: st
   return (
     <span
       className={cls}
-      title="LIVE/RELAY = through this panel · ON-DEMAND = starts when a viewer tunes in · DIRECT = apps hit the provider URL"
+      title="Live = through this panel · On-demand = starts when a viewer tunes in · Direct = provider URL"
     >
       {label}
     </span>

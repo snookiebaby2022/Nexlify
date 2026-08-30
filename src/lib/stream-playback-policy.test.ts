@@ -5,6 +5,7 @@ import {
   getStreamPlaybackPolicy,
   streamPlaysInstantThroughServers,
   streamUptimeColumnLabel,
+  streamUptimeDisplayLabel,
   shouldStopIdleAgentProcess,
   type StreamForPlaybackPolicy,
 } from "./stream-playback-policy";
@@ -77,5 +78,8 @@ describe("getStreamPlaybackPolicy", () => {
     assert.equal(streamUptimeColumnLabel("on_demand"), "ON-DEMAND");
     assert.equal(streamUptimeColumnLabel("created"), "ON-DEMAND");
     assert.equal(streamUptimeColumnLabel("catchup"), "CATCHUP");
+    assert.equal(streamUptimeDisplayLabel("DIRECT"), "Direct");
+    assert.equal(streamUptimeDisplayLabel("LIVE"), "Live");
+    assert.equal(streamUptimeDisplayLabel("ON-DEMAND"), "On-demand");
   });
 });

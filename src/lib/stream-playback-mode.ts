@@ -50,9 +50,9 @@ export function getStreamPlaybackMode(stream: StreamForPlaybackMode): StreamPlay
 export function playbackModeLabel(mode: StreamPlaybackMode): string {
   switch (mode) {
     case "direct":
-      return "Live on-demand";
+      return "Direct";
     case "on_demand":
-      return "Live on-demand";
+      return "On-demand";
     case "transcode":
       return "Transcode";
     case "catchup":

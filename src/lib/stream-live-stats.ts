@@ -72,7 +72,7 @@ function resolveDisplayStatus(
     if (stream.lastProbeOk === false) {
       return { status: "offline", displayStatus: "Source down" };
     }
-    return { status: "direct", displayStatus: "Live on-demand" };
+    return { status: "direct", displayStatus: "Direct" };
   }
 
   if (
@@ -86,7 +86,8 @@ function resolveDisplayStatus(
     }
     return {
       status: "ready",
-      displayStatus: playbackMode === "relay" ? "Live" : "Ready",
+      displayStatus:
+        playbackMode === "relay" ? "Live" : playbackMode === "on_demand" || playbackMode === "created" ? "On-demand" : "Ready",
     };
   }
 
