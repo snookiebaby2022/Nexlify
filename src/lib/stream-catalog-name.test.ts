@@ -14,6 +14,18 @@ describe("displayCatalogStreamName", () => {
     );
   });
 
+  it("treats space-separated EPG dates as garbage and uses the logo name", () => {
+    assert.equal(isGarbageStreamName("(424) (2098 12 31 08:02:04)"), true);
+    assert.equal(
+      displayCatalogStreamName(
+        "(424) (2098 12 31 08:02:04)",
+        "(424) (2098 12 31 08:02:04)",
+        "https://iptvboss.xyz/logos/USA/ESPN%2B424.png"
+      ),
+      "ESPN+ 424"
+    );
+  });
+
   it("uses the stored name when it is valid", () => {
     assert.equal(displayCatalogStreamName("Sky Sports Action FHD", "other"), "Sky Sports Action FHD");
   });

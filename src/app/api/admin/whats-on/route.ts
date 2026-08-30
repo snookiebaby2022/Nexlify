@@ -23,6 +23,7 @@ async function loadWhatsOn(): Promise<Item[]> {
     select: {
       id: true,
       name: true,
+      streamIcon: true,
       epgChannelId: true,
       agentStartCmd: true,
       category: { select: { name: true } },
@@ -53,7 +54,7 @@ async function loadWhatsOn(): Promise<Item[]> {
   return streams
     .map((s) => {
       const meta = parseLiveStreamMeta(s.agentStartCmd);
-      const catalog = displayCatalogStreamName(meta.catalogName || s.name, s.name);
+      const catalog = displayCatalogStreamName(meta.catalogName || s.name, s.name, s.streamIcon);
       const nowPlaying =
         titleByChannel.get(s.epgChannelId ?? "") || meta.nowPlayingTitle?.trim() || "";
       const cat = s.category?.name ?? "";

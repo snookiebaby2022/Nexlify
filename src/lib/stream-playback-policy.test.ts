@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { VodMode } from "@prisma/client";
 import {
   getStreamPlaybackPolicy,
+  streamListUptimeKind,
   streamPlaysInstantThroughServers,
   streamUptimeColumnLabel,
   streamUptimeDisplayLabel,
@@ -81,5 +82,32 @@ describe("getStreamPlaybackPolicy", () => {
     assert.equal(streamUptimeDisplayLabel("DIRECT"), "Direct");
     assert.equal(streamUptimeDisplayLabel("LIVE"), "Live");
     assert.equal(streamUptimeDisplayLabel("ON-DEMAND"), "On-demand");
+  });
+
+  it("shows On-demand on the list even when the source is a provider URL", () => {
+    assert.equal(
+      streamListUptimeKind({
+        isOnDemand: true,
+        hostedExternally: true,
+        liveStats: { playbackMode: "direct" },
+      }),
+      "ON-DEMAND"
+    );
+    assert.equal(
+      streamListUptimeKind({
+        isOnDemand: false,
+        hostedExternally: true,
+        liveStats: { playbackMode: "direct" },
+      }),
+      "DIRECT"
+    );
+    assert.equal(
+      streamListUptimeKind({
+        isOnDemand: false,
+        hostedExternally: false,
+        liveStats: { playbackMode: "relay" },
+      }),
+      "LIVE"
+    );
   });
 });

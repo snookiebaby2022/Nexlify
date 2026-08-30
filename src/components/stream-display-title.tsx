@@ -3,7 +3,7 @@ import {
   integrationSourceLabel,
   stripIntegrationSourceSuffix,
 } from "@/lib/integration-stream-url";
-import { displayCatalogStreamName, nameFromStreamIcon } from "@/lib/stream-catalog-name";
+import { displayCatalogStreamName } from "@/lib/stream-catalog-name";
 
 const badgeClass =
   "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide";
@@ -30,7 +30,8 @@ export function streamDisplayName(
 ): string {
   return displayCatalogStreamName(
     stripIntegrationSourceSuffix(name),
-    stripIntegrationSourceSuffix(fallbackName ?? "") || nameFromStreamIcon(streamIcon)
+    stripIntegrationSourceSuffix(fallbackName ?? ""),
+    streamIcon
   );
 }
 

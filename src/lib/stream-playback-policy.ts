@@ -77,6 +77,34 @@ export function streamUptimeDisplayLabel(
   }
 }
 
+/** List badge/mode: on-demand wins over provider-direct so operators see how it starts. */
+export function streamListUptimeKind(
+  stream: {
+    hostedExternally?: boolean | null;
+    isOnDemand?: boolean | null;
+    isCreatedChannel?: boolean | null;
+    vodMode?: string | null;
+    liveStats?: { playbackMode?: StreamPlaybackPolicyMode } | null;
+  },
+  listType?: string
+): "DIRECT" | "LIVE" | "ON-DEMAND" | "CATCHUP" {
+  if (stream.vodMode === "CATCHUP") return "CATCHUP";
+  if (
+    stream.isCreatedChannel ||
+    stream.isOnDemand ||
+    stream.vodMode === "ON_DEMAND" ||
+    listType === "MOVIE" ||
+    listType === "SERIES"
+  ) {
+    return "ON-DEMAND";
+  }
+  if (stream.liveStats?.playbackMode) {
+    return streamUptimeColumnLabel(stream.liveStats.playbackMode);
+  }
+  if (stream.hostedExternally) return "DIRECT";
+  return "LIVE";
+}
+
 /** Manage Streams Uptime column: DIRECT / LIVE / ON-DEMAND (plus CATCHUP). */
 export function streamUptimeColumnLabel(
   mode: StreamPlaybackPolicyMode

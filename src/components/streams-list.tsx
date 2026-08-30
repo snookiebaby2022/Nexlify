@@ -15,8 +15,7 @@ import { StreamRowActionsMenu } from "@/components/stream-row-actions-menu";
 import { normalizeCategoryName } from "@/lib/category-options";
 import { parseLiveStreamMeta } from "@/lib/stream-live-meta";
 import {
-  playbackPolicyLabel,
-  streamUptimeColumnLabel,
+  streamListUptimeKind,
   streamUptimeDisplayLabel,
 } from "@/lib/stream-playback-policy";
 import { formatUptime } from "@/lib/stream-live-stats";
@@ -99,20 +98,8 @@ function serverLabel(s: Stream) {
   return { name, host };
 }
 
-function streamUptimeKind(s: Stream, listType?: string): "DIRECT" | "LIVE" | "ON-DEMAND" | "CATCHUP" {
-  if (s.liveStats?.playbackMode) {
-    return streamUptimeColumnLabel(s.liveStats.playbackMode);
-  }
-  if (s.hostedExternally) return "DIRECT";
-  if (s.vodMode === "CATCHUP") return "CATCHUP";
-  if (s.isOnDemand || s.vodMode === "ON_DEMAND" || listType === "MOVIE" || listType === "SERIES") {
-    return "ON-DEMAND";
-  }
-  return "LIVE";
-}
-
 function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
-  const kind = streamUptimeKind(stream, listType);
+  const kind = streamListUptimeKind(stream, listType);
   const label = streamUptimeDisplayLabel(kind);
   const cls =
     kind === "DIRECT"
@@ -130,11 +117,9 @@ function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: st
   );
 }
 
-function StreamInfoCell({ stream }: { stream: Stream }) {
+function StreamInfoCell({ stream, listType }: { stream: Stream; listType?: string }) {
   const st = stream.liveStats;
-  const mode = st?.playbackMode
-    ? playbackPolicyLabel(st.playbackMode)
-    : streamUptimeKind(stream);
+  const mode = streamUptimeDisplayLabel(streamListUptimeKind(stream, listType));
   const kbps = st?.bitrateKbps ?? stream.maxSpeedKbps ?? stream.minSpeedKbps;
   const lines: string[] = [];
   lines.push(`Mode: ${mode}`);
@@ -948,7 +933,7 @@ export function StreamsList({
                   ) : null}
                   {streamCols.show("streamInfo") ? (
                     <td>
-                      <StreamInfoCell stream={s} />
+                      <StreamInfoCell stream={s} listType={type} />
                     </td>
                   ) : null}
                 </tr>
