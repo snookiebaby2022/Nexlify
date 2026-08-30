@@ -40,6 +40,7 @@ type ImportOptions = {
   autoBouquetFromGroup: boolean;
   autoAssignEpg: boolean;
   useLogos: boolean;
+  onDemand: boolean;
   serverId: string;
   bouquetIds: string[];
 };
@@ -67,6 +68,7 @@ export default function M3uReviewPage() {
     autoBouquetFromGroup: true,
     autoAssignEpg: true,
     useLogos: true,
+    onDemand: true,
     serverId: "",
     bouquetIds: [],
   });
@@ -185,11 +187,16 @@ export default function M3uReviewPage() {
       setMsg("Select at least one channel to import.");
       return;
     }
+    if (!opts.serverId) {
+      setMsg("Assign a streaming server before import.");
+      return;
+    }
     setImporting(true);
     setMsg("");
     setStep(3);
     try {
       const content = paste.trim() ? paste : undefined;
+      const serverName = servers.find((s) => s.id === opts.serverId)?.name ?? "server";
       const res = await fetch("/api/admin/import/m3u", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -198,19 +205,20 @@ export default function M3uReviewPage() {
           url: url.trim() || undefined,
           selectedUrls,
           streamType: "LIVE",
-          serverId: opts.serverId || null,
+          serverId: opts.serverId,
           autoCategory: opts.autoCategory,
           autoBouquetFromGroup: opts.autoBouquetFromGroup,
           autoAssignEpg: opts.autoAssignEpg,
           bouquetIds: opts.bouquetIds.length ? opts.bouquetIds : undefined,
-          defaultOnDemand: false,
+          defaultOnDemand: opts.onDemand,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Import failed");
       const epgNote = data.epgAssigned ? ` · EPG matched ${data.epgAssigned}` : "";
+      const modeNote = opts.onDemand ? " · on-demand" : " · 24/7 live";
       setMsg(
-        `Imported ${data.imported} channel(s), skipped ${data.skipped ?? 0}${epgNote}. Icons and categories were applied from the playlist.`
+        `Imported ${data.imported} channel(s), skipped ${data.skipped ?? 0}${epgNote}${modeNote} on ${serverName}. Icons and categories were applied from the playlist.`
       );
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Import failed");
@@ -390,6 +398,7 @@ export default function M3uReviewPage() {
                 { key: "autoBouquetFromGroup" as const, label: "Create/link bouquets from groups" },
                 { key: "autoAssignEpg" as const, label: "Auto-match EPG after import" },
                 { key: "useLogos" as const, label: "Apply channel icons from playlist" },
+                { key: "onDemand" as const, label: "On-demand — start only when a viewer watches" },
               ].map(({ key, label }) => (
                 <label key={key} className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -403,14 +412,15 @@ export default function M3uReviewPage() {
             </div>
 
             <label className="block text-sm">
-              <span className="font-medium">Streaming server (LB)</span>
+              <span className="font-medium">Assign streaming server</span>
               <select
                 className="mt-1 w-full rounded border px-3 py-2 panel-select bg-transparent text-sm"
                 style={{ borderColor: "var(--border)" }}
                 value={opts.serverId}
                 onChange={(e) => setOpts({ ...opts, serverId: e.target.value })}
+                required
               >
-                <option value="">— Auto / unassigned —</option>
+                <option value="">— Select server —</option>
                 {servers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
@@ -418,6 +428,17 @@ export default function M3uReviewPage() {
                   </option>
                 ))}
               </select>
+              {!opts.serverId ? (
+                <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>
+                  Required — every imported stream is assigned to this server.
+                </p>
+              ) : (
+                <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                  {opts.onDemand
+                    ? "On-demand: the agent starts the stream on this server when the first client connects."
+                    : "24/7: the stream stays running on this server after import."}
+                </p>
+              )}
             </label>
 
             {bouquets.length > 0 && (
@@ -577,6 +598,37 @@ export default function M3uReviewPage() {
             </p>
           )}
 
+          <div
+            className="rounded-lg border p-4 grid md:grid-cols-2 gap-3"
+            style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+          >
+            <label className="block text-sm">
+              <span className="font-medium">Assign server</span>
+              <select
+                className="mt-1 w-full rounded border px-3 py-2 panel-select bg-transparent text-sm"
+                style={{ borderColor: "var(--border)" }}
+                value={opts.serverId}
+                onChange={(e) => setOpts({ ...opts, serverId: e.target.value })}
+              >
+                <option value="">— Select server —</option>
+                {servers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                    {s.healthStatus ? ` (${s.healthStatus})` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm cursor-pointer self-end pb-2">
+              <input
+                type="checkbox"
+                checked={opts.onDemand}
+                onChange={(e) => setOpts({ ...opts, onDemand: e.target.checked })}
+              />
+              On-demand (start when watched)
+            </label>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -589,7 +641,7 @@ export default function M3uReviewPage() {
             </button>
             <button
               type="button"
-              disabled={importing || selectedCount === 0}
+              disabled={importing || selectedCount === 0 || !opts.serverId}
               onClick={() => void runImport()}
               className="inline-flex items-center gap-2 rounded px-5 py-2 text-sm font-medium disabled:opacity-50 text-white"
               style={{ background: "#22c55e" }}

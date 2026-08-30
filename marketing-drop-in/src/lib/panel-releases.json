@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.58",
+  "latestVersion": "2.0.59",
   "releases": [
+    {
+      "version": "2.0.59",
+      "date": "2026-08-30",
+      "channel": "stable",
+      "summary": "Cleaner dark dashboard, working list pagination, XUI Sources page, M3U Review on-demand + server assign, and QoE capacity.",
+      "changelog": [
+        "Admin dashboard keeps hero KPIs and per-server cards; extra widgets move under More",
+        "List pagination uses Previous/Next so streams, categories, and similar lists can change page",
+        "Live TV Sources groups unique upstream origins and can replace a host across streams",
+        "M3U Stream Review requires a streaming server and imports on-demand by default",
+        "Load balancer skips saturated boxes; playback QoE and egress headroom show on the dashboard"
+      ],
+      "fixes": [
+        "Next page on Showing 1 to 50 of N did not advance because desktop zoom broke click hit-testing",
+        "M3U Stream Review always imported 24/7 with defaultOnDemand false"
+      ]
+    },
     {
       "version": "2.0.58",
       "date": "2026-08-29",
