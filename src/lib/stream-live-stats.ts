@@ -72,7 +72,7 @@ function resolveDisplayStatus(
     if (stream.lastProbeOk === false) {
       return { status: "offline", displayStatus: "Source down" };
     }
-    return { status: "direct", displayStatus: "Direct" };
+    return { status: "direct", displayStatus: "Live on-demand" };
   }
 
   if (

@@ -3,7 +3,7 @@ import {
   integrationSourceLabel,
   stripIntegrationSourceSuffix,
 } from "@/lib/integration-stream-url";
-import { displayCatalogStreamName } from "@/lib/stream-catalog-name";
+import { displayCatalogStreamName, nameFromStreamIcon } from "@/lib/stream-catalog-name";
 
 const badgeClass =
   "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide";
@@ -23,23 +23,34 @@ export function integrationSourceForStream(
   return integrationSourceLabel(streamUrl ?? "") ?? integrationSourceFromName(name);
 }
 
-export function streamDisplayName(name: string, _streamUrl?: string | null): string {
-  return displayCatalogStreamName(stripIntegrationSourceSuffix(name));
+export function streamDisplayName(
+  name: string,
+  fallbackName?: string | null,
+  streamIcon?: string | null
+): string {
+  return displayCatalogStreamName(
+    stripIntegrationSourceSuffix(name),
+    stripIntegrationSourceSuffix(fallbackName ?? "") || nameFromStreamIcon(streamIcon)
+  );
 }
 
 export function StreamDisplayTitle({
   name,
+  fallbackName,
+  streamIcon,
   streamUrl,
   href,
   className,
 }: {
   name: string;
+  fallbackName?: string | null;
+  streamIcon?: string | null;
   streamUrl?: string | null;
   href?: string;
   className?: string;
 }) {
   const source = integrationSourceForStream(name, streamUrl);
-  const displayName = streamDisplayName(name, streamUrl);
+  const displayName = streamDisplayName(name, fallbackName, streamIcon);
   const label = href ? (
     <Link href={href} className={className}>
       {displayName}

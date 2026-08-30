@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Calendar, FileText, Globe, Info, Server, Settings } from "lucide-react";
-import { StreamProbePlayer } from "@/components/stream-probe-player";
 import { StreamLiveInfo } from "@/components/stream-live-info";
+import { isGarbageStreamName } from "@/lib/stream-catalog-name";
 import {
   StreamAdvancedSections,
   advancedFromStream,
@@ -29,7 +29,6 @@ import { readVodTmdbFields } from "@/lib/vod-meta";
 import { XuiFormTabs, type XuiFormTab } from "@/components/xui-form-tabs";
 import { VodInformationTab } from "@/components/vod-information-tab";
 import { integrationSourceLabel, stripIntegrationSourceSuffix } from "@/lib/integration-stream-url";
-import { StreamDisplayTitle } from "@/components/stream-display-title";
 import { cleanTitleForTmdb } from "@/lib/vod-title-clean";
 
 type Stream = {
@@ -90,12 +89,6 @@ function streamEditTabs(type: string): XuiFormTab<StreamEditTab>[] {
     { id: "advanced", label: "Advanced", icon: Settings },
     { id: "server", label: "Server", icon: Server },
   ];
-}
-
-function previewLabel(type: string) {
-  if (type === "MOVIE") return "View Movie";
-  if (type === "SERIES") return "View Series";
-  return "View Channel";
 }
 
 export function StreamManageEditPage({ streamId }: { streamId: string }) {
@@ -621,14 +614,7 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
             <span className="text-xs font-mono" style={{ color: "var(--muted)" }}>
               ID: {streamId}
             </span>
-            <a
-              href="#stream-preview"
-              className="ml-auto text-sm px-3 py-1.5 rounded border font-medium"
-              style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
-            >
-              {previewLabel(form.type)}
-            </a>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <label className="ml-auto flex items-center gap-2 text-sm cursor-pointer">
               <input
                 type="checkbox"
                 checked={form.isActive}
@@ -645,9 +631,33 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           {editTab === "sources" && (
             <div className="space-y-4">
               <p className="text-xs" style={{ color: "var(--muted)" }}>
-                Sources for this channel only — primary URL plus failover backup (XUI-style). To replace a
-                host across every stream, use Manage Streams → Sources.
+                Search a provider catalog (XUI-style) to replace this channel’s source, then save. To
+                replace a host across every stream, use Manage Streams → Sources.
               </p>
+              <SourceChannelFinder
+                streamType={form.type === "SERIES" ? "SERIES" : form.type === "MOVIE" ? "MOVIE" : "LIVE"}
+                label="Search channel by provider"
+                hint="Pick a provider, type the channel name (e.g. Sky Sports Action), then Use URL or Use provider to fill the source below."
+                showDirectUrl
+                initialProviderId={form.providerId}
+                onPickProvider={(m) =>
+                  setForm({
+                    ...form,
+                    useProvider: true,
+                    providerId: m.providerId,
+                    providerPath: m.providerPath ?? "",
+                    streamUrl: m.streamUrl || form.streamUrl,
+                    name: isGarbageStreamName(form.name) ? m.streamName : form.name,
+                  })
+                }
+                onPickDirectUrl={(m) =>
+                  setForm({
+                    ...form,
+                    streamUrl: m.streamUrl,
+                    name: isGarbageStreamName(form.name) ? m.streamName : form.name,
+                  })
+                }
+              />
               <FormField label="Primary source URL" required>
                 <input
                   className={`${formInputClass} font-mono text-xs`}
@@ -665,9 +675,6 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
                   placeholder="http://backup.example.com/stream.m3u8"
                 />
               </FormField>
-              {form.streamUrl.trim() ? (
-                <StreamProbePlayer compact streamUrl={form.streamUrl.trim()} name={form.name || undefined} />
-              ) : null}
             </div>
           )}
 
@@ -804,25 +811,6 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           {saveBar}
         </FormPageShell>
       </form>
-
-      <div
-        id="stream-preview"
-        className="rounded-lg border overflow-hidden"
-        style={{ borderColor: "rgba(0,192,239,0.35)", background: "rgba(0,0,0,0.12)" }}
-      >
-        <div
-          className="px-4 py-2.5"
-          style={{ background: "rgba(0,192,239,0.14)", color: "#7dd3fc" }}
-        >
-          <span className="text-sm font-semibold">Preview player</span>
-          <span className="block text-[11px] font-normal opacity-80 mt-0.5">
-            Test the current source URL before saving changes.
-          </span>
-        </div>
-        <div className="p-4">
-          <StreamProbePlayer streamId={streamId} streamUrl={form.streamUrl} name={form.name} />
-        </div>
-      </div>
     </div>
   );
 }

@@ -21,7 +21,6 @@ import {
   formInputStyle,
   formSelectClass,
 } from "@/components/form-page-shell";
-import { StreamProbePlayer } from "@/components/stream-probe-player";
 import { SourceChannelFinder } from "@/components/source-channel-finder";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
@@ -390,8 +389,30 @@ function LiveStreamForm({
         {addTab === "sources" && insertMode === "single" && (
           <div className="space-y-3">
             <p className="text-xs" style={{ color: "var(--muted)" }}>
-              XUI-style stream sources for this channel. First URL is primary; extra rows are failover backups.
+              Search a provider catalog (XUI-style), then fill primary / failover URLs.
             </p>
+            <SourceChannelFinder
+              streamType="LIVE"
+              label="Search channel by provider"
+              hint="Pick a provider and type the channel name. Use URL fills the primary source below."
+              showDirectUrl
+              onPickProvider={(m) => {
+                setForm((f) => ({ ...f, name: f.name || m.streamName }));
+                setSources((prev) => {
+                  const next = [...prev];
+                  next[0] = m.streamUrl || prev[0];
+                  return next;
+                });
+              }}
+              onPickDirectUrl={(m) => {
+                setForm((f) => ({ ...f, name: f.name || m.streamName }));
+                setSources((prev) => {
+                  const next = [...prev];
+                  next[0] = m.streamUrl;
+                  return next;
+                });
+              }}
+            />
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">
                 Source URLs <span style={{ color: "#ef4444" }}>*</span>
@@ -429,9 +450,6 @@ function LiveStreamForm({
                 </div>
               ))}
             </div>
-            {sources[0]?.trim() ? (
-              <StreamProbePlayer compact streamUrl={sources[0].trim()} name={form.name || undefined} />
-            ) : null}
           </div>
         )}
 
@@ -1063,14 +1081,6 @@ function CompactStreamForm({
         value={form.streamUrl}
         onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
       />
-      {form.streamUrl.trim() && (
-        <div className="rounded-lg border p-3" style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.15)" }}>
-          <p className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>
-            Check source before saving
-          </p>
-          <StreamProbePlayer compact streamUrl={form.streamUrl.trim()} name={form.name || undefined} />
-        </div>
-      )}
       {defaultType === "SERIES" && (
         <>
           <input

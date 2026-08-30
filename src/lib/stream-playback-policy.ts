@@ -47,11 +47,11 @@ export function getStreamPlaybackPolicy(stream: StreamForPlaybackPolicy): Stream
 export function playbackPolicyLabel(mode: StreamPlaybackPolicyMode): string {
   switch (mode) {
     case "direct":
-      return "Direct";
+      return "Live on-demand";
     case "relay":
       return "Live";
     case "on_demand":
-      return "On demand";
+      return "Live on-demand";
     case "transcode":
       return "Transcode";
     case "catchup":

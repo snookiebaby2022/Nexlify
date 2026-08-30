@@ -751,6 +751,8 @@ export function StreamsList({
                 <div className="min-w-0 flex-1">
                       <StreamDisplayTitle
                         name={parseLiveStreamMeta(s.agentStartCmd).catalogName || s.name}
+                        fallbackName={s.name}
+                        streamIcon={s.streamIcon}
                         streamUrl={hideAllUrls ? "" : s.streamUrl}
                         href={`/admin/servers/streams?edit=${s.id}`}
                         className="xui-stream-name font-semibold block truncate"
@@ -859,6 +861,8 @@ export function StreamsList({
                     <td className="xui-streams-td-name">
                       <StreamDisplayTitle
                         name={parseLiveStreamMeta(s.agentStartCmd).catalogName || s.name}
+                        fallbackName={s.name}
+                        streamIcon={s.streamIcon}
                         streamUrl={hideAllUrls ? "" : s.streamUrl}
                         href={`/admin/servers/streams?edit=${s.id}`}
                         className="xui-stream-name"

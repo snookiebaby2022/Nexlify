@@ -53,7 +53,7 @@ async function loadWhatsOn(): Promise<Item[]> {
   return streams
     .map((s) => {
       const meta = parseLiveStreamMeta(s.agentStartCmd);
-      const catalog = displayCatalogStreamName(meta.catalogName || s.name);
+      const catalog = displayCatalogStreamName(meta.catalogName || s.name, s.name);
       const nowPlaying =
         titleByChannel.get(s.epgChannelId ?? "") || meta.nowPlayingTitle?.trim() || "";
       const cat = s.category?.name ?? "";

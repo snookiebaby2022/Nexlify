@@ -185,7 +185,10 @@ export function StreamVerifyPanel() {
               {sources.slice(0, 30).map((s) => {
                 const st = s.liveStats;
                 const uptimeSec = st?.uptimeSec ?? 0;
-                const ok = st?.displayStatus === "Online" || st?.displayStatus === "Direct";
+                const ok =
+                  st?.displayStatus === "Online" ||
+                  st?.displayStatus === "Direct" ||
+                  st?.displayStatus === "Live on-demand";
                 return (
                   <tr key={s.id}>
                     <td>
