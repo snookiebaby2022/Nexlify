@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { LIVE_STALE_MS } from "@/lib/connections";
 import {
   getStreamPlaybackPolicy,
   type StreamPlaybackPolicyMode,
@@ -6,7 +7,7 @@ import {
 } from "@/lib/stream-playback-policy";
 
 /** Live clients/ffmpeg only — keep in sync with LIVE_STALE_MS in connections.ts. */
-const STALE_MS = 45 * 1000;
+const STALE_MS = LIVE_STALE_MS;
 
 export type StreamLiveStat = {
   viewers: number;

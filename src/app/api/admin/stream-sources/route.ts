@@ -21,6 +21,7 @@ type SourceRow = {
   offlineCount: number;
   types: { LIVE: number; MOVIE: number; SERIES: number };
   sampleNames: string[];
+  providers: string[];
 };
 
 function emptyTypes(): SourceRow["types"] {
@@ -55,6 +56,7 @@ export async function GET(req: NextRequest) {
       lastProbeOk: true,
       streamUrl: true,
       backupUrl: true,
+      provider: { select: { name: true } },
     },
   });
 
@@ -73,6 +75,7 @@ export async function GET(req: NextRequest) {
           offlineCount: 0,
           types: emptyTypes(),
           sampleNames: [],
+          providers: [],
         };
         map.set(origin, row);
       }
@@ -82,11 +85,20 @@ export async function GET(req: NextRequest) {
       else if (s.lastProbeOk === false) row.offlineCount += 1;
       bumpType(row.types, s.type);
       if (row.sampleNames.length < 3) row.sampleNames.push(s.name);
+      const providerName = s.provider?.name?.trim();
+      if (providerName && !row.providers.includes(providerName)) row.providers.push(providerName);
     }
   }
 
   let sources = [...map.values()].sort((a, b) => b.streamCount - a.streamCount || a.origin.localeCompare(b.origin));
-  if (search) sources = sources.filter((r) => r.origin.includes(search) || r.sampleNames.some((n) => n.toLowerCase().includes(search)));
+  if (search) {
+    sources = sources.filter(
+      (r) =>
+        r.origin.includes(search) ||
+        r.sampleNames.some((n) => n.toLowerCase().includes(search)) ||
+        r.providers.some((n) => n.toLowerCase().includes(search))
+    );
+  }
   const total = sources.length;
   const pageRows = sources.slice((page - 1) * pageSize, page * pageSize);
 

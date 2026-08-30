@@ -607,6 +607,22 @@ export async function jobExpireLines() {
   }
 }
 
+async function jobPlaybackQuality() {
+  const start = Date.now();
+  try {
+    const { runPlaybackQualityMonitor } = await import("./playback-quality-monitor");
+    const r = await runPlaybackQualityMonitor();
+    await logCron(
+      "playback_quality",
+      "ok",
+      `watched ${r.watched}, drops ${r.drops}, freezes ${r.freezes}, stutters ${r.stutters}, failovers ${r.failovers}`,
+      Date.now() - start
+    );
+  } catch (e) {
+    await logCron("playback_quality", "error", String(e), Date.now() - start);
+  }
+}
+
 export async function jobDeadLinkProbe() {
   const start = Date.now();
   try {
@@ -922,6 +938,7 @@ export async function runAllCronJobs() {
   await jobExpireLines();
   await jobLicenseRevalidate();
   await jobDeadLinkProbe();
+  await jobPlaybackQuality();
   await jobSubscriptionNotify();
   await jobTelegramMonitoring();
   await jobBackfillXtreamNum();

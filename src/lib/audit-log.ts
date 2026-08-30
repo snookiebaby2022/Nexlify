@@ -35,6 +35,12 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   panel_update_ok: "Panel software updated",
   panel_update_failed: "Panel software update failed",
   vpn_auto_block: "VPN/hosting IP auto-blocked",
+  playback_freeze: "Playback freeze",
+  playback_stutter: "Playback stutter",
+  playback_drop: "Channel drop",
+  playback_origin_fail: "Playback origin failed",
+  playback_failover: "Playback failover",
+  stream_primary_failover: "Live primary failover",
 };
 
 export function formatAuditAction(action: string): string {
@@ -50,5 +56,10 @@ export function formatAuditMeta(meta: unknown): string | null {
   if (m.ids && Array.isArray(m.ids)) parts.push(`${m.ids.length} IDs`);
   if (m.minSpeedKbps != null) parts.push(`min ${m.minSpeedKbps} Kbps`);
   if (m.maxSpeedKbps != null) parts.push(`max ${m.maxSpeedKbps} Kbps`);
+  if (m.name) parts.push(String(m.name));
+  if (m.detail) parts.push(String(m.detail));
+  if (m.error) parts.push(String(m.error));
+  if (m.status != null) parts.push(`HTTP ${m.status}`);
+  if (m.sessions != null) parts.push(`${m.sessions} sessions`);
   return parts.length ? parts.join(" · ") : JSON.stringify(meta);
 }

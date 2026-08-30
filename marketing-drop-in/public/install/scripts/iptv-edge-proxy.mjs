@@ -326,6 +326,37 @@ function sendConnectionPulse(ctx, bytes) {
   req.end();
 }
 
+function sendPlaybackEvent(ctx, action, detail, status) {
+  if (!INTERNAL_SECRET || !ctx?.streamId) return;
+  const body = JSON.stringify({
+    action,
+    streamId: ctx.streamId,
+    lineId: ctx.lineId ?? "",
+    detail: String(detail ?? "").slice(0, 300),
+    status: status || undefined,
+  });
+  const req = http.request(
+    {
+      hostname: backendHost,
+      port: backendPort,
+      path: "/api/internal/playback-event",
+      method: "POST",
+      agent: liveAgent,
+      headers: {
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(body),
+        "x-panel-internal-secret": INTERNAL_SECRET,
+      },
+      timeout: 3000,
+    },
+    (res) => res.resume()
+  );
+  req.on("error", () => undefined);
+  req.on("timeout", () => req.destroy());
+  req.write(body);
+  req.end();
+}
+
 function pulseConnection(ctx, bytes) {
   touchPlaybackSession(ctx, { hls: Boolean(ctx?.hls) });
   sendConnectionPulse(ctx, bytes);
@@ -836,7 +867,7 @@ function attachLiveFanClient(fan, clientReq, clientRes, pulseCtx) {
     fan.linger = null;
   }
   if (!clientRes.headersSent) {
-    clientRes.writeHead(200, liveTsHeaders());
+    writeLiveTsHead(clientRes);
     if (fan.prefix && fan.prefix.length) {
       try {
         // The fan keeps a rolling byte tail, which may begin mid-packet.
@@ -904,6 +935,7 @@ function tryJoinLiveFan(streamId, clientReq, clientRes, pulseCtx) {
   return true;
 }
 
+/** One upstream pull per streamId — extra viewers attach to the same fan. */
 function ensureLiveFan(streamId) {
   if (!streamId) return null;
   let fan = liveFans.get(streamId);
@@ -1004,7 +1036,7 @@ function detachHlsRemuxClient(session, slot, opts) {
 
 function attachHlsRemuxClient(session, clientReq, clientRes, pulseCtx) {
   if (!clientRes.headersSent) {
-    clientRes.writeHead(200, liveTsHeaders());
+    writeLiveTsHead(clientRes);
     if (session.prefix?.length) {
       try {
         clientRes.write(session.prefix);
@@ -1410,6 +1442,24 @@ function liveTsHeaders() {
     "Access-Control-Allow-Origin": "*",
     "X-Accel-Buffering": "no",
   };
+}
+
+function writeLiveTsHead(clientRes) {
+  if (!clientRes.headersSent) {
+    clientRes.writeHead(200, liveTsHeaders());
+  }
+  const sock = clientRes.socket;
+  if (!sock) return;
+  try {
+    sock.setNoDelay(true);
+  } catch {
+    /* ignore */
+  }
+  try {
+    sock.setKeepAlive(true, 20_000);
+  } catch {
+    /* ignore */
+  }
 }
 
 function headerStr(headers, key) {
@@ -2147,7 +2197,7 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, onUnplayable, fan
       feedLiveFanFromUpstream(fan, upRes, clientReq, clientRes, pulseCtx);
       return;
     }
-    clientRes.writeHead(200, liveTsHeaders());
+    writeLiveTsHead(clientRes);
     if (meter) upRes.on("data", meter);
     upRes.pipe(clientRes);
     upRes.once("close", stopKickWatch);
@@ -2191,7 +2241,7 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, onUnplayable, fan
       feedLiveFanFromUpstream(fan, upRes, clientReq, clientRes, pulseCtx);
       return;
     }
-    clientRes.writeHead(200, liveTsHeaders());
+    writeLiveTsHead(clientRes);
     clientRes.write(prefix);
     if (meter) {
       meter(prefix);
@@ -2225,7 +2275,7 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, onUnplayable, fan
     upRes.removeListener("data", onData);
     const prefix = Buffer.concat(chunks);
     if (looksLikeMpegTs(prefix)) {
-      clientRes.writeHead(200, liveTsHeaders());
+      writeLiveTsHead(clientRes);
       clientRes.write(prefix);
       if (meter) meter(prefix);
       clientRes.end();
@@ -2359,7 +2409,7 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
     }
     if (status < 200 || status >= 300) {
       upRes.resume();
-      if (live && status === 404 && !retried) {
+      if (live && (status === 404 || status === 400) && !retried) {
         setTimeout(
           () =>
             pipeUpstream(targetUrl, clientReq, clientRes, {
@@ -2410,7 +2460,11 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         }
         return;
       }
-      if (tryNext("upstream status")) return;
+      if (tryNext("upstream status")) {
+        sendPlaybackEvent(pulseCtx, "playback_origin_fail", `upstream ${status}, trying backup`, status);
+        return;
+      }
+      sendPlaybackEvent(pulseCtx, "playback_drop", `upstream ${status} and no backup left`, status);
       if (!clientRes.headersSent) {
         clientRes.writeHead(status || 502, { "content-type": "text/plain" });
       }
@@ -2629,6 +2683,23 @@ async function onRequest(clientReq, clientRes, ctx) {
     console.log(`[iptv-edge-req] ${clientReq.method} ${pathOnly}`);
   }
 
+  if (pathOnly === "/edge/fan-stats") {
+    const channels = [];
+    let clients = 0;
+    for (const fan of liveFans.values()) {
+      const n = fan.clients.size;
+      clients += n;
+      channels.push({
+        streamId: fan.streamId,
+        clients: n,
+        broadcasting: !!fan.broadcasting,
+      });
+    }
+    clientRes.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    clientRes.end(JSON.stringify({ fans: liveFans.size, clients, channels }));
+    return;
+  }
+
   if (clientReq.method === "OPTIONS") {
     clientRes.writeHead(204, {
       "Access-Control-Allow-Origin": "*",
@@ -2708,7 +2779,7 @@ async function onRequest(clientReq, clientRes, ctx) {
     );
     if (pulseCtx && clientReq.method !== "HEAD" && !isLiveRangeProbe) touchPlaybackSession(pulseCtx);
     if (isLiveRangeProbe || (clientReq.method === "HEAD" && auth.live)) {
-      clientRes.writeHead(200, liveTsHeaders());
+      writeLiveTsHead(clientRes);
       clientRes.end();
       return;
     }

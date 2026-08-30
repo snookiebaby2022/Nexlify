@@ -42,16 +42,20 @@ export function pickSiblingBackupUrl(
   const key = liveChannelBackupKey(stream.name);
   if (key.length < 8) return null;
   const host = streamPlaybackHost(stream.streamUrl);
+  const primary = stream.streamUrl.trim();
+  const offHost: string[] = [];
+  const sameHost: string[] = [];
   for (const sib of siblings) {
     if (sib.id === stream.id) continue;
     if (liveChannelBackupKey(sib.name) !== key) continue;
-    const sibHost = streamPlaybackHost(sib.streamUrl);
-    if (!sibHost || (host && sibHost === host)) continue;
-    if (SKIP_LIVE_BACKUP_HOSTS.some((h) => sibHost.includes(h))) continue;
     const url = sib.streamUrl.trim();
-    if (url && /^https?:\/\//i.test(url) && url !== stream.streamUrl.trim()) return url;
+    if (!url || !/^https?:\/\//i.test(url) || url === primary) continue;
+    const sibHost = streamPlaybackHost(url);
+    if (!sibHost || SKIP_LIVE_BACKUP_HOSTS.some((h) => sibHost.includes(h))) continue;
+    if (host && sibHost === host) sameHost.push(url);
+    else offHost.push(url);
   }
-  return null;
+  return offHost[0] ?? sameHost[0] ?? null;
 }
 
 export async function findSiblingLiveBackupUrl(stream: {

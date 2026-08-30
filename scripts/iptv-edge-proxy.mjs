@@ -326,6 +326,37 @@ function sendConnectionPulse(ctx, bytes) {
   req.end();
 }
 
+function sendPlaybackEvent(ctx, action, detail, status) {
+  if (!INTERNAL_SECRET || !ctx?.streamId) return;
+  const body = JSON.stringify({
+    action,
+    streamId: ctx.streamId,
+    lineId: ctx.lineId ?? "",
+    detail: String(detail ?? "").slice(0, 300),
+    status: status || undefined,
+  });
+  const req = http.request(
+    {
+      hostname: backendHost,
+      port: backendPort,
+      path: "/api/internal/playback-event",
+      method: "POST",
+      agent: liveAgent,
+      headers: {
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(body),
+        "x-panel-internal-secret": INTERNAL_SECRET,
+      },
+      timeout: 3000,
+    },
+    (res) => res.resume()
+  );
+  req.on("error", () => undefined);
+  req.on("timeout", () => req.destroy());
+  req.write(body);
+  req.end();
+}
+
 function pulseConnection(ctx, bytes) {
   touchPlaybackSession(ctx, { hls: Boolean(ctx?.hls) });
   sendConnectionPulse(ctx, bytes);
@@ -2378,7 +2409,7 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
     }
     if (status < 200 || status >= 300) {
       upRes.resume();
-      if (live && status === 404 && !retried) {
+      if (live && (status === 404 || status === 400) && !retried) {
         setTimeout(
           () =>
             pipeUpstream(targetUrl, clientReq, clientRes, {
@@ -2429,7 +2460,11 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         }
         return;
       }
-      if (tryNext("upstream status")) return;
+      if (tryNext("upstream status")) {
+        sendPlaybackEvent(pulseCtx, "playback_origin_fail", `upstream ${status}, trying backup`, status);
+        return;
+      }
+      sendPlaybackEvent(pulseCtx, "playback_drop", `upstream ${status} and no backup left`, status);
       if (!clientRes.headersSent) {
         clientRes.writeHead(status || 502, { "content-type": "text/plain" });
       }

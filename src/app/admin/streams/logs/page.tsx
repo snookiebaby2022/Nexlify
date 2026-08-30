@@ -41,6 +41,7 @@ export default function StreamLogsPage() {
   const [activity, setActivity] = useState<ActivityLog[]>([]);
   const [liveViews, setLiveViews] = useState<LiveView[]>([]);
   const [relayErrors, setRelayErrors] = useState<ActivityLog[]>([]);
+  const [playbackEvents, setPlaybackEvents] = useState<ActivityLog[]>([]);
   const [pageSize, setPageSize] = useState(DEFAULT_LOG_PAGE_SIZE);
   const [clearBusy, setClearBusy] = useState(false);
 
@@ -52,6 +53,7 @@ export default function StreamLogsPage() {
         setActivity(d.activity ?? []);
         setLiveViews(d.liveViews ?? []);
         setRelayErrors(d.relayErrors ?? []);
+        setPlaybackEvents(d.playbackEvents ?? []);
       });
   }, [pageSize]);
 
@@ -66,8 +68,8 @@ export default function StreamLogsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Stream logs</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Agent ffmpeg processes, direct/HLS relay viewers, and panel activity (last 24 hours). Direct-source
-          channels do not run ffmpeg — use Live viewers and HLS relay errors below.{" "}
+          Freezes, stutters, channel drops, agent ffmpeg, and HLS relay errors (last 24 hours). Direct-source
+          channels do not run ffmpeg — use Live viewers below.{" "}
           <Link href="/admin/stream_errors" style={{ color: "var(--accent)" }}>
             Stream errors
           </Link>
@@ -91,6 +93,29 @@ export default function StreamLogsPage() {
           }
         }}
       />
+
+      <section>
+        <h2 className="text-lg font-medium mb-3">Playback quality</h2>
+        {playbackEvents.length === 0 ? (
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            No freezes, stutters, or channel drops logged in the last 24 hours.
+          </p>
+        ) : (
+          <DataTable
+            headers={["When", "Event", "Stream", "Detail"]}
+            rows={playbackEvents.map((a) => [
+              formatDateTime(a.createdAt),
+              a.action.replace("playback_", "").replace(/_/g, " "),
+              a.streamName ?? (a.entityId ? `${a.entityId.slice(0, 8)}…` : "—"),
+              String(
+                (a.meta as { detail?: string; error?: string })?.detail ??
+                  (a.meta as { error?: string })?.error ??
+                  "—"
+              ),
+            ])}
+          />
+        )}
+      </section>
 
       {relayErrors.length > 0 && (
         <section>

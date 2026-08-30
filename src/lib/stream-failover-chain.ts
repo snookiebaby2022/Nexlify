@@ -19,6 +19,11 @@ export async function listStreamPlaybackUrlsWithChain(
   };
 
   addAll(await listStreamPlaybackUrlsWithFailover(stream, seed));
+  if (out.length < 2) {
+    const { findSiblingLiveBackupUrl } = await import("@/lib/live-channel-backup");
+    const sibling = await findSiblingLiveBackupUrl(stream);
+    if (sibling) addAll([sibling]);
+  }
 
   let parentId = stream.parentStreamId;
   let depth = 0;

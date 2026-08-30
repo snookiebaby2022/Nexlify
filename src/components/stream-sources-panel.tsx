@@ -13,6 +13,7 @@ type SourceRow = {
   offlineCount: number;
   types: { LIVE: number; MOVIE: number; SERIES: number };
   sampleNames: string[];
+  providers: string[];
 };
 
 export function StreamSourcesPanel({ embedded = false }: { embedded?: boolean }) {
@@ -90,7 +91,7 @@ export function StreamSourcesPanel({ embedded = false }: { embedded?: boolean })
           <div>
             <h1 className="xui-streams-title">Sources</h1>
             <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-              Unique upstream origins used by Manage Streams. Replace a host across every stream URL that uses it.
+              Unique upstream origins from stream source URLs, with the provider assigned on each stream (XUI-style). Replace a host across matching URLs.
             </p>
           </div>
           <Link href="/admin/content/streams" className="xui-streams-btn">
@@ -152,7 +153,7 @@ export function StreamSourcesPanel({ embedded = false }: { embedded?: boolean })
         <input
           type="search"
           className="xui-lines-select flex-1 min-w-[180px] max-w-md"
-          placeholder="Search origin or stream name…"
+          placeholder="Search origin, provider, or stream name…"
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -192,6 +193,7 @@ export function StreamSourcesPanel({ embedded = false }: { embedded?: boolean })
           <thead>
             <tr>
               <th>Source</th>
+              <th>Provider</th>
               <th>Streams</th>
               <th>Active</th>
               <th>Online</th>
@@ -210,6 +212,9 @@ export function StreamSourcesPanel({ embedded = false }: { embedded?: boolean })
                       {s.sampleNames.join(" · ")}
                     </div>
                   ) : null}
+                </td>
+                <td className="text-xs">
+                  {(s.providers ?? []).length ? (s.providers ?? []).join(" · ") : "—"}
                 </td>
                 <td className="tabular-nums">{s.streamCount.toLocaleString()}</td>
                 <td className="tabular-nums">{s.activeCount.toLocaleString()}</td>
@@ -242,14 +247,14 @@ export function StreamSourcesPanel({ embedded = false }: { embedded?: boolean })
             ))}
             {!sources.length && !loading ? (
               <tr>
-                <td colSpan={7} className="xui-streams-empty">
+                <td colSpan={8} className="xui-streams-empty">
                   No sources found.
                 </td>
               </tr>
             ) : null}
             {loading ? (
               <tr>
-                <td colSpan={7} className="xui-streams-empty">
+                <td colSpan={8} className="xui-streams-empty">
                   Loading…
                 </td>
               </tr>

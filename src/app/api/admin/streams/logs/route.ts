@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const take = parseLogLimit(req.nextUrl.searchParams.get("limit"));
   const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  const [processes, activity, liveViews, relayErrorsRaw] = await Promise.all([
+  const [processes, activity, liveViews, relayErrorsRaw, playbackEventsRaw] = await Promise.all([
     prisma.streamProcess.findMany({
       where: { lastSeenAt: { gte: staleBefore } },
       include: {
@@ -46,6 +46,14 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
       take,
     }),
+    prisma.activityLog.findMany({
+      where: {
+        createdAt: { gte: staleBefore },
+        action: { startsWith: "playback_" },
+      },
+      orderBy: { createdAt: "desc" },
+      take,
+    }),
   ]);
 
   const relayStreamIds = [
@@ -68,7 +76,30 @@ export async function GET(req: NextRequest) {
     streamName: r.entityId ? relayNameById.get(r.entityId) ?? null : null,
   }));
 
-  return NextResponse.json({ processes, activity, liveViews, relayErrors });
+  const playbackIds = [
+    ...new Set(
+      playbackEventsRaw
+        .map((r) => r.entityId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0)
+    ),
+  ];
+  const playbackStreams =
+    playbackIds.length > 0
+      ? await prisma.stream.findMany({
+          where: { id: { in: playbackIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+  const playbackNameById = new Map(playbackStreams.map((s) => [s.id, s.name]));
+  const playbackEvents = playbackEventsRaw.map((r) => ({
+    ...r,
+    streamName:
+      (typeof r.meta === "object" && r.meta && "name" in r.meta
+        ? String((r.meta as { name?: string }).name ?? "")
+        : "") || (r.entityId ? playbackNameById.get(r.entityId) ?? null : null),
+  }));
+
+  return NextResponse.json({ processes, activity, liveViews, relayErrors, playbackEvents });
 }
 
 export async function DELETE() {
@@ -76,7 +107,11 @@ export async function DELETE() {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const result = await prisma.activityLog.deleteMany({
     where: {
-      OR: [{ entity: "stream" }, { action: { contains: "stream" } }],
+      OR: [
+        { entity: "stream" },
+        { action: { contains: "stream" } },
+        { action: { startsWith: "playback_" } },
+      ],
     },
   });
   return NextResponse.json({ ok: true, deleted: result.count });

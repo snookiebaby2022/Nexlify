@@ -43,8 +43,8 @@ export default function ManagementLogsPage() {
   useEffect(() => {
     load();
     // Search fields apply on Refresh; only page size auto-reloads.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- q/action used when Refresh calls load()
-  }, [pageSize]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- q applies on Refresh; action filter reloads
+  }, [pageSize, action]);
 
   return (
     <div className="space-y-6">
@@ -73,12 +73,22 @@ export default function ManagementLogsPage() {
         }}
       >
         <input
-          placeholder="Filter action (e.g. create_line)"
+          placeholder="Filter action (e.g. playback, create_line)"
           className="rounded border px-3 py-2 bg-transparent text-sm min-w-[200px]"
           style={{ borderColor: "var(--border)" }}
           value={action}
           onChange={(e) => setAction(e.target.value)}
         />
+        <button
+          type="button"
+          className="rounded border px-3 py-2 text-sm"
+          style={{ borderColor: "var(--border)" }}
+          onClick={() => {
+            setAction("playback");
+          }}
+        >
+          Playback issues
+        </button>
         <input
           placeholder="Search user, line, entity…"
           className="rounded border px-3 py-2 bg-transparent text-sm flex-1 min-w-[200px]"

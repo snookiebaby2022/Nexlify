@@ -1,7 +1,7 @@
 import { cacheDel, cacheGet, cacheMget, cacheSet } from "./cache";
 
 /** Active playback session TTL — match LIVE_STALE_MS so zap/prune stay aligned with the UI. */
-export const LIVE_SESSION_TTL_SEC = 45;
+export const LIVE_SESSION_TTL_SEC = 180;
 
 function sessionIpKey(ip?: string | null): string {
   let raw = ip?.trim() ?? "";

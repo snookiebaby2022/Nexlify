@@ -412,6 +412,14 @@ export async function GET(
           entityId: cleanId,
           meta: { error: proxied.error },
         });
+        void import("@/lib/playback-quality-log").then(({ logPlaybackQuality, PLAYBACK_ORIGIN_FAIL }) =>
+          logPlaybackQuality({
+            action: PLAYBACK_ORIGIN_FAIL,
+            streamId: cleanId,
+            lineId: line.id,
+            detail: proxied.error,
+          })
+        );
         try {
           await prisma.stream.update({
             where: { id: cleanId },

@@ -48,3 +48,21 @@ test("pickSiblingBackupUrl prefers a different live host and skips known-dead ho
     "http://zee-portal.xyz:80/u/p/4"
   );
 });
+
+test("pickSiblingBackupUrl falls back to same-host different path", () => {
+  const stream = {
+    id: "hd",
+    name: "Sky Sports Main Event HD",
+    streamUrl: "http://provider.example:80/live/u/p/hd.ts",
+  };
+  assert.equal(
+    pickSiblingBackupUrl(stream, [
+      {
+        id: "fhd51",
+        name: "Sky Sports Main Event FHD 5.1",
+        streamUrl: "http://provider.example:80/live/u/p/fhd51.ts",
+      },
+    ]),
+    "http://provider.example:80/live/u/p/fhd51.ts"
+  );
+});

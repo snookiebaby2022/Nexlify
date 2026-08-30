@@ -85,7 +85,19 @@ export async function recordConnectionMediaBytes(
   const key = connectionQualityKey(lineId, streamId, ip);
   const now = Date.now();
   const prev = await cacheGet<QualityWindow>(key);
-  await cacheSet(key, applyMediaByteWindow(prev, now, byteLen), QUALITY_TTL_SEC);
+  const next = applyMediaByteWindow(prev, now, byteLen);
+  await cacheSet(key, next, QUALITY_TTL_SEC);
+  const grew = (next.stallCount ?? 0) > (prev?.stallCount ?? 0);
+  if (grew && next.stallCount >= 3 && next.totalBytes > 200_000) {
+    const { logPlaybackQuality, PLAYBACK_STUTTER } = await import("./playback-quality-log");
+    void logPlaybackQuality({
+      action: PLAYBACK_STUTTER,
+      streamId,
+      lineId,
+      detail: "Byte gaps over 2.5s while the player was still pulling",
+      meta: { stallCount: next.stallCount, bytesPerWindow: next.windowBytes },
+    });
+  }
 }
 
 export async function clearConnectionQuality(lineId: string, streamId: string, ip: string) {

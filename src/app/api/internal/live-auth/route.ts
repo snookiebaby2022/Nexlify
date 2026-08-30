@@ -230,7 +230,7 @@ export async function GET(req: NextRequest) {
         userAgent: ua,
         playbackPath: originalPath(req),
         mediaBytes: parsed.wantsHls ? 48_000 : 220_000,
-        pruneOthers: true,
+        pruneOthers: false,
       });
       return liveAuthResponseFromCache(cached);
     }
@@ -284,7 +284,7 @@ export async function GET(req: NextRequest) {
           userAgent: ua,
           playbackPath: path,
           mediaBytes: parsed.wantsHls ? 48_000 : 180_000,
-          pruneOthers: true,
+          pruneOthers: false,
         });
       }
     }
@@ -359,7 +359,7 @@ export async function GET(req: NextRequest) {
       userAgent: ua,
       playbackPath: originalPath(req),
       mediaBytes: 220_000,
-      pruneOthers: true,
+      pruneOthers: false,
     });
   }
 

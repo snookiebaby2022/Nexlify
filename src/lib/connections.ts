@@ -8,12 +8,13 @@ import {
 } from "./connection-playback-output";
 import { clearLiveSession, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
 
-export const STALE_MS = 90 * 1000; // cron safety net — free maxConnections slots after edge/panel restarts
-/** Live Connections UI + dashboard — HLS/Smarters often gap 10–30s between segment/playlist hits. */
-export const LIVE_STALE_MS = 45 * 1000;
+export const STALE_MS = 10 * 60 * 1000; // cron — MPEG-TS pipes often go minutes between panel pulses
+/** Live Connections UI + capacity. 45s was killing long MPEG-TS watches (no playlist heartbeat). */
+export const LIVE_STALE_MS = 3 * 60 * 1000;
 export const PLAYBACK_STALE_MS = LIVE_STALE_MS;
-/** Admin Live Connections list — hide rows idle longer than this (HLS gaps tolerated). */
 export const LIVE_LIST_STALE_MS = LIVE_STALE_MS;
+/** Abort a spliced live body only after a long silence — not a normal GOP/ad gap. */
+export const LIVE_PIPE_IDLE_ABORT_MS = 8 * 60 * 1000;
 const CONNECTIONS_CACHE_TTL = 1; // seconds — dashboard SSE should reflect disconnects quickly
 
 /** Exact Redis keys only — never SCAN the catalog keyspace with conn:*. */
@@ -466,6 +467,12 @@ export async function trackConnection(opts: {
   }
 
   if (streamId && clientIp && opts.pruneOthers) {
+    const lineCap = await prisma.line.findUnique({
+      where: { id: opts.lineId },
+      select: { maxConnections: true },
+    });
+    const maxConn = Math.max(1, lineCap?.maxConnections ?? 1);
+    if (maxConn <= 1) {
     const byIp = await prisma.liveConnection.findFirst({
       where: { lineId: opts.lineId, ip: clientIp },
       orderBy: { lastSeenAt: "desc" },
@@ -498,6 +505,7 @@ export async function trackConnection(opts: {
       void touchLiveSession(opts.lineId, streamId, clientIp);
       void setViewerActiveStream(opts.lineId, streamId, clientIp);
       return byIp.id;
+    }
     }
   }
 
@@ -745,9 +753,8 @@ export async function deleteStaleConnections() {
   return pruneStaleConnections(STALE_MS);
 }
 
-/** List connections with a recent lastSeenAt. Redis session keys are a 12–45s TTL
- *  on a multi-worker panel — requiring them AND lastSeen made Open Connections /
- *  Watching now drop to 0 between HLS segments. Kick still deletes the DB row. */
+/** List connections with a recent lastSeenAt. Redis session keys used to be 45s —
+ *  requiring them AND lastSeen made Open Connections drop between HLS segments. */
 export async function listLiveConnections(ownerId?: string, take = 5000) {
   const staleBefore = new Date(Date.now() - LIVE_LIST_STALE_MS);
   const baseWhere = {
@@ -853,7 +860,7 @@ export function attachKickAwareProxyBody(opts: {
     });
   };
 
-  const IDLE_MS = 45_000;
+  const IDLE_MS = LIVE_PIPE_IDLE_ABORT_MS;
   const HEARTBEAT_MS = 5_000;
   const TIMER_HEARTBEAT_MS = 5_000;
   let timerHeartbeat: ReturnType<typeof setInterval> | null = null;
