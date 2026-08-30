@@ -1,23 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
 import { mergeLineNotesForSave, mergeResellerNotes, splitLineNotes } from "./line-notes";
 
 describe("splitLineNotes", () => {
   it("treats undelimited text as reseller notes for reseller viewer", () => {
-    expect(splitLineNotes("grump signal", "reseller")).toEqual({
+    assert.deepEqual(splitLineNotes("grump signal", "reseller"), {
       admin: "",
       reseller: "grump signal",
     });
   });
 
   it("treats undelimited text as admin notes for admin viewer", () => {
-    expect(splitLineNotes("internal only", "admin")).toEqual({
+    assert.deepEqual(splitLineNotes("internal only", "admin"), {
       admin: "internal only",
       reseller: "",
     });
   });
 
   it("splits on delimiter", () => {
-    expect(splitLineNotes("admin bit\n---\nreseller bit", "reseller")).toEqual({
+    assert.deepEqual(splitLineNotes("admin bit\n---\nreseller bit", "reseller"), {
       admin: "admin bit",
       reseller: "reseller bit",
     });
@@ -26,12 +27,13 @@ describe("splitLineNotes", () => {
 
 describe("mergeLineNotesForSave", () => {
   it("preserves hidden admin notes when reseller saves", () => {
-    expect(
-      mergeLineNotesForSave("reseller", "admin secret\n---\nold", "", "new note")
-    ).toBe("admin secret\n---\nnew note");
+    assert.equal(
+      mergeLineNotesForSave("reseller", "admin secret\n---\nold", "", "new note"),
+      "admin secret\n---\nnew note"
+    );
   });
 
   it("stores reseller-only notes without delimiter", () => {
-    expect(mergeResellerNotes(null, "solo")).toBe("solo");
+    assert.equal(mergeResellerNotes(null, "solo"), "solo");
   });
 });

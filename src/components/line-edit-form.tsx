@@ -191,9 +191,9 @@ export function LineEditForm({
         })
         .catch(() => setCreditBalance(null));
     }
-    fetch("/api/admin/settings?group=general")
-      .then((r) => r.json())
-      .then((d) => setAllowTrials(d.settings?.disableTrial !== true))
+    fetch("/api/panel/line-ux")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setAllowTrials(d?.allowTrials !== false))
       .catch(() => {});
     Promise.all(tasks)
       .then(([lineRes, bouquetRes, packageRes, serverRes, resellerRes]) => {
@@ -689,14 +689,16 @@ export function LineEditForm({
                   placeholder="0 = no change"
                   disabled={form.unlimited}
                   value={form.extendDays || ""}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const extendDays = parseInt(e.target.value, 10) || 0;
+                    const pkg = selectablePackages.find((p) => p.id === form.packageId);
                     setForm({
                       ...form,
                       unlimited: false,
-                      extendDays: parseInt(e.target.value, 10) || 0,
-                      packageId: "",
-                    })
-                  }
+                      extendDays,
+                      packageId: pkg && pkg.days === extendDays ? form.packageId : "",
+                    });
+                  }}
                 />
               </FormField>
               <FormField label="WHMCS / billing service ID">

@@ -232,10 +232,10 @@ export function LineAddForm({
     fetch("/api/admin/lines/templates")
       .then((r) => r.json())
       .then((d) => setTemplates(d.templates ?? []));
-    fetch("/api/admin/settings?group=general")
-      .then((r) => r.json())
+    fetch("/api/panel/line-ux")
+      .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        const trialsOff = d.settings?.disableTrial === true;
+        const trialsOff = d?.allowTrials === false;
         setAllowTrials(!trialsOff);
         if (trialsOff) {
           setForm((f) =>
