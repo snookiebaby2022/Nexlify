@@ -26,6 +26,7 @@ import {
 } from "@/lib/line-duration-presets";
 import { effectiveCreditCost, packageLabelForDays } from "@/lib/package-credits";
 import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
+import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
 import { mergeLineNotesForSave } from "@/lib/line-notes";
 
 function YesNo({
