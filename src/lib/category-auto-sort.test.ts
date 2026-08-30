@@ -42,6 +42,22 @@ test("operator-order preset puts UK Sky tiers before US and 24/7", () => {
   assert.ok(categorySortTier("ZZ Misc", lines) === lines.length);
 });
 
+test("operator-order keeps HEVC folders on their own tier next to the parent", () => {
+  const lines = resolveSortLines("operator-order");
+  assert.ok(
+    categorySortTier("UK | Entertainment (HEVC)", lines) <
+      categorySortTier("UK | Entertainment", lines)
+  );
+  assert.ok(
+    categorySortTier("UK | Sky Sports / TNT Sports (HEVC)", lines) <
+      categorySortTier("UK | Sky Sports", lines)
+  );
+  assert.notEqual(
+    categorySortTier("UK | Entertainment (HEVC)", lines),
+    categorySortTier("UK | Entertainment", lines)
+  );
+});
+
 test("compareCategoriesForAutoSort falls back to name within tier", () => {
   const lines = resolveSortLines("uk-sports-us");
   assert.ok(

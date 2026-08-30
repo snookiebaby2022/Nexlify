@@ -52,7 +52,7 @@ export function DuplicateStreamNamesBanner({ type = "LIVE" }: { type?: "LIVE" | 
         <div className="min-w-0">
           <p className="font-medium">
             {data.collisionCount} duplicate channel name{data.collisionCount === 1 ? "" : "s"} in shared
-            categories/bouquets
+            categories/bouquets (exact name only)
           </p>
           <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
             {data.extraCopies} extra row{data.extraCopies === 1 ? "" : "s"} can make probes look OK while apps tune

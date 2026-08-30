@@ -45,6 +45,7 @@ type ExistingLive = {
   name: string;
   streamIcon: string | null;
   epgChannelId: string | null;
+  categoryId: string | null;
 };
 
 /**
@@ -85,6 +86,7 @@ async function loadExistingLiveForPlaylist(
         name: true,
         streamIcon: true,
         epgChannelId: true,
+        categoryId: true,
       },
     });
     for (const row of rows) remember(row);
@@ -102,6 +104,7 @@ async function loadExistingLiveForPlaylist(
         name: true,
         streamIcon: true,
         epgChannelId: true,
+        categoryId: true,
       },
     });
     for (const row of rows) remember(row);
@@ -198,7 +201,6 @@ export async function importLiveM3uEntriesFast(
   // Resolve categories + group bouquets for new streams only (unique groups).
   const groupsNeeded = new Set<string>();
   for (const { entry } of unique) {
-    if (resolveExisting(entry.url, byExact, byNorm)) continue;
     const g = entry.group?.trim();
     if (g) groupsNeeded.add(g);
   }
@@ -237,6 +239,7 @@ export async function importLiveM3uEntriesFast(
     name: string | null;
     streamIcon: string | null;
     epgChannelId: string | null;
+    categoryId: string | null;
   }[] = [];
 
   /** Playlist URL → already-known stream id (exact or normalized match). */
@@ -262,7 +265,16 @@ export async function importLiveM3uEntriesFast(
       const epgChanged = Boolean(
         nextEpg && nextEpg !== (existing.epgChannelId ?? null)
       );
-      const metaChanged = nameChanged || iconChanged || epgChanged;
+      let nextCategoryId: string | null = null;
+      if (autoCategory && !fixedCategoryId && groupKey) {
+        nextCategoryId = categoryCache.get(groupKey.toLowerCase()) ?? null;
+        if (!nextCategoryId) {
+          nextCategoryId = await categoryFromGroupName(groupKey, StreamType.LIVE);
+          categoryCache.set(groupKey.toLowerCase(), nextCategoryId);
+        }
+      }
+      const categoryChanged = Boolean(nextCategoryId && nextCategoryId !== existing.categoryId);
+      const metaChanged = nameChanged || iconChanged || epgChanged || categoryChanged;
 
       if (
         opts.reorderExisting !== false ||
@@ -276,6 +288,7 @@ export async function importLiveM3uEntriesFast(
           name: nameChanged ? nextName : null,
           streamIcon: iconChanged ? nextIcon : null,
           epgChannelId: epgChanged ? nextEpg : null,
+          categoryId: categoryChanged ? nextCategoryId : null,
         });
         reordered++;
       }
@@ -389,6 +402,7 @@ export async function importLiveM3uEntriesFast(
               ...(u.name ? { name: u.name } : {}),
               ...(u.streamIcon ? { streamIcon: u.streamIcon } : {}),
               ...(u.epgChannelId ? { epgChannelId: u.epgChannelId } : {}),
+              ...(u.categoryId ? { categoryId: u.categoryId } : {}),
             },
           })
         )

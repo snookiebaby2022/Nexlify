@@ -1,5 +1,6 @@
 import type { StreamType, CategoryType } from "@prisma/client";
 import { prisma } from "./prisma";
+import { formatXuiCategoryName } from "./category-xui-name";
 
 function streamTypeToCategoryType(type: StreamType): CategoryType {
   if (type === "MOVIE") return "MOVIE";
@@ -200,7 +201,7 @@ export async function categoryFromGroupName(
   if (type === "MOVIE") {
     return categoryForMovie(g);
   }
-  return findOrCreateCategory(g, null, streamTypeToCategoryType(type));
+  return findOrCreateCategory(formatXuiCategoryName(g), null, streamTypeToCategoryType(type));
 }
 
 /** movies/Action/foo.mp4 → Movies → Action; series/Show/... → TV Series → Show */

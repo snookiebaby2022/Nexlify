@@ -32,14 +32,34 @@ export const CATEGORY_SORT_PRESETS: Record<
     description:
       "UK folders in Sky EPG order, US in network order, sports block, 24/7 block, then everything else A–Z.",
     lines: [
+      "UK | Entertainment (HEVC)",
       "UK | Entertainment",
+      "UK | Sky Sports / TNT Sports (HEVC)",
+      "UK | Sky Sports + EFL",
+      "UK | Sky Sports +",
+      "UK | Sky Sports",
+      "UK | TNT Sports",
       "UK | Sky",
+      "UK | Movies (HEVC)",
       "UK | Movies",
       "UK | Documentaries",
+      "UK | Documentary",
       "UK | News",
       "UK | Kids",
       "UK | Music",
+      "UK | Regionals",
+      "UK | Channels +1",
+      "UK | Ireland",
+      "UK | International",
       "UK | Religious",
+      "UK | EPL Events",
+      "UK | EPL Teams",
+      "UK | EFL Championship",
+      "UK | EFL League 1",
+      "UK | EFL League 2",
+      "UK | EFL Events",
+      "UK | SPFL Premiership",
+      "UK | National League",
       "UK | Football",
       "UK | Cricket",
       "UK | Rugby",
@@ -50,10 +70,12 @@ export const CATEGORY_SORT_PRESETS: Record<
       "UK | Golf",
       "UK | F1",
       "UK | Motorsport",
+      "UK | Sport",
       "UK | Sports",
       "UK |",
       "Ireland",
       "IE |",
+      "US | Entertainment (HEVC)",
       "US | Entertainment",
       "US | Networks",
       "US | Locals",
@@ -62,8 +84,13 @@ export const CATEGORY_SORT_PRESETS: Record<
       "US | Movies",
       "US | Kids",
       "US | Documentaries",
+      "US | Documentary",
       "US | Music",
       "US | Latino",
+      "US | NFL",
+      "US | NBA",
+      "US | NHL",
+      "US | MLB",
       "US |",
       "CA |",
       "Canada",
@@ -200,10 +227,17 @@ function normLine(line: string): string {
 
 function categoryMatchesLine(name: string, line: string): boolean {
   const n = normalizeCategoryName(name);
+  const raw = line.trim();
   const l = normLine(line);
   if (!l) return false;
-  if (n.startsWith(l)) return true;
-  // Short tokens (US, IE, AU…) only match as prefixes — avoids "ie" inside "movies".
+  if (n === l) return true;
+  // "UK |" catch-all and short region codes — prefix only.
+  const regionPrefix = /\|$/.test(raw) || l.length <= 3;
+  if (regionPrefix) {
+    return n === l || n.startsWith(`${l} `) || n.startsWith(l);
+  }
+  // Full folder names stay exact so HEVC / +1 get their own tier.
+  if (raw.includes("|")) return false;
   if (l.length < 4) return false;
   return n.includes(l);
 }

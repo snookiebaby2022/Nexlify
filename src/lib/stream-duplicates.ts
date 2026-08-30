@@ -73,6 +73,14 @@ export function normalizeDuplicateTitle(name: string): string {
     .trim();
 }
 
+/** Live duplicates: same letters/spaces only. BBC One HD ≠ BBC One SD ≠ Channel 5 +1 SD. */
+export function literalLiveNameKey(name: string): string {
+  return String(name ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function episodeGroupKey(row: {
   seriesName: string | null;
   name: string;
@@ -173,7 +181,7 @@ export function buildDuplicateGroups(rows: DuplicateScanRow[], kind: DuplicateKi
     const byTitle = new Map<string, DuplicateScanRow[]>();
     for (const row of rows) {
       if (used.has(row.id)) continue;
-      const key = normalizeDuplicateTitle(row.name);
+      const key = literalLiveNameKey(row.name);
       if (!key) continue;
       const list = byTitle.get(key) ?? [];
       list.push(row);
@@ -562,7 +570,8 @@ export async function findDuplicateNameCollisions(
 
   const byName = new Map<string, typeof rows>();
   for (const row of rows) {
-    const key = normalizeDuplicateTitle(row.name);
+    const key =
+      type === StreamType.LIVE ? literalLiveNameKey(row.name) : normalizeDuplicateTitle(row.name);
     if (!key) continue;
     const list = byName.get(key) ?? [];
     list.push(row);

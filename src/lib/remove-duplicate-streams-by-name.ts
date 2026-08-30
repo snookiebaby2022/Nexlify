@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { StreamType } from "@prisma/client";
-import { pickKeepId, type DuplicateScanRow } from "./stream-duplicates";
+import { literalLiveNameKey, pickKeepId, type DuplicateScanRow } from "./stream-duplicates";
 
 export type RemoveDuplicateStreamsResult = {
   scanned: number;
@@ -10,15 +10,14 @@ export type RemoveDuplicateStreamsResult = {
   samples: { kept: string; removed: string[] }[];
 };
 
-function nameKey(name: string, streamType: StreamType): string {
-  let key = name.toLowerCase().replace(/\s+/g, " ").trim();
-  if (streamType === StreamType.LIVE) {
-    key = key
-      .replace(/\b(fhd|uhd|hdr|4k|sd|hd|1080p|720p|2160p)\b/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-  return key;
+function nameKey(name: string, streamType: StreamType, categoryId?: string | null): string {
+  const base =
+    streamType === StreamType.LIVE
+      ? literalLiveNameKey(name)
+      : name.toLowerCase().replace(/\s+/g, " ").trim();
+  if (!base) return "";
+  if (streamType === StreamType.LIVE) return `${base}::${categoryId ?? ""}`;
+  return base;
 }
 
 export async function removeDuplicateStreamsByName(
@@ -86,7 +85,7 @@ export async function removeDuplicateStreamsByName(
   const groups = new Map<string, DuplicateScanRow[]>();
   for (const r of rows) {
     result.scanned++;
-    const key = nameKey(r.name, opts.streamType);
+    const key = nameKey(r.name, opts.streamType, r.categoryId);
     if (!key) continue;
     const mapped: DuplicateScanRow = {
       id: r.id,

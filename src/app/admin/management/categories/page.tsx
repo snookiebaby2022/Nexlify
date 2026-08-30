@@ -17,7 +17,8 @@ import { AutoLogosButton } from "@/components/auto-logos-button";
 
 const PREDEFINED_CATEGORIES: Record<CategoryTab, string[]> = {
   LIVE: [
-    "UK | Entertainment", "UK | Sports", "UK | News", "UK | Movies", "UK | Documentaries",
+    "UK | Entertainment", "UK | Entertainment (HEVC)", "UK | Sports", "UK | News", "UK | Movies", "UK | Documentaries",
+    "UK | Sky Sports", "UK | Sky Sports / TNT Sports (HEVC)", "UK | TNT Sports",
     "US | Entertainment", "US | Sports", "US | News", "US | Movies",
     "CA | Entertainment", "AU | Entertainment", "IE | Entertainment",
     "UK | Football", "UK | Cricket", "UK | Rugby", "UK | Boxing", "UK | UFC/MMA", "UK | Tennis", "UK | Golf", "UK | F1/Motorsport",
@@ -674,8 +675,9 @@ function CategoryRemoveDuplicateStreamsPanel({
       <div>
         <h2 className="text-sm font-semibold">Remove duplicate streams (same name)</h2>
         <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-          Deletes extra {target.label} that share the exact same display name (case/spacing insensitive).
-          Keeps the best copy (most bouquets, active, oldest). For URL/title fuzzy matching use{" "}
+          Deletes extra {target.label} only when the name is literally the same (case/spacing ignored).
+          BBC One HD, BBC One SD, and Channel 5 +1 SD stay — they are different names. Same-name copies
+          are removed only inside the same category. For URL matching use{" "}
           <Link href="/admin/management/tools/remove-duplicates" className="underline" style={{ color: "var(--accent)" }}>
             Remove Duplicates tool
           </Link>
@@ -727,6 +729,111 @@ function CategoryRemoveDuplicateStreamsPanel({
                 ←
               </span>
               <span style={{ color: "var(--muted)" }}>{s.removed.join(", ")}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CategoryMatchProviderM3uPanel({
+  onApplied,
+  setMsg,
+  setBusy,
+  busy,
+}: {
+  onApplied: () => void;
+  setMsg: (msg: string) => void;
+  setBusy: (busy: boolean) => void;
+  busy: boolean;
+}) {
+  const [samples, setSamples] = useState<{ name: string; from: string | null; to: string }[]>([]);
+
+  async function run(dryRun: boolean) {
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/categories/match-provider-m3u", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dryRun }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(data.error ?? "Provider folder match failed");
+        return;
+      }
+      setSamples(data.samples ?? []);
+      const created = (data.createdCategories ?? []) as string[];
+      if (dryRun) {
+        setMsg(
+          `Preview: ${data.updated} streams would move into provider folders (${data.matched} matched, ${data.unmatched} unmatched, ${data.providers} providers)`
+        );
+        return;
+      }
+      setMsg(
+        `Moved ${data.updated} streams into provider M3U folders` +
+          (created.length ? ` · created ${created.length}: ${created.slice(0, 8).join(", ")}` : "")
+      );
+      onApplied();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="rounded-lg border p-4 space-y-3"
+      style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+    >
+      <div>
+        <h2 className="text-sm font-semibold">Match provider M3U folders</h2>
+        <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+          Puts live streams into the same category names as the provider playlist —{" "}
+          <code>UK | Entertainment</code>, <code>UK | Entertainment (HEVC)</code>,{" "}
+          <code>UK | Sky Sports / TNT Sports (HEVC)</code>, and so on. Creates missing folders.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded border"
+          style={{ borderColor: "var(--border)" }}
+          onClick={() => void run(true)}
+        >
+          Preview folder moves
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          className="text-xs px-3 py-1.5 rounded font-medium text-white"
+          style={{ background: "var(--accent)" }}
+          onClick={() => {
+            if (!confirm("Move live streams into the provider’s exact M3U category folders?")) return;
+            void run(false);
+          }}
+        >
+          {busy ? "Working…" : "Match provider folders"}
+        </button>
+      </div>
+      {samples.length > 0 && (
+        <div
+          className="rounded border max-h-48 overflow-y-auto text-xs font-mono"
+          style={{ borderColor: "var(--border)" }}
+        >
+          {samples.map((s, i) => (
+            <div
+              key={`${s.name}-${i}`}
+              className="px-2 py-1 border-b"
+              style={{ borderColor: "var(--border)" }}
+            >
+              <span className="font-medium">{s.name}</span>
+              <span className="mx-2" style={{ color: "var(--muted)" }}>
+                {s.from ?? "—"} →
+              </span>
+              <span>{s.to}</span>
             </div>
           ))}
         </div>
@@ -956,7 +1063,7 @@ const AUTO_SORT_PRESETS = [
   {
     id: "operator-order",
     label: "Operator order (Sky · US · Sports · 24/7 · A–Z)",
-    hint: "UK in Sky EPG order, US network order, sports block, 24/7, then rest A–Z.",
+    hint: "UK Entertainment → Sky/TNT (incl. HEVC) → movies/docs → US sports, then 24/7 and the rest A–Z.",
     custom: false,
   },
   {
@@ -1387,6 +1494,9 @@ function ManagementCategoriesInner() {
         />
       </label>
       <CategoryRemoveDuplicateStreamsPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+      {tab === "LIVE" ? (
+        <CategoryMatchProviderM3uPanel onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+      ) : null}
       <CategoryNameNormalizePanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
 
       <CategoryAutoSortPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
