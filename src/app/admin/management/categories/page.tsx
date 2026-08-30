@@ -749,15 +749,33 @@ function CategoryMatchProviderM3uPanel({
   busy: boolean;
 }) {
   const [samples, setSamples] = useState<{ name: string; from: string | null; to: string }[]>([]);
+  const [providers, setProviders] = useState<{ id: string; name: string }[]>([]);
+  const [providerId, setProviderId] = useState("");
+  const [overwriteExisting, setOverwriteExisting] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/stream-providers")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.providers ?? []) as { id: string; name: string }[];
+        setProviders(list);
+        setProviderId((cur) => cur || list[0]?.id || "");
+      })
+      .catch(() => undefined);
+  }, []);
 
   async function run(dryRun: boolean) {
+    if (!providerId) {
+      setMsg("Pick one provider. Matching every provider at once is disabled.");
+      return;
+    }
     setBusy(true);
     setMsg("");
     try {
       const res = await fetch("/api/admin/categories/match-provider-m3u", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dryRun }),
+        body: JSON.stringify({ dryRun, providerId, overwriteExisting }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -768,7 +786,7 @@ function CategoryMatchProviderM3uPanel({
       const created = (data.createdCategories ?? []) as string[];
       if (dryRun) {
         setMsg(
-          `Preview: ${data.updated} streams would move into provider folders (${data.matched} matched, ${data.unmatched} unmatched, ${data.providers} providers)`
+          `Preview: ${data.updated} of this provider would move (${data.matched} matched, ${data.skippedExisting ?? 0} left in existing folders, ${data.unmatched} unmatched)`
         );
         return;
       }
@@ -790,15 +808,39 @@ function CategoryMatchProviderM3uPanel({
       <div>
         <h2 className="text-sm font-semibold">Match provider M3U folders</h2>
         <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-          Puts live streams into the same category names as the provider playlist —{" "}
-          <code>UK | Entertainment</code>, <code>UK | Entertainment (HEVC)</code>,{" "}
-          <code>UK | Sky Sports / TNT Sports (HEVC)</code>, and so on. Creates missing folders.
+          One provider only. Matches that provider’s streams by provider id + Xtream stream id.
+          Leaves folders that are already set unless you tick overwrite.
         </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={providerId}
+          onChange={(e) => setProviderId(e.target.value)}
+          disabled={busy}
+          className="text-xs px-2 py-1.5 rounded border"
+          style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+        >
+          <option value="">Select provider…</option>
+          {providers.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+        <label className="text-xs flex items-center gap-1">
+          <input
+            type="checkbox"
+            checked={overwriteExisting}
+            onChange={(e) => setOverwriteExisting(e.target.checked)}
+            disabled={busy}
+          />
+          Overwrite existing folders
+        </label>
       </div>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || !providerId}
           className="text-xs px-3 py-1.5 rounded border"
           style={{ borderColor: "var(--border)" }}
           onClick={() => void run(true)}
@@ -807,11 +849,11 @@ function CategoryMatchProviderM3uPanel({
         </button>
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || !providerId}
           className="text-xs px-3 py-1.5 rounded font-medium text-white"
           style={{ background: "var(--accent)" }}
           onClick={() => {
-            if (!confirm("Move live streams into the provider’s exact M3U category folders?")) return;
+            if (!confirm("Move this provider’s streams only. Other providers stay put.")) return;
             void run(false);
           }}
         >

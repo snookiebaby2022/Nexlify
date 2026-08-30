@@ -502,6 +502,7 @@ model Stream {
   @@index([categoryId])
   @@index([lastProbeOk])
   @@index([providerId])
+  @@index([parentStreamId])
 }
 
 model WatchFolder {

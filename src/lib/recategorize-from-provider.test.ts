@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { xtreamStreamIdFromUrl } from "./recategorize-from-provider";
+import {
+  streamBelongsToProvider,
+  urlHostKey,
+  xtreamStreamIdFromUrl,
+} from "./recategorize-from-provider";
 import { literalLiveNameKey } from "./stream-duplicates";
 
 describe("xtreamStreamIdFromUrl", () => {
@@ -25,5 +29,46 @@ describe("literalLiveNameKey", () => {
       literalLiveNameKey("BBC One HD")
     );
     assert.equal(literalLiveNameKey("BBC One HD"), literalLiveNameKey("  bbc   one  hd "));
+  });
+});
+
+describe("streamBelongsToProvider", () => {
+  it("never lets another providerId steal a stream", () => {
+    assert.equal(
+      streamBelongsToProvider(
+        { providerId: "optv", streamUrl: "http://other.example/live/u/p/1.ts" },
+        "ghostface",
+        "other.example"
+      ),
+      false
+    );
+    assert.equal(
+      streamBelongsToProvider(
+        { providerId: "ghostface", streamUrl: "http://nowtvgo.online/live/u/p/1.ts" },
+        "ghostface",
+        "nowtvgo.online"
+      ),
+      true
+    );
+  });
+
+  it("only uses URL host when providerId is empty", () => {
+    assert.equal(urlHostKey("https://nowtvgo.online:8080/live/u/p/1.ts"), "nowtvgo.online");
+    assert.equal(
+      streamBelongsToProvider(
+        { providerId: null, streamUrl: "https://nowtvgo.online/live/u/p/1.ts" },
+        "ghostface",
+        "nowtvgo.online"
+      ),
+      true
+    );
+    assert.equal(
+      streamBelongsToProvider(
+        { providerId: null, streamUrl: "https://other.example/live/u/p/1.ts" },
+        "ghostface",
+        "nowtvgo.online"
+      ),
+      false
+    );
   });
 });

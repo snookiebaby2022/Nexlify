@@ -16,15 +16,27 @@ export async function POST(req: NextRequest) {
 
     const parsed = await parseJsonBody(req);
     if (!parsed.ok) return parsed.response;
-    const dryRun = parsed.data.dryRun === true;
+    const providerId = String(parsed.data.providerId ?? "").trim();
+    if (!providerId) {
+      return NextResponse.json(
+        { error: "providerId is required. Matching every provider at once is disabled." },
+        { status: 400 }
+      );
+    }
+    const dryRun = parsed.data.dryRun !== false;
+    const overwriteExisting = parsed.data.overwriteExisting === true;
 
-    const result = await recategorizeLiveFromProviders({ dryRun });
+    const result = await recategorizeLiveFromProviders({
+      providerId,
+      dryRun,
+      overwriteExisting,
+    });
 
     if (!dryRun && result.updated > 0) {
       await logActivity("match_provider_m3u_categories", {
         userId: session.id,
         entity: "category",
-        meta: { updated: result.updated, created: result.createdCategories.length },
+        meta: { providerId, updated: result.updated, created: result.createdCategories.length },
       });
     }
 

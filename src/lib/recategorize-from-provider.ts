@@ -4,7 +4,6 @@ import { assertPublicHttpUrl } from "@/lib/ssrf";
 import { resolveProviderXtreamCreds } from "@/lib/stream-provider-probe";
 import { categoryFromGroupName } from "@/lib/vod-category";
 import { formatXuiCategoryName } from "@/lib/category-xui-name";
-import { literalLiveNameKey } from "@/lib/stream-duplicates";
 import { invalidateDashboardStats, invalidateXtreamCategories } from "@/lib/cache-invalidate";
 
 export type RecategorizeFromProviderResult = {
@@ -15,6 +14,8 @@ export type RecategorizeFromProviderResult = {
   createdCategories: string[];
   unchanged: number;
   unmatched: number;
+  skippedOtherProvider: number;
+  skippedExisting: number;
   samples: { name: string; from: string | null; to: string }[];
 };
 
@@ -25,6 +26,28 @@ export function xtreamStreamIdFromUrl(url: string): string | null {
   if (withExt?.[1]) return withExt[1];
   const tail = raw.match(/\/(\d+)(?:\?|$)/);
   return tail?.[1] ?? null;
+}
+
+export function urlHostKey(raw: string): string | null {
+  const value = String(raw ?? "").trim();
+  if (!value) return null;
+  try {
+    const url = new URL(/^https?:\/\//i.test(value) ? value : `http://${value}`);
+    const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+    return host || null;
+  } catch {
+    return null;
+  }
+}
+
+export function streamBelongsToProvider(
+  local: { providerId: string | null; streamUrl: string },
+  providerId: string,
+  providerHost: string | null
+): boolean {
+  if (local.providerId) return local.providerId === providerId;
+  if (!providerHost) return false;
+  return urlHostKey(local.streamUrl) === providerHost;
 }
 
 type RemoteLive = { streamId: string; name: string; categoryName: string };
@@ -74,10 +97,17 @@ async function loadProviderLiveCatalog(
   return out;
 }
 
-export async function recategorizeLiveFromProviders(opts?: {
+export async function recategorizeLiveFromProviders(opts: {
+  providerId: string;
   dryRun?: boolean;
+  overwriteExisting?: boolean;
   sampleLimit?: number;
 }): Promise<RecategorizeFromProviderResult> {
+  const providerId = String(opts.providerId ?? "").trim();
+  if (!providerId) {
+    throw new Error("providerId is required — matching every provider at once is disabled");
+  }
+
   const result: RecategorizeFromProviderResult = {
     providers: 0,
     remoteStreams: 0,
@@ -86,11 +116,13 @@ export async function recategorizeLiveFromProviders(opts?: {
     createdCategories: [],
     unchanged: 0,
     unmatched: 0,
+    skippedOtherProvider: 0,
+    skippedExisting: 0,
     samples: [],
   };
 
-  const providers = await prisma.streamProvider.findMany({
-    where: { isActive: true },
+  const provider = await prisma.streamProvider.findUnique({
+    where: { id: providerId },
     select: {
       id: true,
       baseUrl: true,
@@ -99,41 +131,47 @@ export async function recategorizeLiveFromProviders(opts?: {
       remotePassword: true,
     },
   });
-
-  const byStreamId = new Map<string, RemoteLive>();
-  const byName = new Map<string, RemoteLive[]>();
-
-  for (const provider of providers) {
-    const creds = resolveProviderXtreamCreds(provider);
-    if (!creds.origin || !creds.username || !creds.password) continue;
-    let remote: RemoteLive[] = [];
-    try {
-      remote = await loadProviderLiveCatalog(creds.origin, creds.username, creds.password);
-    } catch {
-      continue;
-    }
-    if (!remote.length) continue;
-    result.providers += 1;
-    result.remoteStreams += remote.length;
-    for (const item of remote) {
-      if (!byStreamId.has(item.streamId)) byStreamId.set(item.streamId, item);
-      const nk = literalLiveNameKey(item.name);
-      if (!nk) continue;
-      const list = byName.get(nk) ?? [];
-      list.push(item);
-      byName.set(nk, list);
-    }
+  if (!provider) {
+    throw new Error("Provider not found");
   }
 
-  if (!byStreamId.size) return result;
+  const creds = resolveProviderXtreamCreds(provider);
+  if (!creds.origin || !creds.username || !creds.password) {
+    throw new Error("Provider is missing Xtream credentials");
+  }
 
+  const providerHost = urlHostKey(creds.origin);
+  let remote: RemoteLive[] = [];
+  try {
+    remote = await loadProviderLiveCatalog(creds.origin, creds.username, creds.password);
+  } catch {
+    return result;
+  }
+  if (!remote.length) return result;
+
+  result.providers = 1;
+  result.remoteStreams = remote.length;
+
+  const byStreamId = new Map<string, RemoteLive>();
+  for (const item of remote) {
+    byStreamId.set(`${provider.id}:${item.streamId}`, item);
+  }
+
+  const hostFilter = providerHost
+    ? [{ providerId: null as string | null, streamUrl: { contains: providerHost } }]
+    : [];
   const locals = await prisma.stream.findMany({
-    where: { type: StreamType.LIVE, isRadio: false },
+    where: {
+      type: StreamType.LIVE,
+      isRadio: false,
+      OR: [{ providerId: provider.id }, ...hostFilter],
+    },
     select: {
       id: true,
       name: true,
       streamUrl: true,
       providerPath: true,
+      providerId: true,
       categoryId: true,
       category: { select: { name: true } },
     },
@@ -161,27 +199,32 @@ export async function recategorizeLiveFromProviders(opts?: {
     return id;
   }
 
-  const sampleLimit = opts?.sampleLimit ?? 24;
+  const sampleLimit = opts.sampleLimit ?? 24;
+  const overwriteExisting = opts.overwriteExisting === true;
 
   for (const local of locals) {
+    if (!streamBelongsToProvider(local, provider.id, providerHost)) {
+      result.skippedOtherProvider += 1;
+      continue;
+    }
     const fromUrl = xtreamStreamIdFromUrl(local.streamUrl);
     const fromPath = String(local.providerPath ?? "").replace(/^remote:[^:]+:/, "").trim();
-    let remote =
-      (fromUrl && byStreamId.get(fromUrl)) ||
-      (fromPath && byStreamId.get(fromPath)) ||
+    const remoteHit =
+      (fromUrl && byStreamId.get(`${provider.id}:${fromUrl}`)) ||
+      (fromPath && byStreamId.get(`${provider.id}:${fromPath}`)) ||
       null;
-    if (!remote) {
-      const named = byName.get(literalLiveNameKey(local.name));
-      if (named?.length === 1) remote = named[0]!;
-    }
-    if (!remote) {
+    if (!remoteHit) {
       result.unmatched += 1;
       continue;
     }
     result.matched += 1;
-    const nextName = formatXuiCategoryName(remote.categoryName);
+    const nextName = formatXuiCategoryName(remoteHit.categoryName);
     if (local.category?.name === nextName) {
       result.unchanged += 1;
+      continue;
+    }
+    if (local.categoryId && !overwriteExisting) {
+      result.skippedExisting += 1;
       continue;
     }
     if (result.samples.length < sampleLimit) {
@@ -191,7 +234,7 @@ export async function recategorizeLiveFromProviders(opts?: {
         to: nextName,
       });
     }
-    if (opts?.dryRun) {
+    if (opts.dryRun) {
       result.updated += 1;
       continue;
     }
@@ -207,7 +250,7 @@ export async function recategorizeLiveFromProviders(opts?: {
     result.updated += 1;
   }
 
-  if (!opts?.dryRun && result.updated > 0) {
+  if (!opts.dryRun && result.updated > 0) {
     await invalidateXtreamCategories();
     await invalidateDashboardStats();
   }
