@@ -14,7 +14,11 @@ PANEL_LISTEN="${PANEL_LISTEN:-13000}"
 pm2 stop nexlify-iptv-edge 2>/dev/null || true
 
 cat > /etc/nginx/conf.d/nexlify-live-remote-edge.conf <<EOF
+# Live MPEG-TS must not share a keepalive pool — reused sockets stall / glitch.
 upstream nexlify_remote_edge {
+    server ${REMOTE};
+}
+upstream nexlify_remote_edge_api {
     server ${REMOTE};
     keepalive 256;
 }
@@ -36,9 +40,10 @@ server {
     location ~ ^/(live|timeshift|movie|series)/ {
         proxy_pass http://nexlify_remote_edge;
         proxy_set_header Host \$host;
+        proxy_set_header Connection "close";
         proxy_set_header X-Real-IP \$remote_addr;
-        # Overwrite client-supplied XFF; the remote edge trusts this panel IP.
-        proxy_set_header X-Forwarded-For \$remote_addr;
+        # Keep the :80 hop's client IP. Overwriting with \$remote_addr here is 127.0.0.1.
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header Range \$http_range;
         proxy_set_header User-Agent \$http_user_agent;
@@ -83,11 +88,10 @@ from pathlib import Path
 PROXY = r'''    location ~ ^/(live|timeshift|movie|series)/ {
         proxy_pass http://209.237.141.15:8080;
         proxy_http_version 1.1;
-        proxy_set_header Connection "";
+        proxy_set_header Connection "close";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        # Overwrite client-supplied XFF; the remote edge trusts this panel IP.
-        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Range $http_range;
         proxy_set_header User-Agent $http_user_agent;

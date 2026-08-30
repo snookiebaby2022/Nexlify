@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedInternalRequest } from "@/lib/internal-request";
 import { pulseLiveConnection } from "@/lib/connection-pulse";
-import { getClientIp } from "@/lib/client-ip";
+import { getClientIp, isInfraHopIp } from "@/lib/client-ip";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,10 +24,11 @@ export async function POST(req: NextRequest) {
     return new NextResponse("lineId and streamId required", { status: 400 });
   }
 
+  const rawIp = String(body.ip ?? "").trim();
   await pulseLiveConnection({
     lineId,
     streamId,
-    ip: body.ip || getClientIp(req) || null,
+    ip: (rawIp && !isInfraHopIp(rawIp) ? rawIp : null) || getClientIp(req) || null,
     bytes: body.bytes,
   }).catch(() => undefined);
 

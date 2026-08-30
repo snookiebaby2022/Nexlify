@@ -258,14 +258,36 @@ function socketIp(req) {
   return ip;
 }
 
+const EDGE_INFRA_IPS = new Set(
+  String(process.env.NEXLIFY_INFRA_IPS || "209.237.141.15,45.88.138.18")
+    .split(",")
+    .map((ip) => ip.trim())
+    .filter(Boolean)
+);
+
+function stripIp(raw) {
+  let ip = String(raw || "").trim();
+  if (ip.startsWith("::ffff:")) ip = ip.slice(7);
+  return ip;
+}
+
+function isInfraOrLoopbackIp(ip) {
+  const n = stripIp(ip);
+  if (!n || !isValidIpLiteral(n)) return true;
+  if (isLoopbackIp(n)) return true;
+  if (EDGE_INFRA_IPS.has(n)) return true;
+  return false;
+}
+
 /**
  * Prefer the TCP peer. Only honor X-Forwarded-For when the hop is loopback,
  * explicitly listed in IPTV_EDGE_TRUST_XFF, or trust is set to always.
- * Direct clients cannot spoof IP locks / geo / DDoS when an allowlist is used.
+ * Walk hops from the nearest proxy and skip loopback/panel/edge IPs — :80
+ * hairpins through 127.0.0.1:8080, which used to become the "viewer" IP.
  */
 function clientIp(req) {
   const peer = socketIp(req);
-  const trust = String(process.env.IPTV_EDGE_TRUST_XFF || "loopback").toLowerCase();
+  const trust = String(process.env.IPTV_EDGE_TRUST_XFF || "loopback,45.88.138.18").toLowerCase();
   const trustedPeers = new Set(
     trust
       .split(",")
@@ -277,21 +299,22 @@ function clientIp(req) {
     trust === "true" ||
     trust === "always" ||
     trustedPeers.has(peer) ||
+    isLoopbackIp(peer) ||
     ((trust === "loopback" || trust === "") && isLoopbackIp(peer));
   if (allowXff) {
-    const forwarded = String(req.headers["x-forwarded-for"] || "")
-      .split(",")
-      .map((ip) => ip.trim())
-      .filter(Boolean);
-    // A trusted nginx appends its direct client as the right-most hop.
-    // Taking that hop prevents a client-supplied XFF prefix from being trusted.
-    const fwd = forwarded.at(-1) || "";
-    const real = String(req.headers["x-real-ip"] || "").trim();
-    const candidate = fwd || real;
-    let ip = candidate.startsWith("::ffff:") ? candidate.slice(7) : candidate;
-    if (isValidIpLiteral(ip)) return ip;
+    const hops = [];
+    for (const part of String(req.headers["x-forwarded-for"] || "").split(",")) {
+      const ip = stripIp(part);
+      if (isValidIpLiteral(ip)) hops.push(ip);
+    }
+    const real = stripIp(req.headers["x-real-ip"]);
+    if (isValidIpLiteral(real)) hops.push(real);
+    for (let i = hops.length - 1; i >= 0; i--) {
+      if (!isInfraOrLoopbackIp(hops[i])) return hops[i];
+    }
   }
-  return peer;
+  if (!isInfraOrLoopbackIp(peer)) return peer;
+  return "";
 }
 
 /** HTTP heartbeat only — must not reset lastClientAt or HLS never goes idle. */
@@ -315,6 +338,8 @@ function sendConnectionPulse(ctx, bytes) {
         "content-type": "application/json",
         "content-length": Buffer.byteLength(body),
         "x-panel-internal-secret": INTERNAL_SECRET,
+        // nginx on :8080 drops underscore headers; this hyphenated alias is accepted by the panel.
+        "x-panel-api-key": INTERNAL_SECRET,
       },
       timeout: 3000,
     },
@@ -346,6 +371,8 @@ function sendPlaybackEvent(ctx, action, detail, status) {
         "content-type": "application/json",
         "content-length": Buffer.byteLength(body),
         "x-panel-internal-secret": INTERNAL_SECRET,
+        // nginx on :8080 drops underscore headers; this hyphenated alias is accepted by the panel.
+        "x-panel-api-key": INTERNAL_SECRET,
       },
       timeout: 3000,
     },
@@ -373,7 +400,10 @@ function querySessionKicked(lineId, ip) {
         path: `/api/internal/session-kicked?${q}`,
         method: "GET",
         agent: liveAgent,
-        headers: { "x-panel-internal-secret": INTERNAL_SECRET },
+        headers: {
+          "x-panel-internal-secret": INTERNAL_SECRET,
+          "x-panel-api-key": INTERNAL_SECRET,
+        },
         timeout: 2000,
       },
       (res) => {
@@ -452,6 +482,8 @@ function endPlaybackSession(ctx) {
         "content-type": "application/json",
         "content-length": Buffer.byteLength(body),
         "x-panel-internal-secret": INTERNAL_SECRET,
+        // nginx on :8080 drops underscore headers; this hyphenated alias is accepted by the panel.
+        "x-panel-api-key": INTERNAL_SECRET,
       },
       timeout: 3000,
     },
@@ -1667,6 +1699,8 @@ function authLive(clientReq) {
       "x-original-range": String(clientReq.headers.range || ""),
       "x-forwarded-for": clientIp(clientReq),
       "x-real-ip": clientIp(clientReq),
+      "x-nexlify-client-ip": clientIp(clientReq),
+      "x-nexlify-viewer-ip": clientIp(clientReq),
       "user-agent": clientReq.headers["user-agent"] || "",
       connection: "close",
     };
