@@ -8,6 +8,7 @@ import { resolveEpgId } from "@/lib/subscription-export";
 import {
   xtreamSafeText,
   xtreamUnix,
+  xtreamUnixString,
   xtreamCategoryIds,
   xtreamCatalogDirectSource,
   xtreamListingExtension,
