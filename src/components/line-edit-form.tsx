@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { RefreshCw, X } from "lucide-react";
 import { AccessOutputCheckboxes } from "@/components/access-output-checkboxes";
 import {
@@ -17,7 +17,11 @@ import { generateLinePassword, MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInp
 import { formatDateTime, isUnlimitedLineExpiry } from "@/lib/format";
 import { lineDurationPresetsForPanel } from "@/lib/line-duration-presets";
 import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
-import { bouquetsApiRoot, linesApiRoot } from "@/lib/panel-api";
+import { effectiveCreditCost, packageLabelForDays } from "@/lib/package-credits";
+import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
+import { isUnlimitedDurationDays } from "@/lib/line-duration-presets";
+import { mergeLineNotesForSave, splitLineNotes } from "@/lib/line-notes";
+import { bouquetsApiRoot, linesApiRoot, packagesApiRoot } from "@/lib/panel-api";
 
 type LineDetail = {
   id: string;
@@ -40,6 +44,15 @@ type LineDetail = {
   allowedOutput?: string | null;
   owner?: { id: string; username: string } | null;
   bouquets: { bouquet: { id: string; name: string } }[];
+};
+
+type PackageRow = {
+  id: string;
+  name: string;
+  creditCost: number;
+  days: number;
+  maxLines: number;
+  bouquetIds: string[];
 };
 
 function YesNo({
@@ -84,12 +97,6 @@ function Card({ title, children }: { title?: string; children: React.ReactNode }
   );
 }
 
-function splitNotes(notes: string | null | undefined) {
-  if (!notes?.trim()) return { admin: "", reseller: "" };
-  const parts = notes.split("\n---\n");
-  return { admin: parts[0]?.trim() ?? "", reseller: parts[1]?.trim() ?? "" };
-}
-
 export function LineEditForm({
   lineId,
   panel = "admin",
@@ -103,12 +110,15 @@ export function LineEditForm({
 }) {
   const [tab, setTab] = useState<"details" | "restrictions" | "bouquets">("details");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
   const [line, setLine] = useState<LineDetail | null>(null);
   const [bouquets, setBouquets] = useState<BouquetPickerRow[]>([]);
+  const [packages, setPackages] = useState<PackageRow[]>([]);
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
   const [owners, setOwners] = useState<{ id: string; username: string }[]>([]);
   const [allowTrials, setAllowTrials] = useState(true);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [form, setForm] = useState({
     password: "",
     maxConnections: 1,
@@ -130,31 +140,75 @@ export function LineEditForm({
     forcedServerId: "",
     adminNotes: "",
     resellerNotes: "",
+    packageId: "",
     accessOutputs: defaultAccessOutputSelection(),
   });
 
+  const notesViewer = panel === "reseller" ? "reseller" : "admin";
+  const selectablePackages = useMemo(
+    () => packages.filter((p) => allowTrials || p.days > 2),
+    [packages, allowTrials]
+  );
+  const selectedPackage = useMemo(
+    () => selectablePackages.find((p) => p.id === form.packageId) ?? null,
+    [selectablePackages, form.packageId]
+  );
+  const extendCreditCost = useMemo(() => {
+    if (panel !== "reseller" || form.extendDays <= 0) return 0;
+    return effectiveCreditCost(form.extendDays, selectedPackage?.creditCost, form.isTrial);
+  }, [panel, form.extendDays, form.isTrial, selectedPackage]);
+
   useEffect(() => {
     setLoading(true);
+    setLoadError("");
     const linesApi = linesApiRoot(panel);
     const bouquetApi = bouquetsApiRoot(panel);
-    const tasks: Promise<Record<string, unknown>>[] = [
-      fetch(`${linesApi}/${lineId}`).then((r) => r.json()),
-      fetch(bouquetApi).then((r) => r.json()),
+    const tasks: Promise<{ ok: boolean; data: Record<string, unknown> }>[] = [
+      fetch(`${linesApi}/${lineId}`)
+        .then(async (r) => ({ ok: r.ok, data: (await r.json().catch(() => ({}))) as Record<string, unknown> })),
+      fetch(bouquetApi)
+        .then(async (r) => ({ ok: r.ok, data: (await r.json().catch(() => ({}))) as Record<string, unknown> })),
+      fetch(packagesApiRoot(panel))
+        .then(async (r) => ({ ok: r.ok, data: (await r.json().catch(() => ({}))) as Record<string, unknown> })),
     ];
     if (panel === "admin") {
-      tasks.push(fetch("/api/admin/servers").then((r) => r.json()));
-      tasks.push(fetch("/api/admin/resellers").then((r) => r.json()));
+      tasks.push(
+        fetch("/api/admin/servers").then(async (r) => ({
+          ok: r.ok,
+          data: (await r.json().catch(() => ({}))) as Record<string, unknown>,
+        })),
+        fetch("/api/admin/resellers").then(async (r) => ({
+          ok: r.ok,
+          data: (await r.json().catch(() => ({}))) as Record<string, unknown>,
+        }))
+      );
+    }
+    if (panel === "reseller") {
+      fetch("/api/reseller/credits")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (d && typeof d.credits === "number") setCreditBalance(d.credits);
+        })
+        .catch(() => setCreditBalance(null));
     }
     fetch("/api/admin/settings?group=general")
       .then((r) => r.json())
       .then((d) => setAllowTrials(d.settings?.disableTrial !== true))
       .catch(() => {});
     Promise.all(tasks)
-      .then(([lineRes, bouquetRes, serverRes, resellerRes]) => {
-        const row = (lineRes as { line?: LineDetail }).line;
-        if (!row) return;
+      .then(([lineRes, bouquetRes, packageRes, serverRes, resellerRes]) => {
+        if (!lineRes.ok) {
+          const err = typeof lineRes.data.error === "string" ? lineRes.data.error : "Line not found";
+          setLoadError(err);
+          return;
+        }
+        const row = lineRes.data.line as LineDetail | undefined;
+        if (!row) {
+          setLoadError("Line not found");
+          return;
+        }
         setLine(row);
-        const notes = splitNotes(row.notes);
+        const notes = splitLineNotes(row.notes, notesViewer);
         const unlimited = isUnlimitedLineExpiry(row.expiresAt);
         setForm({
           password: row.password,
@@ -181,29 +235,45 @@ export function LineEditForm({
           forcedServerId: row.forcedServerId ?? "",
           adminNotes: notes.admin,
           resellerNotes: notes.reseller,
+          packageId: "",
           accessOutputs: (() => {
             const selected = parseAccessOutput(row.allowedOutput);
             return selected.size ? selected : defaultAccessOutputSelection();
           })(),
         });
-        setBouquets((bouquetRes as { bouquets?: { id: string; name: string }[] }).bouquets ?? []);
+        setBouquets((bouquetRes.data.bouquets as BouquetPickerRow[] | undefined) ?? []);
+        const pkgList = ((packageRes.data.packages ?? []) as PackageRow[]).map((p) => ({
+          ...p,
+          days: inferPackageDaysFromName(p.name, p.days) ?? p.days,
+          bouquetIds: Array.isArray(p.bouquetIds) ? p.bouquetIds : [],
+        }));
+        pkgList.sort(
+          (a, b) =>
+            packageDurationSortKey(a.days, a.name) - packageDurationSortKey(b.days, b.name) ||
+            a.name.localeCompare(b.name)
+        );
+        setPackages(
+          panel === "admin" ? pkgList : pkgList.filter((p) => !isUnlimitedDurationDays(p.days))
+        );
         setServers(
-          ((serverRes as { servers?: { id: string; name: string }[] } | undefined)?.servers ?? []).map((s) => ({
+          ((serverRes?.data.servers as { id: string; name: string }[] | undefined) ?? []).map((s) => ({
             id: s.id,
             name: s.name,
           }))
         );
         setOwners(
-          ((resellerRes as { users?: { id: string; username: string; role: string }[]; resellers?: { id: string; username: string; role: string }[] } | undefined)
-            ?.users ??
-            (resellerRes as { resellers?: { id: string; username: string; role: string }[] } | undefined)?.resellers ??
-            [])
+          ((
+            (resellerRes?.data.users as { id: string; username: string; role: string }[] | undefined) ??
+            (resellerRes?.data.resellers as { id: string; username: string; role: string }[] | undefined) ??
+            []
+          )
             .filter((u) => u.role === "RESELLER" || u.role === "SUB_RESELLER")
             .map((u) => ({ id: u.id, username: u.username }))
         );
       })
+      .catch(() => setLoadError("Could not load line"))
       .finally(() => setLoading(false));
-  }, [lineId, panel]);
+  }, [lineId, panel, notesViewer]);
 
   async function setStatus(status: string) {
     await fetch(`${linesApiRoot(panel)}/${lineId}/status`, {
@@ -243,6 +313,10 @@ export function LineEditForm({
         expiresAt = parsed.toISOString();
       }
     }
+    if (panel === "reseller" && form.extendDays > 0 && creditBalance != null && extendCreditCost > creditBalance) {
+      alert(`Insufficient credits (need ${extendCreditCost}, have ${creditBalance}).`);
+      return;
+    }
 
     setSaving(true);
     const targetStatus = form.isEnabled ? "ACTIVE" : "DISABLED";
@@ -250,7 +324,7 @@ export function LineEditForm({
       await setStatus(targetStatus);
     }
 
-    const notes = [form.adminNotes, form.resellerNotes].filter(Boolean).join("\n---\n");
+    const notes = mergeLineNotesForSave(notesViewer, line.notes, form.adminNotes, form.resellerNotes);
     const res = await fetch(`${linesApiRoot(panel)}/${lineId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -260,6 +334,7 @@ export function LineEditForm({
         days: unlimited || expiresAt ? undefined : form.extendDays > 0 ? form.extendDays : undefined,
         unlimited: unlimited ? true : undefined,
         expiresAt,
+        ...(form.extendDays > 0 && form.packageId ? { packageId: form.packageId } : {}),
         ownerId: panel === "admin" ? form.ownerId || null : undefined,
         externalId: form.externalId || null,
         bouquetIds: form.bouquetIds,
@@ -282,6 +357,18 @@ export function LineEditForm({
       alert(data.error ?? "Failed to save line");
       return;
     }
+    const remaining =
+      typeof data.creditsRemaining === "number"
+        ? data.creditsRemaining
+        : typeof data.renew?.creditsRemaining === "number"
+          ? data.renew.creditsRemaining
+          : null;
+    if (remaining != null) {
+      setCreditBalance(remaining);
+      window.dispatchEvent(
+        new CustomEvent("nexlify-credits-updated", { detail: { credits: remaining } })
+      );
+    }
     if (data.line) {
       setLine(data.line);
       setForm((f) => {
@@ -289,6 +376,7 @@ export function LineEditForm({
         return {
           ...f,
           extendDays: 0,
+          packageId: "",
           unlimited: nextUnlimited,
           expiresAtLocal: nextUnlimited
             ? panel === "admin"
@@ -314,10 +402,26 @@ export function LineEditForm({
     onSaved();
   }
 
-  if (loading || !line) {
+  if (loading) {
     return (
       <div className="p-8 text-center text-sm" style={{ color: "var(--muted)" }}>
         Loading line…
+      </div>
+    );
+  }
+
+  if (loadError || !line) {
+    return (
+      <div className="p-8 text-center space-y-3">
+        <p className="text-sm text-red-400">{loadError || "Line not found"}</p>
+        <button
+          type="button"
+          className="text-sm px-4 py-2 rounded border cursor-pointer"
+          style={{ borderColor: "var(--border)" }}
+          onClick={onClose}
+        >
+          Close
+        </button>
       </div>
     );
   }
@@ -534,12 +638,46 @@ export function LineEditForm({
                         unlimited: false,
                         expiresAtLocal: e.target.value,
                         extendDays: 0,
+                        packageId: "",
                       })
                     }
                   />
                   <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
                     Uncheck unlimited (admin) or pick a date to convert an unlimited line.
                   </p>
+                </FormField>
+              )}
+              {selectablePackages.length > 0 && (
+                <FormField label="Renew / extend package">
+                  <select
+                    className={formSelectClass}
+                    style={formInputStyle}
+                    value={form.packageId}
+                    onChange={(e) => {
+                      const pkg = selectablePackages.find((p) => p.id === e.target.value);
+                      setForm((f) => ({
+                        ...f,
+                        packageId: e.target.value,
+                        extendDays: pkg ? pkg.days : f.extendDays,
+                        unlimited: false,
+                        maxConnections: pkg ? pkg.maxLines : f.maxConnections,
+                      }));
+                    }}
+                  >
+                    <option value="">Custom days (no package)</option>
+                    {selectablePackages.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} · {effectiveCreditCost(p.days, p.creditCost)} cr ·{" "}
+                        {packageLabelForDays(p.days)}
+                      </option>
+                    ))}
+                  </select>
+                  {panel === "reseller" && form.extendDays > 0 && (
+                    <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                      Extension cost: {extendCreditCost} credit{extendCreditCost === 1 ? "" : "s"}
+                      {creditBalance != null ? ` · balance ${creditBalance}` : ""}
+                    </p>
+                  )}
                 </FormField>
               )}
               <FormField label="Extend subscription (days)">
@@ -556,6 +694,7 @@ export function LineEditForm({
                       ...form,
                       unlimited: false,
                       extendDays: parseInt(e.target.value, 10) || 0,
+                      packageId: "",
                     })
                   }
                 />

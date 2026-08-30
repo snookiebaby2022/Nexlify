@@ -26,7 +26,7 @@ import {
 } from "@/lib/line-duration-presets";
 import { effectiveCreditCost, packageLabelForDays } from "@/lib/package-credits";
 import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
-import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
+import { mergeLineNotesForSave } from "@/lib/line-notes";
 
 function YesNo({
   label,
@@ -328,7 +328,12 @@ export function LineAddForm({
       return;
     }
 
-    const notes = [form.adminNotes, form.resellerNotes].filter(Boolean).join("\n---\n");
+    const notes = mergeLineNotesForSave(
+      mode === "reseller" ? "reseller" : "admin",
+      null,
+      form.adminNotes,
+      form.resellerNotes
+    );
     // Duration comes from package/days — isTrial is a flag only (do not force 1 day).
     const unlimited = mode === "admin" && form.unlimited;
     const days = unlimited ? UNLIMITED_LINE_DAYS : Math.max(1, Number(form.days) || 1);

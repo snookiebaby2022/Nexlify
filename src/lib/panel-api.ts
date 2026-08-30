@@ -11,3 +11,12 @@ export function ticketsApiRoot(isAdmin: boolean): string {
 export function bouquetsApiRoot(panel: PanelKind): string {
   return panel === "reseller" ? "/api/reseller/bouquets" : "/api/admin/bouquets";
 }
+
+export function linesMassApiRoot(panel: PanelKind): string {
+  return panel === "reseller" ? "/api/reseller/lines/mass" : "/api/admin/lines/mass";
+}
+
+/** Resellers are scoped server-side on GET — same route for both panels. */
+export function packagesApiRoot(_panel: PanelKind = "admin"): string {
+  return "/api/admin/packages";
+}

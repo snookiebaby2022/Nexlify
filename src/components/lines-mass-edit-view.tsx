@@ -31,6 +31,7 @@ import {
   type AccessOutputId,
 } from "@/lib/line-access-output";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
+import { linesApiRoot, linesMassApiRoot } from "@/lib/panel-api";
 
 const MASS_PAGE_SIZE_OPTIONS = [...LIST_PAGE_SIZE_OPTIONS, 500, 2000] as const;
 
@@ -178,7 +179,7 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
     });
     if (search.trim()) params.set("search", search.trim());
     if (panel === "admin" && ownerFilter) params.set("ownerId", ownerFilter);
-    fetch(`/api/admin/lines?${params}`)
+    fetch(`${linesApiRoot(panel)}?${params}`)
       .then((r) => r.json())
       .then((d) => {
         setLines(d.lines ?? []);
@@ -296,7 +297,7 @@ export function LinesMassEditView({ panel = "admin" }: { panel?: "admin" | "rese
 
     setBusy(true);
     setMsg("");
-    const res = await fetch("/api/admin/lines/mass", {
+    const res = await fetch(linesMassApiRoot(panel), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

@@ -18,17 +18,7 @@ export type MassEditPatch = {
   ownerId?: TextFieldState;
 };
 
-export function splitLineNotes(notes: string | null | undefined) {
-  if (!notes?.trim()) return { admin: "", reseller: "" };
-  const parts = notes.split("\n---\n");
-  return { admin: parts[0]?.trim() ?? "", reseller: parts[1]?.trim() ?? "" };
-}
-
-export function mergeResellerNotes(existing: string | null | undefined, reseller: string) {
-  const { admin } = splitLineNotes(existing);
-  if (admin) return `${admin}\n---\n${reseller}`;
-  return reseller;
-}
+export { mergeLineNotesForSave, mergeResellerNotes, splitLineNotes } from "@/lib/line-notes";
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
