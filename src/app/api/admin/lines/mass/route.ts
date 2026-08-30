@@ -165,6 +165,16 @@ export async function POST(req: NextRequest) {
             reactivate: body.reactivate !== false,
           });
         }
+        if (body.packageId) {
+          const pkgId = String(body.packageId);
+          const pkg = await prisma.package.findUnique({ where: { id: pkgId }, select: { id: true } });
+          if (pkg) {
+            await prisma.line.updateMany({
+              where,
+              data: { packageId: pkg.id },
+            });
+          }
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (msg === "Insufficient credits" || msg === "Forbidden") {

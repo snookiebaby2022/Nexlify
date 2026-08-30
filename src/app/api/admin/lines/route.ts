@@ -297,6 +297,7 @@ export async function POST(req: NextRequest) {
           isTrial: Boolean(body.isTrial),
           forcedServerId: body.forcedServerId ? String(body.forcedServerId) : null,
           allowedOutput: normalizeAllowedOutputInput(body.allowedOutput) ?? DEFAULT_ALLOWED_OUTPUT,
+          packageId: body.packageId ? String(body.packageId) : undefined,
           bouquets: { create: bouquetIds.map((bouquetId: string) => ({ bouquetId })) },
         },
         include: { bouquets: { include: { bouquet: true } } },

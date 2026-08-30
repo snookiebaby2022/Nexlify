@@ -237,6 +237,7 @@ export async function handleXuiAction(
           expiresAt,
           authMode,
           activeCode: authMode === "ACTIVE_CODE" ? activeCode : null,
+          packageId: packageId || undefined,
           bouquets: {
             create: bouquetIds.map((bouquetId) => ({ bouquetId })),
           },

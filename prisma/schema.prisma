@@ -668,6 +668,9 @@ model Line {
   isTrial              Boolean       @default(false)
   forcedServerId       String?
   forcedServer         StreamServer? @relation("LineForcedServer", fields: [forcedServerId], references: [id], onDelete: SetNull)
+  /// Last package used to create or renew this line (null = custom days).
+  packageId            String?
+  package              Package?      @relation(fields: [packageId], references: [id], onDelete: SetNull)
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
@@ -694,6 +697,7 @@ model Line {
   dvrSchedules          DvrSchedule[]
 
   @@index([ownerId])
+  @@index([packageId])
   @@index([status, expiresAt])
   @@index([expiresAt])
   @@index([createdAt])
@@ -973,6 +977,7 @@ model Package {
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  lines             Line[]
 }
 
 model StreamProvider {

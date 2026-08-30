@@ -28,6 +28,7 @@ import { effectiveCreditCost, packageLabelForDays } from "@/lib/package-credits"
 import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
 import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
 import { mergeLineNotesForSave } from "@/lib/line-notes";
+import { coerceMinInt, parseIntAllowEmpty } from "@/lib/form-number";
 
 function YesNo({
   label,
@@ -98,7 +99,7 @@ export function LineAddForm({
     username: "",
     password: "",
     ownerId: "",
-    maxConnections: 1,
+    maxConnections: 1 as number | "",
     expiresAt: "",
     unlimited: false,
     days: 30,
@@ -357,7 +358,7 @@ export function LineAddForm({
         body: JSON.stringify({
           username,
           password,
-          maxConnections: form.maxConnections,
+          maxConnections: coerceMinInt(form.maxConnections, 1),
           days,
           unlimited,
           expiresAt: expiresAtPayload,
@@ -657,7 +658,7 @@ export function LineAddForm({
                 style={formInputStyle}
                 value={form.maxConnections}
                 onChange={(e) =>
-                  setForm({ ...form, maxConnections: parseInt(e.target.value, 10) || 1 })
+                  setForm({ ...form, maxConnections: parseIntAllowEmpty(e.target.value) })
                 }
               />
             </FormField>

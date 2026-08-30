@@ -66,6 +66,7 @@ export async function createLineFromShopPackage(opts: {
       maxConnections: Math.max(1, pkg.maxLines),
       expiresAt,
       isTrial,
+      packageId: pkg.id,
       bouquets: {
         create: pkg.bouquetIds.map((bouquetId) => ({ bouquetId })),
       },

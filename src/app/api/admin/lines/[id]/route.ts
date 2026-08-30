@@ -35,6 +35,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       bouquets: { include: { bouquet: true } },
       owner: { select: { id: true, username: true } },
       forcedServer: { select: { id: true, name: true } },
+      package: { select: { id: true, name: true, days: true, creditCost: true, maxLines: true, isActive: true } },
     },
   });
   if (!line) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -133,6 +134,20 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         ? normalizeAllowedOutputInput(body.allowedOutput)
         : undefined,
   };
+
+  if (body.packageId !== undefined) {
+    const pid = body.packageId ? String(body.packageId).trim() : "";
+    if (!pid) {
+      data.packageId = null;
+    } else {
+      const pkg = await prisma.package.findUnique({
+        where: { id: pid },
+        select: { id: true },
+      });
+      if (!pkg) return NextResponse.json({ error: "Package not found" }, { status: 400 });
+      data.packageId = pkg.id;
+    }
+  }
 
   if (session.role === PanelRole.ADMIN && body.ownerId !== undefined) {
     const destId = body.ownerId ? String(body.ownerId).trim() : "";

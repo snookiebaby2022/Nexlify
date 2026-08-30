@@ -22,6 +22,7 @@ import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-
 import { isUnlimitedDurationDays } from "@/lib/line-duration-presets";
 import { mergeLineNotesForSave, splitLineNotes } from "@/lib/line-notes";
 import { bouquetsApiRoot, linesApiRoot, packagesApiRoot } from "@/lib/panel-api";
+import { coerceMinInt, parseIntAllowEmpty } from "@/lib/form-number";
 
 type LineDetail = {
   id: string;
@@ -43,6 +44,8 @@ type LineDetail = {
   forcedServerId?: string | null;
   allowedOutput?: string | null;
   owner?: { id: string; username: string } | null;
+  packageId?: string | null;
+  package?: { id: string; name: string; days: number; creditCost: number; maxLines: number; isActive: boolean } | null;
   bouquets: { bouquet: { id: string; name: string } }[];
 };
 
@@ -121,7 +124,7 @@ export function LineEditForm({
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [form, setForm] = useState({
     password: "",
-    maxConnections: 1,
+    maxConnections: 1 as number | "",
     extendDays: 0,
     unlimited: false,
     expiresAtLocal: "",
@@ -235,7 +238,7 @@ export function LineEditForm({
           forcedServerId: row.forcedServerId ?? "",
           adminNotes: notes.admin,
           resellerNotes: notes.reseller,
-          packageId: "",
+          packageId: row.packageId ?? row.package?.id ?? "",
           accessOutputs: (() => {
             const selected = parseAccessOutput(row.allowedOutput);
             return selected.size ? selected : defaultAccessOutputSelection();
@@ -252,6 +255,17 @@ export function LineEditForm({
             packageDurationSortKey(a.days, a.name) - packageDurationSortKey(b.days, b.name) ||
             a.name.localeCompare(b.name)
         );
+        const currentPkg = row.package;
+        if (currentPkg && !pkgList.some((p) => p.id === currentPkg.id)) {
+          pkgList.push({
+            id: currentPkg.id,
+            name: `${currentPkg.name} (inactive)`,
+            creditCost: currentPkg.creditCost,
+            days: inferPackageDaysFromName(currentPkg.name, currentPkg.days) ?? currentPkg.days,
+            maxLines: currentPkg.maxLines,
+            bouquetIds: [],
+          });
+        }
         setPackages(
           panel === "admin" ? pkgList : pkgList.filter((p) => !isUnlimitedDurationDays(p.days))
         );
@@ -330,11 +344,11 @@ export function LineEditForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         password: form.password !== line.password ? sanitizeCredentialInput(form.password) : undefined,
-        maxConnections: form.maxConnections,
+        maxConnections: coerceMinInt(form.maxConnections, 1),
         days: unlimited || expiresAt ? undefined : form.extendDays > 0 ? form.extendDays : undefined,
         unlimited: unlimited ? true : undefined,
         expiresAt,
-        ...(form.extendDays > 0 && form.packageId ? { packageId: form.packageId } : {}),
+        packageId: form.packageId || null,
         ownerId: panel === "admin" ? form.ownerId || null : undefined,
         externalId: form.externalId || null,
         bouquetIds: form.bouquetIds,
@@ -376,7 +390,7 @@ export function LineEditForm({
         return {
           ...f,
           extendDays: 0,
-          packageId: "",
+          packageId: data.line.packageId ?? f.packageId,
           unlimited: nextUnlimited,
           expiresAtLocal: nextUnlimited
             ? panel === "admin"
@@ -589,7 +603,7 @@ export function LineEditForm({
                   style={formInputStyle}
                   value={form.maxConnections}
                   onChange={(e) =>
-                    setForm({ ...form, maxConnections: parseInt(e.target.value, 10) || 1 })
+                    setForm({ ...form, maxConnections: parseIntAllowEmpty(e.target.value) })
                   }
                 />
               </FormField>
@@ -648,7 +662,7 @@ export function LineEditForm({
                 </FormField>
               )}
               {selectablePackages.length > 0 && (
-                <FormField label="Renew / extend package">
+                <FormField label={line.package?.name ? `Package (${line.package.name})` : "Package"}>
                   <select
                     className={formSelectClass}
                     style={formInputStyle}
@@ -664,7 +678,7 @@ export function LineEditForm({
                       }));
                     }}
                   >
-                    <option value="">Custom days (no package)</option>
+                    <option value="">Custom days (no stored package)</option>
                     {selectablePackages.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} · {effectiveCreditCost(p.days, p.creditCost)} cr ·{" "}
@@ -672,6 +686,9 @@ export function LineEditForm({
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                    Stored on this line. Pick a package and set extend days only if you want to add time.
+                  </p>
                   {panel === "reseller" && form.extendDays > 0 && (
                     <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
                       Extension cost: {extendCreditCost} credit{extendCreditCost === 1 ? "" : "s"}
