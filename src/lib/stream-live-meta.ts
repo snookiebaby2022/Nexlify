@@ -6,8 +6,10 @@ export type ParsedLiveMeta = {
   isAdult: boolean;
   onDemandProbesize: string;
   transcodeProfile: string;
-  /** When true, cron syncs stream.name from the current EPG programme title. */
+  /** Legacy: used to rename catalog name. Now-playing is stored separately. */
   autoSyncNameFromEpg: boolean;
+  nowPlayingTitle: string | null;
+  catalogName: string | null;
   raw: Record<string, unknown> | null;
 };
 
@@ -21,6 +23,8 @@ export function parseLiveStreamMeta(agentStartCmd: string | null | undefined): P
     onDemandProbesize: "256000",
     transcodeProfile: "none",
     autoSyncNameFromEpg: false,
+    nowPlayingTitle: null,
+    catalogName: null,
     raw: null,
   };
   if (!agentStartCmd?.startsWith(PREFIX)) return empty;
@@ -33,6 +37,8 @@ export function parseLiveStreamMeta(agentStartCmd: string | null | undefined): P
       onDemandProbesize: String(raw.onDemandProbesize ?? "256000"),
       transcodeProfile: String(raw.transcodeProfile ?? "none"),
       autoSyncNameFromEpg: raw.autoSyncNameFromEpg === true,
+      nowPlayingTitle: typeof raw.nowPlayingTitle === "string" ? raw.nowPlayingTitle : null,
+      catalogName: typeof raw.catalogName === "string" ? raw.catalogName : null,
       raw,
     };
   } catch {

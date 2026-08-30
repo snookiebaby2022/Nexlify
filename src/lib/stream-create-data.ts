@@ -44,6 +44,7 @@ export type StreamCreateInput = {
   dnsRotator?: unknown;
   bitrates?: unknown;
   agentStartCmd?: string | null;
+  autoSyncNameFromEpg?: boolean;
 };
 
 export async function buildStreamCreateData(body: StreamCreateInput) {
@@ -175,6 +176,18 @@ export async function buildStreamCreateData(body: StreamCreateInput) {
 
   if ((type === "MOVIE" || type === "SERIES") && agentStartCmd) {
     agentStartCmd = rewriteVodAgentCmdForXtream(agentStartCmd) ?? agentStartCmd;
+  }
+
+  if (type === "LIVE") {
+    const { parseLiveStreamMeta, encodeLiveStreamMeta } = await import("@/lib/stream-live-meta");
+    const meta = parseLiveStreamMeta(agentStartCmd);
+    agentStartCmd = encodeLiveStreamMeta({
+      ...(meta.raw ?? {}),
+      autoSyncNameFromEpg: body.autoSyncNameFromEpg === true,
+      catalogName: displayName,
+      redirectStream: false,
+      directSource: false,
+    });
   }
 
   return {

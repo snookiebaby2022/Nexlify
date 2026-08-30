@@ -208,6 +208,8 @@ function registerIcons() {
     ["/reseller/streams", Plus],
     ["/reseller/radios", Radio],
     ["/reseller/epg_view", Tv],
+    ["/reseller/whats-on", Tv],
+    ["/admin/whats-on", Tv],
     ["/reseller/users", Users],
     ["/reseller/tickets", List],
     ["/reseller/profile", Settings],

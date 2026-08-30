@@ -116,6 +116,7 @@ export function getResellerSidebarNav(opts?: Partial<ResellerGroupFlags>): Sideb
           { href: "/reseller/radios", label: "Radio" },
 
           { href: "/reseller/epg_view", label: "EPG Preview" },
+          { href: "/reseller/whats-on", label: "What’s on now" },
 
         ],
 

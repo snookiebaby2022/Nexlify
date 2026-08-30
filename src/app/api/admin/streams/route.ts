@@ -290,6 +290,7 @@ export async function GET(req: NextRequest) {
           timeshiftSeconds: true,
           isShifted: true,
           hostedExternally: true,
+          agentStartCmd: true,
           lastProbeOk: true,
           streamIcon: true,
           sortOrder: true,

@@ -72,12 +72,14 @@ const streamingOptimized =
   process.env.NEXLIFY_STREAMING_OPTIMIZED === "1" || fileEnv.NEXLIFY_STREAMING_OPTIMIZED === "1";
 const panelInstancesRaw = envVar("PANEL_INSTANCES");
 const parsedInstances = parseInt(String(panelInstancesRaw || ""), 10);
+// IPTV boxes: each Next worker is 500–900MB RSS. Default 4–6 workers + 8GB heap
+// reserved ~4–6GB even when idle. Cap unless the operator sets PANEL_INSTANCES.
 let panelInstances = Number.isFinite(parsedInstances)
   ? Math.min(12, Math.max(1, parsedInstances))
   : cpuCount >= 8
-    ? 6
+    ? 2
     : cpuCount >= 4
-      ? 4
+      ? 2
       : 1;
 // IPTV on edge — cap only when streaming profile active and instances not explicitly set.
 const explicitInstances = Number.isFinite(parsedInstances) && panelInstancesRaw;
@@ -125,7 +127,7 @@ const sharedPanelEnv = {
   // Large SQL migration uploads (~1GB+) need headroom for parse + preview.
   // Override via NODE_OPTIONS in .env when a box is memory-constrained.
   NEXLIFY_CATALOG_CACHE_DIR: fileEnv.NEXLIFY_CATALOG_CACHE_DIR || "/var/lib/nexlify/catalog-cache",
-  NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=8192",
+  NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=2048",
   PANEL_INSTANCES: String(panelInstances),
   NEXLIFY_STREAMING_OPTIMIZED: fileEnv.NEXLIFY_STREAMING_OPTIMIZED || (streamingOptimized ? "1" : "0"),
 };
@@ -144,7 +146,7 @@ const pm2Apps = [
           min_uptime: "30s",
           kill_timeout: 8000,
           // Recycle individual workers before they wedge the event loop (~2.5GB+ under IPTV load).
-          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "4096M",
+          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "1800M",
           env: sharedPanelEnv,
         }
       : {
@@ -159,7 +161,7 @@ const pm2Apps = [
           min_uptime: "30s",
           kill_timeout: 8000,
           listen_timeout: 90000,
-          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "4096M",
+          max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "1800M",
           env: sharedPanelEnv,
         },
     {
@@ -172,7 +174,7 @@ const pm2Apps = [
       autorestart: true,
       max_restarts: 10,
       min_uptime: "10s",
-      max_memory_restart: fileEnv.NEXLIFY_CRON_MAX_MEMORY_RESTART || "1800M",
+      max_memory_restart: fileEnv.NEXLIFY_CRON_MAX_MEMORY_RESTART || "1200M",
       env: {
         NODE_ENV: "production",
         DATABASE_URL: fileEnv.DATABASE_URL || "",

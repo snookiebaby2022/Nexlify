@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
         ? StreamType.SERIES
         : StreamType.LIVE;
 
-  const result = await findDuplicateNameCollisions(type);
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  const result = await cacheGetOrSet(`dup-names:${type}`, 15 * 60, () => findDuplicateNameCollisions(type));
   return NextResponse.json({
     type: typeParam,
     ...result,

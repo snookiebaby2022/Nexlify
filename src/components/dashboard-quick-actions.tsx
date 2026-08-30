@@ -1,11 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
   AlertTriangle,
+  ChevronDown,
   Clock,
-  KeyRound,
   Play,
   Plus,
   Radio,
@@ -15,6 +16,8 @@ import {
   Users,
   Wifi,
 } from "lucide-react";
+
+const STORAGE_KEY = "nexlify-dashboard-quick-actions";
 
 const ACTIONS = [
   { href: "/admin/lines/add", label: "Add line", icon: Plus, color: "#38bdf8" },
@@ -34,19 +37,58 @@ const ACTIONS = [
 ];
 
 export function DashboardQuickActions() {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(STORAGE_KEY) === "1") setOpen(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function toggle() {
+    setOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {ACTIONS.map((a) => (
-        <Link
-          key={`${a.href}-${a.label}`}
-          href={a.href}
-          className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
-          style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
-        >
-          <a.icon size={14} style={{ color: a.color }} />
-          {a.label}
-        </Link>
-      ))}
+    <div>
+      <button
+        type="button"
+        onClick={toggle}
+        className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium"
+        style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+        aria-expanded={open}
+      >
+        <ChevronDown
+          size={14}
+          className={open ? "rotate-180 transition-transform" : "transition-transform"}
+        />
+        Quick actions
+      </button>
+      {open ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {ACTIONS.map((a) => (
+            <Link
+              key={`${a.href}-${a.label}`}
+              href={a.href}
+              className="inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-80"
+              style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+            >
+              <a.icon size={14} style={{ color: a.color }} />
+              {a.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

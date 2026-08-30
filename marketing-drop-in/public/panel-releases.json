@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.59",
+  "latestVersion": "2.0.60",
   "releases": [
+    {
+      "version": "2.0.60",
+      "date": "2026-08-30",
+      "channel": "stable",
+      "summary": "Collapsed dashboard quick actions, safer catalog names, LIVE-first stream create, and duplicate/on-demand cleanup.",
+      "changelog": [
+        "Dashboard quick-action chips stay hidden until opened",
+        "EPG now-playing is stored without renaming the catalog channel name",
+        "New live streams default to LIVE relay instead of on-demand",
+        "Duplicate-name cleanup prefers LIVE rows with logos and drops iconless on-demand copies",
+        "What's on now, public LB status, stream sources panel, and line QoE on tickets"
+      ],
+      "fixes": [
+        "Panel update worker could die before rebuild when ERR_LOG was unset",
+        "Empty stream icons rendered as a large white rectangle",
+        "Plex sync skipped too many IPTV titles and dropped year from the match key"
+      ]
+    },
     {
       "version": "2.0.59",
       "date": "2026-08-30",

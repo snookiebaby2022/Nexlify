@@ -72,8 +72,9 @@ export function DashboardIssuesPanel({
   }, [statsUrl]);
 
   useEffect(() => {
+    if (kpi && hideWhenHealthy) return;
     refresh();
-  }, [refresh]);
+  }, [refresh, kpi, hideWhenHealthy]);
 
   async function activateAllInactive() {
     if (

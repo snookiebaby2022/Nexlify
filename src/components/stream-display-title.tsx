@@ -3,6 +3,7 @@ import {
   integrationSourceLabel,
   stripIntegrationSourceSuffix,
 } from "@/lib/integration-stream-url";
+import { displayCatalogStreamName } from "@/lib/stream-catalog-name";
 
 const badgeClass =
   "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide";
@@ -23,7 +24,7 @@ export function integrationSourceForStream(
 }
 
 export function streamDisplayName(name: string, _streamUrl?: string | null): string {
-  return stripIntegrationSourceSuffix(name);
+  return displayCatalogStreamName(stripIntegrationSourceSuffix(name));
 }
 
 export function StreamDisplayTitle({

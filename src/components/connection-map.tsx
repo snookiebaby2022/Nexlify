@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Maximize2, Minimize2, Pause, Play } from "lucide-react";
 import { CountryFlag } from "@/components/ip-with-flag";
 import { startVisibleInterval } from "@/lib/perf-polling";
 
@@ -73,6 +73,10 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
   const timeRef = useRef(0);
   const lastFrameRef = useRef(0);
   const projRef = useRef<Map<string, Proj>>(new Map());
+  const pausedRef = useRef(false);
+  const userRotRef = useRef(0);
+  const dragRef = useRef<{ x: number; rot: number } | null>(null);
+  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     try {
@@ -102,7 +106,7 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
         .catch(() => setData(null));
     }
     load();
-    return startVisibleInterval(load, 12_000);
+    return startVisibleInterval(load, 5 * 60 * 1000);
   }, [apiUrl]);
 
   const draw = useCallback(() => {
@@ -120,8 +124,8 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
 
     const w = canvas.width;
     const h = canvas.height;
-    timeRef.current += 0.008;
-    const rot = timeRef.current * 0.35;
+    if (!pausedRef.current) timeRef.current += 0.008;
+    const rot = timeRef.current * 0.35 + userRotRef.current;
 
     const space = ctx.createRadialGradient(w * 0.35, h * 0.3, 20, w / 2, h / 2, Math.max(w, h) * 0.7);
     space.addColorStop(0, "#122033");
@@ -349,11 +353,24 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
           </button>
           {!collapsed && (
             <p className="text-xs mt-0.5 ml-5" style={{ color: "var(--muted)" }}>
-              Real-time 3D viewer map · refreshes every 3s
+              Live viewer map · refreshes every 5 minutes · drag to rotate · pause to inspect
             </p>
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              const next = !paused;
+              setPaused(next);
+              pausedRef.current = next;
+            }}
+            className="p-1.5 rounded hover:bg-white/5 cursor-pointer"
+            style={{ color: "var(--muted)" }}
+            title={paused ? "Resume rotation" : "Pause rotation"}
+          >
+            {paused ? <Play size={14} /> : <Pause size={14} />}
+          </button>
           <button
             type="button"
             onClick={() => setExpanded((e) => !e)}
@@ -387,9 +404,24 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
               width={1400}
               height={640}
               className="w-full h-full"
-              style={{ display: "block", cursor: hoveredPoint ? "pointer" : "default" }}
-              onMouseMove={handleCanvasMouseMove}
-              onMouseLeave={() => setHoveredPoint(null)}
+              style={{ display: "block", cursor: dragRef.current ? "grabbing" : hoveredPoint ? "pointer" : "grab" }}
+              onMouseDown={(e) => {
+                dragRef.current = { x: e.clientX, rot: userRotRef.current };
+              }}
+              onMouseMove={(e) => {
+                if (dragRef.current) {
+                  userRotRef.current = dragRef.current.rot + (e.clientX - dragRef.current.x) * 0.008;
+                  return;
+                }
+                handleCanvasMouseMove(e);
+              }}
+              onMouseUp={() => {
+                dragRef.current = null;
+              }}
+              onMouseLeave={() => {
+                dragRef.current = null;
+                setHoveredPoint(null);
+              }}
             />
             {hoveredData && hoverProj && (
               <div

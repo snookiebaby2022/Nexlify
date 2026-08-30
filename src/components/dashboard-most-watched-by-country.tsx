@@ -39,7 +39,7 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 5 * 60 * 1000);
+    const t = setInterval(load, 24 * 60 * 60 * 1000);
     return () => clearInterval(t);
   }, [load]);
 
@@ -56,6 +56,9 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
         >
           {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
           Most Watched By Country
+          <span className="ml-2 text-xs font-normal" style={{ color: "var(--muted)" }}>
+            last 24 hours
+          </span>
         </button>
         <button
           type="button"

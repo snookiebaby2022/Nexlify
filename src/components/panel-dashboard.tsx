@@ -274,27 +274,6 @@ export function PanelDashboard({
       .catch(() => {});
   }, [statsUrl]);
 
-  const loadAnalytics = useCallback(() => {
-    if (isReseller) return;
-    fetch("/api/admin/analytics")
-      .then((r) => (r.ok ? r.json() : {}))
-      .then((analytics) => {
-        const a = (analytics ?? {}) as {
-          topChannels?: { streamId?: string; name?: string; viewers?: number; type?: string; watchCount?: number }[];
-        };
-        const topChannels: TopChannel[] = Array.isArray(a.topChannels)
-          ? a.topChannels.map((ch) => ({
-              streamId: String(ch.streamId ?? ""),
-              name: String(ch.name ?? "Unknown"),
-              type: String(ch.type ?? "LIVE"),
-              watchCount: Number(ch.watchCount ?? ch.viewers ?? 0),
-            }))
-          : [];
-        setStats((prev) => ({ ...(prev ?? {}), topChannels }));
-      })
-      .catch(() => {});
-  }, [isReseller]);
-
   useEffect(() => {
     if (!isDesktop) return;
     if (!initialStats) {
@@ -310,8 +289,6 @@ export function PanelDashboard({
         : null;
     const timeoutId = idleId == null ? setTimeout(runFull, initialStats ? 2500 : 120) : null;
     const t = startVisibleInterval(loadFull, isReseller ? 45000 : ADMIN_POLLS.dashboardMs);
-    const analyticsId = initialStats ? null : setTimeout(loadAnalytics, 400);
-    const analyticsT = startVisibleInterval(loadAnalytics, 90_000);
     return () => {
       cancelled = true;
       if (idleId != null && typeof cancelIdleCallback !== "undefined") {
@@ -319,10 +296,8 @@ export function PanelDashboard({
       }
       if (timeoutId != null) clearTimeout(timeoutId);
       t();
-      if (analyticsId != null) clearTimeout(analyticsId);
-      analyticsT();
     };
-  }, [loadHeader, loadFull, loadAnalytics, isReseller, initialStats, isDesktop]);
+  }, [loadHeader, loadFull, isReseller, initialStats, isDesktop]);
 
 
 
@@ -453,24 +428,7 @@ export function PanelDashboard({
                 <DashboardExpiringLines widgetsUrl={widgetsUrl} linesHref={linesHref} />
               </LazyDashboardSection>
             </DashboardCard>
-            <DashboardCard id="top-channels" title="Top channels">
-              <ul className="divide-y text-sm" style={{ borderColor: "var(--border)" }}>
-                {(stats?.topChannels ?? []).slice(0, 6).map((ch) => (
-                  <li key={ch.streamId} className="py-2 flex justify-between gap-2">
-                    <span className="truncate text-xs">{ch.name}</span>
-                    <span className="shrink-0 font-medium tabular-nums">{ch.watchCount}</span>
-                  </li>
-                ))}
-                {!stats?.topChannels?.length && (
-                  <li className="py-4 text-center text-xs" style={{ color: "var(--muted)" }}>
-                    No watch data yet
-                  </li>
-                )}
-              </ul>
-              <Link href="/admin/videolog" className="text-xs underline mt-2 inline-block" style={{ color: "var(--accent)" }}>
-                Video log →
-              </Link>
-            </DashboardCard>
+            <DashboardMostWatchedByCountry widgetsUrl={widgetsUrl} />
           </div>
           <details className="rounded-xl border text-sm" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
             <summary className="px-4 py-3 cursor-pointer font-medium select-none">
@@ -541,9 +499,6 @@ export function PanelDashboard({
               </LazyDashboardSection>
               <LazyDashboardSection minHeight="16rem">
                 <ConnectionMap />
-              </LazyDashboardSection>
-              <LazyDashboardSection minHeight="12rem">
-                <DashboardMostWatchedByCountry widgetsUrl={widgetsUrl} />
               </LazyDashboardSection>
               <LazyDashboardSection minHeight="10rem">
                 <DashboardXuiResourceMonitor serverMetrics={servers} summary={d ?? undefined} />

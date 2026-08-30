@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { ownerScope } from "@/lib/owner-scope";
 import { PanelRole } from "@prisma/client";
 import { cacheGetOrSet } from "@/lib/cache";
+import { countryMapPosition } from "@/lib/connection-map-geo";
 
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
-const MAP_CACHE_TTL = 10; // 10 seconds
+const MAP_CACHE_TTL = 300;
 
 export async function GET() {
   const session = await requireSession([...ROLES]);
@@ -16,85 +17,91 @@ export async function GET() {
   const cacheKey = scope ? `connmap:${scope}` : "connmap:all";
 
   const data = await cacheGetOrSet(cacheKey, MAP_CACHE_TTL, async () => {
-    const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000); // Match connection tracking 24h window
-
-    // Use LiveConnection for real-time count and per-country aggregation
     const { listLiveConnections } = await import("@/lib/connections");
+    const { lookupGeo } = await import("@/lib/geoip");
     const activeConns = await listLiveConnections(scope);
     const total = activeConns.length;
+    const lineIds = [...new Set(activeConns.map((c) => c.lineId))];
 
-    // Cleanup stale ConnectionGeography rows
-    await prisma.connectionGeography.deleteMany({
-      where: { lastSeenAt: { lt: new Date(Date.now() - 5 * 60 * 1000) } },
-    });
+    const geoRows = lineIds.length
+      ? await prisma.connectionGeography.findMany({
+          where: {
+            lineId: { in: lineIds },
+            lastSeenAt: { gte: new Date(Date.now() - 30 * 60 * 1000) },
+            ...(scope ? { line: { ownerId: scope } } : {}),
+          },
+          orderBy: { lastSeenAt: "desc" },
+          take: 8000,
+        })
+      : [];
 
-    // Use ConnectionGeography for map points only (geo data for visualization)
-    const geoPoints = await prisma.connectionGeography.findMany({
-      where: {
-        lastSeenAt: { gte: staleBefore },
-        ...(scope ? { line: { ownerId: scope } } : {}),
-      },
-      orderBy: { lastSeenAt: "desc" },
-      take: 5000,
-    });
+    const geoByLineStream = new Map<string, (typeof geoRows)[number]>();
+    const geoByLine = new Map<string, (typeof geoRows)[number]>();
+    for (const g of geoRows) {
+      const ls = `${g.lineId}:${g.streamId ?? ""}`;
+      if (!geoByLineStream.has(ls)) geoByLineStream.set(ls, g);
+      if (g.lineId && !geoByLine.has(g.lineId)) geoByLine.set(g.lineId, g);
+    }
 
-    // Build per-country counts from active connections, not accumulated connectionCount
-    const countryCounts = new Map<string, number>();
+    const countryCounts = new Map<string, { name: string; count: number; mapX: number; mapY: number }>();
+    const points: {
+      id: string;
+      mapX: number;
+      mapY: number;
+      line: string;
+      stream: string | null;
+      countryCode: string | null;
+    }[] = [];
+
     for (const conn of activeConns) {
-      const geo = geoPoints.find(
-        (g) => g.lineId === conn.lineId && g.streamId === (conn as Record<string, unknown>).streamId
-      );
-      const cc = geo?.countryCode || "??";
-      countryCounts.set(cc, (countryCounts.get(cc) ?? 0) + 1);
-    }
+      const lineLabel = conn.line?.username ?? conn.lineId;
+      const streamName = conn.stream?.name ?? conn.streamId ?? null;
+      const geo =
+        geoByLineStream.get(`${conn.lineId}:${conn.streamId ?? ""}`) ??
+        geoByLine.get(conn.lineId);
 
-    // Also count from geo points for connections that may have ended but still have geo data
-    for (const g of geoPoints) {
-      const cc = g.countryCode || "??";
-      if (!countryCounts.has(cc)) {
-        countryCounts.set(cc, 0);
+      let countryCode = geo?.countryCode || null;
+      let countryName = geo?.country || "Unknown";
+      let mapX = geo?.lng != null ? Math.max(0, Math.min(100, ((geo.lng + 180) / 360) * 100)) : null;
+      let mapY = geo?.lat != null ? Math.max(0, Math.min(100, ((90 - geo.lat) / 180) * 100)) : null;
+
+      if (!countryCode && conn.ip) {
+        const looked = await lookupGeo(conn.ip);
+        countryCode = looked?.countryCode ?? null;
+        countryName = looked?.countryName ?? countryName;
       }
-    }
+      if (mapX == null || mapY == null) {
+        const pos = countryMapPosition(countryCode);
+        mapX = pos?.[0] ?? 50;
+        mapY = pos?.[1] ?? 40;
+      }
 
-    // Aggregate by country for the map
-    const byCountry = new Map<string, { countryCode: string; countryName: string; count: number; mapX: number; mapY: number }>();
-    for (const g of geoPoints) {
-      const cc = g.countryCode || "??";
-      if (byCountry.has(cc)) continue;
-      byCountry.set(cc, {
+      const cc = countryCode || "??";
+      const bucket = countryCounts.get(cc) ?? { name: countryName, count: 0, mapX, mapY };
+      bucket.count += 1;
+      countryCounts.set(cc, bucket);
+
+      points.push({
+        id: conn.id,
+        mapX,
+        mapY,
+        line: lineLabel,
+        stream: streamName,
         countryCode: cc,
-        countryName: g.country,
-        count: countryCounts.get(cc) ?? 0,
-        mapX: g.lng ? Math.max(0, Math.min(100, ((g.lng + 180) / 360) * 100)) : 50,
-        mapY: g.lat ? Math.max(0, Math.min(100, ((90 - g.lat) / 180) * 100)) : 40,
       });
     }
 
-    // Build points array from geo data, deduplicated by IP+stream
-    const seenPoints = new Set<string>();
-    const points = geoPoints
-      .filter((g) => {
-        const key = `${g.city || ""}:${g.streamId || ""}`;
-        if (seenPoints.has(key)) return false;
-        seenPoints.add(key);
-        return true;
-      })
-      .map((g) => ({
-        id: g.id,
-        ip: g.city || "",
-        countryCode: g.countryCode,
-        countryName: g.country,
-        mapX: g.lng ? Math.max(0, Math.min(100, ((g.lng + 180) / 360) * 100)) : 50,
-        mapY: g.lat ? Math.max(0, Math.min(100, ((90 - g.lat) / 180) * 100)) : 40,
-        line: g.lineId || "",
-        stream: g.streamId || null,
-      }));
+    const countries = [...countryCounts.entries()]
+      .map(([countryCode, v]) => ({
+        countryCode,
+        countryName: v.name,
+        count: v.count,
+        mapX: v.mapX,
+        mapY: v.mapY,
+      }))
+      .sort((a, b) => b.count - a.count);
 
-    return {
-      total,
-      countries: Array.from(byCountry.values()).sort((a, b) => b.count - a.count),
-      points,
-    };
+    return { total, countries, points };
   });
 
   return NextResponse.json(data);

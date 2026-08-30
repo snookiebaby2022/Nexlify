@@ -14,6 +14,7 @@ type QoeSnapshot = {
   worstServerName: string | null;
   capMbps: number;
   usedMbps: number;
+  lbNames?: string[];
 };
 
 export function DashboardCapacityStrip() {
@@ -44,7 +45,11 @@ export function DashboardCapacityStrip() {
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2 mb-1">
           <p className="font-medium">
-            {warn ? "Egress almost full — new viewers should not land here" : "Egress headroom"}
+            {data.servers === 0
+              ? "Egress headroom — no load balancers detected"
+              : warn
+                ? "LB egress almost full — new viewers should not land here"
+                : "LB egress headroom"}
           </p>
           <span className="tabular-nums text-xs" style={{ color: "var(--muted)" }}>
             {data.usedMbps.toFixed(1)} / {data.capMbps} Mbps
@@ -54,6 +59,10 @@ export function DashboardCapacityStrip() {
           <div className="h-full rounded-full" style={{ width: `${usedPct}%`, background: bar }} />
         </div>
         <p className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
+          {data.servers
+            ? `${data.servers} LB${data.servers === 1 ? "" : "s"} auto-detected${data.lbNames?.length ? ` (${data.lbNames.join(", ")})` : ""}`
+            : "Main server is excluded — add or tag a load balancer"}
+          {" · "}
           {data.liveConnections} live · {data.stallSessions} with stalls
           {data.avgFirstPictureMs != null ? ` · first picture ${(data.avgFirstPictureMs / 1000).toFixed(1)}s` : ""}
           {data.worstServerName ? ` · lowest headroom ${data.worstServerName} ${data.worstHeadroomPct}%` : ""}

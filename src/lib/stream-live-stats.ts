@@ -18,6 +18,7 @@ export type StreamLiveStat = {
   audioCodec?: string | null;
   videoCodec?: string | null;
   quality?: string | null;
+  bitrateKbps?: number | null;
 };
 
 export type StreamStatsInput = StreamForPlaybackPolicy & {
@@ -158,6 +159,7 @@ export async function getStreamLiveStatsMap(
       playbackMode
     );
 
+    const bitrateKbps = running.find((p) => p.bitrateKbps != null)?.bitrateKbps ?? null;
     map.set(id, {
       viewers,
       uptimeSeconds,
@@ -165,6 +167,7 @@ export async function getStreamLiveStatsMap(
       displayStatus,
       playbackMode,
       servers,
+      bitrateKbps,
     });
   }
 

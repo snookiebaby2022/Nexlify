@@ -206,7 +206,7 @@ async function fetchPlexSectionItems(
   let emptyPages = 0;
   for (;;) {
     const items = await fetchPlexJson<PlexItemsResponse>(
-      `${base}/library/sections/${sectionKey}/all?${tokenParam}&includeMeta=1&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`,
+      `${base}/library/sections/${sectionKey}/all?${tokenParam}&includeMeta=1&sort=addedAt:desc&X-Plex-Container-Start=${start}&X-Plex-Container-Size=${pageSize}`,
       clientIdentifier
     );
     const metadata = items.MediaContainer?.Metadata ?? [];

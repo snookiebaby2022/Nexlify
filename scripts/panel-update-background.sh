@@ -56,6 +56,7 @@ fi
 cd "$ROOT"
 export PANEL_REPO_PATH="$ROOT"
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${ROOT}/node_modules/.bin:${PATH:-}"
+ERR_LOG="${ROOT}/.update-worker-err.log"
 
 if [ -f "${ROOT}/scripts/vps-git-auth.sh" ]; then
   # shellcheck source=scripts/vps-git-auth.sh
@@ -67,7 +68,6 @@ if [ -f "${ROOT}/scripts/vps-git-auth.sh" ]; then
   ensure_nexlify_git_ssh
 fi
 
-ERR_LOG="${ROOT}/.update-worker-err.log"
 TS_SCRIPT="${ROOT}/scripts/panel-update-background.ts"
 
 if [ ! -f "${ROOT}/node_modules/tsx/dist/cli.mjs" ] && [ -f "${ROOT}/scripts/ensure-tsx.sh" ]; then

@@ -667,9 +667,16 @@ async function creditStats(userId: string) {
 }
 
 export async function getMostWatchedByCountry(ownerId?: string): Promise<CountryWatch[]> {
+  const { cacheGetOrSet } = await import("@/lib/cache");
+  return cacheGetOrSet(`dash:mwc:${ownerId ?? "all"}`, 24 * 60 * 60, () => computeMostWatchedByCountry(ownerId));
+}
+
+async function computeMostWatchedByCountry(ownerId?: string): Promise<CountryWatch[]> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const watches = await prisma.lineChannelWatch.findMany({
     where: {
       watchCount: { gt: 0 },
+      lastWatchedAt: { gte: since },
       ...(ownerId ? { line: { ownerId } } : {}),
     },
     include: {

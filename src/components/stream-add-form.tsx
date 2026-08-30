@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Calendar, FileText, Info, Server, Settings } from "lucide-react";
+import { Calendar, FileText, Globe, Info, Server, Settings } from "lucide-react";
+import { StreamSourcesPanel } from "@/components/stream-sources-panel";
 import { XuiFormTabs, type XuiFormTab } from "@/components/xui-form-tabs";
 import { TmdbSearch } from "@/components/tmdb-search";
 import { ProviderSourceFields, OnDemandStreamFields } from "@/components/provider-source-fields";
@@ -96,10 +97,11 @@ function encodeLiveMeta(meta: LiveMeta & { notes?: string }) {
   return `NEXLIFY_LIVE:${JSON.stringify({ v: 1, ...meta })}`;
 }
 
-type LiveAddTab = "details" | "meta" | "advanced" | "server";
+type LiveAddTab = "details" | "sources" | "meta" | "advanced" | "server";
 
 const LIVE_ADD_TABS: XuiFormTab<LiveAddTab>[] = [
   { id: "details", label: "Details", icon: FileText },
+  { id: "sources", label: "Sources", icon: Globe },
   { id: "meta", label: "EPG", icon: Calendar },
   { id: "advanced", label: "Advanced", icon: Settings },
   { id: "server", label: "Server", icon: Server },
@@ -172,7 +174,7 @@ function LiveStreamForm({
     categoryId: "",
     epgChannelId: "",
     notes: "",
-    vodMode: "ON_DEMAND" as string,
+    vodMode: "LIVE" as string,
     archiveDays: "",
     playlistUrl: "",
     isRadio: false,
@@ -330,6 +332,7 @@ function LiveStreamForm({
         autoRestart: form.autoRestart,
         agentStartCmd: encodeLiveMeta({ ...meta, notes: form.notes }),
         ...advancedToPayload(advanced),
+        autoSyncNameFromEpg: advanced.autoSyncNameFromEpg,
         ...(extraSources[0] ? { backupUrl: extraSources[0] } : {}),
         ...(extraSources.length > 1
           ? {
@@ -385,6 +388,8 @@ function LiveStreamForm({
 
         <XuiFormTabs tabs={LIVE_ADD_TABS} active={addTab} onChange={setAddTab} />
 
+        {addTab === "sources" && <StreamSourcesPanel embedded />}
+
         {addTab === "details" && (
           <div className="space-y-4">
             {insertMode === "m3u" && (
@@ -399,7 +404,7 @@ function LiveStreamForm({
                   onChange={(e) => setBulkText(e.target.value)}
                 />
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-                  Channels import as on-demand by default. Set live/on-demand under Advanced after import if needed.
+                  Channels import as live (panel relay), not direct and not on-demand.
                 </p>
               </FormField>
             )}

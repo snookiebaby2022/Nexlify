@@ -51,8 +51,8 @@ test("plexGenreName reads Plex Genre tags", () => {
 
 test("plexCatalogTitleKey matches IPTV and Plex naming", () => {
   assert.equal(plexCatalogTitleKey("Inception"), plexCatalogTitleKey("Inception (Plex)"));
-  assert.equal(plexCatalogTitleKey("Inception (2010)"), plexCatalogTitleKey("Inception | 1080p"));
-  assert.equal(plexCatalogTitleKey("The Matrix (1999) 4K"), plexCatalogTitleKey("The Matrix"));
+  assert.equal(plexCatalogTitleKey("Inception (2010)"), plexCatalogTitleKey("Inception (2010) | 1080p"));
+  assert.notEqual(plexCatalogTitleKey("The Matrix (1999) 4K"), plexCatalogTitleKey("The Matrix (2021)"));
 });
 
 test("plexSeriesTitleKey uses series name and SxxExx prefixes", () => {
@@ -66,10 +66,11 @@ test("plexSeriesTitleKey uses series name and SxxExx prefixes", () => {
   );
 });
 
-test("plexScheduleHours defaults to 12", () => {
+test("plexScheduleHours defaults to 6", () => {
   assert.equal(plexScheduleHours("24h"), 24);
   assert.equal(plexScheduleHours("12h"), 12);
-  assert.equal(plexScheduleHours(""), 12);
+  assert.equal(plexScheduleHours(""), 6);
+  assert.equal(plexScheduleHours(undefined), 6);
 });
 
 test("plexAutoSyncIsDue respects 12h and 24h gaps", () => {

@@ -650,11 +650,16 @@ function CategoryRemoveDuplicateStreamsPanel({
       setSamples(data.samples ?? []);
       if (dryRun) {
         setMsg(
-          `Preview: ${data.duplicateGroups} duplicate name groups, ${data.merged} ${target.label} would be removed (${data.scanned} scanned)`
+          `Preview: ${data.duplicateGroups} duplicate name groups, ${data.merged} ${target.label} would be removed` +
+            (data.ghostOnDemand ? `, ${data.ghostOnDemand} iconless on-demand rows` : "") +
+            ` (${data.scanned} scanned)`
         );
         return;
       }
-      setMsg(`Removed ${data.merged} duplicate ${target.label} with the same name`);
+      setMsg(
+        `Removed ${data.merged} duplicate ${target.label}` +
+          (data.ghostOnDemand ? ` and ${data.ghostOnDemand} iconless on-demand rows` : "")
+      );
       onApplied();
     } finally {
       setBusy(false);

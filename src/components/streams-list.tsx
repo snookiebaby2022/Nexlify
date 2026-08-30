@@ -10,9 +10,12 @@ import {
   RefreshCw,
   Search,
   Square,
-  Volume2,
 } from "lucide-react";
 import { StreamRowActionsMenu } from "@/components/stream-row-actions-menu";
+import { normalizeCategoryName } from "@/lib/category-options";
+import { parseLiveStreamMeta } from "@/lib/stream-live-meta";
+import { playbackPolicyLabel } from "@/lib/stream-playback-policy";
+import { formatUptime } from "@/lib/stream-live-stats";
 import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
@@ -61,6 +64,7 @@ type Stream = {
   isOnDemand?: boolean;
   vodMode?: string;
   hostedExternally?: boolean;
+  agentStartCmd?: string | null;
 };
 
 function statusFromSearch(): "" | "active" | "inactive" | "online" | "offline" {
@@ -106,6 +110,15 @@ function streamUptimeKind(s: Stream, listType?: string): "DIRECT" | "LIVE" | "ON
 
 function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
   const kind = streamUptimeKind(stream, listType);
+  const label = stream.liveStats?.playbackMode
+    ? playbackPolicyLabel(stream.liveStats.playbackMode).toUpperCase()
+    : kind === "ON-DEMAND"
+      ? "ON-DEMAND"
+      : kind === "DIRECT"
+        ? "DIRECT"
+        : kind === "CATCHUP"
+          ? "CATCHUP"
+          : "LIVE / RELAY";
   const cls =
     kind === "DIRECT"
       ? "xui-uptime-badge xui-uptime-badge--direct"
@@ -115,43 +128,40 @@ function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: st
   return (
     <span
       className={cls}
-      title="How playback is served: LIVE = through this panel, DIRECT = apps hit the provider URL, ON-DEMAND = ffmpeg on tune-in"
+      title="LIVE/RELAY = through this panel · ON-DEMAND = starts when a viewer tunes in · DIRECT = apps hit the provider URL"
     >
-      {kind}
+      {label}
     </span>
   );
 }
 
 function StreamInfoCell({ stream }: { stream: Stream }) {
   const st = stream.liveStats;
+  const mode = st?.playbackMode
+    ? playbackPolicyLabel(st.playbackMode)
+    : streamUptimeKind(stream);
+  const kbps = st?.bitrateKbps ?? stream.maxSpeedKbps ?? stream.minSpeedKbps;
+  const lines: string[] = [];
+  lines.push(`Mode: ${mode}`);
+  if (st?.displayStatus) lines.push(`Status: ${st.displayStatus}`);
+  if (kbps) lines.push(`Bitrate: ${Number(kbps).toLocaleString()} kbps`);
+  if (st?.uptimeSeconds != null) lines.push(`Uptime: ${formatUptime(st.uptimeSeconds)}`);
+  if (st && st.viewers > 0) lines.push(`Viewers: ${st.viewers}`);
+  if (st?.videoCodec) lines.push(`Video: ${st.videoCodec}`);
+  if (st?.audioCodec) lines.push(`Audio: ${st.audioCodec}`);
   if (stream.lastProbeOk === false && stream.lastProbeError) {
-    return (
-      <span className="xui-stream-info-empty" title={stream.lastProbeError}>
-        {stream.lastProbeError}
-      </span>
-    );
+    lines.push(`Probe: ${stream.lastProbeError}`);
   }
-  if (!st || st.status === "direct" || st.status === "offline") {
-    return (
-      <span className="xui-stream-info-empty">No information available</span>
-    );
+  if (lines.length <= 1 && !st) {
+    return <span className="xui-stream-info-empty">Waiting for this channel’s probe / process stats</span>;
   }
-  const kbps = stream.maxSpeedKbps ?? stream.minSpeedKbps;
-  const videoCodec = st.videoCodec ?? (st.playbackMode === "transcode" ? "h264" : null);
-  const audioCodec = st.audioCodec ?? (st.playbackMode === "transcode" ? "aac" : null);
   return (
-    <div className="xui-stream-info">
-      {kbps ? <div className="xui-stream-info-line">{kbps.toLocaleString()} Kbps</div> : null}
-      <div className="xui-stream-info-icons">
-        {videoCodec && <span title={videoCodec}>{videoCodec}</span>}
-        {audioCodec && (
-          <>
-            <Volume2 size={12} aria-hidden />
-            <span title={audioCodec}>{audioCodec}</span>
-          </>
-        )}
-        {st.viewers > 0 && <span title={`${st.viewers} viewers`}>{st.viewers}x</span>}
-      </div>
+    <div className="xui-stream-info text-xs leading-snug" style={{ color: "var(--text)" }}>
+      {lines.map((line) => (
+        <div key={line} className="xui-stream-info-line">
+          {line}
+        </div>
+      ))}
     </div>
   );
 }
@@ -222,16 +232,32 @@ export function StreamsList({
   ];
   const countedKeyRef = useRef("");
   const urlInitRef = useRef(false);
+  const liveDefaultCatRef = useRef(false);
 
   useEffect(() => {
     if (urlInitRef.current || typeof window === "undefined") return;
     urlInitRef.current = true;
     const sp = new URLSearchParams(window.location.search);
     const cat = sp.get("categoryId");
-    if (cat) setCategoryId(cat);
+    if (cat) {
+      setCategoryId(cat);
+      liveDefaultCatRef.current = true;
+    }
     const q = sp.get("search");
     if (q) setSearch(q);
   }, []);
+
+  useEffect(() => {
+    if (type !== "LIVE" || liveDefaultCatRef.current || categoryId) return;
+    const ukEnt = categories.find((c) => {
+      const n = normalizeCategoryName(c.name);
+      return n === "uk entertainment" || n.endsWith(" uk entertainment");
+    });
+    if (!ukEnt) return;
+    liveDefaultCatRef.current = true;
+    setCategoryId(ukEnt.id);
+    setPage(1);
+  }, [type, categories, categoryId]);
 
   useEffect(() => {
     if (
@@ -404,6 +430,11 @@ export function StreamsList({
               Import
             </Link>
           )}
+          {type === "LIVE" ? (
+            <Link href="/admin/streams/sources" className="xui-streams-btn xui-streams-btn--ghost">
+              Sources
+            </Link>
+          ) : null}
           <Link href={addHref} className="xui-streams-btn xui-streams-btn--add">
             Add Stream
           </Link>
@@ -461,6 +492,11 @@ export function StreamsList({
             {importHref ? (
               <Link href={importHref} className="xui-toolbar-menu-action" onClick={() => setMoreOpen(false)}>
                 Import
+              </Link>
+            ) : null}
+            {type === "LIVE" ? (
+              <Link href="/admin/streams/sources" className="xui-toolbar-menu-action" onClick={() => setMoreOpen(false)}>
+                Sources
               </Link>
             ) : null}
             <Link href={addHref} className="xui-toolbar-menu-action" onClick={() => setMoreOpen(false)}>
@@ -713,17 +749,22 @@ export function StreamsList({
                   );
                 })()}
                 <div className="min-w-0 flex-1">
-                  <StreamDisplayTitle
-                    name={s.name}
-                    streamUrl={hideAllUrls ? "" : s.streamUrl}
-                    href={`/admin/servers/streams?edit=${s.id}`}
-                    className="xui-stream-name font-semibold block truncate"
-                  />
-                  {s.category?.name ? (
-                    <p className="text-xs truncate" style={{ color: "var(--muted)" }}>
-                      {s.category.name}
-                    </p>
-                  ) : null}
+                      <StreamDisplayTitle
+                        name={parseLiveStreamMeta(s.agentStartCmd).catalogName || s.name}
+                        streamUrl={hideAllUrls ? "" : s.streamUrl}
+                        href={`/admin/servers/streams?edit=${s.id}`}
+                        className="xui-stream-name font-semibold block truncate"
+                      />
+                      {parseLiveStreamMeta(s.agentStartCmd).nowPlayingTitle ? (
+                        <p className="text-xs truncate" style={{ color: "var(--accent)" }}>
+                          Now: {parseLiveStreamMeta(s.agentStartCmd).nowPlayingTitle}
+                        </p>
+                      ) : null}
+                      {s.category?.name ? (
+                        <p className="text-xs truncate" style={{ color: "var(--muted)" }}>
+                          {s.category.name}
+                        </p>
+                      ) : null}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm">
@@ -817,11 +858,16 @@ export function StreamsList({
                   {streamCols.show("name") ? (
                     <td className="xui-streams-td-name">
                       <StreamDisplayTitle
-                        name={s.name}
+                        name={parseLiveStreamMeta(s.agentStartCmd).catalogName || s.name}
                         streamUrl={hideAllUrls ? "" : s.streamUrl}
                         href={`/admin/servers/streams?edit=${s.id}`}
                         className="xui-stream-name"
                       />
+                      {parseLiveStreamMeta(s.agentStartCmd).nowPlayingTitle ? (
+                        <span className="block text-xs mt-0.5" style={{ color: "var(--accent)" }}>
+                          Now: {parseLiveStreamMeta(s.agentStartCmd).nowPlayingTitle}
+                        </span>
+                      ) : null}
                       {s.category?.name && (
                         <span className="xui-stream-category">{s.category.name}</span>
                       )}

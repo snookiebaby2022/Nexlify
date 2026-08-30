@@ -39,7 +39,7 @@ export default function CronSettingsPage() {
         },
         {
           title: "Plex",
-          info: "Requires an active Plex addon (Addons → Plex). Auto-sync skips movies and series already on the panel.",
+          info: "Requires an active Plex addon (Addons → Plex). New Plex titles are imported even if a similarly named IPTV movie already exists.",
           fields: [
             { key: "plexSyncEnabled", label: "Plex library auto-sync", type: "yesno" },
             {
@@ -47,6 +47,7 @@ export default function CronSettingsPage() {
               label: "Plex sync interval",
               type: "select",
               options: [
+                { value: "6h", label: "Every 6 hours" },
                 { value: "12h", label: "Every 12 hours" },
                 { value: "24h", label: "Every 24 hours" },
               ],

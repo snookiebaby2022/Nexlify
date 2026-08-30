@@ -68,7 +68,7 @@ export default function M3uReviewPage() {
     autoBouquetFromGroup: true,
     autoAssignEpg: true,
     useLogos: true,
-    onDemand: true,
+    onDemand: false,
     serverId: "",
     bouquetIds: [],
   });

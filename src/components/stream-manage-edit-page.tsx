@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Calendar, FileText, Info, Server, Settings } from "lucide-react";
+import { Calendar, FileText, Globe, Info, Server, Settings } from "lucide-react";
+import { StreamSourcesPanel } from "@/components/stream-sources-panel";
 import { StreamProbePlayer } from "@/components/stream-probe-player";
 import { StreamLiveInfo } from "@/components/stream-live-info";
 import {
@@ -78,13 +79,14 @@ function manageLabelForType(type: string) {
   return "Manage streams";
 }
 
-type StreamEditTab = "details" | "meta" | "advanced" | "server";
+type StreamEditTab = "details" | "sources" | "meta" | "advanced" | "server";
 
 function streamEditTabs(type: string): XuiFormTab<StreamEditTab>[] {
   const metaLabel = type === "LIVE" ? "EPG" : "Information";
   const MetaIcon = type === "LIVE" ? Calendar : Info;
   return [
     { id: "details", label: "Details", icon: FileText },
+    { id: "sources", label: "Sources", icon: Globe },
     { id: "meta", label: metaLabel, icon: MetaIcon },
     { id: "advanced", label: "Advanced", icon: Settings },
     { id: "server", label: "Server", icon: Server },
@@ -640,6 +642,8 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           <XuiFormTabs tabs={streamEditTabs(form.type)} active={editTab} onChange={setEditTab} />
 
           {editTab === "details" && <div className="space-y-4">{detailsFields}</div>}
+
+          {editTab === "sources" && <StreamSourcesPanel embedded />}
 
           {editTab === "meta" && form.type === "LIVE" && (
             <div className="xui-vod-info-form">

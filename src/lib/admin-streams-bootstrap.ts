@@ -38,6 +38,7 @@ export async function bootstrapAdminStreamsPage(opts: {
         timeshiftSeconds: true,
         isShifted: true,
         hostedExternally: true,
+        agentStartCmd: true,
         lastProbeOk: true,
         streamIcon: true,
         sortOrder: true,

@@ -17,7 +17,7 @@ const MINUTE_MS = 60_000;
 const LOCK_TTL_S = 300; // 5-minute safety net
 const MINUTE_LOCK_KEY = "nexlify:cron:minute";
 /** Exit for PM2 recycle when RSS exceeds this (MB). */
-const RECYCLE_RSS_MB = Number(process.env.NEXLIFY_CRON_RECYCLE_RSS_MB ?? "1200");
+const RECYCLE_RSS_MB = Number(process.env.NEXLIFY_CRON_RECYCLE_RSS_MB ?? "800");
 
 /**
  * Hourly jobs must survive PM2 recycle. Seeding lastHour to "now" meant a

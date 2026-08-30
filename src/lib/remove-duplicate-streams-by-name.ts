@@ -6,11 +6,19 @@ export type RemoveDuplicateStreamsResult = {
   scanned: number;
   duplicateGroups: number;
   merged: number;
+  ghostOnDemand: number;
   samples: { kept: string; removed: string[] }[];
 };
 
-function nameKey(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, " ").trim();
+function nameKey(name: string, streamType: StreamType): string {
+  let key = name.toLowerCase().replace(/\s+/g, " ").trim();
+  if (streamType === StreamType.LIVE) {
+    key = key
+      .replace(/\b(fhd|uhd|hdr|4k|sd|hd|1080p|720p|2160p)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  return key;
 }
 
 export async function removeDuplicateStreamsByName(
@@ -26,8 +34,27 @@ export async function removeDuplicateStreamsByName(
     scanned: 0,
     duplicateGroups: 0,
     merged: 0,
+    ghostOnDemand: 0,
     samples: [],
   };
+
+  if (opts.streamType === StreamType.LIVE && opts.isRadio !== true) {
+    const ghosts = await prisma.stream.findMany({
+      where: {
+        type: StreamType.LIVE,
+        isRadio: false,
+        AND: [
+          { OR: [{ isOnDemand: true }, { vodMode: "ON_DEMAND" }] },
+          { OR: [{ streamIcon: null }, { streamIcon: "" }] },
+        ],
+      },
+      select: { id: true },
+    });
+    result.ghostOnDemand = ghosts.length;
+    if (!opts.dryRun && ghosts.length) {
+      await prisma.stream.deleteMany({ where: { id: { in: ghosts.map((g) => g.id) } } });
+    }
+  }
 
   const rows = await prisma.stream.findMany({
     where: {
@@ -47,6 +74,9 @@ export async function removeDuplicateStreamsByName(
       isActive: true,
       categoryId: true,
       createdAt: true,
+      isOnDemand: true,
+      vodMode: true,
+      streamIcon: true,
       category: { select: { name: true } },
       _count: { select: { bouquets: true } },
     },
@@ -56,7 +86,7 @@ export async function removeDuplicateStreamsByName(
   const groups = new Map<string, DuplicateScanRow[]>();
   for (const r of rows) {
     result.scanned++;
-    const key = nameKey(r.name);
+    const key = nameKey(r.name, opts.streamType);
     if (!key) continue;
     const mapped: DuplicateScanRow = {
       id: r.id,
@@ -71,6 +101,8 @@ export async function removeDuplicateStreamsByName(
       categoryName: r.category?.name ?? null,
       bouquetCount: r._count.bouquets,
       createdAt: r.createdAt,
+      isOnDemand: Boolean(r.isOnDemand || r.vodMode === "ON_DEMAND"),
+      hasIcon: Boolean(String(r.streamIcon ?? "").trim()),
     };
     const list = groups.get(key) ?? [];
     list.push(mapped);

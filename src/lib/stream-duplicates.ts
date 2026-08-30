@@ -17,6 +17,8 @@ export type DuplicateScanRow = {
   categoryName: string | null;
   bouquetCount: number;
   createdAt: Date;
+  isOnDemand?: boolean;
+  hasIcon?: boolean;
 };
 
 export type DuplicateMember = {
@@ -87,6 +89,12 @@ export function episodeGroupKey(row: {
 
 export function pickKeepId(rows: DuplicateScanRow[]): string {
   const ranked = [...rows].sort((a, b) => {
+    const aLive = a.isOnDemand ? 0 : 1;
+    const bLive = b.isOnDemand ? 0 : 1;
+    if (bLive !== aLive) return bLive - aLive;
+    const aIcon = a.hasIcon ? 1 : 0;
+    const bIcon = b.hasIcon ? 1 : 0;
+    if (bIcon !== aIcon) return bIcon - aIcon;
     if (b.bouquetCount !== a.bouquetCount) return b.bouquetCount - a.bouquetCount;
     const ac = a.categoryId ? 1 : 0;
     const bc = b.categoryId ? 1 : 0;

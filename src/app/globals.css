@@ -3945,19 +3945,19 @@ a.btn-back:hover,
 }
 
 .xui-stream-icon {
-  width: 32px;
-  height: 48px;
-  object-fit: cover;
-  border-radius: 3px;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 4px;
   display: block;
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .xui-stream-icon--empty {
-  width: 32px;
-  height: 48px;
-  background: #eee;
-  border: 1px dashed #ccc;
+  width: 28px;
+  height: 28px;
+  background: #1a1a1a;
+  border: 1px dashed #444;
 }
 
 .xui-stream-name {

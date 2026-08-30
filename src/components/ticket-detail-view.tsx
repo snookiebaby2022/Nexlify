@@ -37,6 +37,10 @@ export function TicketDetailView({
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [reply, setReply] = useState("");
   const [msg, setMsg] = useState("");
+  const [fixQuery, setFixQuery] = useState("");
+  const [fixHits, setFixHits] = useState<{ id: string; name: string }[]>([]);
+  const [fixBusy, setFixBusy] = useState(false);
+  const [fixMsg, setFixMsg] = useState("");
 
   const ticketsApi = ticketsApiRoot(isAdmin);
 
@@ -142,6 +146,64 @@ export function TicketDetailView({
             </div>
           </div>
         )}
+        {isAdmin ? (
+          <div className="pt-3 border-t space-y-2" style={{ borderColor: "var(--border)" }}>
+            <p className="text-xs font-medium">Fix this channel</p>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Restart / re-probe the stream the viewer reported.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <input
+                className="rounded border px-2 py-1 text-sm bg-transparent flex-1 min-w-[12rem]"
+                style={{ borderColor: "var(--border)" }}
+                placeholder="Search channel name…"
+                value={fixQuery}
+                onChange={(e) => setFixQuery(e.target.value)}
+              />
+              <button
+                type="button"
+                className="rounded-full px-3 py-1 text-xs font-semibold"
+                style={{ background: "var(--accent)", color: "#fff" }}
+                onClick={() => {
+                  const q = fixQuery.trim();
+                  if (!q) return;
+                  fetch(`/api/admin/streams?search=${encodeURIComponent(q)}&pageSize=8&type=LIVE&skipTotal=1`)
+                    .then((r) => r.json())
+                    .then((d) => setFixHits(Array.isArray(d.streams) ? d.streams.map((s: { id: string; name: string }) => ({ id: s.id, name: s.name })) : []))
+                    .catch(() => setFixHits([]));
+                }}
+              >
+                Find
+              </button>
+            </div>
+            {fixHits.map((s) => (
+              <div key={s.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="truncate">{s.name}</span>
+                <button
+                  type="button"
+                  disabled={fixBusy}
+                  className="shrink-0 text-xs underline"
+                  style={{ color: "var(--accent)" }}
+                  onClick={async () => {
+                    setFixBusy(true);
+                    setFixMsg("");
+                    const res = await fetch("/api/admin/stream-health", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ streamId: s.id }),
+                    });
+                    const j = await res.json().catch(() => ({}));
+                    setFixBusy(false);
+                    setFixMsg(j.message ?? j.error ?? (res.ok ? "Restart queued" : "Fix failed"));
+                  }}
+                >
+                  Fix this channel
+                </button>
+              </div>
+            ))}
+            {fixMsg ? <p className="text-xs" style={{ color: "var(--muted)" }}>{fixMsg}</p> : null}
+          </div>
+        ) : null}
       </header>
 
       <div className="space-y-3">

@@ -7,9 +7,7 @@ import { yieldEventLoop } from "@/lib/yield-event-loop";
 export function plexCatalogTitleKey(raw: string): string {
   let s = String(raw ?? "").toLowerCase();
   s = s.replace(/\(plex\)/g, " ");
-  s = s.replace(/\(\d{4}\)/g, " ");
   s = s.replace(/\[.*?\]/g, " ");
-  s = s.replace(/\b(19|20)\d{2}\b/g, " ");
   s = s.replace(
     /\b(4k|uhd|fhd|hd|sd|1080p|720p|480p|2160p|hevc|h\.?265|h\.?264|x265|x264|hdr10|hdr|dolby|atmos|web-?dl|blu-?ray|remux|proper|repack)\b/g,
     " "
@@ -115,10 +113,14 @@ export async function loadPlexCatalogIndex(integrationId: string): Promise<PlexC
     });
     if (!rows.length) break;
     for (const row of rows) {
-      if (row.streamUrl.startsWith(prefix)) {
+      const isPlexRow = row.streamUrl.startsWith(prefix);
+      if (isPlexRow) {
         plexUrls.add(row.streamUrl);
         plexByUrl.set(row.streamUrl, { id: row.id, type: row.type });
       }
+      // Only treat existing *Plex* titles as already imported. Matching any IPTV
+      // movie by stripped title skipped new Plex additions (same name / remakes).
+      if (!isPlexRow) continue;
       const hasIcon = Boolean(String(row.streamIcon ?? "").trim());
       if (row.type === StreamType.MOVIE) {
         const key = plexCatalogTitleKey(row.name);
@@ -141,14 +143,15 @@ export async function loadPlexCatalogIndex(integrationId: string): Promise<PlexC
   return { movieKeys, seriesKeys, plexUrls, plexByUrl, movieIdByKey, seriesIdByKey };
 }
 
-export function plexScheduleHours(raw: unknown): 12 | 24 {
-  const s = String(raw ?? "12h").trim().toLowerCase();
+export function plexScheduleHours(raw: unknown): 6 | 12 | 24 {
+  const s = String(raw ?? "6h").trim().toLowerCase();
   if (s === "24" || s === "24h" || s === "daily") return 24;
-  return 12;
+  if (s === "12" || s === "12h") return 12;
+  return 6;
 }
 
 /** True when enough time has passed since the last successful auto-sync. */
-export function plexAutoSyncIsDue(lastRunIso: string | null | undefined, intervalHours: 12 | 24, now = Date.now()): boolean {
+export function plexAutoSyncIsDue(lastRunIso: string | null | undefined, intervalHours: 6 | 12 | 24, now = Date.now()): boolean {
   if (!lastRunIso) return true;
   const last = Date.parse(lastRunIso);
   if (!Number.isFinite(last)) return true;
@@ -158,7 +161,7 @@ export function plexAutoSyncIsDue(lastRunIso: string | null | undefined, interva
 
 export function plexAutoSyncNextDueIso(
   lastRunIso: string | null | undefined,
-  intervalHours: 12 | 24
+  intervalHours: 6 | 12 | 24
 ): string | null {
   if (!lastRunIso) return null;
   const last = Date.parse(lastRunIso);

@@ -751,11 +751,6 @@ async function jobPlexAutoSync() {
         await reporter.fail(e instanceof Error ? e.message : "Auto-sync failed");
       }
     }
-    await prisma.panelSetting.upsert({
-      where: { key: "plex_auto_sync_last_run" },
-      update: { value: new Date().toISOString() },
-      create: { key: "plex_auto_sync_last_run", value: new Date().toISOString() },
-    });
     await logCron(
       "plex_auto_sync",
       "ok",

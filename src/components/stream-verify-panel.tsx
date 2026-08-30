@@ -84,7 +84,7 @@ export function StreamVerifyPanel() {
 
   useEffect(() => {
     load();
-    return startVisibleInterval(load, 30_000);
+    return startVisibleInterval(load, 5 * 60 * 1000);
   }, [load]);
 
   const tabs: { id: Tab; label: string }[] = [
