@@ -268,7 +268,7 @@ export function LineEditForm({
             []
           )
             .filter((u) => u.role === "RESELLER" || u.role === "SUB_RESELLER")
-            .map((u) => ({ id: u.id, username: u.username }))
+            .map((u) => ({ id: u.id, username: u.username })))
         );
       })
       .catch(() => setLoadError("Could not load line"))
