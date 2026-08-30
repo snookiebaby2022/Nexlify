@@ -1284,7 +1284,7 @@ function catalogActionCacheable(url) {
   // Xtream login (username/password, no action) must not wait on catalog cache/build.
   if (!m) return false;
   const action = decodeURIComponent(m[1]).toLowerCase();
-  return /^(get_live_categories|get_vod_categories|get_series_categories|get_live_streams|get_vod_streams|get_series|get_series_info|get_simple_data_table|get_epg_channels)$/.test(
+  return /^(get_live_categories|get_vod_categories|get_series_categories|get_live_streams)$/.test(
     action
   );
 }

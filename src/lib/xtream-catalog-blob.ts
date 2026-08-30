@@ -277,7 +277,7 @@ export async function ensureCatalogKind(
   if (catalogFileIsFresh(age)) return;
   await withCatalogBuildLock(destPath, async () => {
     const again = await catalogFileAgeMs(destPath);
-    if (again != null) return "existing" as const;
+    if (catalogFileIsFresh(again)) return "existing" as const;
     await buildCatalogGzip(destPath, kind, line, "all", excludeDisabled);
     return "built" as const;
   });

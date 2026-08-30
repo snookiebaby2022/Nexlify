@@ -5,8 +5,8 @@ import path from "node:path";
 import { createGzip, type Gzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 
-export const CATALOG_BLOB_VERSION = "v12";
-export const CATALOG_TTL_MS = 2 * 60 * 1000;
+export const CATALOG_BLOB_VERSION = "v13";
+export const CATALOG_TTL_MS = 30 * 1000;
 export const CATALOG_STALE_MS = 20 * 60 * 1000;
 /** Dead builders must not pin XCIPTV Update Content for minutes. */
 const LOCK_STALE_MS = 45_000;
@@ -184,6 +184,7 @@ export async function withCatalogBuildLock<T>(
       const code = (err as NodeJS.ErrnoException).code;
       if (code !== "EEXIST") throw err;
       const age = await catalogFileAgeMs(destPath);
+      // Waiters may serve the current file while a rebuild holds the lock.
       if (catalogFileIsUsable(age)) return "existing";
       const stole = await stealCatalogLockIfIdle(lockPath);
       if (stole) continue;
@@ -198,7 +199,9 @@ export async function withCatalogBuildLock<T>(
     }
   }
   const existing = await catalogFileAgeMs(destPath);
-  if (catalogFileIsUsable(existing)) {
+  // Only skip SQL when the blob is still fresh. Stale VOD blobs were never
+  // rebuilt, so XCIPTV Latest Movies kept yesterday's catalog.
+  if (catalogFileIsFresh(existing)) {
     await fs.unlink(lockPath).catch(() => undefined);
     return "existing";
   }

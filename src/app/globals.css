@@ -233,8 +233,25 @@ button {
   min-height: 100dvh;
 }
 
-/* Do not use CSS zoom on the shell — it breaks click hit-testing on
-   bottom-right controls (list pagination Next) in Chromium. */
+/* Desktop panel at browser 100% is laid out at 75% (same as window zoom 75%).
+   CSS zoom scales layout + hit-testing together; apply on the shell so fixed
+   chrome stays inside the same zoom context. Phones keep 100%. */
+@media (min-width: 768px) {
+  .panel-shell {
+    zoom: 0.75;
+  }
+}
+
+@supports not (zoom: 0.75) {
+  @media (min-width: 768px) {
+    .panel-shell {
+      transform: scale(0.75);
+      transform-origin: 0 0;
+      width: 133.333vw;
+      min-height: 133.333vh;
+    }
+  }
+}
 
 .panel-sidebar-column {
   position: relative;
