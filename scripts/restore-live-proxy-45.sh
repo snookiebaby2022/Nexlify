@@ -113,7 +113,8 @@ for p in [
         count=1,
     )
     if count != 1:
-        raise SystemExit(f"media location not found exactly once in {p}")
+        print(f"skip {p}: media location not found exactly once (count={count})")
+        continue
     p.write_text(t)
     print("patched", p)
 PY
