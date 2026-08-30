@@ -416,8 +416,8 @@ async function backfillPlexArtworkIcons(
       const next = plexArtworkUrl(parsed.integrationId, parsed.itemId, origin);
       if (row.streamIcon === next) continue;
       ops.push(prisma.stream.update({ where: { id: row.id }, data: { streamIcon: next } }));
-      if (ops.length >= 20) {
-        await Promise.all(ops);
+      if (ops.length >= 5) {
+        for (const op of ops) await op;
         ops.length = 0;
         await reporter?.note(`Updating poster links… ${seen.toLocaleString()}`, {
           titleCurrent: seen,
@@ -430,7 +430,9 @@ async function backfillPlexArtworkIcons(
     if (rows.length < 500) break;
     await yieldEventLoop();
   }
-  if (ops.length) await Promise.all(ops);
+  if (ops.length) {
+    for (const op of ops) await op;
+  }
 }
 
 /** Strip legacy "(Plex)" suffixes from stream titles — source is shown separately in the UI. */
@@ -1008,18 +1010,28 @@ export async function importPlexLibrary(
   const flushIcons = async () => {
     if (!pendingIcons.length) return;
     const batch = pendingIcons.splice(0, pendingIcons.length);
-    await Promise.all(
-      batch.map((row) =>
-        prisma.stream.update({
+    for (const row of batch) {
+      await prisma.stream.update({
+        where: { id: row.id },
+        data: {
+          ...(row.streamIcon ? { streamIcon: row.streamIcon } : {}),
+          ...(row.categoryId ? { categoryId: row.categoryId } : {}),
+          ...(row.agentStartCmd ? { agentStartCmd: row.agentStartCmd } : {}),
+        },
+      }).catch(async (err) => {
+        const msg = err instanceof Error ? err.message : "";
+        if (!/too many clients/i.test(msg)) throw err;
+        await new Promise((r) => setTimeout(r, 750));
+        await prisma.stream.update({
           where: { id: row.id },
           data: {
             ...(row.streamIcon ? { streamIcon: row.streamIcon } : {}),
             ...(row.categoryId ? { categoryId: row.categoryId } : {}),
             ...(row.agentStartCmd ? { agentStartCmd: row.agentStartCmd } : {}),
           },
-        })
-      )
-    );
+        });
+      });
+    }
   };
 
   await reporter?.counts({ total: selected.length, current: 0 });

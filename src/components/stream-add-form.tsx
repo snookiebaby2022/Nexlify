@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Calendar, FileText, Globe, Info, Server, Settings } from "lucide-react";
-import { StreamSourcesPanel } from "@/components/stream-sources-panel";
 import { XuiFormTabs, type XuiFormTab } from "@/components/xui-form-tabs";
 import { TmdbSearch } from "@/components/tmdb-search";
 import { ProviderSourceFields, OnDemandStreamFields } from "@/components/provider-source-fields";
@@ -388,7 +387,53 @@ function LiveStreamForm({
 
         <XuiFormTabs tabs={LIVE_ADD_TABS} active={addTab} onChange={setAddTab} />
 
-        {addTab === "sources" && <StreamSourcesPanel embedded />}
+        {addTab === "sources" && insertMode === "single" && (
+          <div className="space-y-3">
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              XUI-style stream sources for this channel. First URL is primary; extra rows are failover backups.
+            </p>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                Source URLs <span style={{ color: "#ef4444" }}>*</span>
+              </span>
+              <button
+                type="button"
+                className="text-xs px-2.5 py-1 rounded border cursor-pointer"
+                style={{ borderColor: "#00c0ef", color: "#7dd3fc" }}
+                onClick={() => setSources((s) => [...s, ""])}
+              >
+                + Source
+              </button>
+            </div>
+            <div className="space-y-2">
+              {sources.map((src, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    className={`${formInputClass} flex-1 font-mono text-sm`}
+                    style={formInputStyle}
+                    placeholder={i === 0 ? "Primary http://…" : "Backup source URL"}
+                    value={src}
+                    onChange={(e) => setSource(i, e.target.value)}
+                    required={i === 0}
+                  />
+                  {sources.length > 1 && (
+                    <button
+                      type="button"
+                      className="text-xs px-3 shrink-0 cursor-pointer rounded border"
+                      style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
+                      onClick={() => setSources((s) => s.filter((_, j) => j !== i))}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {sources[0]?.trim() ? (
+              <StreamProbePlayer compact streamUrl={sources[0].trim()} name={form.name || undefined} />
+            ) : null}
+          </div>
+        )}
 
         {addTab === "details" && (
           <div className="space-y-4">
@@ -455,56 +500,9 @@ function LiveStreamForm({
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                   />
                 </FormField>
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-sm font-medium">
-                      Source <span style={{ color: "#ef4444" }}>*</span>
-                    </span>
-                    <button
-                      type="button"
-                      className="text-xs px-2.5 py-1 rounded border cursor-pointer"
-                      style={{ borderColor: "#00c0ef", color: "#7dd3fc" }}
-                      onClick={() => setSources((s) => [...s, ""])}
-                    >
-                      + 1
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {sources.map((src, i) => (
-                      <div key={i} className="flex gap-2">
-                        <input
-                          className={`${formInputClass} flex-1 font-mono text-sm`}
-                          style={formInputStyle}
-                          placeholder={i === 0 ? "http://example.com/stream.m3u8" : "Backup source URL"}
-                          value={src}
-                          onChange={(e) => setSource(i, e.target.value)}
-                          required={i === 0}
-                        />
-                        {sources.length > 1 && (
-                          <button
-                            type="button"
-                            className="text-xs px-3 shrink-0 cursor-pointer rounded border"
-                            style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
-                            onClick={() => setSources((s) => s.filter((_, j) => j !== i))}
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  {sources[0]?.trim() && (
-                    <div
-                      className="mt-3 rounded-lg border p-3"
-                      style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.15)" }}
-                    >
-                      <p className="text-xs font-medium mb-2" style={{ color: "var(--muted)" }}>
-                        Check source before saving
-                      </p>
-                      <StreamProbePlayer compact streamUrl={sources[0].trim()} name={form.name || undefined} />
-                    </div>
-                  )}
-                </div>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  Stream URLs are on the Sources tab (primary + backups), same as XUI.
+                </p>
               </>
             )}
 

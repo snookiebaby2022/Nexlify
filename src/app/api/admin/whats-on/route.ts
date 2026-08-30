@@ -5,39 +5,74 @@ import { prisma } from "@/lib/prisma";
 import { parseLiveStreamMeta } from "@/lib/stream-live-meta";
 import { displayCatalogStreamName } from "@/lib/stream-catalog-name";
 
-export async function GET() {
-  const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
-  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+type Item = {
+  id: string;
+  catalogName: string;
+  nowPlaying: string;
+  category: string;
+  country: string;
+};
 
-  const rows = await prisma.stream.findMany({
+let cache: { at: number; items: Item[] } | null = null;
+const CACHE_MS = 45_000;
+
+async function loadWhatsOn(): Promise<Item[]> {
+  const now = new Date();
+  const streams = await prisma.stream.findMany({
     where: { type: "LIVE", isActive: true, epgChannelId: { not: null } },
     select: {
       id: true,
       name: true,
+      epgChannelId: true,
       agentStartCmd: true,
       category: { select: { name: true } },
     },
-    take: 200,
+    take: 400,
     orderBy: { sortOrder: "asc" },
   });
 
-  const items = rows
+  const epgIds = [...new Set(streams.map((s) => s.epgChannelId).filter((id): id is string => Boolean(id)))];
+  const programs =
+    epgIds.length === 0
+      ? []
+      : await prisma.epgProgram.findMany({
+          where: {
+            channelId: { in: epgIds },
+            start: { lte: now },
+            stop: { gt: now },
+          },
+          select: { channelId: true, title: true },
+        });
+  const titleByChannel = new Map<string, string>();
+  for (const p of programs) {
+    if (p.title.trim() && !titleByChannel.has(p.channelId)) {
+      titleByChannel.set(p.channelId, p.title.trim());
+    }
+  }
+
+  return streams
     .map((s) => {
       const meta = parseLiveStreamMeta(s.agentStartCmd);
       const catalog = displayCatalogStreamName(meta.catalogName || s.name);
-      const now = meta.nowPlayingTitle?.trim() || "";
+      const nowPlaying =
+        titleByChannel.get(s.epgChannelId ?? "") || meta.nowPlayingTitle?.trim() || "";
       const cat = s.category?.name ?? "";
       const country = cat.split("|")[0]?.trim() || cat.split(" ")[0] || "";
-      return {
-        id: s.id,
-        catalogName: catalog,
-        nowPlaying: now,
-        category: cat,
-        country,
-      };
+      return { id: s.id, catalogName: catalog, nowPlaying, category: cat, country };
     })
     .filter((r) => r.nowPlaying)
     .slice(0, 80);
+}
 
+export async function GET() {
+  const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  if (cache && Date.now() - cache.at < CACHE_MS) {
+    return NextResponse.json({ items: cache.items, at: new Date(cache.at).toISOString() });
+  }
+
+  const items = await loadWhatsOn();
+  cache = { at: Date.now(), items };
   return NextResponse.json({ items, at: new Date().toISOString() });
 }

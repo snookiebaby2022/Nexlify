@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Calendar, FileText, Globe, Info, Server, Settings } from "lucide-react";
-import { StreamSourcesPanel } from "@/components/stream-sources-panel";
 import { StreamProbePlayer } from "@/components/stream-probe-player";
 import { StreamLiveInfo } from "@/components/stream-live-info";
 import {
@@ -643,7 +642,34 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
 
           {editTab === "details" && <div className="space-y-4">{detailsFields}</div>}
 
-          {editTab === "sources" && <StreamSourcesPanel embedded />}
+          {editTab === "sources" && (
+            <div className="space-y-4">
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Sources for this channel only — primary URL plus failover backup (XUI-style). To replace a
+                host across every stream, use Manage Streams → Sources.
+              </p>
+              <FormField label="Primary source URL" required>
+                <input
+                  className={`${formInputClass} font-mono text-xs`}
+                  style={formInputStyle}
+                  value={form.streamUrl}
+                  onChange={(e) => setForm({ ...form, streamUrl: e.target.value })}
+                />
+              </FormField>
+              <FormField label="Backup source URL (failover)">
+                <input
+                  className={`${formInputClass} font-mono text-xs`}
+                  style={formInputStyle}
+                  value={form.backupUrl}
+                  onChange={(e) => setForm({ ...form, backupUrl: e.target.value })}
+                  placeholder="http://backup.example.com/stream.m3u8"
+                />
+              </FormField>
+              {form.streamUrl.trim() ? (
+                <StreamProbePlayer compact streamUrl={form.streamUrl.trim()} name={form.name || undefined} />
+              ) : null}
+            </div>
+          )}
 
           {editTab === "meta" && form.type === "LIVE" && (
             <div className="xui-vod-info-form">

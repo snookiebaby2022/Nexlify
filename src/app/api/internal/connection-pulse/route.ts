@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedInternalRequest } from "@/lib/internal-request";
 import { pulseLiveConnection } from "@/lib/connection-pulse";
+import { getClientIp } from "@/lib/client-ip";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
   await pulseLiveConnection({
     lineId,
     streamId,
-    ip: body.ip ?? null,
+    ip: body.ip || getClientIp(req) || null,
     bytes: body.bytes,
   }).catch(() => undefined);
 

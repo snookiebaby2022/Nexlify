@@ -7,6 +7,7 @@ type Item = { id: string; catalogName: string; nowPlaying: string; category: str
 export function WhatsOnNow({ apiUrl = "/api/admin/whats-on" }: { apiUrl?: string }) {
   const [items, setItems] = useState<Item[]>([]);
   const [at, setAt] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     function load() {
@@ -16,7 +17,8 @@ export function WhatsOnNow({ apiUrl = "/api/admin/whats-on" }: { apiUrl?: string
           setItems(Array.isArray(d.items) ? d.items : []);
           setAt(d.at ?? "");
         })
-        .catch(() => setItems([]));
+        .catch(() => setItems([]))
+        .finally(() => setLoading(false));
     }
     load();
     const t = setInterval(load, 60_000);
@@ -32,7 +34,11 @@ export function WhatsOnNow({ apiUrl = "/api/admin/whats-on" }: { apiUrl?: string
           {at ? ` Updated ${new Date(at).toLocaleTimeString()}.` : ""}
         </p>
       </div>
-      {!items.length ? (
+      {loading ? (
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          Loading current programmes…
+        </p>
+      ) : !items.length ? (
         <p className="text-sm" style={{ color: "var(--muted)" }}>
           No current programmes yet. EPG sync fills this every few minutes.
         </p>

@@ -17,6 +17,12 @@ function postgresUrlWithUtcTimezone(url: string | undefined): string | undefined
     if (!/TimeZone\s*=\s*UTC/i.test(url) && !/TimeZone\s*=\s*UTC/i.test(current)) {
       parsed.searchParams.set("options", `${current} -c TimeZone=UTC`.trim());
     }
+    if (!parsed.searchParams.has("connection_limit")) {
+      parsed.searchParams.set("connection_limit", process.env.PRISMA_CONNECTION_LIMIT || "5");
+    }
+    if (!parsed.searchParams.has("pool_timeout")) {
+      parsed.searchParams.set("pool_timeout", "15");
+    }
     return parsed.toString().replace(/^http:\/\//, `${scheme}://`);
   } catch {
     const sep = url.includes("?") ? "&" : "?";
