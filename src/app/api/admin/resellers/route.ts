@@ -200,6 +200,7 @@ export async function PATCH(req: NextRequest) {
     maxLines?: number;
     defaultLanguage?: string;
     profitPercent?: number;
+    apiKey?: string;
   } = {};
 
   if (body.isActive !== undefined) data.isActive = Boolean(body.isActive);
@@ -277,6 +278,11 @@ export async function PATCH(req: NextRequest) {
   const nextParentId = data.parentId !== undefined ? data.parentId : existing.parentId;
   const ownerErr = await assertValidOwner(id, nextParentId ?? null);
   if (ownerErr) return NextResponse.json({ error: ownerErr }, { status: 400 });
+
+  if (body.regenerateApiKey === true) {
+    const { generatePanelApiKey } = await import("@/lib/panel-api-caller");
+    data.apiKey = generatePanelApiKey();
+  }
 
   try {
     const user = await prisma.panelUser.update({

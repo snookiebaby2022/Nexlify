@@ -5,12 +5,24 @@ import { kickLineConnections, listActiveConnections } from "./connections";
 import { PanelRole, Prisma, StreamType, CategoryType } from "@prisma/client";
 import { generatePassword, parseBoundedInt, parseCategoryType, parseStreamType } from "./xui-api-utils";
 import { validateLineCredential } from "./credential-generate";
+import {
+  type PanelApiCaller,
+  userScopeWhere,
+  assertLineInScope,
+  assertUserInScope,
+  assertUserByUsernameInScope,
+} from "./panel-api-caller";
+import { assertResellerCanCreateLine } from "./reseller-line-guards";
+import { debitResellerCredits, sessionPaysLineCredits } from "./reseller-credit-charge";
+import { chargeLineRenewCredits } from "./line-renew-credits";
 
 export async function handleXuiExtendedAction(
   action: string,
   params: URLSearchParams,
-  adminId: string
+  caller: PanelApiCaller
 ): Promise<{ status: string; message?: string; [key: string]: unknown } | null> {
+  const actorId = caller.id;
+
   switch (action) {
     case "get_categories": {
       const categoryType = parseCategoryType(params.get("category_type") ?? params.get("type"));
@@ -28,11 +40,56 @@ export async function handleXuiExtendedAction(
 
     case "add_credits": {
       const username = params.get("username") ?? params.get("reseller");
-      const amount = parseBoundedInt(params.get("credits") ?? params.get("amount"), 0, -1_000_000, 1_000_000);
+      const amount = parseBoundedInt(params.get("credits") ?? params.get("amount"), 0, 1, 1_000_000);
       if (!username) return { status: "error", message: "username required" };
       if (!amount) return { status: "error", message: "credits required" };
-      const user = await prisma.panelUser.findUnique({ where: { username } });
-      if (!user) return { status: "error", message: "not found" };
+
+      const target = await assertUserByUsernameInScope(username, caller);
+      if (!target.ok) return { status: "error", message: target.message };
+      const user = target.user;
+
+      if (!caller.isAdmin) {
+        if (user.parentId !== caller.id) {
+          return { status: "error", message: "not found" };
+        }
+        const parent = await prisma.panelUser.findUnique({
+          where: { id: caller.id },
+          select: { credits: true },
+        });
+        if (!parent || parent.credits < amount) {
+          return { status: "error", message: "Insufficient credits" };
+        }
+
+        const updated = await prisma.$transaction(async (tx) => {
+          await debitResellerCredits(tx, {
+            userId: caller.id,
+            amount,
+            note: params.get("note") ?? `api add_credits ${username}`,
+          });
+          const child = await tx.panelUser.update({
+            where: { id: user.id },
+            data: { credits: { increment: amount } },
+          });
+          await tx.creditTransaction.create({
+            data: {
+              userId: user.id,
+              amount,
+              balanceAfter: child.credits,
+              note: params.get("note") ?? "api add_credits",
+            },
+          }).catch(() => undefined);
+          return child;
+        });
+
+        await logActivity("api_add_credits", {
+          userId: actorId,
+          entity: "user",
+          entityId: user.id,
+          meta: { amount },
+        });
+        return { status: "success", username, credits: updated.credits };
+      }
+
       const updated = await prisma.panelUser.update({
         where: { id: user.id },
         data: { credits: { increment: amount } },
@@ -45,7 +102,7 @@ export async function handleXuiExtendedAction(
           note: params.get("note") ?? "api add_credits",
         },
       }).catch(() => undefined);
-      await logActivity("api_add_credits", { userId: adminId, entity: "user", entityId: user.id, meta: { amount } });
+      await logActivity("api_add_credits", { userId: actorId, entity: "user", entityId: user.id, meta: { amount } });
       return { status: "success", username, credits: updated.credits };
     }
 
@@ -65,7 +122,10 @@ export async function handleXuiExtendedAction(
     case "get_reg_users":
     case "get_resellers": {
       const users = await prisma.panelUser.findMany({
-        where: { role: { in: [PanelRole.RESELLER, PanelRole.SUB_RESELLER] } },
+        where: {
+          role: { in: [PanelRole.RESELLER, PanelRole.SUB_RESELLER] },
+          ...userScopeWhere(caller),
+        },
         select: {
           id: true,
           username: true,
@@ -99,8 +159,10 @@ export async function handleXuiExtendedAction(
     case "kill_connections": {
       const lineId = params.get("line_id") ?? params.get("id");
       if (!lineId) return { status: "error", message: "line_id required" };
+      const scope = await assertLineInScope(lineId, caller);
+      if (!scope.ok) return { status: "error", message: scope.message };
       const kicked = await kickLineConnections(lineId);
-      await logActivity("api_kick_line", { userId: adminId, lineId, entityId: lineId });
+      await logActivity("api_kick_line", { userId: actorId, lineId, entityId: lineId });
       return { status: "success", kicked };
     }
 
@@ -108,13 +170,24 @@ export async function handleXuiExtendedAction(
       const id = params.get("id");
       const days = parseBoundedInt(params.get("days"), 30, 1, 3650);
       if (!id) return { status: "error", message: "id required" };
+      const scope = await assertLineInScope(id, caller);
+      if (!scope.ok) return { status: "error", message: scope.message };
       const line = await prisma.line.findUnique({ where: { id } });
       if (!line) return { status: "error", message: "not found" };
       const expiresAt = new Date(Math.max(line.expiresAt.getTime(), Date.now()));
       expiresAt.setDate(expiresAt.getDate() + days);
-      const updated = await prisma.line.update({
-        where: { id },
-        data: { expiresAt, status: "ACTIVE" },
+      const updated = await prisma.$transaction(async (tx) => {
+        if (sessionPaysLineCredits(caller.role)) {
+          await chargeLineRenewCredits(tx, caller, {
+            days,
+            packageId: line.packageId ?? undefined,
+            lineUsername: line.username,
+          });
+        }
+        return tx.line.update({
+          where: { id },
+          data: { expiresAt, status: "ACTIVE" },
+        });
       });
       return { status: "success", line: updated };
     }
@@ -186,13 +259,16 @@ export async function handleXuiExtendedAction(
     case "edit_user": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
-      const existing = await prisma.panelUser.findUnique({ where: { id }, select: { id: true } });
-      if (!existing) return { status: "error", message: "not found" };
+      const scope = await assertUserInScope(id, caller);
+      if (!scope.ok) return { status: "error", message: scope.message };
       const data: Prisma.PanelUserUpdateInput = {};
       if (params.get("password")) {
         const passErr = validateLineCredential(params.get("password")!, "password");
         if (passErr) return { status: "error", message: passErr };
         data.passwordHash = await hashPassword(params.get("password")!);
+      }
+      if (params.get("credits") && !caller.isAdmin) {
+        return { status: "error", message: "use add_credits to transfer credits" };
       }
       if (params.get("credits")) data.credits = parseBoundedInt(params.get("credits"), 0, 0, 1_000_000);
       if (params.get("is_active") === "0") data.isActive = false;
@@ -204,7 +280,9 @@ export async function handleXuiExtendedAction(
     case "delete_user": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
-      if (id === adminId) return { status: "error", message: "cannot delete self" };
+      if (id === actorId) return { status: "error", message: "cannot delete self" };
+      const scope = await assertUserInScope(id, caller);
+      if (!scope.ok) return { status: "error", message: scope.message };
       const existing = await prisma.panelUser.findUnique({
         where: { id },
         select: { id: true, role: true },
@@ -219,6 +297,8 @@ export async function handleXuiExtendedAction(
       const mac = params.get("mac");
       const lineId = params.get("line_id");
       if (!mac || !lineId) return { status: "error", message: "mac and line_id required" };
+      const scope = await assertLineInScope(lineId, caller);
+      if (!scope.ok) return { status: "error", message: scope.message };
       const device = await prisma.magDevice.create({ data: { mac, lineId } });
       return { status: "success", mag_device: device };
     }
@@ -295,9 +375,13 @@ export async function handleXuiExtendedAction(
     case "assign_bouquets_to_line": {
       const lineId = params.get("line_id") ?? params.get("id");
       if (!lineId) return { status: "error", message: "line_id required" };
+      const scope = await assertLineInScope(lineId, caller);
+      if (!scope.ok) return { status: "error", message: scope.message };
       const bouquetIds = params.getAll("bouquet[]").length
         ? params.getAll("bouquet[]")
         : (params.get("bouquets")?.split(",").filter(Boolean) ?? []);
+      const guard = await assertResellerCanCreateLine(caller, bouquetIds);
+      if (!guard.ok) return { status: "error", message: guard.error };
       await prisma.lineBouquet.deleteMany({ where: { lineId } });
       if (bouquetIds.length) {
         await prisma.lineBouquet.createMany({
@@ -407,6 +491,7 @@ export async function handleXuiExtendedAction(
     }
 
     case "assign_bouquet_to_reseller": {
+      if (!caller.isAdmin) return { status: "error", message: "not found" };
       const userId = params.get("user_id") ?? params.get("reseller_id");
       const bouquetId = params.get("bouquet_id");
       if (!userId || !bouquetId) return { status: "error", message: "user_id and bouquet_id required" };
@@ -419,11 +504,19 @@ export async function handleXuiExtendedAction(
     }
 
     case "get_dashboard": {
+      const lineWhere = caller.isAdmin ? {} : { ownerId: caller.id };
       const [lines, streams, connections, resellers] = await Promise.all([
-        prisma.line.count(),
+        prisma.line.count({ where: lineWhere }),
         prisma.stream.count({ where: { isActive: true } }),
-        prisma.liveConnection.count(),
-        prisma.panelUser.count({ where: { role: { in: [PanelRole.RESELLER, PanelRole.SUB_RESELLER] } } }),
+        prisma.liveConnection.count({
+          where: caller.isAdmin ? undefined : { line: { ownerId: caller.id } },
+        }),
+        prisma.panelUser.count({
+          where: {
+            role: { in: [PanelRole.RESELLER, PanelRole.SUB_RESELLER] },
+            ...userScopeWhere(caller),
+          },
+        }),
       ]);
       return {
         status: "success",
@@ -433,6 +526,9 @@ export async function handleXuiExtendedAction(
 
     case "get_events": {
       const logs = await prisma.activityLog.findMany({
+        where: caller.isAdmin
+          ? undefined
+          : { OR: [{ userId: caller.id }, { line: { ownerId: caller.id } }] },
         take: parseBoundedInt(params.get("limit"), 50, 1, 200),
         orderBy: { createdAt: "desc" },
       });
@@ -442,14 +538,14 @@ export async function handleXuiExtendedAction(
     case "user_info":
     case "get_user_info": {
       const user = await prisma.panelUser.findUnique({
-        where: { id: adminId },
+        where: { id: actorId },
         select: { id: true, username: true, role: true, credits: true },
       });
       return { status: "success", user_info: user };
     }
 
     case "get_connection_stats": {
-      const connections = await listActiveConnections();
+      const connections = await listActiveConnections(caller.isAdmin ? undefined : caller.id);
       return {
         status: "success",
         open_connections: connections.length,
@@ -473,7 +569,7 @@ export async function handleXuiExtendedAction(
           passwordHash: await hashPassword(password),
           role: PanelRole.STAFF,
           permissions: permissionsForPreset(preset),
-          parentId: adminId,
+          parentId: actorId,
         },
       });
       return { status: "success", staff: { id: staff.id, username: staff.username }, password };

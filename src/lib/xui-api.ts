@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { prisma } from "./prisma";
 import { hashPassword } from "./auth";
 import { logActivity } from "./lines";
@@ -8,52 +7,39 @@ import { PanelRole, Prisma, StreamType } from "@prisma/client";
 import { handleXuiExtendedAction } from "./xui-api-extended";
 import {
   generatePassword,
-  hmacHex,
-  hmacHexEqual,
-  hmacPayloadFromSearchParams,
   parseBoundedInt,
   parseStreamType,
 } from "./xui-api-utils";
-import { hasPermission, PERMS } from "./staff-permissions";
 import { validateLineCredential } from "./credential-generate";
+import {
+  type PanelApiCaller,
+  lineScopeWhere,
+  userScopeWhere,
+  connectionScopeWhere,
+  assertLineInScope,
+} from "./panel-api-caller";
+import { assertResellerCanCreateLine, assertRoleMaySetUnlimited } from "./reseller-line-guards";
+import { debitResellerCredits, sessionPaysLineCredits } from "./reseller-credit-charge";
+import { resolveLineCreateFromPackage } from "./package-line";
+import { getResellerBouquetIds } from "./reseller-bouquet-scope";
 
-export async function authenticateAdminApi(req: NextRequest, params?: URLSearchParams) {
-  const p = params ?? req.nextUrl.searchParams;
-  const apiKey = p.get("api_key") ?? req.headers.get("x-api-key");
-  const accessCode = p.get("access_code");
-  if (!apiKey) return null;
-
-  const hmacSig = req.headers.get("x-nexlify-signature") ?? p.get("hmac");
-  const hmacKey = await prisma.panelSetting.findUnique({ where: { key: "hmac_api_secret" } });
-
-  if (hmacSig && hmacKey?.value) {
-    const expected = hmacHex(hmacKey.value, hmacPayloadFromSearchParams(p));
-    if (!hmacHexEqual(hmacSig, expected)) return null;
-  }
-
-  const user = await prisma.panelUser.findFirst({
-    where: {
-      apiKey,
-      isActive: true,
-      ...(accessCode ? { accessCode } : {}),
-      OR: [
-        { role: PanelRole.ADMIN },
-        { role: PanelRole.STAFF, permissions: { has: PERMS.API_ACCESS } },
-      ],
-    },
-  });
-  if (user && user.role === PanelRole.STAFF && !hasPermission(user, PERMS.API_ACCESS)) return null;
-  return user;
-}
+export {
+  authenticatePanelApi,
+  authenticateAdminApi,
+} from "./panel-api-caller";
 
 export async function handleXuiAction(
   action: string,
   params: URLSearchParams,
-  adminId: string
+  caller: PanelApiCaller
 ) {
+  const actorId = caller.id;
+
   switch (action) {
     case "get_bouquets": {
+      const allowedIds = caller.isAdmin ? null : await getResellerBouquetIds(caller);
       const bouquets = await prisma.bouquet.findMany({
+        where: allowedIds?.length ? { id: { in: allowedIds } } : undefined,
         include: { streams: { include: { stream: true } } },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       });
@@ -63,6 +49,7 @@ export async function handleXuiAction(
     case "get_users": {
       const take = parseBoundedInt(params.get("limit"), 500, 1, 1000);
       const users = await prisma.panelUser.findMany({
+        where: userScopeWhere(caller),
         take,
         select: {
           id: true,
@@ -80,6 +67,7 @@ export async function handleXuiAction(
     case "get_lines": {
       const take = parseBoundedInt(params.get("limit"), 1000, 1, 5000);
       const lines = await prisma.line.findMany({
+        where: lineScopeWhere(caller),
         take,
         include: { bouquets: { include: { bouquet: true } } },
         orderBy: { createdAt: "desc" },
@@ -90,6 +78,8 @@ export async function handleXuiAction(
     case "get_line": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
+      const scope = await assertLineInScope(id, caller);
+      if (!scope.ok) return { status: "error", message: scope.message };
       const line = await prisma.line.findUnique({
         where: { id },
         include: { bouquets: true },
@@ -131,6 +121,7 @@ export async function handleXuiAction(
     case "get_mag": {
       const take = parseBoundedInt(params.get("limit"), 1000, 1, 5000);
       const devices = await prisma.magDevice.findMany({
+        where: caller.isAdmin ? undefined : { line: { ownerId: caller.id } },
         take,
         include: { line: { select: { username: true } } },
         orderBy: { createdAt: "desc" },
@@ -141,6 +132,7 @@ export async function handleXuiAction(
     case "live_connections": {
       const take = parseBoundedInt(params.get("limit"), 1000, 1, 5000);
       const connections = await prisma.liveConnection.findMany({
+        where: connectionScopeWhere(caller),
         take,
         include: {
           line: { select: { username: true } },
@@ -154,6 +146,11 @@ export async function handleXuiAction(
     case "activity_logs": {
       const take = parseBoundedInt(params.get("limit"), 100, 1, 500);
       const logs = await prisma.activityLog.findMany({
+        where: caller.isAdmin
+          ? undefined
+          : {
+              OR: [{ userId: caller.id }, { line: { ownerId: caller.id } }],
+            },
         take,
         orderBy: { createdAt: "desc" },
         include: {
@@ -165,17 +162,19 @@ export async function handleXuiAction(
     }
 
     case "get_access_codes": {
+      if (!caller.isAdmin) return { status: "error", message: "not found" };
       const codes = await prisma.accessCode.findMany({ orderBy: { createdAt: "desc" } });
       return { status: "success", access_codes: codes };
     }
 
     case "get_analytics": {
       const topChannels = await prisma.lineChannelWatch.findMany({
+        where: caller.isAdmin ? undefined : { line: { ownerId: caller.id } },
         orderBy: { watchCount: "desc" },
         take: 20,
         include: { stream: { select: { id: true, name: true, type: true } } },
       });
-      const connections = await listActiveConnections();
+      const connections = await listActiveConnections(caller.isAdmin ? undefined : caller.id);
       return {
         status: "success",
         online_connections: connections.length,
@@ -198,18 +197,26 @@ export async function handleXuiAction(
         ? params.getAll("bouquet[]")
         : (params.get("bouquets")?.split(",") ?? []).filter(Boolean);
       const packageId = params.get("package_id") ?? params.get("package");
+      let creditCost = 0;
+
       if (packageId) {
-        const { resolveLineCreateFromPackage } = await import("./package-line");
-        const resolved = await resolveLineCreateFromPackage({
-          packageId,
-          days,
-          maxConnections,
-          bouquetIds,
-        });
-        days = resolved.days;
-        maxConnections = resolved.maxConnections;
-        if (resolved.bouquetIds.length) bouquetIds = resolved.bouquetIds;
+        try {
+          const resolved = await resolveLineCreateFromPackage(
+            { packageId, days, maxConnections, bouquetIds },
+            { sellerId: caller.isAdmin ? null : caller.id }
+          );
+          days = resolved.days;
+          maxConnections = resolved.maxConnections;
+          if (resolved.bouquetIds.length) bouquetIds = resolved.bouquetIds;
+          creditCost = resolved.creditCost;
+        } catch (e) {
+          return { status: "error", message: e instanceof Error ? e.message : String(e) };
+        }
+      } else if (sessionPaysLineCredits(caller.role)) {
+        const { creditCostForDays, effectiveCreditCost } = await import("./package-credits");
+        creditCost = effectiveCreditCost(days, creditCostForDays(days), false);
       }
+
       const authMode = params.get("auth_mode") === "active_code" ? "ACTIVE_CODE" : "USERNAME_PASSWORD";
       const activeCode = params.get("active_code")?.trim().toUpperCase() || null;
 
@@ -226,27 +233,61 @@ export async function handleXuiAction(
       const passErr = validateLineCredential(password, "password");
       if (passErr) return { status: "error", message: passErr };
 
+      const unlimitedGuard = assertRoleMaySetUnlimited(caller.role, { days });
+      if (!unlimitedGuard.ok) return { status: "error", message: unlimitedGuard.error };
+
+      const guard = await assertResellerCanCreateLine(caller, bouquetIds);
+      if (!guard.ok) return { status: "error", message: guard.error };
+
+      if (!caller.isAdmin && !bouquetIds.length) {
+        return { status: "error", message: "Select at least one bouquet for this line" };
+      }
+
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + days);
+      const ownerId = caller.isAdmin ? undefined : caller.id;
 
-      const line = await prisma.line.create({
-        data: {
-          username: username ?? activeCode!,
-          password: authMode === "ACTIVE_CODE" ? (password || activeCode!) : password,
-          maxConnections,
-          expiresAt,
-          authMode,
-          activeCode: authMode === "ACTIVE_CODE" ? activeCode : null,
-          packageId: packageId || undefined,
-          bouquets: {
-            create: bouquetIds.map((bouquetId) => ({ bouquetId })),
+      const line = await prisma.$transaction(async (tx) => {
+        if (sessionPaysLineCredits(caller.role) && creditCost > 0) {
+          await debitResellerCredits(tx, {
+            userId: caller.id,
+            amount: creditCost,
+            note: `Line ${username ?? activeCode}`,
+          });
+          const { getResellerLineRewardPercent, applyResellerLineReward } = await import(
+            "./reseller-rewards"
+          );
+          const rewardPercent = await getResellerLineRewardPercent();
+          if (rewardPercent > 0) {
+            await applyResellerLineReward(tx, {
+              userId: caller.id,
+              spent: creditCost,
+              percent: rewardPercent,
+              lineUsername: username ?? activeCode!,
+            });
+          }
+        }
+
+        return tx.line.create({
+          data: {
+            username: username ?? activeCode!,
+            password: authMode === "ACTIVE_CODE" ? (password || activeCode!) : password,
+            maxConnections,
+            expiresAt,
+            authMode,
+            activeCode: authMode === "ACTIVE_CODE" ? activeCode : null,
+            packageId: packageId || undefined,
+            ownerId,
+            bouquets: {
+              create: bouquetIds.map((bouquetId) => ({ bouquetId })),
+            },
           },
-        },
-        include: { bouquets: true },
+          include: { bouquets: true },
+        });
       });
 
       await logActivity("api_create_line", {
-        userId: adminId,
+        userId: actorId,
         lineId: line.id,
         entity: "line",
         entityId: line.id,
@@ -259,8 +300,8 @@ export async function handleXuiAction(
     case "edit_line": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
-      const existing = await prisma.line.findUnique({ where: { id }, select: { id: true } });
-      if (!existing) return { status: "error", message: "not found" };
+      const scope = await assertLineInScope(id, caller);
+      if (!scope.ok) return { status: "error", message: scope.message };
       const data: Prisma.LineUpdateInput = {};
       if (params.get("password")) {
         const nextPass = params.get("password")!;
@@ -271,8 +312,11 @@ export async function handleXuiAction(
       if (params.get("max_connections"))
         data.maxConnections = parseBoundedInt(params.get("max_connections"), 1, 1, 1000);
       if (params.get("days")) {
+        const nextDays = parseBoundedInt(params.get("days"), 30, 1, 3650);
+        const unlimitedGuard = assertRoleMaySetUnlimited(caller.role, { days: nextDays });
+        if (!unlimitedGuard.ok) return { status: "error", message: unlimitedGuard.error };
         const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + parseBoundedInt(params.get("days"), 30, 1, 3650));
+        expiresAt.setDate(expiresAt.getDate() + nextDays);
         data.expiresAt = expiresAt;
       }
       if (params.get("auth_mode") === "active_code") data.authMode = "ACTIVE_CODE";
@@ -282,27 +326,27 @@ export async function handleXuiAction(
         data,
         include: { bouquets: true },
       });
-      await logActivity("api_edit_line", { userId: adminId, lineId: line.id });
+      await logActivity("api_edit_line", { userId: actorId, lineId: line.id });
       void dispatchOutboundWebhook("line.updated", { lineId: line.id });
       return { status: "success", line };
     }
 
     case "disable_line":
-      return setLineStatus(params.get("id"), "DISABLED", adminId, "line.disabled");
+      return setLineStatus(params.get("id"), "DISABLED", caller, "line.disabled");
     case "enable_line":
-      return setLineStatus(params.get("id"), "ACTIVE", adminId, "line.enabled");
+      return setLineStatus(params.get("id"), "ACTIVE", caller, "line.enabled");
     case "ban_line":
-      return setLineStatus(params.get("id"), "BANNED", adminId, "line.banned");
+      return setLineStatus(params.get("id"), "BANNED", caller, "line.banned");
     case "unban_line":
-      return setLineStatus(params.get("id"), "ACTIVE", adminId, "line.enabled");
+      return setLineStatus(params.get("id"), "ACTIVE", caller, "line.enabled");
 
     case "delete_line": {
       const id = params.get("id");
       if (!id) return { status: "error", message: "id required" };
-      const existing = await prisma.line.findUnique({ where: { id }, select: { id: true } });
-      if (!existing) return { status: "error", message: "not found" };
+      const scope = await assertLineInScope(id, caller);
+      if (!scope.ok) return { status: "error", message: scope.message };
       await prisma.line.delete({ where: { id } });
-      await logActivity("api_delete_line", { userId: adminId, entityId: id });
+      await logActivity("api_delete_line", { userId: actorId, entityId: id });
       void dispatchOutboundWebhook("line.deleted", { lineId: id });
       return { status: "success" };
     }
@@ -317,20 +361,52 @@ export async function handleXuiAction(
       const passErr = validateLineCredential(password, "password");
       if (passErr) return { status: "error", message: passErr };
 
-      const reseller = await prisma.panelUser.create({
-        data: {
-          username,
-          passwordHash: await hashPassword(password),
-          role: PanelRole.RESELLER,
-          credits,
-          parentId: adminId,
-        },
+      const role = caller.isAdmin ? PanelRole.RESELLER : PanelRole.SUB_RESELLER;
+      if (!caller.isAdmin && credits > 0) {
+        const parent = await prisma.panelUser.findUnique({
+          where: { id: caller.id },
+          select: { credits: true },
+        });
+        if (!parent || parent.credits < credits) {
+          return { status: "error", message: "Insufficient credits" };
+        }
+      }
+
+      const reseller = await prisma.$transaction(async (tx) => {
+        if (!caller.isAdmin && credits > 0) {
+          await debitResellerCredits(tx, {
+            userId: caller.id,
+            amount: credits,
+            note: `Sub-reseller ${username}`,
+          });
+        }
+        return tx.panelUser.create({
+          data: {
+            username,
+            passwordHash: await hashPassword(password),
+            role,
+            credits,
+            parentId: caller.id,
+          },
+        });
       });
+
+      if (!caller.isAdmin && credits > 0) {
+        await prisma.creditTransaction.create({
+          data: {
+            userId: reseller.id,
+            amount: credits,
+            balanceAfter: reseller.credits,
+            note: "api create_reseller",
+          },
+        }).catch(() => undefined);
+      }
+
       return { status: "success", reseller: { id: reseller.id, username }, password };
     }
 
     default: {
-      const extended = await handleXuiExtendedAction(action, params, adminId);
+      const extended = await handleXuiExtendedAction(action, params, caller);
       if (extended) return extended;
       return { status: "error", message: `unknown action: ${action}` };
     }
@@ -340,21 +416,20 @@ export async function handleXuiAction(
 async function setLineStatus(
   id: string | null,
   status: "ACTIVE" | "DISABLED" | "BANNED",
-  adminId: string,
+  caller: PanelApiCaller,
   webhookEvent: string
 ) {
   if (!id) return { status: "error", message: "id required" };
-  const existing = await prisma.line.findUnique({ where: { id }, select: { id: true } });
-  if (!existing) return { status: "error", message: "not found" };
+  const scope = await assertLineInScope(id, caller);
+  if (!scope.ok) return { status: "error", message: scope.message };
   const line = await prisma.line.update({
     where: { id },
     data: { status },
   });
   await logActivity(`api_${status.toLowerCase()}_line`, {
-    userId: adminId,
+    userId: caller.id,
     lineId: line.id,
   });
   void dispatchOutboundWebhook(webhookEvent, { lineId: line.id, status });
   return { status: "success", line };
 }
-

@@ -1,17 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, RefreshCw } from "lucide-react";
 import { copyToClipboard } from "@/lib/copy-to-clipboard";
 
-type StreamingInfo = {
+type ApiCredentials = {
+  apiKey: string | null;
+  hasApiKey: boolean;
   baseUrl: string;
-  endpoints: {
+  panelApiUrl: string;
+  example: string | null;
+  streaming: {
     playerApi: string;
     playlist: string;
     liveStream: string;
     stalkerPortal: string;
+    magPortal: string;
   };
+  allowedActions: string[];
   note: string;
 };
 
@@ -50,26 +56,46 @@ function CopyField({ label, value }: { label: string; value: string }) {
 }
 
 export function ResellerApiInfoPage() {
-  const [info, setInfo] = useState<StreamingInfo | null>(null);
+  const [info, setInfo] = useState<ApiCredentials | null>(null);
   const [error, setError] = useState("");
+  const [regenerating, setRegenerating] = useState(false);
+
+  async function load() {
+    const r = await fetch("/api/reseller/api-credentials");
+    if (!r.ok) throw new Error("load");
+    return r.json() as Promise<ApiCredentials>;
+  }
 
   useEffect(() => {
-    fetch("/api/reseller/streaming-info")
-      .then((r) => {
-        if (!r.ok) throw new Error("load");
-        return r.json();
-      })
+    load()
       .then(setInfo)
-      .catch(() => setError("Could not load streaming endpoints."));
+      .catch(() => setError("Could not load API credentials."));
   }, []);
 
+  async function regenerateKey() {
+    if (!confirm("Generate a new API key? Existing integrations using the old key will stop working.")) {
+      return;
+    }
+    setRegenerating(true);
+    setError("");
+    try {
+      const r = await fetch("/api/reseller/api-credentials", { method: "POST" });
+      if (!r.ok) throw new Error("regenerate");
+      await load().then(setInfo);
+    } catch {
+      setError("Could not regenerate API key.");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-8 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-semibold">Streaming API</h1>
+        <h1 className="text-2xl font-semibold">API &amp; streaming URLs</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Xtream-compatible URLs for lines you manage. Use each line&apos;s username and password — not
-          your panel login.
+          Automate line management with your panel API key, or share Xtream-compatible streaming URLs
+          with customers.
         </p>
       </div>
       {error && (
@@ -78,16 +104,50 @@ export function ResellerApiInfoPage() {
         </p>
       )}
       {info && (
-        <div className="space-y-4">
-          <CopyField label="Panel / stream host" value={info.baseUrl} />
-          <CopyField label="Player API" value={info.endpoints.playerApi} />
-          <CopyField label="M3U playlist" value={info.endpoints.playlist} />
-          <CopyField label="Live stream URL" value={info.endpoints.liveStream} />
-          <CopyField label="MAG / Stalker portal" value={info.endpoints.stalkerPortal} />
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            {info.note}
-          </p>
-        </div>
+        <>
+          <section className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-medium">Panel API (automation)</h2>
+              <button
+                type="button"
+                onClick={regenerateKey}
+                disabled={regenerating}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <RefreshCw size={14} className={regenerating ? "animate-spin" : ""} />
+                {info.hasApiKey ? "Regenerate key" : "Generate key"}
+              </button>
+            </div>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              {info.note}
+            </p>
+            <CopyField label="API base URL" value={info.panelApiUrl} />
+            {info.apiKey ? (
+              <CopyField label="API key" value={info.apiKey} />
+            ) : (
+              <p className="text-sm" style={{ color: "var(--muted)" }}>
+                No API key yet — click Generate key to create one.
+              </p>
+            )}
+            {info.example && <CopyField label="Example request" value={info.example} />}
+          </section>
+
+          <section className="space-y-4">
+            <h2 className="text-lg font-medium">Streaming API (Xtream / M3U)</h2>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>
+              Use each line&apos;s username and password — not your panel login.
+              {info.baseUrl !== info.panelApiUrl.replace(/\/api\/v1$/, "") ? (
+                <> Custom DNS: <span className="font-mono">{info.baseUrl}</span>.</>
+              ) : null}
+            </p>
+            <CopyField label="Panel / stream host" value={info.baseUrl} />
+            <CopyField label="Player API" value={info.streaming.playerApi} />
+            <CopyField label="M3U playlist" value={info.streaming.playlist} />
+            <CopyField label="Live stream URL" value={info.streaming.liveStream} />
+            <CopyField label="MAG / Stalker portal" value={info.streaming.stalkerPortal} />
+          </section>
+        </>
       )}
     </div>
   );

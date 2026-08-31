@@ -6,13 +6,14 @@ import { DEFAULT_GROUP_NAV } from "@/lib/group-config";
 
 /** XUI-style reseller / sub-reseller sidebar (matches admin layout). */
 export function getResellerSidebarNav(opts?: Partial<ResellerGroupFlags>): SidebarNavEntry[] {
-  const showStreamingApi = opts?.showStreamingApi !== false;
+  const hideAllUrls = opts?.hideAllUrls === true;
+  const showApiPage = !hideAllUrls;
   const nav = { ...DEFAULT_GROUP_NAV, ...(opts?.nav ?? {}) };
   const accountItems = [
     { href: "/reseller/profile", label: "My Profile" },
     ...(nav.credits ? [{ href: "/reseller/credits", label: "My Credits" }] : []),
     { href: "/reseller/user_logs", label: "Activity Log" },
-    ...(showStreamingApi ? [{ href: "/reseller/api", label: "Streaming API" }] : []),
+    ...(showApiPage ? [{ href: "/reseller/api", label: "API" }] : []),
     { href: "/reseller/session", label: "Session" },
   ];
 
