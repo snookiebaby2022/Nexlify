@@ -112,6 +112,13 @@ export async function savePanelDomainsSettings(
     /* ignore */
   }
   syncPanelDomainsEnv(merged, resellerHosts);
+  try {
+    const { persistPanelDomainsToEnv } = await import("@/lib/panel-public-hosts");
+    const allExtras = new Set([...merged.extraDomains, ...resellerHosts]);
+    persistPanelDomainsToEnv(merged.primaryDomain, [...allExtras]);
+  } catch {
+    /* .env may be absent in dev */
+  }
   return merged;
 }
 
@@ -158,6 +165,8 @@ export function syncPanelDomainsEnv(settings: PanelDomainsSettings, extraHosts: 
     ...extraHosts.map((h) => normalizeDomain(h)).filter(Boolean),
   ]);
   process.env.PANEL_EXTRA_DOMAINS = [...extras].join(",");
+  const resellerOnly = extraHosts.map((h) => normalizeDomain(h)).filter(Boolean);
+  process.env.PANEL_RESELLER_PORTAL_HOSTS = [...new Set(resellerOnly)].join(",");
   const forceHttps = settings.forceHttps || settings.fullSslEncryption;
   const sslOn = settings.sslEnabled || settings.fullSslEncryption;
   process.env.PANEL_FORCE_HTTPS = forceHttps ? "1" : "0";

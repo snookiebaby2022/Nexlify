@@ -77,7 +77,8 @@ function upsertEnvLine(lines: string[], key: string, value: string): string[] {
   return next;
 }
 
-function persistPublicHostsToEnv(primary: string, extras: string[]) {
+/** Write PANEL_PRIMARY_DOMAIN + PANEL_EXTRA_DOMAINS to .env for all PM2 workers after restart. */
+export function persistPanelDomainsToEnv(primary: string, extras: string[]) {
   const envPath = path.join(resolvePanelRepoPathSync(), ".env");
   if (!fs.existsSync(envPath)) return;
   let raw = fs.readFileSync(envPath, "utf8");
@@ -113,7 +114,7 @@ export async function syncStreamServerPublicHosts(server: StreamServerHostFields
 
   const primaryChanged = primary !== current.primaryDomain;
   if (!primaryChanged && !extrasChanged) {
-    persistPublicHostsToEnv(primary, [...extras]);
+    persistPanelDomainsToEnv(primary, [...extras]);
     return;
   }
 
@@ -121,5 +122,5 @@ export async function syncStreamServerPublicHosts(server: StreamServerHostFields
     primaryDomain: primary,
     extraDomains: [...extras],
   });
-  persistPublicHostsToEnv(primary, [...extras]);
+  persistPanelDomainsToEnv(primary, [...extras]);
 }

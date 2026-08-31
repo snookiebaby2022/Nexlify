@@ -176,12 +176,15 @@ export async function middleware(req: NextRequest) {
   }
 
   const host = hostName(req);
+  const allowed = resolveAllowedHosts();
   // Loopback probes (audit/smoke/curl on :13000) must see real pages; public scanners still get a stealth 404.
+  // Allow /login on known panel hosts (including reseller portals) so DNS smoke tests work.
   if (
     shouldBlockBots() &&
     shouldStealthPath(pathname) &&
     isLikelyBot(req) &&
-    !isLocalHost(host)
+    !isLocalHost(host) &&
+    !(pathname === "/login" && allowed.has(host))
   ) {
     return new NextResponse(botBlockedBody(), {
       status: 404,
@@ -204,7 +207,6 @@ export async function middleware(req: NextRequest) {
   const primary = process.env.PANEL_PRIMARY_DOMAIN
     ? normalizeDomain(process.env.PANEL_PRIMARY_DOMAIN)
     : "";
-  const allowed = resolveAllowedHosts();
   const forceHttps =
     process.env.PANEL_FORCE_HTTPS === "1" ||
     process.env.PANEL_FORCE_HTTPS === "true" ||

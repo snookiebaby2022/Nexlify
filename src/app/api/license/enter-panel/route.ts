@@ -12,9 +12,10 @@ import {
   licenseEmailMatches,
 } from "@/lib/license";
 import { licenseCookieSecure } from "@/lib/license/cookie-options";
+import { licenseCheckHost } from "@/lib/domains-host";
 
 function panelHost(req: NextRequest): string {
-  return (req.headers.get("host") ?? "localhost").split(":")[0].toLowerCase();
+  return licenseCheckHost(req.headers.get("host") ?? "localhost");
 }
 
 /** Set license or trial cookie so middleware allows /admin after Continue to dashboard. */

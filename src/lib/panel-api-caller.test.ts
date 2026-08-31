@@ -26,6 +26,16 @@ test("resellerApiBaseUrl prefers resellerDns", () => {
   assert.equal(resellerApiBaseUrl(caller, "https://panel.nexlify.live"), "https://iptv.example.com");
 });
 
+test("resellerApiBaseUrl normalizes malformed resellerDns", () => {
+  const caller = callerFromUser({
+    id: "u1",
+    username: "r1",
+    role: PanelRole.RESELLER,
+    resellerDns: "http://iptv.example.com:2086/",
+  });
+  assert.equal(resellerApiBaseUrl(caller, "https://panel.nexlify.live"), "https://iptv.example.com");
+});
+
 test("resellerApiBaseUrl falls back to request origin", () => {
   const caller = callerFromUser({
     id: "u1",

@@ -31,6 +31,32 @@ function addHostFromUrl(hosts: Set<string>, raw?: string) {
   }
 }
 
+export function resellerPortalHostsFromEnv(): Set<string> {
+  const hosts = new Set<string>();
+  for (const e of (process.env.PANEL_RESELLER_PORTAL_HOSTS ?? "").split(",")) {
+    const d = normalizeDomain(e);
+    if (d) hosts.add(d);
+  }
+  return hosts;
+}
+
+export function isResellerPortalHost(host: string): boolean {
+  const h = normalizeDomain(host.split(":")[0]);
+  if (!h) return false;
+  return resellerPortalHostsFromEnv().has(h);
+}
+
+/** Reseller portal hosts inherit the primary panel license — not separate domains. */
+export function licenseCheckHost(requestHost: string): string {
+  const h = normalizeDomain(requestHost.split(":")[0]);
+  if (!h) return h;
+  if (isResellerPortalHost(h)) {
+    const primary = process.env.PANEL_PRIMARY_DOMAIN?.trim();
+    if (primary) return normalizeDomain(primary);
+  }
+  return h;
+}
+
 export function allowedHostsFromEnv(): string[] {
   const hosts = new Set<string>(["localhost", "127.0.0.1"]);
   hosts.add("panel.demo.nexlify.live");
@@ -43,5 +69,6 @@ export function allowedHostsFromEnv(): string[] {
     const d = normalizeDomain(e);
     if (d) hosts.add(d);
   }
+  for (const d of resellerPortalHostsFromEnv()) hosts.add(d);
   return [...hosts];
 }

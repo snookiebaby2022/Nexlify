@@ -25,6 +25,7 @@ import {
 import { licenseCookieSecure } from "@/lib/license/cookie-options";
 import { jwtSecretBytes, jwtSecretStrengthError } from "@/lib/jwt-secret";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { licenseCheckHost } from "@/lib/domains-host";
 
 import { parseJsonBody } from "@/lib/parse-json-body";
 /**
@@ -38,7 +39,7 @@ async function buildLicenseCookie(
   req: NextRequest
 ): Promise<{ name: string; value: string; maxAge: number } | null> {
   try {
-    const host = (req.headers.get("host") ?? "localhost").split(":")[0].toLowerCase();
+    const host = licenseCheckHost(req.headers.get("host") ?? "localhost");
     const instanceId = await getOrCreateInstanceId();
     const stored = await getStoredLicense();
 

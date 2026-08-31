@@ -1,6 +1,7 @@
 import { decryptAtRest, encryptAtRest, isEncryptedAtRest } from "@/lib/encryption-at-rest";
 import { prisma } from "@/lib/prisma";
 import { isPanelLicenseExempt } from "@/lib/panel-demo-host";
+import { licenseCheckHost } from "@/lib/domains-host";
 import type { LicensePayloadV1, LicenseStatus } from "./types";
 import { parseLicenseKey, licenseKeyHash, hostAllowed } from "./crypto";
 import { licenseTermLabel } from "./terms";
@@ -140,6 +141,7 @@ export async function activateLicenseKey(
   rawKey: string,
   panelHost: string
 ): Promise<{ ok: true; status: LicenseStatus } | { ok: false; error: string }> {
+  panelHost = licenseCheckHost(panelHost);
   const parsed = parseLicenseKey(rawKey);
   if (!parsed) return { ok: false, error: "Invalid or forged license key" };
 
@@ -320,6 +322,7 @@ async function verifyOnlineIfRequired(
 }
 
 export async function revalidateStoredLicense(panelHost: string): Promise<boolean> {
+  panelHost = licenseCheckHost(panelHost);
   const envKey = process.env.NEXLIFY_LICENSE_KEY?.trim();
   if (envKey) {
     const p = parseLicenseKey(envKey);
@@ -460,6 +463,7 @@ export async function getLicenseStatus(panelHost: string): Promise<LicenseStatus
     };
   }
 
+  panelHost = licenseCheckHost(panelHost);
 
   const envKey = process.env.NEXLIFY_LICENSE_KEY?.trim();
   if (envKey) {

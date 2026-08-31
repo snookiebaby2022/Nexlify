@@ -22,11 +22,23 @@ export async function register() {
     } catch {
       /* DB unavailable during build */
     }
-    // Sync NEXLIFY_LICENSE_VALID from NEXLIFY_LICENSE_KEY env var so middleware
+    try {
+      const { repairAndSyncResellerDns } = await import("@/lib/reseller-dns");
+      const { repaired, hosts } = await repairAndSyncResellerDns();
+      if (repaired > 0) {
+        console.log(`[reseller-dns] repaired ${repaired} malformed resellerDns row(s)`);
+      }
+      if (hosts.length > 0) {
+        console.log(`[reseller-dns] synced ${hosts.length} reseller portal host(s)`);
+      }
+    } catch {
+      /* DB unavailable during build */
+    }
+    // Sync NEXLIFY_LICENSE_VALID from env key or stored license so middleware
     // can fast-path the license check without a DB/cookie round-trip.
     try {
-      const { syncPanelLicenseEnvFromKey } = await import("@/lib/panel-license-env");
-      syncPanelLicenseEnvFromKey();
+      const { syncPanelLicenseEnv } = await import("@/lib/panel-license-env");
+      await syncPanelLicenseEnv();
     } catch {
       /* key parse failure — license gate will fall back to cookie check */
     }

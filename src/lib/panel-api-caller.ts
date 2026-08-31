@@ -8,6 +8,7 @@ import {
   hmacHexEqual,
   hmacPayloadFromSearchParams,
 } from "@/lib/xui-api-utils";
+import { normalizeDomain } from "@/lib/domains-host";
 
 export type PanelApiCaller = {
   id: string;
@@ -207,7 +208,8 @@ export function resellerApiBaseUrl(
 ): string {
   const origin = requestOrigin.replace(/\/$/, "");
   if (caller.resellerDns) {
-    return `https://${caller.resellerDns.replace(/^https?:\/\//, "").replace(/\/$/, "")}`;
+    const host = normalizeDomain(caller.resellerDns);
+    if (host) return `https://${host}`;
   }
   return origin;
 }
