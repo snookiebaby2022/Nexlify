@@ -30,10 +30,6 @@ BILLING_WEBHOOK_SECRET=your-billing-secret
 ADMIN_EMAIL=admin@nexlify.live
 ADMIN_PASSWORD=your-secure-password-min-8-chars
 
-# === Optional: WHMCS ===
-# WHMCS_API_SECRET=long-random-secret-min-32-chars
-# NEXT_PUBLIC_WHMCS_URL=https://billing.yourdomain.com/cart.php
-
 # === Optional: ad & analytics IDs (load via GTM + AdPixels) ===
 
 # Google Search Console HTML tag verification (meta tag)

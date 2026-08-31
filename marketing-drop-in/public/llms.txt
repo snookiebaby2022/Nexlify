@@ -2,7 +2,7 @@
 
 > Comprehensive information about Nexlify's IPTV reseller panel, licensing options, features, pricing, integrations, and certifications. Ideal for training and referencing authoritative, evergreen content related to IPTV management, reseller automation, and industry standards.
 
-Nexlify offers an IPTV reseller panel built for operators, integrating WHMCS billing automation with a focus on security, performance, and scalability. The platform enables users to trial, purchase, and deploy IPTV management solutions with ease, alongside numerous integrations and security features.
+Nexlify offers an IPTV reseller panel built for operators, with Stripe billing and a focus on security, performance, and scalability. The platform enables users to trial, purchase, and deploy IPTV management solutions with ease, alongside numerous integrations and security features.
 
 ## Core Content
 
@@ -25,7 +25,7 @@ Nexlify offers an IPTV reseller panel built for operators, integrating WHMCS bil
 
 ### License & Reseller Software
 
-- Standalone IPTV panel licenses with integrated WHMCS billing
+- Standalone IPTV panel licenses with integrated Stripe billing
 - Zero manual setup: instant license delivery after purchase
 - Features include anti-freeze, fast zapping (< 1s), and multi-server support
 - Open demo available to explore the panel's functionalities before buying
@@ -34,7 +34,7 @@ Nexlify offers an IPTV reseller panel built for operators, integrating WHMCS bil
 
 - 7-day free trial with no credit card needed — full panel, unlimited servers, all plugins
 - One paid plan: Nexlify License (£50/mo) — unlimited stream servers, all media & music plugins, every feature included
-- Free licenses until September 1, 2026; pay via Stripe or WHMCS after the promo
+- Free licenses until September 1, 2026; pay via Stripe after the promo
 
 ### Integrations & Bundles
 
@@ -52,7 +52,7 @@ Nexlify offers an IPTV reseller panel built for operators, integrating WHMCS bil
 ### Security & Standards
 
 - Encrypted license validation and server binding
-- Instant revocation if linked through WHMCS is suspended
+- Instant revocation when a Stripe subscription is cancelled
 - Certifications:
   - ISO 9001:2015 (Certificate no.: 22559 C)
   - ISO/IEC 27001:2022 (Certificate no.: 22559 SI)

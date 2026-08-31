@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
-/** WHMCS billing was removed. Stripe checkout is at /pricing. */
+/** Legacy billing hook — removed. Stripe checkout is at /pricing. */
 export async function GET() {
   return NextResponse.json(
-    { error: "WHMCS billing was removed. Use Stripe checkout at /pricing." },
+    { error: "Legacy billing hook removed. Use Stripe checkout at /pricing." },
     { status: 410 }
   );
 }
