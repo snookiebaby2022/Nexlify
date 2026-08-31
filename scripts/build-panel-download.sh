@@ -52,13 +52,17 @@ if [ "${TAR_BYTES:-0}" -lt 500000 ]; then
 fi
 
 missing=""
-for f in .env.example src/lib/panel-releases.json src/lib/lines.ts scripts/set-admin-password.cjs scripts/load-env.cjs scripts/panel-port-config.sh scripts/sync-license-env.mjs scripts/ensure-panel-env.sh scripts/tune-streaming-host.sh scripts/prune-stale-live-connections.sh scripts/fix-panel-ip-login.sh scripts/verify-install-smoke.sh scripts/verify-install-login.sh scripts/verify-panel-admin-login.cjs scripts/reset-panel-admin.sh scripts/apply-panel-fast-update.sh scripts/apply-prebuilt-update.sh scripts/panel-restart-safe.sh scripts/rematch-iptv-edge-auth.sh scripts/sync-internal-secret-env.sh scripts/panel-update-background.sh scripts/panel-update-background.ts scripts/fix-update-worker-now.sh nginx/nexlify-stream-edge.conf scripts/nexlify-port-registry.sh scripts/nexlify-firewall-ports.sh scripts/nexlify-nginx-release-ports.sh scripts/sync-panel-ports.sh scripts/install-nginx-stream-edge.sh scripts/install-iptv-edge-proxy.sh scripts/iptv-edge-proxy.mjs scripts/route-live-to-remote-edge.sh scripts/apply-live-edge-topology.sh scripts/verify-playback-parity.sh scripts/install-nginx-rtmp.sh scripts/install-nginx-https-extra-ports.sh scripts/install-monolithic-profile.sh scripts/install-local-stream-agent.sh scripts/ensure-monolithic-server.ts scripts/fix-stream-edge-now.sh scripts/verify-panel-ports.sh scripts/installer-finalize-ports.sh; do
+for f in .env.example src/lib/panel-releases.json src/lib/lines.ts src/lib/watch-folder-m3u.ts src/lib/watch-folder-m3u.test.ts src/app/api/admin/watch-folders/route.ts prisma/migrations/20260831020000_watch_folder_m3u_options/migration.sql scripts/set-admin-password.cjs scripts/load-env.cjs scripts/panel-port-config.sh scripts/sync-license-env.mjs scripts/ensure-panel-env.sh scripts/tune-streaming-host.sh scripts/prune-stale-live-connections.sh scripts/fix-panel-ip-login.sh scripts/verify-install-smoke.sh scripts/verify-install-login.sh scripts/verify-panel-admin-login.cjs scripts/reset-panel-admin.sh scripts/apply-panel-fast-update.sh scripts/apply-prebuilt-update.sh scripts/panel-restart-safe.sh scripts/rematch-iptv-edge-auth.sh scripts/sync-internal-secret-env.sh scripts/panel-update-background.sh scripts/panel-update-background.ts scripts/fix-update-worker-now.sh nginx/nexlify-stream-edge.conf scripts/nexlify-port-registry.sh scripts/nexlify-firewall-ports.sh scripts/nexlify-nginx-release-ports.sh scripts/sync-panel-ports.sh scripts/install-nginx-stream-edge.sh scripts/install-iptv-edge-proxy.sh scripts/iptv-edge-proxy.mjs scripts/route-live-to-remote-edge.sh scripts/apply-live-edge-topology.sh scripts/verify-playback-parity.sh scripts/install-nginx-rtmp.sh scripts/install-nginx-https-extra-ports.sh scripts/install-monolithic-profile.sh scripts/install-local-stream-agent.sh scripts/ensure-monolithic-server.ts scripts/fix-stream-edge-now.sh scripts/verify-panel-ports.sh scripts/installer-finalize-ports.sh; do
   if ! grep -qF "$f" < <(tar -tzf "$OUT"); then
     missing="${missing}\n  - ${f}"
   fi
 done
 if [ -n "$missing" ]; then
   echo "ERROR: tarball missing required files:${missing}" >&2
+  exit 1
+fi
+if tar -tzf "$OUT" | grep -qE 'whmcs-module|whmcs-zip'; then
+  echo "ERROR: tarball still contains WHMCS paths" >&2
   exit 1
 fi
 echo "Tarball verify OK"
