@@ -6,6 +6,55 @@ import { CountryFlag } from "@/components/ip-with-flag";
 import { startVisibleInterval } from "@/lib/perf-polling";
 
 const MAP_COLLAPSE_KEY = "nx-dash-collapse-connmap";
+const EARTH_TEXTURE_URL = "/earth-blue-marble.jpg";
+
+type EarthPixels = { data: Uint8ClampedArray; w: number; h: number };
+
+function sampleEarth(px: EarthPixels, lon: number, lat: number): [number, number, number] {
+  let u = (lon / Math.PI + 1) / 2;
+  u = ((u % 1) + 1) % 1;
+  const v = Math.max(0, Math.min(1, 0.5 - lat / Math.PI));
+  const x = Math.floor(u * (px.w - 1));
+  const y = Math.floor(v * (px.h - 1));
+  const i = (y * px.w + x) * 4;
+  return [px.data[i] ?? 28, px.data[i + 1] ?? 79, px.data[i + 2] ?? 115];
+}
+
+function drawEarthSphere(
+  ctx: CanvasRenderingContext2D,
+  px: EarthPixels,
+  cx: number,
+  cy: number,
+  r: number,
+  rotY: number
+) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.clip();
+  const step = 2;
+  for (let sy = Math.floor(cy - r); sy <= Math.ceil(cy + r); sy += step) {
+    for (let sx = Math.floor(cx - r); sx <= Math.ceil(cx + r); sx += step) {
+      const dx = (sx - cx) / r;
+      const dy = (cy - sy) / r;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > 1) continue;
+      const z = Math.sqrt(1 - d2);
+      const cos = Math.cos(-rotY);
+      const sin = Math.sin(-rotY);
+      const xw = dx * cos - z * sin;
+      const zw = dx * sin + z * cos;
+      if (zw < -0.02) continue;
+      const lon = Math.atan2(xw, zw);
+      const lat = Math.asin(Math.max(-1, Math.min(1, dy)));
+      const [red, green, blue] = sampleEarth(px, lon, lat);
+      const shade = 0.5 + 0.5 * Math.max(0, zw);
+      ctx.fillStyle = `rgb(${Math.floor(red * shade)},${Math.floor(green * shade)},${Math.floor(blue * shade)})`;
+      ctx.fillRect(sx, sy, step, step);
+    }
+  }
+  ctx.restore();
+}
 
 type MapData = {
   total: number;
@@ -77,6 +126,26 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
   const userRotRef = useRef(0);
   const dragRef = useRef<{ x: number; rot: number } | null>(null);
   const [paused, setPaused] = useState(false);
+  const earthPixelsRef = useRef<EarthPixels | null>(null);
+  const [earthReady, setEarthReady] = useState(false);
+
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = img.width;
+      c.height = img.height;
+      const g = c.getContext("2d");
+      if (!g) return;
+      g.drawImage(img, 0, 0);
+      const id = g.getImageData(0, 0, c.width, c.height);
+      earthPixelsRef.current = { data: id.data, w: c.width, h: c.height };
+      setEarthReady(true);
+    };
+    img.onerror = () => setEarthReady(false);
+    img.src = EARTH_TEXTURE_URL;
+  }, []);
 
   useEffect(() => {
     try {
@@ -160,13 +229,41 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
     disc.addColorStop(0, "#1d4f73");
     disc.addColorStop(0.55, "#0c2a44");
     disc.addColorStop(1, "#061422");
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = disc;
-    ctx.fill();
 
-    ctx.strokeStyle = "rgba(125,211,252,0.12)";
-    ctx.lineWidth = 0.8;
+    if (earthPixelsRef.current) {
+      drawEarthSphere(ctx, earthPixelsRef.current, cx, cy, r, rot);
+    } else {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = disc;
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(56,189,248,0.22)";
+      ctx.strokeStyle = "rgba(125,211,252,0.28)";
+      ctx.lineWidth = 1;
+      for (const land of LANDMASSES) {
+        const pts = land.map(([mx, my]) => {
+          const { lon, lat } = lonLatFromMap((mx / 1000) * 100, (my / 500) * 100);
+          return project(lat, lon, rot, w, h);
+        });
+        if (!pts.some((p) => p.visible)) continue;
+        ctx.beginPath();
+        let started = false;
+        for (const p of pts) {
+          if (!p.visible) continue;
+          if (!started) {
+            ctx.moveTo(p.sx, p.sy);
+            started = true;
+          } else ctx.lineTo(p.sx, p.sy);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 0.6;
     for (let lat = -60; lat <= 60; lat += 30) {
       ctx.beginPath();
       let started = false;
@@ -197,29 +294,6 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
           started = true;
         } else ctx.lineTo(p.sx, p.sy);
       }
-      ctx.stroke();
-    }
-
-    ctx.fillStyle = "rgba(56,189,248,0.22)";
-    ctx.strokeStyle = "rgba(125,211,252,0.28)";
-    ctx.lineWidth = 1;
-    for (const land of LANDMASSES) {
-      const pts = land.map(([mx, my]) => {
-        const { lon, lat } = lonLatFromMap((mx / 1000) * 100, (my / 500) * 100);
-        return project(lat, lon, rot, w, h);
-      });
-      if (!pts.some((p) => p.visible)) continue;
-      ctx.beginPath();
-      let started = false;
-      for (const p of pts) {
-        if (!p.visible) continue;
-        if (!started) {
-          ctx.moveTo(p.sx, p.sy);
-          started = true;
-        } else ctx.lineTo(p.sx, p.sy);
-      }
-      ctx.closePath();
-      ctx.fill();
       ctx.stroke();
     }
 
@@ -287,7 +361,7 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
     }
 
     animRef.current = requestAnimationFrame(draw);
-  }, [data, hoveredPoint]);
+  }, [data, hoveredPoint, earthReady]);
 
   useEffect(() => {
     if (collapsed || !data) return;

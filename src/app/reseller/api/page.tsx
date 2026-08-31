@@ -8,5 +8,5 @@ export default async function Page() {
   if (!session) redirect("/login");
   const flags = await getResellerGroupFlags(session.id);
   if (flags.hideAllUrls) redirect("/reseller/dashboard");
-  return <ResellerApiInfoPage />;
+  return <ResellerApiInfoPage showStreaming={flags.showStreamingApi} />;
 }

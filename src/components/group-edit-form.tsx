@@ -693,8 +693,15 @@ export function GroupEditForm({
               </div>
               <p className="text-xs" style={{ color: "var(--muted)" }}>
                 Hide all URLs / domain names removes Streaming API, playlist download links, and server
-                hostnames from the reseller panel even if the other two are on.
+                hostnames from the reseller panel even if Show Streaming API is on. Turn off Hide all URLs
+                for resellers to see Account → Streaming API.
               </p>
+              {form.config.showStreamingApi && form.config.hideAllUrls && (
+                <p className="text-xs font-medium" style={{ color: "var(--warning, #f59e0b)" }}>
+                  Streaming API is enabled but hidden — disable Hide all URLs or resellers will not see the
+                  API page.
+                </p>
+              )}
               <div className="pt-4 border-t space-y-3" style={{ borderColor: "var(--border)" }}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-medium">Module permissions</span>

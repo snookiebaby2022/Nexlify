@@ -10,6 +10,7 @@ type ApiCredentials = {
   baseUrl: string;
   panelApiUrl: string;
   example: string | null;
+  showStreaming?: boolean;
   streaming: {
     playerApi: string;
     playlist: string;
@@ -55,7 +56,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function ResellerApiInfoPage() {
+export function ResellerApiInfoPage({ showStreaming = true }: { showStreaming?: boolean }) {
   const [info, setInfo] = useState<ApiCredentials | null>(null);
   const [error, setError] = useState("");
   const [regenerating, setRegenerating] = useState(false);
@@ -89,13 +90,15 @@ export function ResellerApiInfoPage() {
     }
   }
 
+  const streamingEnabled = showStreaming && info?.showStreaming !== false;
+
   return (
     <div className="space-y-8 max-w-2xl">
       <div>
         <h1 className="text-2xl font-semibold">API &amp; streaming URLs</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Automate line management with your panel API key, or share Xtream-compatible streaming URLs
-          with customers.
+          Automate line management with your panel API key
+          {streamingEnabled ? ", or share Xtream-compatible streaming URLs with customers" : ""}.
         </p>
       </div>
       {error && (
@@ -133,20 +136,27 @@ export function ResellerApiInfoPage() {
             {info.example && <CopyField label="Example request" value={info.example} />}
           </section>
 
-          <section className="space-y-4">
-            <h2 className="text-lg font-medium">Streaming API (Xtream / M3U)</h2>
-            <p className="text-xs" style={{ color: "var(--muted)" }}>
-              Use each line&apos;s username and password — not your panel login.
-              {info.baseUrl !== info.panelApiUrl.replace(/\/api\/v1$/, "") ? (
-                <> Custom DNS: <span className="font-mono">{info.baseUrl}</span>.</>
-              ) : null}
+          {streamingEnabled ? (
+            <section className="space-y-4">
+              <h2 className="text-lg font-medium">Streaming API (Xtream / M3U)</h2>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Use each line&apos;s username and password — not your panel login.
+                {info.baseUrl !== info.panelApiUrl.replace(/\/api\/v1$/, "") ? (
+                  <> Custom DNS: <span className="font-mono">{info.baseUrl}</span>.</>
+                ) : null}
+              </p>
+              <CopyField label="Panel / stream host" value={info.baseUrl} />
+              <CopyField label="Player API" value={info.streaming.playerApi} />
+              <CopyField label="M3U playlist" value={info.streaming.playlist} />
+              <CopyField label="Live stream URL" value={info.streaming.liveStream} />
+              <CopyField label="MAG / Stalker portal" value={info.streaming.stalkerPortal} />
+            </section>
+          ) : (
+            <p className="text-sm rounded-lg border px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+              Streaming API URLs are disabled for your group. Ask your administrator to enable{" "}
+              <strong>Show Streaming API</strong> and turn off <strong>Hide all URLs</strong> on your user group.
             </p>
-            <CopyField label="Panel / stream host" value={info.baseUrl} />
-            <CopyField label="Player API" value={info.streaming.playerApi} />
-            <CopyField label="M3U playlist" value={info.streaming.playlist} />
-            <CopyField label="Live stream URL" value={info.streaming.liveStream} />
-            <CopyField label="MAG / Stalker portal" value={info.streaming.stalkerPortal} />
-          </section>
+          )}
         </>
       )}
     </div>

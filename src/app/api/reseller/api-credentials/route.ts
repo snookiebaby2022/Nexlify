@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     apiKey: user.apiKey,
     hasApiKey: Boolean(user.apiKey),
+    showStreaming: flags.showStreamingApi,
     baseUrl,
     panelApiUrl: `${baseUrl}/api/v1`,
     example: user.apiKey

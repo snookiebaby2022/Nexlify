@@ -516,7 +516,8 @@ export function PanelDashboard({
 
       {isReseller ? (
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 xl:grid-cols-3">
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 xl:grid-cols-3">
 
           <DashboardStatBox
 
@@ -562,7 +563,25 @@ export function PanelDashboard({
 
           />
 
-        </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <DashboardCard id="reseller-expiring" title="Lines expiring soon">
+              <LazyDashboardSection minHeight="6rem">
+                <DashboardExpiringLines widgetsUrl={widgetsUrl} linesHref={linesHref} />
+              </LazyDashboardSection>
+            </DashboardCard>
+            <DashboardMostWatchedByCountry widgetsUrl={widgetsUrl} />
+          </div>
+
+          <LazyDashboardSection minHeight="16rem">
+            <ConnectionMap apiUrl="/api/admin/connection-map" />
+          </LazyDashboardSection>
+
+          <LazyDashboardSection minHeight="8rem">
+            <DashboardXuiSummaryCards widgetsUrl={widgetsUrl} />
+          </LazyDashboardSection>
+        </>
 
       ) : null}
 
