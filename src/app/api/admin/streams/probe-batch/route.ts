@@ -83,7 +83,10 @@ export async function POST(req: NextRequest) {
 
     const body = parsed.data;
     const rawIds = Array.isArray(body.streamIds) ? body.streamIds : [];
-    const streamIds = [...new Set(rawIds.map((id) => String(id).trim()).filter(Boolean))].slice(0, MAX_IDS);
+    const streamIds = [...new Set(rawIds.map((id: unknown) => String(id).trim()).filter(Boolean))].slice(
+      0,
+      MAX_IDS
+    );
     if (!streamIds.length) {
       return NextResponse.json({ error: "streamIds required" }, { status: 400 });
     }
