@@ -112,13 +112,29 @@ export function resolveSourceToStreamUrl(
 
 function walkVideos(dir: string): string[] {
   const out: string[] = [];
-  if (!fs.existsSync(dir)) return out;
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return out;
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const ent of entries) {
     const full = path.join(dir, ent.name);
     if (ent.isDirectory()) out.push(...walkVideos(full));
     else if (VIDEO_EXT.has(path.extname(ent.name).toLowerCase())) out.push(full);
   }
+  return out;
+}
+
+function collectM3uPlaylistFiles(root: string): string[] {
+  if (!fs.existsSync(root)) return [];
+  const st = fs.statSync(root);
+  if (st.isFile()) return /\.m3u8?$/i.test(root) ? [root] : [];
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) walk(full);
+      else if (/\.m3u8?$/i.test(ent.name)) out.push(full);
+    }
+  };
+  walk(root);
   return out;
 }
 
@@ -231,6 +247,8 @@ type ImportM3uOpts = {
   reorderExisting?: boolean;
   /** When true (default), refresh LIVE stream names/logos/epg ids on sync. */
   updateNamesOnSync?: boolean;
+  /** When true (default), move existing matches into the playlist group-title folder. */
+  overwriteCategories?: boolean;
 };
 
 type ExistingTyped = {
@@ -243,6 +261,7 @@ type ExistingTyped = {
   seriesName: string | null;
   seasonNum: number | null;
   episodeNum: number | null;
+  categoryId: string | null;
 };
 
 const EXISTING_CHUNK = 400;
@@ -273,6 +292,7 @@ async function loadExistingByTypeAndUrls(
         seriesName: true,
         seasonNum: true,
         episodeNum: true,
+        categoryId: true,
       },
     });
     for (const row of rows) remember(row);
@@ -294,6 +314,7 @@ async function loadExistingByTypeAndUrls(
         seriesName: true,
         seasonNum: true,
         episodeNum: true,
+        categoryId: true,
       },
     });
     for (const row of rows) remember(row);
@@ -385,6 +406,7 @@ export async function importM3uEntries(entries: M3uEntry[], opts: ImportM3uOpts)
         sortOrderStart: opts.sortOrderStart,
         reorderExisting: opts.reorderExisting,
         updateNamesOnSync: opts.updateNamesOnSync,
+        overwriteCategories: opts.overwriteCategories,
       })
     );
   }
@@ -414,6 +436,7 @@ export async function importM3uEntries(entries: M3uEntry[], opts: ImportM3uOpts)
           sortOrderStart: opts.sortOrderStart,
           reorderExisting: opts.reorderExisting,
           updateNamesOnSync: opts.updateNamesOnSync,
+          overwriteCategories: opts.overwriteCategories,
         })
       : emptyImportResult();
     const vodResult = vodEntries.length
@@ -502,7 +525,12 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
               seriesMeta.seasonNum !== existing.seasonNum ||
               seriesMeta.episodeNum !== existing.episodeNum)
         );
-        const metaChanged = nameChanged || iconChanged || epgChanged || seriesChanged;
+        let nextCategoryId: string | null = null;
+        if (opts.overwriteCategories !== false && opts.autoCategory !== false && entry.group?.trim()) {
+          nextCategoryId = await categoryFromGroupName(entry.group, type);
+        }
+        const categoryChanged = Boolean(nextCategoryId && nextCategoryId !== existing.categoryId);
+        const metaChanged = nameChanged || iconChanged || epgChanged || seriesChanged || categoryChanged;
 
         if (opts.reorderExisting !== false || metaChanged || urlChanged) {
           await prisma.stream.update({
@@ -513,6 +541,7 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
               ...(nameChanged && nextName ? { name: nextName } : {}),
               ...(iconChanged && nextIcon ? { streamIcon: nextIcon } : {}),
               ...(epgChanged && nextEpg ? { epgChannelId: nextEpg } : {}),
+              ...(categoryChanged && nextCategoryId ? { categoryId: nextCategoryId } : {}),
               ...(seriesMeta
                 ? {
                     seriesName: seriesMeta.seriesName,
@@ -652,7 +681,7 @@ export async function importFromFolder(
   const { pickVodLoadBalancerId } = await import("@/lib/server-load");
   const folderServerId = opts.serverId ?? (await pickVodLoadBalancerId());
 
-  const m3uFiles = walkVideos(safe).filter((f) => f.endsWith(".m3u") || f.endsWith(".m3u8"));
+  const m3uFiles = collectM3uPlaylistFiles(safe);
   for (const m3uFile of m3uFiles) {
     const content = fs.readFileSync(m3uFile, "utf8");
     const r = await importFromM3uContent(content, {

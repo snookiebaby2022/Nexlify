@@ -41,7 +41,7 @@ export async function getAdminStats() {
     paidTotal,
     paidLast7,
     paidLast30,
-    whmcsSales,
+    billingSales,
     stripeSales,
     manualSales,
     orderRevenue,
@@ -82,7 +82,7 @@ export async function getAdminStats() {
       where: { ...paidLicenseWhere(), createdAt: { gte: since30 } },
     }),
     prisma.license.count({
-      where: { ...paidLicenseWhere(), whmcsServiceId: { not: null } },
+      where: { ...paidLicenseWhere(), billingServiceId: { not: null } },
     }),
     prisma.license.count({
       where: {
@@ -93,7 +93,7 @@ export async function getAdminStats() {
     prisma.license.count({
       where: {
         ...paidLicenseWhere(),
-        whmcsServiceId: null,
+        billingServiceId: null,
         OR: [{ orderId: null }, { order: { stripeSessionId: null } }],
         notes: { contains: "Manual issue" },
       },
@@ -184,7 +184,7 @@ export async function getAdminStats() {
     }))
     .sort((a, b) => b.count - a.count);
 
-  const websiteSales = Math.max(0, paidTotal - whmcsSales - manualSales);
+  const websiteSales = Math.max(0, paidTotal - billingSales - manualSales);
 
   const couponMap = new Map<string, { uses: number; revenueCents: number }>();
   for (const o of couponOrders) {
@@ -272,7 +272,7 @@ export async function getAdminStats() {
       last7Days: paidLast7,
       last30Days: paidLast30,
       byChannel: {
-        whmcs: whmcsSales,
+        billing: billingSales,
         stripe: stripeSales,
         website: websiteSales,
         manual: manualSales,
@@ -299,8 +299,8 @@ export async function getAdminStats() {
       plan: l.plan.name,
       status: l.status,
       createdAt: l.createdAt.toISOString(),
-      source: l.whmcsServiceId
-        ? "WHMCS"
+      source: l.billingServiceId
+        ? "billing"
         : l.order?.stripeSessionId
           ? "Stripe"
           : l.notes?.includes("Manual")

@@ -37,7 +37,7 @@ export function NewTicketForm() {
     <div className="glass rounded-2xl p-6">
       <h3 className="font-display text-lg font-semibold text-white">New support ticket</h3>
       <p className="mt-2 text-sm text-[var(--muted)]">
-        Describe your issue — licenses, billing, panel setup, or WHMCS.
+        Describe your issue — licenses, billing, panel setup, or billing.
       </p>
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
         <div>

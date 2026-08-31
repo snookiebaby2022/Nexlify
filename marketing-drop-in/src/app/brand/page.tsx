@@ -67,7 +67,7 @@ export default function BrandPage() {
           <div className="glass rounded-2xl p-6">
             <h2 className="font-semibold text-white">Short description</h2>
             <p className="mt-2 text-sm text-slate-300">
-              Nexlify is IPTV reseller and management software for resellers — WHMCS billing, live
+              Nexlify is IPTV reseller and management software for resellers — Stripe billing, live
               demo, GBP/USD worldwide checkout. We do not host, stream, or distribute TV content.
             </p>
           </div>

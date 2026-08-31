@@ -125,7 +125,7 @@ export function Footer() {
             <NexlifyLogo href="/" className="max-w-[150px]" />
             <p className="mt-2 text-sm text-violet-300">{site.domain}</p>
             <p className="mt-3 max-w-sm text-sm text-[var(--muted)]">
-              {SOFTWARE_POSITIONING}. WHMCS billing with automated keys and built-in support
+              {SOFTWARE_POSITIONING}. Stripe billing with automated keys and built-in support
               tickets. {CONTENT_DISCLAIMER}
             </p>
           </div>

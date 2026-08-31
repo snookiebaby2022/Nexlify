@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
 
-const WHMCS_NOTE_PREFIX = "whmcs:";
+/** Legacy note prefix on AddonLicense rows. Kept so existing keys still match. */
+const BILLING_NOTE_PREFIX = "whmcs:";
 
-function whmcsNote(serviceId: string) {
-  return `${WHMCS_NOTE_PREFIX}${serviceId}`;
+function billingNote(serviceId: string) {
+  return `${BILLING_NOTE_PREFIX}${serviceId}`;
 }
 
 export async function syncAddonLicensesFromBilling(panelLicenseKey: string): Promise<number> {
@@ -55,7 +56,7 @@ export async function syncAddonLicensesFromBilling(panelLicenseKey: string): Pro
       continue;
     }
     activeServiceIds.add(addon.whmcsServiceId);
-    const note = whmcsNote(addon.whmcsServiceId);
+    const note = billingNote(addon.whmcsServiceId);
     const existing = await prisma.addonLicense.findFirst({
       where: { service: addon.service, notes: note },
     });
@@ -84,10 +85,10 @@ export async function syncAddonLicensesFromBilling(panelLicenseKey: string): Pro
   }
 
   const billingRows = await prisma.addonLicense.findMany({
-    where: { notes: { startsWith: WHMCS_NOTE_PREFIX } },
+    where: { notes: { startsWith: BILLING_NOTE_PREFIX } },
   });
   for (const row of billingRows) {
-    const sid = row.notes?.slice(WHMCS_NOTE_PREFIX.length) ?? "";
+    const sid = row.notes?.slice(BILLING_NOTE_PREFIX.length) ?? "";
     if (sid && !activeServiceIds.has(sid)) {
       await prisma.addonLicense.update({
         where: { id: row.id },

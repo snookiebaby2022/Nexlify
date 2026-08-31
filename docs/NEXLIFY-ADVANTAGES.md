@@ -27,7 +27,7 @@ Nexlify is built as a modern alternative to XUI.one, 1-stream, and Xtream UI.
 
 ## Business
 
-- **WHMCS-style webhooks** — create, suspend, renew, terminate; downloadable WHMCS server module ZIP
+- **Billing webhooks** — create, suspend, renew, terminate via JSON API
 - **Stalker geo on handshake** — same blocklist/country/VPN rules as Xtream playback
 - **Plex HLS transcode profiles** — 1080p/720p/480p/direct with explicit bitrate caps
 - **Packages & access codes** — reseller creates lines from packages or redeem codes

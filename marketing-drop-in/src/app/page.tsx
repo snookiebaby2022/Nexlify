@@ -30,8 +30,6 @@ export default async function HomePage() {
     console.error("[home] database unavailable:", error);
   }
 
-  const whmcsCartBaseUrl = process.env.NEXT_PUBLIC_WHMCS_URL ?? null;
-
   return (
     <>
       <HomeFaqJsonLd />
@@ -45,7 +43,6 @@ export default async function HomePage() {
         plans={plansForPricing(plans.map(toPlanView))}
         loggedIn={Boolean(user)}
         stripeEnabled={isStripeConfigured()}
-        whmcsCartBaseUrl={whmcsCartBaseUrl}
       />
       <MigrationCtaSection />
       <DemoBanner />

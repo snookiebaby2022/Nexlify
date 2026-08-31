@@ -23,7 +23,7 @@ export default function XtreamPanelVsModernStackPage() {
           body: (
             <p>
               Generic <strong className="text-slate-200">Xtream panel</strong> forks popularized the Xtream Codes
-              API shape but left operators maintaining PHP codebases, manual WHMCS scripts, and inconsistent security
+              API shape but left operators maintaining PHP codebases, manual billing scripts, and inconsistent security
               patches. Many resellers now search for{" "}
               <strong className="text-slate-200">IPTV management software</strong> on a modern stack with vendor
               support.
@@ -37,7 +37,7 @@ export default function XtreamPanelVsModernStackPage() {
               <li>Node.js application layer with typed codebase</li>
               <li>PostgreSQL for relational reseller and line data</li>
               <li>PM2 process management and nginx reverse proxy</li>
-              <li>First-class WHMCS IPTV module instead of bolt-on scripts</li>
+              <li>First-class native billing instead of bolt-on scripts</li>
               <li>Preview-based migration from XUI.one, 1-stream, and Xtream UI</li>
             </ul>
           ),

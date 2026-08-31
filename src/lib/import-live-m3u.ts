@@ -148,6 +148,8 @@ export async function importLiveM3uEntriesFast(
     reorderExisting?: boolean;
     /** When true (default), refresh name/logo/epg_id on existing LIVE URLs during sync. */
     updateNamesOnSync?: boolean;
+    /** When true (default), move existing matches into the playlist group-title folder. */
+    overwriteCategories?: boolean;
   }
 ) {
   const selectedSet = opts.selectedUrls?.length ? new Set(opts.selectedUrls) : null;
@@ -266,7 +268,7 @@ export async function importLiveM3uEntriesFast(
         nextEpg && nextEpg !== (existing.epgChannelId ?? null)
       );
       let nextCategoryId: string | null = null;
-      if (autoCategory && !fixedCategoryId && groupKey) {
+      if (opts.overwriteCategories !== false && autoCategory && !fixedCategoryId && groupKey) {
         nextCategoryId = categoryCache.get(groupKey.toLowerCase()) ?? null;
         if (!nextCategoryId) {
           nextCategoryId = await categoryFromGroupName(groupKey, StreamType.LIVE);

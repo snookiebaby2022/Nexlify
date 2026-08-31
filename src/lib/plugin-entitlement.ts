@@ -119,7 +119,7 @@ export async function isPluginEntitled(
 
   return {
     ok: false,
-    error: `Plugin not licensed (${service}). Purchase the addon in WHMCS or upgrade to Top Tier for all plugins.`,
+    error: `Plugin not licensed (${service}). Purchase the addon from nexlify.live or upgrade to Top Tier for all plugins.`,
   };
 }
 

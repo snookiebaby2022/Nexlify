@@ -8,7 +8,7 @@ const bodySchema = z.object({
   licenseKey: z.string().min(8).optional(),
 });
 
-/** Panel / WHMCS validate a license key against the marketing database. */
+/** Panel validate a license key against the marketing database. */
 export async function POST(request: Request) {
   try {
     const ip = clientIp(request);

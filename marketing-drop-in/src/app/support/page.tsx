@@ -43,7 +43,7 @@ export default async function SupportPage() {
               Support tickets
             </h1>
             <p className="mt-2 text-[var(--muted)]">
-              {openCount} open · Panel licenses, WHMCS billing, and technical help
+              {openCount} open · Panel licenses, Stripe billing, and technical help
             </p>
           </div>
           {user.role === "ADMIN" && (

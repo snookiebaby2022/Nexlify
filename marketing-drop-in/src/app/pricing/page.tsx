@@ -54,7 +54,7 @@ export default async function PricingPage() {
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-[var(--muted)]">
           Nexlify IPTV management software is free for all operators until {FREE_PERIOD_END_LABEL}.
-          Every license includes the WHMCS IPTV module, instant digital delivery, and full panel
+          Every license includes the native billing, instant digital delivery, and full panel
           access — no credit card required during the free period.
         </p>
         <div className="mt-8 flex flex-col items-center gap-4">
@@ -68,7 +68,7 @@ export default async function PricingPage() {
           primary={{ label: "View plans below", href: "#license-tiers" }}
           secondary={[
             { label: "Try live demo", href: DEMO_PANEL_URL, external: true },
-            { label: "WHMCS module docs", href: "/docs/whmcs" },
+            { label: "billing module docs", href: "/help" },
             { label: "All features", href: "/features" },
           ]}
         />
@@ -82,7 +82,7 @@ export default async function PricingPage() {
           <li className="flex gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-4">
             <span className="text-emerald-400">✓</span>
             <span>
-              <strong className="text-white">WHMCS IPTV module included</strong> — auto-provision, renew,
+              <strong className="text-white">native billing included</strong> — auto-provision, renew,
               suspend on every plan
             </span>
           </li>
@@ -132,10 +132,9 @@ export default async function PricingPage() {
         plans={pricingPlans}
         loggedIn={Boolean(user)}
         stripeEnabled={isStripeConfigured()}
-        whmcsCartBaseUrl={process.env.NEXT_PUBLIC_WHMCS_URL ?? null}
       />
 
-      <PluginPricingSection whmcsCartBaseUrl={process.env.NEXT_PUBLIC_WHMCS_URL ?? null} />
+      <PluginPricingSection />
 
       <LegacyPanelPricingCompare />
 

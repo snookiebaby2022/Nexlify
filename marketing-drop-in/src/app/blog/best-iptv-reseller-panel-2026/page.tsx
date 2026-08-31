@@ -26,7 +26,7 @@ export default function BestIptvResellerPanel2026Page() {
               fork — it is <strong className="text-slate-200">IPTV management software</strong> you can bill,
               secure, migrate, and support at scale. Nexlify is the modern alternative to old XUI.one and
               Xtream UI stacks: maintained code, native{" "}
-              <strong className="text-slate-200">WHMCS IPTV module</strong>, and built-in migration.
+              <strong className="text-slate-200">native billing</strong>, and built-in migration.
             </p>
           ),
         },
@@ -42,13 +42,13 @@ export default function BestIptvResellerPanel2026Page() {
           ),
         },
         {
-          title: "2. Billing & WHMCS IPTV automation",
+          title: "2. Billing & IPTV billing automation",
           body: (
             <p>
-              Manual license spreadsheets fail past a few hundred lines. Demand native WHMCS hooks: create on
+              Manual license spreadsheets fail past a few hundred lines. Demand native Stripe hooks: create on
               order paid, extend on renewal, suspend on overdue. Nexlify includes this on every plan — see{" "}
-              <Link href="/blog/whmcs-iptv-automation-setup" className="text-violet-400 underline hover:text-violet-300">
-                WHMCS + IPTV automation
+              <Link href="/blog/billing-iptv-automation-setup" className="text-violet-400 underline hover:text-violet-300">
+                billing + IPTV automation
               </Link>
               .
             </p>

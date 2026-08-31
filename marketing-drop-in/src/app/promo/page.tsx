@@ -16,7 +16,7 @@ function pickUtm(params: SearchParams) {
 export const metadata = {
   title: "Nexlify — Stream management, built for operators",
   description:
-    "Modern self-hosted IPTV panel. PostgreSQL-native, anti-freeze, reseller tree, WHMCS-ready. All licenses free until September 1, 2026.",
+    "Modern self-hosted IPTV panel. PostgreSQL-native, anti-freeze, reseller tree, billing-ready. All licenses free until September 1, 2026.",
   openGraph: {
     title: "Nexlify — Built for operators",
     description: "All licenses free until September 1, 2026. Try the live demo.",

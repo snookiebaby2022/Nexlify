@@ -19,7 +19,7 @@ export const OPERATOR_FEATURES: OperatorFeature[] = [
   { label: "Playback fingerprint", href: "/admin/settings/fingerprint", group: "Security", aliases: ["hmac url", "leak"] },
   { label: "VPN / proxy block", href: "/admin/settings/security-shield", group: "Security", aliases: ["datacenter", "tor", "ipqs", "autoblock"] },
   { label: "Blocked IPs", href: "/admin/management/blocked-ips", group: "Security", aliases: ["cidr", "blacklist"] },
-  { label: "Admin API & WHMCS", href: "/admin/settings/api", group: "Billing", aliases: ["xui api", "create_line", "api_key", "hmac"] },
+  { label: "Admin API", href: "/admin/settings/api", group: "Billing", aliases: ["xui api", "create_line", "api_key", "hmac"] },
   { label: "Reseller rewards", href: "/admin/settings/billing", group: "Resellers", aliases: ["cashback", "reward plugin", "credit rebate"] },
   { label: "Customer shop", href: "/admin/shop", group: "Resellers", aliases: ["storefront", "stripe", "paypal"] },
   { label: "Rclone / S3 VOD", href: "/admin/settings/vod-storage", group: "VOD", aliases: ["gdrive", "remote library"] },

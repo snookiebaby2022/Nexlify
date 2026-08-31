@@ -4,7 +4,7 @@ import { pageMetadata } from "@/lib/seo";
 export const metadata = pageMetadata({
   title: "Nexlify TikTok Promo — IPTV Panel Ad Creative",
   description:
-    "Full-screen Nexlify IPTV panel selling promo for TikTok screen recording. worldwide reseller panel with WHMCS billing and live demo.",
+    "Full-screen Nexlify IPTV panel selling promo for TikTok screen recording. worldwide reseller panel with Stripe billing and live demo.",
   path: "/promo/tiktok",
   noIndex: true,
   exactTitle: true,

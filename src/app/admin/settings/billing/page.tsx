@@ -9,7 +9,7 @@ export default function BillingSettingsPage() {
       sections={[
         {
           title: "PayPal (website checkout)",
-          info: "Configure PayPal REST credentials for nexlify.live or WHMCS custom modules.",
+          info: "Configure PayPal REST credentials for nexlify.live checkout.",
           fields: [
             { key: "paypalClientId", label: "PayPal client ID" },
             { key: "paypalClientSecret", label: "PayPal client secret", type: "password" },

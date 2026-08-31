@@ -16,7 +16,7 @@ export function OrganizationJsonLd() {
       "IPTV panel",
       "IPTV management software",
       "IPTV reseller software",
-      "WHMCS IPTV module",
+      "native billing",
       "Xtream panel",
     ],
   };
@@ -42,7 +42,7 @@ export function OrganizationJsonLd() {
   const software = buildSoftwareApplicationSchema({
     url: site.url,
     description:
-      "IPTV reseller panel with WHMCS automation, anti-freeze playback, and sub-second zapping. Management software for service providers worldwide.",
+      "IPTV reseller panel with billing automation, anti-freeze playback, and sub-second zapping. Management software for service providers worldwide.",
   });
 
   return (

@@ -14,8 +14,8 @@ export const metadata = pageSeo("/updates");
 
 const GUIDES = [
   {
-    title: "WHMCS IPTV module setup guide",
-    href: "/docs/whmcs",
+    title: "native billing setup guide",
+    href: "/help",
     excerpt: "Connect GBP billing and auto-provision licenses on new orders.",
   },
   {
@@ -52,7 +52,7 @@ export default function UpdatesPage() {
         </h1>
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-300 md:text-base">
           Release notes for the Nexlify IPTV panel plus guides for service providers — check back for
-          WHMCS, streaming, and security improvements.
+          streaming, and security improvements.
         </p>
 
         {latest && (

@@ -33,7 +33,7 @@ export default function OgImage() {
           Nexlify · Worldwide
         </div>
         <div style={{ fontSize: 64, fontWeight: 700, marginTop: 24, lineHeight: 1.1, maxWidth: 900 }}>
-          IPTV Panel &amp; WHMCS Billing
+          IPTV Panel &amp; billing Billing
         </div>
         <div style={{ fontSize: 28, marginTop: 24, color: "#94a3b8", maxWidth: 800, lineHeight: 1.4 }}>
           Best reseller panel · Live demo · 7-day trial · GBP &amp; USD checkout

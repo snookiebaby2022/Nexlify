@@ -1,8 +1,8 @@
 # Cut the Cord Streaming Platform Software | Nexlify
 
-Nexlify is a cut-the-cord streaming management platform — operator software that lets licensed businesses run a live TV streaming service on their own VPS with WHMCS billing, Anti-Freeze playback, and HD streaming player app compatibility.
+Nexlify is a cut-the-cord streaming management platform — operator software that lets licensed businesses run a live TV streaming service on their own VPS with Stripe billing, Anti-Freeze playback, and HD streaming player app compatibility.
 
-> Launch or upgrade a premium digital entertainment business with Nexlify: live TV streaming service tools, WHMCS billing, and HD streaming player app-compatible stack.
+> Launch or upgrade a premium digital entertainment business with Nexlify: live TV streaming service tools, Stripe billing, and HD streaming player app-compatible stack.
 
 **URL:** https://nexlify.live/lp/cut-the-cord-streaming
 **Author:** Nexlify Product Team

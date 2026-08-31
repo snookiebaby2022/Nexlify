@@ -13,7 +13,7 @@ const SERVICES = [
   { name: "Marketing site (nexlify.live)", status: "Operational", href: site.url },
   { name: "License API", status: "Operational", href: `${site.url}/api/health` },
   { name: "Panel demo", status: "Operational", href: "https://panel.demo.nexlify.live" },
-  { name: "WHMCS billing", status: "Operational", href: process.env.NEXT_PUBLIC_WHMCS_URL ?? "/pricing" },
+  { name: "Stripe billing", status: "Operational", href: "/pricing" },
 ] as const;
 
 export default function StatusPage() {

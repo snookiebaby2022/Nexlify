@@ -718,7 +718,7 @@ export function LineEditForm({
                   }}
                 />
               </FormField>
-              <FormField label="WHMCS / billing service ID">
+              <FormField label="Billing service ID">
                 <input
                   className={formInputClass}
                   style={formInputStyle}

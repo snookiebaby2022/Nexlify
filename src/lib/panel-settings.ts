@@ -169,7 +169,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     maintenanceMode: false,
     /** Block new 24h / 48h IPTV trial subscriptions (not the panel software license). */
     disableTrial: false,
-    /** When true, feature packs (LB Pro, transcoding, archive, security) work without WHMCS addon licenses. */
+    /** When true, feature packs (LB Pro, transcoding, archive, security) work without extra addon licenses. */
     bundledFeaturePacks: true,
     /** Hours before panel logs are deleted by cron. 0 = never. */
     logAutoClearHours: 72,
@@ -388,7 +388,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     binanceTestMode: true,
     couponCheckoutEnabled: true,
     rewardPercentOnLineCreate: 0,
-    notes: "Payment credentials for website checkout integration (WHMCS or custom store).",
+    notes: "Payment credentials for website checkout (Stripe, PayPal, or a custom store).",
   },
   cron: {
     epgSyncEnabled: true,
@@ -837,7 +837,7 @@ function settingKey(group: SettingGroup) {
   return `settings.${group}`;
 }
 
-/** Core bundles LB Pro, transcoding, archive, security without WHMCS addon licenses. */
+/** Core bundles LB Pro, transcoding, archive, security without extra addon licenses. */
 export async function isBundledFeaturePacksEnabled(): Promise<boolean> {
   const general = await getSettingGroup("general");
   return general.bundledFeaturePacks === true;

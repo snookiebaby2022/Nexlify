@@ -16,7 +16,7 @@ const SHARED_FAQ = [
 export const LP_GEO_CONTENT: Record<string, LpGeoContent> = {
   "/lp/cut-the-cord-streaming": {
     definition:
-      "Nexlify is a cut-the-cord streaming management platform — operator software that lets licensed businesses run a live TV streaming service on their own VPS with WHMCS billing, Anti-Freeze playback, and HD streaming player app compatibility.",
+      "Nexlify is a cut-the-cord streaming management platform — operator software that lets licensed businesses run a live TV streaming service on their own VPS with Stripe billing, Anti-Freeze playback, and HD streaming player app compatibility.",
     datePublished: "2026-06-01T00:00:00Z",
     dateModified: "2026-06-18T00:00:00Z",
     faq: [
@@ -54,14 +54,14 @@ export const LP_GEO_CONTENT: Record<string, LpGeoContent> = {
   },
   "/lp/reseller-panel": {
     definition:
-      "Nexlify is an IPTV reseller panel — management software operators use to run subscriber lines, sub-resellers, WHMCS billing, and automated license provisioning on their own VPS worldwide.",
+      "Nexlify is an IPTV reseller panel — management software operators use to run subscriber lines, sub-resellers, Stripe billing, and automated license provisioning on their own VPS worldwide.",
     datePublished: "2026-03-01T00:00:00Z",
     dateModified: "2026-06-18T00:00:00Z",
     faq: [
       {
         question: "What is an IPTV reseller panel?",
         answer:
-          "An IPTV reseller panel is back-office software for creating and managing subscriber lines, reseller credits, and billing. Nexlify automates provisioning through WHMCS and Stripe.",
+          "An IPTV reseller panel is back-office software for creating and managing subscriber lines, reseller credits, and billing. Nexlify automates provisioning through Stripe and Stripe.",
       },
       {
         question: "How fast can I deploy Nexlify?",
@@ -73,38 +73,19 @@ export const LP_GEO_CONTENT: Record<string, LpGeoContent> = {
   },
   "/lp/reseller-panel-uk": {
     definition:
-      "Nexlify is a UK IPTV reseller panel — GBP-billed management software for British and EU operators who run lines, sub-resellers, and WHMCS automation on their own VPS.",
+      "Nexlify is a UK IPTV reseller panel — GBP-billed management software for British and EU operators who run lines, sub-resellers,  automation on their own VPS.",
     datePublished: "2026-03-01T00:00:00Z",
     dateModified: "2026-06-18T00:00:00Z",
     faq: [
       {
         question: "Does Nexlify support GBP checkout for UK resellers?",
         answer:
-          "Yes. Nexlify supports GBP and USD checkout via WHMCS and Stripe, with instant digital license delivery.",
+          "Yes. Nexlify supports GBP and USD checkout via Stripe and Stripe, with instant digital license delivery.",
       },
       {
         question: "Can I host on a UK VPS?",
         answer:
           "Yes. Deploy on any Ubuntu or Debian VPS — including London or Manchester regions — using the one-click installer.",
-      },
-      ...SHARED_FAQ,
-    ],
-  },
-  "/lp/whmcs-iptv": {
-    definition:
-      "Nexlify is a WHMCS IPTV module paired with panel licenses — software that auto-creates, renews, suspends, and revokes IPTV management keys when customers pay through your WHMCS cart.",
-    datePublished: "2026-03-01T00:00:00Z",
-    dateModified: "2026-06-18T00:00:00Z",
-    faq: [
-      {
-        question: "What does the WHMCS IPTV module do?",
-        answer:
-          "It connects your WHMCS products to Nexlify licenses. On order, renewal, suspension, or termination, WHMCS events sync automatically — no manual CSV license management.",
-      },
-      {
-        question: "Where is WHMCS setup documented?",
-        answer:
-          "Full setup steps are at nexlify.live/docs/whmcs with product configuration examples for GBP and USD.",
       },
       ...SHARED_FAQ,
     ],

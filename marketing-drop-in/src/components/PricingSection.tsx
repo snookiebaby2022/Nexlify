@@ -14,7 +14,6 @@ type PricingSectionProps = {
   plans: PlanView[];
   loggedIn: boolean;
   stripeEnabled: boolean;
-  whmcsCartBaseUrl: string | null;
 };
 
 function displayPriceCents(plan: PlanView, currency: Currency): number {
@@ -25,7 +24,6 @@ export function PricingSection({
   plans,
   loggedIn,
   stripeEnabled,
-  whmcsCartBaseUrl,
 }: PricingSectionProps) {
   const router = useRouter();
   const [currency, setCurrency] = useState<Currency>("GBP");
@@ -50,7 +48,7 @@ export function PricingSection({
     }
     // During free period, all plans are free — bypass stripe check
     if (plan.priceCents > 0 && !stripeEnabled && !isFreePeriod()) {
-      setError("Stripe checkout is not configured — use WHMCS or contact support.");
+      setError("Stripe checkout is not configured — contact support.");
       return;
     }
     setLoadingId(plan.id);
@@ -80,12 +78,6 @@ export function PricingSection({
     } finally {
       setLoadingId(null);
     }
-  }
-
-  function whmcsHref(plan: PlanView): string | null {
-    if (!whmcsCartBaseUrl || !plan.whmcsProductId) return null;
-    const base = whmcsCartBaseUrl.replace(/\/$/, "");
-    return `${base}?a=add&pid=${plan.whmcsProductId}`;
   }
 
   return (
@@ -147,7 +139,6 @@ export function PricingSection({
           {tiers.map((plan) => {
             const marketing = getPlanMarketing(plan);
             const price = displayPriceCents(plan, currency);
-            const whmcs = marketing.hideWhmcs ? null : whmcsHref(plan);
             const priceDisplay = formatPlanPrice(plan, formatMoney(price, currency));
 
             return (
@@ -222,16 +213,6 @@ export function PricingSection({
                     >
                       {marketing.primaryLabel}
                     </Link>
-                  )}
-                  {whmcs && (
-                    <a
-                      href={whmcs}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block w-full min-h-[44px] rounded-full border border-white/15 py-3 text-center text-sm font-semibold text-slate-200 hover:border-violet-400/40 transition-colors"
-                    >
-                      Checkout via WHMCS
-                    </a>
                   )}
                   {marketing.isTrial && (
                     <p className="text-center text-xs text-[var(--muted)]">

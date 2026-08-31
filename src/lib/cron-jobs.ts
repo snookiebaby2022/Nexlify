@@ -8,6 +8,7 @@ import { runPanelBackup } from "./backup-run";
 import { reassignStreamsFromOfflineServers, rebalanceLiveStreamsAcrossServers } from "./server-load";
 import { jobCheckStreamCerts } from "./cert-monitor";
 import { isRemoteM3uUrl } from "./m3u-watch-sync";
+import { isLocalM3uPath } from "./watch-folder-m3u";
 import { runDueM3uSyncJobs, runWatchFolderM3uSync } from "./m3u-sync-jobs";
 import { getSettingGroup } from "./panel-settings";
 
@@ -226,11 +227,29 @@ export async function jobImportQueue() {
     let mode: "MOVIE" | "SERIES" | "MIXED" =
       job.streamType === "SERIES" ? "SERIES" : job.streamType === "MOVIE" ? "MOVIE" : "MIXED";
 
-    let watchFolder: { type: string; path: string } | null = null;
+    let watchFolder: {
+      type: string;
+      path: string;
+      autoCategory: boolean;
+      updateNames: boolean;
+      overwriteCategories: boolean;
+      onDemand: boolean;
+      removeDuplicates: boolean;
+      isAdult: boolean;
+    } | null = null;
     if (job.watchFolderId) {
       watchFolder = await prisma.watchFolder.findUnique({
         where: { id: job.watchFolderId },
-        select: { type: true, path: true },
+        select: {
+          type: true,
+          path: true,
+          autoCategory: true,
+          updateNames: true,
+          overwriteCategories: true,
+          onDemand: true,
+          removeDuplicates: true,
+          isAdult: true,
+        },
       });
       if (watchFolder?.type === "MIXED") mode = "MIXED";
       else if (watchFolder?.type === "SERIES") mode = "SERIES";
@@ -239,7 +258,7 @@ export async function jobImportQueue() {
 
     let result = { imported: 0, skipped: 0 };
     try {
-      if (watchFolder && isRemoteM3uUrl(job.source)) {
+      if (watchFolder && (isRemoteM3uUrl(job.source) || isLocalM3uPath(job.source))) {
         result = await runWatchFolderM3uSync({
           id: job.watchFolderId!,
           name: "",
@@ -247,6 +266,12 @@ export async function jobImportQueue() {
           type: watchFolder.type,
           categoryId: job.categoryId,
           serverId: job.serverId,
+          autoCategory: watchFolder.autoCategory,
+          updateNames: watchFolder.updateNames,
+          overwriteCategories: watchFolder.overwriteCategories,
+          onDemand: watchFolder.onDemand,
+          removeDuplicates: watchFolder.removeDuplicates,
+          isAdult: watchFolder.isAdult,
         });
       } else {
         result = await importFromFolder(job.source, {

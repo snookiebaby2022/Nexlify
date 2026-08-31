@@ -1,7 +1,7 @@
 {
   "name": "Nexlify - IPTV Reseller Panel",
   "short_name": "Nexlify",
-  "description": "Nexlify IPTV reseller panel and management software with WHMCS IPTV module automation",
+  "description": "Nexlify IPTV reseller panel and management software with native billing automation",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#080612",

@@ -102,7 +102,6 @@ export default function BillingIntegrationPage() {
             <select value={form.provider} onChange={e => setForm(p => ({ ...p, provider: e.target.value }))} className="px-3 py-1.5 rounded border text-sm" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
               <option value="stripe">Stripe</option>
               <option value="paypal">PayPal</option>
-              <option value="whmcs">WHMCS</option>
             </select>
             <input value={form.apiKey} onChange={e => setForm(p => ({ ...p, apiKey: e.target.value }))} placeholder="API Key" className="px-3 py-1.5 rounded border text-sm" style={{ borderColor: "var(--border)", background: "var(--bg)" }} />
           </div>

@@ -1,7 +1,7 @@
 const TESTIMONIALS = [
   {
     quote:
-      "Migrated from a legacy Xtream panel in one afternoon. WHMCS provisioning just works — GBP billing with no manual license CSVs.",
+      "Migrated from a legacy Xtream panel in one afternoon. billing provisioning just works — GBP billing with no manual license CSVs.",
     name: "James R.",
     flag: "🇬🇧",
     lines: "850 lines",
@@ -29,14 +29,14 @@ const CASE_STUDIES = [
   {
     title: "500 → 2,000 lines with Nexlify",
     summary:
-      "Operator cut support load with WHMCS automation, Anti-Freeze, and Telegram alerts — read the full case study.",
+      "Operator cut support load with billing automation, Anti-Freeze, and Telegram alerts — read the full case study.",
     href: "/blog/case-study-500-to-2000-lines",
   },
   {
-    title: "WHMCS IPTV module automation",
+    title: "native billing automation",
     summary:
       "Our host connected order, suspend, and renew hooks so panel license state stays synced with Stripe and PayPal checkouts.",
-    href: "/blog/whmcs-iptv-automation-setup",
+    href: "/blog/billing-iptv-automation-setup",
   },
   {
     title: "Trial → paid in 3 days",

@@ -38,7 +38,7 @@ export default function XuiOneVsNexlifyPricingPage() {
                     <td className="py-2">Varies / community forks</td>
                   </tr>
                   <tr className="border-b border-white/5">
-                    <td className="py-2 pr-4">WHMCS IPTV module</td>
+                    <td className="py-2 pr-4">native billing</td>
                     <td className="py-2 pr-4">Included</td>
                     <td className="py-2">Often third-party / custom</td>
                   </tr>
@@ -61,7 +61,7 @@ export default function XuiOneVsNexlifyPricingPage() {
           title: "Hidden costs on legacy panels",
           body: (
             <ul className="list-disc space-y-2 pl-5">
-              <li>Custom WHMCS bridge development and maintenance</li>
+              <li>Custom billing bridge development and maintenance</li>
               <li>Security patches on unmaintained PHP forks</li>
               <li>Manual license spreadsheets and support load</li>
               <li>Downtime during risky live imports without preview</li>
@@ -72,7 +72,7 @@ export default function XuiOneVsNexlifyPricingPage() {
           title: "Nexlify license tiers",
           body: (
             <p>
-              Starter, Main, and Top Tier scale with line counts — every tier includes the WHMCS IPTV module and
+              Starter, Main, and Top Tier scale with line counts — every tier includes the native billing and
               IPTV management software stack. See live GBP/USD numbers on{" "}
               <Link href="/pricing" className="text-violet-400 underline hover:text-violet-300">
                 pricing

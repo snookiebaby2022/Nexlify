@@ -5,6 +5,7 @@ import {
   syncM3uFromUrl,
   type M3uContentType,
 } from "./m3u-watch-sync";
+import { syncWatchFolderM3u } from "./watch-folder-m3u";
 import { ImportKind } from "@prisma/client";
 
 export type M3uSyncRunResult = {
@@ -12,6 +13,7 @@ export type M3uSyncRunResult = {
   skipped: number;
   updated?: number;
   reordered?: number;
+  deduped?: number;
   errors?: string[];
 };
 
@@ -148,7 +150,7 @@ export async function runDueM3uSyncJobs(limit = 5): Promise<{
   return { processed, imported, skipped, errors };
 }
 
-/** Sync a watch folder when its path is a remote M3U URL. */
+/** Sync a watch folder from a remote M3U URL or a local .m3u file. */
 export async function runWatchFolderM3uSync(folder: {
   id: string;
   name: string;
@@ -156,12 +158,12 @@ export async function runWatchFolderM3uSync(folder: {
   type: string;
   categoryId: string | null;
   serverId: string | null;
+  autoCategory?: boolean;
+  updateNames?: boolean;
+  overwriteCategories?: boolean;
+  onDemand?: boolean;
+  removeDuplicates?: boolean;
+  isAdult?: boolean;
 }): Promise<M3uSyncRunResult> {
-  return runM3uUrlSync(folder.path, {
-    contentType: folder.type,
-    categoryId: folder.categoryId,
-    serverId: folder.serverId,
-    autoTmdb: true,
-    autoCategory: true,
-  });
+  return syncWatchFolderM3u(folder);
 }

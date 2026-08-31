@@ -20,7 +20,7 @@ export function HomeSeoContent() {
             Nexlify is {SOFTWARE_POSITIONING.toLowerCase()} — a secure, reliable management tool
             for service providers worldwide. Whether you run a growing IPTV reseller business or
             operate infrastructure for hundreds of lines, our IPTV panel combines Xtream-compatible
-            controls, WHMCS IPTV module automation, and operator-grade tooling in one platform you
+            controls, native billing automation, and operator-grade tooling in one platform you
             deploy on your own servers — without the fragility of generic cheap IPTV scripts.
           </p>
         </div>
@@ -53,7 +53,7 @@ export function HomeSeoContent() {
               Resellers get enforced 2FA, commission reports, coupon checkout, and Telegram alerts
               when streams go offline. Operators get reseller management software that separates live
               channels from VOD, probes dead links automatically, and syncs license state every time
-              WHMCS creates, suspends, or terminates a service. It is IPTV management software
+              billing creates, suspends, or terminates a service. It is IPTV management software
               designed for real revenue — not a demo theme.
             </p>
             <p className="mt-4 text-sm leading-relaxed text-[var(--muted)] md:text-base">
@@ -76,7 +76,7 @@ export function HomeSeoContent() {
           </h2>
           <p className="mt-5 text-base leading-relaxed text-[var(--muted)] md:text-lg">
             Nexlify sells digital IPTV panel licenses — there is no physical shipping. Customers
-            worldwide can checkout in GBP or USD via Stripe or WHMCS.
+            worldwide can checkout in GBP or USD via Stripe or billing.
             License keys and installer access are delivered instantly to your account and email
             after payment — no customs, no warehouse delays, no regional stock limits.
           </p>
@@ -85,10 +85,10 @@ export function HomeSeoContent() {
         <div className="mt-10 grid gap-10 lg:grid-cols-2">
           <div>
             <h3 className="font-display text-xl font-semibold text-white">
-              GBP and USD checkout via WHMCS
+              GBP and USD checkout via Stripe
             </h3>
             <p className="mt-4 text-sm leading-relaxed text-[var(--muted)] md:text-base">
-              Connect the WHMCS IPTV module so new orders provision panel licenses automatically.
+              Connect the native billing so new orders provision panel licenses automatically.
               One simple £50/mo license suits solo resellers and growing service providers alike. Launch
               coupons and trial registrations are available for worldwide operators evaluating
               cheap IPTV panel options without sacrificing security or support quality.
@@ -139,7 +139,7 @@ export function HomeSeoContent() {
 
         <div className="mt-16 max-w-3xl">
           <h2 className="font-display text-3xl font-bold text-white md:text-4xl">
-            WHMCS IPTV module and reseller tooling included
+            native billing and reseller tooling included
           </h2>
           <p className="mt-5 text-base leading-relaxed text-[var(--muted)] md:text-base">
             Every Nexlify license includes API access for automated provisioning, webhook handlers
@@ -155,7 +155,7 @@ export function HomeSeoContent() {
               Automated license provisioning
             </h3>
             <p className="mt-4 text-sm leading-relaxed text-[var(--muted)] md:text-base">
-              When a customer orders through WHMCS, Nexlify issues a bound license key, activates
+              When a customer orders through Stripe, Nexlify issues a bound license key, activates
               the correct plan tier, and reflects status changes on suspension or termination. No
               manual CSV imports or midnight cron fixes — the IPTV panel stays aligned with your
               billing system in real time.
@@ -193,7 +193,7 @@ export function HomeSeoContent() {
             {site.salesEmail}
           </a>{" "}
           for reseller volume questions. Nexlify is the management tool and best reseller panel
-          choice when you need WHMCS IPTV module automation without compromise.
+          choice when you need native billing automation without compromise.
         </p>
       </div>
     </section>

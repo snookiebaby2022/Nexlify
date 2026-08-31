@@ -1,4 +1,4 @@
-/** Paid feature packs — WHMCS service IDs and panel settings groups. */
+/** Paid feature packs — license service IDs and panel settings groups. */
 export type FeaturePackDef = {
   id: string;
   serviceId: string;

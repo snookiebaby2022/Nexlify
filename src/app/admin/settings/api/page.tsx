@@ -9,7 +9,7 @@ export default function AdminApiDocsPage() {
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
-        <h1 className="text-2xl font-semibold">Admin API & WHMCS</h1>
+        <h1 className="text-2xl font-semibold">Admin API</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
           XUI One-compatible actions for billing scripts. Optional HMAC header{" "}
           <code className="text-xs">x-nexlify-signature</code> when a HMAC secret is set.
@@ -59,7 +59,7 @@ GET /api/v1?api_key=KEY&action=add_credits&username=reseller1&credits=10`}
       </section>
 
       <section className="rounded-lg border p-4 space-y-2 text-sm" style={{ borderColor: "var(--border)" }}>
-        <h2 className="font-semibold">WHMCS webhook</h2>
+        <h2 className="font-semibold">Billing webhook</h2>
         <p style={{ color: "var(--muted)" }}>
           Set <code className="text-xs">BILLING_WEBHOOK_SECRET</code> in the panel <code className="text-xs">.env</code>.
         </p>
@@ -71,9 +71,6 @@ Header: X-Billing-Secret: YOUR_SECRET
         <p style={{ color: "var(--muted)" }}>
           Actions: create, suspend, unsuspend, terminate, renew, add_credits.
         </p>
-        <Link href="/api/admin/billing/whmcs-zip" className="inline-block text-sm" style={{ color: "var(--accent)" }}>
-          Download WHMCS module ZIP
-        </Link>
       </section>
 
       <p className="text-sm">

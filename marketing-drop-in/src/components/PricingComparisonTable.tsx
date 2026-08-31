@@ -10,7 +10,7 @@ type Row = {
 };
 
 const ROWS: Row[] = [
-  { feature: "WHMCS native", nexlify: true, xtream: false, xui: "partial", onestream: false, ministra: "partial" },
+  { feature: "billing native", nexlify: true, xtream: false, xui: "partial", onestream: false, ministra: "partial" },
   { feature: "Anti-freeze playback", nexlify: true, xtream: "partial", xui: false, onestream: false, ministra: false },
   { feature: "Sub-second zapping", nexlify: true, xtream: false, xui: "partial", onestream: false, ministra: false },
   { feature: "GBP + USD checkout", nexlify: true, xtream: false, xui: false, onestream: false, ministra: "partial" },

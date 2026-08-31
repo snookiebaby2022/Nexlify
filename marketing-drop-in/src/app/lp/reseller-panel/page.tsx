@@ -13,7 +13,7 @@ export default function LpResellerPanelPage() {
       bullets={[
         "7-day free trial — no card required",
         "Live demo at panel.demo.nexlify.live",
-        "WHMCS & Stripe auto-provisioning",
+        "billing & Stripe auto-provisioning",
         "GBP or USD checkout worldwide",
         "One-click install on any VPS",
         "Sub-reseller hierarchy & white-label",

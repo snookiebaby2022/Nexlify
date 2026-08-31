@@ -24,7 +24,7 @@ export default function MigrateXuiOnePage() {
         { name: "Export or connect XUI source", text: "Use Import → Panel migration and select XUI.one as the source." },
         { name: "Run Preview", text: "Validate line counts, bouquets, and reseller mapping before live import." },
         { name: "Import during low traffic", text: "Execute the import and monitor PostgreSQL load." },
-        { name: "Reconnect WHMCS", text: "Point the WHMCS IPTV module at the new license server." },
+        { name: "Reconnect billing", text: "Point the native billing at the new license server." },
         { name: "Cut over DNS", text: "Switch panel URL when playback tests pass on sample lines." },
       ]}
       related={[
@@ -37,7 +37,7 @@ export default function MigrateXuiOnePage() {
           title: "Why operators migrate off XUI.one",
           body: (
             <p>
-              XUI.one forks are widespread but often lack maintained WHMCS integration, modern security defaults,
+              XUI.one forks are widespread but often lack maintained billing integration, modern security defaults,
               and predictable upgrade paths. Nexlify targets operators who want to{" "}
               <strong className="text-slate-200">migrate from XUI.one to Nexlify</strong> without rebuilding
               reseller hierarchies from CSV exports.
@@ -73,8 +73,8 @@ export default function MigrateXuiOnePage() {
           body: (
             <p>
               Connect{" "}
-              <Link href="/docs/whmcs" className="text-violet-400 underline hover:text-violet-300">
-                WHMCS IPTV automation
+              <Link href="/help" className="text-violet-400 underline hover:text-violet-300">
+                IPTV billing automation
               </Link>
               , enable Telegram alerts for stream health, and document backups in admin settings. For the full
               8-step checklist including 1-stream notes, see{" "}

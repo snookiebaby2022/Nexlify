@@ -9,7 +9,7 @@ export default function CutTheCordStreamingPage() {
       path="/lp/cut-the-cord-streaming"
       breadcrumbLabel="Cut the cord streaming platform"
       h1="Cut the cord streaming — platform software for modern operators"
-      sub="Launch or upgrade a premium digital entertainment business with Nexlify: live TV streaming service tools, WHMCS billing, and an HD streaming player app-compatible stack subscribers expect when they cut traditional cable."
+      sub="Launch or upgrade a premium digital entertainment business with Nexlify: live TV streaming service tools, Stripe billing, and an HD streaming player app-compatible stack subscribers expect when they cut traditional cable."
       bullets={[
         "Cut the cord streaming infrastructure on your VPS",
         "Live TV streaming service management in one dashboard",

@@ -61,7 +61,7 @@ export default function AdminCouponsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Coupons</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Discount codes for WHMCS or website checkout via{" "}
+          Discount codes for website checkout via{" "}
           <code className="text-xs">POST /api/billing/coupon</code>.
         </p>
       </div>

@@ -32,14 +32,12 @@ type HomeBelowFoldProps = {
   plans: PlanView[];
   loggedIn: boolean;
   stripeEnabled: boolean;
-  whmcsCartBaseUrl: string | null;
 };
 
 export function HomePricingSections({
   plans,
   loggedIn,
   stripeEnabled,
-  whmcsCartBaseUrl,
 }: HomeBelowFoldProps) {
   return (
     <>
@@ -47,9 +45,8 @@ export function HomePricingSections({
         plans={plans}
         loggedIn={loggedIn}
         stripeEnabled={stripeEnabled}
-        whmcsCartBaseUrl={whmcsCartBaseUrl}
       />
-      <PluginPricingSection whmcsCartBaseUrl={whmcsCartBaseUrl} />
+      <PluginPricingSection />
     </>
   );
 }

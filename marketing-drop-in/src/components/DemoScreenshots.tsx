@@ -2,7 +2,7 @@ import Link from "next/link";
 import {
   PanelDashboardSlide,
   PanelResellerSlide,
-  PanelWhmcsBillingSlide,
+  PanelBillingSlide,
 } from "@/components/demo/panel-slide-views";
 import { DEMO_PANEL_URL } from "@/lib/demo";
 
@@ -14,10 +14,10 @@ const SCREENSHOTS = [
     alt: "Nexlify IPTV panel dashboard showing active lines, streams, and server health metrics",
   },
   {
-    View: PanelWhmcsBillingSlide,
-    title: "WHMCS billing sync",
+    View: PanelBillingSlide,
+    title: "Stripe billing sync",
     caption: "Orders, renewals, and suspensions stay in sync with your cart.",
-    alt: "Nexlify WHMCS billing integration with automatic license provisioning on order",
+    alt: "Nexlify Stripe billing integration with automatic license provisioning on order",
   },
   {
     View: PanelResellerSlide,

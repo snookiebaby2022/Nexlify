@@ -18,7 +18,7 @@ export function PrivacyContent() {
         <h2 className="font-display text-lg font-semibold text-white">Data we collect</h2>
         <ul className="list-disc space-y-2 pl-5">
           <li>Account details (email, name) when you register or purchase a license</li>
-          <li>Billing records processed via WHMCS or Stripe</li>
+          <li>Billing records processed via Stripe or Stripe</li>
           <li>Support tickets and correspondence</li>
           <li>Analytics data (Google Analytics, Umami, GTM) when you accept cookies</li>
           <li>Advertising pixels (Meta, TikTok, LinkedIn) if configured and you accept cookies</li>

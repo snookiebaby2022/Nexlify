@@ -141,7 +141,7 @@ export async function handleBillingWebhook(
           userId: user.id,
           amount,
           balanceAfter: updated.credits,
-          note: payload.note ?? "whmcs add_credits",
+          note: payload.note ?? "billing add_credits",
         },
       });
       result = { ok: true, message: "credits", lineId: user.id };
@@ -155,7 +155,7 @@ export async function handleBillingWebhook(
 
   await prisma.billingEvent.create({
     data: {
-      provider: "whmcs",
+      provider: "billing",
       action,
       payload: payload as Prisma.InputJsonValue,
       lineId: result.lineId,

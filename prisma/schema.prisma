@@ -518,6 +518,16 @@ model WatchFolder {
   autoScanMins  Int             @default(0)
   /// Import movies via symlink/hardlink instead of copying bytes.
   useSymlinks   Boolean         @default(false)
+  /// M3U watches: create folders from group-title.
+  autoCategory  Boolean         @default(true)
+  /// M3U watches: refresh names / logos / EPG on existing URLs.
+  updateNames   Boolean         @default(true)
+  /// M3U watches: move existing matches into the playlist group-title folder.
+  overwriteCategories Boolean   @default(true)
+  /// LIVE M3U imports use on-demand (no restream) when true.
+  onDemand      Boolean         @default(true)
+  /// After scan, drop extra rows with the same live name in this playlist.
+  removeDuplicates Boolean      @default(false)
   lastScan      DateTime?
   importedCount Int             @default(0)
   createdAt     DateTime        @default(now())
@@ -789,7 +799,7 @@ model EpgProgram {
 
 model BillingEvent {
   id        String   @id @default(cuid())
-  provider  String   @default("whmcs")
+  provider  String   @default("billing")
   action    String
   payload   Json
   lineId    String?

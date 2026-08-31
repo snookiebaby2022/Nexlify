@@ -9,7 +9,7 @@ export const metadata = pageSeo("/compare/xtream-panel");
 
 
 const ROWS = [
-  { feature: "WHMCS auto-provisioning", nexlify: "Built-in module", other: "Often manual / third-party" },
+  { feature: "billing auto-provisioning", nexlify: "Built-in module", other: "Often manual / third-party" },
   { feature: "License encryption", nexlify: "AES-256 + server binding", other: "Varies / often weak" },
   { feature: "Worldwide checkout", nexlify: "GBP + USD", other: "Rarely supported" },
   { feature: "Anti-Freeze playback", nexlify: "Included", other: "Uncommon" },
@@ -25,7 +25,7 @@ export default function CompareXtreamPage() {
       breadcrumbLabel="Xtream panel comparison"
       eyebrow="Compare · Worldwide"
       h1="Nexlify vs generic Xtream panel"
-      intro="Operators searching for an Xtream-compatible IPTV panel need more than playback URLs. Nexlify is full IPTV management software with WHMCS IPTV module automation, built for service service providers worldwide."
+      intro="Operators searching for an Xtream-compatible IPTV panel need more than playback URLs. Nexlify is full IPTV management software with native billing automation, built for service service providers worldwide."
       otherLabel="Typical Xtream panel"
       rows={ROWS}
       closing="Nexlify is IPTV management software designed for revenue — not a script bundle. Open the live demo or start a trial before you commit."

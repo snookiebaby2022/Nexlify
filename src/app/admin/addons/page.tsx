@@ -85,19 +85,7 @@ const TOOL_PLUGINS: PluginDef[] = [
   },
 ];
 
-const THIRD_PARTY: PluginDef[] = [
-  {
-    id: "whmcs",
-    href: "https://nexlify.live/docs/whmcs",
-    name: "WHMCS Billing",
-    description: "Automate panel and plugin licenses through WHMCS.",
-    color: "#22c55e",
-    gradient: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
-    monogram: "W",
-    version: "external",
-    external: true,
-  },
-];
+const THIRD_PARTY: PluginDef[] = [];
 
 function musicPlugins(): PluginDef[] {
   return MUSIC_ADDONS.map((m) => ({
@@ -586,7 +574,7 @@ export default function AddonsOverviewPage() {
           <div>
             <div className="text-sm font-medium">Addon licenses</div>
             <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-              Keys from WHMCS or manual entry unlock plugins on this panel.
+              Keys from your Nexlify license or a manual addon key unlock plugins on this panel.
             </p>
           </div>
           <Link

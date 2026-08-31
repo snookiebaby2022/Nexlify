@@ -30,8 +30,8 @@ export default function MarketplacePage() {
     <FormPageShell title="Feature Pack Marketplace" manageHref="/admin/addons" manageLabel="All Addons">
       <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
         {bundled
-          ? "All feature packs are included with your Nexlify license — configure each pack below. Optional WHMCS billing applies only when bundled packs are disabled on your plan."
-          : "Premium monthly packs via WHMCS — Transcoding, LB, Archive, Security, Analytics, DVR, or Full Enterprise bundle (£80–100/mo)."}
+          ? "All feature packs are included with your Nexlify license — configure each pack below."
+          : "Premium monthly packs — Transcoding, LB, Archive, Security, Analytics, DVR, or Full Enterprise bundle (£80–100/mo)."}
       </p>
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {FEATURE_PACKS.map((pack) => {

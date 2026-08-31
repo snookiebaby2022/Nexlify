@@ -124,6 +124,12 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/docs/api", destination: "/install", permanent: true },
+      { source: "/whmcs", destination: "/pricing", permanent: true },
+      { source: "/docs/whmcs", destination: "/help", permanent: true },
+      { source: "/lp/whmcs-iptv", destination: "/pricing", permanent: true },
+      { source: "/compare/whmcs-iptv-module", destination: "/compare/xtream-panel", permanent: true },
+      { source: "/blog/whmcs-iptv-automation-setup", destination: "/blog", permanent: true },
+      { source: "/blog/whmcs-iptv-integration-keeps-breaking", destination: "/blog", permanent: true },
       {
         source: "/:path*",
         has: [{ type: "host", value: "www.nexlify.live" }],

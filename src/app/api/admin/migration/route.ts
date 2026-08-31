@@ -62,7 +62,6 @@ export async function POST(req: NextRequest) {
     MigrationSource.XTREAM_UI,
     MigrationSource.XUI,
     MigrationSource.NXT,
-    MigrationSource.WHMCS,
   ];
   if (!validSources.includes(source)) {
     return NextResponse.json({ error: "Invalid source" }, { status: 400 });

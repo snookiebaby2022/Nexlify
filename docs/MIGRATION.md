@@ -111,4 +111,4 @@ Live PG also merges `package_streams` / `subscription_packages` junction tables.
 
 ## Still configure on Nexlify (not in legacy dumps)
 
-Stream agents, blocklists, WHMCS, TMDB, CDN/RTMP edges, and most ops tooling are Nexlify-native — set those up after the data cutover.
+Stream agents, blocklists, TMDB, CDN/RTMP edges, and most ops tooling are Nexlify-native — set those up after the data cutover.

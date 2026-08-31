@@ -169,8 +169,8 @@ export function AdminStats() {
             hint={`${stats.sales.completedPaidOrders} completed paid orders`}
           />
           <StatCard
-            label="WHMCS sales"
-            value={stats.sales.byChannel.whmcs}
+            label="billing sales"
+            value={stats.sales.byChannel.billing}
             hint={`Stripe ${stats.sales.byChannel.stripe} · Manual ${stats.sales.byChannel.manual}`}
           />
         </div>

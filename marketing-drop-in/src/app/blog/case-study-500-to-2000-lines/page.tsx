@@ -11,7 +11,7 @@ export const metadata = blogPostMetadata(post);
 const TESTIMONIALS = [
   {
     quote:
-      "Migrated from a legacy Xtream panel in one afternoon. WHMCS provisioning just works — GBP billing with no manual license CSVs.",
+      "Migrated from a legacy Xtream panel in one afternoon. billing provisioning just works — GBP billing with no manual license CSVs.",
     name: "James R.",
     region: "Manchester, UK",
     lines: "850 → 1,400 lines",
@@ -37,7 +37,7 @@ export default function CaseStudy500To2000Page() {
     <BlogArticleShell
       post={post}
       related={[
-        { label: "WHMCS automation guide", href: "/blog/whmcs-iptv-automation-setup" },
+        { label: "billing automation guide", href: "/blog/billing-iptv-automation-setup" },
         { label: "Features", href: "/features" },
         { label: "Pricing", href: "/pricing" },
       ]}
@@ -48,7 +48,7 @@ export default function CaseStudy500To2000Page() {
             <p>
               Operators scaling past ~500 lines often hit manual billing, unstable forks, and support load from
               buffering complaints. The goal: an <strong className="text-slate-200">IPTV management software</strong>{" "}
-              stack with <strong className="text-slate-200">WHMCS IPTV automation</strong>, Anti-Freeze playback,
+              stack with <strong className="text-slate-200">IPTV billing automation</strong>, Anti-Freeze playback,
               and sub-reseller tooling — without rebuilding hierarchies from scratch.
             </p>
           ),
@@ -57,7 +57,7 @@ export default function CaseStudy500To2000Page() {
           title: "Results operators report",
           body: (
             <ul className="list-disc space-y-2 pl-5">
-              <li>Less time on license CSVs — WHMCS creates and renews keys automatically</li>
+              <li>Less time on license CSVs — billing creates and renews keys automatically</li>
               <li>Fewer playback tickets — Anti-Freeze and failover URLs on unstable ISPs</li>
               <li>Faster cutover — preview migration from XUI.one / Xtream UI forks</li>
               <li>Better uptime visibility — Telegram alerts when streams or servers drop</li>
@@ -88,8 +88,8 @@ export default function CaseStudy500To2000Page() {
                 7-day trial
               </Link>
               , connect{" "}
-              <Link href="/blog/whmcs-iptv-automation-setup" className="text-violet-400 underline hover:text-violet-300">
-                WHMCS automation
+              <Link href="/blog/billing-iptv-automation-setup" className="text-violet-400 underline hover:text-violet-300">
+                billing automation
               </Link>
               , and migrate with{" "}
               <Link href="/blog/migrate-xui-xtream-ui-to-nexlify" className="text-violet-400 underline hover:text-violet-300">

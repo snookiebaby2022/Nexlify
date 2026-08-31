@@ -9,7 +9,7 @@ export default function TranscodingPackSettingsPage() {
       sections={[
         {
           title: "License",
-          info: "Requires Transcoding Pro Pack WHMCS addon (£35–55/mo) or Full Enterprise Bundle.",
+          info: "Requires Transcoding Pro Pack addon (£35–55/mo) or Full Enterprise Bundle.",
           fields: [{ key: "enabled", label: "Enable Transcoding Pro", type: "yesno" }],
         },
         {

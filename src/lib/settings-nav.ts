@@ -35,7 +35,7 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
   { href: "/admin/settings/vod-proxy", label: "Hide VOD URLs", group: "vod-proxy" },
   { href: "/admin/settings/vod-burst", label: "VOD Burst Speed", group: "vod-burst" },
   { href: "/admin/settings/vod-storage", label: "Rclone / S3 VOD", group: "vod-storage" },
-  { href: "/admin/settings/api", label: "Admin API & WHMCS" },
+  { href: "/admin/settings/api", label: "Admin API" },
   { href: "/admin/settings/batch-manager", label: "Batch Manager", group: "batch-manager" },
   { href: "/admin/settings/expiry-videos", label: "Expiry Videos", group: "expiry-videos" },
   { href: "/admin/settings/server-cleaner", label: "Server Cleaner", group: "server-cleaner" },

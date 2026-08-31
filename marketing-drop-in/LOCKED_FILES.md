@@ -42,7 +42,7 @@ src/app/api/licenses/send-code/route.ts
 src/app/api/licenses/sync/route.ts
 src/app/api/checkout/route.ts
 src/app/api/plans/route.ts
-src/app/api/whmcs/route.ts
+src/app/api/billing/route.ts
 src/app/api/health/route.ts
 
 # ──────────────────────────────────────────────
@@ -227,7 +227,7 @@ src/components/ProblemSolutionBlogPage.tsx
 # MEDIUM: Comparison & VS pages
 # ──────────────────────────────────────────────
 src/app/compare/xtream-panel/page.tsx
-src/app/compare/whmcs-iptv-module/page.tsx
+src/app/compare/xtream-panel/page.tsx
 src/app/vs/xui-one/page.tsx
 src/app/vs/1-stream/page.tsx
 src/components/ComparePageShell.tsx
@@ -275,7 +275,7 @@ src/components/ObsSetupPanel.tsx
 # ──────────────────────────────────────────────
 src/app/lp/reseller-panel/page.tsx
 src/app/lp/reseller-panel-uk/page.tsx
-src/app/lp/whmcs-iptv/page.tsx
+src/app/pricing/page.tsx
 src/app/lp/live-tv-streaming-platform/page.tsx
 src/app/lp/cut-the-cord-streaming/page.tsx
 src/components/LpCtaPage.tsx
@@ -317,8 +317,8 @@ src/app/updates/page.tsx
 src/app/affiliates/page.tsx
 src/app/grow/page.tsx
 src/app/grow/links/page.tsx
-src/app/docs/whmcs/page.tsx
-src/app/whmcs/page.tsx
+src/app/help/page.tsx
+src/app/billing/page.tsx
 src/app/best-iptv-reseller-panel/page.tsx
 src/app/forgot-password/page.tsx
 src/app/reset-password/[token]/page.tsx

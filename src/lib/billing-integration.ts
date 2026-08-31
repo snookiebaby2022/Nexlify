@@ -5,7 +5,7 @@ const BILLING_PREFIX = "billing:";
 
 export type BillingIntegration = {
   id: string;
-  provider: "stripe" | "paypal" | "whmcs";
+  provider: "stripe" | "paypal" | "billing";
   apiKey: string;
   isActive: boolean;
 };

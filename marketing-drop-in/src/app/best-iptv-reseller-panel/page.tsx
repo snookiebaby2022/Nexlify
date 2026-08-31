@@ -15,41 +15,41 @@ const PANELS = [
     name: "Nexlify",
     highlight: true,
     pricing: "From £50/mo · 7-day trial",
-    whmcs: "Native module",
+    billing: "Native module",
     stability: "Node + PostgreSQL, PM2",
-    verdict: "Best for WHMCS-first operators who want billing automation, GBP/USD checkout worldwide, and modern UX.",
+    verdict: "Best for billing-first operators who want billing automation, GBP/USD checkout worldwide, and modern UX.",
   },
   {
     name: "Xtream UI",
     highlight: false,
     pricing: "Self-hosted · variable",
-    whmcs: "Third-party scripts",
+    billing: "Third-party scripts",
     stability: "PHP stacks vary by fork",
-    verdict: "Familiar Xtream API, but WHMCS and multi-currency checkout usually require custom glue.",
+    verdict: "Familiar Xtream API, but billing and multi-currency checkout usually require custom glue.",
   },
   {
     name: "XUI.one",
     highlight: false,
     pricing: "License + hosting",
-    whmcs: "Bolt-on integrations",
+    billing: "Bolt-on integrations",
     stability: "Mature but legacy architecture",
-    verdict: "Large installed base; migration and WHMCS sync are common pain points for growing resellers.",
+    verdict: "Large installed base; migration  sync are common pain points for growing resellers.",
   },
   {
     name: "1-stream",
     highlight: false,
     pricing: "Fork-dependent",
-    whmcs: "Third-party scripts",
+    billing: "Third-party scripts",
     stability: "Varies by fork",
-    verdict: "Common migration source; preview import and WHMCS sync are why operators move to Nexlify.",
+    verdict: "Common migration source; preview import  sync are why operators move to Nexlify.",
   },
   {
     name: "Ministra (Stalker)",
     highlight: false,
     pricing: "Middleware licensing",
-    whmcs: "Partner-dependent",
+    billing: "Partner-dependent",
     stability: "MAG-focused middleware",
-    verdict: "Strong for MAG portals; less turnkey for Xtream-style reseller panels and WHMCS carts.",
+    verdict: "Strong for MAG portals; less turnkey for Xtream-style reseller panels  carts.",
   },
 ] as const;
 
@@ -65,7 +65,7 @@ export default function BestIptvResellerPanelPage() {
       <WebPageJsonLd
         path="/best-iptv-reseller-panel"
         name="Best IPTV Reseller Panel in 2026 — Honest Comparison"
-        description="Compare Nexlify vs Xtream UI, XUI.one, and Ministra for WHMCS support, stability, and reseller features."
+        description="Compare Nexlify vs Xtream UI, XUI.one, and Ministra for billing support, stability, and reseller features."
         about="IPTV reseller panel comparison"
       />
       <SoftwareProductJsonLd path="/best-iptv-reseller-panel" includeProduct />
@@ -78,7 +78,7 @@ export default function BestIptvResellerPanelPage() {
           Nexlify vs all IPTV panels — XUI, 1-stream, Xtream, Ministra
         </h1>
         <p className="mt-4 max-w-2xl text-lg text-[var(--muted)]">
-          Best IPTV reseller panel comparison for 2026 — WHMCS IPTV module, Anti-Freeze, security,
+          Best IPTV reseller panel comparison for 2026 — native billing, Anti-Freeze, security,
           migration, and pricing vs XUI.one, 1-stream, Xtream UI, and Ministra.
         </p>
 
@@ -117,8 +117,8 @@ export default function BestIptvResellerPanelPage() {
                   <dd className="mt-1 text-slate-200">{panel.pricing}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs uppercase tracking-wider text-[var(--muted)]">WHMCS</dt>
-                  <dd className="mt-1 text-slate-200">{panel.whmcs}</dd>
+                  <dt className="text-xs uppercase tracking-wider text-[var(--muted)]">billing</dt>
+                  <dd className="mt-1 text-slate-200">{panel.billing}</dd>
                 </div>
                 <div>
                   <dt className="text-xs uppercase tracking-wider text-[var(--muted)]">Stack</dt>
@@ -140,8 +140,8 @@ export default function BestIptvResellerPanelPage() {
             One-click installer
           </Link>
           {" · "}
-          <Link href="/whmcs" className="text-violet-400 hover:text-violet-300 underline">
-            WHMCS module
+          <Link href="/billing" className="text-violet-400 hover:text-violet-300 underline">
+            billing module
           </Link>
           {" · "}
           <Link href="/compare/xtream-panel" className="text-violet-400 hover:text-violet-300 underline">

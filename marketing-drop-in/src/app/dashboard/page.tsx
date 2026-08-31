@@ -37,7 +37,7 @@ export default async function DashboardPage() {
       </Suspense>
       <h1 className="font-display text-3xl font-bold text-white">My licenses</h1>
       <p className="mt-2 text-[var(--muted)]">
-        Signed in as {user.email}. Keys from WHMCS or checkout — paste into your panel activation.
+        Signed in as {user.email}. Keys from billing or checkout — paste into your panel activation.
       </p>
 
       {hasStripeSub ? (

@@ -101,7 +101,7 @@ const ROWS: FeatureRow[] = [
   { category: "User & Reseller", feature: "Access Codes — one-time use codes for line activation", nexlify: "new", typical: "missing" },
   { category: "User & Reseller", feature: "Reseller API Keys — scoped keys with granular permissions + IP restrictions", nexlify: "new", typical: "missing" },
   { category: "User & Reseller", feature: "Mass Edit — bulk ops for lines, streams, channels, movies, series, bouquets", nexlify: "new", typical: "missing" },
-  { category: "User & Reseller", feature: "Migration from NXT, XCIPTV, WHMCS, Xtream UI, XUI, Custom", nexlify: "new", typical: "partial" },
+  { category: "User & Reseller", feature: "Migration from NXT, XCIPTV, Xtream UI, XUI, Custom", nexlify: "new", typical: "partial" },
   { category: "User & Reseller", feature: "Sub-reseller hierarchy & credits", nexlify: "included", typical: "missing" },
   { category: "User & Reseller", feature: "MAG devices (full native support)", nexlify: "included", typical: "partial" },
   { category: "User & Reseller", feature: "Enigma2 bouquet tools", nexlify: "included", typical: "partial" },
@@ -109,7 +109,7 @@ const ROWS: FeatureRow[] = [
   { category: "User & Reseller", feature: "Automated email + in-panel notifications", nexlify: "included", typical: "partial" },
 
   // Billing
-  { category: "Billing", feature: "WHMCS IPTV module — auto-provision, renew, suspend", nexlify: "included", typical: "partial" },
+  { category: "Billing", feature: "native billing — auto-provision, renew, suspend", nexlify: "included", typical: "partial" },
   { category: "Billing", feature: "PayPal checkout (Orders v2) + Stripe", nexlify: "included", typical: "partial" },
   { category: "Billing", feature: "Coupon codes + checkout API", nexlify: "included", typical: "missing" },
   { category: "Billing", feature: "Advanced billing logs — financial audit trail", nexlify: "included", typical: "missing" },
@@ -136,7 +136,7 @@ const ROWS: FeatureRow[] = [
   { category: "Business & Monetization", feature: "Dynamic Pricing Engine — peak/off-peak multipliers, time-based pricing", nexlify: "new", typical: "missing" },
   { category: "Business & Monetization", feature: "Multi-tenancy — per-reseller branding, isolated configs, tenant permissions", nexlify: "new", typical: "missing" },
   { category: "Business & Monetization", feature: "Loyalty Program — points, badges, tier levels for active viewers", nexlify: "new", typical: "missing" },
-  { category: "Business & Monetization", feature: "Billing Integration — Stripe, PayPal, WHMCS with invoice management", nexlify: "new", typical: "missing" },
+  { category: "Business & Monetization", feature: "Billing Integration — Stripe, PayPal with invoice management", nexlify: "new", typical: "missing" },
   { category: "Business & Monetization", feature: "Content Moderation — flag, review, approve/reject streams", nexlify: "new", typical: "missing" },
 
   // Operations & Maintenance
@@ -202,7 +202,7 @@ export default function FeaturesPage() {
           { name: "Features", path: "/features" },
         ]}
       />
-      <WebPageJsonLd path="/features" name="IPTV panel features for resellers worldwide" description="Compare Nexlify IPTV management software features for worldwide service providers — WHMCS, streaming, security, billing, and reseller tools." about="Features" />
+      <WebPageJsonLd path="/features" name="IPTV panel features for resellers worldwide" description="Compare Nexlify IPTV management software features for worldwide service providers — streaming, security, billing, and reseller tools." about="Features" />
       <SoftwareProductJsonLd path="/features" includeProduct />
 
       <main className="max-w-6xl mx-auto px-4 py-12 space-y-10">
@@ -216,7 +216,7 @@ export default function FeaturesPage() {
           <p className="text-lg max-w-2xl" style={{ color: "#94a3b8" }}>
 
             Honest feature matrix for worldwide service providers evaluating IPTV management software
-            and IPTV reseller panel tools. Compare security, WHMCS IPTV automation, Anti-Freeze
+            and IPTV reseller panel tools. Compare security, IPTV billing automation, Anti-Freeze
             streaming, and migration against typical Xtream and XUI.one forks.
 
           </p>
@@ -250,7 +250,7 @@ export default function FeaturesPage() {
               playback token TTL
             </li>
             <li className="rounded-lg border p-4" style={{ borderColor: "#1e3a5f" }}>
-              <strong className="text-cyan-300">Billing</strong> — WHMCS IPTV module, PayPal, coupons,
+              <strong className="text-cyan-300">Billing</strong> — native billing, PayPal, coupons,
               auto renewals
             </li>
             <li className="rounded-lg border p-4" style={{ borderColor: "#1e3a5f" }}>
@@ -272,7 +272,7 @@ export default function FeaturesPage() {
 
           <p className="text-base leading-relaxed" style={{ color: "#94a3b8" }}>
 
-            Generic Xtream panel installs lack WHMCS IPTV module depth, leak auditing, and reseller
+            Generic Xtream panel installs lack native billing depth, leak auditing, and reseller
             white-label controls. Nexlify is IPTV management software built as a management tool for
             service providers who need billing automation, stream health monitoring, and subscriber
             self-service in one IPTV panel.

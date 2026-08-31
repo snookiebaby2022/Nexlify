@@ -13,7 +13,6 @@ export type PlanMarketing = {
   primaryHref: string | null;
   primaryTrack: string;
   isTrial: boolean;
-  hideWhmcs: boolean;
   highlight?: boolean;
 };
 
@@ -23,7 +22,7 @@ export const FULL_PANEL_FEATURES = [
   "Reseller panel UI",
   "Xtream-compatible API",
   "Anti-Freeze playback & fast zapping",
-  "WHMCS / Stripe license provisioning",
+  "Stripe license provisioning",
   "Sub-reseller hierarchy & credits",
   "Commission & usage reports",
   "Geo-blocking, leak audit & VOD workspace",
@@ -68,7 +67,7 @@ function planLimitsFor(plan: PlanView): string[] {
     serversLimitLabel(plan),
     "All media & music plugins included",
     "Every Nexlify panel feature included",
-    "WHMCS IPTV module included",
+    "Stripe checkout included",
     isFreePeriod()
       ? `Free until ${FREE_PERIOD_END_LABEL}, then £${PAID_PRICE_GBP_CENTS / 100}/month`
       : `£${PAID_PRICE_GBP_CENTS / 100}/month`,
@@ -85,7 +84,6 @@ export function getPlanMarketing(plan: PlanView): PlanMarketing {
       primaryHref: "/register?trial=1",
       primaryTrack: "trial_start",
       isTrial: true,
-      hideWhmcs: true,
     };
   }
 
@@ -96,7 +94,6 @@ export function getPlanMarketing(plan: PlanView): PlanMarketing {
     primaryHref: null,
     primaryTrack: "checkout_start",
     isTrial: false,
-    hideWhmcs: true,
     highlight: plan.slug === PAID_PLAN_SLUG,
   };
 }

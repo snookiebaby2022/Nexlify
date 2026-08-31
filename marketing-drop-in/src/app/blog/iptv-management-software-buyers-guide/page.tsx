@@ -15,7 +15,7 @@ export default function IptvManagementSoftwareBuyersGuidePage() {
       related={[
         { label: "Best reseller panel 2026", href: "/blog/best-iptv-reseller-panel-2026" },
         { label: "Requirements", href: "/requirements" },
-        { label: "WHMCS automation", href: "/blog/whmcs-iptv-automation-setup" },
+        { label: "billing automation", href: "/blog/billing-iptv-automation-setup" },
       ]}
       sections={[
         {
@@ -33,7 +33,7 @@ export default function IptvManagementSoftwareBuyersGuidePage() {
           title: "Must-have capabilities",
           body: (
             <ul className="list-disc space-y-2 pl-5">
-              <li>Native WHMCS IPTV module (create / renew / suspend / revoke)</li>
+              <li>Native native billing (create / renew / suspend / revoke)</li>
               <li>Sub-reseller credits and commission reporting</li>
               <li>Encrypted license keys with server binding</li>
               <li>Panel migration with preview import</li>
@@ -67,7 +67,7 @@ export default function IptvManagementSoftwareBuyersGuidePage() {
               <Link href="/register?trial=1" className="text-violet-400 underline hover:text-violet-300">
                 7-day trial
               </Link>{" "}
-              to validate WHMCS hooks and import a subset of lines from XUI.one or 1-stream. Compare against our{" "}
+              to validate billing hooks and import a subset of lines from XUI.one or 1-stream. Compare against our{" "}
               <Link href="/blog/best-iptv-reseller-panel-2026" className="text-violet-400 underline hover:text-violet-300">
                 best IPTV reseller panel
               </Link>{" "}

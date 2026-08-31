@@ -95,7 +95,7 @@ export function Hero() {
             { label: "AI Tools", value: "15 Built-in" },
             { label: "Features", value: "100+" },
             { label: "Zapping", value: "< 1s" },
-            { label: "Billing", value: "WHMCS" },
+            { label: "Billing", value: "billing" },
           ].map((s) => (
             <div key={s.label} className="rounded-xl px-3 py-3 sm:px-4 sm:py-5" style={{ background: "rgba(255,255,255,0.04)" }}>
               <dt className="text-xs uppercase tracking-wider text-[var(--muted)]">{s.label}</dt>

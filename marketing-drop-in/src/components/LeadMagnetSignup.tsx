@@ -60,7 +60,7 @@ export function LeadMagnetSignup({ sequence = "become-a-reseller" }: LeadMagnetS
         IPTV Reseller Starter Guide (PDF)
       </h2>
       <p className="mt-2 text-sm text-[var(--muted)]">
-        Free download — WHMCS setup checklist, VPS sizing, and your first 100 lines playbook.
+        Free download — billing setup checklist, VPS sizing, and your first 100 lines playbook.
         Join the become-a-reseller email sequence (no spam).
       </p>
       <div className="mt-6 flex flex-col gap-3 sm:flex-row">

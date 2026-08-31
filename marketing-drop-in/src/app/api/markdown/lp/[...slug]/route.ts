@@ -7,7 +7,7 @@ const LP_PAGE_COPY: Record<
   "/lp/cut-the-cord-streaming": {
     title: "Cut the Cord Streaming Platform Software | Nexlify",
     summary:
-      "Launch or upgrade a premium digital entertainment business with Nexlify: live TV streaming service tools, WHMCS billing, and HD streaming player app-compatible stack.",
+      "Launch or upgrade a premium digital entertainment business with Nexlify: live TV streaming service tools, Stripe billing, and HD streaming player app-compatible stack.",
     bullets: [
       "Cut the cord streaming infrastructure on your VPS",
       "Live TV streaming service management in one dashboard",
@@ -31,41 +31,29 @@ const LP_PAGE_COPY: Record<
     ],
   },
   "/lp/reseller-panel": {
-    title: "IPTV Reseller Panel — WHMCS IPTV Module & Trial",
+    title: "IPTV Reseller Panel — Stripe Billing & Trial",
     summary:
       "Nexlify is the management software operators use to run lines, sub-resellers, and automated billing on their own servers.",
     bullets: [
       "7-day free trial — no card required",
       "Live demo at panel.demo.nexlify.live",
-      "WHMCS & Stripe auto-provisioning",
+      "Stripe auto-provisioning",
       "GBP or USD checkout worldwide",
       "One-click install on any VPS",
       "Sub-reseller hierarchy & white-label",
     ],
   },
   "/lp/reseller-panel-uk": {
-    title: "UK IPTV Reseller Panel — WHMCS IPTV Module",
+    title: "UK IPTV Reseller Panel — GBP Stripe Checkout",
     summary:
-      "Run lines, resellers, and WHMCS billing on your own UK or EU VPS with GBP checkout.",
+      "Run lines, resellers, and Stripe billing on your own UK or EU VPS with GBP checkout.",
     bullets: [
-      "GBP checkout via WHMCS or Stripe",
+      "GBP checkout via Stripe",
       "7-day free trial — no card required",
       "Live demo at panel.demo.nexlify.live",
       "Deploy on London or Manchester VPS",
-      "WHMCS auto-provisioning included",
+      "License keys issued on payment",
       "Telegram alerts & reseller tools",
-    ],
-  },
-  "/lp/whmcs-iptv": {
-    title: "WHMCS IPTV Module — IPTV Reseller Panel Licenses",
-    summary:
-      "Connect your WHMCS cart to Nexlify for automatic license provisioning worldwide.",
-    bullets: [
-      "Create, renew, suspend, terminate — synced",
-      "Stripe + PayPal checkout support",
-      "Documented setup at /docs/whmcs",
-      "Panel tiers from £50/mo",
-      "Priority support for growing operators",
     ],
   },
 };

@@ -35,6 +35,7 @@ tar -czf "$OUT" \
   --exclude=graft \
   --exclude=.next.test \
   --exclude=backups \
+  --exclude=whmcs-module \
   --exclude=docs \
   -C . .
 

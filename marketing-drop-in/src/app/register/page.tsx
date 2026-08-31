@@ -36,7 +36,7 @@ export default async function RegisterPage({
       <SoftwareProductJsonLd
         path="/register"
         name="Nexlify IPTV Panel — 7-Day Trial"
-        description="IPTV reseller panel with WHMCS IPTV module and IPTV management software. Start a 7-day free trial."
+        description="IPTV reseller panel with native billing and IPTV management software. Start a 7-day free trial."
         includeProduct
       />
       <div className="mesh-bg flex min-h-[70vh] items-center justify-center px-4 py-16">
@@ -45,7 +45,7 @@ export default async function RegisterPage({
             Create your best reseller panel account
           </h1>
           <p className="mt-2 text-center text-sm text-[var(--muted)]">
-            Start a free 7-day trial for worldwide operators, or purchase licenses through WHMCS
+            Start a free 7-day trial for worldwide operators, or purchase licenses through Stripe
             checkout with GBP or USD billing
           </p>
           <div className="mt-8">

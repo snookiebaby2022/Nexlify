@@ -18,7 +18,7 @@ const SETUP_SECTIONS = [
     title: "Panel & billing",
     items: [
       { href: "/admin/settings/general", label: "General settings" },
-      { href: "/admin/settings/billing", label: "WHMCS & PayPal" },
+      { href: "/admin/settings/billing", label: "Billing & PayPal" },
       { href: "/admin/settings/notifications", label: "Email & SMTP" },
       { href: "/admin/settings/white-label", label: "White-label portal" },
     ],

@@ -345,7 +345,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/settings/binaries", label: "FFmpeg", section: "Panel" },
           { href: "/admin/settings/cache", label: "Cache / Redis", section: "Panel" },
           { href: "/admin/settings/billing", label: "Billing & PayPal", section: "Billing" },
-          { href: "/admin/settings/api", label: "Admin API & WHMCS", section: "Billing", keywords: "create_line hmac xui billing" },
+          { href: "/admin/settings/api", label: "Admin API", section: "Billing", keywords: "create_line hmac xui billing" },
           { href: "/admin/settings/notifications", label: "Email & SMTP", section: "Billing" },
           { href: "/admin/settings/tmdb", label: "TMDB", section: "Content" },
           { href: "/admin/settings/cron", label: "Scheduled tasks", section: "Maintenance" },

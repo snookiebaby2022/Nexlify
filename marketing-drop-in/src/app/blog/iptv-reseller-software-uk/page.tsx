@@ -15,7 +15,7 @@ export default function IptvResellerSoftwareUkPage() {
       ctaSecondary={[{ label: "UK reseller landing page", href: "/lp/reseller-panel-uk" }]}
       related={[
         { label: "GBP pricing", href: "/pricing" },
-        { label: "WHMCS UK setup", href: "/blog/whmcs-iptv-automation-setup" },
+        { label: "billing UK setup", href: "/blog/billing-iptv-automation-setup" },
         { label: "Privacy policy", href: "/privacy" },
       ]}
       sections={[
@@ -23,19 +23,19 @@ export default function IptvResellerSoftwareUkPage() {
           title: "IPTV reseller software UK — what British operators need",
           body: (
             <p>
-              UK resellers typically require GBP checkout, clear software-only positioning, and WHMCS workflows
+              UK resellers typically require GBP checkout, clear software-only positioning,  workflows
               their accountant recognizes. Nexlify is{" "}
               <strong className="text-slate-200">IPTV reseller software UK</strong> operators can self-host —
               an <strong className="text-slate-200">IPTV reseller panel</strong> with{" "}
-              <strong className="text-slate-200">WHMCS IPTV module</strong> support, not a content library.
+              <strong className="text-slate-200">native billing</strong> support, not a content library.
             </p>
           ),
         },
         {
-          title: "GBP billing and WHMCS",
+          title: "GBP billing ",
           body: (
             <p>
-              Sell licenses in GBP through WHMCS with Stripe or PayPal. The Nexlify module auto-provisions keys
+              Sell licenses in GBP through Stripe with Stripe or PayPal. The Nexlify module auto-provisions keys
               when invoices are paid — no manual CSV handoffs. USD remains available for international
               sub-resellers on the same install.
             </p>

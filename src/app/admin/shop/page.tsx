@@ -16,7 +16,7 @@ export default function AdminShopPage() {
           Edit packages
         </Link>
         <Link href="/admin/settings/api" className="rounded px-3 py-2 border" style={{ borderColor: "var(--border)" }}>
-          WHMCS / API
+          Admin API
         </Link>
       </div>
     </div>

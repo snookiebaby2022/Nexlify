@@ -27,7 +27,7 @@ export const HELP_QUICK_LINKS: FaqLink[] = [
   { label: "Create a support ticket", href: "/support" },
   { label: "Panel demo", href: "/demo" },
   { label: "Pricing & plans", href: "/pricing" },
-  { label: "WHMCS setup guide", href: "/docs/whmcs" },
+  { label: "billing setup guide", href: "/pricing" },
   { label: "My licenses", href: "/dashboard" },
   { label: "Terms & conditions", href: "/terms" },
   { label: "Refund policy", href: "/refund-policy" },
@@ -46,7 +46,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "what-is-nexlify",
         question: "What is Nexlify?",
         answer:
-          "Nexlify sells IPTV panel software licenses and optional plugins. We provide billing, license keys, and documentation — we do not host, stream, or distribute any copyrighted content, sports feeds, channels, or other TV content. You run the panel on your own server and connect it to your WHMCS billing.",
+          "Nexlify sells IPTV panel software licenses and optional plugins. We provide billing, license keys, and documentation — we do not host, stream, or distribute any copyrighted content, sports feeds, channels, or other TV content. You run the panel on your own server and connect it to your Stripe billing.",
         links: [
           { label: "Try the live panel demo", href: "/demo" },
           { label: "View pricing", href: "/pricing" },
@@ -56,11 +56,11 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "how-to-buy",
         question: "How do I purchase a panel license?",
         answer:
-          "Choose a plan on our pricing page and complete checkout through WHMCS. After payment, a license key is issued automatically and linked to your account. You can copy it from your dashboard and activate it in your IPTV panel.",
+          "Choose a plan on our pricing page and complete checkout through Stripe. After payment, a license key is issued automatically and linked to your account. You can copy it from your dashboard and activate it in your IPTV panel.",
         links: [
           { label: "Pricing", href: "/pricing" },
           { label: "Register an account", href: "/register" },
-          { label: "WHMCS integration guide", href: "/docs/whmcs" },
+          { label: "Stripe checkout", href: "/pricing" },
         ],
       },
       {
@@ -102,7 +102,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "find-license",
         question: "Where is my license key?",
         answer:
-          "Sign in and open My licenses on your dashboard. Keys issued by WHMCS or manual admin issue appear there with status, expiry, and plan limits. Copy the key and paste it into your panel under License activation.",
+          "Sign in and open My licenses on your dashboard. Keys issued by billing or manual admin issue appear there with status, expiry, and plan limits. Copy the key and paste it into your panel under License activation.",
         links: [{ label: "My licenses", href: "/dashboard" }],
       },
       {
@@ -119,7 +119,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "license-expired",
         question: "My license expired or shows suspended — what now?",
         answer:
-          "Renew or pay the outstanding WHMCS invoice for the linked service. WHMCS automation extends expiry on renewal and re-enables suspended keys. If billing is correct but the panel still fails, open a ticket with your key and domain.",
+          "Renew or pay the outstanding billing invoice for the linked service. billing automation extends expiry on renewal and re-enables suspended keys. If billing is correct but the panel still fails, open a ticket with your key and domain.",
         links: [
           { label: "My licenses", href: "/dashboard" },
           { label: "Open a support ticket", href: "/support" },
@@ -135,22 +135,22 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
     ],
   },
   {
-    id: "whmcs",
-    title: "WHMCS & billing",
+    id: "billing",
+    title: "Billing & licenses",
     items: [
       {
-        id: "whmcs-automation",
-        question: "How does WHMCS automation work?",
+        id: "billing-automation",
+        question: "How does billing automation work?",
         answer:
-          "Install our StreamForge / Nexlify server module in WHMCS. When a customer pays for a panel product, WHMCS calls our API to create, renew, suspend, or revoke the matching license key automatically.",
-        links: [{ label: "WHMCS setup documentation", href: "/docs/whmcs" }],
+          "Buy or trial a license on nexlify.live. Stripe checkout issues the key; paste it into your panel under License activation. Renewals extend expiry automatically.",
+        links: [{ label: "Pricing", href: "/pricing" }],
       },
       {
-        id: "whmcs-products",
-        question: "Which WHMCS product IDs map to plans?",
+        id: "billing-products",
+        question: "What plans are available?",
         answer:
-          "WHMCS product ID 1 maps to the Nexlify License (£50/mo, all features included). Legacy Starter/Main/Top Tier IDs are retired — see the WHMCS docs for the current mapping.",
-        links: [{ label: "WHMCS docs", href: "/docs/whmcs" }],
+          "One Nexlify License covers the full panel (£50/mo after the free period). Plugins are included. See pricing for current GBP/USD rates.",
+        links: [{ label: "Pricing", href: "/pricing" }],
       },
       {
         id: "refunds",

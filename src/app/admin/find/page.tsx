@@ -22,7 +22,7 @@ export default function FindFeaturePage() {
         autoFocus
         className="w-full rounded border px-3 py-2 text-sm bg-transparent"
         style={{ borderColor: "var(--border)" }}
-        placeholder="VPN, overlay, capture, WHMCS, rclone, trials…"
+        placeholder="VPN, overlay, capture, rclone, trials…"
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />

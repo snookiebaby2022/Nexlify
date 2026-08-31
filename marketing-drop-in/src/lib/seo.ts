@@ -7,7 +7,7 @@ import { coreKeywordDescription, withCoreKeywords } from "@/lib/seo-keywords";
 import { site } from "@/lib/site";
 
 export const DEFAULT_DESCRIPTION = coreKeywordDescription(
-  "Nexlify IPTV reseller panel and IPTV management software for worldwide operators — WHMCS IPTV module, Xtream-compatible stack, 7-day trial, and one-click VPS install.",
+  "Nexlify IPTV reseller panel and IPTV management software for worldwide operators — native billing, Xtream-compatible stack, 7-day trial, and one-click VPS install.",
 );
 
 export const DEFAULT_KEYWORDS = withCoreKeywords([
@@ -134,7 +134,6 @@ export const SITEMAP_PATHS: {
   { path: "/pricing", priority: 0.95, changeFrequency: "weekly" },
   { path: "/features", priority: 0.8, changeFrequency: "monthly" },
   { path: "/install", priority: 0.9, changeFrequency: "monthly" },
-  { path: "/docs/whmcs", priority: 0.85, changeFrequency: "monthly" },
   { path: "/requirements", priority: 0.75, changeFrequency: "monthly" },
   { path: "/help", priority: 0.7, changeFrequency: "monthly" },
   { path: "/updates", priority: 0.8, changeFrequency: "weekly" },
@@ -143,18 +142,16 @@ export const SITEMAP_PATHS: {
   { path: "/register", priority: 0.6, changeFrequency: "monthly" },
   { path: "/privacy", priority: 0.35, changeFrequency: "yearly" },
   { path: "/compare/xtream-panel", priority: 0.75, changeFrequency: "monthly" },
-  { path: "/compare/whmcs-iptv-module", priority: 0.75, changeFrequency: "monthly" },
   { path: "/vs/xui-one", priority: 0.7, changeFrequency: "monthly" },
   { path: "/lp/reseller-panel", priority: 0.7, changeFrequency: "monthly" },
   { path: "/lp/reseller-panel-uk", priority: 0.65, changeFrequency: "monthly" },
-  { path: "/lp/whmcs-iptv", priority: 0.65, changeFrequency: "monthly" },
   { path: "/lp/live-tv-streaming-platform", priority: 0.72, changeFrequency: "monthly" },
   { path: "/lp/cut-the-cord-streaming", priority: 0.7, changeFrequency: "monthly" },
   { path: "/affiliates", priority: 0.5, changeFrequency: "monthly" },
   { path: "/brand", priority: 0.4, changeFrequency: "yearly" },
   { path: "/status", priority: 0.3, changeFrequency: "weekly" },
   { path: "/livestream", priority: 0.7, changeFrequency: "weekly" },
-  { path: "/whmcs", priority: 0.85, changeFrequency: "monthly" },
+  { path: "/billing", priority: 0.85, changeFrequency: "monthly" },
   { path: "/best-iptv-reseller-panel", priority: 0.8, changeFrequency: "monthly" },
   { path: "/blog", priority: 0.65, changeFrequency: "weekly" },
   ...ALL_BLOG_POSTS.map(({ path, sitemapPriority }) => ({

@@ -1,6 +1,6 @@
 # Nexlify
 
-IPTV / OTT management panel inspired by **XUI.one** and **1-stream**: admin UI, resellers, lines, bouquets, Xtream API, MAG/Stalker portal, EPG, line management, and WHMCS-style billing webhooks.
+IPTV / OTT management panel inspired by **XUI.one** and **1-stream**: admin UI, resellers, lines, bouquets, Xtream API, MAG/Stalker portal, EPG, line management, and billing webhooks.
 
 ## Features
 
@@ -15,7 +15,7 @@ IPTV / OTT management panel inspired by **XUI.one** and **1-stream**: admin UI, 
 | EPG | XMLTV sources, **60+ country guides**, sync, `get_short_epg` |
 | Cache | Redis (optional) + in-memory fallback for stats / Xtream / EPG — see [docs/REDIS.md](docs/REDIS.md) |
 | Proxies | HTTP/HTTPS/SOCKS5 under **Servers → Proxies**, assign per server |
-| Billing | WHMCS-style webhook: create, suspend, renew, terminate |
+| Billing | JSON webhook: create, suspend, renew, terminate |
 | Security | Playback blocklists, fingerprint URLs, geo/country lock, theft detection |
 | Migration | XUI SQL, **1-stream PostgreSQL live**, phase-2 servers/categories/EPG |
 | Integrations | Plex library import, YouTube channels, access codes, server install wizard |
@@ -106,7 +106,7 @@ Open [http://localhost:3000](http://localhost:3000)
 - **MAG portal:** `http://localhost:3000/c/`
 - **Stalker API:** `http://localhost:3000/stalker_portal/server/load.php?type=stb&action=handshake&mac=00:1A:79:00:00:01`
 
-## WHMCS / billing webhook
+## Billing webhook
 
 ```http
 POST /api/billing/webhook
@@ -125,19 +125,7 @@ Content-Type: application/json
 
 Actions: `create`, `suspend`, `unsuspend`, `terminate`, `renew`
 
-Map WHMCS module hooks:
-
-| WHMCS | Nexlify `action` |
-|-------|------------------|
-| CreateAccount | `create` |
-| SuspendAccount | `suspend` |
-| UnsuspendAccount | `unsuspend` |
-| TerminateAccount | `terminate` |
-| Renew (custom) | `renew` |
-
 Store `service_id` as the line `externalId` for idempotent updates.
-
-**WHMCS module:** Admin → **Billing** → download ZIP, or `npm run package:whmcs`. See [docs/WHMCS.md](docs/WHMCS.md).
 
 ## Environment
 

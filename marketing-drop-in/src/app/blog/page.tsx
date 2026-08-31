@@ -24,7 +24,7 @@ const RELATED_RESOURCES = [
 
     href: "/vs/xui-one",
 
-    excerpt: "Built-in migration, WHMCS automation, and modern reseller tooling compared.",
+    excerpt: "Built-in migration automation, and modern reseller tooling compared.",
 
     tag: "Comparison",
 
@@ -56,9 +56,9 @@ const RELATED_RESOURCES = [
 
   {
 
-    title: "WHMCS IPTV module docs",
+    title: "native billing docs",
 
-    href: "/docs/whmcs",
+    href: "/help",
 
     excerpt: "Connect GBP billing and auto-provision licenses on new orders.",
 
@@ -106,7 +106,7 @@ export default function BlogPage() {
 
         name="IPTV Reseller Blog — Guides & Operator Tips"
 
-        description="IPTV reseller guides, WHMCS setup tips, and operator playbooks for worldwide service providers."
+        description="IPTV reseller guides setup tips, and operator playbooks for worldwide service providers."
 
         about="Blog"
 
@@ -130,7 +130,7 @@ export default function BlogPage() {
 
         <p className="mt-4 max-w-2xl text-[var(--muted)]">
 
-          Playbooks for becoming a reseller — WHMCS automation, panel migration, Anti-Freeze streaming, and
+          Playbooks for becoming a reseller — billing automation, panel migration, Anti-Freeze streaming, and
 
           growth tips for worldwide operators.
 

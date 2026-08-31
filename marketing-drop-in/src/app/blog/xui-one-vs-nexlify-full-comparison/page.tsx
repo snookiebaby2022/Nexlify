@@ -9,7 +9,7 @@ const post = getBlogPost(SLUG)!;
 export const metadata = blogPostMetadata(post);
 
 const ROWS = [
-  ["WHMCS IPTV module", "Native — auto keys, renewals, suspend", "Third-party scripts / manual"],
+  ["native billing", "Native — auto keys, renewals, suspend", "Third-party scripts / manual"],
   ["Anti-Freeze playback", "Included", "Rare on forks"],
   ["Security (2FA, leak audit, geo-block)", "Built-in", "Varies / partial"],
   ["XUI.one migration", "Preview import built-in", "N/A"],
@@ -33,11 +33,11 @@ export default function XuiOneVsNexlifyFullComparisonPage() {
           title: "Why operators search XUI.one vs Nexlify",
           body: (
             <p>
-              XUI.one has a large installed base, but growing resellers hit walls on WHMCS sync, migration
+              XUI.one has a large installed base, but growing resellers hit walls on billing sync, migration
               risk, and unmaintained forks. Nexlify is the modern{" "}
               <strong className="text-slate-200">IPTV management software</strong> alternative — a maintained{" "}
               <strong className="text-slate-200">IPTV reseller panel</strong> with native{" "}
-              <strong className="text-slate-200">WHMCS IPTV module</strong> automation.
+              <strong className="text-slate-200">native billing</strong> automation.
             </p>
           ),
         },
@@ -71,7 +71,7 @@ export default function XuiOneVsNexlifyFullComparisonPage() {
           body: (
             <ul className="list-disc space-y-2 pl-5">
               <li>
-                <strong className="text-slate-200">WHMCS integration</strong> — license lifecycle on payment,
+                <strong className="text-slate-200">billing integration</strong> — license lifecycle on payment,
                 not spreadsheets
               </li>
               <li>

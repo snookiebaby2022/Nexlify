@@ -21,11 +21,8 @@ export async function GET(req: Request) {
 
   const base = serverBaseUrl(req.url, req.headers);
   const billing = await getSettingGroup("billing");
-  const whmcsUrl = String(process.env.NEXT_PUBLIC_WHMCS_URL ?? "").trim();
-  const renewUrl = whmcsUrl
-    ? `${whmcsUrl.replace(/\/+$/, "")}/clientarea.php?action=productdetails`
-    : null;
   const stripeCheckout = String(process.env.NEXT_PUBLIC_STRIPE_CHECKOUT_URL ?? "").trim() || null;
+  const renewUrl = stripeCheckout;
 
   const xtreamUrl = `${base}/player_api.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`;
   const m3uUrl = `${base}/get.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}&type=m3u_plus&output=ts`;

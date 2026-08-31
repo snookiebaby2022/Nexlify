@@ -19,7 +19,6 @@ import {
   Play,
   Pause,
   ArrowRight,
-  Globe,
   KeyRound,
   Layers,
   FileText,
@@ -28,7 +27,7 @@ import {
 
 interface MigrationJob {
   id: string;
-  source: "XTREAM_UI" | "XUI" | "NXT" | "WHMCS";
+  source: "XTREAM_UI" | "XUI" | "NXT" | "CUSTOM";
   sourceUrl: string;
   status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
   stats: {
@@ -51,14 +50,12 @@ const SOURCE_LABELS: Record<string, string> = {
   XTREAM_UI: "Xtream UI",
   XUI: "XUI",
   NXT: "NXT",
-  WHMCS: "WHMCS",
 };
 
 const SOURCE_ICONS: Record<string, React.ReactNode> = {
   XTREAM_UI: <Server className="w-4 h-4" />,
   XUI: <Database className="w-4 h-4" />,
   NXT: <Wifi className="w-4 h-4" />,
-  WHMCS: <Globe className="w-4 h-4" />,
 };
 
 const ITEM_OPTIONS = [
@@ -183,7 +180,7 @@ export default function MigrationPage() {
         <div>
           <h1 className="text-2xl font-semibold">Migration Tools</h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            Migrate from Xtream UI, XUI, NXT, and WHMCS. View running progress and final results.
+            Migrate from Xtream UI, XUI, and NXT. View running progress and final results.
           </p>
         </div>
         <button

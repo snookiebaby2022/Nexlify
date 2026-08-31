@@ -127,7 +127,7 @@ function AdArtboard() {
           Legacy IPTV Panel
         </h1>
         <p className="mt-4 text-sm text-slate-400">
-          WHMCS billing · Anti-Freeze · Reseller tools
+          Stripe billing · Anti-Freeze · Reseller tools
         </p>
         <p className="mt-2 text-sm text-slate-500">Deploy on your own VPS in minutes.</p>
         <div

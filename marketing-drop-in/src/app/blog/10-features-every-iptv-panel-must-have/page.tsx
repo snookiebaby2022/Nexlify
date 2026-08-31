@@ -9,14 +9,14 @@ const post = getBlogPost(SLUG)!;
 export const metadata = blogPostMetadata(post);
 
 const FEATURES = [
-  { n: 1, title: "WHMCS IPTV module", desc: "Auto-provision, renew, suspend, and revoke license keys on payment." },
+  { n: 1, title: "native billing", desc: "Auto-provision, renew, suspend, and revoke license keys on payment." },
   { n: 2, title: "Anti-Freeze playback", desc: "Reduce visible buffering on residential and mobile lines." },
   { n: 3, title: "Fast zapping", desc: "Sub-second channel changes keep subscribers happy." },
   { n: 4, title: "Reseller credits & hierarchy", desc: "Sub-resellers, commissions, and white-label groups." },
   { n: 5, title: "Geo-blocking & security", desc: "2FA, leak audit logs, token TTL, per-line blocklists." },
   { n: 6, title: "Built-in migration", desc: "Preview import from XUI.one, 1-stream, and Xtream UI." },
   { n: 7, title: "Stream health monitoring", desc: "Telegram alerts, failover URLs, cron link probes." },
-  { n: 8, title: "GBP & USD checkout", desc: "Worldwide operators sell through WHMCS, Stripe, or PayPal." },
+  { n: 8, title: "GBP & USD checkout", desc: "Worldwide operators sell through Stripe, Stripe, or PayPal." },
   { n: 9, title: "Subscriber portal", desc: "Renewals, M3U download, EPG, and tickets for end users." },
   { n: 10, title: "One-click VPS install", desc: "Node + PostgreSQL + PM2 on Ubuntu or Debian in one command." },
 ] as const;

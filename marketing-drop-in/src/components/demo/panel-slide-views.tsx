@@ -199,12 +199,12 @@ export function PanelDashboardSlide() {
   );
 }
 
-export function PanelWhmcsBillingSlide() {
+export function PanelBillingSlide() {
   return (
     <PanelChrome
       activeNav="Products"
       compact
-      subtitle="billing.nexlify.live — WHMCS automation"
+      subtitle="nexlify.live — Stripe billing"
       navItems={["Clients", "Orders", "Products", "Licenses", "Invoices", "Addons"]}
     >
       <StatGrid

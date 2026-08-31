@@ -96,14 +96,14 @@ const STEPS = [
     ),
   },
   {
-    title: "Connect WHMCS billing",
+    title: "Connect Stripe billing",
     summary:
-      "Follow the WHMCS IPTV module guide so new orders, renewals, suspensions, and revocations sync license state automatically.",
+      "Follow the native billing guide so new orders, renewals, suspensions, and revocations sync license state automatically.",
     body: (
       <>
         Follow the{" "}
-        <Link href="/docs/whmcs" className="text-violet-400 underline hover:text-violet-300">
-          WHMCS IPTV module guide
+        <Link href="/help" className="text-violet-400 underline hover:text-violet-300">
+          native billing guide
         </Link>{" "}
         so new orders, renewals, suspensions, and revocations sync license state automatically. This
         replaces manual CSV workflows common on legacy panels.
@@ -147,7 +147,7 @@ function MigrationHowToJsonLd() {
     "@type": "HowTo",
     name: "Migrate from XUI.one or 1-stream to Nexlify",
     description:
-      "Step-by-step checklist to migrate IPTV panel data from XUI.one or 1-stream to Nexlify with preview import and WHMCS billing.",
+      "Step-by-step checklist to migrate IPTV panel data from XUI.one or 1-stream to Nexlify with preview import and Stripe billing.",
     url: pageUrl(PATH),
     inLanguage: ["en-GB", "en-US"],
     step: MIGRATION_HOWTO_STEPS.map((s) => ({
@@ -180,7 +180,7 @@ export default function MigrateBlogPage() {
       <WebPageJsonLd
         path={PATH}
         name="Migrate from XUI.one or 1-stream to Nexlify"
-        description="Step-by-step checklist to migrate IPTV panel data from XUI.one or 1-stream to Nexlify with preview import and WHMCS billing."
+        description="Step-by-step checklist to migrate IPTV panel data from XUI.one or 1-stream to Nexlify with preview import and Stripe billing."
         about="Migration guide"
       />
       <MigrationHowToJsonLd />
@@ -227,7 +227,7 @@ export default function MigrateBlogPage() {
         <section className="mt-14 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
           <h2 className="font-display text-lg font-semibold text-amber-100">Why operators switch</h2>
           <ul className="mt-4 space-y-2 text-sm text-slate-300">
-            <li>• WHMCS auto-provisioning instead of manual license spreadsheets</li>
+            <li>• billing auto-provisioning instead of manual license spreadsheets</li>
             <li>• Telegram stream alerts and Anti-Freeze playback tooling</li>
             <li>• Sub-reseller credits, commission reports, and white-label groups</li>
             <li>• One-click install on modern Node/PostgreSQL stack</li>

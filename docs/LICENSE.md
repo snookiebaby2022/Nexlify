@@ -124,7 +124,7 @@ Terms: `1m` | `3m` | `6m` | `1y`
 
 
 
-### HTTP API (automated billing / WHMCS)
+### HTTP API (automated billing)
 
 
 

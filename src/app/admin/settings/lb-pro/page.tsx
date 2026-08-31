@@ -9,7 +9,7 @@ export default function LbProSettingsPage() {
       sections={[
         {
           title: "License",
-          info: "Requires Intelligent LB Pack WHMCS addon (£25–40/mo) or Full Enterprise Bundle.",
+          info: "Requires Intelligent LB Pack addon (£25–40/mo) or Full Enterprise Bundle.",
           fields: [{ key: "enabled", label: "Enable Intelligent LB", type: "yesno" }],
         },
         {

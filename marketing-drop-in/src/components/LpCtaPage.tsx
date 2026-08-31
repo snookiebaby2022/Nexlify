@@ -25,7 +25,7 @@ type LpCtaPageProps = {
 
 const LP_TESTIMONIALS = [
   {
-    quote: "Migrated from a legacy panel in one afternoon. WHMCS provisioning just works.",
+    quote: "Migrated from a legacy panel in one afternoon. billing provisioning just works.",
     name: "James R.",
     detail: "850 lines · UK",
   },
@@ -49,7 +49,7 @@ const WHY_NEXLIFY = [
   },
   {
     title: "Billing on autopilot",
-    desc: "WHMCS and Stripe sync create, renew, suspend, and revoke licenses automatically.",
+    desc: "billing and Stripe sync create, renew, suspend, and revoke licenses automatically.",
     icon: "◆",
   },
   {
@@ -77,12 +77,12 @@ const WHY_NEXLIFY = [
 const STEPS = [
   { step: "1", title: "Start trial or demo", desc: "Register free or explore the live sandbox — no commitment." },
   { step: "2", title: "Install on your VPS", desc: "Run the one-click script. Node, PostgreSQL, PM2, and nginx included." },
-  { step: "3", title: "Connect billing & sell", desc: "Hook up WHMCS or Stripe. Licenses provision automatically on payment." },
+  { step: "3", title: "Connect billing & sell", desc: "Hook up billing or Stripe. Licenses provision automatically on payment." },
 ] as const;
 
 const LEGACY_VS = [
   { label: "Manual license CSVs", legacy: true, nexlify: false },
-  { label: "WHMCS auto-provisioning", legacy: false, nexlify: true },
+  { label: "billing auto-provisioning", legacy: false, nexlify: true },
   { label: "Reseller hierarchy & credits", legacy: false, nexlify: true },
   { label: "Encrypted license binding", legacy: false, nexlify: true },
   { label: "Live demo before checkout", legacy: false, nexlify: true },

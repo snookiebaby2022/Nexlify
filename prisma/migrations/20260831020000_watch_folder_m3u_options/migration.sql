@@ -1,0 +1,6 @@
+-- Watch folder M3U import options (idempotent)
+ALTER TABLE "WatchFolder" ADD COLUMN IF NOT EXISTS "autoCategory" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "WatchFolder" ADD COLUMN IF NOT EXISTS "updateNames" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "WatchFolder" ADD COLUMN IF NOT EXISTS "overwriteCategories" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "WatchFolder" ADD COLUMN IF NOT EXISTS "onDemand" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "WatchFolder" ADD COLUMN IF NOT EXISTS "removeDuplicates" BOOLEAN NOT NULL DEFAULT false;

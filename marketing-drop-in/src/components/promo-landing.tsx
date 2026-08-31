@@ -15,7 +15,7 @@ const BENEFITS = [
     desc: "Self-hosted stack. Migrate from XUI or 1-stream without vendor lock-in.",
   },
   {
-    title: "Resellers + WHMCS",
+    title: "Resellers + billing",
     desc: "Credits, packages, and billing webhooks for real operator workflows.",
   },
   {
@@ -160,7 +160,7 @@ export function PromoLanding({ utm = {} }: PromoLandingProps) {
         </h1>
 
         <p className="text-sm sm:text-base mb-8 max-w-sm" style={{ color: "#8ba3c7" }}>
-          Modern control panel vs legacy XUI. Self-hosted on PostgreSQL — anti-freeze, resellers, WHMCS-ready. Dynamic pricing, piracy detection, and 15+ advanced features.
+          Modern control panel vs legacy XUI. Self-hosted on PostgreSQL — anti-freeze, resellers, billing-ready. Dynamic pricing, piracy detection, and 15+ advanced features.
         </p>
 
         {/* Dual CTAs */}
