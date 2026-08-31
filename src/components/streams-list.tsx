@@ -7,6 +7,7 @@ import Link from "next/link";
 import {
   ChevronDown,
   Filter,
+  Play,
   RefreshCw,
   Search,
   Square,
@@ -43,6 +44,10 @@ import { useResellerGroupFlags } from "@/components/reseller-group-flags-context
 
 const StreamVerifyPanel = dynamic(
   () => import("@/components/stream-verify-panel").then((m) => m.StreamVerifyPanel),
+  { ssr: false }
+);
+const StreamPreviewModal = dynamic(
+  () => import("@/components/stream-preview-modal").then((m) => m.StreamPreviewModal),
   { ssr: false }
 );
 
@@ -88,9 +93,17 @@ const STREAM_COLUMN_DEFAULTS: Record<string, boolean> = {
   clients: true,
   uptime: true,
   actions: true,
+  player: true,
   epg: true,
   streamInfo: true,
 };
+
+function streamPlayBtnClass(stream: Stream, probing?: boolean) {
+  if (probing) return "xui-stream-play-btn xui-stream-play-btn--pending";
+  if (stream.lastProbeOk === true) return "xui-stream-play-btn xui-stream-play-btn--ok";
+  if (stream.lastProbeOk === false) return "xui-stream-play-btn xui-stream-play-btn--fail";
+  return "xui-stream-play-btn";
+}
 
 function serverLabel(s: Stream) {
   const name = s.server?.name ?? "Main Server";
@@ -192,6 +205,10 @@ export function StreamsList({
   const [videoFilter, setVideoFilter] = useState("");
   const [qualityFilter, setQualityFilter] = useState("");
   const [clientsModal, setClientsModal] = useState<{ id: string; name: string } | null>(null);
+  const [previewModal, setPreviewModal] = useState<Stream | null>(null);
+  const [probingPage, setProbingPage] = useState(false);
+  const [probingIds, setProbingIds] = useState<Set<string>>(() => new Set());
+  const probedPageKeyRef = useRef("");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -207,6 +224,7 @@ export function StreamsList({
     { id: "clients", label: "Clients" },
     { id: "uptime", label: "Uptime" },
     { id: "actions", label: "Actions", locked: true },
+    { id: "player", label: "Player" },
     { id: "epg", label: "EPG" },
     { id: "streamInfo", label: "Stream Info" },
   ];
@@ -306,7 +324,49 @@ export function StreamsList({
       .catch(() => {});
   }, []);
 
-  const load = useCallback(() => {
+  const runPageProbe = useCallback(
+    async (list: Stream[], force = false) => {
+      if (type !== "LIVE" || !list.length) return;
+      const pageKey = `${page}|${list.map((s) => s.id).join(",")}`;
+      if (!force && probedPageKeyRef.current === pageKey) return;
+      probedPageKeyRef.current = pageKey;
+
+      setProbingPage(true);
+      setProbingIds(new Set(list.map((s) => s.id)));
+      try {
+        const res = await fetch("/api/admin/streams/probe-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ streamIds: list.map((s) => s.id), fast: true }),
+        });
+        const data = (await res.json()) as {
+          results?: Record<
+            string,
+            { lastProbeOk?: boolean; lastProbeError?: string | null; error?: string }
+          >;
+        };
+        if (!res.ok || !data.results) return;
+        setStreams((prev) =>
+          prev.map((s) => {
+            const row = data.results?.[s.id];
+            if (!row || row.error) return s;
+            return {
+              ...s,
+              lastProbeOk: row.lastProbeOk ?? s.lastProbeOk,
+              lastProbeError: row.lastProbeError ?? null,
+            };
+          })
+        );
+      } finally {
+        setProbingPage(false);
+        setProbingIds(new Set());
+      }
+    },
+    [type, page]
+  );
+
+  const load = useCallback(
+    (opts?: { forceProbe?: boolean }) => {
     const params = new URLSearchParams({
       page: String(page),
       pageSize: String(pageSize),
@@ -342,8 +402,13 @@ export function StreamsList({
           setTotal(d.total);
           countedKeyRef.current = loadKey;
         }
+        if (type === "LIVE" && next.length) {
+          void runPageProbe(next, opts?.forceProbe ?? false);
+        }
       });
-  }, [type, categoryId, serverId, search, page, pageSize, statusFilter, modeFilter]);
+    },
+    [type, categoryId, serverId, search, page, pageSize, statusFilter, modeFilter, runPageProbe]
+  );
 
   useEffect(() => {
     if (initialBootstrap?.categories?.length) return;
@@ -359,6 +424,9 @@ export function StreamsList({
   useEffect(() => {
     if (skipInitialLoadRef.current) {
       skipInitialLoadRef.current = false;
+      if (type === "LIVE" && initialBootstrap?.streams?.length) {
+        void runPageProbe(initialBootstrap.streams as Stream[]);
+      }
       if (type === "MOVIE" || type === "SERIES") return;
       return startVisibleInterval(load, ADMIN_POLLS.streamsMs);
     }
@@ -367,7 +435,7 @@ export function StreamsList({
       return;
     }
     return startVisibleInterval(load, ADMIN_POLLS.streamsMs);
-  }, [load, type]);
+  }, [load, type, initialBootstrap?.streams, runPageProbe]);
 
   const filtered = useMemo(() => {
     return streams.filter((s) => {
@@ -415,6 +483,17 @@ export function StreamsList({
               Sources
             </Link>
           ) : null}
+          {type === "LIVE" ? (
+            <button
+              type="button"
+              className="xui-streams-btn xui-streams-btn--ghost"
+              disabled={probingPage}
+              title="Quick-probe every stream on this page (XUI-style)"
+              onClick={() => load({ forceProbe: true })}
+            >
+              {probingPage ? "Probing…" : "Probe page"}
+            </button>
+          ) : null}
           <Link href={addHref} className="xui-streams-btn xui-streams-btn--add">
             Add Stream
           </Link>
@@ -433,7 +512,12 @@ export function StreamsList({
           >
             <Filter size={16} />
           </button>
-          <button type="button" className="xui-streams-icon-btn xui-streams-icon-btn--refresh" title="Refresh" onClick={load}>
+          <button
+            type="button"
+            className="xui-streams-icon-btn xui-streams-icon-btn--refresh"
+            title="Refresh"
+            onClick={() => load({ forceProbe: type === "LIVE" })}
+          >
             <RefreshCw size={16} />
           </button>
           <ToolbarDropdown
@@ -769,7 +853,15 @@ export function StreamsList({
                   <StreamUptimeBadge stream={s} listType={type} />
                 </div>
               </div>
-              <div className="panel-mobile-card-actions">
+              <div className="panel-mobile-card-actions flex items-center gap-2">
+                <button
+                  type="button"
+                  className={streamPlayBtnClass(s, probingIds.has(s.id))}
+                  title="Preview and probe"
+                  onClick={() => setPreviewModal(s)}
+                >
+                  <Play size={14} fill="currentColor" />
+                </button>
                 <StreamRowActionsMenu
                   streamId={s.id}
                   streamType={type}
@@ -793,7 +885,8 @@ export function StreamsList({
       <div className="xui-streams-table-wrap hidden md:block">
         {type === "LIVE" ? (
           <p className="text-[10px] px-2 pb-1" style={{ color: "var(--muted)" }}>
-            EPG: gray = not linked · orange = linked · green = linked with active guide data.
+            Player: cyan = not probed · green = source OK · red = probe failed. EPG: gray = not linked · orange =
+            linked · green = linked with active guide data.
           </p>
         ) : null}
         <table className="xui-streams-table">
@@ -806,6 +899,7 @@ export function StreamsList({
               {streamCols.show("clients") ? <th>Clients</th> : null}
               {streamCols.show("uptime") ? <th title="How playback is served right now">Uptime</th> : null}
               {streamCols.show("actions") ? <th>Actions</th> : null}
+              {streamCols.show("player") ? <th>Player</th> : null}
               {streamCols.show("epg") ? <th>EPG</th> : null}
               {streamCols.show("streamInfo") ? <th>Stream Info</th> : null}
             </tr>
@@ -908,6 +1002,24 @@ export function StreamsList({
                       />
                     </td>
                   ) : null}
+                  {streamCols.show("player") ? (
+                    <td>
+                      <button
+                        type="button"
+                        className={streamPlayBtnClass(s, probingIds.has(s.id))}
+                        title={
+                          s.lastProbeOk === false && s.lastProbeError
+                            ? s.lastProbeError
+                            : probingIds.has(s.id)
+                              ? "Probing source…"
+                              : "Preview and probe source"
+                        }
+                        onClick={() => setPreviewModal(s)}
+                      >
+                        <Play size={14} fill="currentColor" />
+                      </button>
+                    </td>
+                  ) : null}
                   {streamCols.show("epg") ? (
                     <td>
                       <Link
@@ -957,6 +1069,19 @@ export function StreamsList({
           streamId={clientsModal.id}
           streamName={clientsModal.name}
           onClose={() => setClientsModal(null)}
+        />
+      )}
+
+      {previewModal && (
+        <StreamPreviewModal
+          streamId={previewModal.id}
+          streamName={previewModal.name}
+          streamUrl={hideAllUrls ? "" : previewModal.streamUrl}
+          streamType={previewModal.type}
+          onClose={() => {
+            setPreviewModal(null);
+            load({ forceProbe: type === "LIVE" });
+          }}
         />
       )}
     </div>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Calendar, FileText, Globe, Info, Server, Settings } from "lucide-react";
+import { StreamProbePlayer } from "@/components/stream-probe-player";
 import { StreamLiveInfo } from "@/components/stream-live-info";
 import { isGarbageStreamName } from "@/lib/stream-catalog-name";
 import {
@@ -675,6 +676,14 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
                   placeholder="http://backup.example.com/stream.m3u8"
                 />
               </FormField>
+              {form.streamUrl.trim() ? (
+                <StreamProbePlayer
+                  compact
+                  streamId={streamId}
+                  streamUrl={form.streamUrl.trim()}
+                  name={form.name || undefined}
+                />
+              ) : null}
             </div>
           )}
 

@@ -43,6 +43,27 @@ export function StreamRowActionsMenu({
     onRefresh();
   }
 
+  async function probeStream() {
+    setOpen(false);
+    const res = await fetch("/api/admin/streams/probe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ streamId, fast: true }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error ?? "Probe failed");
+      return;
+    }
+    const ok = data.probe?.status === "online" || data.probe?.status === "degraded";
+    alert(
+      ok
+        ? `Source online${data.probe?.latencyMs != null ? ` (${data.probe.latencyMs} ms)` : ""}`
+        : data.probe?.message ?? "Source offline"
+    );
+    onRefresh();
+  }
+
   const updatePosition = useCallback(() => {
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
@@ -96,6 +117,16 @@ export function StreamRowActionsMenu({
           <Link href="/admin/stream_health" className="xui-lines-action-menu-item" onClick={() => setOpen(false)} role="menuitem">
             Stream health
           </Link>
+          {streamType === "LIVE" && (
+            <button
+              type="button"
+              className="xui-lines-action-menu-item"
+              role="menuitem"
+              onClick={() => void probeStream()}
+            >
+              Probe source
+            </button>
+          )}
           {streamType === "SERIES" && (
             <Link href={episodesHref} className="xui-lines-action-menu-item" onClick={() => setOpen(false)} role="menuitem">
               Manage episodes

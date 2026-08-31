@@ -4084,6 +4084,19 @@ a.btn-back:hover,
   padding: 0;
 }
 
+.xui-stream-play-btn--ok {
+  background: #27ae60;
+}
+
+.xui-stream-play-btn--fail {
+  background: #e74c3c;
+}
+
+.xui-stream-play-btn--pending {
+  background: #7f8c8d;
+  cursor: wait;
+}
+
 .xui-stream-epg-btn {
   display: inline-flex;
   align-items: center;
