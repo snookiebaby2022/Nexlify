@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
 
     const body = parsed.data;
     const rawIds = Array.isArray(body.streamIds) ? body.streamIds : [];
-    const streamIds = [...new Set(rawIds.map((id: unknown) => String(id).trim()).filter(Boolean))].slice(
+    const streamIds: string[] = [...new Set(rawIds.map((id: unknown) => String(id).trim()).filter(Boolean))].slice(
       0,
       MAX_IDS
     );
