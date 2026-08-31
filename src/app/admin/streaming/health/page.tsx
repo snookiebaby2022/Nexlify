@@ -52,6 +52,14 @@ type HealthSnapshot = {
   readyScore: number;
   readyTotal: number;
   streamingReady: boolean;
+  buffering: {
+    risk: "healthy" | "watch" | "critical";
+    label: string;
+    liveConnections: number;
+    stallSessions: number;
+    atRiskServers: { id: string; name: string; risk: string; label: string; headroomPct: number }[];
+    sourceDiagnostics: { id: string; name: string; lastProbeError: string | null; sources: { url: string; state: string; failures: number; successes: number; latencyMs: number | null; bitrateKbps: number | null; lastError: string | null }[] }[];
+  };
 };
 
 export default function StreamingHealthPage() {
@@ -167,6 +175,54 @@ export default function StreamingHealthPage() {
           </p>
         </div>
       </div>
+
+      <section
+        className="rounded-lg border p-4 space-y-3"
+        style={{
+          borderColor: data.buffering.risk === "critical" ? "#ef4444" : data.buffering.risk === "watch" ? "#f59e0b" : "#22c55e",
+          background: "var(--bg-card)",
+        }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">Buffering risk</h2>
+            <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+              {data.buffering.liveConnections} active sessions · {data.buffering.stallSessions} with observed byte gaps
+            </p>
+          </div>
+          <strong className={data.buffering.risk === "critical" ? "text-red-400" : data.buffering.risk === "watch" ? "text-amber-400" : "text-green-400"}>
+            {data.buffering.label}
+          </strong>
+        </div>
+        {data.buffering.sourceDiagnostics.length > 0 && (
+          <div className="border-t pt-3 space-y-2" style={{ borderColor: "var(--border)" }}>
+            <p className="text-xs font-semibold">Source diagnostics</p>
+            {data.buffering.sourceDiagnostics.map((stream) => (
+              <div key={stream.id} className="text-xs">
+                <Link className="underline" href={`/admin/stream?id=${stream.id}`} style={{ color: "var(--accent)" }}>{stream.name}</Link>
+                <span style={{ color: "var(--muted)" }}>{stream.lastProbeError ? ` — ${stream.lastProbeError}` : ""}</span>
+                <ul className="ml-3 mt-1 space-y-0.5" style={{ color: "var(--muted)" }}>
+                  {stream.sources.map((source) => (
+                    <li key={source.url} className={source.state === "open" ? "text-red-400" : source.state === "half_open" ? "text-amber-400" : ""}>
+                      {source.state.toUpperCase()} · {source.failures} failures · {source.latencyMs != null ? `${source.latencyMs}ms` : "latency —"}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+        {data.buffering.atRiskServers.length > 0 && (
+          <ul className="text-xs space-y-1" style={{ color: "var(--muted)" }}>
+            {data.buffering.atRiskServers.map((server) => (
+              <li key={server.id}>
+                <Link className="underline" href={`/admin/servers/${server.id}`} style={{ color: "var(--accent)" }}>{server.name}</Link>
+                {` — ${server.label}, ${server.headroomPct}% egress headroom`}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="rounded-lg border p-4 space-y-3" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
         <h2 className="text-sm font-semibold flex items-center gap-2">

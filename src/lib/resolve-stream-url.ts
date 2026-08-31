@@ -3,6 +3,7 @@ import { resolveProviderUrl } from "./vod-provider-url";
 import { parseBitrates, resolveStreamPlayUrl } from "./stream-variants";
 import { repairMalformedStreamUrl } from "./stream-source";
 import { getActiveSource, getUpstreamAttempts } from "./source-failover";
+import { getSourceCircuit, rankSourceCandidates } from "./source-circuit-breaker";
 
 const MAX_FAILOVER_ATTEMPTS = 3;
 
@@ -154,20 +155,12 @@ export async function preferHealthyPlaybackUrls(
       return out;
     }
   }
-  const primary = urls[0];
-  const primaryAttempts = await getUpstreamAttempts(streamId, primary);
-  if (primaryAttempts < MAX_FAILOVER_ATTEMPTS) return urls;
-  for (let i = 1; i < urls.length; i++) {
-    const alt = urls[i]!;
-    const altAttempts = await getUpstreamAttempts(streamId, alt);
-    if (altAttempts < MAX_FAILOVER_ATTEMPTS) {
-      const out = [...urls];
-      const [preferred] = out.splice(i, 1);
-      out.unshift(preferred);
-      return out;
-    }
-  }
-  return urls;
+  const candidates = await Promise.all(urls.map(async (url, priority) => {
+    const circuit = await getSourceCircuit(streamId, url);
+    const attempts = await getUpstreamAttempts(streamId, url);
+    return { url, priority, state: circuit.state, failures: Math.max(circuit.failures, attempts), latencyMs: circuit.latencyMs, bitrateKbps: circuit.bitrateKbps };
+  }));
+  return rankSourceCandidates(candidates).map((candidate) => candidate.url);
 }
 
 /** Like listStreamPlaybackUrls but prefers a healthy backup when primary is known-bad. */

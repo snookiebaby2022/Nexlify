@@ -3,9 +3,14 @@ import { getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { bouquetContentCounts } from "@/lib/bouquet-counts";
 import { redisModeFromEnv, redisPing } from "@/lib/redis";
 import { detectHostHardware, buildOptimizationProfile } from "@/lib/server-optimization";
+import { getServerLoadScores } from "@/lib/server-load";
+import { bufferingRisk, bufferingRiskLabel } from "@/lib/server-load-metrics";
+import { batchGetLiveQualitySamples } from "@/lib/connection-quality-live";
+import { listLiveConnections } from "@/lib/connections";
+import { getSourceCircuit } from "@/lib/source-circuit-breaker";
 
 export async function getStreamingHealthSnapshot() {
-  const [servers, streamCounts, bouquets, lines, antiFreeze, redisOk, liveProbeStats] = await Promise.all([
+  const [servers, streamCounts, bouquets, lines, antiFreeze, redisOk, liveProbeStats, loadScores, liveConnections] = await Promise.all([
     prisma.streamServer.findMany({
       select: {
         id: true,
@@ -41,15 +46,25 @@ export async function getStreamingHealthSnapshot() {
       where: { isActive: true, type: "LIVE" },
       _count: { id: true },
     }),
+    getServerLoadScores(),
+    listLiveConnections(undefined, 500),
   ]);
 
   const hardware = detectHostHardware();
   const recommended = buildOptimizationProfile(hardware);
 
   const now = Date.now();
+  const liveSamples = await batchGetLiveQualitySamples(
+    liveConnections.map((c) => ({ lineId: c.lineId, streamId: c.streamId ?? "", ip: c.ip }))
+  );
+  const stallSessions = liveSamples.filter((sample) => (sample?.stallCount ?? 0) > 0).length;
+  const serverLoadById = new Map(loadScores.map((row) => [row.server.id, row]));
+
   const serverRows = servers.map((s) => {
     const hb = s.agentLastSeen ? new Date(s.agentLastSeen).getTime() : 0;
     const online = s.isActive && (s.healthStatus === "online" || s.healthStatus === "healthy" || (hb > 0 && now - hb < 300_000));
+    const load = serverLoadById.get(s.id);
+    const loadPct = Math.round((load?.score ?? 0) * 100);
     return {
       id: s.id,
       name: s.name,
@@ -59,6 +74,16 @@ export async function getStreamingHealthSnapshot() {
       hasAgent: Boolean(s.agentToken),
       agentLastSeen: s.agentLastSeen,
       maxClients: s.maxClients,
+      loadPct,
+      usedMbps: load?.bandwidthMbps ?? 0,
+      capMbps: load?.capMbps ?? 0,
+      headroomPct: load?.headroomPct ?? 100,
+      bufferingRisk: bufferingRisk({
+        online,
+        saturated: load?.saturated ?? false,
+        headroomPct: load?.headroomPct ?? 100,
+        loadPct,
+      }),
     };
   });
 
@@ -171,8 +196,32 @@ export async function getStreamingHealthSnapshot() {
 
   const readyScore = checklist.filter((c) => c.ok).length;
 
+  const riskRows = serverRows.filter((s) => s.isActive && s.bufferingRisk !== "healthy");
+  const degradedStreams = await prisma.stream.findMany({
+    where: { type: "LIVE", isActive: true, OR: [{ lastProbeOk: false }, { lastProbeOk: null }] },
+    select: { id: true, name: true, streamUrl: true, backupUrl: true, lastProbeError: true },
+    orderBy: { lastProbeAt: "asc" },
+    take: 30,
+  });
+  const sourceDiagnostics = await Promise.all(degradedStreams.map(async (stream) => {
+    const urls = [stream.streamUrl, stream.backupUrl].filter((url): url is string => Boolean(url?.trim()));
+    const sources = await Promise.all(urls.map(async (url) => {
+      const circuit = await getSourceCircuit(stream.id, url);
+      return { url, ...circuit };
+    }));
+    return { id: stream.id, name: stream.name, lastProbeError: stream.lastProbeError, sources };
+  }));
+
   return {
     servers: serverRows,
+    buffering: {
+      risk: riskRows.some((s) => s.bufferingRisk === "critical") ? "critical" : riskRows.length ? "watch" : "healthy",
+      label: riskRows.some((s) => s.bufferingRisk === "critical") ? "High buffering risk" : riskRows.length ? "Watch closely" : "Healthy",
+      liveConnections: liveConnections.length,
+      stallSessions,
+      atRiskServers: riskRows.map((s) => ({ id: s.id, name: s.name, risk: s.bufferingRisk, label: bufferingRiskLabel(s.bufferingRisk), headroomPct: s.headroomPct })),
+      sourceDiagnostics,
+    },
     onlineServers,
     streamCounts: {
       live: byType.LIVE ?? 0,

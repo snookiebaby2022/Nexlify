@@ -9,7 +9,8 @@ import {
   logPlaybackQuality,
 } from "@/lib/playback-quality-log";
 import { setActiveFailover } from "@/lib/source-failover";
-import { probeStreamUrl } from "@/lib/stream-probe-server";
+import { probeStreamUrl, type ProbeResult } from "@/lib/stream-probe-server";
+import { allowSourceProbe, recordSourceProbe } from "@/lib/source-circuit-breaker";
 
 export type PlaybackQualityScan = {
   watched: number;
@@ -144,8 +145,21 @@ export async function runPlaybackQualityMonitor(): Promise<PlaybackQualityScan> 
 
     if (!kind) continue;
 
-    const primary = await probeStreamUrl(row.streamUrl, { fast: false });
+    const primaryAllowed = await allowSourceProbe(row.id, row.streamUrl);
+    const primary: ProbeResult = primaryAllowed
+      ? await probeStreamUrl(row.streamUrl, { fast: false })
+      : { status: "offline", message: "Circuit open — recovery probe deferred" };
     const primaryOk = primary.status === "online" || primary.status === "degraded";
+    if (primaryAllowed) {
+      await recordSourceProbe({
+        streamId: row.id,
+        url: row.streamUrl,
+        ok: primaryOk,
+        error: primaryOk ? null : primary.message,
+        latencyMs: primary.latencyMs,
+        bitrateKbps: primary.bitrateKbps,
+      });
+    }
     if (!primaryOk) {
       await logPlaybackQuality({
         action: PLAYBACK_ORIGIN_FAIL,

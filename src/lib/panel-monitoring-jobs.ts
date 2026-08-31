@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
-import { probeStreamUrl } from "@/lib/stream-probe-server";
+import { probeStreamUrl, type ProbeResult } from "@/lib/stream-probe-server";
 import { streamProbeErrorWithHint } from "@/lib/stream-probe-fix-hints";
 import { resolveStreamPlaybackUrl } from "@/lib/resolve-stream-url";
 import { sendTelegramAlert } from "@/lib/panel-telegram-alerts";
 import { enqueueAgentCommand } from "@/lib/stream-agent";
 import { findSiblingLiveBackupUrl } from "@/lib/live-channel-backup";
+import { allowSourceProbe, recordSourceProbe } from "@/lib/source-circuit-breaker";
 
 export async function runDeadLinkProbeJob() {
   const settings = await getSettingGroup("streams");
@@ -24,8 +25,21 @@ export async function runDeadLinkProbeJob() {
 
   for (const stream of streams) {
     const primaryUrl = resolveStreamPlaybackUrl(stream);
-    const probe = await probeStreamUrl(primaryUrl, { fast: true });
+    const primaryAllowed = await allowSourceProbe(stream.id, primaryUrl);
+    const probe: ProbeResult = primaryAllowed
+      ? await probeStreamUrl(primaryUrl, { fast: true })
+      : { status: "offline" as const, message: "Circuit open — primary probe deferred" };
     const ok = probe.status === "online" || probe.status === "degraded";
+    if (primaryAllowed) {
+      await recordSourceProbe({
+        streamId: stream.id,
+        url: primaryUrl,
+        ok,
+        error: ok ? null : probe.message,
+        latencyMs: probe.latencyMs,
+        bitrateKbps: probe.bitrateKbps,
+      });
+    }
 
     if (!stream.backupUrl?.trim()) {
       const sibling = await findSiblingLiveBackupUrl(stream);
@@ -39,8 +53,23 @@ export async function runDeadLinkProbeJob() {
     }
 
     if (!ok && stream.backupUrl?.trim()) {
-      const backupProbe = await probeStreamUrl(stream.backupUrl.trim(), { fast: true });
-      if (backupProbe.status === "online") {
+      const backupUrl = stream.backupUrl.trim();
+      const backupAllowed = await allowSourceProbe(stream.id, backupUrl);
+      const backupProbe: ProbeResult = backupAllowed
+        ? await probeStreamUrl(backupUrl, { fast: true })
+        : { status: "offline", message: "Circuit open — backup probe deferred" };
+      const backupOk = backupProbe.status === "online" || backupProbe.status === "degraded";
+      if (backupAllowed) {
+        await recordSourceProbe({
+          streamId: stream.id,
+          url: backupUrl,
+          ok: backupOk,
+          error: backupOk ? null : backupProbe.message,
+          latencyMs: backupProbe.latencyMs,
+          bitrateKbps: backupProbe.bitrateKbps,
+        });
+      }
+      if (backupOk) {
         await prisma.stream.update({
           where: { id: stream.id },
           data: {

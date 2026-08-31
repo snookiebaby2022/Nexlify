@@ -32,6 +32,30 @@ export function dashboardPlaybackBandwidthMbps(
 export const SATURATED_SLOT_RATIO = 0.92;
 export const SATURATED_HEADROOM_RATIO = 0.08;
 
+export type BufferingRisk = "healthy" | "watch" | "critical";
+
+/**
+ * Classify delivery risk from the two capacity signals that actually cause
+ * origin-side buffering: viewer slots and egress headroom. Unknown/zero
+ * capacity is treated conservatively, without inventing a failure.
+ */
+export function bufferingRisk(opts: {
+  online: boolean;
+  saturated: boolean;
+  headroomPct: number;
+  loadPct: number;
+  failedStreams?: number;
+}): BufferingRisk {
+  if (!opts.online || opts.failedStreams && opts.failedStreams > 0) return "critical";
+  if (opts.saturated || opts.headroomPct < 8 || opts.loadPct >= 92) return "critical";
+  if (opts.headroomPct < 20 || opts.loadPct >= 80) return "watch";
+  return "healthy";
+}
+
+export function bufferingRiskLabel(risk: BufferingRisk): string {
+  return risk === "critical" ? "High buffering risk" : risk === "watch" ? "Watch closely" : "Healthy";
+}
+
 export type ServerEgressHeadroom = {
   capMbps: number;
   usedMbps: number;

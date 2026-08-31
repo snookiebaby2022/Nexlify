@@ -4,6 +4,7 @@ import { cacheGet, cacheSet } from "@/lib/cache";
 const FAILOVER_PREFIX = "failover:attempts:";
 const MAX_FAILOVER_ATTEMPTS = 3;
 const FAILOVER_COOLDOWN_SEC = 300;
+const FAILOVER_PROBE_TIMEOUT_MS = 4_000;
 
 export type UpstreamSource = {
   url: string;
@@ -125,14 +126,24 @@ export async function executeFailover(
   return { url: primaryUrl, source: "primary", attempts: attempts1 };
 }
 
-export async function probeUpstream(url: string, timeoutMs: number = 10000): Promise<boolean> {
+export async function probeUpstream(url: string, timeoutMs: number = FAILOVER_PROBE_TIMEOUT_MS): Promise<boolean> {
   try {
     const res = await fetch(url, {
       method: "HEAD",
       signal: AbortSignal.timeout(timeoutMs),
-      headers: { "User-Agent": "Nexlify-Probe/1.0" },
+      headers: { "User-Agent": "Nexlify-Probe/1.0", Accept: "*/*" },
     });
-    return res.ok || res.status === 405;
+    if (res.ok) return true;
+    // Some live providers reject HEAD but serve GET. Do one bounded range probe
+    // instead of declaring a healthy source dead.
+    if (res.status === 405 || res.status === 501) {
+      const fallback = await fetch(url, {
+        headers: { "User-Agent": "Nexlify-Probe/1.0", Range: "bytes=0-1023", Accept: "*/*" },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      return fallback.ok || fallback.status === 206;
+    }
+    return false;
   } catch {
     return false;
   }
