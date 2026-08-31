@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.ok) return parsed.response;
 
     const body = parsed.data;
-    const rawIds = Array.isArray(body.streamIds) ? body.streamIds : [];
+    const rawIds: unknown[] = Array.isArray(body.streamIds) ? body.streamIds : [];
     const streamIds = [
       ...new Set(
         rawIds
