@@ -105,14 +105,14 @@ test("computeConnectionQualityWithLive — new session starts green not yellow",
   assert.ok(q.score >= 98);
 });
 
-test("applyMediaByteWindow counts a stall after a 2.5s byte gap", () => {
+test("applyMediaByteWindow counts a stall after a long byte gap", () => {
   const t0 = 1_000_000;
   const first = applyMediaByteWindow(null, t0, 188);
   assert.equal(first.stallCount, 0);
   assert.equal(first.firstByteAt, t0);
   const later = applyMediaByteWindow(first, t0 + 800, 188);
   assert.equal(later.stallCount, 0);
-  const stalled = applyMediaByteWindow(later, t0 + 4_000, 188);
+  const stalled = applyMediaByteWindow(later, t0 + 25_000, 188);
   assert.equal(stalled.stallCount, 1);
   assert.equal(stalled.firstByteAt, t0);
 });

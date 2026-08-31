@@ -27,7 +27,12 @@ export type QualityWindow = {
   stallCount: number;
 };
 
-export const STALL_GAP_MS = 2_500;
+// Edge batches connection pulses every ~15s (IPTV_EDGE_SESSION_KEEPALIVE_MS) to avoid
+// overloading the panel. Gaps below ~20s are normal keepalive spacing, not stalls.
+export const STALL_GAP_MS = Math.max(
+  20_000,
+  Number(process.env.CONNECTION_STALL_GAP_MS || 20_000)
+);
 
 const QUALITY_TTL_SEC = 180;
 const WINDOW_MS = 10_000;
@@ -88,7 +93,7 @@ export async function recordConnectionMediaBytes(
   const next = applyMediaByteWindow(prev, now, byteLen);
   await cacheSet(key, next, QUALITY_TTL_SEC);
   const grew = (next.stallCount ?? 0) > (prev?.stallCount ?? 0);
-  if (grew && next.stallCount >= 3 && next.totalBytes > 200_000) {
+  if (grew && next.stallCount >= 5 && next.totalBytes > 500_000) {
     const { logPlaybackQuality, PLAYBACK_STUTTER } = await import("./playback-quality-log");
     void logPlaybackQuality({
       action: PLAYBACK_STUTTER,
