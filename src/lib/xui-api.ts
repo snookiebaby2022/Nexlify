@@ -238,6 +238,7 @@ export async function handleXuiAction(
 
       const guard = await assertResellerCanCreateLine(caller, bouquetIds);
       if (!guard.ok) return { status: "error", message: guard.error };
+      bouquetIds = guard.bouquetIds;
 
       if (!caller.isAdmin && !bouquetIds.length) {
         return { status: "error", message: "Select at least one bouquet for this line" };

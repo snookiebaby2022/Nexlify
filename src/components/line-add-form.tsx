@@ -165,10 +165,12 @@ export function LineAddForm({
       | undefined
   ) {
     if (!pkg) return f;
+    const allowedIds = new Set(bouquets.map((b) => b.id));
+    const fromPkg = pkg.bouquetIds.filter((id) => allowedIds.has(id));
     const named = bouquets
       .filter((b) => b.name.trim().toLowerCase() === pkg.name.trim().toLowerCase())
       .map((b) => b.id);
-    const nextBouquets = pkg.bouquetIds.length ? [...pkg.bouquetIds] : named;
+    const nextBouquets = fromPkg.length ? fromPkg : named.length ? named : bouquets.map((b) => b.id);
     return {
       ...f,
       packageId: pkg.id,

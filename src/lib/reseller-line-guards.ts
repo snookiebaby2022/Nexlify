@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { isUnlimitedLineExpiry } from "@/lib/format";
 import { isUnlimitedDurationDays } from "@/lib/line-duration-presets";
 
+export const RESELLER_BOUQUET_ACCESS_ERROR =
+  "No bouquets are assigned to your reseller account. Ask your administrator to grant bouquet access under Admin → Resellers → Bouquet Access.";
+
 export const RESELLER_UNLIMITED_LINE_ERROR =
   "Only administrators can create or set unlimited lines";
 
@@ -24,11 +27,46 @@ export function assertRoleMaySetUnlimited(
   return { ok: true };
 }
 
+/** Intersect requested bouquet IDs with reseller allowance; default to all allowed when none match. */
+export function pickResellerLineBouquetIds(allowed: string[], requested: string[]): string[] {
+  const allowedSet = new Set(allowed);
+  const req = [...new Set(requested.map(String).filter(Boolean))];
+  const matched = req.filter((id) => allowedSet.has(id));
+  return matched.length ? matched : [...allowed];
+}
+
+/**
+ * Packages and access codes often list every admin bouquet. Intersect with the
+ * reseller's granted set; if none match, default to all allowed bouquets.
+ */
+export async function resolveResellerLineBouquets(
+  userId: string,
+  role: PanelRole,
+  bouquetIds: string[]
+): Promise<{ ok: true; bouquetIds: string[] } | { ok: false; error: string }> {
+  if (role === PanelRole.ADMIN) {
+    return { ok: true, bouquetIds: [...new Set(bouquetIds.filter(Boolean))] };
+  }
+
+  const rows = await prisma.resellerBouquet.findMany({
+    where: { userId },
+    select: { bouquetId: true },
+  });
+  const allowed = rows.map((r) => r.bouquetId);
+  if (!allowed.length) {
+    return { ok: false, error: RESELLER_BOUQUET_ACCESS_ERROR };
+  }
+
+  return { ok: true, bouquetIds: pickResellerLineBouquetIds(allowed, bouquetIds) };
+}
+
 export async function assertResellerCanCreateLine(
   session: { id: string; role: PanelRole },
   bouquetIds: string[]
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (session.role === PanelRole.ADMIN) return { ok: true };
+): Promise<{ ok: true; bouquetIds: string[] } | { ok: false; error: string }> {
+  if (session.role === PanelRole.ADMIN) {
+    return { ok: true, bouquetIds };
+  }
 
   const owner = await prisma.panelUser.findUnique({
     where: { id: session.id },
@@ -36,7 +74,6 @@ export async function assertResellerCanCreateLine(
       credits: true,
       maxLines: true,
       _count: { select: { lines: true } },
-      resellerBouquets: { select: { bouquetId: true } },
     },
   });
   if (!owner) return { ok: false, error: "Forbidden" };
@@ -48,16 +85,11 @@ export async function assertResellerCanCreateLine(
     };
   }
 
-  const allowed = new Set(owner.resellerBouquets.map((b) => b.bouquetId));
-  if (allowed.size > 0 && bouquetIds.length) {
-    const invalid = bouquetIds.filter((id) => !allowed.has(id));
-    if (invalid.length) {
-      return {
-        ok: false,
-        error: "One or more bouquets are not allowed for your reseller account",
-      };
-    }
+  const bouquets = await resolveResellerLineBouquets(session.id, session.role, bouquetIds);
+  if (!bouquets.ok) return bouquets;
+  if (!bouquets.bouquetIds.length) {
+    return { ok: false, error: RESELLER_BOUQUET_ACCESS_ERROR };
   }
 
-  return { ok: true };
+  return { ok: true, bouquetIds: bouquets.bouquetIds };
 }

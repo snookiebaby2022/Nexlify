@@ -219,6 +219,7 @@ export async function POST(req: NextRequest) {
   if (!guard.ok) {
     return NextResponse.json({ error: guard.error }, { status: 400 });
   }
+  bouquetIds = guard.bouquetIds;
 
   const paysCredits =
     session.role === PanelRole.RESELLER || session.role === PanelRole.SUB_RESELLER;
@@ -233,7 +234,6 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-
   const { getResellerLineRewardPercent } = await import("@/lib/reseller-rewards");
   const { debitResellerCredits } = await import("@/lib/reseller-credit-charge");
   const rewardPercent = paysCredits ? await getResellerLineRewardPercent() : 0;

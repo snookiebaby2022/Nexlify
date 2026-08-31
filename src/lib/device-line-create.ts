@@ -47,6 +47,11 @@ export async function createLineForDevice(opts: {
   const trialGuard = await assertIptvTrialAllowed({ isTrial: resolved.isTrial });
   if (!trialGuard.ok) throw new Error(trialGuard.error);
 
+  const { assertResellerCanCreateLine } = await import("@/lib/reseller-line-guards");
+  const bouquetGuard = await assertResellerCanCreateLine(opts.session, resolved.bouquetIds);
+  if (!bouquetGuard.ok) throw new Error(bouquetGuard.error);
+  resolved.bouquetIds = bouquetGuard.bouquetIds;
+
   const paysCredits =
     opts.session.role === PanelRole.RESELLER || opts.session.role === PanelRole.SUB_RESELLER;
 

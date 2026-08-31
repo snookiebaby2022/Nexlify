@@ -377,11 +377,12 @@ export async function handleXuiExtendedAction(
       if (!lineId) return { status: "error", message: "line_id required" };
       const scope = await assertLineInScope(lineId, caller);
       if (!scope.ok) return { status: "error", message: scope.message };
-      const bouquetIds = params.getAll("bouquet[]").length
+      let bouquetIds = params.getAll("bouquet[]").length
         ? params.getAll("bouquet[]")
         : (params.get("bouquets")?.split(",").filter(Boolean) ?? []);
       const guard = await assertResellerCanCreateLine(caller, bouquetIds);
       if (!guard.ok) return { status: "error", message: guard.error };
+      bouquetIds = guard.bouquetIds;
       await prisma.lineBouquet.deleteMany({ where: { lineId } });
       if (bouquetIds.length) {
         await prisma.lineBouquet.createMany({
