@@ -54,7 +54,13 @@ async function ensureBackupAndFailover(
     }
   }
   if (!backup || backup === stream.streamUrl.trim()) return false;
-  const probe = await probeStreamUrl(backup, { fast: false });
+  const scheduled = await probeStreamWithScheduler({
+    streamId: stream.id,
+    url: backup,
+    fast: false,
+  });
+  if (scheduled.skipped) return false;
+  const probe = scheduled.probe;
   if (probe.status !== "online" && probe.status !== "degraded") return false;
   await setActiveFailover(stream.id, backup, 600);
   await logPlaybackQuality({
