@@ -8,9 +8,10 @@ import { IpWithFlag } from "@/components/ip-with-flag";
 import { subscriptionPaths } from "@/lib/panel-paths";
 import {
   connectionQualityClass,
+  describeStallCount,
+  LIVE_STALL_HELP,
   type ConnectionQuality,
 } from "@/lib/connection-quality";
-import { describeStallCount, LIVE_STALL_HELP } from "@/lib/connection-quality-live";
 import type { PlaybackOutputLabel } from "@/lib/connection-playback-output";
 import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
 import { ListPagination } from "@/components/list-pagination";

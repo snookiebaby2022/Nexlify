@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { startVisibleInterval } from "@/lib/perf-polling";
-import { LIVE_STALL_HELP } from "@/lib/connection-quality-live";
+import { LIVE_STALL_HELP } from "@/lib/connection-quality";
 
 type QoeSnapshot = {
   liveConnections: number;

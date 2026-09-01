@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { computeConnectionQuality, scoreFromLastSeen } from "./connection-quality";
+import { computeConnectionQuality, scoreFromLastSeen, describeStallCount } from "./connection-quality";
+
+test("describeStallCount maps 0 / 1–4 / 5+ for operators", () => {
+  assert.equal(describeStallCount(0).level, "ok");
+  assert.equal(describeStallCount(4).level, "watch");
+  assert.equal(describeStallCount(5).level, "bad");
+});
 
 test("scoreFromLastSeen — excellent while session is actively refreshing", () => {
   assert.ok(scoreFromLastSeen(2) >= 98);

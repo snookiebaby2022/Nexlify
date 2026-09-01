@@ -3,8 +3,8 @@ import test from "node:test";
 import {
   applyMediaByteWindow,
   computeConnectionQualityWithLive,
-  describeStallCount,
 } from "./connection-quality-live";
+import { describeStallCount } from "./connection-quality";
 
 test("describeStallCount maps 0 / 1–4 / 5+ for operators", () => {
   assert.equal(describeStallCount(0).level, "ok");

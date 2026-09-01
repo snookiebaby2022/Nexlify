@@ -55,3 +55,24 @@ export function connectionQualityClass(level: ConnectionQualityLevel): string {
       return "xui-quality-badge xui-quality-badge--poor";
   }
 }
+
+/** Session stall count that means the player is actually buffering, not a zap. */
+export const STALL_PROBLEM_COUNT = 5;
+
+export const LIVE_STALL_HELP =
+  "A stall is counted when no video bytes arrive for 20+ seconds. Shorter gaps are normal keepalive, not buffering. 0 is healthy. 1–4 in a session is usually a channel change or a brief hiccup. 5+ means the player is stalling — check that channel’s source or the load balancer. Quality % is how fresh the session heartbeat is, not the stall count.";
+
+export function describeStallCount(stallCount: number): {
+  level: "ok" | "watch" | "bad";
+  summary: string;
+} {
+  const n = Math.max(0, Math.floor(Number(stallCount) || 0));
+  if (n <= 0) return { level: "ok", summary: "0 stalls — normal" };
+  if (n < STALL_PROBLEM_COUNT) {
+    return {
+      level: "watch",
+      summary: `${n} stall${n === 1 ? "" : "s"} — occasional, usually fine`,
+    };
+  }
+  return { level: "bad", summary: `${n} stalls — buffering, check source or LB` };
+}
