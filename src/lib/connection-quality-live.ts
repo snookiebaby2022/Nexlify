@@ -27,12 +27,16 @@ export type QualityWindow = {
   stallCount: number;
 };
 
-// Edge batches connection pulses every ~15s (IPTV_EDGE_SESSION_KEEPALIVE_MS) to avoid
-// overloading the panel. Gaps below ~20s are normal keepalive spacing, not stalls.
+// Edge batches connection pulses every ~15s (IPTV_EDGE_SESSION_KEEPALIVE_MS).
+// A delayed flush still carries the video that flowed during the wait — that is
+// not a stall. Floor is > 2 keepalives + HTTP timeout so jitter cannot trip it.
 export const STALL_GAP_MS = Math.max(
-  20_000,
-  Number(process.env.CONNECTION_STALL_GAP_MS || 20_000)
+  45_000,
+  Number(process.env.CONNECTION_STALL_GAP_MS || 45_000)
 );
+/** Below this, a late pulse is a dribble (playlist/keepalive), not a healthy TS batch. */
+export const MIN_HEALTHY_PULSE_BYTES = 64_000;
+const SESSION_RESET_GAP_MS = 120_000;
 
 const QUALITY_TTL_SEC = 180;
 const WINDOW_MS = 10_000;
@@ -41,25 +45,44 @@ export function connectionQualityKey(lineId: string, streamId: string, ip: strin
   return `conn:q:${lineId}:${streamId}:${ip || "*"}`;
 }
 
-/** Apply inbound media bytes to a QoE window (stalls = gaps longer than STALL_GAP_MS). */
+function freshQualityWindow(now: number, byteLen: number): QualityWindow {
+  return {
+    windowStart: now,
+    windowBytes: Math.max(0, byteLen),
+    totalBytes: Math.max(0, byteLen),
+    lastByteAt: now,
+    peakBytesPerSec: 0,
+    firstByteAt: now,
+    stallCount: 0,
+  };
+}
+
+/** True when this sample is a batched healthy pipe, not a buffering gap. */
+export function pulseLooksLikeStall(gapMs: number, byteLen: number): boolean {
+  if (gapMs < STALL_GAP_MS) return false;
+  return byteLen < MIN_HEALTHY_PULSE_BYTES;
+}
+
+/** Apply inbound media bytes to a QoE window.
+ *  Edge pulses are batched: 2MB after 30s is delayed metering, not a stall. */
 export function applyMediaByteWindow(
   prev: QualityWindow | null | undefined,
   now: number,
   byteLen: number
 ): QualityWindow {
+  const bytes = Math.max(0, byteLen);
   if (!prev || prev.totalBytes <= 0) {
-    return {
-      windowStart: now,
-      windowBytes: Math.max(0, byteLen),
-      totalBytes: Math.max(0, byteLen),
-      lastByteAt: now,
-      peakBytesPerSec: 0,
-      firstByteAt: now,
-      stallCount: 0,
-    };
+    return freshQualityWindow(now, bytes);
   }
   const gap = now - prev.lastByteAt;
-  const stallCount = gap >= STALL_GAP_MS ? (prev.stallCount ?? 0) + 1 : prev.stallCount ?? 0;
+  if (gap >= SESSION_RESET_GAP_MS) {
+    const next = freshQualityWindow(now, bytes);
+    next.totalBytes = prev.totalBytes + bytes;
+    return next;
+  }
+  const stallCount = pulseLooksLikeStall(gap, bytes)
+    ? (prev.stallCount ?? 0) + 1
+    : prev.stallCount ?? 0;
   const window: QualityWindow = {
     windowStart: prev.windowStart,
     windowBytes: prev.windowBytes + Math.max(0, byteLen),
@@ -99,7 +122,7 @@ export async function recordConnectionMediaBytes(
       action: PLAYBACK_STUTTER,
       streamId,
       lineId,
-      detail: "Byte gaps over 2.5s while the player was still pulling",
+      detail: "Long gap with almost no video bytes between edge pulses",
       meta: { stallCount: next.stallCount, bytesPerWindow: next.windowBytes },
     });
   }

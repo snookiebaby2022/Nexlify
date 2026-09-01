@@ -125,7 +125,24 @@ test("applyMediaByteWindow counts a stall after a long byte gap", () => {
   assert.equal(first.firstByteAt, t0);
   const later = applyMediaByteWindow(first, t0 + 800, 188);
   assert.equal(later.stallCount, 0);
-  const stalled = applyMediaByteWindow(later, t0 + 25_000, 188);
+  const stalled = applyMediaByteWindow(later, t0 + 50_000, 188);
   assert.equal(stalled.stallCount, 1);
   assert.equal(stalled.firstByteAt, t0);
+});
+
+test("applyMediaByteWindow does not treat a delayed full video pulse as a stall", () => {
+  const t0 = 1_000_000;
+  const first = applyMediaByteWindow(null, t0, 220_000);
+  const batched = applyMediaByteWindow(first, t0 + 30_000, 2_000_000);
+  assert.equal(batched.stallCount, 0);
+});
+
+test("applyMediaByteWindow resets stall count after a long idle (new spell)", () => {
+  const t0 = 1_000_000;
+  const first = applyMediaByteWindow(null, t0, 188);
+  const stalled = applyMediaByteWindow(first, t0 + 50_000, 188);
+  assert.equal(stalled.stallCount, 1);
+  const resumed = applyMediaByteWindow(stalled, t0 + 200_000, 220_000);
+  assert.equal(resumed.stallCount, 0);
+  assert.equal(resumed.firstByteAt, t0 + 200_000);
 });
