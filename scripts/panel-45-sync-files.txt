@@ -23,6 +23,7 @@ src/lib/intelligent-lb.ts
 src/lib/panel-monitoring-jobs.ts
 src/lib/playback-quality-monitor.ts
 src/lib/resolve-stream-url.ts
+src/lib/vod-mode.ts
 src/lib/server-load-metrics.ts
 src/lib/server-load.ts
 src/lib/source-circuit-breaker.ts

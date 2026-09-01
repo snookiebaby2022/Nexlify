@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { listStreamPlaybackUrls, syncVodModeFields, type StreamWithProvider } from "./resolve-stream-url";
+import { listStreamPlaybackUrls, type StreamWithProvider } from "./resolve-stream-url";
+import { syncVodModeFields } from "./vod-mode";
 
 describe("syncVodModeFields", () => {
   it("keeps LIVE / ON_DEMAND / CATCHUP", () => {

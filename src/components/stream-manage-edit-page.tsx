@@ -31,7 +31,7 @@ import { XuiFormTabs, type XuiFormTab } from "@/components/xui-form-tabs";
 import { VodInformationTab } from "@/components/vod-information-tab";
 import { integrationSourceLabel, stripIntegrationSourceSuffix } from "@/lib/integration-stream-url";
 import { StreamServerTab } from "@/components/stream-server-tab";
-import { effectiveStreamVodMode } from "@/lib/resolve-stream-url";
+import { effectiveStreamVodMode } from "@/lib/vod-mode";
 import { parseLiveStreamMeta } from "@/lib/stream-live-meta";
 import { parseVodAgentCmd } from "@/lib/vod-meta";
 
