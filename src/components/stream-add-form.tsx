@@ -7,7 +7,7 @@ import { Calendar, FileText, Globe, Info, Server, Settings } from "lucide-react"
 import { XuiFormTabs, type XuiFormTab } from "@/components/xui-form-tabs";
 import { TmdbSearch } from "@/components/tmdb-search";
 import { ProviderSourceFields, OnDemandStreamFields } from "@/components/provider-source-fields";
-import { ServerTreePicker } from "@/components/server-tree-picker";
+import { StreamServerTab } from "@/components/stream-server-tab";
 import { StreamBouquetSection } from "@/components/stream-bouquet-section";
 import {
   StreamAdvancedSections,
@@ -944,9 +944,20 @@ function LiveStreamForm({
         )}
 
         {addTab === "server" && (
-          <ServerTreePicker
-            selectedIds={meta.serverIds}
-            onChange={(serverIds) => setMeta({ ...meta, serverIds })}
+          <StreamServerTab
+            streamType="LIVE"
+            serverIds={meta.serverIds}
+            onServerIdsChange={(serverIds) => setMeta((m) => ({ ...m, serverIds }))}
+            vodMode={form.vodMode}
+            onVodModeChange={(vodMode) => setForm((f) => ({ ...f, vodMode }))}
+            transcodeProfile={meta.transcodeProfile}
+            onTranscodeProfileChange={(transcodeProfile) =>
+              setMeta((m) => ({ ...m, transcodeProfile }))
+            }
+            directSource={meta.directStream}
+            onDirectSourceChange={(directStream) => setMeta((m) => ({ ...m, directStream }))}
+            autoRestart={form.autoRestart}
+            onAutoRestartChange={(autoRestart) => setForm((f) => ({ ...f, autoRestart }))}
           />
         )}
 

@@ -39,7 +39,7 @@ export function getStreamPlaybackPolicy(stream: StreamForPlaybackPolicy): Stream
 
   if (isExternalHttpUrl(stream.streamUrl ?? "")) return "relay";
 
-  if (mode === "ON_DEMAND" || stream.isOnDemand) return "on_demand";
+  if (mode === "ON_DEMAND" || (mode !== "LIVE" && stream.isOnDemand)) return "on_demand";
 
   return "transcode";
 }
@@ -89,6 +89,13 @@ export function streamListUptimeKind(
   listType?: string
 ): "DIRECT" | "LIVE" | "ON-DEMAND" | "CATCHUP" {
   if (stream.vodMode === "CATCHUP") return "CATCHUP";
+  if (stream.vodMode === "LIVE") {
+    if (stream.liveStats?.playbackMode) {
+      return streamUptimeColumnLabel(stream.liveStats.playbackMode);
+    }
+    if (stream.hostedExternally) return "DIRECT";
+    return "LIVE";
+  }
   if (
     stream.isCreatedChannel ||
     stream.isOnDemand ||

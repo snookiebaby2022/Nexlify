@@ -20,8 +20,26 @@ describe("syncVodModeFields", () => {
     assert.equal(syncVodModeFields({ vodMode: "SERIES" }).vodMode, "ON_DEMAND");
   });
 
-  it("honors isOnDemand when flipping LIVE", () => {
-    assert.equal(syncVodModeFields({ isOnDemand: true, vodMode: "LIVE" }).vodMode, "ON_DEMAND");
+  it("prefers explicit vodMode over legacy isOnDemand", () => {
+    assert.deepEqual(syncVodModeFields({ isOnDemand: true, vodMode: "LIVE" }), {
+      isOnDemand: false,
+      vodMode: "LIVE",
+    });
+    assert.deepEqual(syncVodModeFields({ isOnDemand: false, vodMode: "ON_DEMAND" }), {
+      isOnDemand: true,
+      vodMode: "ON_DEMAND",
+    });
+  });
+
+  it("maps legacy isOnDemand-only updates", () => {
+    assert.deepEqual(syncVodModeFields({ isOnDemand: true }), {
+      isOnDemand: true,
+      vodMode: "ON_DEMAND",
+    });
+    assert.deepEqual(syncVodModeFields({ isOnDemand: false }), {
+      isOnDemand: false,
+      vodMode: "LIVE",
+    });
   });
 });
 

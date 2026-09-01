@@ -30,7 +30,10 @@ import { readVodTmdbFields } from "@/lib/vod-meta";
 import { XuiFormTabs, type XuiFormTab } from "@/components/xui-form-tabs";
 import { VodInformationTab } from "@/components/vod-information-tab";
 import { integrationSourceLabel, stripIntegrationSourceSuffix } from "@/lib/integration-stream-url";
-import { cleanTitleForTmdb } from "@/lib/vod-title-clean";
+import { StreamServerTab } from "@/components/stream-server-tab";
+import { effectiveStreamVodMode } from "@/lib/resolve-stream-url";
+import { parseLiveStreamMeta } from "@/lib/stream-live-meta";
+import { parseVodAgentCmd } from "@/lib/vod-meta";
 
 type Stream = {
   id: string;
@@ -94,7 +97,9 @@ function streamEditTabs(type: string): XuiFormTab<StreamEditTab>[] {
 
 export function StreamManageEditPage({ streamId }: { streamId: string }) {
   const [stream, setStream] = useState<Stream | null>(null);
-  const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
+  const [serverIds, setServerIds] = useState<string[]>([]);
+  const [transcodeProfile, setTranscodeProfile] = useState("none");
+  const [directSource, setDirectSource] = useState(false);
   const [categories, setCategories] = useState<CategoryOptionInput[]>([]);
   const [parentStreams, setParentStreams] = useState<{ id: string; name: string }[]>([]);
   const [advanced, setAdvanced] = useState<StreamAdvancedState>(emptyAdvancedState());
@@ -138,18 +143,22 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
         const s = d.stream as Stream | undefined;
         if (!s) return;
         setStream(s);
+        const isMovieOrSeries = s.type === "MOVIE" || s.type === "SERIES";
+        if (isMovieOrSeries) {
+          const vodMeta = parseVodAgentCmd(s.agentStartCmd);
+          setTranscodeProfile(String(vodMeta.transcodeProfile ?? "none"));
+        } else {
+          const liveMeta = parseLiveStreamMeta(s.agentStartCmd);
+          setTranscodeProfile(liveMeta.transcodeProfile || "none");
+          setDirectSource(liveMeta.directSource);
+        }
+        setServerIds(s.serverId ? [s.serverId] : []);
         const loadedTmdb = readVodTmdbFields((s as Stream).agentStartCmd);
         setTmdb(loadedTmdb);
-        const isMovieOrSeries = s.type === "MOVIE" || s.type === "SERIES";
         setStreamIcon(
           String((s as Stream).streamIcon ?? (isMovieOrSeries ? loadedTmdb.tmdbPoster : "") ?? "")
         );
-        const vodMode =
-          s.vodMode === "ON_DEMAND" || s.vodMode === "CATCHUP" || s.vodMode === "LIVE"
-            ? s.vodMode
-            : s.isOnDemand
-              ? "ON_DEMAND"
-              : "LIVE";
+        const vodMode = effectiveStreamVodMode(s);
         setForm({
           name: s.name,
           streamUrl: s.streamUrl,
@@ -177,9 +186,6 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
         });
         setAdvanced(advancedFromStream(s));
       });
-    fetch("/api/admin/servers")
-      .then((r) => r.json())
-      .then((d) => setServers(d.servers ?? []));
     fetch("/api/admin/categories?lite=1")
       .then((r) => r.json())
       .then((d) => setCategories(d.categories ?? []));
@@ -229,11 +235,13 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           providerId: form.useProvider ? form.providerId || null : null,
           providerPath: form.useProvider ? form.providerPath || null : null,
           backupUrl: form.backupUrl.trim() || null,
-          serverId: form.serverId || null,
+          serverId: serverIds[0] || null,
           categoryId: form.categoryId.trim() || stream?.categoryId || null,
           epgChannelId: form.epgChannelId || null,
           isActive: form.isActive,
           bouquetIds: form.bouquetIds,
+          transcodeProfile,
+          ...(form.type === "LIVE" ? { directSource } : {}),
           vodMode: isLiveType ? form.vodMode : "ON_DEMAND",
           isOnDemand: isLiveType ? form.vodMode !== "LIVE" : true,
           archiveDays: form.archiveDays ? Number(form.archiveDays) : null,
@@ -275,11 +283,13 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           : "Saved."
       );
       if (data.stream) {
+        const savedVodMode = effectiveStreamVodMode(data.stream);
         setStream((s) => (s ? { ...s, ...data.stream } : (data.stream as Stream)));
         setForm((f) => ({
           ...f,
           streamUrl: data.stream?.streamUrl ?? f.streamUrl,
           epgChannelId: data.stream?.epgChannelId ?? f.epgChannelId,
+          vodMode: savedVodMode,
         }));
       }
     } catch (err) {
@@ -517,12 +527,12 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           archiveDays={form.archiveDays}
           playlistUrl={form.playlistUrl}
           onChange={(next) =>
-            setForm({
-              ...form,
+            setForm((f) => ({
+              ...f,
               vodMode: next.vodMode,
               archiveDays: next.archiveDays,
               playlistUrl: next.playlistUrl,
-            })
+            }))
           }
         />
       )}
@@ -792,29 +802,26 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           )}
 
           {editTab === "server" && (
-            <div className="space-y-4 max-w-xl">
-              <FormField label="Streaming server">
-                <select
-                  className={formSelectClass}
-                  style={formInputStyle}
-                  value={form.serverId}
-                  onChange={(e) => setForm({ ...form, serverId: e.target.value })}
-                >
-                  <option value="">Default / load-balanced</option>
-                  {servers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                {form.useProvider ? (
-                  <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
-                    Hosted items play through the source URL. Leave empty unless you need local
-                    transcode on a specific server.
-                  </p>
-                ) : null}
-              </FormField>
-            </div>
+            <StreamServerTab
+              streamType={form.type}
+              serverIds={serverIds}
+              onServerIdsChange={setServerIds}
+              vodMode={form.vodMode}
+              onVodModeChange={
+                form.type === "LIVE"
+                  ? (vodMode) => setForm((f) => ({ ...f, vodMode }))
+                  : undefined
+              }
+              transcodeProfile={transcodeProfile}
+              onTranscodeProfileChange={setTranscodeProfile}
+              directSource={directSource}
+              onDirectSourceChange={form.type === "LIVE" ? setDirectSource : undefined}
+              autoRestart={form.autoRestart}
+              onAutoRestartChange={
+                form.type === "LIVE" ? (autoRestart) => setForm((f) => ({ ...f, autoRestart })) : undefined
+              }
+              useProvider={form.useProvider}
+            />
           )}
 
           {saveBar}

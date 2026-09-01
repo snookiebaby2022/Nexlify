@@ -868,6 +868,49 @@ async function jobWarmXtreamCatalogs() {
   }
 }
 
+async function jobEdgeChannelPrewarm() {
+  const start = Date.now();
+  try {
+    const edgeHost = String(process.env.NEXLIFY_EDGE_PREWARM_HOST || "").trim();
+    const secret = String(process.env.INTERNAL_API_SECRET || process.env.PANEL_INTERNAL_SECRET || "").trim();
+    if (!edgeHost || !secret) {
+      await logCron("edge_channel_prewarm", "ok", "disabled", Date.now() - start);
+      return;
+    }
+    const { listHotChannels, buildEdgePrewarmTargets } = await import("./edge-prewarm");
+    const channels = await listHotChannels();
+    const targets = buildEdgePrewarmTargets(channels, edgeHost);
+    let warmed = 0;
+    for (const url of targets) {
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { "x-panel-internal-secret": secret },
+        signal: AbortSignal.timeout(3000),
+      }).catch(() => null);
+      if (res?.ok || res?.status === 202) warmed += 1;
+    }
+    await logCron("edge_channel_prewarm", "ok", `warmed ${warmed}/${targets.length}`, Date.now() - start);
+  } catch (e) {
+    await logCron("edge_channel_prewarm", "error", String(e), Date.now() - start);
+  }
+}
+
+export async function jobRecoverLoadBalancers() {
+  const start = Date.now();
+  try {
+    const { recoverLoadBalancersAfterReboot } = await import("./lb-boot-recover");
+    const result = await recoverLoadBalancersAfterReboot();
+    await logCron(
+      "lb_boot_recover",
+      result.stillDown ? "warn" : "ok",
+      `checked ${result.checked}, recovered ${result.recovered}, down ${result.stillDown}`,
+      Date.now() - start
+    );
+  } catch (e) {
+    await logCron("lb_boot_recover", "error", String(e), Date.now() - start);
+  }
+}
+
 export async function jobServerHostMetrics() {
   const start = Date.now();
   try {
@@ -951,6 +994,7 @@ export async function runAllCronJobs() {
   await jobStopIdleStreams();
   await jobBandwidthSnapshot();
   await jobServerHostMetrics();
+  await jobRecoverLoadBalancers();
   await jobWatchFolders();
   await jobImportQueue();
   await jobM3uSync();
@@ -969,6 +1013,7 @@ export async function runAllCronJobs() {
   await jobBackfillXtreamNum();
   await jobPlexVodMetaBackfill();
   await jobWarmXtreamCatalogs();
+  await jobEdgeChannelPrewarm();
   await jobStreamEpgNameSync();
 }
 

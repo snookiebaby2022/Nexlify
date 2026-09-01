@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getAntiFreezeSettings } from "@/lib/anti-freeze";
 import { bouquetContentCounts } from "@/lib/bouquet-counts";
+import { isMultiWorkerPanel, isRedisConfigured } from "@/lib/cache";
 import { redisModeFromEnv, redisPing } from "@/lib/redis";
 import { detectHostHardware, buildOptimizationProfile } from "@/lib/server-optimization";
 import { getServerLoadScores } from "@/lib/server-load";
@@ -112,9 +113,8 @@ export async function getStreamingHealthSnapshot() {
   const liveTotal = probeOk + probeFail + probeUnknown;
   const streamsHealthy = liveTotal === 0 || probeFail === 0;
 
-  const redisConfigured = Boolean(
-    process.env.REDIS_URL?.trim() || process.env.REDIS_CLUSTER_NODES?.trim()
-  );
+  const redisConfigured = isRedisConfigured();
+  const clusterNeedsRedis = isMultiWorkerPanel();
   const fastZapReady = antiFreeze.fastZapEnabled && (redisOk || !redisConfigured);
   const prefetchReady =
     antiFreeze.zapPrefetchOnLiveHit && antiFreeze.zapPrefetchNeighbors > 0;
@@ -173,15 +173,21 @@ export async function getStreamingHealthSnapshot() {
     {
       id: "redis",
       label: "Redis URL cache (Fast Zap)",
-      ok: fastZapReady,
+      ok: clusterNeedsRedis ? redisConfigured && redisOk : fastZapReady,
       href: "/admin/settings/cache",
-      hint: !antiFreeze.fastZapEnabled
-        ? "Enable Fast Zap in Settings → Streams"
-        : redisConfigured
+      hint: clusterNeedsRedis
+        ? redisConfigured
           ? redisOk
-            ? `Redis connected (${redisModeFromEnv()})`
-            : "Redis unreachable — check REDIS_URL"
-          : "Fast Zap active (in-memory cache — set REDIS_URL for multi-worker)",
+            ? `Redis connected (${redisModeFromEnv()}) — required for ${process.env.PANEL_INSTANCES ?? 2} workers`
+            : "Redis unreachable — multi-worker panel degraded"
+          : "REDIS_URL required when PANEL_INSTANCES > 1"
+        : !antiFreeze.fastZapEnabled
+          ? "Enable Fast Zap in Settings → Streams"
+          : redisConfigured
+            ? redisOk
+              ? `Redis connected (${redisModeFromEnv()})`
+              : "Redis unreachable — check REDIS_URL"
+            : "Fast Zap active (in-memory cache — set REDIS_URL for multi-worker)",
     },
     {
       id: "prefetch",

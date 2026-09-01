@@ -171,9 +171,26 @@ const MAX_EDGE_DISK_PACK = Number(process.env.IPTV_EDGE_MAX_DISK_PACK || 256);
 /** One provider pull per live channel while anyone is watching (XUI on-demand restream). */
 const MAX_LIVE_FANS = Number(process.env.IPTV_EDGE_MAX_LIVE_FANS || 8000);
 const LIVE_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_LIVE_FAN_LINGER_MS || 12000);
+/** Drop/resync clients that fall behind the shared fan instead of buffering unboundedly. */
+const MAX_CLIENT_LAG_BYTES = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_BYTES || 4_000_000);
+const MAX_CLIENT_LAG_MS = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_MS || 8000);
+/** Stop idle disk HLS packagers after no segment requests. */
+const DISK_PACK_IDLE_MS = Number(process.env.IPTV_EDGE_DISK_PACK_IDLE_MS || 45_000);
+const DISK_PACK_IDLE_SWEEP_MS = Math.min(DISK_PACK_IDLE_MS, 15_000);
 /** streamId -> { proc, key, clients, prefix } — refcounted native-HLS remux */
 const edgeHlsRemuxSessions = new Map();
 const edgeDiskPackagers = new Map();
+/** streamId -> last segment/playlist request timestamp */
+const diskPackLastAccess = new Map();
+/** cacheKey -> Promise<Buffer|null> — coalesce cold HLS segment reads */
+const hlsSegInflight = new Map();
+const edgeMetrics = {
+  laggedDrops: 0,
+  fanCapacityRejections: 0,
+  diskPackIdleStops: 0,
+  hlsSegCoalesced: 0,
+  eventLoopDelayMs: 0,
+};
 /** streamId -> shared MPEG-TS restream */
 const liveFans = new Map();
 /** Edge-local primary-bad marks (mirrors panel source-failover attempts). */
@@ -318,30 +335,41 @@ function clientIp(req) {
 }
 
 /** HTTP heartbeat only — must not reset lastClientAt or HLS never goes idle. */
-function sendConnectionPulse(ctx, bytes) {
+const pendingPulseBatch = new Map();
+let pulseBatchTimer = null;
+
+function queueConnectionPulse(ctx, bytes) {
   if (!INTERNAL_SECRET || !ctx?.lineId || !ctx?.streamId) return;
+  const key = playbackSessionKey(ctx);
   const n = Math.max(0, Math.floor(bytes ?? 0));
-  const body = JSON.stringify({
+  const prev = pendingPulseBatch.get(key);
+  pendingPulseBatch.set(key, {
     lineId: ctx.lineId,
     streamId: ctx.streamId,
     ip: ctx.ip ?? "",
-    bytes: n,
+    bytes: (prev?.bytes ?? 0) + n,
   });
+}
+
+function flushConnectionPulseBatch() {
+  if (!INTERNAL_SECRET || pendingPulseBatch.size === 0) return;
+  const sessions = [...pendingPulseBatch.values()];
+  pendingPulseBatch.clear();
+  const body = JSON.stringify({ sessions });
   const req = http.request(
     {
       hostname: backendHost,
       port: backendPort,
-      path: "/api/internal/connection-pulse",
+      path: "/api/internal/connection-pulse-batch",
       method: "POST",
       agent: liveAgent,
       headers: {
         "content-type": "application/json",
         "content-length": Buffer.byteLength(body),
         "x-panel-internal-secret": INTERNAL_SECRET,
-        // nginx on :8080 drops underscore headers; this hyphenated alias is accepted by the panel.
         "x-panel-api-key": INTERNAL_SECRET,
       },
-      timeout: 3000,
+      timeout: 5000,
     },
     (res) => res.resume()
   );
@@ -349,6 +377,16 @@ function sendConnectionPulse(ctx, bytes) {
   req.on("timeout", () => req.destroy());
   req.write(body);
   req.end();
+}
+
+function ensurePulseBatchTimer() {
+  if (pulseBatchTimer) return;
+  pulseBatchTimer = setInterval(flushConnectionPulseBatch, SESSION_KEEPALIVE_MS);
+}
+
+function sendConnectionPulse(ctx, bytes) {
+  queueConnectionPulse(ctx, bytes);
+  ensurePulseBatchTimer();
 }
 
 function sendPlaybackEvent(ctx, action, detail, status) {
@@ -540,6 +578,7 @@ function touchPlaybackSession(ctx, opts = {}) {
       if (idle > SESSION_IDLE_MS) {
         clearInterval(session.timer);
         playbackSessions.delete(key);
+        pendingPulseBatch.delete(key);
         if (typeof session.teardown === "function") {
           try {
             session.teardown();
@@ -550,7 +589,7 @@ function touchPlaybackSession(ctx, opts = {}) {
         endPlaybackSession(session.ctx);
         return;
       }
-      sendConnectionPulse(session.ctx, 48_000);
+      sendConnectionPulse(session.ctx, 0);
     }, tickMs);
     playbackSessions.set(key, session);
     pulseConnection(ctx, 72_000);
@@ -936,6 +975,46 @@ function attachLiveFanClient(fan, clientReq, clientRes, pulseCtx) {
   fan.clients.add(slot);
 }
 
+function resumeFanUpstream(fan) {
+  if (!fan?.upstreamRes || !fan.upstreamPaused) return;
+  fan.upstreamPaused = false;
+  try {
+    fan.upstreamRes.resume();
+  } catch {
+    /* ignore */
+  }
+}
+
+function writeFanChunkToSlot(fan, slot, chunk) {
+  if (slot.meter) slot.meter(chunk);
+  const ok = slot.clientRes.write(chunk);
+  if (ok) {
+    slot.pendingBytes = 0;
+    slot.lagSince = 0;
+    return true;
+  }
+  slot.pendingBytes = (slot.pendingBytes || 0) + chunk.length;
+  slot.lagSince = slot.lagSince || Date.now();
+  if (!slot.drainListener) {
+    slot.drainListener = () => {
+      slot.pendingBytes = 0;
+      slot.lagSince = 0;
+      slot.drainListener = null;
+      resumeFanUpstream(fan);
+    };
+    slot.clientRes.once("drain", slot.drainListener);
+  }
+  if (
+    slot.pendingBytes > MAX_CLIENT_LAG_BYTES ||
+    (slot.lagSince && Date.now() - slot.lagSince > MAX_CLIENT_LAG_MS)
+  ) {
+    edgeMetrics.laggedDrops += 1;
+    detachLiveFanClient(fan, slot);
+    return false;
+  }
+  return false;
+}
+
 function broadcastFanChunk(fan, chunk) {
   if (!chunk || !chunk.length) return;
   const keep = 188 * 24;
@@ -945,12 +1024,21 @@ function broadcastFanChunk(fan, chunk) {
     const next = Buffer.concat([fan.prefix, chunk]);
     fan.prefix = next.length <= keep ? next : next.subarray(next.length - keep);
   }
+  let backpressured = 0;
   for (const slot of [...fan.clients]) {
     try {
-      if (slot.meter) slot.meter(chunk);
-      slot.clientRes.write(chunk);
+      if (writeFanChunkToSlot(fan, slot, chunk)) continue;
+      backpressured += 1;
     } catch {
       detachLiveFanClient(fan, slot);
+    }
+  }
+  if (backpressured > 0 && fan.clients.size > 0 && fan.upstreamRes && !fan.upstreamPaused) {
+    fan.upstreamPaused = true;
+    try {
+      fan.upstreamRes.pause();
+    } catch {
+      /* ignore */
     }
   }
 }
@@ -1101,13 +1189,37 @@ function broadcastHlsRemuxChunk(session, chunk) {
     const next = Buffer.concat([session.prefix, chunk]);
     session.prefix = next.length <= keep ? next : next.subarray(next.length - keep);
   }
+  let backpressured = 0;
   for (const slot of [...session.clients]) {
     try {
       if (slot.meter) slot.meter(chunk);
-      slot.clientRes.write(chunk);
+      const ok = slot.clientRes.write(chunk);
+      if (ok) continue;
+      backpressured += 1;
+      slot.pendingBytes = (slot.pendingBytes || 0) + chunk.length;
+      if (slot.pendingBytes > MAX_CLIENT_LAG_BYTES) {
+        edgeMetrics.laggedDrops += 1;
+        detachHlsRemuxClient(session, slot);
+      }
     } catch {
       detachHlsRemuxClient(session, slot);
     }
+  }
+  if (backpressured > 0 && session.clients.size > 0 && session.proc?.stdout && !session.stdoutPaused) {
+    session.stdoutPaused = true;
+    try {
+      session.proc.stdout.pause();
+    } catch {
+      /* ignore */
+    }
+    session.proc.stdout.once("drain", () => {
+      session.stdoutPaused = false;
+      try {
+        session.proc.stdout.resume();
+      } catch {
+        /* ignore */
+      }
+    });
   }
 }
 
@@ -1208,6 +1320,26 @@ function stopEdgeDiskPackager(streamId) {
     /* ignore */
   }
   edgeDiskPackagers.delete(streamId);
+  diskPackLastAccess.delete(streamId);
+}
+
+function touchDiskPackagerAccess(streamId) {
+  if (!streamId) return;
+  diskPackLastAccess.set(streamId, Date.now());
+}
+
+function sweepIdleDiskPackagers() {
+  const now = Date.now();
+  for (const [streamId, lastAt] of [...diskPackLastAccess.entries()]) {
+    if (now - lastAt < DISK_PACK_IDLE_MS) continue;
+    const proc = edgeDiskPackagers.get(streamId);
+    if (!proc) {
+      diskPackLastAccess.delete(streamId);
+      continue;
+    }
+    edgeMetrics.diskPackIdleStops += 1;
+    stopEdgeDiskPackager(streamId);
+  }
 }
 
 /** XUI-style: ffmpeg writes HLS segments on disk at edge — XCIPTV/Smarters never hit Next.js for .m3u8. */
@@ -1286,6 +1418,7 @@ function startEdgeDiskPackager(streamId, upstreamUrl, ua, proxy) {
     windowsHide: true,
   });
   edgeDiskPackagers.set(streamId, proc);
+  touchDiskPackagerAccess(streamId);
   proc.stderr?.on("data", (chunk) => {
     const msg = String(chunk || "").trim();
     if (msg && !msg.includes("frame=")) {
@@ -1868,6 +2001,7 @@ function pruneHlsSegMemCache() {
 
 async function serveHlsSegment(streamId, segName, clientRes, pulseCtx) {
   const cacheKey = `${streamId}:${segName}`;
+  touchDiskPackagerAccess(streamId);
   const mem = hlsSegMemCache.get(cacheKey);
   if (mem?.buf?.length) {
     if (pulseCtx) pulseConnection(pulseCtx, mem.buf.length);
@@ -1875,32 +2009,52 @@ async function serveHlsSegment(streamId, segName, clientRes, pulseCtx) {
     clientRes.end(mem.buf);
     return true;
   }
-  if (edgeRedisEnabled()) {
-    const redisBuf = await edgeRedisGetSeg(streamId, segName);
-    if (redisBuf?.length) {
-      hlsSegMemCache.set(cacheKey, { buf: redisBuf, at: Date.now() });
-      pruneHlsSegMemCache();
-      if (pulseCtx) pulseConnection(pulseCtx, redisBuf.length);
-      clientRes.writeHead(200, hlsSegHeaders(redisBuf.length));
-      clientRes.end(redisBuf);
+  if (hlsSegInflight.has(cacheKey)) {
+    edgeMetrics.hlsSegCoalesced += 1;
+    const buf = await hlsSegInflight.get(cacheKey);
+    if (buf?.length) {
+      if (pulseCtx) pulseConnection(pulseCtx, buf.length);
+      clientRes.writeHead(200, hlsSegHeaders(buf.length));
+      clientRes.end(buf);
       return true;
     }
-  }
-  const segPath = hlsSegPath(streamId, segName);
-  if (!segPath) return false;
-  try {
-    if (!fs.existsSync(segPath)) return false;
-    const buf = fs.readFileSync(segPath);
-    if (!buf.length) return false;
-    hlsSegMemCache.set(cacheKey, { buf, at: Date.now() });
-    pruneHlsSegMemCache();
-    if (edgeRedisEnabled()) void edgeRedisSetSeg(streamId, segName, buf);
-    if (pulseCtx) pulseConnection(pulseCtx, buf.length);
-    clientRes.writeHead(200, hlsSegHeaders(buf.length));
-    clientRes.end(buf);
-    return true;
-  } catch {
     return false;
+  }
+  const loadPromise = (async () => {
+    if (edgeRedisEnabled()) {
+      const redisBuf = await edgeRedisGetSeg(streamId, segName);
+      if (redisBuf?.length) {
+        hlsSegMemCache.set(cacheKey, { buf: redisBuf, at: Date.now() });
+        pruneHlsSegMemCache();
+        return redisBuf;
+      }
+    }
+    const segPath = hlsSegPath(streamId, segName);
+    if (!segPath) return null;
+    try {
+      if (!fs.existsSync(segPath)) return null;
+      const buf = fs.readFileSync(segPath);
+      if (!buf.length) return null;
+      hlsSegMemCache.set(cacheKey, { buf, at: Date.now() });
+      pruneHlsSegMemCache();
+      if (edgeRedisEnabled()) void edgeRedisSetSeg(streamId, segName, buf);
+      return buf;
+    } catch {
+      return null;
+    }
+  })();
+  hlsSegInflight.set(cacheKey, loadPromise);
+  try {
+    const buf = await loadPromise;
+    if (buf?.length) {
+      if (pulseCtx) pulseConnection(pulseCtx, buf.length);
+      clientRes.writeHead(200, hlsSegHeaders(buf.length));
+      clientRes.end(buf);
+      return true;
+    }
+    return false;
+  } finally {
+    if (hlsSegInflight.get(cacheKey) === loadPromise) hlsSegInflight.delete(cacheKey);
   }
 }
 
@@ -2177,6 +2331,8 @@ function pipeLiveMpegTsShared(fan, upRes, clientReq, clientRes, pulseCtx, onUnpl
 }
 
 function feedLiveFanFromUpstream(fan, upRes, clientReq, clientRes, pulseCtx) {
+  fan.upstreamRes = upRes;
+  fan.upstreamPaused = false;
   fanGoLive(fan, () => {
     try {
       upRes.destroy();
@@ -2717,7 +2873,26 @@ async function onRequest(clientReq, clientRes, ctx) {
     console.log(`[iptv-edge-req] ${clientReq.method} ${pathOnly}`);
   }
 
-  if (pathOnly === "/edge/fan-stats") {
+  if (pathOnly === "/edge/prewarm") {
+    const secret = clientReq.headers["x-panel-internal-secret"] || clientReq.headers["x-panel-api-key"];
+    if (!INTERNAL_SECRET || String(secret || "") !== INTERNAL_SECRET) {
+      clientRes.writeHead(403, { "content-type": "text/plain" });
+      clientRes.end("forbidden");
+      return;
+    }
+    const q = new URL(clientReq.url || "/", "http://local").searchParams;
+    const streamId = String(q.get("streamId") || "").trim();
+    if (!streamId) {
+      clientRes.writeHead(400, { "content-type": "text/plain" });
+      clientRes.end("streamId required");
+      return;
+    }
+    clientRes.writeHead(202, { "content-type": "application/json" });
+    clientRes.end(JSON.stringify({ ok: true, streamId, queued: true }));
+    return;
+  }
+
+  if (pathOnly === "/edge/fan-stats" || pathOnly === "/edge/metrics") {
     const channels = [];
     let clients = 0;
     for (const fan of liveFans.values()) {
@@ -2727,10 +2902,22 @@ async function onRequest(clientReq, clientRes, ctx) {
         streamId: fan.streamId,
         clients: n,
         broadcasting: !!fan.broadcasting,
+        upstreamPaused: !!fan.upstreamPaused,
       });
     }
+    const payload = {
+      fans: liveFans.size,
+      maxFans: MAX_LIVE_FANS,
+      clients,
+      remuxSessions: edgeHlsRemuxSessions.size,
+      diskPackagers: edgeDiskPackagers.size,
+      hlsSegCacheEntries: hlsSegMemCache.size,
+      hlsSegCacheMb: EDGE_HLS_SEG_CACHE_MB,
+      metrics: { ...edgeMetrics },
+      channels: channels.slice(0, 64),
+    };
     clientRes.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
-    clientRes.end(JSON.stringify({ fans: liveFans.size, clients, channels }));
+    clientRes.end(JSON.stringify(payload));
     return;
   }
 
@@ -2830,12 +3017,21 @@ async function onRequest(clientReq, clientRes, ctx) {
         queueLiveFanWaiter(acquired.fan, clientReq, clientRes, pulseCtx);
         return;
       }
+      if (acquired.mode === "none") {
+        edgeMetrics.fanCapacityRejections += 1;
+        clientRes.writeHead(503, { "content-type": "text/plain", "retry-after": "5" });
+        clientRes.end("edge fan capacity reached");
+        return;
+      }
       if (acquired.mode === "start") fan = acquired.fan;
     }
     const ordered = orderLiveUpstreamTargets(auth.streamId || "", auth.upstream, auth.alts || []);
     if (auth.live && isHlsPlaybackUrl(ordered.upstream)) {
+      if (fan) {
+        releaseLiveFanStarter(fan, false);
+        destroyLiveFan(fan);
+      }
       spawnEdgeHlsToMpegTs(ordered.upstream, clientReq, clientRes, pulseCtx);
-      if (fan) releaseLiveFanStarter(fan, true);
       return;
     }
     pipeUpstream(ordered.upstream, clientReq, clientRes, {
@@ -2895,6 +3091,8 @@ const keyPath = process.env.IPTV_EDGE_KEY || "/etc/nginx/ssl/nexlify-panel/privk
 
 async function startEdge() {
   await waitForBackendReady();
+  setInterval(sweepIdleDiskPackagers, DISK_PACK_IDLE_SWEEP_MS);
+  ensurePulseBatchTimer();
   for (const p of httpPorts) listenHttp(p);
   if (httpsPorts.length) {
     if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {

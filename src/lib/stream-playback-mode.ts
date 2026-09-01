@@ -42,7 +42,7 @@ export function getStreamPlaybackMode(stream: StreamForPlaybackMode): StreamPlay
     return "direct";
   }
 
-  if (mode === "ON_DEMAND" || stream.isOnDemand) return "on_demand";
+  if (mode === "ON_DEMAND" || (mode !== "LIVE" && stream.isOnDemand)) return "on_demand";
 
   return "transcode";
 }

@@ -10,10 +10,15 @@ export function ServerTreePicker({
   selectedIds,
   onChange,
   label = "Streaming servers",
+  embedded = false,
+  variant = "default",
 }: {
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   label?: string;
+  /** Hide outer label when parent provides XUI row label */
+  embedded?: boolean;
+  variant?: "default" | "xui";
 }) {
   const [servers, setServers] = useState<StreamServer[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set(["__direct__"]));
@@ -61,11 +66,15 @@ export function ServerTreePicker({
 
   return (
     <div className="space-y-2">
-      <div className="text-sm font-medium" style={{ color: "var(--muted)" }}>
-        {label}
-      </div>
+      {!embedded ? (
+        <div className="text-sm font-medium" style={{ color: "var(--muted)" }}>
+          {label}
+        </div>
+      ) : null}
       <div
-        className="rounded-lg border overflow-hidden text-sm max-h-[220px] overflow-y-auto"
+        className={`rounded-lg border overflow-hidden text-sm overflow-y-auto ${
+          variant === "xui" ? "xui-server-tree-panel max-h-[320px]" : "max-h-[220px]"
+        }`}
         style={{ borderColor: "var(--border)", background: "rgba(0,0,0,0.15)" }}
       >
         {groups.map((group) => {
@@ -117,7 +126,12 @@ export function ServerTreePicker({
                       className="cursor-pointer"
                     />
                     <Server size={12} className="shrink-0 opacity-70" style={{ color: "#4ade80" }} />
-                    <span className={s.isActive ? "" : "opacity-50"}>{s.name}</span>
+                    <span className={s.isActive ? "" : "opacity-50"}>
+                      {s.name}
+                      {variant === "xui" && s.host ? (
+                        <span className="text-xs ml-1 opacity-50 font-mono">{s.host}</span>
+                      ) : null}
+                    </span>
                   </label>
                 ))}
             </div>

@@ -1,16 +1,23 @@
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
-import { probeStreamUrl, type ProbeResult } from "@/lib/stream-probe-server";
 import { streamProbeErrorWithHint } from "@/lib/stream-probe-fix-hints";
 import { resolveStreamPlaybackUrl } from "@/lib/resolve-stream-url";
 import { sendTelegramAlert } from "@/lib/panel-telegram-alerts";
 import { enqueueAgentCommand } from "@/lib/stream-agent";
 import { findSiblingLiveBackupUrl } from "@/lib/live-channel-backup";
-import { allowSourceProbe, recordSourceProbe } from "@/lib/source-circuit-breaker";
+import {
+  markDeadLinkProbeRun,
+  probeStreamWithScheduler,
+  PROBE_SCHEDULER_BUDGET_MS,
+  runProbeBatchWithinBudget,
+  shouldRunDeadLinkProbe,
+} from "@/lib/source-probe-scheduler";
 
 export async function runDeadLinkProbeJob() {
+  if (!(await shouldRunDeadLinkProbe())) return { probed: 0, failed: 0, restarted: 0, logged: 0, skipped: true };
+
   const settings = await getSettingGroup("streams");
-  if (!settings.autoFixDeadLinks) return { probed: 0, failed: 0, restarted: 0, logged: 0 };
+  if (!settings.autoFixDeadLinks) return { probed: 0, failed: 0, restarted: 0, logged: 0, skipped: true };
 
   const streams = await prisma.stream.findMany({
     where: { isActive: true, type: "LIVE" },
@@ -22,24 +29,17 @@ export async function runDeadLinkProbeJob() {
   let failed = 0;
   let restarted = 0;
   let logged = 0;
+  let probed = 0;
 
-  for (const stream of streams) {
+  await runProbeBatchWithinBudget(streams, PROBE_SCHEDULER_BUDGET_MS, async (stream) => {
     const primaryUrl = resolveStreamPlaybackUrl(stream);
-    const primaryAllowed = await allowSourceProbe(stream.id, primaryUrl);
-    const probe: ProbeResult = primaryAllowed
-      ? await probeStreamUrl(primaryUrl, { fast: true })
-      : { status: "offline" as const, message: "Circuit open — primary probe deferred" };
-    const ok = probe.status === "online" || probe.status === "degraded";
-    if (primaryAllowed) {
-      await recordSourceProbe({
-        streamId: stream.id,
-        url: primaryUrl,
-        ok,
-        error: ok ? null : probe.message,
-        latencyMs: probe.latencyMs,
-        bitrateKbps: probe.bitrateKbps,
-      });
-    }
+    const { probe, skipped } = await probeStreamWithScheduler({
+      streamId: stream.id,
+      url: primaryUrl,
+      fast: true,
+    });
+    probed += 1;
+    const ok = !skipped && (probe.status === "online" || probe.status === "degraded");
 
     if (!stream.backupUrl?.trim()) {
       const sibling = await findSiblingLiveBackupUrl(stream);
@@ -54,21 +54,14 @@ export async function runDeadLinkProbeJob() {
 
     if (!ok && stream.backupUrl?.trim()) {
       const backupUrl = stream.backupUrl.trim();
-      const backupAllowed = await allowSourceProbe(stream.id, backupUrl);
-      const backupProbe: ProbeResult = backupAllowed
-        ? await probeStreamUrl(backupUrl, { fast: true })
-        : { status: "offline", message: "Circuit open — backup probe deferred" };
-      const backupOk = backupProbe.status === "online" || backupProbe.status === "degraded";
-      if (backupAllowed) {
-        await recordSourceProbe({
-          streamId: stream.id,
-          url: backupUrl,
-          ok: backupOk,
-          error: backupOk ? null : backupProbe.message,
-          latencyMs: backupProbe.latencyMs,
-          bitrateKbps: backupProbe.bitrateKbps,
-        });
-      }
+      const backupResult = await probeStreamWithScheduler({
+        streamId: stream.id,
+        url: backupUrl,
+        fast: true,
+      });
+      const backupOk =
+        !backupResult.skipped &&
+        (backupResult.probe.status === "online" || backupResult.probe.status === "degraded");
       if (backupOk) {
         await prisma.stream.update({
           where: { id: stream.id },
@@ -78,7 +71,7 @@ export async function runDeadLinkProbeJob() {
             lastProbeError: "Using backup URL (primary failed)",
           },
         });
-        continue;
+        return;
       }
     }
 
@@ -114,7 +107,6 @@ export async function runDeadLinkProbeJob() {
         await enqueueAgentCommand(stream.serverId, "restart_stream", { streamId: stream.id });
         restarted++;
       }
-      // Prefer probe from the assigned stream server when an agent is present
       if (stream.serverId && stream.server?.agentToken) {
         await enqueueAgentCommand(stream.serverId, "probe_stream", {
           streamId: stream.id,
@@ -122,9 +114,10 @@ export async function runDeadLinkProbeJob() {
         }).catch(() => undefined);
       }
     }
-  }
+  });
 
-  return { probed: streams.length, failed, restarted, logged };
+  await markDeadLinkProbeRun();
+  return { probed, failed, restarted, logged, skipped: false };
 }
 
 export async function runTelegramMonitoringJob() {

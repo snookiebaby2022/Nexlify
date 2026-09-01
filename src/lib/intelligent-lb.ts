@@ -60,9 +60,10 @@ export async function pickIntelligentServer(
   if (bandwidthAware && requiredBandwidthKbps != null && requiredBandwidthKbps > 0) {
     const needMbps = requiredBandwidthKbps / 1000;
     const withHeadroom = pool.filter((x) => {
-      const cap = x.server.bandwidthMbps ?? 1000;
-      const used = x.score * cap;
-      return cap - used >= needMbps;
+      const cap = x.capMbps > 0 ? x.capMbps : x.server.bandwidthMbps ?? 0;
+      if (cap <= 0) return false;
+      const used = x.bandwidthMbps ?? 0;
+      return cap - used >= needMbps && x.headroomPct >= 30;
     });
     if (withHeadroom.length) pool = withHeadroom;
   }
@@ -78,7 +79,10 @@ export async function pickIntelligentServer(
   }
 
   const sorted = [...pool].sort((a, b) => a.score - b.score);
-  return sorted[0]?.server.id ?? null;
+  const top = sorted.slice(0, Math.min(3, sorted.length));
+  if (!top.length) return pickServerForClient(clientIp);
+  const pick = top[Math.floor(Math.random() * top.length)];
+  return pick?.server.id ?? null;
 }
 
 export async function rankServersForClient(clientIp?: string): Promise<LbServerScore[]> {

@@ -29,8 +29,10 @@ export function dashboardPlaybackBandwidthMbps(
   return { networkInMbps: out, networkOutMbps: out };
 }
 
-export const SATURATED_SLOT_RATIO = 0.92;
-export const SATURATED_HEADROOM_RATIO = 0.08;
+export const SATURATED_SLOT_RATIO = 0.7;
+export const SATURATED_HEADROOM_RATIO = 0.3;
+export const ADMISSION_SLOT_RATIO = 0.7;
+export const ADMISSION_HEADROOM_RATIO = 0.3;
 
 export type BufferingRisk = "healthy" | "watch" | "critical";
 
@@ -47,8 +49,8 @@ export function bufferingRisk(opts: {
   failedStreams?: number;
 }): BufferingRisk {
   if (!opts.online || opts.failedStreams && opts.failedStreams > 0) return "critical";
-  if (opts.saturated || opts.headroomPct < 8 || opts.loadPct >= 92) return "critical";
-  if (opts.headroomPct < 20 || opts.loadPct >= 80) return "watch";
+  if (opts.saturated || opts.headroomPct < 30 || opts.loadPct >= 70) return "critical";
+  if (opts.headroomPct < 40 || opts.loadPct >= 60) return "watch";
   return "healthy";
 }
 
@@ -70,8 +72,11 @@ export function serverEgressHeadroom(opts: {
   nicCapMbps: number;
   slotRatio: number;
 }): ServerEgressHeadroom {
-  const capMbps = opts.nicCapMbps > 0 ? opts.nicCapMbps : 1000;
+  const capMbps = opts.nicCapMbps > 0 ? opts.nicCapMbps : 0;
   const usedMbps = Math.max(0, opts.usedMbps);
+  if (capMbps <= 0) {
+    return { capMbps: 0, usedMbps, headroomMbps: 0, headroomPct: 0, saturated: true };
+  }
   const headroomMbps = Math.max(0, Math.round((capMbps - usedMbps) * 10) / 10);
   const headroomPct = Math.round((headroomMbps / capMbps) * 100);
   const saturated =

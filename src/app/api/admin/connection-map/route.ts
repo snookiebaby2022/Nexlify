@@ -7,7 +7,7 @@ import { cacheGetOrSet } from "@/lib/cache";
 import { countryMapPosition } from "@/lib/connection-map-geo";
 
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
-const MAP_CACHE_TTL = 300;
+const MAP_CACHE_TTL = 30;
 
 export async function GET() {
   const session = await requireSession([...ROLES]);

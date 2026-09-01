@@ -1,0 +1,36 @@
+# Server 45 panel sync manifest — session changes (playback reliability + stream server tab + vodMode fix)
+# Excludes: edge scripts, scripts/_tmp-*, docs, tests, .freebuff
+# Usage: bash scripts/sync-panel-45-session.sh
+package.json
+src/app/globals.css
+src/app/api/admin/connection-map/route.ts
+src/app/api/admin/streams/route.ts
+src/app/api/admin/streams/probe-batch/route.ts
+src/app/api/internal/connection-pulse-batch/route.ts
+src/components/connection-map.tsx
+src/components/dashboard-issues-panel.tsx
+src/components/server-tree-picker.tsx
+src/components/stream-add-form.tsx
+src/components/stream-manage-edit-page.tsx
+src/components/stream-server-tab.tsx
+src/components/streams-list.tsx
+src/lib/cache.ts
+src/lib/connection-pulse-batch.ts
+src/lib/cron-jobs.ts
+src/lib/edge-prewarm.ts
+src/lib/gpu-admission.ts
+src/lib/intelligent-lb.ts
+src/lib/panel-monitoring-jobs.ts
+src/lib/playback-quality-monitor.ts
+src/lib/resolve-stream-url.ts
+src/lib/server-load-metrics.ts
+src/lib/server-load.ts
+src/lib/source-circuit-breaker.ts
+src/lib/source-host-circuit.ts
+src/lib/source-probe-scheduler.ts
+src/lib/stream-agent-config.ts
+src/lib/stream-playback-mode.ts
+src/lib/stream-playback-policy.ts
+src/lib/streaming-health.ts
+scripts/panel-45-sync-files.txt
+scripts/sync-panel-45-session.sh

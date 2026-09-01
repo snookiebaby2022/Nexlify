@@ -32,7 +32,10 @@ function drawEarthSphere(
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.clip();
-  const step = 2;
+  const step = 1.5;
+  const lightX = -0.38;
+  const lightY = 0.42;
+  const lightZ = 0.82;
   for (let sy = Math.floor(cy - r); sy <= Math.ceil(cy + r); sy += step) {
     for (let sx = Math.floor(cx - r); sx <= Math.ceil(cx + r); sx += step) {
       const dx = (sx - cx) / r;
@@ -40,19 +43,31 @@ function drawEarthSphere(
       const d2 = dx * dx + dy * dy;
       if (d2 > 1) continue;
       const z = Math.sqrt(1 - d2);
-      const cos = Math.cos(-rotY);
-      const sin = Math.sin(-rotY);
-      const xw = dx * cos - z * sin;
-      const zw = dx * sin + z * cos;
-      if (zw < -0.02) continue;
-      const lon = Math.atan2(xw, zw);
+      const lon = Math.atan2(dx, z) - rotY;
       const lat = Math.asin(Math.max(-1, Math.min(1, dy)));
       const [red, green, blue] = sampleEarth(px, lon, lat);
-      const shade = 0.5 + 0.5 * Math.max(0, zw);
-      ctx.fillStyle = `rgb(${Math.floor(red * shade)},${Math.floor(green * shade)},${Math.floor(blue * shade)})`;
+      const daylight = Math.max(0, dx * lightX + dy * lightY + z * lightZ);
+      const shade = 0.3 + daylight * 0.78;
+      const rimBlue = Math.pow(1 - z, 3) * 24;
+      ctx.fillStyle = `rgb(${Math.min(255, Math.floor(red * shade))},${Math.min(255, Math.floor(green * shade + rimBlue * 0.45))},${Math.min(255, Math.floor(blue * shade + rimBlue))})`;
       ctx.fillRect(sx, sy, step, step);
     }
   }
+
+  const gloss = ctx.createRadialGradient(
+    cx - r * 0.42,
+    cy - r * 0.46,
+    0,
+    cx - r * 0.25,
+    cy - r * 0.28,
+    r * 1.1
+  );
+  gloss.addColorStop(0, "rgba(255,255,255,0.14)");
+  gloss.addColorStop(0.28, "rgba(186,230,253,0.05)");
+  gloss.addColorStop(0.72, "rgba(2,8,23,0.04)");
+  gloss.addColorStop(1, "rgba(2,6,23,0.3)");
+  ctx.fillStyle = gloss;
+  ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
   ctx.restore();
 }
 
@@ -90,7 +105,7 @@ function project(lat: number, lon: number, rotY: number, w: number, h: number): 
   const r = Math.min(w, h) * 0.4;
   const cx = w / 2;
   const cy = h / 2 + h * 0.02;
-  return { sx: cx + x * r, sy: cy - y * r, z, visible: z > -0.08 };
+  return { sx: cx + x * r, sy: cy - y * r, z, visible: z > 0.025 };
 }
 
 const LANDMASSES: number[][][] = [
@@ -175,7 +190,7 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
         .catch(() => setData(null));
     }
     load();
-    return startVisibleInterval(load, 5 * 60 * 1000);
+    return startVisibleInterval(load, 30 * 1000);
   }, [apiUrl]);
 
   const draw = useCallback(() => {
@@ -196,19 +211,31 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
     if (!pausedRef.current) timeRef.current += 0.008;
     const rot = timeRef.current * 0.35 + userRotRef.current;
 
-    const space = ctx.createRadialGradient(w * 0.35, h * 0.3, 20, w / 2, h / 2, Math.max(w, h) * 0.7);
-    space.addColorStop(0, "#122033");
-    space.addColorStop(0.45, "#0a1424");
-    space.addColorStop(1, "#050910");
+    const space = ctx.createRadialGradient(w * 0.38, h * 0.3, 16, w / 2, h / 2, Math.max(w, h) * 0.78);
+    space.addColorStop(0, "#172943");
+    space.addColorStop(0.38, "#091529");
+    space.addColorStop(0.72, "#040914");
+    space.addColorStop(1, "#01040a");
     ctx.fillStyle = space;
     ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
-    for (let i = 0; i < 48; i++) {
-      const sx = ((i * 137.5) % w) + Math.sin(timeRef.current + i) * 2;
-      const sy = ((i * 89.3) % h);
-      ctx.globalAlpha = 0.15 + ((i * 17) % 40) / 100;
-      ctx.fillRect(sx, sy, 1.2, 1.2);
+    const milkyWay = ctx.createLinearGradient(0, h * 0.15, w, h * 0.85);
+    milkyWay.addColorStop(0, "rgba(56,89,140,0)");
+    milkyWay.addColorStop(0.48, "rgba(96,130,180,0.045)");
+    milkyWay.addColorStop(0.58, "rgba(125,160,210,0.065)");
+    milkyWay.addColorStop(1, "rgba(56,89,140,0)");
+    ctx.fillStyle = milkyWay;
+    ctx.fillRect(0, 0, w, h);
+
+    for (let i = 0; i < 96; i++) {
+      const sx = (i * 137.508 + (i % 7) * 19.31) % w;
+      const sy = (i * 89.317 + (i % 11) * 7.73) % h;
+      const size = i % 17 === 0 ? 1.8 : i % 5 === 0 ? 1.2 : 0.75;
+      ctx.globalAlpha = 0.18 + ((i * 17) % 48) / 100;
+      ctx.fillStyle = i % 9 === 0 ? "#bae6fd" : "#ffffff";
+      ctx.beginPath();
+      ctx.arc(sx, sy, size, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
 
@@ -216,9 +243,20 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
     const cx = w / 2;
     const cy = h / 2 + h * 0.02;
 
-    const atm = ctx.createRadialGradient(cx, cy, r * 0.92, cx, cy, r * 1.18);
+    const shadow = ctx.createRadialGradient(cx + r * 0.14, cy + r * 0.16, r * 0.5, cx, cy, r * 1.1);
+    shadow.addColorStop(0, "rgba(0,0,0,0)");
+    shadow.addColorStop(0.72, "rgba(0,0,0,0.04)");
+    shadow.addColorStop(1, "rgba(0,0,0,0.65)");
+    ctx.fillStyle = shadow;
+    ctx.beginPath();
+    ctx.ellipse(cx + r * 0.08, cy + r * 0.11, r * 1.03, r * 1.03, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const atm = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, r * 1.2);
     atm.addColorStop(0, "rgba(56,189,248,0)");
-    atm.addColorStop(0.7, "rgba(56,189,248,0.08)");
+    atm.addColorStop(0.48, "rgba(56,189,248,0.025)");
+    atm.addColorStop(0.72, "rgba(56,189,248,0.14)");
+    atm.addColorStop(0.86, "rgba(14,165,233,0.06)");
     atm.addColorStop(1, "rgba(56,189,248,0)");
     ctx.fillStyle = atm;
     ctx.beginPath();
@@ -262,40 +300,11 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
       }
     }
 
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    ctx.lineWidth = 0.6;
-    for (let lat = -60; lat <= 60; lat += 30) {
-      ctx.beginPath();
-      let started = false;
-      for (let lon = -180; lon <= 180; lon += 6) {
-        const p = project(lat, lon, rot, w, h);
-        if (!p.visible) {
-          started = false;
-          continue;
-        }
-        if (!started) {
-          ctx.moveTo(p.sx, p.sy);
-          started = true;
-        } else ctx.lineTo(p.sx, p.sy);
-      }
-      ctx.stroke();
-    }
-    for (let lon = -180; lon < 180; lon += 30) {
-      ctx.beginPath();
-      let started = false;
-      for (let lat = -80; lat <= 80; lat += 6) {
-        const p = project(lat, lon, rot, w, h);
-        if (!p.visible) {
-          started = false;
-          continue;
-        }
-        if (!started) {
-          ctx.moveTo(p.sx, p.sy);
-          started = true;
-        } else ctx.lineTo(p.sx, p.sy);
-      }
-      ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 0.5, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(125,211,252,0.42)";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
 
     const nextProj = new Map<string, Proj>();
     const visiblePts = data.points
@@ -308,36 +317,21 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
       .filter((x) => x.proj.visible);
     projRef.current = nextProj;
 
-    for (let i = 0; i < visiblePts.length; i++) {
-      for (let j = i + 1; j < Math.min(visiblePts.length, i + 4); j++) {
-        const a = visiblePts[i].proj;
-        const b = visiblePts[j].proj;
-        const phase = (timeRef.current * 1.6 + i * 0.4) % 1;
-        const grad = ctx.createLinearGradient(a.sx, a.sy, b.sx, b.sy);
-        grad.addColorStop(0, "rgba(56,189,248,0)");
-        grad.addColorStop(Math.max(0, phase - 0.25), "rgba(56,189,248,0)");
-        grad.addColorStop(phase, "rgba(125,211,252,0.75)");
-        grad.addColorStop(Math.min(1, phase + 0.08), "rgba(56,189,248,0)");
-        ctx.beginPath();
-        ctx.moveTo(a.sx, a.sy);
-        ctx.quadraticCurveTo((a.sx + b.sx) / 2, Math.min(a.sy, b.sy) - 28, b.sx, b.sy);
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 1.6;
-        ctx.stroke();
-      }
-    }
-
     for (const { p, proj } of visiblePts) {
-      const pulse = Math.sin(timeRef.current * 4 + p.mapX) * 0.5 + 0.5;
       const isHovered = hoveredPoint === p.id;
-      const glowSize = isHovered ? 22 : 11 + pulse * 6;
+      const glowSize = isHovered ? 22 : 13;
       const glow = ctx.createRadialGradient(proj.sx, proj.sy, 0, proj.sx, proj.sy, glowSize);
-      glow.addColorStop(0, isHovered ? "rgba(56,189,248,0.55)" : "rgba(34,197,94,0.4)");
+      glow.addColorStop(0, isHovered ? "rgba(56,189,248,0.62)" : "rgba(34,197,94,0.48)");
       glow.addColorStop(1, "rgba(34,197,94,0)");
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(proj.sx, proj.sy, glowSize, 0, Math.PI * 2);
       ctx.fill();
+      ctx.beginPath();
+      ctx.arc(proj.sx, proj.sy, isHovered ? 7 : 5, 0, Math.PI * 2);
+      ctx.strokeStyle = isHovered ? "rgba(186,230,253,0.9)" : "rgba(134,239,172,0.72)";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
       ctx.beginPath();
       ctx.arc(proj.sx, proj.sy, isHovered ? 5 : 3.2, 0, Math.PI * 2);
       ctx.fillStyle = isHovered ? "#7dd3fc" : "#4ade80";
@@ -427,7 +421,7 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
           </button>
           {!collapsed && (
             <p className="text-xs mt-0.5 ml-5" style={{ color: "var(--muted)" }}>
-              Live viewer map · refreshes every 5 minutes · drag to rotate · pause to inspect
+              Satellite Earth · viewer pins stay fixed to their detected location · refreshes every 30 seconds
             </p>
           )}
         </div>

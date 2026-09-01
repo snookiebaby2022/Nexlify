@@ -42,7 +42,7 @@ export async function getServerLoadScores() {
     const slots = s.maxClients > 0 ? s.maxClients : 1000;
     const bitrateSum = s.processes.reduce((acc, p) => acc + (p.bitrateKbps ?? 0), 0);
     const usedMbps = estimatedLiveBandwidthMbps(liveConnections, bitrateSum);
-    const nicCap = s.bandwidthMbps && s.bandwidthMbps > 0 ? s.bandwidthMbps : 1000;
+    const nicCap = s.bandwidthMbps && s.bandwidthMbps > 0 ? s.bandwidthMbps : 0;
     const egress = serverEgressHeadroom({
       usedMbps,
       nicCapMbps: nicCap,

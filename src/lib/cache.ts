@@ -254,3 +254,17 @@ export async function cacheGetOrSet<T>(
   await cacheSet(key, fresh, ttlSec);
   return fresh;
 }
+
+export function isRedisConfigured(): boolean {
+  return Boolean(process.env.REDIS_URL?.trim() || process.env.REDIS_CLUSTER_NODES?.trim());
+}
+
+export function isMultiWorkerPanel(): boolean {
+  const raw = process.env.PANEL_INSTANCES ?? process.env.NEXLIFY_PANEL_INSTANCES ?? "1";
+  return Math.max(1, Number(raw) || 1) > 1;
+}
+
+/** Multi-worker panels require Redis for auth, circuits, and session state. */
+export function redisRequiredForCluster(): boolean {
+  return isMultiWorkerPanel();
+}

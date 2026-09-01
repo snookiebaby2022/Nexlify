@@ -8,7 +8,7 @@
  * Usage:
  *   node scripts/load-test-run.cjs --host=https://darkcdn.store --concurrency=500 --duration=120
  *   node scripts/load-test-run.cjs --host=https://darkcdn.store --concurrency=500 --duration=300 --stream=1796860029 --delay-ms=3000 --lines=5000
- *   node scripts/load-test-run.cjs --host=... --concurrency=500 --method=get  # opens upstream (heavy)
+ *   node scripts/load-test-run.cjs --host=... --concurrency=500 --method=media --force-media --media-ms=8000
  *   node scripts/load-test-run.cjs --host=... --concurrency=500 --method=head # auth/panel only (safe)
  *
  * When postgres is busy, pass --stream= and --lines= (or --no-db) to skip DB lookups entirely.
@@ -28,16 +28,22 @@ function sleep(ms) {
 }
 
 const host = String(parseArg("host", "http://127.0.0.1:3000")).replace(/\/$/, "");
-const concurrency = Math.min(Number(parseArg("concurrency", "100")) || 100, 5000);
+const concurrency = Math.min(Number(parseArg("concurrency", "100")) || 100, 6500);
 const durationSec = Number(parseArg("duration", "60")) || 60;
 const delayMs = Math.max(0, Math.floor(Number(parseArg("delay-ms", "0")) || 0));
+const mediaMs = Math.max(1000, Math.floor(Number(parseArg("media-ms", "8000")) || 8000));
 const useTestIp = !process.argv.includes("--no-test-ip");
 const reqMethodRaw = String(parseArg("method", "head") || "head").toLowerCase();
 if (reqMethodRaw === "get" && !process.argv.includes("--force-get")) {
-  console.error("Refusing --method=get (opens real upstreams). Use HEAD, or pass --force-get.");
+  console.error("Refusing --method=get (opens real upstreams). Use HEAD, media, or pass --force-get.");
   process.exit(1);
 }
-const reqMethod = reqMethodRaw === "get" ? "GET" : "HEAD";
+if (reqMethodRaw === "media" && !process.argv.includes("--force-media")) {
+  console.error("Refusing --method=media without --force-media (full-body MPEG-TS load).");
+  process.exit(1);
+}
+const reqMethod =
+  reqMethodRaw === "media" ? "MEDIA" : reqMethodRaw === "get" ? "GET" : "HEAD";
 const singleUser = parseArg("user", "");
 const singlePass = parseArg("pass", "");
 const streamNum = parseArg("stream", "");
@@ -120,6 +126,7 @@ function testIpForSlot(slot) {
 }
 
 function fetchOnce(url, slot) {
+  if (reqMethod === "MEDIA") return fetchMediaOnce(url, slot);
   return new Promise((resolve) => {
     const lib = url.startsWith("https") ? https : http;
     const headers = {
@@ -148,6 +155,59 @@ function fetchOnce(url, slot) {
       req.destroy();
       resolve({ ok: false, status: 0 });
     });
+    req.end();
+  });
+}
+
+function fetchMediaOnce(url, slot) {
+  return new Promise((resolve) => {
+    const lib = url.startsWith("https") ? https : http;
+    const headers = {
+      "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
+      Accept: "*/*",
+    };
+    if (useTestIp) headers["X-Forwarded-For"] = testIpForSlot(slot);
+    const started = Date.now();
+    let ttfb = null;
+    let bytes = 0;
+    let status = 0;
+    const req = lib.request(
+      url,
+      { method: "GET", headers, timeout: mediaMs + 5000 },
+      (res) => {
+        status = res.statusCode ?? 0;
+        ttfb = Date.now() - started;
+        res.on("data", (chunk) => {
+          bytes += chunk.length;
+        });
+        res.on("end", () => {
+          resolve({
+            ok: status >= 200 && status < 400 && bytes > 0,
+            status,
+            ttfb,
+            bytes,
+            durationMs: Date.now() - started,
+          });
+        });
+      }
+    );
+    req.on("error", () => resolve({ ok: false, status: 0, ttfb, bytes: 0, durationMs: Date.now() - started }));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve({ ok: false, status: 0, ttfb, bytes, durationMs: Date.now() - started });
+    });
+    const timer = setTimeout(() => {
+      req.destroy();
+      resolve({
+        ok: status >= 200 && status < 400 && bytes > 188,
+        status,
+        ttfb,
+        bytes,
+        durationMs: Date.now() - started,
+        truncated: true,
+      });
+    }, mediaMs);
+    req.on("close", () => clearTimeout(timer));
     req.end();
   });
 }
@@ -195,6 +255,8 @@ async function cleanupLoadTestConnections() {
   let fail = 0;
   let total = 0;
   const statusCounts = {};
+  const ttfbSamples = [];
+  let mediaBytes = 0;
   const endAt = Date.now() + durationSec * 1000;
 
   function noteStatus(status) {
@@ -216,6 +278,8 @@ async function cleanupLoadTestConnections() {
         fail++;
         noteStatus(result.status);
       }
+      if (typeof result.ttfb === "number") ttfbSamples.push(result.ttfb);
+      if (typeof result.bytes === "number") mediaBytes += result.bytes;
       if (delayMs > 0 && Date.now() < endAt) {
         await sleep(delayMs);
       }
@@ -230,6 +294,7 @@ async function cleanupLoadTestConnections() {
         durationSec,
         delayMs,
         method: reqMethod,
+        mediaMs: reqMethod === "MEDIA" ? mediaMs : undefined,
         useTestIp,
         noDb,
         streams: streamIds.length,
@@ -266,6 +331,9 @@ async function cleanupLoadTestConnections() {
   await Promise.all(workers);
   clearInterval(ticker);
   await cleanupLoadTestConnections();
+  const sortedTtfb = [...ttfbSamples].sort((a, b) => a - b);
+  const p95Ttfb =
+    sortedTtfb.length > 0 ? sortedTtfb[Math.floor(sortedTtfb.length * 0.95)] ?? sortedTtfb.at(-1) : null;
   console.log(
     JSON.stringify(
       {
@@ -275,6 +343,14 @@ async function cleanupLoadTestConnections() {
         fail,
         successRate: total ? ok / total : 0,
         failStatusCounts: statusCounts,
+        mediaBytes: mediaBytes || undefined,
+        ttfbMs: sortedTtfb.length
+          ? {
+              p50: sortedTtfb[Math.floor(sortedTtfb.length * 0.5)],
+              p95: p95Ttfb,
+              samples: sortedTtfb.length,
+            }
+          : undefined,
       },
       null,
       2

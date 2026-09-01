@@ -191,25 +191,43 @@ export function vodModeLabel(mode: VodMode | string): string {
   }
 }
 
+function parseVodModeToken(raw: string): VodMode | null {
+  const token = raw.trim().toUpperCase();
+  if (token === "ON_DEMAND" || token === "CATCHUP" || token === "LIVE") return token as VodMode;
+  if (token === "MOVIE" || token === "SERIES" || token === "VOD") return "ON_DEMAND";
+  return null;
+}
+
+/** Resolve display/storage mode when legacy isOnDemand and vodMode disagree. vodMode wins when set. */
+export function effectiveStreamVodMode(stream: {
+  vodMode?: VodMode | string | null;
+  isOnDemand?: boolean | null;
+}): VodMode {
+  const parsed = parseVodModeToken(String(stream.vodMode ?? ""));
+  if (parsed) return parsed;
+  return stream.isOnDemand ? "ON_DEMAND" : "LIVE";
+}
+
 export function syncVodModeFields(input: {
   isOnDemand?: boolean;
   vodMode?: VodMode | string;
 }): { isOnDemand: boolean; vodMode: VodMode } {
-  const raw = String(input.vodMode ?? "").trim().toUpperCase();
-  let vodMode: VodMode =
-    raw === "ON_DEMAND" || raw === "CATCHUP" || raw === "LIVE"
-      ? (raw as VodMode)
-      : // Movie/series forms historically sent "MOVIE"/"SERIES" — map to on-demand.
-        raw === "MOVIE" || raw === "SERIES" || raw === "VOD"
-        ? "ON_DEMAND"
-        : "LIVE";
+  const explicitVodMode =
+    input.vodMode !== undefined && String(input.vodMode).trim() !== ""
+      ? parseVodModeToken(String(input.vodMode))
+      : null;
 
-  if (input.isOnDemand === true && vodMode === "LIVE") {
-    vodMode = "ON_DEMAND";
+  if (explicitVodMode) {
+    const isOnDemand = explicitVodMode !== "LIVE";
+    return { isOnDemand, vodMode: explicitVodMode };
   }
-  if (input.isOnDemand === false && (vodMode === "ON_DEMAND" || vodMode === "CATCHUP") && input.vodMode === undefined) {
-    vodMode = "LIVE";
+
+  if (input.isOnDemand === true) {
+    return { isOnDemand: true, vodMode: "ON_DEMAND" };
   }
-  const isOnDemand = vodMode !== "LIVE";
-  return { isOnDemand, vodMode };
+  if (input.isOnDemand === false) {
+    return { isOnDemand: false, vodMode: "LIVE" };
+  }
+
+  return { isOnDemand: false, vodMode: "LIVE" };
 }

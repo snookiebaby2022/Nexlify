@@ -86,7 +86,10 @@ export function applySourceProbe(
   } else {
     next.failures += 1;
     next.lastError = opts.error?.trim() || "Source probe failed";
-    if (prev.state === "open" || prev.state === "half_open" || next.failures >= FAILURE_THRESHOLD) {
+    if (prev.state === "half_open") {
+      next.state = "open";
+      next.openedAt = now;
+    } else if (prev.state === "open" || next.failures >= FAILURE_THRESHOLD) {
       next.state = "open";
       next.openedAt = now;
     }
@@ -107,8 +110,17 @@ export async function recordSourceProbe(opts: SourceProbeResult & {
 
 export async function allowSourceProbe(streamId: string, url: string, now = Date.now()): Promise<boolean> {
   const circuit = await getSourceCircuit(streamId, url);
-  if (circuit.state !== "open") return true;
+  if (circuit.state === "closed" || circuit.state === "half_open") return true;
   return Boolean(circuit.openedAt && now - circuit.openedAt >= RECOVERY_AFTER_MS);
+}
+
+/** Transition an open circuit into half_open before a recovery probe. */
+export async function markSourceCircuitHalfOpen(streamId: string, url: string): Promise<SourceCircuit> {
+  const prev = await getSourceCircuit(streamId, url);
+  if (prev.state !== "open") return prev;
+  const next: SourceCircuit = { ...prev, state: "half_open", lastCheckedAt: Date.now() };
+  await cacheSet(key(streamId, url), next, CIRCUIT_TTL_SEC);
+  return next;
 }
 
 export async function resetSourceCircuit(streamId: string, url: string): Promise<void> {

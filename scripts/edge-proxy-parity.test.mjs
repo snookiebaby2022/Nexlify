@@ -59,6 +59,15 @@ describe("edge proxy installer parity", () => {
     assert.match(canonical, /if \(!fan \|\| fan\.destroyed\) return/);
   });
 
+  it("canonical applies fan backpressure and capacity limits", () => {
+    const canonical = readEdgeSource(canonicalPath);
+    assert.match(canonical, /MAX_CLIENT_LAG_BYTES/);
+    assert.match(canonical, /upstreamRes\.pause\(\)/);
+    assert.match(canonical, /edge fan capacity reached/);
+    assert.match(canonical, /connection-pulse-batch/);
+    assert.match(canonical, /\/edge\/metrics/);
+  });
+
   it(
     "installer does not forward /live/ by calling forward() without a media guard",
     { skip: !installerAvailable },

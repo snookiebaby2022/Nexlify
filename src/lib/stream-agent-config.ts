@@ -123,6 +123,14 @@ export async function buildAgentConfigForServer(
       preferHevc: transcodeSettings.enableHevc === true,
       maxBandwidthKbps: transcodeSettings.enable4K ? undefined : 12000,
     });
+    if (transcodeProfile && transcodeProfile.gpuEncoder !== "cpu") {
+      const { shouldUseGpuTranscode } = await import("@/lib/gpu-admission");
+      const gpuOk = await shouldUseGpuTranscode(transcodeProfile.gpuEncoder);
+      if (!gpuOk) {
+        transcodeProfile =
+          transcodeLadder.find((p) => p.gpuEncoder === "cpu") ?? transcodeProfile;
+      }
+    }
   }
 
   const antiFreeze = streamsSettings.antiFreezeEnabled !== false;

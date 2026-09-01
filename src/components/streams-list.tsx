@@ -183,15 +183,25 @@ export function StreamsList({
   const searchParams = useSearchParams();
   const { hideAllUrls } = useResellerGroupFlags();
   const statusFromUrl = searchParams.get("status");
-  const [streams, setStreams] = useState<Stream[]>(initialBootstrap?.streams ?? []);
+  const sourceIssueFromUrl = searchParams.get("sourceIssue");
+  const hasUrlListFilter = Boolean(
+    statusFromUrl ||
+      sourceIssueFromUrl ||
+      searchParams.get("categoryId") ||
+      searchParams.get("search") ||
+      searchParams.get("serverId")
+  );
+  const [streams, setStreams] = useState<Stream[]>(
+    hasUrlListFilter ? [] : (initialBootstrap?.streams ?? [])
+  );
   const [servers, setServers] = useState<{ id: string; name: string }[]>(initialBootstrap?.servers ?? []);
   const [categories, setCategories] = useState<CategoryOptionInput[]>(initialBootstrap?.categories ?? []);
-  const [total, setTotal] = useState(initialBootstrap?.total ?? 0);
+  const [total, setTotal] = useState(hasUrlListFilter ? 0 : (initialBootstrap?.total ?? 0));
   const [page, setPage] = useState(initialBootstrap?.page ?? 1);
   const [pageSize, setPageSize] = useState<number>(initialBootstrap?.pageSize ?? DEFAULT_LIST_PAGE_SIZE);
-  const [search, setSearch] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [serverId, setServerId] = useState("");
+  const [search, setSearch] = useState(searchParams.get("search") ?? "");
+  const [categoryId, setCategoryId] = useState(searchParams.get("categoryId") ?? "");
+  const [serverId, setServerId] = useState(searchParams.get("serverId") ?? "");
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive" | "online" | "offline">(
     statusFromUrl === "active" ||
       statusFromUrl === "inactive" ||
@@ -199,6 +209,9 @@ export function StreamsList({
       statusFromUrl === "offline"
       ? statusFromUrl
       : ""
+  );
+  const [sourceIssueFilter, setSourceIssueFilter] = useState<"" | "dead" | "unstable">(
+    sourceIssueFromUrl === "dead" || sourceIssueFromUrl === "unstable" ? sourceIssueFromUrl : ""
   );
   const [modeFilter, setModeFilter] = useState<"" | "LIVE" | "ON_DEMAND" | "CATCHUP">("");
   const [audioFilter, setAudioFilter] = useState("");
@@ -230,7 +243,7 @@ export function StreamsList({
   ];
   const countedKeyRef = useRef("");
   const urlInitRef = useRef(false);
-  const liveDefaultCatRef = useRef(false);
+  const liveDefaultCatRef = useRef(Boolean(searchParams.get("categoryId")));
 
   useEffect(() => {
     if (urlInitRef.current || typeof window === "undefined") return;
@@ -270,11 +283,21 @@ export function StreamsList({
     if (statusFromUrl == null) return;
   }, [statusFromUrl]);
 
+  useEffect(() => {
+    setSourceIssueFilter(
+      sourceIssueFromUrl === "dead" || sourceIssueFromUrl === "unstable"
+        ? sourceIssueFromUrl
+        : ""
+    );
+  }, [sourceIssueFromUrl]);
+
   const [verifyReady, setVerifyReady] = useState(false);
   const [typeTotals, setTypeTotals] = useState<{ LIVE?: number; MOVIE?: number; SERIES?: number }>(
     initialBootstrap?.typeTotals ?? {}
   );
-  const skipInitialLoadRef = useRef(Boolean(initialBootstrap));
+  const skipInitialLoadRef = useRef(
+    Boolean(initialBootstrap) && !hasUrlListFilter
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -383,8 +406,9 @@ export function StreamsList({
     if (serverId) params.set("serverId", serverId);
     if (search.trim()) params.set("search", search.trim());
     if (statusFilter) params.set("status", statusFilter);
+    if (sourceIssueFilter) params.set("sourceIssue", sourceIssueFilter);
     if (type === "LIVE" && modeFilter) params.set("vodMode", modeFilter);
-    const loadKey = `${type}|${categoryId}|${serverId}|${search}|${statusFilter}|${modeFilter}`;
+    const loadKey = `${type}|${categoryId}|${serverId}|${search}|${statusFilter}|${sourceIssueFilter}|${modeFilter}`;
     if (countedKeyRef.current === loadKey) {
       params.set("skipTotal", "1");
       params.set("skipEpg", "1");
@@ -407,7 +431,7 @@ export function StreamsList({
         }
       });
     },
-    [type, categoryId, serverId, search, page, pageSize, statusFilter, modeFilter, runPageProbe]
+    [type, categoryId, serverId, search, page, pageSize, statusFilter, sourceIssueFilter, modeFilter, runPageProbe]
   );
 
   useEffect(() => {
@@ -543,6 +567,7 @@ export function StreamsList({
                 setCategoryId("");
                 setServerId("");
                 setStatusFilter("");
+                setSourceIssueFilter("");
                 setModeFilter("");
                 setAudioFilter("");
                 setVideoFilter("");
@@ -640,6 +665,7 @@ export function StreamsList({
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value as typeof statusFilter);
+              setSourceIssueFilter("");
               setPage(1);
             }}
           >
@@ -674,12 +700,18 @@ export function StreamsList({
         </div>
       </MobileFilterSheet>
 
-      {statusFilter === "offline" && (
+      {sourceIssueFilter ? (
+        <p className="text-sm rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+          {sourceIssueFilter === "dead"
+            ? "Showing active live streams whose last source probe failed and have no backup URL. Open a stream to repair its primary source and add an independent backup."
+            : "Showing active live streams whose last source probe failed but already have a backup URL. Open a stream to test or replace both sources."}
+        </p>
+      ) : statusFilter === "offline" ? (
         <p className="text-sm rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
           Live streams whose last source probe failed. Direct and on-demand channels without a running
           ffmpeg process are not listed here unless the probe itself failed.
         </p>
-      )}
+      ) : null}
 
       <div
         className={`xui-streams-filters xui-streams-filters--desktop ${showFilters ? "" : "xui-streams-filters--hidden"}`}
@@ -728,6 +760,7 @@ export function StreamsList({
           value={statusFilter}
           onChange={(e) => {
             setStatusFilter(e.target.value as typeof statusFilter);
+            setSourceIssueFilter("");
             setPage(1);
           }}
         >

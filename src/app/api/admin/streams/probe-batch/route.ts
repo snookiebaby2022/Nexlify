@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { probeStreamUrl } from "@/lib/stream-probe-server";
 import { resolveProbeTargetUrl } from "@/lib/resolve-probe-url";
+import { probeStreamWithScheduler } from "@/lib/source-probe-scheduler";
 import { PanelRole } from "@prisma/client";
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -25,8 +25,8 @@ async function probeStreamRow(streamId: string, fast: boolean): Promise<ProbeRow
 
   const resolved = await resolveProbeTargetUrl(stream.streamUrl, stream);
   const url = resolved.url || stream.streamUrl;
-  const probe = await probeStreamUrl(url, { fast });
-  const ok = probe.status === "online" || probe.status === "degraded";
+  const { probe, skipped } = await probeStreamWithScheduler({ streamId: stream.id, url, fast });
+  const ok = !skipped && (probe.status === "online" || probe.status === "degraded");
   const lastProbeError =
     probe.status === "online"
       ? null

@@ -109,6 +109,7 @@ export async function GET(req: NextRequest) {
   const idsParam = req.nextUrl.searchParams.get("ids")?.trim();
   const serverId = req.nextUrl.searchParams.get("serverId")?.trim();
   const statusParam = req.nextUrl.searchParams.get("status")?.trim()?.toLowerCase();
+  const sourceIssue = req.nextUrl.searchParams.get("sourceIssue")?.trim()?.toLowerCase();
   const missingEpg = req.nextUrl.searchParams.get("missingEpg") === "1";
 
   const where: Prisma.StreamWhereInput = {};
@@ -154,6 +155,19 @@ export async function GET(req: NextRequest) {
     where.isActive = true;
     if (!where.type) where.type = StreamType.LIVE;
     where.id = { in: onlineIds.length ? onlineIds : ["__none__"] };
+  }
+  if (sourceIssue === "dead" || sourceIssue === "unstable") {
+    where.isActive = true;
+    where.lastProbeOk = false;
+    where.type = StreamType.LIVE;
+    const backupCondition: Prisma.StreamWhereInput =
+      sourceIssue === "dead"
+        ? { OR: [{ backupUrl: null }, { backupUrl: "" }] }
+        : { AND: [{ backupUrl: { not: null } }, { backupUrl: { not: "" } }] };
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      backupCondition,
+    ];
   }
   if (missingEpg) {
     // Use AND so this does not clash with video/search OR filters
@@ -732,6 +746,21 @@ export async function PATCH(req: NextRequest) {
       ...(meta.raw ?? {}),
       autoSyncNameFromEpg: body.autoSyncNameFromEpg === true,
     });
+  }
+
+  if (body.directSource !== undefined) {
+    const { parseLiveStreamMeta, encodeLiveStreamMeta } = await import("@/lib/stream-live-meta");
+    const existing = await prisma.stream.findUnique({
+      where: { id },
+      select: { agentStartCmd: true, type: true },
+    });
+    if (existing?.type === "LIVE") {
+      const meta = parseLiveStreamMeta(existing.agentStartCmd);
+      data.agentStartCmd = encodeLiveStreamMeta({
+        ...(meta.raw ?? {}),
+        directSource: body.directSource === true,
+      });
+    }
   }
 
   if (body.transcodeProfile !== undefined) {

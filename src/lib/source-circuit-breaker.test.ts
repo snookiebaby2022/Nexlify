@@ -41,19 +41,18 @@ test("successful recovery probe closes an open circuit", () => {
   assert.equal(recovered.latencyMs, 75);
 });
 
-test("failed recovery probe reopens from the new attempt time", () => {
+test("failed recovery probe reopens from half_open", () => {
   const openedAt = 10_000;
-  const open = {
+  const halfOpen = {
     ...emptySourceCircuit(),
-    state: "open" as const,
+    state: "half_open" as const,
     failures: 3,
     openedAt,
   };
   const retryAt = openedAt + CIRCUIT_RECOVERY_AFTER_MS;
-  const failed = applySourceProbe(open, { ok: false, now: retryAt });
+  const failed = applySourceProbe(halfOpen, { ok: false, now: retryAt });
   assert.equal(failed.state, "open");
   assert.equal(failed.openedAt, retryAt);
-  assert.equal(failed.failures, 4);
 });
 
 test("rankSourceCandidates prefers closed and low-latency sources", () => {

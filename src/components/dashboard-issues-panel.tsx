@@ -48,6 +48,9 @@ export function DashboardIssuesPanel({
   const unstable = local?.unstableStreams ?? kpi?.unstableStreams ?? 0;
   const offline = local?.offlineStreams ?? kpi?.offlineStreams ?? 0;
   const tickets = local?.openTickets ?? kpi?.openTickets ?? 0;
+  const inactiveLive = local?.inactiveLive ?? kpi?.inactiveLive ?? 0;
+  const inactiveMovies = local?.inactiveMovies ?? kpi?.inactiveMovies ?? 0;
+  const inactiveSeries = local?.inactiveSeries ?? kpi?.inactiveSeries ?? 0;
 
   // offline already includes dead + unstable (failed source probes).
   const totalIssues = inactive + offline + tickets;
@@ -159,15 +162,9 @@ export function DashboardIssuesPanel({
               <p className="text-sm font-medium">{inactive.toLocaleString()} inactive streams</p>
               <p className="text-xs" style={{ color: "var(--muted)" }}>
                 Off in panel — players will not see them
-                {(kpi?.inactiveLive || local?.inactiveLive)
-                  ? ` · Live ${local?.inactiveLive ?? kpi?.inactiveLive ?? 0}`
-                  : ""}
-                {(kpi?.inactiveMovies || local?.inactiveMovies)
-                  ? ` · Movies ${local?.inactiveMovies ?? kpi?.inactiveMovies ?? 0}`
-                  : ""}
-                {(kpi?.inactiveSeries || local?.inactiveSeries)
-                  ? ` · Series ${local?.inactiveSeries ?? kpi?.inactiveSeries ?? 0}`
-                  : ""}
+                {inactiveLive ? ` · Live ${inactiveLive}` : ""}
+                {inactiveMovies ? ` · Movies ${inactiveMovies}` : ""}
+                {inactiveSeries ? ` · Series ${inactiveSeries}` : ""}
               </p>
             </div>
             <button
@@ -180,13 +177,21 @@ export function DashboardIssuesPanel({
               <Wrench size={12} />
               {busy === "activate" ? "Fixing…" : "Activate all"}
             </button>
-            <Link
-              href="/admin/content/streams?status=inactive"
-              className="text-xs underline"
-              style={{ color: "var(--accent)" }}
-            >
-              Review
-            </Link>
+            {inactiveLive > 0 && (
+              <Link href="/admin/content/streams?status=inactive" className="text-xs underline" style={{ color: "var(--accent)" }}>
+                Review live
+              </Link>
+            )}
+            {inactiveMovies > 0 && (
+              <Link href="/admin/content/movies?status=inactive" className="text-xs underline" style={{ color: "var(--accent)" }}>
+                Review movies
+              </Link>
+            )}
+            {inactiveSeries > 0 && (
+              <Link href="/admin/content/series?status=inactive" className="text-xs underline" style={{ color: "var(--accent)" }}>
+                Review series
+              </Link>
+            )}
           </div>
         )}
 
@@ -198,11 +203,11 @@ export function DashboardIssuesPanel({
               <p className="text-xs" style={{ color: "var(--muted)" }}>Probe failed with no backup URL</p>
             </div>
             <Link
-              href="/admin/stream_errors"
+              href="/admin/content/streams?status=offline&sourceIssue=dead"
               className="text-xs px-3 py-1.5 rounded border"
               style={{ borderColor: "var(--border)" }}
             >
-              Open stream errors
+              Fix dead streams
             </Link>
           </div>
         )}
@@ -215,11 +220,11 @@ export function DashboardIssuesPanel({
               <p className="text-xs" style={{ color: "var(--muted)" }}>Probe failed but backup URL is set</p>
             </div>
             <Link
-              href="/admin/stream_health"
+              href="/admin/content/streams?status=offline&sourceIssue=unstable"
               className="text-xs px-3 py-1.5 rounded border"
               style={{ borderColor: "var(--border)" }}
             >
-              Stream health
+              Fix unstable streams
             </Link>
           </div>
         )}

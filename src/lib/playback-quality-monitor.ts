@@ -9,8 +9,7 @@ import {
   logPlaybackQuality,
 } from "@/lib/playback-quality-log";
 import { setActiveFailover } from "@/lib/source-failover";
-import { probeStreamUrl, type ProbeResult } from "@/lib/stream-probe-server";
-import { allowSourceProbe, recordSourceProbe } from "@/lib/source-circuit-breaker";
+import { probeStreamWithScheduler } from "@/lib/source-probe-scheduler";
 
 export type PlaybackQualityScan = {
   watched: number;
@@ -145,21 +144,14 @@ export async function runPlaybackQualityMonitor(): Promise<PlaybackQualityScan> 
 
     if (!kind) continue;
 
-    const primaryAllowed = await allowSourceProbe(row.id, row.streamUrl);
-    const primary: ProbeResult = primaryAllowed
-      ? await probeStreamUrl(row.streamUrl, { fast: false })
-      : { status: "offline", message: "Circuit open — recovery probe deferred" };
-    const primaryOk = primary.status === "online" || primary.status === "degraded";
-    if (primaryAllowed) {
-      await recordSourceProbe({
-        streamId: row.id,
-        url: row.streamUrl,
-        ok: primaryOk,
-        error: primaryOk ? null : primary.message,
-        latencyMs: primary.latencyMs,
-        bitrateKbps: primary.bitrateKbps,
-      });
-    }
+    const primaryResult = await probeStreamWithScheduler({
+      streamId: row.id,
+      url: row.streamUrl,
+      fast: false,
+    });
+    const primary = primaryResult.probe;
+    const primaryOk =
+      !primaryResult.skipped && (primary.status === "online" || primary.status === "degraded");
     if (!primaryOk) {
       await logPlaybackQuality({
         action: PLAYBACK_ORIGIN_FAIL,

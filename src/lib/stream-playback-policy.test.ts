@@ -87,6 +87,15 @@ describe("getStreamPlaybackPolicy", () => {
   it("shows On-demand on the list even when the source is a provider URL", () => {
     assert.equal(
       streamListUptimeKind({
+        vodMode: "LIVE",
+        isOnDemand: true,
+        hostedExternally: true,
+        liveStats: { playbackMode: "direct" },
+      }),
+      "DIRECT"
+    );
+    assert.equal(
+      streamListUptimeKind({
         isOnDemand: true,
         hostedExternally: true,
         liveStats: { playbackMode: "direct" },
