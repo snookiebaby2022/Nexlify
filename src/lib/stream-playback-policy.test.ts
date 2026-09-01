@@ -25,11 +25,29 @@ function base(over: Partial<StreamForPlaybackPolicy> = {}): StreamForPlaybackPol
 }
 
 describe("getStreamPlaybackPolicy", () => {
-  it("relays imported live HTTP through the panel unless hosted by provider", () => {
-    assert.equal(getStreamPlaybackPolicy(base()), "relay");
-    assert.equal(streamPlaysInstantThroughServers(base()), true);
-    assert.equal(getStreamPlaybackPolicy(base({ hostedExternally: true })), "direct");
-    assert.equal(streamPlaysInstantThroughServers(base({ hostedExternally: true })), true);
+  it("relays imported live HTTP through the panel unless Direct source is on", () => {
+    assert.equal(getStreamPlaybackPolicy(base()), "on_demand");
+    assert.equal(streamPlaysInstantThroughServers(base()), false);
+    assert.equal(
+      getStreamPlaybackPolicy(base({ vodMode: VodMode.LIVE, isOnDemand: false, hostedExternally: true })),
+      "relay"
+    );
+    assert.equal(
+      streamPlaysInstantThroughServers(
+        base({ vodMode: VodMode.LIVE, isOnDemand: false, hostedExternally: true })
+      ),
+      true
+    );
+    assert.equal(
+      getStreamPlaybackPolicy(
+        base({
+          vodMode: VodMode.LIVE,
+          isOnDemand: false,
+          agentStartCmd: 'NEXLIFY_LIVE:{"directSource":true}',
+        })
+      ),
+      "direct"
+    );
   });
 
   it("keeps created channels on the agent path", () => {
@@ -53,15 +71,30 @@ describe("getStreamPlaybackPolicy", () => {
     );
   });
 
-  it("treats Redirect stream as provider-direct", () => {
+  it("ignores leftover Redirect stream when operator chose Live only", () => {
     assert.equal(
       getStreamPlaybackPolicy(
         base({
+          vodMode: VodMode.LIVE,
+          isOnDemand: false,
           hostedExternally: false,
           agentStartCmd: 'NEXLIFY_LIVE:{"redirectStream":true}',
         })
       ),
-      "direct"
+      "relay"
+    );
+  });
+
+  it("treats Redirect stream as provider-direct only when not Live only", () => {
+    assert.equal(
+      getStreamPlaybackPolicy(
+        base({
+          vodMode: VodMode.ON_DEMAND,
+          hostedExternally: false,
+          agentStartCmd: 'NEXLIFY_LIVE:{"redirectStream":true}',
+        })
+      ),
+      "on_demand"
     );
   });
 
@@ -84,13 +117,31 @@ describe("getStreamPlaybackPolicy", () => {
     assert.equal(streamUptimeDisplayLabel("ON-DEMAND"), "On-demand");
   });
 
-  it("shows On-demand on the list even when the source is a provider URL", () => {
+  it("shows Live on the list when vodMode is Live only, even if stats still say direct", () => {
     assert.equal(
       streamListUptimeKind({
         vodMode: "LIVE",
-        isOnDemand: true,
+        isOnDemand: false,
         hostedExternally: true,
         liveStats: { playbackMode: "direct" },
+      }),
+      "LIVE"
+    );
+    assert.equal(
+      streamListUptimeKind({
+        vodMode: "LIVE",
+        isOnDemand: false,
+        hostedExternally: false,
+        agentStartCmd: 'NEXLIFY_LIVE:{"redirectStream":true}',
+        liveStats: { playbackMode: "direct" },
+      }),
+      "LIVE"
+    );
+    assert.equal(
+      streamListUptimeKind({
+        vodMode: "LIVE",
+        isOnDemand: false,
+        agentStartCmd: 'NEXLIFY_LIVE:{"directSource":true}',
       }),
       "DIRECT"
     );
@@ -101,14 +152,6 @@ describe("getStreamPlaybackPolicy", () => {
         liveStats: { playbackMode: "direct" },
       }),
       "ON-DEMAND"
-    );
-    assert.equal(
-      streamListUptimeKind({
-        isOnDemand: false,
-        hostedExternally: true,
-        liveStats: { playbackMode: "direct" },
-      }),
-      "DIRECT"
     );
     assert.equal(
       streamListUptimeKind({

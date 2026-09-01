@@ -1,4 +1,5 @@
-import type { Line, Stream } from "@prisma/client";
+import type { Stream } from "@prisma/client";
+import { userAgentIsSmartTv } from "./live-http-range";
 
 type StreamAdultCheck = Pick<Stream, "name"> & {
   isAdult?: boolean;
@@ -68,6 +69,7 @@ const COMPANION_PLAYER_PATTERNS = ["vlc", "libvlc", "lavf", "exoplayer", "okhttp
 const IPTV_APP_PATTERNS = ["xciptv", "smarters", "tivimate", "iptv", "perfect player", "ghb", "stb"];
 
 function isCompanionPlayerUa(ua: string): boolean {
+  if (userAgentIsSmartTv(ua)) return true;
   return COMPANION_PLAYER_PATTERNS.some((p) => ua.includes(p));
 }
 

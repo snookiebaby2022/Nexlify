@@ -65,7 +65,8 @@ describe("edge proxy installer parity", () => {
     assert.match(canonical, /upstreamRes\.pause\(\)/);
     assert.match(canonical, /edge fan capacity reached/);
     assert.match(canonical, /connection-pulse-batch/);
-    assert.match(canonical, /\/edge\/metrics/);
+    assert.match(canonical, /userAgentIsSmartTv/);
+    assert.match(canonical, /rewriteLiveTsUrlToHls/);
   });
 
   it(

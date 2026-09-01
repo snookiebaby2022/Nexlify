@@ -7,6 +7,7 @@ import { startVisibleInterval } from "@/lib/perf-polling";
 
 const MAP_COLLAPSE_KEY = "nx-dash-collapse-connmap";
 const EARTH_TEXTURE_URL = "/earth-blue-marble.jpg";
+const GLOBE_R = 0.46;
 
 type EarthPixels = { data: Uint8ClampedArray; w: number; h: number };
 
@@ -28,44 +29,41 @@ function drawEarthSphere(
   r: number,
   rotY: number
 ) {
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.clip();
-  const step = 1.5;
-  const lightX = -0.38;
-  const lightY = 0.42;
-  const lightZ = 0.82;
-  for (let sy = Math.floor(cy - r); sy <= Math.ceil(cy + r); sy += step) {
-    for (let sx = Math.floor(cx - r); sx <= Math.ceil(cx + r); sx += step) {
+  const left = Math.floor(cx - r);
+  const top = Math.floor(cy - r);
+  const size = Math.ceil(r * 2) + 2;
+  const img = ctx.createImageData(size, size);
+  const out = img.data;
+  for (let py = 0; py < size; py++) {
+    const sy = top + py;
+    const dy = (cy - sy) / r;
+    for (let qx = 0; qx < size; qx++) {
+      const sx = left + qx;
       const dx = (sx - cx) / r;
-      const dy = (cy - sy) / r;
       const d2 = dx * dx + dy * dy;
       if (d2 > 1) continue;
       const z = Math.sqrt(1 - d2);
       const lon = Math.atan2(dx, z) - rotY;
       const lat = Math.asin(Math.max(-1, Math.min(1, dy)));
       const [red, green, blue] = sampleEarth(px, lon, lat);
-      const daylight = Math.max(0, dx * lightX + dy * lightY + z * lightZ);
-      const shade = 0.3 + daylight * 0.78;
-      const rimBlue = Math.pow(1 - z, 3) * 24;
-      ctx.fillStyle = `rgb(${Math.min(255, Math.floor(red * shade))},${Math.min(255, Math.floor(green * shade + rimBlue * 0.45))},${Math.min(255, Math.floor(blue * shade + rimBlue))})`;
-      ctx.fillRect(sx, sy, step, step);
+      const limb = Math.pow(1 - z, 1.8);
+      const shade = 0.96 - limb * 0.18;
+      const i = (py * size + qx) * 4;
+      out[i] = Math.min(255, Math.floor(red * shade));
+      out[i + 1] = Math.min(255, Math.floor(green * shade));
+      out[i + 2] = Math.min(255, Math.floor(blue * shade));
+      out[i + 3] = 255;
     }
   }
-
-  const gloss = ctx.createRadialGradient(
-    cx - r * 0.42,
-    cy - r * 0.46,
-    0,
-    cx - r * 0.25,
-    cy - r * 0.28,
-    r * 1.1
-  );
-  gloss.addColorStop(0, "rgba(255,255,255,0.14)");
-  gloss.addColorStop(0.28, "rgba(186,230,253,0.05)");
-  gloss.addColorStop(0.72, "rgba(2,8,23,0.04)");
-  gloss.addColorStop(1, "rgba(2,6,23,0.3)");
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.putImageData(img, left, top);
+  const gloss = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, 0, cx, cy, r);
+  gloss.addColorStop(0, "rgba(255,255,255,0.08)");
+  gloss.addColorStop(0.45, "rgba(255,255,255,0)");
+  gloss.addColorStop(1, "rgba(2,8,23,0.12)");
   ctx.fillStyle = gloss;
   ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
   ctx.restore();
@@ -102,10 +100,10 @@ function project(lat: number, lon: number, rotY: number, w: number, h: number): 
   const x = Math.cos(latR) * Math.sin(lonR);
   const y = Math.sin(latR);
   const z = Math.cos(latR) * Math.cos(lonR);
-  const r = Math.min(w, h) * 0.4;
+  const r = Math.min(w, h) * GLOBE_R;
   const cx = w / 2;
   const cy = h / 2 + h * 0.02;
-  return { sx: cx + x * r, sy: cy - y * r, z, visible: z > 0.025 };
+  return { sx: cx + x * r, sy: cy - y * r, z, visible: z > 0.02 };
 }
 
 const LANDMASSES: number[][][] = [
@@ -239,7 +237,7 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
     }
     ctx.globalAlpha = 1;
 
-    const r = Math.min(w, h) * 0.4;
+    const r = Math.min(w, h) * GLOBE_R;
     const cx = w / 2;
     const cy = h / 2 + h * 0.02;
 
@@ -421,7 +419,7 @@ export function ConnectionMap({ apiUrl = "/api/admin/connection-map" }: { apiUrl
           </button>
           {!collapsed && (
             <p className="text-xs mt-0.5 ml-5" style={{ color: "var(--muted)" }}>
-              Satellite Earth · viewer pins stay fixed to their detected location · refreshes every 30 seconds
+              Satellite Earth · pins stay on their country · full-colour globe while it turns · refreshes every 30 seconds
             </p>
           )}
         </div>

@@ -62,6 +62,18 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
 export function detectClientProfile(userAgent?: string | null): ClientProfileId {
   const ua = (userAgent ?? "").toLowerCase();
   if (ua.includes("xciptv")) return "xciptv";
+  // LG/Samsung native players cannot play unbounded MPEG-TS. Keep m3u8 first.
+  if (
+    ua.includes("web0s") ||
+    ua.includes("webos") ||
+    ua.includes("tizen") ||
+    ua.includes("netcast") ||
+    ua.includes("webappmanager") ||
+    ua.includes("smarttv") ||
+    ua.includes("smart-tv")
+  ) {
+    return "auto";
+  }
   if (ua.includes("smarters") || ua.includes("iptv smarters")) return "smarters";
   if (ua.includes("tivimate")) return "tivimate";
   if (ua.includes("vlc") || ua.includes("libvlc") || ua.includes("exoplayer")) return "vlc";
@@ -106,6 +118,18 @@ export function userAgentWantsHlsPlaylist(_userAgent?: string | null): boolean {
 export function userAgentAllowsInstantTsWrap(userAgent?: string | null): boolean {
   const ua = (userAgent ?? "").toLowerCase();
   if (!ua) return false;
+  // webOS/Tizen UAs contain Chrome/ but cannot play a fake HLS wrap of unbounded MPEG-TS.
+  if (
+    ua.includes("web0s") ||
+    ua.includes("webos") ||
+    ua.includes("tizen") ||
+    ua.includes("netcast") ||
+    ua.includes("webappmanager") ||
+    ua.includes("smarttv") ||
+    ua.includes("smart-tv")
+  ) {
+    return false;
+  }
   if (
     ua.includes("smarters") ||
     ua.includes("libvlc") ||

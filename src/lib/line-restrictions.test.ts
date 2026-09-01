@@ -58,4 +58,12 @@ describe("checkLineUserAgent", () => {
       false
     );
   });
+
+  it("allows webOS/Tizen when the line allows Smarters", () => {
+    const webos =
+      "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 WebAppManager";
+    assert.equal(checkLineUserAgent({ allowedUserAgents: "smarters" }, webos), true);
+    assert.equal(checkLineUserAgent({ allowedUserAgents: "IPTV Smarters" }, webos), true);
+    assert.equal(checkLineUserAgent({ allowedUserAgents: "VLC" }, webos), false);
+  });
 });

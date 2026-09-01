@@ -23,8 +23,9 @@ function isExternalHttpUrl(url: string): boolean {
 }
 
 /**
- * Provider DIRECT only when “hosted by provider URL” (or Redirect stream) is on.
- * Other live HTTP(S) is instant panel/edge relay — no ffmpeg wait.
+ * Live only (vodMode LIVE) splices through the panel. Direct is only the
+ * explicit Direct source toggle. On-demand / hosted-provider stay on-demand
+ * until the operator switches mode.
  */
 export function getStreamPlaybackPolicy(stream: StreamForPlaybackPolicy): StreamPlaybackPolicyMode {
   const mode = stream.vodMode as VodMode;
@@ -35,11 +36,20 @@ export function getStreamPlaybackPolicy(stream: StreamForPlaybackPolicy): Stream
   const transcoding = Boolean(meta.transcodeProfile && meta.transcodeProfile !== "none");
   if (transcoding) return "transcode";
 
+  if (mode === "ON_DEMAND" || (mode !== "LIVE" && stream.isOnDemand)) return "on_demand";
+
+  // Direct source is the explicit toggle. Leftover XUI redirectStream must not
+  // override operator-selected Live only — that was showing as Direct.
+  if (meta.directSource) return "direct";
+
+  if (mode === "LIVE") {
+    if (isExternalHttpUrl(stream.streamUrl ?? "")) return "relay";
+    return "transcode";
+  }
+
   if (stream.hostedExternally === true || meta.redirectStream) return "direct";
 
   if (isExternalHttpUrl(stream.streamUrl ?? "")) return "relay";
-
-  if (mode === "ON_DEMAND" || (mode !== "LIVE" && stream.isOnDemand)) return "on_demand";
 
   return "transcode";
 }
@@ -77,23 +87,22 @@ export function streamUptimeDisplayLabel(
   }
 }
 
-/** List badge/mode: on-demand wins over provider-direct so operators see how it starts. */
+/** List badge/mode: operator stream mode wins. Live only → Live unless Direct source is on. */
 export function streamListUptimeKind(
   stream: {
     hostedExternally?: boolean | null;
     isOnDemand?: boolean | null;
     isCreatedChannel?: boolean | null;
     vodMode?: string | null;
+    agentStartCmd?: string | null;
     liveStats?: { playbackMode?: StreamPlaybackPolicyMode } | null;
   },
   listType?: string
 ): "DIRECT" | "LIVE" | "ON-DEMAND" | "CATCHUP" {
   if (stream.vodMode === "CATCHUP") return "CATCHUP";
   if (stream.vodMode === "LIVE") {
-    if (stream.liveStats?.playbackMode) {
-      return streamUptimeColumnLabel(stream.liveStats.playbackMode);
-    }
-    if (stream.hostedExternally) return "DIRECT";
+    const meta = parseLiveStreamMeta(stream.agentStartCmd);
+    if (meta.directSource) return "DIRECT";
     return "LIVE";
   }
   if (

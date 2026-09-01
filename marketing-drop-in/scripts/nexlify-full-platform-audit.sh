@@ -169,7 +169,7 @@ if [ -n "$PANEL" ]; then
   done
 
   code=$(http_code "$PBASE/player_api.php?username=__audit__&password=__audit__")
-  [ "$code" = "400" ] || [ "$code" = "401" ] && ok "Xtream player_api.php → $code" || warn "player_api.php → $code"
+  [ "$code" = "200" ] || [ "$code" = "400" ] || [ "$code" = "401" ] && ok "Xtream player_api.php → $code" || warn "player_api.php → $code"
 
   if [ -x scripts/full-audit-smoke.sh ]; then
     echo ""

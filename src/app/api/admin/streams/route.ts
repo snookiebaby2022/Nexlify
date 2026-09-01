@@ -780,7 +780,6 @@ export async function PATCH(req: NextRequest) {
       data.agentStartCmd = encodeLiveStreamMeta({
         ...(meta.raw ?? {}),
         transcodeProfile: nextProfile,
-        redirectStream: nextProfile === "none",
       });
     }
     if (nextProfile !== "none") {
@@ -796,6 +795,25 @@ export async function PATCH(req: NextRequest) {
     });
     data.vodMode = synced.vodMode;
     data.isOnDemand = synced.isOnDemand;
+    if (synced.vodMode === "LIVE") {
+      const { parseLiveStreamMeta, encodeLiveStreamMeta } = await import("@/lib/stream-live-meta");
+      const existingLive = await prisma.stream.findUnique({
+        where: { id },
+        select: { agentStartCmd: true },
+      });
+      const currentCmd =
+        typeof data.agentStartCmd === "string" ? data.agentStartCmd : existingLive?.agentStartCmd;
+      const liveMeta = parseLiveStreamMeta(currentCmd);
+      const keepDirect = body.directSource === true;
+      data.agentStartCmd = encodeLiveStreamMeta({
+        ...(liveMeta.raw ?? {}),
+        redirectStream: false,
+        directSource: keepDirect,
+      });
+      if (body.hostedExternally !== true && !keepDirect) {
+        data.hostedExternally = false;
+      }
+    }
   }
 
   if (

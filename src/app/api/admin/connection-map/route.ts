@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { ownerScope } from "@/lib/owner-scope";
 import { PanelRole } from "@prisma/client";
 import { cacheGetOrSet } from "@/lib/cache";
-import { countryMapPosition } from "@/lib/connection-map-geo";
+import { countryMapPosition, latLngToMapPct, stableCountryOffset } from "@/lib/connection-map-geo";
 
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
 const MAP_CACHE_TTL = 30;
@@ -62,29 +62,27 @@ export async function GET() {
 
       let countryCode = geo?.countryCode || null;
       let countryName = geo?.country || "Unknown";
-      let mapX = geo?.lng != null ? Math.max(0, Math.min(100, ((geo.lng + 180) / 360) * 100)) : null;
-      let mapY = geo?.lat != null ? Math.max(0, Math.min(100, ((90 - geo.lat) / 180) * 100)) : null;
 
       if (!countryCode && conn.ip) {
         const looked = await lookupGeo(conn.ip);
         countryCode = looked?.countryCode ?? null;
         countryName = looked?.countryName ?? countryName;
       }
-      if (mapX == null || mapY == null) {
-        const pos = countryMapPosition(countryCode);
-        mapX = pos?.[0] ?? 50;
-        mapY = pos?.[1] ?? 40;
-      }
 
       const cc = countryCode || "??";
-      const bucket = countryCounts.get(cc) ?? { name: countryName, count: 0, mapX, mapY };
+      const centroid = countryMapPosition(countryCode);
+      const geoPct =
+        geo?.lat != null && geo?.lng != null ? latLngToMapPct(geo.lat, geo.lng) : null;
+      const base = centroid ?? geoPct ?? ([50, 40] as [number, number]);
+      const bucket = countryCounts.get(cc) ?? { name: countryName, count: 0, mapX: base[0], mapY: base[1] };
+      const [dx, dy] = stableCountryOffset(conn.id, bucket.count);
       bucket.count += 1;
       countryCounts.set(cc, bucket);
 
       points.push({
         id: conn.id,
-        mapX,
-        mapY,
+        mapX: Math.max(0, Math.min(100, base[0] + dx)),
+        mapY: Math.max(0, Math.min(100, base[1] + dy)),
         line: lineLabel,
         stream: streamName,
         countryCode: cc,

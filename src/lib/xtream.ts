@@ -31,6 +31,7 @@ import { formatPanelClock, normalizeTimeFormat } from "./epg-time";
 import { getPanelServerSettings } from "./panel-server";
 import { getSettingGroup } from "./panel-settings";
 import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
+import { userAgentIsSmartTv } from "./live-http-range";
 import { preferLiveOutputFormats, resolveClientPlaybackProfile } from "./client-playback-profiles";
 import { mapXtreamLiveItem, mapXtreamSeriesItem, mapXtreamVodItem } from "./xtream-catalog-items";
 
@@ -110,14 +111,19 @@ export async function xtreamUserInfo(
   } catch {
     streamHost = panelOrigin.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
   }
-  const useHttps = panelOrigin.startsWith("https");
+  const useHttps = userAgentIsSmartTv(userAgent) ? false : panelOrigin.startsWith("https");
   const publicPort = portFromPanelBaseUrl(panelOrigin);
   const serverSettings = await getPanelServerSettings();
   const streamHttpsPort = serverSettings.streamHttpsPort || resolveStreamHttpsPort();
   // Smarters follows server_info.port for every API call after login. Never redirect
   // HTTPS :443 clients to :8080 — player_api is on 443 and many hosts block 8080 externally.
-  const httpPort = useHttps ? String(streamHttpsPort) : String(resolveAdvertisedStreamHttpPort(publicPort));
-  const httpsPort = String(streamHttpsPort);
+  // LG/webOS Smarters Pro fails Cloudflare HTTP/2 HTTPS ("Authorization failed at host").
+  const httpPort = userAgentIsSmartTv(userAgent)
+    ? "80"
+    : useHttps
+      ? String(streamHttpsPort)
+      : String(resolveAdvertisedStreamHttpPort(publicPort));
+  const httpsPort = userAgentIsSmartTv(userAgent) ? "80" : String(streamHttpsPort);
   const formats = preferLiveOutputFormats(
     xtreamOutputFormats(line.allowedOutput),
     resolveClientPlaybackProfile(userAgent)

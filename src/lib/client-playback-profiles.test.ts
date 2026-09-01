@@ -13,6 +13,12 @@ describe("client playback profiles", () => {
   it("detects XCIPTV and Smarters from User-Agent", () => {
     assert.equal(detectClientProfile("XCIPTV/5.0.0"), "xciptv");
     assert.equal(detectClientProfile("IPTVSmartersPlayer"), "smarters");
+    assert.equal(
+      detectClientProfile(
+        "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 Chrome/87.0.4280.88 Safari/537.36 WebAppManager"
+      ),
+      "auto"
+    );
   });
 
   it("does not prefetch streams during XCIPTV catalog updates", () => {
@@ -47,6 +53,12 @@ describe("client playback profiles", () => {
   it("allows instant TS-wrap only for Exo/Chrome — Smarters/VLC need real HLS", () => {
     assert.equal(userAgentAllowsInstantTsWrap("ExoPlayerLib/2.19.1"), true);
     assert.equal(userAgentAllowsInstantTsWrap("Mozilla/5.0 Chrome/120.0.0.0"), true);
+    assert.equal(
+      userAgentAllowsInstantTsWrap(
+        "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 WebAppManager"
+      ),
+      false
+    );
     assert.equal(userAgentAllowsInstantTsWrap("IPTVSmartersPlayer"), false);
     assert.equal(userAgentAllowsInstantTsWrap("Mozilla/5.0 IPTV Smarters Pro"), false);
     assert.equal(userAgentAllowsInstantTsWrap("VLC/3.0.20 LibVLC/3.0.20"), false);

@@ -208,7 +208,8 @@ const HLS_SEG_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\/hls\/(seg\d+\.ts)$/i;
 const LIVE_M3U8_RE = /^\/live\/([^/]+)\/([^/]+)\/([^/]+)\.m3u8$/i;
 const TIMESHIFT_RE = /^\/timeshift\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/i;
 
-function isTinyLiveRangeProbe(range) {
+function isTinyLiveRangeProbe(range, ua) {
+  if (userAgentIsSmartTv(ua)) return false;
   const r = String(range ?? "").trim();
   if (!r) return false;
   const m = /^bytes=(\d+)-(\d+)$/i.exec(r);
@@ -219,10 +220,33 @@ function isTinyLiveRangeProbe(range) {
   return end - start < 65536;
 }
 
+function userAgentIsSmartTv(ua) {
+  const s = String(ua || "").toLowerCase();
+  return (
+    s.includes("web0s") ||
+    s.includes("webos") ||
+    s.includes("tizen") ||
+    s.includes("netcast") ||
+    s.includes("webappmanager") ||
+    s.includes("smarttv") ||
+    s.includes("smart-tv")
+  );
+}
+
+function rewriteLiveTsUrlToHls(url) {
+  const raw = String(url || "/");
+  const q = raw.indexOf("?");
+  const pathOnly = q >= 0 ? raw.slice(0, q) : raw;
+  const qs = q >= 0 ? raw.slice(q) : "";
+  if (!/^\/live\/[^/]+\/[^/]+\/[^/]+\.ts$/i.test(pathOnly)) return raw;
+  return `${pathOnly.replace(/\.ts$/i, ".m3u8")}${qs}`;
+}
+
 /** Exo/Chrome can play an instant HLS wrap. Smarters/LibVLC need real HLS segments. */
 function userAgentAllowsInstantTsWrap(ua) {
   const s = String(ua || "").toLowerCase();
   if (!s) return false;
+  if (userAgentIsSmartTv(s)) return false;
   if (s.includes("smarters") || s.includes("libvlc") || s.includes("lavf") || s.includes("vlc/")) {
     return false;
   }
@@ -2953,6 +2977,18 @@ async function onRequest(clientReq, clientRes, ctx) {
     return;
   }
 
+  // LG webOS / Samsung Tizen IPTV Smarters request /live/.../id.ts but cannot play
+  // unbounded MPEG-TS. Serve real HLS (no 302) so the native player can start.
+  if (
+    PLAYBACK_RE.test(pathOnly) &&
+    /^\/live\/[^/]+\/[^/]+\/[^/]+\.ts$/i.test(pathOnly) &&
+    userAgentIsSmartTv(clientReq.headers["user-agent"])
+  ) {
+    clientReq.url = rewriteLiveTsUrlToHls(clientReq.url || pathOnly);
+    await handleDiskHls(clientReq, clientRes, ctx, "playlist", "");
+    return;
+  }
+
   if (!shouldSplice(clientReq)) {
     if (process.env.IPTV_EDGE_DEBUG_UPSTREAM === "1" && /^\/live\//.test(pathOnly)) {
       console.error(`[iptv-edge] no-splice ${pathOnly}`);
@@ -2979,6 +3015,13 @@ async function onRequest(clientReq, clientRes, ctx) {
       );
     }
     if (auth.passthrough || !auth.upstream) {
+      // HEAD / tiny Range probes from live-auth omit upstream. Do not forward
+      // /live/ to the panel (502 "must splice locally") — Smart TVs always HEAD.
+      if (auth.live && (clientReq.method === "HEAD" || isTinyLiveRangeProbe(clientReq.headers.range, clientReq.headers["user-agent"]))) {
+        writeLiveTsHead(clientRes);
+        clientRes.end();
+        return;
+      }
       forward(clientReq, clientRes, ctx);
       return;
     }
@@ -2996,7 +3039,9 @@ async function onRequest(clientReq, clientRes, ctx) {
         ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
         : null;
     const isLiveRangeProbe = Boolean(
-      auth.live && clientReq.method !== "HEAD" && isTinyLiveRangeProbe(clientReq.headers.range)
+      auth.live &&
+        clientReq.method !== "HEAD" &&
+        isTinyLiveRangeProbe(clientReq.headers.range, clientReq.headers["user-agent"])
     );
     if (pulseCtx && clientReq.method !== "HEAD" && !isLiveRangeProbe) touchPlaybackSession(pulseCtx);
     if (isLiveRangeProbe || (clientReq.method === "HEAD" && auth.live)) {

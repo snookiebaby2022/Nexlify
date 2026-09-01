@@ -65,16 +65,18 @@ function originalRange(req: NextRequest): string {
 }
 
 /** HEAD or tiny finite Range probes during XCIPTV Update Content — do not occupy slots.
- *  LibVLC `Range: bytes=0-` is live playback (XUI/1-stream ignore Range and splice). */
+ *  LibVLC `Range: bytes=0-` is live playback (XUI/1-stream ignore Range and splice).
+ *  webOS/Tizen `Range: bytes=0-1` is also live playback — empty 200s 502 on the edge. */
 function isLiveByteProbe(
   req: NextRequest,
   parsed: { spliceLiveTs?: boolean; wantsHls?: boolean },
   isHlsSegment: boolean
 ): boolean {
+  const ua = req.headers.get("user-agent");
   if (originalMethod(req) === "HEAD") return true;
   if (isHlsSegment) return false;
   if (!parsed.spliceLiveTs) return false;
-  return isTinyLiveRangeProbe(originalRange(req));
+  return isTinyLiveRangeProbe(originalRange(req), ua);
 }
 
 async function resolveStreamOutboundProxy(streamId: string, agentServerScope: string | null = null) {

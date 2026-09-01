@@ -244,6 +244,7 @@ export async function POST(req: NextRequest) {
           data: {
             vodMode: mode as "LIVE" | "ON_DEMAND" | "CATCHUP",
             isOnDemand: mode !== "LIVE",
+            ...(mode === "LIVE" ? { hostedExternally: false } : {}),
             archiveDays:
               body.archiveDays !== undefined && body.archiveDays !== ""
                 ? Number(body.archiveDays)

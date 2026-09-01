@@ -123,7 +123,7 @@ function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: st
   return (
     <span
       className={cls}
-      title="Live = through this panel · On-demand = starts when a viewer tunes in · Direct = provider URL"
+      title="Live = through this panel · On-demand = starts when a viewer tunes in · Direct = Direct source is on"
     >
       {label}
     </span>

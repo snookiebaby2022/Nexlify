@@ -6,6 +6,7 @@ import {
   assertPlaybackAllowed,
   playbackDenyMessage,
 } from "@/lib/playback-guard";
+import { xtreamUnauthPayload } from "@/lib/xtream-unauth";
 import {
   serverBaseUrl,
   xtreamUserInfo,
@@ -115,6 +116,11 @@ export async function GET(req: NextRequest) {
   return handlePlayerApi(req, req.nextUrl.searchParams);
 }
 
+/** LG Smarters Pro probes the host with HEAD before sending credentials. */
+export async function HEAD(req: NextRequest) {
+  return handlePlayerApi(req, req.nextUrl.searchParams);
+}
+
 /** XUI.one / Xtream apps POST username, password, action as form fields. */
 export async function POST(req: NextRequest) {
   return handlePlayerApi(req, await mergeXtreamRequestParams(req));
@@ -146,35 +152,37 @@ async function handlePlayerApiInner(
   const username = params.get("username");
   const password = params.get("password");
   const action = params.get("action");
+  const userAgent = req.headers.get("user-agent");
+  const panelBase = serverBaseUrl(req.url, req.headers);
 
   if (!username || !password) {
-    return j({ error: "credentials required" }, { status: 400 });
+    // XUI/Smarters Pro (LG/webOS) probe player_api.php with no credentials.
+    // HTTP 400 is treated as "Authorization failed at host".
+    return j(xtreamUnauthPayload(panelBase, userAgent));
   }
 
   const line = await getLineByCredentials(username, password);
   if (!line) {
-    return j(
-      { user_info: { auth: 0, message: "Invalid credentials" } },
-      { status: 401 },
-    );
+    return j(xtreamUnauthPayload(panelBase, userAgent));
   }
 
   const ip = getClientIp(req);
   const deny = await assertPlaybackAllowed(
     asPlaybackGuardLine(line),
     ip,
-    req.headers.get("user-agent") ?? undefined,
+    userAgent ?? undefined,
     { listingOnly: true },
   );
   if (deny) {
+    const payload = xtreamUnauthPayload(panelBase, userAgent);
+    payload.user_info.message = playbackDenyMessage(deny);
     return j(
-      { user_info: { auth: 0, message: playbackDenyMessage(deny) } },
-      { status: deny === "rate" || deny === "ddos" ? 429 : 403 },
+      payload,
+      deny === "rate" || deny === "ddos" ? { status: 429 } : undefined,
     );
   }
 
-  const baseUrl = serverBaseUrl(req.url, req.headers);
-  const userAgent = req.headers.get("user-agent");
+  const baseUrl = panelBase;
 
   if (!action) {
     // Login/user_info only needs live ready for first zap. VOD/series are
