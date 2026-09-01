@@ -289,7 +289,7 @@ export default function StreamSettingsPage() {
               type: "number",
               hint: "0 = disabled. Signed pt= token on playback URLs.",
             },
-            { key: "autoFixDeadLinks", label: "Auto-fix dead links (cron probe)", type: "yesno" },
+            { key: "autoFixDeadLinks", label: "Auto-fix dead links (cron probe)", type: "yesno", hint: "Off by default. Probe a channel when you open it — catalog scans burn Main CPU." },
             {
               key: "autoFixDeadLinksIntervalMin",
               label: "Probe interval (minutes)",

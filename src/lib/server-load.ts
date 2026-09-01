@@ -68,21 +68,14 @@ export async function pickLeastLoadedServerId(clientIp?: string): Promise<string
   if (clientIp) {
     const { pickServerForClient } = await import("@/lib/server-geo-lb");
     const geoPick = await pickServerForClient(clientIp);
-    if (geoPick) return geoPick;
+    if (geoPick) {
+      const scores = await getServerLoadScores();
+      const roleCtx = roleCtxFromScores(scores);
+      const hit = scores.find((x) => x.server.id === geoPick);
+      if (hit && resolveServerRole(hit.server, roleCtx) !== "main") return geoPick;
+    }
   }
-  const settings = await getSettingGroup("streams");
-  const mode = String(settings.loadBalancing ?? "server_slots");
-  const scores = await getServerLoadScores();
-  const online = preferHeadroomPool(scores);
-  if (!online.length) return null;
-
-  if (mode === "round_robin") {
-    const sorted = [...online].sort((a, b) => a.server.sortOrder - b.server.sortOrder);
-    return sorted[0]?.server.id ?? null;
-  }
-
-  const sorted = [...online].sort((a, b) => a.score - b.score);
-  return sorted[0]?.server.id ?? null;
+  return pickNamedOrLeastLb(await getServerLoadScores());
 }
 
 function isTenGigLbLabel(name: string, host: string): boolean {

@@ -99,6 +99,8 @@ function colorForHref(href: string): string {
   if (href.includes("/management/tools") || href.includes("/mass-delete") || href.includes("/mass-edit"))
     return "#f59e0b";
   if (href.includes("/import/migrate")) return "#06b6d4";
+  if (href.includes("/diagnostics") || href.includes("/streaming/health") || href.includes("/process_monitor"))
+    return "#f59e0b";
   if (href.includes("/logs") || href.includes("/stream_errors") || href.includes("/streams/logs"))
     return "#fca5a5";
   if (href.includes("/api")) return "#fde047";
@@ -247,6 +249,9 @@ HREF_ICONS["/admin/settings/prefix-manager"] = coloredIcon(Paintbrush, colorForH
 HREF_ICONS["/admin/settings/batch-manager"] = coloredIcon(Package, colorForHref("/admin/settings/batch-manager"));
 HREF_ICONS["/admin/settings/expiry-videos"] = coloredIcon(Film, colorForHref("/admin/settings/expiry-videos"));
 HREF_ICONS["/admin/settings/disk-monitor"] = coloredIcon(HardDrive, colorForHref("/admin/settings/disk-monitor"));
+HREF_ICONS["/admin/diagnostics"] = coloredIcon(Gauge, colorForHref("/admin/diagnostics"));
+HREF_ICONS["/admin/streaming/health"] = coloredIcon(Activity, colorForHref("/admin/streaming/health"));
+HREF_ICONS["/admin/process_monitor"] = coloredIcon(Gauge, colorForHref("/admin/process_monitor"));
 HREF_ICONS["/admin/app-builder"] = coloredIcon(Layers, colorForHref("/admin/app-builder"));
 
 export function navIconForHref(href: string): ReactNode {
@@ -327,6 +332,7 @@ export function coloredGroupIcon(groupId: string): ReactNode {
     analytics: { Icon: BarChart3, color: "#818cf8" },
     security: { Icon: Lock, color: "#f87171" },
     logs: { Icon: List, color: "#fca5a5" },
+    diagnostics: { Icon: Gauge, color: "#f59e0b" },
     "streaming-tools": { Icon: Wrench, color: "#f59e0b" },
     tickets: { Icon: Send, color: "#fcd34d" },
     settings: { Icon: Settings, color: "#94a3b8" },

@@ -115,7 +115,7 @@ export function instantStreamingPanelDefaults(): Partial<Record<SettingGroup, Re
       maxConnectionsPerStream: 0,
       preferredLiveOutput: "ts",
       abrAutoSwitch: true,
-      autoFixDeadLinks: true,
+      autoFixDeadLinks: false,
       autoFixDeadLinksIntervalMin: 15,
     },
     cache: {
@@ -130,7 +130,7 @@ export function instantStreamingPanelDefaults(): Partial<Record<SettingGroup, Re
       perfLowRamMode: true,
       perfConnectionPooling: true,
       perfNginxWorkers: "auto",
-      perfStreamPreload: true,
+      perfStreamPreload: false,
       perfBufferOptimization: true,
       perfConnectionReuse: true,
     },
@@ -144,14 +144,23 @@ export function instantStreamingPanelDefaults(): Partial<Record<SettingGroup, Re
       proxyBuffering: true,
     },
     "nginx-cache": {
-      enabled: true,
+      enabled: false,
       cachePath: "/var/cache/nexlify/hls",
-      cacheSize: "2g",
+      cacheSize: "256m",
       inactiveMinutes: 60,
       sliceEnabled: true,
       sliceSize: "1m",
       useStale: true,
       revalidate: true,
+    },
+    cron: {
+      deadLinkProbeEnabled: false,
+    },
+    "auto-fix": {
+      autoFixEnabled: false,
+    },
+    "source-monitor": {
+      sourceMonitorEnabled: false,
     },
   };
 }
@@ -272,7 +281,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     onDemandProbesizeAuto: true,
     abrAutoSwitch: true,
     playbackTokenTtlSec: 0,
-    autoFixDeadLinks: true,
+    autoFixDeadLinks: false,
     autoFixDeadLinksIntervalMin: 15,
     catchupPresetsHours: [24, 48, 72],
   },
@@ -357,9 +366,9 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     telegramChatId: "",
     alertOfflineStreams: true,
     alertHighLoad: true,
-    alertAbuse: true,
+    alertAbuse: false,
     highLoadConnectionsThreshold: 500,
-    offlineStreamMinutes: 5,
+    offlineStreamMinutes: 1,
     metricsExportEnabled: false,
     metricsExportToken: "",
   },
@@ -395,7 +404,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     epgSyncCron: "0 * * * *",
     channelRefreshEnabled: true,
     channelRefreshCron: "0 4 * * *",
-    deadLinkProbeEnabled: true,
+    deadLinkProbeEnabled: false,
     deadLinkProbeCron: "*/15 * * * *",
     subscriptionNotifyCron: "0 8 * * *",
     plexSyncEnabled: true,
@@ -562,14 +571,14 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     perfLowRamMode: true,
     perfConnectionPooling: true,
     perfNginxWorkers: "auto",
-    perfStreamPreload: true,
+    perfStreamPreload: false,
     perfEventScaleMode: "dynamic",
     perfBufferOptimization: true,
     perfConnectionReuse: true,
     perfMaxEventConnections: 50000,
   },
   "auto-fix": {
-    autoFixEnabled: true,
+    autoFixEnabled: false,
     autoFixAudioLoss: true,
     autoFixVideoFreeze: true,
     autoFixLoopDetection: true,
@@ -652,7 +661,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     sourceSwapPreserveViewerPosition: true,
   },
   "source-monitor": {
-    sourceMonitorEnabled: true,
+    sourceMonitorEnabled: false,
     sourceMonitorIntervalSeconds: 30,
     sourceMonitorOfflineAlert: true,
     sourceMonitorLatencyAlert: true,
@@ -769,9 +778,9 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     providers: [] as import("@/lib/live-sports-types").LiveSportsProvider[],
   },
   "nginx-cache": {
-    enabled: true,
+    enabled: false,
     cachePath: "/var/cache/nexlify/hls",
-    cacheSize: "2g",
+    cacheSize: "256m",
     cacheLevels: "1:2",
     keysZoneName: "hls_cache",
     keysZoneSize: "10m",
@@ -926,7 +935,7 @@ export async function ensureAddonSettingsHealed(): Promise<{
       await setSettingGroup("streams", {
         ...parsed,
         autoChannelLogos: parsed.autoChannelLogos !== false,
-        autoFixDeadLinks: true,
+        autoFixDeadLinks: false,
       });
       streamsPromoted = true;
       touched.push("streams");
@@ -1060,6 +1069,26 @@ export async function ensurePanelUpdateAutoApplyOffByDefault(): Promise<void> {
     await setSettingGroup("server", patch);
   } catch {
     /* DB unavailable — skip; default remains false in DEFAULTS */
+  }
+}
+
+/** Probe a channel only when an operator opens it — never scan the catalog on a timer. */
+export async function ensureOnDemandProbeOnlyDefaults(): Promise<void> {
+  try {
+    const streams = await getSettingGroup("streams");
+    if (streams.onDemandProbeOnlyV1 === true) return;
+
+    await setSettingGroup("streams", {
+      autoFixDeadLinks: false,
+      onDemandProbeOnlyV1: true,
+    });
+    await setSettingGroup("cron", { deadLinkProbeEnabled: false });
+    await setSettingGroup("auto-fix", { autoFixEnabled: false });
+    await setSettingGroup("source-monitor", { sourceMonitorEnabled: false });
+    await setSettingGroup("performance-core", { perfStreamPreload: false });
+    await setSettingGroup("nginx-cache", { enabled: false });
+  } catch {
+    /* DB unavailable — skip; DEFAULTS already prefer on-demand probe */
   }
 }
 

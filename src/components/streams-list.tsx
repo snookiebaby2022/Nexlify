@@ -426,8 +426,8 @@ export function StreamsList({
           setTotal(d.total);
           countedKeyRef.current = loadKey;
         }
-        if (type === "LIVE" && next.length) {
-          void runPageProbe(next, opts?.forceProbe ?? false);
+        if (type === "LIVE" && next.length && opts?.forceProbe) {
+          void runPageProbe(next, true);
         }
       });
     },
@@ -448,9 +448,6 @@ export function StreamsList({
   useEffect(() => {
     if (skipInitialLoadRef.current) {
       skipInitialLoadRef.current = false;
-      if (type === "LIVE" && initialBootstrap?.streams?.length) {
-        void runPageProbe(initialBootstrap.streams as Stream[]);
-      }
       if (type === "MOVIE" || type === "SERIES") return;
       return startVisibleInterval(load, ADMIN_POLLS.streamsMs);
     }
@@ -459,7 +456,7 @@ export function StreamsList({
       return;
     }
     return startVisibleInterval(load, ADMIN_POLLS.streamsMs);
-  }, [load, type, initialBootstrap?.streams, runPageProbe]);
+  }, [load, type, initialBootstrap?.streams]);
 
   const filtered = useMemo(() => {
     return streams.filter((s) => {
@@ -512,7 +509,7 @@ export function StreamsList({
               type="button"
               className="xui-streams-btn xui-streams-btn--ghost"
               disabled={probingPage}
-              title="Quick-probe every stream on this page (XUI-style)"
+              title="Probe sources on this page only (not automatic)"
               onClick={() => load({ forceProbe: true })}
             >
               {probingPage ? "Probing…" : "Probe page"}
@@ -540,7 +537,7 @@ export function StreamsList({
             type="button"
             className="xui-streams-icon-btn xui-streams-icon-btn--refresh"
             title="Refresh"
-            onClick={() => load({ forceProbe: type === "LIVE" })}
+            onClick={() => load()}
           >
             <RefreshCw size={16} />
           </button>
@@ -1113,7 +1110,7 @@ export function StreamsList({
           streamType={previewModal.type}
           onClose={() => {
             setPreviewModal(null);
-            load({ forceProbe: type === "LIVE" });
+            load();
           }}
         />
       )}

@@ -10,6 +10,7 @@ import {
   connectionQualityClass,
   type ConnectionQuality,
 } from "@/lib/connection-quality";
+import { describeStallCount, LIVE_STALL_HELP } from "@/lib/connection-quality-live";
 import type { PlaybackOutputLabel } from "@/lib/connection-playback-output";
 import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
 import { ListPagination } from "@/components/list-pagination";
@@ -49,8 +50,15 @@ function formatConnDuration(
 
 function formatQoe(qoe: ConnectionRow["qoe"]): string {
   if (!qoe) return "—";
-  const ttfp = qoe.firstPictureMs != null ? `${(qoe.firstPictureMs / 1000).toFixed(1)}s` : "—";
-  return `${ttfp} · ${qoe.stallCount} stall · ${qoe.mbps.toFixed(1)} Mb/s`;
+  const ttfp = qoe.firstPictureMs != null ? `${(qoe.firstPictureMs / 1000).toFixed(1)}s to picture` : "—";
+  const stalls = describeStallCount(qoe.stallCount).summary;
+  return `${ttfp} · ${stalls} · ${qoe.mbps.toFixed(1)} Mb/s`;
+}
+
+function stallColor(level: "ok" | "watch" | "bad"): string {
+  if (level === "bad") return "var(--danger)";
+  if (level === "watch") return "#fbbf24";
+  return "var(--muted)";
 }
 
 function CompactConnectionRow({
@@ -110,7 +118,7 @@ function ConnectionCard({
         </div>
         <span
           className={connectionQualityClass(c.quality.level)}
-          title={`Connection quality ${c.quality.label}`}
+          title={`Heartbeat freshness ${c.quality.label}. 80–100% is normal for an active viewer. This is not the stall count.`}
         >
           {c.quality.label}
         </span>
@@ -134,7 +142,13 @@ function ConnectionCard({
         </div>
         <div>
           <p className="panel-mobile-card-label">QoE</p>
-          <p className="text-sm">{formatQoe(c.qoe)}</p>
+          <p
+            className="text-sm"
+            style={{ color: c.qoe ? stallColor(describeStallCount(c.qoe.stallCount).level) : undefined }}
+            title={LIVE_STALL_HELP}
+          >
+            {formatQoe(c.qoe)}
+          </p>
         </div>
       </div>
       <div className="panel-mobile-card-actions">
@@ -264,6 +278,9 @@ export function AdminConnectionsClient({
           </button>
         </div>
       </div>
+      <p className="text-sm px-1 max-w-4xl" style={{ color: "var(--muted)" }}>
+        {LIVE_STALL_HELP}
+      </p>
       {paths.isReseller ? (
         <p className="text-sm px-1" style={{ color: "var(--muted)" }}>
           Showing your lines only.
@@ -343,7 +360,7 @@ export function AdminConnectionsClient({
                 <td>
                   <span
                     className={connectionQualityClass(c.quality.level)}
-                    title={`Connection quality ${c.quality.label}`}
+                    title={`Heartbeat freshness ${c.quality.label}. 80–100% is normal for an active viewer. This is not the stall count.`}
                   >
                     {c.quality.label}
                   </span>
@@ -357,7 +374,11 @@ export function AdminConnectionsClient({
                 <td>
                   <span className="xui-duration-badge">{formatConnDuration(c.startedAt, c.lastSeenAt, nowMs)}</span>
                 </td>
-                <td className="text-xs tabular-nums whitespace-nowrap" title="Time to first picture · stalls · bitrate">
+                <td
+                  className="text-xs tabular-nums whitespace-nowrap"
+                  style={{ color: c.qoe ? stallColor(describeStallCount(c.qoe.stallCount).level) : undefined }}
+                  title={LIVE_STALL_HELP}
+                >
                   {formatQoe(c.qoe)}
                 </td>
                 <td>{c.output}</td>

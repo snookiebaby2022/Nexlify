@@ -1,7 +1,27 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.60",
+  "latestVersion": "2.0.62",
   "releases": [
+    {
+      "version": "2.0.62",
+      "date": "2026-09-01",
+      "channel": "stable",
+      "summary": "On-demand channel probes, a Diagnostics hub, quieter Main, safer LB reboot recover, and stall ranges on Live Connections.",
+      "changelog": [
+        "Catalog stream probes stay off by default; a channel is probed when playback fails after you open it, or when you click Check",
+        "New Diagnostics sidebar hub recovers load balancers after reboot and probes one stream without starting edge on Main",
+        "New live and VOD rows assign to load balancers, never Main",
+        "Nginx HLS cache defaults off; Main nginx/agent recover after reboot never starts nexlify-iptv-edge",
+        "Telegram monitoring explains each alert; offline-server default is 1 minute; failed catalog-probe alerts default off",
+        "Live Connections QoE shows what a stall is: 0 is normal, 1–4 is usually a zap, 5+ means buffering"
+      ],
+      "fixes": [
+        "Opening Manage Streams no longer probes every visible live row",
+        "Stale /root/.pm2/pm2.pid left Type=forking pm2-root inactive after an LB reboot",
+        "Recovering Main via SSH could resurrect panel IPTV edge and fight nginx on :8080",
+        "Geo/least-loaded picker could still place new live channels on Main"
+      ]
+    },
     {
       "version": "2.0.60",
       "date": "2026-08-30",

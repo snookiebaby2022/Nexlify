@@ -52,39 +52,31 @@ export function StreamProbePlayer({
     return () => handle.destroy();
   }, []);
 
+  const probedOnErrorRef = useRef(false);
+
   useEffect(() => {
     setResolvedUrl(streamUrl);
     setProbe(null);
     setShowPlayer(Boolean(playFirst && canPlayInBrowser(streamUrl)));
     setPlayerError("");
+    probedOnErrorRef.current = false;
   }, [streamUrl, playFirst]);
 
   async function resolvePlaybackUrl(): Promise<string> {
     setResolving(true);
     try {
-      const res = await fetch("/api/admin/streams/probe", {
+      const mint = await fetch("/api/admin/streams/proxy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ streamId, url: streamUrl, fast: true }),
+        body: JSON.stringify({
+          url: streamUrl,
+          hls: isBrowserHlsUrl(streamUrl) || (!streamUrl.includes(".ts") && /^https?:\/\//i.test(streamUrl)),
+        }),
       });
-      const data = await res.json();
-      if (data.stream?.streamUrl) {
-        const rawUrl = String(data.stream.streamUrl);
-        const mint = await fetch("/api/admin/streams/proxy", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            url: rawUrl,
-            hls: isBrowserHlsUrl(rawUrl) || (!rawUrl.includes(".ts") && /^https?:\/\//i.test(rawUrl)),
-          }),
-        });
-        const minted = (await mint.json().catch(() => null)) as { playbackUrl?: string } | null;
-        const proxyUrl =
-          mint.ok && minted?.playbackUrl ? minted.playbackUrl : rawUrl;
-        setResolvedUrl(proxyUrl);
-        return proxyUrl;
-      }
-      return streamUrl;
+      const minted = (await mint.json().catch(() => null)) as { playbackUrl?: string } | null;
+      const proxyUrl = mint.ok && minted?.playbackUrl ? minted.playbackUrl : streamUrl;
+      setResolvedUrl(proxyUrl);
+      return proxyUrl;
     } catch {
       return streamUrl;
     } finally {
@@ -147,10 +139,15 @@ export function StreamProbePlayer({
   }, [showPlayer, resolvedUrl, streamUrl, streamId, attachMedia]);
 
   useEffect(() => {
-    if (!playFirst) return;
+    if (!playerError || probedOnErrorRef.current) return;
+    const msg = playerError.toLowerCase();
+    if (msg.includes("click play to start") || msg.includes("retrying") || msg.includes("recovering")) {
+      return;
+    }
+    probedOnErrorRef.current = true;
     void runProbe(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when opening preview
-  }, [playFirst, streamUrl, streamId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- probe once when in-browser play fails
+  }, [playerError]);
 
   const displayUrl = resolvedUrl || streamUrl;
   const canPlay = canPlayInBrowser(displayUrl);
@@ -171,7 +168,7 @@ export function StreamProbePlayer({
       {!compact && name && <p className="font-medium text-sm">{name}</p>}
       {streamId && !compact && (
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          Probe uses primary ABR variant and DNS rotator when configured.
+          Playback starts when you open a channel. A source probe runs only if play fails, or if you click Check.
         </p>
       )}
       <p className="text-xs font-mono break-all" style={{ color: "var(--muted)" }}>

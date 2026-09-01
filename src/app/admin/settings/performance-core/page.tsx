@@ -18,7 +18,7 @@ export default function PerformanceCoreSettingsPage() {
           title: "Streaming Optimizations",
           fields: [
             { key: "perfConnectionPooling", label: "Connection pooling", type: "yesno", hint: "Reuse connections to reduce overhead." },
-            { key: "perfStreamPreload", label: "Stream preloading", type: "yesno", hint: "Preload segments for faster zapping." },
+            { key: "perfStreamPreload", label: "Stream preloading", type: "yesno", hint: "Off by default. Preloading extra segments uses Main RAM and disk." },
             { key: "perfBufferOptimization", label: "Buffer optimization", type: "yesno", hint: "Auto-tune HLS/DASH buffer sizes." },
             { key: "perfConnectionReuse", label: "Connection reuse", type: "yesno", hint: "Keep-alive connections between segments." },
           ],

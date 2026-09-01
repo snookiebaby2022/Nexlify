@@ -187,7 +187,8 @@ export default function StreamingHealthPage() {
           <div>
             <h2 className="text-sm font-semibold">Buffering risk</h2>
             <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-              {data.buffering.liveConnections} active sessions · {data.buffering.stallSessions} with observed byte gaps
+              {data.buffering.liveConnections} active sessions · {data.buffering.stallSessions} with stalls
+              (0 is normal; 1–4 is usually a zap; 5+ on a session means buffering)
             </p>
           </div>
           <strong className={data.buffering.risk === "critical" ? "text-red-400" : data.buffering.risk === "watch" ? "text-amber-400" : "text-green-400"}>

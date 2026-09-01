@@ -1,7 +1,27 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.60",
+  "latestVersion": "2.0.62",
   "releases": [
+    {
+      "version": "2.0.62",
+      "date": "2026-09-01",
+      "channel": "stable",
+      "summary": "On-demand channel probes, a Diagnostics hub, quieter Main, safer LB reboot recover, and stall ranges on Live Connections.",
+      "changelog": [
+        "Catalog stream probes stay off by default; a channel is probed when playback fails after you open it, or when you click Check",
+        "New Diagnostics sidebar hub recovers load balancers after reboot and probes one stream without starting edge on Main",
+        "New live and VOD rows assign to load balancers, never Main",
+        "Nginx HLS cache defaults off; Main nginx/agent recover after reboot never starts nexlify-iptv-edge",
+        "Telegram monitoring explains each alert; offline-server default is 1 minute; failed catalog-probe alerts default off",
+        "Live Connections QoE shows what a stall is: 0 is normal, 1–4 is usually a zap, 5+ means buffering"
+      ],
+      "fixes": [
+        "Opening Manage Streams no longer probes every visible live row",
+        "Stale /root/.pm2/pm2.pid left Type=forking pm2-root inactive after an LB reboot",
+        "Recovering Main via SSH could resurrect panel IPTV edge and fight nginx on :8080",
+        "Geo/least-loaded picker could still place new live channels on Main"
+      ]
+    },
     {
       "version": "2.0.60",
       "date": "2026-08-30",
@@ -256,9 +276,9 @@
       "version": "2.0.45",
       "date": "2026-08-25",
       "channel": "stable",
-      "summary": "Public shop/API line and credit create, reseller profit markup, and compact admin nav.",
+      "summary": "Public shop, WHMCS/API line and credit create, reseller profit markup, and compact admin nav.",
       "changelog": [
-        "Documented admin API  module for create line, renew, and add_credits",
+        "Documented admin API and WHMCS module for create line, renew, and add_credits",
         "Reseller and package profit % markup on credit cost when selling lines",
         "Customer portal copy Xtream/M3U/MAG and watch in browser; public /shop PayPal checkout",
         "Rclone/S3 VOD storage settings; compact XUI-style sidebar and dashboard shortcuts",
@@ -2863,7 +2883,7 @@
         "White-label Mobile Apps — build branded Android/iOS apps for resellers with custom packages",
         "Multi-tenancy — per-reseller branding, isolated configs, tenant-level permissions",
         "Viewer Loyalty Program — points, badges, tier levels to reward active viewers",
-        "Billing Integration — Stripe, PayPal with invoice management",
+        "Billing Integration — Stripe, PayPal, WHMCS with invoice management",
         "Content Moderation — flag, review, approve/reject streams with severity levels",
         "Automated Backup & Restore — one-click backup with scheduled snapshots",
         "Advanced EPG Sources — multi-source EPG with sync and quality scoring",
@@ -3005,7 +3025,7 @@
         "Fix download playlist web player button (open prop shadowing window.open)",
         "Fix HLS MPEG-TS relay and live stream TypeScript errors",
         "PM2 restart dedupes orphan nexlify workers after mode switches",
-        "Marketing: licenses/validate + billing API routes; licensing exports restored",
+        "Marketing: licenses/validate + whmcs API routes; licensing exports restored",
         "scripts/full-audit-smoke.sh for vendor/customer health checks"
       ]
     },
@@ -3233,7 +3253,7 @@
         "xDrive / Encrypted Cloud Backup: encrypted backups with S3/GCS/Azure/xDrive support and configurable retention",
         "Server Cleaner: automated maintenance tasks (orphaned streams, expired lines, old logs, temp files, DB vacuum, broken streams)",
         "Custom Expiry Videos: branded messages when lines expire, suspend, or run low on credits",
-        "Migration Tools: automated import from Xtream UI, XUI, NXT with selectable item types",
+        "Migration Tools: automated import from Xtream UI, XUI, NXT, WHMCS with selectable item types",
         "Connection Geography: live connections world map with country, region, city, bandwidth tracking",
         "Stream Health Dashboard: per-stream health checks with response time, bitrate, audio/video tracks, freeze/loop detection",
         "Live VideoLog: real-time viewer activity logging per stream and line"

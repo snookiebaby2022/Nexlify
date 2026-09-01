@@ -33,7 +33,7 @@ export default function CronSettingsPage() {
         {
           title: "Stream health",
           fields: [
-            { key: "deadLinkProbeEnabled", label: "Auto probe dead links", type: "yesno" },
+            { key: "deadLinkProbeEnabled", label: "Auto probe dead links", type: "yesno", hint: "Off by default. Use Diagnostics or click a stream to probe." },
             { key: "deadLinkProbeCron", label: "Probe cron", placeholder: "*/15 * * * *" },
           ],
         },

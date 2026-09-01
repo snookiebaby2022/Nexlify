@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { startVisibleInterval } from "@/lib/perf-polling";
+import { LIVE_STALL_HELP } from "@/lib/connection-quality-live";
 
 type QoeSnapshot = {
   liveConnections: number;
@@ -63,7 +64,11 @@ export function DashboardCapacityStrip() {
             ? `${data.servers} LB${data.servers === 1 ? "" : "s"} auto-detected${data.lbNames?.length ? ` (${data.lbNames.join(", ")})` : ""}`
             : "Main server is excluded — add or tag a load balancer"}
           {" · "}
-          {data.liveConnections} live · {data.stallSessions} with stalls
+          <span title={LIVE_STALL_HELP}>
+            {data.liveConnections} live · {data.stallSessions} with stalls
+            {" "}
+            (0 on a row is normal; 1–4 is usually a zap; 5+ on one viewer means buffering)
+          </span>
           {data.avgFirstPictureMs != null ? ` · first picture ${(data.avgFirstPictureMs / 1000).toFixed(1)}s` : ""}
           {data.worstServerName ? ` · lowest headroom ${data.worstServerName} ${data.worstHeadroomPct}%` : ""}
         </p>

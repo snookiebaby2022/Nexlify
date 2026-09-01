@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyMediaByteWindow, computeConnectionQualityWithLive } from "./connection-quality-live";
+import {
+  applyMediaByteWindow,
+  computeConnectionQualityWithLive,
+  describeStallCount,
+} from "./connection-quality-live";
+
+test("describeStallCount maps 0 / 1–4 / 5+ for operators", () => {
+  assert.equal(describeStallCount(0).level, "ok");
+  assert.equal(describeStallCount(1).level, "watch");
+  assert.equal(describeStallCount(4).level, "watch");
+  assert.equal(describeStallCount(5).level, "bad");
+  assert.match(describeStallCount(0).summary, /normal/);
+  assert.match(describeStallCount(5).summary, /buffering/);
+});
 
 test("computeConnectionQualityWithLive uses throughput when samples exist", () => {
   const now = Date.now();

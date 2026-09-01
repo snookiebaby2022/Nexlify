@@ -19,11 +19,36 @@ export default function MonitoringSettingsPage() {
         {
           title: "Alert types",
           fields: [
-            { key: "alertOfflineStreams", label: "Offline streaming servers", type: "yesno" },
-            { key: "offlineStreamMinutes", label: "Offline after (minutes)", type: "number" },
-            { key: "alertHighLoad", label: "High connection load", type: "yesno" },
-            { key: "highLoadConnectionsThreshold", label: "Connection threshold", type: "number" },
-            { key: "alertAbuse", label: "Multiple failed stream probes", type: "yesno" },
+            {
+              key: "alertOfflineStreams",
+              label: "Offline streaming servers",
+              type: "yesno",
+              hint: "Telegram when a load balancer or agent stops checking in, or its health is offline.",
+            },
+            {
+              key: "offlineStreamMinutes",
+              label: "Offline after (minutes)",
+              type: "number",
+              hint: "How long the agent can be silent before that server is treated as down. 1 = alert after one minute.",
+            },
+            {
+              key: "alertHighLoad",
+              label: "High connection load",
+              type: "yesno",
+              hint: "Telegram when too many people are watching at once (Live Connections), not when a server is down.",
+            },
+            {
+              key: "highLoadConnectionsThreshold",
+              label: "Connection threshold",
+              type: "number",
+              hint: "Fire that alert when active viewers (seen in the last 2 minutes) reach this number. Example: 500.",
+            },
+            {
+              key: "alertAbuse",
+              label: "Multiple failed stream probes",
+              type: "yesno",
+              hint: "Off by default. Needs catalog probes, which burn Main CPU. Use Diagnostics or click a failing channel instead.",
+            },
           ],
         },
         {

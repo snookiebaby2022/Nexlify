@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Plus, Ticket, Play, Radio, Activity } from "lucide-react";
+import { ChevronRight, Plus, Ticket, Play, Radio, Activity, Gauge } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { startVisibleInterval } from "@/lib/perf-polling";
 import type { ExpiringLineRow } from "@/lib/dashboard-widgets";
@@ -111,6 +111,7 @@ export function PanelMobileDashboard({
     { href: "/admin/lines/add", label: "+ Add Line", icon: Plus, color: "#38bdf8" },
     { href: "/admin/content/streams/add", label: "+ Add Stream", icon: Play, color: "#22c55e" },
     { href: "/admin/tickets", label: "View Tickets", icon: Ticket, color: "#f97316" },
+    { href: "/admin/diagnostics", label: "Diagnostics", icon: Gauge, color: "#f59e0b" },
     { href: connectionsHref, label: "Live Conns", icon: Activity, color: "#a78bfa" },
   ];
 

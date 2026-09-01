@@ -635,6 +635,12 @@ export async function jobExpireLines() {
 async function jobPlaybackQuality() {
   const start = Date.now();
   try {
+    const settings = await getSettingGroup("streams");
+    const cron = await getSettingGroup("cron");
+    if (settings.autoFixDeadLinks !== true || cron.deadLinkProbeEnabled === false) {
+      await logCron("playback_quality", "ok", "skipped (on-demand probe only)", Date.now() - start);
+      return;
+    }
     const { runPlaybackQualityMonitor } = await import("./playback-quality-monitor");
     const r = await runPlaybackQualityMonitor();
     await logCron(
@@ -651,12 +657,20 @@ async function jobPlaybackQuality() {
 export async function jobDeadLinkProbe() {
   const start = Date.now();
   try {
+    const settings = await getSettingGroup("streams");
+    const cron = await getSettingGroup("cron");
+    if (settings.autoFixDeadLinks !== true || cron.deadLinkProbeEnabled === false) {
+      await logCron("dead_link_probe", "ok", "skipped (on-demand probe only)", Date.now() - start);
+      return;
+    }
     const { runDeadLinkProbeJob } = await import("@/lib/panel-monitoring-jobs");
     const result = await runDeadLinkProbeJob();
     await logCron(
       "dead_link_probe",
       "ok",
-      `probed ${result.probed}, failed ${result.failed}, restarted ${result.restarted}, logged ${result.logged}`,
+      result.skipped
+        ? "skipped (on-demand probe only)"
+        : `probed ${result.probed}, failed ${result.failed}, restarted ${result.restarted}, logged ${result.logged}`,
       Date.now() - start
     );
   } catch (e) {

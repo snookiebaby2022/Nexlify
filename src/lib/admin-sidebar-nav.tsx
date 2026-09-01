@@ -68,6 +68,22 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
     {
       kind: "group",
       group: {
+        id: "diagnostics",
+        label: "Diagnostics",
+        icon: coloredGroupIcon("diagnostics"),
+        items: [
+          { href: "/admin/diagnostics", label: "Panel diagnostics", section: "Hub", keywords: "fix recover probe reboot health nginx" },
+          { href: "/admin/stream_errors", label: "Stream errors", section: "Streams" },
+          { href: "/admin/streaming/health", label: "Streaming health", section: "Streams" },
+          { href: "/admin/connections", label: "Live connections", section: "Clients" },
+          { href: "/admin/servers", label: "Servers", section: "Servers" },
+          { href: "/admin/process_monitor", label: "Process monitor", section: "Servers" },
+        ],
+      },
+    },
+    {
+      kind: "group",
+      group: {
         id: "lines",
         label: "Lines",
         icon: coloredGroupIcon("subscriptions"),

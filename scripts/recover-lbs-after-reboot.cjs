@@ -62,11 +62,12 @@ function recoverCmd(isPanelHost) {
     "systemctl start nginx 2>/dev/null",
     "systemctl enable nexlify-agent 2>/dev/null",
     "systemctl start nexlify-agent 2>/dev/null",
-    "systemctl enable pm2-root 2>/dev/null || systemctl enable pm2-ubuntu 2>/dev/null",
-    "systemctl start pm2-root 2>/dev/null || true",
   ];
   if (!isPanelHost) {
     parts.push(
+      "systemctl enable pm2-root 2>/dev/null || systemctl enable pm2-ubuntu 2>/dev/null",
+      "rm -f /root/.pm2/pm2.pid",
+      "systemctl start pm2-root 2>/dev/null || true",
       "if command -v pm2 >/dev/null && [ -f /opt/nexlify-panel/scripts/iptv-edge-proxy.mjs ]; then",
       "  cd /opt/nexlify-panel",
       "  pm2 start ecosystem.config.cjs --only nexlify-iptv-edge --update-env >/dev/null 2>&1",
@@ -78,6 +79,14 @@ function recoverCmd(isPanelHost) {
       "command -v ufw >/dev/null && ufw allow 25461/tcp >/dev/null 2>&1"
     );
   }
+  parts.push(
+    "sleep 2",
+    "echo AFTER_LISTEN=$(ss -lntp | awk '/:80 |:443 |:8080 |:25461 /{print $4}' | tr '\\n' ' ')",
+    "echo AFTER_AGENT=$(systemctl is-active nexlify-agent 2>/dev/null)",
+    "echo AFTER_EDGE=$(pm2 jlist 2>/dev/null | python3 -c 'import json,sys\ntry:\n d=json.load(sys.stdin)\nexcept Exception:\n print(\"none\"); raise SystemExit\nprint(\",\".join(p.get(\"name\")+\":\"+p.get(\"pm2_env\",{}).get(\"status\",\"\") for p in d))' 2>/dev/null)"
+  );
+  return parts.join("\n");
+}
   parts.push(
     "sleep 2",
     "echo AFTER_LISTEN=$(ss -lntp | awk '/:80 |:443 |:8080 |:25461 /{print $4}' | tr '\\n' ' ')",
@@ -111,6 +120,34 @@ async function main() {
           data: {
             healthStatus: "online",
             healthMessage: `Stream port ${s.port} open`,
+            lastHealthAt: new Date(),
+          },
+        });
+        row.markedOnline = true;
+      }
+      results.push(row);
+      continue;
+    }
+    if (isPanel) {
+      console.log("panel host — local nginx/agent recover (never iptv-edge)");
+      try {
+        const { execSync } = require("child_process");
+        execSync(recoverCmd(true), { shell: "/bin/bash", timeout: 45_000 });
+        row.localRecover = true;
+      } catch (e) {
+        row.localRecover = false;
+        row.sshError = e instanceof Error ? e.message : String(e);
+        console.log("LOCAL RECOVER FAIL:", row.sshError);
+      }
+      const probeLocal = await tcpProbe(s.host, s.port || 8080, 5000);
+      row.streamPortOpenAfter = probeLocal.ok;
+      console.log(`stream_port after ${s.port} ${probeLocal.ok ? "OPEN" : "FAIL " + probeLocal.extra}`);
+      if (probeLocal.ok && s.healthStatus !== "online") {
+        await prisma.streamServer.update({
+          where: { id: s.id },
+          data: {
+            healthStatus: "online",
+            healthMessage: "Recovered panel nginx after reboot",
             lastHealthAt: new Date(),
           },
         });

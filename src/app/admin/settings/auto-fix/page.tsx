@@ -10,7 +10,7 @@ export default function AutoFixSettingsPage() {
         {
           title: "General",
           fields: [
-            { key: "autoFixEnabled", label: "Enable Auto Fix", type: "yesno", hint: "Master switch for automatic stream repair." },
+            { key: "autoFixEnabled", label: "Enable Auto Fix", type: "yesno", hint: "Off by default. Automatic catalog repair burns Main CPU — use Diagnostics or click a failing stream." },
             { key: "autoFixIntervalSeconds", label: "Check interval (seconds)", type: "number", placeholder: "30", hint: "How often to scan streams for issues." },
             { key: "autoFixMaxRetries", label: "Max retries per issue", type: "number", placeholder: "3", hint: "How many times to attempt repair before alerting." },
           ],

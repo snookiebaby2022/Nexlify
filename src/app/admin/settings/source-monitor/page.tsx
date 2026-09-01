@@ -10,7 +10,7 @@ export default function SourceMonitorSettingsPage() {
         {
           title: "General",
           fields: [
-            { key: "sourceMonitorEnabled", label: "Enable source monitoring", type: "yesno", hint: "Master switch for real-time source monitoring." },
+            { key: "sourceMonitorEnabled", label: "Enable source monitoring", type: "yesno", hint: "Off by default. Timed source probes burn Main CPU — probe a channel when you click it and it is not playing." },
             { key: "sourceMonitorIntervalSeconds", label: "Check interval (seconds)", type: "number", placeholder: "30", hint: "How often to probe stream sources." },
           ],
         },

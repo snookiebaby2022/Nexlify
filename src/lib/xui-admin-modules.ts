@@ -43,6 +43,8 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "stream_categories", title: "Stream categories", category: "Streams", redirect: "/admin/management/categories" },
   { slug: "stream_category", title: "Stream category", category: "Streams", redirect: "/admin/management/categories" },
   { slug: "stream_errors", title: "Stream errors", category: "Streams", redirect: "/admin/stream_errors" },
+  { slug: "diagnostics", title: "Diagnostics", category: "Diagnostics", redirect: "/admin/diagnostics" },
+  { slug: "panel_diagnostics", title: "Panel diagnostics", category: "Diagnostics", redirect: "/admin/diagnostics" },
   { slug: "stream_rank", title: "Stream Rank", category: "Streams", description: "Popularity ranking for channels.", redirect: "/admin/reports/usage" },
   { slug: "stream_review", title: "Stream review", category: "Streams", redirect: "/admin/stream_review" },
   { slug: "channel_order", title: "Channel order", category: "Streams", redirect: "/admin/management/tools/channel-order" },
