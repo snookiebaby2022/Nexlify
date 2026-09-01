@@ -32,6 +32,7 @@ import { VodInformationTab } from "@/components/vod-information-tab";
 import { integrationSourceLabel, stripIntegrationSourceSuffix } from "@/lib/integration-stream-url";
 import { StreamServerTab } from "@/components/stream-server-tab";
 import { effectiveStreamVodMode } from "@/lib/vod-mode";
+import { cleanTitleForTmdb } from "@/lib/vod-title-clean";
 import { parseLiveStreamMeta } from "@/lib/stream-live-meta";
 import { parseVodAgentCmd } from "@/lib/vod-meta";
 
