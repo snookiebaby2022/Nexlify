@@ -93,7 +93,7 @@ export async function authenticatePanelApi(
   const authorization = req.headers.get("authorization")?.trim() ?? "";
   const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
   const token = authorization.match(/^Token\s+(.+)$/i)?.[1]?.trim();
-  const [bearerKey, bearerToken] = bearer?.split(/:(.*)/s, 2) ?? [];
+  const [bearerKey, bearerToken] = bearer?.split(/:([\s\S]*)/, 2) ?? [];
   const apiKey =
     p.get("api_key") ??
     req.headers.get("x-api-key") ??

@@ -7,6 +7,9 @@ import {
   setConnectionPlaybackOutput,
 } from "./connection-playback-output";
 import { clearLiveSession, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
+import { connectionViewerSessionKey, normalizeConnectionIp } from "./connection-address";
+
+export { connectionViewerSessionKey, normalizeConnectionIp } from "./connection-address";
 
 export const STALE_MS = 10 * 60 * 1000; // cron — MPEG-TS pipes often go minutes between panel pulses
 /** Live Connections UI + capacity. 45s was killing long MPEG-TS watches (no playlist heartbeat). */
@@ -25,14 +28,6 @@ function invalidateConnectionCaches(opts?: { lineId?: string; ownerId?: string |
 }
 /** After Kick, block reconnect / track refresh for this long (covers multi-worker via Redis). */
 export const KICK_DENY_TTL_SEC = 120;
-
-/** Normalize client IP for DB + Redis keys (empty/loopback → null in Postgres). */
-export function normalizeConnectionIp(ip?: string | null): string | null {
-  let raw = ip?.trim() ?? "";
-  if (raw.startsWith("::ffff:")) raw = raw.slice(7);
-  if (!raw || raw === "127.0.0.1" || raw === "::1") return null;
-  return raw;
-}
 
 /** RFC 5737 / deploy smoke-test IPs — must not consume real viewer connection slots. */
 export function isTestConnectionIp(ip?: string | null): boolean {
@@ -249,16 +244,7 @@ async function pruneTestConnectionRows(lineId: string) {
 }
 
 function sessionKey(lineId: string, streamId: string | null | undefined, ip?: string | null) {
-  return `${lineId}|${streamId ?? ""}|${normalizeConnectionIp(ip) ?? ""}`;
-}
-
-/** Stable key for UI rows (line + stream + viewer IP). */
-export function connectionViewerSessionKey(
-  lineId: string,
-  streamId: string | null | undefined,
-  ip?: string | null
-): string {
-  return sessionKey(lineId, streamId, ip);
+  return connectionViewerSessionKey(lineId, streamId, ip);
 }
 
 function isAnonymousConnectionIp(ip?: string | null): boolean {

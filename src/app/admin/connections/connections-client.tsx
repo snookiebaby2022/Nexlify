@@ -14,7 +14,7 @@ import {
 } from "@/lib/connection-quality";
 import type { PlaybackOutputLabel } from "@/lib/connection-playback-output";
 import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
-import { connectionViewerSessionKey } from "@/lib/connections";
+import { connectionViewerSessionKey } from "@/lib/connection-address";
 import { ListPagination } from "@/components/list-pagination";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
