@@ -9,9 +9,9 @@ export default function PlayerSettingsPage() {
       description="Built-in player, offline splash screens for IPTV apps, and content decryption (CDM)."
       sections={[
         {
-          title: "Offline channel splash",
+          title: "Offline channel splash (IPTV apps)",
           info:
-            "URL sent to IPTV apps in player_api as offline_image_url. Nexus and other apps show this when a channel fails to play. Custom URL overrides the template.",
+            "When a channel fails to play, many IPTV apps show this image (sent as offline_image_url in player_api). Pick a built-in template or paste your own image URL — custom URL overrides the template.",
           fields: [
             {
               key: "offlineStreamImageTemplate",

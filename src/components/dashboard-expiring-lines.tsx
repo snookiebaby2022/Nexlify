@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AlertTriangle, Clock } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import type { ExpiringLineRow } from "@/lib/dashboard-widgets";
+import { DashboardWidgetsContext } from "@/components/dashboard-widgets-context";
 
 type WidgetData = {
   expiringLines?: ExpiringLineRow[];
@@ -122,29 +123,33 @@ export function DashboardExpiringLines({
   widgetsUrl: string;
   linesHref: string;
 }) {
+  const shared = useContext(DashboardWidgetsContext);
   const [data, setData] = useState<WidgetData | null>(null);
 
   const load = useCallback(() => {
+    if (shared) return;
     fetch(widgetsUrl)
       .then((r) => r.json())
       .then((payload: WidgetData) => setData(payload))
       .catch(() => setData(null));
-  }, [widgetsUrl]);
+  }, [widgetsUrl, shared]);
 
   useEffect(() => {
+    if (shared) return;
     load();
     const t = setInterval(load, 90_000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, shared]);
 
-  const showOwner = data?.showOwner ?? false;
+  const payload = shared?.data ?? data;
+  const showOwner = payload?.showOwner ?? false;
 
   return (
     <div className="grid lg:grid-cols-2 gap-4" data-dashboard-expiring>
       <LineTable
         title="Expiring in 7 days"
         icon={<Clock size={16} style={{ color: "#f39c12" }} />}
-        rows={data?.expiringLines ?? []}
+        rows={payload?.expiringLines ?? []}
         linesHref={linesHref}
         showOwner={showOwner}
         mode="soon"
@@ -152,7 +157,7 @@ export function DashboardExpiringLines({
       <LineTable
         title="Recently expired"
         icon={<AlertTriangle size={16} style={{ color: "var(--danger)" }} />}
-        rows={data?.recentlyExpired ?? []}
+        rows={payload?.recentlyExpired ?? []}
         linesHref={linesHref}
         showOwner={showOwner}
         mode="recent"

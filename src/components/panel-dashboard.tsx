@@ -102,6 +102,7 @@ import { DashboardStackStrip } from "@/components/dashboard-stack-strip";
 
 import { DashboardIssuesPanel } from "@/components/dashboard-issues-panel";
 import { LazyDashboardSection } from "@/components/lazy-dashboard-section";
+import { DashboardWidgetsProvider } from "@/components/dashboard-widgets-context";
 
 import type { DashboardKpiExtended } from "@/lib/dashboard-server-metrics";
 
@@ -276,18 +277,16 @@ export function PanelDashboard({
 
   useEffect(() => {
     if (!isDesktop) return;
-    if (!initialStats) {
-      loadHeader();
-    }
+    loadHeader();
     let cancelled = false;
     const runFull = () => {
       if (!cancelled) loadFull();
     };
     const idleId =
       typeof requestIdleCallback !== "undefined"
-        ? requestIdleCallback(runFull, { timeout: initialStats ? 3000 : 1500 })
+        ? requestIdleCallback(runFull, { timeout: 2500 })
         : null;
-    const timeoutId = idleId == null ? setTimeout(runFull, initialStats ? 2500 : 120) : null;
+    const timeoutId = idleId == null ? setTimeout(runFull, 800) : null;
     const t = startVisibleInterval(loadFull, isReseller ? 45000 : ADMIN_POLLS.dashboardMs);
     return () => {
       cancelled = true;
@@ -297,7 +296,7 @@ export function PanelDashboard({
       if (timeoutId != null) clearTimeout(timeoutId);
       t();
     };
-  }, [loadHeader, loadFull, isReseller, initialStats, isDesktop]);
+  }, [loadHeader, loadFull, isReseller, isDesktop]);
 
 
 
@@ -399,6 +398,7 @@ export function PanelDashboard({
       </header>
 
       {!isReseller && (
+        <DashboardWidgetsProvider widgetsUrl={widgetsUrl}>
         <>
           <DashboardXuiKpiRibbon
             summary={liveSummary}
@@ -407,7 +407,9 @@ export function PanelDashboard({
             linesHref={linesHref}
             streamsHref={streamsHref}
           />
-          <DashboardCapacityStrip />
+          <LazyDashboardSection minHeight="3rem">
+            <DashboardCapacityStrip />
+          </LazyDashboardSection>
           <DashboardIssuesPanel statsUrl={statsUrl} kpi={stats?.dashboardKpi} hideWhenHealthy />
           {servers.length > 0 ? (
             <DashboardXuiServerTiles servers={servers} />
@@ -512,6 +514,7 @@ export function PanelDashboard({
             </div>
           </details>
         </>
+        </DashboardWidgetsProvider>
       )}
 
       {isReseller ? (

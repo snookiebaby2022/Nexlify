@@ -24,7 +24,7 @@ export function PanelUpdateBanner() {
     let cancelled = false;
     const load = () => {
       if (window.location.pathname.includes("/admin/settings/updates")) return;
-      fetch("/api/admin/panel-update")
+      fetch("/api/admin/panel-update?light=1")
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => {
           if (!cancelled) setData(d);

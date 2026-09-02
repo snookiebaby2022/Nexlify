@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { Coins, Users, Globe, ExternalLink, Clock, Tv, LifeBuoy, Activity, Gauge } from "lucide-react";
 import type { SummaryCardData } from "@/lib/dashboard-widgets";
+import { DashboardWidgetsContext } from "@/components/dashboard-widgets-context";
 
 const CARD_STYLES = {
   orange: { header: "linear-gradient(135deg, #f39c12 0%, #e08e0b 100%)" },
@@ -106,26 +107,28 @@ function SummaryCard({ card }: { card: SummaryCardData }) {
 }
 
 export function DashboardXuiSummaryCards({ widgetsUrl }: { widgetsUrl: string }) {
+  const shared = useContext(DashboardWidgetsContext);
   const [cards, setCards] = useState<SummaryCardData[]>([]);
 
-  const load = useCallback(() => {
-    fetch(widgetsUrl)
-      .then((r) => r.json())
-      .then((data: { cards?: SummaryCardData[] }) => setCards(data.cards ?? []))
-      .catch(() => setCards([]));
-  }, [widgetsUrl]);
-
   useEffect(() => {
+    if (shared) return;
+    const load = () => {
+      fetch(widgetsUrl)
+        .then((r) => r.json())
+        .then((data: { cards?: SummaryCardData[] }) => setCards(data.cards ?? []))
+        .catch(() => setCards([]));
+    };
     load();
     const t = setInterval(load, 90_000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [widgetsUrl, shared]);
 
-  if (cards.length === 0) return null;
+  const rows = shared?.data?.cards ?? cards;
+  if (rows.length === 0) return null;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4">
-      {cards.map((card) => (
+      {rows.map((card) => (
         <SummaryCard key={card.id} card={card} />
       ))}
     </div>

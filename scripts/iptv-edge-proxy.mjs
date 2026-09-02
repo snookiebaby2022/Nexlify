@@ -49,7 +49,9 @@ function loadDotEnv() {
     if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
       v = v.slice(1, -1);
     }
-    if (process.env[k] == null || process.env[k] === "") process.env[k] = v;
+    if (k.startsWith("IPTV_EDGE_") || process.env[k] == null || process.env[k] === "") {
+      process.env[k] = v;
+    }
   }
 }
 loadDotEnv();
@@ -171,7 +173,7 @@ const MAX_EDGE_DISK_PACK = Number(process.env.IPTV_EDGE_MAX_DISK_PACK || 256);
 /** One provider pull per live channel while anyone is watching (XUI on-demand restream). */
 const MAX_LIVE_FANS = Number(process.env.IPTV_EDGE_MAX_LIVE_FANS || 8000);
 const LIVE_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_LIVE_FAN_LINGER_MS || 12000);
-const ON_DEMAND_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_ON_DEMAND_FAN_LINGER_MS || 90000);
+const ON_DEMAND_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_ON_DEMAND_FAN_LINGER_MS || 25000);
 /** Drop/resync clients that fall behind the shared fan instead of buffering unboundedly.
  *  4MB was too low once origin stays realtime: CDN bursts (~8MB in <1s) backpressure
  *  a healthy socket and used to kill the viewer. Time lag still drops slow clients. */
@@ -945,6 +947,36 @@ function resolveFfmpegPath() {
   return "ffmpeg";
 }
 
+function liveFanIsIdle(fan) {
+  return (
+    fan &&
+    !fan.destroyed &&
+    !fan.starterLock &&
+    fan.clients.size === 0 &&
+    fan.waiters.length === 0
+  );
+}
+
+/** Reclaim linger/zombie fans so a busy edge does not 503 while empty slots exist. */
+function reclaimIdleLiveFan() {
+  for (const fan of liveFans.values()) {
+    if (!liveFanIsIdle(fan)) continue;
+    destroyLiveFan(fan);
+    return true;
+  }
+  return false;
+}
+
+function sweepIdleLiveFans() {
+  const now = Date.now();
+  for (const fan of liveFans.values()) {
+    if (!liveFanIsIdle(fan)) continue;
+    const lingerMs = fan.onDemand ? ON_DEMAND_FAN_LINGER_MS : LIVE_FAN_LINGER_MS;
+    const idleFor = now - (fan.idleSince || fan.createdAt || now);
+    if (!fan.broadcasting || idleFor >= lingerMs) destroyLiveFan(fan);
+  }
+}
+
 function destroyLiveFan(fan) {
   if (!fan || fan.destroyed) return;
   fan.destroyed = true;
@@ -987,6 +1019,7 @@ function detachLiveFanClient(fan, slot, opts) {
   }
   if (opts?.closingFan) return;
   if (fan.clients.size === 0 && fan.waiters.length === 0) {
+    fan.idleSince = Date.now();
     if (fan.linger) clearTimeout(fan.linger);
     const lingerMs = fan.onDemand ? ON_DEMAND_FAN_LINGER_MS : LIVE_FAN_LINGER_MS;
     fan.linger = setTimeout(() => destroyLiveFan(fan), lingerMs);
@@ -998,6 +1031,7 @@ function attachLiveFanClient(fan, clientReq, clientRes, pulseCtx) {
     clearTimeout(fan.linger);
     fan.linger = null;
   }
+  fan.idleSince = 0;
   if (!clientRes.headersSent) {
     writeLiveTsHead(clientRes);
     if (fan.prefix && fan.prefix.length) {
@@ -1115,6 +1149,9 @@ function ensureLiveFan(streamId) {
   let fan = liveFans.get(streamId);
   if (fan) return fan;
   if (liveFans.size >= MAX_LIVE_FANS) return null;
+  if (liveFans.size >= MAX_LIVE_FANS) {
+    if (!reclaimIdleLiveFan()) return null;
+  }
   fan = {
     streamId,
     broadcasting: false,
@@ -1125,6 +1162,8 @@ function ensureLiveFan(streamId) {
     prefix: Buffer.alloc(0),
     linger: null,
     destroyed: false,
+    createdAt: Date.now(),
+    idleSince: Date.now(),
   };
   liveFans.set(streamId, fan);
   return fan;
@@ -3187,6 +3226,7 @@ const keyPath = process.env.IPTV_EDGE_KEY || "/etc/nginx/ssl/nexlify-panel/privk
 async function startEdge() {
   await waitForBackendReady();
   setInterval(sweepIdleDiskPackagers, DISK_PACK_IDLE_SWEEP_MS);
+  setInterval(sweepIdleLiveFans, 10_000);
   ensurePulseBatchTimer();
   for (const p of httpPorts) listenHttp(p);
   if (httpsPorts.length) {

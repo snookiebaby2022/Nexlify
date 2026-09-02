@@ -25,9 +25,22 @@ export async function GET(req: NextRequest) {
 
   const typeFilter = req.nextUrl.searchParams.get("type")?.toUpperCase();
   const lite = req.nextUrl.searchParams.get("lite") === "1";
+  const countsOnly = req.nextUrl.searchParams.get("countsOnly") === "1";
   const where =
     typeFilter && VALID_TYPES.has(typeFilter) ? { categoryType: typeFilter as CategoryType } : undefined;
   try {
+    if (countsOnly) {
+      const rows = await prisma.category.groupBy({
+        by: ["categoryType"],
+        _count: { id: true },
+      });
+      const counts: Record<string, number> = { LIVE: 0, MOVIE: 0, SERIES: 0, RADIO: 0 };
+      for (const row of rows) {
+        const key = String(row.categoryType ?? "LIVE");
+        counts[key] = row._count.id;
+      }
+      return NextResponse.json({ counts });
+    }
     if (lite) {
       const categories = await prisma.category.findMany({
         where,

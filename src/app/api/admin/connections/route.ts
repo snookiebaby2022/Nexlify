@@ -6,6 +6,7 @@ import {
   PLAYBACK_STALE_MS,
 } from "@/lib/connections";
 import { listAdminConnections } from "@/lib/admin-connections-list";
+import { isConnectionQoeEnabled } from "@/lib/connection-qoe";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -17,7 +18,7 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const connections = await listAdminConnections(session);
-  return NextResponse.json({ connections });
+  return NextResponse.json({ connections, qoeEnabled: isConnectionQoeEnabled() });
 }
 
 export async function DELETE(req: NextRequest) {

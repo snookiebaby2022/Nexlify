@@ -69,6 +69,7 @@ function CompactConnectionRow({
   onKick,
   paths,
   nowMs,
+  qoeEnabled,
 }: {
   c: ConnectionRow;
   expanded: boolean;
@@ -76,6 +77,7 @@ function CompactConnectionRow({
   onKick: (id: string) => void;
   paths: ReturnType<typeof subscriptionPaths>;
   nowMs: number;
+  qoeEnabled: boolean;
 }) {
   return (
     <div className="panel-mobile-conn-row">
@@ -88,7 +90,7 @@ function CompactConnectionRow({
       </button>
       {expanded ? (
         <div className="panel-mobile-conn-detail">
-          <ConnectionCard c={c} paths={paths} onKick={onKick} compact nowMs={nowMs} />
+          <ConnectionCard c={c} paths={paths} onKick={onKick} compact nowMs={nowMs} qoeEnabled={qoeEnabled} />
         </div>
       ) : null}
     </div>
@@ -101,12 +103,14 @@ function ConnectionCard({
   onKick,
   compact = false,
   nowMs,
+  qoeEnabled = false,
 }: {
   c: ConnectionRow;
   paths: ReturnType<typeof subscriptionPaths>;
   onKick: (id: string) => void;
   compact?: boolean;
   nowMs: number;
+  qoeEnabled?: boolean;
 }) {
   return (
     <article className={`panel-mobile-card space-y-2 ${compact ? "p-3 border-0" : "p-4"}`}>
@@ -141,16 +145,18 @@ function ConnectionCard({
           <p className="panel-mobile-card-label">Output</p>
           <p className="text-sm">{c.output}</p>
         </div>
-        <div>
-          <p className="panel-mobile-card-label">QoE</p>
-          <p
-            className="text-sm"
-            style={{ color: c.qoe ? stallColor(describeStallCount(c.qoe.stallCount).level) : undefined }}
-            title={LIVE_STALL_HELP}
-          >
-            {formatQoe(c.qoe)}
-          </p>
-        </div>
+        {qoeEnabled ? (
+          <div>
+            <p className="panel-mobile-card-label">QoE</p>
+            <p
+              className="text-sm"
+              style={{ color: c.qoe ? stallColor(describeStallCount(c.qoe.stallCount).level) : undefined }}
+              title={LIVE_STALL_HELP}
+            >
+              {formatQoe(c.qoe)}
+            </p>
+          </div>
+        ) : null}
       </div>
       <div className="panel-mobile-card-actions">
         <button
@@ -176,13 +182,16 @@ const LS_AUTO_REFRESH_KEY = "nx-live-conn-auto-refresh";
 
 export function AdminConnectionsClient({
   initialConnections = [],
+  initialQoeEnabled = false,
 }: {
   initialConnections?: ConnectionRow[];
+  initialQoeEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const paths = subscriptionPaths(pathname);
 
   const [connections, setConnections] = useState<ConnectionRow[]>(initialConnections);
+  const [qoeEnabled, setQoeEnabled] = useState(initialQoeEnabled);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
@@ -210,7 +219,10 @@ export function AdminConnectionsClient({
   function load() {
     fetch("/api/admin/connections", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => setConnections(Array.isArray(d.connections) ? d.connections : []))
+      .then((d) => {
+        setConnections(Array.isArray(d.connections) ? d.connections : []);
+        setQoeEnabled(Boolean(d.qoeEnabled));
+      })
       .catch(() => setConnections([]));
   }
 
@@ -284,7 +296,9 @@ export function AdminConnectionsClient({
         </div>
       </div>
       <p className="text-sm px-1 max-w-4xl" style={{ color: "var(--muted)" }}>
-        {LIVE_STALL_HELP}
+        {qoeEnabled
+          ? LIVE_STALL_HELP
+          : "Quality % reflects heartbeat freshness for active viewers (80–100% is normal). QoE stall metering is disabled on this server."}
       </p>
       {paths.isReseller ? (
         <p className="text-sm px-1" style={{ color: "var(--muted)" }}>
@@ -338,6 +352,7 @@ export function AdminConnectionsClient({
             onKick={kick}
             paths={paths}
             nowMs={nowMs}
+            qoeEnabled={qoeEnabled}
           />
         ))}
         {shown.length === 0 && <p className="xui-streams-empty p-4">No active connections.</p>}
@@ -353,7 +368,7 @@ export function AdminConnectionsClient({
               <th>Server</th>
               <th>IP</th>
               <th title="Longest sessions first">Duration</th>
-              <th>QoE</th>
+              {qoeEnabled ? <th>QoE</th> : null}
               <th>Output</th>
               <th>Restreamer</th>
               <th>Actions</th>
@@ -379,13 +394,15 @@ export function AdminConnectionsClient({
                 <td>
                   <span className="xui-duration-badge">{formatConnDuration(c.startedAt, c.lastSeenAt, nowMs)}</span>
                 </td>
-                <td
-                  className="text-xs tabular-nums whitespace-nowrap"
-                  style={{ color: c.qoe ? stallColor(describeStallCount(c.qoe.stallCount).level) : undefined }}
-                  title={LIVE_STALL_HELP}
-                >
-                  {formatQoe(c.qoe)}
-                </td>
+                {qoeEnabled ? (
+                  <td
+                    className="text-xs tabular-nums whitespace-nowrap"
+                    style={{ color: c.qoe ? stallColor(describeStallCount(c.qoe.stallCount).level) : undefined }}
+                    title={LIVE_STALL_HELP}
+                  >
+                    {formatQoe(c.qoe)}
+                  </td>
+                ) : null}
                 <td>{c.output}</td>
                 <td>
                   <span

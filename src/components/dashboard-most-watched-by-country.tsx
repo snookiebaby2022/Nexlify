@@ -1,15 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
 import { CountryFlag } from "@/components/ip-with-flag";
 import type { CountryWatch } from "@/lib/dashboard-widgets";
+import { DashboardWidgetsContext } from "@/components/dashboard-widgets-context";
 
 const MWC_COLLAPSE_KEY = "nx-dash-collapse-mwc";
 
 export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: string }) {
+  const shared = useContext(DashboardWidgetsContext);
   const [countries, setCountries] = useState<CountryWatch[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!shared);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -27,6 +29,7 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
   }, []);
 
   const load = useCallback(() => {
+    if (shared) return;
     setLoading(true);
     fetch(widgetsUrl)
       .then((r) => r.json())
@@ -35,13 +38,18 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
       })
       .catch(() => setCountries([]))
       .finally(() => setLoading(false));
-  }, [widgetsUrl]);
+  }, [widgetsUrl, shared]);
 
   useEffect(() => {
+    if (shared) return;
     load();
     const t = setInterval(load, 24 * 60 * 60 * 1000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, shared]);
+
+  const rows = shared?.data?.mostWatchedByCountry ?? countries;
+  const busy = shared ? shared.loading : loading;
+  const onRefresh = shared ? shared.refresh : load;
 
   return (
     <div
@@ -62,23 +70,23 @@ export function DashboardMostWatchedByCountry({ widgetsUrl }: { widgetsUrl: stri
         </button>
         <button
           type="button"
-          onClick={load}
+          onClick={onRefresh}
           className="p-1.5 rounded-md hover:opacity-80 transition-opacity"
           style={{ color: "var(--muted)" }}
           title="Refresh"
           aria-label="Refresh"
         >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+          <RefreshCw size={16} className={busy ? "animate-spin" : ""} />
         </button>
       </div>
 
-      {collapsed ? null : countries.length === 0 ? (
+      {collapsed ? null : rows.length === 0 ? (
         <p className="text-sm text-center py-8" style={{ color: "var(--muted)" }}>
-          No watch history by country yet
+          {busy ? "Loading…" : "No watch history by country yet"}
         </p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {countries.map((c) => (
+          {rows.map((c) => (
             <div
               key={c.countryCode}
               className="rounded-lg border p-3"

@@ -1291,7 +1291,9 @@ function ManagementCategoriesInner() {
     typeFromUrl === "LIVE" || typeFromUrl === "MOVIE" || typeFromUrl === "SERIES" || typeFromUrl === "RADIO"
       ? typeFromUrl
       : "LIVE";
-  const [allCategories, setAllCategories] = useState<CategoryRow[]>([]);
+  const [categoriesByType, setCategoriesByType] = useState<Partial<Record<CategoryTab, CategoryRow[]>>>({});
+  const [tabCounts, setTabCounts] = useState<Partial<Record<CategoryTab, number>>>({});
+  const [loadingCategories, setLoadingCategories] = useState(true);
   const [tab, setTab] = useState<CategoryTab>(initialTab);
   const [name, setName] = useState("");
   const [parentId, setParentId] = useState("");
@@ -1303,22 +1305,44 @@ function ManagementCategoriesInner() {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [catQuery, setCatQuery] = useState("");
 
-  function load() {
-    fetch("/api/admin/categories?lite=1")
+  function loadType(type: CategoryTab) {
+    setLoadingCategories(true);
+    fetch(`/api/admin/categories?lite=1&type=${encodeURIComponent(type)}`)
       .then(async (r) => {
         const d = await r.json();
         if (!r.ok) {
           setMsg(d.error ?? "Failed to load categories");
           return;
         }
-        setAllCategories(d.categories ?? []);
+        setCategoriesByType((prev) => ({ ...prev, [type]: d.categories ?? [] }));
       })
-      .catch(() => setMsg("Failed to load categories"));
+      .catch(() => setMsg("Failed to load categories"))
+      .finally(() => setLoadingCategories(false));
+  }
+
+  function refreshCategories() {
+    loadType(tab);
+    fetch("/api/admin/categories?lite=1&countsOnly=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.counts) setTabCounts(d.counts as Partial<Record<CategoryTab, number>>);
+      })
+      .catch(() => undefined);
   }
 
   useEffect(() => {
-    load();
+    fetch("/api/admin/categories?lite=1&countsOnly=1")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.counts) setTabCounts(d.counts as Partial<Record<CategoryTab, number>>);
+      })
+      .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (categoriesByType[tab]) return;
+    loadType(tab);
+  }, [tab, categoriesByType]);
 
   useEffect(() => {
     const raw = searchParams.get("type")?.toUpperCase();
@@ -1336,23 +1360,20 @@ function ManagementCategoriesInner() {
       : "/admin/categories";
     router.replace(`${base}?type=${next}`);
   }
-  const tabCategories = useMemo(
-    () => allCategories.filter((c) => (c.categoryType ?? "LIVE") === tab),
-    [allCategories, tab]
-  );
+  const tabCategories = categoriesByType[tab] ?? [];
 
   const parentSelectOptions = useMemo(
     () => labeledCategoryOptions(tabCategories),
     [tabCategories]
   );
 
-  const tabCounts = useMemo(() => {
-    const counts: Partial<Record<CategoryTab, number>> = {};
+  const tabCountsDisplay = useMemo(() => {
+    const counts: Partial<Record<CategoryTab, number>> = { ...tabCounts };
     for (const t of ["LIVE", "MOVIE", "SERIES", "RADIO"] as CategoryTab[]) {
-      counts[t] = allCategories.filter((c) => (c.categoryType ?? "LIVE") === t).length;
+      if (categoriesByType[t]) counts[t] = categoriesByType[t]!.length;
     }
     return counts;
-  }, [allCategories]);
+  }, [tabCounts, categoriesByType]);
 
   const tree = useMemo(() => {
     const built = buildTree(tabCategories);
@@ -1381,7 +1402,7 @@ function ManagementCategoriesInner() {
     setName("");
     setParentId("");
     setIsAdult(false);
-    load();
+    refreshCategories();
   }
 
   async function remove(id: string) {
@@ -1393,7 +1414,7 @@ function ManagementCategoriesInner() {
       return;
     }
     setMsg(`Deleted ${data.deleted ?? 1} categor${data.deleted === 1 ? "y" : "ies"}`);
-    load();
+    refreshCategories();
   }
 
   async function renameCategory(id: string, newName: string) {
@@ -1407,7 +1428,7 @@ function ManagementCategoriesInner() {
       setMsg(data.error ?? "Rename failed");
       return;
     }
-    load();
+    refreshCategories();
   }
 
   async function reparentCategory(id: string, newParentId: string | null) {
@@ -1421,7 +1442,7 @@ function ManagementCategoriesInner() {
       setMsg(data.error ?? "Reparent failed");
       return;
     }
-    load();
+    refreshCategories();
   }
 
   const dragParentId = useMemo(() => {
@@ -1442,7 +1463,7 @@ function ManagementCategoriesInner() {
       setMsg(data.error ?? "Reorder failed");
       return false;
     }
-    load();
+    refreshCategories();
     return true;
   }
 
@@ -1493,7 +1514,7 @@ function ManagementCategoriesInner() {
         </Link>
       </div>
 
-      <CategoryTypeTabs active={tab} onChange={changeTab} counts={tabCounts} />
+      <CategoryTypeTabs active={tab} onChange={changeTab} counts={tabCountsDisplay} />
 
       <div
         className="rounded-lg border p-4 space-y-2"
@@ -1521,9 +1542,9 @@ function ManagementCategoriesInner() {
       </div>
 
       {/* Predefined category quick-add */}
-      <PredefinedCategories tab={tab} existingNames={tabCategories.map((c) => c.name.toLowerCase())} onAdded={load} />
+      <PredefinedCategories tab={tab} existingNames={tabCategories.map((c) => c.name.toLowerCase())} onAdded={refreshCategories} />
 
-      <CategoryRemoveDuplicatesPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+      <CategoryRemoveDuplicatesPanel tab={tab} onApplied={refreshCategories} setMsg={setMsg} setBusy={setBusy} busy={busy} />
 
       <label className="block text-sm max-w-md">
         <span className="font-medium">Find subcategory</span>
@@ -1535,13 +1556,13 @@ function ManagementCategoriesInner() {
           onChange={(e) => setCatQuery(e.target.value)}
         />
       </label>
-      <CategoryRemoveDuplicateStreamsPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+      <CategoryRemoveDuplicateStreamsPanel tab={tab} onApplied={refreshCategories} setMsg={setMsg} setBusy={setBusy} busy={busy} />
       {tab === "LIVE" ? (
-        <CategoryMatchProviderM3uPanel onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+        <CategoryMatchProviderM3uPanel onApplied={refreshCategories} setMsg={setMsg} setBusy={setBusy} busy={busy} />
       ) : null}
-      <CategoryNameNormalizePanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+      <CategoryNameNormalizePanel tab={tab} onApplied={refreshCategories} setMsg={setMsg} setBusy={setBusy} busy={busy} />
 
-      <CategoryAutoSortPanel tab={tab} onApplied={load} setMsg={setMsg} setBusy={setBusy} busy={busy} />
+      <CategoryAutoSortPanel tab={tab} onApplied={refreshCategories} setMsg={setMsg} setBusy={setBusy} busy={busy} />
 
       <div
         className="rounded-lg border p-4 text-sm space-y-2"
@@ -1639,7 +1660,16 @@ function ManagementCategoriesInner() {
       </form>
 
       <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
-        {flat.map((node) => (
+        {loadingCategories && flat.length === 0 ? (
+          <p className="p-6 text-sm text-center" style={{ color: "var(--muted)" }}>
+            Loading categories…
+          </p>
+        ) : flat.length === 0 ? (
+          <p className="p-6 text-sm text-center" style={{ color: "var(--muted)" }}>
+            No categories in this folder yet.
+          </p>
+        ) : (
+        flat.map((node) => (
           <TreeRow
             key={node.id}
             node={node}
@@ -1660,7 +1690,7 @@ function ManagementCategoriesInner() {
             onMove={(dir) => move(node.id, dir)}
             onRename={renameCategory}
             onReparent={reparentCategory}
-            onStreamsChanged={load}
+            onStreamsChanged={refreshCategories}
             onDragStart={setDragId}
             onDragEnd={() => {
               setDragId(null);
@@ -1675,11 +1705,7 @@ function ManagementCategoriesInner() {
               setDropTargetId(null);
             }}
           />
-        ))}
-        {!tabCategories.length && (
-          <p className="p-6 text-sm text-center" style={{ color: "var(--muted)" }}>
-            No {CATEGORY_TYPE_LABELS[tab].toLowerCase()} categories yet.
-          </p>
+        ))
         )}
       </div>
       {busy && <p className="text-sm" style={{ color: "var(--muted)" }}>Saving order…</p>}

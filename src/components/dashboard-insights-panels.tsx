@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useContext, useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -19,6 +19,7 @@ import type {
   TopResellerRow,
   TrialLineRow,
 } from "@/lib/dashboard-widgets";
+import { DashboardWidgetsContext } from "@/components/dashboard-widgets-context";
 
 function Panel({
   title,
@@ -206,22 +207,26 @@ export function DashboardInsightsPanels({
   widgetsUrl: string;
   linesHref: string;
 }) {
+  const shared = useContext(DashboardWidgetsContext);
   const [data, setData] = useState<DashboardWidgetsPayload | null>(null);
 
   const load = useCallback(() => {
+    if (shared) return;
     fetch(widgetsUrl)
       .then((r) => r.json())
       .then((payload: DashboardWidgetsPayload) => setData(payload))
       .catch(() => setData(null));
-  }, [widgetsUrl]);
+  }, [widgetsUrl, shared]);
 
   useEffect(() => {
+    if (shared) return;
     load();
     const t = setInterval(load, 90_000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, shared]);
 
-  if (!data) return null;
+  const payload = shared?.data ?? data;
+  if (!payload) return null;
 
   return (
     <div className="space-y-4" data-dashboard-insights>
@@ -229,26 +234,26 @@ export function DashboardInsightsPanels({
         <Panel
           title="Trial lines expiring"
           icon={<FlaskConical size={16} style={{ color: "#a78bfa" }} />}
-          count={data.trialExpiringLines?.length ?? 0}
+          count={payload.trialExpiringLines?.length ?? 0}
           href={linesHref}
         >
           <TrialLinesTable
-            rows={data.trialExpiringLines ?? []}
+            rows={payload.trialExpiringLines ?? []}
             linesHref={linesHref}
-            showOwner={data.showOwner}
+            showOwner={payload.showOwner}
           />
         </Panel>
 
-        {data.showOfflineStreams && (
+        {payload.showOfflineStreams && (
           <Panel
             title="Offline streams"
             icon={<Radio size={16} style={{ color: "var(--danger)" }} />}
-            count={data.streamHealth?.offline ?? 0}
-            href={data.streamsHref}
+            count={payload.streamHealth?.offline ?? 0}
+            href={payload.streamsHref}
           >
             <OfflineStreamsList
-              rows={data.streamHealth?.offlineStreams ?? []}
-              streamsHref={data.streamsHref}
+              rows={payload.streamHealth?.offlineStreams ?? []}
+              streamsHref={payload.streamsHref}
             />
           </Panel>
         )}
@@ -256,47 +261,47 @@ export function DashboardInsightsPanels({
         <Panel
           title="Open tickets"
           icon={<LifeBuoy size={16} style={{ color: "#60a5fa" }} />}
-          count={(data.tickets?.open ?? 0) + (data.tickets?.inProgress ?? 0)}
-          href={data.ticketsHref}
+          count={(payload.tickets?.open ?? 0) + (payload.tickets?.inProgress ?? 0)}
+          href={payload.ticketsHref}
         >
-          <TicketsList rows={data.tickets?.rows ?? []} ticketsHref={data.ticketsHref} />
+          <TicketsList rows={payload.tickets?.rows ?? []} ticketsHref={payload.ticketsHref} />
         </Panel>
 
-        {data.showTopResellers && (
+        {payload.showTopResellers && (
           <Panel
             title="Top resellers"
             icon={<TrendingUp size={16} style={{ color: "#34d399" }} />}
             href="/admin/resellers"
           >
-            <TopResellersList rows={data.topResellers ?? []} />
+            <TopResellersList rows={payload.topResellers ?? []} />
           </Panel>
         )}
 
-        {data.showTopResellers && (
+        {payload.showTopResellers && (
           <Panel
             title="Low credit resellers"
             icon={<AlertTriangle size={16} style={{ color: "#f39c12" }} />}
-            count={data.lowCredits?.length ?? 0}
+            count={payload.lowCredits?.length ?? 0}
             href="/admin/resellers/credits"
           >
-            <LowCreditsList rows={data.lowCredits ?? []} />
+            <LowCreditsList rows={payload.lowCredits ?? []} />
           </Panel>
         )}
 
-        {data.bandwidth && (
+        {payload.bandwidth && (
           <Panel title="Bandwidth" icon={<TrendingUp size={16} style={{ color: "#17a2b8" }} />}>
             <div className="grid grid-cols-3 gap-3 text-center text-xs">
               <div>
                 <p style={{ color: "var(--muted)" }}>In</p>
-                <p className="text-lg font-bold mt-1">{(data.bandwidth.inPerMin / 125_000 / 60).toFixed(1)} <span className="text-xs font-normal">Mbps</span></p>
+                <p className="text-lg font-bold mt-1">{(payload.bandwidth.inPerMin / 125_000 / 60).toFixed(1)} <span className="text-xs font-normal">Mbps</span></p>
               </div>
               <div>
                 <p style={{ color: "var(--muted)" }}>Out</p>
-                <p className="text-lg font-bold mt-1">{(data.bandwidth.outPerMin / 125_000 / 60).toFixed(1)} <span className="text-xs font-normal">Mbps</span></p>
+                <p className="text-lg font-bold mt-1">{(payload.bandwidth.outPerMin / 125_000 / 60).toFixed(1)} <span className="text-xs font-normal">Mbps</span></p>
               </div>
               <div>
                 <p style={{ color: "var(--muted)" }}>Conns</p>
-                <p className="text-lg font-bold mt-1">{data.bandwidth.connections}</p>
+                <p className="text-lg font-bold mt-1">{payload.bandwidth.connections}</p>
               </div>
             </div>
           </Panel>

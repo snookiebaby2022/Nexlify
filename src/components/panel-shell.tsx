@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Suspense, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { PanelTopNav } from "@/components/panel-top-nav";
 import { DashboardLiveMetricsProvider } from "@/components/dashboard-live-metrics";
 import { AdminPanelSidebar, PanelSidebar, ResellerPanelSidebar } from "@/components/panel-sidebar";
@@ -42,6 +43,13 @@ export function PanelShell({
 }) {
   const [mobileNav, setMobileNav] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const pathname = usePathname() ?? "";
+  const liveMetricsRoutes =
+    pathname.startsWith("/admin/dashboard") ||
+    pathname.startsWith("/admin/connections") ||
+    pathname.startsWith("/reseller/dashboard") ||
+    pathname.startsWith("/reseller/live_connections");
+  const liveMetricsEnabled = role === "ADMIN" && isDesktop && liveMetricsRoutes;
   useEffect(() => {
     if (!mobileNav) return;
     const prev = document.body.style.overflow;
@@ -60,7 +68,7 @@ export function PanelShell({
   return (
     <ResellerGroupFlagsProvider flags={role === "RESELLER" ? resellerFlags : DEFAULT_RESELLER_GROUP_FLAGS}>
     <PanelUpdateJobProvider>
-    <DashboardLiveMetricsProvider enabled={role === "ADMIN" && isDesktop}>
+    <DashboardLiveMetricsProvider enabled={liveMetricsEnabled}>
     <div
       className={`panel-shell${mobileNav ? " panel-shell--mobile-nav-open" : ""}`}
       style={accent ? ({ ["--accent" as string]: accent } as React.CSSProperties) : undefined}

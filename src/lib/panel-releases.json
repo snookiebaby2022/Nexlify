@@ -20,7 +20,8 @@
         "Stale /root/.pm2/pm2.pid left Type=forking pm2-root inactive after an LB reboot",
         "Recovering Main via SSH could resurrect panel IPTV edge and fight nginx on :8080",
         "Geo/least-loaded picker could still place new live channels on Main"
-      ]
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.62.tar.gz"
     },
     {
       "version": "2.0.60",
