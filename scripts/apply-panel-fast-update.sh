@@ -305,18 +305,27 @@ cmd_bootstrap() {
 }
 
 cmd_sync_git() {
-  echo "Git checkout — syncing origin/main (GitHub is source of truth, not vendor tarball)"
+  echo "Git checkout — fetching origin/main (GitHub is source of truth, not vendor tarball)"
   if ! git -C "$ROOT" fetch origin main && ! git -C "$ROOT" fetch origin; then
     echo "WARN: git fetch failed — falling back to tarball" >&2
     return 1
   fi
   bash "$ROOT/scripts/panel-git-sparse.sh" "$ROOT" 2>/dev/null || true
+  local panel_ref
+  if [ -f /etc/nexlify/panel-git-ref.sh ]; then
+    panel_ref="$(bash /etc/nexlify/panel-git-ref.sh "$ROOT")"
+  elif [ -f "$ROOT/scripts/panel-git-ref.sh" ]; then
+    panel_ref="$(bash "$ROOT/scripts/panel-git-ref.sh" "$ROOT")"
+  else
+    panel_ref="origin/main"
+  fi
+  echo "Git checkout — syncing ${panel_ref} (panel paths; skip marketing-only HEAD)"
   local force="${PANEL_UPDATE_FORCE:-}"
   force="$(printf '%s' "$force" | tr '[:upper:]' '[:lower:]')"
   if [ "$force" = "1" ] || [ "$force" = "true" ] || [ "$force" = "yes" ]; then
-    git -C "$ROOT" reset --hard origin/main || return 1
+    git -C "$ROOT" reset --hard "$panel_ref" || return 1
   else
-    git -C "$ROOT" merge --ff-only origin/main || git -C "$ROOT" reset --hard origin/main || return 1
+    git -C "$ROOT" merge --ff-only "$panel_ref" || git -C "$ROOT" reset --hard "$panel_ref" || return 1
   fi
   bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" 2>/dev/null || true
   normalize_scripts

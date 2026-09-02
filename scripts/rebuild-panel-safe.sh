@@ -80,7 +80,7 @@ unset NEXT_PRIVATE_WORKER_THREADS 2>/dev/null || true
 export GIT_TERMINAL_PROMPT=0
 
 if [ -d .git ] && [ "${NEXLIFY_SKIP_GIT_RESET:-}" != "1" ]; then
-  echo "==> git fetch + reset --hard origin/main"
+  echo "==> git fetch + reset to last panel commit (skip marketing-only HEAD)"
   if [ -f "$ROOT/scripts/vps-git-auth.sh" ]; then
     # shellcheck source=scripts/vps-git-auth.sh
     . "$ROOT/scripts/vps-git-auth.sh"
@@ -90,7 +90,15 @@ if [ -d .git ] && [ "${NEXLIFY_SKIP_GIT_RESET:-}" != "1" ]; then
   fi
   timeout 90 git fetch origin main || git fetch origin main
   bash "$ROOT/scripts/panel-git-sparse.sh" "$ROOT" || true
-  git reset --hard origin/main
+  if [ -f /etc/nexlify/panel-git-ref.sh ]; then
+    PANEL_REF="$(bash /etc/nexlify/panel-git-ref.sh "$ROOT")"
+  elif [ -f "$ROOT/scripts/panel-git-ref.sh" ]; then
+    PANEL_REF="$(bash "$ROOT/scripts/panel-git-ref.sh" "$ROOT")"
+  else
+    PANEL_REF="$(git rev-parse origin/main)"
+  fi
+  echo "==> git reset --hard ${PANEL_REF} (panel paths; skip marketing-only HEAD)"
+  git reset --hard "$PANEL_REF"
   bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" || true
   chmod +x scripts/*.sh 2>/dev/null || true
 fi
