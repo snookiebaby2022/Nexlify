@@ -50,6 +50,13 @@ export function clientIp(req: NextRequest): string {
   return "";
 }
 
+/** Compare session IPs without ::ffff: / whitespace mismatches (Firefox vs nginx headers). */
+export function normalizeSessionIp(ip: string): string {
+  let raw = ip.trim();
+  if (raw.startsWith("::ffff:")) raw = raw.slice(7);
+  return raw;
+}
+
 export function shouldLogoutOnIpChange(): boolean {
   return (
     process.env.PANEL_LOGOUT_ON_IP_CHANGE === "1" ||

@@ -10,12 +10,16 @@ import { isConnectionQoeEnabled } from "@/lib/connection-qoe";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
 
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
 
 export async function GET() {
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const viewDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.CONNECTIONS_VIEW);
+  if (viewDenied) return viewDenied;
 
   const connections = await listAdminConnections(session);
   return NextResponse.json({ connections, qoeEnabled: isConnectionQoeEnabled() });
@@ -27,6 +31,9 @@ export async function DELETE(req: NextRequest) {
 
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const kickDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.CONNECTIONS_KICK);
+  if (kickDenied) return kickDenied;
 
   const id = req.nextUrl.searchParams.get("id");
   const scope = ownerScope(session);

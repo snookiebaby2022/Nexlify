@@ -8,6 +8,8 @@ import { Prisma } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { PanelRole } from "@prisma/client";
+import { listEffectiveResellerPermissions } from "@/lib/reseller-permissions";
 export async function GET() {
   const session = await requireSession();
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -30,7 +32,13 @@ export async function GET() {
     },
   });
   if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json({ user });
+
+  const effectivePermissions =
+    user.role === PanelRole.RESELLER || user.role === PanelRole.SUB_RESELLER
+      ? await listEffectiveResellerPermissions(user.id, user.role)
+      : null;
+
+  return NextResponse.json({ user, effectivePermissions });
 }
 
 export async function PATCH(req: NextRequest) {

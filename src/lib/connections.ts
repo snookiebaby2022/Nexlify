@@ -252,6 +252,83 @@ function sessionKey(lineId: string, streamId: string | null | undefined, ip?: st
   return `${lineId}|${streamId ?? ""}|${normalizeConnectionIp(ip) ?? ""}`;
 }
 
+/** Stable key for UI rows (line + stream + viewer IP). */
+export function connectionViewerSessionKey(
+  lineId: string,
+  streamId: string | null | undefined,
+  ip?: string | null
+): string {
+  return sessionKey(lineId, streamId, ip);
+}
+
+function isAnonymousConnectionIp(ip?: string | null): boolean {
+  return normalizeConnectionIp(ip) === null;
+}
+
+function startedAtMs(d: Date | string): number {
+  const t = d instanceof Date ? d.getTime() : new Date(d).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** Collapse duplicate DB rows; retain the row with the newest heartbeat. */
+export function pickCanonicalLiveConnectionRows<
+  T extends {
+    lineId: string;
+    streamId: string | null;
+    ip: string | null;
+    startedAt: Date;
+    lastSeenAt: Date;
+  },
+>(rows: T[]): T[] {
+  const byViewerKey = new Map<string, T>();
+  for (const row of rows) {
+    const key = sessionKey(row.lineId, row.streamId, row.ip);
+    const prev = byViewerKey.get(key);
+    if (!prev || startedAtMs(row.lastSeenAt) > startedAtMs(prev.lastSeenAt)) {
+      byViewerKey.set(key, row);
+    } else if (
+      startedAtMs(row.lastSeenAt) === startedAtMs(prev.lastSeenAt) &&
+      startedAtMs(row.startedAt) < startedAtMs(prev.startedAt)
+    ) {
+      byViewerKey.set(key, row);
+    }
+  }
+
+  const byLineStream = new Map<string, T[]>();
+  for (const row of byViewerKey.values()) {
+    const ls = `${row.lineId}|${row.streamId ?? ""}`;
+    const bucket = byLineStream.get(ls) ?? [];
+    bucket.push(row);
+    byLineStream.set(ls, bucket);
+  }
+
+  const out: T[] = [];
+  for (const group of byLineStream.values()) {
+    const real = group.filter((r) => !isAnonymousConnectionIp(r.ip));
+    const anon = group.filter((r) => isAnonymousConnectionIp(r.ip));
+    if (real.length === 0) {
+      if (anon.length) {
+        out.push(
+          anon.reduce((a, b) => (startedAtMs(a.startedAt) <= startedAtMs(b.startedAt) ? a : b))
+        );
+      }
+      continue;
+    }
+    const oldestAnonMs = anon.length
+      ? Math.min(...anon.map((r) => startedAtMs(r.startedAt)))
+      : null;
+    for (const r of real) {
+      if (oldestAnonMs != null && oldestAnonMs < startedAtMs(r.startedAt)) {
+        out.push({ ...r, startedAt: new Date(oldestAnonMs) });
+      } else {
+        out.push(r);
+      }
+    }
+  }
+
+  return out.sort((a, b) => startedAtMs(a.startedAt) - startedAtMs(b.startedAt));
+}
+
 /** One live row per line + stream + viewer IP (XCIPTV/HLS must not multiply sessions). */
 async function dedupeLiveConnectionRows(
   lineId: string,
@@ -266,8 +343,8 @@ async function dedupeLiveConnectionRows(
       ...(streamId ? { streamId } : {}),
       ...(clientIp !== undefined ? connectionIpPrismaFilter(clientIp) : {}),
     },
-    orderBy: { lastSeenAt: "desc" },
-    select: { id: true, streamId: true, ip: true, lastSeenAt: true },
+    orderBy: [{ lastSeenAt: "desc" }, { startedAt: "asc" }],
+    select: { id: true, streamId: true, ip: true, startedAt: true, lastSeenAt: true },
     take: 200,
   });
   const keepIds = new Set<string>();
@@ -563,12 +640,11 @@ export async function trackConnection(opts: {
   if (streamId) {
     const dupes = await prisma.liveConnection.findMany({
       where: { lineId: opts.lineId, streamId, ...connectionIpPrismaFilter(clientIp) },
-      orderBy: { lastSeenAt: "desc" },
+      orderBy: [{ lastSeenAt: "desc" }, { startedAt: "asc" }],
       select: { id: true },
     });
     if (dupes.length > 1) {
-      const keepId = existing?.id ?? dupes[0]!.id;
-      const dropIds = dupes.filter((d) => d.id !== keepId).map((d) => d.id);
+      const dropIds = dupes.slice(1).map((d) => d.id);
       if (dropIds.length) {
         await prisma.liveConnection.deleteMany({ where: { id: { in: dropIds } } });
       }
@@ -589,7 +665,7 @@ export async function trackConnection(opts: {
           { ip: "45.88.138.18" },
         ],
       },
-      orderBy: { lastSeenAt: "desc" },
+      orderBy: [{ startedAt: "asc" }, { lastSeenAt: "desc" }],
     });
     if (loose) {
       await prisma.liveConnection.updateMany({
@@ -784,15 +860,7 @@ export async function listLiveConnections(ownerId?: string, take = 5000) {
     take: Math.min(Math.max(1, take), 5000),
   });
   const live = rows.filter((row) => row.streamId && !isTestConnectionIp(row.ip));
-  const seen = new Set<string>();
-  const deduped: typeof live = [];
-  for (const row of live) {
-    const key = sessionKey(row.lineId, row.streamId, row.ip);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(row);
-  }
-  return deduped.slice(0, Math.min(Math.max(1, take), 5000));
+  return pickCanonicalLiveConnectionRows(live).slice(0, Math.min(Math.max(1, take), 5000));
 }
 
 export async function deleteActiveConnection(id: string, ownerId?: string) {

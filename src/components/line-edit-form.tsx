@@ -12,6 +12,7 @@ import {
 import { BouquetPickerTable, type BouquetPickerRow } from "@/components/bouquet-picker-table";
 import { PasswordInput } from "@/components/password-input";
 import { CopyableCredential } from "@/components/copyable-credential";
+import { PanelMobileActionBar } from "@/components/panel-mobile-action-bar";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { generateLinePassword, MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput } from "@/lib/credential-generate";
 import { formatDateTime, isUnlimitedLineExpiry } from "@/lib/format";
@@ -123,6 +124,7 @@ export function LineEditForm({
   const [allowTrials, setAllowTrials] = useState(true);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [form, setForm] = useState({
+    username: "",
     password: "",
     maxConnections: 1 as number | "",
     extendDays: 0,
@@ -214,6 +216,7 @@ export function LineEditForm({
         const notes = splitLineNotes(row.notes, notesViewer);
         const unlimited = isUnlimitedLineExpiry(row.expiresAt);
         setForm({
+          username: row.username,
           password: row.password,
           maxConnections: row.maxConnections,
           extendDays: 0,
@@ -343,6 +346,10 @@ export function LineEditForm({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        username:
+          panel === "admin" && form.username.trim() && form.username !== line.username
+            ? sanitizeCredentialInput(form.username)
+            : undefined,
         password: form.password !== line.password ? sanitizeCredentialInput(form.password) : undefined,
         maxConnections: coerceMinInt(form.maxConnections, 1),
         days: unlimited || expiresAt ? undefined : form.extendDays > 0 ? form.extendDays : undefined,
@@ -444,7 +451,7 @@ export function LineEditForm({
     line.status === "ACTIVE" ? "Active" : line.status === "BANNED" ? "Banned" : "Disabled";
 
   return (
-    <form onSubmit={submit} className="panel-form-mobile-tight">
+    <form id="line-edit-form" onSubmit={submit} className="panel-form-mobile-tight pb-24 md:pb-0">
       <div
         className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 rounded-t-lg"
         style={{ background: "linear-gradient(90deg, #00c0ef 0%, #3c8dbc 100%)" }}
@@ -554,9 +561,19 @@ export function LineEditForm({
           <div className="grid lg:grid-cols-2 gap-4 sm:gap-5">
             <Card title="Account">
               <FormField label="Username">
-                <div className="flex items-center gap-2">
-                  <CopyableCredential value={line.username} label="Username" />
-                </div>
+                {panel === "admin" ? (
+                  <input
+                    className={formInputClass}
+                    style={formInputStyle}
+                    value={form.username}
+                    onChange={(e) => setForm({ ...form, username: e.target.value })}
+                    autoComplete="off"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <CopyableCredential value={line.username} label="Username" />
+                  </div>
+                )}
               </FormField>
               <FormField label="Password">
                 <div className="flex gap-2">
@@ -872,7 +889,7 @@ export function LineEditForm({
           />
         )}
 
-        <div className="flex justify-end gap-3 pt-2 border-t" style={{ borderColor: "var(--border)" }}>
+        <div className="hidden md:flex justify-end gap-3 pt-2 border-t" style={{ borderColor: "var(--border)" }}>
           <button type="button" className="btn-cancel rounded px-6 py-2.5 text-sm font-medium" onClick={onClose}>
             Cancel
           </button>
@@ -885,6 +902,14 @@ export function LineEditForm({
           </button>
         </div>
       </div>
+      <PanelMobileActionBar
+        cancelLabel="Cancel"
+        onCancel={onClose}
+        saveLabel="Save line"
+        onSave={() => document.getElementById("line-edit-form")?.requestSubmit()}
+        saveDisabled={saving}
+        saveBusy={saving}
+      />
     </form>
   );
 }

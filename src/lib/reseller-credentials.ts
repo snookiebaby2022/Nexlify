@@ -25,7 +25,7 @@ export async function resolveNewPanelUserCredentials(input: {
   const isResellerAccount =
     input.role === PanelRole.RESELLER || input.role === PanelRole.SUB_RESELLER;
 
-  if (isResellerAccount && (await resellerCredentialsMustBeGenerated())) {
+  if (isResellerAccount) {
     if (!username) username = generateLineUsername();
     if (!password) password = generateLinePassword();
   } else if (input.role === PanelRole.ADMIN && !password && username) {

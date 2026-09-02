@@ -9,6 +9,12 @@ import {
   hmacPayloadFromSearchParams,
 } from "@/lib/xui-api-utils";
 import { normalizeDomain } from "@/lib/domains-host";
+import { verifyPanelLogin } from "@/lib/auth";
+import { clientIp } from "@/lib/middleware-runtime";
+import { ipMatchesRule } from "@/lib/line-ip-lock";
+import { verifyTotpCode } from "@/lib/totp";
+import { getSettingGroup } from "@/lib/panel-settings";
+import { hasResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
 
 export type PanelApiCaller = {
   id: string;
@@ -24,6 +30,7 @@ export type PanelApiCaller = {
 export const RESELLER_PANEL_API_ACTIONS = new Set([
   "get_lines",
   "get_line",
+  "get_line_status",
   "create_line",
   "edit_line",
   "disable_line",
@@ -83,9 +90,21 @@ export async function authenticatePanelApi(
   params?: URLSearchParams
 ): Promise<PanelApiCaller | null> {
   const p = params ?? req.nextUrl.searchParams;
-  const apiKey = p.get("api_key") ?? req.headers.get("x-api-key");
-  const accessCode = p.get("access_code");
-  if (!apiKey) return null;
+  const authorization = req.headers.get("authorization")?.trim() ?? "";
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const token = authorization.match(/^Token\s+(.+)$/i)?.[1]?.trim();
+  const [bearerKey, bearerToken] = bearer?.split(/:(.*)/s, 2) ?? [];
+  const apiKey =
+    p.get("api_key") ??
+    req.headers.get("x-api-key") ??
+    (token || bearerKey);
+  const accessCode = p.get("access_code") ?? bearerToken;
+  const username = p.get("username") ?? p.get("user");
+  const password = p.get("password") ?? p.get("pass");
+  const ip = clientIp(req);
+  const ipSetting = await prisma.panelSetting.findUnique({ where: { key: "ipWhitelist" } });
+  const ipRules = (ipSetting?.value ?? "").split(/[\s,]+/).filter(Boolean);
+  if (ipRules.length > 0 && !ipRules.some((rule) => ipMatchesRule(ip, rule))) return null;
 
   const hmacSig = req.headers.get("x-nexlify-signature") ?? p.get("hmac");
   const hmacKey = await prisma.panelSetting.findUnique({ where: { key: "hmac_api_secret" } });
@@ -94,30 +113,53 @@ export async function authenticatePanelApi(
     if (!hmacHexEqual(hmacSig, expected)) return null;
   }
 
-  const user = await prisma.panelUser.findFirst({
-    where: {
-      apiKey,
-      isActive: true,
-      ...(accessCode ? { accessCode } : {}),
-      OR: [
-        { role: PanelRole.ADMIN },
-        { role: PanelRole.STAFF, permissions: { has: PERMS.API_ACCESS } },
-        { role: PanelRole.RESELLER },
-        { role: PanelRole.SUB_RESELLER },
-      ],
-    },
-    select: {
-      id: true,
-      username: true,
-      role: true,
-      permissions: true,
-      resellerDns: true,
-    },
-  });
+  const passwordAuth = !apiKey && Boolean(username && password);
+  const user = apiKey
+    ? await prisma.panelUser.findFirst({
+        where: {
+          apiKey,
+          isActive: true,
+          ...(accessCode ? { accessCode } : {}),
+          OR: [
+            { role: PanelRole.ADMIN },
+            { role: PanelRole.STAFF, permissions: { has: PERMS.API_ACCESS } },
+            { role: PanelRole.RESELLER },
+            { role: PanelRole.SUB_RESELLER },
+          ],
+        },
+        select: {
+          id: true,
+          username: true,
+          role: true,
+          permissions: true,
+          resellerDns: true,
+          totpEnabled: true,
+          totpSecret: true,
+        },
+      })
+    : username && password
+      ? await verifyPanelLogin(username, password)
+      : null;
   if (!user) return null;
   if (user.role === PanelRole.STAFF && !hasPermission(user, PERMS.API_ACCESS)) return null;
 
   const caller = callerFromUser(user);
+  if (caller.isReseller) {
+    const allowed = await hasResellerPermission(caller, RESELLER_PERMS.API_ACCESS);
+    if (!allowed) return null;
+  }
+  if (passwordAuth) {
+    const totpCode = p.get("totpCode") ?? p.get("totp_code") ?? "";
+    const security = await getSettingGroup("security").catch(() => ({} as Record<string, unknown>));
+    const requiresTotp =
+      Boolean(user.totpEnabled && user.totpSecret) ||
+      (user.role === PanelRole.ADMIN && security.totpRequiredForAdmins === true) ||
+      ((user.role === PanelRole.RESELLER || user.role === PanelRole.SUB_RESELLER) &&
+        security.totpRequiredForResellers === true);
+    if (requiresTotp && (!user.totpSecret || !totpCode || !verifyTotpCode(user.totpSecret, totpCode))) {
+      return null;
+    }
+  }
   if (user.role === PanelRole.STAFF) {
     return { ...caller, isAdmin: true, isReseller: false };
   }

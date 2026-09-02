@@ -8,6 +8,7 @@ import {
   shouldBlockBots,
   shouldLogoutOnIpChange,
   shouldStealthPanel,
+  normalizeSessionIp,
 } from "@/lib/middleware-runtime";
 import {
   botBlockedBody,
@@ -269,9 +270,11 @@ export async function middleware(req: NextRequest) {
 
   try {
     const { payload } = await jwtVerify(token, secret);
-    if (shouldLogoutOnIpChange()) {
-      const sessionIp = String(payload.clientIp ?? "");
-      const current = clientIp(req);
+    // Mobile reseller connections can change carrier IPs between the login
+    // response and the dashboard request; keep IP-bound logout for admins.
+    if (shouldLogoutOnIpChange() && payload.role === "ADMIN") {
+      const sessionIp = normalizeSessionIp(String(payload.clientIp ?? ""));
+      const current = normalizeSessionIp(clientIp(req));
       if (sessionIp && current && sessionIp !== current) {
         const res = panelRedirect(req, "/login");
         res.cookies.delete(COOKIE);
@@ -282,8 +285,7 @@ export async function middleware(req: NextRequest) {
     return applyStealthHeaders(panelRedirect(req, "/login"));
   }
 
-  const isAdminArea = pathname.startsWith("/admin") || pathname.startsWith("/reseller");
-  if (isAdminArea) {
+  if (pathname.startsWith("/admin")) {
     const licenseSkip = isPanelLicenseExempt(host);
     const envLicensed = process.env.NEXLIFY_LICENSE_VALID === "1";
     const licenseCookie = req.cookies.get(LICENSE_SESSION_COOKIE)?.value;

@@ -136,6 +136,8 @@ export async function PATCH(req: NextRequest) {
       config: config != null ? (config as Prisma.InputJsonValue) : undefined,
     },
   });
+  const { bustResellerPermissionCache } = await import("@/lib/reseller-permissions");
+  bustResellerPermissionCache();
   return NextResponse.json({ group: serializeGroup(group) });
   } catch (e) {
     return apiMutationErrorResponse(e);

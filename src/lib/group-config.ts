@@ -136,6 +136,8 @@ export const PERMISSION_LABELS: Record<string, string> = {
   "epg.view": "View EPG",
   "reports.view": "View reports",
   "api.access": "Streaming API",
+  "connections.view": "View live connections",
+  "connections.kick": "Kick live connections",
 };
 
 /** Default checked permissions for a standard reseller group (XUI-style preset). */
@@ -158,6 +160,8 @@ export const RECOMMENDED_RESELLER_PERMISSIONS = [
   "tickets.view",
   "tickets.create",
   "reports.view",
+  "connections.view",
+  "connections.kick",
 ] as const;
 
 export const RECOMMENDED_SUB_RESELLER_PERMISSIONS = [
@@ -177,6 +181,8 @@ export const RECOMMENDED_SUB_RESELLER_PERMISSIONS = [
   "tickets.view",
   "tickets.create",
   "reports.view",
+  "connections.view",
+  "connections.kick",
 ] as const;
 
 export const DEFAULT_GROUP_CONFIG: GroupConfig = {
@@ -232,6 +238,8 @@ export const RESELLER_PERMISSIONS = [
   "epg.view",
   "reports.view",
   "api.access",
+  "connections.view",
+  "connections.kick",
 ];
 
 const VALID_GROUP_ROLES = new Set<GroupRole>(["admin", "reseller", "sub_reseller"]);
