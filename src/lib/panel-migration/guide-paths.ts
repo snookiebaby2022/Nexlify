@@ -19,6 +19,12 @@ export type MigrationGuidePath = {
   oneStreamArtisan?: string;
   /** Short hint under the source dropdown */
   hint: string;
+  /** Runtime management integration, when the source also exposes a live API. */
+  runtimeIntegration?: {
+    basePath: string;
+    auth: string;
+    endpoints: string[];
+  };
   /** Ordered steps for this source on Nexlify */
   steps: string[];
   /** Post-import checklist (guide + Nexlify cutover) */
@@ -107,6 +113,11 @@ export const MIGRATION_GUIDE_PATHS: MigrationGuidePath[] = [
     defaultDatabase: "nxt",
     engine: "mysql",
     oneStreamArtisan: "migrate-system:from nxt",
+    runtimeIntegration: {
+      basePath: "/api/",
+      auth: "X-API-Key: {API_KEY} (or Authorization: Token {API_KEY})",
+      endpoints: ["GET /api/lines", "POST /api/lines/create", "POST /api/lines/status/{id}", "POST /api/lines/renew/{id}", "GET /api/packages", "player/ streams"],
+    },
     hint: "MySQL dump — default DB name nxt (1-stream Migration Guide).",
     steps: [
       "Export a full MySQL dump of the nxt database from the NXT-DASH host.",
@@ -117,6 +128,7 @@ export const MIGRATION_GUIDE_PATHS: MigrationGuidePath[] = [
     postImport: SHARED_POST_IMPORT,
     notes: [
       "Best-effort XUI-lineage table mapping including extended entities when table names match. If Preview counts look wrong, export Nexlify JSON or adjust the dump and re-run.",
+      "NXT is also supported as a live/runtime provider: configure the API key on the provider, use the /api/ base path, and map lines, packages, and player/ stream endpoints.",
     ],
   },
   {

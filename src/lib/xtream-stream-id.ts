@@ -104,9 +104,7 @@ export async function seriesSeedsForBouquets(
   const offset = opts?.offset != null ? Math.max(0, opts.offset) : 0;
   if (limit != null) {
     return prisma.$queryRaw<SeriesSeedRow[]>`
-      SELECT seeds.id, seeds.name, seeds."streamIcon", seeds."categoryId",
-        seeds."updatedAt", seeds."vodRating", seeds."vodPlot"
-      FROM (${seriesSeedFromSql(bouquetIds, categorySql)}) seeds
+      SELECT * FROM (${seriesSeedFromSql(bouquetIds, categorySql)}) seeds
       ORDER BY seeds.name ASC, seeds.id ASC
       LIMIT ${limit} OFFSET ${offset}
     `;
