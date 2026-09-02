@@ -50,7 +50,7 @@ export async function probeStreamUrl(
       skipCache: attempt > 0 ? true : opts?.skipCache,
     });
     if (http.status === "online" || http.status === "degraded") {
-      if (hint && http.status !== "offline") {
+      if (hint) {
         return {
           ...http,
           message: http.message.includes("integration") ? http.message : `${http.message} · ${hint}`,

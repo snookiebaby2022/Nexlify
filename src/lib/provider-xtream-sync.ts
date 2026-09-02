@@ -37,7 +37,7 @@ export async function oneStreamRequest(
   body: Record<string, unknown>
 ): Promise<unknown> {
   await assertPublicHttpUrl(provider.baseUrl);
-  const [apiKey, apiToken] = (provider.apiKey ?? "").split(/:(.*)/s, 2);
+  const [apiKey, apiToken] = (provider.apiKey ?? "").split(/:([\s\S]*)/, 2);
   const res = await fetch(`${provider.baseUrl.replace(/\/$/, "")}/api/lines/${endpoint}`, {
     method: "POST",
     headers: {
@@ -54,13 +54,14 @@ export async function oneStreamRequest(
 /** NXT Dash API-key adapter. */
 export async function nxtRequest(
   provider: ManagedProvider,
-  endpoint: "lines" | "create" | "status" | "renew" | "packages",
+  endpoint: "lines" | "create" | "status" | "renew" | "delete" | "packages",
   body?: Record<string, unknown>,
   id?: string
 ): Promise<unknown> {
   await assertPublicHttpUrl(provider.baseUrl);
   const suffix =
-    endpoint === "status" || endpoint === "renew" ? `/api/lines/${endpoint}/${encodeURIComponent(id ?? "")}` :
+    endpoint === "status" || endpoint === "renew" || endpoint === "delete"
+      ? `/api/lines/${endpoint}/${encodeURIComponent(id ?? "")}` :
     endpoint === "create" ? "/api/lines/create" : `/api/${endpoint}`;
   const res = await fetch(`${provider.baseUrl.replace(/\/$/, "")}${suffix}`, {
     method: endpoint === "lines" || endpoint === "packages" ? "GET" : "POST",

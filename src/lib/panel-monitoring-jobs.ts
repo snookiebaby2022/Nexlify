@@ -63,7 +63,7 @@ function buildProbeAuthHeaders(provider: ProviderSlice): Record<string, string> 
   const headers: Record<string, string> = { "User-Agent": PROBE_UA, Accept: "*/*" };
   const type = (provider?.providerType ?? "").toLowerCase();
   if (type === "onestream") {
-    const [apiKey, apiToken] = (provider?.apiKey ?? "").split(/:(.*)/s, 2);
+    const [apiKey, apiToken] = (provider?.apiKey ?? "").split(/:([\s\S]*)/, 2);
     headers.Authorization = `Bearer ${apiKey}:${apiToken ?? ""}`;
   } else if (type === "nxt" && provider?.apiKey) {
     headers["X-API-Key"] = provider.apiKey;

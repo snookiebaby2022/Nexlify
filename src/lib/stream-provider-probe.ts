@@ -122,7 +122,7 @@ async function probeManagedProviderHealth(
   const origin = normalizeProviderUrl(baseUrl);
   if (!origin.ok) return null;
   const start = Date.now();
-  const [storedKey, storedToken] = (opts.apiKey ?? "").split(/:(.*)/s, 2);
+  const [storedKey, storedToken] = (opts.apiKey ?? "").split(/:([\s\S]*)/, 2);
   const apiKey = storedKey || opts.apiKey || "";
   const apiToken = opts.apiToken || storedToken || "";
   try {
@@ -555,7 +555,7 @@ function probeHeadersForUrl(url: string, opts?: ProviderProbeOptions): Record<st
   const username = opts?.remoteUsername?.trim() || creds.username;
   const password = opts?.remotePassword?.trim() || creds.password;
   if (opts?.providerType === "onestream") {
-    const [apiKey, apiToken] = (opts.apiKey ?? "").split(/:(.*)/s, 2);
+    const [apiKey, apiToken] = (opts.apiKey ?? "").split(/:([\s\S]*)/, 2);
     headers.Authorization = `Bearer ${apiKey}:${apiToken ?? ""}`;
     headers["Content-Type"] = "application/json";
   } else if (opts?.providerType === "nxt" && opts.apiKey) {

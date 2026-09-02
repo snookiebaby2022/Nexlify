@@ -999,6 +999,7 @@ async function jobProviderHealthCheck() {
         id: true,
         baseUrl: true,
         apiKey: true,
+        providerType: true,
         remoteUsername: true,
         remotePassword: true,
         lastCheckAt: true,

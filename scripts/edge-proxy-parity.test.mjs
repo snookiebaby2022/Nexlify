@@ -59,10 +59,10 @@ describe("edge proxy installer parity", () => {
     assert.match(canonical, /if \(!fan \|\| fan\.destroyed\) return/);
   });
 
-  it("canonical applies fan backpressure and capacity limits", () => {
+  it("canonical drops lagging fan clients without pausing the shared origin", () => {
     const canonical = readEdgeSource(canonicalPath);
     assert.match(canonical, /MAX_CLIENT_LAG_BYTES/);
-    assert.match(canonical, /upstreamRes\.pause\(\)/);
+    assert.doesNotMatch(canonical, /upstreamRes\.pause\(\)/);
     assert.match(canonical, /edge fan capacity reached/);
     assert.match(canonical, /connection-pulse-batch/);
     assert.match(canonical, /userAgentIsSmartTv/);
