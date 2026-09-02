@@ -34,9 +34,15 @@ EXPECTED_PORT="${PORT:-${PANEL_PORT:-3000}}"
 EXPECTED_BIND="${PANEL_BIND_HOST:-127.0.0.1}"
 echo "Panel port from env: ${EXPECTED_PORT} (website: ${WEBSITE_PORT:-${STREAM_HTTP_PORT:-3001}})"
 
-# IP installs bind :80 — free stale listeners before PM2 start (orphan cluster workers).
+# Free stale listeners before PM2 start (orphan cluster workers).
+# Never fuser :8080 (live MPEG-TS/HLS edge). Never stop nginx — it owns :80 UI.
 free_stale_panel_port() {
   local port="$1"
+  if [ "$port" = "8080" ] || [ "$port" = "80" ]; then
+    [ "$port" = "8080" ] && echo "WARN: refusing to clear port 8080 (live edge)"
+    [ "$port" = "80" ] && echo "NOTE: leaving port 80 to nginx (panel UI)"
+    return 0
+  fi
   if ! ss -tlnp 2>/dev/null | grep -q ":${port} "; then
     return 0
   fi
@@ -261,7 +267,7 @@ ensure_pm2_app() {
 
 ensure_pm2_app nexlify
 ensure_pm2_app nexlify-cron
-ensure_pm2_app nexlify-hls
+ensure_pm2_app nexlify-hls || echo "WARN: nexlify-hls did not start (panel UI does not need it)"
 
 LIVE_EDGE_MODE="${NEXLIFY_LIVE_EDGE_MODE:-local}"
 LIVE_EDGE_MODE="$(echo "$LIVE_EDGE_MODE" | tr '[:upper:]' '[:lower:]')"
