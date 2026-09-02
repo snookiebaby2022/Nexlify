@@ -233,17 +233,15 @@ button {
   min-height: 100dvh;
 }
 
-/* Desktop panel at browser 100% is laid out at 75% (same as window zoom 75%).
-   CSS zoom scales layout + hit-testing together; apply on the shell so fixed
-   chrome stays inside the same zoom context. Phones keep 100%. */
-@media (min-width: 768px) {
+/* Desktop panel density: apply zoom only on wide desktops (not tablets/foldables). */
+@media (min-width: 1280px) {
   .panel-shell {
     zoom: 0.75;
   }
 }
 
 @supports not (zoom: 0.75) {
-  @media (min-width: 768px) {
+  @media (min-width: 1280px) {
     .panel-shell {
       transform: scale(0.75);
       transform-origin: 0 0;
@@ -289,6 +287,8 @@ button {
 .panel-main-content {
   position: relative;
   z-index: 1;
+  container-type: inline-size;
+  container-name: panel-main;
 }
 
 .panel-sidebar {
@@ -1063,7 +1063,7 @@ button {
   gap: 0.75rem;
 }
 
-@media (max-width: 639px) {
+@media (max-width: 767px) {
   .panel-form-mobile-tight input,
   .panel-form-mobile-tight select,
   .panel-form-mobile-tight textarea {
@@ -1123,11 +1123,16 @@ button {
     grid-template-columns: 1fr !important;
   }
 
-  .panel-main-content .min-w-\[1100px\],
-  .panel-main-content .min-w-\[1400px\],
-  .panel-main-content table.min-w-\[1100px\],
-  .panel-main-content table.min-w-\[1400px\] {
-    min-width: 0 !important;
+  /* Unconverted power-user tables remain readable and scroll horizontally. */
+  .panel-main-content .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: thin;
+  }
+
+  .panel-main-content .overflow-x-auto > table {
+    width: max-content;
+    min-width: 100%;
   }
 
   /* Touch-friendly controls (min 44px tap targets) */
@@ -1170,7 +1175,7 @@ button {
   }
 
   .panel-shell--mobile-nav-open .panel-main-surface {
-    visibility: hidden;
+    opacity: 0.35;
     pointer-events: none;
   }
 
@@ -1600,7 +1605,11 @@ button {
     color: #f1f5f9;
   }
 
-  /* Bottom tab bar */
+  /* Floating widgets clear bottom nav on compact layouts */
+  .panel-floating-widget {
+    bottom: calc(4.5rem + env(safe-area-inset-bottom, 0));
+  }
+
   .panel-mobile-bottom-nav {
     position: fixed;
     left: 0;
@@ -1875,6 +1884,100 @@ button {
   .panel-main-content canvas,
   .panel-main-content .recharts-wrapper {
     max-width: 100% !important;
+  }
+}
+
+/* Tablet / unfolded foldable: slim sidebar rail */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .panel-shell--tablet .panel-sidebar {
+    width: 72px;
+  }
+
+  .panel-shell--tablet .panel-sidebar .panel-brand-text,
+  .panel-shell--tablet .panel-sidebar .panel-brand-cube,
+  .panel-shell--tablet .panel-sidebar .panel-nav-link-label,
+  .panel-shell--tablet .panel-sidebar .panel-nav-group-label,
+  .panel-shell--tablet .panel-sidebar .panel-sidebar-search,
+  .panel-shell--tablet .panel-sidebar .panel-sidebar-support {
+    display: none;
+  }
+
+  .panel-shell--tablet .panel-sidebar .panel-nav-link,
+  .panel-shell--tablet .panel-sidebar .panel-nav-group-btn {
+    justify-content: center;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .panel-main-content {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    padding-bottom: 1.5rem !important;
+  }
+}
+
+/* Landscape phones: hide bottom nav, rely on drawer */
+@media (max-height: 500px) and (orientation: landscape) and (max-width: 767px) {
+  .panel-mobile-bottom-nav {
+    display: none;
+  }
+
+  .panel-main-content {
+    padding-bottom: 1rem !important;
+  }
+
+  .panel-mobile-action-bar {
+    bottom: 0;
+  }
+
+  .panel-mobile-sheet {
+    max-height: 92dvh;
+  }
+}
+
+/* Container-query responsive data views */
+@container panel-main (max-width: 767px) {
+  .responsive-data-view__table {
+    display: none !important;
+  }
+
+  .responsive-data-view__cards {
+    display: block !important;
+  }
+}
+
+@container panel-main (min-width: 768px) {
+  .responsive-data-view__table {
+    display: block !important;
+  }
+
+  .responsive-data-view__cards {
+    display: none !important;
+  }
+}
+
+/* Dual-pane master-detail on wide content areas */
+.responsive-master-detail {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  min-height: 0;
+}
+
+@container panel-main (min-width: 560px) {
+  .responsive-master-detail--split {
+    grid-template-columns: minmax(240px, 38%) minmax(0, 1fr);
+  }
+
+  .responsive-master-detail--split .responsive-master-detail__list {
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    max-height: calc(100dvh - 8rem);
+  }
+
+  .responsive-master-detail--split .responsive-master-detail__detail {
+    overflow-y: auto;
+    max-height: calc(100dvh - 8rem);
   }
 }
 
@@ -4266,6 +4369,41 @@ a.btn-back:hover,
 
 .xui-line-edit-modal .panel-form-mobile-tight {
   margin: 0;
+}
+
+/* Compact phones: full-screen line edit */
+@media (max-width: 767px) {
+  .xui-modal-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .xui-line-edit-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+  }
+}
+
+/* Tablet / unfolded foldable: side-by-side edit panel */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .xui-modal-backdrop--split {
+    justify-content: flex-end;
+    align-items: stretch;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  .xui-line-edit-modal--split {
+    width: min(52%, 520px);
+    max-width: 52%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.35);
+  }
 }
 
 .xui-modal-body {

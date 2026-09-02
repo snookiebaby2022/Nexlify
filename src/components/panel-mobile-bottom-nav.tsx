@@ -7,12 +7,16 @@ import { getMobileBottomNav } from "@/lib/panel-mobile-nav";
 export function PanelMobileBottomNav({
   role,
   onMore,
+  hidden = false,
 }: {
   role: "ADMIN" | "RESELLER";
   onMore: () => void;
+  hidden?: boolean;
 }) {
   const pathname = usePathname();
   const items = getMobileBottomNav(role);
+
+  if (hidden) return null;
 
   return (
     <nav className="panel-mobile-bottom-nav md:hidden" aria-label="Main navigation">

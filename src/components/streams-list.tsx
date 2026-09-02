@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -180,6 +180,7 @@ export function StreamsList({
     typeTotals: { LIVE?: number; MOVIE?: number; SERIES?: number };
   };
 }) {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { hideAllUrls } = useResellerGroupFlags();
   const statusFromUrl = searchParams.get("status");
@@ -187,6 +188,8 @@ export function StreamsList({
   const hasUrlListFilter = Boolean(
     statusFromUrl ||
       sourceIssueFromUrl ||
+      searchParams.get("page") ||
+      searchParams.get("pageSize") ||
       searchParams.get("categoryId") ||
       searchParams.get("search") ||
       searchParams.get("serverId")
@@ -197,8 +200,15 @@ export function StreamsList({
   const [servers, setServers] = useState<{ id: string; name: string }[]>(initialBootstrap?.servers ?? []);
   const [categories, setCategories] = useState<CategoryOptionInput[]>(initialBootstrap?.categories ?? []);
   const [total, setTotal] = useState(hasUrlListFilter ? 0 : (initialBootstrap?.total ?? 0));
-  const [page, setPage] = useState(initialBootstrap?.page ?? 1);
-  const [pageSize, setPageSize] = useState<number>(initialBootstrap?.pageSize ?? DEFAULT_LIST_PAGE_SIZE);
+  const pageParam = Number(searchParams.get("page"));
+  const pageFromUrl =
+    Number.isFinite(pageParam) && pageParam > 0
+      ? Math.floor(pageParam)
+      : initialBootstrap?.page ?? 1;
+  const pageSizeFromUrl =
+    Number(searchParams.get("pageSize")) || initialBootstrap?.pageSize || DEFAULT_LIST_PAGE_SIZE;
+  const [page, setPage] = useState(pageFromUrl);
+  const [pageSize, setPageSize] = useState<number>(pageSizeFromUrl);
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [categoryId, setCategoryId] = useState(searchParams.get("categoryId") ?? "");
   const [serverId, setServerId] = useState(searchParams.get("serverId") ?? "");
@@ -213,10 +223,15 @@ export function StreamsList({
   const [sourceIssueFilter, setSourceIssueFilter] = useState<"" | "dead" | "unstable">(
     sourceIssueFromUrl === "dead" || sourceIssueFromUrl === "unstable" ? sourceIssueFromUrl : ""
   );
-  const [modeFilter, setModeFilter] = useState<"" | "LIVE" | "ON_DEMAND" | "CATCHUP">("");
-  const [audioFilter, setAudioFilter] = useState("");
-  const [videoFilter, setVideoFilter] = useState("");
-  const [qualityFilter, setQualityFilter] = useState("");
+  const modeFromUrl = searchParams.get("vodMode");
+  const [modeFilter, setModeFilter] = useState<"" | "LIVE" | "ON_DEMAND" | "CATCHUP">(
+    modeFromUrl === "LIVE" || modeFromUrl === "ON_DEMAND" || modeFromUrl === "CATCHUP"
+      ? modeFromUrl
+      : ""
+  );
+  const [audioFilter, setAudioFilter] = useState(searchParams.get("audio") ?? "");
+  const [videoFilter, setVideoFilter] = useState(searchParams.get("video") ?? "");
+  const [qualityFilter, setQualityFilter] = useState(searchParams.get("quality") ?? "");
   const [clientsModal, setClientsModal] = useState<{ id: string; name: string } | null>(null);
   const [previewModal, setPreviewModal] = useState<Stream | null>(null);
   const [probingPage, setProbingPage] = useState(false);
@@ -244,6 +259,44 @@ export function StreamsList({
   const countedKeyRef = useRef("");
   const urlInitRef = useRef(false);
   const liveDefaultCatRef = useRef(Boolean(searchParams.get("categoryId")));
+
+  const listReturnHref = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
+    if (search.trim()) params.set("search", search.trim());
+    if (categoryId) params.set("categoryId", categoryId);
+    if (serverId) params.set("serverId", serverId);
+    if (statusFilter) params.set("status", statusFilter);
+    if (sourceIssueFilter) params.set("sourceIssue", sourceIssueFilter);
+    if (modeFilter) params.set("vodMode", modeFilter);
+    if (audioFilter) params.set("audio", audioFilter);
+    if (videoFilter) params.set("video", videoFilter);
+    if (qualityFilter) params.set("quality", qualityFilter);
+    return `${pathname}?${params.toString()}`;
+  }, [
+    pathname,
+    page,
+    pageSize,
+    search,
+    categoryId,
+    serverId,
+    statusFilter,
+    sourceIssueFilter,
+    modeFilter,
+    audioFilter,
+    videoFilter,
+    qualityFilter,
+  ]);
+
+  const editHref = (streamId: string, hash = "") =>
+    `/admin/servers/streams?edit=${encodeURIComponent(streamId)}&returnTo=${encodeURIComponent(
+      listReturnHref
+    )}${hash}`;
+
+  useEffect(() => {
+    window.history.replaceState(window.history.state, "", listReturnHref);
+  }, [listReturnHref]);
 
   useEffect(() => {
     if (urlInitRef.current || typeof window === "undefined") return;
@@ -848,7 +901,7 @@ export function StreamsList({
                         fallbackName={s.name}
                         streamIcon={s.streamIcon}
                         streamUrl={hideAllUrls ? "" : s.streamUrl}
-                        href={`/admin/servers/streams?edit=${s.id}`}
+                        href={editHref(s.id)}
                         className="xui-stream-name font-semibold block truncate"
                       />
                       {parseLiveStreamMeta(s.agentStartCmd).nowPlayingTitle ? (
@@ -898,6 +951,7 @@ export function StreamsList({
                   isActive={s.isActive}
                   onRefresh={load}
                   onDelete={() => remove(s.id)}
+                  editHref={editHref(s.id)}
                 />
               </div>
             </article>
@@ -968,7 +1022,7 @@ export function StreamsList({
                         fallbackName={s.name}
                         streamIcon={s.streamIcon}
                         streamUrl={hideAllUrls ? "" : s.streamUrl}
-                        href={`/admin/servers/streams?edit=${s.id}`}
+                        href={editHref(s.id)}
                         className="xui-stream-name"
                       />
                       {parseLiveStreamMeta(s.agentStartCmd).nowPlayingTitle ? (
@@ -1029,6 +1083,7 @@ export function StreamsList({
                         isActive={s.isActive}
                         onRefresh={load}
                         onDelete={() => remove(s.id)}
+                        editHref={editHref(s.id)}
                       />
                     </td>
                   ) : null}
@@ -1053,7 +1108,7 @@ export function StreamsList({
                   {streamCols.show("epg") ? (
                     <td>
                       <Link
-                        href={`/admin/servers/streams?edit=${s.id}#epg`}
+                        href={editHref(s.id, "#epg")}
                         className={`xui-stream-epg-btn ${
                           s.epgChannelId
                             ? s.epgWorking

@@ -14,12 +14,14 @@ export function StreamRowActionsMenu({
   isActive,
   onRefresh,
   onDelete,
+  editHref,
 }: {
   streamId: string;
   streamType?: StreamType;
   isActive: boolean;
   onRefresh: () => void;
   onDelete: () => void;
+  editHref?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
@@ -108,7 +110,7 @@ export function StreamRowActionsMenu({
           role="menu"
         >
           <div className="xui-lines-action-menu-head">Stream actions</div>
-          <Link href={`/admin/servers/streams?edit=${streamId}`} className="xui-lines-action-menu-item" onClick={() => setOpen(false)} role="menuitem">
+          <Link href={editHref ?? `/admin/servers/streams?edit=${streamId}`} className="xui-lines-action-menu-item" onClick={() => setOpen(false)} role="menuitem">
             Edit stream
           </Link>
           <Link href="/admin/streams/logs" className="xui-lines-action-menu-item" onClick={() => setOpen(false)} role="menuitem">

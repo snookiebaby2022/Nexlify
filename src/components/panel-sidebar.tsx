@@ -330,6 +330,7 @@ export function PanelSidebar({
   brandHref = "/admin/dashboard",
   showReport = false,
   username,
+  forceCollapsed,
 }: {
   entries: SidebarNavEntry[];
   className?: string;
@@ -338,6 +339,8 @@ export function PanelSidebar({
   brandHref?: string;
   showReport?: boolean;
   username?: string;
+  /** Used by the unfolded-foldable/tablet shell rail. */
+  forceCollapsed?: boolean;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -353,7 +356,7 @@ export function PanelSidebar({
   const visibleEntries = filterNavEntries(entries, deferredFilter);
   /** Mobile drawer: never use the desktop collapsed (72px) rail. */
   const isMobileDrawer = Boolean(onNavigate);
-  const effectiveCollapsed = isMobileDrawer ? false : collapsed;
+  const effectiveCollapsed = isMobileDrawer ? false : (forceCollapsed ?? collapsed);
 
   useEffect(() => {
     if (!isMobileDrawer) {
@@ -503,7 +506,7 @@ export function PanelSidebar({
         )}
       </nav>
 
-      {!isMobileDrawer && (
+      {!isMobileDrawer && !forceCollapsed && (
         <div className="panel-sidebar-collapse-row">
           <button
             type="button"
@@ -527,10 +530,12 @@ export function AdminPanelSidebar({
   brand,
   brandHref = "/admin/dashboard",
   username,
+  forceCollapsed,
 }: {
   brand?: string;
   brandHref?: string;
   username?: string;
+  forceCollapsed?: boolean;
 } = {}) {
   return (
     <Suspense fallback={<aside className="panel-sidebar" aria-hidden />}>
@@ -540,6 +545,7 @@ export function AdminPanelSidebar({
         brandHref={brandHref}
         showReport
         username={username}
+        forceCollapsed={forceCollapsed}
       />
     </Suspense>
   );
@@ -550,11 +556,13 @@ export function ResellerPanelSidebar({
   brandHref = "/reseller/dashboard",
   username,
   flags,
+  forceCollapsed,
 }: {
   brand?: string;
   brandHref?: string;
   username?: string;
   flags?: Partial<ResellerGroupFlags>;
+  forceCollapsed?: boolean;
 } = {}) {
   return (
     <Suspense fallback={<aside className="panel-sidebar" aria-hidden />}>
@@ -564,6 +572,7 @@ export function ResellerPanelSidebar({
         brandHref={brandHref}
         showReport
         username={username}
+        forceCollapsed={forceCollapsed}
       />
     </Suspense>
   );

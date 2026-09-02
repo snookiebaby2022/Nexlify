@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Home, Users, Play, Server, MoreHorizontal, Wifi } from "lucide-react";
+import { Home, Users, Play, MoreHorizontal, Wifi } from "lucide-react";
 
 export type MobileBottomNavItem = {
   id: string;
@@ -34,11 +34,11 @@ const ADMIN_BOTTOM_NAV: MobileBottomNavItem[] = [
     match: (p) => p.includes("/streams") || p.includes("/content/"),
   },
   {
-    id: "servers",
-    label: "Servers",
-    href: "/admin/servers",
-    icon: Server,
-    match: (p) => p.startsWith("/admin/servers"),
+    id: "connections",
+    label: "Live",
+    href: "/admin/connections",
+    icon: Wifi,
+    match: (p) => p.startsWith("/admin/connections"),
   },
   { id: "more", label: "More", icon: MoreHorizontal, action: "more" },
 ];
@@ -79,13 +79,21 @@ const PAGE_TITLES: Record<string, string> = {
   "/admin/connections": "Live Connections",
   "/admin/servers": "Servers",
   "/admin/content/streams": "Streams",
+  "/admin/content/movies": "Movies",
+  "/admin/content/series": "Series",
+  "/admin/content/episodes": "Episodes",
   "/admin/tickets": "Tickets",
   "/admin/management/packages": "Packages",
+  "/admin/management/bouquets": "Bouquets",
+  "/admin/resellers": "Resellers",
+  "/admin/settings/general": "Settings",
   "/reseller/dashboard": "Dashboard",
   "/reseller/lines": "Manage Lines",
   "/reseller/lines/add": "Add Line",
   "/reseller/live_connections": "Live Connections",
   "/reseller/tickets": "Tickets",
+  "/reseller/profile": "Profile",
+  "/reseller/users": "Users",
 };
 
 export function getMobilePageTitle(pathname: string): string {

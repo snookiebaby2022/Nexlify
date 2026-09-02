@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Play, Users, Zap, ChevronDown, ChevronRight } from "lucide-react";
 import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
-import { useMediaQuery } from "@/lib/use-media-query";
+import { usePanelLayout } from "@/lib/use-panel-layout";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
 
@@ -243,7 +243,7 @@ export function PanelDashboard({
 }: PanelDashboardProps) {
 
   const isReseller = variant === "reseller";
-  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const { isMdUp } = usePanelLayout();
 
   const [stats, setStats] = useState<Stats | null>(initialStats);
   const [stackItems, setStackItems] = useState<StackComponentStatus[]>([]);
@@ -276,7 +276,7 @@ export function PanelDashboard({
   }, [statsUrl]);
 
   useEffect(() => {
-    if (!isDesktop) return;
+    if (!isMdUp) return;
     loadHeader();
     let cancelled = false;
     const runFull = () => {
@@ -296,13 +296,13 @@ export function PanelDashboard({
       if (timeoutId != null) clearTimeout(timeoutId);
       t();
     };
-  }, [loadHeader, loadFull, isReseller, isDesktop]);
+  }, [loadHeader, loadFull, isReseller, isMdUp]);
 
 
 
   useEffect(() => {
 
-    if (isReseller || !isDesktop) return;
+    if (isReseller || !isMdUp) return;
 
     fetch("/api/admin/stack/status")
 
@@ -310,7 +310,7 @@ export function PanelDashboard({
 
       .then((d) => setStackItems(d.items ?? []));
 
-  }, [isReseller, isDesktop]);
+  }, [isReseller, isMdUp]);
 
 
 

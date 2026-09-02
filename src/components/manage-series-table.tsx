@@ -153,7 +153,81 @@ export function ManageSeriesTable() {
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border" style={{ borderColor: "var(--border)" }}>
+      <div className="md:hidden divide-y rounded-lg border" style={{ borderColor: "var(--border)" }}>
+        {loading && series.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm" style={{ color: "var(--muted)" }}>
+            Loading…
+          </p>
+        ) : series.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm" style={{ color: "var(--muted)" }}>
+            No series found.
+          </p>
+        ) : (
+          series.map((s) => (
+            <article key={s.id} className="panel-mobile-card p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                {displayStreamIcon(s) ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={displayStreamIcon(s)!}
+                    alt=""
+                    className="h-14 w-10 rounded object-cover bg-black/20 shrink-0"
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <Tv size={20} style={{ color: "var(--muted)" }} className="shrink-0 mt-1" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <StreamDisplayTitle name={s.name} streamUrl={s.streamUrl} className="font-medium text-base" />
+                  <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                    {s.categoryName ?? "No category"} · {s.episodeCount} episodes · {s.isActive ? "Active" : "Disabled"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/admin/content/episodes?seriesId=${encodeURIComponent(s.id)}`}
+                  className="panel-mobile-card-action text-xs px-3 py-2 rounded border"
+                  style={{ borderColor: "var(--border)", color: "var(--accent)" }}
+                >
+                  Episodes
+                </Link>
+                <Link
+                  href={`/admin/servers/streams?edit=${encodeURIComponent(s.id)}`}
+                  className="panel-mobile-card-action text-xs px-3 py-2 rounded border"
+                  style={{ borderColor: "var(--border)" }}
+                >
+                  <Pencil size={14} className="inline mr-1" />
+                  Edit
+                </Link>
+                <button
+                  type="button"
+                  className="panel-mobile-card-action text-xs px-3 py-2 rounded border"
+                  style={{ borderColor: "var(--border)" }}
+                  disabled={busyId === s.id}
+                  onClick={() => toggleActive(s)}
+                >
+                  <Power size={14} className="inline mr-1" />
+                  {s.isActive ? "Disable" : "Enable"}
+                </button>
+                <button
+                  type="button"
+                  className="panel-mobile-card-action text-xs px-3 py-2 rounded border"
+                  style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
+                  disabled={busyId === s.id}
+                  onClick={() => removeSeries(s)}
+                >
+                  <Trash2 size={14} className="inline mr-1" />
+                  Delete
+                </button>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+
+      <div className="hidden md:block overflow-x-auto rounded-lg border" style={{ borderColor: "var(--border)" }}>
         <table className="xui-lines-table w-full">
           <thead>
             <tr>

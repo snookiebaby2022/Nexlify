@@ -170,7 +170,65 @@ export function EpisodesManageTable({ initialSeriesId }: { initialSeriesId?: str
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border" style={{ borderColor: "var(--border)" }}>
+      <div className="md:hidden divide-y rounded-lg border" style={{ borderColor: "var(--border)" }}>
+        {filtered.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm" style={{ color: "var(--muted)" }}>
+            No episodes yet.
+          </p>
+        ) : (
+          filtered.map((ep) => (
+            <article key={ep.id} className="panel-mobile-card p-4 space-y-2">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selected.has(ep.id)}
+                  onChange={() => {
+                    const next = new Set(selected);
+                    if (next.has(ep.id)) next.delete(ep.id);
+                    else next.add(ep.id);
+                    setSelected(next);
+                  }}
+                  aria-label={`Select episode ${ep.title}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <StreamDisplayTitle name={ep.title} streamUrl={ep.streamUrl} className="font-medium" />
+                  <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                    {streamDisplayName(ep.series.name, ep.streamUrl)} · S{ep.season} E{ep.episode} ·{" "}
+                    {ep.isActive === false ? "Disabled" : "Active"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 pl-7">
+                <Link
+                  href={`/admin/servers/streams?edit=${ep.id}`}
+                  className="panel-mobile-card-action text-xs px-3 py-2 rounded border"
+                  style={{ borderColor: "var(--border)", color: "var(--accent)" }}
+                >
+                  Edit
+                </Link>
+                <button
+                  type="button"
+                  className="panel-mobile-card-action text-xs px-3 py-2 rounded border"
+                  style={{ borderColor: "var(--border)" }}
+                  onClick={() => void toggleActive(ep)}
+                >
+                  {ep.isActive === false ? "Enable" : "Disable"}
+                </button>
+                <button
+                  type="button"
+                  className="panel-mobile-card-action text-xs px-3 py-2 rounded border"
+                  style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
+                  onClick={() => remove(ep.id)}
+                >
+                  Delete
+                </button>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+
+      <div className="hidden md:block overflow-x-auto rounded-lg border" style={{ borderColor: "var(--border)" }}>
         <table className="xui-lines-table w-full">
           <thead>
             <tr>

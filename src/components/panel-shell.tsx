@@ -22,7 +22,7 @@ import {
   type ResellerGroupFlags,
 } from "@/lib/reseller-group-flags";
 import { ResellerGroupFlagsProvider } from "@/components/reseller-group-flags-context";
-import { useMediaQuery } from "@/lib/use-media-query";
+import { usePanelLayout } from "@/lib/use-panel-layout";
 
 export function PanelShell({
   title,
@@ -42,14 +42,14 @@ export function PanelShell({
   children: React.ReactNode;
 }) {
   const [mobileNav, setMobileNav] = useState(false);
-  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const { isCompact, isTablet, isMdUp } = usePanelLayout();
   const pathname = usePathname() ?? "";
   const liveMetricsRoutes =
     pathname.startsWith("/admin/dashboard") ||
     pathname.startsWith("/admin/connections") ||
     pathname.startsWith("/reseller/dashboard") ||
     pathname.startsWith("/reseller/live_connections");
-  const liveMetricsEnabled = role === "ADMIN" && isDesktop && liveMetricsRoutes;
+  const liveMetricsEnabled = role === "ADMIN" && isMdUp && liveMetricsRoutes;
   useEffect(() => {
     if (!mobileNav) return;
     const prev = document.body.style.overflow;
@@ -70,7 +70,7 @@ export function PanelShell({
     <PanelUpdateJobProvider>
     <DashboardLiveMetricsProvider enabled={liveMetricsEnabled}>
     <div
-      className={`panel-shell${mobileNav ? " panel-shell--mobile-nav-open" : ""}`}
+      className={`panel-shell${mobileNav ? " panel-shell--mobile-nav-open" : ""}${isTablet ? " panel-shell--tablet" : ""}${isCompact ? " panel-shell--compact" : ""}`}
       style={accent ? ({ ["--accent" as string]: accent } as React.CSSProperties) : undefined}
     >
       {mobileNav && (
@@ -118,13 +118,19 @@ export function PanelShell({
       <div className="panel-shell-inner">
         <div className="panel-sidebar-column hidden md:block shrink-0">
           {role === "ADMIN" ? (
-            <AdminPanelSidebar brand={title} brandHref={dashboardHref} username={username} />
+            <AdminPanelSidebar
+              brand={title}
+              brandHref={dashboardHref}
+              username={username}
+              forceCollapsed={isTablet}
+            />
           ) : (
             <ResellerPanelSidebar
               brand={title}
               brandHref={dashboardHref}
               username={username}
               flags={resellerFlags}
+              forceCollapsed={isTablet}
             />
           )}
         </div>
@@ -143,7 +149,7 @@ export function PanelShell({
             onMenuToggle={() => setMobileNav((o) => !o)}
             menuOpen={mobileNav}
           />
-          <main className="panel-main-content flex-1 p-3 sm:p-4 md:p-6 pb-28 md:pb-24 overflow-x-hidden md:overflow-x-auto overflow-y-auto min-w-0 flex flex-col">
+          <main className="panel-main-content flex-1 p-3 sm:p-4 md:p-6 pb-28 md:pb-6 overflow-x-hidden overflow-y-auto min-w-0 flex flex-col">
             {isDemo && <PanelDemoBanner />}
           {role === "ADMIN" && <PanelUpdateBanner />}
           {role === "ADMIN" && <PanelUpdateProgress />}
@@ -154,7 +160,7 @@ export function PanelShell({
           {role === "ADMIN" && <PanelReleaseNotesModal />}
         </div>
       </div>
-      <PanelMobileBottomNav role={role} onMore={() => setMobileNav(true)} />
+      <PanelMobileBottomNav role={role} onMore={() => setMobileNav(true)} hidden={!isCompact} />
     </div>
     </DashboardLiveMetricsProvider>
     </PanelUpdateJobProvider>
