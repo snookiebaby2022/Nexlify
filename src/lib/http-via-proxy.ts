@@ -99,7 +99,6 @@ export function requestOrigin(
         method,
         headers: opts.headers,
         timeout: opts.timeoutMs,
-        ...(target.protocol === "https:" ? { rejectUnauthorized: false } : {}),
       },
       onResponse
     );
@@ -118,7 +117,6 @@ export function requestOrigin(
         Host: target.host,
       },
       timeout: opts.timeoutMs,
-      rejectUnauthorized: false,
       createConnection: (_connOpts, cb) => {
         void connectOriginSocket(opts.targetUrl, opts.proxy, opts.timeoutMs)
           .then((socket) => cb(null, socket))

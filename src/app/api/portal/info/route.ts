@@ -59,5 +59,5 @@ export async function GET(req: Request) {
       ticketUrl: "/portal/support",
       createTicketUrl: "/portal/support?new=1",
     },
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 }

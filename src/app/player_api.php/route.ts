@@ -63,32 +63,37 @@ async function resolveXtreamEpgListings(
   streamId: string,
   limit: number,
 ): Promise<Awaited<ReturnType<typeof getShortEpgForChannelIds>>> {
-  const resolved = await resolveStreamIdParam(streamId, { lineId });
-  const stream = resolved
-    ? await prisma.stream.findUnique({
-        where: { id: resolved },
-        select: {
-          epgChannelId: true,
-          channelId: true,
-          id: true,
-          vodMode: true,
-          archiveDays: true,
-          timeshiftSeconds: true,
-          isShifted: true,
-        },
-      })
-    : null;
-  const channelIds = stream
-    ? [
-        stream.epgChannelId,
-        stream.channelId,
-        stream.id,
-        streamId,
-        String(cuidToNum(stream.id)),
-      ].filter((v): v is string => Boolean(v?.trim()))
-    : [streamId];
-  const archivable = stream ? streamHasArchive(stream) : false;
-  return getShortEpgForChannelIds(channelIds, limit, archivable);
+  const ttl = await getCacheTtls();
+  return cacheGetOrSet(`xtream:epg:list:${lineId}:${streamId}:${limit}`, ttl.epg, async () => {
+    const resolved = await resolveStreamIdParam(streamId, { lineId });
+    const stream = resolved
+      ? await cacheGetOrSet(`xtream:epg:meta:${resolved}`, 300, async () =>
+          prisma.stream.findUnique({
+            where: { id: resolved },
+            select: {
+              epgChannelId: true,
+              channelId: true,
+              id: true,
+              vodMode: true,
+              archiveDays: true,
+              timeshiftSeconds: true,
+              isShifted: true,
+            },
+          })
+        )
+      : null;
+    const channelIds = stream
+      ? [
+          stream.epgChannelId,
+          stream.channelId,
+          stream.id,
+          streamId,
+          String(cuidToNum(stream.id)),
+        ].filter((v): v is string => Boolean(v?.trim()))
+      : [streamId];
+    const archivable = stream ? streamHasArchive(stream) : false;
+    return getShortEpgForChannelIds(channelIds, limit, archivable);
+  });
 }
 
 function warmVodPlayback(
@@ -131,8 +136,16 @@ async function handlePlayerApi(req: NextRequest, params: URLSearchParams) {
   const demoBlock = rejectDemoIptvPlayback(req);
   if (demoBlock) return demoBlock;
 
+  const envelope = params.get("envelope") === "true";
   const j = (data: unknown, init?: ResponseInit) =>
-    iptvJson(data, { ...init, compressFor: req });
+    iptvJson(
+      envelope ? { success: true, data } : data,
+      {
+        ...init,
+        headers: { "Cache-Control": "private, max-age=60" },
+        compressFor: req,
+      },
+    );
 
   try {
     return await handlePlayerApiInner(req, params, j);
@@ -150,8 +163,8 @@ async function handlePlayerApiInner(
   params: URLSearchParams,
   j: (data: unknown, init?: ResponseInit) => Promise<NextResponse>,
 ) {
-  const username = params.get("username");
-  const password = params.get("password");
+  const username = params.get("username") ?? params.get("user");
+  const password = params.get("password") ?? params.get("pass");
   const action = params.get("action");
   const userAgent = req.headers.get("user-agent");
   const panelBase = serverBaseUrl(req.url, req.headers);
@@ -207,7 +220,7 @@ async function handlePlayerApiInner(
         : `xtream:live_categories:v9:${bouquetToken}`;
       const payload = await cacheGetOrSet(
         catKey,
-        Math.max(300, ttl.categories),
+        ttl.categories,
         () => xtreamLiveCategoriesForLine(line, profile.numericCategoryId),
       );
       return j(payload);
@@ -244,7 +257,7 @@ async function handlePlayerApiInner(
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(
         `xtream:vod_categories:v5:${bouquetToken}`,
-        Math.max(300, ttl.categories),
+        ttl.categories,
         () => xtreamVodCategoriesForLine(line),
       );
       return j(payload);
@@ -253,7 +266,7 @@ async function handlePlayerApiInner(
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(
         `xtream:series_categories:v5:${bouquetToken}`,
-        Math.max(300, ttl.categories),
+        ttl.categories,
         () => xtreamSeriesCategoriesForLine(line),
       );
       return j(payload);
@@ -267,7 +280,7 @@ async function handlePlayerApiInner(
       if (!vodId) return j({});
       const info = await cacheGetOrSet(
         `xtream:vod_info:${line.id}:${vodId}`,
-        300,
+        60,
         () => xtreamVodInfo(line, baseUrl, vodId),
       );
       if (info) warmVodPlayback(line.id, vodId, ip, userAgent);
@@ -278,7 +291,7 @@ async function handlePlayerApiInner(
       if (!seriesId) return j(emptyXtreamSeriesInfo());
       const info = await cacheGetOrSet(
         `xtream:series_info:${line.id}:${seriesId}`,
-        120,
+        60,
         async () => {
           const row = await xtreamSeriesInfo(line, baseUrl, seriesId);
           return row ?? emptyXtreamSeriesInfo();
@@ -312,6 +325,7 @@ async function handlePlayerApiInner(
         epg_listings: await resolveXtreamEpgListings(line.id, streamId, 10),
       });
     }
+    case "get_account_info":
     case "get_user_info":
       return j(await xtreamUserInfo(line, baseUrl, userAgent));
     case "get_server_info": {

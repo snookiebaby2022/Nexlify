@@ -14,7 +14,7 @@ export const maxDuration = 180;
 
 const M3U_HEADERS = {
   "Content-Type": "audio/x-mpegurl",
-  "Cache-Control": "no-store",
+  "Cache-Control": "private, max-age=60, must-revalidate",
 };
 
 export async function OPTIONS() {

@@ -1,2 +1,2 @@
-/** XCIPTV / XUI alias — same handler as player_api.php */
-export { OPTIONS, GET, POST, HEAD } from "../player_api.php/route";
+/** XUI management API alias — never dispatch line credentials to player API. */
+export { GET, POST } from "../api/v1/route";
