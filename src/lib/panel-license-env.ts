@@ -1,10 +1,15 @@
 import { parseLicenseKey } from "@/lib/license/crypto";
-import { isPanelLicenseExemptEnv } from "@/lib/panel-demo-host";
+import { isPanelLicenseExempt, isPanelLicenseExemptEnv } from "@/lib/panel-demo-host";
 
 /** Node-only: set NEXLIFY_LICENSE_VALID for Edge middleware (no crypto in middleware). */
 export async function syncPanelLicenseEnv() {
   delete process.env.NEXLIFY_LICENSE_VALID;
   if (isPanelLicenseExemptEnv()) {
+    process.env.NEXLIFY_LICENSE_VALID = "1";
+    return;
+  }
+  const primaryHost = process.env.PANEL_PRIMARY_DOMAIN ?? "";
+  if (primaryHost && isPanelLicenseExempt(primaryHost)) {
     process.env.NEXLIFY_LICENSE_VALID = "1";
     return;
   }

@@ -1,7 +1,28 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.62",
+  "latestVersion": "2.0.63",
   "releases": [
+    {
+      "version": "2.0.63",
+      "date": "2026-09-03",
+      "channel": "stable",
+      "summary": "More stable live playback, accurate Live Connections duration, in-page stream editing, and a tougher panel restart.",
+      "changelog": [
+        "Live Connections duration follows the stream being watched and keeps ticking when the list refreshes",
+        "Manage Streams edit opens in a panel on the list, the same way Edit Lines does",
+        "Live playback holds a channel through brief zaps and is slower to drop a lagging client",
+        "A healthy HLS restream is left running across panel restarts",
+        "Panel process env no longer blanks DATABASE_URL when .env uses export KEY=",
+        "Background jobs retry a brief Postgres disconnect instead of failing the cron loop"
+      ],
+      "fixes": [
+        "Duration no longer freezes or resets after a Live Connections refresh",
+        "Fewer random live drops from overly tight fan teardown and client-lag limits",
+        "License startup no longer treats a configured demo or exempt host as unlicensed",
+        "Plex sync no longer dies when Postgres closes a connection mid-job"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/nexlify-panel.tar.gz"
+    },
     {
       "version": "2.0.62",
       "date": "2026-09-01",

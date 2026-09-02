@@ -100,9 +100,13 @@ function streamEditTabs(type: string): XuiFormTab<StreamEditTab>[] {
 export function StreamManageEditPage({
   streamId,
   returnTo,
+  onClose,
+  onSaved,
 }: {
   streamId: string;
   returnTo?: string;
+  onClose?: () => void;
+  onSaved?: () => void;
 }) {
   const [stream, setStream] = useState<Stream | null>(null);
   const [serverIds, setServerIds] = useState<string[]>([]);
@@ -145,6 +149,7 @@ export function StreamManageEditPage({
   const [editTab, setEditTab] = useState<StreamEditTab>("details");
 
   useEffect(() => {
+    setStream(null);
     fetch(`/api/admin/streams/${streamId}`)
       .then((r) => r.json())
       .then((d) => {
@@ -209,6 +214,12 @@ export function StreamManageEditPage({
             }))
         )
       );
+  }, [streamId]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#epg") {
+      setEditTab("meta");
+    }
   }, [streamId]);
 
   async function save(e: React.FormEvent) {
@@ -300,6 +311,7 @@ export function StreamManageEditPage({
           vodMode: savedVodMode,
         }));
       }
+      onSaved?.();
     } catch (err) {
       const aborted = err instanceof Error && err.name === "AbortError";
       setMessage(aborted ? "Save timed out — try again." : err instanceof Error ? err.message : "Save failed");
@@ -377,12 +389,22 @@ export function StreamManageEditPage({
       >
         {saving ? "Saving…" : "Save stream"}
       </button>
-      <Link
-        href={manageHref}
-        className="btn-cancel rounded px-6 py-2.5 text-sm font-medium inline-flex items-center"
-      >
-        Cancel
-      </Link>
+      {onClose ? (
+        <button
+          type="button"
+          onClick={onClose}
+          className="btn-cancel rounded px-6 py-2.5 text-sm font-medium inline-flex items-center"
+        >
+          Cancel
+        </button>
+      ) : (
+        <Link
+          href={manageHref}
+          className="btn-cancel rounded px-6 py-2.5 text-sm font-medium inline-flex items-center"
+        >
+          Cancel
+        </Link>
+      )}
       {message && (
         <span
           className="text-sm"
@@ -840,7 +862,8 @@ export function StreamManageEditPage({
         </FormPageShell>
       </form>
       <PanelMobileActionBar
-        cancelHref={manageHref}
+        cancelHref={onClose ? undefined : manageHref}
+        onCancel={onClose}
         saveLabel="Save stream"
         onSave={() => (document.getElementById("stream-edit-form") as HTMLFormElement | null)?.requestSubmit()}
         saveDisabled={saving}

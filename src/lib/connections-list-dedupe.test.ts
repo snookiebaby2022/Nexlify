@@ -27,6 +27,7 @@ test("pickCanonicalLiveConnectionRows keeps newest heartbeat for duplicate viewe
   ]);
   assert.equal(rows.length, 1);
   assert.equal(rows[0]!.id, "new");
+  assert.equal(rows[0]!.startedAt.toISOString(), "2026-09-02T11:00:00.000Z");
 });
 
 test("pickCanonicalLiveConnectionRows drops anonymous edge row when real viewer IP exists", () => {

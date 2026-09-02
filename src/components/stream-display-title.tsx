@@ -41,6 +41,7 @@ export function StreamDisplayTitle({
   streamIcon,
   streamUrl,
   href,
+  onOpen,
   className,
 }: {
   name: string;
@@ -48,11 +49,16 @@ export function StreamDisplayTitle({
   streamIcon?: string | null;
   streamUrl?: string | null;
   href?: string;
+  onOpen?: () => void;
   className?: string;
 }) {
   const source = integrationSourceForStream(name, streamUrl);
   const displayName = streamDisplayName(name, fallbackName, streamIcon);
-  const label = href ? (
+  const label = onOpen ? (
+    <button type="button" className={className} onClick={onOpen}>
+      {displayName}
+    </button>
+  ) : href ? (
     <Link href={href} className={className}>
       {displayName}
     </Link>

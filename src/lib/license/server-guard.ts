@@ -25,6 +25,11 @@ export async function startupLicenseValidation(): Promise<{ ok: boolean; reason?
   }
 
   const host = process.env.PANEL_PRIMARY_DOMAIN ?? "localhost";
+  const { isPanelLicenseExempt } = await import("@/lib/panel-demo-host");
+  if (isPanelLicenseExempt(host)) {
+    await markStartupValidated();
+    return { ok: true, reason: "host_exempt" };
+  }
 
   const envKey = process.env.NEXLIFY_LICENSE_KEY?.trim();
   if (envKey) {
@@ -37,7 +42,16 @@ export async function startupLicenseValidation(): Promise<{ ok: boolean; reason?
   }
 
   const { getStoredLicense, revalidateStoredLicense } = await import("@/lib/license");
-  const stored = await getStoredLicense();
+  let stored;
+  try {
+    stored = await getStoredLicense();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/DATABASE_URL|empty|PrismaClientInitialization|P1017|Can't reach/i.test(message)) {
+      return { ok: false, reason: "db_unavailable" };
+    }
+    throw error;
+  }
   if (!stored) {
     return { ok: false, reason: "no_license" };
   }
@@ -75,6 +89,10 @@ export async function heartbeatCheck(): Promise<{ ok: boolean; reason?: string; 
   }
 
   const host = process.env.PANEL_PRIMARY_DOMAIN ?? "localhost";
+  const { isPanelLicenseExempt } = await import("@/lib/panel-demo-host");
+  if (isPanelLicenseExempt(host)) {
+    return { ok: true, reason: "host_exempt" };
+  }
 
   try {
     const { getStoredLicense } = await import("@/lib/license");

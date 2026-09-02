@@ -1,9 +1,6 @@
 import type { SessionUser } from "@/lib/auth";
-import {
-  listLiveConnections,
-  pruneStaleConnections,
-  PLAYBACK_STALE_MS,
-} from "@/lib/connections";
+import { listLiveConnections } from "@/lib/connections";
+import { prisma } from "@/lib/prisma";
 import { computeConnectionQualityWithLive, batchGetLiveQualitySamples } from "@/lib/connection-quality-live";
 import { isConnectionQoeEnabled } from "@/lib/connection-qoe";
 import {
@@ -19,6 +16,7 @@ export type AdminConnectionRow = {
   ip: string | null;
   userAgent: string | null;
   startedAt: string;
+  streamStartedAt: string | null;
   lastSeenAt: string;
   serverName: string;
   line: { username: string; maxConnections: number; isRestreamer?: boolean };
@@ -29,8 +27,28 @@ export type AdminConnectionRow = {
 };
 
 export async function listAdminConnections(session: SessionUser): Promise<AdminConnectionRow[]> {
-  void pruneStaleConnections(PLAYBACK_STALE_MS);
   const connections = await listLiveConnections(ownerScope(session));
+  const streamIds = [...new Set(connections.map((c) => c.streamId).filter((id): id is string => Boolean(id)))];
+  const processStartedById = new Map<string, Date>();
+  const watchStartedById = new Map<string, Date>();
+  if (streamIds.length) {
+    const processes = await prisma.streamProcess.findMany({
+      where: { streamId: { in: streamIds }, status: "running", startedAt: { not: null } },
+      select: { streamId: true, startedAt: true },
+    });
+    for (const p of processes) {
+      if (!p.streamId || !p.startedAt) continue;
+      const prev = processStartedById.get(p.streamId);
+      if (!prev || p.startedAt < prev) processStartedById.set(p.streamId, p.startedAt);
+    }
+    for (const c of connections) {
+      if (!c.streamId) continue;
+      const watchStart = c.startedAt instanceof Date ? c.startedAt : new Date(c.startedAt);
+      if (!Number.isFinite(watchStart.getTime())) continue;
+      const prev = watchStartedById.get(c.streamId);
+      if (!prev || watchStart < prev) watchStartedById.set(c.streamId, watchStart);
+    }
+  }
   const now = Date.now();
   const qualityItems = connections.map((c) => ({
     lineId: c.lineId,
@@ -62,6 +80,9 @@ export async function listAdminConnections(session: SessionUser): Promise<AdminC
       userAgent: c.userAgent,
     });
     const startedMs = c.startedAt instanceof Date ? c.startedAt.getTime() : new Date(c.startedAt).getTime();
+    const streamStarted = c.streamId
+      ? (processStartedById.get(c.streamId) ?? watchStartedById.get(c.streamId) ?? null)
+      : null;
     const qoe =
       live?.hasSamples
         ? {
@@ -80,6 +101,7 @@ export async function listAdminConnections(session: SessionUser): Promise<AdminC
     return {
       ...c,
       startedAt: c.startedAt instanceof Date ? c.startedAt.toISOString() : String(c.startedAt),
+      streamStartedAt: streamStarted ? streamStarted.toISOString() : null,
       lastSeenAt: c.lastSeenAt instanceof Date ? c.lastSeenAt.toISOString() : String(c.lastSeenAt),
       serverName,
       quality,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -41,6 +41,7 @@ import {
   useStoredColumnVisibility,
 } from "@/components/table-toolbar-menus";
 import { useResellerGroupFlags } from "@/components/reseller-group-flags-context";
+import { usePanelLayout } from "@/lib/use-panel-layout";
 
 const StreamVerifyPanel = dynamic(
   () => import("@/components/stream-verify-panel").then((m) => m.StreamVerifyPanel),
@@ -48,6 +49,10 @@ const StreamVerifyPanel = dynamic(
 );
 const StreamPreviewModal = dynamic(
   () => import("@/components/stream-preview-modal").then((m) => m.StreamPreviewModal),
+  { ssr: false }
+);
+const StreamManageEditPage = dynamic(
+  () => import("@/components/stream-manage-edit-page").then((m) => m.StreamManageEditPage),
   { ssr: false }
 );
 
@@ -113,7 +118,9 @@ function serverLabel(s: Stream) {
 
 function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
   const kind = streamListUptimeKind(stream, listType);
-  const label = streamUptimeDisplayLabel(kind);
+  const mode = streamUptimeDisplayLabel(kind);
+  const uptime = formatUptime(stream.liveStats?.uptimeSeconds ?? null);
+  const label = stream.liveStats?.uptimeSeconds != null ? `${mode} · ${uptime}` : mode;
   const cls =
     kind === "DIRECT"
       ? "xui-uptime-badge xui-uptime-badge--direct"
@@ -123,7 +130,7 @@ function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: st
   return (
     <span
       className={cls}
-      title="Live = through this panel · On-demand = starts when a viewer tunes in · Direct = Direct source is on"
+      title="Uptime is how long this channel has been pulling. Live = through this panel · On-demand = starts when a viewer tunes in · Direct = Direct source is on"
     >
       {label}
     </span>
@@ -180,8 +187,11 @@ export function StreamsList({
     typeTotals: { LIVE?: number; MOVIE?: number; SERIES?: number };
   };
 }) {
+  const router = useRouter();
+  const { isTablet } = usePanelLayout();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const editId = searchParams.get("edit")?.trim() || null;
   const { hideAllUrls } = useResellerGroupFlags();
   const statusFromUrl = searchParams.get("status");
   const sourceIssueFromUrl = searchParams.get("sourceIssue");
@@ -290,13 +300,25 @@ export function StreamsList({
   ]);
 
   const editHref = (streamId: string, hash = "") =>
-    `/admin/servers/streams?edit=${encodeURIComponent(streamId)}&returnTo=${encodeURIComponent(
-      listReturnHref
-    )}${hash}`;
+    `${listReturnHref}&edit=${encodeURIComponent(streamId)}${hash}`;
 
   useEffect(() => {
-    window.history.replaceState(window.history.state, "", listReturnHref);
-  }, [listReturnHref]);
+    const href = editId
+      ? `${listReturnHref}&edit=${encodeURIComponent(editId)}${window.location.hash}`
+      : listReturnHref;
+    window.history.replaceState(window.history.state, "", href);
+  }, [editId, listReturnHref]);
+
+  const closeEdit = useCallback(() => {
+    router.replace(listReturnHref, { scroll: false });
+  }, [listReturnHref, router]);
+
+  const openEdit = useCallback(
+    (streamId: string, hash = "") => {
+      router.replace(`${listReturnHref}&edit=${encodeURIComponent(streamId)}${hash}`, { scroll: false });
+    },
+    [listReturnHref, router]
+  );
 
   useEffect(() => {
     if (urlInitRef.current || typeof window === "undefined") return;
@@ -901,8 +923,8 @@ export function StreamsList({
                         fallbackName={s.name}
                         streamIcon={s.streamIcon}
                         streamUrl={hideAllUrls ? "" : s.streamUrl}
-                        href={editHref(s.id)}
-                        className="xui-stream-name font-semibold block truncate"
+                        onOpen={() => openEdit(s.id)}
+                        className="xui-stream-name font-semibold block truncate text-left"
                       />
                       {parseLiveStreamMeta(s.agentStartCmd).nowPlayingTitle ? (
                         <p className="text-xs truncate" style={{ color: "var(--accent)" }}>
@@ -951,7 +973,7 @@ export function StreamsList({
                   isActive={s.isActive}
                   onRefresh={load}
                   onDelete={() => remove(s.id)}
-                  editHref={editHref(s.id)}
+                  onEdit={() => openEdit(s.id)}
                 />
               </div>
             </article>
@@ -1022,8 +1044,8 @@ export function StreamsList({
                         fallbackName={s.name}
                         streamIcon={s.streamIcon}
                         streamUrl={hideAllUrls ? "" : s.streamUrl}
-                        href={editHref(s.id)}
-                        className="xui-stream-name"
+                        onOpen={() => openEdit(s.id)}
+                        className="xui-stream-name text-left"
                       />
                       {parseLiveStreamMeta(s.agentStartCmd).nowPlayingTitle ? (
                         <span className="block text-xs mt-0.5" style={{ color: "var(--accent)" }}>
@@ -1083,7 +1105,7 @@ export function StreamsList({
                         isActive={s.isActive}
                         onRefresh={load}
                         onDelete={() => remove(s.id)}
-                        editHref={editHref(s.id)}
+                        onEdit={() => openEdit(s.id)}
                       />
                     </td>
                   ) : null}
@@ -1107,8 +1129,9 @@ export function StreamsList({
                   ) : null}
                   {streamCols.show("epg") ? (
                     <td>
-                      <Link
-                        href={editHref(s.id, "#epg")}
+                      <button
+                        type="button"
+                        onClick={() => openEdit(s.id, "#epg")}
                         className={`xui-stream-epg-btn ${
                           s.epgChannelId
                             ? s.epgWorking
@@ -1125,7 +1148,7 @@ export function StreamsList({
                         }
                       >
                         <Square size={12} fill="currentColor" />
-                      </Link>
+                      </button>
                     </td>
                   ) : null}
                   {streamCols.show("streamInfo") ? (
@@ -1168,6 +1191,32 @@ export function StreamsList({
             load();
           }}
         />
+      )}
+
+      {editId && (
+        <div
+          className={`xui-modal-backdrop${isTablet ? " xui-modal-backdrop--split" : ""}`}
+          onClick={closeEdit}
+        >
+          <div
+            className={`xui-modal-panel xui-line-edit-modal${isTablet ? " xui-line-edit-modal--split" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Edit stream"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <StreamManageEditPage
+              key={editId}
+              streamId={editId}
+              returnTo={listReturnHref}
+              onClose={closeEdit}
+              onSaved={() => {
+                load();
+                closeEdit();
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

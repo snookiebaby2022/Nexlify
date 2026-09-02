@@ -566,6 +566,12 @@ function registerPipeTeardown(pulseCtx, fn) {
   if (session) session.teardown = fn;
 }
 
+function markPlaybackSessionActive(pulseCtx, now = Date.now()) {
+  if (!pulseCtx?.lineId || !pulseCtx?.streamId) return;
+  const session = playbackSessions.get(playbackSessionKey(pulseCtx));
+  if (session) session.lastClientAt = now;
+}
+
 function createLiveByteMeter(pulseCtx) {
   if (!pulseCtx?.lineId || !pulseCtx?.streamId) return () => undefined;
   touchPlaybackSession(pulseCtx);
@@ -576,6 +582,7 @@ function createLiveByteMeter(pulseCtx) {
     if (n <= 0) return;
     pending += n;
     const now = Date.now();
+    markPlaybackSessionActive(pulseCtx, now);
     if (lastPulse === 0) lastPulse = now;
     // Aggregate bytes locally. A bitrate-based threshold generated several DB
     // writes per second per viewer and made the panel unavailable.

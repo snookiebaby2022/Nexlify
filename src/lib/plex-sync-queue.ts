@@ -72,12 +72,35 @@ export async function enqueuePlexSync(
   return { alreadyRunning: false, jobId, progress };
 }
 
+function isTransientPrismaDisconnect(error: unknown): boolean {
+  const code =
+    typeof error === "object" && error && "code" in error
+      ? String((error as { code?: string }).code)
+      : "";
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    code === "P1017" ||
+    /closed the connection|Can't reach database server|Connection reset/i.test(message)
+  );
+}
+
+async function withPrismaRetry<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (!isTransientPrismaDisconnect(error)) throw error;
+    await prisma.$connect().catch(() => {});
+    return await fn();
+  }
+}
+
 async function claimNextPlexSync(): Promise<{
   id: string;
   jobId: string;
   serverId: string | null;
 } | null> {
-  return prisma.$transaction(
+  return withPrismaRetry(() =>
+    prisma.$transaction(
     async (tx) => {
       const locked = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM "MediaIntegration"
@@ -117,6 +140,7 @@ async function claimNextPlexSync(): Promise<{
       return { id: row.id, jobId, serverId };
     },
     { timeout: 15_000 }
+    )
   );
 }
 

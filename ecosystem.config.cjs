@@ -7,15 +7,18 @@ function loadEnv() {
   const out = {};
   if (!existsSync(envPath)) return out;
   for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
-    const t = line.trim();
+    let t = line.trim();
     if (!t || t.startsWith("#")) continue;
+    if (t.startsWith("export ")) t = t.slice(7).trim();
     const i = t.indexOf("=");
     if (i < 1) continue;
     let val = t.slice(i + 1).trim();
     if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
       val = val.slice(1, -1);
     }
-    out[line.slice(0, i).trim()] = val;
+    const key = t.slice(0, i).trim();
+    if (!key) continue;
+    out[key] = val;
   }
   return out;
 }
@@ -42,6 +45,16 @@ function envVar(key, fallback = "") {
   const fromFile = fileEnv[key];
   if (fromFile !== undefined && fromFile !== "") return fromFile;
   return fallback;
+}
+
+/** PM2 treats "" as a set value and shadows Next/.env — omit blanks. */
+function compactEnv(env) {
+  const out = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined || value === null || value === "") continue;
+    out[key] = value;
+  }
+  return out;
 }
 
 const panelPort = String(
@@ -88,8 +101,8 @@ const panelExecMode = panelInstances > 1 ? "cluster" : "fork";
 
 const sharedPanelEnv = {
   NODE_ENV: "production",
-  DATABASE_URL: fileEnv.DATABASE_URL || "",
-  JWT_SECRET: fileEnv.JWT_SECRET || "",
+  DATABASE_URL: envVar("DATABASE_URL"),
+  JWT_SECRET: envVar("JWT_SECRET"),
   PORT: panelPort,
   PANEL_PORT: panelPort,
   WEBSITE_PORT: websitePort,
@@ -101,11 +114,14 @@ const sharedPanelEnv = {
   PANEL_PUBLIC_PORT: fileEnv.PANEL_PUBLIC_PORT || "80",
   PANEL_ASSUME_PROXY_SSL: fileEnv.PANEL_ASSUME_PROXY_SSL || "0",
   PANEL_PRIMARY_DOMAIN: fileEnv.PANEL_PRIMARY_DOMAIN || "",
+  PANEL_LICENSE_EXEMPT_HOSTS: envVar("PANEL_LICENSE_EXEMPT_HOSTS"),
+  PANEL_DEMO_HOSTS: envVar("PANEL_DEMO_HOSTS"),
   PANEL_COOKIE_SECURE: fileEnv.PANEL_COOKIE_SECURE || "0",
   NEXLIFY_LICENSE_COOKIE_SECURE: fileEnv.NEXLIFY_LICENSE_COOKIE_SECURE || "0",
   INSTALL_ADMIN_PASSWORD: fileEnv.INSTALL_ADMIN_PASSWORD || "",
   NEXLIFY_LICENSE_VALID: fileEnv.NEXLIFY_LICENSE_VALID || "0",
   NEXLIFY_LICENSE_KEY: fileEnv.NEXLIFY_LICENSE_KEY || "",
+  NEXLIFY_LICENSE_REQUIRE: envVar("NEXLIFY_LICENSE_REQUIRE"),
   PANEL_TRUST_CLOUDFLARE: fileEnv.PANEL_TRUST_CLOUDFLARE || "1",
   PANEL_REPO_PATH: fileEnv.PANEL_REPO_PATH || __dirname,
   SMTP_HOST: fileEnv.SMTP_HOST || "",
@@ -133,6 +149,8 @@ const sharedPanelEnv = {
   NEXLIFY_CONNECTION_QOE: envVar("NEXLIFY_CONNECTION_QOE", streamingOptimized ? "0" : "0"),
 };
 
+const panelRuntimeEnv = compactEnv(sharedPanelEnv);
+
 /** @type {import('pm2').StartOptions[]} */
 const pm2Apps = [
     useStandalone
@@ -148,7 +166,7 @@ const pm2Apps = [
           kill_timeout: 8000,
           // Recycle individual workers before they wedge the event loop (~2.5GB+ under IPTV load).
           max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "1800M",
-          env: sharedPanelEnv,
+          env: panelRuntimeEnv,
         }
       : {
           name: "nexlify",
@@ -163,7 +181,7 @@ const pm2Apps = [
           kill_timeout: 8000,
           listen_timeout: 90000,
           max_memory_restart: fileEnv.NEXLIFY_MAX_MEMORY_RESTART || "1800M",
-          env: sharedPanelEnv,
+          env: panelRuntimeEnv,
         },
     {
       name: "nexlify-cron",
@@ -176,15 +194,19 @@ const pm2Apps = [
       max_restarts: 10,
       min_uptime: "10s",
       max_memory_restart: fileEnv.NEXLIFY_CRON_MAX_MEMORY_RESTART || "1200M",
-      env: {
+      env: compactEnv({
         NODE_ENV: "production",
-        DATABASE_URL: fileEnv.DATABASE_URL || "",
+        DATABASE_URL: envVar("DATABASE_URL"),
+        PANEL_PRIMARY_DOMAIN: envVar("PANEL_PRIMARY_DOMAIN"),
+        PANEL_LICENSE_EXEMPT_HOSTS: envVar("PANEL_LICENSE_EXEMPT_HOSTS"),
+        PANEL_DEMO_HOSTS: envVar("PANEL_DEMO_HOSTS"),
+        NEXLIFY_LICENSE_REQUIRE: envVar("NEXLIFY_LICENSE_REQUIRE"),
         REDIS_URL: fileEnv.REDIS_URL || process.env.REDIS_URL || "redis://127.0.0.1:6379",
         REDIS_CLUSTER_NODES: fileEnv.REDIS_CLUSTER_NODES || process.env.REDIS_CLUSTER_NODES || "",
         PATH: pgBinPath(),
         NEXLIFY_CRON_MAX_OLD_SPACE_MB: fileEnv.NEXLIFY_CRON_MAX_OLD_SPACE_MB || "1536",
         NEXLIFY_CRON_RECYCLE_RSS_MB: fileEnv.NEXLIFY_CRON_RECYCLE_RSS_MB || "1200",
-      },
+      }),
     },
     {
       name: "nexlify-hls",
@@ -197,15 +219,15 @@ const pm2Apps = [
       max_restarts: 20,
       min_uptime: "5s",
       max_memory_restart: "2048M",
-      env: {
+      env: compactEnv({
         NODE_ENV: "production",
-        DATABASE_URL: fileEnv.DATABASE_URL || "",
-        JWT_SECRET: fileEnv.JWT_SECRET || "",
+        DATABASE_URL: envVar("DATABASE_URL"),
+        JWT_SECRET: envVar("JWT_SECRET"),
         PANEL_INTERNAL_SECRET: envVar("PANEL_INTERNAL_SECRET"),
         NEXLIFY_HLS_DIR: fileEnv.NEXLIFY_HLS_DIR || "/var/lib/nexlify/hls",
         NEXLIFY_HLS_DAEMON_PORT: "13081",
         PATH: pgBinPath(),
-      },
+      }),
     },
     {
       name: "nexlify-web",
@@ -217,10 +239,10 @@ const pm2Apps = [
       autorestart: true,
       max_restarts: 10,
       min_uptime: "10s",
-      env: {
+      env: compactEnv({
         NODE_ENV: "production",
-        DATABASE_URL: fileEnv.DATABASE_URL || "",
-        JWT_SECRET: fileEnv.JWT_SECRET || "",
+        DATABASE_URL: envVar("DATABASE_URL"),
+        JWT_SECRET: envVar("JWT_SECRET"),
         STRIPE_SECRET_KEY: fileEnv.STRIPE_SECRET_KEY || "",
         SMTP_HOST: fileEnv.SMTP_HOST || "smtp.gmail.com",
         SMTP_PORT: fileEnv.SMTP_PORT || "587",
@@ -229,7 +251,7 @@ const pm2Apps = [
         SMTP_FROM: fileEnv.SMTP_FROM || "Nexlify <admin@nexlify.live>",
         PANEL_API_SECRET: fileEnv.PANEL_API_SECRET || "",
         NEXLIFY_PANEL_API_SECRET: fileEnv.NEXLIFY_PANEL_API_SECRET || "",
-      },
+      }),
     },
 ];
 

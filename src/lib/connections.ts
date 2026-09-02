@@ -270,14 +270,21 @@ export function pickCanonicalLiveConnectionRows<
   for (const row of rows) {
     const key = sessionKey(row.lineId, row.streamId, row.ip);
     const prev = byViewerKey.get(key);
-    if (!prev || startedAtMs(row.lastSeenAt) > startedAtMs(prev.lastSeenAt)) {
+    if (!prev) {
       byViewerKey.set(key, row);
-    } else if (
-      startedAtMs(row.lastSeenAt) === startedAtMs(prev.lastSeenAt) &&
-      startedAtMs(row.startedAt) < startedAtMs(prev.startedAt)
-    ) {
-      byViewerKey.set(key, row);
+      continue;
     }
+    const rowNewer = startedAtMs(row.lastSeenAt) > startedAtMs(prev.lastSeenAt);
+    const sameBeatOlderStart =
+      startedAtMs(row.lastSeenAt) === startedAtMs(prev.lastSeenAt) &&
+      startedAtMs(row.startedAt) < startedAtMs(prev.startedAt);
+    const keep = rowNewer || sameBeatOlderStart ? row : prev;
+    const other = keep === row ? prev : row;
+    const earliestStart =
+      startedAtMs(other.startedAt) > 0 && startedAtMs(other.startedAt) < startedAtMs(keep.startedAt)
+        ? other.startedAt
+        : keep.startedAt;
+    byViewerKey.set(key, earliestStart === keep.startedAt ? keep : { ...keep, startedAt: earliestStart });
   }
 
   const byLineStream = new Map<string, T[]>();
@@ -542,11 +549,13 @@ export async function trackConnection(opts: {
       select: { id: true, streamId: true },
     });
     if (byIp) {
+      const switchedStream = Boolean(byIp.streamId && byIp.streamId !== streamId);
       try {
         await prisma.liveConnection.update({
           where: { id: byIp.id },
           data: {
             streamId,
+            ...(switchedStream ? { startedAt: new Date() } : {}),
             lastSeenAt: new Date(),
             ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
           },

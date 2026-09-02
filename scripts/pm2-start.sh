@@ -242,14 +242,20 @@ ensure_pm2_app() {
       val="$(grep -E '^NEXLIFY_HLS_DAEMON_PORT=' "$ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' "'\''"')"
       [ -n "$val" ] && HLS_PORT="$val"
     fi
-    # tsx child processes can survive PM2 bash-wrapper restarts and block :13081
-    if command -v fuser >/dev/null 2>&1 && fuser "${HLS_PORT}/tcp" >/dev/null 2>&1; then
-      echo "Clearing stale HLS daemon listener on port ${HLS_PORT}..."
-      fuser -k "${HLS_PORT}/tcp" 2>/dev/null || true
-      sleep 1
+    # Only SIGTERM a wedged listener. Killing a healthy daemon on every restart
+    # drops in-flight HLS and inflates PM2 restart counts (exit 130).
+    HLS_HEALTH="http://127.0.0.1:${HLS_PORT}/health"
+    if curl -fsS --max-time 1 "$HLS_HEALTH" >/dev/null 2>&1; then
+      echo "HLS daemon already healthy on :${HLS_PORT} — restart without killing port"
+    else
+      if command -v fuser >/dev/null 2>&1 && fuser "${HLS_PORT}/tcp" >/dev/null 2>&1; then
+        echo "Clearing stale HLS daemon listener on port ${HLS_PORT}..."
+        fuser -k "${HLS_PORT}/tcp" 2>/dev/null || true
+        sleep 1
+      fi
+      pkill -f 'hls-restream-daemon.ts' 2>/dev/null || true
+      sleep 0.5
     fi
-    pkill -f 'hls-restream-daemon.ts' 2>/dev/null || true
-    sleep 0.5
   fi
   if needs_reregister "$name"; then
     pm2 delete "$name" 2>/dev/null || true

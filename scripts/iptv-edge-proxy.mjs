@@ -172,13 +172,13 @@ const MAX_EDGE_HLS_REMUX = Number(process.env.IPTV_EDGE_MAX_HLS_REMUX || 256);
 const MAX_EDGE_DISK_PACK = Number(process.env.IPTV_EDGE_MAX_DISK_PACK || 256);
 /** One provider pull per live channel while anyone is watching (XUI on-demand restream). */
 const MAX_LIVE_FANS = Number(process.env.IPTV_EDGE_MAX_LIVE_FANS || 8000);
-const LIVE_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_LIVE_FAN_LINGER_MS || 12000);
-const ON_DEMAND_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_ON_DEMAND_FAN_LINGER_MS || 25000);
+const LIVE_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_LIVE_FAN_LINGER_MS || 45000);
+const ON_DEMAND_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_ON_DEMAND_FAN_LINGER_MS || 45000);
 /** Drop/resync clients that fall behind the shared fan instead of buffering unboundedly.
  *  4MB was too low once origin stays realtime: CDN bursts (~8MB in <1s) backpressure
  *  a healthy socket and used to kill the viewer. Time lag still drops slow clients. */
-const MAX_CLIENT_LAG_BYTES = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_BYTES || 16_000_000);
-const MAX_CLIENT_LAG_MS = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_MS || 8000);
+const MAX_CLIENT_LAG_BYTES = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_BYTES || 24_000_000);
+const MAX_CLIENT_LAG_MS = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_MS || 25000);
 /** Stop idle disk HLS packagers after no segment requests. */
 const DISK_PACK_IDLE_MS = Number(process.env.IPTV_EDGE_DISK_PACK_IDLE_MS || 45_000);
 const DISK_PACK_IDLE_SWEEP_MS = Math.min(DISK_PACK_IDLE_MS, 15_000);
@@ -659,6 +659,12 @@ function registerPipeTeardown(pulseCtx, fn) {
   if (session) session.teardown = fn;
 }
 
+function markPlaybackSessionActive(pulseCtx, now = Date.now()) {
+  if (!pulseCtx?.lineId || !pulseCtx?.streamId) return;
+  const session = playbackSessions.get(playbackSessionKey(pulseCtx));
+  if (session) session.lastClientAt = now;
+}
+
 function createLiveByteMeter(pulseCtx) {
   if (!pulseCtx?.lineId || !pulseCtx?.streamId) return () => undefined;
   touchPlaybackSession(pulseCtx);
@@ -670,6 +676,7 @@ function createLiveByteMeter(pulseCtx) {
     const n = chunk?.length ?? 0;
     if (n <= 0) return;
     const now = Date.now();
+    markPlaybackSessionActive(pulseCtx, now);
     if (lastChunk > 0) {
       const gap = now - lastChunk;
       if (gap > longestIdle) longestIdle = gap;

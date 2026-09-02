@@ -25,6 +25,7 @@ type ConnectionRow = {
   ip: string | null;
   userAgent: string | null;
   startedAt: string;
+  streamStartedAt?: string | null;
   lastSeenAt: string;
   serverName: string;
   line: { username: string; maxConnections: number; isRestreamer?: boolean };
@@ -38,38 +39,71 @@ function connectionRowKey(c: ConnectionRow): string {
   return connectionViewerSessionKey(c.lineId, c.stream?.id ?? null, c.ip);
 }
 
+function earlierIso(a?: string | null, b?: string | null): string | null {
+  const at = a ? new Date(a).getTime() : NaN;
+  const bt = b ? new Date(b).getTime() : NaN;
+  if (Number.isFinite(at) && Number.isFinite(bt)) return at <= bt ? (a as string) : (b as string);
+  if (Number.isFinite(at)) return a ?? null;
+  if (Number.isFinite(bt)) return b ?? null;
+  return null;
+}
+
+function mergeConnectionRows(prev: ConnectionRow[], incoming: ConnectionRow[]): ConnectionRow[] {
+  const prevByKey = new Map(prev.map((row) => [connectionRowKey(row), row]));
+  const merged = incoming.map((row) => {
+    const old = prevByKey.get(connectionRowKey(row));
+    if (!old) return row;
+    return {
+      ...row,
+      startedAt: earlierIso(old.startedAt, row.startedAt) ?? row.startedAt,
+      streamStartedAt: earlierIso(old.streamStartedAt, row.streamStartedAt) ?? row.streamStartedAt ?? null,
+    };
+  });
+  return dedupeConnectionRows(merged);
+}
+
 function dedupeConnectionRows(rows: ConnectionRow[]): ConnectionRow[] {
   const map = new Map<string, ConnectionRow>();
   for (const c of rows) {
     const key = connectionRowKey(c);
     const prev = map.get(key);
-    if (!prev || new Date(c.lastSeenAt).getTime() > new Date(prev.lastSeenAt).getTime()) {
+    if (!prev) {
       map.set(key, c);
-    } else if (
-      new Date(c.lastSeenAt).getTime() === new Date(prev.lastSeenAt).getTime() &&
-      new Date(c.startedAt).getTime() < new Date(prev.startedAt).getTime()
-    ) {
-      map.set(key, c);
+      continue;
     }
+    const cNewer = new Date(c.lastSeenAt).getTime() > new Date(prev.lastSeenAt).getTime();
+    const keep = cNewer ? c : prev;
+    const other = keep === c ? prev : c;
+    map.set(key, {
+      ...keep,
+      startedAt: earlierIso(keep.startedAt, other.startedAt) ?? keep.startedAt,
+      streamStartedAt: earlierIso(keep.streamStartedAt, other.streamStartedAt),
+    });
   }
   return [...map.values()];
 }
 
 function formatConnDuration(
-  startedAt: string | Date,
-  lastSeenAt: string | Date | undefined,
+  startedAt: string | Date | null | undefined,
   nowMs: number
 ): string {
+  if (!startedAt) return "—";
   const start = new Date(startedAt).getTime();
   if (!Number.isFinite(start)) return "—";
-  const last = lastSeenAt ? new Date(lastSeenAt).getTime() : NaN;
-  const end = Number.isFinite(last) && nowMs - last > 8_000 ? last : nowMs;
-  const sec = Math.max(0, Math.floor((end - start) / 1000));
+  const sec = Math.max(0, Math.floor((nowMs - start) / 1000));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
   if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
   return `${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
+}
+
+function streamWatchStartedAt(c: ConnectionRow): string {
+  return c.streamStartedAt || c.startedAt;
+}
+
+function durationTitle(c: ConnectionRow, nowMs: number): string {
+  return `Stream uptime ${formatConnDuration(streamWatchStartedAt(c), nowMs)} · watching ${formatConnDuration(c.startedAt, nowMs)}`;
 }
 
 function formatQoe(qoe: ConnectionRow["qoe"]): string {
@@ -158,7 +192,9 @@ function ConnectionCard({
         </div>
         <div>
           <p className="panel-mobile-card-label">Duration</p>
-          <span className="xui-duration-badge">{formatConnDuration(c.startedAt, c.lastSeenAt, nowMs)}</span>
+          <span className="xui-duration-badge" title={durationTitle(c, nowMs)}>
+            {formatConnDuration(streamWatchStartedAt(c), nowMs)}
+          </span>
         </div>
         <div>
           <p className="panel-mobile-card-label">Server</p>
@@ -244,7 +280,7 @@ export function AdminConnectionsClient({
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d) => {
         const rows = Array.isArray(d.connections) ? (d.connections as ConnectionRow[]) : [];
-        setConnections(dedupeConnectionRows(rows));
+        setConnections((prev) => mergeConnectionRows(prev, rows));
         setQoeEnabled(Boolean(d.qoeEnabled));
       })
       .catch(() => setConnections([]));
@@ -259,7 +295,7 @@ export function AdminConnectionsClient({
   }, [autoRefresh, initialConnections.length]);
 
   useEffect(() => {
-    return startVisibleInterval(() => setNowMs(Date.now()), 5_000);
+    return startVisibleInterval(() => setNowMs(Date.now()), 1_000);
   }, []);
 
   async function kick(id: string) {
@@ -394,7 +430,7 @@ export function AdminConnectionsClient({
               <th>Watching</th>
               <th>Server</th>
               <th>IP</th>
-              <th title="Longest sessions first">Duration</th>
+              <th title="Uptime of the stream being watched. Viewer watch time is in the tooltip.">Duration</th>
               {qoeEnabled ? <th>QoE</th> : null}
               <th>Output</th>
               <th>Restreamer</th>
@@ -419,7 +455,9 @@ export function AdminConnectionsClient({
                 <td>{c.serverName ?? "Main Server"}</td>
                 <td>{c.ip ? <IpWithFlag ip={c.ip} /> : "—"}</td>
                 <td>
-                  <span className="xui-duration-badge">{formatConnDuration(c.startedAt, c.lastSeenAt, nowMs)}</span>
+                  <span className="xui-duration-badge" title={durationTitle(c, nowMs)}>
+                    {formatConnDuration(streamWatchStartedAt(c), nowMs)}
+                  </span>
                 </td>
                 {qoeEnabled ? (
                   <td
