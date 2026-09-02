@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { useMediaQuery } from "@/lib/use-media-query";
+import { usePanelLayout } from "@/lib/use-panel-layout";
 import {
   ArrowUpDown,
-  ChevronRight,
   Filter,
   List,
   RefreshCw,
@@ -160,7 +159,7 @@ export function ManageLinesTable({
   const [page, setPage] = useState(serverPage ?? 1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const isMdUp = useMediaQuery("(min-width: 768px)");
+  const { isMdUp, isTablet } = usePanelLayout();
   const [bulk, setBulk] = useState("");
   const [sortKey, setSortKey] = useState<LineSortKey>(serverSort ?? "createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">(serverSortDir ?? "desc");
@@ -747,7 +746,20 @@ export function ManageLinesTable({
           const exp = formatExpireXui(l.expiresAt);
           return (
             <article key={l.id} className="panel-mobile-activity-card">
-              <div className="panel-mobile-activity-card-body min-w-0">
+              <input
+                type="checkbox"
+                className="shrink-0"
+                autoComplete="off"
+                checked={selected.has(l.id)}
+                onChange={(e) => {
+                  const next = new Set(selected);
+                  if (e.target.checked) next.add(l.id);
+                  else next.delete(l.id);
+                  setSelected(next);
+                }}
+                aria-label={`Select ${l.username}`}
+              />
+              <div className="panel-mobile-activity-card-body min-w-0 flex-1">
                 <Link href={`${base}/lines?edit=${l.id}`} className="panel-mobile-activity-card-title hover:underline">
                   {l.username}
                 </Link>
@@ -759,13 +771,19 @@ export function ManageLinesTable({
                   {exp.kind === "unlimited" ? "Unlimited" : exp.text}
                 </p>
               </div>
-              <Link href={`${base}/lines?edit=${l.id}`} className="panel-mobile-activity-manage">
-                Manage
-                <ChevronRight size={16} />
-              </Link>
+              <LineRowActionsMenu
+                line={l}
+                panel={panel}
+                onUpdated={onRefresh}
+                open={openMenuId === l.id}
+                onToggle={() => setOpenMenuId(openMenuId === l.id ? null : l.id)}
+                onClose={() => setOpenMenuId(null)}
+                portalEnabled={false}
+              />
             </article>
           );
-        })}      </div>
+        })}
+      </div>
 
       <div className="hidden md:block overflow-x-auto overflow-y-visible">
         <table className="xui-lines-table w-full text-sm min-w-[1400px]">
@@ -831,8 +849,14 @@ export function ManageLinesTable({
         </table>      </div>
 
       {editLineId && (
-        <div className="xui-modal-backdrop" onClick={closeEdit}>
-          <div className="xui-modal-panel xui-line-edit-modal" onClick={(e) => e.stopPropagation()}>
+        <div
+          className={`xui-modal-backdrop${isTablet ? " xui-modal-backdrop--split" : ""}`}
+          onClick={closeEdit}
+        >
+          <div
+            className={`xui-modal-panel xui-line-edit-modal${isTablet ? " xui-line-edit-modal--split" : ""}`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <LineEditForm
               lineId={editLineId}
               panel={panel}

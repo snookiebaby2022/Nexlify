@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUpDown, ChevronDown, Plus, RefreshCw, Search } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { computePortalMenuPosition } from "@/lib/portal-menu-position";
 import { CopyableCredential } from "@/components/copyable-credential";
+import { MobileActionSheet } from "@/components/mobile-action-sheet";
+import { usePanelLayout } from "@/lib/use-panel-layout";
 
 export type ManageSubResellerRow = {
   id: string;
@@ -36,6 +39,7 @@ export function ManageSubResellersTable({
   resellers: ManageSubResellerRow[];
   onRefresh: () => void;
 }) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
@@ -51,6 +55,7 @@ export function ManageSubResellersTable({
   const [bulkGroupId, setBulkGroupId] = useState("");
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const { isCompact } = usePanelLayout();
 
   useEffect(() => {
     fetch("/api/admin/groups")
@@ -346,7 +351,43 @@ export function ManageSubResellersTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="md:hidden divide-y rounded-lg border" style={{ borderColor: "var(--border)" }}>
+        {pageRows.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm" style={{ color: "var(--muted)" }}>
+            No sub-resellers yet
+          </p>
+        ) : (
+          pageRows.map((r) => (
+            <article key={r.id} className="panel-mobile-card p-4 space-y-2">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={selected.has(r.id)}
+                  onChange={() => toggleSelected(r.id)}
+                  aria-label={`Select ${r.username}`}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{r.username}</p>
+                  <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                    {r.groupName} · {r.credits.toLocaleString()} credits · {r.lines}/{r.maxLines} lines
+                  </p>
+                </div>
+                <span className={`xui-pill xui-pill--${r.isActive ? "yes" : "no"}`}>{r.isActive ? "Active" : "Off"}</span>
+              </div>
+              <button
+                type="button"
+                className="panel-mobile-card-action text-xs px-3 py-2 rounded border ml-7"
+                style={{ borderColor: "var(--border)" }}
+                onClick={() => setOpenMenuId(r.id)}
+              >
+                Actions
+              </button>
+            </article>
+          ))
+        )}
+      </div>
+
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead style={{ background: "rgba(0,0,0,0.25)" }}>
             <tr>
@@ -461,6 +502,7 @@ export function ManageSubResellersTable({
       </div>
 
       {openRow &&
+        !isCompact &&
         typeof document !== "undefined" &&
         createPortal(
           <>
@@ -508,6 +550,38 @@ export function ManageSubResellersTable({
           </>,
           document.body
         )}
+      <MobileActionSheet
+        open={Boolean(openRow)}
+        onClose={() => setOpenMenuId(null)}
+        title={openRow ? `${openRow.username} actions` : "Actions"}
+        items={
+          openRow
+            ? [
+                {
+                  id: "edit",
+                  label: "Edit user",
+                  onClick: () => {
+                    router.push(`/admin/resellers/${openRow.id}/edit`);
+                  },
+                },
+                {
+                  id: "lines",
+                  label: `View lines (${openRow.lines})`,
+                  onClick: () => {
+                    router.push(`/admin/lines?owner=${openRow.id}`);
+                  },
+                },
+                { id: "credits", label: "Add credits", onClick: () => void addCredits(openRow) },
+                {
+                  id: "status",
+                  label: openRow.isActive ? "Disable" : "Enable",
+                  onClick: () => void toggleActive(openRow),
+                },
+                { id: "delete", label: "Delete", destructive: true, onClick: () => void remove(openRow) },
+              ]
+            : []
+        }
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t text-sm" style={{ borderColor: "var(--border)" }}>
         <span style={{ color: "var(--muted)" }}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PANEL_LAYOUT_QUERIES } from "@/lib/panel-breakpoints";
 
 export function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
@@ -14,4 +15,9 @@ export function useMediaQuery(query: string) {
   }, [query]);
 
   return matches;
+}
+
+/** @deprecated Prefer usePanelLayout() for layout mode. */
+export function useIsMdUp() {
+  return useMediaQuery(PANEL_LAYOUT_QUERIES.mdUp);
 }

@@ -258,7 +258,39 @@ export function ManageBouquetsTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="md:hidden divide-y rounded-lg border" style={{ borderColor: "var(--border)" }}>
+        {pageRows.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm" style={{ color: "var(--muted)" }}>
+            {bouquets.length === 0 ? "No bouquets found." : "No bouquets match this search."}
+          </p>
+        ) : (
+          pageRows.map((b) => (
+            <article key={b.id} className="panel-mobile-card p-4 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link href={`/admin/bouquets/${b.id}`} className="font-medium text-base hover:underline" style={{ color: "var(--accent)" }}>
+                    {b.name}
+                  </Link>
+                  <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                    ID {b.displayId} · {b.streamCount} streams · {b.lineCount} lines
+                  </p>
+                </div>
+                <span className={`xui-pill xui-pill--${b.isActive ? "yes" : "no"}`}>{b.isActive ? "Active" : "Off"}</span>
+              </div>
+              <BouquetRowActionsMenu
+                bouquetId={b.id}
+                isActive={b.isActive}
+                busy={busyId === b.id}
+                onToggleActive={() => void toggleActive(b)}
+                onDuplicate={() => void duplicateBouquet(b)}
+                onDelete={() => void deleteBouquet(b)}
+              />
+            </article>
+          ))
+        )}
+      </div>
+
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead style={{ background: "rgba(0,0,0,0.25)" }}>
             <tr>

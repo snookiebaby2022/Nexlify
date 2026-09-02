@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { PanelMobileActionBar } from "@/components/panel-mobile-action-bar";
 import { Calendar, FileText, Globe, Info, Server, Settings } from "lucide-react";
 import { StreamProbePlayer } from "@/components/stream-probe-player";
 import { StreamLiveInfo } from "@/components/stream-live-info";
@@ -96,7 +97,13 @@ function streamEditTabs(type: string): XuiFormTab<StreamEditTab>[] {
   ];
 }
 
-export function StreamManageEditPage({ streamId }: { streamId: string }) {
+export function StreamManageEditPage({
+  streamId,
+  returnTo,
+}: {
+  streamId: string;
+  returnTo?: string;
+}) {
   const [stream, setStream] = useState<Stream | null>(null);
   const [serverIds, setServerIds] = useState<string[]>([]);
   const [transcodeProfile, setTranscodeProfile] = useState("none");
@@ -353,12 +360,16 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
 
   const isVod = form.type === "MOVIE" || form.type === "SERIES";
   const integrationSource = integrationSourceLabel(form.streamUrl);
+  const manageHref =
+    returnTo?.startsWith("/admin/") && !returnTo.startsWith("//")
+      ? returnTo
+      : manageHrefForType(form.type);
   const vodRawTitle =
     form.type === "SERIES" ? form.seriesName.trim() || form.name.trim() : form.name.trim();
   const vodSearchTitle = cleanTitleForTmdb(stripIntegrationSourceSuffix(vodRawTitle));
 
   const saveBar = (
-    <div className="flex flex-wrap gap-3 items-center pt-5 mt-5 border-t" style={{ borderColor: "var(--border)" }}>
+    <div className="hidden md:flex flex-wrap gap-3 items-center pt-5 mt-5 border-t" style={{ borderColor: "var(--border)" }}>
       <button
         type="submit"
         disabled={saving}
@@ -367,7 +378,7 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
         {saving ? "Saving…" : "Save stream"}
       </button>
       <Link
-        href={manageHrefForType(form.type)}
+        href={manageHref}
         className="btn-cancel rounded px-6 py-2.5 text-sm font-medium inline-flex items-center"
       >
         Cancel
@@ -607,13 +618,13 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
     <div className="space-y-5 max-w-6xl">
       <StreamLiveInfo streamId={streamId} />
 
-      <form onSubmit={save}>
+      <form id="stream-edit-form" onSubmit={save} className="pb-24 md:pb-0">
         <FormPageShell
           title={
             form.name.trim() ||
             (form.type === "MOVIE" ? "Movie" : form.type === "SERIES" ? "Series" : "Edit stream")
           }
-          manageHref={manageHrefForType(form.type)}
+          manageHref={manageHref}
           manageLabel={manageLabelForType(form.type)}
         >
           <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -828,6 +839,13 @@ export function StreamManageEditPage({ streamId }: { streamId: string }) {
           {saveBar}
         </FormPageShell>
       </form>
+      <PanelMobileActionBar
+        cancelHref={manageHref}
+        saveLabel="Save stream"
+        onSave={() => document.getElementById("stream-edit-form")?.requestSubmit()}
+        saveDisabled={saving}
+        saveBusy={saving}
+      />
     </div>
   );
 }

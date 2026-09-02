@@ -283,6 +283,9 @@ export function PanelTopNav({
 
         <div className="panel-header-end flex items-center gap-2 sm:gap-3 ml-auto shrink-0">
         <div className="panel-header-controls flex items-center gap-2 sm:gap-3">
+          <div className="flex sm:hidden items-center gap-1.5 shrink-0" title="Theme">
+            <ThemeToggle />
+          </div>
           <div
             className="panel-header-toggle-bar hidden sm:flex items-center gap-2.5 rounded-lg px-3 py-1.5 shrink-0"
             title="Logo accent and theme"

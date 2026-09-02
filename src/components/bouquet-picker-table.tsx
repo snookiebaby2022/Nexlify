@@ -42,7 +42,43 @@ export function BouquetPickerTable({
       <p className="text-xs" style={{ color: "var(--muted)" }}>
         Select channel packages for this line. Counts show streams / movies / series / radio stations in each bouquet.
       </p>
-      <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border)" }}>
+      <div className="md:hidden divide-y rounded-lg border" style={{ borderColor: "var(--border)" }}>
+        {bouquets.length === 0 ? (
+          <p className="px-3 py-8 text-center text-xs" style={{ color: "var(--muted)" }}>
+            No bouquets — create one under Bouquets → Add Bouquet
+          </p>
+        ) : (
+          bouquets.map((b, i) => {
+            const c = b.contentCounts ?? { streams: 0, movies: 0, series: 0, stations: 0, total: 0 };
+            const empty = c.total === 0;
+            return (
+              <label
+                key={b.id}
+                className="panel-mobile-card flex cursor-pointer items-start gap-3 p-4"
+                style={{ background: selected.has(b.id) ? "rgba(0,192,239,0.1)" : undefined }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(b.id)}
+                  onChange={() => toggle(b.id)}
+                  className="mt-1 h-5 w-5 shrink-0"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">
+                    {i + 1}. {b.name}
+                    {empty && <span className="ml-2 text-[10px] uppercase text-amber-400">empty</span>}
+                  </span>
+                  <span className="mt-1 block text-xs" style={{ color: "var(--muted)" }}>
+                    {c.streams} streams · {c.movies} movies · {c.series} series · {c.stations} stations
+                  </span>
+                </span>
+              </label>
+            );
+          })
+        )}
+      </div>
+
+      <div className="hidden md:block rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border)" }}>
         <table className="w-full text-sm">
           <thead style={{ background: "rgba(0,192,239,0.12)" }}>
             <tr>

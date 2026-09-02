@@ -21,6 +21,7 @@ import { computePortalMenuPosition } from "@/lib/portal-menu-position";
 import { DownloadPlaylistModal } from "@/components/download-playlist-modal";
 import { LineRecentlyWatchedDialog } from "@/components/line-recently-watched-dialog";
 import { LineRenewModal } from "@/components/line-renew-modal";
+import { MobileActionSheet } from "@/components/mobile-action-sheet";
 import {
   lineActivityPagePath,
   linesApiRoot,
@@ -236,6 +237,23 @@ export function LineRowActionsMenu({
   }, [open, portalEnabled, updatePosition]);
 
   const showPortal = open && portalEnabled;
+  const mobileItems = [
+    ...(allowPlaylistDownload
+      ? [
+          {
+            id: "download",
+            label: "Download line",
+            onClick: () => setDownloadModalOpen(true),
+          },
+        ]
+      : []),
+    ...items.map((item) => ({
+      id: item.label,
+      label: item.label,
+      destructive: item.danger,
+      onClick: item.onClick,
+    })),
+  ];
 
   const menu =
     showPortal &&
@@ -308,6 +326,14 @@ export function LineRowActionsMenu({
         </button>
         {menu}
       </div>
+      {!portalEnabled && (
+        <MobileActionSheet
+          open={open}
+          onClose={onClose}
+          title={`${line.username} actions`}
+          items={mobileItems}
+        />
+      )}
       <LineRecentlyWatchedDialog
         lineId={line.id}
         username={line.username}

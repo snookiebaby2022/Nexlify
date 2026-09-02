@@ -152,7 +152,7 @@ export function ResellerNotificationsWidget() {
   }
 
   return (
-    <div className="fixed bottom-4 left-4 z-[300] flex flex-col items-start gap-3">
+    <div className="panel-floating-widget fixed bottom-4 left-4 z-[300] flex flex-col items-start gap-3">
       {open && (
         <div
           className="w-[min(92vw,400px)] rounded-2xl shadow-2xl overflow-hidden flex flex-col"
