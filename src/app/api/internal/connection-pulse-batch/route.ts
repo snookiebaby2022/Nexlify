@@ -27,6 +27,8 @@ export async function POST(req: NextRequest) {
         streamId,
         ip: r.ip != null ? String(r.ip) : null,
         bytes: Math.max(0, Math.floor(Number(r.bytes ?? 0))),
+        idleMs: Math.max(0, Math.floor(Number(r.idleMs ?? 0))),
+        onDemand: String(r.onDemand ?? "") === "1" || r.onDemand === true,
       };
     })
     .filter(Boolean) as Array<{
@@ -34,6 +36,8 @@ export async function POST(req: NextRequest) {
     streamId: string;
     ip?: string | null;
     bytes?: number;
+    idleMs?: number;
+    onDemand?: boolean;
   }>;
   const applied = await pulseLiveConnectionBatch(sessions);
   return NextResponse.json({ ok: true, applied });

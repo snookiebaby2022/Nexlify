@@ -240,15 +240,19 @@ export function AdminConnectionsClient({
     load();
   }
 
-  const filtered = connections.filter((c) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      c.line.username.toLowerCase().includes(q) ||
-      (c.ip ?? "").includes(q) ||
-      (c.stream?.name ?? "").toLowerCase().includes(q)
+  const filtered = connections
+    .filter((c) => {
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return (
+        c.line.username.toLowerCase().includes(q) ||
+        (c.ip ?? "").includes(q) ||
+        (c.stream?.name ?? "").toLowerCase().includes(q)
+      );
+    })
+    .sort(
+      (a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()
     );
-  });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -348,7 +352,7 @@ export function AdminConnectionsClient({
               <th>Watching</th>
               <th>Server</th>
               <th>IP</th>
-              <th>Duration</th>
+              <th title="Longest sessions first">Duration</th>
               <th>QoE</th>
               <th>Output</th>
               <th>Restreamer</th>

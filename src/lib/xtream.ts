@@ -10,6 +10,8 @@ import {
   xtreamUnixString,
   xtreamOutputFormats,
   xtreamM3uAttr,
+  xtreamExportCategoryId,
+  xtreamExportCategoryIdValue,
 } from "./xtream-safe";
 import { seriesSeedsForBouquets, resolveCategoryIdParam } from "./xtream-stream-id";
 import { expandCategoryFilter } from "./category-tree";
@@ -30,8 +32,9 @@ import {
 import { formatPanelClock, normalizeTimeFormat } from "./epg-time";
 import { getPanelServerSettings } from "./panel-server";
 import { getSettingGroup } from "./panel-settings";
+import { resolveOfflineStreamImageUrl } from "./offline-stream-image";
 import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
-import { userAgentIsSmartTv } from "./live-http-range";
+import { userAgentUsesStandardIptvPorts } from "./live-http-range";
 import { preferLiveOutputFormats, resolveClientPlaybackProfile } from "./client-playback-profiles";
 import { mapXtreamLiveItem, mapXtreamSeriesItem, mapXtreamVodItem } from "./xtream-catalog-items";
 
@@ -111,19 +114,20 @@ export async function xtreamUserInfo(
   } catch {
     streamHost = panelOrigin.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
   }
-  const useHttps = userAgentIsSmartTv(userAgent) ? false : panelOrigin.startsWith("https");
+  const standardPorts = userAgentUsesStandardIptvPorts(userAgent);
+  const useHttps = standardPorts ? false : panelOrigin.startsWith("https");
   const publicPort = portFromPanelBaseUrl(panelOrigin);
   const serverSettings = await getPanelServerSettings();
   const streamHttpsPort = serverSettings.streamHttpsPort || resolveStreamHttpsPort();
-  // Smarters follows server_info.port for every API call after login. Never redirect
+  // Smarters/Nexus follow server_info.port for every API call after login. Never redirect
   // HTTPS :443 clients to :8080 — player_api is on 443 and many hosts block 8080 externally.
   // LG/webOS Smarters Pro fails Cloudflare HTTP/2 HTTPS ("Authorization failed at host").
-  const httpPort = userAgentIsSmartTv(userAgent)
+  const httpPort = standardPorts
     ? "80"
     : useHttps
       ? String(streamHttpsPort)
       : String(resolveAdvertisedStreamHttpPort(publicPort));
-  const httpsPort = userAgentIsSmartTv(userAgent) ? "80" : String(streamHttpsPort);
+  const httpsPort = standardPorts ? "80" : String(streamHttpsPort);
   const formats = preferLiveOutputFormats(
     xtreamOutputFormats(line.allowedOutput),
     resolveClientPlaybackProfile(userAgent)
@@ -132,11 +136,18 @@ export async function xtreamUserInfo(
   const datetimeFormat = timeFormat === "12" ? "Y-m-d h:i:s A" : "Y-m-d H:i:s";
   const websiteOrigin = websiteBaseUrl(panelOrigin);
   const epgUrl = `${websiteOrigin}/xmltv.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`;
+  const playerSettings = await getSettingGroup("player");
+  const offlineImageUrl = resolveOfflineStreamImageUrl({
+    panelOrigin: websiteOrigin,
+    customUrl: String(playerSettings.offlineStreamImageUrl ?? ""),
+    templateId: String(playerSettings.offlineStreamImageTemplate ?? "offline"),
+  });
   return {
     user_info: {
       username: line.username,
       password: line.password,
       epg_url: epgUrl,
+      offline_image_url: offlineImageUrl,
       message: !playable
         ? "Account inactive or expired"
         : atCapacity
@@ -169,14 +180,20 @@ export async function xtreamUserInfo(
       abr_auto_switch: abrAutoSwitch ? 1 : 0,
       abr_hint: abrAutoSwitch ? "client_may_switch_variants" : "",
       epg_url: epgUrl,
+      offline_image_url: offlineImageUrl,
     },
   };
 }
 
-async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType) {
+async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType, numericCategoryId = false) {
   const canonicalMaps = await buildCanonicalCategoryMaps(type);
   const { categoryIds, hasUncategorized } = await categoryIdsForLine(line, { type });
-  const rows: { category_id: string; category_name: string; parent_id: number; created_at: string }[] = [];
+  const rows: {
+    category_id: string | number;
+    category_name: string;
+    parent_id: number;
+    created_at: string;
+  }[] = [];
   if (categoryIds.length) {
     const cats = await prisma.category.findMany({
       where: { id: { in: categoryIds } },
@@ -192,7 +209,10 @@ async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType)
       const entry = mergeKey ? canonicalMaps.byMergeKey.get(mergeKey) : undefined;
       if (mergeKey) seenMerge.add(mergeKey);
       rows.push({
-        category_id: entry?.numericId ?? canonicalNumericForCategory(canonicalMaps, c.id),
+        category_id: xtreamExportCategoryIdValue(
+          entry?.numericId ?? canonicalNumericForCategory(canonicalMaps, c.id),
+          numericCategoryId
+        ),
         category_name: xtreamSafeText(entry?.name ?? c.name) || "Category",
         parent_id: 0,
         created_at: xtreamUnixString(c.createdAt),
@@ -200,13 +220,18 @@ async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType)
     }
   }
   if (hasUncategorized) {
-    rows.push({ category_id: "0", category_name: "Uncategorized", parent_id: 0, created_at: "0" });
+    rows.push({
+      category_id: numericCategoryId ? 0 : "0",
+      category_name: "Uncategorized",
+      parent_id: 0,
+      created_at: "0",
+    });
   }
   return rows;
 }
 
-export async function xtreamLiveCategoriesForLine(line: LineWithBouquets) {
-  return xtreamCategoriesForType(line, StreamType.LIVE);
+export async function xtreamLiveCategoriesForLine(line: LineWithBouquets, numericCategoryId = false) {
+  return xtreamCategoriesForType(line, StreamType.LIVE, numericCategoryId);
 }
 
 async function categoryIdsForXtreamFilter(
@@ -254,7 +279,12 @@ export async function resolveXtreamCategoryFilter(
   return categoryIdsForXtreamFilter(categoryId, type);
 }
 
-export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string, categoryId?: string | null) {
+export async function xtreamLiveStreams(
+  line: LineWithBouquets,
+  baseUrl: string,
+  categoryId?: string | null,
+  opts?: { numericCategoryId?: boolean }
+) {
   let live;
   if (!isXtreamAllCategoryParam(categoryId)) {
     const ids = await categoryIdsForXtreamFilter(categoryId!, StreamType.LIVE);
@@ -275,7 +305,7 @@ export async function xtreamLiveStreams(line: LineWithBouquets, baseUrl: string,
 
   const canonical = await buildCanonicalCategoryMaps(StreamType.LIVE);
 
-  return live.map((s, i) => mapXtreamLiveItem(s, i, canonical));
+  return live.map((s, i) => mapXtreamLiveItem(s, i, canonical, opts));
 }
 
 export async function xtreamVodStreams(line: LineWithBouquets, _baseUrl: string, categoryId?: string | null) {

@@ -1,5 +1,20 @@
 export type PanelKind = "admin" | "reseller";
 
+/** `/admin` or `/reseller` — use for page routes, not API. */
+export function panelBasePath(panel: PanelKind): string {
+  return panel === "reseller" ? "/reseller" : "/admin";
+}
+
+export function linesPagePath(panel: PanelKind, editLineId?: string | null): string {
+  const base = `${panelBasePath(panel)}/lines`;
+  if (!editLineId?.trim()) return base;
+  return `${base}?edit=${encodeURIComponent(editLineId.trim())}`;
+}
+
+export function lineActivityPagePath(panel: PanelKind, lineId: string): string {
+  return `${panelBasePath(panel)}/line_activity?lineId=${encodeURIComponent(lineId)}`;
+}
+
 export function linesApiRoot(panel: PanelKind): string {
   return panel === "reseller" ? "/api/reseller/lines" : "/api/admin/lines";
 }

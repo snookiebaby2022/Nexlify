@@ -1,5 +1,5 @@
 import { pickPublicOrigin } from "./public-origin";
-import { userAgentIsSmartTv } from "./live-http-range";
+import { userAgentUsesStandardIptvPorts } from "./live-http-range";
 
 /** XUI-style 200 + auth:0 body. Smarters Pro (LG) treats HTTP 400 as "Authorization failed at host". */
 export function xtreamUnauthPayload(panelBaseUrl: string, userAgent?: string | null) {
@@ -14,8 +14,8 @@ export function xtreamUnauthPayload(panelBaseUrl: string, userAgent?: string | n
   } catch {
     streamHost = origin.replace(/^https?:\/\//, "").split("/")[0].split(":")[0] || "localhost";
   }
-  const smartTv = userAgentIsSmartTv(userAgent);
-  const useHttps = smartTv ? false : origin.startsWith("https");
+  const standardPorts = userAgentUsesStandardIptvPorts(userAgent);
+  const useHttps = standardPorts ? false : origin.startsWith("https");
   return {
     user_info: {
       auth: 0 as const,
@@ -25,7 +25,7 @@ export function xtreamUnauthPayload(panelBaseUrl: string, userAgent?: string | n
     server_info: {
       url: streamHost,
       port: useHttps ? "443" : "80",
-      https_port: smartTv ? "80" : "443",
+      https_port: standardPorts ? "80" : "443",
       server_protocol: useHttps ? "https" : "http",
       rtmp_port: "0",
       timezone: "Europe/London",

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#0b0f14"/>
+  <circle cx="640" cy="300" r="120" fill="none" stroke="#3b4450" stroke-width="8"/>
+  <path d="M560 380 L720 220 M720 380 L560 220" stroke="#ef4444" stroke-width="16" stroke-linecap="round"/>
+  <text x="640" y="520" fill="#e5e7eb" font-family="Arial,sans-serif" font-size="48" text-anchor="middle">No signal</text>
+</svg>

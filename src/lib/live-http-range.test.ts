@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isTinyLiveRangeProbe, userAgentIsSmartTv } from "./live-http-range";
+import { isTinyLiveRangeProbe, userAgentIsSmartTv, userAgentUsesStandardIptvPorts } from "./live-http-range";
 
 const WEBOS_UA =
   "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 WebAppManager";
@@ -23,5 +23,11 @@ describe("isTinyLiveRangeProbe", () => {
     assert.equal(userAgentIsSmartTv(WEBOS_UA), true);
     assert.equal(isTinyLiveRangeProbe("bytes=0-1", WEBOS_UA), false);
     assert.equal(isTinyLiveRangeProbe("bytes=0-1023", WEBOS_UA), false);
+  });
+
+  it("uses standard IPTV ports for Nexus and Lavf", () => {
+    assert.equal(userAgentUsesStandardIptvPorts("NexusTV/1.0"), true);
+    assert.equal(userAgentUsesStandardIptvPorts("Lavf/58.29.100"), true);
+    assert.equal(userAgentUsesStandardIptvPorts("Mozilla/5.0 Chrome/120"), false);
   });
 });

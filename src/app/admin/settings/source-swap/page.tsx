@@ -10,7 +10,7 @@ export default function SourceSwapSettingsPage() {
         {
           title: "General",
           fields: [
-            { key: "sourceSwapEnabled", label: "Enable source swap", type: "yesno", hint: "Master switch for instant source switching." },
+            { key: "sourceSwapEnabled", label: "Enable source swap", type: "yesno", hint: "Off = backup URLs stay on the stream but playback never switches unless you swap them in the editor." },
             { key: "sourceSwapGracePeriodMs", label: "Grace period (ms)", type: "number", placeholder: "5000", hint: "Time to wait before switching sources." },
             { key: "sourceSwapFailoverRetries", label: "Failover retries", type: "number", placeholder: "2", hint: "Retry current source before switching." },
           ],

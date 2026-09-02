@@ -158,6 +158,11 @@ export function instantStreamingPanelDefaults(): Partial<Record<SettingGroup, Re
     },
     "auto-fix": {
       autoFixEnabled: false,
+      autoFixSourceSwitch: false,
+    },
+    "source-swap": {
+      sourceSwapEnabled: false,
+      sourceSwapOnFailure: false,
     },
     "source-monitor": {
       sourceMonitorEnabled: false,
@@ -518,6 +523,8 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     webrtcPreviewEnabled: true,
     licenseProxyUrl: "",
     cdmNotes: "Built-in Widevine CDM for the panel player and stream probe.",
+    offlineStreamImageUrl: "",
+    offlineStreamImageTemplate: "offline",
   },
   webrtc: {
     enabled: false,
@@ -582,7 +589,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     autoFixAudioLoss: true,
     autoFixVideoFreeze: true,
     autoFixLoopDetection: true,
-    autoFixSourceSwitch: true,
+    autoFixSourceSwitch: false,
     autoFixIntervalSeconds: 30,
     autoFixMaxRetries: 3,
     autoFixNotifyOnRepair: true,
@@ -652,9 +659,9 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     analyzerAlertThreshold: 5,
   },
   "source-swap": {
-    sourceSwapEnabled: true,
-    sourceSwapOnFailure: true,
-    sourceSwapOnHighLoad: true,
+    sourceSwapEnabled: false,
+    sourceSwapOnFailure: false,
+    sourceSwapOnHighLoad: false,
     sourceSwapGracePeriodMs: 5000,
     sourceSwapFailoverRetries: 2,
     sourceSwapNotifyOnChange: true,

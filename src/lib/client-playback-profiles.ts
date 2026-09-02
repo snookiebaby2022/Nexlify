@@ -1,6 +1,6 @@
 /** Per-app playback tuning — XCIPTV prefers TS, Smarters HLS, etc. */
 
-export type ClientProfileId = "auto" | "smarters" | "xciptv" | "tivimate" | "mag" | "vlc";
+export type ClientProfileId = "auto" | "smarters" | "xciptv" | "tivimate" | "mag" | "vlc" | "nexus";
 
 export type ClientPlaybackProfile = {
   id: ClientProfileId;
@@ -8,6 +8,8 @@ export type ClientPlaybackProfile = {
   liveOutput: "hls" | "ts" | "auto";
   vodDirectPlay: boolean;
   zapPrefetchOnPlaylist: boolean;
+  /** Nexus parses category_id as integer — JSON number avoids empty category grids. */
+  numericCategoryId: boolean;
 };
 
 export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackProfile> = {
@@ -17,6 +19,7 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
     liveOutput: "auto",
     vodDirectPlay: false,
     zapPrefetchOnPlaylist: true,
+    numericCategoryId: false,
   },
   smarters: {
     id: "smarters",
@@ -27,6 +30,7 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
     vodDirectPlay: false,
     // Prefetch during catalog update starts HLS ffmpeg and leaves live rows open.
     zapPrefetchOnPlaylist: false,
+    numericCategoryId: false,
   },
   xciptv: {
     id: "xciptv",
@@ -35,6 +39,7 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
     vodDirectPlay: false,
     // Prefetch during get_live_streams stalls "Update Content" and can occupy the only slot.
     zapPrefetchOnPlaylist: false,
+    numericCategoryId: false,
   },
   tivimate: {
     id: "tivimate",
@@ -42,6 +47,7 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
     liveOutput: "auto",
     vodDirectPlay: false,
     zapPrefetchOnPlaylist: true,
+    numericCategoryId: false,
   },
   mag: {
     id: "mag",
@@ -49,6 +55,7 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
     liveOutput: "ts",
     vodDirectPlay: false,
     zapPrefetchOnPlaylist: false,
+    numericCategoryId: false,
   },
   vlc: {
     id: "vlc",
@@ -56,12 +63,23 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
     liveOutput: "ts",
     vodDirectPlay: false,
     zapPrefetchOnPlaylist: false,
+    numericCategoryId: false,
+  },
+  nexus: {
+    id: "nexus",
+    label: "Nexus TV / Lavf",
+    liveOutput: "ts",
+    vodDirectPlay: false,
+    // Bulk get_live_streams + prefetch ties up the only connection slot and stalls EPG load.
+    zapPrefetchOnPlaylist: false,
+    numericCategoryId: true,
   },
 };
 
 export function detectClientProfile(userAgent?: string | null): ClientProfileId {
   const ua = (userAgent ?? "").toLowerCase();
   if (ua.includes("xciptv")) return "xciptv";
+  if (ua.includes("nexus") || ua.includes("nexustv")) return "nexus";
   // LG/Samsung native players cannot play unbounded MPEG-TS. Keep m3u8 first.
   if (
     ua.includes("web0s") ||
@@ -75,8 +93,15 @@ export function detectClientProfile(userAgent?: string | null): ClientProfileId 
     return "auto";
   }
   if (ua.includes("smarters") || ua.includes("iptv smarters")) return "smarters";
+  // Smarters / XCIPTV often send okhttp without "ExoPlayer" in the UA string.
+  if (ua.includes("okhttp") && (ua.includes("iptv") || ua.includes("smarter") || ua.includes("xciptv"))) {
+    return "smarters";
+  }
   if (ua.includes("tivimate")) return "tivimate";
-  if (ua.includes("vlc") || ua.includes("libvlc") || ua.includes("exoplayer")) return "vlc";
+  // FFmpeg Lavf is used by Nexus TV and LibVLC engines — treat like VLC (TS, no prefetch).
+  if (ua.includes("lavf/") || ua.includes("vlc") || ua.includes("libvlc") || ua.includes("exoplayer")) {
+    return ua.includes("exoplayer") ? "vlc" : "nexus";
+  }
   if (ua.includes("mag") || ua.includes("stalker") || ua.includes("infomir")) return "mag";
   return "auto";
 }

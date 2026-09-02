@@ -1,4 +1,5 @@
 import { cacheGet, cacheMget, cacheSet, cacheDel } from "@/lib/cache";
+import { isConnectionQoeEnabled } from "@/lib/connection-qoe";
 import {
   computeConnectionQuality,
   scoreFromLastSeen,
@@ -36,7 +37,30 @@ export const STALL_GAP_MS = Math.max(
 );
 /** Below this, a late pulse is a dribble (playlist/keepalive), not a healthy TS batch. */
 export const MIN_HEALTHY_PULSE_BYTES = 64_000;
+/** Origin/fan idle inside a 15s pulse — long enough that a live player buffers. */
+export const PLAYER_STALL_IDLE_MS = 2_500;
+/** On-demand: provider + fan cold-start can sit quiet for several seconds before TS flows. */
+export const ON_DEMAND_PLAYER_STALL_IDLE_MS = Math.max(
+  8_000,
+  Number(process.env.CONNECTION_ON_DEMAND_STALL_IDLE_MS || 8_000)
+);
+/** Do not count stalls until the session has warmed up (bytes or age). */
+export const ON_DEMAND_STALL_WARMUP_MS = Math.max(
+  45_000,
+  Number(process.env.CONNECTION_ON_DEMAND_STALL_WARMUP_MS || 45_000)
+);
+export const ON_DEMAND_MIN_WARMUP_BYTES = 500_000;
+export const ON_DEMAND_STALL_GAP_MS = Math.max(
+  60_000,
+  Number(process.env.CONNECTION_ON_DEMAND_STALL_GAP_MS || 60_000)
+);
 const SESSION_RESET_GAP_MS = 120_000;
+
+export type StallPulseContext = {
+  onDemand?: boolean;
+  sessionAgeMs?: number;
+  totalBytesBefore?: number;
+};
 
 const QUALITY_TTL_SEC = 180;
 const WINDOW_MS = 10_000;
@@ -58,17 +82,36 @@ function freshQualityWindow(now: number, byteLen: number): QualityWindow {
 }
 
 /** True when this sample is a batched healthy pipe, not a buffering gap. */
-export function pulseLooksLikeStall(gapMs: number, byteLen: number): boolean {
+export function pulseLooksLikeStall(
+  gapMs: number,
+  byteLen: number,
+  idleMs = 0,
+  ctx?: StallPulseContext
+): boolean {
+  if (ctx?.onDemand) {
+    const age = ctx.sessionAgeMs ?? 0;
+    const prevBytes = ctx.totalBytesBefore ?? 0;
+    const stillWarming =
+      age < ON_DEMAND_STALL_WARMUP_MS && prevBytes < ON_DEMAND_MIN_WARMUP_BYTES;
+    if (stillWarming) return false;
+    if (idleMs >= ON_DEMAND_PLAYER_STALL_IDLE_MS) return true;
+    if (gapMs < ON_DEMAND_STALL_GAP_MS) return false;
+    return byteLen < MIN_HEALTHY_PULSE_BYTES;
+  }
+  if (idleMs >= PLAYER_STALL_IDLE_MS) return true;
   if (gapMs < STALL_GAP_MS) return false;
   return byteLen < MIN_HEALTHY_PULSE_BYTES;
 }
 
 /** Apply inbound media bytes to a QoE window.
- *  Edge pulses are batched: 2MB after 30s is delayed metering, not a stall. */
+ *  Edge pulses are batched: 2MB after 30s is delayed metering, not a stall.
+ *  idleMs is origin silence inside that batch (player-visible buffering). */
 export function applyMediaByteWindow(
   prev: QualityWindow | null | undefined,
   now: number,
-  byteLen: number
+  byteLen: number,
+  idleMs = 0,
+  onDemand = false
 ): QualityWindow {
   const bytes = Math.max(0, byteLen);
   if (!prev || prev.totalBytes <= 0) {
@@ -80,7 +123,11 @@ export function applyMediaByteWindow(
     next.totalBytes = prev.totalBytes + bytes;
     return next;
   }
-  const stallCount = pulseLooksLikeStall(gap, bytes)
+  const stallCount = pulseLooksLikeStall(gap, bytes, idleMs, {
+    onDemand,
+    sessionAgeMs: now - (prev.firstByteAt || prev.lastByteAt),
+    totalBytesBefore: prev.totalBytes,
+  })
     ? (prev.stallCount ?? 0) + 1
     : prev.stallCount ?? 0;
   const window: QualityWindow = {
@@ -107,13 +154,18 @@ export async function recordConnectionMediaBytes(
   lineId: string,
   streamId: string,
   ip: string,
-  byteLen: number
+  byteLen: number,
+  idleMs = 0,
+  onDemand = false
 ): Promise<void> {
-  if (byteLen <= 0) return;
+  if (!isConnectionQoeEnabled()) return;
+  const idle = Math.max(0, Math.floor(idleMs || 0));
+  const idleThreshold = onDemand ? ON_DEMAND_PLAYER_STALL_IDLE_MS : PLAYER_STALL_IDLE_MS;
+  if (byteLen <= 0 && idle < idleThreshold) return;
   const key = connectionQualityKey(lineId, streamId, ip);
   const now = Date.now();
   const prev = await cacheGet<QualityWindow>(key);
-  const next = applyMediaByteWindow(prev, now, byteLen);
+  const next = applyMediaByteWindow(prev, now, byteLen, idle, onDemand);
   await cacheSet(key, next, QUALITY_TTL_SEC);
   const grew = (next.stallCount ?? 0) > (prev?.stallCount ?? 0);
   if (grew && next.stallCount >= 5 && next.totalBytes > 500_000) {
@@ -122,8 +174,8 @@ export async function recordConnectionMediaBytes(
       action: PLAYBACK_STUTTER,
       streamId,
       lineId,
-      detail: "Long gap with almost no video bytes between edge pulses",
-      meta: { stallCount: next.stallCount, bytesPerWindow: next.windowBytes },
+      detail: "Player-visible origin idle or empty edge pulse",
+      meta: { stallCount: next.stallCount, bytesPerWindow: next.windowBytes, idleMs: idle },
     });
   }
 }
@@ -181,6 +233,9 @@ export async function batchGetLiveQualitySamples(
   items: Array<{ lineId: string; streamId: string; ip: string | null | undefined }>,
   now = Date.now()
 ): Promise<(LiveQualitySample | null)[]> {
+  if (!isConnectionQoeEnabled()) {
+    return items.map(() => null);
+  }
   const flatKeys: string[] = [];
   const lookups: Array<{ itemIndex: number; keyIndexes: number[] }> = [];
 

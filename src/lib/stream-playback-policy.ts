@@ -54,6 +54,15 @@ export function getStreamPlaybackPolicy(stream: StreamForPlaybackPolicy): Stream
   return "transcode";
 }
 
+/** On-demand streams spin up the provider on first viewer — QoE needs a warmup grace. */
+export function streamUsesOnDemandWarmup(stream: {
+  vodMode?: string | null;
+  isOnDemand?: boolean | null;
+}): boolean {
+  if (stream.vodMode === "LIVE") return false;
+  return stream.vodMode === "ON_DEMAND" || Boolean(stream.isOnDemand);
+}
+
 export function playbackPolicyLabel(mode: StreamPlaybackPolicyMode): string {
   switch (mode) {
     case "direct":

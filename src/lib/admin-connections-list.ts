@@ -5,6 +5,7 @@ import {
   PLAYBACK_STALE_MS,
 } from "@/lib/connections";
 import { computeConnectionQualityWithLive, batchGetLiveQualitySamples } from "@/lib/connection-quality-live";
+import { isConnectionQoeEnabled } from "@/lib/connection-qoe";
 import {
   batchGetConnectionPlaybackOutputs,
   resolvePlaybackOutputLabel,
@@ -41,7 +42,9 @@ export async function listAdminConnections(session: SessionUser): Promise<AdminC
     ip: c.ip,
   }));
   const [liveSamples, cachedOutputs] = await Promise.all([
-    batchGetLiveQualitySamples(qualityItems, now),
+    isConnectionQoeEnabled()
+      ? batchGetLiveQualitySamples(qualityItems, now)
+      : Promise.resolve(qualityItems.map(() => null)),
     batchGetConnectionPlaybackOutputs(outputItems),
   ]);
   return connections.map((c, i) => {

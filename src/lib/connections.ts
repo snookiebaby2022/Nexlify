@@ -780,7 +780,7 @@ export async function listLiveConnections(ownerId?: string, take = 5000) {
       lastSeenAt: { gte: staleBefore },
     },
     include: connectionInclude,
-    orderBy: { lastSeenAt: "desc" },
+    orderBy: [{ startedAt: "asc" }, { lastSeenAt: "desc" }],
     take: Math.min(Math.max(1, take), 5000),
   });
   const live = rows.filter((row) => row.streamId && !isTestConnectionIp(row.ip));

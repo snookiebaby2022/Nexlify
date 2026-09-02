@@ -8,6 +8,7 @@ export type LiveAuthCacheEntry = {
   upstream: string;
   alts: string[];
   live: boolean;
+  onDemand?: boolean;
   hlsNative?: boolean;
   wantsHls?: boolean;
   lineId: string;

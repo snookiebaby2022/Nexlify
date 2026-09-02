@@ -11,6 +11,7 @@ import {
   serverBaseUrl,
   xtreamUserInfo,
   xtreamLiveCategoriesForLine,
+  xtreamLiveStreams,
   xtreamVodCategoriesForLine,
   xtreamSeriesCategoriesForLine,
 } from "@/lib/xtream";
@@ -197,16 +198,32 @@ async function handlePlayerApiInner(
   switch (action) {
     case "get_live_categories": {
       const ttl = await getCacheTtls();
+      const profile = resolveClientPlaybackProfile(userAgent);
+      if (!profile.zapPrefetchOnPlaylist) {
+        void warmXtreamLiveCatalogNow(line).catch(() => undefined);
+      }
+      const catKey = profile.numericCategoryId
+        ? `xtream:live_categories:v10n:${bouquetToken}`
+        : `xtream:live_categories:v9:${bouquetToken}`;
       const payload = await cacheGetOrSet(
-        `xtream:live_categories:v7:${bouquetToken}`,
+        catKey,
         Math.max(300, ttl.categories),
-        () => xtreamLiveCategoriesForLine(line),
+        () => xtreamLiveCategoriesForLine(line, profile.numericCategoryId),
       );
       return j(payload);
     }
     case "get_live_streams": {
       const categoryId = params.get("category_id");
       const profile = resolveClientPlaybackProfile(userAgent);
+      // Nexus/Lavf bulk-loads then filters client-side — serve fresh inline JSON
+      // (numeric category_id + normalized icons) instead of a stale gzip blob.
+      if (profile.id === "nexus") {
+        return j(
+          await xtreamLiveStreams(line, baseUrl, categoryId, {
+            numericCategoryId: profile.numericCategoryId,
+          })
+        );
+      }
       return serveXtreamCatalogJson("live", line, req, categoryId, (ids) => {
         if (!profile.zapPrefetchOnPlaylist) return;
         void getAntiFreezeSettings().then((antiFreeze) => {

@@ -21,7 +21,7 @@ export default function AutoFixSettingsPage() {
             { key: "autoFixAudioLoss", label: "Fix audio loss", type: "yesno", hint: "Auto-detect and restart streams with missing audio." },
             { key: "autoFixVideoFreeze", label: "Fix video freeze", type: "yesno", hint: "Auto-detect and restart frozen video streams." },
             { key: "autoFixLoopDetection", label: "Fix loop detection", type: "yesno", hint: "Detect and break looping streams." },
-            { key: "autoFixSourceSwitch", label: "Auto source switch", type: "yesno", hint: "Switch to backup source on failure." },
+            { key: "autoFixSourceSwitch", label: "Auto source switch", type: "yesno", hint: "Off = keep using the primary URL. Swap to backup yourself in the stream editor." },
           ],
         },
         {

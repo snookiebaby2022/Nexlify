@@ -10,9 +10,20 @@ import {
 } from "./client-playback-profiles";
 
 describe("client playback profiles", () => {
+  it("detects Nexus TV and Lavf as TS clients without playlist prefetch", () => {
+    const nexus = resolveClientPlaybackProfile("NexusTV/1.0");
+    assert.equal(nexus.id, "nexus");
+    assert.equal(nexus.liveOutput, "ts");
+    assert.equal(nexus.zapPrefetchOnPlaylist, false);
+    const lavf = resolveClientPlaybackProfile("Lavf/58.29.100");
+    assert.equal(lavf.id, "nexus");
+    assert.equal(lavf.zapPrefetchOnPlaylist, false);
+  });
+
   it("detects XCIPTV and Smarters from User-Agent", () => {
     assert.equal(detectClientProfile("XCIPTV/5.0.0"), "xciptv");
     assert.equal(detectClientProfile("IPTVSmartersPlayer"), "smarters");
+    assert.equal(detectClientProfile("okhttp/4.12.0 IPTV Smarters Pro"), "smarters");
     assert.equal(
       detectClientProfile(
         "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 Chrome/87.0.4280.88 Safari/537.36 WebAppManager"

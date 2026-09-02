@@ -26,11 +26,13 @@ function LineActivityContent() {
   const [rows, setRows] = useState<Conn[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const linesApi = isReseller ? "/api/reseller/lines" : "/api/admin/lines";
+
   useEffect(() => {
-    fetch("/api/admin/lines")
+    fetch(linesApi)
       .then((r) => r.json())
       .then((d) => setLines(Array.isArray(d.lines) ? d.lines : []));
-  }, []);
+  }, [linesApi]);
 
   const load = useCallback(() => {
     setLoading(true);

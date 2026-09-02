@@ -168,7 +168,7 @@ export function DashboardXuiKpiRibbon({
             className="px-4 py-2 text-white text-sm flex items-center justify-between"
             style={{ background: "linear-gradient(135deg, #dd4b39 0%, #c23321 100%)" }}
           >
-            <span className="uppercase text-xs opacity-90">Probe failed</span>
+            <span className="uppercase text-xs opacity-90">Viewer / probe failed</span>
             <span className="font-bold tabular-nums">{offlineStreams.toLocaleString()}</span>
           </Link>
         </div>

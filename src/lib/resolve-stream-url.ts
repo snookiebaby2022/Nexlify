@@ -2,7 +2,7 @@ import type { Stream, StreamProvider, StreamServer, VodMode } from "@prisma/clie
 import { resolveProviderUrl } from "./vod-provider-url";
 import { parseBitrates, resolveStreamPlayUrl } from "./stream-variants";
 import { repairMalformedStreamUrl } from "./stream-source";
-import { getActiveSource, getUpstreamAttempts } from "./source-failover";
+import { getActiveSource, getUpstreamAttempts, isAutoSourceSwapEnabled } from "./source-failover";
 import { getSourceCircuit, rankSourceCandidates } from "./source-circuit-breaker";
 
 const MAX_FAILOVER_ATTEMPTS = 3;
@@ -144,6 +144,7 @@ export async function preferHealthyPlaybackUrls(
   urls: string[]
 ): Promise<string[]> {
   if (!streamId || urls.length < 2) return urls;
+  if (!(await isAutoSourceSwapEnabled())) return urls;
   const active = await getActiveSource(streamId);
   if (active.source === "failover" && active.url) {
     const activeNorm = normalizeUpstreamStreamUrl(active.url);

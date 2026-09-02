@@ -11,6 +11,7 @@ import { isRemoteM3uUrl } from "./m3u-watch-sync";
 import { isLocalM3uPath } from "./watch-folder-m3u";
 import { runDueM3uSyncJobs, runWatchFolderM3uSync } from "./m3u-sync-jobs";
 import { getSettingGroup } from "./panel-settings";
+import { cronIntervalDue, getCronLoadSnapshot } from "./cron-load-gate";
 
 const ESTIMATED_MBPS_PER_STREAM = Number(process.env.ESTIMATED_MBPS_PER_STREAM ?? "4");
 
@@ -635,6 +636,16 @@ export async function jobExpireLines() {
 async function jobPlaybackQuality() {
   const start = Date.now();
   try {
+    const load = await getCronLoadSnapshot();
+    if (load.deferHeavy) {
+      await logCron(
+        "playback_quality",
+        "ok",
+        `skipped (load ${load.load1.toFixed(1)}/${load.cpuCount}, live ${load.liveConnections})`,
+        Date.now() - start
+      );
+      return;
+    }
     const settings = await getSettingGroup("streams");
     const cron = await getSettingGroup("cron");
     if (settings.autoFixDeadLinks !== true || cron.deadLinkProbeEnabled === false) {
@@ -657,6 +668,20 @@ async function jobPlaybackQuality() {
 export async function jobDeadLinkProbe() {
   const start = Date.now();
   try {
+    const load = await getCronLoadSnapshot();
+    if (load.deferHeavy) {
+      await logCron(
+        "dead_link_probe",
+        "ok",
+        `skipped (load ${load.load1.toFixed(1)}/${load.cpuCount}, live ${load.liveConnections})`,
+        Date.now() - start
+      );
+      return;
+    }
+    if (!(await cronIntervalDue("dead_link_probe", 300))) {
+      await logCron("dead_link_probe", "ok", "skipped (interval)", Date.now() - start);
+      return;
+    }
     const settings = await getSettingGroup("streams");
     const cron = await getSettingGroup("cron");
     if (settings.autoFixDeadLinks !== true || cron.deadLinkProbeEnabled === false) {
@@ -858,6 +883,20 @@ async function jobPlexVodMetaBackfill() {
 async function jobWarmXtreamCatalogs() {
   const start = Date.now();
   try {
+    const load = await getCronLoadSnapshot();
+    if (load.deferHeavy) {
+      await logCron(
+        "xtream_catalog_warm",
+        "ok",
+        `skipped (load ${load.load1.toFixed(1)}/${load.cpuCount}, live ${load.liveConnections})`,
+        Date.now() - start
+      );
+      return;
+    }
+    if (!(await cronIntervalDue("xtream_catalog_warm", 300))) {
+      await logCron("xtream_catalog_warm", "ok", "skipped (interval)", Date.now() - start);
+      return;
+    }
     const lines = await prisma.line.findMany({
       where: { status: "ACTIVE", expiresAt: { gt: new Date() } },
       include: { bouquets: { include: { bouquet: true } } },
@@ -885,6 +924,16 @@ async function jobWarmXtreamCatalogs() {
 async function jobEdgeChannelPrewarm() {
   const start = Date.now();
   try {
+    const load = await getCronLoadSnapshot();
+    if (load.deferHeavy) {
+      await logCron(
+        "edge_channel_prewarm",
+        "ok",
+        `skipped (load ${load.load1.toFixed(1)}/${load.cpuCount}, live ${load.liveConnections})`,
+        Date.now() - start
+      );
+      return;
+    }
     const edgeHost = String(process.env.NEXLIFY_EDGE_PREWARM_HOST || "").trim();
     const secret = String(process.env.INTERNAL_API_SECRET || process.env.PANEL_INTERNAL_SECRET || "").trim();
     if (!edgeHost || !secret) {

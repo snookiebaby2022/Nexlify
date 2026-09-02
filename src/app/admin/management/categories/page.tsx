@@ -1304,7 +1304,7 @@ function ManagementCategoriesInner() {
   const [catQuery, setCatQuery] = useState("");
 
   function load() {
-    fetch("/api/admin/categories")
+    fetch("/api/admin/categories?lite=1")
       .then(async (r) => {
         const d = await r.json();
         if (!r.ok) {

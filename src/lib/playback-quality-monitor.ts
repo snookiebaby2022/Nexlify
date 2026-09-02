@@ -8,7 +8,7 @@ import {
   PLAYBACK_STUTTER,
   logPlaybackQuality,
 } from "@/lib/playback-quality-log";
-import { setActiveFailover } from "@/lib/source-failover";
+import { setActiveFailover, isAutoSourceSwapEnabled } from "@/lib/source-failover";
 import { probeStreamWithScheduler } from "@/lib/source-probe-scheduler";
 
 export type PlaybackQualityScan = {
@@ -43,6 +43,7 @@ export function classifyWatchRowForTest(row: Parameters<typeof classifyWatch>[0]
 async function ensureBackupAndFailover(
   stream: { id: string; name: string; streamUrl: string; backupUrl: string | null }
 ): Promise<boolean> {
+  if (!(await isAutoSourceSwapEnabled())) return false;
   let backup = stream.backupUrl?.trim() || "";
   if (!backup) {
     backup = (await findSiblingLiveBackupUrl(stream)) ?? "";

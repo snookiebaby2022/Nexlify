@@ -20,6 +20,26 @@ export function userAgentIsSmartTv(userAgent?: string | null): boolean {
   );
 }
 
+/**
+ * IPTV apps that break when server_info advertises :8080 / :443 on the stream host.
+ * Use plain :80 / http for API + EPG after login (Smarters, Nexus, Lavf/VLC engines).
+ */
+export function userAgentUsesStandardIptvPorts(userAgent?: string | null): boolean {
+  if (userAgentIsSmartTv(userAgent)) return true;
+  const s = String(userAgent ?? "").toLowerCase();
+  return (
+    s.includes("nexus") ||
+    s.includes("nexustv") ||
+    s.includes("smarters") ||
+    s.includes("xciptv") ||
+    s.includes("tivimate") ||
+    s.includes("perfect player") ||
+    s.includes("lavf/") ||
+    s.includes("libvlc") ||
+    s.includes("vlc/")
+  );
+}
+
 export function isTinyLiveRangeProbe(range?: string | null, userAgent?: string | null): boolean {
   if (userAgentIsSmartTv(userAgent)) return false;
   const r = String(range ?? "").trim();

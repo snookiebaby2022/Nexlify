@@ -7,6 +7,7 @@ import {
   xtreamDeltaArray,
   xtreamOutputFormats,
   xtreamCategoryIds,
+  xtreamExportCategoryId,
   xmltvSafeText,
   xtreamBase64,
   xtreamCatalogDirectSource,
@@ -51,8 +52,13 @@ describe("xtream-safe", () => {
     assert.deepEqual(xtreamOutputFormats("hls,m3u8,ts,rtmp"), ["m3u8", "ts", "rtmp"]);
   });
 
-  it("uses numeric category_ids like XUI", () => {
+  it("exports numeric category_ids like XUI", () => {
     assert.deepEqual(xtreamCategoryIds("162563989"), [162563989]);
+  });
+
+  it("exports string category_id for SQLite-friendly IPTV apps", () => {
+    assert.equal(xtreamExportCategoryId("707056019"), "707056019");
+    assert.equal(xtreamExportCategoryId("0"), "0");
   });
 
   it("escapes XML and drops illegal control chars", () => {

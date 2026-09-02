@@ -59,7 +59,7 @@ export async function GET(
     include: {
       line: { select: { username: true, isRestreamer: true } },
     },
-    orderBy: { lastSeenAt: "desc" },
+    orderBy: [{ startedAt: "asc" }, { lastSeenAt: "desc" }],
   });
 
   const serverLabel = stream.server

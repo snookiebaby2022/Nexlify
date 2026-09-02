@@ -11,6 +11,9 @@ import {
   xtreamUnixString,
   xtreamAddedUnix,
   xtreamCategoryIds,
+  xtreamExportCategoryId,
+  xtreamExportCategoryIdValue,
+  normalizeXtreamStreamIcon,
   xtreamCatalogDirectSource,
   xtreamListingExtension,
 } from "@/lib/xtream-safe";
@@ -40,7 +43,8 @@ function exportCategoryNumericId(
 export function mapXtreamLiveItem(
   s: StreamForLine,
   index: number,
-  canonical: CanonicalCategoryMaps
+  canonical: CanonicalCategoryMaps,
+  opts?: { numericCategoryId?: boolean }
 ) {
   const catchup = s.vodMode === "CATCHUP" || s.isShifted;
   const archiveDays = s.archiveDays ?? 0;
@@ -48,18 +52,24 @@ export function mapXtreamLiveItem(
   const shiftLabel = formatTimeshiftLabel(s.timeshiftSeconds);
   const numCategoryId = exportCategoryNumericId(s, canonical, "LIVE");
   const name = xtreamSafeText(shiftLabel ? `${s.name} (${shiftLabel})` : s.name) || "Live";
+  const icon = normalizeXtreamStreamIcon(s.streamIcon);
+  const categoryId = xtreamExportCategoryIdValue(numCategoryId, Boolean(opts?.numericCategoryId));
   return {
     num: index + 1,
     name,
+    title: name,
+    stream_display_name: name,
     stream_type: "live" as const,
     stream_id: cuidToNum(s.id),
-    stream_icon: xtreamSafeText(s.streamIcon),
+    stream_icon: icon,
+    thumbnail: icon,
     epg_channel_id: xtreamSafeText(resolveEpgId(s)),
     epg_id: xtreamSafeText(resolveEpgId(s)),
     added: xtreamUnixString(s.createdAt),
-    category_id: numCategoryId,
+    category_id: categoryId,
     category_ids: xtreamCategoryIds(numCategoryId),
     custom_sid: "",
+    is_adult: 0,
     tv_archive: catchup || timeshiftHours > 0 ? 1 : 0,
     direct_source: xtreamCatalogDirectSource(),
     tv_archive_duration: catchup ? archiveDays || timeshiftHours || 7 : timeshiftHours || 0,
@@ -89,7 +99,7 @@ export function mapXtreamVodItem(
     updated_at: added,
     last_modified: String(added),
     is_adult: s.isAdult ? 1 : 0,
-    category_id: numCategoryId,
+    category_id: xtreamExportCategoryId(numCategoryId),
     category_ids: xtreamCategoryIds(numCategoryId),
     container_extension: xtreamListingExtension(
       s.containerExtension,
@@ -131,7 +141,7 @@ export function mapXtreamSeriesItem(
     backdrop_path: [] as string[],
     youtube_trailer: "",
     episode_run_time: "0",
-    category_id: numCategoryId,
+    category_id: xtreamExportCategoryId(numCategoryId),
     category_ids: xtreamCategoryIds(numCategoryId),
   };
 }

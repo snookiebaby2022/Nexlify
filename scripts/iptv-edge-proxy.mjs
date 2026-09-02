@@ -171,8 +171,11 @@ const MAX_EDGE_DISK_PACK = Number(process.env.IPTV_EDGE_MAX_DISK_PACK || 256);
 /** One provider pull per live channel while anyone is watching (XUI on-demand restream). */
 const MAX_LIVE_FANS = Number(process.env.IPTV_EDGE_MAX_LIVE_FANS || 8000);
 const LIVE_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_LIVE_FAN_LINGER_MS || 12000);
-/** Drop/resync clients that fall behind the shared fan instead of buffering unboundedly. */
-const MAX_CLIENT_LAG_BYTES = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_BYTES || 4_000_000);
+const ON_DEMAND_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_ON_DEMAND_FAN_LINGER_MS || 90000);
+/** Drop/resync clients that fall behind the shared fan instead of buffering unboundedly.
+ *  4MB was too low once origin stays realtime: CDN bursts (~8MB in <1s) backpressure
+ *  a healthy socket and used to kill the viewer. Time lag still drops slow clients. */
+const MAX_CLIENT_LAG_BYTES = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_BYTES || 16_000_000);
 const MAX_CLIENT_LAG_MS = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_MS || 8000);
 /** Stop idle disk HLS packagers after no segment requests. */
 const DISK_PACK_IDLE_MS = Number(process.env.IPTV_EDGE_DISK_PACK_IDLE_MS || 45_000);
@@ -362,16 +365,19 @@ function clientIp(req) {
 const pendingPulseBatch = new Map();
 let pulseBatchTimer = null;
 
-function queueConnectionPulse(ctx, bytes) {
+function queueConnectionPulse(ctx, bytes, idleMs) {
   if (!INTERNAL_SECRET || !ctx?.lineId || !ctx?.streamId) return;
   const key = playbackSessionKey(ctx);
   const n = Math.max(0, Math.floor(bytes ?? 0));
+  const idle = Math.max(0, Math.floor(idleMs ?? ctx?.idleMs ?? 0));
   const prev = pendingPulseBatch.get(key);
   pendingPulseBatch.set(key, {
     lineId: ctx.lineId,
     streamId: ctx.streamId,
     ip: ctx.ip ?? "",
     bytes: (prev?.bytes ?? 0) + n,
+    idleMs: Math.max(prev?.idleMs ?? 0, idle),
+    onDemand: Boolean(ctx.onDemand || prev?.onDemand),
   });
 }
 
@@ -408,8 +414,8 @@ function ensurePulseBatchTimer() {
   pulseBatchTimer = setInterval(flushConnectionPulseBatch, SESSION_KEEPALIVE_MS);
 }
 
-function sendConnectionPulse(ctx, bytes) {
-  queueConnectionPulse(ctx, bytes);
+function sendConnectionPulse(ctx, bytes, idleMs) {
+  queueConnectionPulse(ctx, bytes, idleMs);
   ensurePulseBatchTimer();
 }
 
@@ -446,9 +452,21 @@ function sendPlaybackEvent(ctx, action, detail, status) {
   req.end();
 }
 
-function pulseConnection(ctx, bytes) {
+function reportViewerPlaybackDrop(clientReq, auth, detail, status) {
+  if (!auth?.streamId || !auth?.lineId) return;
+  if (clientReq.method === "HEAD") return;
+  if (isTinyLiveRangeProbe(clientReq.headers.range, clientReq.headers["user-agent"])) return;
+  sendPlaybackEvent(
+    { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) },
+    "playback_drop",
+    detail,
+    status
+  );
+}
+
+function pulseConnection(ctx, bytes, idleMs) {
   touchPlaybackSession(ctx, { hls: Boolean(ctx?.hls) });
-  sendConnectionPulse(ctx, bytes);
+  sendConnectionPulse(ctx, bytes, idleMs);
 }
 
 function querySessionKicked(lineId, ip) {
@@ -559,9 +577,19 @@ function endPlaybackSession(ctx) {
 
 /** Keep panel live rows fresh while MPEG-TS/HLS clients are connected (XUI-style). */
 const playbackSessions = new Map();
+function connectionQoeEnabled() {
+  const raw = String(process.env.NEXLIFY_CONNECTION_QOE ?? "").trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(raw)) return true;
+  if (["0", "false", "no", "off"].includes(raw)) return false;
+  return false;
+}
+const CONNECTION_QOE_ENABLED = connectionQoeEnabled();
 const SESSION_KEEPALIVE_MS = Math.max(
   5_000,
-  Number(process.env.IPTV_EDGE_SESSION_KEEPALIVE_MS || 15_000)
+  Number(
+    process.env.IPTV_EDGE_SESSION_KEEPALIVE_MS ||
+      (CONNECTION_QOE_ENABLED ? 15_000 : 45_000)
+  )
 );
 /** HLS playlist polls stop when the app exits — close the panel row quickly. */
 const SESSION_IDLE_MS = Number(process.env.IPTV_EDGE_SESSION_IDLE_MS || 120_000);
@@ -634,18 +662,26 @@ function createLiveByteMeter(pulseCtx) {
   touchPlaybackSession(pulseCtx);
   let pending = 0;
   let lastPulse = 0;
+  let lastChunk = 0;
+  let longestIdle = 0;
   return (chunk) => {
     const n = chunk?.length ?? 0;
     if (n <= 0) return;
-    pending += n;
     const now = Date.now();
+    if (lastChunk > 0) {
+      const gap = now - lastChunk;
+      if (gap > longestIdle) longestIdle = gap;
+    }
+    lastChunk = now;
+    pending += n;
     if (lastPulse === 0) lastPulse = now;
     // Aggregate bytes locally. A bitrate-based threshold generated several DB
     // writes per second per viewer and made the panel unavailable.
     if (now - lastPulse >= SESSION_KEEPALIVE_MS) {
-      pulseConnection(pulseCtx, pending);
+      pulseConnection(pulseCtx, pending, longestIdle);
       pending = 0;
       lastPulse = now;
+      longestIdle = 0;
     }
   };
 }
@@ -952,7 +988,8 @@ function detachLiveFanClient(fan, slot, opts) {
   if (opts?.closingFan) return;
   if (fan.clients.size === 0 && fan.waiters.length === 0) {
     if (fan.linger) clearTimeout(fan.linger);
-    fan.linger = setTimeout(() => destroyLiveFan(fan), LIVE_FAN_LINGER_MS);
+    const lingerMs = fan.onDemand ? ON_DEMAND_FAN_LINGER_MS : LIVE_FAN_LINGER_MS;
+    fan.linger = setTimeout(() => destroyLiveFan(fan), lingerMs);
   }
 }
 
@@ -1048,21 +1085,14 @@ function broadcastFanChunk(fan, chunk) {
     const next = Buffer.concat([fan.prefix, chunk]);
     fan.prefix = next.length <= keep ? next : next.subarray(next.length - keep);
   }
-  let backpressured = 0;
+  // Live TV must stay realtime. Never pause the origin because one client is
+  // slow — that starves every viewer on the fan (ITV HD dropped from ~12 Mbps
+  // to ~4 Mbps with 7s gaps). Slow sockets are dropped via MAX_CLIENT_LAG.
   for (const slot of [...fan.clients]) {
     try {
-      if (writeFanChunkToSlot(fan, slot, chunk)) continue;
-      backpressured += 1;
+      writeFanChunkToSlot(fan, slot, chunk);
     } catch {
       detachLiveFanClient(fan, slot);
-    }
-  }
-  if (backpressured > 0 && fan.clients.size > 0 && fan.upstreamRes && !fan.upstreamPaused) {
-    fan.upstreamPaused = true;
-    try {
-      fan.upstreamRes.pause();
-    } catch {
-      /* ignore */
     }
   }
 }
@@ -1213,13 +1243,11 @@ function broadcastHlsRemuxChunk(session, chunk) {
     const next = Buffer.concat([session.prefix, chunk]);
     session.prefix = next.length <= keep ? next : next.subarray(next.length - keep);
   }
-  let backpressured = 0;
   for (const slot of [...session.clients]) {
     try {
       if (slot.meter) slot.meter(chunk);
       const ok = slot.clientRes.write(chunk);
       if (ok) continue;
-      backpressured += 1;
       slot.pendingBytes = (slot.pendingBytes || 0) + chunk.length;
       if (slot.pendingBytes > MAX_CLIENT_LAG_BYTES) {
         edgeMetrics.laggedDrops += 1;
@@ -1228,22 +1256,6 @@ function broadcastHlsRemuxChunk(session, chunk) {
     } catch {
       detachHlsRemuxClient(session, slot);
     }
-  }
-  if (backpressured > 0 && session.clients.size > 0 && session.proc?.stdout && !session.stdoutPaused) {
-    session.stdoutPaused = true;
-    try {
-      session.proc.stdout.pause();
-    } catch {
-      /* ignore */
-    }
-    session.proc.stdout.once("drain", () => {
-      session.stdoutPaused = false;
-      try {
-        session.proc.stdout.resume();
-      } catch {
-        /* ignore */
-      }
-    });
   }
 }
 
@@ -1894,6 +1906,7 @@ function authLive(clientReq) {
             upstream: String(res.headers["x-nexlify-upstream"] || ""),
             alts: parseAltsHeader(res.headers["x-nexlify-alts"]),
             live: String(res.headers["x-nexlify-live"] || "") === "1",
+            onDemand: String(res.headers["x-nexlify-on-demand"] || "") === "1",
             hlsNative: String(res.headers["x-nexlify-hls-native"] || "") === "1",
             passthrough: String(res.headers["x-nexlify-passthrough"] || "") === "1" || res.statusCode === 204,
             streamId: String(res.headers["x-nexlify-stream-id"] || ""),
@@ -2811,6 +2824,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     return;
   }
   if (auth.status === 401 || auth.status === 403 || auth.status === 429 || auth.status === 404) {
+    reportViewerPlaybackDrop(clientReq, auth, `Live auth denied (HTTP ${auth.status})`, auth.status);
     denyAuth(clientRes, auth.status);
     return;
   }
@@ -2821,6 +2835,14 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
   const isHead = String(clientReq.method || "GET").toUpperCase() === "HEAD";
   if (pulseCtx && !isHead) touchPlaybackSession(pulseCtx, { hls: true });
   if (auth.passthrough || auth.status !== 200 || !auth.streamId) {
+    if (!isHead) {
+      reportViewerPlaybackDrop(
+        clientReq,
+        auth,
+        auth.passthrough ? "HLS auth returned no upstream" : "HLS auth failed",
+        auth.status && auth.status !== 200 ? auth.status : 502
+      );
+    }
     clientRes.writeHead(auth.status && auth.status !== 200 ? auth.status : 502, {
       "content-type": "text/plain",
     });
@@ -2835,6 +2857,7 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
     touchHlsDaemon(streamId);
   }
   if (auth.hlsNative && !packUrl) {
+    reportViewerPlaybackDrop(clientReq, auth, "Native HLS missing upstream URL", 502);
     clientRes.writeHead(502, { "content-type": "text/plain" });
     clientRes.end("native hls missing upstream");
     return;
@@ -2886,6 +2909,17 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
   if (packUrl) {
     prewarmHlsSeg0(streamId, packUrl, clientReq.headers["user-agent"], outboundProxy);
     serveBootstrapHlsPlaylist(clientReq, clientRes, pulseCtx);
+    return;
+  }
+  // LibVLC / Smarters-VLC cannot play fake EVENT playlists (single unbounded .ts).
+  // ExoPlayer may use that fast path; everyone else must retry or use .ts output.
+  if (!userAgentAllowsInstantTsWrap(clientReq.headers["user-agent"])) {
+    clientRes.writeHead(503, {
+      "content-type": "text/plain",
+      "retry-after": "1",
+      "x-playback-hint": "mpegts",
+    });
+    clientRes.end("HLS not ready for this player — use MPEG-TS output");
     return;
   }
   serveInstantTsPlaylist(clientReq, clientRes, pulseCtx);
@@ -3022,21 +3056,34 @@ async function onRequest(clientReq, clientRes, ctx) {
         clientRes.end();
         return;
       }
+      reportViewerPlaybackDrop(
+        clientReq,
+        auth,
+        auth.passthrough ? "Live auth returned no upstream" : "Live auth missing upstream URL",
+        auth.status && auth.status !== 200 ? auth.status : 502
+      );
       forward(clientReq, clientRes, ctx);
       return;
     }
     if (auth.status === 401 || auth.status === 403 || auth.status === 429 || auth.status === 404) {
+      reportViewerPlaybackDrop(clientReq, auth, `Live auth denied (HTTP ${auth.status})`, auth.status);
       clientRes.writeHead(auth.status, { "content-type": "text/plain" });
       clientRes.end(auth.status === 401 ? "Unauthorized" : auth.status === 404 ? "Not found" : "Forbidden");
       return;
     }
     if (auth.status !== 200) {
+      reportViewerPlaybackDrop(clientReq, auth, `Live auth failed (HTTP ${auth.status})`, auth.status);
       forward(clientReq, clientRes, ctx);
       return;
     }
     const pulseCtx =
       auth.lineId && auth.streamId
-        ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq) }
+        ? {
+            lineId: auth.lineId,
+            streamId: auth.streamId,
+            ip: clientIp(clientReq),
+            onDemand: Boolean(auth.onDemand),
+          }
         : null;
     const isLiveRangeProbe = Boolean(
       auth.live &&
@@ -3068,7 +3115,10 @@ async function onRequest(clientReq, clientRes, ctx) {
         clientRes.end("edge fan capacity reached");
         return;
       }
-      if (acquired.mode === "start") fan = acquired.fan;
+      if (acquired.mode === "start") {
+        fan = acquired.fan;
+        if (auth.onDemand) fan.onDemand = true;
+      }
     }
     const ordered = orderLiveUpstreamTargets(auth.streamId || "", auth.upstream, auth.alts || []);
     if (auth.live && isHlsPlaybackUrl(ordered.upstream)) {

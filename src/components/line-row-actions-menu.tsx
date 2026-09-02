@@ -21,7 +21,13 @@ import { computePortalMenuPosition } from "@/lib/portal-menu-position";
 import { DownloadPlaylistModal } from "@/components/download-playlist-modal";
 import { LineRecentlyWatchedDialog } from "@/components/line-recently-watched-dialog";
 import { LineRenewModal } from "@/components/line-renew-modal";
-import { linesApiRoot, type PanelKind } from "@/lib/panel-api";
+import {
+  lineActivityPagePath,
+  linesApiRoot,
+  linesPagePath,
+  panelBasePath,
+  type PanelKind,
+} from "@/lib/panel-api";
 import { useResellerGroupFlags } from "@/components/reseller-group-flags-context";
 
 export type LineRowForMenu = {
@@ -63,6 +69,7 @@ export function LineRowActionsMenu({
   const [renewOpen, setRenewOpen] = useState(false);
 
   const linesApi = linesApiRoot(panel);
+  const base = panelBasePath(panel);
   const { showM3uDownload } = useResellerGroupFlags();
   const allowPlaylistDownload = panel !== "reseller" || showM3uDownload;
 
@@ -132,7 +139,7 @@ export function LineRowActionsMenu({
       label: "View connection history",
       icon: <Eye size={15} />,
       onClick: () => {
-        router.push(`/admin/line_activity?lineId=${encodeURIComponent(line.id)}`);
+        router.push(lineActivityPagePath(panel, line.id));
         onClose();
       },
     },
@@ -152,14 +159,27 @@ export function LineRowActionsMenu({
       onClick: () => setStatus("BANNED"),
       danger: true,
     },
-    {
-      label: "Convert to MAG",
-      icon: <Box size={15} />,
-      onClick: () => {
-        router.push(`/admin/mag/add?lineId=${encodeURIComponent(line.id)}`);
-        onClose();
-      },
-    },
+    ...(panel === "admin"
+      ? [
+          {
+            label: "Convert to MAG",
+            icon: <Box size={15} />,
+            onClick: () => {
+              router.push(`/admin/mag/add?lineId=${encodeURIComponent(line.id)}`);
+              onClose();
+            },
+          },
+        ]
+      : [
+          {
+            label: "Convert to MAG",
+            icon: <Box size={15} />,
+            onClick: () => {
+              router.push(`${base}/mags/convert-to-line?lineId=${encodeURIComponent(line.id)}`);
+              onClose();
+            },
+          },
+        ]),
     {
       label: "Sync with package",
       icon: <RotateCw size={15} />,
@@ -172,7 +192,7 @@ export function LineRowActionsMenu({
       label: "Edit",
       icon: <Pencil size={15} />,
       onClick: () => {
-        router.push(`/admin/lines?edit=${encodeURIComponent(line.id)}`);
+        router.push(linesPagePath(panel, line.id));
         onClose();
       },
     },

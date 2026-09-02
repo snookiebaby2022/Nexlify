@@ -1,12 +1,32 @@
 import { SettingsPanelForm } from "@/components/settings-panel-form";
+import { OFFLINE_STREAM_IMAGE_TEMPLATES } from "@/lib/offline-stream-image";
 
 export default function PlayerSettingsPage() {
   return (
     <SettingsPanelForm
       group="player"
       title="Player & CDM"
-      description="Built-in player and content decryption (CDM) for protected streams."
+      description="Built-in player, offline splash screens for IPTV apps, and content decryption (CDM)."
       sections={[
+        {
+          title: "Offline channel splash",
+          info:
+            "URL sent to IPTV apps in player_api as offline_image_url. Nexus and other apps show this when a channel fails to play. Custom URL overrides the template.",
+          fields: [
+            {
+              key: "offlineStreamImageTemplate",
+              label: "Template",
+              type: "select",
+              options: OFFLINE_STREAM_IMAGE_TEMPLATES.map((t) => ({ value: t.id, label: t.label })),
+            },
+            {
+              key: "offlineStreamImageUrl",
+              label: "Custom image URL (optional)",
+              placeholder: "https://your-cdn.com/offline.png",
+              colSpan: 2,
+            },
+          ],
+        },
         {
           title: "WebRTC preview",
           info: "Enable WebRTC in Settings → WebRTC and install MediaMTX on stream servers for sub-second live preview.",

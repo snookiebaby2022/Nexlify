@@ -200,7 +200,7 @@ export function DashboardIssuesPanel({
             <AlertTriangle size={16} className="text-red-500 shrink-0" />
             <div className="flex-1 min-w-[160px]">
               <p className="text-sm font-medium">{dead.toLocaleString()} dead streams</p>
-              <p className="text-xs" style={{ color: "var(--muted)" }}>Probe failed with no backup URL</p>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>Viewer reported offline or probe failed (no backup)</p>
             </div>
             <Link
               href="/admin/content/streams?status=offline&sourceIssue=dead"
@@ -217,7 +217,7 @@ export function DashboardIssuesPanel({
             <AlertTriangle size={16} className="text-amber-500 shrink-0" />
             <div className="flex-1 min-w-[160px]">
               <p className="text-sm font-medium">{unstable.toLocaleString()} unstable streams</p>
-              <p className="text-xs" style={{ color: "var(--muted)" }}>Probe failed but backup URL is set</p>
+              <p className="text-xs" style={{ color: "var(--muted)" }}>Viewer reported offline or probe failed (backup set)</p>
             </div>
             <Link
               href="/admin/content/streams?status=offline&sourceIssue=unstable"

@@ -13,6 +13,8 @@ export async function pulseLiveConnection(opts: {
   streamId: string;
   ip?: string | null;
   bytes?: number;
+  idleMs?: number;
+  onDemand?: boolean;
   userAgent?: string;
   playbackPath?: string;
 }): Promise<void> {
@@ -22,8 +24,10 @@ export async function pulseLiveConnection(opts: {
 
   const clientIp = normalizeConnectionIp(opts.ip);
   const bytes = Math.max(0, Math.floor(opts.bytes ?? 0));
-  if (bytes > 0) {
-    void recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", bytes);
+  const idleMs = Math.max(0, Math.floor(opts.idleMs ?? 0));
+  const onDemand = Boolean(opts.onDemand);
+  if (bytes > 0 || idleMs > 0) {
+    void recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", bytes, idleMs, onDemand);
   }
   void touchLiveSession(lineId, streamId, clientIp);
 

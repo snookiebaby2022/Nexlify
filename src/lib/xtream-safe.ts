@@ -61,6 +61,40 @@ export function xtreamCategoryIds(numericId: string): number[] {
   return Number.isFinite(n) ? [n] : [0];
 }
 
+/** XUI / Smarters use string category_id; Nexus expects JSON numbers. */
+export function xtreamExportCategoryId(numericId: string): string {
+  const raw = String(numericId ?? "").trim();
+  return raw || "0";
+}
+
+export function xtreamExportCategoryIdValue(
+  numericId: string,
+  asNumber: boolean
+): string | number {
+  const raw = String(numericId ?? "").trim() || "0";
+  if (!asNumber) return raw;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Strip :443/:80 from icon URLs — some Android IPTV grids refuse to render them. */
+export function normalizeXtreamStreamIcon(url: unknown): string {
+  const u = xtreamSafeText(url);
+  if (!u) return "";
+  try {
+    const parsed = new URL(u.includes("://") ? u : `https://${u}`);
+    if (
+      (parsed.protocol === "https:" && parsed.port === "443") ||
+      (parsed.protocol === "http:" && parsed.port === "80")
+    ) {
+      parsed.port = "";
+    }
+    return parsed.toString();
+  } catch {
+    return u.replace(/:443\//, "/").replace(/:80\//, "/");
+  }
+}
+
 /** Catalog listings must not embed playback URLs — XCIPTV HTTP-probes every `direct_source`. */
 export function xtreamCatalogDirectSource(): string {
   return "";

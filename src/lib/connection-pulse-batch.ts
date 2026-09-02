@@ -5,6 +5,8 @@ export type PulseBatchEntry = {
   streamId: string;
   ip?: string | null;
   bytes?: number;
+  idleMs?: number;
+  onDemand?: boolean;
 };
 
 const MAX_BATCH = 512;
@@ -19,6 +21,8 @@ export async function pulseLiveConnectionBatch(entries: PulseBatchEntry[]): Prom
         streamId: entry.streamId,
         ip: entry.ip,
         bytes: entry.bytes,
+        idleMs: entry.idleMs,
+        onDemand: entry.onDemand,
       })
     )
   );

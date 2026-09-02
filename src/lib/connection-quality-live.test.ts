@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   applyMediaByteWindow,
   computeConnectionQualityWithLive,
+  ON_DEMAND_PLAYER_STALL_IDLE_MS,
 } from "./connection-quality-live";
 import { describeStallCount } from "./connection-quality";
 
@@ -137,6 +138,13 @@ test("applyMediaByteWindow does not treat a delayed full video pulse as a stall"
   assert.equal(batched.stallCount, 0);
 });
 
+test("applyMediaByteWindow counts a stall when the edge reports player-visible origin idle", () => {
+  const t0 = 1_000_000;
+  const first = applyMediaByteWindow(null, t0, 220_000);
+  const stalled = applyMediaByteWindow(first, t0 + 15_000, 2_000_000, 7_000);
+  assert.equal(stalled.stallCount, 1);
+});
+
 test("applyMediaByteWindow resets stall count after a long idle (new spell)", () => {
   const t0 = 1_000_000;
   const first = applyMediaByteWindow(null, t0, 188);
@@ -145,4 +153,20 @@ test("applyMediaByteWindow resets stall count after a long idle (new spell)", ()
   const resumed = applyMediaByteWindow(stalled, t0 + 200_000, 220_000);
   assert.equal(resumed.stallCount, 0);
   assert.equal(resumed.firstByteAt, t0 + 200_000);
+});
+
+test("applyMediaByteWindow ignores on-demand spin-up idle during warmup", () => {
+  const t0 = 1_000_000;
+  const first = applyMediaByteWindow(null, t0, 120_000, 0, true);
+  const spinUp = applyMediaByteWindow(first, t0 + 15_000, 180_000, 7_000, true);
+  assert.equal(spinUp.stallCount, 0);
+});
+
+test("applyMediaByteWindow counts on-demand stall only above on-demand idle threshold", () => {
+  const t0 = 1_000_000;
+  const warmed = applyMediaByteWindow(null, t0, 600_000, 0, true);
+  const below = applyMediaByteWindow(warmed, t0 + 60_000, 2_000_000, ON_DEMAND_PLAYER_STALL_IDLE_MS - 500, true);
+  assert.equal(below.stallCount, 0);
+  const stalled = applyMediaByteWindow(below, t0 + 75_000, 2_000_000, ON_DEMAND_PLAYER_STALL_IDLE_MS + 500, true);
+  assert.equal(stalled.stallCount, 1);
 });

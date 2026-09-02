@@ -10,13 +10,17 @@ import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { isSessionKicked, trackConnection, isTestConnectionIp } from "@/lib/connections";
 import { outboundProxyHeaderValue, resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
 import { isTinyLiveRangeProbe } from "@/lib/live-http-range";
+import { isAutoSourceSwapEnabled } from "@/lib/source-failover";
 import { getServerByAgentToken } from "@/lib/stream-agent";
+import { prisma } from "@/lib/prisma";
+import { streamUsesOnDemandWarmup } from "@/lib/stream-playback-policy";
 import {
   getLiveAuthCache,
   setLiveAuthCache,
   type LiveAuthCacheEntry,
   type LiveAuthOutputMode,
 } from "@/lib/live-auth-cache";
+import { markStreamViewerPlaybackFailed } from "@/lib/viewer-playback-probe";
 
 const LIVE_AUTH_RESOLVE_MS = 2500;
 
@@ -90,6 +94,10 @@ function proxyAuthHeaders(proxy: Awaited<ReturnType<typeof resolveStreamOutbound
   return value ? { "X-Nexlify-Outbound-Proxy": value } : {};
 }
 
+function onDemandAuthHeaders(onDemand: boolean): Record<string, string> {
+  return onDemand ? { "X-Nexlify-On-Demand": "1" } : {};
+}
+
 function liveAuthResponseFromCache(entry: LiveAuthCacheEntry): NextResponse {
   return new NextResponse(null, {
     status: 200,
@@ -101,6 +109,7 @@ function liveAuthResponseFromCache(entry: LiveAuthCacheEntry): NextResponse {
         ? { "X-Nexlify-Alts": entry.alts.map((u) => encodeURIComponent(u)).join(",") }
         : {}),
       "X-Nexlify-Live": entry.live ? "1" : "0",
+      ...onDemandAuthHeaders(Boolean(entry.onDemand)),
       ...(entry.wantsHls ? { "X-Nexlify-Hls": "1" } : {}),
       ...(entry.hlsNative ? { "X-Nexlify-Hls-Native": "1" } : {}),
       "Cache-Control": "no-store",
@@ -174,6 +183,12 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Session kicked", { status: 403 });
   }
 
+  const streamModeRow = await prisma.stream.findUnique({
+    where: { id: cleanId },
+    select: { vodMode: true, isOnDemand: true },
+  });
+  const onDemand = streamUsesOnDemandWarmup(streamModeRow ?? {});
+
   const isHlsSegment = parsed.wantsHls && /\/hls\/seg\d+\.ts$/i.test(parsed.streamKey);
   const liveProbe = isLiveByteProbe(req, parsed, isHlsSegment);
   const testIp = isTestConnectionIp(ip);
@@ -186,6 +201,7 @@ export async function GET(req: NextRequest) {
         "X-Nexlify-Line-Id": line.id,
         "X-Nexlify-Stream-Id": cleanId,
         "X-Nexlify-Live": "1",
+        ...onDemandAuthHeaders(onDemand),
         ...(parsed.wantsHls ? { "X-Nexlify-Hls": "1" } : {}),
         "Cache-Control": "no-store",
       } as Record<string, string>,
@@ -199,6 +215,7 @@ export async function GET(req: NextRequest) {
         "X-Nexlify-Line-Id": line.id,
         "X-Nexlify-Stream-Id": cleanId,
         "X-Nexlify-Live": "1",
+        ...onDemandAuthHeaders(onDemand),
         "Cache-Control": "no-store",
       } as Record<string, string>,
     });
@@ -247,6 +264,7 @@ export async function GET(req: NextRequest) {
           "X-Nexlify-Stream-Id": cleanId,
           "X-Nexlify-Live": "1",
           "X-Nexlify-Hls": "1",
+          ...onDemandAuthHeaders(onDemand),
           "Cache-Control": "no-store",
         } as Record<string, string>,
       });
@@ -296,6 +314,7 @@ export async function GET(req: NextRequest) {
         upstream: hlsUpstream,
         alts: [],
         live: true,
+        onDemand,
         hlsNative: Boolean(hlsNative && !tsUrl),
         wantsHls: true,
         lineId: line.id,
@@ -312,6 +331,7 @@ export async function GET(req: NextRequest) {
         "X-Nexlify-Stream-Id": cleanId,
         "X-Nexlify-Live": "1",
         "X-Nexlify-Hls": "1",
+        ...onDemandAuthHeaders(onDemand),
         ...(hlsNative && !tsUrl ? { "X-Nexlify-Hls-Native": "1" } : {}),
         ...((tsUrl ?? hlsNative) ? { "X-Nexlify-Upstream": tsUrl ?? hlsNative! } : {}),
         "Cache-Control": "no-store",
@@ -336,7 +356,7 @@ export async function GET(req: NextRequest) {
     const tsList = candidates.filter((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
     if (tsList.length) {
       upstream = tsList[0]!;
-      altUpstreams = tsList.slice(1, 4);
+      altUpstreams = (await isAutoSourceSwapEnabled()) ? tsList.slice(1, 4) : [];
     } else {
       const hlsUrl = candidates.find((u) => isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
       if (hlsUrl) upstream = hlsUrl;
@@ -350,6 +370,9 @@ export async function GET(req: NextRequest) {
   }
 
   if (!upstream || !isSafeUpstreamUrl(upstream)) {
+    if (!liveProbe && method !== "HEAD" && !isHlsSegment) {
+      void markStreamViewerPlaybackFailed(cleanId, "No playable upstream URL for viewer");
+    }
     return new NextResponse(null, { status: 204, headers: { "X-Nexlify-Passthrough": "1" } });
   }
 
@@ -369,6 +392,7 @@ export async function GET(req: NextRequest) {
     upstream,
     alts: altUpstreams,
     live: parsed.spliceLiveTs,
+    onDemand,
     lineId: line.id,
     streamId: cleanId,
     outputMode: authOutputMode,
@@ -386,6 +410,7 @@ export async function GET(req: NextRequest) {
         ? { "X-Nexlify-Alts": altUpstreams.map((u) => encodeURIComponent(u)).join(",") }
         : {}),
       "X-Nexlify-Live": parsed.spliceLiveTs ? "1" : "0",
+      ...onDemandAuthHeaders(onDemand),
       "Cache-Control": "no-store",
       ...proxyAuthHeaders(outboundProxy),
     } as Record<string, string>,

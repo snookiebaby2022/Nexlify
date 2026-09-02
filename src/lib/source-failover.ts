@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { cacheGet, cacheSet } from "@/lib/cache";
+import { getSettingGroup } from "@/lib/panel-settings";
 
 const FAILOVER_PREFIX = "failover:attempts:";
 const MAX_FAILOVER_ATTEMPTS = 3;
@@ -21,11 +22,25 @@ export type FailoverResult = {
   attempts: number;
 };
 
+/** Backup URLs stay on the stream; playback uses them only when this is on. */
+export async function isAutoSourceSwapEnabled(): Promise<boolean> {
+  const [swap, fix] = await Promise.all([
+    getSettingGroup("source-swap"),
+    getSettingGroup("auto-fix"),
+  ]);
+  const swapOn = swap.sourceSwapEnabled === true && swap.sourceSwapOnFailure !== false;
+  const fixOn = fix.autoFixEnabled === true && fix.autoFixSourceSwitch === true;
+  return swapOn || fixOn;
+}
+
 export async function getFailoverKey(streamId: string): Promise<string> {
   return `${FAILOVER_PREFIX}${streamId}`;
 }
 
 export async function getActiveSource(streamId: string): Promise<FailoverResult> {
+  if (!(await isAutoSourceSwapEnabled())) {
+    return { url: "", source: "primary", attempts: 0 };
+  }
   const cached = await cacheGet<{ url: string; until: number }>(
     `failover:active:${streamId}`
   );
@@ -104,6 +119,9 @@ export async function executeFailover(
   primaryUrl: string,
   testUrl: (url: string) => Promise<boolean>
 ): Promise<FailoverResult> {
+  if (!(await isAutoSourceSwapEnabled())) {
+    return { url: primaryUrl, source: "primary", attempts: 0 };
+  }
   const active = await getActiveSource(streamId);
   if (active.source === "failover" && active.url) {
     const stillWorks = await testUrl(active.url);

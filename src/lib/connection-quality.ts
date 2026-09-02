@@ -60,7 +60,7 @@ export function connectionQualityClass(level: ConnectionQualityLevel): string {
 export const STALL_PROBLEM_COUNT = 5;
 
 export const LIVE_STALL_HELP =
-  "A stall is counted when an edge heartbeat arrives after 45+ seconds with almost no video bytes. 15s batched pulses that still carry a full video payload are metering, not buffering. 0 is healthy. 1–4 in a session is usually a zap or a brief hiccup. 5+ means the player is actually stalling. Quality % is heartbeat freshness, not the stall count.";
+  "A stall is counted when the live origin/fan goes quiet for 2.5+ seconds inside a heartbeat (the player buffers), or when a heartbeat arrives after 45+ seconds with almost no video. On-demand streams get a 45s / 500KB warmup grace and use 8s idle / 60s gap thresholds so provider spin-up is not marked as buffering. 15s batched pulses that still carry a full video payload are metering, not buffering. 0 is healthy. 1–4 in a session is usually a zap or a brief hiccup. 5+ means the player is actually stalling. Quality % is heartbeat freshness, not the stall count.";
 
 export function describeStallCount(stallCount: number): {
   level: "ok" | "watch" | "bad";

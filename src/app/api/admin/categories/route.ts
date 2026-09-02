@@ -31,15 +31,17 @@ export async function GET(req: NextRequest) {
     if (lite) {
       const categories = await prisma.category.findMany({
         where,
-        include: { parent: { select: { id: true, name: true } } },
+        include: {
+          parent: { select: { id: true, name: true } },
+          _count: { select: { streams: true, children: true } },
+        },
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       });
       return NextResponse.json({
         categories: categories.map((c) => ({
           ...c,
-          activeCount: 0,
+          activeCount: c._count.streams,
           inactiveCount: 0,
-          _count: { streams: 0, children: 0 },
         })),
       });
     }
