@@ -120,7 +120,7 @@ export function instantStreamingPanelDefaults(): Partial<Record<SettingGroup, Re
     },
     cache: {
       statsTtlSeconds: 15,
-      epgTtlSeconds: 120,
+      epgTtlSeconds: 43_200,
       playbackUrlCacheTtlSec: 60,
       redisMode: "single",
       redisKeyPrefix: "nexlify:",
@@ -292,8 +292,8 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
   },
   cache: {
     statsTtlSeconds: 15,
-    epgTtlSeconds: 120,
-    categoriesTtlSeconds: 600,
+    epgTtlSeconds: 43_200,
+    categoriesTtlSeconds: 60,
     playbackUrlCacheTtlSec: 60,
     redisMode: "single",
     redisClusterNodes: "",

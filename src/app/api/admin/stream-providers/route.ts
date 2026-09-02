@@ -21,6 +21,7 @@ async function runCheckAllProviders(
     id: string;
     baseUrl: string;
     apiKey: string | null;
+    providerType?: string | null;
     remoteUsername?: string | null;
     remotePassword?: string | null;
   }>
@@ -83,17 +84,21 @@ async function panelConnectionCounts(providerIds: string[]) {
 async function runProviderCheck(p: {
   baseUrl: string;
   apiKey: string | null;
+  providerType?: string | null;
   remoteUsername?: string | null;
   remotePassword?: string | null;
 }) {
   const [probe, remote, account] = await Promise.all([
     probeStreamProvider(p.baseUrl, {
       apiKey: p.apiKey,
+      providerType: p.providerType,
       remoteUsername: p.remoteUsername,
       remotePassword: p.remotePassword,
     }),
     Promise.resolve(inferRemoteConnectionFromUrl(p.baseUrl)),
-    probeProviderAccountInfo(p.baseUrl, p.apiKey),
+    p.providerType === "onestream" || p.providerType === "nxt"
+      ? Promise.resolve({ expiresAt: null, maxConnections: null, upstreamActiveConnections: null })
+      : probeProviderAccountInfo(p.baseUrl, p.apiKey),
   ]);
   return { probe, remote, account };
 }

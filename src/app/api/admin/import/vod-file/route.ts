@@ -7,6 +7,8 @@ import { ImportKind, PanelRole, StreamType } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { readResponseTextLimited } from "@/lib/read-response-limited";
 export async function POST(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
   if (rateLimited) return rateLimited;
@@ -24,9 +26,14 @@ export async function POST(req: NextRequest) {
   let content = body.content as string | undefined;
 
   if (!content?.trim() && body.url) {
-    const res = await fetch(body.url, { signal: AbortSignal.timeout(60_000) });
+    const url = String(body.url).trim();
+    await assertPublicHttpUrl(url);
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(60_000),
+      redirect: "error",
+    });
     if (!res.ok) return NextResponse.json({ error: "Failed to fetch import file URL" }, { status: 400 });
-    content = await res.text();
+    content = await readResponseTextLimited(res);
   }
 
   if (!content?.trim()) {

@@ -5,6 +5,7 @@ import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import type { StreamProxy } from "@prisma/client";
 import { proxyUrl } from "@/lib/proxy";
+import { assertPublicHttpUrl } from "@/lib/ssrf";
 
 const EPG_HEADERS: Record<string, string> = {
   "User-Agent":
@@ -13,6 +14,7 @@ const EPG_HEADERS: Record<string, string> = {
   // Omit br — we only decode gzip; brotli bodies fail parse on many custom EPG hosts.
   "Accept-Encoding": "gzip, deflate",
 };
+const MAX_EPG_RESPONSE_BYTES = 100 * 1024 * 1024;
 
 type EpgFetchResult = {
   ok: boolean;
@@ -47,6 +49,7 @@ function fetchEpgOnce(
       return;
     }
 
+    void assertPublicHttpUrl(url).then(() => {
     const lib = parsed.protocol === "https:" ? https : http;
     const req = lib.request(
       url,
@@ -54,7 +57,6 @@ function fetchEpgOnce(
         method: "GET",
         headers: { ...EPG_HEADERS, ...extraHeaders },
         timeout: timeoutMs,
-        ...(parsed.protocol === "https:" ? { rejectUnauthorized: false } : {}),
       },
       (res) => {
         const status = res.statusCode ?? 0;
@@ -69,8 +71,23 @@ function fetchEpgOnce(
           }
           return;
         }
+        const advertised = Number(res.headers["content-length"] ?? "");
+        if (Number.isFinite(advertised) && advertised > MAX_EPG_RESPONSE_BYTES) {
+          res.resume();
+          reject(new Error("EPG response is too large"));
+          return;
+        }
         const chunks: Buffer[] = [];
-        res.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+        let total = 0;
+        res.on("data", (c) => {
+          const chunk = Buffer.isBuffer(c) ? c : Buffer.from(c);
+          total += chunk.length;
+          if (total > MAX_EPG_RESPONSE_BYTES) {
+            res.destroy(new Error("EPG response is too large"));
+            return;
+          }
+          chunks.push(chunk);
+        });
         res.on("end", () => {
           resolve({
             ok: status >= 200 && status < 300,
@@ -85,6 +102,7 @@ function fetchEpgOnce(
     req.on("timeout", () => req.destroy(new Error("EPG fetch timeout")));
     req.on("error", reject);
     req.end();
+    }).catch(reject);
   });
 }
 
@@ -164,6 +182,7 @@ async function pipeEpgResponseToFile(
       reject(new Error("EPG URL must be http or https"));
       return;
     }
+    void assertPublicHttpUrl(url).then(() => {
     const lib = parsed.protocol === "https:" ? https : http;
     const req = lib.request(
       url,
@@ -171,7 +190,6 @@ async function pipeEpgResponseToFile(
         method: "GET",
         headers: { ...EPG_HEADERS, ...extraHeaders },
         timeout: 180_000,
-        ...(parsed.protocol === "https:" ? { rejectUnauthorized: false } : {}),
       },
       (res) => {
         const status = res.statusCode ?? 0;
@@ -179,7 +197,9 @@ async function pipeEpgResponseToFile(
         if (status >= 300 && status < 400 && location) {
           res.resume();
           const next = new URL(location, url).toString();
-          pipeEpgResponseToFile(next, extraHeaders, destPath).then(resolve, reject);
+          assertPublicHttpUrl(next)
+            .then(() => pipeEpgResponseToFile(next, extraHeaders, destPath))
+            .then(resolve, reject);
           return;
         }
         if (status < 200 || status >= 300) {
@@ -201,6 +221,7 @@ async function pipeEpgResponseToFile(
     req.on("timeout", () => req.destroy(new Error("EPG fetch timeout")));
     req.on("error", reject);
     req.end();
+    }).catch(reject);
   });
 }
 

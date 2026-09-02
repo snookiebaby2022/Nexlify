@@ -1015,6 +1015,7 @@ async function jobProviderHealthCheck() {
     for (const p of providers) {
       const probe = await probeStreamProvider(p.baseUrl, {
         apiKey: p.apiKey,
+        providerType: p.providerType,
         remoteUsername: p.remoteUsername,
         remotePassword: p.remotePassword,
       });

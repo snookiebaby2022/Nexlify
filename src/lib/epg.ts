@@ -14,11 +14,16 @@ export function parseXmltvDate(raw: string): Date {
   const h = parseInt(m[4]!, 10);
   const mi = parseInt(m[5]!, 10);
   const s = parseInt(m[6]!, 10);
+  const daysInMonth = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  if (mo < 1 || mo > 12 || d < 1 || d > daysInMonth || h > 23 || mi > 59 || s > 59) {
+    throw new Error("Invalid XMLTV datetime: out-of-range timestamp");
+  }
   const tz = m[7];
   if (tz) {
     const sign = tz[0] === "-" ? -1 : 1;
     const tzh = parseInt(tz.slice(1, 3), 10);
     const tzm = parseInt(tz.slice(3, 5), 10);
+    if (tzh > 23 || tzm > 59) throw new Error("Invalid XMLTV datetime: invalid timezone");
     const offsetMin = sign * (tzh * 60 + tzm);
     const utcMs = Date.UTC(y, mo - 1, d, h, mi, s) - offsetMin * 60_000;
     return new Date(utcMs);

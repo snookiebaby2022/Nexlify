@@ -1,4 +1,4 @@
-import { probeStreamProvider, type ProbeResult } from "@/lib/stream-provider-probe";
+import { probeStreamProvider, type ProbeResult, type ProviderProbeOptions } from "@/lib/stream-provider-probe";
 import { getFfprobePath, runCommand } from "@/lib/bin-tools";
 import { formatFfprobeSummary, parseFfprobeJson } from "@/lib/ffprobe-media";
 import { isIntegrationStreamUrl } from "@/lib/integration-stream-url";
@@ -26,38 +26,53 @@ async function resolveForProbe(url: string): Promise<{ target: string; hint?: st
 /** Probe any stream URL (live, VOD, provider base). Server/API only. */
 export async function probeStreamUrl(
   url: string,
-  opts?: { fast?: boolean }
+  opts?: ProviderProbeOptions
 ): Promise<ProbeResult> {
   const trimmed = url.trim();
   if (!trimmed) {
-    return { status: "offline", message: "URL is empty" };
+    return { status: "offline", message: "URL is empty", failureReason: "error" };
   }
 
   const { target, hint } = await resolveForProbe(trimmed);
   if (!target) {
-    return { status: "offline", message: "URL is empty" };
+    return { status: "offline", message: "URL is empty", failureReason: "error" };
   }
   if (hint && !/^https?:\/\//i.test(target)) {
-    return { status: "offline", message: hint };
+    return { status: "offline", message: hint, failureReason: "error" };
   }
 
   const fast = opts?.fast === true;
-  const http = await probeStreamProvider(target, { fast });
-  if (hint && http.status !== "offline") {
+  let last: ProbeResult | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const http = await probeStreamProvider(target, {
+      ...opts,
+      fast,
+      skipCache: attempt > 0 ? true : opts?.skipCache,
+    });
+    if (http.status === "online" || http.status === "degraded") {
+      if (hint && http.status !== "offline") {
+        return {
+          ...http,
+          message: http.message.includes("integration") ? http.message : `${http.message} · ${hint}`,
+        };
+      }
+      if (fast || attempt > 0) return http;
+      const media = await probeStreamWithFfprobe(target);
+      if (media) return media;
+      return http;
+    }
+    last = http;
+    if (attempt === 0) await new Promise((r) => setTimeout(r, 400));
+  }
+
+  const failed = last ?? { status: "offline" as const, message: "Probe failed" };
+  if (hint) {
     return {
-      ...http,
-      message: http.message.includes("integration") ? http.message : `${http.message} · ${hint}`,
+      ...failed,
+      message: failed.message.includes("integration") ? failed.message : `${failed.message} · ${hint}`,
     };
   }
-
-  if (fast) {
-    return http;
-  }
-
-  const media = await probeStreamWithFfprobe(target);
-  if (media) return media;
-
-  return http;
+  return failed;
 }
 
 async function probeStreamWithFfprobe(url: string): Promise<ProbeResult | null> {
