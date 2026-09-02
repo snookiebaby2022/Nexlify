@@ -842,7 +842,7 @@ export function StreamManageEditPage({
       <PanelMobileActionBar
         cancelHref={manageHref}
         saveLabel="Save stream"
-        onSave={() => document.getElementById("stream-edit-form")?.requestSubmit()}
+        onSave={() => (document.getElementById("stream-edit-form") as HTMLFormElement | null)?.requestSubmit()}
         saveDisabled={saving}
         saveBusy={saving}
       />

@@ -890,7 +890,7 @@ export function LineEditForm({
         cancelLabel="Cancel"
         onCancel={onClose}
         saveLabel="Save line"
-        onSave={() => document.getElementById("line-edit-form")?.requestSubmit()}
+        onSave={() => (document.getElementById("line-edit-form") as HTMLFormElement | null)?.requestSubmit()}
         saveDisabled={saving}
         saveBusy={saving}
       />
