@@ -8,7 +8,7 @@ import { TRIAL_PLAN_SLUG } from "@/lib/plans";
 import { getAppUrl } from "@/lib/app-url";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { isPayPalConfigured } from "@/lib/billing-settings";
-import { createPayPalOrder } from "@/lib/paypal-billing";
+import { createPayPalSubscription, getOrCreatePayPalPlan } from "@/lib/paypal-billing";
 import {
   checkoutAmountCents,
   DEFAULT_CHECKOUT_CURRENCY,
@@ -107,29 +107,34 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "PayPal checkout is not configured" }, { status: 503 });
       }
 
-      const paypalOrder = await createPayPalOrder({
-        amount: paypalAmountMajor(chargeCents),
+      const paypalPlanId = await getOrCreatePayPalPlan({
+        amountMajor: paypalAmountMajor(chargeCents),
         currency: paypalCurrencyCode(currency),
-        description: plan.description,
+        planName: plan.name,
+      });
+
+      const paypalSub = await createPayPalSubscription({
+        planId: paypalPlanId,
         returnUrl: `${getAppUrl()}/checkout/success?paypal=1&order_id=${order.id}`,
         cancelUrl: `${getAppUrl()}/pricing?canceled=1`,
         customId: order.id,
+        subscriberEmail: user.email,
       });
 
       await prisma.order.update({
         where: { id: order.id },
         data: {
-          paypalOrderId: paypalOrder.orderId,
+          paypalSubscriptionId: paypalSub.subscriptionId,
           paymentProvider: "paypal",
-          billingMode: "payment",
+          billingMode: "subscription",
         },
       });
 
-      if (!paypalOrder.approveUrl) {
+      if (!paypalSub.approveUrl) {
         return NextResponse.json({ error: "PayPal approval URL missing" }, { status: 500 });
       }
 
-      return NextResponse.json({ url: paypalOrder.approveUrl, provider: "paypal" });
+      return NextResponse.json({ url: paypalSub.approveUrl, provider: "paypal" });
     }
 
     if (!isStripeConfigured()) {

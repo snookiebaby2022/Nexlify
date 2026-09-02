@@ -9,3 +9,7 @@ export function getAppUrl(): string {
 export function stripeWebhookUrl(): string {
   return `${getAppUrl()}/api/stripe/webhook`;
 }
+
+export function paypalWebhookUrl(): string {
+  return `${getAppUrl()}/api/paypal/webhook`;
+}

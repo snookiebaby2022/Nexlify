@@ -267,7 +267,7 @@ export async function expirePastDueLicenses() {
       status: { in: ["ACTIVE", "UNUSED"] },
       expiresAt: { lt: new Date() },
     },
-    select: { id: true, stripeSubscriptionId: true, notes: true },
+    select: { id: true, stripeSubscriptionId: true, paypalSubscriptionId: true, notes: true },
   });
 
   let marked = 0;
@@ -280,7 +280,7 @@ export async function expirePastDueLicenses() {
         notes: row.notes ? `${row.notes}\n${stamp}` : stamp,
       },
     });
-    if (row.stripeSubscriptionId) {
+    if (row.stripeSubscriptionId || row.paypalSubscriptionId) {
       await syncLicenseToPanel(row.id, "REVOKE").catch(() => {});
     }
     marked += 1;

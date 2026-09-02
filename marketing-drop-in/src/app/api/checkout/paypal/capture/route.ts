@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
-import { issueLicenseForOrder } from "@/lib/licensing";
-import { prisma } from "@/lib/prisma";
 import { capturePayPalOrder } from "@/lib/paypal-billing";
+import { fulfillPayPalSubscription } from "@/lib/paypal-subscription-billing";
+import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
   orderId: z.string().min(1),
   paypalOrderId: z.string().min(1).optional(),
+  paypalSubscriptionId: z.string().min(1).optional(),
 });
 
 export async function POST(request: Request) {
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { orderId, paypalOrderId } = schema.parse(await request.json());
+    const { orderId, paypalOrderId, paypalSubscriptionId } = schema.parse(await request.json());
 
     const order = await prisma.order.findFirst({
       where: { id: orderId, userId: user.id },
@@ -31,6 +32,21 @@ export async function POST(request: Request) {
     }
     if (order.status === "COMPLETED") {
       return NextResponse.json({ success: true, orderId: order.id, alreadyPaid: true });
+    }
+
+    const subscriptionId = paypalSubscriptionId ?? order.paypalSubscriptionId;
+    if (subscriptionId || order.billingMode === "subscription") {
+      if (!subscriptionId) {
+        return NextResponse.json({ error: "PayPal subscription ID missing" }, { status: 400 });
+      }
+      const result = await fulfillPayPalSubscription({ orderId: order.id, subscriptionId });
+      if (!result.ok) {
+        return NextResponse.json(
+          { error: `PayPal subscription not active (${result.error})` },
+          { status: 400 },
+        );
+      }
+      return NextResponse.json({ success: true, orderId: order.id, subscription: true });
     }
 
     const captureId = paypalOrderId ?? order.paypalOrderId;
@@ -53,6 +69,7 @@ export async function POST(request: Request) {
     });
 
     if (!order.license) {
+      const { issueLicenseForOrder } = await import("@/lib/licensing");
       await issueLicenseForOrder(order.id);
     }
 

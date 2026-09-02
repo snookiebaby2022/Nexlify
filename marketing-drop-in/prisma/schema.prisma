@@ -116,6 +116,7 @@ model Order {
   stripePaymentId String?
   stripeSubscriptionId String?
   paypalOrderId   String?     @unique
+  paypalSubscriptionId String?  @unique
   paymentProvider String?     // "stripe" | "paypal"
   currency        String?     // "GBP" | "USD"
   billingMode     String?     // "payment" | "subscription"
@@ -143,6 +144,8 @@ model License {
   stripeSubscriptionId String?  @unique
   stripeCustomerId     String?
   stripeSubscriptionStatus String?
+  paypalSubscriptionId String?  @unique
+  paypalSubscriptionStatus String?
   status          LicenseStatus @default(UNUSED)
   expiresAt       DateTime?
   activatedAt     DateTime?
@@ -163,6 +166,7 @@ model License {
 
   @@index([stripeCustomerId])
   @@index([stripeSubscriptionStatus])
+  @@index([paypalSubscriptionStatus])
 }
 
 /** WHMCS product → panel plugin service (Plex, Emby, etc.). */

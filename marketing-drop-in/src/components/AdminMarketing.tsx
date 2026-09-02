@@ -32,6 +32,7 @@ type BillingSettingsView = {
   paypalConfigured: boolean;
   paypalSecretSet: boolean;
   webhookUrl: string;
+  paypalWebhookUrl: string;
   links: BillingLinks;
 };
 
@@ -361,10 +362,11 @@ export function AdminMarketing() {
                   placeholder={billing.paypalSecretSet ? "Leave blank to keep current secret" : "Secret key"}
                 />
                 <Field
-                  label="Webhook ID (optional)"
+                  label="Webhook ID"
                   value={billing.paypalWebhookId}
                   onChange={(v) => setBilling({ ...billing, paypalWebhookId: v })}
                   placeholder="WH-…"
+                  hint="Required for monthly renewals. Create webhook at PayPal Developer → Webhooks pointing to the PayPal webhook URL below."
                 />
                 <label className="flex items-center gap-3 text-sm text-slate-300">
                   <input
@@ -393,6 +395,33 @@ export function AdminMarketing() {
                 <button
                   type="button"
                   onClick={copyWebhookUrl}
+                  className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800"
+                >
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 text-sm">
+              <p className="text-slate-300 font-medium">PayPal webhook endpoint</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Add this URL in PayPal Developer → Webhooks. Events:{" "}
+                <code className="text-cyan-300">BILLING.SUBSCRIPTION.ACTIVATED</code>,{" "}
+                <code className="text-cyan-300">PAYMENT.SALE.COMPLETED</code>,{" "}
+                <code className="text-cyan-300">BILLING.SUBSCRIPTION.PAYMENT.FAILED</code>,{" "}
+                <code className="text-cyan-300">BILLING.SUBSCRIPTION.CANCELLED</code>.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <code className="flex-1 break-all rounded-lg bg-black/40 px-3 py-2 text-xs text-cyan-200">
+                  {billing.paypalWebhookUrl}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(billing.paypalWebhookUrl);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
                   className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:bg-slate-800"
                 >
                   {copied ? "Copied" : "Copy"}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
-import { stripeWebhookUrl } from "@/lib/app-url";
+import { paypalWebhookUrl, stripeWebhookUrl } from "@/lib/app-url";
 import {
   billingSettingsForAdmin,
   getStripeSecretKey,
@@ -24,6 +24,7 @@ export async function GET() {
   return NextResponse.json({
     ...billingSettingsForAdmin(),
     webhookUrl: stripeWebhookUrl(),
+    paypalWebhookUrl: paypalWebhookUrl(),
     links: {
       stripeDashboard: "https://dashboard.stripe.com/",
       stripeWebhooks: "https://dashboard.stripe.com/webhooks",
@@ -75,6 +76,7 @@ export async function PATCH(req: Request) {
   return NextResponse.json({
     ...billingSettingsForAdmin(),
     webhookUrl: stripeWebhookUrl(),
+    paypalWebhookUrl: paypalWebhookUrl(),
     links: {
       stripeDashboard: "https://dashboard.stripe.com/",
       stripeWebhooks: "https://dashboard.stripe.com/webhooks",

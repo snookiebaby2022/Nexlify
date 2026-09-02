@@ -13,11 +13,15 @@ export function PayPalCheckoutCapture({ orderId }: PayPalCheckoutCaptureProps) {
   const [done, setDone] = useState(false);
 
   useEffect(() => {
-    const paypalOrderId = searchParams.get("token") ?? searchParams.get("orderId") ?? undefined;
+    const paypalSubscriptionId =
+      searchParams.get("subscription_id") ??
+      searchParams.get("ba_token") ??
+      searchParams.get("token") ??
+      undefined;
     fetch("/api/checkout/paypal/capture", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderId, paypalOrderId }),
+      body: JSON.stringify({ orderId, paypalSubscriptionId, paypalOrderId: paypalSubscriptionId }),
     })
       .then(async (res) => {
         const data = await res.json();

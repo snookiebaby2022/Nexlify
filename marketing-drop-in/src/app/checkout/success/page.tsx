@@ -32,7 +32,7 @@ export default async function CheckoutSuccessPage({
       return (
         <div className="mx-auto max-w-lg px-4 py-20 text-center">
           <div className="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-10">
-            <h1 className="text-2xl font-bold text-white">Confirming PayPal payment</h1>
+            <h1 className="text-2xl font-bold text-white">Confirming PayPal subscription</h1>
             <Suspense fallback={<p className="mt-4 text-sm text-slate-400">Loading…</p>}>
               <PayPalCheckoutCapture orderId={params.order_id} />
             </Suspense>
@@ -80,7 +80,7 @@ export default async function CheckoutSuccessPage({
     }
   }
 
-  const isSub = Boolean(license?.stripeSubscriptionId);
+  const isSub = Boolean(license?.stripeSubscriptionId || license?.paypalSubscriptionId);
 
   return (
     <div className="mx-auto max-w-lg px-4 py-20 text-center">
@@ -100,8 +100,8 @@ export default async function CheckoutSuccessPage({
             </p>
             {isSub ? (
               <p className="mt-3 text-sm text-emerald-200/80">
-                Monthly billing is active. Stripe will email invoices on each renewal. You can
-                update your card from My Licenses.
+                Monthly billing is active. You will be charged each month and your license renews
+                automatically. Manage billing from My Licenses.
               </p>
             ) : null}
           </>
