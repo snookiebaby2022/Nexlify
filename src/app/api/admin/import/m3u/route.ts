@@ -6,12 +6,19 @@ import { ImportKind, PanelRole, StreamType } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { readResponseTextLimited } from "@/lib/read-response-limited";
 async function fetchM3uContent(body: { url?: string; content?: string }) {
   let content = body.content as string | undefined;
   if (body.url) {
-    const res = await fetch(body.url, { signal: AbortSignal.timeout(60_000) });
+    const url = String(body.url).trim();
+    await assertPublicHttpUrl(url);
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(60_000),
+      redirect: "error",
+    });
     if (!res.ok) throw new Error("Failed to fetch M3U URL");
-    content = await res.text();
+    content = await readResponseTextLimited(res);
   }
   if (!content?.trim()) throw new Error("content or url required");
   return content;

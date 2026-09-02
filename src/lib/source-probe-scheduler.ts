@@ -9,6 +9,7 @@ import {
   recordSourceProbe,
 } from "@/lib/source-circuit-breaker";
 import { probeStreamUrl, type ProbeResult } from "@/lib/stream-probe-server";
+import type { ProviderProbeOptions } from "@/lib/stream-provider-probe";
 
 const PROBE_SLOT_KEY = "nexlify:probe:slots";
 const PROBE_LAST_RUN_KEY = "nexlify:probe:dead-link:last-run";
@@ -51,7 +52,7 @@ export async function probeStreamWithScheduler(opts: {
   streamId: string;
   url: string;
   fast?: boolean;
-}): Promise<{ probe: ProbeResult; skipped: boolean; reason?: string }> {
+} & ProviderProbeOptions): Promise<{ probe: ProbeResult; skipped: boolean; reason?: string }> {
   const hostAllowed = await allowHostProbe(opts.url);
   if (!hostAllowed) {
     return {
@@ -78,7 +79,14 @@ export async function probeStreamWithScheduler(opts: {
   }
   try {
     await markSourceCircuitHalfOpen(opts.streamId, opts.url);
-    const probe = await probeStreamUrl(opts.url, { fast: opts.fast !== false });
+    const probe = await probeStreamUrl(opts.url, {
+      fast: opts.fast !== false,
+      apiKey: opts.apiKey,
+      apiToken: opts.apiToken,
+      providerType: opts.providerType,
+      remoteUsername: opts.remoteUsername,
+      remotePassword: opts.remotePassword,
+    });
     const ok = probe.status === "online" || probe.status === "degraded";
     await recordSourceProbe({
       streamId: opts.streamId,

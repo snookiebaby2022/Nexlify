@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { cacheGet, cacheSet, cacheDel } from "@/lib/cache";
 import { logActivity } from "@/lib/lines";
+import { assertPublicHttpUrl } from "@/lib/ssrf";
+import { readResponseTextLimited } from "@/lib/read-response-limited";
 
 const EPG_CACHE_PREFIX = "epg:custom:";
 const EPG_MERGE_PREFIX = "epg:merged:";
@@ -83,12 +85,14 @@ export async function fetchEpgFromSource(
   source: EpgSource
 ): Promise<{ programs: EpgProgram[]; error?: string }> {
   try {
-    const res = await fetch(source.url, {
+    const url = await assertPublicHttpUrl(source.url);
+    const res = await fetch(url, {
       signal: AbortSignal.timeout(30000),
       headers: { "User-Agent": "Nexlify-EPG/1.0" },
+      redirect: "error",
     });
     if (!res.ok) return { programs: [], error: `HTTP ${res.status}` };
-    const text = await res.text();
+    const text = await readResponseTextLimited(res);
     return parseXmltv(text);
   } catch (err) {
     return {

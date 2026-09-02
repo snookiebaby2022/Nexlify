@@ -4,7 +4,14 @@ import { mkdtemp, rm, readFile, writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { gunzipSync } from "node:zlib";
-import { hashCatalogKey, lineBouquetCacheToken, writeGzipJsonArrayFile, catalogFileIsUsable, catalogFileIsFresh } from "./catalog-disk-cache";
+import {
+  CATALOG_TTL_MS,
+  hashCatalogKey,
+  lineBouquetCacheToken,
+  writeGzipJsonArrayFile,
+  catalogFileIsUsable,
+  catalogFileIsFresh,
+} from "./catalog-disk-cache";
 import { memoryCacheWouldStore, MEMORY_CACHE_MAX_BYTES } from "./cache";
 import { iterateXmltvPrograms, parseXmltvPrograms } from "./epg";
 
@@ -14,8 +21,8 @@ describe("catalog disk cache", () => {
     assert.equal(catalogFileIsUsable(10 * 60 * 1000), true);
     assert.equal(catalogFileIsUsable(3 * 60 * 60 * 1000), true);
     assert.equal(catalogFileIsUsable(null), false);
-    assert.equal(catalogFileIsFresh(10 * 1000), true);
-    assert.equal(catalogFileIsFresh(45 * 1000), false);
+    assert.equal(catalogFileIsFresh(CATALOG_TTL_MS - 1), true);
+    assert.equal(catalogFileIsFresh(CATALOG_TTL_MS), false);
   });
 
   it("does not delete in-flight .tmp files when purging catalog cache", async () => {

@@ -96,7 +96,7 @@ export function buildOptimizationProfile(hardware: HostHardwareProfile): Optimiz
         cache: {
           playbackUrlCacheTtlSec: 60,
           statsTtlSeconds: 10,
-          epgTtlSeconds: 180,
+          epgTtlSeconds: 43_200,
           redisMaxMemory: "512mb",
         },
         serverPerformance: {
@@ -129,7 +129,7 @@ export function buildOptimizationProfile(hardware: HostHardwareProfile): Optimiz
         cache: {
           playbackUrlCacheTtlSec: 45,
           statsTtlSeconds: 12,
-          epgTtlSeconds: 120,
+          epgTtlSeconds: 43_200,
           redisMaxMemory: "384mb",
         },
         serverPerformance: {
@@ -159,7 +159,7 @@ export function buildOptimizationProfile(hardware: HostHardwareProfile): Optimiz
         cache: {
           playbackUrlCacheTtlSec: 30,
           statsTtlSeconds: 15,
-          epgTtlSeconds: 120,
+          epgTtlSeconds: 43_200,
           redisMaxMemory: "256mb",
         },
         serverPerformance: {
@@ -191,7 +191,7 @@ export function buildOptimizationProfile(hardware: HostHardwareProfile): Optimiz
         cache: {
           playbackUrlCacheTtlSec: 25,
           statsTtlSeconds: 20,
-          epgTtlSeconds: 90,
+          epgTtlSeconds: 43_200,
           redisMaxMemory: "128mb",
         },
         serverPerformance: {

@@ -11,8 +11,9 @@ export function isLikelyDirectPlayUrl(url: string): boolean {
 }
 
 export function probeTimeoutMs(fast?: boolean): number {
-  const base = Number(process.env.STREAM_PROBE_TIMEOUT_MS ?? "4000");
-  return fast ? Math.min(base, 2500) : base;
+  const base = Number(process.env.STREAM_PROBE_TIMEOUT_MS ?? "8000");
+  const ms = Number.isFinite(base) && base > 500 ? base : 8000;
+  return fast ? ms : Math.max(ms, 12_000);
 }
 
 /** Client-safe: URLs the browser video element or Hls.js can try to play. */
