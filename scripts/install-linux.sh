@@ -80,6 +80,38 @@ done
 log() { echo ""; echo "==> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+validate_domain() {
+  [ -z "${1:-}" ] || [ "$1" = "localhost" ] || [[ "$1" =~ ^[A-Za-z0-9.-]+$ ]] ||
+    die "Invalid IP/DOMAIN: use a hostname or IPv4 address without shell characters"
+}
+validate_domain "$DOMAIN"
+
+# apt nginx ships a default site that 404s /login. IP and domain installs both
+# need nginx :80 → 127.0.0.1:13000. Never fuser/kill :8080 (live edge).
+remove_default_nginx_site() {
+  rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/default.conf 2>/dev/null || true
+}
+
+install_nginx_panel_http_vhost() {
+  [ "${SKIP_NGINX:-0}" = "0" ] || return 0
+  [ "${NEXLIFY_USE_NGINX:-1}" = "1" ] || return 0
+  [ -n "${DOMAIN:-}" ] && [ "$DOMAIN" != "localhost" ] || return 0
+  [ -f nginx/panel.nexlify.live-http-only.conf ] || return 0
+  mkdir -p /etc/nginx/conf.d /etc/nginx/sites-available /etc/nginx/sites-enabled
+  cp -f nginx/nexlify-upstream.conf /etc/nginx/conf.d/nexlify-upstream.conf
+  local site="/etc/nginx/sites-available/nexlify-panel-${DOMAIN}"
+  cp -f nginx/panel.nexlify.live-http-only.conf "$site"
+  sed -i "s/server_name panel.nexlify.live;/server_name ${DOMAIN} default_server;/" "$site"
+  remove_default_nginx_site
+  ln -sfn "$site" "/etc/nginx/sites-enabled/nexlify-panel-${DOMAIN}"
+  nginx -t
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl enable nginx 2>/dev/null || true
+    systemctl start nginx 2>/dev/null || systemctl reload nginx 2>/dev/null || true
+  fi
+  echo "NOTE: nginx :80 → 127.0.0.1:13000 (server_name ${DOMAIN})"
+}
+
 is_nexlify_panel_root() {
   [ -f "$1/package.json" ] || return 1
   grep -q '"name": "nexlify"' "$1/package.json" 2>/dev/null || return 1
@@ -217,6 +249,11 @@ if [ -z "$DOMAIN" ]; then
   DOMAIN="$(detect_server_address)"
   log "Using server address: $DOMAIN"
 fi
+# IP installs still use nginx :80 → panel :13000 (same as HTTP domain installs).
+# Only skip Let's Encrypt — there is no hostname for a cert.
+if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  SKIP_SSL=1
+fi
 
 case "$PANEL_ARCHIVE_URL" in
   *\?*) ;;
@@ -332,6 +369,12 @@ fi
 
 if ! command -v certbot >/dev/null 2>&1; then
   apt-get install -y -qq certbot python3-certbot-nginx
+fi
+
+remove_default_nginx_site
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl enable nginx 2>/dev/null || true
+  systemctl start nginx 2>/dev/null || true
 fi
 
 mkdir -p "$(dirname "$PANEL_DIR")"
@@ -484,12 +527,10 @@ CRON_SECRET="$(openssl rand -hex 24)"
 BILLING_SECRET="$(openssl rand -hex 24)"
 ADMIN_PASS="$(openssl rand -base64 18 | tr -d '/+=' | head -c 20)"
 CREDS_FILE="$CREDS_ROOT/install-credentials"
-# Raw IP installs: panel on port 80 directly — no nginx, no internal :3000.
+# Raw IP installs: nginx :80 → panel :13000 (no Let's Encrypt).
 if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   SKIP_SSL=1
-  SKIP_NGINX=1
-  NEXLIFY_USE_NGINX=0
-  echo "NOTE: IP install — panel on http://${DOMAIN}/ (port 80, no nginx)."
+  echo "NOTE: IP install — panel UI at http://${DOMAIN}/ (nginx :80 → 127.0.0.1:13000)."
 fi
 
 if [ -f "$PANEL_DIR/scripts/panel-port-config.sh" ]; then
@@ -498,6 +539,20 @@ if [ -f "$PANEL_DIR/scripts/panel-port-config.sh" ]; then
 elif [ -f scripts/panel-port-config.sh ]; then
   # shellcheck source=scripts/panel-port-config.sh
   . scripts/panel-port-config.sh
+fi
+
+# Older tarballs set NEXLIFY_USE_NGINX=0 for IPs (Next on :80). That fights
+# apt nginx and leaves /login on the default 404 site. Always put nginx in
+# front of Node :13000; IPTV edge stays on :8080/:25461.
+if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  NEXLIFY_PANEL_LISTEN_PORT="${NEXLIFY_UPSTREAM_PORT:-13000}"
+  NEXLIFY_PANEL_BIND_HOST="127.0.0.1"
+  NEXLIFY_PANEL_BEHIND_NGINX=1
+  NEXLIFY_PANEL_PUBLIC_PORT=80
+  NEXLIFY_USE_NGINX=1
+  SKIP_NGINX=0
+  export NEXLIFY_PANEL_LISTEN_PORT NEXLIFY_PANEL_BIND_HOST NEXLIFY_PANEL_BEHIND_NGINX
+  export NEXLIFY_PANEL_PUBLIC_PORT NEXLIFY_USE_NGINX
 fi
 
 if [ "${NEXLIFY_USE_NGINX:-1}" = "0" ]; then
@@ -613,7 +668,7 @@ set_kv DATABASE_URL "postgresql://nexlify:${PG_PASS}@${PG_HOST}:${PG_PORT}/nexli
 set_kv JWT_SECRET "$JWT_SECRET"
 set_kv CRON_SECRET "$CRON_SECRET"
 set_kv BILLING_WEBHOOK_SECRET "$BILLING_SECRET"
-if [[ "$DOMAIN" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [ "${NEXLIFY_USE_NGINX:-1}" = "0" ]; then
+if [ "${NEXLIFY_USE_NGINX:-1}" = "0" ]; then
   set_kv PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
   set_kv PANEL_PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
   set_kv PANEL_BIND_HOST "0.0.0.0"
@@ -808,7 +863,13 @@ progress_step "Starting services"
 # Shorter health waits during install — fresh VPS usually starts in <10s.
 export PANEL_PM2_WAIT_SEC=30
 export PANEL_HEALTH_WAIT_SEC=30
-bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1
+install_nginx_panel_http_vhost
+if ! bash scripts/pm2-start.sh >>"$INSTALL_LOG" 2>&1; then
+  echo "WARN: pm2-start reported an error — checking whether the panel is up"
+  if ! curl -fsS --max-time 8 "http://127.0.0.1:${NEXLIFY_PANEL_LISTEN_PORT:-13000}/api/health" >/dev/null 2>&1; then
+    die "Panel failed to start. See $INSTALL_LOG"
+  fi
+fi
 bash scripts/pm2-boot-enable.sh >>"$INSTALL_LOG" 2>&1 || true
 
 # Ensure a Main Server row exists in the database for the dashboard
@@ -839,22 +900,15 @@ if [ -f scripts/install-resource-headroom.sh ]; then
     log "WARN: resource headroom guard could not be installed"
 fi
 
-if [ "$SKIP_NGINX" -eq 0 ] && [ "${NEXLIFY_USE_NGINX:-1}" = "1" ] && [ -n "$DOMAIN" ] && [ "$DOMAIN" != "localhost" ]; then
-  mkdir -p /etc/nginx/conf.d
-  cp nginx/nexlify-upstream.conf /etc/nginx/conf.d/nexlify-upstream.conf
-  NGINX_SITE="/etc/nginx/sites-available/nexlify-panel-${DOMAIN}"
-  cp nginx/panel.nexlify.live-http-only.conf "$NGINX_SITE"
-  sed -i "s/server_name panel.nexlify.live;/server_name ${DOMAIN};/" "$NGINX_SITE"
-  ln -sf "$NGINX_SITE" "/etc/nginx/sites-enabled/nexlify-panel-${DOMAIN}"
-  nginx -t
-  systemctl enable nginx
-  systemctl start nginx 2>/dev/null || systemctl reload nginx
+install_nginx_panel_http_vhost
 
+if [ "$SKIP_NGINX" -eq 0 ] && [ "${NEXLIFY_USE_NGINX:-1}" = "1" ] && [ -n "$DOMAIN" ] && [ "$DOMAIN" != "localhost" ]; then
   if [ "$SKIP_SSL" -eq 0 ] && [ -n "$EMAIL" ]; then
     log "Let's Encrypt SSL"
     certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "$EMAIL" --redirect || \
       echo "WARN: certbot failed — use HTTP until DNS points here, then: certbot --nginx -d $DOMAIN"
     if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ]; then
+      NGINX_SITE="/etc/nginx/sites-available/nexlify-panel-${DOMAIN}"
       cp nginx/panel.nexlify.live.conf "$NGINX_SITE"
       sed -i "s/panel.nexlify.live/${DOMAIN}/g" "$NGINX_SITE"
       nginx -t && systemctl reload nginx
@@ -862,11 +916,7 @@ if [ "$SKIP_NGINX" -eq 0 ] && [ "${NEXLIFY_USE_NGINX:-1}" = "1" ] && [ -n "$DOMA
   fi
 fi
 
-if [ "${NEXLIFY_USE_NGINX:-1}" = "0" ] && command -v systemctl >/dev/null 2>&1; then
-  systemctl stop nginx 2>/dev/null || true
-  systemctl disable nginx 2>/dev/null || true
-  echo "NOTE: nginx stopped — panel serves port 80 directly."
-fi
+remove_default_nginx_site
 
 # Refresh env after SSL / port mode
 bash scripts/ensure-panel-env.sh >>"$INSTALL_LOG" 2>&1
