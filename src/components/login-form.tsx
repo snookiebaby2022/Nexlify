@@ -87,7 +87,6 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
     try {
       res = await fetch("/api/auth/login", {
         method: "POST",
-        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username,

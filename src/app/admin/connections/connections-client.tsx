@@ -14,14 +14,12 @@ import {
 } from "@/lib/connection-quality";
 import type { PlaybackOutputLabel } from "@/lib/connection-playback-output";
 import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
-import { connectionViewerSessionKey } from "@/lib/connections";
 import { ListPagination } from "@/components/list-pagination";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
 
 type ConnectionRow = {
   id: string;
-  lineId: string;
   ip: string | null;
   userAgent: string | null;
   startedAt: string;
@@ -33,27 +31,6 @@ type ConnectionRow = {
   output: PlaybackOutputLabel;
   qoe?: { firstPictureMs: number | null; stallCount: number; mbps: number } | null;
 };
-
-function connectionRowKey(c: ConnectionRow): string {
-  return connectionViewerSessionKey(c.lineId, c.stream?.id ?? null, c.ip);
-}
-
-function dedupeConnectionRows(rows: ConnectionRow[]): ConnectionRow[] {
-  const map = new Map<string, ConnectionRow>();
-  for (const c of rows) {
-    const key = connectionRowKey(c);
-    const prev = map.get(key);
-    if (!prev || new Date(c.lastSeenAt).getTime() > new Date(prev.lastSeenAt).getTime()) {
-      map.set(key, c);
-    } else if (
-      new Date(c.lastSeenAt).getTime() === new Date(prev.lastSeenAt).getTime() &&
-      new Date(c.startedAt).getTime() < new Date(prev.startedAt).getTime()
-    ) {
-      map.set(key, c);
-    }
-  }
-  return [...map.values()];
-}
 
 function formatConnDuration(
   startedAt: string | Date,
@@ -240,11 +217,10 @@ export function AdminConnectionsClient({
   }
 
   function load() {
-    fetch("/api/admin/connections", { cache: "no-store", credentials: "same-origin" })
+    fetch("/api/admin/connections", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d) => {
-        const rows = Array.isArray(d.connections) ? (d.connections as ConnectionRow[]) : [];
-        setConnections(dedupeConnectionRows(rows));
+        setConnections(Array.isArray(d.connections) ? d.connections : []);
         setQoeEnabled(Boolean(d.qoeEnabled));
       })
       .catch(() => setConnections([]));
@@ -369,13 +345,10 @@ export function AdminConnectionsClient({
         </div>
         {shown.map((c) => (
           <CompactConnectionRow
-            key={connectionRowKey(c)}
+            key={c.id}
             c={c}
-            expanded={expandedId === connectionRowKey(c)}
-            onToggle={() => {
-              const key = connectionRowKey(c);
-              setExpandedId((id) => (id === key ? null : key));
-            }}
+            expanded={expandedId === c.id}
+            onToggle={() => setExpandedId((id) => (id === c.id ? null : c.id))}
             onKick={kick}
             paths={paths}
             nowMs={nowMs}
@@ -403,7 +376,7 @@ export function AdminConnectionsClient({
           </thead>
           <tbody>
             {shown.map((c) => (
-              <tr key={connectionRowKey(c)}>
+              <tr key={c.id}>
                 <td>
                   <span
                     className={connectionQualityClass(c.quality.level)}
