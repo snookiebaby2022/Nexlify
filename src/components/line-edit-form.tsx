@@ -12,6 +12,7 @@ import {
 import { BouquetPickerTable, type BouquetPickerRow } from "@/components/bouquet-picker-table";
 import { PasswordInput } from "@/components/password-input";
 import { CopyableCredential } from "@/components/copyable-credential";
+import { PanelMobileActionBar } from "@/components/panel-mobile-action-bar";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { generateLinePassword, MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput } from "@/lib/credential-generate";
 import { formatDateTime, isUnlimitedLineExpiry } from "@/lib/format";
@@ -444,7 +445,7 @@ export function LineEditForm({
     line.status === "ACTIVE" ? "Active" : line.status === "BANNED" ? "Banned" : "Disabled";
 
   return (
-    <form onSubmit={submit} className="panel-form-mobile-tight">
+    <form id="line-edit-form" onSubmit={submit} className="panel-form-mobile-tight pb-24 md:pb-0">
       <div
         className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 rounded-t-lg"
         style={{ background: "linear-gradient(90deg, #00c0ef 0%, #3c8dbc 100%)" }}
@@ -872,7 +873,7 @@ export function LineEditForm({
           />
         )}
 
-        <div className="flex justify-end gap-3 pt-2 border-t" style={{ borderColor: "var(--border)" }}>
+        <div className="hidden md:flex justify-end gap-3 pt-2 border-t" style={{ borderColor: "var(--border)" }}>
           <button type="button" className="btn-cancel rounded px-6 py-2.5 text-sm font-medium" onClick={onClose}>
             Cancel
           </button>
@@ -885,6 +886,14 @@ export function LineEditForm({
           </button>
         </div>
       </div>
+      <PanelMobileActionBar
+        cancelLabel="Cancel"
+        onCancel={onClose}
+        saveLabel="Save line"
+        onSave={() => document.getElementById("line-edit-form")?.requestSubmit()}
+        saveDisabled={saving}
+        saveBusy={saving}
+      />
     </form>
   );
 }
