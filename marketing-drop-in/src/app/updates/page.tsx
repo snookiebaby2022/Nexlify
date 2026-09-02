@@ -14,7 +14,7 @@ export const metadata = pageSeo("/updates");
 
 const GUIDES = [
   {
-    title: "native billing setup guide",
+    title: "checkout & licensing setup guide",
     href: "/help",
     excerpt: "Connect GBP billing and auto-provision licenses on new orders.",
   },

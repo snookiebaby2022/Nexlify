@@ -33,7 +33,7 @@ const CASE_STUDIES = [
     href: "/blog/case-study-500-to-2000-lines",
   },
   {
-    title: "native billing automation",
+    title: "automatic license delivery",
     summary:
       "Our host connected order, suspend, and renew hooks so panel license state stays synced with Stripe and PayPal checkouts.",
     href: "/blog/billing-iptv-automation-setup",
@@ -41,7 +41,7 @@ const CASE_STUDIES = [
   {
     title: "Trial → paid in 3 days",
     summary:
-      "Reseller started the 7-day trial, tested the live demo with sub-users, then upgraded to Main tier with coupon checkout.",
+      "Reseller started the 7-day trial, tested the live demo with sub-users, then upgraded to Main tier via Stripe checkout.",
     href: "/register?trial=1",
   },
 ] as const;

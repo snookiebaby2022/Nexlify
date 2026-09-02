@@ -98,12 +98,12 @@ const STEPS = [
   {
     title: "Connect Stripe billing",
     summary:
-      "Follow the native billing guide so new orders, renewals, suspensions, and revocations sync license state automatically.",
+      "Follow the checkout & licensing guide so new orders, renewals, suspensions, and revocations sync license state automatically.",
     body: (
       <>
         Follow the{" "}
         <Link href="/help" className="text-violet-400 underline hover:text-violet-300">
-          native billing guide
+          checkout & licensing guide
         </Link>{" "}
         so new orders, renewals, suspensions, and revocations sync license state automatically. This
         replaces manual CSV workflows common on legacy panels.

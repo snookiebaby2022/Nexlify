@@ -43,7 +43,7 @@ export default function DemoPage() {
           { name: "Demo", path: "/demo" },
         ]}
       />
-      <WebPageJsonLd path="/demo" name="Live IPTV panel demo for resellers worldwide" description="Open the full IPTV reseller panel at panel.demo.nexlify.live. Operators worldwide can explore dashboards, lines, and billing-ready licensing." about="Demo" />
+      <WebPageJsonLd path="/demo" name="Live IPTV panel demo for resellers worldwide" description="Open the full IPTV reseller panel at panel.demo.nexlify.live. Operators worldwide can explore dashboards, lines, and license-ready licensing." about="Demo" />
       <SoftwareProductJsonLd path="/demo" />
 
       <div className="mx-auto max-w-6xl px-4 py-16 md:py-24">
@@ -55,7 +55,7 @@ export default function DemoPage() {
         </h1>
         <p className="mt-4 max-w-2xl text-lg text-[var(--muted)]">
           Open the full IPTV reseller panel at panel.demo.nexlify.live. Operators worldwide can
-          explore the same sandbox — browse dashboards, lines, and billing-ready licensing; live
+          explore the same sandbox — browse dashboards, lines, and license-ready licensing; live
           playback and saving changes are blocked in demo mode.
         </p>
 

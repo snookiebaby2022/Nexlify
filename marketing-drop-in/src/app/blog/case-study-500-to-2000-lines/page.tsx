@@ -95,7 +95,11 @@ export default function CaseStudy500To2000Page() {
               <Link href="/blog/migrate-xui-xtream-ui-to-nexlify" className="text-violet-400 underline hover:text-violet-300">
                 built-in import
               </Link>
-              . Use code <strong className="text-amber-300">NEXLIFY50</strong> for 50% off the first 3 months.
+              . Start with a{" "}
+              <Link href="/register?trial=1" className="text-violet-400 underline hover:text-violet-300">
+                7-day free trial
+              </Link>
+              , then subscribe at standard pricing.
             </p>
           ),
         },

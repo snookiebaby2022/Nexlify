@@ -8,9 +8,9 @@ const FAQ_ITEMS = [
       "An IPTV reseller panel is back-office software that lets operators create, manage, and bill subscribers for IPTV lines, with automation for renewals, suspensions, and reseller hierarchies.",
   },
   {
-    question: "Does Nexlify work with billing?",
+    question: "Does Nexlify work with Stripe and PayPal?",
     answer:
-      "Yes — the native billing provisions licenses automatically on order, and syncs renewals, suspensions, and terminations in real time.",
+      "Yes — Stripe and PayPal checkout provisions licenses automatically on order, and syncs renewals, suspensions, and terminations in real time.",
   },
   {
     question: "Can I try Nexlify before buying?",
@@ -20,7 +20,7 @@ const FAQ_ITEMS = [
   {
     question: "Do you support GBP and USD?",
     answer:
-      "Yes. Customers worldwide can checkout in GBP or USD via Stripe or billing.",
+      "Yes. Customers worldwide can checkout in GBP or USD via Stripe or PayPal.",
   },
 ] as const;
 

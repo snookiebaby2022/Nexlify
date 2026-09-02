@@ -42,11 +42,23 @@ function dbPath() {
   if (fs.existsSync(DB)) return DB;
   const alt = path.join(ROOT, "prisma/dev.db");
   if (fs.existsSync(alt)) return alt;
-  throw new Error(`Database not found under ${ROOT}/data or prisma/`);
+  return null;
 }
 
-function fetchHash(email) {
+function isPostgres(env) {
+  return (env.DATABASE_URL || "").includes("postgres");
+}
+
+function fetchHash(email, env) {
+  if (isPostgres(env)) {
+    const sql = `SELECT "passwordHash" FROM "User" WHERE email = '${email.replace(/'/g, "''")}' LIMIT 1;`;
+    const r = spawnSync("psql", [env.DATABASE_URL, "-tAc", sql], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(r.stderr || r.stdout || "postgres read failed");
+    return r.stdout.trim();
+  }
+
   const db = dbPath();
+  if (!db) throw new Error(`Database not found under ${ROOT}/data or prisma/`);
   const emailJson = JSON.stringify(email);
   return pySql(`
 import sqlite3
@@ -56,8 +68,16 @@ print(row[0] if row else "")
 `);
 }
 
-function userExists(email) {
+function userExists(email, env) {
+  if (isPostgres(env)) {
+    const sql = `SELECT id FROM "User" WHERE email = '${email.replace(/'/g, "''")}' LIMIT 1;`;
+    const r = spawnSync("psql", [env.DATABASE_URL, "-tAc", sql], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(r.stderr || r.stdout || "postgres read failed");
+    return Boolean(r.stdout.trim());
+  }
+
   const db = dbPath();
+  if (!db) throw new Error(`Database not found under ${ROOT}/data or prisma/`);
   const emailJson = JSON.stringify(email);
   return pySql(`
 import sqlite3
@@ -67,12 +87,29 @@ print("yes" if row else "no")
 `) === "yes";
 }
 
-function writeHash(email, hash) {
+function writeHash(email, hash, env) {
+  if (isPostgres(env)) {
+    const emailEsc = email.replace(/'/g, "''");
+    const hashEsc = hash.replace(/'/g, "''");
+    if (userExists(email, env)) {
+      const sql = `UPDATE "User" SET "passwordHash"='${hashEsc}', role='ADMIN' WHERE email='${emailEsc}';`;
+      const r = spawnSync("psql", [env.DATABASE_URL, "-c", sql], { encoding: "utf8" });
+      if (r.status !== 0) throw new Error(r.stderr || r.stdout || "postgres update failed");
+      return "updated";
+    }
+    const id = `admin_${Date.now()}`;
+    const sql = `INSERT INTO "User" (id, email, "passwordHash", name, role, "trialBypass", "createdAt", "updatedAt") VALUES ('${id}', '${emailEsc}', '${hashEsc}', 'Admin', 'ADMIN', false, NOW(), NOW());`;
+    const r = spawnSync("psql", [env.DATABASE_URL, "-c", sql], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(r.stderr || r.stdout || "postgres insert failed");
+    return "created";
+  }
+
   const db = dbPath();
+  if (!db) throw new Error(`Database not found under ${ROOT}/data or prisma/`);
   const emailJson = JSON.stringify(email);
   const hashJson = JSON.stringify(hash);
 
-  if (userExists(email)) {
+  if (userExists(email, env)) {
     pySql(`
 import sqlite3
 conn = sqlite3.connect(${JSON.stringify(db)})
@@ -110,7 +147,7 @@ async function main() {
     process.exit(1);
   }
 
-  const stored = fetchHash(email);
+  const stored = fetchHash(email, env);
   let needsSync = !stored;
 
   if (stored && isCorruptedHash(stored)) {
@@ -135,8 +172,8 @@ async function main() {
   }
 
   const hash = await bcrypt.hash(password, 12);
-  const action = writeHash(email, hash);
-  const verifyStored = fetchHash(email);
+  const action = writeHash(email, hash, env);
+  const verifyStored = fetchHash(email, env);
 
   if (isCorruptedHash(verifyStored)) {
     console.error("Verify FAILED: stored hash still corrupted after write");

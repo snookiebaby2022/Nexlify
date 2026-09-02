@@ -21,7 +21,7 @@ export function BlogResourceLinks() {
           <Link href="/pricing" className="text-violet-400 underline hover:text-violet-300">
             Pricing vs XUI.one &amp; 1-stream
           </Link>{" "}
-          — from £50/mo, native billing included
+          — from £50/mo, Stripe & PayPal checkout included
         </li>
         <li>
           →{" "}

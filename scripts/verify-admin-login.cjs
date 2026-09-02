@@ -6,7 +6,7 @@ const { spawnSync } = require("child_process");
 const bcrypt = require("bcryptjs");
 
 const ROOT = process.env.NEXLIFY_MARKETING_PATH || "/var/www/nexlify";
-const PORT = process.env.NEXLIFY_WEB_PORT || "3001";
+const PORT = process.env.NEXLIFY_WEB_PORT || "13001";
 const BCRYPT_RE = /^\$2[aby]\$\d{2}\$/;
 
 function loadEnv(file) {
@@ -26,7 +26,15 @@ function loadEnv(file) {
   return out;
 }
 
-function fetchHash(email) {
+function fetchHash(email, env) {
+  const dbUrl = env.DATABASE_URL || "";
+  if (dbUrl.includes("postgres")) {
+    const sql = `SELECT "passwordHash" FROM "User" WHERE email = '${email.replace(/'/g, "''")}' LIMIT 1;`;
+    const r = spawnSync("psql", [dbUrl, "-tAc", sql], { encoding: "utf8" });
+    if (r.status !== 0) throw new Error(r.stderr || "failed to read password hash from Postgres");
+    return r.stdout.trim();
+  }
+
   const db = fs.existsSync(path.join(ROOT, "data/nexlify.db"))
     ? path.join(ROOT, "data/nexlify.db")
     : path.join(ROOT, "prisma/dev.db");
@@ -58,7 +66,7 @@ async function main() {
     process.exit(1);
   }
 
-  const hash = fetchHash(email);
+  const hash = fetchHash(email, env);
   if (!hash) {
     console.error(`No user row for ${email}`);
     process.exit(1);

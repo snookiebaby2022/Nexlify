@@ -33,12 +33,12 @@ export default function XuiOneVsNexlifyPricingPage() {
                 </thead>
                 <tbody className="text-slate-300">
                   <tr className="border-b border-white/5">
-                    <td className="py-2 pr-4">License from</td>
-                    <td className="py-2 pr-4">£50/mo Starter</td>
+                    <td className="py-2 pr-4">License</td>
+                    <td className="py-2 pr-4">£50/mo — single Nexlify License</td>
                     <td className="py-2">Varies / community forks</td>
                   </tr>
                   <tr className="border-b border-white/5">
-                    <td className="py-2 pr-4">native billing</td>
+                    <td className="py-2 pr-4">Stripe & PayPal checkout</td>
                     <td className="py-2 pr-4">Included</td>
                     <td className="py-2">Often third-party / custom</td>
                   </tr>
@@ -69,11 +69,11 @@ export default function XuiOneVsNexlifyPricingPage() {
           ),
         },
         {
-          title: "Nexlify license tiers",
+          title: "One simple Nexlify License",
           body: (
             <p>
-              Starter, Main, and Top Tier scale with line counts — every tier includes the native billing and
-              IPTV management software stack. See live GBP/USD numbers on{" "}
+              Nexlify offers a single £50/mo license — unlimited servers, all plugins, and Stripe & PayPal
+              checkout included. See live GBP/USD numbers on{" "}
               <Link href="/pricing" className="text-violet-400 underline hover:text-violet-300">
                 pricing
               </Link>{" "}

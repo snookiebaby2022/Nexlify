@@ -1,7 +1,7 @@
 /** Core keywords — weave into titles and meta descriptions on indexable pages. */
 export const CORE_SEO_KEYWORDS = [
   "IPTV reseller panel",
-  "native billing",
+  "Stripe PayPal checkout",
   "IPTV management software",
 ] as const;
 

@@ -5,7 +5,8 @@ import {
   UNLIMITED_SERVERS,
   type PlanView,
 } from "@/lib/plans";
-import { isFreePeriod, FREE_PERIOD_END_LABEL } from "@/lib/marketing-coupon";
+import { isFreePeriod } from "@/lib/marketing-coupon";
+import { pricingHonestyNote, paidPlanLimitNote } from "@/lib/marketing-copy";
 
 export type PlanMarketing = {
   planLimits: string[];
@@ -16,13 +17,12 @@ export type PlanMarketing = {
   highlight?: boolean;
 };
 
-/** Shown on every card — all tiers run the same panel codebase. */
 export const FULL_PANEL_FEATURES = [
   "Back-office admin UI",
   "Reseller panel UI",
   "Xtream-compatible API",
   "Anti-Freeze playback & fast zapping",
-  "Stripe license provisioning",
+  "Stripe & PayPal checkout",
   "Sub-reseller hierarchy & credits",
   "Commission & usage reports",
   "Geo-blocking, leak audit & VOD workspace",
@@ -33,7 +33,7 @@ export const FULL_PANEL_FEATURES = [
   "No subscriber line cap in panel software",
 ] as const;
 
-export const PRICING_HONESTY_NOTE = `Completely free until ${FREE_PERIOD_END_LABEL}, then £${PAID_PRICE_GBP_CENTS / 100}/month — everything included. Support via tickets and Telegram.`;
+export const PRICING_HONESTY_NOTE = pricingHonestyNote();
 
 export function isTrialPlan(plan: PlanView): boolean {
   return (
@@ -67,10 +67,8 @@ function planLimitsFor(plan: PlanView): string[] {
     serversLimitLabel(plan),
     "All media & music plugins included",
     "Every Nexlify panel feature included",
-    "Stripe checkout included",
-    isFreePeriod()
-      ? `Free until ${FREE_PERIOD_END_LABEL}, then £${PAID_PRICE_GBP_CENTS / 100}/month`
-      : `£${PAID_PRICE_GBP_CENTS / 100}/month`,
+    "Stripe or PayPal checkout",
+    paidPlanLimitNote(),
   ];
 }
 
@@ -99,11 +97,10 @@ export function getPlanMarketing(plan: PlanView): PlanMarketing {
 }
 
 export function formatPlanPrice(plan: PlanView, formatted: string): string {
-  if (isTrialPlan(plan)) return "Free";
   if (plan.priceCents === 0 || isFreePeriod()) return "Free";
   return formatted;
 }
 
 export function postPromoPriceLabel(): string {
-  return `£${PAID_PRICE_GBP_CENTS / 100}/month after ${FREE_PERIOD_END_LABEL}`;
+  return `Then £${PAID_PRICE_GBP_CENTS / 100}/month`;
 }

@@ -17,7 +17,7 @@ export default async function LoginPage({
     if (user.role === "ADMIN") {
       redirect(params.next?.startsWith("/") ? params.next : "/admin");
     }
-    if (params.trial === "1") redirect("/pricing?trial=1");
+    if (params.trial === "1") redirect("/dashboard?trial=1");
     redirect(params.next?.startsWith("/") ? params.next : "/dashboard");
   }
 

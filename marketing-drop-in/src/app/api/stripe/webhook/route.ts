@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
+import { getStripeWebhookSecret } from "@/lib/billing-settings";
 import {
   fulfillCheckoutSession,
   handleSubscriptionDeleted,
@@ -12,9 +13,9 @@ import {
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+  const secret = getStripeWebhookSecret();
   if (!secret) {
-    console.error("[stripe/webhook] STRIPE_WEBHOOK_SECRET not set");
+    console.error("[stripe/webhook] Stripe webhook secret not set");
     return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
   }
 

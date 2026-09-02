@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { Footer } from "@/components/Footer";
@@ -8,11 +7,6 @@ import { FreeLaunchBanner } from "@/components/FreeLaunchBanner";
 import { LpHeader } from "@/components/LpHeader";
 import { Navbar } from "@/components/Navbar";
 import type { SessionUser } from "@/lib/auth";
-
-const CouponLaunchBanner = dynamic(
-  () => import("@/components/CouponLaunchBanner").then((m) => ({ default: m.CouponLaunchBanner })),
-  { ssr: false },
-);
 
 type ConditionalShellProps = {
   user: SessionUser | null;
@@ -44,7 +38,6 @@ export function ConditionalShell({ user, children }: ConditionalShellProps) {
     return (
       <>
         <FreeLaunchBanner />
-        <CouponLaunchBanner isLoggedIn={!!user} />
         <LpHeader />
         <main className="flex-1 min-w-0 overflow-x-hidden">{children}</main>
       </>
@@ -54,7 +47,6 @@ export function ConditionalShell({ user, children }: ConditionalShellProps) {
   return (
     <>
       <FreeLaunchBanner />
-      <CouponLaunchBanner isLoggedIn={!!user} />
       <Navbar user={user} />
       <main className="flex-1 min-w-0 overflow-x-hidden">{children}</main>
       <Footer />

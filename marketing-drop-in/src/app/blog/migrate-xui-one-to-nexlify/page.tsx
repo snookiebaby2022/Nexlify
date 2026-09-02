@@ -24,7 +24,7 @@ export default function MigrateXuiOnePage() {
         { name: "Export or connect XUI source", text: "Use Import → Panel migration and select XUI.one as the source." },
         { name: "Run Preview", text: "Validate line counts, bouquets, and reseller mapping before live import." },
         { name: "Import during low traffic", text: "Execute the import and monitor PostgreSQL load." },
-        { name: "Reconnect billing", text: "Point the native billing at the new license server." },
+        { name: "Reconnect checkout", text: "Point Stripe & PayPal checkout at the new license server." },
         { name: "Cut over DNS", text: "Switch panel URL when playback tests pass on sample lines." },
       ]}
       related={[

@@ -7,7 +7,7 @@ import {
   LpPageJsonLd,
 } from "@/components/LpGeoSections";
 import { DEMO_PANEL_URL } from "@/lib/demo";
-import { NEXLIFY_LAUNCH_COUPON } from "@/lib/marketing-coupon";
+import { promoBadgeText } from "@/lib/marketing-copy";
 import { CONTENT_DISCLAIMER, SOFTWARE_POSITIONING } from "@/lib/marketing-constants";
 
 type LpCtaPageProps = {
@@ -183,9 +183,7 @@ export function LpCtaPage({
             />
           </div>
           <p className="mt-4 text-sm text-[var(--muted)]">{secondaryCtaLabel}</p>
-          <p className="mt-3 text-sm text-amber-300/90">
-            Launch offer: use code <strong className="text-amber-200">{NEXLIFY_LAUNCH_COUPON}</strong> at checkout
-          </p>
+          <p className="mt-3 text-sm text-amber-300/90">{promoBadgeText()}</p>
           <ContentDisclaimer className="mx-auto mt-6 max-w-xl" />
         </section>
       </header>

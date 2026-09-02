@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
+import { promoBadgeText } from "@/lib/marketing-copy";
 
 const LICENSE_URL = "/register";
 const DEMO_URL = "https://panel.nexlify.live";
@@ -153,6 +154,17 @@ export function PromoLanding({ utm = {} }: PromoLandingProps) {
           IPTV panel for operators
         </p>
 
+        <p
+          className="mb-4 inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold"
+          style={{
+            color: "#fcd34d",
+            background: "rgba(245,158,11,0.15)",
+            border: "1px solid rgba(245,158,11,0.35)",
+          }}
+        >
+          {promoBadgeText()}
+        </p>
+
         <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight mb-3">
           Stream management,
           <br />
@@ -160,7 +172,7 @@ export function PromoLanding({ utm = {} }: PromoLandingProps) {
         </h1>
 
         <p className="text-sm sm:text-base mb-8 max-w-sm" style={{ color: "#8ba3c7" }}>
-          Modern control panel vs legacy XUI. Self-hosted on PostgreSQL — anti-freeze, resellers, billing-ready. Dynamic pricing, piracy detection, and 15+ advanced features.
+          Modern control panel vs legacy XUI. Self-hosted on PostgreSQL — anti-freeze, resellers, license-ready. Dynamic pricing, piracy detection, and 15+ advanced features.
         </p>
 
         {/* Dual CTAs */}

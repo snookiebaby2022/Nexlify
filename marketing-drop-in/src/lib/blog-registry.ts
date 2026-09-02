@@ -80,7 +80,7 @@ export const BLOG_POSTS: BlogPostMeta[] = [
       "Stack, billing, reseller hierarchy, migration, and support — what to demand from IPTV management software in 2026.",
     seoTitle: "IPTV Management Software Buyer's Guide 2026 | Nexlify",
     seoDescription:
-      "IPTV management software buyer's guide: native billing, IPTV reseller panel features, migration, and VPS requirements.",
+      "IPTV management software buyer's guide: Stripe & PayPal checkout, IPTV reseller panel features, migration, and VPS requirements.",
     keywords: ["IPTV management software", "IPTV reseller software"],
     datePublished: "2026-06-13",
     sitemapPriority: 0.78,
@@ -93,10 +93,10 @@ export const BLOG_POSTS: BlogPostMeta[] = [
     h1: "IPTV reseller software UK — GBP billing, and compliance basics",
     eyebrow: "UK · Resellers",
     excerpt:
-      "British operators: GBP checkout, native billing, trial terms, and software-only positioning for UK resellers.",
+      "British operators: GBP checkout, Stripe & PayPal checkout, trial terms, and software-only positioning for UK resellers.",
     seoTitle: "IPTV Reseller Software UK — GBP & billing | Nexlify",
     seoDescription:
-      "IPTV reseller software UK: Nexlify IPTV reseller panel with GBP billing, native billing, and IPTV management software for British operators.",
+      "IPTV reseller software UK: Nexlify IPTV reseller panel with GBP billing, Stripe & PayPal checkout, and IPTV management software for British operators.",
     keywords: ["IPTV reseller software UK", "UK IPTV panel"],
     datePublished: "2026-06-16",
     sitemapPriority: 0.75,
@@ -112,7 +112,7 @@ export const BLOG_POSTS: BlogPostMeta[] = [
       "Compare monthly license tiers inclusion, migration tooling, and support model vs XUI.one forks.",
     seoTitle: "XUI.one vs Nexlify Pricing Comparison | Nexlify",
     seoDescription:
-      "XUI.one vs Nexlify pricing for IPTV reseller panel operators. native billing included — IPTV management software from £50/mo.",
+      "XUI.one vs Nexlify pricing for IPTV reseller panel operators. Stripe & PayPal checkout included — IPTV management software from £50/mo.",
     keywords: ["XUI.one pricing", "IPTV panel pricing"],
     datePublished: "2026-06-18",
     sitemapPriority: 0.76,
@@ -128,7 +128,7 @@ export const BLOG_POSTS: BlogPostMeta[] = [
       "Why operators outgrow generic Xtream UI forks and what a maintained IPTV management software stack looks like.",
     seoTitle: "Xtream Panel vs Modern IPTV Stack | Nexlify",
     seoDescription:
-      "Xtream panel vs modern IPTV management software. Nexlify IPTV reseller panel with native billing on Node + PostgreSQL.",
+      "Xtream panel vs modern IPTV management software. Nexlify IPTV reseller panel with Stripe & PayPal checkout on Node + PostgreSQL.",
     keywords: ["Xtream panel", "IPTV panel stack"],
     datePublished: "2026-06-23",
     sitemapPriority: 0.72,
@@ -144,7 +144,7 @@ export const BLOG_POSTS: BlogPostMeta[] = [
       "Direct comparison: billing integration, security, Anti-Freeze, migration, support, and pricing vs XUI.one forks.",
     seoTitle: "XUI.one vs Nexlify: Full Comparison 2026 | Nexlify",
     seoDescription:
-      "XUI.one vs Nexlify IPTV reseller panel — native billing, Anti-Freeze, security, migration, pricing, and IPTV management software compared.",
+      "XUI.one vs Nexlify IPTV reseller panel — Stripe & PayPal checkout, Anti-Freeze, security, migration, pricing, and IPTV management software compared.",
     keywords: ["XUI.one vs Nexlify", "XUI alternative"],
     datePublished: "2026-06-25",
     sitemapPriority: 0.82,
@@ -160,7 +160,7 @@ export const BLOG_POSTS: BlogPostMeta[] = [
       "Use Nexlify's built-in panel migration with preview import — step-by-step cutover from XUI.one and Xtream UI forks.",
     seoTitle: "Migrate XUI / Xtream UI to Nexlify — Step-by-Step | Nexlify",
     seoDescription:
-      "Migrate from XUI.one or Xtream UI to Nexlify IPTV reseller panel. Built-in migration tool, native billing, IPTV management software guide.",
+      "Migrate from XUI.one or Xtream UI to Nexlify IPTV reseller panel. Built-in migration tool, Stripe & PayPal checkout, IPTV management software guide.",
     keywords: ["Xtream UI migration", "XUI migration"],
     datePublished: "2026-06-27",
     sitemapPriority: 0.78,
@@ -176,7 +176,7 @@ export const BLOG_POSTS: BlogPostMeta[] = [
       "Less support work, automated Stripe billing, better uptime — results from Manchester, Texas, and Amsterdam operators.",
     seoTitle: "Case Study: 500 to 2,000 Lines with Nexlify | Nexlify",
     seoDescription:
-      "IPTV reseller panel case study: grow lines with Nexlify IPTV management software, native billing automation, and Anti-Freeze playback.",
+      "IPTV reseller panel case study: grow lines with Nexlify IPTV management software, automatic license delivery, and Anti-Freeze playback.",
     keywords: ["IPTV reseller case study", "IPTV panel growth"],
     datePublished: "2026-06-29",
     sitemapPriority: 0.74,
@@ -192,7 +192,7 @@ export const BLOG_POSTS: BlogPostMeta[] = [
       "Anti-Freeze, fast zapping, reseller credits, geo-blocking, security, migration, and more — visual checklist for operators.",
     seoTitle: "10 Features Every IPTV Panel Must Have | Nexlify",
     seoDescription:
-      "Infographic checklist: Anti-Freeze, native billing, security, migration, and IPTV management software features every IPTV reseller panel needs.",
+      "Infographic checklist: Anti-Freeze, Stripe & PayPal checkout, security, migration, and IPTV management software features every IPTV reseller panel needs.",
     keywords: ["IPTV panel features", "best iptv reseller panel"],
     datePublished: "2026-07-01",
     sitemapPriority: 0.73,

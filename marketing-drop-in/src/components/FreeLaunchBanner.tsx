@@ -49,7 +49,7 @@ export function FreeLaunchBanner() {
           </div>
           <p className="mt-1 text-sm font-medium text-white sm:text-base">
             <span className="font-bold text-amber-300">All licenses are free</span> until{" "}
-            <span className="text-amber-200">{FREE_PERIOD_END_LABEL}</span> — no coupon needed
+            <span className="text-amber-200">{FREE_PERIOD_END_LABEL}</span>
           </p>
         </div>
 

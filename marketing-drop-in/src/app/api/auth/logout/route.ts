@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { clearSessionCookie } from "@/lib/auth";
-import { getAppUrl } from "@/lib/stripe";
+import { getAppUrl } from "@/lib/app-url";
 
 export async function POST() {
   await clearSessionCookie();

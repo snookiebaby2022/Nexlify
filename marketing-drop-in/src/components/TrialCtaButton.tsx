@@ -38,7 +38,7 @@ export function TrialCtaButton({
       .catch(() => setLoggedIn(false));
   }, [loggedInProp]);
 
-  const href = loggedIn ? "/pricing?trial=1" : "/register?trial=1";
+  const href = loggedIn ? "/dashboard?trial=1" : "/register?trial=1";
   const label = loggedIn
     ? "Start 7-Day Free Trial"
     : "Start 7-Day Free Trial – No Card Required";

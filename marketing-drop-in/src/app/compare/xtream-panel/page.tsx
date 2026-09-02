@@ -25,7 +25,7 @@ export default function CompareXtreamPage() {
       breadcrumbLabel="Xtream panel comparison"
       eyebrow="Compare · Worldwide"
       h1="Nexlify vs generic Xtream panel"
-      intro="Operators searching for an Xtream-compatible IPTV panel need more than playback URLs. Nexlify is full IPTV management software with native billing automation, built for service service providers worldwide."
+      intro="Operators searching for an Xtream-compatible IPTV panel need more than playback URLs. Nexlify is full IPTV management software with automatic license delivery, built for service service providers worldwide."
       otherLabel="Typical Xtream panel"
       rows={ROWS}
       closing="Nexlify is IPTV management software designed for revenue — not a script bundle. Open the live demo or start a trial before you commit."

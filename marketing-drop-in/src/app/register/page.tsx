@@ -17,7 +17,7 @@ export default async function RegisterPage({
   const user = await getSessionUser();
   if (user) {
     const params = await searchParams;
-    redirect(params.trial === "1" ? "/pricing?trial=1" : "/dashboard");
+    redirect(params.trial === "1" ? "/dashboard?trial=1" : "/dashboard");
   }
   return (
     <>
@@ -36,7 +36,7 @@ export default async function RegisterPage({
       <SoftwareProductJsonLd
         path="/register"
         name="Nexlify IPTV Panel — 7-Day Trial"
-        description="IPTV reseller panel with native billing and IPTV management software. Start a 7-day free trial."
+        description="IPTV reseller panel with Stripe & PayPal checkout and IPTV management software. Start a 7-day free trial."
         includeProduct
       />
       <div className="mesh-bg flex min-h-[70vh] items-center justify-center px-4 py-16">

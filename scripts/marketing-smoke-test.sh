@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="${1:-/var/www/nexlify}"
-PORT="${NEXLIFY_WEB_PORT:-3001}"
+PORT="${NEXLIFY_WEB_PORT:-13001}"
 BASE="http://127.0.0.1:${PORT}"
 
 fail() {
@@ -21,9 +21,20 @@ if ! find "$ROOT/src/generated/prisma" -name 'libquery_engine*.node' | grep -q .
   fail "Prisma query engine missing"
 fi
 
-if ! sqlite3 "$ROOT/data/nexlify.db" "SELECT 1 FROM User LIMIT 1;" >/dev/null 2>&1; then
+# Marketing uses PostgreSQL in production; fall back to SQLite for local dev.
+if [ -f "$ROOT/.env" ] && grep -q '^DATABASE_URL=.*postgres' "$ROOT/.env" 2>/dev/null; then
+  if ! (cd "$ROOT" && npx prisma db execute --stdin <<< "SELECT 1;" >/dev/null 2>&1); then
+    # Older prisma: try psql via DATABASE_URL
+    if ! command -v psql >/dev/null 2>&1; then
+      echo "WARN: Postgres DATABASE_URL set but cannot verify DB (skip)"
+    else
+      DB_URL=$(grep '^DATABASE_URL=' "$ROOT/.env" | cut -d= -f2- | tr -d '"')
+      psql "$DB_URL" -c "SELECT 1;" >/dev/null 2>&1 || fail "PostgreSQL database not reachable"
+    fi
+  fi
+elif ! sqlite3 "$ROOT/data/nexlify.db" "SELECT 1 FROM User LIMIT 1;" >/dev/null 2>&1; then
   if ! sqlite3 "$ROOT/prisma/dev.db" "SELECT 1 FROM User LIMIT 1;" >/dev/null 2>&1; then
-    fail "SQLite database not readable"
+    fail "Database not readable (no Postgres or SQLite)"
   fi
 fi
 
@@ -46,6 +57,11 @@ login_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST "$BASE
 
 if [ -f "$ROOT/scripts/verify-admin-login.cjs" ]; then
   node "$ROOT/scripts/verify-admin-login.cjs" || fail "admin password verification failed"
+fi
+
+# License server (vendor VPS only)
+if curl -sf --max-time 5 http://127.0.0.1:8787/health >/dev/null 2>&1; then
+  echo "License server health OK"
 fi
 
 echo "Smoke tests passed"

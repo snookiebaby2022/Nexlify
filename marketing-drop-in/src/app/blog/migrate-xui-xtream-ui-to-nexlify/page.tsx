@@ -20,7 +20,7 @@ export default function MigrateXuiXtreamUiPage() {
         { name: "Open Import → Panel migration", text: "Select XUI.one or Xtream UI as the source." },
         { name: "Run Preview (dry-run)", text: "Validate lines, bouquets, resellers before live import." },
         { name: "Execute import off-peak", text: "Import during low traffic and monitor playback." },
-        { name: "Connect native billing", text: "Sync license keys, renewals, and suspensions." },
+        { name: "Connect Stripe & PayPal checkout", text: "Sync license keys, renewals, and suspensions." },
         { name: "Cut over DNS and decommission", text: "Switch panel URL after tests pass; retire old stack." },
       ]}
       related={[

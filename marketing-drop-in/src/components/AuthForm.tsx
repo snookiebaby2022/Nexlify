@@ -61,7 +61,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           : next && next.startsWith("/")
             ? next
             : trial && mode === "login"
-              ? "/pricing?trial=1"
+              ? "/dashboard?trial=1"
               : data.trial || trial
                 ? "/dashboard"
                 : plan && mode === "register"

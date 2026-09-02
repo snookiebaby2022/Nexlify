@@ -16,7 +16,7 @@ export function OrganizationJsonLd() {
       "IPTV panel",
       "IPTV management software",
       "IPTV reseller software",
-      "native billing",
+      "Stripe & PayPal checkout",
       "Xtream panel",
     ],
   };

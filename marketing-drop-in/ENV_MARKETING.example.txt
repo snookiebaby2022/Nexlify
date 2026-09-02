@@ -9,6 +9,7 @@ JWT_SECRET="long-random-string-min-32-chars"
 # License signing — use FILE path only (never paste PEM lines into .env)
 LICENSE_KEY_FILE=/var/www/nexlify/.license-keys/private.pem
 NEXLIFY_LICENSE_API_URL=http://127.0.0.1:8787
+LICENSE_SERVER_API_SECRET=shared-secret-with-panel-env
 
 # === Site URLs ===
 NODE_ENV=production

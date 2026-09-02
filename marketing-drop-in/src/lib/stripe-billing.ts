@@ -3,7 +3,7 @@ import { issueLicenseForOrder } from "@/lib/licensing";
 import { sendMarketingEmail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
 import { syncLicenseToPanel } from "@/lib/panel-sync";
-import { getAppUrl } from "@/lib/stripe";
+import { getAppUrl } from "@/lib/app-url";
 import type Stripe from "stripe";
 
 async function adminEmails(): Promise<string[]> {

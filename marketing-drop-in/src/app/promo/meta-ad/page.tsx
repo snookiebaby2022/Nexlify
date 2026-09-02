@@ -5,7 +5,7 @@ import { withCoreKeywords } from "@/lib/seo-keywords";
 export const metadata = pageMetadata({
   title: "Nexlify Meta Ad — IPTV Reseller Panel Creative",
   description:
-    "Meta ad creative for Nexlify IPTV reseller panel — IPTV management software with native billing. Export-ready landscape layout.",
+    "Meta ad creative for Nexlify IPTV reseller panel — IPTV management software with Stripe & PayPal checkout. Export-ready landscape layout.",
   path: "/promo/meta-ad",
   keywords: withCoreKeywords(["Meta ad creative"]),
   noIndex: true,

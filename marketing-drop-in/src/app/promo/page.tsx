@@ -1,4 +1,5 @@
 import { PromoLanding } from "@/components/promo-landing";
+import { promoOpenGraphDescription, promoPageDescription } from "@/lib/marketing-copy";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -13,16 +14,18 @@ function pickUtm(params: SearchParams) {
   return utm;
 }
 
-export const metadata = {
-  title: "Nexlify — Stream management, built for operators",
-  description:
-    "Modern self-hosted IPTV panel. PostgreSQL-native, anti-freeze, reseller tree, billing-ready. All licenses free until September 1, 2026.",
-  openGraph: {
-    title: "Nexlify — Built for operators",
-    description: "All licenses free until September 1, 2026. Try the live demo.",
-    url: "https://nexlify.live/promo",
-  },
-};
+export function generateMetadata() {
+  const description = promoPageDescription();
+  return {
+    title: "Nexlify — Stream management, built for operators",
+    description,
+    openGraph: {
+      title: "Nexlify — Built for operators",
+      description: promoOpenGraphDescription(),
+      url: "https://nexlify.live/promo",
+    },
+  };
+}
 
 export default async function PromoPage({
   searchParams,

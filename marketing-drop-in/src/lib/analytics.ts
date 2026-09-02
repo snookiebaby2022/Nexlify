@@ -6,7 +6,6 @@ export type AnalyticsEvent =
   | "pricing_view"
   | "checkout_start"
   | "purchase"
-  | "coupon_claim"
   | "newsletter_signup"
   | "lead_magnet_signup"
   | "telegram_click"

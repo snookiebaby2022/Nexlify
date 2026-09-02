@@ -26,7 +26,7 @@ export default function BestIptvResellerPanel2026Page() {
               fork — it is <strong className="text-slate-200">IPTV management software</strong> you can bill,
               secure, migrate, and support at scale. Nexlify is the modern alternative to old XUI.one and
               Xtream UI stacks: maintained code, native{" "}
-              <strong className="text-slate-200">native billing</strong>, and built-in migration.
+              <strong className="text-slate-200">Stripe & PayPal checkout</strong>, and built-in migration.
             </p>
           ),
         },

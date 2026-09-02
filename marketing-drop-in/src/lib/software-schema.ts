@@ -39,10 +39,10 @@ export function buildSoftwareApplicationSchema(options?: {
     url,
     description:
       options?.description ??
-      "IPTV reseller panel with native billing automation, anti-freeze playback, and sub-second zapping for operators worldwide.",
+      "IPTV reseller panel with automatic license delivery, anti-freeze playback, and sub-second zapping for operators worldwide.",
     offers,
     featureList: [
-      "native billing",
+      "Stripe & PayPal checkout",
       "IPTV reseller panel",
       "Reseller hierarchy and credits",
       "Anti-freeze streaming",
@@ -78,7 +78,7 @@ export function buildProductSchema(options?: {
     name: options?.name ?? `${site.name} IPTV Panel License`,
     description:
       options?.description ??
-      "IPTV reseller panel license with native billing and full IPTV management software stack.",
+      "IPTV reseller panel license with Stripe & PayPal checkout and full IPTV management software stack.",
     brand: { "@type": "Brand", name: site.name },
     url,
     areaServed: "Worldwide",

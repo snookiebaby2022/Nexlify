@@ -27,7 +27,7 @@ export default function IptvResellerSoftwareUkPage() {
               their accountant recognizes. Nexlify is{" "}
               <strong className="text-slate-200">IPTV reseller software UK</strong> operators can self-host —
               an <strong className="text-slate-200">IPTV reseller panel</strong> with{" "}
-              <strong className="text-slate-200">native billing</strong> support, not a content library.
+              <strong className="text-slate-200">Stripe & PayPal checkout</strong> support, not a content library.
             </p>
           ),
         },

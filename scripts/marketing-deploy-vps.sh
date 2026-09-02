@@ -7,6 +7,16 @@ cd "$ROOT"
 
 echo "=== Nexlify marketing deploy (build) ==="
 
+for rel in /home/nexlify-panel/src/lib/panel-releases.json /home/nexlify/src/lib/panel-releases.json; do
+  if [ -f "$rel" ]; then
+    mkdir -p "$ROOT/src/lib" "$ROOT/public"
+    cp -f "$rel" "$ROOT/src/lib/panel-releases.json"
+    cp -f "$rel" "$ROOT/public/panel-releases.json"
+    echo "  Synced panel-releases.json from $rel"
+    break
+  fi
+done
+
 if [ ! -f .env ]; then
   echo "ERROR: $ROOT/.env missing — create it on the server; deploy never ships .env files." >&2
   exit 1
@@ -47,6 +57,9 @@ npm install --no-audit --no-fund
 echo "-> prisma generate"
 rm -rf src/generated/prisma
 npx prisma generate
+
+echo "-> prisma migrate"
+npx prisma migrate deploy 2>/dev/null || npx prisma db push --accept-data-loss --skip-generate 2>/dev/null || true
 
 ENGINE=$(find src/generated/prisma -name 'libquery_engine*.node' 2>/dev/null | head -1)
 if [ -z "$ENGINE" ] || [ ! -f src/generated/prisma/client.ts ]; then

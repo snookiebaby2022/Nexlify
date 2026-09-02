@@ -130,6 +130,7 @@ const sharedPanelEnv = {
   NODE_OPTIONS: fileEnv.NODE_OPTIONS || "--max-old-space-size=2048",
   PANEL_INSTANCES: String(panelInstances),
   NEXLIFY_STREAMING_OPTIMIZED: fileEnv.NEXLIFY_STREAMING_OPTIMIZED || (streamingOptimized ? "1" : "0"),
+  NEXLIFY_CONNECTION_QOE: envVar("NEXLIFY_CONNECTION_QOE", streamingOptimized ? "0" : "0"),
 };
 
 /** @type {import('pm2').StartOptions[]} */

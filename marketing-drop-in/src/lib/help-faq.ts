@@ -27,7 +27,7 @@ export const HELP_QUICK_LINKS: FaqLink[] = [
   { label: "Create a support ticket", href: "/support" },
   { label: "Panel demo", href: "/demo" },
   { label: "Pricing & plans", href: "/pricing" },
-  { label: "billing setup guide", href: "/pricing" },
+  { label: "Checkout & licensing FAQ", href: "/help#billing" },
   { label: "My licenses", href: "/dashboard" },
   { label: "Terms & conditions", href: "/terms" },
   { label: "Refund policy", href: "/refund-policy" },
@@ -46,7 +46,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "what-is-nexlify",
         question: "What is Nexlify?",
         answer:
-          "Nexlify sells IPTV panel software licenses and optional plugins. We provide billing, license keys, and documentation — we do not host, stream, or distribute any copyrighted content, sports feeds, channels, or other TV content. You run the panel on your own server and connect it to your Stripe billing.",
+          "Nexlify sells IPTV panel software licenses and optional plugins. We provide checkout, license keys, and documentation — we do not host, stream, or distribute any copyrighted content, sports feeds, channels, or other TV content. You run the panel on your own server and purchase licenses via Stripe or PayPal checkout on nexlify.live.",
         links: [
           { label: "Try the live panel demo", href: "/demo" },
           { label: "View pricing", href: "/pricing" },
@@ -56,11 +56,11 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "how-to-buy",
         question: "How do I purchase a panel license?",
         answer:
-          "Choose a plan on our pricing page and complete checkout through Stripe. After payment, a license key is issued automatically and linked to your account. You can copy it from your dashboard and activate it in your IPTV panel.",
+          "Choose a plan on our pricing page and complete checkout through Stripe or PayPal. After payment, a license key is issued automatically and linked to your account. You can copy it from your dashboard and activate it in your IPTV panel.",
         links: [
           { label: "Pricing", href: "/pricing" },
           { label: "Register an account", href: "/register" },
-          { label: "Stripe checkout", href: "/pricing" },
+          { label: "Checkout & licensing FAQ", href: "/help#billing" },
         ],
       },
       {
@@ -102,7 +102,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "find-license",
         question: "Where is my license key?",
         answer:
-          "Sign in and open My licenses on your dashboard. Keys issued by billing or manual admin issue appear there with status, expiry, and plan limits. Copy the key and paste it into your panel under License activation.",
+          "Sign in and open My licenses on your dashboard. Keys issued after Stripe or PayPal checkout appear there with status, expiry, and plan limits. Copy the key and paste it into your panel under License activation.",
         links: [{ label: "My licenses", href: "/dashboard" }],
       },
       {
@@ -119,7 +119,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "license-expired",
         question: "My license expired or shows suspended — what now?",
         answer:
-          "Renew or pay the outstanding billing invoice for the linked service. billing automation extends expiry on renewal and re-enables suspended keys. If billing is correct but the panel still fails, open a ticket with your key and domain.",
+          "Renew via Stripe or PayPal checkout, or pay any outstanding invoice linked to your license. Checkout extends expiry on renewal and re-enables suspended keys. If payment is correct but the panel still fails, open a ticket with your key and domain.",
         links: [
           { label: "My licenses", href: "/dashboard" },
           { label: "Open a support ticket", href: "/support" },
@@ -140,16 +140,19 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
     items: [
       {
         id: "billing-automation",
-        question: "How does billing automation work?",
+        question: "How does Stripe and PayPal checkout work?",
         answer:
-          "Buy or trial a license on nexlify.live. Stripe checkout issues the key; paste it into your panel under License activation. Renewals extend expiry automatically.",
-        links: [{ label: "Pricing", href: "/pricing" }],
+          "Start a 7-day free trial from the homepage or pricing page — your license key is issued instantly on sign-up with no card or checkout. Paid plans use Stripe or PayPal checkout; the key appears on your dashboard and by email. Paste it into your panel under License activation. Renewals extend expiry automatically.",
+        links: [
+          { label: "Pricing", href: "/pricing" },
+          { label: "Checkout & licensing FAQ", href: "/help#billing" },
+        ],
       },
       {
         id: "billing-products",
         question: "What plans are available?",
         answer:
-          "One Nexlify License covers the full panel (£50/mo after the free period). Plugins are included. See pricing for current GBP/USD rates.",
+          "One Nexlify License covers the full panel at £50/mo (GBP default, USD available). All plugins are included. See pricing for current rates and the 7-day free trial.",
         links: [{ label: "Pricing", href: "/pricing" }],
       },
       {
@@ -182,7 +185,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "plugins",
         question: "What plugins and addons are available?",
         answer:
-          "All media and music plugins are included free with every Nexlify License — Plex, Emby, Jellyfin, Spotify, Apple Music, Deezer, YouTube Music, and more. No separate addon purchase required during the free period until September 1, 2026.",
+          "All media and music plugins are included with every Nexlify License — Plex, Emby, Jellyfin, Spotify, Apple Music, Deezer, YouTube Music, and more. No separate addon purchase required.",
         links: [{ label: "Plugins included", href: "/pricing#plugins" }],
       },
       {

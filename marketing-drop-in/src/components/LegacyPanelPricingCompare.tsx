@@ -17,7 +17,7 @@ const ROWS: Row[] = [
     oneStream: "Fork-dependent",
   },
   {
-    feature: "native billing",
+    feature: "Stripe & PayPal checkout",
     nexlify: true,
     xui: "partial",
     oneStream: false,
@@ -88,7 +88,7 @@ export function LegacyPanelPricingCompare() {
       <p className="mx-auto mt-3 max-w-3xl text-center text-sm leading-relaxed text-[var(--muted)] md:text-base">
         Operators searching for an <strong className="text-slate-300">IPTV reseller panel</strong> often compare
         Nexlify against legacy XUI.one forks and 1-stream stacks. Every Nexlify license includes the{" "}
-        <strong className="text-slate-300">native billing</strong> and full{" "}
+        <strong className="text-slate-300">Stripe & PayPal checkout</strong> and full{" "}
         <strong className="text-slate-300">IPTV management software</strong> — not a bolt-on script bundle.
         Third-party names are used descriptively only.
       </p>

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { CopyButton } from "@/components/CopyButton";
+import { PayPalCheckoutCapture } from "@/components/PayPalCheckoutCapture";
 import { getSessionUser } from "@/lib/auth";
 import { issueLicenseForOrder } from "@/lib/licensing";
 import { prisma } from "@/lib/prisma";
@@ -13,13 +15,32 @@ export const metadata = pageSeo("/checkout/success");
 export default async function CheckoutSuccessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ session_id?: string; order_id?: string }>;
+  searchParams: Promise<{ session_id?: string; order_id?: string; paypal?: string }>;
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
 
   const params = await searchParams;
   let license = null;
+
+  if (params.paypal === "1" && params.order_id) {
+    const pendingOrder = await prisma.order.findFirst({
+      where: { id: params.order_id, userId: user.id },
+      select: { status: true },
+    });
+    if (pendingOrder?.status === "PENDING") {
+      return (
+        <div className="mx-auto max-w-lg px-4 py-20 text-center">
+          <div className="rounded-2xl border border-violet-500/30 bg-violet-500/10 p-10">
+            <h1 className="text-2xl font-bold text-white">Confirming PayPal payment</h1>
+            <Suspense fallback={<p className="mt-4 text-sm text-slate-400">Loading…</p>}>
+              <PayPalCheckoutCapture orderId={params.order_id} />
+            </Suspense>
+          </div>
+        </div>
+      );
+    }
+  }
 
   if (params.order_id) {
     const order = await prisma.order.findFirst({

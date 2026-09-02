@@ -29,7 +29,14 @@ export async function GET() {
     include: {
       user: { select: { email: true, name: true } },
       plan: { select: { name: true, slug: true } },
-      order: { select: { couponCode: true, amountCents: true, status: true } },
+      order: {
+        select: {
+          paymentProvider: true,
+          currency: true,
+          amountCents: true,
+          status: true,
+        },
+      },
     },
   });
 
@@ -43,7 +50,8 @@ export async function GET() {
     "maxLines",
     "machineId",
     "notes",
-    "couponCode",
+    "paymentProvider",
+    "currency",
     "amountCents",
     "createdAt",
   ].join(",");
@@ -59,7 +67,8 @@ export async function GET() {
       csvEscape(l.maxLines),
       csvEscape(l.machineId),
       csvEscape(l.notes),
-      csvEscape(l.order?.couponCode),
+      csvEscape(l.order?.paymentProvider),
+      csvEscape(l.order?.currency),
       csvEscape(l.order?.amountCents),
       csvEscape(formatDate(l.createdAt)),
     ].join(","),

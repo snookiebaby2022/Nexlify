@@ -50,7 +50,7 @@ export function Hero() {
 
           {isFreePeriod() && (
             <p className="mt-4 text-sm font-medium text-amber-200">
-              All licenses free until {FREE_PERIOD_END_LABEL} — no coupon needed
+              All licenses free until {FREE_PERIOD_END_LABEL}
             </p>
           )}
 

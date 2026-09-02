@@ -2,8 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { readPendingCouponCode } from "@/lib/marketing-coupon";
 import { TRIAL_PLAN_SLUG } from "@/lib/plans";
+import {
+  DEFAULT_CHECKOUT_CURRENCY,
+  parseCheckoutCurrency,
+  parsePaymentMethod,
+} from "@/lib/checkout-currency";
 
 type PlanRef = { id: string; slug: string };
 
@@ -40,14 +44,29 @@ export function PricingCheckoutLauncher({ plans, loggedIn }: PricingCheckoutLaun
       return;
     }
 
+    const currency = parseCheckoutCurrency(
+      searchParams.get("currency") ?? DEFAULT_CHECKOUT_CURRENCY,
+    );
+    const paymentMethod = parsePaymentMethod(searchParams.get("payment") ?? "stripe");
+
     (async () => {
       try {
+        if (trial) {
+          const res = await fetch("/api/trial", { method: "POST" });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error ?? "Trial could not be started");
+          router.replace("/dashboard");
+          router.refresh();
+          return;
+        }
+
         const res = await fetch("/api/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             planId,
-            couponCode: readPendingCouponCode() ?? undefined,
+            currency,
+            paymentMethod,
           }),
         });
         const data = await res.json();

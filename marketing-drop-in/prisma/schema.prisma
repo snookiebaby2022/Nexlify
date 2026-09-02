@@ -115,6 +115,9 @@ model Order {
   stripeSessionId String?     @unique
   stripePaymentId String?
   stripeSubscriptionId String?
+  paypalOrderId   String?     @unique
+  paymentProvider String?     // "stripe" | "paypal"
+  currency        String?     // "GBP" | "USD"
   billingMode     String?     // "payment" | "subscription"
   amountCents          Int
   couponCode           String?

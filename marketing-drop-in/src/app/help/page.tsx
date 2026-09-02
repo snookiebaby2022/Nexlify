@@ -30,7 +30,7 @@ export default function HelpPage() {
           IPTV panel help &amp; FAQ for worldwide operators
         </h1>
         <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-300 md:text-base">
-          Installation guides, native billing setup, GBP and USD billing, and answers for service
+          Installation guides, checkout & licensing setup, GBP and USD billing, and answers for service
           service providers worldwide. Can&apos;t find what you need?{" "}
           <Link href="/support" className="text-violet-400 hover:text-violet-300 underline">
             open a support ticket

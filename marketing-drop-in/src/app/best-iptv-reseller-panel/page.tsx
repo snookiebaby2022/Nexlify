@@ -78,7 +78,7 @@ export default function BestIptvResellerPanelPage() {
           Nexlify vs all IPTV panels — XUI, 1-stream, Xtream, Ministra
         </h1>
         <p className="mt-4 max-w-2xl text-lg text-[var(--muted)]">
-          Best IPTV reseller panel comparison for 2026 — native billing, Anti-Freeze, security,
+          Best IPTV reseller panel comparison for 2026 — Stripe & PayPal checkout, Anti-Freeze, security,
           migration, and pricing vs XUI.one, 1-stream, Xtream UI, and Ministra.
         </p>
 

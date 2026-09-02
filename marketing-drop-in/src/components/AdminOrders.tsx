@@ -10,10 +10,18 @@ type OrderRow = {
   plan: string;
   status: string;
   amountCents: number;
-  couponCode: string | null;
+  currency: string | null;
+  paymentProvider: string | null;
   licenseKey: string | null;
   createdAt: string;
 };
+
+function paymentLabel(provider: string | null, amountCents: number): string {
+  if (amountCents === 0) return "Complimentary";
+  if (provider === "paypal") return "PayPal";
+  if (provider === "stripe") return "Stripe";
+  return provider ?? "—";
+}
 
 export function AdminOrders() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -51,7 +59,7 @@ export function AdminOrders() {
               <th className="px-4 py-3">Customer</th>
               <th className="px-4 py-3">Plan</th>
               <th className="px-4 py-3">Amount</th>
-              <th className="px-4 py-3">Coupon</th>
+              <th className="px-4 py-3">Payment</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">License</th>
             </tr>
@@ -72,9 +80,14 @@ export function AdminOrders() {
                     {o.name && <div className="text-xs text-slate-500">{o.name}</div>}
                   </td>
                   <td className="px-4 py-3">{o.plan}</td>
-                  <td className="px-4 py-3">{formatMoney(o.amountCents)}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-amber-300">
-                    {o.couponCode ?? "—"}
+                  <td className="px-4 py-3">
+                    {formatMoney(o.amountCents, o.currency ?? "GBP")}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-300">
+                    {paymentLabel(o.paymentProvider, o.amountCents)}
+                    {o.currency ? (
+                      <span className="ml-1 text-slate-500">({o.currency})</span>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3">{o.status}</td>
                   <td className="px-4 py-3 font-mono text-[10px] text-cyan-300">

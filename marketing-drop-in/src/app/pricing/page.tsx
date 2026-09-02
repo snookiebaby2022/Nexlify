@@ -13,10 +13,16 @@ import { getSessionUser } from "@/lib/auth";
 import { DEMO_PANEL_URL } from "@/lib/demo";
 import { toPlanView, plansForPricing } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
-import { isStripeConfigured } from "@/lib/stripe";
+import { isPayPalConfigured, isStripeConfigured } from "@/lib/billing-settings";
 
 import { pageSeo } from "@/lib/seo-pages";
-import { FREE_PERIOD_END_LABEL } from "@/lib/marketing-coupon";
+import {
+  pricingHeroEyebrow,
+  pricingHeroSubtitle,
+  pricingHeroTitle,
+  PAID_PRICE_LABEL,
+} from "@/lib/marketing-copy";
+import { isFreePeriod } from "@/lib/marketing-coupon";
 
 export const metadata = pageSeo("/pricing");
 
@@ -35,6 +41,7 @@ export default async function PricingPage() {
   }
 
   const pricingPlans = plansForPricing(plans.map(toPlanView));
+  const freeActive = isFreePeriod();
 
   return (
     <div className="mesh-bg">
@@ -47,28 +54,30 @@ export default async function PricingPage() {
       <PricingJsonLd />
       <div className="mx-auto max-w-6xl px-4 pt-16 text-center">
         <p className="text-sm font-semibold uppercase tracking-widest text-amber-400">
-          Free until {FREE_PERIOD_END_LABEL}
+          {pricingHeroEyebrow()}
         </p>
         <h1 className="font-display mt-2 text-4xl font-bold text-white md:text-5xl">
-          All licenses free — IPTV reseller panel for operators worldwide
+          {pricingHeroTitle()}
         </h1>
-        <p className="mx-auto mt-4 max-w-2xl text-[var(--muted)]">
-          Nexlify IPTV management software is free for all operators until {FREE_PERIOD_END_LABEL}.
-          Every license includes the native billing, instant digital delivery, and full panel
-          access — no credit card required during the free period.
-        </p>
+        <p className="mx-auto mt-4 max-w-2xl text-[var(--muted)]">{pricingHeroSubtitle()}</p>
         <div className="mt-8 flex flex-col items-center gap-4">
           <TrialCtaButton trackLabel="pricing_hero" loggedIn={Boolean(user)} />
-          <p className="text-sm text-amber-300/90">
-            <strong>Limited time:</strong> All plans are free — no coupon needed
-          </p>
+          {freeActive ? (
+            <p className="text-sm text-amber-300/90">
+              <strong>Limited time:</strong> All paid plans are free during the launch period
+            </p>
+          ) : (
+            <p className="text-sm text-violet-300/90">
+              7-day trial · then {PAID_PRICE_LABEL} · Stripe or PayPal
+            </p>
+          )}
         </div>
         <PageCta
           className="mt-4"
           primary={{ label: "View plans below", href: "#license-tiers" }}
           secondary={[
             { label: "Try live demo", href: DEMO_PANEL_URL, external: true },
-            { label: "billing module docs", href: "/help" },
+            { label: "Checkout & licensing FAQ", href: "/help#billing" },
             { label: "All features", href: "/features" },
           ]}
         />
@@ -82,7 +91,7 @@ export default async function PricingPage() {
           <li className="flex gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-4">
             <span className="text-emerald-400">✓</span>
             <span>
-              <strong className="text-white">native billing included</strong> — auto-provision, renew,
+              <strong className="text-white">Stripe & PayPal checkout included</strong> — auto-provision, renew,
               suspend on every plan
             </span>
           </li>
@@ -116,8 +125,18 @@ export default async function PricingPage() {
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-center text-sm leading-relaxed text-[var(--muted)]">
           One license includes unlimited stream servers, all plugins, and the full Nexlify panel.
-          Completely free until <strong className="text-amber-300">{FREE_PERIOD_END_LABEL}</strong>, then{" "}
-          <strong className="text-amber-300">£50/month</strong>.
+          {freeActive ? (
+            <>
+              {" "}
+              Complimentary during the launch period, then{" "}
+              <strong className="text-amber-300">{PAID_PRICE_LABEL}</strong>.
+            </>
+          ) : (
+            <>
+              {" "}
+              <strong className="text-amber-300">{PAID_PRICE_LABEL}</strong> after your 7-day trial.
+            </>
+          )}
         </p>
       </section>
 
@@ -132,6 +151,7 @@ export default async function PricingPage() {
         plans={pricingPlans}
         loggedIn={Boolean(user)}
         stripeEnabled={isStripeConfigured()}
+        paypalEnabled={isPayPalConfigured()}
       />
 
       <PluginPricingSection />

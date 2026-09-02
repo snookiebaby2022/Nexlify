@@ -17,7 +17,6 @@ export type PlanView = {
   maxServers: number;
   badge: string | null;
   features: string[];
-  whmcsProductId: number | null;
 };
 
 const TRIAL_FALLBACK: PlanView = {
@@ -31,7 +30,6 @@ const TRIAL_FALLBACK: PlanView = {
   maxServers: UNLIMITED_SERVERS,
   badge: "trial",
   features: [],
-  whmcsProductId: null,
 };
 
 const PAID_FALLBACK: PlanView = {
@@ -45,7 +43,6 @@ const PAID_FALLBACK: PlanView = {
   maxServers: UNLIMITED_SERVERS,
   badge: null,
   features: [],
-  whmcsProductId: 1,
 };
 
 /** Fallback when the database is unavailable (GBP cents). */
@@ -88,7 +85,6 @@ export function toPlanView(plan: {
   maxServers: number;
   badge: string | null;
   featuresJson: string | null;
-  whmcsProductId: number | null;
   active?: boolean;
 }): PlanView {
   let features: string[] = [];
@@ -114,6 +110,5 @@ export function toPlanView(plan: {
     maxServers: plan.maxServers,
     badge: plan.badge,
     features,
-    whmcsProductId: plan.whmcsProductId,
   };
 }

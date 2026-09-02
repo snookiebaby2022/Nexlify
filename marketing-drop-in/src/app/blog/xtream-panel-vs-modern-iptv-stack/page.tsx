@@ -37,7 +37,7 @@ export default function XtreamPanelVsModernStackPage() {
               <li>Node.js application layer with typed codebase</li>
               <li>PostgreSQL for relational reseller and line data</li>
               <li>PM2 process management and nginx reverse proxy</li>
-              <li>First-class native billing instead of bolt-on scripts</li>
+              <li>First-class Stripe & PayPal checkout instead of bolt-on scripts</li>
               <li>Preview-based migration from XUI.one, 1-stream, and Xtream UI</li>
             </ul>
           ),

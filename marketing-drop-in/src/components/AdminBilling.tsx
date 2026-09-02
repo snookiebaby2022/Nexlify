@@ -101,13 +101,13 @@ export function AdminBilling() {
           <p>
             Stripe secret:{" "}
             <span className={data.stripeConfigured ? "text-emerald-300" : "text-amber-300"}>
-              {data.stripeConfigured ? "configured" : "missing STRIPE_SECRET_KEY"}
+              {data.stripeConfigured ? "configured" : "add in Admin → Marketing"}
             </span>
           </p>
           <p>
             Webhook secret:{" "}
             <span className={data.webhookConfigured ? "text-emerald-300" : "text-amber-300"}>
-              {data.webhookConfigured ? "configured" : "missing STRIPE_WEBHOOK_SECRET"}
+              {data.webhookConfigured ? "configured" : "add in Admin → Marketing"}
             </span>
           </p>
           <p className="text-slate-400">

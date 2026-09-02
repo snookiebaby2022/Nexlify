@@ -1,6 +1,6 @@
 "use client";
 
-import { NEXLIFY_LAUNCH_COUPON } from "@/lib/marketing-coupon";
+import { promoBadgeText } from "@/lib/marketing-copy";
 
 const AD_WIDTH = 1200;
 const AD_HEIGHT = 628;
@@ -138,7 +138,7 @@ function AdArtboard() {
         </div>
         <p className="mt-4 text-lg font-semibold text-orange-400">nexlify.live</p>
         <div className="mt-4 inline-flex w-fit rounded-md bg-orange-500 px-4 py-2 text-sm font-bold tracking-wide text-white">
-          USE CODE {NEXLIFY_LAUNCH_COUPON}
+          {promoBadgeText()}
         </div>
       </div>
     </div>

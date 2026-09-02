@@ -37,7 +37,6 @@ const patchSchema = z.object({
   maxServers: z.number().int().positive().optional(),
   stripePriceId: z.string().nullable().optional(),
   stripeProductId: z.string().nullable().optional(),
-  whmcsProductId: z.number().int().nullable().optional(),
   badge: z.string().nullable().optional(),
   active: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
@@ -92,7 +91,7 @@ export async function POST(request: Request) {
 
   if (!isStripeConfigured()) {
     return NextResponse.json(
-      { error: "Stripe is not configured. Add STRIPE_SECRET_KEY to .env on the server." },
+      { error: "Stripe is not configured. Add keys in Admin → Marketing → Checkout payments." },
       { status: 503 },
     );
   }

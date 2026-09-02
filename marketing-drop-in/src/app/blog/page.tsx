@@ -56,7 +56,7 @@ const RELATED_RESOURCES = [
 
   {
 
-    title: "native billing docs",
+    title: "Checkout & licensing FAQ",
 
     href: "/help",
 

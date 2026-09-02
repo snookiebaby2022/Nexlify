@@ -109,9 +109,9 @@ const ROWS: FeatureRow[] = [
   { category: "User & Reseller", feature: "Automated email + in-panel notifications", nexlify: "included", typical: "partial" },
 
   // Billing
-  { category: "Billing", feature: "native billing — auto-provision, renew, suspend", nexlify: "included", typical: "partial" },
-  { category: "Billing", feature: "PayPal checkout (Orders v2) + Stripe", nexlify: "included", typical: "partial" },
-  { category: "Billing", feature: "Coupon codes + checkout API", nexlify: "included", typical: "missing" },
+  { category: "Billing", feature: "Stripe & PayPal checkout — auto-provision, renew, suspend", nexlify: "included", typical: "partial" },
+  { category: "Billing", feature: "Stripe checkout (cards, GBP/USD)", nexlify: "included", typical: "partial" },
+  { category: "Billing", feature: "PayPal checkout (Orders v2)", nexlify: "included", typical: "partial" },
   { category: "Billing", feature: "Advanced billing logs — financial audit trail", nexlify: "included", typical: "missing" },
   { category: "Billing", feature: "Commission reports (CSV export)", nexlify: "included", typical: "missing" },
 
@@ -250,8 +250,8 @@ export default function FeaturesPage() {
               playback token TTL
             </li>
             <li className="rounded-lg border p-4" style={{ borderColor: "#1e3a5f" }}>
-              <strong className="text-cyan-300">Billing</strong> — native billing, PayPal, coupons,
-              auto renewals
+              <strong className="text-cyan-300">Billing</strong> — Stripe & PayPal checkout, auto
+              renewals, license delivery
             </li>
             <li className="rounded-lg border p-4" style={{ borderColor: "#1e3a5f" }}>
               <strong className="text-cyan-300">Anti-Freeze</strong> — smoother playback, failover URLs,
@@ -272,7 +272,7 @@ export default function FeaturesPage() {
 
           <p className="text-base leading-relaxed" style={{ color: "#94a3b8" }}>
 
-            Generic Xtream panel installs lack native billing depth, leak auditing, and reseller
+            Generic Xtream panel installs lack Stripe & PayPal checkout depth, leak auditing, and reseller
             white-label controls. Nexlify is IPTV management software built as a management tool for
             service providers who need billing automation, stream health monitoring, and subscriber
             self-service in one IPTV panel.
@@ -283,7 +283,7 @@ export default function FeaturesPage() {
 
           <p className="text-sm leading-relaxed" style={{ color: "#94a3b8" }}>
 
-            From coupon checkout and PayPal orders to geo-blocking and Telegram alerts, every row
+            From Stripe & PayPal checkout to geo-blocking and Telegram alerts, every row
             below reflects production features on nexlify.live — not a roadmap slide deck. worldwide
             resellers use the same codebase with GBP or USD licensing.
 

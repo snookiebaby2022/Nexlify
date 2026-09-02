@@ -10,7 +10,7 @@ export const metadata = pageSeo("/vs/xui-one");
 
 const ROWS = [
   { feature: "Modern stack", nexlify: "Node + PostgreSQL + PM2", other: "Legacy PHP stacks" },
-  { feature: "billing-native billing", nexlify: "First-class module", other: "Bolt-on scripts" },
+  { feature: "Stripe & PayPal checkout", nexlify: "Built-in checkout", other: "Bolt-on scripts" },
   { feature: "Video / VOD workspace", nexlify: "Dedicated UI", other: "Mixed with live" },
   { feature: "Stream health alerts", nexlify: "Telegram + dashboard", other: "Basic logs" },
   { feature: "worldwide support", nexlify: "Tickets + docs", other: "Community-only" },
@@ -24,7 +24,7 @@ export default function VsXuiPage() {
       breadcrumbLabel="XUI alternative"
       eyebrow="Migration · Worldwide"
       h1="Modern IPTV panel alternative for XUI-style operators"
-      intro="Service providers outgrowing legacy panels move to Nexlify for encrypted licensing, native billing automation, and IPTV reseller software built for worldwide scale. Third-party product names are used descriptively only."
+      intro="Service providers outgrowing legacy panels move to Nexlify for encrypted licensing, automatic license delivery, and IPTV reseller software built for worldwide scale. Third-party product names are used descriptively only."
       otherLabel="Legacy XUI-style panel"
       rows={ROWS}
       closing="Run the one-click installer on a fresh VPS, open Import → Panel migration, and run Preview before cutover. See our migration checklist for XUI and 1-stream operators."

@@ -2,14 +2,14 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { CopyButton } from "@/components/CopyButton";
+import { TrialAutoStart } from "@/components/TrialAutoStart";
 import { getSessionUser } from "@/lib/auth";
 import { formatDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { TRIAL_PLAN_SLUG } from "@/lib/plans";
-import { TrialCouponBanner } from "@/components/TrialCouponBanner";
-import { TrialCouponRedirect } from "@/components/TrialCouponRedirect";
 import { ManageBillingButton } from "@/components/ManageBillingButton";
 import { pageSeo } from "@/lib/seo-pages";
+import { isFreePeriod } from "@/lib/marketing-coupon";
 
 export const metadata = pageSeo("/dashboard");
 
@@ -29,11 +29,21 @@ export default async function DashboardPage() {
   const trialExpired =
     trialLicense?.expiresAt && trialLicense.expiresAt < new Date();
   const hasStripeSub = licenses.some((l) => Boolean(l.stripeSubscriptionId));
+  const freeActive = isFreePeriod();
+
+  function licensePaymentLabel(lic: (typeof licenses)[number]): string {
+    const order = lic.order;
+    if (!order) return "—";
+    if (order.amountCents === 0) return "Complimentary";
+    if (order.paymentProvider === "paypal") return "PayPal";
+    if (order.paymentProvider === "stripe" || order.stripeSessionId) return "Stripe";
+    return "Other";
+  }
 
   return (
     <div className="mesh-bg mx-auto max-w-6xl px-4 py-16 md:py-24">
       <Suspense fallback={null}>
-        <TrialCouponRedirect />
+        <TrialAutoStart />
       </Suspense>
       <h1 className="font-display text-3xl font-bold text-white">My licenses</h1>
       <p className="mt-2 text-[var(--muted)]">
@@ -60,7 +70,6 @@ export default async function DashboardPage() {
               Upgrade plan →
             </Link>
           </div>
-          <TrialCouponBanner expiresLabel={formatDate(trialLicense.expiresAt)} />
         </>
       )}
 
@@ -83,13 +92,13 @@ export default async function DashboardPage() {
           <p className="text-slate-400">No licenses yet.</p>
           <div className="mt-4 flex flex-wrap justify-center gap-4">
             <Link
-              href="/pricing?trial=1"
+              href="/dashboard?trial=1"
               className="text-cyan-400 hover:underline"
             >
               Start free 7-day trial →
             </Link>
             <Link href="/pricing" className="text-violet-400 hover:underline">
-              Get a free license →
+              {freeActive ? "Get a complimentary license →" : "View paid plans →"}
             </Link>
           </div>
         </div>
@@ -101,6 +110,7 @@ export default async function DashboardPage() {
                 <th className="px-4 py-3 font-medium">License key</th>
                 <th className="px-4 py-3 font-medium">Plan</th>
                 <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Payment</th>
                 <th className="px-4 py-3 font-medium">Expires</th>
                 <th className="px-4 py-3 font-medium">Servers</th>
                 <th className="px-4 py-3 font-medium" />
@@ -127,6 +137,7 @@ export default async function DashboardPage() {
                       {lic.status}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-slate-400">{licensePaymentLabel(lic)}</td>
                   <td className="px-4 py-3">{formatDate(lic.expiresAt)}</td>
                   <td className="px-4 py-3">{lic.plan.maxServers}</td>
                   <td className="px-4 py-3">

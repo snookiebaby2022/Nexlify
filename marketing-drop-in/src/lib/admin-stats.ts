@@ -41,8 +41,9 @@ export async function getAdminStats() {
     paidTotal,
     paidLast7,
     paidLast30,
-    billingSales,
     stripeSales,
+    paypalSales,
+    complimentarySales,
     manualSales,
     orderRevenue,
     plans,
@@ -50,7 +51,6 @@ export async function getAdminStats() {
     recentTrials,
     recentPaid,
     openTickets,
-    couponOrders,
     trialUserIds,
     paidUserIds,
     utmUsers,
@@ -82,9 +82,6 @@ export async function getAdminStats() {
       where: { ...paidLicenseWhere(), createdAt: { gte: since30 } },
     }),
     prisma.license.count({
-      where: { ...paidLicenseWhere(), billingServiceId: { not: null } },
-    }),
-    prisma.license.count({
       where: {
         ...paidLicenseWhere(),
         order: { stripeSessionId: { not: null } },
@@ -93,8 +90,18 @@ export async function getAdminStats() {
     prisma.license.count({
       where: {
         ...paidLicenseWhere(),
-        billingServiceId: null,
-        OR: [{ orderId: null }, { order: { stripeSessionId: null } }],
+        order: { paymentProvider: "paypal" },
+      },
+    }),
+    prisma.license.count({
+      where: {
+        ...paidLicenseWhere(),
+        order: { status: "COMPLETED", amountCents: 0 },
+      },
+    }),
+    prisma.license.count({
+      where: {
+        ...paidLicenseWhere(),
         notes: { contains: "Manual issue" },
       },
     }),
@@ -133,19 +140,11 @@ export async function getAdminStats() {
       include: {
         user: { select: { email: true } },
         plan: { select: { name: true } },
-        order: { select: { amountCents: true, stripeSessionId: true } },
+        order: { select: { amountCents: true, stripeSessionId: true, paymentProvider: true } },
       },
     }),
     prisma.ticket.count({
       where: { status: { not: "CLOSED" } },
-    }),
-    prisma.order.findMany({
-      where: {
-        status: "COMPLETED",
-        couponCode: { not: null },
-        amountCents: { gt: 0 },
-      },
-      select: { couponCode: true, amountCents: true },
     }),
     trialPlan
       ? prisma.license.findMany({
@@ -184,19 +183,10 @@ export async function getAdminStats() {
     }))
     .sort((a, b) => b.count - a.count);
 
-  const websiteSales = Math.max(0, paidTotal - billingSales - manualSales);
-
-  const couponMap = new Map<string, { uses: number; revenueCents: number }>();
-  for (const o of couponOrders) {
-    const code = o.couponCode ?? "unknown";
-    const cur = couponMap.get(code) ?? { uses: 0, revenueCents: 0 };
-    cur.uses += 1;
-    cur.revenueCents += o.amountCents;
-    couponMap.set(code, cur);
-  }
-  const coupons = [...couponMap.entries()]
-    .map(([code, v]) => ({ code, ...v }))
-    .sort((a, b) => b.uses - a.uses);
+  const unattributedSales = Math.max(
+    0,
+    paidTotal - stripeSales - paypalSales - complimentarySales - manualSales,
+  );
 
   const paidSet = new Set(paidUserIds.map((r) => r.userId));
   const trialOnlyUsers = trialUserIds.filter((t) => !paidSet.has(t.userId)).length;
@@ -272,16 +262,16 @@ export async function getAdminStats() {
       last7Days: paidLast7,
       last30Days: paidLast30,
       byChannel: {
-        billing: billingSales,
         stripe: stripeSales,
-        website: websiteSales,
+        paypal: paypalSales,
+        complimentary: complimentarySales,
         manual: manualSales,
+        other: unattributedSales,
       },
       byPlan: salesByPlan,
       revenueCents: orderRevenue._sum.amountCents ?? 0,
       completedPaidOrders: orderRevenue._count,
     },
-    coupons,
     utmSummary,
     umami: {
       dashboardUrl: "https://analytics.nexlify.live/dashboard",
@@ -299,13 +289,15 @@ export async function getAdminStats() {
       plan: l.plan.name,
       status: l.status,
       createdAt: l.createdAt.toISOString(),
-      source: l.billingServiceId
-        ? "billing"
-        : l.order?.stripeSessionId
+      source: l.order?.paymentProvider === "paypal"
+        ? "PayPal"
+        : l.order?.stripeSessionId || l.order?.paymentProvider === "stripe"
           ? "Stripe"
-          : l.notes?.includes("Manual")
-            ? "Manual"
-            : "Website",
+          : l.order?.amountCents === 0
+            ? "Complimentary"
+            : l.notes?.includes("Manual")
+              ? "Manual"
+              : "Other",
       amountCents: l.order?.amountCents ?? null,
     })),
   };

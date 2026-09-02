@@ -14,7 +14,7 @@ import { getSessionUser } from "@/lib/auth";
 import { toPlanView, plansForPricing } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 import { pageSeo } from "@/lib/seo-pages";
-import { isStripeConfigured } from "@/lib/stripe";
+import { isPayPalConfigured, isStripeConfigured } from "@/lib/billing-settings";
 
 export const metadata = pageSeo("/");
 
@@ -43,6 +43,7 @@ export default async function HomePage() {
         plans={plansForPricing(plans.map(toPlanView))}
         loggedIn={Boolean(user)}
         stripeEnabled={isStripeConfigured()}
+        paypalEnabled={isPayPalConfigured()}
       />
       <MigrationCtaSection />
       <DemoBanner />

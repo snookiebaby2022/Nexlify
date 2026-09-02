@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isStripeConfigured } from "@/lib/stripe";
+import { isStripeConfigured, getStripeWebhookSecret } from "@/lib/billing-settings";
+import { stripeWebhookUrl } from "@/lib/app-url";
 import { expirePastDueLicenses } from "@/lib/stripe-billing";
 import { syncLicenseToPanel } from "@/lib/panel-sync";
 import { extendLicense, reactivateLicense } from "@/lib/admin-license";
@@ -44,13 +45,13 @@ export async function GET() {
           plan: { slug: "trial" },
         },
       }),
-      Promise.resolve(Boolean(process.env.STRIPE_WEBHOOK_SECRET?.trim())),
+      Promise.resolve(Boolean(getStripeWebhookSecret())),
     ]);
 
   return NextResponse.json({
     stripeConfigured: isStripeConfigured(),
     webhookConfigured,
-    webhookUrl: "https://nexlify.live/api/stripe/webhook",
+    webhookUrl: stripeWebhookUrl(),
     summary: {
       subscriptions: subscriptions.length,
       pastDue,

@@ -11,7 +11,6 @@ import {
   HeartPulse,
   KeyRound,
   Mail,
-  Megaphone,
   Package,
   Radio,
   Receipt,
@@ -35,7 +34,6 @@ import { AdminDeploy } from "@/components/AdminDeploy";
 import { AdminHealth } from "@/components/AdminHealth";
 import { AdminSiteSettings } from "@/components/AdminSiteSettings";
 import { AdminAuditLog } from "@/components/AdminAuditLog";
-import { AdminCoupons } from "@/components/AdminCoupons";
 import { AdminContent } from "@/components/AdminContent";
 import { AdminRemoteUpdate } from "@/components/AdminRemoteUpdate";
 import { AdminCategories } from "@/components/AdminCategories";
@@ -60,10 +58,9 @@ const NAV_GROUPS = [
     label: "Commerce",
     items: [
       { id: "licenses", label: "Licenses", icon: KeyRound },
-      { id: "plans", label: "Plans & Stripe", icon: CreditCard },
+      { id: "plans", label: "Plans & checkout", icon: CreditCard },
       { id: "billing", label: "Billing", icon: Receipt },
       { id: "orders", label: "Orders", icon: Package },
-      { id: "coupons", label: "Coupons", icon: Megaphone },
     ],
   },
   {
@@ -86,7 +83,7 @@ const NAV_GROUPS = [
   {
     label: "Operations",
     items: [
-      { id: "categories", label: "Categories", icon: Folder },
+      { id: "categories", label: "Panel operator tooling", icon: Folder },
       { id: "unlock-ip", label: "Unlock IP", icon: Unlock },
       { id: "deploy", label: "Deploy", icon: Upload },
       { id: "remote", label: "Remote Update", icon: Radio },
@@ -187,7 +184,6 @@ export function AdminDashboard() {
         {tab === "billing" && <AdminBilling />}
         {tab === "licenses" && <AdminPanel />}
         {tab === "orders" && <AdminOrders />}
-        {tab === "coupons" && <AdminCoupons />}
         {tab === "users" && <AdminUsers />}
         {tab === "tickets" && <AdminTickets />}
         {tab === "newsletter" && <AdminNewsletter />}

@@ -169,9 +169,9 @@ export function AdminStats() {
             hint={`${stats.sales.completedPaidOrders} completed paid orders`}
           />
           <StatCard
-            label="billing sales"
-            value={stats.sales.byChannel.billing}
-            hint={`Stripe ${stats.sales.byChannel.stripe} · Manual ${stats.sales.byChannel.manual}`}
+            label="Stripe sales"
+            value={stats.sales.byChannel.stripe}
+            hint={`PayPal ${stats.sales.byChannel.paypal} · Complimentary ${stats.sales.byChannel.complimentary} · Manual ${stats.sales.byChannel.manual}`}
           />
         </div>
 
@@ -196,32 +196,6 @@ export function AdminStats() {
           </div>
         )}
       </div>
-
-      {stats.coupons.length > 0 && (
-        <div>
-          <h2 className="font-display text-xl font-semibold text-white">Coupon usage</h2>
-          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-800">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-900/80 text-[var(--muted)]">
-                <tr>
-                  <th className="px-4 py-3">Code</th>
-                  <th className="px-4 py-3">Uses</th>
-                  <th className="px-4 py-3">Revenue</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {stats.coupons.map((c) => (
-                  <tr key={c.code}>
-                    <td className="px-4 py-3 font-mono text-cyan-300">{c.code}</td>
-                    <td className="px-4 py-3 text-slate-300">{c.uses}</td>
-                    <td className="px-4 py-3 text-slate-300">{formatMoney(c.revenueCents)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       <div className="grid gap-8 lg:grid-cols-2">
         <div>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FREE_PERIOD_END_LABEL } from "@/lib/marketing-coupon";
+import { pluginPricingBlurb } from "@/lib/marketing-copy";
 
 const ADDONS = [
   { name: "Media pack", desc: "Plex, Emby, Jellyfin, YouTube integrations" },
@@ -14,8 +14,7 @@ export function PluginPricingSection() {
         <h2 className="font-display text-2xl font-bold text-white">Plugins included free</h2>
         <p className="mx-auto mt-3 max-w-xl text-sm text-[var(--muted)]">
           Every media and music integration is included with your Nexlify License at no extra cost —
-          free until <strong className="text-amber-300">{FREE_PERIOD_END_LABEL}</strong>, then included
-          in the £50/month plan.
+          {pluginPricingBlurb()}.
         </p>
         <div className="mt-10 grid gap-4 text-left md:grid-cols-3">
           {ADDONS.map((addon) => (

@@ -13,7 +13,6 @@ type PlanRow = {
   maxServers: number;
   stripePriceId: string | null;
   stripeProductId: string | null;
-  whmcsProductId: number | null;
   badge: string | null;
   active: boolean;
   sortOrder: number;
@@ -61,7 +60,6 @@ export function AdminPlans() {
         maxServers: plan.maxServers,
         stripePriceId: plan.stripePriceId || null,
         stripeProductId: plan.stripeProductId || null,
-        whmcsProductId: plan.whmcsProductId,
         badge: plan.badge || null,
         active: plan.active,
         sortOrder: plan.sortOrder,
@@ -78,23 +76,6 @@ export function AdminPlans() {
     setTimeout(() => setSavedId(null), 2000);
   }
 
-  async function syncStripe(planId: string) {
-    setBusyId(planId);
-    setError(null);
-    const res = await fetch("/api/admin/plans", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "syncStripe", planId }),
-    });
-    const data = await res.json();
-    setBusyId(null);
-    if (!res.ok) {
-      setError(data.error ?? "Stripe sync failed");
-      return;
-    }
-    setPlans((prev) => prev.map((p) => (p.id === planId ? { ...p, ...data.plan } : p)));
-  }
-
   function updatePlan(id: string, patch: Partial<PlanRow>) {
     setPlans((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
   }
@@ -107,9 +88,9 @@ export function AdminPlans() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-display text-xl font-semibold text-white">Plans & Stripe</h2>
+          <h2 className="font-display text-xl font-semibold text-white">Plans & checkout</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Set pricing and link each plan to a Stripe Price ID used at checkout.
+            Set GBP pricing. Checkout builds Stripe prices dynamically per currency (GBP/USD).
           </p>
         </div>
         <span
@@ -119,7 +100,7 @@ export function AdminPlans() {
               : "bg-amber-500/15 text-amber-300"
           }`}
         >
-          Stripe {stripeConfigured ? "configured" : "not configured — add STRIPE_SECRET_KEY to .env"}
+          Stripe {stripeConfigured ? "configured" : "not configured — add keys in Admin → Marketing"}
         </span>
       </div>
 
@@ -193,26 +174,9 @@ export function AdminPlans() {
               </label>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-xs text-slate-400">
-                Stripe Price ID
-                <input
-                  value={plan.stripePriceId ?? ""}
-                  onChange={(e) => updatePlan(plan.id, { stripePriceId: e.target.value || null })}
-                  placeholder="price_…"
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-white"
-                />
-              </label>
-              <label className="block text-xs text-slate-400">
-                Stripe Product ID
-                <input
-                  value={plan.stripeProductId ?? ""}
-                  onChange={(e) => updatePlan(plan.id, { stripeProductId: e.target.value || null })}
-                  placeholder="prod_…"
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-white"
-                />
-              </label>
-            </div>
+            <p className="text-xs text-slate-500">
+              Stripe price/product IDs are optional legacy fields — checkout uses dynamic price_data.
+            </p>
 
             <div className="flex flex-wrap gap-2">
               <button
@@ -222,14 +186,6 @@ export function AdminPlans() {
                 className="rounded-full bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
               >
                 {busyId === plan.id ? "Saving…" : savedId === plan.id ? "Saved" : "Save plan"}
-              </button>
-              <button
-                type="button"
-                disabled={!stripeConfigured || busyId === plan.id}
-                onClick={() => syncStripe(plan.id)}
-                className="rounded-full border border-cyan-500/40 px-4 py-2 text-sm text-cyan-300 hover:bg-cyan-500/10 disabled:opacity-50"
-              >
-                Create monthly Stripe price
               </button>
             </div>
           </div>

@@ -9,7 +9,7 @@ const post = getBlogPost(SLUG)!;
 export const metadata = blogPostMetadata(post);
 
 const ROWS = [
-  ["native billing", "Native — auto keys, renewals, suspend", "Third-party scripts / manual"],
+  ["Stripe & PayPal checkout", "Built-in — auto keys, renewals, suspend", "Third-party scripts / manual"],
   ["Anti-Freeze playback", "Included", "Rare on forks"],
   ["Security (2FA, leak audit, geo-block)", "Built-in", "Varies / partial"],
   ["XUI.one migration", "Preview import built-in", "N/A"],
@@ -37,7 +37,7 @@ export default function XuiOneVsNexlifyFullComparisonPage() {
               risk, and unmaintained forks. Nexlify is the modern{" "}
               <strong className="text-slate-200">IPTV management software</strong> alternative — a maintained{" "}
               <strong className="text-slate-200">IPTV reseller panel</strong> with native{" "}
-              <strong className="text-slate-200">native billing</strong> automation.
+              <strong className="text-slate-200">Stripe & PayPal checkout</strong> automation.
             </p>
           ),
         },

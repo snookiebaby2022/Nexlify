@@ -1,26 +1,28 @@
 import Stripe from "stripe";
+import { getStripeSecretKey, isStripeConfigured as billingStripeConfigured } from "@/lib/billing-settings";
+
+export { isStripeConfigured } from "@/lib/billing-settings";
+export { getAppUrl } from "@/lib/app-url";
 
 let stripeClient: Stripe | null = null;
+let stripeClientKey: string | null = null;
 
-export function isStripeConfigured(): boolean {
-  return Boolean(process.env.STRIPE_SECRET_KEY?.trim());
+export function resetStripeClient(): void {
+  stripeClient = null;
+  stripeClientKey = null;
 }
 
 export function getStripe(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY?.trim();
+  const key = getStripeSecretKey();
   if (!key) {
-    throw new Error("STRIPE_SECRET_KEY is not configured");
+    throw new Error("Stripe is not configured — add keys in Admin → Marketing → Checkout payments");
   }
-  if (!stripeClient) {
+  if (!billingStripeConfigured()) {
+    throw new Error("Stripe secret key is invalid — must start with sk_");
+  }
+  if (!stripeClient || stripeClientKey !== key) {
     stripeClient = new Stripe(key);
+    stripeClientKey = key;
   }
   return stripeClient;
-}
-
-export function getAppUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_WEBSITE_URL?.trim() ||
-    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
-    "https://nexlify.live"
-  );
 }

@@ -5,7 +5,7 @@ export function PricingJsonLd() {
     <SoftwareProductJsonLd
       path="/pricing"
       name="Nexlify IPTV Panel License"
-      description="Compare Nexlify IPTV reseller panel pricing vs XUI.one and 1-stream. native billing and IPTV management software from £50/mo."
+      description="Compare Nexlify IPTV reseller panel pricing vs XUI.one and 1-stream. Stripe & PayPal checkout and IPTV management software from £50/mo."
       includeProduct
     />
   );

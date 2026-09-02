@@ -9,7 +9,7 @@ const post = getBlogPost(SLUG)!;
 export const metadata = blogPostMetadata(post);
 
 const FEATURES = [
-  { n: 1, title: "native billing", desc: "Auto-provision, renew, suspend, and revoke license keys on payment." },
+  { n: 1, title: "Stripe & PayPal checkout", desc: "Auto-provision, renew, suspend, and revoke license keys on payment." },
   { n: 2, title: "Anti-Freeze playback", desc: "Reduce visible buffering on residential and mobile lines." },
   { n: 3, title: "Fast zapping", desc: "Sub-second channel changes keep subscribers happy." },
   { n: 4, title: "Reseller credits & hierarchy", desc: "Sub-resellers, commissions, and white-label groups." },

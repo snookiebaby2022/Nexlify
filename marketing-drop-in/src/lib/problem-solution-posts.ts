@@ -173,7 +173,7 @@ export const PROBLEM_SOLUTION_POSTS: ProblemSolutionPost[] = [
       "IPTV reseller panel credits, hierarchy, and white-label gaps — why legacy panels fail growing operators.",
     seoTitle: "IPTV Reseller Credits & Hierarchy Fix | Nexlify",
     seoDescription:
-      "Fix broken IPTV reseller panel credits and hierarchy. Nexlify IPTV management software with white-label, commissions, and native billing billing.",
+      "Fix broken IPTV reseller panel credits and hierarchy. Nexlify IPTV management software with white-label, commissions, and Stripe & PayPal checkout.",
     keywords: ["iptv reseller panel credits", "reseller hierarchy", "white label iptv panel"],
     datePublished: "2026-07-07",
     sitemapPriority: 0.75,
@@ -210,7 +210,7 @@ export const PROBLEM_SOLUTION_POSTS: ProblemSolutionPost[] = [
       "Migrate from XUI.one or Xtream UI without downtime — why migration hurts and how Nexlify’s preview import fixes it.",
     seoTitle: "Migrate XUI.one / Xtream UI Without Downtime | Nexlify",
     seoDescription:
-      "Switch IPTV panel without downtime. Migrate from XUI.one and Xtream UI with Nexlify IPTV reseller panel — preview import, native billing, IPTV management software.",
+      "Switch IPTV panel without downtime. Migrate from XUI.one and Xtream UI with Nexlify IPTV reseller panel — preview import, Stripe & PayPal checkout, IPTV management software.",
     keywords: ["migrate from xui.one", "xtream ui migration", "switch iptv panel without downtime"],
     datePublished: "2026-07-08",
     sitemapPriority: 0.79,
@@ -247,7 +247,7 @@ export const PROBLEM_SOLUTION_POSTS: ProblemSolutionPost[] = [
       "IPTV panel support delays and abandoned forks — why operators switch to a maintained IPTV management software vendor.",
     seoTitle: "IPTV Panel Support & Updates — Best Supported Panel | Nexlify",
     seoDescription:
-      "Best supported IPTV reseller panel with tickets, docs, and updates. Nexlify IPTV management software with native billing and operator guides.",
+      "Best supported IPTV reseller panel with tickets, docs, and updates. Nexlify IPTV management software with Stripe & PayPal checkout and operator guides.",
     keywords: ["iptv panel support", "xtream ui updates", "best supported iptv panel"],
     datePublished: "2026-07-09",
     sitemapPriority: 0.73,
@@ -359,7 +359,7 @@ export const PROBLEM_SOLUTION_POSTS: ProblemSolutionPost[] = [
       "Modern IPTV panel UI vs legacy dashboards — why operators upgrade to Nexlify’s clean reseller interface.",
     seoTitle: "Modern IPTV Panel UI — Easy Reseller Dashboard | Nexlify",
     seoDescription:
-      "Modern IPTV panel with easy reseller dashboard. Nexlify IPTV management software — clean UI, mobile-friendly, native billing included.",
+      "Modern IPTV panel with easy reseller dashboard. Nexlify IPTV management software — clean UI, mobile-friendly, Stripe & PayPal checkout included.",
     keywords: ["modern iptv panel", "easy to use reseller dashboard", "best ui iptv panel"],
     datePublished: "2026-07-12",
     sitemapPriority: 0.74,

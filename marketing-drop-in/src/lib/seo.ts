@@ -7,7 +7,7 @@ import { coreKeywordDescription, withCoreKeywords } from "@/lib/seo-keywords";
 import { site } from "@/lib/site";
 
 export const DEFAULT_DESCRIPTION = coreKeywordDescription(
-  "Nexlify IPTV reseller panel and IPTV management software for worldwide operators — native billing, Xtream-compatible stack, 7-day trial, and one-click VPS install.",
+  "Nexlify IPTV reseller panel and IPTV management software for worldwide operators — Stripe & PayPal checkout, Xtream-compatible stack, 7-day trial, and one-click VPS install.",
 );
 
 export const DEFAULT_KEYWORDS = withCoreKeywords([

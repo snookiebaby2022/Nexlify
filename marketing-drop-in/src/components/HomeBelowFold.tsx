@@ -32,12 +32,14 @@ type HomeBelowFoldProps = {
   plans: PlanView[];
   loggedIn: boolean;
   stripeEnabled: boolean;
+  paypalEnabled?: boolean;
 };
 
 export function HomePricingSections({
   plans,
   loggedIn,
   stripeEnabled,
+  paypalEnabled = false,
 }: HomeBelowFoldProps) {
   return (
     <>
@@ -45,6 +47,7 @@ export function HomePricingSections({
         plans={plans}
         loggedIn={loggedIn}
         stripeEnabled={stripeEnabled}
+        paypalEnabled={paypalEnabled}
       />
       <PluginPricingSection />
     </>

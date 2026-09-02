@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
-import { getAppUrl, getStripe, isStripeConfigured } from "@/lib/stripe";
+import { getAppUrl } from "@/lib/app-url";
+import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 
 /** Stripe Customer Portal — update card / cancel subscription. */

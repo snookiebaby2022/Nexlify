@@ -33,7 +33,7 @@ export default function IptvManagementSoftwareBuyersGuidePage() {
           title: "Must-have capabilities",
           body: (
             <ul className="list-disc space-y-2 pl-5">
-              <li>Native native billing (create / renew / suspend / revoke)</li>
+              <li>Stripe & PayPal checkout included (create / renew / suspend / revoke)</li>
               <li>Sub-reseller credits and commission reporting</li>
               <li>Encrypted license keys with server binding</li>
               <li>Panel migration with preview import</li>
