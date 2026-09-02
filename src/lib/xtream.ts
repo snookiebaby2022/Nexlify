@@ -37,6 +37,7 @@ import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-or
 import { userAgentUsesStandardIptvPorts } from "./live-http-range";
 import { preferLiveOutputFormats, resolveClientPlaybackProfile } from "./client-playback-profiles";
 import { mapXtreamLiveItem, mapXtreamSeriesItem, mapXtreamVodItem } from "./xtream-catalog-items";
+import { cacheGetOrSet } from "./cache";
 
 type RequestHeaders = { get(name: string): string | null };
 
@@ -89,6 +90,84 @@ export function websiteBaseUrl(panelBaseUrl?: string): string {
   return `http://127.0.0.1:${resolveWebsiteHttpPort()}`;
 }
 
+type XtreamAccountShell = {
+  panelTimezone: string;
+  timeFormat: "12" | "24";
+  abrAutoSwitch: boolean;
+  streamHost: string;
+  httpPort: string;
+  httpsPort: string;
+  useHttps: boolean;
+  formats: string[];
+  clock: string;
+  datetimeFormat: string;
+  websiteOrigin: string;
+  offlineImageUrl: string;
+};
+
+async function loadXtreamAccountShell(
+  panelBaseUrl: string,
+  userAgent?: string | null
+): Promise<XtreamAccountShell> {
+  const uaKey = (userAgent ?? "").slice(0, 64);
+  return cacheGetOrSet(`xtream:acct:shell:${panelBaseUrl}:${uaKey}`, 60, async () => {
+    const streams = await getSettingGroup("streams");
+    const general = await getSettingGroup("general");
+    const panelTimezone = String(general.timezone || "Europe/London");
+    const timeFormat = normalizeTimeFormat(general.timeFormat);
+    const abrAutoSwitch = streams.abrAutoSwitch === true;
+    const panelOrigin = pickPublicOrigin(
+      panelBaseUrl,
+      process.env.NEXT_PUBLIC_WEBSITE_URL || process.env.NEXT_PUBLIC_SERVER_URL
+    ).replace(/\/+$/, "");
+    let streamHost: string;
+    try {
+      const u = new URL(panelOrigin.includes("://") ? panelOrigin : `http://${panelOrigin}`);
+      streamHost = u.hostname;
+    } catch {
+      streamHost = panelOrigin.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+    }
+    const standardPorts = userAgentUsesStandardIptvPorts(userAgent);
+    const useHttps = standardPorts ? false : panelOrigin.startsWith("https");
+    const publicPort = portFromPanelBaseUrl(panelOrigin);
+    const serverSettings = await getPanelServerSettings();
+    const streamHttpsPort = serverSettings.streamHttpsPort || resolveStreamHttpsPort();
+    const httpPort = standardPorts
+      ? "80"
+      : useHttps
+        ? String(streamHttpsPort)
+        : String(resolveAdvertisedStreamHttpPort(publicPort));
+    const httpsPort = standardPorts ? "80" : String(streamHttpsPort);
+    const formats = preferLiveOutputFormats(
+      xtreamOutputFormats("hls,m3u8,ts,rtmp"),
+      resolveClientPlaybackProfile(userAgent)
+    );
+    const clock = xtreamClockNow(panelTimezone, timeFormat);
+    const datetimeFormat = timeFormat === "12" ? "Y-m-d h:i:s A" : "Y-m-d H:i:s";
+    const websiteOrigin = websiteBaseUrl(panelOrigin);
+    const playerSettings = await getSettingGroup("player");
+    const offlineImageUrl = resolveOfflineStreamImageUrl({
+      panelOrigin: websiteOrigin,
+      customUrl: String(playerSettings.offlineStreamImageUrl ?? ""),
+      templateId: String(playerSettings.offlineStreamImageTemplate ?? "offline"),
+    });
+    return {
+      panelTimezone,
+      timeFormat,
+      abrAutoSwitch,
+      streamHost,
+      httpPort,
+      httpsPort,
+      useHttps,
+      formats,
+      clock,
+      datetimeFormat,
+      websiteOrigin,
+      offlineImageUrl,
+    };
+  });
+}
+
 export async function xtreamUserInfo(
   line: LineWithBouquets,
   panelBaseUrl: string,
@@ -98,56 +177,15 @@ export async function xtreamUserInfo(
   const { countLineSessions } = await import("@/lib/connections");
   const activeCons = playable ? await countLineSessions(line.id) : 0;
   const atCapacity = playable && line.maxConnections > 0 && activeCons >= line.maxConnections;
-  const streams = await getSettingGroup("streams");
-  const general = await getSettingGroup("general");
-  const panelTimezone = String(general.timezone || "Europe/London");
-  const timeFormat = normalizeTimeFormat(general.timeFormat);
-  const abrAutoSwitch = streams.abrAutoSwitch === true;
-  const panelOrigin = pickPublicOrigin(
-    panelBaseUrl,
-    process.env.NEXT_PUBLIC_WEBSITE_URL || process.env.NEXT_PUBLIC_SERVER_URL
-  ).replace(/\/+$/, "");
-  let streamHost: string;
-  try {
-    const u = new URL(panelOrigin.includes("://") ? panelOrigin : `http://${panelOrigin}`);
-    streamHost = u.hostname;
-  } catch {
-    streamHost = panelOrigin.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
-  }
-  const standardPorts = userAgentUsesStandardIptvPorts(userAgent);
-  const useHttps = standardPorts ? false : panelOrigin.startsWith("https");
-  const publicPort = portFromPanelBaseUrl(panelOrigin);
-  const serverSettings = await getPanelServerSettings();
-  const streamHttpsPort = serverSettings.streamHttpsPort || resolveStreamHttpsPort();
-  // Smarters/Nexus follow server_info.port for every API call after login. Never redirect
-  // HTTPS :443 clients to :8080 — player_api is on 443 and many hosts block 8080 externally.
-  // LG/webOS Smarters Pro fails Cloudflare HTTP/2 HTTPS ("Authorization failed at host").
-  const httpPort = standardPorts
-    ? "80"
-    : useHttps
-      ? String(streamHttpsPort)
-      : String(resolveAdvertisedStreamHttpPort(publicPort));
-  const httpsPort = standardPorts ? "80" : String(streamHttpsPort);
-  const formats = preferLiveOutputFormats(
-    xtreamOutputFormats(line.allowedOutput),
-    resolveClientPlaybackProfile(userAgent)
-  );
-  const clock = xtreamClockNow(panelTimezone, timeFormat);
-  const datetimeFormat = timeFormat === "12" ? "Y-m-d h:i:s A" : "Y-m-d H:i:s";
-  const websiteOrigin = websiteBaseUrl(panelOrigin);
-  const epgUrl = `${websiteOrigin}/xmltv.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`;
-  const playerSettings = await getSettingGroup("player");
-  const offlineImageUrl = resolveOfflineStreamImageUrl({
-    panelOrigin: websiteOrigin,
-    customUrl: String(playerSettings.offlineStreamImageUrl ?? ""),
-    templateId: String(playerSettings.offlineStreamImageTemplate ?? "offline"),
-  });
+  const shell = await loadXtreamAccountShell(panelBaseUrl, userAgent);
+  const formats = preferLiveOutputFormats(xtreamOutputFormats(line.allowedOutput), resolveClientPlaybackProfile(userAgent));
+  const epgUrl = `${shell.websiteOrigin}/xmltv.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`;
   return {
     user_info: {
       username: line.username,
       password: line.password,
       epg_url: epgUrl,
-      offline_image_url: offlineImageUrl,
+      offline_image_url: shell.offlineImageUrl,
       message: !playable
         ? "Account inactive or expired"
         : atCapacity
@@ -164,23 +202,23 @@ export async function xtreamUserInfo(
       allowed_outputs: formats,
     },
     server_info: {
-      url: streamHost,
-      port: httpPort,
-      https_port: httpsPort,
-      server_protocol: useHttps ? "https" : "http",
+      url: shell.streamHost,
+      port: shell.httpPort,
+      https_port: shell.httpsPort,
+      server_protocol: shell.useHttps ? "https" : "http",
       rtmp_port: "0",
-      timezone: panelTimezone,
-      time_format: timeFormat,
+      timezone: shell.panelTimezone,
+      time_format: shell.timeFormat,
       date_format: "Y-m-d",
-      datetime_format: datetimeFormat,
+      datetime_format: shell.datetimeFormat,
       timestamp_now: Math.floor(Date.now() / 1000),
-      time_now: clock,
-      time: clock,
+      time_now: shell.clock,
+      time: shell.clock,
       allowed_output_formats: formats,
-      abr_auto_switch: abrAutoSwitch ? 1 : 0,
-      abr_hint: abrAutoSwitch ? "client_may_switch_variants" : "",
+      abr_auto_switch: shell.abrAutoSwitch ? 1 : 0,
+      abr_hint: shell.abrAutoSwitch ? "client_may_switch_variants" : "",
       epg_url: epgUrl,
-      offline_image_url: offlineImageUrl,
+      offline_image_url: shell.offlineImageUrl,
     },
   };
 }

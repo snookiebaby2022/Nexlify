@@ -19,5 +19,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Line unavailable" }, { status: 403 });
   }
 
-  return NextResponse.json({ username: line.username, password: line.password });
+  return NextResponse.json(
+    { username: line.username, password: line.password },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }

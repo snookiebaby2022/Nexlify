@@ -41,18 +41,25 @@ async function serveXtreamCatalogInline(
   line: LineWithBouquets,
   req: Request,
   categoryId?: string | null,
+  envelope = false,
 ): Promise<NextResponse> {
   if (kind === "live") {
-    return iptvJson(await xtreamLiveStreams(line, "", categoryId), {
+    const data = await xtreamLiveStreams(line, "", categoryId);
+    return iptvJson(envelope ? { success: true, data } : data, {
+      headers: { "Cache-Control": "private, max-age=60" },
       compressFor: req,
     });
   }
   if (kind === "vod") {
-    return iptvJson(await xtreamVodStreams(line, "", categoryId), {
+    const data = await xtreamVodStreams(line, "", categoryId);
+    return iptvJson(envelope ? { success: true, data } : data, {
+      headers: { "Cache-Control": "private, max-age=60" },
       compressFor: req,
     });
   }
-  return iptvJson(await xtreamSeriesForLine(line, categoryId), {
+  const data = await xtreamSeriesForLine(line, categoryId);
+  return iptvJson(envelope ? { success: true, data } : data, {
+    headers: { "Cache-Control": "private, max-age=60" },
     compressFor: req,
   });
 }
@@ -175,7 +182,9 @@ export async function serveXtreamCatalogJson(
   req: Request,
   categoryId?: string | null,
   onFirstLiveIds?: (ids: string[]) => void,
+  envelope = false,
 ): Promise<NextResponse> {
+  if (envelope) return serveXtreamCatalogInline(kind, line, req, categoryId, true);
   const excludeDisabled = await excludeDisabledFromExport();
   const filter = await resolveCategoryFilter(kind, categoryId);
 

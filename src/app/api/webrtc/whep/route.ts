@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/auth";
+import { PanelRole } from "@prisma/client";
 import { getClientIp } from "@/lib/client-ip";
 import { getLineForPlaybackAuth, resolvePlaybackUrlForLine } from "@/lib/line-playback";
 import { lineIsPlayable } from "@/lib/lines";
@@ -122,10 +124,32 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+  const session = await requireSession([PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
+  if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
   const body = await req.json().catch(() => ({}));
   const sessionUrl = String(body.sessionUrl ?? "").trim();
   if (!sessionUrl) {
     return NextResponse.json({ error: "sessionUrl required" }, { status: 400 });
+  }
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(sessionUrl);
+  } catch {
+    return NextResponse.json({ error: "Invalid sessionUrl" }, { status: 400 });
+  }
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    return NextResponse.json({ error: "Invalid sessionUrl" }, { status: 400 });
+  }
+  const settings = await getWebRtcSettings();
+  const configuredOrigin = settings.gatewayBaseUrl.trim()
+    ? new URL(settings.gatewayBaseUrl).origin
+    : "";
+  const defaultOrigin =
+    (parsedUrl.hostname === "localhost" || parsedUrl.hostname === "127.0.0.1") &&
+    Number(parsedUrl.port || (parsedUrl.protocol === "https:" ? 443 : 80)) === settings.webrtcPort;
+  if ((configuredOrigin && parsedUrl.origin !== configuredOrigin) || (!configuredOrigin && !defaultOrigin)) {
+    return NextResponse.json({ error: "Session URL is not an allowed WHEP gateway" }, { status: 400 });
   }
   await teardownWhepSession(sessionUrl);
   return NextResponse.json({ ok: true });

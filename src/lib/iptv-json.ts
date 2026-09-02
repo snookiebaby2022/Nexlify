@@ -31,7 +31,7 @@ export function iptvGzipFileResponse(
   opts?: { asGzipFile?: boolean; forceGzip?: boolean }
 ): NextResponse {
   const headers = new Headers();
-  headers.set("Cache-Control", "private, no-cache, no-store, must-revalidate");
+  headers.set("Cache-Control", "private, max-age=43200, must-revalidate");
   const sendGzip = opts?.forceGzip !== false && clientAcceptsGzip(compressFor);
   let nodeStream: Readable;
   if (opts?.asGzipFile) {
