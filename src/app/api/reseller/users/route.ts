@@ -7,6 +7,7 @@ import { canManageSubUsers, directSubUserWhere } from "@/lib/reseller-sub-users"
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
 function roleLabel(role: PanelRole) {
   if (role === PanelRole.SUB_RESELLER) return "sub-reseller";
   return "reseller";
@@ -56,6 +57,9 @@ export async function GET() {
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const denied = await denyUnlessResellerPermission(session, RESELLER_PERMS.USERS_VIEW);
+  if (denied) return denied;
+
   const rows = await prisma.panelUser.findMany({
     where: directSubUserWhere(session.id),
     include: {
@@ -79,6 +83,9 @@ export async function POST(req: NextRequest) {
   if (!session || !canManageSubUsers(session.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const createDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.USERS_CREATE);
+  if (createDenied) return createDenied;
 
   const parsed = await parseJsonBody(req);
 
@@ -201,6 +208,9 @@ export async function PATCH(req: NextRequest) {
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const editDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.USERS_EDIT);
+  if (editDenied) return editDenied;
+
   const parsed = await parseJsonBody(req);
 
   if (!parsed.ok) return parsed.response;
@@ -269,6 +279,9 @@ export async function DELETE(req: NextRequest) {
   try {
   const session = await requireSession([PanelRole.RESELLER, PanelRole.SUB_RESELLER]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const editDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.USERS_EDIT);
+  if (editDenied) return editDenied;
 
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });

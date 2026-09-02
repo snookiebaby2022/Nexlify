@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
 import { invalidateLineAuth, invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { PanelRole } from "@prisma/client";
-import { MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput, validateLinePasswordPolicy } from "@/lib/credential-generate";
+import { MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput, validateLineCredential, validateLinePasswordPolicy } from "@/lib/credential-generate";
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
 import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
 import { applyLineRenewDays, applyLineSetExpiry, applyLineUnlimited } from "@/lib/line-renew";
@@ -12,6 +12,8 @@ import { assertRoleMaySetUnlimited } from "@/lib/reseller-line-guards";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
+import { adminOrOwnerWhere, logAdminCredentialChange } from "@/lib/admin-access";
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
@@ -25,9 +27,11 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const viewDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.LINES_VIEW);
+  if (viewDenied) return viewDenied;
+
   const { id } = await ctx.params;
-  const where =
-    session.role === PanelRole.ADMIN ? { id } : { id, ownerId: session.id };
+  const where = adminOrOwnerWhere(session, id);
 
   const line = await prisma.line.findFirst({
     where,
@@ -55,16 +59,39 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const editDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.LINES_EDIT);
+  if (editDenied) return editDenied;
+
   const { id } = await ctx.params;
   const parsed = await parseJsonBody(req);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
-  const where =
-    session.role === PanelRole.ADMIN ? { id } : { id, ownerId: session.id };
+  const where = adminOrOwnerWhere(session, id);
 
   const existing = await prisma.line.findFirst({ where });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const isRenew =
+    body.unlimited === true ||
+    Boolean(body.expiresAt && String(body.expiresAt).trim()) ||
+    (body.days != null && Number(body.days) > 0);
+  if (isRenew) {
+    const renewDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.LINES_EXTEND);
+    if (renewDenied) return renewDenied;
+  }
+
+  if (session.role === PanelRole.ADMIN && body.username !== undefined) {
+    const nextUsername = sanitizeCredentialInput(String(body.username));
+    if (nextUsername && nextUsername !== existing.username) {
+      const userErr = validateLineCredential(nextUsername, "username");
+      if (userErr) return NextResponse.json({ error: userErr }, { status: 400 });
+      const taken = await prisma.line.findUnique({ where: { username: nextUsername } });
+      if (taken && taken.id !== existing.id) {
+        return NextResponse.json({ error: `Username "${nextUsername}" is already taken` }, { status: 400 });
+      }
+    }
+  }
 
   const nextPassword = body.password ? sanitizeCredentialInput(String(body.password)) : "";
   if (body.password) {
@@ -134,6 +161,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
         ? normalizeAllowedOutputInput(body.allowedOutput)
         : undefined,
   };
+
+  if (session.role === PanelRole.ADMIN && body.username !== undefined) {
+    const nextUsername = sanitizeCredentialInput(String(body.username));
+    if (nextUsername && nextUsername !== existing.username) {
+      data.username = nextUsername;
+    }
+  }
 
   if (body.packageId !== undefined) {
     const pid = body.packageId ? String(body.packageId).trim() : "";
@@ -293,7 +327,28 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   });
 
   void invalidateLineAuth(existing.username);
-  if (line.username !== existing.username) void invalidateLineAuth(line.username);
+  if (line.username !== existing.username) {
+    void invalidateLineAuth(line.username);
+    if (session.role === PanelRole.ADMIN) {
+      await logAdminCredentialChange({
+        userId: session.id,
+        entity: "line",
+        entityId: line.id,
+        field: "username",
+        meta: { from: existing.username, to: line.username },
+      });
+    }
+  }
+  if (nextPassword) {
+    if (session.role === PanelRole.ADMIN) {
+      await logAdminCredentialChange({
+        userId: session.id,
+        entity: "line",
+        entityId: line.id,
+        field: "password",
+      });
+    }
+  }
 
   if (body.bouquetIds && Array.isArray(body.bouquetIds)) {
     await prisma.lineBouquet.deleteMany({ where: { lineId: line.id } });
@@ -350,9 +405,11 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
   ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const deleteDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.LINES_DELETE);
+  if (deleteDenied) return deleteDenied;
+
   const { id } = await ctx.params;
-  const where =
-    session.role === PanelRole.ADMIN ? { id } : { id, ownerId: session.id };
+  const where = adminOrOwnerWhere(session, id);
 
   const existing = await prisma.line.findFirst({ where });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });

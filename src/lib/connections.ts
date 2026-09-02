@@ -7,6 +7,9 @@ import {
   setConnectionPlaybackOutput,
 } from "./connection-playback-output";
 import { clearLiveSession, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
+import { connectionViewerSessionKey, normalizeConnectionIp } from "./connection-address";
+
+export { connectionViewerSessionKey, normalizeConnectionIp } from "./connection-address";
 
 export const STALE_MS = 10 * 60 * 1000; // cron — MPEG-TS pipes often go minutes between panel pulses
 /** Live Connections UI + capacity. 45s was killing long MPEG-TS watches (no playlist heartbeat). */
@@ -25,14 +28,6 @@ function invalidateConnectionCaches(opts?: { lineId?: string; ownerId?: string |
 }
 /** After Kick, block reconnect / track refresh for this long (covers multi-worker via Redis). */
 export const KICK_DENY_TTL_SEC = 120;
-
-/** Normalize client IP for DB + Redis keys (empty/loopback → null in Postgres). */
-export function normalizeConnectionIp(ip?: string | null): string | null {
-  let raw = ip?.trim() ?? "";
-  if (raw.startsWith("::ffff:")) raw = raw.slice(7);
-  if (!raw || raw === "127.0.0.1" || raw === "::1") return null;
-  return raw;
-}
 
 /** RFC 5737 / deploy smoke-test IPs — must not consume real viewer connection slots. */
 export function isTestConnectionIp(ip?: string | null): boolean {
@@ -249,7 +244,75 @@ async function pruneTestConnectionRows(lineId: string) {
 }
 
 function sessionKey(lineId: string, streamId: string | null | undefined, ip?: string | null) {
-  return `${lineId}|${streamId ?? ""}|${normalizeConnectionIp(ip) ?? ""}`;
+  return connectionViewerSessionKey(lineId, streamId, ip);
+}
+
+function isAnonymousConnectionIp(ip?: string | null): boolean {
+  return normalizeConnectionIp(ip) === null;
+}
+
+function startedAtMs(d: Date | string): number {
+  const t = d instanceof Date ? d.getTime() : new Date(d).getTime();
+  return Number.isFinite(t) ? t : 0;
+}
+
+/** Collapse duplicate DB rows; retain the row with the newest heartbeat. */
+export function pickCanonicalLiveConnectionRows<
+  T extends {
+    lineId: string;
+    streamId: string | null;
+    ip: string | null;
+    startedAt: Date;
+    lastSeenAt: Date;
+  },
+>(rows: T[]): T[] {
+  const byViewerKey = new Map<string, T>();
+  for (const row of rows) {
+    const key = sessionKey(row.lineId, row.streamId, row.ip);
+    const prev = byViewerKey.get(key);
+    if (!prev || startedAtMs(row.lastSeenAt) > startedAtMs(prev.lastSeenAt)) {
+      byViewerKey.set(key, row);
+    } else if (
+      startedAtMs(row.lastSeenAt) === startedAtMs(prev.lastSeenAt) &&
+      startedAtMs(row.startedAt) < startedAtMs(prev.startedAt)
+    ) {
+      byViewerKey.set(key, row);
+    }
+  }
+
+  const byLineStream = new Map<string, T[]>();
+  for (const row of byViewerKey.values()) {
+    const ls = `${row.lineId}|${row.streamId ?? ""}`;
+    const bucket = byLineStream.get(ls) ?? [];
+    bucket.push(row);
+    byLineStream.set(ls, bucket);
+  }
+
+  const out: T[] = [];
+  for (const group of byLineStream.values()) {
+    const real = group.filter((r) => !isAnonymousConnectionIp(r.ip));
+    const anon = group.filter((r) => isAnonymousConnectionIp(r.ip));
+    if (real.length === 0) {
+      if (anon.length) {
+        out.push(
+          anon.reduce((a, b) => (startedAtMs(a.startedAt) <= startedAtMs(b.startedAt) ? a : b))
+        );
+      }
+      continue;
+    }
+    const oldestAnonMs = anon.length
+      ? Math.min(...anon.map((r) => startedAtMs(r.startedAt)))
+      : null;
+    for (const r of real) {
+      if (oldestAnonMs != null && oldestAnonMs < startedAtMs(r.startedAt)) {
+        out.push({ ...r, startedAt: new Date(oldestAnonMs) });
+      } else {
+        out.push(r);
+      }
+    }
+  }
+
+  return out.sort((a, b) => startedAtMs(a.startedAt) - startedAtMs(b.startedAt));
 }
 
 /** One live row per line + stream + viewer IP (XCIPTV/HLS must not multiply sessions). */
@@ -266,8 +329,8 @@ async function dedupeLiveConnectionRows(
       ...(streamId ? { streamId } : {}),
       ...(clientIp !== undefined ? connectionIpPrismaFilter(clientIp) : {}),
     },
-    orderBy: { lastSeenAt: "desc" },
-    select: { id: true, streamId: true, ip: true, lastSeenAt: true },
+    orderBy: [{ lastSeenAt: "desc" }, { startedAt: "asc" }],
+    select: { id: true, streamId: true, ip: true, startedAt: true, lastSeenAt: true },
     take: 200,
   });
   const keepIds = new Set<string>();
@@ -563,12 +626,11 @@ export async function trackConnection(opts: {
   if (streamId) {
     const dupes = await prisma.liveConnection.findMany({
       where: { lineId: opts.lineId, streamId, ...connectionIpPrismaFilter(clientIp) },
-      orderBy: { lastSeenAt: "desc" },
+      orderBy: [{ lastSeenAt: "desc" }, { startedAt: "asc" }],
       select: { id: true },
     });
     if (dupes.length > 1) {
-      const keepId = existing?.id ?? dupes[0]!.id;
-      const dropIds = dupes.filter((d) => d.id !== keepId).map((d) => d.id);
+      const dropIds = dupes.slice(1).map((d) => d.id);
       if (dropIds.length) {
         await prisma.liveConnection.deleteMany({ where: { id: { in: dropIds } } });
       }
@@ -589,7 +651,7 @@ export async function trackConnection(opts: {
           { ip: "45.88.138.18" },
         ],
       },
-      orderBy: { lastSeenAt: "desc" },
+      orderBy: [{ startedAt: "asc" }, { lastSeenAt: "desc" }],
     });
     if (loose) {
       await prisma.liveConnection.updateMany({
@@ -784,15 +846,7 @@ export async function listLiveConnections(ownerId?: string, take = 5000) {
     take: Math.min(Math.max(1, take), 5000),
   });
   const live = rows.filter((row) => row.streamId && !isTestConnectionIp(row.ip));
-  const seen = new Set<string>();
-  const deduped: typeof live = [];
-  for (const row of live) {
-    const key = sessionKey(row.lineId, row.streamId, row.ip);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(row);
-  }
-  return deduped.slice(0, Math.min(Math.max(1, take), 5000));
+  return pickCanonicalLiveConnectionRows(live).slice(0, Math.min(Math.max(1, take), 5000));
 }
 
 export async function deleteActiveConnection(id: string, ownerId?: string) {

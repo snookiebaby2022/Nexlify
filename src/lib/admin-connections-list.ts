@@ -15,6 +15,7 @@ import { ownerScope } from "@/lib/owner-scope";
 
 export type AdminConnectionRow = {
   id: string;
+  lineId: string;
   ip: string | null;
   userAgent: string | null;
   startedAt: string;

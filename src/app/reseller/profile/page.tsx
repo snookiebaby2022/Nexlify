@@ -23,6 +23,10 @@ export default function ResellerProfilePage() {
   const [passwords, setPasswords] = useState({ currentPassword: "", newPassword: "" });
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  const [effectivePermissions, setEffectivePermissions] = useState<{
+    permissions: string[];
+    labels: Record<string, string>;
+  } | null>(null);
   const [panelUrl, setPanelUrl] = useState<{
     canonicalUrl: string | null;
     primaryDomain: string | null;
@@ -40,6 +44,7 @@ export default function ResellerProfilePage() {
         });
         const parsed = parseAvatarConfig(d.user.avatarConfig);
         if (parsed) setAvatarConfig(parsed);
+        if (d.effectivePermissions) setEffectivePermissions(d.effectivePermissions);
       });
   }
 
@@ -161,6 +166,28 @@ export default function ResellerProfilePage() {
           <p className="text-xs" style={{ color: "var(--muted)" }}>
             To change this domain, contact your provider (Admin → Resellers).
           </p>
+        </div>
+      )}
+      {effectivePermissions && effectivePermissions.permissions.length > 0 && (
+        <div
+          className="rounded-lg border p-4 text-sm space-y-3"
+          style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
+        >
+          <div className="font-medium">Your account capabilities</div>
+          <p style={{ color: "var(--muted)" }}>
+            Features enabled for your reseller group. Contact your provider to request changes.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {effectivePermissions.permissions.map((perm) => (
+              <span
+                key={perm}
+                className="text-xs px-2 py-1 rounded border"
+                style={{ borderColor: "var(--border)", color: "var(--accent)" }}
+              >
+                {effectivePermissions.labels[perm] ?? perm}
+              </span>
+            ))}
+          </div>
         </div>
       )}
       <form

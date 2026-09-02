@@ -24,6 +24,7 @@ import { listManageLinesPage } from "@/lib/manage-lines-list";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 5000;
 
@@ -37,6 +38,9 @@ export async function GET(req: NextRequest) {
     PanelRole.SUB_RESELLER,
   ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const viewDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.LINES_VIEW);
+  if (viewDenied) return viewDenied;
 
   const url = new URL(req.url);
   const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
@@ -82,6 +86,9 @@ export async function POST(req: NextRequest) {
   ]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  const createDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.LINES_CREATE);
+  if (createDenied) return createDenied;
+
   const parsed = await parseJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
@@ -91,13 +98,12 @@ export async function POST(req: NextRequest) {
     MIN_LINE_CREDENTIAL_LENGTH,
     Number(security.lineCredentialMinLength ?? MIN_LINE_CREDENTIAL_LENGTH) || MIN_LINE_CREDENTIAL_LENGTH
   );
-  const autoGen = security.autoGenerateLineCredentials === true;
 
   let username = sanitizeCredentialInput(String(body.username ?? ""));
   let password = sanitizeCredentialInput(String(body.password ?? ""));
-  // Never replace credentials the operator typed — only fill blanks when auto-generate is on.
-  if (!username && autoGen) username = generateLineUsername();
-  if (!password && autoGen) password = generateLinePassword();
+  // Fill blanks automatically; preserve operator-supplied credentials.
+  if (!username) username = generateLineUsername();
+  if (!password) password = generateLinePassword();
   if (!username || !password) {
     return NextResponse.json(
       { error: "Username and password are required (or enable auto-generate in Settings → Security)" },

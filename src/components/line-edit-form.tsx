@@ -123,6 +123,7 @@ export function LineEditForm({
   const [allowTrials, setAllowTrials] = useState(true);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [form, setForm] = useState({
+    username: "",
     password: "",
     maxConnections: 1 as number | "",
     extendDays: 0,
@@ -214,6 +215,7 @@ export function LineEditForm({
         const notes = splitLineNotes(row.notes, notesViewer);
         const unlimited = isUnlimitedLineExpiry(row.expiresAt);
         setForm({
+          username: row.username,
           password: row.password,
           maxConnections: row.maxConnections,
           extendDays: 0,
@@ -343,6 +345,10 @@ export function LineEditForm({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        username:
+          panel === "admin" && form.username.trim() && form.username !== line.username
+            ? sanitizeCredentialInput(form.username)
+            : undefined,
         password: form.password !== line.password ? sanitizeCredentialInput(form.password) : undefined,
         maxConnections: coerceMinInt(form.maxConnections, 1),
         days: unlimited || expiresAt ? undefined : form.extendDays > 0 ? form.extendDays : undefined,
@@ -554,9 +560,19 @@ export function LineEditForm({
           <div className="grid lg:grid-cols-2 gap-4 sm:gap-5">
             <Card title="Account">
               <FormField label="Username">
-                <div className="flex items-center gap-2">
-                  <CopyableCredential value={line.username} label="Username" />
-                </div>
+                {panel === "admin" ? (
+                  <input
+                    className={formInputClass}
+                    style={formInputStyle}
+                    value={form.username}
+                    onChange={(e) => setForm({ ...form, username: e.target.value })}
+                    autoComplete="off"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <CopyableCredential value={line.username} label="Username" />
+                  </div>
+                )}
               </FormField>
               <FormField label="Password">
                 <div className="flex gap-2">
