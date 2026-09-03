@@ -738,10 +738,18 @@ export async function startBackgroundPanelUpdate(
       let spawnFailed = false;
       child.on("error", () => { spawnFailed = true; });
 
-      // Give it a moment to see if spawn itself fails
-      await new Promise((r) => setTimeout(r, 200));
+      // Launcher can exit 127 in <1s (nounset / missing tsx). Do not commit to
+      // that PID — fall through to the next runner so 2.0.64 panels can still update.
+      const early = await new Promise<{ exited: boolean; code: number | null }>((resolve) => {
+        const timer = setTimeout(() => resolve({ exited: false, code: null }), 800);
+        child.once("exit", (code) => {
+          clearTimeout(timer);
+          resolve({ exited: true, code });
+        });
+      });
 
       if (spawnFailed || !child.pid) continue;
+      if (early.exited && early.code !== 0) continue;
 
       spawned = true;
       await writeFile(getUpdatePidPath(repoPath), String(child.pid), "utf8");

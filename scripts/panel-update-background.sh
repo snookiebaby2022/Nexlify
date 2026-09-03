@@ -57,37 +57,29 @@ cd "$ROOT"
 export PANEL_REPO_PATH="$ROOT"
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${ROOT}/node_modules/.bin:${PATH:-}"
 ERR_LOG="${ROOT}/.update-worker-err.log"
-
-if [ -f "${ROOT}/scripts/vps-git-auth.sh" ]; then
-  # shellcheck source=scripts/vps-git-auth.sh
-  . "${ROOT}/scripts/vps-git-auth.sh"
-  if [ -f "${ROOT}/scripts/ensure-fleet-deploy-key.sh" ]; then
-    bash "${ROOT}/scripts/ensure-fleet-deploy-key.sh" >>"$ERR_LOG" 2>&1 || true
-  fi
-  configure_nexlify_git_origin "$ROOT"
-  ensure_nexlify_git_ssh
-fi
+export ERR_LOG
 
 TS_SCRIPT="${ROOT}/scripts/panel-update-background.ts"
 
 if [ ! -f "${ROOT}/node_modules/tsx/dist/cli.mjs" ] && [ -f "${ROOT}/scripts/ensure-tsx.sh" ]; then
-  bash "${ROOT}/scripts/ensure-tsx.sh" >>"$ERR_LOG" 2>&1 || true
+  bash "${ROOT}/scripts/ensure-tsx.sh" >>"${ERR_LOG}" 2>&1 || true
 fi
 
 run_tsx() {
   local tsx_bin="${ROOT}/node_modules/.bin/tsx"
   local tsx_cli="${ROOT}/node_modules/tsx/dist/cli.mjs"
+  local log="${ERR_LOG:-${ROOT}/.update-worker-err.log}"
   if [ -x "$tsx_bin" ]; then
-    exec "$tsx_bin" "$TS_SCRIPT" 2>>"$ERR_LOG"
+    exec "$tsx_bin" "$TS_SCRIPT" 2>>"$log"
   fi
   if [ -f "$tsx_cli" ]; then
-    exec node "$tsx_cli" "$TS_SCRIPT" 2>>"$ERR_LOG"
+    exec node "$tsx_cli" "$TS_SCRIPT" 2>>"$log"
   fi
   if command -v tsx >/dev/null 2>&1; then
-    exec tsx "$TS_SCRIPT" 2>>"$ERR_LOG"
+    exec tsx "$TS_SCRIPT" 2>>"$log"
   fi
   if command -v npx >/dev/null 2>&1; then
-    exec npx --yes tsx "$TS_SCRIPT" 2>>"$ERR_LOG"
+    exec npx --yes tsx "$TS_SCRIPT" 2>>"$log"
   fi
   echo "panel-update-background.sh: tsx not available — run: cd $ROOT && bash scripts/ensure-tsx.sh" >&2
   exit 127
