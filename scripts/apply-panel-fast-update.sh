@@ -23,11 +23,23 @@ BUILD_SUCCEEDED=0
 UPDATE_TRAP_ACTIVE=0
 PANEL_RESTARTED=0
 
+sanitize_vendor_ip() {
+  printf '%s' "${1:-}" | tr -d '\r\n"'"'"'[:space:]'
+}
+
+is_gzip_file() {
+  local f="$1" magic
+  [ -s "$f" ] || return 1
+  magic="$(od -An -tx1 -N2 "$f" 2>/dev/null | tr -d ' \n')"
+  [ "$magic" = "1f8b" ]
+}
+
 # Cloudflare bot fight returns 403 to datacenter curl — fall back to origin IP + Host header.
 resolve_vendor_ip() {
+  local ip
   if [ -n "${PANEL_VENDOR_IP:-}" ]; then
-    echo "$PANEL_VENDOR_IP"
-    return 0
+    ip="$(sanitize_vendor_ip "$PANEL_VENDOR_IP")"
+    [ -n "$ip" ] && echo "$ip" && return 0
   fi
   if [ -f "$ROOT/.env" ]; then
     local ip
@@ -39,9 +51,11 @@ resolve_vendor_ip() {
   fi
   local origin="${PANEL_INSTALL_BASE}/panel-vendor-origin.env"
   if curl -fsSL -A "NexlifyPanelUpdater/1.0" "$origin" -o /tmp/nexlify-vendor-origin.env 2>/dev/null; then
+    sed -i 's/\r$//' /tmp/nexlify-vendor-origin.env 2>/dev/null || true
     # shellcheck disable=SC1091
     source /tmp/nexlify-vendor-origin.env 2>/dev/null || true
-    [ -n "${PANEL_VENDOR_IP:-}" ] && echo "$PANEL_VENDOR_IP" && return 0
+    ip="$(sanitize_vendor_ip "${PANEL_VENDOR_IP:-}")"
+    [ -n "$ip" ] && echo "$ip" && return 0
   fi
   return 1
 }
@@ -50,11 +64,14 @@ curl_vendor() {
   local url="$1" dest="$2"
   local ua="NexlifyPanelUpdater/1.0 (+https://nexlify.live)"
   if curl -fsSL -A "$ua" --retry 2 --retry-delay 2 --max-time 60 "$url" -o "$dest" 2>/dev/null; then
-    return 0
+    if [[ "$url" != *.tar.gz* ]] || is_gzip_file "$dest"; then
+      return 0
+    fi
+    echo "WARN: CDN returned a non-gzip body for $url — retry origin" >&2
   fi
   local ip host path
-  ip="$(resolve_vendor_ip 2>/dev/null || echo "85.17.162.54")"
-  host="${PANEL_VENDOR_HOST:-nexlify.live}"
+  ip="$(sanitize_vendor_ip "$(resolve_vendor_ip 2>/dev/null || echo "85.17.162.54")")"
+  host="$(sanitize_vendor_ip "${PANEL_VENDOR_HOST:-nexlify.live}")"
   path=""
   if [[ "$url" == https://${host}* ]]; then
     path="${url#https://${host}}"
@@ -84,7 +101,7 @@ curl_vendor() {
     /install/apply-prebuilt-update.sh) gh_path="scripts/apply-prebuilt-update.sh" ;;
     /install/scripts/*) gh_path="scripts/${path#/install/scripts/}" ;;
     /install/*) gh_path="marketing-drop-in/public/install/${path#/install/}" ;;
-    /downloads/nexlify-panel.tar.gz|/downloads/next-*.tar.gz)
+    /downloads/nexlify-panel.tar.gz*|/downloads/next-*.tar.gz*)
       echo "WARN: vendor archive failed — retry GitHub main tarball" >&2
       curl -fsSL -A "$ua" --max-time 180 -L "$gh_archive" -o "$dest"
       return $?
@@ -174,11 +191,12 @@ update_trap_exit() {
       echo "Update failed — rolling back if needed ..."
       if ! has_valid_next; then
         restore_next_backup || true
+        ensure_panel_running_after_update || true
       fi
     else
       echo "Update build OK but a later step failed — restarting panel ..."
+      ensure_panel_running_after_update || true
     fi
-    ensure_panel_running_after_update || true
   fi
   rm -f "$ROOT/.update-in-progress"
   return "$ec"
@@ -274,10 +292,17 @@ verify_downloaded_archive() {
     echo "ERROR: download too small (${size:-0} bytes) — likely a failed or cached response" >&2
     return 1
   fi
-  if tar -tzf "$archive" 2>/dev/null | grep -Eq '(^|/)package.json$'; then
+  if ! is_gzip_file "$archive"; then
+    echo "ERROR: download is not a gzip archive ($(file -b "$archive" 2>/dev/null || echo unknown))" >&2
+    return 1
+  fi
+  if tar -xOf "$archive" ./package.json >/dev/null 2>&1 \
+    || tar -xOf "$archive" package.json >/dev/null 2>&1 \
+    || tar -tzf "$archive" 2>/dev/null | grep -aEq '(^|/)package.json$'; then
     return 0
   fi
   echo "ERROR: invalid panel tarball (missing package.json) — aborting" >&2
+  file "$archive" >&2 || true
   return 1
 }
 

@@ -44,7 +44,8 @@ mkdir -p scripts
 BASE='${base}'
 BUST='${bust}'
 GH='https://raw.githubusercontent.com/snookiebaby2022/Nexlify/main'
-ORIGIN_IP='${(process.env.PANEL_VENDOR_IP || "85.17.162.54").replace(/'/g, "")}'
+ORIGIN_IP='${(process.env.PANEL_VENDOR_IP || "85.17.162.54").replace(/'/g, "").replace(/\r/g, "").trim()}'
+ORIGIN_IP="\${ORIGIN_IP//\$'\\r'/}"
 fetch() {
   local url="$1" dest="$2"
   if curl -fsSL "$url" -o "$dest.new"; then

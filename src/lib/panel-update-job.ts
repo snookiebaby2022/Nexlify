@@ -776,18 +776,26 @@ export async function startBackgroundPanelUpdate(
             }
             const versionDone = await promoteIfInstalledVersionSucceeded(repoPath, job);
             if (versionDone) return;
-            let errDetail = `Worker exited with code ${code} (signal: ${signal})`;
+            const failedStep = [...(job.steps ?? [])].reverse().find((s) => s && s.ok === false);
+            const stepHint = failedStep?.output
+              ? String(failedStep.output).trim().split("\n").slice(-6).join("\n")
+              : "";
+            let errDetail = stepHint
+              ? `${failedStep?.name || "update"} failed:\n${stepHint}`
+              : `Worker exited with code ${code} (signal: ${signal})`;
             try {
               const { readFileSync } = await import("fs");
               const errLog = readFileSync(errLogPath, "utf-8").trim();
-              if (errLog) errDetail += `\n${errLog.slice(-2000)}`;
+              if (errLog && !stepHint) errDetail += `\n${errLog.slice(-2000)}`;
             } catch {}
             await writeUpdateJob(repoPath, {
               ...job,
               status: "failed",
               currentStep: null,
               finishedAt: new Date().toISOString(),
-              message: `Update worker crashed: ${errDetail}. Try running manually: cd ${repoPath} && bash scripts/panel-update-background.sh`,
+              message: stepHint
+                ? errDetail
+                : `Update worker crashed: ${errDetail}. Try running manually: cd ${repoPath} && bash scripts/panel-update-background.sh`,
             });
           }
         } catch {}

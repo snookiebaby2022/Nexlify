@@ -23,11 +23,23 @@ BUILD_SUCCEEDED=0
 UPDATE_TRAP_ACTIVE=0
 PANEL_RESTARTED=0
 
+sanitize_vendor_ip() {
+  printf '%s' "${1:-}" | tr -d '\r\n"'"'"'[:space:]'
+}
+
+is_gzip_file() {
+  local f="$1" magic
+  [ -s "$f" ] || return 1
+  magic="$(od -An -tx1 -N2 "$f" 2>/dev/null | tr -d ' \n')"
+  [ "$magic" = "1f8b" ]
+}
+
 # Cloudflare bot fight returns 403 to datacenter curl — fall back to origin IP + Host header.
 resolve_vendor_ip() {
+  local ip
   if [ -n "${PANEL_VENDOR_IP:-}" ]; then
-    echo "$PANEL_VENDOR_IP"
-    return 0
+    ip="$(sanitize_vendor_ip "$PANEL_VENDOR_IP")"
+    [ -n "$ip" ] && echo "$ip" && return 0
   fi
   if [ -f "$ROOT/.env" ]; then
     local ip
@@ -39,9 +51,11 @@ resolve_vendor_ip() {
   fi
   local origin="${PANEL_INSTALL_BASE}/panel-vendor-origin.env"
   if curl -fsSL -A "NexlifyPanelUpdater/1.0" "$origin" -o /tmp/nexlify-vendor-origin.env 2>/dev/null; then
+    sed -i 's/\r$//' /tmp/nexlify-vendor-origin.env 2>/dev/null || true
     # shellcheck disable=SC1091
     source /tmp/nexlify-vendor-origin.env 2>/dev/null || true
-    [ -n "${PANEL_VENDOR_IP:-}" ] && echo "$PANEL_VENDOR_IP" && return 0
+    ip="$(sanitize_vendor_ip "${PANEL_VENDOR_IP:-}")"
+    [ -n "$ip" ] && echo "$ip" && return 0
   fi
   return 1
 }
@@ -50,11 +64,14 @@ curl_vendor() {
   local url="$1" dest="$2"
   local ua="NexlifyPanelUpdater/1.0 (+https://nexlify.live)"
   if curl -fsSL -A "$ua" --retry 2 --retry-delay 2 --max-time 60 "$url" -o "$dest" 2>/dev/null; then
-    return 0
+    if [[ "$url" != *.tar.gz* ]] || is_gzip_file "$dest"; then
+      return 0
+    fi
+    echo "WARN: CDN returned a non-gzip body for $url — retry origin" >&2
   fi
   local ip host path
-  ip="$(resolve_vendor_ip 2>/dev/null || echo "85.17.162.54")"
-  host="${PANEL_VENDOR_HOST:-nexlify.live}"
+  ip="$(sanitize_vendor_ip "$(resolve_vendor_ip 2>/dev/null || echo "85.17.162.54")")"
+  host="$(sanitize_vendor_ip "${PANEL_VENDOR_HOST:-nexlify.live}")"
   path=""
   if [[ "$url" == https://${host}* ]]; then
     path="${url#https://${host}}"
@@ -84,7 +101,7 @@ curl_vendor() {
     /install/apply-prebuilt-update.sh) gh_path="scripts/apply-prebuilt-update.sh" ;;
     /install/scripts/*) gh_path="scripts/${path#/install/scripts/}" ;;
     /install/*) gh_path="marketing-drop-in/public/install/${path#/install/}" ;;
-    /downloads/nexlify-panel.tar.gz|/downloads/next-*.tar.gz)
+    /downloads/nexlify-panel.tar.gz*|/downloads/next-*.tar.gz*)
       echo "WARN: vendor archive failed — retry GitHub main tarball" >&2
       curl -fsSL -A "$ua" --max-time 180 -L "$gh_archive" -o "$dest"
       return $?
@@ -146,6 +163,21 @@ ensure_panel_running_after_update() {
   fi
 }
 
+# Keep the background worker PID if panel-update-background.ts already wrote it.
+# `touch` alone was wiping the PID and made the cron watchdog think the worker was dead,
+# which painted a false "Last update failed" after a successful swap/restart.
+mark_update_in_progress() {
+  local marker="$ROOT/.update-in-progress"
+  if [ -s "$marker" ]; then
+    local existing
+    existing="$(tr -d '[:space:]' < "$marker" 2>/dev/null || true)"
+    if [ -n "$existing" ] && kill -0 "$existing" 2>/dev/null; then
+      return 0
+    fi
+  fi
+  echo $$ > "$marker"
+}
+
 update_trap_exit() {
   local ec=$?
   if [ "$UPDATE_TRAP_ACTIVE" != "1" ]; then
@@ -159,11 +191,12 @@ update_trap_exit() {
       echo "Update failed — rolling back if needed ..."
       if ! has_valid_next; then
         restore_next_backup || true
+        ensure_panel_running_after_update || true
       fi
     else
       echo "Update build OK but a later step failed — restarting panel ..."
+      ensure_panel_running_after_update || true
     fi
-    ensure_panel_running_after_update || true
   fi
   rm -f "$ROOT/.update-in-progress"
   return "$ec"
@@ -185,8 +218,13 @@ bootstrap_patch_scripts() {
   }
   fetch_one "${base}/apply-panel-fast-update.sh?${cache}" "$ROOT/scripts/apply-panel-fast-update.sh"
   fetch_one "${base}/scripts/panel-restart-safe.sh?${cache}" "$ROOT/scripts/panel-restart-safe.sh"
+  fetch_one "${base}/scripts/rematch-iptv-edge-auth.sh?${cache}" "$ROOT/scripts/rematch-iptv-edge-auth.sh"
+  fetch_one "${base}/scripts/sync-internal-secret-env.sh?${cache}" "$ROOT/scripts/sync-internal-secret-env.sh"
   fetch_one "${base}/scripts/panel-update-recover.sh?${cache}" "$ROOT/scripts/panel-update-recover.sh"
   fetch_one "${base}/scripts/panel-update-background.sh?${cache}" "$ROOT/scripts/panel-update-background.sh"
+  fetch_one "${base}/scripts/ensure-fleet-deploy-key.sh?${cache}" "$ROOT/scripts/ensure-fleet-deploy-key.sh"
+  fetch_one "${base}/scripts/vps-git-auth.sh?${cache}" "$ROOT/scripts/vps-git-auth.sh"
+  fetch_one "${base}/scripts/install-fleet-deploy-key.sh?${cache}" "$ROOT/scripts/install-fleet-deploy-key.sh"
   fetch_one "${base}/scripts/has-valid-next-build.sh?${cache}" "$ROOT/scripts/has-valid-next-build.sh"
   normalize_scripts
   # Auto-install tsx if not available (needed for background update worker)
@@ -254,10 +292,17 @@ verify_downloaded_archive() {
     echo "ERROR: download too small (${size:-0} bytes) — likely a failed or cached response" >&2
     return 1
   fi
-  if tar -tzf "$archive" 2>/dev/null | grep -Eq '(^|/)package.json$'; then
+  if ! is_gzip_file "$archive"; then
+    echo "ERROR: download is not a gzip archive ($(file -b "$archive" 2>/dev/null || echo unknown))" >&2
+    return 1
+  fi
+  if tar -xOf "$archive" ./package.json >/dev/null 2>&1 \
+    || tar -xOf "$archive" package.json >/dev/null 2>&1 \
+    || tar -tzf "$archive" 2>/dev/null | grep -aEq '(^|/)package.json$'; then
     return 0
   fi
   echo "ERROR: invalid panel tarball (missing package.json) — aborting" >&2
+  file "$archive" >&2 || true
   return 1
 }
 
@@ -285,18 +330,29 @@ cmd_bootstrap() {
 }
 
 cmd_sync_git() {
-  echo "Git checkout — syncing origin/main (GitHub is source of truth, not vendor tarball)"
+  echo "Git checkout — fetching origin/main (PANEL_UPDATE_PREFER_GIT=1)"
   if ! git -C "$ROOT" fetch origin main && ! git -C "$ROOT" fetch origin; then
     echo "WARN: git fetch failed — falling back to tarball" >&2
     return 1
   fi
+  bash "$ROOT/scripts/panel-git-sparse.sh" "$ROOT" 2>/dev/null || true
+  local panel_ref
+  if [ -f /etc/nexlify/panel-git-ref.sh ]; then
+    panel_ref="$(bash /etc/nexlify/panel-git-ref.sh "$ROOT")"
+  elif [ -f "$ROOT/scripts/panel-git-ref.sh" ]; then
+    panel_ref="$(bash "$ROOT/scripts/panel-git-ref.sh" "$ROOT")"
+  else
+    panel_ref="origin/main"
+  fi
+  echo "Git checkout — syncing ${panel_ref} (panel paths; skip marketing-only HEAD)"
   local force="${PANEL_UPDATE_FORCE:-}"
   force="$(printf '%s' "$force" | tr '[:upper:]' '[:lower:]')"
   if [ "$force" = "1" ] || [ "$force" = "true" ] || [ "$force" = "yes" ]; then
-    git -C "$ROOT" reset --hard origin/main || return 1
+    git -C "$ROOT" reset --hard "$panel_ref" || return 1
   else
-    git -C "$ROOT" merge --ff-only origin/main || git -C "$ROOT" reset --hard origin/main || return 1
+    git -C "$ROOT" merge --ff-only "$panel_ref" || git -C "$ROOT" reset --hard "$panel_ref" || return 1
   fi
+  bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" 2>/dev/null || true
   normalize_scripts
   local synced_ver
   synced_ver="$(node -e "try{process.stdout.write(require('./package.json').version||'')}catch{}" 2>/dev/null || true)"
@@ -333,11 +389,13 @@ cmd_sync_tarball() {
       --exclude='data/' --exclude='node_modules/' \
       --exclude='.next/' --exclude='.next.backup/' --exclude='.next.staging/' \
       --exclude='.panel-update-cache.json' \
+      --exclude='marketing-drop-in/' --exclude='windows/' --exclude='graft/' \
       "$src/" "$ROOT/"
   else
     find "$src" -mindepth 1 -maxdepth 1 ! -name '.git' ! -name '.env' ! -name 'data' ! -name 'node_modules' ! -name '.next' ! -name '.next.backup' ! -name '.next.staging' \
       -exec cp -a {} "$ROOT/" \;
   fi
+  bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" 2>/dev/null || true
   normalize_scripts
   rm -rf "$tmp"
   local synced_ver
@@ -347,8 +405,12 @@ cmd_sync_tarball() {
 
 cmd_sync() {
   bootstrap_patch_scripts
-  if [ -d "$ROOT/.git" ] && cmd_sync_git; then
-    return 0
+  local prefer_git
+  prefer_git="$(printf '%s' "${PANEL_UPDATE_PREFER_GIT:-}" | tr '[:upper:]' '[:lower:]')"
+  if [ "$prefer_git" = "1" ] || [ "$prefer_git" = "true" ] || [ "$prefer_git" = "yes" ]; then
+    if [ -d "$ROOT/.git" ] && cmd_sync_git; then
+      return 0
+    fi
   fi
   cmd_sync_tarball
 }
@@ -373,8 +435,9 @@ cmd_prisma() {
   unset DATABASE_URL 2>/dev/null || true
   if schema_changed; then
     echo "Schema changed — prisma db push + generate ..."
-    npx prisma db push --accept-data-loss --skip-generate
-    npx prisma generate
+    npx prisma db push --accept-data-loss --skip-generate \
+      || echo "WARN: prisma db push failed (non-fatal) — continuing with current database"
+    npx prisma generate || echo "WARN: prisma generate failed"
   elif [ ! -d node_modules/.prisma/client ]; then
     echo "Prisma client missing — generating ..."
     npx prisma generate
@@ -384,6 +447,11 @@ cmd_prisma() {
 }
 
 cmd_build_prep() {
+  if [ -f "$ROOT/scripts/nexlify-streaming-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-streaming-guard.sh"
+    nexlify_refuse_build_if_streaming_busy || exit 1
+  fi
   if [ -x "$ROOT/scripts/ensure-customer-ip-env.sh" ]; then
     bash "$ROOT/scripts/ensure-customer-ip-env.sh" || true
   fi
@@ -401,21 +469,45 @@ cmd_build_prep() {
 cmd_build_compile() {
   echo "Building panel (staging) ..."
   export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}"
-  export NEXT_PRIVATE_WORKER_THREADS=false
+  # Do not force NEXT_PRIVATE_WORKER_THREADS=false here: Next 15.5 minify then
+  # throws "WebpackError is not a constructor" and the real minify error is lost.
+  unset NEXT_PRIVATE_WORKER_THREADS 2>/dev/null || true
   export NEXLIFY_DIST_DIR=".next.staging"
+  # Single-flight: stacked next builds corrupt .next / OOM low-RAM hosts (e.g. 75).
+  # Skip if run-panel-build.mjs (or another caller) already holds the same lock.
+  if [ "${NEXLIFY_BUILD_LOCK_HELD:-}" != "1" ] && command -v flock >/dev/null 2>&1; then
+    exec 8>/tmp/nexlify-panel-build.lock
+    if ! flock -n 8; then
+      echo "ERROR: another panel build holds /tmp/nexlify-panel-build.lock — aborting" >&2
+      return 75
+    fi
+    export NEXLIFY_BUILD_LOCK_HELD=1
+  fi
   # Call next directly — do not use `npm run build` (that wrapper routes back here).
+  if [ ! -f ./node_modules/next/dist/bin/next ]; then
+    echo "WARN: next binary missing — reinstalling deps before build ..." >&2
+    npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error || \
+      npm install --include=dev --include=optional --no-audit --no-fund --loglevel=error
+  fi
   if node ./node_modules/next/dist/bin/next build; then
     return 0
   fi
-  echo "WARN: next build failed (webpack?) — clear caches + reinstall optional SWC + retry once ..." >&2
+  echo "WARN: next build failed — clear caches + reinstall next/SWC + retry once ..." >&2
   rm -rf .next.staging node_modules/.cache .next/cache 2>/dev/null || true
-  rm -rf node_modules
-  npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error
-  # Ensure platform SWC binary is present (missing binary → "generate is not a function")
+  # Prefer surgical next reinstall first (faster); full wipe if still broken.
+  npm install next@15.5.21 --include=optional --no-audit --no-fund --loglevel=error || true
   npm install --no-save --include=optional @next/swc-linux-x64-gnu 2>/dev/null || \
     npm install --no-save --include=optional @next/swc-linux-x64-musl 2>/dev/null || true
-  export NEXLIFY_DIST_DIR=".next.staging"
-  node ./node_modules/next/dist/bin/next build
+  if ! node ./node_modules/next/dist/bin/next build; then
+    echo "WARN: retry still failed — full node_modules reinstall ..." >&2
+    rm -rf node_modules
+    npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error || \
+      npm install --include=dev --include=optional --no-audit --no-fund --loglevel=error
+    npm install --no-save --include=optional @next/swc-linux-x64-gnu 2>/dev/null || \
+      npm install --no-save --include=optional @next/swc-linux-x64-musl 2>/dev/null || true
+    export NEXLIFY_DIST_DIR=".next.staging"
+    node ./node_modules/next/dist/bin/next build
+  fi
 }
 
 swap_staging_build() {
@@ -493,9 +585,16 @@ cmd_swap() {
 }
 
 cmd_build() {
+  if [ -f "$ROOT/scripts/nexlify-migrate-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-migrate-guard.sh"
+    if ! nexlify_refuse_restart_if_migrating; then
+      return 1
+    fi
+  fi
   UPDATE_TRAP_ACTIVE=1
   trap 'update_trap_exit $?' EXIT
-  touch "$ROOT/.update-in-progress"
+  mark_update_in_progress
   cmd_build_prep
   cmd_build_compile
   cmd_build_standalone
@@ -504,6 +603,13 @@ cmd_build() {
 }
 
 cmd_restart() {
+  if [ -f "$ROOT/scripts/nexlify-migrate-guard.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/nexlify-migrate-guard.sh"
+    if ! nexlify_refuse_restart_if_migrating; then
+      return 1
+    fi
+  fi
   if [ "$PANEL_RESTARTED" = "1" ]; then
     echo "Panel already restarted after build swap."
     return 0
@@ -512,12 +618,19 @@ cmd_restart() {
     echo "WARN: restart skipped — no valid .next (run recover)" >&2
     return 1
   fi
+  if [ -x "$ROOT/scripts/ensure-nginx-panel-hold.sh" ]; then
+    bash "$ROOT/scripts/ensure-nginx-panel-hold.sh" || true
+  fi
   if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
     bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only
   elif [ -x "$ROOT/scripts/pm2-start.sh" ]; then
     bash "$ROOT/scripts/pm2-start.sh"
   else
-    pm2 restart nexlify --update-env 2>/dev/null || pm2 start ecosystem.config.cjs --only nexlify --update-env
+    if pm2 describe nexlify >/dev/null 2>&1; then
+      pm2 reload nexlify --update-env 2>/dev/null || pm2 restart nexlify --update-env
+    else
+      pm2 start ecosystem.config.cjs --only nexlify --update-env
+    fi
     pm2 save 2>/dev/null || true
   fi
   if [ -f "$ROOT/.next/standalone/server.js" ]; then
@@ -549,11 +662,32 @@ cmd_restart() {
         sleep 3
       fi
       _code2="$(curl -sS -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' "http://127.0.0.1/_next/static/chunks/${_bn}" 2>/dev/null || echo 000)"
-      if [ "$_code2" != "200" ]; then
-        echo "ERROR: static assets still HTTP ${_code2} after repair — UI will show client-side exception" >&2
-        return 1
+      if [ "$_code2" = "000" ]; then
+        _code2="$(curl -sS -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' "http://127.0.0.1:13000/_next/static/chunks/${_bn}" 2>/dev/null || echo 000)"
       fi
-      echo "Static assets recovered after distdir repair."
+      if [ "$_code2" != "200" ]; then
+        # Health OK means the panel API is up — do not fail the whole update over a transient static check.
+        _health_ok=0
+        for _hu in \
+          "http://127.0.0.1:${PORT:-13000}/api/health" \
+          "http://127.0.0.1/api/health" \
+          "http://127.0.0.1:13000/api/health"
+        do
+          _hc="$(curl -sS -o /dev/null -w '%{http_code}' -m 5 "$_hu" 2>/dev/null || echo 000)"
+          if [ "$_hc" = "200" ]; then
+            _health_ok=1
+            break
+          fi
+        done
+        if [ "$_health_ok" = "1" ]; then
+          echo "WARN: static assets still HTTP ${_code2} but /api/health is 200 — treating restart as OK" >&2
+        else
+          echo "ERROR: static assets still HTTP ${_code2} after repair — UI will show client-side exception" >&2
+          return 1
+        fi
+      else
+        echo "Static assets recovered after distdir repair."
+      fi
     fi
   fi
   PANEL_RESTARTED=1
@@ -579,7 +713,7 @@ cmd_recover() {
 cmd_all() {
   UPDATE_TRAP_ACTIVE=1
   trap 'update_trap_exit $?' EXIT
-  touch "$ROOT/.update-in-progress"
+  mark_update_in_progress
   cmd_sync
   cmd_deps
   cmd_prisma
