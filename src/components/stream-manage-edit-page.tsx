@@ -838,6 +838,7 @@ export function StreamManageEditPage({
           {editTab === "server" && (
             <StreamServerTab
               streamType={form.type}
+              streamId={streamId}
               serverIds={serverIds}
               onServerIdsChange={setServerIds}
               vodMode={form.vodMode}

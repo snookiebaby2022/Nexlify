@@ -247,3 +247,42 @@ export async function categoryFromFolderPath(
   }
   return categoryForMovie();
 }
+
+/** Create top-level MOVIE/SERIES categories named after Plex libraries. */
+export async function ensureNamedVodCategories(
+  names: { name: string; type: "MOVIE" | "SERIES" }[]
+): Promise<number> {
+  let created = 0;
+  for (const { name, type } of names) {
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    await findOrCreateCategory(trimmed, null, type);
+    created++;
+  }
+  return created;
+}
+
+/** Delete matching top-level categories (streams keep their rows; categoryId is cleared). */
+export async function deleteNamedVodCategories(
+  names: { name: string; type: "MOVIE" | "SERIES" }[]
+): Promise<{ deleted: number; skipped: number }> {
+  let deleted = 0;
+  let skipped = 0;
+  for (const { name, type } of names) {
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    const cat = await prisma.category.findFirst({
+      where: { name: trimmed, parentId: null, categoryType: type },
+      include: { _count: { select: { children: true } } },
+    });
+    if (!cat) continue;
+    if (cat._count.children > 0) {
+      skipped++;
+      continue;
+    }
+    await prisma.stream.updateMany({ where: { categoryId: cat.id }, data: { categoryId: null } });
+    await prisma.category.delete({ where: { id: cat.id } });
+    deleted++;
+  }
+  return { deleted, skipped };
+}

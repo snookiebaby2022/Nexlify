@@ -33,7 +33,12 @@ describe("mergeLineNotesForSave", () => {
     );
   });
 
-  it("stores reseller-only notes without delimiter", () => {
-    assert.equal(mergeResellerNotes(null, "solo"), "solo");
+  it("always stores a delimiter so Manage Lines can split admin vs reseller notes", () => {
+    assert.equal(mergeResellerNotes(null, "solo"), "\n---\nsolo");
+    assert.equal(mergeLineNotesForSave("admin", null, "internal", ""), "internal\n---\n");
+    assert.equal(mergeLineNotesForSave("admin", null, "", "visible"), "\n---\nvisible");
+    assert.deepEqual(splitLineNotes("internal\n---\n", "admin"), { admin: "internal", reseller: "" });
+    assert.deepEqual(splitLineNotes("\n---\nvisible", "admin"), { admin: "", reseller: "visible" });
+    assert.deepEqual(splitLineNotes("\n---\nvisible", "reseller"), { admin: "", reseller: "visible" });
   });
 });

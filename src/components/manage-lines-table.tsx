@@ -19,6 +19,7 @@ import { CopyableCredential } from "@/components/copyable-credential";
 import { linesApiRoot } from "@/lib/panel-api";
 import { ConnInfoCell, LastWatchedCell } from "@/components/line-last-watched-cell";
 import { formatDateTime, formatExpireXui } from "@/lib/format";
+import { splitLineNotes } from "@/lib/line-notes";
 import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
 import {
   ColumnPickerList,
@@ -76,10 +77,8 @@ const LINE_COLUMN_DEFAULTS: Record<string, boolean> = {
   actions: true,
 };
 
-function splitNotes(notes: string | null | undefined) {
-  if (!notes?.trim()) return { admin: "", reseller: "" };
-  const parts = notes.split("\n---\n");
-  return { admin: parts[0]?.trim() ?? "", reseller: parts[1]?.trim() ?? "" };
+function splitNotes(notes: string | null | undefined, panel: "admin" | "reseller") {
+  return splitLineNotes(notes, panel);
 }
 
 function isTrialLine(line: ManageLineRow) {
@@ -99,9 +98,15 @@ function XuiPill({
   return <span className={`xui-pill xui-pill--${variant}`}>{value}</span>;
 }
 
-function NoteBtn({ label, hasNote }: { label: string; hasNote: boolean }) {
+function NoteBtn({ label, text }: { label: string; text: string }) {
+  if (!text) {
+    return <span className="xui-note-btn">NO NOTE</span>;
+  }
   return (
-    <span className={`xui-note-btn ${hasNote ? "xui-note-btn--has" : ""}`}>{hasNote ? label : "NO NOTE"}</span>
+    <span className="xui-note-btn xui-note-btn--has" title={`${label}: ${text}`}>
+      <span className="block text-[10px] uppercase tracking-wide opacity-70">{label}</span>
+      <span className="block max-w-[14rem] truncate">{text}</span>
+    </span>
   );
 }
 
@@ -260,6 +265,7 @@ export function ManageLinesTable({
             (l.externalId?.toLowerCase().includes(q) ?? false) ||
             (l.lastWatchedStream?.name?.toLowerCase().includes(q) ?? false) ||
             (l.lastWatchedIp?.toLowerCase().includes(q) ?? false) ||
+            (l.notes ?? "").toLowerCase().includes(q) ||
             (l.bouquets ?? []).some((b) => b.bouquet?.name?.toLowerCase().includes(q))
         );
       }
@@ -369,7 +375,7 @@ export function ManageLinesTable({
 
   function renderRowCells(l: ManageLineRow) {
     const exp = formatExpireXui(l.expiresAt);
-    const notes = splitNotes(l.notes);
+    const notes = splitNotes(l.notes, panel);
     const pkg =
       (l.bouquets ?? [])
         .map((b) => b.bouquet?.name)
@@ -471,9 +477,9 @@ export function ManageLinesTable({
         ) : null}
         {columns.show("notes") ? (
           <td className="xui-lines-td">
-            <div className="flex flex-col gap-0.5">
-              {panel === "admin" && <NoteBtn label="Admin" hasNote={Boolean(notes.admin)} />}
-              <NoteBtn label={panel === "reseller" ? "Note" : "Reseller"} hasNote={Boolean(notes.reseller)} />
+            <div className="flex flex-col gap-0.5 min-w-[8rem]">
+              {panel === "admin" && <NoteBtn label="Admin" text={notes.admin} />}
+              <NoteBtn label={panel === "reseller" ? "Note" : "Reseller"} text={notes.reseller} />
             </div>
           </td>
         ) : null}
@@ -593,7 +599,7 @@ export function ManageLinesTable({
             <input
               type="search"
               autoComplete="off"
-              placeholder="Search lines…"
+              placeholder="Search lines, notes…"
               className="xui-lines-search-input w-full"
               value={search}
               onChange={(e) => {
@@ -660,7 +666,7 @@ export function ManageLinesTable({
             <input
               type="search"
               autoComplete="off"
-              placeholder="Search lines…"
+              placeholder="Search lines, notes…"
               className="xui-lines-search-input"
               value={search}
               onChange={(e) => {

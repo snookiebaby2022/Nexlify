@@ -6,7 +6,7 @@ import { buildPanelReport } from "@/lib/panel-report";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 const COOLDOWN_MS = 5 * 60 * 1000;
 const MAX_IMAGES = 5;

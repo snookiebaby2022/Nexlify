@@ -54,6 +54,43 @@ warmup_playback_routes() {
   done
 }
 
+nexlify_online_count() {
+  pm2 jlist 2>/dev/null | node -e "
+    try {
+      const list = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+      process.stdout.write(String(list.filter((p) => p.name === 'nexlify' && p.pm2_env && p.pm2_env.status === 'online').length));
+    } catch { process.stdout.write('0'); }
+  " 2>/dev/null || echo 0
+}
+
+start_nexlify_without_delete() {
+  if [ "$(nexlify_online_count)" != "0" ]; then
+    log "Reloading nexlify in place (no delete) ..."
+    if pm2 reload nexlify --update-env >>"$LOG_FILE" 2>&1; then
+      return 0
+    fi
+    log "reload failed — restart in place"
+    if pm2 restart nexlify --update-env >>"$LOG_FILE" 2>&1; then
+      return 0
+    fi
+  fi
+  log "Starting nexlify (process was down) ..."
+  pm2 start ecosystem.config.cjs --only nexlify --update-env >>"$LOG_FILE" 2>&1
+}
+
+restore_next_backup_if_needed() {
+  if bash scripts/has-valid-next-build.sh 2>/dev/null; then
+    return 0
+  fi
+  if [ -d .next.backup ] && { [ -f .next.backup/BUILD_ID ] || [ -f .next.backup/standalone/server.js ]; }; then
+    log "Restoring .next.backup after failed restart"
+    rm -rf .next
+    mv .next.backup .next
+    return 0
+  fi
+  return 1
+}
+
 nexlify_only_restart() {
   load_env
 
@@ -66,7 +103,10 @@ nexlify_only_restart() {
     fi
   fi
 
-  if [ -f "$ROOT/scripts/nexlify-streaming-guard.sh" ]; then
+  local panel_down=0
+  [ "$(nexlify_online_count)" = "0" ] && panel_down=1
+
+  if [ "$panel_down" != "1" ] && [ -f "$ROOT/scripts/nexlify-streaming-guard.sh" ]; then
     # shellcheck disable=SC1091
     . "$ROOT/scripts/nexlify-streaming-guard.sh"
     if ! nexlify_refuse_restart_if_streaming_busy; then
@@ -95,27 +135,12 @@ nexlify_only_restart() {
     return 1
   fi
 
-  log "Restarting nexlify only (preserving nexlify-cron) ..."
-  if command -v pm2 >/dev/null 2>&1; then
-    for _ in 1 2 3 4 5 6; do
-      remaining="$(pm2 jlist 2>/dev/null | node -e "
-        const list = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-        process.stdout.write(String(list.filter((p) => p.name === 'nexlify').length));
-      " 2>/dev/null || echo 0)"
-      [ "$remaining" = "0" ] && break
-      pm2 jlist 2>/dev/null | node -e "
-        const { execSync } = require('child_process');
-        const list = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-        for (const x of list.filter((p) => p.name === 'nexlify')) {
-          try { execSync('pm2 delete ' + x.pm_id, { stdio: 'ignore' }); } catch {}
-        }
-      " 2>/dev/null || true
-      pm2 delete nexlify 2>/dev/null || true
-      sleep 1
-    done
+  if [ -x scripts/ensure-nginx-panel-hold.sh ]; then
+    bash scripts/ensure-nginx-panel-hold.sh >>"$LOG_FILE" 2>&1 || true
   fi
-  pm2 delete nexlify 2>/dev/null || true
-  pm2 start ecosystem.config.cjs --only nexlify --update-env >>"$LOG_FILE" 2>&1
+
+  log "Restarting nexlify only (preserving nexlify-cron, no pm2 delete) ..."
+  start_nexlify_without_delete
   pm2 save >>"$LOG_FILE" 2>&1 || true
 
   if verify_panel; then
@@ -132,8 +157,17 @@ nexlify_only_restart() {
     log "nexlify-only restart OK"
     return 0
   fi
-  log "ERROR: nexlify started but health check failed"
+
+  log "ERROR: nexlify started but health check failed — restoring previous build"
   pm2 logs nexlify --lines 15 --nostream >>"$LOG_FILE" 2>&1 || true
+  if restore_next_backup_if_needed; then
+    start_nexlify_without_delete
+    pm2 save >>"$LOG_FILE" 2>&1 || true
+    if verify_panel; then
+      log "Recovered previous build after failed restart"
+      return 0
+    fi
+  fi
   return 1
 }
 

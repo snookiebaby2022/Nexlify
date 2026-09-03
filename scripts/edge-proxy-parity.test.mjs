@@ -69,6 +69,16 @@ describe("edge proxy installer parity", () => {
     assert.match(canonical, /rewriteLiveTsUrlToHls/);
   });
 
+  it("keeps long-lived MPEG-TS sessions active while media bytes arrive", () => {
+    const canonical = readEdgeSource(canonicalPath);
+    assert.match(canonical, /function markPlaybackSessionActive\(/);
+    assert.match(canonical, /markPlaybackSessionActive\(pulseCtx, now\)/);
+    if (installerAvailable) {
+      const installer = readEdgeSource(installerPath);
+      assert.match(installer, /markPlaybackSessionActive\(pulseCtx, now\)/);
+    }
+  });
+
   it(
     "installer does not forward /live/ by calling forward() without a media guard",
     { skip: !installerAvailable },

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FormPageShell, FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { PasswordInput } from "@/components/password-input";
-import { generateLinePassword, generateLineUsername, MIN_LINE_CREDENTIAL_LENGTH } from "@/lib/credential-generate";
+import { generateLinePassword, generateLineUsername, clampLineCredentialMinLength, DEFAULT_LINE_CREDENTIAL_MIN_LENGTH } from "@/lib/credential-generate";
 import { RefreshCw } from "lucide-react";
 
 export default function ResellerAddUserPage() {
@@ -15,6 +15,7 @@ export default function ResellerAddUserPage() {
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [autoGenerate, setAutoGenerate] = useState(false);
+  const [credentialMinLength, setCredentialMinLength] = useState(DEFAULT_LINE_CREDENTIAL_MIN_LENGTH);
   const [form, setForm] = useState({
     username: "",
     password: "",
@@ -30,8 +31,9 @@ export default function ResellerAddUserPage() {
       fetch("/api/admin/profile").then((r) => r.json()),
       fetch("/api/reseller/groups?role=sub_reseller").then((r) => r.json()),
       fetch("/api/admin/settings?group=security").then((r) => r.json()),
+      fetch("/api/panel/line-ux").then((r) => r.json()).catch(() => ({})),
     ])
-      .then(([profile, groupsData, security]) => {
+      .then(([profile, groupsData, security, lineUx]) => {
         setMyCredits(profile.user?.credits ?? 0);
         const list = (groupsData.groups ?? []) as { id: string; name: string; groupRole?: string }[];
         setGroups(list);
@@ -40,6 +42,9 @@ export default function ResellerAddUserPage() {
           list[0];
         const on = security.settings?.autoGenerateResellerCredentials === true;
         setAutoGenerate(on);
+        if (lineUx?.credentialMinLength != null) {
+          setCredentialMinLength(clampLineCredentialMinLength(lineUx.credentialMinLength));
+        }
         const generated = on
           ? { username: generateLineUsername(), password: generateLinePassword() }
           : null;
@@ -61,8 +66,8 @@ export default function ResellerAddUserPage() {
       setMsg("Password and confirm password do not match.");
       return;
     }
-    if (form.username.trim().length < MIN_LINE_CREDENTIAL_LENGTH || form.password.length < MIN_LINE_CREDENTIAL_LENGTH) {
-      setMsg(`Username and password must each be at least ${MIN_LINE_CREDENTIAL_LENGTH} characters.`);
+    if (form.username.trim().length < credentialMinLength || form.password.length < credentialMinLength) {
+      setMsg(`Username and password must each be at least ${credentialMinLength} characters.`);
       return;
     }
     setSaving(true);
@@ -102,7 +107,7 @@ export default function ResellerAddUserPage() {
           <div className="flex gap-2">
             <input
               required
-              minLength={MIN_LINE_CREDENTIAL_LENGTH}
+              minLength={credentialMinLength}
               className={`${formInputClass} flex-1`}
               style={formInputStyle}
               value={form.username}

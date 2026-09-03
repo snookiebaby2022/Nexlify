@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma";
 import { cacheGet, cacheSet } from "@/lib/cache";
 
 const BANDWIDTH_PREFIX = "bandwidth:predict:";

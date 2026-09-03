@@ -253,7 +253,7 @@ export function DashboardIssuesPanel({
             <div className="flex-1 min-w-[160px]">
               <p className="text-sm font-medium">{tickets} open support ticket(s)</p>
             </div>
-            <Link href="/admin/tickets" className="text-xs underline" style={{ color: "var(--accent)" }}>
+            <Link href="/admin/tickets?status=OPEN" className="text-xs underline" style={{ color: "var(--accent)" }}>
               Open tickets
             </Link>
           </div>

@@ -79,7 +79,7 @@ export default function DiagnosticsPage() {
       const res = await fetch("/api/admin/streams/probe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ streamId: id, fast: true }),
+        body: JSON.stringify({ streamId: id, fast: false }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Probe failed");
@@ -103,8 +103,8 @@ export default function DiagnosticsPage() {
       </p>
 
       <div className="flex flex-wrap gap-2 mb-5">
-        <Link className="text-sm underline" href="/admin/stream_errors" style={{ color: "var(--accent)" }}>
-          Stream errors
+        <Link className="text-sm underline" href="/admin/content/streams?status=offline" style={{ color: "var(--accent)" }}>
+          Failed probes
         </Link>
         <Link className="text-sm underline" href="/admin/streaming/health" style={{ color: "var(--accent)" }}>
           Streaming health

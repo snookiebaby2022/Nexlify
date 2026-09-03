@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleBillingWebhook, type BillingPayload } from "@/lib/billing";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
   try {
   const secret =

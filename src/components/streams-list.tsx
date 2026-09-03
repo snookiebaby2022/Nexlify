@@ -29,12 +29,15 @@ import { type StreamLiveStat } from "@/lib/stream-live-stats";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
+import { ListPagination } from "@/components/list-pagination";
 import { displayStreamIcon } from "@/lib/plex-artwork";
 import { StreamDisplayTitle } from "@/components/stream-display-title";
 import { MobileFilterSheet } from "@/components/mobile-filter-sheet";
 import { TmdbBackfillBanner } from "@/components/tmdb-backfill-banner";
 import { DuplicateStreamNamesBanner } from "@/components/duplicate-stream-names-banner";
-import { ListPagination } from "@/components/list-pagination";
+import { parseVodAgentCmd } from "@/lib/vod-meta";
+import { detectTitleLanguage } from "@/lib/title-language";
+import { RemoveForeignVodButton } from "@/components/remove-foreign-vod-button";
 import {
   ColumnPickerList,
   ToolbarDropdown,
@@ -435,7 +438,10 @@ export function StreamsList({
         const res = await fetch("/api/admin/streams/probe-batch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ streamIds: list.map((s) => s.id), fast: true }),
+          body: JSON.stringify({
+            streamIds: list.map((s) => s.id),
+            fast: statusFilter !== "offline" && !sourceIssueFilter,
+          }),
         });
         const data = (await res.json()) as {
           results?: Record<
@@ -444,8 +450,8 @@ export function StreamsList({
           >;
         };
         if (!res.ok || !data.results) return;
-        setStreams((prev) =>
-          prev.map((s) => {
+        setStreams((prev) => {
+          const next = prev.map((s) => {
             const row = data.results?.[s.id];
             if (!row || row.error) return s;
             return {
@@ -453,14 +459,18 @@ export function StreamsList({
               lastProbeOk: row.lastProbeOk ?? s.lastProbeOk,
               lastProbeError: row.lastProbeError ?? null,
             };
-          })
-        );
+          });
+          if (statusFilter === "offline" || sourceIssueFilter) {
+            return next.filter((s) => s.lastProbeOk === false);
+          }
+          return next;
+        });
       } finally {
         setProbingPage(false);
         setProbingIds(new Set());
       }
     },
-    [type, page]
+    [type, page, statusFilter, sourceIssueFilter]
   );
 
   const load = useCallback(
@@ -477,6 +487,7 @@ export function StreamsList({
     }
     if (type) params.set("type", type);
     if (type === "LIVE") params.set("sort", "order");
+    if (type === "MOVIE" || type === "SERIES") params.set("sort", "newest");
     if (categoryId) params.set("categoryId", categoryId);
     if (serverId) params.set("serverId", serverId);
     if (search.trim()) params.set("search", search.trim());
@@ -589,6 +600,12 @@ export function StreamsList({
             >
               {probingPage ? "Probing…" : "Probe page"}
             </button>
+          ) : null}
+          {type === "MOVIE" ? (
+            <RemoveForeignVodButton kind="MOVIE" onDone={() => load()} />
+          ) : null}
+          {type === "SERIES" ? (
+            <RemoveForeignVodButton kind="SERIES" onDone={() => load()} />
           ) : null}
           <Link href={addHref} className="xui-streams-btn xui-streams-btn--add">
             Add Stream
@@ -780,7 +797,8 @@ export function StreamsList({
         </p>
       ) : statusFilter === "offline" ? (
         <p className="text-sm rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
-          Live streams whose last source probe failed. Direct and on-demand channels without a running
+          Live streams whose last source probe failed. Use Probe page (full check) to retest — streams
+          that come back online drop off this list. Direct and on-demand channels without a running
           ffmpeg process are not listed here unless the probe itself failed.
         </p>
       ) : null}
@@ -936,6 +954,14 @@ export function StreamsList({
                           {s.category.name}
                         </p>
                       ) : null}
+                      {type === "MOVIE" || type === "SERIES" ? (
+                        <p className="text-xs truncate" style={{ color: "var(--muted)" }}>
+                          {detectTitleLanguage(s.name, {
+                            categoryName: s.category?.name,
+                            meta: parseVodAgentCmd(s.agentStartCmd),
+                          }).label}
+                        </p>
+                      ) : null}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm">
@@ -971,6 +997,7 @@ export function StreamsList({
                   streamId={s.id}
                   streamType={type}
                   isActive={s.isActive}
+                  serverId={s.server?.id}
                   onRefresh={load}
                   onDelete={() => remove(s.id)}
                   onEdit={() => openEdit(s.id)}
@@ -1055,6 +1082,14 @@ export function StreamsList({
                       {s.category?.name && (
                         <span className="xui-stream-category">{s.category.name}</span>
                       )}
+                      {type === "MOVIE" || type === "SERIES" ? (
+                        <span className="xui-stream-category" title="Detected title language">
+                          {detectTitleLanguage(s.name, {
+                            categoryName: s.category?.name,
+                            meta: parseVodAgentCmd(s.agentStartCmd),
+                          }).label}
+                        </span>
+                      ) : null}
                     </td>
                   ) : null}
                   {streamCols.show("servers") ? (
@@ -1103,6 +1138,7 @@ export function StreamsList({
                         streamId={s.id}
                         streamType={type}
                         isActive={s.isActive}
+                        serverId={s.server?.id}
                         onRefresh={load}
                         onDelete={() => remove(s.id)}
                         onEdit={() => openEdit(s.id)}

@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { importFromFolder, resolveSafePath } from "@/lib/import-media";
 import { isRemoteM3uUrl } from "@/lib/m3u-watch-sync";
 import { runWatchFolderM3uSync } from "@/lib/m3u-sync-jobs";
-import { isLocalM3uPath, reviewWatchFolder, reviewWatchM3uContent, writeWatchM3uFile } from "@/lib/watch-folder-m3u";
+import { isLocalM3uPath, reviewWatchFolder, reviewWatchM3uContent, writeWatchM3uFile, watchBouquetIdsCsv } from "@/lib/watch-folder-m3u";
 import { prisma } from "@/lib/prisma";
 import { ImportKind, PanelRole, WatchFolderType } from "@prisma/client";
 import { getSettingGroup } from "@/lib/panel-settings";
@@ -18,6 +18,8 @@ function folderM3uFlags(body: Record<string, unknown>) {
     overwriteCategories: body.overwriteCategories !== false,
     onDemand: body.onDemand !== false,
     removeDuplicates: body.removeDuplicates === true,
+    autoBouquet: body.autoBouquet !== false,
+    bouquetIds: watchBouquetIdsCsv(body.bouquetIds),
   };
 }
 export async function GET() {
@@ -72,6 +74,10 @@ export async function POST(req: NextRequest) {
         body.removeDuplicates !== undefined
           ? body.removeDuplicates === true
           : existing?.removeDuplicates === true,
+      autoBouquet:
+        body.autoBouquet !== undefined ? body.autoBouquet !== false : existing?.autoBouquet !== false,
+      bouquetIds:
+        body.bouquetIds !== undefined ? watchBouquetIdsCsv(body.bouquetIds) : existing?.bouquetIds ?? "",
     };
     const folderPath = String(body.path ?? existing?.path ?? "").trim();
     const type = String(body.type ?? existing?.type ?? "LIVE");
@@ -308,6 +314,8 @@ export async function PATCH(req: NextRequest) {
     if (body.overwriteCategories !== undefined) data.overwriteCategories = body.overwriteCategories !== false;
     if (body.onDemand !== undefined) data.onDemand = body.onDemand !== false;
     if (body.removeDuplicates !== undefined) data.removeDuplicates = body.removeDuplicates === true;
+    if (body.autoBouquet !== undefined) data.autoBouquet = body.autoBouquet !== false;
+    if (body.bouquetIds !== undefined) data.bouquetIds = watchBouquetIdsCsv(body.bouquetIds);
     if (body.type && Object.values(WatchFolderType).includes(body.type)) data.type = body.type;
 
     const m3uContent = typeof body.m3uContent === "string" ? body.m3uContent : "";

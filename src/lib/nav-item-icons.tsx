@@ -101,7 +101,7 @@ function colorForHref(href: string): string {
   if (href.includes("/import/migrate")) return "#06b6d4";
   if (href.includes("/diagnostics") || href.includes("/streaming/health") || href.includes("/process_monitor"))
     return "#f59e0b";
-  if (href.includes("/logs") || href.includes("/stream_errors") || href.includes("/streams/logs"))
+  if (href.includes("/logs") || href.includes("/streams/logs") || href.includes("status=offline"))
     return "#fca5a5";
   if (href.includes("/api")) return "#fde047";
   return "#7dd3fc";
@@ -173,7 +173,7 @@ function registerIcons() {
     ["/admin/management/blocked-ips", Shield],
     ["/admin/management/logs", List],
     ["/admin/streams/logs", List],
-    ["/admin/stream_errors", Activity],
+    ["/admin/content/streams", Activity],
     ["/admin/management/tools", Wrench],
     ["/admin/management/tools/mass-delete", Trash2],
     ["/admin/settings/general", Settings],

@@ -5,6 +5,8 @@ import { PanelRole, Prisma, StreamType } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { parseVodAgentCmd } from "@/lib/vod-meta";
+import { detectTitleLanguage } from "@/lib/title-language";
 type SeriesAggRow = {
   id: string;
   name: string;
@@ -14,6 +16,8 @@ type SeriesAggRow = {
   is_active: boolean;
   category_name: string | null;
   total_count: bigint | number;
+  newest?: Date | string | null;
+  parent_cmd?: string | null;
 };
 
 export async function GET(req: NextRequest) {
@@ -28,6 +32,7 @@ export async function GET(req: NextRequest) {
   const pageSize = Math.min(200, Math.max(10, Number(sp.get("pageSize") || 50) || 50));
   const search = (sp.get("search") || "").trim();
   const categoryId = (sp.get("categoryId") || "").trim();
+  const status = (sp.get("status") || "").trim().toLowerCase();
   const offset = (page - 1) * pageSize;
 
   try {
@@ -42,6 +47,12 @@ export async function GET(req: NextRequest) {
       );
     }
     const whereSql = Prisma.join(filters, " AND ");
+    const groupedStatusSql =
+      status === "inactive"
+        ? Prisma.sql`WHERE COALESCE(parent_active, any_active, true) = false`
+        : status === "active"
+          ? Prisma.sql`WHERE COALESCE(parent_active, any_active, true) = true`
+          : Prisma.empty;
 
     const rows = await prisma.$queryRaw<SeriesAggRow[]>`
       WITH grouped AS (
@@ -61,7 +72,11 @@ export async function GET(req: NextRequest) {
           BOOL_OR(s."isActive") FILTER (WHERE s."episodeNum" IS NULL OR s."episodeNum" <= 0) AS parent_active,
           BOOL_OR(s."isActive") AS any_active,
           MAX(c.name) FILTER (WHERE s."episodeNum" IS NULL OR s."episodeNum" <= 0) AS parent_cat,
-          MAX(c.name) AS any_cat
+          MAX(c.name) AS any_cat,
+          MAX(s."createdAt") AS newest,
+          (ARRAY_AGG(s."agentStartCmd") FILTER (
+            WHERE s."episodeNum" IS NULL OR s."episodeNum" <= 0
+          ))[1] AS parent_cmd
         FROM "Stream" s
         LEFT JOIN "Category" c ON c.id = s."categoryId"
         WHERE ${whereSql}
@@ -75,22 +90,33 @@ export async function GET(req: NextRequest) {
         any_url AS stream_url,
         COALESCE(parent_active, any_active, true) AS is_active,
         COALESCE(parent_cat, any_cat) AS category_name,
-        COUNT(*) OVER()::bigint AS total_count
+        newest,
+        parent_cmd,
+          COUNT(*) OVER()::bigint AS total_count
       FROM grouped
-      ORDER BY series_label ASC
+      ${groupedStatusSql}
+      ORDER BY newest DESC, series_label ASC
       LIMIT ${pageSize} OFFSET ${offset}
     `;
 
     const total = rows.length ? Number(rows[0].total_count) : 0;
-    const series = rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      episodeCount: Number(r.episode_count),
-      streamIcon: r.stream_icon,
-      streamUrl: r.stream_url,
-      isActive: Boolean(r.is_active),
-      categoryName: r.category_name,
-    }));
+    const series = rows.map((r) => {
+      const lang = detectTitleLanguage(r.name, {
+        categoryName: r.category_name,
+        meta: parseVodAgentCmd(r.parent_cmd),
+      });
+      return {
+        id: r.id,
+        name: r.name,
+        episodeCount: Number(r.episode_count),
+        streamIcon: r.stream_icon,
+        streamUrl: r.stream_url,
+        isActive: Boolean(r.is_active),
+        categoryName: r.category_name,
+        language: lang.label,
+        languageCode: lang.code,
+      };
+    });
 
     return NextResponse.json({ series, total, page, pageSize });
   } catch (e) {
@@ -99,6 +125,8 @@ export async function GET(req: NextRequest) {
       const where: Prisma.StreamWhereInput = {
         type: StreamType.SERIES,
         ...(categoryId ? { categoryId } : {}),
+        ...(status === "inactive" ? { isActive: false } : {}),
+        ...(status === "active" ? { isActive: true } : {}),
         ...(search
           ? {
               OR: [
@@ -119,9 +147,11 @@ export async function GET(req: NextRequest) {
           streamIcon: true,
           streamUrl: true,
           isActive: true,
+          createdAt: true,
+          agentStartCmd: true,
           category: { select: { name: true } },
         },
-        orderBy: [{ seriesName: "asc" }, { name: "asc" }],
+        orderBy: [{ createdAt: "desc" }, { name: "asc" }],
       });
       type SeriesRow = {
         id: string;
@@ -131,12 +161,20 @@ export async function GET(req: NextRequest) {
         streamUrl: string | null;
         isActive: boolean;
         categoryName: string | null;
+        createdAt: number;
+        language: string;
+        languageCode: string;
       };
       const groups = new Map<string, SeriesRow>();
       for (const row of all) {
         const name = (row.seriesName ?? row.name).trim() || row.name;
         const key = name.toLowerCase();
         const isEpisode = row.episodeNum != null && row.episodeNum > 0;
+        const createdAt = row.createdAt instanceof Date ? row.createdAt.getTime() : 0;
+        const lang = detectTitleLanguage(name, {
+          categoryName: row.category?.name,
+          meta: parseVodAgentCmd(row.agentStartCmd),
+        });
         const existing = groups.get(key);
         if (!existing) {
           groups.set(key, {
@@ -147,18 +185,24 @@ export async function GET(req: NextRequest) {
             streamUrl: row.streamUrl,
             isActive: row.isActive,
             categoryName: row.category?.name ?? null,
+            createdAt,
+            language: lang.label,
+            languageCode: lang.code,
           });
           continue;
         }
+        existing.createdAt = Math.max(existing.createdAt, createdAt);
         if (isEpisode) existing.episodeCount += 1;
         else {
           existing.id = row.id;
           existing.streamIcon = row.streamIcon ?? existing.streamIcon;
           existing.isActive = row.isActive;
           existing.categoryName = row.category?.name ?? existing.categoryName;
+          existing.language = lang.label;
+          existing.languageCode = lang.code;
         }
       }
-      const seriesAll = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+      const seriesAll = [...groups.values()].sort((a, b) => b.createdAt - a.createdAt || a.name.localeCompare(b.name));
       const total = seriesAll.length;
       const series = seriesAll.slice(offset, offset + pageSize);
       return NextResponse.json({ series, total, page, pageSize });

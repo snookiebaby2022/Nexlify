@@ -22,10 +22,15 @@ describe("xtream-safe", () => {
     assert.equal(xtreamSafeText("Sky\u0000 Sport\u0007"), "Sky Sport");
   });
 
-  it("uses the later of created and updated for Xtream added (XCIPTV Latest Movies)", () => {
-    const created = new Date("2020-01-01T00:00:00Z");
+  it("uses createdAt for Xtream added so XCIPTV Latest Movies shows panel-added titles", () => {
+    const created = new Date("2026-08-30T12:00:00Z");
+    const updated = new Date("2026-09-01T12:00:00Z");
+    assert.equal(xtreamAddedUnix(created, updated), Math.floor(created.getTime() / 1000));
+  });
+
+  it("falls back to updatedAt when createdAt is missing", () => {
     const updated = new Date("2026-08-30T12:00:00Z");
-    assert.equal(xtreamAddedUnix(created, updated), Math.floor(updated.getTime() / 1000));
+    assert.equal(xtreamAddedUnix(null, updated), Math.floor(updated.getTime() / 1000));
   });
 
   it("never emits NaN unix timestamps", () => {

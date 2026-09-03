@@ -1,5 +1,3 @@
-import http from "node:http";
-import https from "node:https";
 import { Readable } from "node:stream";
 import { ReadableStream } from "node:stream/web";
 import type { OutboundProxy } from "@/lib/outbound-proxy";

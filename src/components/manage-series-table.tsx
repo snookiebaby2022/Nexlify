@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Pencil, RefreshCw, Search, Tv, Trash2, Power } from "lucide-react";
 import { DEFAULT_LIST_PAGE_SIZE, LIST_PAGE_SIZE_OPTIONS } from "@/lib/list-page-sizes";
 import { displayStreamIcon } from "@/lib/plex-artwork";
 import { StreamDisplayTitle } from "@/components/stream-display-title";
 import { TmdbBackfillBanner } from "@/components/tmdb-backfill-banner";
 import { ListPagination } from "@/components/list-pagination";
+import { RemoveForeignVodButton } from "@/components/remove-foreign-vod-button";
 
 type SeriesRow = {
   id: string;
@@ -17,9 +19,13 @@ type SeriesRow = {
   streamUrl?: string | null;
   isActive: boolean;
   categoryName: string | null;
+  language?: string | null;
 };
 
 export function ManageSeriesTable() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const statusFromUrl = (searchParams.get("status") || "").toLowerCase();
   const [series, setSeries] = useState<SeriesRow[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -27,6 +33,9 @@ export function ManageSeriesTable() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_LIST_PAGE_SIZE);
   const [categoryId, setCategoryId] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">(
+    statusFromUrl === "active" || statusFromUrl === "inactive" ? statusFromUrl : ""
+  );
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -36,6 +45,14 @@ export function ManageSeriesTable() {
     const cat = new URLSearchParams(window.location.search).get("categoryId");
     if (cat) setCategoryId(cat);
   }, []);
+
+  useEffect(() => {
+    if (statusFromUrl === "active" || statusFromUrl === "inactive") {
+      setStatusFilter(statusFromUrl);
+    } else if (!statusFromUrl) {
+      setStatusFilter("");
+    }
+  }, [statusFromUrl]);
 
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search.trim()), 250);
@@ -51,6 +68,7 @@ export function ManageSeriesTable() {
     });
     if (searchDebounced) params.set("search", searchDebounced);
     if (categoryId) params.set("categoryId", categoryId);
+    if (statusFilter) params.set("status", statusFilter);
     fetch(`/api/admin/series?${params}`)
       .then(async (r) => {
         const d = await r.json().catch(() => ({}));
@@ -60,7 +78,7 @@ export function ManageSeriesTable() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load series"))
       .finally(() => setLoading(false));
-  }, [page, pageSize, searchDebounced, categoryId]);
+  }, [page, pageSize, searchDebounced, categoryId, statusFilter]);
 
   useEffect(() => {
     load();
@@ -102,6 +120,7 @@ export function ManageSeriesTable() {
           <Link href="/admin/import/series" className="xui-lines-header-btn xui-lines-header-btn--outline">
             Import
           </Link>
+          <RemoveForeignVodButton kind="SERIES" onDone={load} className="xui-lines-header-btn xui-lines-header-btn--outline" />
         </div>
       </div>
 
@@ -148,6 +167,24 @@ export function ManageSeriesTable() {
           </select>
           entries
         </label>
+        <select
+          className="xui-lines-select"
+          value={statusFilter}
+          onChange={(e) => {
+            const next = e.target.value as typeof statusFilter;
+            setStatusFilter(next);
+            setPage(1);
+            const params = new URLSearchParams(searchParams.toString());
+            if (next) params.set("status", next);
+            else params.delete("status");
+            const q = params.toString();
+            router.replace(`/admin/content/series${q ? `?${q}` : ""}`);
+          }}
+        >
+          <option value="">All series</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
         <button type="button" className="xui-lines-toolbar-btn" onClick={load}>
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
         </button>
@@ -181,7 +218,7 @@ export function ManageSeriesTable() {
                 <div className="min-w-0 flex-1">
                   <StreamDisplayTitle name={s.name} streamUrl={s.streamUrl} className="font-medium text-base" />
                   <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-                    {s.categoryName ?? "No category"} · {s.episodeCount} episodes · {s.isActive ? "Active" : "Disabled"}
+                    {s.categoryName ?? "No category"} · {s.language ?? "Unknown"} · {s.episodeCount} episodes · {s.isActive ? "Active" : "Disabled"}
                   </p>
                 </div>
               </div>
@@ -233,6 +270,7 @@ export function ManageSeriesTable() {
             <tr>
               <th className="xui-lines-th">Series</th>
               <th className="xui-lines-th">Category</th>
+              <th className="xui-lines-th">Language</th>
               <th className="xui-lines-th">Episodes</th>
               <th className="xui-lines-th">Status</th>
               <th className="xui-lines-th">Actions</th>
@@ -259,6 +297,7 @@ export function ManageSeriesTable() {
                   </div>
                 </td>
                 <td className="xui-lines-td">{s.categoryName ?? "—"}</td>
+                <td className="xui-lines-td">{s.language ?? "—"}</td>
                 <td className="xui-lines-td">{s.episodeCount}</td>
                 <td className="xui-lines-td">{s.isActive ? "Active" : "Disabled"}</td>
                 <td className="xui-lines-td">

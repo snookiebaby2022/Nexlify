@@ -5,7 +5,7 @@ import { aiChat, isAiConfigured } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 const SYSTEM_PROMPT = `You are a helpful AI support assistant for Nexlify IPTV Panel. Answer user questions about:
 

@@ -8,7 +8,7 @@ import {
   getPricingSuggestion,
 } from "@/lib/dynamic-pricing";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function GET() {
   const session = await requireSession([PanelRole.ADMIN]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole, StreamType } from "@prisma/client";
 import { autoAssignEpgToStream, findBestEpgMatch, listEpgChannelCandidates } from "@/lib/epg-auto-match";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 /**
  * POST { streamId?, name?, channelId?, force? }

@@ -6,7 +6,7 @@ import { collectDescendantCategoryIds } from "@/lib/category-tree";
 import { logActivity } from "@/lib/lines";
 import { invalidateXtreamCategories, invalidateDashboardStats } from "@/lib/cache-invalidate";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 /**
  * POST — set all streams in a category (and descendants) active or offline.

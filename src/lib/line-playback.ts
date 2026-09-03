@@ -2,11 +2,7 @@ import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { lineIsPlayable, type Line } from "@/lib/lines";
 import { expandHlsPlaybackCandidates } from "@/lib/hls-playback";
-import {
-  listStreamPlaybackUrls,
-  resolveStreamPlaybackUrl,
-  type StreamWithProvider,
-} from "@/lib/resolve-stream-url";
+import { resolveStreamPlaybackUrl, type StreamWithProvider } from "@/lib/resolve-stream-url";
 import { isIntegrationStreamUrl } from "@/lib/integration-stream-url";
 import { resolveIntegrationPlaybackUrl } from "@/lib/integration-playback";
 import { cacheGet, cacheSet } from "@/lib/cache";

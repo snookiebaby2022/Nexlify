@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { iptvTrialLinesDisabled } from "@/lib/iptv-trial-lines";
+import { getSettingGroup } from "@/lib/panel-settings";
+import { clampLineCredentialMinLength } from "@/lib/credential-generate";
 import { PanelRole } from "@prisma/client";
 
 /** Line create/edit UX flags readable by admin and resellers. */
@@ -13,5 +15,10 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const disabled = await iptvTrialLinesDisabled();
-  return NextResponse.json({ allowTrials: !disabled });
+  const security = await getSettingGroup("security");
+  return NextResponse.json({
+    allowTrials: !disabled,
+    autoGenerateLineCredentials: security.autoGenerateLineCredentials !== false,
+    credentialMinLength: clampLineCredentialMinLength(security.lineCredentialMinLength),
+  });
 }

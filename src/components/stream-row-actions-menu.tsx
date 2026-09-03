@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { MoreVertical } from "lucide-react";
+import { restartStreamOnServer } from "@/lib/restart-stream";
 import { computePortalMenuPosition } from "@/lib/portal-menu-position";
 
 type StreamType = "LIVE" | "MOVIE" | "SERIES";
@@ -12,6 +13,7 @@ export function StreamRowActionsMenu({
   streamId,
   streamType,
   isActive,
+  serverId,
   onRefresh,
   onDelete,
   editHref,
@@ -20,6 +22,7 @@ export function StreamRowActionsMenu({
   streamId: string;
   streamType?: StreamType;
   isActive: boolean;
+  serverId?: string | null;
   onRefresh: () => void;
   onDelete: () => void;
   editHref?: string;
@@ -52,7 +55,7 @@ export function StreamRowActionsMenu({
     const res = await fetch("/api/admin/streams/probe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ streamId, fast: true }),
+      body: JSON.stringify({ streamId, fast: false }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -96,6 +99,18 @@ export function StreamRowActionsMenu({
     };
   }, [open, updatePosition]);
 
+  async function restartStream() {
+    setOpen(false);
+    if (!serverId) {
+      alert("No streaming server assigned to this channel.");
+      return;
+    }
+    if (!confirm("Restart this stream on the assigned server? Viewers will reconnect.")) return;
+    const err = await restartStreamOnServer(serverId, streamId);
+    if (err) alert(err);
+    else onRefresh();
+  }
+
   const episodesHref =
     streamType === "SERIES" ? `/admin/content/episodes?seriesId=${streamId}` : "/admin/content/episodes/add";
 
@@ -132,8 +147,8 @@ export function StreamRowActionsMenu({
           <Link href="/admin/streams/logs" className="xui-lines-action-menu-item" onClick={() => setOpen(false)} role="menuitem">
             View logs
           </Link>
-          <Link href="/admin/stream_health" className="xui-lines-action-menu-item" onClick={() => setOpen(false)} role="menuitem">
-            Stream health
+          <Link href="/admin/content/streams?status=offline" className="xui-lines-action-menu-item" onClick={() => setOpen(false)} role="menuitem">
+            Failed probes
           </Link>
           {streamType === "LIVE" && (
             <button
@@ -143,6 +158,16 @@ export function StreamRowActionsMenu({
               onClick={() => void probeStream()}
             >
               Probe source
+            </button>
+          )}
+          {streamType === "LIVE" && (
+            <button
+              type="button"
+              className="xui-lines-action-menu-item"
+              role="menuitem"
+              onClick={() => void restartStream()}
+            >
+              Restart stream
             </button>
           )}
           {streamType === "SERIES" && (

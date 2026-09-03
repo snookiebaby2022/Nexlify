@@ -64,6 +64,20 @@ const nextConfig: NextConfig = {
       ...cacheHeaders,
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: "/admin/stream_errors",
+        destination: "/admin/content/streams?status=offline",
+        permanent: false,
+      },
+      {
+        source: "/admin/stream_health",
+        destination: "/admin/content/streams?status=offline&sourceIssue=unstable",
+        permanent: false,
+      },
+    ];
+  },
   /** Allow accessing dev server by public IP (e.g. http://85.17.162.54:3000) */
   allowedDevOrigins: devOrigins,
   experimental: {

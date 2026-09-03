@@ -8,7 +8,7 @@ import { redeemCouponCode, toCouponPublicView } from "@/lib/coupon-redeem";
 
 
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 const DEFAULT_PUBLIC_CODE = "NEXLIFY50";
 
 

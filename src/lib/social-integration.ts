@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma";
 import { cacheGet, cacheSet } from "@/lib/cache";
 
 const SOCIAL_PREFIX = "social:";

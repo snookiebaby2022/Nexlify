@@ -94,3 +94,9 @@ scripts/verify_separation.py
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# One-off operator diagnostics and host scratch (never ship to GitHub)
+scripts/_tmp-*
+.tmp-*
+tmp-tsc-mkt.txt
+tmp-*.txt

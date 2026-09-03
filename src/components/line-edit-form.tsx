@@ -14,7 +14,7 @@ import { PasswordInput } from "@/components/password-input";
 import { CopyableCredential } from "@/components/copyable-credential";
 import { PanelMobileActionBar } from "@/components/panel-mobile-action-bar";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
-import { generateLinePassword, MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput } from "@/lib/credential-generate";
+import { clampLineCredentialMinLength, MIN_LINE_CREDENTIAL_FLOOR, generateLinePassword, sanitizeCredentialInput } from "@/lib/credential-generate";
 import { formatDateTime, isUnlimitedLineExpiry } from "@/lib/format";
 import { lineDurationPresetsForPanel } from "@/lib/line-duration-presets";
 import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
@@ -122,6 +122,7 @@ export function LineEditForm({
   const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
   const [owners, setOwners] = useState<{ id: string; username: string }[]>([]);
   const [allowTrials, setAllowTrials] = useState(true);
+  const [credentialMinLength, setCredentialMinLength] = useState(MIN_LINE_CREDENTIAL_FLOOR);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [form, setForm] = useState({
     username: "",
@@ -198,7 +199,12 @@ export function LineEditForm({
     }
     fetch("/api/panel/line-ux")
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setAllowTrials(d?.allowTrials !== false))
+      .then((d) => {
+        setAllowTrials(d?.allowTrials !== false);
+        if (d?.credentialMinLength != null) {
+          setCredentialMinLength(clampLineCredentialMinLength(d.credentialMinLength));
+        }
+      })
       .catch(() => {});
     Promise.all(tasks)
       .then(([lineRes, bouquetRes, packageRes, serverRes, resellerRes]) => {
@@ -303,10 +309,10 @@ export function LineEditForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!line) return;
-    if (form.password.length > 0) {
+    if (form.password.length > 0 && form.password !== line.password) {
       const nextPass = sanitizeCredentialInput(form.password);
-      if (nextPass.length < MIN_LINE_CREDENTIAL_LENGTH) {
-        alert(`Password must be at least ${MIN_LINE_CREDENTIAL_LENGTH} characters.`);
+      if (nextPass.length < credentialMinLength) {
+        alert(`Password must be at least ${credentialMinLength} characters.`);
         return;
       }
     }
@@ -581,8 +587,8 @@ export function LineEditForm({
                     className="flex-1"
                     value={form.password}
                     onChange={(password) => setForm({ ...form, password })}
-                    placeholder={`Letters & numbers, min ${MIN_LINE_CREDENTIAL_LENGTH}`}
-                    minLength={MIN_LINE_CREDENTIAL_LENGTH}
+                    placeholder={`Letters & numbers, min ${credentialMinLength}`}
+                    minLength={form.password !== line.password ? credentialMinLength : undefined}
                   />
                   <button
                     type="button"

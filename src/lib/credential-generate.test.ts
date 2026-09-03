@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  MIN_LINE_CREDENTIAL_LENGTH,
+  MIN_LINE_CREDENTIAL_FLOOR,
+  DEFAULT_LINE_CREDENTIAL_MIN_LENGTH,
+  clampLineCredentialMinLength,
   validateLineCredential,
   validateLinePasswordPolicy,
   validatePanelAccountCredentials,
@@ -10,10 +12,22 @@ import {
 } from "./credential-generate";
 
 describe("credential charset + min length", () => {
-  it("requires at least 6 characters", () => {
-    assert.equal(MIN_LINE_CREDENTIAL_LENGTH, 6);
+  it("defaults to 6 but honors a configured floor of 3", () => {
+    assert.equal(MIN_LINE_CREDENTIAL_FLOOR, 3);
+    assert.equal(DEFAULT_LINE_CREDENTIAL_MIN_LENGTH, 6);
+    assert.equal(clampLineCredentialMinLength(3), 3);
+    assert.equal(clampLineCredentialMinLength(2), 3);
     assert.match(validateLineCredential("abc12", "username") ?? "", /at least 6/);
     assert.match(validateLineCredential("Ab1!", "password") ?? "", /at least 6/);
+    assert.equal(validateLineCredential("abc", "username", 3), null);
+    assert.equal(
+      validateLinePasswordPolicy("abc", "someone", {
+        minLength: 3,
+        requireLetterAndDigit: false,
+        blockCommonPasswords: false,
+      }),
+      null
+    );
   });
 
   it("allows letters and numbers in username and password", () => {

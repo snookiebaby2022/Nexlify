@@ -88,11 +88,6 @@ export async function requestLicenseKey(opts: {
   return signPayload(payload);
 }
 
-/** @deprecated Use requestLicenseKey */
-export async function generateLicenseKey(email: string, durationDays: number): Promise<string> {
-  return requestLicenseKey({ email, durationDays });
-}
-
 export async function uniqueLicenseKey(
   email: string,
   durationDays: number,

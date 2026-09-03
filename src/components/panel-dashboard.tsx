@@ -532,7 +532,7 @@ export function PanelDashboard({
 
             icon={<Play size={28} fill="currentColor" strokeWidth={0} />}
 
-            href={streamsHref}
+            href={`${streamsHref.split("?")[0]}?status=online`}
 
             footerLabel="View streams"
 

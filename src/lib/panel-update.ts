@@ -27,7 +27,7 @@ import {
   fetchNexlifyReleasesFeed,
   isVersionNewer,
 } from "@/lib/panel-releases-feed";
-import { choosePanelUpdateMode, isPanelUpdateForced } from "@/lib/panel-update-mode";
+import { choosePanelUpdateMode, isNextBuildTarballUrl, isPanelUpdateForced } from "@/lib/panel-update-mode";
 
 async function loadPanelServerSettings(): Promise<PanelServerSettings> {
   if (typeof getPanelServerSettingsSafe === "function") {
@@ -157,19 +157,6 @@ async function npmInstallStep(repoPath: string): Promise<UpdateStep> {
   }
 }
 
-const BUILD_STEPS_BASE: UpdateStep[] = [
-  { name: "prisma db push", command: "npx", args: ["prisma", "db", "push", "--accept-data-loss", "--skip-generate"] },
-  { name: "prisma generate", command: "npx", args: ["prisma", "generate"] },
-  { name: "npm run build", command: "npm", args: ["run", "build"] },
-];
-
-async function buildSteps(repoPath: string, skipNpm = false): Promise<UpdateStep[]> {
-  const steps: UpdateStep[] = [];
-  if (!skipNpm) steps.push(await npmInstallStep(repoPath));
-  steps.push(...BUILD_STEPS_BASE);
-  return steps;
-}
-
 /** VPS patch deploys ship updates via tarball sync script (no git pull required). */
 export async function resolvePatchUpdateScript(repoPath: string): Promise<string | null> {
   const candidates = [
@@ -261,24 +248,24 @@ async function resolvePanelRestartStep(repoPath: string): Promise<UpdateStep> {
   try {
     await access(safe);
     return {
-      name: "pm2 restart all",
+      name: "pm2 restart nexlify",
       command: "bash",
-      args: [safe],
+      args: [safe, "--nexlify-only"],
     };
   } catch {
     const pm2Start = path.join(repoPath, "scripts/pm2-start.sh");
     try {
       await access(pm2Start);
-      return { name: "pm2 restart all", command: "bash", args: [pm2Start] };
+      return { name: "pm2 restart nexlify", command: "bash", args: [pm2Start] };
     } catch {
       // Never bare `pm2 restart nexlify` — process may not exist after a failed swap.
       const eco = path.join(repoPath, "ecosystem.config.cjs");
       return {
-        name: "pm2 restart all",
+        name: "pm2 restart nexlify",
         command: "bash",
         args: [
           "-c",
-          `pm2 delete nexlify 2>/dev/null || true; pm2 start "${eco}" --only nexlify && pm2 save`,
+          `if pm2 describe nexlify >/dev/null 2>&1; then pm2 reload nexlify --update-env || pm2 restart nexlify --update-env; else pm2 start "${eco}" --only nexlify --update-env; fi && pm2 save`,
         ],
       };
     }
@@ -617,8 +604,22 @@ export async function runPanelUpdateWithProgress(
     /* keep targetVersion as fromVersion and fall back to patch/git below */
   }
 
+  const downloadUrl =
+    prebuiltScript && hasNewerRelease
+      ? await resolvePrebuiltDownloadUrl(targetVersion, repoPath)
+      : null;
+  const hasNextBuildTarball = isNextBuildTarballUrl(downloadUrl);
+
   let gitFetchOk: boolean | undefined;
-  if (versionInfo.isGitRepo) {
+  const tentativeMode = choosePanelUpdateMode({
+    isGitRepo: versionInfo.isGitRepo,
+    gitFetchOk,
+    hasPatchScript: Boolean(patchScript),
+    hasPrebuiltDownload: hasNextBuildTarball,
+    hasNewerRelease,
+  });
+
+  if (versionInfo.isGitRepo && tentativeMode === "git") {
     const fetchStepName = "git fetch origin main";
     await reportProgress(onProgress, {
       currentStep: fetchStepName,
@@ -643,16 +644,11 @@ export async function runPanelUpdateWithProgress(
     gitFetchOk = fetch.ok;
   }
 
-  const downloadUrl =
-    prebuiltScript && hasNewerRelease
-      ? await resolvePrebuiltDownloadUrl(targetVersion, repoPath)
-      : null;
-
   const chosen = choosePanelUpdateMode({
     isGitRepo: versionInfo.isGitRepo,
     gitFetchOk,
     hasPatchScript: Boolean(patchScript),
-    hasPrebuiltDownload: Boolean(downloadUrl),
+    hasPrebuiltDownload: hasNextBuildTarball,
     hasNewerRelease,
   });
   if (!chosen) {
@@ -663,7 +659,7 @@ export async function runPanelUpdateWithProgress(
   }
   mode = chosen;
 
-  if (mode === "prebuilt" && prebuiltScript && downloadUrl) {
+  if (mode === "prebuilt" && prebuiltScript && downloadUrl && hasNextBuildTarball) {
     mode = "prebuilt";
     // Always fetch the latest prebuilt apply script first so fixes in the script itself are picked up.
     const cacheBust = panelUpdateCacheBust(await readPanelVersionForCacheBust(repoPath));
@@ -742,6 +738,23 @@ export async function runPanelUpdateWithProgress(
         output: pm2.output,
       });
       ok = pm2.ok;
+    }
+  }
+  if (ok) {
+    const ready = path.join(repoPath, "scripts/wait-panel-ready.sh");
+    try {
+      await access(ready);
+      const health = await runCommand(repoPath, "bash", [ready], { stepName: "verify panel health" });
+      steps.push({ name: "verify panel health", ok: health.ok, output: health.output });
+      jobSteps.push({
+        name: "verify panel health",
+        ok: health.ok,
+        status: health.ok ? "done" : "failed",
+        output: health.output,
+      });
+      if (!health.ok) ok = false;
+    } catch {
+      /* older installs without wait-panel-ready.sh */
     }
   }
   if (!ok) {

@@ -1,7 +1,85 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.63",
+  "latestVersion": "2.0.65",
   "releases": [
+    {
+      "version": "2.0.65",
+      "date": "2026-09-03",
+      "channel": "stable",
+      "summary": "In-panel Update installs this numbered tarball from nexlify.live. Instant Live Connections, watch-folder bouquets, clearer dashboard links, and probes that no longer mark healthy channels dead.",
+      "changelog": [
+        "In-panel Update downloads the published tarball for this version instead of compiling GitHub main",
+        "GitHub main is fallback only, or if PANEL_UPDATE_PREFER_GIT=1 is set",
+        "Restart reloads the running app instead of deleting it first",
+        "A failed compile is recorded as failed and the previous build stays online",
+        "Nginx keeps retrying the panel port and shows a short restart page for the admin UI only",
+        "Live Connections refreshes as soon as a viewer starts, stops, zaps, or is kicked",
+        "Watch folders can create bouquets from M3U group-title and attach imported streams to chosen bouquets",
+        "Watch folders can create categories from group-title or assign an existing category",
+        "Remove foreign VOD previews matching titles first; uncertain rows stay unchecked until you include them",
+        "Dashboard Watching counts live channels only and opens the online streams list",
+        "Dead and Unstable tiles open Manage Streams already filtered to that problem",
+        "Ticket dashboard tiles open Tickets already filtered by type",
+        "Series list can filter inactive titles",
+        "Reseller edit uses the same username and password minimum length as line settings",
+        "Dashboard KPI and server tiles load together instead of waiting on one another"
+      ],
+      "fixes": [
+        "Update no longer reports success when the production build failed",
+        "Finishing or recovering an update cannot leave the panel process deleted",
+        "Live playback locations are not given the admin restart page",
+        "A skipped probe or a fast HEAD failure no longer marks a stream failed",
+        "Viewer playback needs three failed zaps before a fail is stored",
+        "Source probes need three dead streaks before a channel is marked dead",
+        "A live origin miss uses the same fail streak instead of flipping the stream offline immediately",
+        "HEAD-only probe failures retry with a full GET before counting against the stream",
+        "Stream Errors and Stream Health now open offline or unstable streams instead of separate pages",
+        "Creating a line applies the same password policy as editing one"
+      ],
+      "notes": [
+        "Existing M3U watch folders create bouquets from group-title on the next scan unless you turn Auto bouquet off",
+        "Use Admin → Updates on the panel to install v2.0.65 from the published tarball"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/nexlify-panel.tar.gz"
+    },
+    {
+      "version": "2.0.64",
+      "date": "2026-09-03",
+      "channel": "stable",
+      "summary": "Safer panel updates, instant Live Connections, watch-folder bouquets, clearer dashboard stream and ticket links, and probes that no longer mark healthy channels dead.",
+      "changelog": [
+        "Panel updates apply the published tarball instead of compiling a different git commit",
+        "Restart reloads the running app instead of deleting it first",
+        "A failed compile is recorded as failed and the previous build stays online",
+        "Nginx keeps retrying the panel port and shows a short restart page for the admin UI only",
+        "Live Connections refreshes as soon as a viewer starts, stops, zaps, or is kicked",
+        "Watch folders can create bouquets from M3U group-title and attach imported streams to chosen bouquets",
+        "Watch folders can create categories from group-title or assign an existing category",
+        "Remove foreign VOD previews matching titles first; uncertain rows stay unchecked until you include them",
+        "Dashboard Watching counts live channels only and opens the online streams list",
+        "Dead and Unstable tiles open Manage Streams already filtered to that problem",
+        "Ticket dashboard tiles open Tickets already filtered by type",
+        "Series list can filter inactive titles",
+        "Reseller edit uses the same username and password minimum length as line settings",
+        "Dashboard KPI and server tiles load together instead of waiting on one another"
+      ],
+      "fixes": [
+        "Update no longer reports success when the production build failed",
+        "Finishing or recovering an update cannot leave the panel process deleted",
+        "Live playback locations are not given the admin restart page",
+        "A skipped probe or a fast HEAD failure no longer marks a stream failed",
+        "Viewer playback needs three failed zaps before a fail is stored",
+        "Source probes need three dead streaks before a channel is marked dead",
+        "A live origin miss uses the same fail streak instead of flipping the stream offline immediately",
+        "HEAD-only probe failures retry with a full GET before counting against the stream",
+        "Stream Errors and Stream Health now open offline or unstable streams instead of separate pages",
+        "Creating a line applies the same password policy as editing one"
+      ],
+      "notes": [
+        "Existing M3U watch folders create bouquets from group-title on the next scan unless you turn Auto bouquet off"
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/nexlify-panel.tar.gz"
+    },
     {
       "version": "2.0.63",
       "date": "2026-09-03",

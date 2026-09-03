@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FormPageShell, FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { PasswordInput } from "@/components/password-input";
 import { CopyableCredential } from "@/components/copyable-credential";
+import { clampLineCredentialMinLength, DEFAULT_LINE_CREDENTIAL_MIN_LENGTH } from "@/lib/credential-generate";
 
 const LANGUAGES = [
   { value: "en", label: "English" },
@@ -25,6 +26,7 @@ export default function AdminEditUserPage() {
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [credentialMinLength, setCredentialMinLength] = useState(DEFAULT_LINE_CREDENTIAL_MIN_LENGTH);
   const [form, setForm] = useState({
     username: "",
     password: "",
@@ -63,6 +65,14 @@ export default function AdminEditUserPage() {
             }))
         )
       );
+    fetch("/api/panel/line-ux")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.credentialMinLength != null) {
+          setCredentialMinLength(clampLineCredentialMinLength(d.credentialMinLength));
+        }
+      })
+      .catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -100,6 +110,14 @@ export default function AdminEditUserPage() {
     setMsg("");
     if (form.password && form.password !== form.confirmPassword) {
       setMsg("Password and confirm password do not match.");
+      return;
+    }
+    if (form.username.trim().length < credentialMinLength) {
+      setMsg(`Username must be at least ${credentialMinLength} characters.`);
+      return;
+    }
+    if (form.password && form.password.length < credentialMinLength) {
+      setMsg(`Password must be at least ${credentialMinLength} characters.`);
       return;
     }
     if (form.role === "SUB_RESELLER" && !form.parentId) {
@@ -156,6 +174,7 @@ export default function AdminEditUserPage() {
             value={form.username}
             onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
             required
+            minLength={credentialMinLength}
           />
         </FormField>
 
@@ -185,9 +204,10 @@ export default function AdminEditUserPage() {
           <PasswordInput
             value={form.password}
             onChange={(v) => setForm((f) => ({ ...f, password: v }))}
+            minLength={form.password ? credentialMinLength : undefined}
           />
           <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-            Leave blank to keep current password
+            Leave blank to keep current password. New passwords must be at least {credentialMinLength} characters.
           </p>
         </FormField>
 

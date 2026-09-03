@@ -5,6 +5,7 @@ import {
   generateLineUsername,
   validatePanelAccountCredentials,
 } from "@/lib/credential-generate";
+import { resolveLineCredentialMinLength } from "@/lib/line-credential-policy";
 
 export async function resellerCredentialsMustBeGenerated(): Promise<boolean> {
   const security = await getSettingGroup("security");
@@ -36,7 +37,7 @@ export async function resolveNewPanelUserCredentials(input: {
     return { ok: false, error: "Username and password are required" };
   }
 
-  const credErr = validatePanelAccountCredentials(username, password);
+  const credErr = validatePanelAccountCredentials(username, password, await resolveLineCredentialMinLength());
   if (credErr) return { ok: false, error: credErr };
   return { ok: true, username, password };
 }

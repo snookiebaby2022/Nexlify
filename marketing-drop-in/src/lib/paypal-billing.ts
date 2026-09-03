@@ -225,53 +225,6 @@ export async function verifyPayPalWebhook(headers: Headers, rawBody: string): Pr
   return data.verification_status === "SUCCESS";
 }
 
-/** @deprecated Legacy one-time orders — new checkouts use subscriptions. */
-export async function createPayPalOrder(opts: {
-  amount: number;
-  currency: string;
-  description: string;
-  returnUrl: string;
-  cancelUrl: string;
-  customId?: string;
-}): Promise<{ orderId: string; approveUrl?: string }> {
-  const cfg = await getPayPalConfig();
-  if (!cfg) throw new Error("PayPal not configured");
-  const token = await getPayPalAccessToken(cfg);
-  const orderRes = await fetch(`${cfg.base}/v2/checkout/orders`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      intent: "CAPTURE",
-      purchase_units: [
-        {
-          amount: { currency_code: opts.currency, value: opts.amount.toFixed(2) },
-          description: opts.description,
-          ...(opts.customId ? { custom_id: opts.customId.slice(0, 127) } : {}),
-        },
-      ],
-      application_context: {
-        return_url: opts.returnUrl,
-        cancel_url: opts.cancelUrl,
-        brand_name: "Nexlify",
-        user_action: "PAY_NOW",
-      },
-    }),
-  });
-  const order = (await orderRes.json()) as {
-    id?: string;
-    links?: { rel: string; href: string }[];
-    message?: string;
-  };
-  if (!orderRes.ok || !order.id) {
-    throw new Error(order.message ?? "PayPal order create failed");
-  }
-  const approve = order.links?.find((l) => l.rel === "approve")?.href;
-  return { orderId: order.id, approveUrl: approve };
-}
-
 /** @deprecated Legacy one-time capture. */
 export async function capturePayPalOrder(orderId: string): Promise<{
   status: string;

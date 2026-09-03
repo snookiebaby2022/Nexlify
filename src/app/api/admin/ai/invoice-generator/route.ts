@@ -4,7 +4,7 @@ import { PanelRole } from "@prisma/client";
 import { aiChatJSON, isAiConfigured } from "@/lib/ai";
 import { prisma } from "@/lib/prisma";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { parseJsonBody } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 interface InvoiceResult {
   invoiceDescription: string;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { HelpCircle, Play, Square } from "lucide-react";
+import { RotateCcw, HelpCircle, Play, Square } from "lucide-react";
 import { FFMPEG_TRANSCODE_PROFILES } from "@/lib/ffmpeg-transcode-profiles";
 
 export function StreamTranscodeQuickActions({
@@ -95,6 +95,16 @@ export function StreamTranscodeQuickActions({
           onClick={() => void agentAction(running ? "stop_stream" : "start_stream")}
         >
           {running ? <Square size={12} /> : <Play size={12} />}
+        </button>
+        <button
+          type="button"
+          className="xui-lines-action-btn p-1"
+          disabled={busy}
+          title="Restart this stream on the assigned server (viewers reconnect)"
+          aria-label="Restart stream"
+          onClick={() => void agentAction("restart_stream")}
+        >
+          <RotateCcw size={12} />
         </button>
         <button
           type="button"

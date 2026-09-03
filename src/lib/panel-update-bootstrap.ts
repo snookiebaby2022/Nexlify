@@ -72,13 +72,16 @@ fetch_gh() {
   local rel="$1" dest="$2"
   fetch "$GH/$rel" "$dest"
 }
-fetch_gh scripts/apply-panel-fast-update.sh scripts/apply-panel-fast-update.sh || fetch_vendor apply-panel-fast-update.sh scripts/apply-panel-fast-update.sh || true
-fetch_gh scripts/apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || fetch_vendor apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || true
-fetch_gh scripts/panel-restart-safe.sh scripts/panel-restart-safe.sh || fetch_vendor scripts/panel-restart-safe.sh scripts/panel-restart-safe.sh || true
-fetch_gh scripts/panel-update-recover.sh scripts/panel-update-recover.sh || fetch_vendor scripts/panel-update-recover.sh scripts/panel-update-recover.sh || true
-fetch_gh scripts/has-valid-next-build.sh scripts/has-valid-next-build.sh || fetch_vendor scripts/has-valid-next-build.sh scripts/has-valid-next-build.sh || true
-fetch_gh scripts/panel-update-background.sh scripts/panel-update-background.sh || fetch_vendor scripts/panel-update-background.sh scripts/panel-update-background.sh || true
-fetch_gh scripts/panel-update-background.ts scripts/panel-update-background.ts || fetch_vendor scripts/panel-update-background.ts scripts/panel-update-background.ts || true
+fetch_vendor apply-panel-fast-update.sh scripts/apply-panel-fast-update.sh || fetch_gh scripts/apply-panel-fast-update.sh scripts/apply-panel-fast-update.sh || true
+fetch_vendor apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || fetch_vendor scripts/apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || fetch_gh scripts/apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || true
+fetch_vendor scripts/panel-restart-safe.sh scripts/panel-restart-safe.sh || fetch_gh scripts/panel-restart-safe.sh scripts/panel-restart-safe.sh || true
+fetch_vendor scripts/panel-update-recover.sh scripts/panel-update-recover.sh || fetch_gh scripts/panel-update-recover.sh scripts/panel-update-recover.sh || true
+fetch_vendor scripts/has-valid-next-build.sh scripts/has-valid-next-build.sh || fetch_gh scripts/has-valid-next-build.sh scripts/has-valid-next-build.sh || true
+fetch_vendor scripts/panel-update-background.sh scripts/panel-update-background.sh || fetch_gh scripts/panel-update-background.sh scripts/panel-update-background.sh || true
+fetch_vendor scripts/panel-update-background.ts scripts/panel-update-background.ts || fetch_gh scripts/panel-update-background.ts scripts/panel-update-background.ts || true
+fetch_vendor scripts/ensure-nginx-panel-hold.sh scripts/ensure-nginx-panel-hold.sh || fetch_gh scripts/ensure-nginx-panel-hold.sh scripts/ensure-nginx-panel-hold.sh || true
+fetch_vendor scripts/nexlify-streaming-guard.sh scripts/nexlify-streaming-guard.sh || fetch_gh scripts/nexlify-streaming-guard.sh scripts/nexlify-streaming-guard.sh || true
+fetch_vendor scripts/nexlify-watchdog.sh scripts/nexlify-watchdog.sh || fetch_gh scripts/nexlify-watchdog.sh scripts/nexlify-watchdog.sh || true
 sed -i 's/\\r$//' scripts/*.sh 2>/dev/null || true
 chmod +x scripts/*.sh 2>/dev/null || true
 echo "Bootstrap complete (github+vendor=$BASE cache=$BUST)"

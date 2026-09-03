@@ -305,7 +305,7 @@ cmd_bootstrap() {
 }
 
 cmd_sync_git() {
-  echo "Git checkout — fetching origin/main (GitHub is source of truth, not vendor tarball)"
+  echo "Git checkout — fetching origin/main (PANEL_UPDATE_PREFER_GIT=1)"
   if ! git -C "$ROOT" fetch origin main && ! git -C "$ROOT" fetch origin; then
     echo "WARN: git fetch failed — falling back to tarball" >&2
     return 1
@@ -380,8 +380,12 @@ cmd_sync_tarball() {
 
 cmd_sync() {
   bootstrap_patch_scripts
-  if [ -d "$ROOT/.git" ] && cmd_sync_git; then
-    return 0
+  local prefer_git
+  prefer_git="$(printf '%s' "${PANEL_UPDATE_PREFER_GIT:-}" | tr '[:upper:]' '[:lower:]')"
+  if [ "$prefer_git" = "1" ] || [ "$prefer_git" = "true" ] || [ "$prefer_git" = "yes" ]; then
+    if [ -d "$ROOT/.git" ] && cmd_sync_git; then
+      return 0
+    fi
   fi
   cmd_sync_tarball
 }
@@ -406,8 +410,9 @@ cmd_prisma() {
   unset DATABASE_URL 2>/dev/null || true
   if schema_changed; then
     echo "Schema changed — prisma db push + generate ..."
-    npx prisma db push --accept-data-loss --skip-generate
-    npx prisma generate
+    npx prisma db push --accept-data-loss --skip-generate \
+      || echo "WARN: prisma db push failed (non-fatal) — continuing with current database"
+    npx prisma generate || echo "WARN: prisma generate failed"
   elif [ ! -d node_modules/.prisma/client ]; then
     echo "Prisma client missing — generating ..."
     npx prisma generate
@@ -588,12 +593,19 @@ cmd_restart() {
     echo "WARN: restart skipped — no valid .next (run recover)" >&2
     return 1
   fi
+  if [ -x "$ROOT/scripts/ensure-nginx-panel-hold.sh" ]; then
+    bash "$ROOT/scripts/ensure-nginx-panel-hold.sh" || true
+  fi
   if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
-    bash "$ROOT/scripts/panel-restart-safe.sh"
+    bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only
   elif [ -x "$ROOT/scripts/pm2-start.sh" ]; then
     bash "$ROOT/scripts/pm2-start.sh"
   else
-    pm2 restart nexlify --update-env 2>/dev/null || pm2 start ecosystem.config.cjs --only nexlify --update-env
+    if pm2 describe nexlify >/dev/null 2>&1; then
+      pm2 reload nexlify --update-env 2>/dev/null || pm2 restart nexlify --update-env
+    else
+      pm2 start ecosystem.config.cjs --only nexlify --update-env
+    fi
     pm2 save 2>/dev/null || true
   fi
   if [ -f "$ROOT/.next/standalone/server.js" ]; then
@@ -621,7 +633,7 @@ cmd_restart() {
       bash "$ROOT/scripts/fix-next-distdir-references.sh" "$ROOT/.next" 2>/dev/null || true
       bash "$ROOT/scripts/prepare-standalone.sh" 2>/dev/null || true
       if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
-        bash "$ROOT/scripts/panel-restart-safe.sh" 2>/dev/null || true
+        bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only 2>/dev/null || true
         sleep 3
       fi
       _code2="$(curl -sS -o /dev/null -w '%{http_code}' -A 'Mozilla/5.0' "http://127.0.0.1/_next/static/chunks/${_bn}" 2>/dev/null || echo 000)"

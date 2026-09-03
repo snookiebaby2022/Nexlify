@@ -230,23 +230,36 @@ export function installedVersionImpliesUpdateSuccess(
 export function looksLikeSuccessfulUpdateDespiteWorkerExit(job: PanelUpdateJob): boolean {
   const step = (job.currentStep ?? "").trim();
   const progress = Number(job.progress) || 0;
-  if (progress >= 94) return true;
-  if (step === "pm2 restart nexlify") return true;
-  if (step === "prepare standalone" && progress >= 90) return true;
-  if (step === "apply update" && progress >= 88) return true;
-  // Compile often sits at ~52–70% when PM2 swap kills the worker. Treat as success
-  // so Updates cannot remain stuck at 60% after the new build is already live.
+  const buildFailed = job.steps?.some(
+    (s) =>
+      (s.name === "npm run build" || s.name === "prepare build") &&
+      (s.ok === false || s.status === "failed")
+  );
+  if (buildFailed) return false;
+  // Mid-compile is not success. A failed Next build used to be promoted to "done"
+  // and then the restart deleted nexlify, leaving nginx on 502.
   if (
-    progress >= 50 &&
-    (step === "npm run build" || step === "prepare build" || step === "prepare standalone" || step === "apply update")
+    step === "npm run build" ||
+    step === "prepare build" ||
+    step === "git pull" ||
+    step === "git fetch origin main" ||
+    step === "npm install" ||
+    step === "download update" ||
+    step === "extract update" ||
+    step === "sync panel files"
   ) {
-    return true;
+    return false;
   }
-  // Steps array may already record a successful restart while status is still "running"
   const restartDone = job.steps?.some(
-    (s) => s.name === "pm2 restart nexlify" && (s.ok || s.status === "done")
+    (s) =>
+      (s.name === "pm2 restart nexlify" || s.name === "pm2 restart all") &&
+      (s.ok === true || s.status === "done")
   );
   if (restartDone) return true;
+  if (step === "pm2 restart nexlify" || step === "pm2 restart all") return progress >= 90;
+  if (step === "prepare standalone" && progress >= 90) return true;
+  if (step === "apply update" && progress >= 88) return true;
+  if (progress >= 94) return true;
   return false;
 }
 

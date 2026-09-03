@@ -6,7 +6,7 @@ import {
   resolveStreamIdParam,
   seriesEpisodeIdsForLine,
 } from "./xtream-stream-id";
-import { xtreamListingExtension, xtreamSafeText } from "./xtream-safe";
+import { xtreamAddedUnix, xtreamListingExtension, xtreamSafeText } from "./xtream-safe";
 import {
   buildCanonicalCategoryMaps,
   canonicalNumericForCategory,
@@ -102,12 +102,7 @@ export async function xtreamVodInfo(
     movie_data: {
       stream_id: cuidToNum(full.id),
       name: xtreamSafeText(full.name) || "Movie",
-      added: String(
-        Math.max(
-          Math.floor(full.createdAt.getTime() / 1000),
-          Math.floor(full.updatedAt.getTime() / 1000),
-        ),
-      ),
+      added: String(xtreamAddedUnix(full.createdAt, full.updatedAt)),
       category_id: canonicalNumericForCategory(canonical, full.categoryId),
       container_extension: ext,
       custom_sid: "",

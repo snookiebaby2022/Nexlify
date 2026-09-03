@@ -10,7 +10,7 @@ import { resolvePatchUpdateScript } from "@/lib/panel-update";
 import { getPanelVersionInfo, readInstalledVersion } from "@/lib/panel-version";
 import { getPanelUpdateStatus } from "@/lib/panel-update-auto";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 /** Vendor (nexlify.live) triggers a background panel update on a customer VPS. */
 export async function POST(req: NextRequest) {
   try {

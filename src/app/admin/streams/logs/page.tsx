@@ -70,8 +70,8 @@ export default function StreamLogsPage() {
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
           Freezes, stutters, channel drops, agent ffmpeg, and HLS relay errors (last 24 hours). Direct-source
           channels do not run ffmpeg — use Live viewers below.{" "}
-          <Link href="/admin/stream_errors" style={{ color: "var(--accent)" }}>
-            Stream errors
+          <Link href="/admin/content/streams?status=offline" style={{ color: "var(--accent)" }}>
+            Failed probes
           </Link>
         </p>
       </div>

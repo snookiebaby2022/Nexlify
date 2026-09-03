@@ -5,20 +5,35 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LifeBuoy } from "lucide-react";
 import type { TicketRow } from "@/components/ticket-ui";
+import {
+  classifyTicketSubject,
+  type TicketContentKind,
+  type TicketIntent,
+} from "@/lib/ticket-content-types";
 
 function TicketsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const statusParam = (searchParams.get("status") || "OPEN").toUpperCase();
+  const intentParam = (searchParams.get("intent") || "").toLowerCase();
+  const contentParam = (searchParams.get("content") || "").toLowerCase();
   const initialTab =
     statusParam === "CLOSED" || statusParam === "RESOLVED"
       ? "CLOSED"
       : statusParam === "ALL"
         ? "ALL"
         : "OPEN";
+  const initialIntent: TicketIntent | "ALL" =
+    intentParam === "report" || intentParam === "request" ? intentParam : "ALL";
+  const initialContent: TicketContentKind | "ALL" =
+    contentParam === "channels" || contentParam === "movies" || contentParam === "series"
+      ? contentParam
+      : "ALL";
 
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [tab, setTab] = useState<"OPEN" | "CLOSED" | "ALL">(initialTab);
+  const [filterIntent, setFilterIntent] = useState<TicketIntent | "ALL">(initialIntent);
+  const [filterContent, setFilterContent] = useState<TicketContentKind | "ALL">(initialContent);
   const [filterCategory, setFilterCategory] = useState("ALL");
   const [filterAssignee, setFilterAssignee] = useState("ALL");
   const [admins, setAdmins] = useState<{ id: string; username: string }[]>([]);
@@ -40,13 +55,30 @@ function TicketsPageInner() {
 
   useEffect(() => {
     setTab(initialTab);
-  }, [initialTab]);
+    setFilterIntent(initialIntent);
+    setFilterContent(initialContent);
+  }, [initialTab, initialIntent, initialContent]);
+
+  function ticketsQuery(next: {
+    tab?: "OPEN" | "CLOSED" | "ALL";
+    intent?: TicketIntent | "ALL";
+    content?: TicketContentKind | "ALL";
+  }) {
+    const params = new URLSearchParams();
+    const status = next.tab ?? tab;
+    const intent = next.intent ?? filterIntent;
+    const content = next.content ?? filterContent;
+    if (status !== "ALL") params.set("status", status);
+    if (intent !== "ALL") params.set("intent", intent);
+    if (content !== "ALL") params.set("content", content);
+    const q = params.toString();
+    return `/admin/tickets${q ? `?${q}` : ""}`;
+  }
 
   function setTabAndUrl(next: "OPEN" | "CLOSED" | "ALL") {
     setTab(next);
     setSelected(new Set());
-    const q = next === "ALL" ? "" : `?status=${next}`;
-    router.replace(`/admin/tickets${q}`);
+    router.replace(ticketsQuery({ tab: next }));
   }
 
   async function setStatus(id: string, status: string) {
@@ -75,6 +107,12 @@ function TicketsPageInner() {
     if (tab === "CLOSED" && t.status !== "CLOSED" && t.status !== "RESOLVED") return false;
     if (filterCategory !== "ALL" && t.category !== filterCategory) return false;
     if (filterAssignee !== "ALL" && t.assignedToId !== filterAssignee) return false;
+    if (filterIntent !== "ALL" || filterContent !== "ALL") {
+      const classified = classifyTicketSubject(t.subject);
+      if (!classified) return false;
+      if (filterIntent !== "ALL" && classified.intent !== filterIntent) return false;
+      if (filterContent !== "ALL" && classified.content !== filterContent) return false;
+    }
     return true;
   });
 
@@ -150,6 +188,37 @@ function TicketsPageInner() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          <select
+            className="rounded border px-3 py-2 text-sm bg-transparent"
+            style={{ borderColor: "var(--border)" }}
+            value={filterIntent}
+            onChange={(e) => {
+              const intent = e.target.value as TicketIntent | "ALL";
+              setFilterIntent(intent);
+              setSelected(new Set());
+              router.replace(ticketsQuery({ intent }));
+            }}
+          >
+            <option value="ALL">All intents</option>
+            <option value="report">Reports</option>
+            <option value="request">Add requests</option>
+          </select>
+          <select
+            className="rounded border px-3 py-2 text-sm bg-transparent"
+            style={{ borderColor: "var(--border)" }}
+            value={filterContent}
+            onChange={(e) => {
+              const content = e.target.value as TicketContentKind | "ALL";
+              setFilterContent(content);
+              setSelected(new Set());
+              router.replace(ticketsQuery({ content }));
+            }}
+          >
+            <option value="ALL">All content</option>
+            <option value="channels">Channels</option>
+            <option value="movies">Movies</option>
+            <option value="series">TV series</option>
+          </select>
           <select
             className="rounded border px-3 py-2 text-sm bg-transparent"
             style={{ borderColor: "var(--border)" }}

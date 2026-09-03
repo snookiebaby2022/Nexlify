@@ -8,14 +8,14 @@ import {
   incrementAccessCodeUse,
   resolveLineCreateFromPackage,
 } from "@/lib/package-line";
-import { getSettingGroup } from "@/lib/panel-settings";
 import {
   generateLinePassword,
   generateLineUsername,
-  MIN_LINE_CREDENTIAL_LENGTH,
   sanitizeCredentialInput,
   validateLineCredential,
+  validateLinePasswordPolicy,
 } from "@/lib/credential-generate";
+import { resolveLineCredentialMinLength, resolveLinePasswordPolicy } from "@/lib/line-credential-policy";
 import { LineStatus, Prisma } from "@prisma/client";
 import { normalizeAllowedOutputInput, DEFAULT_ALLOWED_OUTPUT } from "@/lib/line-access-output";
 import { UNLIMITED_LINE_DAYS } from "@/lib/line-duration-presets";
@@ -93,11 +93,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
-  const security = await getSettingGroup("security");
-  const minLen = Math.max(
-    MIN_LINE_CREDENTIAL_LENGTH,
-    Number(security.lineCredentialMinLength ?? MIN_LINE_CREDENTIAL_LENGTH) || MIN_LINE_CREDENTIAL_LENGTH
-  );
+  const minLen = await resolveLineCredentialMinLength();
 
   let username = sanitizeCredentialInput(String(body.username ?? ""));
   let password = sanitizeCredentialInput(String(body.password ?? ""));
@@ -113,13 +109,7 @@ export async function POST(req: NextRequest) {
 
   const userErr = validateLineCredential(username, "username", minLen);
   if (userErr) return NextResponse.json({ error: userErr }, { status: 400 });
-  const { validateLinePasswordPolicy } = await import("@/lib/credential-generate");
-  const passErr = validateLinePasswordPolicy(password, username, {
-    minLength: minLen,
-    requireLetterAndDigit: security.linePasswordRequireLetterAndDigit === true,
-    blockCommonPasswords: security.linePasswordBlockCommon !== false,
-    disallowUsernameMatch: security.linePasswordDisallowUsername !== false,
-  });
+  const passErr = validateLinePasswordPolicy(password, username, await resolveLinePasswordPolicy());
   if (passErr) return NextResponse.json({ error: passErr }, { status: 400 });
 
   const existing = await prisma.line.findUnique({ where: { username } });

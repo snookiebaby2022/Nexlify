@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PanelRole, StreamType } from "@prisma/client";
 import { probeStreamUrl } from "@/lib/stream-probe-server";
 import { resolveProbeTargetUrl } from "@/lib/resolve-probe-url";
+import { decideProbePersist } from "@/lib/stream-probe-persist";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -119,27 +120,32 @@ export async function POST(req: NextRequest) {
 
     const resolved = await resolveProbeTargetUrl(stream.streamUrl, stream);
     const probeUrl = resolved.url || stream.streamUrl;
-    const primaryProbe = await probeStreamUrl(probeUrl, { fast: true });
+    const primaryProbe = await probeStreamUrl(probeUrl, { fast: false });
     let backupProbe = null;
     if (stream.backupUrl) {
       const backupResolved = await resolveProbeTargetUrl(stream.backupUrl.trim(), stream);
-      backupProbe = await probeStreamUrl(backupResolved.url || stream.backupUrl.trim(), { fast: true });
+      backupProbe = await probeStreamUrl(backupResolved.url || stream.backupUrl.trim(), { fast: false });
     }
 
-    const lastProbeOk = primaryProbe.status === "online";
-    const lastProbeError = lastProbeOk ? null : primaryProbe.message ?? "Probe failed";
-
-    await prisma.stream.update({
-      where: { id: streamId },
-      data: { lastProbeOk, lastProbeError },
-    });
+    const lastProbeOk = primaryProbe.status === "online" || primaryProbe.status === "degraded";
+    const persist = decideProbePersist({ fast: false, probe: primaryProbe });
+    if (persist.write) {
+      await prisma.stream.update({
+        where: { id: streamId },
+        data: {
+          lastProbeOk: persist.lastProbeOk,
+          lastProbeError: persist.lastProbeError ?? null,
+          lastProbeAt: new Date(),
+        },
+      });
+    }
 
     return NextResponse.json({
       streamId,
       name: stream.name,
       primary: { status: primaryProbe.status, message: primaryProbe.message },
       backup: backupProbe ? { status: backupProbe.status, message: backupProbe.message } : null,
-      lastProbeOk,
+      lastProbeOk: persist.write ? Boolean(persist.lastProbeOk) : lastProbeOk,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";

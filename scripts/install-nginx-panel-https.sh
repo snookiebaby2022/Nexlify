@@ -108,6 +108,15 @@ server {
         proxy_set_header X-Forwarded-Host \$host;
         proxy_set_header X-Forwarded-Port \$server_port;
         proxy_read_timeout 300s;
+        proxy_connect_timeout 3s;
+        proxy_intercept_errors on;
+        error_page 502 503 504 =503 @nexlify_panel_hold;
+    }
+
+    location @nexlify_panel_hold {
+        default_type text/html;
+        root /var/www/nexlify-updating;
+        try_files /updating.html =503;
     }
 }
 NGINX

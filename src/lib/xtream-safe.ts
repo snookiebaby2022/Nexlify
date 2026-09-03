@@ -26,12 +26,14 @@ export function xtreamUnixString(date: Date | string | number | null | undefined
   return String(xtreamUnix(date));
 }
 
-/** XCIPTV Latest Movies sorts/filters on `added`. Use the later of created/updated so Plex syncs appear. */
+/** XCIPTV Latest Movies sorts/filters on `added`. Use panel createdAt so TMDB/Plex metadata updates do not hide newly added titles. */
 export function xtreamAddedUnix(
   createdAt: Date | string | number | null | undefined,
   updatedAt?: Date | string | number | null
 ): number {
-  return Math.max(xtreamUnix(createdAt), xtreamUnix(updatedAt));
+  const created = xtreamUnix(createdAt);
+  if (created > 0) return created;
+  return xtreamUnix(updatedAt);
 }
 
 /** XCIPTV iterates JSON arrays. Delta/timestamp must still return an array, never a wrapper object. */

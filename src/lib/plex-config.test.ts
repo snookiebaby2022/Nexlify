@@ -70,3 +70,14 @@ test("plexImageRequestHeaders asks Plex for an image, not JSON", () => {
   assert.match(img.Accept, /image\//i);
   assert.doesNotMatch(img.Accept, /application\/json/i);
 });
+
+test("normalizePlexConfig keeps multi-library keys and skip-foreign", () => {
+  const cfg = normalizePlexConfig({
+    host: "plex.local",
+    libraryKeys: ["1", "2"],
+    excludeNonEnglish: true,
+  });
+  assert.deepEqual(cfg.libraryKeys, ["1", "2"]);
+  assert.equal(cfg.libraryKey, "1");
+  assert.equal(cfg.excludeNonEnglish, true);
+});

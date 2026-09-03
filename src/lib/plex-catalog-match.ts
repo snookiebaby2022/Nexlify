@@ -38,6 +38,34 @@ export function plexSeriesTitleKey(name: string, seriesName?: string | null): st
   return plexCatalogTitleKey(cut);
 }
 
+export function plexLanguageFromItem(item: {
+  guid?: string;
+  Guid?: unknown;
+  Language?: unknown;
+}): string {
+  const guid = String(item.guid ?? "");
+  const guidLang = guid.match(/[?&]lang=([a-z]{2,8})/i);
+  if (guidLang) return guidLang[1]!.toLowerCase();
+  if (Array.isArray(item.Guid)) {
+    for (const g of item.Guid) {
+      const id = typeof g === "string" ? g : String((g as { id?: string })?.id ?? "");
+      const m = id.match(/[?&]lang=([a-z]{2,8})/i);
+      if (m) return m[1]!.toLowerCase();
+    }
+  }
+  const lang = item.Language;
+  if (typeof lang === "string" && lang.trim()) return lang.trim().toLowerCase();
+  if (Array.isArray(lang)) {
+    for (const x of lang) {
+      if (typeof x === "string" && x.trim()) return x.trim().toLowerCase();
+      if (x && typeof x === "object" && typeof (x as { tag?: string }).tag === "string") {
+        return String((x as { tag: string }).tag).trim().toLowerCase();
+      }
+    }
+  }
+  return "";
+}
+
 function plexTagList(value: unknown): string {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (!Array.isArray(value)) return "";
@@ -60,6 +88,9 @@ export function plexVodMetaFromItem(item: {
   originallyAvailableAt?: string;
   duration?: number;
   studio?: string;
+  guid?: string;
+  Guid?: unknown;
+  Language?: unknown;
   Genre?: unknown;
   Role?: unknown;
   Director?: unknown;
@@ -72,6 +103,7 @@ export function plexVodMetaFromItem(item: {
   const rating = ratingRaw != null && Number(ratingRaw) > 0 ? String(Number(ratingRaw).toFixed(1)) : "";
   const durationMs = Number(item.duration);
   const durationSecs = Number.isFinite(durationMs) && durationMs > 1000 ? Math.round(durationMs / 1000) : 0;
+  const language = plexLanguageFromItem(item);
   return {
     plot,
     summary: plot,
@@ -82,6 +114,8 @@ export function plexVodMetaFromItem(item: {
     releaseDate: release,
     durationSecs,
     studio: String(item.studio ?? "").trim(),
+    originalLanguage: language,
+    language,
   };
 }
 

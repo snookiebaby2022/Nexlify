@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole, Prisma } from "@prisma/client";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import {
   buildBrandedAndroidProject,
   writeBrandedAppConfig,

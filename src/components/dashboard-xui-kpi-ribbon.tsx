@@ -98,7 +98,6 @@ export function DashboardXuiKpiRibbon({
   kpi,
   connectionsHref,
   linesHref,
-  streamsHref,
 }: {
   summary?: Summary;
   kpi?: DashboardKpiExtended;
@@ -182,73 +181,71 @@ export function DashboardXuiKpiRibbon({
           value={kpi?.unstableStreams ?? 0}
           pct={unstablePct}
           barColor="#f39c12"
-          href="/admin/stream_health"
+          href="/admin/content/streams?status=offline&sourceIssue=unstable"
         />
-        <MiniStat label="Dead Stream" value={kpi?.deadStreams ?? 0} pct={deadPct} barColor="#dd4b39" href="/admin/stream_errors" />
+        <MiniStat
+          label="Dead Stream"
+          value={kpi?.deadStreams ?? 0}
+          pct={deadPct}
+          barColor="#dd4b39"
+          href="/admin/content/streams?status=offline&sourceIssue=dead"
+        />
       </div>
 
       {(kpi?.reportedChannels || kpi?.channelRequests) ? (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Link
-          href="/admin/tickets?status=OPEN"
-          className="rounded-lg border px-4 py-3 flex flex-col gap-2 hover:opacity-95"
-          style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
-        >
-          <div className="flex items-center justify-between gap-2">
+        <div className="rounded-lg border px-4 py-3 flex flex-col gap-2" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+          <Link href="/admin/tickets?status=OPEN&intent=report" className="flex items-center justify-between gap-2 hover:opacity-95">
             <span className="text-sm font-medium">User Reported Channels</span>
             <span className="text-xl font-bold tabular-nums">{kpi?.reportedChannels ?? 0}</span>
-          </div>
+          </Link>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs" style={{ color: "var(--muted)" }}>
-            <span>
+            <Link href="/admin/tickets?status=OPEN&intent=report&content=channels" className="hover:underline">
               Channels{" "}
               <strong className="tabular-nums" style={{ color: "var(--text)" }}>
                 {kpi?.reportedBreakdown?.channels ?? 0}
               </strong>
-            </span>
-            <span>
+            </Link>
+            <Link href="/admin/tickets?status=OPEN&intent=report&content=movies" className="hover:underline">
               Movies{" "}
               <strong className="tabular-nums" style={{ color: "var(--text)" }}>
                 {kpi?.reportedBreakdown?.movies ?? 0}
               </strong>
-            </span>
-            <span>
+            </Link>
+            <Link href="/admin/tickets?status=OPEN&intent=report&content=series" className="hover:underline">
               TV Series / Episodes{" "}
               <strong className="tabular-nums" style={{ color: "var(--text)" }}>
                 {kpi?.reportedBreakdown?.series ?? 0}
               </strong>
-            </span>
+            </Link>
           </div>
-        </Link>
-        <Link
-          href="/admin/tickets?status=OPEN"
-          className="rounded-lg border px-4 py-3 flex flex-col gap-2 hover:opacity-95"
-          style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
-        >
-          <div className="flex items-center justify-between gap-2">
+        </div>
+        <div className="rounded-lg border px-4 py-3 flex flex-col gap-2" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
+          <Link href="/admin/tickets?status=OPEN&intent=request" className="flex items-center justify-between gap-2 hover:opacity-95">
             <span className="text-sm font-medium">New Channels Add Request</span>
             <span className="text-xl font-bold tabular-nums">{kpi?.channelRequests ?? 0}</span>
-          </div>
+          </Link>
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs" style={{ color: "var(--muted)" }}>
-            <span>
+            <Link href="/admin/tickets?status=OPEN&intent=request&content=channels" className="hover:underline">
               Channels{" "}
               <strong className="tabular-nums" style={{ color: "var(--text)" }}>
                 {kpi?.requestBreakdown?.channels ?? 0}
               </strong>
-            </span>
-            <span>
+            </Link>
+            <Link href="/admin/tickets?status=OPEN&intent=request&content=movies" className="hover:underline">
               Movies{" "}
               <strong className="tabular-nums" style={{ color: "var(--text)" }}>
                 {kpi?.requestBreakdown?.movies ?? 0}
               </strong>
-            </span>
-            <span>
+            </Link>
+            <Link href="/admin/tickets?status=OPEN&intent=request&content=series" className="hover:underline">
               TV Series / Episodes{" "}
               <strong className="tabular-nums" style={{ color: "var(--text)" }}>
                 {kpi?.requestBreakdown?.series ?? 0}
               </strong>
-            </span>
+            </Link>
           </div>
-        </Link>
+        </div>
       </div>
       ) : null}
     </section>

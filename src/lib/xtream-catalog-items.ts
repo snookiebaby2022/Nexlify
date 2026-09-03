@@ -86,6 +86,7 @@ export function mapXtreamVodItem(
   const stars = xtreamListingRating(s.vodRating);
   const icon = xtreamSafeText(s.streamIcon);
   const added = xtreamAddedUnix(s.createdAt, s.updatedAt);
+  const modified = xtreamUnix(s.updatedAt);
   return {
     num: index + 1,
     name: xtreamSafeText(s.name) || "Movie",
@@ -96,8 +97,8 @@ export function mapXtreamVodItem(
     rating: stars.rating,
     rating_5based: stars.rating_5based,
     added: String(added),
-    updated_at: added,
-    last_modified: String(added),
+    updated_at: modified,
+    last_modified: String(modified),
     is_adult: s.isAdult ? 1 : 0,
     category_id: xtreamExportCategoryId(numCategoryId),
     category_ids: xtreamCategoryIds(numCategoryId),

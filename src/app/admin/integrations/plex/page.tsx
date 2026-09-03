@@ -7,6 +7,7 @@ import { formatDateTime } from "@/lib/format";
 import { IntegrationProgressCard } from "@/components/integration-progress-card";
 import { PlexAutoSyncStatus } from "@/components/plex-auto-sync-status";
 import type { IntegrationSyncProgress } from "@/lib/integration-sync-types";
+import { RemoveForeignVodButton } from "@/components/remove-foreign-vod-button";
 
 type PlexItem = {
   id: string;
@@ -24,8 +25,10 @@ type PlexItem = {
     directStream?: boolean;
     libraryKey?: string;
     libraryTitle?: string;
+    libraryKeys?: string[];
     transcodeProfile?: string;
     skipExistingCatalog?: boolean;
+    excludeNonEnglish?: boolean;
   };
 };
 
@@ -58,9 +61,11 @@ const emptyForm = {
   serverId: "",
   libraryKey: "",
   libraryTitle: "",
+  libraryKeys: [] as string[],
   transcodeProfile: "direct",
   directStream: true,
   skipExistingCatalog: true,
+  excludeNonEnglish: false,
   isActive: true,
 };
 
@@ -95,6 +100,7 @@ export default function PlexIntegrationPage() {
   const [error, setError] = useState("");
   const [addProgress, setAddProgress] = useState<LocalProgress | null>(null);
   const [syncProgress, setSyncProgress] = useState<IntegrationSyncProgress | null>(null);
+  const [catBusy, setCatBusy] = useState(false);
 
   function load() {
     fetch("/api/admin/integrations?type=plex")
@@ -172,9 +178,15 @@ export default function PlexIntegrationPage() {
       serverId: c.serverId || pickDefaultLbServerId(servers),
       libraryKey: c.libraryKey ?? "",
       libraryTitle: c.libraryTitle ?? "",
+      libraryKeys: Array.isArray(c.libraryKeys) && c.libraryKeys.length
+        ? c.libraryKeys.map(String)
+        : c.libraryKey
+          ? [c.libraryKey]
+          : [],
       transcodeProfile: c.transcodeProfile ?? "direct",
       directStream: c.directStream !== false,
       skipExistingCatalog: c.skipExistingCatalog !== false,
+      excludeNonEnglish: c.excludeNonEnglish === true,
       isActive: item.isActive !== false,
     });
     setLibraries([]);
@@ -230,6 +242,40 @@ export default function PlexIntegrationPage() {
     }
   }
 
+  async function plexCategories(mode: "add" | "remove") {
+    if (!editId) {
+      setError("Save the Plex server first.");
+      return;
+    }
+    if (mode === "remove") {
+      if (!confirm("Remove IPTV categories named after these Plex libraries? Streams stay; only matching empty folders with no child categories are deleted.")) {
+        return;
+      }
+    }
+    setCatBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch("/api/admin/integrations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "plex-categories", id: editId, mode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Category update failed");
+      const names = Array.isArray(data.names) ? data.names.join(", ") : "";
+      setMessage(
+        mode === "remove"
+          ? `Removed ${data.count ?? 0} categor${data.count === 1 ? "y" : "ies"}${data.skipped ? ` (${data.skipped} skipped)` : ""}${names ? `: ${names}` : ""}`
+          : `Added ${data.count ?? 0} IPTV categor${data.count === 1 ? "y" : "ies"} from Plex libraries${names ? `: ${names}` : ""}`
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Category update failed");
+    } finally {
+      setCatBusy(false);
+    }
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -248,8 +294,14 @@ export default function PlexIntegrationPage() {
         ...form,
         port: form.port,
         serverId: form.serverId || null,
-        libraryKey: form.libraryKey || undefined,
-        libraryTitle: form.libraryTitle || undefined,
+        libraryKey: form.libraryKeys[0] || undefined,
+        libraryKeys: form.libraryKeys,
+        libraryTitle:
+          libraries
+            .filter((l) => form.libraryKeys.includes(l.key))
+            .map((l) => l.title)
+            .join(", ") || form.libraryTitle || undefined,
+        excludeNonEnglish: form.excludeNonEnglish,
       };
       const res = await fetch("/api/admin/integrations", {
         method: editId ? "PATCH" : "POST",
@@ -338,13 +390,17 @@ export default function PlexIntegrationPage() {
       </Link>
       <h1 className="text-2xl font-semibold">Plex sync</h1>
       <p className="text-sm opacity-70">
-        Connect a remote Plex server, pick a library, and sync only titles that are not already
+        Connect a remote Plex server, pick libraries like XUI One, and sync titles that are not already
         on this panel. Auto-sync runs every 12 or 24 hours from{" "}
         <Link href="/admin/settings/cron" className="underline" style={{ color: "var(--accent)" }}>
           Scheduled tasks
         </Link>
         .
       </p>
+      <div className="flex flex-wrap gap-2">
+        <RemoveForeignVodButton kind="MOVIE" />
+        <RemoveForeignVodButton kind="SERIES" />
+      </div>
       <PlexAutoSyncStatus />
 
       {addProgress && <IntegrationProgressCard progress={addProgress} title="Add / update" />}
@@ -460,42 +516,76 @@ export default function PlexIntegrationPage() {
         </label>
 
         <div>
-          <span className="font-medium">Library</span>
-          <div className="flex gap-2 mt-1">
-            <select
-              className="flex-1 rounded border px-3 py-2 panel-select bg-transparent"
-              style={{ borderColor: "var(--border)" }}
-              value={form.libraryKey}
-              onChange={(e) => {
-                const lib = libraries.find((l) => l.key === e.target.value);
-                setForm({
-                  ...form,
-                  libraryKey: e.target.value,
-                  libraryTitle: lib?.title ?? form.libraryTitle,
-                });
-              }}
-            >
-              <option value="">All movie/show libraries</option>
-              {libraries.map((l) => (
-                <option key={l.key} value={l.key}>
-                  {l.title} ({l.type})
-                </option>
-              ))}
-              {form.libraryKey && !libraries.some((l) => l.key === form.libraryKey) && form.libraryTitle && (
-                <option value={form.libraryKey}>{form.libraryTitle}</option>
-              )}
-            </select>
-            <button
-              type="button"
-              disabled={loadingLibs || !editId}
-              onClick={() => void refreshLibraries()}
-              className="rounded border px-3 py-2"
-              style={{ borderColor: "var(--border)" }}
-              title="Refresh libraries"
-            >
-              <RefreshCw size={16} className={loadingLibs ? "animate-spin" : ""} />
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium">Libraries</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="text-xs underline"
+                style={{ color: "var(--accent)" }}
+                disabled={!libraries.length}
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    libraryKeys: libraries.filter((l) => !l.type || l.type === "movie" || l.type === "show").map((l) => l.key),
+                  })
+                }
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                className="text-xs underline"
+                style={{ color: "var(--muted)" }}
+                onClick={() => setForm({ ...form, libraryKeys: [] })}
+              >
+                Clear (sync all)
+              </button>
+              <button
+                type="button"
+                disabled={loadingLibs || !editId}
+                onClick={() => void refreshLibraries()}
+                className="rounded border px-2 py-1"
+                style={{ borderColor: "var(--border)" }}
+                title="Refresh libraries"
+              >
+                <RefreshCw size={14} className={loadingLibs ? "animate-spin" : ""} />
+              </button>
+            </div>
           </div>
+          <div
+            className="mt-1 max-h-48 overflow-y-auto rounded border px-3 py-2 space-y-1"
+            style={{ borderColor: "var(--border)" }}
+          >
+            {libraries.length === 0 ? (
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Save and test the Plex server, then refresh libraries. Leave none selected to sync every movie/show library.
+              </p>
+            ) : (
+              libraries
+                .filter((l) => !l.type || l.type === "movie" || l.type === "show")
+                .map((l) => (
+                  <label key={l.key} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.libraryKeys.includes(l.key)}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...form.libraryKeys, l.key]
+                          : form.libraryKeys.filter((k) => k !== l.key);
+                        setForm({ ...form, libraryKeys: next, libraryKey: next[0] ?? "" });
+                      }}
+                    />
+                    <span>
+                      {l.title} <span style={{ color: "var(--muted)" }}>({l.type})</span>
+                    </span>
+                  </label>
+                ))
+            )}
+          </div>
+          <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+            Same as XUI One: pick libraries to sync, or leave empty for all movie/show libraries.
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-6">
@@ -522,6 +612,14 @@ export default function PlexIntegrationPage() {
               onChange={(e) => setForm({ ...form, skipExistingCatalog: e.target.checked })}
             />
             Skip titles already on this panel
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.excludeNonEnglish}
+              onChange={(e) => setForm({ ...form, excludeNonEnglish: e.target.checked })}
+            />
+            Skip non-English movies and TV series
           </label>
         </div>
         <p className="text-xs -mt-2" style={{ color: "var(--muted)" }}>
@@ -560,6 +658,24 @@ export default function PlexIntegrationPage() {
                 onClick={() => void testSaved(editId)}
               >
                 {testing ? "Testing…" : "Test connection"}
+              </button>
+              <button
+                type="button"
+                disabled={catBusy}
+                className="rounded px-4 py-2 border"
+                style={{ borderColor: "var(--border)" }}
+                onClick={() => void plexCategories("add")}
+              >
+                {catBusy ? "Working…" : "Add all library categories"}
+              </button>
+              <button
+                type="button"
+                disabled={catBusy}
+                className="rounded px-4 py-2 border"
+                style={{ borderColor: "var(--border)" }}
+                onClick={() => void plexCategories("remove")}
+              >
+                Remove library categories
               </button>
               <button
                 type="button"

@@ -79,9 +79,14 @@ export function withXtreamVodAliases(meta: Record<string, unknown>): Record<stri
     (Array.isArray(meta.backdrop_path) ? asText(meta.backdrop_path[0]) : asText(meta.backdrop_path));
   const tmdbId = asText(meta.tmdbId) || asText(meta.tmdb_id);
 
+  const originalLanguage =
+    asText(meta.originalLanguage) || asText(meta.original_language) || asText(meta.language);
   return {
     ...meta,
     ...(tmdbId ? { tmdbId } : {}),
+    ...(originalLanguage
+      ? { originalLanguage, original_language: originalLanguage, language: originalLanguage }
+      : {}),
     plot,
     cast,
     director,

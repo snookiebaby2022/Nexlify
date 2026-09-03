@@ -25,7 +25,7 @@ import {
 } from "@/lib/panel-update";
 import { PanelRole } from "@prisma/client";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);

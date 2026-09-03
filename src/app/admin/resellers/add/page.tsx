@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { FormPageShell, FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import { PasswordInput } from "@/components/password-input";
-import { generateLinePassword, generateLineUsername, MIN_LINE_CREDENTIAL_LENGTH } from "@/lib/credential-generate";
+import { generateLinePassword, generateLineUsername, clampLineCredentialMinLength, DEFAULT_LINE_CREDENTIAL_MIN_LENGTH } from "@/lib/credential-generate";
 import { RefreshCw } from "lucide-react";
 
 const LANGUAGES = [
@@ -25,6 +25,7 @@ export default function AdminAddUserPage() {
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [autoGenerate, setAutoGenerate] = useState(false);
+  const [credentialMinLength, setCredentialMinLength] = useState(DEFAULT_LINE_CREDENTIAL_MIN_LENGTH);
   const [form, setForm] = useState({
     username: "",
     password: "",
@@ -66,6 +67,14 @@ export default function AdminAddUserPage() {
         }
       })
       .catch(() => {});
+    fetch("/api/panel/line-ux")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.credentialMinLength != null) {
+          setCredentialMinLength(clampLineCredentialMinLength(d.credentialMinLength));
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -81,8 +90,8 @@ export default function AdminAddUserPage() {
       setMsg("Password and confirm password do not match.");
       return;
     }
-    if (form.username.trim().length < MIN_LINE_CREDENTIAL_LENGTH || (form.password && form.password.length < MIN_LINE_CREDENTIAL_LENGTH)) {
-      setMsg(`Username and password must each be at least ${MIN_LINE_CREDENTIAL_LENGTH} characters.`);
+    if (form.username.trim().length < credentialMinLength || (form.password && form.password.length < credentialMinLength)) {
+      setMsg(`Username and password must each be at least ${credentialMinLength} characters.`);
       return;
     }
     if (!form.groupId) {
@@ -141,7 +150,7 @@ export default function AdminAddUserPage() {
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
                 placeholder="test456654"
                 required
-                minLength={MIN_LINE_CREDENTIAL_LENGTH}
+                minLength={credentialMinLength}
               />
               {autoGenerate && (
                 <button

@@ -10,7 +10,7 @@ import {
 } from "@/lib/stream-provider-probe";
 import { PanelRole, Prisma } from "@prisma/client";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { redactStreamProviders } from "@/lib/stream-redact";
 

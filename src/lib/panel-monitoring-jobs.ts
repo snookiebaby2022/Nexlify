@@ -24,7 +24,7 @@ const PROBE_UA = "VLC/3.0.20 LibVLC/3.0.20";
 const PROBE_CONNECT_MS = 8000;
 const PROBE_UNSTABLE_MIN_MS = 5000;
 const PROBE_UNSTABLE_MAX_MS = 8000;
-const PROBE_DEAD_STREAK = 2;
+const PROBE_DEAD_STREAK = 3;
 const PROBE_RETRY_MS = 400;
 
 type ProviderSlice = {
@@ -150,8 +150,11 @@ async function fetchProbeWithFallback(
   }
 }
 
-function evaluateProbeOutcome(probe: ProbeResult, skipped: boolean): { ok: boolean; state: HealthState } {
-  if (skipped) return { ok: false, state: "dead" };
+function evaluateProbeOutcome(
+  probe: ProbeResult,
+  skipped: boolean
+): { ok: boolean; state: HealthState | "skipped" } {
+  if (skipped) return { ok: true, state: "skipped" };
   const ms = probe.latencyMs ?? 0;
   if (probe.status === "online") {
     if (ms >= PROBE_UNSTABLE_MIN_MS && ms <= PROBE_UNSTABLE_MAX_MS) {
@@ -165,8 +168,8 @@ function evaluateProbeOutcome(probe: ProbeResult, skipped: boolean): { ok: boole
   return { ok: false, state: "dead" };
 }
 
-function probeErrorLabel(probe: ProbeResult, state: HealthState): string | null {
-  if (state === "healthy") return null;
+function probeErrorLabel(probe: ProbeResult, state: HealthState | "skipped"): string | null {
+  if (state === "healthy" || state === "skipped") return null;
   const labeled = formatProbeFailure(probe);
   if (state === "unstable") {
     return streamProbeErrorWithHint(`[unstable] ${labeled}`);
@@ -194,9 +197,23 @@ async function probeStreamForMonitoring(
       fast: true,
       ...opts,
     });
-    const outcome = evaluateProbeOutcome(result.probe, result.skipped);
-    if (outcome.ok || result.skipped) return result;
-    last = result;
+    if (!result.skipped && (result.probe.status === "online" || result.probe.status === "degraded")) {
+      return result;
+    }
+    if (!result.skipped) {
+      const full = await probeStreamWithScheduler({
+        streamId,
+        url: target,
+        fast: false,
+        ...opts,
+      });
+      const outcome = evaluateProbeOutcome(full.probe, full.skipped);
+      if (outcome.ok || full.skipped) return full;
+      last = full;
+    } else {
+      last = result;
+      return result;
+    }
     if (attempt < PROBE_DEAD_STREAK - 1) {
       await new Promise((r) => setTimeout(r, PROBE_RETRY_MS));
     }
@@ -237,6 +254,7 @@ export async function runDeadLinkProbeJob() {
       const { probe, skipped } = await probeStreamForMonitoring(stream.id, primaryUrl, provider);
       probed += 1;
       const { ok, state } = evaluateProbeOutcome(probe, skipped);
+      if (state === "skipped") return;
 
       if (!stream.backupUrl?.trim()) {
         const sibling = await findSiblingLiveBackupUrl(stream);
@@ -253,6 +271,7 @@ export async function runDeadLinkProbeJob() {
         const backupUrl = stream.backupUrl.trim();
         const backupResult = await probeStreamForMonitoring(stream.id, backupUrl, provider);
         const backupOutcome = evaluateProbeOutcome(backupResult.probe, backupResult.skipped);
+        if (backupOutcome.state === "skipped") return;
         if (backupOutcome.ok) {
           await prisma.stream.update({
             where: { id: stream.id },

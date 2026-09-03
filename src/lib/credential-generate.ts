@@ -1,7 +1,23 @@
-/** Minimum length for line / reseller / sub-reseller usernames and passwords. */
-export const MIN_LINE_CREDENTIAL_LENGTH = 6;
+/** Absolute floor — Settings → Security can set this as low as 3. */
+export const MIN_LINE_CREDENTIAL_FLOOR = 3;
+/** Default when Settings has no value (new installs). */
+export const DEFAULT_LINE_CREDENTIAL_MIN_LENGTH = 6;
+/**
+ * Lowest length the panel will accept. Callers that need the *configured*
+ * minimum should pass `clampLineCredentialMinLength(settings.lineCredentialMinLength)`.
+ */
+export const MIN_LINE_CREDENTIAL_LENGTH = MIN_LINE_CREDENTIAL_FLOOR;
 /** Alias used for panel users (resellers / sub-resellers). */
-export const MIN_PANEL_CREDENTIAL_LENGTH = MIN_LINE_CREDENTIAL_LENGTH;
+export const MIN_PANEL_CREDENTIAL_LENGTH = DEFAULT_LINE_CREDENTIAL_MIN_LENGTH;
+
+export function clampLineCredentialMinLength(
+  value: unknown,
+  fallback = DEFAULT_LINE_CREDENTIAL_MIN_LENGTH
+): number {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(64, Math.max(MIN_LINE_CREDENTIAL_FLOOR, n));
+}
 
 const USER_CHARS = "abcdefghijkmnopqrstuvwxyz0123456789";
 const PASS_CHARS =
@@ -46,21 +62,21 @@ function randomFrom(chars: string, length: number): string {
   return out;
 }
 
-/** Random line username (letters + digits, min 6). */
+/** Random line username (letters + digits). */
 export function generateLineUsername(): string {
   const len = 8 + randomInt(4);
-  return randomFrom(USER_CHARS, Math.max(MIN_LINE_CREDENTIAL_LENGTH, len));
+  return randomFrom(USER_CHARS, Math.max(DEFAULT_LINE_CREDENTIAL_MIN_LENGTH, len));
 }
 
-/** Random line password (letters + digits, min 6). */
+/** Random line password (letters + digits). */
 export function generateLinePassword(length = 12): string {
-  return randomFrom(PASS_CHARS, Math.max(MIN_LINE_CREDENTIAL_LENGTH, length));
+  return randomFrom(PASS_CHARS, Math.max(DEFAULT_LINE_CREDENTIAL_MIN_LENGTH, length));
 }
 
 export function validateLineCredential(
   value: string,
   field: "username" | "password",
-  minLength = MIN_LINE_CREDENTIAL_LENGTH
+  minLength = DEFAULT_LINE_CREDENTIAL_MIN_LENGTH
 ): string | null {
   const v = sanitizeCredentialInput(value);
   const label = field === "username" ? "Username" : "Password";
@@ -137,10 +153,7 @@ export function validateLinePasswordPolicy(
 ): string | null {
   const pass = sanitizeCredentialInput(password);
   const user = sanitizeCredentialInput(username);
-  const minLength = Math.max(
-    MIN_LINE_CREDENTIAL_LENGTH,
-    Number(policy.minLength) || MIN_LINE_CREDENTIAL_LENGTH
-  );
+  const minLength = clampLineCredentialMinLength(policy.minLength);
   const base = validateLineCredential(pass, "password", minLength);
   if (base) return base;
   if (policy.disallowUsernameMatch !== false && user && pass.toLowerCase() === user.toLowerCase()) {

@@ -40,7 +40,7 @@ assert.equal(
 );
 assert.equal(
   looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 88, currentStep: "npm run build" })),
-  true
+  false
 );
 assert.equal(
   looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 90, currentStep: "prepare standalone" })),
@@ -56,7 +56,17 @@ assert.equal(
 );
 assert.equal(
   looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 60, currentStep: "npm run build" })),
-  true
+  false
+);
+assert.equal(
+  looksLikeSuccessfulUpdateDespiteWorkerExit(
+    base({
+      progress: 96,
+      currentStep: "pm2 restart nexlify",
+      steps: [{ name: "npm run build", ok: false, status: "failed" }],
+    })
+  ),
+  false
 );
 
 // Progress stuck at ~60% but package.json already on the new version → success

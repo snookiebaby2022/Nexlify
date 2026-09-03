@@ -59,12 +59,16 @@ update_in_progress() {
           if (j.status!=="running") return;
           const step=String(j.currentStep||"");
           const progress=Number(j.progress)||0;
+          const buildFailed = Array.isArray(j.steps) && j.steps.some(s => s && (s.name === "npm run build" || s.name === "prepare build") && (s.ok === false || s.status === "failed"));
+          const midCompile = step === "npm run build" || step === "prepare build" || step === "git pull" || step === "npm install" || step === "sync panel files";
           const nearEnd =
+            !buildFailed && !midCompile && (
             progress >= 94 ||
             step === "pm2 restart nexlify" ||
+            step === "pm2 restart all" ||
             (step === "prepare standalone" && progress >= 90) ||
             (step === "apply update" && progress >= 88) ||
-            (Array.isArray(j.steps) && j.steps.some(s => s && s.name === "pm2 restart nexlify" && (s.ok || s.status === "done")));
+            (Array.isArray(j.steps) && j.steps.some(s => s && (s.name === "pm2 restart nexlify" || s.name === "pm2 restart all") && (s.ok || s.status === "done"))));
           j.finishedAt=new Date().toISOString();
           j.currentStep=null;
           if (nearEnd) {

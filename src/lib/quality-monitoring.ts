@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma";
 import { cacheGet, cacheSet } from "@/lib/cache";
 
 const MONITORING_PREFIX = "monitoring:";

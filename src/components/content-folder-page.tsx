@@ -189,8 +189,8 @@ export function ContentFolderPage({
             <Link href="/admin/management/mass-edit" className="text-sm px-3 py-2 rounded border" style={{ borderColor: "var(--border)" }}>
               Mass edit
             </Link>
-            <Link href="/admin/stream_health" className="text-sm px-3 py-2 rounded border" style={{ borderColor: "var(--border)" }}>
-              Stream health
+            <Link href="/admin/content/streams?status=offline" className="text-sm px-3 py-2 rounded border" style={{ borderColor: "var(--border)" }}>
+              Failed probes
             </Link>
           </>
         )}

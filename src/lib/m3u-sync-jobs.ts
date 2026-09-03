@@ -164,6 +164,8 @@ export async function runWatchFolderM3uSync(folder: {
   onDemand?: boolean;
   removeDuplicates?: boolean;
   isAdult?: boolean;
+  autoBouquet?: boolean;
+  bouquetIds?: string | null;
 }): Promise<M3uSyncRunResult> {
   return syncWatchFolderM3u(folder);
 }

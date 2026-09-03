@@ -6,6 +6,7 @@ import { probeStreamWithScheduler } from "@/lib/source-probe-scheduler";
 import { PanelRole } from "@prisma/client";
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { decideProbePersist } from "@/lib/stream-probe-persist";
 
 const MAX_IDS = 50;
 const CONCURRENCY = 4;
@@ -26,24 +27,31 @@ async function probeStreamRow(streamId: string, fast: boolean): Promise<ProbeRow
   const resolved = await resolveProbeTargetUrl(stream.streamUrl, stream);
   const url = resolved.url || stream.streamUrl;
   const { probe, skipped } = await probeStreamWithScheduler({ streamId: stream.id, url, fast });
-  const ok = !skipped && (probe.status === "online" || probe.status === "degraded");
+  const persist = decideProbePersist({ skipped, fast, probe });
   const lastProbeError =
-    probe.status === "online"
-      ? null
-      : probe.message ?? "Probe failed";
-
-  await prisma.stream.update({
-    where: { id: stream.id },
-    data: {
-      lastProbeAt: new Date(),
-      lastProbeOk: ok,
-      lastProbeError,
-    },
-  });
+    persist.write && persist.lastProbeError !== undefined
+      ? persist.lastProbeError
+      : probe.status === "online"
+        ? null
+        : probe.message ?? "Probe failed";
+  if (persist.write) {
+    await prisma.stream.update({
+      where: { id: stream.id },
+      data: {
+        lastProbeAt: new Date(),
+        lastProbeOk: persist.lastProbeOk,
+        lastProbeError: persist.lastProbeError ?? lastProbeError,
+      },
+    });
+    if (persist.lastProbeOk) {
+      const { markStreamViewerPlaybackOk } = await import("@/lib/viewer-playback-probe");
+      await markStreamViewerPlaybackOk(stream.id).catch(() => {});
+    }
+  }
 
   return {
-    lastProbeOk: ok,
-    lastProbeError,
+    lastProbeOk: persist.write ? Boolean(persist.lastProbeOk) : stream.lastProbeOk !== false,
+    lastProbeError: persist.write ? persist.lastProbeError ?? lastProbeError : stream.lastProbeError,
     probe: {
       status: probe.status,
       message: probe.message ?? "",

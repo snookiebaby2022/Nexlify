@@ -66,8 +66,44 @@ function gatewayFor(iface: string): string {
   return "";
 }
 
-/** Approximate CPU % from 1-minute load average (safe, no sampling). */
+export type CpuTimeSnapshot = { idle: number; total: number };
+
+export function cpuPercentFromSnapshots(
+  previous: CpuTimeSnapshot,
+  current: CpuTimeSnapshot
+): number | null {
+  const totalDelta = current.total - previous.total;
+  const idleDelta = current.idle - previous.idle;
+  if (!Number.isFinite(totalDelta) || !Number.isFinite(idleDelta) || totalDelta <= 0) return null;
+  return Math.max(0, Math.min(100, Math.round((1 - idleDelta / totalDelta) * 100)));
+}
+
+function cpuTimeSnapshot(): CpuTimeSnapshot {
+  return os.cpus().reduce(
+    (sum, cpu) => ({
+      idle: sum.idle + cpu.times.idle,
+      total:
+        sum.total +
+        cpu.times.user +
+        cpu.times.nice +
+        cpu.times.sys +
+        cpu.times.idle +
+        cpu.times.irq,
+    }),
+    { idle: 0, total: 0 }
+  );
+}
+
+let previousCpuTimeSnapshot: CpuTimeSnapshot | null = null;
+
+/** CPU utilisation since the previous sample; load average is only a first-sample fallback. */
 export function sampleCpuPercent(): number {
+  const current = cpuTimeSnapshot();
+  const sampled = previousCpuTimeSnapshot
+    ? cpuPercentFromSnapshots(previousCpuTimeSnapshot, current)
+    : null;
+  previousCpuTimeSnapshot = current;
+  if (sampled != null) return sampled;
   const cores = Math.max(1, os.cpus().length);
   const load = os.loadavg()[0] ?? 0;
   return Math.max(0, Math.min(100, Math.round((load / cores) * 100)));

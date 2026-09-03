@@ -237,6 +237,8 @@ export async function jobImportQueue() {
       onDemand: boolean;
       removeDuplicates: boolean;
       isAdult: boolean;
+      autoBouquet: boolean;
+      bouquetIds: string;
     } | null = null;
     if (job.watchFolderId) {
       watchFolder = await prisma.watchFolder.findUnique({
@@ -250,6 +252,8 @@ export async function jobImportQueue() {
           onDemand: true,
           removeDuplicates: true,
           isAdult: true,
+          autoBouquet: true,
+          bouquetIds: true,
         },
       });
       if (watchFolder?.type === "MIXED") mode = "MIXED";
@@ -273,6 +277,8 @@ export async function jobImportQueue() {
           onDemand: watchFolder.onDemand,
           removeDuplicates: watchFolder.removeDuplicates,
           isAdult: watchFolder.isAdult,
+          autoBouquet: watchFolder.autoBouquet,
+          bouquetIds: watchFolder.bouquetIds,
         });
       } else {
         result = await importFromFolder(job.source, {

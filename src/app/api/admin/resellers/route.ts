@@ -207,18 +207,20 @@ export async function PATCH(req: NextRequest) {
   if (body.notes !== undefined) data.notes = body.notes ? String(body.notes) : null;
   if (body.credits != null) data.credits = Number(body.credits);
   if (body.email !== undefined) data.email = body.email ? String(body.email).trim() : null;
+  const { resolveLineCredentialMinLength } = await import("@/lib/line-credential-policy");
+  const minLen = await resolveLineCredentialMinLength();
   if (body.username !== undefined) {
     const username = String(body.username).trim();
     if (!username) return NextResponse.json({ error: "Username required" }, { status: 400 });
     const { validateLineCredential } = await import("@/lib/credential-generate");
-    const userErr = validateLineCredential(username, "username");
+    const userErr = validateLineCredential(username, "username", minLen);
     if (userErr) return NextResponse.json({ error: userErr }, { status: 400 });
     data.username = username;
   }
   if (typeof body.password === "string" && body.password.trim()) {
     const plain = body.password.trim();
     const { validateLineCredential } = await import("@/lib/credential-generate");
-    const passErr = validateLineCredential(plain, "password");
+    const passErr = validateLineCredential(plain, "password", minLen);
     if (passErr) return NextResponse.json({ error: passErr }, { status: 400 });
     data.passwordHash = await hashPassword(plain);
     data.passwordPlain = null;

@@ -28,13 +28,15 @@ export async function GET(req: NextRequest) {
         try {
           const now = new Date();
           const [rows, activeLines] = await Promise.all([
-            listLiveConnections(ownerId, 400),
+            listLiveConnections(ownerId),
             prisma.line.count({ where: { status: "ACTIVE", expiresAt: { gt: now } } }),
           ]);
 
           const live = rows.filter((r) => !isTestConnectionIp(r.ip));
           const users = new Set(live.map((r) => r.lineId));
-          const streams = new Set(live.map((r) => r.streamId).filter(Boolean));
+          const streams = new Set(
+            live.filter((r) => r.stream?.type === "LIVE").map((r) => r.streamId).filter(Boolean)
+          );
 
           const { networkInMbps, networkOutMbps } = await getDashboardNicBandwidthMbps();
 

@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { convertMagDevicesToLines } from "@/lib/mag-convert-to-line";
 import { PanelRole } from "@prisma/client";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 export async function POST(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);

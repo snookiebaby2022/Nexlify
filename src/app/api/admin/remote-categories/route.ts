@@ -10,7 +10,7 @@ import {
   wouldCreateCategoryCycle,
 } from "@/lib/category-tree";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 const VALID_TYPES = new Set<string>(Object.values(CategoryType));
 

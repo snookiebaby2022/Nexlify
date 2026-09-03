@@ -64,7 +64,7 @@ export function cronFixHref(job: string, status: string): string | null {
   if (j.includes("pg_dump") || j.includes("pgdump") || j.includes("db_backup")) return "/admin/settings/backup";
   if (j.includes("backup")) return "/admin/settings/backup";
   if (j.includes("ssl") || j.includes("cert")) return "/admin/settings/domains";
-  if (j.includes("stream") || j.includes("probe")) return "/admin/stream_errors";
+  if (j.includes("stream") || j.includes("probe")) return "/admin/content/streams?status=offline";
   if (j.includes("license")) return "/admin/license";
   return "/admin/settings/server";
 }

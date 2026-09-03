@@ -178,6 +178,16 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
   const ordered = sortServersMainFirst(servers);
   let localSample: HostMetricsSample | null = null;
 
+  const remotesNeedingCache = ordered.filter((s) => {
+    if (isThisPanelMachine(s)) return false;
+    const stored = readStoredHostMetrics(s.panelSettings);
+    return !stored || !metricsFresh(stored) || metricsMissingOrZero(stored);
+  });
+  const lbCacheEntries = await Promise.all(
+    remotesNeedingCache.map(async (s) => [s.id, await getServerMetrics(s.id).catch(() => null)] as const)
+  );
+  const lbCacheById = new Map(lbCacheEntries);
+
   const rows: ServerMetricsRow[] = [];
   for (const s of ordered) {
     const online = isServerHealthOnline(s.healthStatus);
@@ -197,14 +207,9 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
       host = localSample;
     } else {
       host = readStoredHostMetrics(s.panelSettings) ?? emptyHostSample();
-      if (!metricsFresh(host)) {
+      if (!metricsFresh(host) || metricsMissingOrZero(host)) {
         host = emptyHostSample();
-        const cached = await getServerMetrics(s.id);
-        const fromCache = hostSampleFromLbCache(cached, cap);
-        if (fromCache && !metricsMissingOrZero(fromCache)) host = fromCache;
-      } else if (metricsMissingOrZero(host)) {
-        const cached = await getServerMetrics(s.id);
-        const fromCache = hostSampleFromLbCache(cached, cap);
+        const fromCache = hostSampleFromLbCache(lbCacheById.get(s.id) ?? null, cap);
         if (fromCache && !metricsMissingOrZero(fromCache)) host = fromCache;
       }
       if (online && (!metricsFresh(host) || metricsMissingOrZero(host))) {
@@ -245,7 +250,6 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     trialUsers,
     deadStreams,
     unstableStreams,
-    viewers,
     tickets,
     inactiveByType,
     openTicketCount,
@@ -254,14 +258,6 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
       where: {
         status: "ACTIVE",
         expiresAt: { gt: now },
-        // paid = expire window longer than trial
-        AND: [
-          {
-            expiresAt: {
-              gt: new Date(now.getTime()),
-            },
-          },
-        ],
       },
     }),
     // Approximate trial: expires within trial window from create — use raw for speed
@@ -281,7 +277,6 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
         AND: [{ backupUrl: { not: null } }, { backupUrl: { not: "" } }],
       },
     }),
-    liveViewerStats(),
     prisma.ticket.findMany({
       where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
       select: { subject: true },

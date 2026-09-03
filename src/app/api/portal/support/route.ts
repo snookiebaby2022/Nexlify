@@ -3,7 +3,7 @@ import { getPortalSession } from "@/lib/portal-session";
 import { sendPanelEmail, panelReportRecipient } from "@/lib/panel-email";
 import { prisma } from "@/lib/prisma";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
   try {
   const session = await getPortalSession();

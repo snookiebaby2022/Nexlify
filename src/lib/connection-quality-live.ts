@@ -1,12 +1,6 @@
 import { cacheGet, cacheMget, cacheSet, cacheDel } from "@/lib/cache";
 import { isConnectionQoeEnabled } from "@/lib/connection-qoe";
-import {
-  computeConnectionQuality,
-  scoreFromLastSeen,
-  LIVE_STALE_SEC,
-  type ConnectionQuality,
-  type ConnectionQualityLevel,
-} from "@/lib/connection-quality";
+import { scoreFromLastSeen, LIVE_STALE_SEC, type ConnectionQuality, type ConnectionQualityLevel } from "@/lib/connection-quality";
 
 export type LiveQualitySample = {
   bytesPerSec: number;

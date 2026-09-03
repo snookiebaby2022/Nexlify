@@ -7,6 +7,7 @@ import {
   importPlexLibrary,
   importYoutubeSource,
   listPlexLibraries,
+  syncPlexLibraryCategories,
   testPlexConnection,
   testYoutubeConnection,
 } from "@/lib/media-integrations";
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest) {
 
     const pluginType = String(
       body.type ??
-        (body.action === "sync" || body.action === "libraries" || body.action === "test" || body.action === "sync-status"
+        (body.action === "sync" || body.action === "libraries" || body.action === "test" || body.action === "sync-status" || body.action === "plex-categories"
           ? (await prisma.mediaIntegration.findUnique({ where: { id: String(body.id ?? "") } }))?.type ?? "plex"
           : "plex")
     );
@@ -220,6 +221,22 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ libraries });
       }
       return NextResponse.json({ error: "Libraries not supported for this integration" }, { status: 400 });
+    }
+
+    if (body.action === "plex-categories") {
+      const id = String(body.id ?? "");
+      if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+      const row = await prisma.mediaIntegration.findUnique({ where: { id } });
+      if (!row || row.type !== "plex") return NextResponse.json({ error: "Not found" }, { status: 404 });
+      const mode = String(body.mode ?? "add") === "remove" ? "remove" : "add";
+      const result = await syncPlexLibraryCategories(id, mode);
+      return NextResponse.json({
+        ok: true,
+        mode,
+        count: result.count,
+        skipped: result.skipped,
+        names: result.names,
+      });
     }
 
     if (body.action === "sync") {

@@ -154,7 +154,7 @@ export function PanelMobileDashboard({
           label="Watching now"
           value={String(d?.onlineStreams ?? "—")}
           sub={d?.totalLiveStreams != null ? `of ${d.totalLiveStreams}` : undefined}
-          href={streamsHref}
+          href={`${streamsHref.split("?")[0]}?status=online`}
         />
         <StatTile
           label="Live connections"

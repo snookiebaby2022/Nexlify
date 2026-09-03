@@ -1,8 +1,10 @@
 "use client";
 
 import { Info } from "lucide-react";
+import { useState } from "react";
 import { ServerTreePicker } from "@/components/server-tree-picker";
 import { formInputStyle, formSelectClass } from "@/components/form-page-shell";
+import { restartStreamOnServer } from "@/lib/restart-stream";
 
 function XuiYesNo({
   value,
@@ -53,6 +55,7 @@ function XuiRow({
 
 export type StreamServerTabProps = {
   streamType: string;
+  streamId?: string;
   serverIds: string[];
   onServerIdsChange: (ids: string[]) => void;
   vodMode?: string;
@@ -68,6 +71,7 @@ export type StreamServerTabProps = {
 
 export function StreamServerTab({
   streamType,
+  streamId,
   serverIds,
   onServerIdsChange,
   vodMode = "LIVE",
@@ -81,6 +85,24 @@ export function StreamServerTab({
   useProvider = false,
 }: StreamServerTabProps) {
   const isLive = streamType === "LIVE";
+  const [restartBusy, setRestartBusy] = useState(false);
+
+  async function restartNow() {
+    const serverId = serverIds[0];
+    if (!streamId) return;
+    if (!serverId) {
+      alert("Select a streaming server first.");
+      return;
+    }
+    if (!confirm("Restart this stream on the assigned server? Viewers will reconnect.")) return;
+    setRestartBusy(true);
+    try {
+      const err = await restartStreamOnServer(serverId, streamId);
+      if (err) alert(err);
+    } finally {
+      setRestartBusy(false);
+    }
+  }
 
   return (
     <div className="xui-vod-info-form xui-stream-server-tab">
@@ -144,6 +166,20 @@ export function StreamServerTab({
       {isLive && onAutoRestartChange ? (
         <XuiRow label="Auto restart" hint="Restart ffmpeg on the stream server when the probe fails.">
           <XuiYesNo name="auto-restart" value={autoRestart} onChange={onAutoRestartChange} />
+        </XuiRow>
+      ) : null}
+
+      {isLive && streamId ? (
+        <XuiRow label="Restart now" hint="Queues restart_stream on the first selected server. Does not kill nginx.">
+          <button
+            type="button"
+            className="rounded border px-3 py-1.5 text-sm"
+            style={{ borderColor: "var(--border)" }}
+            disabled={restartBusy}
+            onClick={() => void restartNow()}
+          >
+            {restartBusy ? "Restarting…" : "Restart stream"}
+          </button>
         </XuiRow>
       ) : null}
 

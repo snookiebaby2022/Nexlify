@@ -9,14 +9,14 @@ export type AdminPollIntervals = {
 
 const DEFAULT: AdminPollIntervals = {
   dashboardMs: 45_000,
-  connectionsMs: 12_000,
+  connectionsMs: 3_000,
   streamsMs: 30_000,
   dashboardSseMs: 10_000,
 };
 
 const PERF: AdminPollIntervals = {
   dashboardMs: 90_000,
-  connectionsMs: 15_000,
+  connectionsMs: 3_000,
   streamsMs: 45_000,
   dashboardSseMs: 12_000,
 };

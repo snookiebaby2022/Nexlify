@@ -42,7 +42,9 @@ export async function GET(req: NextRequest) {
     prisma.stream.count({ where }),
     prisma.stream.findMany({
       where,
-      orderBy: [{ seasonNum: "asc" }, { episodeNum: "asc" }, { name: "asc" }],
+      orderBy: seriesId
+        ? [{ seasonNum: "asc" }, { episodeNum: "asc" }, { name: "asc" }]
+        : [{ createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
       select: {

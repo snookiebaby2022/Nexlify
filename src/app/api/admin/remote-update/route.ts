@@ -9,7 +9,7 @@ import { getPanelServerSettingsSafe, getResolvedRepoPath } from "@/lib/panel-ser
 import { readInstalledVersion } from "@/lib/panel-version";
 import { getPanelUpdateStatus } from "@/lib/panel-update-auto";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 /**
  * Remote update trigger — called by the marketing site admin.

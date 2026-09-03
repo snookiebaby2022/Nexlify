@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { DataTable } from "@/components/data-table";
 import { formatDateTime } from "@/lib/format";
+import { DualListPicker, type DualListItem } from "@/components/dual-list-picker";
 import { ServerTreePicker } from "@/components/server-tree-picker";
 
 type SourceKind = "local" | "m3u" | "file";
@@ -52,6 +53,8 @@ type WatchFolderRow = {
   isAdult?: boolean;
   categoryId?: string | null;
   serverId?: string | null;
+  autoBouquet?: boolean;
+  bouquetIds?: string | null;
 };
 
 const emptyForm = {
@@ -69,6 +72,8 @@ const emptyForm = {
   overwriteCategories: true,
   onDemand: true,
   removeDuplicates: true,
+  autoBouquet: true,
+  bouquetIds: [] as string[],
   xtreamOrigin: "",
   xtreamUser: "",
   xtreamPass: "",
@@ -108,7 +113,8 @@ export function AdminWatchFoldersClient({
   initialVodHint?: string;
 }) {
   const [folders, setFolders] = useState<WatchFolderRow[]>(initialFolders);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string; type?: string }[]>([]);
+  const [bouquets, setBouquets] = useState<DualListItem[]>([]);
   const [vodHint, setVodHint] = useState(initialVodHint);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -143,7 +149,24 @@ export function AdminWatchFoldersClient({
   }, [initialFolders.length]);
 
   useEffect(() => {
-    fetch("/api/admin/categories").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+    const type = form.type === "LIVE" || form.type === "MOVIE" || form.type === "SERIES" ? form.type : "";
+    fetch(`/api/admin/categories${type ? `?type=${type}` : ""}`)
+      .then((r) => r.json())
+      .then((d) => setCategories(d.categories ?? []));
+  }, [form.type]);
+
+  useEffect(() => {
+    fetch("/api/admin/bouquets")
+      .then((r) => r.json())
+      .then((d) =>
+        setBouquets(
+          (d.bouquets ?? []).map((b: { id: string; name: string }) => ({
+            id: b.id,
+            label: b.name,
+          }))
+        )
+      )
+      .catch(() => setBouquets([]));
   }, []);
 
   function m3uFlags() {
@@ -153,6 +176,8 @@ export function AdminWatchFoldersClient({
       overwriteCategories: form.overwriteCategories,
       onDemand: form.onDemand,
       removeDuplicates: form.removeDuplicates,
+      autoBouquet: form.autoBouquet,
+      bouquetIds: form.bouquetIds,
     };
   }
 
@@ -329,6 +354,11 @@ export function AdminWatchFoldersClient({
       overwriteCategories: f.overwriteCategories !== false,
       onDemand: f.onDemand !== false,
       removeDuplicates: f.removeDuplicates === true,
+      autoBouquet: f.autoBouquet !== false,
+      bouquetIds: String(f.bouquetIds ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean),
     });
     setOk(`Editing “${f.name}”. Save to apply, then Scan now.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -573,7 +603,7 @@ export function AdminWatchFoldersClient({
         <div className="grid md:grid-cols-2 gap-4">
           <label className="block space-y-1">
             <span className="text-sm" style={{ color: "var(--muted)" }}>
-              Default category
+              Default category (existing panel folders)
             </span>
             <select
               className="w-full rounded border px-3 py-2 bg-transparent"
@@ -610,6 +640,23 @@ export function AdminWatchFoldersClient({
           onChange={(serverIds) => setForm({ ...form, serverIds })}
         />
 
+        <div className="space-y-1">
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Also add to these bouquets
+          </p>
+          <DualListPicker
+            items={bouquets}
+            selectedIds={form.bouquetIds}
+            onChange={(bouquetIds) => setForm({ ...form, bouquetIds })}
+            availableTitle="Available bouquets"
+            selectedTitle="Assigned bouquets"
+          />
+          <p className="text-[11px]" style={{ color: "var(--muted)" }}>
+            Provider group-title still creates bouquets when the checkbox below is on. These are extra
+            packages every imported stream is attached to.
+          </p>
+        </div>
+
         <div className="grid md:grid-cols-2 gap-2 text-sm">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -618,6 +665,14 @@ export function AdminWatchFoldersClient({
               onChange={(e) => setForm({ ...form, autoCategory: e.target.checked })}
             />
             Create categories from group-title
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.autoBouquet}
+              onChange={(e) => setForm({ ...form, autoBouquet: e.target.checked })}
+            />
+            Create/sync bouquets from group-title
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input

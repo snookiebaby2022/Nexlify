@@ -1,8 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { choosePanelUpdateMode, isPanelUpdateForced, preferTarballPanelUpdates } from "./panel-update-mode";
+import {
+  choosePanelUpdateMode,
+  isNextBuildTarballUrl,
+  isPanelUpdateForced,
+  preferGitPanelUpdates,
+  preferTarballPanelUpdates,
+} from "./panel-update-mode";
 
-test("git repo prefers git even when a patch script and prebuilt exist", () => {
+test("newer release prefers published tarball over git", () => {
+  assert.equal(
+    choosePanelUpdateMode({
+      isGitRepo: true,
+      gitFetchOk: true,
+      hasPatchScript: true,
+      hasPrebuiltDownload: false,
+      hasNewerRelease: true,
+    }),
+    "patch",
+  );
+});
+
+test("compiled next-*.tar.gz is used when a newer release exists", () => {
   assert.equal(
     choosePanelUpdateMode({
       isGitRepo: true,
@@ -11,7 +30,7 @@ test("git repo prefers git even when a patch script and prebuilt exist", () => {
       hasPrebuiltDownload: true,
       hasNewerRelease: true,
     }),
-    "git",
+    "prebuilt",
   );
 });
 
@@ -45,7 +64,7 @@ test("isPanelUpdateForced reads PANEL_UPDATE_FORCE", () => {
   assert.equal(isPanelUpdateForced({}), false);
 });
 
-test("git still preferred when fetch result is unknown", () => {
+test("same-version rebuild still uses git when fetch works", () => {
   assert.equal(
     choosePanelUpdateMode({
       isGitRepo: true,
@@ -70,20 +89,30 @@ test("failed git fetch falls back to patch tarball", () => {
   );
 });
 
-test("PANEL_UPDATE_PREFER_TARBALL skips git when patch exists", () => {
-  const prev = process.env.PANEL_UPDATE_PREFER_TARBALL;
-  process.env.PANEL_UPDATE_PREFER_TARBALL = "1";
-  assert.equal(preferTarballPanelUpdates(), true);
+test("PANEL_UPDATE_PREFER_GIT restores git-first when no tarball env", () => {
+  const prevGit = process.env.PANEL_UPDATE_PREFER_GIT;
+  const prevTar = process.env.PANEL_UPDATE_PREFER_TARBALL;
+  process.env.PANEL_UPDATE_PREFER_GIT = "1";
+  delete process.env.PANEL_UPDATE_PREFER_TARBALL;
+  assert.equal(preferGitPanelUpdates(), true);
+  assert.equal(preferTarballPanelUpdates(), false);
   assert.equal(
     choosePanelUpdateMode({
       isGitRepo: true,
       gitFetchOk: true,
       hasPatchScript: true,
-      hasPrebuiltDownload: false,
-      hasNewerRelease: false,
+      hasPrebuiltDownload: true,
+      hasNewerRelease: true,
     }),
-    "patch",
+    "git",
   );
-  if (prev === undefined) delete process.env.PANEL_UPDATE_PREFER_TARBALL;
-  else process.env.PANEL_UPDATE_PREFER_TARBALL = prev;
+  if (prevGit === undefined) delete process.env.PANEL_UPDATE_PREFER_GIT;
+  else process.env.PANEL_UPDATE_PREFER_GIT = prevGit;
+  if (prevTar === undefined) delete process.env.PANEL_UPDATE_PREFER_TARBALL;
+  else process.env.PANEL_UPDATE_PREFER_TARBALL = prevTar;
+});
+
+test("isNextBuildTarballUrl rejects the source archive", () => {
+  assert.equal(isNextBuildTarballUrl("https://nexlify.live/downloads/nexlify-panel.tar.gz"), false);
+  assert.equal(isNextBuildTarballUrl("https://nexlify.live/downloads/next-2.0.64.tar.gz"), true);
 });

@@ -2,14 +2,6 @@ import { addDays } from "@/lib/license";
 import { prisma } from "@/lib/prisma";
 import { syncLicenseToPanel } from "@/lib/panel-sync";
 
-const DELETABLE_STATUSES = new Set(["REVOKED", "EXPIRED"]);
-
-export function isLicenseDeletable(status: string, expiresAt: Date | null): boolean {
-  if (DELETABLE_STATUSES.has(status)) return true;
-  if (expiresAt && expiresAt.getTime() < Date.now()) return true;
-  return false;
-}
-
 export async function clearLicenseMachineId(id: string) {
   return prisma.license.update({
     where: { id },

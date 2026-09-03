@@ -2,7 +2,6 @@
 
 import { Calendar, Globe, Tv } from "lucide-react";
 import { formatRelativeTime } from "@/lib/format";
-import { lineQoeFromWatchedAt } from "@/lib/line-qoe-score";
 
 function truncateMiddle(value: string, max = 28) {
   if (value.length <= max) return value;
@@ -44,17 +43,6 @@ export function LastWatchedCell({
           <span className="xui-last-watched-text xui-last-watched-time">{formatRelativeTime(watchedAt)}</span>
         </div>
       ) : null}
-      {(() => {
-        const qoe = lineQoeFromWatchedAt(watchedAt);
-        if (!qoe) return null;
-        return (
-          <div className="xui-last-watched-row" title="Client quality from last heartbeat freshness">
-            <span className="xui-last-watched-text text-xs font-semibold">
-              QoE {qoe.score} · {qoe.label}
-            </span>
-          </div>
-        );
-      })()}
     </div>
   );
 }

@@ -29,7 +29,20 @@ export type WatchFolderM3uOpts = {
   onDemand?: boolean;
   removeDuplicates?: boolean;
   isAdult?: boolean;
+  autoBouquet?: boolean;
+  bouquetIds?: string[] | string | null;
 };
+
+export function parseWatchBouquetIds(raw: unknown): string[] {
+  const parts = Array.isArray(raw)
+    ? raw.map((id) => String(id))
+    : String(raw ?? "").split(",");
+  return [...new Set(parts.map((id) => id.trim()).filter(Boolean))];
+}
+
+export function watchBouquetIdsCsv(raw: unknown): string {
+  return parseWatchBouquetIds(raw).join(",");
+}
 
 export function isLocalM3uPath(source: string): boolean {
   const value = String(source ?? "").trim();
@@ -356,6 +369,8 @@ export async function syncWatchFolderM3u(folder: WatchFolderM3uOpts) {
     defaultOnDemand: folder.onDemand !== false ? true : false,
     updateNamesOnSync: folder.updateNames !== false,
     overwriteCategories: folder.overwriteCategories !== false,
+    autoBouquetFromGroup: folder.autoBouquet !== false,
+    bouquetIds: parseWatchBouquetIds(folder.bouquetIds),
     importMeta: folder.isAdult ? { isAdult: true } : undefined,
   });
 

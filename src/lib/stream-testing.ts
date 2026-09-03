@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { cacheGet, cacheSet } from "@/lib/cache";
+import { decideProbePersist } from "@/lib/stream-probe-persist";
 
 const TEST_PREFIX = "stream:test:";
 
@@ -109,11 +110,16 @@ export async function testStream(streamId: string): Promise<StreamTestResult> {
   // Cache result
   await cacheSet(`${TEST_PREFIX}${streamId}`, result, 300);
 
-  // Update stream health in DB
-  await prisma.stream.update({
-    where: { id: streamId },
-    data: { lastProbeOk: test.accessible },
-  });
+  const persist = decideProbePersist({ fast: true, probe });
+  if (persist.write) {
+    await prisma.stream.update({
+      where: { id: streamId },
+      data: {
+        lastProbeOk: persist.lastProbeOk,
+        lastProbeError: persist.lastProbeError ?? null,
+      },
+    });
+  }
 
   return result;
 }

@@ -6,7 +6,7 @@ import { checkLoginRateLimit, recordLoginFailure, clearLoginFailures } from "@/l
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 import { getClientIp } from "@/lib/client-ip";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
   try {
   const rateLimited = await guardAdminApiRequest(req);

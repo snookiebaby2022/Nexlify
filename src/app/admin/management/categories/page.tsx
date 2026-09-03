@@ -226,7 +226,6 @@ const TreeRow = memo(function TreeRow({
   allCategories,
   dragId,
   dropTargetId,
-  dragParentId,
   onToggle,
   onRemove,
   onMove,
@@ -244,7 +243,6 @@ const TreeRow = memo(function TreeRow({
   allCategories: CategoryRow[];
   dragId: string | null;
   dropTargetId: string | null;
-  dragParentId: string | null;
   onToggle: () => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
@@ -263,6 +261,7 @@ const TreeRow = memo(function TreeRow({
   const [showStreams, setShowStreams] = useState(false);
   const [streams, setStreams] = useState<CatStreamRow[]>([]);
   const [streamsLoading, setStreamsLoading] = useState(false);
+  const [streamDragId, setStreamDragId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const didDragRef = useRef(false);
   const hasChildren = node.children.length > 0;
@@ -271,7 +270,7 @@ const TreeRow = memo(function TreeRow({
     dropTargetId === node.id &&
     dragId != null &&
     dragId !== node.id &&
-    dragParentId === (node.parentId ?? null);
+    !collectDescendantIdsLocal(dragId, allCategories).has(node.id);
   const indent = node.depth * 24;
   const activeCount = node.activeCount ?? 0;
   const inactiveCount = node.inactiveCount ?? 0;
@@ -302,7 +301,7 @@ const TreeRow = memo(function TreeRow({
     setStreamsLoading(true);
     try {
       const res = await fetch(
-        `/api/admin/streams?categoryId=${encodeURIComponent(node.id)}&page=1&pageSize=50&lite=1`
+        `/api/admin/streams?categoryId=${encodeURIComponent(node.id)}&page=1&pageSize=500&lite=1`
       );
       const data = await res.json();
       setStreams(data.streams ?? []);
@@ -311,6 +310,41 @@ const TreeRow = memo(function TreeRow({
     } finally {
       setStreamsLoading(false);
     }
+  }
+
+  async function persistStreamOrder(next: CatStreamRow[]) {
+    setStreams(next);
+    const type =
+      node.categoryType === "MOVIE" ? "MOVIE" : node.categoryType === "SERIES" ? "SERIES" : "LIVE";
+    try {
+      await fetch("/api/admin/tools/channel-order", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: next.map((s) => s.id), type }),
+      });
+    } catch {
+      /* keep local order; operator can retry */
+    }
+  }
+
+  function moveStream(index: number, dir: -1 | 1) {
+    const j = index + dir;
+    if (j < 0 || j >= streams.length) return;
+    const next = [...streams];
+    [next[index], next[j]] = [next[j], next[index]];
+    void persistStreamOrder(next);
+  }
+
+  function dropStreamOn(targetId: string) {
+    if (!streamDragId || streamDragId === targetId) return;
+    const next = [...streams];
+    const from = next.findIndex((s) => s.id === streamDragId);
+    const to = next.findIndex((s) => s.id === targetId);
+    if (from < 0 || to < 0) return;
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    setStreamDragId(null);
+    void persistStreamOrder(next);
   }
 
   async function toggleShowStreams() {
@@ -373,14 +407,16 @@ const TreeRow = memo(function TreeRow({
           paddingLeft: `${12 + indent}px`,
           background: isDropTarget ? "rgba(0,192,239,0.12)" : isDragging ? "rgba(0,192,239,0.08)" : undefined,
         }}
-        onDragOver={(e) => {
-          if (dragId == null || dragParentId !== (node.parentId ?? null) || dragId === node.id) return;
+          onDragOver={(e) => {
+          if (dragId == null || dragId === node.id) return;
+          if (collectDescendantIdsLocal(dragId, allCategories).has(node.id)) return;
           e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
           onDragOverRow(node.id);
         }}
-        onDragLeave={onDragLeaveRow}
         onDrop={(e) => {
-          if (dragId == null || dragParentId !== (node.parentId ?? null) || dragId === node.id) return;
+          if (dragId == null || dragId === node.id) return;
+          if (collectDescendantIdsLocal(dragId, allCategories).has(node.id)) return;
           e.preventDefault();
           onDropOnRow(node.id);
         }}
@@ -537,11 +573,23 @@ const TreeRow = memo(function TreeRow({
               >
                 Rename
               </button>
-              <button type="button" className="p-1 rounded hover:bg-white/10" onClick={() => onMove(-1)}>
-                <ArrowUp size={12} />
+              <button
+                type="button"
+                className="w-8 h-8 rounded flex items-center justify-center hover:bg-white/10"
+                title="Move up"
+                aria-label="Move category up"
+                onClick={() => onMove(-1)}
+              >
+                <ArrowUp size={18} />
               </button>
-              <button type="button" className="p-1 rounded hover:bg-white/10" onClick={() => onMove(1)}>
-                <ArrowDown size={12} />
+              <button
+                type="button"
+                className="w-8 h-8 rounded flex items-center justify-center hover:bg-white/10"
+                title="Move down"
+                aria-label="Move category down"
+                onClick={() => onMove(1)}
+              >
+                <ArrowDown size={18} />
               </button>
               <button
                 type="button"
@@ -574,14 +622,60 @@ const TreeRow = memo(function TreeRow({
               No streams in this category.
             </p>
           )}
-          {streams.map((s) => (
-            <div key={s.id} className="flex items-center gap-2 text-xs py-1">
+          {streams.map((s, i) => (
+            <div
+              key={s.id}
+              className="flex items-center gap-2 text-xs py-1 rounded px-1"
+              style={{
+                background: streamDragId === s.id ? "rgba(0,192,239,0.12)" : undefined,
+              }}
+              onDragOver={(e) => {
+                if (!streamDragId || streamDragId === s.id) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                dropStreamOn(s.id);
+              }}
+            >
               <span
                 className="w-2 h-2 rounded-full shrink-0"
                 style={{ background: s.isActive ? "#22c55e" : "#ef4444" }}
               />
+              <span
+                className="cursor-grab active:cursor-grabbing shrink-0"
+                draggable
+                title="Drag to reorder"
+                onDragStart={(e) => {
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("text/plain", s.id);
+                  setStreamDragId(s.id);
+                }}
+                onDragEnd={() => setStreamDragId(null)}
+              >
+                <GripVertical size={14} style={{ color: "var(--muted)" }} />
+              </span>
               <span className="flex-1 truncate font-medium">{s.name}</span>
               <span style={{ color: "var(--muted)" }}>{s.type}</span>
+              <button
+                type="button"
+                className="w-7 h-7 rounded flex items-center justify-center hover:bg-white/10"
+                title="Move up"
+                aria-label="Move stream up"
+                onClick={() => moveStream(i, -1)}
+              >
+                <ArrowUp size={14} />
+              </button>
+              <button
+                type="button"
+                className="w-7 h-7 rounded flex items-center justify-center hover:bg-white/10"
+                title="Move down"
+                aria-label="Move stream down"
+                onClick={() => moveStream(i, 1)}
+              >
+                <ArrowDown size={14} />
+              </button>
               <button
                 type="button"
                 className="px-2 py-0.5 rounded text-white"
@@ -592,7 +686,7 @@ const TreeRow = memo(function TreeRow({
               </button>
             </div>
           ))}
-          {streams.length >= 100 && (
+          {streams.length >= 500 && (
             <Link href={contentHref} className="text-xs underline" style={{ color: "var(--accent)" }}>
               View all in library →
             </Link>
@@ -1445,12 +1539,14 @@ function ManagementCategoriesInner() {
     refreshCategories();
   }
 
-  const dragParentId = useMemo(() => {
-    if (!dragId) return null;
-    return tabCategories.find((c) => c.id === dragId)?.parentId ?? null;
-  }, [dragId, tabCategories]);
-
   async function saveSiblingOrder(list: CategoryRow[]) {
+    const orderIndex = new Map(list.map((c, i) => [c.id, i]));
+    setCategoriesByType((prev) => ({
+      ...prev,
+      [tab]: (prev[tab] ?? []).map((c) =>
+        orderIndex.has(c.id) ? { ...c, sortOrder: orderIndex.get(c.id)! } : c
+      ),
+    }));
     setBusy(true);
     const res = await fetch("/api/admin/categories", {
       method: "PATCH",
@@ -1461,9 +1557,9 @@ function ManagementCategoriesInner() {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setMsg(data.error ?? "Reorder failed");
+      refreshCategories();
       return false;
     }
-    refreshCategories();
     return true;
   }
 
@@ -1659,6 +1755,29 @@ function ManagementCategoriesInner() {
         </div>
       </form>
 
+      {dragId ? (
+        <div
+          className="rounded-lg border px-3 py-2 text-sm"
+          style={{
+            borderColor: dropTargetId === "__root__" ? "var(--accent)" : "var(--border)",
+            background: dropTargetId === "__root__" ? "rgba(0,192,239,0.12)" : "var(--bg-card)",
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            setDropTargetId("__root__");
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (dragId) void reparentCategory(dragId, null);
+            setDragId(null);
+            setDropTargetId(null);
+          }}
+        >
+          Drop here to make this category top-level
+        </div>
+      ) : null}
+
       <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}>
         {loadingCategories && flat.length === 0 ? (
           <p className="p-6 text-sm text-center" style={{ color: "var(--muted)" }}>
@@ -1677,7 +1796,6 @@ function ManagementCategoriesInner() {
             allCategories={tabCategories}
             dragId={dragId}
             dropTargetId={dropTargetId}
-            dragParentId={dragParentId}
             onToggle={() =>
               setExpanded((prev) => {
                 const next = new Set(prev);
@@ -1697,10 +1815,19 @@ function ManagementCategoriesInner() {
               setDropTargetId(null);
             }}
             onDragOverRow={setDropTargetId}
-            onDragLeaveRow={() => setDropTargetId(null)}
+            onDragLeaveRow={() => {}}
             onDropOnRow={(targetId) => {
               if (!dragId) return;
-              void reorderSiblings(dragId, targetId);
+              const from = tabCategories.find((c) => c.id === dragId);
+              const to = tabCategories.find((c) => c.id === targetId);
+              if (!from || !to) return;
+              if (collectDescendantIdsLocal(dragId, tabCategories).has(targetId)) return;
+              if ((from.parentId ?? null) === (to.parentId ?? null)) {
+                void reorderSiblings(dragId, targetId);
+              } else {
+                void reparentCategory(dragId, targetId);
+                setExpanded((prev) => new Set(prev).add(targetId));
+              }
               setDragId(null);
               setDropTargetId(null);
             }}

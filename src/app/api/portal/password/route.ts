@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPortalSession } from "@/lib/portal-session";
-import { generateLinePassword, MIN_LINE_CREDENTIAL_LENGTH } from "@/lib/credential-generate";
+import { generateLinePassword } from "@/lib/credential-generate";
+import { resolveLineCredentialMinLength } from "@/lib/line-credential-policy";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 export async function POST(req: NextRequest) {
   try {
   const session = await getPortalSession();
@@ -18,9 +19,10 @@ export async function POST(req: NextRequest) {
   const current = String(body.currentPassword ?? "");
   const next = String(body.newPassword ?? "").trim();
 
-  if (next.length < MIN_LINE_CREDENTIAL_LENGTH) {
+  const minLen = await resolveLineCredentialMinLength();
+  if (next.length < minLen) {
     return NextResponse.json(
-      { error: `Password must be at least ${MIN_LINE_CREDENTIAL_LENGTH} characters` },
+      { error: `Password must be at least ${minLen} characters` },
       { status: 400 }
     );
   }

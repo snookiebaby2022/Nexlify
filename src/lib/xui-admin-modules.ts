@@ -42,7 +42,8 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "stream_view", title: "Stream view", category: "Streams", redirect: "/admin/content/streams" },
   { slug: "stream_categories", title: "Stream categories", category: "Streams", redirect: "/admin/management/categories" },
   { slug: "stream_category", title: "Stream category", category: "Streams", redirect: "/admin/management/categories" },
-  { slug: "stream_errors", title: "Stream errors", category: "Streams", redirect: "/admin/stream_errors" },
+  { slug: "stream_errors", title: "Stream errors", category: "Streams", redirect: "/admin/content/streams?status=offline" },
+  { slug: "stream_health", title: "Stream health", category: "Streams", redirect: "/admin/content/streams?status=offline&sourceIssue=unstable" },
   { slug: "diagnostics", title: "Diagnostics", category: "Diagnostics", redirect: "/admin/diagnostics" },
   { slug: "panel_diagnostics", title: "Panel diagnostics", category: "Diagnostics", redirect: "/admin/diagnostics" },
   { slug: "stream_rank", title: "Stream Rank", category: "Streams", description: "Popularity ranking for channels.", redirect: "/admin/reports/usage" },
@@ -157,7 +158,7 @@ export const XUI_ADMIN_MODULES: AdminModuleDef[] = [
   { slug: "hmacs", title: "HMAC keys", category: "Security", redirect: "/admin/settings/security" },
   { slug: "api", title: "API", category: "Developers", redirect: "/admin/settings" },
   { slug: "webhooks", title: "Webhooks", category: "Developers", redirect: "/admin/settings" },
-  { slug: "videolog", title: "Video log", category: "Streams", redirect: "/admin/stream_errors" },
+  { slug: "videolog", title: "Video log", category: "Streams", redirect: "/admin/streams/logs" },
 
   { slug: "content", title: "Content", category: "Content", redirect: "/admin/content" },
   { slug: "content_created", title: "Content — created", category: "Content", redirect: "/admin/content/created" },

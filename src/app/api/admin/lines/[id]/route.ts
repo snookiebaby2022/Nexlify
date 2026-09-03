@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
 import { invalidateLineAuth, invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { PanelRole } from "@prisma/client";
-import { MIN_LINE_CREDENTIAL_LENGTH, sanitizeCredentialInput, validateLineCredential, validateLinePasswordPolicy } from "@/lib/credential-generate";
+import { sanitizeCredentialInput, validateLineCredential, validateLinePasswordPolicy } from "@/lib/credential-generate";
+import { resolveLineCredentialMinLength, resolveLinePasswordPolicy } from "@/lib/line-credential-policy";
 import { normalizeUserAgentField } from "@/lib/line-restrictions";
 import { normalizeAllowedOutputInput } from "@/lib/line-access-output";
 import { applyLineRenewDays, applyLineSetExpiry, applyLineUnlimited } from "@/lib/line-renew";
@@ -81,10 +82,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     if (renewDenied) return renewDenied;
   }
 
+  const minLen = await resolveLineCredentialMinLength();
+  const passwordPolicy = await resolveLinePasswordPolicy();
+
   if (session.role === PanelRole.ADMIN && body.username !== undefined) {
     const nextUsername = sanitizeCredentialInput(String(body.username));
     if (nextUsername && nextUsername !== existing.username) {
-      const userErr = validateLineCredential(nextUsername, "username");
+      const userErr = validateLineCredential(nextUsername, "username", minLen);
       if (userErr) return NextResponse.json({ error: userErr }, { status: 400 });
       const taken = await prisma.line.findUnique({ where: { username: nextUsername } });
       if (taken && taken.id !== existing.id) {
@@ -94,11 +98,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   }
 
   const nextPassword = body.password ? sanitizeCredentialInput(String(body.password)) : "";
-  if (body.password) {
-    const passErr = validateLinePasswordPolicy(nextPassword, existing.username, {
-      minLength: MIN_LINE_CREDENTIAL_LENGTH,
-      requireLetterAndDigit: false,
-    });
+  if (body.password && nextPassword && nextPassword !== existing.password) {
+    const passErr = validateLinePasswordPolicy(nextPassword, existing.username, passwordPolicy);
     if (passErr) return NextResponse.json({ error: passErr }, { status: 400 });
   }
 

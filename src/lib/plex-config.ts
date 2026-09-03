@@ -13,8 +13,12 @@ export type PlexIntegrationConfig = {
   directStream?: boolean;
   libraryKey?: string;
   libraryTitle?: string;
+  /** Selected Plex section keys. Empty means every movie/show library. */
+  libraryKeys?: string[];
   /** Skip movies/shows whose titles already exist on the IPTV panel. */
   skipExistingCatalog?: boolean;
+  /** Skip titles that are not English (Plex language tag, script, or genre). */
+  excludeNonEnglish?: boolean;
 };
 
 /** Pull the real X-Plex-Token out of a pasted URL, query string, or labeled value. */
@@ -121,6 +125,7 @@ export function plexImageRequestHeaders(token: string, clientIdentifier = "nexli
 export function normalizePlexConfig(raw: Record<string, unknown>): PlexIntegrationConfig {
   const token = extractPlexToken(String(raw.token ?? ""));
   const parsed = parsePlexHostPort(String(raw.host ?? raw.url ?? ""), raw.port as string | number | undefined);
+  const keys = parsePlexLibraryKeys(raw.libraryKeys, raw.libraryKey);
   return {
     url: raw.url ? String(raw.url) : undefined,
     host: parsed.host || (raw.host ? String(raw.host) : undefined),
@@ -133,10 +138,28 @@ export function normalizePlexConfig(raw: Record<string, unknown>): PlexIntegrati
     serverId: raw.serverId ? String(raw.serverId) : null,
     transcodeProfile: raw.transcodeProfile ? String(raw.transcodeProfile) : "direct",
     directStream: raw.directStream !== false,
-    libraryKey: raw.libraryKey ? String(raw.libraryKey) : undefined,
+    libraryKey: keys[0],
     libraryTitle: raw.libraryTitle ? String(raw.libraryTitle) : undefined,
+    libraryKeys: keys,
     skipExistingCatalog: raw.skipExistingCatalog !== false,
+    excludeNonEnglish: raw.excludeNonEnglish === true,
   };
+}
+
+function parsePlexLibraryKeys(raw: unknown, fallbackKey?: unknown): string[] {
+  const fromArr = Array.isArray(raw)
+    ? raw.map((v) => String(v).trim()).filter(Boolean)
+    : typeof raw === "string"
+      ? raw.split(/[,\s]+/).map((v) => v.trim()).filter(Boolean)
+      : [];
+  if (fromArr.length) return [...new Set(fromArr)];
+  const one = String(fallbackKey ?? "").trim();
+  return one ? [one] : [];
+}
+
+/** Empty array = sync every movie/show library (XUI-style default). */
+export function plexLibraryKeys(cfg: PlexIntegrationConfig): string[] {
+  return parsePlexLibraryKeys(cfg.libraryKeys, cfg.libraryKey);
 }
 
 export function plexTokenParam(cfg: PlexIntegrationConfig): string {

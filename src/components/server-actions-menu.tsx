@@ -38,7 +38,7 @@ export function ServerActionsMenu({
     { kind: "link", label: "View server", href: `/admin/servers/${serverId}` },
     { kind: "link", label: "Edit server", href: `/admin/servers/${serverId}/edit` },
     { kind: "link", label: "View streams", href: `/admin/content/streams?serverId=${serverId}` },
-    { kind: "link", label: "Stream health", href: "/admin/stream_health" },
+    { kind: "link", label: "Failed probes", href: `/admin/content/streams?status=offline&serverId=${serverId}` },
     { kind: "link", label: "Connections", href: "/admin/connections" },
     { kind: "link", label: "Resource charts", href: "/admin/servers/resource-charts" },
     { kind: "link", label: "Load balancer", href: "/admin/servers/load-balancer" },

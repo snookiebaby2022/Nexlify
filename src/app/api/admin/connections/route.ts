@@ -6,7 +6,6 @@ import {
   PLAYBACK_STALE_MS,
 } from "@/lib/connections";
 import { listAdminConnections } from "@/lib/admin-connections-list";
-import { isConnectionQoeEnabled } from "@/lib/connection-qoe";
 import { PanelRole } from "@prisma/client";
 import { ownerScope } from "@/lib/owner-scope";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -14,7 +13,7 @@ import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-per
 
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await requireSession([...ROLES]);
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -22,7 +21,7 @@ export async function GET() {
   if (viewDenied) return viewDenied;
 
   const connections = await listAdminConnections(session);
-  return NextResponse.json({ connections, qoeEnabled: isConnectionQoeEnabled() });
+  return NextResponse.json({ connections });
 }
 
 export async function DELETE(req: NextRequest) {

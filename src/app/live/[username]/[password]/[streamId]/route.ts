@@ -42,7 +42,7 @@ import { readReadyPackagerPlaylist } from "@/lib/ts-hls-packager";
 import { ensureDiskHls } from "@/lib/hls-restream-client";
 import { resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
 import type { OutboundProxy } from "@/lib/outbound-proxy";
-import { prisma } from "@/lib/prisma";
+import { markStreamViewerPlaybackFailed } from "@/lib/viewer-playback-probe";
 import { userAgentAllowsInstantTsWrap } from "@/lib/client-playback-profiles";
 
 export const runtime = "nodejs";
@@ -421,14 +421,7 @@ export async function GET(
           })
         );
         try {
-          await prisma.stream.update({
-            where: { id: cleanId },
-            data: {
-              lastProbeOk: false,
-              lastProbeError: proxied.error.slice(0, 500),
-              lastProbeAt: new Date(),
-            },
-          });
+          await markStreamViewerPlaybackFailed(cleanId, proxied.error.slice(0, 500));
         } catch {
           /* ignore probe bookkeeping */
         }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePanelApiKey } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 /**
  * POST /api/admin/remote-unlock-ip

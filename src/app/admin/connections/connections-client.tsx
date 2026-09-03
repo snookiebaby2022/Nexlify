@@ -3,18 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Hammer, Fingerprint } from "lucide-react";
+import { Hammer, Fingerprint, RotateCcw } from "lucide-react";
 import { IpWithFlag } from "@/components/ip-with-flag";
 import { subscriptionPaths } from "@/lib/panel-paths";
-import {
-  connectionQualityClass,
-  describeStallCount,
-  LIVE_STALL_HELP,
-  type ConnectionQuality,
-} from "@/lib/connection-quality";
-import type { PlaybackOutputLabel } from "@/lib/connection-playback-output";
 import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
+import type { PlaybackOutputLabel } from "@/lib/connection-playback-output";
+import { connectionQualityClass, type ConnectionQuality } from "@/lib/connection-quality";
 import { connectionViewerSessionKey } from "@/lib/connection-address";
+import { restartStreamOnServer } from "@/lib/restart-stream";
 import { ListPagination } from "@/components/list-pagination";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
@@ -29,10 +25,9 @@ type ConnectionRow = {
   lastSeenAt: string;
   serverName: string;
   line: { username: string; maxConnections: number; isRestreamer?: boolean };
-  stream: { id: string; name: string; type: string } | null;
+  stream: { id: string; name: string; type: string; serverId?: string | null } | null;
   quality: ConnectionQuality;
   output: PlaybackOutputLabel;
-  qoe?: { firstPictureMs: number | null; stallCount: number; mbps: number } | null;
 };
 
 function connectionRowKey(c: ConnectionRow): string {
@@ -106,17 +101,17 @@ function durationTitle(c: ConnectionRow, nowMs: number): string {
   return `Stream uptime ${formatConnDuration(streamWatchStartedAt(c), nowMs)} · watching ${formatConnDuration(c.startedAt, nowMs)}`;
 }
 
-function formatQoe(qoe: ConnectionRow["qoe"]): string {
-  if (!qoe) return "—";
-  const ttfp = qoe.firstPictureMs != null ? `${(qoe.firstPictureMs / 1000).toFixed(1)}s to picture` : "—";
-  const stalls = describeStallCount(qoe.stallCount).summary;
-  return `${ttfp} · ${stalls} · ${qoe.mbps.toFixed(1)} Mb/s`;
-}
-
-function stallColor(level: "ok" | "watch" | "bad"): string {
-  if (level === "bad") return "var(--danger)";
-  if (level === "watch") return "#fbbf24";
-  return "var(--muted)";
+async function restartConnectionStream(c: ConnectionRow) {
+  const streamId = c.stream?.id;
+  const serverId = c.stream?.serverId;
+  if (!streamId) return;
+  if (!serverId) {
+    alert("No streaming server assigned to this channel.");
+    return;
+  }
+  if (!confirm(`Restart stream “${c.stream?.name}”? Viewers will reconnect.`)) return;
+  const err = await restartStreamOnServer(serverId, streamId);
+  if (err) alert(err);
 }
 
 function CompactConnectionRow({
@@ -126,7 +121,6 @@ function CompactConnectionRow({
   onKick,
   paths,
   nowMs,
-  qoeEnabled,
 }: {
   c: ConnectionRow;
   expanded: boolean;
@@ -134,7 +128,6 @@ function CompactConnectionRow({
   onKick: (id: string) => void;
   paths: ReturnType<typeof subscriptionPaths>;
   nowMs: number;
-  qoeEnabled: boolean;
 }) {
   return (
     <div className="panel-mobile-conn-row">
@@ -147,7 +140,7 @@ function CompactConnectionRow({
       </button>
       {expanded ? (
         <div className="panel-mobile-conn-detail">
-          <ConnectionCard c={c} paths={paths} onKick={onKick} compact nowMs={nowMs} qoeEnabled={qoeEnabled} />
+          <ConnectionCard c={c} paths={paths} onKick={onKick} compact nowMs={nowMs} />
         </div>
       ) : null}
     </div>
@@ -160,14 +153,12 @@ function ConnectionCard({
   onKick,
   compact = false,
   nowMs,
-  qoeEnabled = false,
 }: {
   c: ConnectionRow;
   paths: ReturnType<typeof subscriptionPaths>;
   onKick: (id: string) => void;
   compact?: boolean;
   nowMs: number;
-  qoeEnabled?: boolean;
 }) {
   return (
     <article className={`panel-mobile-card space-y-2 ${compact ? "p-3 border-0" : "p-4"}`}>
@@ -180,7 +171,7 @@ function ConnectionCard({
         </div>
         <span
           className={connectionQualityClass(c.quality.level)}
-          title={`Heartbeat freshness ${c.quality.label}. 80–100% is normal for an active viewer. This is not the stall count.`}
+          title={`Heartbeat freshness ${c.quality.label}. 80–100% is normal for an active viewer.`}
         >
           {c.quality.label}
         </span>
@@ -204,18 +195,6 @@ function ConnectionCard({
           <p className="panel-mobile-card-label">Output</p>
           <p className="text-sm">{c.output}</p>
         </div>
-        {qoeEnabled ? (
-          <div>
-            <p className="panel-mobile-card-label">QoE</p>
-            <p
-              className="text-sm"
-              style={{ color: c.qoe ? stallColor(describeStallCount(c.qoe.stallCount).level) : undefined }}
-              title={LIVE_STALL_HELP}
-            >
-              {formatQoe(c.qoe)}
-            </p>
-          </div>
-        ) : null}
       </div>
       <div className="panel-mobile-card-actions">
         <button
@@ -226,6 +205,16 @@ function ConnectionCard({
           <Hammer size={16} />
           Kick
         </button>
+        {c.stream?.type === "LIVE" ? (
+          <button
+            type="button"
+            className="panel-mobile-card-action"
+            onClick={() => void restartConnectionStream(c)}
+          >
+            <RotateCcw size={16} />
+            Restart
+          </button>
+        ) : null}
         {c.stream && paths.streamEdit(c.stream.id) ? (
           <Link href={paths.streamEdit(c.stream.id)!} className="panel-mobile-card-action">
             <Fingerprint size={16} />
@@ -241,16 +230,13 @@ const LS_AUTO_REFRESH_KEY = "nx-live-conn-auto-refresh";
 
 export function AdminConnectionsClient({
   initialConnections = [],
-  initialQoeEnabled = false,
 }: {
   initialConnections?: ConnectionRow[];
-  initialQoeEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const paths = subscriptionPaths(pathname);
 
   const [connections, setConnections] = useState<ConnectionRow[]>(initialConnections);
-  const [qoeEnabled, setQoeEnabled] = useState(initialQoeEnabled);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(1);
@@ -281,18 +267,69 @@ export function AdminConnectionsClient({
       .then((d) => {
         const rows = Array.isArray(d.connections) ? (d.connections as ConnectionRow[]) : [];
         setConnections((prev) => mergeConnectionRows(prev, rows));
-        setQoeEnabled(Boolean(d.qoeEnabled));
       })
-      .catch(() => setConnections([]));
+      .catch(() => {});
   }
 
   useEffect(() => {
-    if (!initialConnections.length) {
-      load();
-    }
+    load();
     if (!autoRefresh) return;
-    return startVisibleInterval(load, ADMIN_POLLS.connectionsMs);
-  }, [autoRefresh, initialConnections.length]);
+    let stopped = false;
+    let pollStop: (() => void) | undefined;
+    let es: EventSource | null = null;
+
+    const startPoll = () => {
+      if (stopped || pollStop) return;
+      pollStop = startVisibleInterval(() => load(), ADMIN_POLLS.connectionsMs);
+    };
+
+    const connectSse = () => {
+      if (stopped) return;
+      if (typeof EventSource === "undefined") {
+        startPoll();
+        return;
+      }
+      try {
+        es?.close();
+        es = new EventSource("/api/admin/connections/stream");
+      } catch {
+        startPoll();
+        return;
+      }
+      es.onmessage = (event) => {
+        try {
+          const d = JSON.parse(event.data) as { connections?: ConnectionRow[] };
+          const rows = Array.isArray(d.connections) ? d.connections : [];
+          setConnections((prev) => mergeConnectionRows(prev, rows));
+        } catch {
+          /* ignore malformed ticks */
+        }
+      };
+      es.onerror = () => {
+        es?.close();
+        es = null;
+        startPoll();
+      };
+    };
+
+    const onVis = () => {
+      if (document.visibilityState === "hidden") {
+        es?.close();
+        es = null;
+        return;
+      }
+      if (!es && !pollStop) connectSse();
+    };
+
+    connectSse();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      stopped = true;
+      document.removeEventListener("visibilitychange", onVis);
+      es?.close();
+      pollStop?.();
+    };
+  }, [autoRefresh]);
 
   useEffect(() => {
     return startVisibleInterval(() => setNowMs(Date.now()), 1_000);
@@ -343,7 +380,7 @@ export function AdminConnectionsClient({
             type="button"
             className="xui-streams-btn xui-streams-btn--ghost"
             onClick={toggleAutoRefresh}
-            title={autoRefresh ? "Auto refresh every 5s (click to pause)" : "Auto refresh paused (click to enable)"}
+            title={autoRefresh ? "Live updates while this page is open (click to pause)" : "Auto refresh paused (click to enable)"}
           >
             {autoRefresh ? "Auto refresh: On" : "Auto refresh: Off"}
           </button>
@@ -356,9 +393,8 @@ export function AdminConnectionsClient({
         </div>
       </div>
       <p className="text-sm px-1 max-w-4xl" style={{ color: "var(--muted)" }}>
-        {qoeEnabled
-          ? LIVE_STALL_HELP
-          : "Quality % reflects heartbeat freshness for active viewers (80–100% is normal). QoE stall metering is disabled on this server."}
+        Quality % reflects heartbeat freshness for active viewers (80–100% is normal). Restart restarts the
+        channel on its streaming server — viewers reconnect.
       </p>
       {paths.isReseller ? (
         <p className="text-sm px-1" style={{ color: "var(--muted)" }}>
@@ -415,7 +451,6 @@ export function AdminConnectionsClient({
             onKick={kick}
             paths={paths}
             nowMs={nowMs}
-            qoeEnabled={qoeEnabled}
           />
         ))}
         {shown.length === 0 && <p className="xui-streams-empty p-4">No active connections.</p>}
@@ -431,7 +466,6 @@ export function AdminConnectionsClient({
               <th>Server</th>
               <th>IP</th>
               <th title="Uptime of the stream being watched. Viewer watch time is in the tooltip.">Duration</th>
-              {qoeEnabled ? <th>QoE</th> : null}
               <th>Output</th>
               <th>Restreamer</th>
               <th>Actions</th>
@@ -443,7 +477,7 @@ export function AdminConnectionsClient({
                 <td>
                   <span
                     className={connectionQualityClass(c.quality.level)}
-                    title={`Heartbeat freshness ${c.quality.label}. 80–100% is normal for an active viewer. This is not the stall count.`}
+                    title={`Heartbeat freshness ${c.quality.label}. 80–100% is normal for an active viewer.`}
                   >
                     {c.quality.label}
                   </span>
@@ -459,15 +493,6 @@ export function AdminConnectionsClient({
                     {formatConnDuration(streamWatchStartedAt(c), nowMs)}
                   </span>
                 </td>
-                {qoeEnabled ? (
-                  <td
-                    className="text-xs tabular-nums whitespace-nowrap"
-                    style={{ color: c.qoe ? stallColor(describeStallCount(c.qoe.stallCount).level) : undefined }}
-                    title={LIVE_STALL_HELP}
-                  >
-                    {formatQoe(c.qoe)}
-                  </td>
-                ) : null}
                 <td>{c.output}</td>
                 <td>
                   <span
@@ -484,6 +509,16 @@ export function AdminConnectionsClient({
                     >
                       <Hammer size={14} />
                     </button>
+                    {c.stream?.type === "LIVE" ? (
+                      <button
+                        type="button"
+                        className="xui-icon-action"
+                        title="Restart stream on the assigned server"
+                        onClick={() => void restartConnectionStream(c)}
+                      >
+                        <RotateCcw size={14} />
+                      </button>
+                    ) : null}
                     {c.stream && paths.streamEdit(c.stream.id) ? (
                       <Link href={paths.streamEdit(c.stream.id)!} className="xui-icon-action" title="Stream">
                         <Fingerprint size={14} />

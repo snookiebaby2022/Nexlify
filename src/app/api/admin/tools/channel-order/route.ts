@@ -20,19 +20,26 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const categoryId = req.nextUrl.searchParams.get("categoryId");
+  const categoryIds = [
+    ...req.nextUrl.searchParams.get("categoryIds")?.split(",") ?? [],
+    ...(categoryId ? [categoryId] : []),
+  ]
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const uniqueCategoryIds = [...new Set(categoryIds)];
   const type = parseType(req.nextUrl.searchParams.get("type"));
 
   const streams = await prisma.stream.findMany({
     where: {
       type,
-      ...(categoryId ? { categoryId } : {}),
+      ...(uniqueCategoryIds.length ? { categoryId: { in: uniqueCategoryIds } } : {}),
       // Live list excludes radio channels for channel-order UX
       ...(type === StreamType.LIVE ? { isRadio: false } : {}),
     },
     select: { id: true, name: true, sortOrder: true, categoryId: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     // Cap unfiltered loads so "All categories" does not stall the UI
-    take: categoryId ? 20_000 : 5_000,
+    take: uniqueCategoryIds.length ? 20_000 : 5_000,
   });
   return NextResponse.json({ streams, type });
 }
@@ -54,8 +61,24 @@ export async function PATCH(req: NextRequest) {
   const order: string[] = body.order ?? [];
   if (!order.length) return NextResponse.json({ error: "order required" }, { status: 400 });
 
+  const rows = await prisma.stream.findMany({
+    where: { id: { in: order } },
+    select: { id: true, categoryId: true },
+  });
+  const catById = new Map(rows.map((r) => [r.id, r.categoryId ?? ""]));
+  const perCat = new Map<string, string[]>();
+  for (const id of order) {
+    const cat = catById.get(id);
+    if (cat == null) continue;
+    const list = perCat.get(cat) ?? [];
+    list.push(id);
+    perCat.set(cat, list);
+  }
+
   await Promise.all(
-    order.map((id, index) => prisma.stream.update({ where: { id }, data: { sortOrder: index } }))
+    [...perCat.values()].flatMap((ids) =>
+      ids.map((id, index) => prisma.stream.update({ where: { id }, data: { sortOrder: index } }))
+    )
   );
   const { cacheDel } = await import("@/lib/cache");
   await cacheDel("categories");

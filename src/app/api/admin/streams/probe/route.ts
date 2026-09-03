@@ -9,6 +9,7 @@ import { PanelRole } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { decideProbePersist } from "@/lib/stream-probe-persist";
 
 function resolveProbeUrl(raw: string): string {
   const normalized = normalizeStreamSource(raw);
@@ -44,17 +45,21 @@ export async function POST(req: NextRequest) {
     const resolved = await resolveProbeTargetUrl(url || stream.streamUrl, stream);
     url = resolved.url || stream.streamUrl;
     const probe = await probeStreamUrl(url, { fast });
-    await prisma.stream.update({
-      where: { id: stream.id },
-      data: {
-        lastProbeAt: new Date(),
-        lastProbeOk: probe.status === "online" || probe.status === "degraded",
-        lastProbeError:
-          probe.status === "online"
-            ? null
-            : probe.message ?? "Probe failed",
-      },
-    });
+    const persist = decideProbePersist({ fast, probe });
+    if (persist.write) {
+      await prisma.stream.update({
+        where: { id: stream.id },
+        data: {
+          lastProbeAt: new Date(),
+          lastProbeOk: persist.lastProbeOk,
+          lastProbeError: persist.lastProbeError ?? null,
+        },
+      });
+      if (persist.lastProbeOk) {
+        const { markStreamViewerPlaybackOk } = await import("@/lib/viewer-playback-probe");
+        await markStreamViewerPlaybackOk(stream.id).catch(() => {});
+      }
+    }
     return NextResponse.json({
       probe,
       stream: { name: stream.name, streamUrl: url, isActive: stream.isActive },

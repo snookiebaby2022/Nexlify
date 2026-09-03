@@ -530,6 +530,10 @@ model WatchFolder {
   onDemand      Boolean         @default(true)
   /// After scan, drop extra rows with the same live name in this playlist.
   removeDuplicates Boolean      @default(false)
+  /// Create/sync bouquets from M3U group-title on LIVE imports.
+  autoBouquet   Boolean         @default(true)
+  /// Comma-separated bouquet IDs to attach imported streams to.
+  bouquetIds    String          @default("")
   lastScan      DateTime?
   importedCount Int             @default(0)
   createdAt     DateTime        @default(now())

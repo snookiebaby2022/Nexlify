@@ -5,8 +5,8 @@ export function splitLineNotes(
   notes: string | null | undefined,
   viewer: LineNotesViewer = "admin"
 ): { admin: string; reseller: string } {
-  if (!notes?.trim()) return { admin: "", reseller: "" };
-  const parts = notes.split("\n---\n");
+  if (notes == null || notes === "") return { admin: "", reseller: "" };
+  const parts = String(notes).split("\n---\n");
   if (parts.length >= 2) {
     return {
       admin: parts[0]?.trim() ?? "",
@@ -14,9 +14,14 @@ export function splitLineNotes(
     };
   }
   const single = parts[0]?.trim() ?? "";
+  if (!single) return { admin: "", reseller: "" };
   // Legacy rows: reseller-only text with no delimiter.
   if (viewer === "reseller") return { admin: "", reseller: single };
   return { admin: single, reseller: "" };
+}
+
+function joinLineNotes(admin: string, reseller: string): string {
+  return `${admin}\n---\n${reseller}`;
 }
 
 export function mergeResellerNotes(
@@ -25,9 +30,8 @@ export function mergeResellerNotes(
 ): string {
   const trimmed = reseller.trim();
   const { admin } = splitLineNotes(existing, "admin");
-  if (!trimmed) return admin;
-  if (admin) return `${admin}\n---\n${trimmed}`;
-  return trimmed;
+  if (!trimmed && !admin) return "";
+  return joinLineNotes(admin, trimmed);
 }
 
 export function mergeLineNotesForSave(
@@ -42,6 +46,6 @@ export function mergeLineNotesForSave(
     const merged = mergeResellerNotes(existing, reseller);
     return merged || null;
   }
-  if (admin && reseller) return `${admin}\n---\n${reseller}`;
-  return admin || reseller || null;
+  if (!admin && !reseller) return null;
+  return joinLineNotes(admin, reseller);
 }

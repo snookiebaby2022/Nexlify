@@ -14,9 +14,10 @@ import { BouquetPickerTable, type BouquetPickerRow } from "@/components/bouquet-
 import { PasswordInput } from "@/components/password-input";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
 import {
+  clampLineCredentialMinLength,
+  DEFAULT_LINE_CREDENTIAL_MIN_LENGTH,
   generateLinePassword,
   generateLineUsername,
-  MIN_LINE_CREDENTIAL_LENGTH,
 } from "@/lib/credential-generate";
 import {
   UNLIMITED_LINE_DAYS,
@@ -91,13 +92,14 @@ export function LineAddForm({
     { id: string; label: string; description: string; days: number; maxConnections: number; creditCost: number; isTrial: boolean; lockToIp: boolean; allowedCountries: string; blockedCountries: string; canWatchAdult: boolean }[]
   >([]);
   const [templateId, setTemplateId] = useState("");
-  const [autoGenerate, setAutoGenerate] = useState(false);
+  const [autoGenerate, setAutoGenerate] = useState(true);
   const [allowTrials, setAllowTrials] = useState(true);
+  const [credentialMinLength, setCredentialMinLength] = useState(DEFAULT_LINE_CREDENTIAL_MIN_LENGTH);
   const [creditBalance, setCreditBalance] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    username: "",
-    password: "",
+    username: generateLineUsername(),
+    password: generateLinePassword(),
     ownerId: "",
     maxConnections: 1 as number | "",
     expiresAt: "",
@@ -240,25 +242,19 @@ export function LineAddForm({
       .then((d) => {
         const trialsOff = d?.allowTrials === false;
         setAllowTrials(!trialsOff);
+        if (d?.credentialMinLength != null) {
+          setCredentialMinLength(clampLineCredentialMinLength(d.credentialMinLength));
+        }
+        if (d?.autoGenerateLineCredentials === false) {
+          setAutoGenerate(false);
+        } else {
+          setAutoGenerate(true);
+        }
         if (trialsOff) {
           setForm((f) =>
             f.isTrial || f.days === 1 || f.days === 2
               ? { ...f, isTrial: false, days: f.days === 1 || f.days === 2 ? 30 : f.days }
               : f
-          );
-        }
-      })
-      .catch(() => {});
-    fetch("/api/admin/settings?group=security")
-      .then((r) => r.json())
-      .then((d) => {
-        const on = d.settings?.autoGenerateLineCredentials === true;
-        setAutoGenerate(on);
-        if (on) {
-          setForm((f) =>
-            f.username || f.password
-              ? f
-              : { ...f, username: generateLineUsername(), password: generateLinePassword() }
           );
         }
       })
@@ -319,8 +315,8 @@ export function LineAddForm({
       if (!username) username = generateLineUsername();
       if (!password) password = generateLinePassword();
     }
-    if (username.length < MIN_LINE_CREDENTIAL_LENGTH || password.length < MIN_LINE_CREDENTIAL_LENGTH) {
-      alert(`Username and password must each be at least ${MIN_LINE_CREDENTIAL_LENGTH} characters.`);
+    if (username.length < credentialMinLength || password.length < credentialMinLength) {
+      alert(`Username and password must each be at least ${credentialMinLength} characters.`);
       return;
     }
     if (form.bouquetIds.length === 0) {
@@ -551,7 +547,7 @@ export function LineAddForm({
                 style={formInputStyle}
                 placeholder="Random value will be generated if left blank and auto-generate is on"
                 value={form.username}
-                minLength={MIN_LINE_CREDENTIAL_LENGTH}
+                minLength={credentialMinLength}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
               />
             </FormField>
@@ -561,9 +557,9 @@ export function LineAddForm({
                   className="flex-1"
                   value={form.password}
                   onChange={(password) => setForm({ ...form, password })}
-                  placeholder={`Letters & numbers, min ${MIN_LINE_CREDENTIAL_LENGTH}`}
+                  placeholder={`Letters & numbers, min ${credentialMinLength}`}
                   required={!autoGenerate}
-                  minLength={MIN_LINE_CREDENTIAL_LENGTH}
+                  minLength={credentialMinLength}
                 />
                 <button
                   type="button"

@@ -25,14 +25,16 @@ import {
   extractPlexToken,
   normalizePlexConfig,
   plexClientIdentifier,
+  plexLibraryKeys,
   plexTokenParam,
   signInPlexTv,
   type PlexIntegrationConfig,
 } from "@/lib/plex-config";
 import type { IntegrationSyncReporter } from "@/lib/integration-sync-progress";
-import { loadPlexCatalogIndex, plexCatalogTitleKey, plexGenreName, plexVodMetaFromItem } from "@/lib/plex-catalog-match";
-import { categoryForPlexMovie, categoryForPlexSeries, flattenNestedSeriesCategories, reassignTvSeriesNamedCategory } from "@/lib/vod-category";
+import { loadPlexCatalogIndex, plexCatalogTitleKey, plexGenreName, plexLanguageFromItem, plexVodMetaFromItem } from "@/lib/plex-catalog-match";
+import { categoryForPlexMovie, categoryForPlexSeries, flattenNestedSeriesCategories, reassignTvSeriesNamedCategory, ensureNamedVodCategories, deleteNamedVodCategories } from "@/lib/vod-category";
 import { encodeVodAgentCmd, parseVodAgentCmd } from "@/lib/vod-meta";
+import { detectTitleLanguage } from "@/lib/title-language";
 import { yieldEventLoop } from "@/lib/yield-event-loop";
 
 async function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
@@ -78,6 +80,9 @@ type PlexItemMeta = {
   originallyAvailableAt?: string;
   duration?: number;
   studio?: string;
+  guid?: string;
+  Guid?: unknown;
+  Language?: unknown;
   Genre?: unknown;
   Role?: unknown;
   Director?: unknown;
@@ -622,8 +627,9 @@ export async function backfillPlexGenresFromLibrary(
     clientIdentifier
   );
   let dirs = sections.MediaContainer?.Directory ?? [];
-  if (cfg.libraryKey) {
-    dirs = dirs.filter((d) => String(d.key) === String(cfg.libraryKey));
+  const selectedKeys = plexLibraryKeys(cfg);
+  if (selectedKeys.length) {
+    dirs = dirs.filter((d) => selectedKeys.includes(String(d.key)));
   }
   dirs = dirs.filter((d) => !d.type || d.type === "movie" || d.type === "show");
 
@@ -927,6 +933,31 @@ export async function listPlexLibraries(integrationId: string) {
   }));
 }
 
+export async function syncPlexLibraryCategories(
+  integrationId: string,
+  mode: "add" | "remove"
+): Promise<{ count: number; skipped: number; names: string[] }> {
+  const libs = await listPlexLibraries(integrationId);
+  const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
+  const cfg = normalizePlexConfig((row?.config as Record<string, unknown>) ?? {});
+  const keys = plexLibraryKeys(cfg);
+  const selected = libs.filter((l) => {
+    if (l.type && l.type !== "movie" && l.type !== "show") return false;
+    if (!keys.length) return true;
+    return keys.includes(l.key);
+  });
+  const names = selected.map((l) => ({
+    name: l.title,
+    type: (l.type === "show" ? "SERIES" : "MOVIE") as "MOVIE" | "SERIES",
+  }));
+  if (mode === "remove") {
+    const result = await deleteNamedVodCategories(names);
+    return { count: result.deleted, skipped: result.skipped, names: names.map((n) => n.name) };
+  }
+  const count = await ensureNamedVodCategories(names);
+  return { count, skipped: 0, names: names.map((n) => n.name) };
+}
+
 export async function importPlexLibrary(
   integrationId: string,
   serverId?: string | null,
@@ -949,8 +980,9 @@ export async function importPlexLibrary(
     clientIdentifier
   );
   let dirs = sections.MediaContainer?.Directory ?? [];
-  if (cfg.libraryKey) {
-    dirs = dirs.filter((d) => String(d.key) === String(cfg.libraryKey));
+  const selectedKeys = plexLibraryKeys(cfg);
+  if (selectedKeys.length) {
+    dirs = dirs.filter((d) => selectedKeys.includes(String(d.key)));
   }
   dirs = dirs.filter((d) => !d.type || d.type === "movie" || d.type === "show");
   if (!dirs.length) {
@@ -962,11 +994,7 @@ export async function importPlexLibrary(
   let episodes = 0;
   const sortCounter = { value: (await maxStreamSortOrder()) + 1 };
   const warnings: string[] = [];
-  const libraryCap = 20;
-  const selected = dirs.slice(0, libraryCap);
-  if (dirs.length > libraryCap) {
-    warnings.push(`Only the first ${libraryCap} Plex libraries were synced.`);
-  }
+  const selected = dirs;
 
   await reporter?.step("index", "Checking titles already on this panel…");
   const catalog = await loadPlexCatalogIndex(integrationId);
@@ -1102,6 +1130,17 @@ export async function importPlexLibrary(
         }
       );
       if (!name || !ratingKey) continue;
+      if (cfg.excludeNonEnglish) {
+        const lang = detectTitleLanguage(name, {
+          language: plexLanguageFromItem(item),
+          categoryName: plexGenreName(item) ?? libraryName,
+          meta: { guid: item.guid, originalLanguage: plexLanguageFromItem(item) },
+        });
+        if (!lang.english) {
+          skipped++;
+          continue;
+        }
+      }
 
       try {
       const isShow =
