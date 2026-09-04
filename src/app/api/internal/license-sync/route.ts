@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isAuthorizedInternalRequest } from "@/lib/internal-request";
+import { secretsEqual } from "@/lib/secrets-equal";
 import {
   issueLicenseSessionCookie,
   parseLicenseKey,
@@ -20,10 +21,23 @@ const bodySchema = z.object({
   licenseKey: z.string().optional(),
 });
 
+function canLicenseSync(req: NextRequest): boolean {
+  if (isAuthorizedInternalRequest(req)) return true;
+  const provided =
+    req.headers.get("x-panel-internal-secret") ??
+    req.headers.get("x-panel-api-key") ??
+    "";
+  const panelSecret =
+    process.env.NEXLIFY_PANEL_API_SECRET?.trim() ??
+    process.env.PANEL_API_SECRET?.trim() ??
+    "";
+  return Boolean(panelSecret && secretsEqual(provided, panelSecret));
+}
+
 /** Vendor admin pushes license add / renew / revoke / suspend to this panel. */
 export async function POST(req: NextRequest) {
   try {
-  if (!isAuthorizedInternalRequest(req)) {
+  if (!canLicenseSync(req)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

@@ -1,7 +1,34 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.65",
+  "latestVersion": "2.0.66",
   "releases": [
+    {
+      "version": "2.0.66",
+      "date": "2026-09-04",
+      "channel": "stable",
+      "summary": "Updates only succeed when the running build actually changes. Reseller Live Connections list the correct line without a long delay. Line username/password minimum of 3 is enforced on Add/Edit Line.",
+      "changelog": [
+        "In-panel Update no longer reports success just because package.json already says the latest version",
+        "Same-version Update waits for a real new BUILD_ID / finished swap instead of clearing the progress bar immediately",
+        "Prebuilt download/extract/apply share one tarball file so split steps cannot miss the download",
+        "Reseller Live Connections include sub-reseller lines, refresh as soon as a viewer starts, and show the line username (not a shared stream clock)",
+        "Add Line and Edit Line use the Security → Line credentials minimum length (lowest 3)",
+        "Xtream/XUI line create and edit use the same minimum instead of a hidden 6-character floor"
+      ],
+      "fixes": [
+        "Updating while already on the feed latest no longer pretends the UI changed",
+        "package.json is not treated as a finished install until the worker finished or BUILD_ID changed",
+        "Reseller Open Connections no longer keep a stale cached list after a zap",
+        "Duration on Live Connections is that viewer’s watch time, not the first person on the channel",
+        "Saving a line no longer rejects 3–5 character passwords when the setting is 3",
+        "Settings no longer show a 6-character minimum while allowing 3 to be saved"
+      ],
+      "notes": [
+        "Use Admin → Updates to install v2.0.66 from the published tarball. If you were already on v2.0.65 with an old UI, this is the version that actually replaces the running app.",
+        "Set Minimum username/password length to 3 under Admin → Settings → Security, then save. New and edited lines follow that value."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/nexlify-panel.tar.gz"
+    },
     {
       "version": "2.0.65",
       "date": "2026-09-03",

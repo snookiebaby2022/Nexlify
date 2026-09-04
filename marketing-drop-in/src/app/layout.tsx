@@ -8,7 +8,7 @@ import { OrganizationJsonLd } from "@/components/JsonLd";
 import { LivestreamAnalyticsGate, MarketingOverlays } from "@/components/MarketingOverlays";
 import { AnnouncementBanner } from "@/components/AnnouncementBanner";
 
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUser, getImpersonatorUser } from "@/lib/auth";
 
 import { DEFAULT_OG_IMAGE_ABSOLUTE } from "@/lib/geo";
 
@@ -104,6 +104,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const user = await getSessionUser();
+  const impersonator = await getImpersonatorUser();
 
   return (
     <html
@@ -121,7 +122,7 @@ export default async function RootLayout({
           <DeferredMarketingScripts />
         </LivestreamAnalyticsGate>
         <AnnouncementBanner />
-        <ConditionalShell user={user}>{children}</ConditionalShell>
+        <ConditionalShell user={user} impersonator={impersonator}>{children}</ConditionalShell>
         <MarketingOverlays isLoggedIn={!!user} />
       </body>
     </html>

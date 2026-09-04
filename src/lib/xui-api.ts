@@ -11,6 +11,7 @@ import {
   parseStreamType,
 } from "./xui-api-utils";
 import { validateLineCredential } from "./credential-generate";
+import { resolveLineCredentialMinLength } from "./line-credential-policy";
 import {
   type PanelApiCaller,
   lineScopeWhere,
@@ -34,6 +35,7 @@ export async function handleXuiAction(
   caller: PanelApiCaller
 ) {
   const actorId = caller.id;
+  const credMin = await resolveLineCredentialMinLength();
 
   switch (action) {
     case "get_bouquets": {
@@ -227,10 +229,10 @@ export async function handleXuiAction(
         return { status: "error", message: "active_code required" };
       }
       if (username) {
-        const userErr = validateLineCredential(username, "username");
+        const userErr = validateLineCredential(username, "username", credMin);
         if (userErr) return { status: "error", message: userErr };
       }
-      const passErr = validateLineCredential(password, "password");
+      const passErr = validateLineCredential(password, "password", credMin);
       if (passErr) return { status: "error", message: passErr };
 
       const unlimitedGuard = assertRoleMaySetUnlimited(caller.role, { days });
@@ -306,7 +308,7 @@ export async function handleXuiAction(
       const data: Prisma.LineUpdateInput = {};
       if (params.get("password")) {
         const nextPass = params.get("password")!;
-        const passErr = validateLineCredential(nextPass, "password");
+        const passErr = validateLineCredential(nextPass, "password", credMin);
         if (passErr) return { status: "error", message: passErr };
         data.password = nextPass;
       }
@@ -357,9 +359,9 @@ export async function handleXuiAction(
       const password = params.get("password") ?? generatePassword();
       const credits = parseBoundedInt(params.get("credits"), 0, 0, 1_000_000);
       if (!username) return { status: "error", message: "username required" };
-      const userErr = validateLineCredential(username, "username");
+      const userErr = validateLineCredential(username, "username", credMin);
       if (userErr) return { status: "error", message: userErr };
-      const passErr = validateLineCredential(password, "password");
+      const passErr = validateLineCredential(password, "password", credMin);
       if (passErr) return { status: "error", message: passErr };
 
       const role = caller.isAdmin ? PanelRole.RESELLER : PanelRole.SUB_RESELLER;

@@ -24,7 +24,12 @@ type ConnectionRow = {
   streamStartedAt?: string | null;
   lastSeenAt: string;
   serverName: string;
-  line: { username: string; maxConnections: number; isRestreamer?: boolean };
+  line: {
+    username: string;
+    maxConnections: number;
+    isRestreamer?: boolean;
+    magDevices?: { mac: string }[];
+  };
   stream: { id: string; name: string; type: string; serverId?: string | null } | null;
   quality: ConnectionQuality;
   output: PlaybackOutputLabel;
@@ -93,12 +98,13 @@ function formatConnDuration(
   return `${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
 }
 
-function streamWatchStartedAt(c: ConnectionRow): string {
-  return c.streamStartedAt || c.startedAt;
+function lineLabel(c: ConnectionRow): string {
+  const mag = c.line.magDevices?.[0]?.mac?.trim();
+  return mag ? `${c.line.username} (${mag})` : c.line.username;
 }
 
 function durationTitle(c: ConnectionRow, nowMs: number): string {
-  return `Stream uptime ${formatConnDuration(streamWatchStartedAt(c), nowMs)} · watching ${formatConnDuration(c.startedAt, nowMs)}`;
+  return `Stream uptime ${formatConnDuration(c.streamStartedAt || c.startedAt, nowMs)} · watching ${formatConnDuration(c.startedAt, nowMs)}`;
 }
 
 async function restartConnectionStream(c: ConnectionRow) {
@@ -133,7 +139,7 @@ function CompactConnectionRow({
     <div className="panel-mobile-conn-row">
       <button type="button" className="panel-mobile-conn-main" onClick={onToggle}>
         <span className="panel-mobile-conn-status" aria-hidden />
-        <span className="panel-mobile-conn-owner">{c.line.username}</span>
+        <span className="panel-mobile-conn-owner">{lineLabel(c)}</span>
         <span className="panel-mobile-conn-chevron" aria-hidden>
           {expanded ? "▾" : "▸"}
         </span>
@@ -164,7 +170,7 @@ function ConnectionCard({
     <article className={`panel-mobile-card space-y-2 ${compact ? "p-3 border-0" : "p-4"}`}>
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-semibold text-base">{c.line.username}</p>
+          <p className="font-semibold text-base">{lineLabel(c)}</p>
           <p className="text-sm truncate max-w-[240px]" style={{ color: "var(--muted)" }}>
             {c.stream?.name ?? "—"}
           </p>
@@ -184,7 +190,7 @@ function ConnectionCard({
         <div>
           <p className="panel-mobile-card-label">Duration</p>
           <span className="xui-duration-badge" title={durationTitle(c, nowMs)}>
-            {formatConnDuration(streamWatchStartedAt(c), nowMs)}
+            {formatConnDuration(c.startedAt, nowMs)}
           </span>
         </div>
         <div>
@@ -354,7 +360,7 @@ export function AdminConnectionsClient({
       if (!search.trim()) return true;
       const q = search.toLowerCase();
       return (
-        c.line.username.toLowerCase().includes(q) ||
+        lineLabel(c).toLowerCase().includes(q) ||
         (c.ip ?? "").includes(q) ||
         (c.stream?.name ?? "").toLowerCase().includes(q)
       );
@@ -398,7 +404,7 @@ export function AdminConnectionsClient({
       </p>
       {paths.isReseller ? (
         <p className="text-sm px-1" style={{ color: "var(--muted)" }}>
-          Showing your lines only.
+          Showing your lines and sub-reseller lines.
         </p>
       ) : null}
 
@@ -437,7 +443,7 @@ export function AdminConnectionsClient({
       <div className="panel-mobile-conn-list md:hidden">
         <div className="panel-mobile-conn-head">
           <span>Status</span>
-          <span>Owner</span>
+          <span>Line</span>
         </div>
         {shown.map((c) => (
           <CompactConnectionRow
@@ -482,7 +488,7 @@ export function AdminConnectionsClient({
                     {c.quality.label}
                   </span>
                 </td>
-                <td className="font-semibold">{c.line.username}</td>
+                <td className="font-semibold">{lineLabel(c)}</td>
                 <td className="max-w-[220px] truncate" title={c.stream?.name ?? undefined}>
                   {c.stream?.name ?? "—"}
                 </td>
@@ -490,7 +496,7 @@ export function AdminConnectionsClient({
                 <td>{c.ip ? <IpWithFlag ip={c.ip} /> : "—"}</td>
                 <td>
                   <span className="xui-duration-badge" title={durationTitle(c, nowMs)}>
-                    {formatConnDuration(streamWatchStartedAt(c), nowMs)}
+                    {formatConnDuration(c.startedAt, nowMs)}
                   </span>
                 </td>
                 <td>{c.output}</td>

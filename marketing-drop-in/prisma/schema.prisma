@@ -49,6 +49,7 @@ model User {
   name           String?
   role           Role            @default(USER)
   trialBypass    Boolean         @default(false)
+  creditCents    Int             @default(0)
   utmSource      String?
   utmMedium      String?
   utmCampaign    String?
@@ -60,6 +61,8 @@ model User {
   activationCodes    ActivationCode[]
   tickets            Ticket[]
   ticketMessages     TicketMessage[] @relation("TicketMessageAuthor")
+  couponsCreated     Coupon[]        @relation("CouponCreatedBy")
+  creditNotes        CreditNote[]
 }
 
 model Ticket {
@@ -199,6 +202,36 @@ model AddonEntitlement {
 
   @@index([email, service])
   @@index([panelLicenseId, service])
+}
+
+model Coupon {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  percentOff     Int?
+  amountOffCents Int?
+  active         Boolean   @default(true)
+  maxUses        Int?
+  usedCount      Int       @default(0)
+  expiresAt      DateTime?
+  note           String?
+  createdById    String?
+  createdBy      User?     @relation("CouponCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([active])
+}
+
+/** Admin-granted account credit (applied at next checkout). */
+model CreditNote {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountCents Int
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model PasswordResetToken {

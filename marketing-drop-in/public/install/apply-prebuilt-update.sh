@@ -16,8 +16,9 @@ DOWNLOAD_URL="${1:?Usage: apply-prebuilt-update.sh <downloadUrl> [download|extra
 STEP="${2:-all}"
 BACKUP_DIR="$ROOT/.next.backup"
 STAGING_DIR="$ROOT/.next.staging"
-TMP_TGZ="/tmp/nexlify-next-$$.tar.gz"
-ROOT_PKG_BACKUP="/tmp/nexlify-pkg-backup-$$.json"
+# Stable paths — download / extract / apply run in separate processes (different $$).
+TMP_TGZ="$ROOT/.update-next.tar.gz"
+ROOT_PKG_BACKUP="$ROOT/.update-pkg-backup.json"
 
 has_valid_next() {
   bash "$ROOT/scripts/has-valid-next-build.sh" 2>/dev/null

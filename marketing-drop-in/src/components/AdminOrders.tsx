@@ -13,6 +13,10 @@ type OrderRow = {
   currency: string | null;
   paymentProvider: string | null;
   licenseKey: string | null;
+  stripePaymentId: string | null;
+  stripeSubscriptionId: string | null;
+  paypalOrderId: string | null;
+  paypalSubscriptionId: string | null;
   createdAt: string;
 };
 
@@ -26,6 +30,8 @@ function paymentLabel(provider: string | null, amountCents: number): string {
 export function AdminOrders() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     fetch("/api/admin/orders?limit=100")
@@ -37,6 +43,26 @@ export function AdminOrders() {
   useEffect(() => {
     load();
   }, [load]);
+
+  async function act(id: string, action: "refund" | "cancel") {
+    if (!confirm(action === "refund" ? "Refund this payment and revoke the license?" : "Cancel the subscription?")) {
+      return;
+    }
+    setBusyId(`${id}:${action}`);
+    setError(null);
+    const res = await fetch("/api/admin/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, action }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setBusyId(null);
+    if (!res.ok) {
+      setError(data.error ?? "Action failed");
+      return;
+    }
+    load();
+  }
 
   if (loading) return <p className="text-slate-400 text-sm">Loading orders…</p>;
 
@@ -50,8 +76,7 @@ export function AdminOrders() {
         >
           Export licenses CSV
         </a>
-      </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-800">
+        {error && <p className="text-sm text-red-400">{error}</p>}
         <table className="w-full text-left text-sm">
           <thead className="border-b border-slate-800 bg-slate-900/80 text-slate-400">
             <tr>
@@ -62,12 +87,13 @@ export function AdminOrders() {
               <th className="px-4 py-3">Payment</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">License</th>
+              <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody>
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                   No orders yet.
                 </td>
               </tr>
@@ -92,6 +118,28 @@ export function AdminOrders() {
                   <td className="px-4 py-3">{o.status}</td>
                   <td className="px-4 py-3 font-mono text-[10px] text-cyan-300">
                     {o.licenseKey ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {o.status !== "REFUNDED" && (o.stripePaymentId || o.paypalOrderId || o.amountCents === 0) ? (
+                      <button
+                        type="button"
+                        disabled={busyId === `${o.id}:refund`}
+                        onClick={() => void act(o.id, "refund")}
+                        className="mr-2 text-xs text-amber-300 hover:underline disabled:opacity-50"
+                      >
+                        Refund
+                      </button>
+                    ) : null}
+                    {o.stripeSubscriptionId || o.paypalSubscriptionId ? (
+                      <button
+                        type="button"
+                        disabled={busyId === `${o.id}:cancel`}
+                        onClick={() => void act(o.id, "cancel")}
+                        className="text-xs text-slate-300 hover:underline disabled:opacity-50"
+                      >
+                        Cancel sub
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))

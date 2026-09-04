@@ -7,7 +7,7 @@ import {
   resolvePlaybackOutputLabel,
 } from "@/lib/connection-playback-output";
 import { streamServerDisplayName } from "@/lib/stream-server-display";
-import { ownerScope } from "@/lib/owner-scope";
+import { ownerLineOwnerIds } from "@/lib/owner-scope";
 
 export type AdminConnectionRow = {
   id: string;
@@ -18,7 +18,12 @@ export type AdminConnectionRow = {
   streamStartedAt: string | null;
   lastSeenAt: string;
   serverName: string;
-  line: { username: string; maxConnections: number; isRestreamer?: boolean };
+  line: {
+    username: string;
+    maxConnections: number;
+    isRestreamer?: boolean;
+    magDevices?: { mac: string }[];
+  };
   stream: { id: string; name: string; type: string; serverId?: string | null } | null;
   quality: ReturnType<typeof computeConnectionQualityWithLive>;
   output: ReturnType<typeof resolvePlaybackOutputLabel>;
@@ -28,10 +33,9 @@ export async function listAdminConnections(
   session: SessionUser,
   _opts?: { includeQoe?: boolean }
 ): Promise<AdminConnectionRow[]> {
-  const connections = await listLiveConnections(ownerScope(session));
+  const connections = await listLiveConnections(await ownerLineOwnerIds(session));
   const streamIds = [...new Set(connections.map((c) => c.streamId).filter((id): id is string => Boolean(id)))];
   const processStartedById = new Map<string, Date>();
-  const watchStartedById = new Map<string, Date>();
   if (streamIds.length) {
     const processes = await prisma.streamProcess.findMany({
       where: { streamId: { in: streamIds }, status: "running", startedAt: { not: null } },
@@ -41,13 +45,6 @@ export async function listAdminConnections(
       if (!p.streamId || !p.startedAt) continue;
       const prev = processStartedById.get(p.streamId);
       if (!prev || p.startedAt < prev) processStartedById.set(p.streamId, p.startedAt);
-    }
-    for (const c of connections) {
-      if (!c.streamId) continue;
-      const watchStart = c.startedAt instanceof Date ? c.startedAt : new Date(c.startedAt);
-      if (!Number.isFinite(watchStart.getTime())) continue;
-      const prev = watchStartedById.get(c.streamId);
-      if (!prev || watchStart < prev) watchStartedById.set(c.streamId, watchStart);
     }
   }
   const now = Date.now();
@@ -69,9 +66,7 @@ export async function listAdminConnections(
       cached: cachedOutput,
       userAgent: c.userAgent,
     });
-    const streamStarted = c.streamId
-      ? (processStartedById.get(c.streamId) ?? watchStartedById.get(c.streamId) ?? null)
-      : null;
+    const streamStarted = c.streamId ? (processStartedById.get(c.streamId) ?? null) : null;
     const srv = c.stream?.server;
     const serverName = srv
       ? streamServerDisplayName(srv.name, srv.domain || srv.host || "")

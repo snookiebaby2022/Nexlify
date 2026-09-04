@@ -27,6 +27,7 @@ export async function GET(request: Request) {
   const q = searchParams.get("q")?.trim() ?? "";
   const status = searchParams.get("status")?.trim() ?? "";
   const plan = searchParams.get("plan")?.trim() ?? "";
+  const syncErrors = searchParams.get("syncErrors") === "1";
   const page = Math.max(1, Number(searchParams.get("page") ?? 1));
   const pageSize = Math.min(100, Math.max(10, Number(searchParams.get("pageSize") ?? 25)));
   const skip = (page - 1) * pageSize;
@@ -39,6 +40,17 @@ export async function GET(request: Request) {
       { key: { contains: q, mode: "insensitive" } },
       { user: { email: { contains: q, mode: "insensitive" } } },
       { notes: { contains: q, mode: "insensitive" } },
+      { panelUrl: { contains: q, mode: "insensitive" } },
+      { panelHost: { contains: q, mode: "insensitive" } },
+      { machineId: { contains: q, mode: "insensitive" } },
+    ];
+  }
+  if (syncErrors) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      {
+        OR: [{ lastSyncError: { not: null } }, { pendingSyncAction: { not: null } }],
+      },
     ];
   }
 
@@ -177,6 +189,28 @@ export async function PATCH(request: Request) {
       updateData.status = "ACTIVE";
     }
 
+    if (data.activatePanel) {
+      const lic = await prisma.license.findUnique({ where: { id } });
+      if (!lic) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      const result = await syncLicenseToPanel(id, "ACTIVATE", {
+        licenseKey: lic.key,
+        panelUrl: data.panelUrl ? String(data.panelUrl) : undefined,
+        panelApiSecret: data.panelApiSecret ? String(data.panelApiSecret) : undefined,
+      });
+      await logAudit({
+        userId: admin.id,
+        email: admin.email,
+        action: "license_update",
+        detail: `${lic.key} → activate panel ${result.pushed ? "ok" : result.error ?? "failed"}`,
+      });
+      const license = await prisma.license.findUnique({ where: { id } });
+      return NextResponse.json({ license, sync: result });
+    }
+
+    if (!Object.keys(updateData).length) {
+      return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
+    }
+
     const license = await prisma.license.update({ where: { id }, data: updateData });
 
     if (data.extendDays || data.upgradePlanSlug || data.reactivate) {
@@ -203,7 +237,17 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { email, planId, term, durationDays, maxLines } = body;
+    const {
+      email,
+      planId,
+      term,
+      durationDays,
+      maxLines,
+      panelUrl,
+      panelApiSecret,
+      createAccount,
+      activatePanel,
+    } = body;
     if (!email || !planId) {
       return NextResponse.json({ error: "email and planId required" }, { status: 400 });
     }
@@ -227,12 +271,27 @@ export async function POST(request: Request) {
 
     const normalizedEmail = String(email).trim().toLowerCase();
     let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (!user || !isRegisteredAccount(user.passwordHash)) {
+    if (!user) {
+      if (createAccount === false) {
+        return NextResponse.json(
+          { error: "No account for this email — enable create account, or the customer must sign up first" },
+          { status: 400 }
+        );
+      }
+      user = await prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash: UNUSABLE_PASSWORD_HASH,
+        },
+      });
+    } else if (!isRegisteredAccount(user.passwordHash) && createAccount === false) {
       return NextResponse.json(
         { error: "No registered account for this email — customer must sign up first" },
         { status: 400 }
       );
     }
+
+    const wantActivate = Boolean(activatePanel && String(panelUrl ?? "").trim());
 
     const order = await prisma.order.create({
       data: {
@@ -244,7 +303,9 @@ export async function POST(request: Request) {
       },
     });
 
-    const issued = await issueLicenseForOrder(order.id);
+    const issued = await issueLicenseForOrder(order.id, {
+      sendActivationEmail: !wantActivate,
+    });
     if (!issued) {
       return NextResponse.json({ error: "License issue failed" }, { status: 500 });
     }
@@ -255,18 +316,28 @@ export async function POST(request: Request) {
         expiresAt,
         maxLines: maxLines ? Number(maxLines) : plan.maxLines,
         notes: "Admin-issued",
+        status: wantActivate ? "ACTIVE" : issued.status,
       },
       include: { user: true, plan: true },
     });
+
+    let sync: { pushed: boolean; error?: string } = { pushed: false };
+    if (wantActivate) {
+      sync = await syncLicenseToPanel(license.id, "ACTIVATE", {
+        licenseKey: license.key,
+        panelUrl: String(panelUrl),
+        panelApiSecret: panelApiSecret ? String(panelApiSecret) : undefined,
+      });
+    }
 
     await logAudit({
       userId: admin.id,
       email: admin.email,
       action: "license_create",
-      detail: `${license.key} for ${email} (${plan.slug})`,
+      detail: `${license.key} for ${normalizedEmail} (${plan.slug})${sync.pushed ? " panel activated" : ""}`,
     });
 
-    return NextResponse.json({ license, sync: { pushed: false } });
+    return NextResponse.json({ license, sync });
   } catch (e) {
     console.error("[admin/licenses POST]", e);
     return NextResponse.json({ error: "Issue failed" }, { status: 500 });

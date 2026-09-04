@@ -69,7 +69,7 @@ assert.equal(
   false
 );
 
-// Progress stuck at ~60% but package.json already on the new version → success
+// package.json on the target only counts when the job is actually moving versions
 assert.equal(
   installedVersionImpliesUpdateSuccess(base({ progress: 60, currentStep: "npm run build" }), "1.9.94"),
   true
@@ -88,6 +88,13 @@ assert.equal(
     "1.9.93"
   ),
   true
+);
+assert.equal(
+  installedVersionImpliesUpdateSuccess(
+    base({ fromVersion: "2.0.65", toVersion: "2.0.65", progress: 8, currentStep: "Starting update…" }),
+    "2.0.65"
+  ),
+  false
 );
 
 console.log("panel-update-job-success.test.ts: ok");

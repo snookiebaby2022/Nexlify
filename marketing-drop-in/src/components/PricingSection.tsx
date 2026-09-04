@@ -41,7 +41,7 @@ export function PricingSection({
   const [currency, setCurrency] = useState<CheckoutCurrency>(DEFAULT_CHECKOUT_CURRENCY);
   const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>("stripe");
   const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState("");
   const freeActive = isFreePeriod();
 
   useEffect(() => {
@@ -105,7 +105,12 @@ export function PricingSection({
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: plan.id, currency, paymentMethod }),
+        body: JSON.stringify({
+          planId: plan.id,
+          currency,
+          paymentMethod,
+          ...(couponCode.trim() ? { couponCode: couponCode.trim() } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Checkout failed");
@@ -183,6 +188,15 @@ export function PricingSection({
                 </button>
               ))}
             </div>
+            {!freeActive ? (
+              <input
+                type="text"
+                placeholder="Coupon"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value)}
+                className="w-32 rounded-full border border-white/15 bg-black/40 px-4 py-2 text-sm text-white placeholder:text-slate-500"
+              />
+            ) : null}
           </div>
         </div>
 

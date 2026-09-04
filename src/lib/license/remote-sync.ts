@@ -102,7 +102,7 @@ async function vendorFetch(path: string, init?: RequestInit) {
 
   const headers: Record<string, string> = {
     Accept: "application/json",
-    "x-panel-api-key": secret,
+    "x-panel-api-key": process.env.PANEL_INTERNAL_SECRET?.trim() || secret,
     ...(init?.headers as Record<string, string> | undefined),
   };
 

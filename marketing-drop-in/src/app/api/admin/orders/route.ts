@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { TRIAL_PLAN_SLUG } from "@/lib/plans";
+import { adminRefundOrCancelOrder } from "@/lib/admin-order-refund";
 
 async function requireAdmin() {
   const user = await getSessionUser();
@@ -46,9 +47,32 @@ export async function GET(request: Request) {
       utmSource: o.utmSource,
       utmMedium: o.utmMedium,
       utmCampaign: o.utmCampaign,
+      stripePaymentId: o.stripePaymentId,
+      stripeSubscriptionId: o.stripeSubscriptionId,
+      paypalOrderId: o.paypalOrderId,
+      paypalSubscriptionId: o.paypalSubscriptionId,
       licenseKey: o.license?.key ?? null,
       licenseStatus: o.license?.status ?? null,
       createdAt: o.createdAt.toISOString(),
     })),
   });
+}
+
+export async function POST(request: Request) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const body = (await request.json()) as { id?: string; action?: string };
+  const id = String(body.id ?? "").trim();
+  const action = body.action === "cancel" ? "cancel" : body.action === "refund" ? "refund" : null;
+  if (!id || !action) {
+    return NextResponse.json({ error: "id and action (refund|cancel) required" }, { status: 400 });
+  }
+  const result = await adminRefundOrCancelOrder({
+    orderId: id,
+    action,
+    adminEmail: admin.email,
+    adminId: admin.id,
+  });
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  return NextResponse.json({ ok: true });
 }

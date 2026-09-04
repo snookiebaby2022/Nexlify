@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { clearLicenseServerBinding, setLicenseServerStatus } from "@/lib/license-server-admin";
 import { secretsEqual } from "@/lib/secrets-equal";
 import { requirePanelApiKey } from "@/lib/auth";
-import { panelUrlCandidates } from "@/lib/panel-url-variants";
+import { panelUrlCandidates, preferReachablePanelUrls } from "@/lib/panel-url-variants";
 
 export type PanelSyncAction =
   | "ACTIVATE"
@@ -99,7 +99,9 @@ function isPrivateOrLocalHost(hostname: string): boolean {
 function parsePublicPanelUrl(raw: string): { ok: true; url: string } | { ok: false; error: string } {
   try {
     const trimmed = normalizePanelUrl(raw);
-    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const hostGuess = trimmed.replace(/^https?:\/\//i, "").split("/")[0].split(":")[0];
+    const defaultProto = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostGuess) ? "http" : "https";
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `${defaultProto}://${trimmed}`;
     const url = new URL(withProto);
     if (!["http:", "https:"].includes(url.protocol)) {
       return { ok: false, error: "Invalid panel URL" };
@@ -137,39 +139,51 @@ export async function findUserPanelTarget(userId: string) {
 
 async function pushToPanel(
   panelUrl: string,
-  body: { action: string; licenseKey?: string }
+  body: { action: string; licenseKey?: string },
+  overrideSecret?: string | null
 ): Promise<{ ok: boolean; error?: string }> {
-  const secret = await apiKeyForPanelUrl(panelUrl);
+  const secret = overrideSecret?.trim() || (await apiKeyForPanelUrl(panelUrl));
   if (!secret) {
-    return { ok: false, error: "No API secret registered for this panel" };
+    return {
+      ok: false,
+      error:
+        "No API secret for this panel — paste PANEL_INTERNAL_SECRET or PANEL_API_SECRET from the panel .env",
+    };
   }
 
-  let res: Response;
-  try {
-    res = await fetch(`${panelUrl}/api/internal/license-sync`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-panel-internal-secret": secret,
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
-    });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Network error";
-    return { ok: false, error: message };
-  }
+  const bases = preferReachablePanelUrls(panelUrl);
+  const urls = bases.length ? bases : [normalizePanelUrl(panelUrl)];
+  let lastError = "Push failed";
 
-  const contentType = res.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    return { ok: false, error: `Panel HTTP ${res.status}` };
+  for (const base of urls) {
+    try {
+      const res = await fetch(`${base}/api/internal/license-sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-panel-internal-secret": secret,
+          "x-panel-api-key": secret,
+        },
+        body: JSON.stringify(body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(20_000),
+      });
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        lastError = `Panel HTTP ${res.status} at ${base}`;
+        continue;
+      }
+      const data = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) {
+        lastError = data.error ?? `Panel HTTP ${res.status} at ${base}`;
+        continue;
+      }
+      return { ok: true };
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : "Network error";
+    }
   }
-  const data = (await res.json()) as { ok?: boolean; error?: string };
-  if (!res.ok || !data.ok) {
-    return { ok: false, error: data.error ?? `Panel HTTP ${res.status}` };
-  }
-  return { ok: true };
+  return { ok: false, error: lastError };
 }
 
 function actionToRemote(action: PanelSyncAction): string {
@@ -188,26 +202,53 @@ function actionToRemote(action: PanelSyncAction): string {
   }
 }
 
+export type SyncLicenseOpts = {
+  licenseKey?: string;
+  panelUrl?: string;
+  panelApiSecret?: string;
+};
+
+function hostFromPanelUrl(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Queue + push a license change to the customer's panel. */
 export async function syncLicenseToPanel(
   licenseId: string,
   action: PanelSyncAction,
-  opts?: { licenseKey?: string }
+  opts?: SyncLicenseOpts
 ) {
-  const license = await prisma.license.findUnique({
+  const existing = await prisma.license.findUnique({
     where: { id: licenseId },
     include: { user: { select: { id: true, email: true } } },
   });
+  if (!existing) return { pushed: false, error: "License not found" };
+
+  const key = opts?.licenseKey ?? existing.key;
+  const secretIn = opts?.panelApiSecret?.trim() || "";
+  const urlPatch: { panelUrl?: string; panelHost?: string | null; panelApiSecret?: string } = {};
+  if (opts?.panelUrl?.trim()) {
+    const parsed = parsePublicPanelUrl(opts.panelUrl);
+    if (!parsed.ok) return { pushed: false, error: parsed.error };
+    urlPatch.panelUrl = parsed.url;
+    urlPatch.panelHost = hostFromPanelUrl(parsed.url);
+  }
+  if (secretIn.length >= 16) urlPatch.panelApiSecret = secretIn;
+
+  if (Object.keys(urlPatch).length) {
+    await prisma.license.update({ where: { id: licenseId }, data: urlPatch });
+  }
+
+  const license = await prisma.license.findUnique({ where: { id: licenseId } });
   if (!license) return { pushed: false, error: "License not found" };
 
-  const key = opts?.licenseKey ?? license.key;
-  const target =
-    license.panelUrl && license.machineId
-      ? {
-          panelUrl: normalizePanelUrl(license.panelUrl),
-          machineId: license.machineId,
-        }
-      : await findUserPanelTarget(license.userId);
+  const fromLicense = license.panelUrl ? normalizePanelUrl(license.panelUrl) : null;
+  const sibling = fromLicense ? null : await findUserPanelTarget(license.userId);
+  const targetUrl = fromLicense ?? sibling?.panelUrl ?? null;
 
   await prisma.license.update({
     where: { id: licenseId },
@@ -225,10 +266,10 @@ export async function syncLicenseToPanel(
     await setLicenseServerStatus(key, "ACTIVE");
   }
 
-  if (!target?.panelUrl) {
+  if (!targetUrl) {
     return {
       pushed: false,
-      error: "No panel registered — customer must activate once; change will apply on next poll",
+      error: "No panel URL — enter the panel domain or IP to push activation",
     };
   }
 
@@ -238,14 +279,24 @@ export async function syncLicenseToPanel(
     pushBody.licenseKey = key;
   }
 
-  const result = await pushToPanel(target.panelUrl, pushBody);
+  const result = await pushToPanel(targetUrl, pushBody, secretIn || license.panelApiSecret);
   await prisma.license.update({
     where: { id: licenseId },
     data: {
       lastSyncAt: new Date(),
       lastSyncError: result.ok ? null : result.error ?? "Push failed",
       ...(result.ok
-        ? { pendingSyncAction: null, pendingSyncKey: null, panelUrl: target.panelUrl }
+        ? {
+            pendingSyncAction: null,
+            pendingSyncKey: null,
+            panelUrl: targetUrl,
+            panelHost: hostFromPanelUrl(targetUrl),
+            ...((action === "ACTIVATE" || action === "REPLACE") &&
+            license.status !== "REVOKED" &&
+            license.status !== "SUSPENDED"
+              ? { status: "ACTIVE" as const, activatedAt: new Date() }
+              : {}),
+          }
         : {}),
     },
   });

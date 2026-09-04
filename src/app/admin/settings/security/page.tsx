@@ -79,7 +79,7 @@ export default function SecuritySettingsPage() {
               key: "lineCredentialMinLength",
               label: "Minimum username/password length",
               type: "number",
-              hint: "Lowest allowed is 3. Applies to line usernames/passwords for admins and resellers.",
+              hint: "This length is enforced on Add Line and Edit Line. Lowest allowed is 3.",
             },
             {
               key: "linePasswordRequireLetterAndDigit",

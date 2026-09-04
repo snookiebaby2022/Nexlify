@@ -1,9 +1,12 @@
-/** In-process wake-ups for Live Connections SSE. Heartbeats do not notify — only add/kick. */
+import { cacheGet, cacheSet } from "./cache";
+
+/** In-process + Redis wake-ups for Live Connections SSE. */
 
 type Listener = () => void;
 
 const listeners = new Set<Listener>();
 let generation = 0;
+export const LIVE_GEN_KEY = "conn:live:gen";
 
 export function liveConnectionsGeneration(): number {
   return generation;
@@ -11,6 +14,7 @@ export function liveConnectionsGeneration(): number {
 
 export function notifyLiveConnectionsChanged(): void {
   generation += 1;
+  void cacheSet(LIVE_GEN_KEY, generation, 86_400).catch(() => {});
   for (const fn of [...listeners]) {
     try {
       fn();
@@ -40,11 +44,20 @@ export function waitForLiveConnectionsChange(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearInterval(poll);
       unsub();
       signal?.removeEventListener("abort", finish);
       resolve(generation);
     };
     const timer = setTimeout(finish, Math.max(1_000, timeoutMs));
+    const poll = setInterval(() => {
+      void cacheGet<number>(LIVE_GEN_KEY).then((remote) => {
+        if (typeof remote === "number" && remote !== since) {
+          generation = Math.max(generation, remote);
+          finish();
+        }
+      });
+    }, 400);
     const unsub = subscribeLiveConnections(finish);
     signal?.addEventListener("abort", finish, { once: true });
   });

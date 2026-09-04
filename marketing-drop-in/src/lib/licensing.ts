@@ -4,7 +4,10 @@ import { generateActivationCode } from "@/lib/activation-code";
 import { sendActivationCodeEmail } from "@/lib/activation-email";
 import type { License, Plan } from "@/generated/prisma";
 
-export async function issueLicenseForOrder(orderId: string) {
+export async function issueLicenseForOrder(
+  orderId: string,
+  opts?: { sendActivationEmail?: boolean }
+) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: { plan: true, user: true, license: true },
@@ -31,11 +34,13 @@ export async function issueLicenseForOrder(orderId: string) {
     include: { plan: true },
   });
 
-  generateActivationCode(license.id, order.userId, order.user.email)
-    .then((code) =>
-      sendActivationCodeEmail(order.user.email, order.user.name, code, license.id)
-    )
-    .catch((e) => console.error("[licensing] Failed to send activation code:", e));
+  if (opts?.sendActivationEmail !== false) {
+    generateActivationCode(license.id, order.userId, order.user.email)
+      .then((code) =>
+        sendActivationCodeEmail(order.user.email, order.user.name, code, license.id)
+      )
+      .catch((e) => console.error("[licensing] Failed to send activation code:", e));
+  }
 
   return license;
 }

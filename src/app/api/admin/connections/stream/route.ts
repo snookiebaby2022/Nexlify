@@ -10,7 +10,7 @@ import {
 } from "@/lib/connection-live-bus";
 
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
-const KEEP_ALIVE_MS = 15_000;
+const KEEP_ALIVE_MS = 2_500;
 
 export const dynamic = "force-dynamic";
 

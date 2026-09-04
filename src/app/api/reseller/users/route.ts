@@ -239,7 +239,8 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.password === "string" && body.password.trim()) {
     const plain = body.password.trim();
     const { validateLineCredential } = await import("@/lib/credential-generate");
-    const passErr = validateLineCredential(plain, "password");
+    const { resolveLineCredentialMinLength } = await import("@/lib/line-credential-policy");
+    const passErr = validateLineCredential(plain, "password", await resolveLineCredentialMinLength());
     if (passErr) return NextResponse.json({ error: passErr }, { status: 400 });
     data.passwordHash = await bcrypt.hash(plain, 12);
     data.passwordPlain = null;

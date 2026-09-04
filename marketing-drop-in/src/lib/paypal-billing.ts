@@ -260,3 +260,30 @@ export async function capturePayPalOrder(orderId: string): Promise<{
     currency: capture?.amount?.currency_code,
   };
 }
+
+export async function cancelPayPalSubscription(subscriptionId: string): Promise<void> {
+  await paypalApi(`/v1/billing/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, {
+    method: "POST",
+    body: { reason: "Cancelled by Nexlify admin" },
+  });
+}
+
+export async function refundPayPalOrder(paypalOrderId: string): Promise<void> {
+  const cfg = await getPayPalConfig();
+  if (!cfg) throw new Error("PayPal not configured");
+  const token = await getPayPalAccessToken(cfg);
+  const res = await fetch(`${cfg.base}/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await res.json()) as {
+    purchase_units?: { payments?: { captures?: { id: string }[] } }[];
+    message?: string;
+  };
+  if (!res.ok) throw new Error(data.message ?? "Could not load PayPal order");
+  const captureId = data.purchase_units?.[0]?.payments?.captures?.[0]?.id;
+  if (!captureId) throw new Error("No PayPal capture to refund — cancel the subscription instead");
+  await paypalApi(`/v2/payments/captures/${encodeURIComponent(captureId)}/refund`, {
+    method: "POST",
+    body: {},
+  });
+}

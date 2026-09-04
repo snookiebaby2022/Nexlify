@@ -24,6 +24,8 @@ export type PanelUpdateJob = {
   message: string | null;
   fromVersion: string | null;
   toVersion: string | null;
+  /** `.next/BUILD_ID` when the job started — version in package.json is not proof the running app changed. */
+  fromBuildId?: string | null;
 };
 
 export function getUpdateLockPath(repoPath: string): string {
@@ -184,6 +186,22 @@ const MAX_FAILED_MS = 2 * 60 * 1000; // auto-clear failed jobs quickly so Clear 
 const MAX_DONE_MS = 2 * 60 * 1000; // auto-clear completed jobs so reload does not re-show banner
 const MAX_SAME_VERSION_FAILED_MS = 5 * 60 * 1000; // re-sync failures stop nagging sooner
 
+export async function readNextBuildId(repoPath: string): Promise<string | null> {
+  const files = [
+    path.join(repoPath, ".next", "BUILD_ID"),
+    path.join(repoPath, ".next", "standalone", ".next", "BUILD_ID"),
+  ];
+  for (const file of files) {
+    try {
+      const raw = (await readFile(file, "utf8")).trim();
+      if (raw) return raw;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
 async function readInstalledPackageVersion(repoPath: string): Promise<string | null> {
   const files = [
     path.join(repoPath, "package.json"),
@@ -202,9 +220,9 @@ async function readInstalledPackageVersion(repoPath: string): Promise<string | n
 }
 
 /**
- * True when package.json already reflects a successful update even if the
- * progress bar never reached the late swap/restart steps (common when PM2
- * restarts kill the worker around mid-build ~55–70%).
+ * True when package.json moved onto a *newer* version than the job started from.
+ * Same-version rebuilds (already on latest) must not count — that was marking
+ * Updates as done while the compiled UI stayed old.
  */
 export function installedVersionImpliesUpdateSuccess(
   job: PanelUpdateJob,
@@ -217,8 +235,9 @@ export function installedVersionImpliesUpdateSuccess(
   const from = (job.fromVersion ?? "").replace(/^v/i, "").trim();
   const to = (job.toVersion ?? "").replace(/^v/i, "").trim();
 
-  if (to && compareVersions(installed, to) >= 0) return true;
-  if (from && compareVersions(installed, from) > 0) return true;
+  if (from && to && from === to) return false;
+  if (to && from && from !== to && compareVersions(installed, to) >= 0) return true;
+  if (!to && from && compareVersions(installed, from) > 0) return true;
   return false;
 }
 
@@ -279,8 +298,19 @@ async function promoteIfInstalledVersionSucceeded(
   repoPath: string,
   job: PanelUpdateJob
 ): Promise<PanelUpdateJob | null> {
+  if (await isPanelUpdateWorkAlive(repoPath)) return null;
+  if (findUpdateWorkerPid(repoPath) != null) return null;
+
   const installed = await readInstalledPackageVersion(repoPath);
-  if (!installedVersionImpliesUpdateSuccess(job, installed)) return null;
+  const versionBumped = installedVersionImpliesUpdateSuccess(job, installed);
+  const buildNow = await readNextBuildId(repoPath);
+  const buildChanged = Boolean(job.fromBuildId && buildNow && job.fromBuildId !== buildNow);
+  const late = looksLikeSuccessfulUpdateDespiteWorkerExit(job);
+
+  if (!((versionBumped && (late || buildChanged)) || (buildChanged && late))) {
+    return null;
+  }
+
   const to = (job.toVersion ?? installed ?? "").replace(/^v/i, "");
   const from = (job.fromVersion ?? "").replace(/^v/i, "");
   const promoted = promoteJobToDone(
@@ -677,6 +707,7 @@ export async function startBackgroundPanelUpdate(
     message: null,
     fromVersion,
     toVersion: targetVersion?.replace(/^v/i, "").trim() || null,
+    fromBuildId: await readNextBuildId(repoPath),
   };
   await writeUpdateJob(repoPath, initialJob);
 

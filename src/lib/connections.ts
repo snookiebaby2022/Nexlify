@@ -8,7 +8,7 @@ import {
 } from "./connection-playback-output";
 import { clearLiveSession, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
 import { connectionViewerSessionKey, normalizeConnectionIp } from "./connection-address";
-import { notifyLiveConnectionsChanged } from "./connection-live-bus";
+import { LIVE_GEN_KEY, notifyLiveConnectionsChanged } from "./connection-live-bus";
 
 export { connectionViewerSessionKey, normalizeConnectionIp } from "./connection-address";
 
@@ -23,6 +23,9 @@ const CONNECTIONS_CACHE_TTL = 1; // seconds — dashboard SSE should reflect dis
 
 /** Exact Redis keys only — never SCAN the catalog keyspace with conn:*. */
 function invalidateConnectionCaches(opts?: { lineId?: string; ownerId?: string | null }) {
+  void cacheGet<number>(LIVE_GEN_KEY)
+    .then((g) => cacheSet(LIVE_GEN_KEY, (typeof g === "number" ? g : 0) + 1, 86_400))
+    .catch(() => {});
   void cacheDelExact("conn:list:all").catch(() => {});
   void cacheDelExact("conn:live:all").catch(() => {});
   if (opts?.ownerId) {
@@ -793,7 +796,15 @@ export async function removeConnection(lineId: string, streamId: string, ip: str
 }
 
 const connectionInclude = {
-  line: { select: { username: true, maxConnections: true, ownerId: true, isRestreamer: true } },
+  line: {
+    select: {
+      username: true,
+      maxConnections: true,
+      ownerId: true,
+      isRestreamer: true,
+      magDevices: { select: { mac: true }, take: 1 },
+    },
+  },
   stream: {
     select: {
       id: true,
@@ -805,14 +816,28 @@ const connectionInclude = {
   },
 } as const;
 
-export async function listActiveConnections(ownerId?: string) {
-  const cacheKey = ownerId ? `conn:list:${ownerId}` : "conn:list:all";
+function lineOwnerWhere(ownerId?: string | string[] | null) {
+  if (ownerId == null) return {};
+  const ids = Array.isArray(ownerId) ? ownerId : [ownerId];
+  if (ids.length === 1) return { line: { ownerId: ids[0] } };
+  return { line: { ownerId: { in: ids } } };
+}
+
+function ownerCacheSuffix(ownerId?: string | string[] | null) {
+  if (ownerId == null) return "all";
+  const ids = (Array.isArray(ownerId) ? ownerId : [ownerId]).slice().sort();
+  return ids.join(",");
+}
+
+export async function listActiveConnections(ownerId?: string | string[]) {
+  const gen = (await cacheGet<number>(LIVE_GEN_KEY)) ?? 0;
+  const cacheKey = `conn:list:${ownerCacheSuffix(ownerId)}:${gen}`;
   return cacheGetOrSet(cacheKey, CONNECTIONS_CACHE_TTL, async () => {
     const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
     return prisma.liveConnection.findMany({
       where: {
         lastSeenAt: { gte: staleBefore },
-        ...(ownerId ? { line: { ownerId } } : {}),
+        ...lineOwnerWhere(ownerId),
       },
       include: connectionInclude,
       orderBy: { lastSeenAt: "desc" },
@@ -849,17 +874,15 @@ export async function deleteStaleConnections() {
 
 /** List connections with a recent lastSeenAt. Redis session keys used to be 45s —
  *  requiring them AND lastSeen made Open Connections drop between HLS segments. */
-export async function listLiveConnections(ownerId?: string, take = 5000) {
+export async function listLiveConnections(ownerId?: string | string[], take = 5000) {
   const cap = Math.min(Math.max(1, take), 5000);
-  const cacheKey = ownerId ? `conn:live:${ownerId}` : "conn:live:all";
-  const rows = await cacheGetOrSet(cacheKey, 5, async () => {
+  const gen = (await cacheGet<number>(LIVE_GEN_KEY)) ?? 0;
+  const cacheKey = `conn:live:${ownerCacheSuffix(ownerId)}:${gen}`;
+  const rows = await cacheGetOrSet(cacheKey, 1, async () => {
     const staleBefore = new Date(Date.now() - LIVE_LIST_STALE_MS);
-    const baseWhere = {
-      ...(ownerId ? { line: { ownerId } } : {}),
-    };
     const found = await prisma.liveConnection.findMany({
       where: {
-        ...baseWhere,
+        ...lineOwnerWhere(ownerId),
         lastSeenAt: { gte: staleBefore },
       },
       include: connectionInclude,

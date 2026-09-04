@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { formatDate } from "@/lib/format";
 
 type UserSummary = {
@@ -12,9 +12,11 @@ type UserSummary = {
   createdAt: string;
   licenseCount: number;
   ticketCount: number;
+  creditCents?: number;
 };
 
 type UserDetail = UserSummary & {
+  creditCents: number;
   utmSource: string | null;
   utmMedium: string | null;
   utmCampaign: string | null;
@@ -42,12 +44,22 @@ export function AdminUsers() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newName, setNewName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<"USER" | "ADMIN">("USER");
+  const [setPassword, setSetPassword] = useState("");
+  const [creditAmount, setCreditAmount] = useState("10");
+
+  async function loadUsers() {
+    const res = await fetch("/api/admin/users");
+    if (!res.ok) return;
+    const d = await res.json();
+    setUsers(d.users ?? []);
+  }
 
   useEffect(() => {
-    fetch("/api/admin/users")
-      .then((r) => r.json())
-      .then((d) => setUsers(d.users ?? []))
-      .catch(() => {});
+    loadUsers().catch(() => {});
   }, []);
 
   async function lookup(email: string) {
@@ -80,6 +92,10 @@ export function AdminUsers() {
       setMessage(data.error ?? "Update failed");
       return;
     }
+    if (body.sendReset) {
+      setMessage(data.resetUrl ? `Reset sent (${data.resetUrl})` : "Reset email sent");
+      return;
+    }
     if (body.resetTrial) {
       setMessage(`Reset trial eligibility (${data.deletedTrialLicenses ?? 0} licenses removed)`);
       const refresh = await fetch(`/api/admin/users?email=${encodeURIComponent(user.email)}`);
@@ -91,6 +107,58 @@ export function AdminUsers() {
     }
     setUser((u) => (u ? { ...u, ...data.user } : u));
     setMessage("User updated");
+    loadUsers().catch(() => {});
+  }
+
+  async function createUser(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
+    setCreating(true);
+    const res = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: newEmail,
+        password: newPassword,
+        name: newName.trim() || undefined,
+        role: newRole,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setCreating(false);
+    if (!res.ok) {
+      setError(data.error ?? "Create failed");
+      return;
+    }
+    setNewEmail("");
+    setNewName("");
+    setNewPassword("");
+    setNewRole("USER");
+    setMessage(`Created ${data.user.email}`);
+    await loadUsers();
+  }
+
+  async function deleteUser(id: string, email: string) {
+    if (!confirm(`Permanently delete ${email}? Licenses, orders, and tickets for this account are removed.`)) {
+      return;
+    }
+    setError(null);
+    setMessage(null);
+    const res = await fetch("/api/admin/users", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(data.error ?? "Delete failed");
+      return;
+    }
+    setMessage(`Deleted ${email}`);
+    setUser(null);
+    setSelectedEmail("");
+    await loadUsers();
   }
 
   const filtered = search
@@ -133,6 +201,9 @@ export function AdminUsers() {
               </p>
             )}
             <p className="text-xs text-slate-500">{user.ticketCount} support tickets</p>
+            <p className="text-sm text-slate-300">
+              Account credit: {((user.creditCents ?? 0) / 100).toFixed(2)} GBP
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -174,7 +245,92 @@ export function AdminUsers() {
             >
               {user.trialBypass ? "Disable trial bypass" : "Enable trial bypass"}
             </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (user.role === "ADMIN") return;
+                setMessage(null);
+                const res = await fetch("/api/admin/users/impersonate", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ id: user.id }),
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                  setMessage(data.error ?? "Impersonate failed");
+                  return;
+                }
+                window.location.href = data.redirect ?? "/dashboard";
+              }}
+              className="rounded-lg border border-cyan-500/40 px-4 py-2 text-sm text-cyan-200 hover:bg-cyan-500/10"
+            >
+              Log in as customer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm(`Send password reset email to ${user.email}?`)) patch({ sendReset: true });
+              }}
+              className="rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200"
+            >
+              Email password reset
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteUser(user.id, user.email)}
+              className="rounded-lg border border-red-500/40 px-4 py-2 text-sm text-red-300 hover:bg-red-500/10"
+            >
+              Delete user
+            </button>
           </div>
+
+          <form
+            className="flex flex-wrap gap-2 items-end"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (setPassword.length < 8) {
+                setMessage("Password must be at least 8 characters");
+                return;
+              }
+              void patch({ password: setPassword }).then(() => setSetPassword(""));
+            }}
+          >
+            <input
+              type="password"
+              minLength={8}
+              placeholder="Set new password"
+              value={setPassword}
+              onChange={(e) => setSetPassword(e.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+            />
+            <button type="submit" className="rounded-lg bg-slate-700 px-3 py-2 text-sm text-white">
+              Set password
+            </button>
+          </form>
+          <form
+            className="flex flex-wrap gap-2 items-end"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const pounds = Number(creditAmount);
+              if (!Number.isFinite(pounds) || pounds === 0) return;
+              void patch({
+                creditDeltaCents: Math.round(pounds * 100),
+                creditReason: "Admin credit note",
+              });
+            }}
+          >
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Credit GBP (+/-)"
+              value={creditAmount}
+              onChange={(e) => setCreditAmount(e.target.value)}
+              className="w-36 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+            />
+            <button type="submit" className="rounded-lg bg-slate-700 px-3 py-2 text-sm text-white">
+              Add credit note
+            </button>
+          </form>
 
           <div>
             <h3 className="font-semibold text-white mb-2">Licenses</h3>
@@ -216,6 +372,55 @@ export function AdminUsers() {
 
   return (
     <div className="space-y-6">
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+      {message && <p className="text-cyan-400 text-sm">{message}</p>}
+
+      <form
+        onSubmit={createUser}
+        className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 max-w-lg space-y-3"
+      >
+        <h2 className="font-semibold text-white">Add user</h2>
+        <input
+          type="email"
+          required
+          placeholder="Email"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-white"
+        />
+        <input
+          type="text"
+          placeholder="Name (optional)"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-white"
+        />
+        <input
+          type="password"
+          required
+          minLength={8}
+          placeholder="Password (min 8 characters)"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-white"
+        />
+        <select
+          value={newRole}
+          onChange={(e) => setNewRole(e.target.value as "USER" | "ADMIN")}
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-white"
+        >
+          <option value="USER">Customer</option>
+          <option value="ADMIN">Admin</option>
+        </select>
+        <button
+          type="submit"
+          disabled={creating}
+          className="rounded-lg bg-amber-500 px-4 py-2 font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+        >
+          {creating ? "Creating…" : "Create user"}
+        </button>
+      </form>
+
       <div className="flex flex-wrap gap-3 items-center">
         <input
           type="search"
@@ -262,6 +467,13 @@ export function AdminUsers() {
                       className="text-xs text-violet-400 hover:underline"
                     >
                       View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteUser(u.id, u.email)}
+                      className="ml-3 text-xs text-red-400 hover:underline"
+                    >
+                      Delete
                     </button>
                   </td>
                 </tr>

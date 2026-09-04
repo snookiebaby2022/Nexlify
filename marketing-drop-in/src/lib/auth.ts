@@ -5,8 +5,10 @@ import { prisma } from "@/lib/prisma";
 import type { Role } from "@/generated/prisma/client";
 import { secretsEqual } from "@/lib/secrets-equal";
 
-const COOKIE_NAME = "stream_session";
+export const COOKIE_NAME = "stream_session";
+export const IMPERSONATOR_COOKIE = "stream_impersonator";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
+const IMPERSONATE_MAX_AGE = 60 * 60 * 2;
 const BCRYPT_HASH_RE = /^\$2[aby]\$\d{2}\$/;
 
 export function isValidBcryptHash(hash: string): boolean {
@@ -83,7 +85,7 @@ export async function dummyPasswordCheck(password: string): Promise<void> {
   await verifyPassword(password, UNUSABLE_PASSWORD_HASH);
 }
 
-export async function createSessionToken(user: SessionUser): Promise<string> {
+export async function createSessionToken(user: SessionUser, maxAgeSec = SESSION_MAX_AGE): Promise<string> {
   return new SignJWT({
     sub: user.id,
     email: user.email,
@@ -92,7 +94,7 @@ export async function createSessionToken(user: SessionUser): Promise<string> {
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(`${SESSION_MAX_AGE}s`)
+    .setExpirationTime(`${maxAgeSec}s`)
     .sign(getSecret());
 }
 
@@ -119,15 +121,49 @@ export async function verifySessionToken(
   }
 }
 
-export async function setSessionCookie(token: string): Promise<void> {
+export async function setSessionCookie(token: string, maxAgeSec = SESSION_MAX_AGE): Promise<void> {
   const store = await cookies();
   store.set(COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: SESSION_MAX_AGE,
+    maxAge: maxAgeSec,
   });
+}
+
+export async function setImpersonatorCookie(token: string): Promise<void> {
+  const store = await cookies();
+  store.set(IMPERSONATOR_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: IMPERSONATE_MAX_AGE,
+  });
+}
+
+export async function clearImpersonatorCookie(): Promise<void> {
+  const store = await cookies();
+  store.delete(IMPERSONATOR_COOKIE);
+}
+
+export async function readSessionCookie(): Promise<string | null> {
+  const store = await cookies();
+  return store.get(COOKIE_NAME)?.value ?? null;
+}
+
+export async function getImpersonatorUser(): Promise<SessionUser | null> {
+  try {
+    const store = await cookies();
+    const token = store.get(IMPERSONATOR_COOKIE)?.value;
+    if (!token) return null;
+    const session = await verifySessionToken(token);
+    if (!session || session.role !== "ADMIN") return null;
+    return session;
+  } catch {
+    return null;
+  }
 }
 
 export async function clearSessionCookie(): Promise<void> {

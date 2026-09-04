@@ -48,6 +48,16 @@ export function AdminPanel() {
   const [planId, setPlanId] = useState("");
   const [issueTerm, setIssueTerm] = useState<"plan" | "1m" | "3m" | "6m" | "1y" | "unlimited">("plan");
   const [issueMaxLines, setIssueMaxLines] = useState("");
+  const [issuePanelUrl, setIssuePanelUrl] = useState("");
+  const [issuePanelSecret, setIssuePanelSecret] = useState("");
+  const [issueCreateAccount, setIssueCreateAccount] = useState(true);
+  const [issueActivatePanel, setIssueActivatePanel] = useState(true);
+  const [issuing, setIssuing] = useState(false);
+  const [activateEdit, setActivateEdit] = useState<{
+    id: string;
+    panelUrl: string;
+    panelSecret: string;
+  } | null>(null);
   const [plans, setPlans] = useState<{ id: string; name: string; slug: string }[]>([]);
   const [flash, setFlash] = useState<{ message: string; type: "ok" | "err" } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -135,12 +145,18 @@ export function AdminPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, ...body }),
     });
+    const data = await res.json().catch(() => ({}));
     setBusyId(null);
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
       notify(data.error ?? "Update failed", "err");
       return false;
     }
+    if (data.sync && data.sync.pushed === false) {
+      notify(data.sync.error ?? "Panel push failed", "err");
+      load();
+      return false;
+    }
+    if (data.sync?.pushed) notify("Panel activated");
     load();
     return true;
   }
@@ -190,26 +206,43 @@ export function AdminPanel() {
 
   async function issueManual(e: React.FormEvent) {
     e.preventDefault();
-    const body: Record<string, unknown> = { email: issueEmail, planId };
+    const body: Record<string, unknown> = {
+      email: issueEmail,
+      planId,
+      createAccount: issueCreateAccount,
+      activatePanel: issueActivatePanel && Boolean(issuePanelUrl.trim()),
+    };
     if (issueTerm !== "plan") {
       body.term = issueTerm;
       if (issueTerm === "unlimited") body.durationDays = 0;
     }
     const maxLines = issueMaxLines.trim();
     if (maxLines !== "") body.maxLines = Number(maxLines);
+    if (issuePanelUrl.trim()) body.panelUrl = issuePanelUrl.trim();
+    if (issuePanelSecret.trim()) body.panelApiSecret = issuePanelSecret.trim();
 
+    setIssuing(true);
     const res = await fetch("/api/admin/licenses", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     const data = await res.json();
+    setIssuing(false);
     if (!res.ok) {
       notify(data.error ?? "Failed", "err");
       return;
     }
-    notify(`Issued key: ${data.license.key}`);
+    if (data.sync?.pushed) {
+      notify(`Issued and activated panel: ${data.license.key}`);
+    } else if (data.sync?.error) {
+      notify(`Issued key, panel push failed: ${data.sync.error}`, "err");
+    } else {
+      notify(`Issued key: ${data.license.key}`);
+    }
     setIssueEmail("");
+    setIssuePanelUrl("");
+    setIssuePanelSecret("");
     load();
   }
 
@@ -273,6 +306,9 @@ export function AdminPanel() {
         className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 max-w-lg space-y-4"
       >
         <h2 className="font-semibold text-white">Issue manual license</h2>
+        <p className="text-xs text-slate-500">
+          Creates a key for the customer. Optionally push it to their IPTV panel so they are not asked to paste the key.
+        </p>
         <input
           type="email"
           placeholder="Customer email"
@@ -312,11 +348,45 @@ export function AdminPanel() {
           onChange={(e) => setIssueMaxLines(e.target.value)}
           className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-white"
         />
+        <input
+          type="text"
+          placeholder="Panel URL (http://45.88.138.18 or https://darkcdn.store)"
+          value={issuePanelUrl}
+          onChange={(e) => setIssuePanelUrl(e.target.value)}
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-white"
+        />
+        <input
+          type="password"
+          placeholder="Panel API secret (optional — from panel .env)"
+          value={issuePanelSecret}
+          onChange={(e) => setIssuePanelSecret(e.target.value)}
+          autoComplete="off"
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-white"
+        />
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={issueCreateAccount}
+            onChange={(e) => setIssueCreateAccount(e.target.checked)}
+            className="rounded border-slate-600"
+          />
+          Create marketing account if this email is new
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={issueActivatePanel}
+            onChange={(e) => setIssueActivatePanel(e.target.checked)}
+            className="rounded border-slate-600"
+          />
+          Auto-activate IPTV panel (requires panel URL)
+        </label>
         <button
           type="submit"
-          className="rounded-lg bg-amber-500 px-4 py-2 font-semibold text-slate-950 hover:bg-amber-400"
+          disabled={issuing}
+          className="rounded-lg bg-amber-500 px-4 py-2 font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
         >
-          Issue key
+          {issuing ? "Issuing…" : "Issue key"}
         </button>
       </form>
 
@@ -325,7 +395,7 @@ export function AdminPanel() {
           <label className="text-xs text-slate-400">Search</label>
           <input
             type="search"
-            placeholder="Key, email, notes…"
+            placeholder="Key, email, domain, IP, notes…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
@@ -516,6 +586,11 @@ export function AdminPanel() {
                         {lic.pendingSyncAction && (
                           <p className="mt-1 text-[10px] text-amber-400">pending: {lic.pendingSyncAction}</p>
                         )}
+                        {lic.lastSyncError && (
+                          <p className="mt-1 text-[10px] text-red-400 break-words max-w-[220px]" title={lic.lastSyncError}>
+                            sync: {lic.lastSyncError}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3">{lic.user.email}</td>
                       <td className="px-4 py-3">{lic.plan.name}</td>
@@ -549,6 +624,20 @@ export function AdminPanel() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setActivateEdit({
+                                id: lic.id,
+                                panelUrl: lic.panelUrl ?? lic.panelHost ?? "",
+                                panelSecret: "",
+                              })
+                            }
+                            disabled={busyId === lic.id}
+                            className="text-violet-400 hover:underline disabled:opacity-50"
+                          >
+                            Activate panel
+                          </button>
                           <button type="button" onClick={() => copyKey(lic.key)} className="text-cyan-400 hover:underline">
                             Copy
                           </button>
@@ -657,6 +746,59 @@ export function AdminPanel() {
               </button>
               <button type="submit" className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white">
                 Extend
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {activateEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!activateEdit.panelUrl.trim()) {
+                notify("Panel URL required", "err");
+                return;
+              }
+              const ok = await patchLicense(activateEdit.id, {
+                activatePanel: true,
+                panelUrl: activateEdit.panelUrl.trim(),
+                ...(activateEdit.panelSecret.trim()
+                  ? { panelApiSecret: activateEdit.panelSecret.trim() }
+                  : {}),
+              });
+              if (ok) setActivateEdit(null);
+            }}
+            className="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 p-6 space-y-4"
+          >
+            <h3 className="font-semibold text-white">Activate IPTV panel</h3>
+            <p className="text-xs text-slate-400">
+              Pushes this license key to the panel so login on the domain or IP no longer asks for the key. Prefer the
+              origin IP if the domain is behind Cloudflare.
+            </p>
+            <input
+              type="text"
+              placeholder="http://45.88.138.18"
+              value={activateEdit.panelUrl}
+              onChange={(e) => setActivateEdit({ ...activateEdit, panelUrl: e.target.value })}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
+              required
+            />
+            <input
+              type="password"
+              placeholder="PANEL_INTERNAL_SECRET or PANEL_API_SECRET (if push fails)"
+              value={activateEdit.panelSecret}
+              onChange={(e) => setActivateEdit({ ...activateEdit, panelSecret: e.target.value })}
+              autoComplete="off"
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"
+            />
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setActivateEdit(null)} className="px-4 py-2 text-sm text-slate-400">
+                Cancel
+              </button>
+              <button type="submit" className="rounded-lg bg-violet-600 px-4 py-2 text-sm text-white">
+                Push activation
               </button>
             </div>
           </form>

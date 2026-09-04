@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
 import { validateLineCredential } from "@/lib/credential-generate";
+import { resolveLineCredentialMinLength } from "@/lib/line-credential-policy";
 import { generatePassword } from "@/lib/xui-api-utils";
 import { createWebplayerLinkToken } from "@/lib/webplayer-link";
 
@@ -38,9 +39,10 @@ export async function createLineFromShopPackage(opts: {
   let username = String(opts.username ?? "").trim();
   let password = String(opts.password ?? "").trim() || generatePassword();
   if (!username) username = `shop_${Date.now().toString(36)}`;
-  const userErr = validateLineCredential(username, "username");
+  const minLen = await resolveLineCredentialMinLength();
+  const userErr = validateLineCredential(username, "username", minLen);
   if (userErr) throw new Error(userErr);
-  const passErr = validateLineCredential(password, "password");
+  const passErr = validateLineCredential(password, "password", minLen);
   if (passErr) throw new Error(passErr);
 
   const existing = await prisma.line.findUnique({ where: { username } });

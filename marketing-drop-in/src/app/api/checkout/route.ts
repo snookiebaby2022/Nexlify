@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth";
 import { issueLicenseForOrder } from "@/lib/licensing";
 import { isFreePeriod } from "@/lib/marketing-coupon";
+import { applyCheckoutDiscounts } from "@/lib/checkout-discount";
 import { prisma } from "@/lib/prisma";
 import { TRIAL_PLAN_SLUG } from "@/lib/plans";
 import { getAppUrl } from "@/lib/app-url";
@@ -26,6 +27,7 @@ const schema = z.object({
   utmSource: z.string().max(200).optional(),
   utmMedium: z.string().max(200).optional(),
   utmCampaign: z.string().max(200).optional(),
+  couponCode: z.string().max(40).optional(),
 });
 
 export async function POST(request: Request) {
@@ -55,9 +57,21 @@ export async function POST(request: Request) {
     }
 
     let amountCents = plan.priceCents;
+    let appliedCoupon: string | null = null;
     const freePeriod = isFreePeriod();
     if (freePeriod && plan.slug !== TRIAL_PLAN_SLUG) {
       amountCents = 0;
+    } else {
+      const discounted = await applyCheckoutDiscounts({
+        userId: user.id,
+        planPriceCents: amountCents,
+        couponCode: body.couponCode,
+      });
+      if ("error" in discounted) {
+        return NextResponse.json({ error: discounted.error }, { status: 400 });
+      }
+      amountCents = discounted.amountCents;
+      appliedCoupon = discounted.couponCode;
     }
 
     const chargeCents = checkoutAmountCents(amountCents, currency);
@@ -82,6 +96,7 @@ export async function POST(request: Request) {
         planId: plan.id,
         amountCents: chargeCents,
         currency,
+        couponCode: appliedCoupon,
         licenseDurationDays: freePeriod && plan.slug !== TRIAL_PLAN_SLUG ? plan.durationDays : null,
         status: "PENDING",
         utmSource: utmSource?.trim() || utmFromUser.utmSource || null,

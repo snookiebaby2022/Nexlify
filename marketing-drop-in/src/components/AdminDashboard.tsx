@@ -6,7 +6,6 @@ import {
   Bell,
   CreditCard,
   FileText,
-  Folder,
   Globe,
   HeartPulse,
   KeyRound,
@@ -17,7 +16,6 @@ import {
   ScrollText,
   Settings,
   Ticket,
-  Unlock,
   Upload,
   Users,
 } from "lucide-react";
@@ -36,9 +34,9 @@ import { AdminSiteSettings } from "@/components/AdminSiteSettings";
 import { AdminAuditLog } from "@/components/AdminAuditLog";
 import { AdminContent } from "@/components/AdminContent";
 import { AdminRemoteUpdate } from "@/components/AdminRemoteUpdate";
-import { AdminCategories } from "@/components/AdminCategories";
-import { AdminUnlockIP } from "@/components/AdminUnlockIP";
 import { AdminAnnouncements } from "@/components/AdminAnnouncements";
+import { AdminCoupons } from "@/components/AdminCoupons";
+import { AdminSyncQueue } from "@/components/AdminSyncQueue";
 import {
   AdminTicketAlertsBanner,
   TicketAttentionBadge,
@@ -58,9 +56,11 @@ const NAV_GROUPS = [
     label: "Commerce",
     items: [
       { id: "licenses", label: "Licenses", icon: KeyRound },
+      { id: "sync", label: "Failed syncs", icon: Radio },
       { id: "plans", label: "Plans & checkout", icon: CreditCard },
       { id: "billing", label: "Billing", icon: Receipt },
       { id: "orders", label: "Orders", icon: Package },
+      { id: "coupons", label: "Coupons", icon: Receipt },
     ],
   },
   {
@@ -83,8 +83,6 @@ const NAV_GROUPS = [
   {
     label: "Operations",
     items: [
-      { id: "categories", label: "Panel operator tooling", icon: Folder },
-      { id: "unlock-ip", label: "Unlock IP", icon: Unlock },
       { id: "deploy", label: "Deploy", icon: Upload },
       { id: "remote", label: "Remote Update", icon: Radio },
     ],
@@ -183,7 +181,9 @@ export function AdminDashboard() {
         {tab === "plans" && <AdminPlans />}
         {tab === "billing" && <AdminBilling />}
         {tab === "licenses" && <AdminPanel />}
+        {tab === "sync" && <AdminSyncQueue />}
         {tab === "orders" && <AdminOrders />}
+        {tab === "coupons" && <AdminCoupons />}
         {tab === "users" && <AdminUsers />}
         {tab === "tickets" && <AdminTickets />}
         {tab === "newsletter" && <AdminNewsletter />}
@@ -193,8 +193,6 @@ export function AdminDashboard() {
         {tab === "settings" && <AdminSiteSettings />}
         {tab === "health" && <AdminHealth />}
         {tab === "audit" && <AdminAuditLog />}
-        {tab === "categories" && <AdminCategories />}
-        {tab === "unlock-ip" && <AdminUnlockIP />}
         {tab === "deploy" && <AdminDeploy />}
         {tab === "remote" && <AdminRemoteUpdate />}
       </main>
