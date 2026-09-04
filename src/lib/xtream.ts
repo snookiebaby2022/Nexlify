@@ -33,7 +33,7 @@ import { formatPanelClock, normalizeTimeFormat } from "./epg-time";
 import { getPanelServerSettings } from "./panel-server";
 import { getSettingGroup } from "./panel-settings";
 import { resolveOfflineStreamImageUrl } from "./offline-stream-image";
-import { pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
+import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
 import { userAgentUsesStandardIptvPorts } from "./live-http-range";
 import { preferLiveOutputFormats, resolveClientPlaybackProfile } from "./client-playback-profiles";
 import { mapXtreamLiveItem, mapXtreamSeriesItem, mapXtreamVodItem } from "./xtream-catalog-items";

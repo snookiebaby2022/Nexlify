@@ -17,7 +17,7 @@ export function persistPlaybackTopologyFiles(opts: {
   remoteLiveUpstream?: string;
   repoPath?: string;
 }): void {
-  const lines = [opts.topology];
+  const lines: string[] = [opts.topology];
   const remote = String(opts.remoteLiveUpstream ?? "").trim();
   if (remote) lines.push(remote);
   const body = `${lines.join("\n")}\n`;
