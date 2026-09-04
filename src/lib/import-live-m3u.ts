@@ -5,6 +5,7 @@ import { categoryFromGroupName } from "./vod-category";
 import { encodeLiveStreamMeta } from "./stream-live-meta";
 import { maxStreamSortOrder } from "./stream-order";
 import { liveTitleExactKey, liveTitleQualityKey } from "./live-title-dedupe";
+import { normalizeStreamMatchKey, streamUrlHosts } from "./stream-url-match";
 
 const CHUNK = 400;
 
