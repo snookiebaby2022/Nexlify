@@ -76,7 +76,13 @@ scripts/panel_full_test.py
 scripts/patch_install.py
 scripts/perf_analysis.py
 scripts/perf_test.py
-scripts/quick_login.py
+scripts/_tmp-*.sh
+marketing-drop-in/scripts/create-paypal-test-checkout.mjs
+marketing-drop-in/scripts/create-paypal-test-checkout.sh
+marketing-drop-in/scripts/ensure-paypal-webhook.sh
+marketing-drop-in/scripts/marketing-checkout-smoke.mjs
+marketing-drop-in/scripts/watch-paypal-test-order.sh
+scripts/configure-marketing-billing-85.sh
 scripts/rebuild_all.py
 scripts/restore_*.py
 scripts/revert_admin_pw.py
