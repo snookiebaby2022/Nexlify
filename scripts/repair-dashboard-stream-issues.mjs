@@ -6,8 +6,8 @@
  * Usage on the panel VPS:
  *   node /opt/nexlify-panel/scripts/repair-dashboard-stream-issues.mjs
  */
-const fs = require("fs");
-const path = require("path");
+import fs from "node:fs";
+import path from "node:path";
 
 const ROOT = process.env.NEXLIFY_ROOT || process.cwd();
 
@@ -57,7 +57,7 @@ async function main() {
   });
   const cookie = cookieHeader(loginRes.headers.getSetCookie?.() ?? loginRes.headers.get("set-cookie"));
   if (!loginRes.ok || !cookie) {
-    console.error("login failed", loginRes.status, await loginRes.text().catch(() => ""));
+    console.error("login failed", loginRes.status);
     process.exit(1);
   }
 
@@ -87,7 +87,7 @@ async function main() {
   while (Date.now() < deadline) {
     const { res, data } = await api("/api/admin/stream-errors");
     if (!res.ok) {
-      console.error("stream-errors", res.status, data);
+      console.error("stream-errors", res.status);
       break;
     }
     const ids = (data.streams || data.probeFails || []).map((s) => s.id).filter(Boolean);
@@ -98,7 +98,7 @@ async function main() {
       body: JSON.stringify({ streamIds: chunk, fast: false }),
     });
     if (!batch.res.ok) {
-      console.error("probe-batch", batch.res.status, batch.data);
+      console.error("probe-batch", batch.res.status);
       break;
     }
     probed += chunk.length;
@@ -113,7 +113,7 @@ async function main() {
     body: JSON.stringify({ action: "clear_live_dashboard_issues" }),
   });
   if (!clear.res.ok) {
-    console.error("clear_live_dashboard_issues", clear.res.status, clear.data);
+    console.error("clear_live_dashboard_issues", clear.res.status);
     process.exit(1);
   }
 

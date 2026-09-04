@@ -1,6 +1,7 @@
 import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
+import { liveOriginOrSpliceFailWhere } from "@/lib/stream-health-signals";
 import { isTestConnectionIp, liveViewerStats, listLiveConnections } from "@/lib/connections";
 import { sortServersMainFirst } from "@/lib/ensure-main-server-online";
 import { isThisPanelMachine } from "@/lib/panel-local-server";
@@ -267,14 +268,16 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
         AND ("expiresAt" - "createdAt") <= (${trialMs} * interval '1 millisecond')
     `.then((r) => Number(r[0]?.count ?? 0)).catch(() => 0),
     prisma.stream.count({
-      where: { type: StreamType.LIVE, isActive: true, lastProbeOk: false, OR: [{ backupUrl: null }, { backupUrl: "" }] },
+      where: {
+        AND: [liveOriginOrSpliceFailWhere(), { OR: [{ backupUrl: null }, { backupUrl: "" }] }],
+      },
     }),
     prisma.stream.count({
       where: {
-        type: StreamType.LIVE,
-        isActive: true,
-        lastProbeOk: false,
-        AND: [{ backupUrl: { not: null } }, { backupUrl: { not: "" } }],
+        AND: [
+          liveOriginOrSpliceFailWhere(),
+          { AND: [{ backupUrl: { not: null } }, { backupUrl: { not: "" } }] },
+        ],
       },
     }),
     prisma.ticket.findMany({

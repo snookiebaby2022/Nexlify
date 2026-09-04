@@ -8,6 +8,7 @@ node_modules
 .env.local
 .env.*
 !.env.example
+.playback-topology
 windows/deploy.config.json
 backups/
 .license-keys/

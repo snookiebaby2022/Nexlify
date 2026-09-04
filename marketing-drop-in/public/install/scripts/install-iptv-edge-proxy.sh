@@ -11,6 +11,17 @@ PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
 [ -f "$PANEL_DIR/package.json" ] || PANEL_DIR="/home/nexlify-panel"
 cd "$PANEL_DIR"
 
+# Never bind/kill :8080 or start local edge on the customer panel (502 live loop).
+# shellcheck disable=SC1091
+if [ -f "$PANEL_DIR/scripts/panel-no-local-iptv-edge.sh" ]; then
+  . "$PANEL_DIR/scripts/panel-no-local-iptv-edge.sh"
+  if nexlify_panel_must_not_run_iptv_edge; then
+    echo "[iptv-edge] SKIP install — nginx owns live :8080 on this panel"
+    nexlify_stop_panel_local_iptv_edge
+    exit 0
+  fi
+fi
+
 ENV_FILE="$PANEL_DIR/.env"
 env_val() {
   local key="$1"
@@ -121,12 +132,14 @@ sleep 1
 for p in $(echo "$HTTP_PORTS" | tr ',' ' '); do
   [ -z "$p" ] && continue
   [ "$p" = "80" ] && continue
+  [ "$p" = "8080" ] && continue
   fuser -k "${p}/tcp" 2>/dev/null || true
 done
 if [ -n "$HTTPS_PORTS" ]; then
   for p in $(echo "$HTTPS_PORTS" | tr ',' ' '); do
     [ -z "$p" ] && continue
     [ "$p" = "80" ] && continue
+  [ "$p" = "8080" ] && continue
     fuser -k "${p}/tcp" 2>/dev/null || true
   done
 fi

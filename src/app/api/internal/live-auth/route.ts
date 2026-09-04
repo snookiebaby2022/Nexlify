@@ -20,7 +20,7 @@ import {
   type LiveAuthCacheEntry,
   type LiveAuthOutputMode,
 } from "@/lib/live-auth-cache";
-import { markStreamViewerPlaybackFailed } from "@/lib/viewer-playback-probe";
+import { markStreamViewerPlaybackFailed, markStreamSpliceOk } from "@/lib/viewer-playback-probe";
 
 const LIVE_AUTH_RESOLVE_MS = 2500;
 
@@ -399,6 +399,7 @@ export async function GET(req: NextRequest) {
     serverId: agentServerScope,
     outboundProxy: outboundProxyHeaderValue(outboundProxy) ?? null,
   });
+  void markStreamSpliceOk(cleanId);
 
   return new NextResponse(null, {
     status: 200,

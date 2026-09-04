@@ -32,7 +32,7 @@ import {
   schedulePlaylistZapWarm,
   schedulePlaybackUpstreamWarm,
 } from "@/lib/anti-freeze";
-import { iptvCorsPreflight } from "@/lib/iptv-cors";
+import { iptvCorsPreflight, withIptvCors } from "@/lib/iptv-cors";
 import { iptvJson } from "@/lib/iptv-json";
 import { resolveClientPlaybackProfile } from "@/lib/client-playback-profiles";
 import { mergeXtreamRequestParams } from "@/lib/xtream-request-params";
@@ -122,9 +122,18 @@ export async function GET(req: NextRequest) {
   return handlePlayerApi(req, req.nextUrl.searchParams);
 }
 
-/** LG Smarters Pro probes the host with HEAD before sending credentials. */
-export async function HEAD(req: NextRequest) {
-  return handlePlayerApi(req, req.nextUrl.searchParams);
+/** Smarters Pro (LG/Android) HEADs player_api.php with no credentials.
+ *  Returning auth:0 JSON here is parsed as "Unauthorized Access" and Update Content fails. */
+export async function HEAD() {
+  return withIptvCors(
+    new NextResponse(null, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "private, max-age=30",
+      },
+    }),
+  );
 }
 
 /** XUI.one / Xtream apps POST username, password, action as form fields. */
@@ -212,9 +221,9 @@ async function handlePlayerApiInner(
     case "get_live_categories": {
       const ttl = await getCacheTtls();
       const profile = resolveClientPlaybackProfile(userAgent);
-      if (!profile.zapPrefetchOnPlaylist) {
-        void warmXtreamLiveCatalogNow(line).catch(() => undefined);
-      }
+      // Do not await the live catalog here — Smarters times out Update Content
+      // and shows Unauthorized Access if this blocks on a 30k-stream gzip rebuild.
+      void warmXtreamLiveCatalogNow(line).catch(() => undefined);
       const catKey = profile.numericCategoryId
         ? `xtream:live_categories:v10n:${bouquetToken}`
         : `xtream:live_categories:v9:${bouquetToken}`;

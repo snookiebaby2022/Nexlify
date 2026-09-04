@@ -227,6 +227,8 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
      * Existing panels that inherited the old default (true) are flipped off once on upgrade.
      */
     panelUpdateAutoApplyDefaultOffV1: false,
+    playbackTopology: "local-edge",
+    remoteLiveUpstream: "",
     streamAgentUpgradeNotes:
       "Upgrade stream agents: Admin → Servers → action menu → Reinstall agent, or SSH to the node and re-run the install command from the server wizard. Match agent version to panel release shown on Updates.",
   },

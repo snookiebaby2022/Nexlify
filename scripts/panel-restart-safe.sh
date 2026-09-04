@@ -145,9 +145,14 @@ nexlify_only_restart() {
 
   if verify_panel; then
     warmup_playback_routes
-    # Panel-only restarts used to leave nexlify-iptv-edge on a stale
-    # PANEL_INTERNAL_SECRET (or hung sockets) → UI works, nothing plays.
-    if [ -x scripts/rematch-iptv-edge-auth.sh ]; then
+    # shellcheck disable=SC1091
+    if [ -f "$ROOT/scripts/panel-no-local-iptv-edge.sh" ]; then
+      . "$ROOT/scripts/panel-no-local-iptv-edge.sh"
+    fi
+    if type nexlify_panel_must_not_run_iptv_edge >/dev/null 2>&1 && nexlify_panel_must_not_run_iptv_edge; then
+      log "Skip iptv-edge rematch — nginx owns live :8080 on this panel"
+      nexlify_stop_panel_local_iptv_edge
+    elif [ -x scripts/rematch-iptv-edge-auth.sh ]; then
       if bash scripts/rematch-iptv-edge-auth.sh >>"$LOG_FILE" 2>&1; then
         log "iptv-edge auth rematch OK"
       else
@@ -180,7 +185,14 @@ full_restart() {
   bash "$ROOT/scripts/pm2-start.sh" >>"$LOG_FILE" 2>&1
   load_env
   warmup_playback_routes || true
-  if [ -x scripts/rematch-iptv-edge-auth.sh ]; then
+  # shellcheck disable=SC1091
+  if [ -f "$ROOT/scripts/panel-no-local-iptv-edge.sh" ]; then
+    . "$ROOT/scripts/panel-no-local-iptv-edge.sh"
+  fi
+  if type nexlify_panel_must_not_run_iptv_edge >/dev/null 2>&1 && nexlify_panel_must_not_run_iptv_edge; then
+    log "Skip iptv-edge rematch — nginx owns live :8080 on this panel"
+    nexlify_stop_panel_local_iptv_edge
+  elif [ -x scripts/rematch-iptv-edge-auth.sh ]; then
     bash scripts/rematch-iptv-edge-auth.sh >>"$LOG_FILE" 2>&1 || log "WARN: iptv-edge auth rematch failed"
   fi
 }

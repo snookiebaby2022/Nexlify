@@ -659,6 +659,18 @@ export async function applyMigrationPhase3(
           continue;
         }
         try {
+          const row = await prisma.stream.findUnique({
+            where: { id: streamId },
+            select: { type: true },
+          });
+          if (row?.type === "LIVE") {
+            await prisma.stream.update({
+              where: { id: streamId },
+              data: { isOnDemand: false, vodMode: "LIVE", autoRestart: false },
+            });
+            result.onDemandStreams.skipped++;
+            continue;
+          }
           await prisma.stream.update({
             where: { id: streamId },
             data: { isOnDemand: true, vodMode: "ON_DEMAND" },

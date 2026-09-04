@@ -33,7 +33,7 @@ import { formatPanelClock, normalizeTimeFormat } from "./epg-time";
 import { getPanelServerSettings } from "./panel-server";
 import { getSettingGroup } from "./panel-settings";
 import { resolveOfflineStreamImageUrl } from "./offline-stream-image";
-import { isIpHost, pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
+import { pickPublicOrigin, publicOriginFromRequest } from "./public-origin";
 import { userAgentUsesStandardIptvPorts } from "./live-http-range";
 import { preferLiveOutputFormats, resolveClientPlaybackProfile } from "./client-playback-profiles";
 import { mapXtreamLiveItem, mapXtreamSeriesItem, mapXtreamVodItem } from "./xtream-catalog-items";
@@ -55,7 +55,19 @@ function xtreamClockNow(timezone: string, timeFormat: "12" | "24"): string {
 /** Panel + IPTV base URL (M3U live links, Xtream when served from same host). */
 export function serverBaseUrl(reqUrl: string, headers?: RequestHeaders): string {
   const fromReq = publicOriginFromRequest(reqUrl, headers);
-  return pickPublicOrigin(fromReq, process.env.NEXT_PUBLIC_SERVER_URL);
+  let origin = pickPublicOrigin(fromReq, process.env.NEXT_PUBLIC_SERVER_URL);
+  const ua = headers?.get("user-agent");
+  if (userAgentUsesStandardIptvPorts(ua)) {
+    try {
+      const u = new URL(origin.includes("://") ? origin : `http://${origin}`);
+      u.protocol = "http:";
+      if (u.port === "443") u.port = "";
+      origin = u.origin;
+    } catch {
+      /* keep origin */
+    }
+  }
+  return origin;
 }
 
 /** Client-facing website origin for server_info / streams. */
@@ -139,7 +151,7 @@ async function loadXtreamAccountShell(
         : String(resolveAdvertisedStreamHttpPort(publicPort));
     const httpsPort = standardPorts ? "80" : String(streamHttpsPort);
     const formats = preferLiveOutputFormats(
-      xtreamOutputFormats("hls,m3u8,ts,rtmp"),
+      xtreamOutputFormats("ts,m3u8,hls,rtmp"),
       resolveClientPlaybackProfile(userAgent)
     );
     const clock = xtreamClockNow(panelTimezone, timeFormat);

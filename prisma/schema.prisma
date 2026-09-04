@@ -472,6 +472,11 @@ model Stream {
   lastProbeAt        DateTime?
   lastProbeOk        Boolean?
   lastProbeError     String?
+  lastSpliceAt       DateTime?
+  lastSpliceOk       Boolean?
+  lastSpliceError    String?
+  lastViewerFailAt   DateTime?
+  lastViewerError    String?
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 

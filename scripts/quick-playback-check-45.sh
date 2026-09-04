@@ -3,13 +3,18 @@ set -euo pipefail
 cd /opt/nexlify-panel
 sudo -u postgres psql -d nexlify -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='nexlify' AND pid <> pg_backend_pid() AND state='idle';" 2>/dev/null | tail -3 || true
 node -e 'const {PrismaClient}=require("@prisma/client"); const p=new PrismaClient(); p.stream.count({where:{type:"LIVE"}}).then(n=>console.log("live_streams",n)).finally(()=>p.$disconnect())'
-# XUI remote routing: nginx owns :8080 — do not start local iptv-edge.
-if [ -f /etc/nginx/conf.d/nexlify-live-remote-edge.conf ]; then
+# XUI remote routing: nginx owns :8080 — do not start local iptv-edge or HLS.
+# shellcheck disable=SC1091
+if [ -f scripts/panel-no-local-iptv-edge.sh ]; then
+  . scripts/panel-no-local-iptv-edge.sh
+fi
+if type nexlify_panel_must_not_run_iptv_edge >/dev/null 2>&1 && nexlify_panel_must_not_run_iptv_edge; then
+  nexlify_stop_panel_local_iptv_edge
+elif [ -f /etc/nginx/conf.d/nexlify-live-remote-edge.conf ]; then
   pm2 stop nexlify-iptv-edge 2>/dev/null || true
 else
   pm2 restart nexlify-iptv-edge nexlify-hls --update-env 2>/dev/null || true
 fi
-pm2 restart nexlify-hls --update-env 2>/dev/null || true
 sleep 6
 CREDS=$(node scripts/ensure-smoke-test-line.cjs 2>/dev/null | tail -1)
 U=$(node -e "console.log(JSON.parse(process.argv[1]).u)" "$CREDS")

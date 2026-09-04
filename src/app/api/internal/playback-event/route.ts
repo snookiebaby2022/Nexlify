@@ -6,7 +6,8 @@ import {
   PLAYBACK_QUALITY_ACTIONS,
   logPlaybackQuality,
 } from "@/lib/playback-quality-log";
-import { markStreamViewerPlaybackFailed } from "@/lib/viewer-playback-probe";
+import { markStreamViewerPlaybackFailed, markStreamSpliceFailed } from "@/lib/viewer-playback-probe";
+import { playbackFailKind } from "@/lib/live-playback-contract";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -57,7 +58,11 @@ export async function POST(req: NextRequest) {
     const detail =
       body.detail ||
       (body.status != null ? `Viewer playback failed (HTTP ${body.status})` : "Viewer playback failed");
-    void markStreamViewerPlaybackFailed(streamId, detail);
+    if (playbackFailKind(detail, body.status) === "splice") {
+      void markStreamSpliceFailed(streamId, detail);
+    } else {
+      void markStreamViewerPlaybackFailed(streamId, detail);
+    }
   }
 
   return new NextResponse(null, { status: 204 });

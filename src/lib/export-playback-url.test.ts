@@ -70,6 +70,30 @@ describe("exportPlaybackUrl", () => {
     assert.equal(url, "http://45.88.138.18/movie/demo/pass/movie123.mkv");
   });
 
+  it("does not advertise HLS for live auto when origin is m3u8 — MPEG-TS unless the client asked", () => {
+    const url = exportPlaybackUrl(
+      baseUrl,
+      line,
+      {
+        id: "live123",
+        type: "LIVE",
+        streamUrl: "http://upstream/live.m3u8",
+        containerExtension: null,
+      },
+      {
+        id: "live123",
+        type: "LIVE",
+        streamUrl: "http://upstream/live.m3u8",
+        playlistUrl: null,
+        backupUrl: null,
+        containerExtension: null,
+      } as never,
+      undefined,
+      "auto"
+    );
+    assert.equal(url, "http://45.88.138.18/live/demo/pass/live123.ts");
+  });
+
   it("forces live panel .ts when output is ts", () => {
     const url = exportPlaybackUrl(
       baseUrl,

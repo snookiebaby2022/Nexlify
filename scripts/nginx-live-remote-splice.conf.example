@@ -1,0 +1,9 @@
+# Example nginx include for topology B (panel-only, remote splice).
+# Applied by scripts/route-live-to-remote-edge.sh — do not 302 /live/.
+# Placeholders: REMOTE_EDGE=host:port  PANEL_LISTEN=13000
+#
+# upstream nexlify_remote_edge { server REMOTE_EDGE; keepalive 128; }
+# location ~ ^/(live|timeshift|movie|series)/ {
+#   proxy_pass http://nexlify_remote_edge;
+#   proxy_buffering off;
+# }

@@ -5,6 +5,7 @@ import {
   normalizeConnectionIp,
 } from "@/lib/connections";
 import { touchLiveSession } from "@/lib/live-session";
+import { markStreamSpliceOk } from "@/lib/viewer-playback-probe";
 import { lineIsPlayable } from "@/lib/lines";
 
 /** Edge / proxy heartbeat: refresh lastSeenAt and optional throughput samples. */
@@ -30,6 +31,7 @@ export async function pulseLiveConnection(opts: {
     void recordConnectionMediaBytes(lineId, streamId, clientIp ?? "", bytes, idleMs, onDemand);
   }
   void touchLiveSession(lineId, streamId, clientIp);
+  if (bytes > 0) void markStreamSpliceOk(streamId);
 
   const row = await prisma.liveConnection.findFirst({
     where: clientIp

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Build a pre-built .next.tar.gz for customer auto-updates.
-# This archive contains only the .next directory so it can be swapped in
-# without running npm install or npm run build on the customer VPS.
+# Build a pre-built archive for customer auto-updates: .next runtime + versioned scripts overlay.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,14 +21,14 @@ if [ ! -f .next/BUILD_ID ]; then
   exit 1
 fi
 
-echo "Building prebuilt .next archive: $OUT"
-# Only include files needed for `next start` mode:
-# - server/      (full server-side build output)
-# - static/      (static assets)
-# - BUILD_ID and manifest files
-# Exclude standalone/ (not needed - customer VPS uses `next start` with existing node_modules),
-# cache/, and diagnostics/ which bloat the archive.
-tar -czf "$OUT" \
+cd "$ROOT"
+PACK="$(mktemp -d)"
+cleanup_pack() { rm -rf "$PACK"; }
+trap cleanup_pack EXIT
+
+mkdir -p "$PACK"
+# .next runtime files at archive root (BUILD_ID next to overlay)
+tar -cf - \
   --exclude='cache' \
   --exclude='diagnostics' \
   -C .next \
@@ -50,6 +48,28 @@ tar -czf "$OUT" \
   export-marker.json \
   images-manifest.json \
   types \
-  2>/dev/null || true
+  2>/dev/null | tar -xf - -C "$PACK" || true
 
+OVER="$PACK/_nexlify_overlay/scripts"
+mkdir -p "$OVER"
+for f in \
+  playback-topology.sh \
+  panel-no-local-iptv-edge.sh \
+  apply-live-edge-topology.sh \
+  apply-prebuilt-update.sh \
+  rematch-iptv-edge-auth.sh \
+  install-iptv-edge-proxy.sh \
+  pm2-start.sh \
+  panel-restart-safe.sh \
+  verify-live-no-redirect.sh \
+  route-live-to-remote-edge.sh \
+  nginx-live-remote-splice.conf.example
+do
+  if [ -f "$ROOT/scripts/$f" ]; then
+    cp -f "$ROOT/scripts/$f" "$OVER/"
+  fi
+done
+echo "$VER" > "$PACK/_nexlify_overlay/VERSION"
+
+tar -czf "$OUT" -C "$PACK" .
 echo "Built $OUT ($(du -h "$OUT" | cut -f1))"

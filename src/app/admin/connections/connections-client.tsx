@@ -33,6 +33,7 @@ type ConnectionRow = {
   stream: { id: string; name: string; type: string; serverId?: string | null } | null;
   quality: ConnectionQuality;
   output: PlaybackOutputLabel;
+  processKind?: "ffmpeg" | "edge";
 };
 
 function connectionRowKey(c: ConnectionRow): string {
@@ -104,7 +105,11 @@ function lineLabel(c: ConnectionRow): string {
 }
 
 function durationTitle(c: ConnectionRow, nowMs: number): string {
-  return `Stream uptime ${formatConnDuration(c.streamStartedAt || c.startedAt, nowMs)} · watching ${formatConnDuration(c.startedAt, nowMs)}`;
+  const watch = formatConnDuration(c.startedAt, nowMs);
+  if (c.processKind === "edge" || !c.streamStartedAt) {
+    return `Viewer session ${watch} · stream process N/A (edge splice)`;
+  }
+  return `Viewer session ${watch} · ffmpeg ${formatConnDuration(c.streamStartedAt, nowMs)}`;
 }
 
 async function restartConnectionStream(c: ConnectionRow) {

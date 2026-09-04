@@ -57,6 +57,14 @@ export async function PATCH(req: NextRequest) {
     syncPanelSecurityEnv(settings);
   }
   if (group === "server") {
+    const { persistPlaybackTopologyFiles, playbackTopologyFromSettings } = await import(
+      "@/lib/playback-topology-persist"
+    );
+    persistPlaybackTopologyFiles({
+      topology: playbackTopologyFromSettings(settings),
+      remoteLiveUpstream: String(settings.remoteLiveUpstream ?? ""),
+      repoPath: String(settings.repoPath ?? ""),
+    });
     const { syncPanelPortsAfterSettingsSave } = await import("@/lib/panel-port-sync");
     const portSync = await syncPanelPortsAfterSettingsSave();
     return NextResponse.json({ group, settings, portSync });

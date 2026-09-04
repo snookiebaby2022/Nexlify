@@ -61,6 +61,8 @@ export async function register() {
       await ensureAddonSettingsHealed();
       await ensureInstantStreamingDefaults();
       await ensureOnDemandProbeOnlyDefaults();
+      const { ensureLivePlaybackContract } = await import("@/lib/live-playback-contract");
+      await ensureLivePlaybackContract();
     } catch {
       /* DB unavailable during build / early boot */
     }

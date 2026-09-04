@@ -27,6 +27,7 @@ export type AdminConnectionRow = {
   stream: { id: string; name: string; type: string; serverId?: string | null } | null;
   quality: ReturnType<typeof computeConnectionQualityWithLive>;
   output: ReturnType<typeof resolvePlaybackOutputLabel>;
+  processKind: "ffmpeg" | "edge";
 };
 
 export async function listAdminConnections(
@@ -82,6 +83,7 @@ export async function listAdminConnections(
         : null,
       quality,
       output,
+      processKind: streamStarted ? "ffmpeg" : "edge",
     };
   });
 }

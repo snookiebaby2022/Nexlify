@@ -25,9 +25,11 @@ describe("isTinyLiveRangeProbe", () => {
     assert.equal(isTinyLiveRangeProbe("bytes=0-1023", WEBOS_UA), false);
   });
 
-  it("uses standard IPTV ports for Nexus and Lavf", () => {
+  it("uses standard IPTV ports for Nexus, Lavf, and OkHttp Smarters", () => {
     assert.equal(userAgentUsesStandardIptvPorts("NexusTV/1.0"), true);
     assert.equal(userAgentUsesStandardIptvPorts("Lavf/58.29.100"), true);
+    assert.equal(userAgentUsesStandardIptvPorts("okhttp/4.12.0"), true);
+    assert.equal(userAgentUsesStandardIptvPorts("IPTV Smarters Pro"), true);
     assert.equal(userAgentUsesStandardIptvPorts("Mozilla/5.0 Chrome/120"), false);
   });
 });

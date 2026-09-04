@@ -34,9 +34,15 @@ EXPECTED_PORT="${PORT:-${PANEL_PORT:-3000}}"
 EXPECTED_BIND="${PANEL_BIND_HOST:-127.0.0.1}"
 echo "Panel port from env: ${EXPECTED_PORT} (website: ${WEBSITE_PORT:-${STREAM_HTTP_PORT:-3001}})"
 
-# IP installs bind :80 — free stale listeners before PM2 start (orphan cluster workers).
+# Free stale listeners before PM2 start (orphan cluster workers).
+# Never fuser :8080 (live MPEG-TS/HLS edge). Never stop nginx — it owns :80 UI.
 free_stale_panel_port() {
   local port="$1"
+  if [ "$port" = "8080" ] || [ "$port" = "80" ]; then
+    [ "$port" = "8080" ] && echo "WARN: refusing to clear port 8080 (live edge)"
+    [ "$port" = "80" ] && echo "NOTE: leaving port 80 to nginx (panel UI)"
+    return 0
+  fi
   if ! ss -tlnp 2>/dev/null | grep -q ":${port} "; then
     return 0
   fi
@@ -236,14 +242,20 @@ ensure_pm2_app() {
       val="$(grep -E '^NEXLIFY_HLS_DAEMON_PORT=' "$ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d ' "'\''"')"
       [ -n "$val" ] && HLS_PORT="$val"
     fi
-    # tsx child processes can survive PM2 bash-wrapper restarts and block :13081
-    if command -v fuser >/dev/null 2>&1 && fuser "${HLS_PORT}/tcp" >/dev/null 2>&1; then
-      echo "Clearing stale HLS daemon listener on port ${HLS_PORT}..."
-      fuser -k "${HLS_PORT}/tcp" 2>/dev/null || true
-      sleep 1
+    # Only SIGTERM a wedged listener. Killing a healthy daemon on every restart
+    # drops in-flight HLS and inflates PM2 restart counts (exit 130).
+    HLS_HEALTH="http://127.0.0.1:${HLS_PORT}/health"
+    if curl -fsS --max-time 1 "$HLS_HEALTH" >/dev/null 2>&1; then
+      echo "HLS daemon already healthy on :${HLS_PORT} — restart without killing port"
+    else
+      if command -v fuser >/dev/null 2>&1 && fuser "${HLS_PORT}/tcp" >/dev/null 2>&1; then
+        echo "Clearing stale HLS daemon listener on port ${HLS_PORT}..."
+        fuser -k "${HLS_PORT}/tcp" 2>/dev/null || true
+        sleep 1
+      fi
+      pkill -f 'hls-restream-daemon.ts' 2>/dev/null || true
+      sleep 0.5
     fi
-    pkill -f 'hls-restream-daemon.ts' 2>/dev/null || true
-    sleep 0.5
   fi
   if needs_reregister "$name"; then
     pm2 delete "$name" 2>/dev/null || true
@@ -261,12 +273,29 @@ ensure_pm2_app() {
 
 ensure_pm2_app nexlify
 ensure_pm2_app nexlify-cron
-ensure_pm2_app nexlify-hls
+# shellcheck disable=SC1091
+if [ -f "$ROOT/scripts/panel-no-local-iptv-edge.sh" ]; then
+  . "$ROOT/scripts/panel-no-local-iptv-edge.sh"
+fi
+if type nexlify_panel_must_not_run_iptv_edge >/dev/null 2>&1 && nexlify_panel_must_not_run_iptv_edge; then
+  echo "Skip nexlify-hls — live HLS packager belongs on the splice node, not this panel"
+  pm2 stop nexlify-hls >/dev/null 2>&1 || true
+else
+  ensure_pm2_app nexlify-hls || echo "WARN: nexlify-hls did not start (panel UI does not need it)"
+fi
 
 LIVE_EDGE_MODE="${NEXLIFY_LIVE_EDGE_MODE:-local}"
 LIVE_EDGE_MODE="$(echo "$LIVE_EDGE_MODE" | tr '[:upper:]' '[:lower:]')"
-if [ -f /etc/nexlify/server-45-protected ] || [ -f /etc/nexlify/live-routing.lock ]; then
+# shellcheck disable=SC1091
+if [ -f "$ROOT/scripts/panel-no-local-iptv-edge.sh" ]; then
+  . "$ROOT/scripts/panel-no-local-iptv-edge.sh"
+fi
+if type nexlify_panel_must_not_run_iptv_edge >/dev/null 2>&1 && nexlify_panel_must_not_run_iptv_edge; then
+  echo "Skip topology refresh — this panel must not run nexlify-iptv-edge"
+  nexlify_stop_panel_local_iptv_edge
+elif [ -f /etc/nexlify/server-45-protected ] || [ -f /etc/nexlify/live-routing.lock ]; then
   echo "Skip topology refresh — protected production routing"
+  nexlify_stop_panel_local_iptv_edge 2>/dev/null || true
 elif [ -f "$ROOT/scripts/apply-live-edge-topology.sh" ]; then
   echo "Applying live-edge topology (${LIVE_EDGE_MODE})..."
   PANEL_DIR="$ROOT" bash "$ROOT/scripts/apply-live-edge-topology.sh" || echo "WARN: live-edge topology apply failed"

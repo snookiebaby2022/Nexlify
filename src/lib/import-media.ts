@@ -595,7 +595,7 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
           ? encodeImportVodMeta(opts.importMeta ?? {}, meta.agentStartCmd)
           : meta.agentStartCmd;
 
-      const onDemand = type === "LIVE" ? opts.defaultOnDemand === true : true;
+      const onDemand = type === "LIVE" ? false : true;
       const liveAgentStartCmd =
         type === "LIVE" && !onDemand
           ? (await import("@/lib/stream-live-meta")).encodeLiveStreamMeta({

@@ -1,7 +1,32 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.71",
+  "latestVersion": "2.0.72",
   "releases": [
+    {
+      "version": "2.0.72",
+      "date": "2026-09-04",
+      "channel": "stable",
+      "summary": "Playback topology, live MPEG-TS contract, split health, and versioned scripts inside the prebuilt update.",
+      "changelog": [
+        "Admin → Server: playback topology A local-edge / B remote-splice / C multi-lb — apply, rematch, and pm2-start follow it and never start local iptv-edge on B/C",
+        "Live playlists default to MPEG-TS; HLS only when the client asks and the origin is HLS. LIVE imports are never On demand",
+        "Dashboard Issues count origin and splice failures only — viewer zap 502s are not dead sources",
+        "Prebuilt tarball ships scripts overlay; apply copies them and refuses a /live/ redirect after health",
+        "M3U import skips duplicate titles and known origin 404s, and warns when the same event appears 3+ times",
+        "Connections duration is viewer session; ffmpeg uptime is N/A on edge splice"
+      ],
+      "fixes": [
+        "Update apply could start local iptv-edge and 502-loop MPEG-TS on panel-only hosts",
+        "Viewer 502 stamps filled Issues to fix while origins were healthy",
+        "Imported XUI On demand live rows pushed XCIPTV onto local HLS packager",
+        "Prebuilt apply replaced .next but left old edge installers in scripts/"
+      ],
+      "notes": [
+        "Set topology B on panel-only hosts (nginx → remote splice) before the first apply of this release.",
+        "Use Admin → Updates to install v2.0.72."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.72.tar.gz"
+    },
     {
       "version": "2.0.71",
       "date": "2026-09-04",

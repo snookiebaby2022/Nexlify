@@ -38,13 +38,7 @@ export function exportPlaybackUrl(
   const base = trimBase(baseUrl);
 
   if (stream.type === StreamType.LIVE) {
-    if (output === "ts") {
-      return `${base}/live/${line.username}/${line.password}/${stream.id}.ts`;
-    }
-    // Serve HLS sources as HLS when possible. Players handle native HLS far
-    // better than a forced HLS->TS remux (faster zapping, no buffering).
-    // output=hls forces HLS; output=auto picks HLS for HLS upstreams, TS otherwise.
-    if ((output === "hls" || output === "auto") && full && isHlsUpstream(resolved, seed)) {
+    if (output === "hls" && full && isHlsUpstream(resolved, seed)) {
       return `${base}/live/${line.username}/${line.password}/${stream.id}.m3u8`;
     }
     return `${base}/live/${line.username}/${line.password}/${stream.id}.ts`;

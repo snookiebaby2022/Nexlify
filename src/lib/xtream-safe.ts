@@ -55,7 +55,7 @@ export function xtreamOutputFormats(raw: string | null | undefined): string[] {
     .filter(Boolean)
     .map((s) => (s === "hls" ? "m3u8" : s));
   const out = [...new Set(parts)].filter((s) => s === "m3u8" || s === "ts" || s === "rtmp");
-  return out.length ? out : ["m3u8", "ts"];
+  return out.length ? out : ["ts", "m3u8"];
 }
 
 export function xtreamCategoryIds(numericId: string): number[] {

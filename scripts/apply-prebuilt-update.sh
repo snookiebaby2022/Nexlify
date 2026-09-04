@@ -45,6 +45,24 @@ restore_next_backup() {
   return 1
 }
 
+after_panel_healthy() {
+  if [ -x "$ROOT/scripts/verify-live-no-redirect.sh" ]; then
+    bash "$ROOT/scripts/verify-live-no-redirect.sh" 8080 || {
+      echo "ERROR: /live/ redirected after apply — Xtream .ts clients will fail"
+      return 1
+    }
+  fi
+  if [ -f "$ROOT/scripts/panel-no-local-iptv-edge.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/panel-no-local-iptv-edge.sh"
+    if nexlify_panel_must_not_run_iptv_edge; then
+      echo "Keeping nginx live :8080 — not starting local iptv-edge"
+      nexlify_stop_panel_local_iptv_edge
+    fi
+  fi
+  return 0
+}
+
 ensure_panel_running() {
   if ! has_valid_next; then
     restore_next_backup || true
@@ -194,12 +212,23 @@ do_extract() {
     exit 1
   fi
   echo "Extracted and validated BUILD_ID"
+
+  if [ -d "$STAGING_DIR/_nexlify_overlay" ]; then
+    echo "Update archive includes versioned scripts overlay"
+  fi
 }
 
 do_apply() {
   backup_next_if_valid
 
   echo "Swapping .next directories (panel stays registered — no pm2 stop/delete) ..."
+  if [ -d "$STAGING_DIR/_nexlify_overlay/scripts" ]; then
+    echo "Installing versioned scripts from this release ..."
+    mkdir -p "$ROOT/scripts"
+    cp -a "$STAGING_DIR/_nexlify_overlay/scripts/." "$ROOT/scripts/"
+    chmod +x "$ROOT/scripts/"*.sh 2>/dev/null || true
+    rm -rf "$STAGING_DIR/_nexlify_overlay"
+  fi
   rm -rf .next
   mv "$STAGING_DIR" .next
   rm -rf "$STAGING_DIR"
@@ -261,6 +290,7 @@ do_apply() {
   for i in 1 2 3 4 5 6 7 8 9 10; do
     if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
       echo "Panel is healthy!"
+      after_panel_healthy || exit 1
       rm -rf "$BACKUP_DIR"
       exit 0
     fi
@@ -277,6 +307,7 @@ do_apply() {
     for i in 1 2 3 4 5; do
       if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
         echo "Panel is healthy (next start fallback)!"
+        after_panel_healthy || exit 1
         rm -rf "$BACKUP_DIR"
         exit 0
       fi

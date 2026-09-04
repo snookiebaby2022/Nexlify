@@ -4,10 +4,7 @@ import type { M3uEntry } from "./m3u-parser";
 import { categoryFromGroupName } from "./vod-category";
 import { encodeLiveStreamMeta } from "./stream-live-meta";
 import { maxStreamSortOrder } from "./stream-order";
-import {
-  normalizeStreamMatchKey,
-  streamUrlHosts,
-} from "./stream-url-match";
+import { liveTitleExactKey, liveTitleQualityKey } from "./live-title-dedupe";
 
 const CHUNK = 400;
 
@@ -180,6 +177,17 @@ export async function importLiveM3uEntriesFast(
     byUrl.set(entry.url, { entry, index });
   });
   const unique = [...byUrl.values()];
+  const qualityCounts = new Map<string, number>();
+  for (const { entry } of unique) {
+    const k = liveTitleQualityKey(liveStreamDisplayName(entry));
+    if (!k) continue;
+    qualityCounts.set(k, (qualityCounts.get(k) ?? 0) + 1);
+  }
+  for (const [label, n] of qualityCounts) {
+    if (n >= 3) {
+      errors.push(`Playlist has ${n} copies of “${label}” (title + quality). Keep one source per event.`);
+    }
+  }
 
   const sortOrderStart =
     opts.sortOrderStart ??
@@ -189,12 +197,25 @@ export async function importLiveM3uEntriesFast(
     unique.map((u) => u.entry.url)
   );
 
+  const dead404 = await prisma.stream.findMany({
+    where: {
+      type: StreamType.LIVE,
+      lastProbeOk: false,
+      lastProbeError: { contains: "404" },
+    },
+    select: { streamUrl: true },
+    take: 5000,
+  });
+  const dead404Urls = new Set(dead404.map((r) => r.streamUrl));
+
+  const seenExactName = new Set<string>();
+
   const categoryCache = new Map<string, string>();
   const bouquetCache = new Map<string, string>();
   const autoCategory = opts.autoCategory !== false;
   const autoBouquet = opts.autoBouquetFromGroup === true;
   const fixedCategoryId = opts.categoryId ?? null;
-  const onDemand = opts.defaultOnDemand === true;
+  const onDemand = false;
   const liveAgentStartCmd = !onDemand
     ? encodeLiveStreamMeta({ redirectStream: false })
     : null;
@@ -308,8 +329,23 @@ export async function importLiveM3uEntriesFast(
       }
     }
 
+    if (dead404Urls.has(entry.url)) {
+      skipped++;
+      errors.push(`${liveStreamDisplayName(entry)}: skipped (origin 404)`);
+      continue;
+    }
+
+    const displayName = liveStreamDisplayName(entry);
+    const exactKey = liveTitleExactKey(displayName);
+    if (exactKey && seenExactName.has(exactKey)) {
+      skipped++;
+      errors.push(`${displayName}: skipped duplicate title in this playlist`);
+      continue;
+    }
+    if (exactKey) seenExactName.add(exactKey);
+
     toCreate.push({
-      name: liveStreamDisplayName(entry),
+      name: displayName,
       streamUrl: entry.url,
       streamIcon: entry.logo?.trim() || null,
       type: StreamType.LIVE,

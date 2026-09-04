@@ -15,10 +15,18 @@ echo "=== purge duplicates ==="
 node scripts/purge-stream-duplicates.cjs --all-live-url 2>&1 | tail -20
 
 echo "=== restart services ==="
-node --check scripts/iptv-edge-proxy.mjs
+# shellcheck disable=SC1091
+if [ -f scripts/panel-no-local-iptv-edge.sh ]; then
+  . scripts/panel-no-local-iptv-edge.sh
+fi
 export NEXLIFY_FORCE_RESTART=1
 bash scripts/panel-restart-safe.sh --nexlify-only 2>&1 | tail -10
-pm2 restart nexlify-iptv-edge nexlify-hls --update-env
+if type nexlify_panel_must_not_run_iptv_edge >/dev/null 2>&1 && nexlify_panel_must_not_run_iptv_edge; then
+  nexlify_stop_panel_local_iptv_edge
+else
+  node --check scripts/iptv-edge-proxy.mjs
+  pm2 restart nexlify-iptv-edge nexlify-hls --update-env
+fi
 sleep 12
 
 echo "=== verify ==="

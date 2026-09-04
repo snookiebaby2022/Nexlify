@@ -273,12 +273,29 @@ ensure_pm2_app() {
 
 ensure_pm2_app nexlify
 ensure_pm2_app nexlify-cron
-ensure_pm2_app nexlify-hls || echo "WARN: nexlify-hls did not start (panel UI does not need it)"
+# shellcheck disable=SC1091
+if [ -f "$ROOT/scripts/panel-no-local-iptv-edge.sh" ]; then
+  . "$ROOT/scripts/panel-no-local-iptv-edge.sh"
+fi
+if type nexlify_panel_must_not_run_iptv_edge >/dev/null 2>&1 && nexlify_panel_must_not_run_iptv_edge; then
+  echo "Skip nexlify-hls — live HLS packager belongs on the splice node, not this panel"
+  pm2 stop nexlify-hls >/dev/null 2>&1 || true
+else
+  ensure_pm2_app nexlify-hls || echo "WARN: nexlify-hls did not start (panel UI does not need it)"
+fi
 
 LIVE_EDGE_MODE="${NEXLIFY_LIVE_EDGE_MODE:-local}"
 LIVE_EDGE_MODE="$(echo "$LIVE_EDGE_MODE" | tr '[:upper:]' '[:lower:]')"
-if [ -f /etc/nexlify/server-45-protected ] || [ -f /etc/nexlify/live-routing.lock ]; then
+# shellcheck disable=SC1091
+if [ -f "$ROOT/scripts/panel-no-local-iptv-edge.sh" ]; then
+  . "$ROOT/scripts/panel-no-local-iptv-edge.sh"
+fi
+if type nexlify_panel_must_not_run_iptv_edge >/dev/null 2>&1 && nexlify_panel_must_not_run_iptv_edge; then
+  echo "Skip topology refresh — this panel must not run nexlify-iptv-edge"
+  nexlify_stop_panel_local_iptv_edge
+elif [ -f /etc/nexlify/server-45-protected ] || [ -f /etc/nexlify/live-routing.lock ]; then
   echo "Skip topology refresh — protected production routing"
+  nexlify_stop_panel_local_iptv_edge 2>/dev/null || true
 elif [ -f "$ROOT/scripts/apply-live-edge-topology.sh" ]; then
   echo "Applying live-edge topology (${LIVE_EDGE_MODE})..."
   PANEL_DIR="$ROOT" bash "$ROOT/scripts/apply-live-edge-topology.sh" || echo "WARN: live-edge topology apply failed"

@@ -24,12 +24,19 @@ describe("client playback profiles", () => {
     assert.equal(detectClientProfile("XCIPTV/5.0.0"), "xciptv");
     assert.equal(detectClientProfile("IPTVSmartersPlayer"), "smarters");
     assert.equal(detectClientProfile("okhttp/4.12.0 IPTV Smarters Pro"), "smarters");
+    assert.equal(detectClientProfile("okhttp/4.12.0"), "smarters");
     assert.equal(
       detectClientProfile(
         "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 Chrome/87.0.4280.88 Safari/537.36 WebAppManager"
       ),
       "auto"
     );
+  });
+
+  it("does not prefetch live zaps for unmatched User-Agents (avoids panel HLS ffmpeg on login)", () => {
+    const profile = resolveClientPlaybackProfile("SomeIptvApp/1.0");
+    assert.equal(profile.id, "auto");
+    assert.equal(profile.zapPrefetchOnPlaylist, false);
   });
 
   it("does not prefetch streams during XCIPTV catalog updates", () => {

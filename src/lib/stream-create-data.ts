@@ -49,7 +49,11 @@ export type StreamCreateInput = {
 
 export async function buildStreamCreateData(body: StreamCreateInput) {
   const type = (body.type ?? "LIVE") as StreamType;
-  const { isOnDemand, vodMode } = syncVodModeFields(body);
+  let { isOnDemand, vodMode } = syncVodModeFields(body);
+  if (type === "LIVE" && vodMode === "ON_DEMAND") {
+    isOnDemand = false;
+    vodMode = "LIVE";
+  }
 
   let hostedExternally = Boolean(body.hostedExternally);
   let providerId = body.providerId || null;

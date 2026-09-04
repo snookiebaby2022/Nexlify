@@ -1,6 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 cd /opt/nexlify-panel
+# shellcheck disable=SC1091
+if [ -f scripts/panel-no-local-iptv-edge.sh ]; then
+  . scripts/panel-no-local-iptv-edge.sh
+  if nexlify_panel_must_not_run_iptv_edge; then
+    echo "This panel splices live on the remote edge — not restarting nexlify-iptv-edge or nexlify-hls"
+    nexlify_stop_panel_local_iptv_edge
+  fi
+fi
 
 echo "=== Terminate stale postgres connections ==="
 sudo -u postgres psql -d nexlify -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='nexlify' AND pid <> pg_backend_pid() AND state IN ('idle','idle in transaction');" || true
@@ -21,11 +29,15 @@ node scripts/invalidate-playback-cache.cjs 2>/dev/null || node scripts/bust-xtre
 echo "=== Purge duplicate live streams ==="
 node scripts/purge-stream-duplicates.cjs --all-live-url
 
-echo "=== Restart panel + edge + hls ==="
+echo "=== Restart panel (live splice stays on remote nginx/edge) ==="
 export NEXLIFY_FORCE_RESTART=1
 bash scripts/panel-restart-safe.sh --nexlify-only
-node --check scripts/iptv-edge-proxy.mjs
-pm2 restart nexlify-iptv-edge nexlify-hls 2>/dev/null || true
+if type nexlify_panel_must_not_run_iptv_edge >/dev/null 2>&1 && nexlify_panel_must_not_run_iptv_edge; then
+  nexlify_stop_panel_local_iptv_edge
+else
+  node --check scripts/iptv-edge-proxy.mjs
+  pm2 restart nexlify-iptv-edge nexlify-hls 2>/dev/null || true
+fi
 sleep 12
 
 echo "=== Verify ==="

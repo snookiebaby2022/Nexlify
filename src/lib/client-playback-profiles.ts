@@ -18,7 +18,8 @@ export const CLIENT_PLAYBACK_PROFILES: Record<ClientProfileId, ClientPlaybackPro
     label: "Auto-detect from User-Agent",
     liveOutput: "auto",
     vodDirectPlay: false,
-    zapPrefetchOnPlaylist: true,
+    // Prefetch on login starts HLS packagers on the panel and stalls first zap.
+    zapPrefetchOnPlaylist: false,
     numericCategoryId: false,
   },
   smarters: {
@@ -93,10 +94,8 @@ export function detectClientProfile(userAgent?: string | null): ClientProfileId 
     return "auto";
   }
   if (ua.includes("smarters") || ua.includes("iptv smarters")) return "smarters";
-  // Smarters / XCIPTV often send okhttp without "ExoPlayer" in the UA string.
-  if (ua.includes("okhttp") && (ua.includes("iptv") || ua.includes("smarter") || ua.includes("xciptv"))) {
-    return "smarters";
-  }
+  // Bare OkHttp is IPTV Smarters Pro / XCIPTV on Android — not Chrome.
+  if (ua.includes("okhttp")) return "smarters";
   if (ua.includes("tivimate")) return "tivimate";
   // FFmpeg Lavf is used by Nexus TV and LibVLC engines — treat like VLC (TS, no prefetch).
   if (ua.includes("lavf/") || ua.includes("vlc") || ua.includes("libvlc") || ua.includes("exoplayer")) {

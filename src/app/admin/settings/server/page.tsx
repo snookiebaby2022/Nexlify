@@ -64,9 +64,40 @@ export default function ServerSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Server & port</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Public URLs for the panel and MAG / Enigma portals, plus listen ports for the panel and streaming edge.
+          Publish HTTP :80 / :8080 for Xtream apps. HTTPS is optional extra DNS — MPEG-TS clients often stall on Cloudflare HTTPS.
         </p>
       </div>
+
+      <SettingsPanel
+        title="Playback topology"
+        info="How this machine delivers /live/. Updates, rematch, and pm2-start follow this setting — they will not start a local iptv-edge or fuser :8080 on remote-splice / multi-lb."
+      >
+        <label className="block text-sm w-full">
+          <span style={{ color: "var(--muted)" }}>This panel host</span>
+          <select
+            className="mt-1 w-full rounded border px-3 py-2 bg-transparent"
+            style={{ borderColor: "var(--border)" }}
+            value={String(data.playbackTopology ?? "local-edge")}
+            onChange={(e) => setData({ ...data, playbackTopology: e.target.value })}
+          >
+            <option value="local-edge">A — Panel + local edge (owns :8080)</option>
+            <option value="remote-splice">B — Panel only, nginx proxies /live/ to a remote splice</option>
+            <option value="multi-lb">C — Multi-server LB (stream nodes splice; panel does not bind edge)</option>
+          </select>
+        </label>
+        {String(data.playbackTopology ?? "") === "remote-splice" ? (
+          <label className="block text-sm w-full mt-3">
+            <span style={{ color: "var(--muted)" }}>Remote live upstream (host:port)</span>
+            <input
+              className="mt-1 w-full rounded border px-3 py-2 bg-transparent font-mono text-sm"
+              style={{ borderColor: "var(--border)" }}
+              placeholder="209.237.141.15:8080"
+              value={String(data.remoteLiveUpstream ?? "")}
+              onChange={(e) => setData({ ...data, remoteLiveUpstream: e.target.value })}
+            />
+          </label>
+        ) : null}
+      </SettingsPanel>
 
       <SettingsPanel
         title="Panel URL"
@@ -77,7 +108,7 @@ export default function ServerSettingsPage() {
           <input
             className="mt-1 w-full rounded border px-3 py-2 bg-transparent"
             style={{ borderColor: "var(--border)" }}
-            placeholder="https://panel.example.com"
+            placeholder="http://panel.example.com"
             value={String(data.serverUrl ?? "")}
             onChange={(e) => setData({ ...data, serverUrl: e.target.value })}
           />

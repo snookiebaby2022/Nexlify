@@ -77,6 +77,10 @@ fetch_vendor scripts/apply-nexlify-prebuilt.sh scripts/apply-nexlify-prebuilt.sh
 fetch_vendor scripts/ensure-prisma-client.sh scripts/ensure-prisma-client.sh || fetch_gh scripts/ensure-prisma-client.sh scripts/ensure-prisma-client.sh || true
 fetch_vendor apply-panel-fast-update.sh scripts/apply-panel-fast-update.sh || fetch_gh scripts/apply-panel-fast-update.sh scripts/apply-panel-fast-update.sh || true
 fetch_vendor apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || fetch_vendor scripts/apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || fetch_gh scripts/apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || true
+fetch_vendor scripts/playback-topology.sh scripts/playback-topology.sh || fetch_gh scripts/playback-topology.sh scripts/playback-topology.sh || true
+fetch_vendor scripts/panel-no-local-iptv-edge.sh scripts/panel-no-local-iptv-edge.sh || fetch_gh scripts/panel-no-local-iptv-edge.sh scripts/panel-no-local-iptv-edge.sh || true
+fetch_vendor scripts/verify-live-no-redirect.sh scripts/verify-live-no-redirect.sh || fetch_gh scripts/verify-live-no-redirect.sh scripts/verify-live-no-redirect.sh || true
+fetch_vendor scripts/apply-live-edge-topology.sh scripts/apply-live-edge-topology.sh || fetch_gh scripts/apply-live-edge-topology.sh scripts/apply-live-edge-topology.sh || true
 fetch_vendor scripts/panel-restart-safe.sh scripts/panel-restart-safe.sh || fetch_gh scripts/panel-restart-safe.sh scripts/panel-restart-safe.sh || true
 fetch_vendor scripts/panel-update-recover.sh scripts/panel-update-recover.sh || fetch_gh scripts/panel-update-recover.sh scripts/panel-update-recover.sh || true
 fetch_vendor scripts/has-valid-next-build.sh scripts/has-valid-next-build.sh || fetch_gh scripts/has-valid-next-build.sh scripts/has-valid-next-build.sh || true

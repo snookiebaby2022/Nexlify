@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { cacheGetOrSet } from "@/lib/cache";
+import { liveOriginOrSpliceFailWhere } from "@/lib/stream-health-signals";
 import { streamProbeFixHint } from "@/lib/stream-probe-fix-hints";
 import { invalidateDashboardStats } from "@/lib/cache-invalidate";
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
@@ -18,17 +19,14 @@ export async function GET() {
 
     const [probeFails, processErrors] = await Promise.all([
       prisma.stream.findMany({
-        where: {
-          isActive: true,
-          type: "LIVE",
-          lastProbeOk: false,
-        },
+        where: liveOriginOrSpliceFailWhere(),
         select: {
           id: true,
           name: true,
           type: true,
           lastProbeAt: true,
           lastProbeError: true,
+          lastSpliceError: true,
           backupUrl: true,
           server: { select: { name: true } },
         },
@@ -60,11 +58,11 @@ export async function GET() {
         name: s.name,
         type: s.type,
         lastProbeAt: s.lastProbeAt,
-        lastProbeError: s.lastProbeError,
+        lastProbeError: s.lastProbeError || s.lastSpliceError,
         hasBackup,
         kind: hasBackup ? ("unstable" as const) : ("dead" as const),
         server: s.server,
-        fixHint: streamProbeFixHint(s.lastProbeError),
+        fixHint: streamProbeFixHint(s.lastProbeError || s.lastSpliceError),
       };
     });
 

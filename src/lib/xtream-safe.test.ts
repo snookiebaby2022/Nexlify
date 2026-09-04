@@ -57,6 +57,10 @@ describe("xtream-safe", () => {
     assert.deepEqual(xtreamOutputFormats("hls,m3u8,ts,rtmp"), ["m3u8", "ts", "rtmp"]);
   });
 
+  it("defaults live output to mpegts first", () => {
+    assert.deepEqual(xtreamOutputFormats(""), ["ts", "m3u8"]);
+  });
+
   it("exports numeric category_ids like XUI", () => {
     assert.deepEqual(xtreamCategoryIds("162563989"), [162563989]);
   });

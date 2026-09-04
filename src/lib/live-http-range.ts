@@ -31,6 +31,7 @@ export function userAgentUsesStandardIptvPorts(userAgent?: string | null): boole
     s.includes("nexus") ||
     s.includes("nexustv") ||
     s.includes("smarters") ||
+    s.includes("okhttp") ||
     s.includes("xciptv") ||
     s.includes("tivimate") ||
     s.includes("perfect player") ||
