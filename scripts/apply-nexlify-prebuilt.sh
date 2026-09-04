@@ -28,14 +28,11 @@ echo "Panel root: $ROOT"
 
 HOST="${PANEL_VENDOR_HOST:-nexlify.live}"
 IP="${PANEL_VENDOR_IP:-85.17.162.54}"
-VER="${VER:-}"
-if [ -z "$VER" ]; then
-  VER="$(curl -fsS --max-time 20 --resolve "${HOST}:443:${IP}" "https://${HOST}/panel-releases.json" \
-    | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{try{console.log(JSON.parse(d).latestVersion||"")}catch(e){}}')" \
-    || true)"
-fi
-if [ -z "$VER" ]; then
-  VER="$(node -e 'try{process.stdout.write(require("./package.json").version||"")}catch(e){}')"
+VER="${VER:-2.0.68}"
+if [ -z "${SKIP_FEED:-}" ]; then
+  FEED_VER="$(curl -fsS --max-time 20 --resolve "${HOST}:443:${IP}" "https://${HOST}/panel-releases.json" 2>/dev/null \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("latestVersion") or "")' 2>/dev/null || true)"
+  if [ -n "$FEED_VER" ]; then VER="$FEED_VER"; fi
 fi
 echo "Target version: $VER"
 
