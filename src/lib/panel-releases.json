@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.69",
+  "latestVersion": "2.0.70",
   "releases": [
+    {
+      "version": "2.0.70",
+      "date": "2026-09-04",
+      "channel": "stable",
+      "summary": "Reseller and admin panel no longer white-screen after an update because of a stale PWA cache.",
+      "changelog": [
+        "The service worker no longer cache-first serves /reseller and /admin HTML from a previous build",
+        "A missing JS chunk after an update reloads the tab once instead of showing Application error"
+      ],
+      "fixes": [
+        "Application error: a client-side exception has occurred while loading darkcdn.store"
+      ],
+      "notes": [
+        "Use Admin → Updates to install v2.0.70. After install, open the panel once so the new service worker activates. Hard-refresh if an old tab still errors."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.70.tar.gz"
+    },
     {
       "version": "2.0.69",
       "date": "2026-09-04",
