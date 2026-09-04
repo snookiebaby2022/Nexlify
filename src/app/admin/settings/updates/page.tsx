@@ -204,7 +204,7 @@ export default function PanelUpdatesPage() {
     }
     const bust = `cb=${Date.now()}`;
     const url = opts?.silent
-      ? `/api/admin/panel-update?light=1&${bust}`
+      ? `/api/admin/panel-update/progress?${bust}`
       : `/api/admin/panel-update?${bust}`;
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), opts?.silent ? 8000 : 20000);
@@ -393,11 +393,41 @@ export default function PanelUpdatesPage() {
     }
   }
 
-  if (loading) {
+  if (loading && !liveUpdateRunning && liveJob?.status !== "running") {
     return <p className="text-sm" style={{ color: "var(--muted)" }}>Loading updates…</p>;
   }
 
-  if (loadError || !data) {
+  if ((loadError || !data) && (liveUpdateRunning || liveJob?.status === "running")) {
+    const reconnectJob =
+      liveJob?.status === "running"
+        ? liveJob
+        : liveJob
+          ? { ...liveJob, status: "running" as const, finishedAt: null }
+          : null;
+    return (
+      <div className="space-y-4 max-w-2xl">
+        <h1 className="text-2xl font-semibold" style={{ color: "#00c0ef" }}>
+          Updates
+        </h1>
+        <p className="text-sm rounded-lg border px-4 py-3" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
+          {loadError
+            ? `${loadError} The update is still running — this bar stays until the panel answers again.`
+            : "Loading update status…"}
+        </p>
+        {reconnectJob ? <PanelUpdateRunningProgress job={reconnectJob} variant="card" /> : null}
+        <button
+          type="button"
+          onClick={() => load()}
+          className="rounded-lg border px-4 py-2 text-sm cursor-pointer"
+          style={{ borderColor: "var(--border)" }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if ((loadError || !data) && !liveUpdateRunning && liveJob?.status !== "running") {
     return (
       <div className="space-y-4 max-w-2xl">
         <h1 className="text-2xl font-semibold" style={{ color: "#00c0ef" }}>
@@ -438,8 +468,13 @@ export default function PanelUpdatesPage() {
   const releases = data.releasesFeed?.releases ?? [];
   const showBanner =
     data.version.updateAvailable && isVersionNewer(latest, installed);
-  const jobRunning = liveUpdateRunning;
-  const progressJob = liveJob?.status === "running" ? liveJob : null;
+  const jobRunning = liveUpdateRunning || liveJob?.status === "running";
+  const progressJob =
+    liveJob?.status === "running"
+      ? liveJob
+      : jobRunning && liveJob
+        ? { ...liveJob, status: "running" as const, finishedAt: null }
+        : null;
   const failedJob = liveJob?.status === "failed" ? liveJob : null;
 
   return (

@@ -73,6 +73,8 @@ fetch_gh() {
   local rel="$1" dest="$2"
   fetch "$GH/$rel" "$dest"
 }
+fetch_vendor scripts/apply-nexlify-prebuilt.sh scripts/apply-nexlify-prebuilt.sh || fetch_gh scripts/apply-nexlify-prebuilt.sh scripts/apply-nexlify-prebuilt.sh || true
+fetch_vendor scripts/ensure-prisma-client.sh scripts/ensure-prisma-client.sh || fetch_gh scripts/ensure-prisma-client.sh scripts/ensure-prisma-client.sh || true
 fetch_vendor apply-panel-fast-update.sh scripts/apply-panel-fast-update.sh || fetch_gh scripts/apply-panel-fast-update.sh scripts/apply-panel-fast-update.sh || true
 fetch_vendor apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || fetch_vendor scripts/apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || fetch_gh scripts/apply-prebuilt-update.sh scripts/apply-prebuilt-update.sh || true
 fetch_vendor scripts/panel-restart-safe.sh scripts/panel-restart-safe.sh || fetch_gh scripts/panel-restart-safe.sh scripts/panel-restart-safe.sh || true

@@ -56,9 +56,9 @@ export function PanelUpdateProgress() {
   if (!job || dismissed) return null;
   if (job.status === "idle") return null;
 
-  const running = job.status === "running";
+  const running = job.status === "running" || (updateRunning && job.status !== "done");
   const done = job.status === "done";
-  const failed = job.status === "failed";
+  const failed = job.status === "failed" && !updateRunning;
   const elapsed = formatUpdateElapsed(job.startedAt);
 
   return (
@@ -94,11 +94,7 @@ export function PanelUpdateProgress() {
           </div>
         </div>
 
-        {running && (
-          <>
-            <PanelUpdateRunningProgress job={job} variant="overlay" />
-          </>
-        )}
+        {running && <PanelUpdateRunningProgress job={job} variant="overlay" />}
 
         {done && (
           <p className="panel-update-progress-message">

@@ -61,14 +61,6 @@ function resolveJobRepoPath(
 }
 
 async function main() {
-  const runPanelUpdateWithProgress = namedExport<
-    (onProgress?: (update: Record<string, unknown>) => void | Promise<void>) => Promise<{
-      ok: boolean;
-      message: string;
-      toVersion: string;
-      steps: { name: string; ok: boolean; output?: string }[];
-    }>
-  >(await importPanelFile("src/lib/panel-update.ts"), "runPanelUpdateWithProgress");
   const jobMod = await importPanelFile("src/lib/panel-update-job.ts");
   const readUpdateJob = namedExport<(repoPath: string) => Promise<{
     status: string;
@@ -95,6 +87,36 @@ async function main() {
   const { writeFile, unlink } = await import("fs/promises");
 
   const repoPath = resolveJobRepoPath(resolvePanelRepoPathSync);
+
+  let runPanelUpdateWithProgress: (onProgress?: (update: Record<string, unknown>) => void | Promise<void>) => Promise<{
+    ok: boolean;
+    message: string;
+    toVersion: string;
+    steps: { name: string; ok: boolean; output?: string }[];
+  }>;
+  try {
+    runPanelUpdateWithProgress = namedExport(
+      await importPanelFile("src/lib/panel-update.ts"),
+      "runPanelUpdateWithProgress"
+    );
+  } catch (e) {
+    const crashed = await readUpdateJob(repoPath);
+    if (crashed) {
+      await writeUpdateJob(repoPath, {
+        ...crashed,
+        status: "failed",
+        currentStep: null,
+        finishedAt: new Date().toISOString(),
+        message:
+          e instanceof Error
+            ? e.message
+            : "Update worker could not load panel-update.ts. Run: bash scripts/ensure-prisma-client.sh",
+      });
+    }
+    await spawnRecover(repoPath);
+    process.exit(1);
+    return;
+  }
 
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   let job: Awaited<ReturnType<typeof readUpdateJob>> = null;

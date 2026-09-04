@@ -422,6 +422,9 @@ cmd_deps() {
   elif [ ! -d node_modules/tailwindcss ] || [ ! -d node_modules/typescript ]; then
     echo "Dev dependencies missing (tailwindcss/typescript) — running npm ci ..."
     npm ci --include=dev --include=optional || npm install --include=dev --include=optional
+  elif [ ! -f node_modules/@prisma/client/package.json ]; then
+    echo "@prisma/client missing — running npm ci ..."
+    npm ci --include=dev --include=optional || npm install --include=dev --include=optional
   else
     echo "Lockfile unchanged — dev deps present."
   fi
@@ -498,11 +501,23 @@ cmd_build_compile() {
   npm install next@15.5.21 --include=optional --no-audit --no-fund --loglevel=error || true
   npm install --no-save --include=optional @next/swc-linux-x64-gnu 2>/dev/null || \
     npm install --no-save --include=optional @next/swc-linux-x64-musl 2>/dev/null || true
-  if ! node ./node_modules/next/dist/bin/next build; then
-    echo "WARN: retry still failed — full node_modules reinstall ..." >&2
-    rm -rf node_modules
-    npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error || \
-      npm install --include=dev --include=optional --no-audit --no-fund --loglevel=error
+  if (!node ./node_modules/next/dist/bin/next build; then
+    echo "WARN: retry still failed — reinstalling node_modules without leaving the tree empty ..." >&2
+    if [ -d node_modules ]; then
+      rm -rf node_modules.bak
+      mv node_modules node_modules.bak
+    fi
+    if npm ci --include=dev --include=optional --no-audit --no-fund --loglevel=error || \
+      npm install --include=dev --include=optional --no-audit --no-fund --loglevel=error; then
+      rm -rf node_modules.bak
+    else
+      echo "ERROR: npm reinstall failed — restoring previous node_modules" >&2
+      rm -rf node_modules
+      if [ -d node_modules.bak ]; then
+        mv node_modules.bak node_modules
+      fi
+      return 1
+    fi
     npm install --no-save --include=optional @next/swc-linux-x64-gnu 2>/dev/null || \
       npm install --no-save --include=optional @next/swc-linux-x64-musl 2>/dev/null || true
     export NEXLIFY_DIST_DIR=".next.staging"

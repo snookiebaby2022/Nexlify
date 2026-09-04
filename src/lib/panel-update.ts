@@ -27,7 +27,7 @@ import {
   fetchNexlifyReleasesFeed,
   isVersionNewer,
 } from "@/lib/panel-releases-feed";
-import { choosePanelUpdateMode, isNextBuildTarballUrl, isPanelUpdateForced } from "@/lib/panel-update-mode";
+import { allowCompilePanelUpdates, choosePanelUpdateMode, isNextBuildTarballUrl, isPanelUpdateForced, prebuiltTarballUrlsForVersion } from "@/lib/panel-update-mode";
 
 async function loadPanelServerSettings(): Promise<PanelServerSettings> {
   if (typeof getPanelServerSettingsSafe === "function") {
@@ -187,19 +187,22 @@ export async function resolvePrebuiltDownloadUrl(
     const feedUrl = settings.updateCheckUrl?.trim() || DEFAULT_RELEASES_FEED_URL;
     const feed = await fetchNexlifyReleasesFeed(feedUrl);
     const release = feed.releases.find((r) => r.version === targetVersion);
-    if (release?.downloadUrl) {
-      const reachable = await downloadUrlReachable(release.downloadUrl);
-      if (!reachable) {
-        console.log(`[panel-update] downloadUrl not reachable for v${targetVersion}: ${release.downloadUrl}`);
-        return null;
+    const candidates = prebuiltTarballUrlsForVersion(targetVersion, release?.downloadUrl);
+    for (const url of candidates) {
+      if (!isNextBuildTarballUrl(url)) continue;
+      const reachable = await downloadUrlReachable(url);
+      if (reachable) {
+        console.log(`[panel-update] Found prebuilt downloadUrl for v${targetVersion}: ${url}`);
+        return url;
       }
-      console.log(`[panel-update] Found prebuilt downloadUrl for v${targetVersion}`);
-      return release.downloadUrl;
+      console.log(`[panel-update] HEAD miss for ${url} — still using it (apply script retries via origin IP)`);
+      return url;
     }
   } catch (err) {
     console.log("[panel-update] Could not resolve prebuilt download URL:", err);
   }
-  return null;
+  const fallback = prebuiltTarballUrlsForVersion(targetVersion)[0];
+  return fallback && isNextBuildTarballUrl(fallback) ? fallback : null;
 }
 
 async function downloadUrlReachable(url: string): Promise<boolean> {
@@ -454,7 +457,14 @@ async function postPullBuildSteps(repoPath: string): Promise<UpdateStep[]> {
   }
   if (patchScript) {
     const steps: UpdateStep[] = [];
-    if (await lockfileChanged(repoPath)) {
+    const prismaPkg = path.join(repoPath, "node_modules/@prisma/client/package.json");
+    let prismaMissing = false;
+    try {
+      await access(prismaPkg);
+    } catch {
+      prismaMissing = true;
+    }
+    if ((await lockfileChanged(repoPath)) || prismaMissing) {
       steps.push({ name: "npm install", command: "bash", args: [patchScript, "deps"] });
     } else {
       steps.push({
@@ -609,6 +619,7 @@ export async function runPanelUpdateWithProgress(
       ? await resolvePrebuiltDownloadUrl(targetVersion, repoPath)
       : null;
   const hasNextBuildTarball = isNextBuildTarballUrl(downloadUrl);
+  const allowCompile = allowCompilePanelUpdates();
 
   let gitFetchOk: boolean | undefined;
   const tentativeMode = choosePanelUpdateMode({
@@ -617,6 +628,7 @@ export async function runPanelUpdateWithProgress(
     hasPatchScript: Boolean(patchScript),
     hasPrebuiltDownload: hasNextBuildTarball,
     hasNewerRelease,
+    allowCompile,
   });
 
   if (versionInfo.isGitRepo && tentativeMode === "git") {
@@ -650,10 +662,12 @@ export async function runPanelUpdateWithProgress(
     hasPatchScript: Boolean(patchScript),
     hasPrebuiltDownload: hasNextBuildTarball,
     hasNewerRelease,
+    allowCompile,
   });
   if (!chosen) {
-    const msg =
-      "No update method available (not a git repo, and no patch/prebuilt script).";
+    const msg = hasNewerRelease && !hasNextBuildTarball && !allowCompile
+      ? `No compiled update package (next-${targetVersion}.tar.gz) for v${targetVersion}. This panel will not git-reset or compile on the VPS. Publish the prebuilt archive on nexlify.live, then retry Updates.`
+      : "No update method available (not a git repo, and no patch/prebuilt script).";
     await recordResult(settings, false, msg, fromVersion, fromVersion, "update", steps);
     return { ok: false, message: msg, steps, fromVersion, toVersion: fromVersion };
   }

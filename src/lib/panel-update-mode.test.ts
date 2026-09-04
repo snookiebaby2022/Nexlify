@@ -6,6 +6,7 @@ import {
   isPanelUpdateForced,
   preferGitPanelUpdates,
   preferTarballPanelUpdates,
+  prebuiltTarballUrlsForVersion,
 } from "./panel-update-mode";
 
 test("newer release prefers published tarball over git", () => {
@@ -115,4 +116,27 @@ test("PANEL_UPDATE_PREFER_GIT restores git-first when no tarball env", () => {
 test("isNextBuildTarballUrl rejects the source archive", () => {
   assert.equal(isNextBuildTarballUrl("https://nexlify.live/downloads/nexlify-panel.tar.gz"), false);
   assert.equal(isNextBuildTarballUrl("https://nexlify.live/downloads/next-2.0.64.tar.gz"), true);
+});
+
+test("source feed URL rewrites to next-*.tar.gz", () => {
+  const urls = prebuiltTarballUrlsForVersion(
+    "2.0.66",
+    "https://nexlify.live/downloads/nexlify-panel.tar.gz",
+  );
+  assert.equal(urls[0], "https://nexlify.live/downloads/next-2.0.66.tar.gz");
+  assert.ok(urls.every((u) => isNextBuildTarballUrl(u)));
+});
+
+test("numbered release without a next tarball does not compile unless allowed", () => {
+  assert.equal(
+    choosePanelUpdateMode({
+      isGitRepo: true,
+      gitFetchOk: true,
+      hasPatchScript: true,
+      hasPrebuiltDownload: false,
+      hasNewerRelease: true,
+      allowCompile: false,
+    }),
+    null,
+  );
 });

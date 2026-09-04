@@ -6,7 +6,7 @@
 #   bash scripts/apply-prebuilt-update.sh <downloadUrl>            # run all steps (legacy)
 #   bash scripts/apply-prebuilt-update.sh <downloadUrl> download   # step 1: download tarball
 #   bash scripts/apply-prebuilt-update.sh <downloadUrl> extract    # step 2: extract to staging
-#   bash scripts/apply-prebuilt-update.sh <downloadUrl> apply      # step 3: stop, swap, prisma, restart, health
+#   bash scripts/apply-prebuilt-update.sh <downloadUrl> apply      # step 3: swap, prisma, reload, health
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -46,16 +46,23 @@ restore_next_backup() {
 }
 
 ensure_panel_running() {
-  if has_valid_next; then
-    pm2 restart nexlify --update-env 2>/dev/null || true
+  if ! has_valid_next; then
+    restore_next_backup || true
+  fi
+  if ! has_valid_next; then
+    echo "ERROR: No valid .next build available after recovery"
+    return 1
+  fi
+  if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
+    NEXLIFY_FORCE_RESTART=1 bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only || true
     return 0
   fi
-  if restore_next_backup; then
-    pm2 restart nexlify --update-env 2>/dev/null || true
-    return 0
+  if pm2 describe nexlify >/dev/null 2>&1; then
+    pm2 reload nexlify --update-env 2>/dev/null || pm2 restart nexlify --update-env 2>/dev/null || true
+  else
+    pm2 start ecosystem.config.cjs --only nexlify --update-env 2>/dev/null || true
   fi
-  echo "ERROR: No valid .next build available after recovery"
-  return 1
+  return 0
 }
 
 cleanup() {
@@ -192,11 +199,7 @@ do_extract() {
 do_apply() {
   backup_next_if_valid
 
-  echo "Stopping panel ..."
-  pm2 stop nexlify 2>/dev/null || true
-  sleep 2
-
-  echo "Swapping .next directories ..."
+  echo "Swapping .next directories (panel stays registered — no pm2 stop/delete) ..."
   rm -rf .next
   mv "$STAGING_DIR" .next
   rm -rf "$STAGING_DIR"
@@ -219,10 +222,12 @@ do_apply() {
   fi
 
   echo "Running database migrations ..."
-  if [ -f node_modules/.prisma/client/index.js ]; then
+  if [ -f "$ROOT/scripts/ensure-prisma-client.sh" ]; then
+    bash "$ROOT/scripts/ensure-prisma-client.sh" || echo "WARN: ensure-prisma-client failed"
+  else
     npx prisma generate 2>&1 || echo "WARN: prisma generate failed"
-    npx prisma db push --accept-data-loss 2>&1 || echo "WARN: prisma db push failed (non-fatal)"
   fi
+  npx prisma db push --accept-data-loss 2>&1 || echo "WARN: prisma db push failed (non-fatal)"
 
   # Restore root package.json if corrupted
   if [ -f "$ROOT_PKG_BACKUP" ]; then
@@ -233,8 +238,16 @@ do_apply() {
     rm -f "$ROOT_PKG_BACKUP"
   fi
 
-  echo "Starting panel ..."
-  pm2 start nexlify --update-env 2>/dev/null || pm2 restart nexlify --update-env 2>/dev/null || true
+  echo "Reloading panel on the new build ..."
+  if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
+    NEXLIFY_FORCE_RESTART=1 bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only || true
+  else
+    if pm2 describe nexlify >/dev/null 2>&1; then
+      pm2 reload nexlify --update-env 2>/dev/null || pm2 restart nexlify --update-env 2>/dev/null || true
+    else
+      pm2 start ecosystem.config.cjs --only nexlify --update-env 2>/dev/null || true
+    fi
+  fi
   pm2 restart nexlify-cron --update-env 2>/dev/null || true
   sleep 3
 

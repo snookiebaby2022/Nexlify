@@ -48,6 +48,10 @@ restart_panel() {
 
 echo "=== panel-update-recover ($QUICK) ==="
 
+if [ -f "$ROOT/scripts/ensure-prisma-client.sh" ]; then
+  bash "$ROOT/scripts/ensure-prisma-client.sh" || echo "WARN: prisma client repair failed"
+fi
+
 if has_valid_next; then
   echo "Recover: production build present"
   restart_panel

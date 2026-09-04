@@ -222,10 +222,12 @@ do_apply() {
   fi
 
   echo "Running database migrations ..."
-  if [ -f node_modules/.prisma/client/index.js ]; then
+  if [ -f "$ROOT/scripts/ensure-prisma-client.sh" ]; then
+    bash "$ROOT/scripts/ensure-prisma-client.sh" || echo "WARN: ensure-prisma-client failed"
+  else
     npx prisma generate 2>&1 || echo "WARN: prisma generate failed"
-    npx prisma db push --accept-data-loss 2>&1 || echo "WARN: prisma db push failed (non-fatal)"
   fi
+  npx prisma db push --accept-data-loss 2>&1 || echo "WARN: prisma db push failed (non-fatal)"
 
   # Restore root package.json if corrupted
   if [ -f "$ROOT_PKG_BACKUP" ]; then

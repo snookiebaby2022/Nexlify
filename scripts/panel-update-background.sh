@@ -59,6 +59,24 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${ROOT
 ERR_LOG="${ROOT}/.update-worker-err.log"
 export ERR_LOG
 
+if [ -f "$ROOT/scripts/ensure-prisma-client.sh" ]; then
+  if ! bash "$ROOT/scripts/ensure-prisma-client.sh" >>"${ERR_LOG}" 2>&1; then
+    echo "panel-update-background.sh: Prisma client missing — run: bash scripts/ensure-prisma-client.sh" | tee -a "${ERR_LOG}" >&2
+    node -e '
+      const fs = require("fs");
+      const p = ".update-progress.json";
+      try {
+        const j = JSON.parse(fs.readFileSync(p, "utf8"));
+        j.status = "failed";
+        j.finishedAt = new Date().toISOString();
+        j.message = "Cannot find module @prisma/client. On the server run: cd '"$ROOT"' && bash scripts/ensure-prisma-client.sh";
+        fs.writeFileSync(p, JSON.stringify(j));
+      } catch (e) {}
+    ' || true
+    exit 1
+  fi
+fi
+
 TS_SCRIPT="${ROOT}/scripts/panel-update-background.ts"
 
 if [ ! -f "${ROOT}/node_modules/tsx/dist/cli.mjs" ] && [ -f "${ROOT}/scripts/ensure-tsx.sh" ]; then

@@ -1,7 +1,30 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.67",
+  "latestVersion": "2.0.68",
   "releases": [
+    {
+      "version": "2.0.68",
+      "date": "2026-09-04",
+      "channel": "stable",
+      "summary": "Compiled Updates tarball (no VPS compile), MAG BACK/channel zap, and a progress bar that stays visible while the panel restarts.",
+      "changelog": [
+        "Admin → Updates installs next-2.0.68.tar.gz instead of git-reset/compile on the customer VPS",
+        "A failed npm ci no longer leaves node_modules empty, which caused Cannot find module @prisma/client",
+        "The Updates progress bar is restored after a reload and keeps polling without Prisma",
+        "MAG BACK returns to the list; CH+/− zaps Live TV instead of firmware TV mode"
+      ],
+      "fixes": [
+        "v2.0.65 → v2.0.66 no longer falls through to a source tarball compile that wipes Prisma",
+        "Update worker writes a clear Prisma repair message instead of crashing on import",
+        "Progress bar no longer vanishes on 502 during swap",
+        "MAG could not change channels or go back during playback"
+      ],
+      "notes": [
+        "Use Admin → Updates to install v2.0.68. If the last update failed with @prisma/client, run bash scripts/ensure-prisma-client.sh on the server first, then retry.",
+        "After this panel restarts, reboot MAG boxes or reload the portal URL so they fetch a new /c/ page."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.68.tar.gz"
+    },
     {
       "version": "2.0.67",
       "date": "2026-09-04",
@@ -49,7 +72,7 @@
         "Use Admin → Updates to install v2.0.66 from the published tarball. If you were already on v2.0.65 with an old UI, this is the version that actually replaces the running app.",
         "Set Minimum username/password length to 3 under Admin → Settings → Security, then save. New and edited lines follow that value."
       ],
-      "downloadUrl": "https://nexlify.live/downloads/nexlify-panel.tar.gz"
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.66.tar.gz"
     },
     {
       "version": "2.0.65",
