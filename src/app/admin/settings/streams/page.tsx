@@ -59,7 +59,7 @@ export default function StreamSettingsPage() {
           title: "Connections & limits",
           fields: [
             { key: "defaultStreamTimeout", label: "Stream timeout (seconds)", type: "number" },
-            { key: "maxConnectionsPerLine", label: "Max connections per line", type: "number" },
+            { key: "maxConnectionsPerLine", label: "Max connections per line", type: "number", hint: "0 = unlimited. Used for dashboard capacity; each line can still set its own limit." },
             {
               key: "connectionLimitHandle",
               label: "Connection limit handle",

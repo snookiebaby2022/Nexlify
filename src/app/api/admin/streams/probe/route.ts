@@ -59,6 +59,8 @@ export async function POST(req: NextRequest) {
         const { markStreamViewerPlaybackOk } = await import("@/lib/viewer-playback-probe");
         await markStreamViewerPlaybackOk(stream.id).catch(() => {});
       }
+      const { invalidateDashboardStats } = await import("@/lib/cache-invalidate");
+      await invalidateDashboardStats().catch(() => {});
     }
     return NextResponse.json({
       probe,

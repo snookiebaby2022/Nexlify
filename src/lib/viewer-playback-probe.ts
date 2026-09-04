@@ -26,6 +26,8 @@ export async function markStreamViewerPlaybackFailed(
       lastProbeError: labeled || "Viewer: playback failed",
     },
   });
+  const { invalidateDashboardStats } = await import("@/lib/cache-invalidate");
+  await invalidateDashboardStats().catch(() => {});
 }
 
 /** Viewer playback succeeded — clear a prior viewer-failure flag. */
@@ -41,4 +43,6 @@ export async function markStreamViewerPlaybackOk(streamId: string): Promise<void
       lastProbeError: null,
     },
   });
+  const { invalidateDashboardStats } = await import("@/lib/cache-invalidate");
+  await invalidateDashboardStats().catch(() => {});
 }

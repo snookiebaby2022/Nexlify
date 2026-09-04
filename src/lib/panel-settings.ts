@@ -232,7 +232,7 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
   },
   streams: {
     defaultStreamTimeout: 35,
-    maxConnectionsPerLine: 1,
+    maxConnectionsPerLine: 0,
     allowRestream: false,
     epgHoursAhead: 24,
     vodDirectPlay: true,

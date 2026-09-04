@@ -92,12 +92,12 @@ export default function AdminAccessCodesPage() {
         />
         <input
           type="number"
-          min={1}
+          min={0}
           className="rounded-lg border px-3 py-2 text-sm"
           style={{ borderColor: "var(--border)" }}
           value={form.maxConnections}
           onChange={(e) => setForm({ ...form, maxConnections: Number(e.target.value) })}
-          placeholder="Max connections"
+          placeholder="Max connections (0 = unlimited)"
         />
         <input
           type="number"
@@ -124,7 +124,7 @@ export default function AdminAccessCodesPage() {
           <code key={c.id}>{c.code}</code>,
           c.days,
           `${c.uses} / ${c.maxUses}`,
-          c.maxConnections,
+          c.maxConnections > 0 ? c.maxConnections : "∞",
           c.isActive ? "Yes" : "No",
           c.expiresAt ? formatDateTime(c.expiresAt) : "—",
           formatDateTime(c.createdAt),

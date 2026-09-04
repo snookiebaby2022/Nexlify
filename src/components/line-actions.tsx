@@ -89,9 +89,10 @@ export function LineActions({
         />
         <input
           type="number"
+          min={0}
           className="rounded border px-2 py-1 text-xs bg-transparent"
           style={{ borderColor: "var(--border)" }}
-          placeholder="Max conn"
+          placeholder="Max conn (0=∞)"
           value={form.maxConnections}
           onChange={(e) =>
             setForm({ ...form, maxConnections: parseInt(e.target.value, 10) })

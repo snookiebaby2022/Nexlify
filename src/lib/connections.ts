@@ -549,8 +549,8 @@ export async function trackConnection(opts: {
       where: { id: opts.lineId },
       select: { maxConnections: true },
     });
-    const maxConn = Math.max(1, lineCap?.maxConnections ?? 1);
-    if (maxConn <= 1) {
+    const maxConn = lineCap?.maxConnections ?? 1;
+    if (maxConn > 0 && maxConn <= 1) {
     const byIp = await prisma.liveConnection.findFirst({
       where: { lineId: opts.lineId, ip: clientIp },
       orderBy: { lastSeenAt: "desc" },

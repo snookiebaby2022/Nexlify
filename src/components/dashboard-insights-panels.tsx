@@ -121,15 +121,18 @@ function OfflineStreamsList({ rows, streamsHref }: { rows: OfflineStreamRow[]; s
       {rows.map((s) => (
         <li key={s.id} className="border-b pb-2" style={{ borderColor: "var(--border)" }}>
           <Link
-            href={`${streamsHref}?edit=${s.id}`}
+            href={`/admin/content/streams?edit=${s.id}`}
             className="font-medium hover:underline truncate block"
             style={{ color: "var(--accent)" }}
           >
             {s.name}
           </Link>
           <p className="truncate mt-0.5" style={{ color: "var(--danger)" }}>
-            {s.lastProbeError ?? "Probe failed or pending"}
+            {s.lastProbeError ?? "Probe failed"}
           </p>
+          <Link href="/admin/stream_errors" className="text-[10px] underline" style={{ color: "var(--muted)" }}>
+            Repair on Stream errors
+          </Link>
         </li>
       ))}
     </ul>
@@ -249,7 +252,7 @@ export function DashboardInsightsPanels({
             title="Offline streams"
             icon={<Radio size={16} style={{ color: "var(--danger)" }} />}
             count={payload.streamHealth?.offline ?? 0}
-            href={payload.streamsHref}
+            href="/admin/stream_errors"
           >
             <OfflineStreamsList
               rows={payload.streamHealth?.offlineStreams ?? []}

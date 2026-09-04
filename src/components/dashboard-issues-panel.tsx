@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Power, RefreshCw, Wrench } from "lucide-react";
+import { notifyStreamHealthChanged, STREAM_HEALTH_CHANGED } from "@/lib/stream-health-events";
 
 type IssueStats = {
   inactiveStreams?: number;
@@ -15,8 +16,16 @@ type IssueStats = {
   openTickets?: number;
 };
 
+type FailedStream = {
+  id: string;
+  name: string;
+  kind: "dead" | "unstable";
+  lastProbeError: string | null;
+  fixHint?: string;
+};
+
 /**
- * Dashboard panel: surface inactive/dead streams and one-click fixes.
+ * Dashboard panel: surface inactive/dead streams and one-click full probes.
  */
 export function DashboardIssuesPanel({
   statsUrl = "/api/admin/stats",
@@ -39,24 +48,23 @@ export function DashboardIssuesPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [local, setLocal] = useState<IssueStats | null>(null);
+  const [failed, setFailed] = useState<FailedStream[]>([]);
 
   const inactive =
     local?.inactiveStreams ??
     kpi?.inactiveStreams ??
     (kpi?.inactiveLive ?? 0) + (kpi?.inactiveMovies ?? 0) + (kpi?.inactiveSeries ?? 0);
-  const dead = local?.deadStreams ?? kpi?.deadStreams ?? 0;
-  const unstable = local?.unstableStreams ?? kpi?.unstableStreams ?? 0;
-  const offline = local?.offlineStreams ?? kpi?.offlineStreams ?? 0;
+  const dead = local?.deadStreams ?? kpi?.deadStreams ?? failed.filter((s) => s.kind === "dead").length;
+  const unstable = local?.unstableStreams ?? kpi?.unstableStreams ?? failed.filter((s) => s.kind === "unstable").length;
   const tickets = local?.openTickets ?? kpi?.openTickets ?? 0;
   const inactiveLive = local?.inactiveLive ?? kpi?.inactiveLive ?? 0;
   const inactiveMovies = local?.inactiveMovies ?? kpi?.inactiveMovies ?? 0;
   const inactiveSeries = local?.inactiveSeries ?? kpi?.inactiveSeries ?? 0;
 
-  // offline already includes dead + unstable (failed source probes).
-  const totalIssues = inactive + offline + tickets;
+  const totalIssues = inactive + dead + unstable + tickets;
 
   const refresh = useCallback(() => {
-    fetch(statsUrl)
+    fetch(`${statsUrl}${statsUrl.includes("?") ? "&" : "?"}t=${Date.now()}`)
       .then((r) => r.json())
       .then((d) => {
         const k = d.dashboardKpi ?? {};
@@ -72,12 +80,21 @@ export function DashboardIssuesPanel({
         });
       })
       .catch(() => {});
+    fetch("/api/admin/stream-errors", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setFailed(d.streams ?? d.probeFails ?? []))
+      .catch(() => {});
   }, [statsUrl]);
 
   useEffect(() => {
-    if (kpi && hideWhenHealthy) return;
     refresh();
-  }, [refresh, kpi, hideWhenHealthy]);
+  }, [refresh]);
+
+  useEffect(() => {
+    const onChange = () => refresh();
+    window.addEventListener(STREAM_HEALTH_CHANGED, onChange);
+    return () => window.removeEventListener(STREAM_HEALTH_CHANGED, onChange);
+  }, [refresh]);
 
   async function activateAllInactive() {
     if (
@@ -100,10 +117,51 @@ export function DashboardIssuesPanel({
         setMsg(data.error ?? "Failed to activate streams");
       } else {
         setMsg(`Activated ${data.updated ?? 0} inactive stream(s).`);
+        notifyStreamHealthChanged();
         refresh();
       }
     } catch {
       setMsg("Network error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function probeKind(which: "dead" | "unstable" | "all") {
+    const ids = failed.filter((s) => which === "all" || s.kind === which).map((s) => s.id).slice(0, 50);
+    if (!ids.length) return;
+    setBusy(which);
+    setMsg("");
+    try {
+      const res = await fetch("/api/admin/streams/probe-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamIds: ids, fast: false }),
+      });
+      const data = (await res.json()) as {
+        results?: Record<string, { lastProbeOk?: boolean; error?: string }>;
+      };
+      if (!res.ok || !data.results) {
+        setMsg("Full probe failed");
+        return;
+      }
+      let recovered = 0;
+      let still = 0;
+      for (const id of ids) {
+        const row = data.results[id];
+        if (row && !row.error && row.lastProbeOk) recovered += 1;
+        else still += 1;
+      }
+      setFailed((prev) => prev.filter((s) => data.results?.[s.id]?.lastProbeOk !== true));
+      setMsg(
+        recovered
+          ? `Cleared ${recovered} from the dashboard${still ? ` · ${still} still failing` : ""}.`
+          : `${still} still failing after full probe.`
+      );
+      notifyStreamHealthChanged();
+      refresh();
+    } catch {
+      setMsg("Network error while probing");
     } finally {
       setBusy(null);
     }
@@ -120,15 +178,41 @@ export function DashboardIssuesPanel({
         <div>
           <p className="text-sm font-semibold">No stream issues detected</p>
           <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-            All content looks active. Use Categories to toggle streams online/offline by group.
+            Failed probes clear from this card as soon as a full probe succeeds.
           </p>
         </div>
-        <Link href="/admin/management/categories" className="ml-auto text-xs underline" style={{ color: "var(--accent)" }}>
-          Categories
+        <Link href="/admin/stream_errors" className="ml-auto text-xs underline" style={{ color: "var(--accent)" }}>
+          Stream errors
         </Link>
       </div>
     );
   }
+
+  function IssueList({ rows }: { rows: FailedStream[] }) {
+    if (!rows.length) return null;
+    return (
+      <ul className="mt-2 space-y-1">
+        {rows.slice(0, 5).map((s) => (
+          <li key={s.id} className="text-xs flex justify-between gap-2">
+            <Link href={`/admin/content/streams?edit=${s.id}`} className="truncate hover:underline" style={{ color: "var(--accent)" }}>
+              {s.name}
+            </Link>
+            <span className="truncate max-w-[50%] text-right" style={{ color: "var(--muted)" }}>
+              {(s.lastProbeError ?? "Probe failed").slice(0, 80)}
+            </span>
+          </li>
+        ))}
+        {rows.length > 5 && (
+          <li className="text-xs" style={{ color: "var(--muted)" }}>
+            +{rows.length - 5} more
+          </li>
+        )}
+      </ul>
+    );
+  }
+
+  const deadRows = failed.filter((s) => s.kind === "dead");
+  const unstableRows = failed.filter((s) => s.kind === "unstable");
 
   return (
     <div
@@ -144,6 +228,9 @@ export function DashboardIssuesPanel({
       >
         <AlertTriangle size={18} className="text-amber-500 shrink-0" />
         <h2 className="text-sm font-semibold flex-1">Issues to fix</h2>
+        <Link href="/admin/stream_errors" className="text-xs underline" style={{ color: "var(--accent)" }}>
+          Open repair page
+        </Link>
         <button
           type="button"
           className="text-xs px-2 py-1 rounded border inline-flex items-center gap-1"
@@ -156,95 +243,83 @@ export function DashboardIssuesPanel({
 
       <div className="p-4 space-y-3">
         {inactive > 0 && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
-            <Power size={16} className="text-red-400 shrink-0" />
-            <div className="flex-1 min-w-[160px]">
-              <p className="text-sm font-medium">{inactive.toLocaleString()} inactive streams</p>
-              <p className="text-xs" style={{ color: "var(--muted)" }}>
-                Off in panel — players will not see them
-                {inactiveLive ? ` · Live ${inactiveLive}` : ""}
-                {inactiveMovies ? ` · Movies ${inactiveMovies}` : ""}
-                {inactiveSeries ? ` · Series ${inactiveSeries}` : ""}
-              </p>
+          <div className="rounded-lg border px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
+            <div className="flex flex-wrap items-center gap-3">
+              <Power size={16} className="text-red-400 shrink-0" />
+              <div className="flex-1 min-w-[160px]">
+                <p className="text-sm font-medium">{inactive.toLocaleString()} switched off in the panel</p>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  Players cannot see them
+                  {inactiveLive ? ` · Live ${inactiveLive}` : ""}
+                  {inactiveMovies ? ` · Movies ${inactiveMovies}` : ""}
+                  {inactiveSeries ? ` · Series ${inactiveSeries}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={busy === "activate"}
+                onClick={activateAllInactive}
+                className="text-xs px-3 py-1.5 rounded text-white inline-flex items-center gap-1 disabled:opacity-50"
+                style={{ background: "var(--accent)" }}
+              >
+                <Wrench size={12} />
+                {busy === "activate" ? "Fixing…" : "Activate all"}
+              </button>
             </div>
-            <button
-              type="button"
-              disabled={busy === "activate"}
-              onClick={activateAllInactive}
-              className="text-xs px-3 py-1.5 rounded text-white inline-flex items-center gap-1 disabled:opacity-50"
-              style={{ background: "var(--accent)" }}
-            >
-              <Wrench size={12} />
-              {busy === "activate" ? "Fixing…" : "Activate all"}
-            </button>
-            {inactiveLive > 0 && (
-              <Link href="/admin/content/streams?status=inactive" className="text-xs underline" style={{ color: "var(--accent)" }}>
-                Review live
-              </Link>
-            )}
-            {inactiveMovies > 0 && (
-              <Link href="/admin/content/movies?status=inactive" className="text-xs underline" style={{ color: "var(--accent)" }}>
-                Review movies
-              </Link>
-            )}
-            {inactiveSeries > 0 && (
-              <Link href="/admin/content/series?status=inactive" className="text-xs underline" style={{ color: "var(--accent)" }}>
-                Review series
-              </Link>
-            )}
           </div>
         )}
 
         {dead > 0 && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
-            <AlertTriangle size={16} className="text-red-500 shrink-0" />
-            <div className="flex-1 min-w-[160px]">
-              <p className="text-sm font-medium">{dead.toLocaleString()} dead streams</p>
-              <p className="text-xs" style={{ color: "var(--muted)" }}>Viewer reported offline or probe failed (no backup)</p>
+          <div className="rounded-lg border px-3 py-2.5" style={{ borderColor: "rgba(239,68,68,0.35)" }}>
+            <div className="flex flex-wrap items-center gap-3">
+              <AlertTriangle size={16} className="text-red-500 shrink-0" />
+              <div className="flex-1 min-w-[160px]">
+                <p className="text-sm font-medium">{dead.toLocaleString()} dead sources</p>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  Last full/viewer check failed and there is no backup URL. Full probe here removes them from this card when the source is up.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={Boolean(busy) || deadRows.length === 0}
+                onClick={() => probeKind("dead")}
+                className="text-xs px-3 py-1.5 rounded text-white disabled:opacity-50"
+                style={{ background: "#dc2626" }}
+              >
+                {busy === "dead" ? "Probing…" : "Full-probe dead"}
+              </button>
+              <Link href="/admin/stream_errors?kind=dead" className="text-xs underline" style={{ color: "var(--accent)" }}>
+                Repair list
+              </Link>
             </div>
-            <Link
-              href="/admin/content/streams?status=offline&sourceIssue=dead"
-              className="text-xs px-3 py-1.5 rounded border"
-              style={{ borderColor: "var(--border)" }}
-            >
-              Fix dead streams
-            </Link>
+            <IssueList rows={deadRows} />
           </div>
         )}
 
         {unstable > 0 && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
-            <AlertTriangle size={16} className="text-amber-500 shrink-0" />
-            <div className="flex-1 min-w-[160px]">
-              <p className="text-sm font-medium">{unstable.toLocaleString()} unstable streams</p>
-              <p className="text-xs" style={{ color: "var(--muted)" }}>Viewer reported offline or probe failed (backup set)</p>
+          <div className="rounded-lg border px-3 py-2.5" style={{ borderColor: "rgba(245,158,11,0.4)" }}>
+            <div className="flex flex-wrap items-center gap-3">
+              <AlertTriangle size={16} className="text-amber-500 shrink-0" />
+              <div className="flex-1 min-w-[160px]">
+                <p className="text-sm font-medium">{unstable.toLocaleString()} unstable sources</p>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                  Primary probe failed, but a backup URL is already set. Full probe clears the dashboard flag if either source answers.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={Boolean(busy) || unstableRows.length === 0}
+                onClick={() => probeKind("unstable")}
+                className="text-xs px-3 py-1.5 rounded text-white disabled:opacity-50"
+                style={{ background: "#d97706" }}
+              >
+                {busy === "unstable" ? "Probing…" : "Full-probe unstable"}
+              </button>
+              <Link href="/admin/stream_errors?kind=unstable" className="text-xs underline" style={{ color: "var(--accent)" }}>
+                Repair list
+              </Link>
             </div>
-            <Link
-              href="/admin/content/streams?status=offline&sourceIssue=unstable"
-              className="text-xs px-3 py-1.5 rounded border"
-              style={{ borderColor: "var(--border)" }}
-            >
-              Fix unstable streams
-            </Link>
-          </div>
-        )}
-
-        {offline > 0 && (
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5" style={{ borderColor: "var(--border)" }}>
-            <Power size={16} className="text-amber-400 shrink-0" />
-            <div className="flex-1 min-w-[160px]">
-              <p className="text-sm font-medium">{offline.toLocaleString()} live streams with a failed source</p>
-              <p className="text-xs" style={{ color: "var(--muted)" }}>
-                last probe failed — not the same as inactive, and not “no ffmpeg running”
-              </p>
-            </div>
-            <Link
-              href="/admin/content/streams?status=offline"
-              className="text-xs px-3 py-1.5 rounded border"
-              style={{ borderColor: "var(--border)" }}
-            >
-              Review offline
-            </Link>
+            <IssueList rows={unstableRows} />
           </div>
         )}
 
@@ -259,23 +334,21 @@ export function DashboardIssuesPanel({
           </div>
         )}
 
-        <div className="flex flex-wrap gap-3 text-xs pt-1" style={{ color: "var(--muted)" }}>
-          <Link href="/admin/management/categories" className="underline" style={{ color: "var(--accent)" }}>
-            Edit by category (online/offline)
-          </Link>
-          <Link href="/admin/management/mass-edit/streams" className="underline" style={{ color: "var(--accent)" }}>
-            Mass edit streams
-          </Link>
-          <Link href="/admin/content/movies?status=inactive" className="underline" style={{ color: "var(--accent)" }}>
-            Inactive movies
-          </Link>
-          <Link href="/admin/content/series?status=inactive" className="underline" style={{ color: "var(--accent)" }}>
-            Inactive series
-          </Link>
-        </div>
+        {(dead > 0 || unstable > 0) && (
+          <button
+            type="button"
+            disabled={Boolean(busy) || failed.length === 0}
+            onClick={() => probeKind("all")}
+            className="text-xs px-3 py-1.5 rounded border inline-flex items-center gap-1 disabled:opacity-50"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <Wrench size={12} />
+            {busy === "all" ? "Probing…" : "Full-probe all failed sources"}
+          </button>
+        )}
 
         {msg && (
-          <p className="text-xs" style={{ color: msg.startsWith("Activated") ? "#22c55e" : "var(--danger)" }}>
+          <p className="text-xs" style={{ color: msg.toLowerCase().includes("fail") && !msg.startsWith("Cleared") ? "var(--danger)" : "#22c55e" }}>
             {msg}
           </p>
         )}

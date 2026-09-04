@@ -27,7 +27,7 @@ export const OPERATOR_FEATURES: OperatorFeature[] = [
   { label: "Web player", href: "/webplayer", group: "Player", aliases: ["watch in browser"] },
   { label: "Load balancer", href: "/admin/servers/load-balancer", group: "Servers", aliases: ["lb", "geo", "proxy"] },
   { label: "Diagnostics", href: "/admin/diagnostics", group: "Diagnostics", aliases: ["fix", "recover", "probe", "reboot", "health", "lb recover"] },
-  { label: "Stream errors", href: "/admin/content/streams?status=offline", group: "Diagnostics", aliases: ["down streams", "dead links", "offline channels", "probe failed"] },
+  { label: "Stream errors", href: "/admin/stream_errors", group: "Diagnostics", aliases: ["down streams", "dead links", "offline channels", "probe failed"] },
   { label: "Proxies", href: "/admin/servers/proxies", group: "Servers", aliases: ["edge", "1-stream proxies"] },
   { label: "Transcoding", href: "/admin/streaming/transcoding", group: "Servers", aliases: ["nvenc", "ffmpeg", "gpu"] },
   { label: "Archive / catch-up", href: "/admin/settings/catchup", group: "Live", aliases: ["timeshift", "dvr", "time machine"] },

@@ -1,7 +1,29 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.70",
+  "latestVersion": "2.0.71",
   "releases": [
+    {
+      "version": "2.0.71",
+      "date": "2026-09-04",
+      "channel": "stable",
+      "summary": "Unlimited line connections, a real stream-errors repair page, and updater health that does not false-fail on loopback HTTPS.",
+      "changelog": [
+        "Admin line and package forms accept 0 as unlimited max connections",
+        "Stream errors lists dead and unstable LIVE sources and full-probe actually drops recovered channels from the dashboard",
+        "Apply uses http://127.0.0.1:13000/api/health instead of https://127.0.0.1",
+        "Login header no longer shows a generic LOGO chip when no custom logo is set"
+      ],
+      "fixes": [
+        "Package pick overwrote a typed max-connections value",
+        "Dashboard Issues to fix stayed stale after a successful probe (KPI cache)",
+        "Next apply reported unhealthy because curl used HTTPS against 127.0.0.1",
+        "Login header showed a placeholder Logo label"
+      ],
+      "notes": [
+        "Use Admin → Updates to install v2.0.71."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.71.tar.gz"
+    },
     {
       "version": "2.0.70",
       "date": "2026-09-04",

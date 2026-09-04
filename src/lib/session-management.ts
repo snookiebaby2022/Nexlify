@@ -119,7 +119,7 @@ export async function checkSessionAllowed(
     (s) => Date.now() - s.lastHeartbeat < 120_000
   ).length;
 
-  if (activeCount >= policy.maxConnections) {
+  if (policy.maxConnections > 0 && activeCount >= policy.maxConnections) {
     const existingFromIp = sessions.find((s) => s.ip === ip);
     if (!existingFromIp) {
       return {

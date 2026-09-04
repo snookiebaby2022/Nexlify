@@ -197,7 +197,7 @@ export async function xtreamUserInfo(
       is_trial: "0",
       active_cons: String(activeCons),
       created_at: String(Math.floor(lineDateMs(line.createdAt) / 1000)),
-      max_connections: String(Math.max(1, Number(line.maxConnections) || 1)),
+      max_connections: String(Number(line.maxConnections) > 0 ? Math.floor(Number(line.maxConnections)) : 0),
       allowed_output_formats: formats,
       allowed_outputs: formats,
     },

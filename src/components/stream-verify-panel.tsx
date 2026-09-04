@@ -249,9 +249,25 @@ export function StreamVerifyPanel() {
                     <td>{e.name}</td>
                     <td>{e.server?.name ?? "—"}</td>
                     <td className="text-red-400 text-sm">{e.lastProbeError ?? "Unknown"}</td>
-                    <td>
-                      <Link href={`/admin/servers/streams?edit=${e.id}`} className="xui-verify-link">
-                        Fix
+                    <td className="xui-verify-actions">
+                      <button
+                        type="button"
+                        className="xui-verify-link"
+                        onClick={async () => {
+                          await fetch("/api/admin/streams/probe-batch", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ streamIds: [e.id], fast: false }),
+                          });
+                          const { notifyStreamHealthChanged } = await import("@/lib/stream-health-events");
+                          notifyStreamHealthChanged();
+                          load();
+                        }}
+                      >
+                        Full probe
+                      </button>
+                      <Link href={`/admin/content/streams?edit=${e.id}`} className="xui-verify-link">
+                        Edit
                       </Link>
                     </td>
                   </tr>

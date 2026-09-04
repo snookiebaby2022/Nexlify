@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Play, Users, Zap, ChevronDown, ChevronRight } from "lucide-react";
-import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
+import { STREAM_HEALTH_CHANGED } from "@/lib/stream-health-events";
 import { usePanelLayout } from "@/lib/use-panel-layout";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
@@ -288,8 +288,11 @@ export function PanelDashboard({
         : null;
     const timeoutId = idleId == null ? setTimeout(runFull, 800) : null;
     const t = startVisibleInterval(loadFull, isReseller ? 45000 : ADMIN_POLLS.dashboardMs);
+    const onHealth = () => loadFull();
+    window.addEventListener(STREAM_HEALTH_CHANGED, onHealth);
     return () => {
       cancelled = true;
+      window.removeEventListener(STREAM_HEALTH_CHANGED, onHealth);
       if (idleId != null && typeof cancelIdleCallback !== "undefined") {
         cancelIdleCallback(idleId);
       }

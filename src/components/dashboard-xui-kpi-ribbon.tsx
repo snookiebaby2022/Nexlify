@@ -76,7 +76,7 @@ function MiniStat({
         </div>
       </div>
       <div className="flex justify-between text-[10px] uppercase mb-1" style={{ color: "var(--muted)" }}>
-        <span>{label === "Unstable Stream" ? "Dead source" : label === "Dead Stream" ? "Hide stream" : "Last 24 hours"}</span>
+        <span>{label === "Unstable Stream" ? "Failed probe · backup set" : label === "Dead Stream" ? "Failed probe · no backup" : "Last 24 hours"}</span>
         <span>{pct}%</span>
       </div>
       <div className="h-1.5 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-700">
@@ -163,11 +163,11 @@ export function DashboardXuiKpiRibbon({
             <Play size={24} fill="white" strokeWidth={0} />
           </Link>
           <Link
-            href="/admin/content/streams?status=offline"
+            href="/admin/stream_errors"
             className="px-4 py-2 text-white text-sm flex items-center justify-between"
             style={{ background: "linear-gradient(135deg, #dd4b39 0%, #c23321 100%)" }}
           >
-            <span className="uppercase text-xs opacity-90">Viewer / probe failed</span>
+            <span className="uppercase text-xs opacity-90">Probe failed</span>
             <span className="font-bold tabular-nums">{offlineStreams.toLocaleString()}</span>
           </Link>
         </div>
@@ -181,14 +181,14 @@ export function DashboardXuiKpiRibbon({
           value={kpi?.unstableStreams ?? 0}
           pct={unstablePct}
           barColor="#f39c12"
-          href="/admin/content/streams?status=offline&sourceIssue=unstable"
+          href="/admin/stream_errors?kind=unstable"
         />
         <MiniStat
           label="Dead Stream"
           value={kpi?.deadStreams ?? 0}
           pct={deadPct}
           barColor="#dd4b39"
-          href="/admin/content/streams?status=offline&sourceIssue=dead"
+          href="/admin/stream_errors?kind=dead"
         />
       </div>
 

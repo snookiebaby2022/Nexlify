@@ -251,10 +251,10 @@ do_apply() {
   pm2 restart nexlify-cron --update-env 2>/dev/null || true
   sleep 3
 
-  # Verify health
-  PANEL_PORT="$(grep -E '^PANEL_PUBLIC_PORT=' .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r"' || echo "80")"
-  HEALTH_URL="http://127.0.0.1:${PANEL_PORT}/api/health"
-  [ "$PANEL_PORT" = "443" ] && HEALTH_URL="https://127.0.0.1/api/health"
+  # Loopback health — never https://127.0.0.1 (cert is for the public hostname, curl -sf fails).
+  PANEL_LISTEN="$(grep -E '^PANEL_LISTEN=' .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r"' || true)"
+  [ -z "$PANEL_LISTEN" ] && PANEL_LISTEN="13000"
+  HEALTH_URL="http://127.0.0.1:${PANEL_LISTEN}/api/health"
 
   echo "Verifying health at $HEALTH_URL ..."
   for i in 1 2 3 4 5 6 7 8 9 10; do

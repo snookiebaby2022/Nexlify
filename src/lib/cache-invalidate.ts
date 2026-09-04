@@ -1,7 +1,14 @@
 import { cacheDel, cacheDelExact } from "@/lib/cache";
 
 export async function invalidateDashboardStats() {
-  await cacheDelExact("stats:dashboard");
+  await Promise.all([
+    cacheDelExact("stats:dashboard"),
+    cacheDelExact("stats:kpi"),
+    cacheDelExact("stats:summary"),
+    cacheDelExact("stats:server-metrics"),
+    cacheDelExact("stream-errors:list"),
+    cacheDelExact("dashboard:admin-widgets"),
+  ]);
 }
 
 type XtreamDiskScope = "all" | "vod";

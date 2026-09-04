@@ -14,6 +14,7 @@ import { PasswordInput } from "@/components/password-input";
 import { CopyableCredential } from "@/components/copyable-credential";
 import { PanelMobileActionBar } from "@/components/panel-mobile-action-bar";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
+import { MaxConnectionsField } from "@/components/max-connections-field";
 import { clampLineCredentialMinLength, MIN_LINE_CREDENTIAL_FLOOR, generateLinePassword, sanitizeCredentialInput } from "@/lib/credential-generate";
 import { formatDateTime, isUnlimitedLineExpiry } from "@/lib/format";
 import { lineDurationPresetsForPanel } from "@/lib/line-duration-presets";
@@ -23,7 +24,7 @@ import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-
 import { isUnlimitedDurationDays } from "@/lib/line-duration-presets";
 import { mergeLineNotesForSave, splitLineNotes } from "@/lib/line-notes";
 import { bouquetsApiRoot, linesApiRoot, packagesApiRoot } from "@/lib/panel-api";
-import { coerceMinInt, parseIntAllowEmpty } from "@/lib/form-number";
+import { coerceLineMaxConnections } from "@/lib/form-number";
 
 type LineDetail = {
   id: string;
@@ -357,7 +358,7 @@ export function LineEditForm({
             ? sanitizeCredentialInput(form.username)
             : undefined,
         password: form.password !== line.password ? sanitizeCredentialInput(form.password) : undefined,
-        maxConnections: coerceMinInt(form.maxConnections, 1),
+        maxConnections: coerceLineMaxConnections(form.maxConnections),
         days: unlimited || expiresAt ? undefined : form.extendDays > 0 ? form.extendDays : undefined,
         unlimited: unlimited ? true : undefined,
         expiresAt,
@@ -618,18 +619,10 @@ export function LineEditForm({
                   </select>
                 </FormField>
               )}
-              <FormField label="Max connections">
-                <input
-                  type="number"
-                  min={1}
-                  className={formInputClass}
-                  style={formInputStyle}
-                  value={form.maxConnections}
-                  onChange={(e) =>
-                    setForm({ ...form, maxConnections: parseIntAllowEmpty(e.target.value) })
-                  }
-                />
-              </FormField>
+              <MaxConnectionsField
+                value={form.maxConnections}
+                onChange={(maxConnections) => setForm({ ...form, maxConnections })}
+              />
               <FormField label="Current expiry (UTC)">
                 <input
                   className={formInputClass}

@@ -13,6 +13,7 @@ import {
 import { BouquetPickerTable, type BouquetPickerRow } from "@/components/bouquet-picker-table";
 import { PasswordInput } from "@/components/password-input";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
+import { MaxConnectionsField } from "@/components/max-connections-field";
 import {
   clampLineCredentialMinLength,
   DEFAULT_LINE_CREDENTIAL_MIN_LENGTH,
@@ -29,7 +30,7 @@ import { effectiveCreditCost, packageLabelForDays } from "@/lib/package-credits"
 import { inferPackageDaysFromName, packageDurationSortKey } from "@/lib/package-days";
 import { expiryFromDays, toDatetimeLocalValue } from "@/lib/datetime-local";
 import { mergeLineNotesForSave } from "@/lib/line-notes";
-import { coerceMinInt, parseIntAllowEmpty } from "@/lib/form-number";
+import { coerceLineMaxConnections } from "@/lib/form-number";
 
 function YesNo({
   label,
@@ -356,7 +357,7 @@ export function LineAddForm({
         body: JSON.stringify({
           username,
           password,
-          maxConnections: coerceMinInt(form.maxConnections, 1),
+          maxConnections: coerceLineMaxConnections(form.maxConnections),
           days,
           unlimited,
           expiresAt: expiresAtPayload,
@@ -648,18 +649,10 @@ export function LineAddForm({
                 </div>
               </FormField>
             )}
-            <FormField label="Max Connections">
-              <input
-                type="number"
-                min={1}
-                className={formInputClass}
-                style={formInputStyle}
-                value={form.maxConnections}
-                onChange={(e) =>
-                  setForm({ ...form, maxConnections: parseIntAllowEmpty(e.target.value) })
-                }
-              />
-            </FormField>
+            <MaxConnectionsField
+              value={form.maxConnections}
+              onChange={(maxConnections) => setForm({ ...form, maxConnections })}
+            />
             <FormField label="Expiry date — updates when you pick a package">
               <div className="relative">
                 <input

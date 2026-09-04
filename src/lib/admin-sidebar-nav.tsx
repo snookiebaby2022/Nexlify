@@ -73,7 +73,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         icon: coloredGroupIcon("diagnostics"),
         items: [
           { href: "/admin/diagnostics", label: "Panel diagnostics", section: "Hub", keywords: "fix recover probe reboot health nginx" },
-          { href: "/admin/content/streams?status=offline", label: "Stream errors", section: "Streams" },
+          { href: "/admin/stream_errors", label: "Stream errors", section: "Streams" },
           { href: "/admin/streaming/health", label: "Streaming health", section: "Streams" },
           { href: "/admin/connections", label: "Live connections", section: "Clients" },
           { href: "/admin/servers", label: "Servers", section: "Servers" },
@@ -259,7 +259,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
         items: [
           { href: "/admin/videolog", label: "VideoLog", section: "Reports" },
           { href: "/admin/stream_rank", label: "Top Channels", section: "Reports" },
-          { href: "/admin/content/streams?status=offline&sourceIssue=unstable", label: "Stream Health", section: "Reports" },
+          { href: "/admin/stream_errors?kind=unstable", label: "Stream Health", section: "Reports" },
           { href: "/admin/theft_detection", label: "Theft Detection", section: "Reports" },
           { href: "/admin/reports/usage", label: "Usage", section: "Reports" },
           { href: "/admin/reports/commission", label: "Commission", section: "Reports" },
@@ -305,7 +305,7 @@ export function getAdminSidebarNav(): SidebarNavEntry[] {
           { href: "/admin/login_logs", label: "Login Logs" },
           { href: "/admin/restream_logs", label: "Restream Logs" },
           { href: "/admin/streams/logs", label: "Stream Logs" },
-          { href: "/admin/content/streams?status=offline", label: "Stream Errors" },
+          { href: "/admin/stream_errors", label: "Stream Errors" },
         ],
       },
     },

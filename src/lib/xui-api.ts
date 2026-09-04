@@ -193,7 +193,8 @@ export async function handleXuiAction(
     case "create_line": {
       const username = params.get("username");
       const password = params.get("password") ?? generatePassword();
-      let maxConnections = parseBoundedInt(params.get("max_connections"), 1, 1, 1000);
+      const maxConnRaw = params.get("max_connections");
+      let maxConnections = parseBoundedInt(maxConnRaw, 1, 0, 100000);
       let days = parseBoundedInt(params.get("days"), 30, 1, 3650);
       let bouquetIds = params.getAll("bouquet[]").length
         ? params.getAll("bouquet[]")
@@ -204,8 +205,16 @@ export async function handleXuiAction(
       if (packageId) {
         try {
           const resolved = await resolveLineCreateFromPackage(
-            { packageId, days, maxConnections, bouquetIds },
-            { sellerId: caller.isAdmin ? null : caller.id }
+            {
+              packageId,
+              days,
+              maxConnections: maxConnRaw != null ? maxConnections : undefined,
+              bouquetIds,
+            },
+            {
+              sellerId: caller.isAdmin ? null : caller.id,
+              honorExplicitMaxConnections: caller.isAdmin,
+            }
           );
           days = resolved.days;
           maxConnections = resolved.maxConnections;
@@ -313,7 +322,7 @@ export async function handleXuiAction(
         data.password = nextPass;
       }
       if (params.get("max_connections"))
-        data.maxConnections = parseBoundedInt(params.get("max_connections"), 1, 1, 1000);
+        data.maxConnections = parseBoundedInt(params.get("max_connections"), 1, 0, 100000);
       if (params.get("days")) {
         const nextDays = parseBoundedInt(params.get("days"), 30, 1, 3650);
         const unlimitedGuard = assertRoleMaySetUnlimited(caller.role, { days: nextDays });

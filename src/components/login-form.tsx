@@ -135,9 +135,6 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
       <header className="login-top-header sticky top-0 z-30 shrink-0 w-full">
         <div className="panel-header-controls flex items-center justify-end gap-2 px-4 sm:px-6 py-2.5">
           <div className="panel-header-toggle-bar flex items-center gap-2 rounded-lg px-2.5 py-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              Logo
-            </span>
             <LogoAccentToggle />
             <span className="w-px h-5 bg-white/10" aria-hidden />
             <ThemeToggle />

@@ -450,6 +450,8 @@ export function StreamsList({
           >;
         };
         if (!res.ok || !data.results) return;
+        const { notifyStreamHealthChanged } = await import("@/lib/stream-health-events");
+        notifyStreamHealthChanged();
         setStreams((prev) => {
           const next = prev.map((s) => {
             const row = data.results?.[s.id];

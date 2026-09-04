@@ -290,9 +290,6 @@ export function PanelTopNav({
             className="panel-header-toggle-bar hidden sm:flex items-center gap-2.5 rounded-lg px-3 py-1.5 shrink-0"
             title="Logo accent and theme"
           >
-            <span className="hidden md:inline text-xs font-semibold uppercase tracking-wider text-slate-300">
-              Logo
-            </span>
             <LogoAccentToggle />
             <span className="hidden sm:block w-px h-5 bg-white/10" aria-hidden />
             <ThemeToggle />

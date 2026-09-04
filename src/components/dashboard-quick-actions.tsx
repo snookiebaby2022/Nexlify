@@ -25,7 +25,7 @@ const ACTIONS = [
   { href: "/admin/streams/add", label: "Add stream", icon: Play, color: "#22c55e" },
   { href: "/admin/connections", label: "Live connections", icon: Wifi, color: "#22d3ee" },
   { href: "/admin/lines", label: "Expiring lines", icon: Clock, color: "#f59e0b" },
-  { href: "/admin/content/streams?status=offline&sourceIssue=dead", label: "Down streams", icon: AlertTriangle, color: "#f97316" },
+  { href: "/admin/stream_errors?kind=dead", label: "Down streams", icon: AlertTriangle, color: "#f97316" },
   { href: "/admin/diagnostics", label: "Diagnostics", icon: Gauge, color: "#f59e0b" },
   { href: "/admin/streaming/health", label: "Health", icon: Activity, color: "#a78bfa" },
   { href: "/admin/servers", label: "Servers", icon: Server, color: "#94a3b8" },

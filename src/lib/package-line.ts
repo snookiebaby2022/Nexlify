@@ -7,10 +7,10 @@ export async function resolveLineCreateFromPackage(
     packageId?: string;
     accessCode?: string;
     days?: number;
-    maxConnections?: number;
+    maxConnections?: number | string | "";
     bouquetIds?: string[];
   },
-  opts?: { sellerId?: string | null }
+  opts?: { sellerId?: string | null; honorExplicitMaxConnections?: boolean }
 ) {
   let days = Number(body.days ?? 30);
   const explicitDays =
@@ -19,7 +19,12 @@ export async function resolveLineCreateFromPackage(
     Number(body.days) > 0
       ? Math.max(1, Math.floor(Number(body.days)))
       : null;
-  let maxConnections = Number(body.maxConnections ?? 1);
+  const hasExplicitMax =
+    body.maxConnections != null &&
+    body.maxConnections !== "" &&
+    Number.isFinite(Number(body.maxConnections));
+  const explicitMax = hasExplicitMax ? Math.max(0, Math.floor(Number(body.maxConnections))) : null;
+  let maxConnections = explicitMax ?? 1;
   let bouquetIds: string[] = body.bouquetIds ?? [];
   // Duration-based default so renew/create without a package still charges correctly.
   let creditCost = creditCostForDays(explicitDays ?? days);
@@ -32,7 +37,9 @@ export async function resolveLineCreateFromPackage(
     if (code.expiresAt && code.expiresAt < new Date()) throw new Error("Access code expired");
     if (code.uses >= code.maxUses) throw new Error("Access code fully used");
     days = code.days;
-    maxConnections = code.maxConnections;
+    if (!(opts?.honorExplicitMaxConnections && explicitMax != null)) {
+      maxConnections = code.maxConnections;
+    }
     bouquetIds = code.bouquetIds.length ? [...code.bouquetIds] : bouquetIds;
     if (code.packageId) body.packageId = code.packageId;
     creditCost = creditCostForDays(days);
@@ -48,7 +55,9 @@ export async function resolveLineCreateFromPackage(
     const pkgDays = inferPackageDaysFromName(pkg.name, pkg.days) ?? pkg.days;
     // Renew/custom extend sends explicit days — use those for billing even when packageId is set.
     days = explicitDays ?? pkgDays;
-    maxConnections = pkg.maxLines;
+    if (!(opts?.honorExplicitMaxConnections && explicitMax != null)) {
+      maxConnections = pkg.maxLines;
+    }
     if (pkg.bouquetIds.length) bouquetIds = [...pkg.bouquetIds];
     packageProfit = pkg.profitPercent ?? 0;
     const { isIptvTrialPackageMeta } = await import("@/lib/iptv-trial-lines");

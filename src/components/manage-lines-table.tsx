@@ -458,7 +458,7 @@ export function ManageLinesTable({
         ) : null}
         {columns.show("conns") ? (
           <td className="xui-lines-td tabular-nums text-xs text-center whitespace-nowrap">
-            {activeConn}/{Math.max(1, l.maxConnections)}
+            {activeConn}/{l.maxConnections > 0 ? l.maxConnections : "∞"}
           </td>
         ) : null}
         {columns.show("connInfo") ? (

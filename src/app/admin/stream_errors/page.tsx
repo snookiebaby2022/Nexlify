@@ -1,5 +1,10 @@
-import { redirect } from "next/navigation";
+import { Suspense } from "react";
+import { StreamErrorsClient } from "@/components/stream-errors-page";
 
 export default function StreamErrorsPage() {
-  redirect("/admin/content/streams?status=offline");
+  return (
+    <Suspense fallback={<p className="text-sm" style={{ color: "var(--muted)" }}>Loading stream errors…</p>}>
+      <StreamErrorsClient />
+    </Suspense>
+  );
 }

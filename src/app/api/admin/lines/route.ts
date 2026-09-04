@@ -134,7 +134,10 @@ export async function POST(req: NextRequest) {
         maxConnections?: number;
         bouquetIds?: string[];
       },
-      { sellerId: session.role === PanelRole.ADMIN ? null : session.id }
+      {
+        sellerId: session.role === PanelRole.ADMIN ? null : session.id,
+        honorExplicitMaxConnections: session.role === PanelRole.ADMIN,
+      }
     );
     days = resolved.days;
     maxConnections = resolved.maxConnections;

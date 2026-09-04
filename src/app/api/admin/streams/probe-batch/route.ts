@@ -28,33 +28,52 @@ async function probeStreamRow(streamId: string, fast: boolean): Promise<ProbeRow
   const url = resolved.url || stream.streamUrl;
   const { probe, skipped } = await probeStreamWithScheduler({ streamId: stream.id, url, fast });
   const persist = decideProbePersist({ skipped, fast, probe });
+  let effective = persist;
+  let usedBackup = false;
+
+  if (!skipped && persist.write && persist.lastProbeOk === false && stream.backupUrl?.trim()) {
+    const backupResolved = await resolveProbeTargetUrl(stream.backupUrl.trim(), stream);
+    const backupUrl = backupResolved.url || stream.backupUrl.trim();
+    const backup = await probeStreamWithScheduler({ streamId: stream.id, url: backupUrl, fast: false });
+    const backupPersist = decideProbePersist({ skipped: backup.skipped, fast: false, probe: backup.probe });
+    if (backupPersist.write && backupPersist.lastProbeOk) {
+      effective = {
+        skipped: false,
+        write: true,
+        lastProbeOk: true,
+        lastProbeError: null,
+      };
+      usedBackup = true;
+    }
+  }
+
   const lastProbeError =
-    persist.write && persist.lastProbeError !== undefined
-      ? persist.lastProbeError
-      : probe.status === "online"
+    effective.write && effective.lastProbeError !== undefined
+      ? effective.lastProbeError
+      : probe.status === "online" || usedBackup
         ? null
         : probe.message ?? "Probe failed";
-  if (persist.write) {
+  if (effective.write) {
     await prisma.stream.update({
       where: { id: stream.id },
       data: {
         lastProbeAt: new Date(),
-        lastProbeOk: persist.lastProbeOk,
-        lastProbeError: persist.lastProbeError ?? lastProbeError,
+        lastProbeOk: effective.lastProbeOk,
+        lastProbeError: effective.lastProbeError ?? lastProbeError,
       },
     });
-    if (persist.lastProbeOk) {
+    if (effective.lastProbeOk) {
       const { markStreamViewerPlaybackOk } = await import("@/lib/viewer-playback-probe");
       await markStreamViewerPlaybackOk(stream.id).catch(() => {});
     }
   }
 
   return {
-    lastProbeOk: persist.write ? Boolean(persist.lastProbeOk) : stream.lastProbeOk !== false,
-    lastProbeError: persist.write ? persist.lastProbeError ?? lastProbeError : stream.lastProbeError,
+    lastProbeOk: effective.write ? Boolean(effective.lastProbeOk) : stream.lastProbeOk !== false,
+    lastProbeError: effective.write ? effective.lastProbeError ?? lastProbeError : stream.lastProbeError,
     probe: {
-      status: probe.status,
-      message: probe.message ?? "",
+      status: usedBackup ? "online" : probe.status,
+      message: usedBackup ? "Backup URL is online" : probe.message ?? "",
       latencyMs: probe.latencyMs,
     },
   };
@@ -108,6 +127,9 @@ export async function POST(req: NextRequest) {
     streamIds.forEach((id, idx) => {
       results[id] = rows[idx];
     });
+
+    const { invalidateDashboardStats } = await import("@/lib/cache-invalidate");
+    await invalidateDashboardStats().catch(() => {});
 
     return NextResponse.json({ results, fast });
   } catch (e) {

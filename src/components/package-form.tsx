@@ -204,15 +204,15 @@ export function PackageForm({
           </label>
           <label className="block text-sm md:col-span-4 md:max-w-xs">
             <span className="mb-1 block" style={{ color: "var(--muted)" }}>
-              Max lines (device slots base)
+              Max connections (0 = unlimited)
             </span>
             <input
               type="number"
-              min={1}
+              min={0}
               className="w-full rounded border px-3 py-2 bg-transparent"
               style={{ borderColor: "var(--border)" }}
               value={form.maxLines}
-              onChange={(e) => setForm({ ...form, maxLines: parseInt(e.target.value, 10) || 1 })}
+              onChange={(e) => setForm({ ...form, maxLines: Math.max(0, parseInt(e.target.value, 10) || 0) })}
             />
           </label>
           <label className="block text-sm md:col-span-4 md:max-w-xs">

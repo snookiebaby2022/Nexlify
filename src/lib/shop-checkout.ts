@@ -65,7 +65,7 @@ export async function createLineFromShopPackage(opts: {
     data: {
       username,
       password,
-      maxConnections: Math.max(1, pkg.maxLines),
+      maxConnections: Math.max(0, pkg.maxLines),
       expiresAt,
       isTrial,
       packageId: pkg.id,
