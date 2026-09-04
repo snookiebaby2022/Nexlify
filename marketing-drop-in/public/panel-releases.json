@@ -1,7 +1,29 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.66",
+  "latestVersion": "2.0.67",
   "releases": [
+    {
+      "version": "2.0.67",
+      "date": "2026-09-04",
+      "channel": "stable",
+      "summary": "MAG portal keeps BACK and channel zap during Live TV, Movies, and Series playback instead of dropping into firmware TV mode.",
+      "changelog": [
+        "While a MAG is playing, BACK returns to the portal list instead of freezing the box",
+        "CH+/− zaps the next or previous Live TV channel (including the next page of the list)",
+        "The portal stays on top of the native player so Infomir remote keys reach the page",
+        "Player stop and error events restore the portal instead of leaving a dead fullscreen player"
+      ],
+      "fixes": [
+        "MAG TV mode no longer swallows CH+/− so channels cannot be changed",
+        "BACK during Movies and Series playback no longer collapses the portal",
+        "Numeric stbEvent codes (play start/end/error and keycodes) are handled, not only string key events"
+      ],
+      "notes": [
+        "Use Admin → Updates to install v2.0.67. After the panel restarts, reboot the MAG or reload the portal URL so it fetches a new /c/ page.",
+        "This is the MAG remote-control fix. v2.0.66 remains the honest-update and Live Connections release."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.67.tar.gz"
+    },
     {
       "version": "2.0.66",
       "date": "2026-09-04",

@@ -50,6 +50,9 @@ main{flex:1;min-height:0;position:relative}
 .pb-hint{font-size:.68rem;color:#9ec7ff;margin-top:.2rem;opacity:.9}
 #volume-hud{display:none;position:fixed;top:1rem;right:1rem;z-index:10001;padding:.55rem .85rem;border-radius:10px;background:rgba(7,18,34,.92);border:2px solid #5eb3ff;color:#fff;font-size:1rem;font-weight:700;min-width:5rem;text-align:center}
 #volume-hud.active{display:block}
+body.mag-playing{background:transparent!important}
+body.mag-playing #app{opacity:0;pointer-events:none}
+body.mag-playing #playback-ui{pointer-events:auto}
 </style>
 </head>
 <body>
@@ -91,7 +94,7 @@ main{flex:1;min-height:0;position:relative}
   <div class="pb-meta">
     <div class="pb-category" id="playback-category">Live TV</div>
     <div class="pb-stream" id="playback-title">Now playing</div>
-    <div class="pb-hint">BACK returns to list · tap Vol ± if hardware keys do not work</div>
+      <div class="pb-hint">CH+/− next channel · BACK returns to list · Vol ± if hardware keys fail</div>
   </div>
 </div>
 <div id="volume-hud">Vol 50</div>
@@ -112,6 +115,7 @@ main{flex:1;min-height:0;position:relative}
   var suppressPlayerStop = false;
   var volumeHudTimer = null;
   var portalVolume = 50;
+  var playSeq = 0;
 
   var MODULES = [
     { id: "tv", label: "Live TV", icon: "📺", apiType: "stb" },
@@ -400,9 +404,23 @@ main{flex:1;min-height:0;position:relative}
   }
 
   function isBackKey(code, key) {
+    code = parseInt(code, 10) || 0;
+    key = String(key || "");
     return code === 8 || code === 4 || code === 27 || code === 166 || code === 461 ||
-      code === 10009 || code === 88 || code === 501 || key === "Backspace" ||
-      key === "Escape" || key === "Back" || key === "BrowserBack";
+      code === 10009 || code === 88 || code === 501 || code === 283 || code === 112 ||
+      code === 36 || code === 18 || code === 123 || code === 61448 ||
+      key === "Backspace" || key === "Escape" || key === "Back" || key === "BrowserBack" ||
+      key === "Exit" || key === "GoBack";
+  }
+
+  function isChUp(code) {
+    code = parseInt(code, 10) || 0;
+    return code === 427 || code === 33 || code === 437 || code === 117;
+  }
+
+  function isChDown(code) {
+    code = parseInt(code, 10) || 0;
+    return code === 428 || code === 34 || code === 438 || code === 118;
   }
 
   function isVolumeKey(code, key) {
@@ -519,16 +537,34 @@ main{flex:1;min-height:0;position:relative}
     return true;
   }
 
+  function keepRemoteInPortal() {
+    stbCall(function () {
+      if (typeof stb !== "undefined") {
+        if (stb.SetTopWin) stb.SetTopWin(1);
+        if (stb.EnableAppButton) stb.EnableAppButton(true);
+        if (stb.EnableServiceButton) stb.EnableServiceButton(true);
+        if (stb.SetTransparent) stb.SetTransparent(true);
+      }
+      if (typeof gSTB !== "undefined") {
+        if (gSTB.SetTopWin) gSTB.SetTopWin(1);
+        if (gSTB.EnableAppButton) gSTB.EnableAppButton(true);
+        if (gSTB.EnableServiceButton) gSTB.EnableServiceButton(true);
+        if (gSTB.SetTransparent) gSTB.SetTransparent(true);
+      }
+    });
+  }
+
   function hidePortalUi() {
-    var app = document.getElementById("app");
-    app.style.visibility = "hidden";
-    app.style.pointerEvents = "none";
+    document.body.classList.add("mag-playing");
+    keepRemoteInPortal();
   }
 
   function showPortalUi() {
-    var app = document.getElementById("app");
-    app.style.visibility = "";
-    app.style.pointerEvents = "";
+    document.body.classList.remove("mag-playing");
+    stbCall(function () {
+      if (typeof stb !== "undefined" && stb.SetTransparent) stb.SetTransparent(false);
+      if (typeof gSTB !== "undefined" && gSTB.SetTransparent) gSTB.SetTransparent(false);
+    });
   }
 
   function notifyDisconnect(streamId) {
@@ -566,32 +602,107 @@ main{flex:1;min-height:0;position:relative}
     });
   }
 
+  function zapChannel(delta) {
+    if (!playing || !module || !items.length) return;
+    var pages = Math.max(1, Math.ceil(totalItems / PAGE));
+    var catId = categories[idxCat] ? categories[idxCat].id : "0";
+    var next = idxItem + delta;
+    function playAt(i) {
+      idxItem = i;
+      var it = items[idxItem];
+      if (it && it.cmd) playCmd(it.cmd);
+    }
+    if (next >= 0 && next < items.length) {
+      playAt(next);
+      return;
+    }
+    if (delta > 0) {
+      if (curPage < pages - 1) {
+        loadItemsForced(catId, curPage + 1).then(function () { playAt(0); }).catch(function () {});
+        return;
+      }
+      if (pages > 1) {
+        loadItemsForced(catId, 0).then(function () { playAt(0); }).catch(function () {});
+        return;
+      }
+      playAt(0);
+      return;
+    }
+    if (curPage > 0) {
+      loadItemsForced(catId, curPage - 1).then(function () {
+        playAt(Math.max(0, items.length - 1));
+      }).catch(function () {});
+      return;
+    }
+    if (pages > 1) {
+      loadItemsForced(catId, pages - 1).then(function () {
+        playAt(Math.max(0, items.length - 1));
+      }).catch(function () {});
+      return;
+    }
+    playAt(Math.max(0, items.length - 1));
+  }
+
+  function handlePlaybackRemote(code, keyStr) {
+    code = parseInt(code, 10) || 0;
+    keyStr = String(keyStr || "");
+    if (isVolumeKey(code, keyStr)) {
+      adjustVolume(code, keyStr);
+      return true;
+    }
+    if (isBackKey(code, keyStr)) {
+      exitPlayback(true);
+      return true;
+    }
+    if (isChUp(code) || (module && module.id === "tv" && code === 38)) {
+      zapChannel(-1);
+      return true;
+    }
+    if (isChDown(code) || (module && module.id === "tv" && code === 40)) {
+      zapChannel(1);
+      return true;
+    }
+    if (code === 13) {
+      exitPlayback(true);
+      return true;
+    }
+    return false;
+  }
+
   function bindStbEvents() {
     window.stbEvent = window.stbEvent || {};
     var prev = window.stbEvent.onEvent;
     window.stbEvent.onEvent = function (event, info) {
       try {
+        var evStr = String(event == null ? "" : event);
+        var evLower = evStr.toLowerCase();
+        var eventNum = parseInt(evStr, 10);
+        var infoNum = parseInt(info, 10);
+        var keyCode = !isNaN(infoNum) && String(info).length ? infoNum : eventNum;
+
         if (playing) {
-          var ev = String(event || "").toLowerCase();
-          if (ev.indexOf("key") >= 0 || ev === "keyboard") {
-            var code = parseInt(info, 10);
-            var keyStr = String(info || "");
-            if (isVolumeKey(code, keyStr)) {
-              adjustVolume(code, keyStr);
-              return false;
-            }
-            if (isBackKey(code, "") || isBackKey(0, keyStr)) {
-              exitPlayback(true);
-              return false;
-            }
+          if (eventNum === 2 || eventNum === 4 ||
+              evLower.indexOf("play_end") >= 0 || evLower === "stop" ||
+              evLower === "player_stop" || evLower === "end") {
+            exitPlayback(eventNum === 4);
+            return false;
           }
-          if (event === "play_end" || event === "stop" || event === "player_stop" ||
-              event === "stbPlayer.onPlayEnd" || event === "end") {
-            exitPlayback(false);
+          if (eventNum !== 1 && eventNum !== 5 && handlePlaybackRemote(keyCode, String(info || event || ""))) {
+            return false;
+          }
+          if (evLower.indexOf("key") >= 0 || evLower === "keyboard") {
+            if (handlePlaybackRemote(keyCode, String(info || ""))) return false;
           }
         }
       } catch (e) {}
       if (typeof prev === "function") return prev(event, info);
+    };
+    window.stbEvent.onBroadcastMessage = window.stbEvent.onBroadcastMessage || function () {};
+    window.stbEvent.onPress = window.stbEvent.onPress || function (code) {
+      if (playing) handlePlaybackRemote(code, "");
+    };
+    window.stbEvent.onKeyPress = window.stbEvent.onKeyPress || function (code) {
+      if (playing) handlePlaybackRemote(code, "");
     };
   }
 
@@ -737,21 +848,27 @@ main{flex:1;min-height:0;position:relative}
     bindPlayerCallbacks();
     var solution = playerSolution(url);
     try {
+      if (!playing) enterPlayback(title, snapshot);
+      else updatePlaybackBar(playbackTitle, playbackCategory);
+      keepRemoteInPortal();
       if (typeof stb !== "undefined") {
         if (stb.player && stb.player.play) {
-          enterPlayback(title, snapshot);
           stb.player.play({ url: url, solution: solution, name: title || "" });
+          setTimeout(keepRemoteInPortal, 50);
+          setTimeout(keepRemoteInPortal, 400);
           return;
         }
         if (stb.Play) {
-          enterPlayback(title, snapshot);
           stb.Play(url);
+          setTimeout(keepRemoteInPortal, 50);
+          setTimeout(keepRemoteInPortal, 400);
           return;
         }
       }
       if (typeof gSTB !== "undefined" && gSTB.Play) {
-        enterPlayback(title, snapshot);
         gSTB.Play(url);
+        setTimeout(keepRemoteInPortal, 50);
+        setTimeout(keepRemoteInPortal, 400);
         return;
       }
     } catch (e) {
@@ -759,11 +876,13 @@ main{flex:1;min-height:0;position:relative}
       showError("Player error");
       return;
     }
+    if (playing) exitPlayback(false);
     showError("Native player not available");
   }
 
   function playCmd(cmd) {
-    if (!cmd || loading) return;
+    if (!cmd) return;
+    var seq = ++playSeq;
     var prevStream = activeStreamId;
     var snapshot = captureBrowseState();
     var title = snapshot.itemName || (items[idxItem] && items[idxItem].name);
@@ -772,13 +891,15 @@ main{flex:1;min-height:0;position:relative}
       notifyDisconnect(prevStream);
     }
     loading = true;
-    api("create_link", "stb", { cmd: cmd }).then(function (r) {
+    api("create_link", (module && module.apiType) || "stb", { cmd: cmd }).then(function (r) {
+      if (seq !== playSeq) return;
       loading = false;
       if (r.js && r.js.cmd) {
         activeStreamId = streamId;
         playUrl(r.js.cmd, title, snapshot);
       } else showError((r.js && r.js.error) || "Playback failed");
     }).catch(function () {
+      if (seq !== playSeq) return;
       loading = false;
       showError("Playback request failed");
     });
@@ -814,7 +935,7 @@ main{flex:1;min-height:0;position:relative}
     var code = keyCode(ev);
     var key = ev.key || "";
     var now = Date.now();
-    if (code === lastKey && now - lastKeyAt < 140) return;
+    if (code === lastKey && now - lastKeyAt < (playing ? 90 : 140)) return;
     lastKey = code;
     lastKeyAt = now;
 
@@ -837,12 +958,10 @@ main{flex:1;min-height:0;position:relative}
     }
 
     if (playing) {
-      if (back || enter) {
-        exitPlayback(true);
-        ev.preventDefault();
-        ev.stopPropagation();
-        ev.stopImmediatePropagation();
-      }
+      ev.preventDefault();
+      ev.stopPropagation();
+      ev.stopImmediatePropagation();
+      handlePlaybackRemote(code, key);
       return;
     }
 
@@ -931,9 +1050,16 @@ main{flex:1;min-height:0;position:relative}
   try {
     if (typeof stb !== "undefined") {
       if (stb.EnableVKButton) stb.EnableVKButton(false);
+      if (stb.EnableAppButton) stb.EnableAppButton(true);
+      if (stb.EnableServiceButton) stb.EnableServiceButton(true);
       if (stb.SetVolumeMode) stb.SetVolumeMode(1);
       if (stb.InitPlayer) stb.InitPlayer();
     }
+    if (typeof gSTB !== "undefined") {
+      if (gSTB.EnableAppButton) gSTB.EnableAppButton(true);
+      if (gSTB.EnableServiceButton) gSTB.EnableServiceButton(true);
+    }
+    keepRemoteInPortal();
   } catch (e) {}
 
   bindStbEvents();
