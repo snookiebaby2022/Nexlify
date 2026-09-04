@@ -463,6 +463,17 @@ export default function PanelUpdatesPage() {
     );
   }
 
+  if (!data) {
+    return (
+      <div className="space-y-4 max-w-2xl">
+        <h1 className="text-2xl font-semibold" style={{ color: "#00c0ef" }}>
+          Updates
+        </h1>
+        <p className="text-sm" style={{ color: "var(--muted)" }}>Loading updates…</p>
+      </div>
+    );
+  }
+
   const installed = data.version.installedVersion;
   const latest = data.releasesFeed?.latestVersion ?? installed;
   const releases = data.releasesFeed?.releases ?? [];
