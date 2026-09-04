@@ -41,6 +41,7 @@ export function PricingSection({
   const [currency, setCurrency] = useState<CheckoutCurrency>(DEFAULT_CHECKOUT_CURRENCY);
   const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>("stripe");
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const freeActive = isFreePeriod();
 
