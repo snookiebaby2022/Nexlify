@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Play, Users, Zap, ChevronDown, ChevronRight } from "lucide-react";
 import { STREAM_HEALTH_CHANGED } from "@/lib/stream-health-events";
+import { resolveClientPollIntervals } from "@/lib/perf-polling";
 import { usePanelLayout } from "@/lib/use-panel-layout";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
