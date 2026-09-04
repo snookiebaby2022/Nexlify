@@ -186,13 +186,13 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     });
 
     return user;
-  } catch (error) {
+  } catch (caught) {
     const isStaticGen =
-      error instanceof Error &&
-      (error.message.includes("couldn't be rendered statically because it used `cookies`") ||
-        (error as { digest?: string }).digest === "DYNAMIC_SERVER_USAGE");
+      caught instanceof Error &&
+      (caught.message.includes("couldn't be rendered statically because it used `cookies`") ||
+        (caught as { digest?: string }).digest === "DYNAMIC_SERVER_USAGE");
     if (!isStaticGen) {
-      console.error("[auth] getSessionUser failed (database or session error):", error);
+      console.error("[auth] getSessionUser failed (database or session error):", caught);
     }
     return null;
   }

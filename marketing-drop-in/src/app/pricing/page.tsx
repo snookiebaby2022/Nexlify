@@ -36,8 +36,8 @@ export default async function PricingPage() {
       where: { active: true },
       orderBy: { sortOrder: "asc" },
     });
-  } catch (error) {
-    console.error("[pricing] database unavailable:", error);
+  } catch (caught) {
+    console.error("[pricing] database unavailable:", caught);
   }
 
   const pricingPlans = plansForPricing(plans.map(toPlanView));

@@ -9,7 +9,6 @@ const nextConfig: NextConfig = {
   compress: true,
   poweredByHeader: false,
   generateEtags: true,
-  swcMinify: true,
   typescript: {
     ignoreBuildErrors: true,
   },

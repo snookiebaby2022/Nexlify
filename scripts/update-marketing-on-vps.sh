@@ -144,7 +144,10 @@ for d in /home/nexlify-panel /opt/nexlify-panel /home/nexlify; do
     break
   fi
 done
-if [ -n "$PUBLISH_ROOT" ]; then
+# Skip tarball publish unless explicitly requested — marketing clone is not a panel tree.
+if [ "${NEXLIFY_SKIP_PANEL_PUBLISH:-1}" = "1" ]; then
+  echo "==> Skipping panel tarball publish (NEXLIFY_SKIP_PANEL_PUBLISH=1)"
+elif [ -n "$PUBLISH_ROOT" ]; then
   echo "==> Publishing panel release tarball from $PUBLISH_ROOT ..."
   (cd "$PUBLISH_ROOT" && bash scripts/publish-panel-release.sh) || echo "WARN: publish-panel-release failed (non-fatal)"
 elif [ -f "$SRC/scripts/publish-panel-release.sh" ]; then
