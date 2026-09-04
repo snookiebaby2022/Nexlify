@@ -44,6 +44,9 @@ const nextConfig: NextConfig = {
   distDir,
   compress: true,
   poweredByHeader: false,
+  // MAG/Infomir portal URL is /c/. Next's default slash strip 308s /c/ → /c;
+  // STB firmware does not follow 308, so the portal never loads.
+  skipTrailingSlashRedirect: true,
   generateEtags: true,
   eslint: {
     ignoreDuringBuilds: false,

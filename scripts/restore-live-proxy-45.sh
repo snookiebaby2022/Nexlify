@@ -37,6 +37,17 @@ server {
     proxy_buffering off;
     proxy_request_buffering off;
 
+    location = /c/ {
+        proxy_pass http://nexlify_panel_backend/c;
+        proxy_set_header Host \$host;
+        proxy_set_header Authorization \$http_authorization;
+        proxy_set_header X-Real-IP \$http_x_real_ip;
+        proxy_set_header X-Forwarded-For \$http_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 300s;
+    }
+
     location ~ ^/(live|timeshift|movie|series)/ {
         proxy_pass http://nexlify_remote_edge;
         proxy_set_header Host \$host;

@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.68",
+  "latestVersion": "2.0.69",
   "releases": [
+    {
+      "version": "2.0.69",
+      "date": "2026-09-04",
+      "channel": "stable",
+      "summary": "MAG portal URL /c/ loads without a 308 redirect that Infomir firmware does not follow.",
+      "changelog": [
+        "Next no longer 308s /c/ to /c, so MAG boxes receive the portal HTML on the standard Infomir URL",
+        "nginx exact /c/ proxies to the panel path without a trailing slash so existing installs match"
+      ],
+      "fixes": [
+        "MAG portal URL with trailing slash returned 308 and the box never loaded BACK/CH+ JavaScript"
+      ],
+      "notes": [
+        "Use Admin → Updates to install v2.0.69. Reboot the MAG or reload https://your-domain/c/ after the panel restarts.",
+        "Darkcdn already had the nginx /c/ rewrite; this release puts the same behavior in the compiled app."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.69.tar.gz"
+    },
     {
       "version": "2.0.68",
       "date": "2026-09-04",
