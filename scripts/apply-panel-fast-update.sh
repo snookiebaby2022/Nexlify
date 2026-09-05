@@ -501,7 +501,7 @@ cmd_build_compile() {
   npm install next@15.5.21 --include=optional --no-audit --no-fund --loglevel=error || true
   npm install --no-save --include=optional @next/swc-linux-x64-gnu 2>/dev/null || \
     npm install --no-save --include=optional @next/swc-linux-x64-musl 2>/dev/null || true
-  if (!node ./node_modules/next/dist/bin/next build; then
+  if ! node ./node_modules/next/dist/bin/next build; then
     echo "WARN: retry still failed — reinstalling node_modules without leaving the tree empty ..." >&2
     if [ -d node_modules ]; then
       rm -rf node_modules.bak
