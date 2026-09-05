@@ -1,7 +1,28 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.79",
+  "latestVersion": "2.0.80",
   "releases": [
+    {
+      "version": "2.0.80",
+      "date": "2026-09-06",
+      "channel": "stable",
+      "summary": "Clean server-45 sync of the 2.0.79 line: matching tree, Next 15.5.24 pin, and temp/staging cleanup.",
+      "changelog": [
+        "Panel tree on server 45 aligned to the local release (no leftover staging or tmp apply scripts)",
+        "Next.js dependency pinned to 15.5.24 everywhere (was 15.5.21 on 45)",
+        "Standalone package.json restored so PM2/version checks match package.json",
+        "Carries forward synthetic EPG, Plex/cron safety, and live fleet hardening from 2.0.79"
+      ],
+      "fixes": [
+        "Server 45 drifted package.json / dirty git leftovers after partial applies",
+        "Missing .next/standalone package metadata after rebuilds",
+        "Stale /tmp and panel tmp-* scripts cluttering ops hosts"
+      ],
+      "notes": [
+        "Use Admin \u2192 Updates to install v2.0.80. Operator hosts: strip staging with scripts/strip-non-panel-tree.sh after apply."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.80.tar.gz"
+    },
     {
       "version": "2.0.79",
       "date": "2026-09-05",

@@ -1,6 +1,6 @@
 {
-  "command": "curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.79' | sudo bash",
-  "url": "https://nexlify.live/install/panel.sh?v=2.0.79",
-  "label": "v2.0.79",
-  "version": "2.0.79"
+  "command": "curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.80' | sudo bash",
+  "url": "https://nexlify.live/install/panel.sh?v=2.0.80",
+  "label": "v2.0.80",
+  "version": "2.0.80"
 }
