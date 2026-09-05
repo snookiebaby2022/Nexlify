@@ -51,7 +51,7 @@ tar -cf - \
   2>/dev/null | tar -xf - -C "$PACK" || true
 
 OVER="$PACK/_nexlify_overlay/scripts"
-mkdir -p "$OVER"
+mkdir -p "$OVER" "$PACK/_nexlify_overlay/prisma"
 for f in \
   playback-topology.sh \
   panel-no-local-iptv-edge.sh \
@@ -69,6 +69,9 @@ do
     cp -f "$ROOT/scripts/$f" "$OVER/"
   fi
 done
+if [ -f "$ROOT/prisma/schema.prisma" ]; then
+  cp -f "$ROOT/prisma/schema.prisma" "$PACK/_nexlify_overlay/prisma/schema.prisma"
+fi
 echo "$VER" > "$PACK/_nexlify_overlay/VERSION"
 
 tar -czf "$OUT" -C "$PACK" .
