@@ -2996,6 +2996,34 @@ async function onRequest(clientReq, clientRes, ctx) {
     return;
   }
 
+  if (pathOnly === "/edge/drop-stream") {
+    const secret = clientReq.headers["x-panel-internal-secret"] || clientReq.headers["x-panel-api-key"];
+    if (!INTERNAL_SECRET || String(secret || "") !== INTERNAL_SECRET) {
+      clientRes.writeHead(403, { "content-type": "text/plain" });
+      clientRes.end("forbidden");
+      return;
+    }
+    const q = new URL(clientReq.url || "/", "http://local").searchParams;
+    const streamId = String(q.get("streamId") || "").trim();
+    if (!streamId) {
+      clientRes.writeHead(400, { "content-type": "text/plain" });
+      clientRes.end("streamId required");
+      return;
+    }
+    const fan = liveFans.get(streamId);
+    if (fan) destroyLiveFan(fan);
+    let authCleared = 0;
+    for (const [key, hit] of authCache.entries()) {
+      if (hit?.data?.streamId === streamId) {
+        authCache.delete(key);
+        authCleared += 1;
+      }
+    }
+    clientRes.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    clientRes.end(JSON.stringify({ ok: true, streamId, fanDropped: Boolean(fan), authCleared }));
+    return;
+  }
+
   if (pathOnly === "/edge/fan-stats" || pathOnly === "/edge/metrics") {
     const channels = [];
     let clients = 0;

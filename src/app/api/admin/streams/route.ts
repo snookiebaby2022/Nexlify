@@ -24,6 +24,7 @@ import {
   invalidateDashboardStats,
   invalidatePlaybackUrls,
   invalidateXtreamCategories,
+  refreshStreamPlayback,
 } from "@/lib/cache-invalidate";
 import { syncStreamBouquets } from "@/lib/stream-bouquets";
 import { expandCategoryFilter } from "@/lib/category-tree";
@@ -881,10 +882,16 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Cache invalidation must never block the save response
+    const urlChanged =
+      body.source != null ||
+      body.streamUrl != null ||
+      body.backupUrl != null ||
+      body.providerPath != null;
     void Promise.allSettled([
       invalidatePlaybackUrls(id),
       invalidateXtreamCategories(),
       invalidateDashboardStats(),
+      urlChanged ? refreshStreamPlayback(id) : Promise.resolve(),
     ]);
 
     // Auto-map EPG when live and still empty (or when client asks). Cap at 3s so Save never hangs.

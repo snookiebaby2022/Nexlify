@@ -125,10 +125,79 @@ export async function invalidateEpgCache() {
 
 export async function invalidatePlaybackUrls(streamId?: string) {
   if (streamId) {
-    await cacheDel(`playback:url:*:${streamId}`);
+    await Promise.all([
+      cacheDel(`playback:url:*:${streamId}`),
+      cacheDel(`playback:urls:*:${streamId}`),
+    ]);
     return;
   }
-  await cacheDel("playback:url:");
+  await Promise.all([cacheDel("playback:url:"), cacheDel("playback:urls:")]);
+}
+
+/** Drop panel live-auth cache entries that pin a stream's upstream URL. */
+export async function invalidateLiveAuthForStream(streamId: string) {
+  const id = streamId?.trim();
+  if (!id) return 0;
+  // Keys: live-auth:v3:{lineId}:{streamId}:{ip}:{mode}:{serverId}
+  return cacheDel(`live-auth:v3:*:${id}:*`);
+}
+
+/**
+ * After source URL change or Restart on LIVE relay: clear panel caches and ask
+ * the edge to drop the active fan so viewers re-auth against the new upstream.
+ */
+export async function refreshStreamPlayback(streamId: string): Promise<{
+  liveAuthDeleted: number;
+  edgeDropped: boolean;
+}> {
+  const id = streamId?.trim();
+  if (!id) return { liveAuthDeleted: 0, edgeDropped: false };
+  const [liveAuthDeleted] = await Promise.all([
+    invalidateLiveAuthForStream(id),
+    invalidatePlaybackUrls(id),
+  ]);
+  const edgeDropped = await requestEdgeDropStream(id).catch(() => false);
+  return { liveAuthDeleted, edgeDropped };
+}
+
+async function requestEdgeDropStream(streamId: string): Promise<boolean> {
+  const secret = String(
+    process.env.INTERNAL_API_SECRET || process.env.PANEL_INTERNAL_SECRET || ""
+  ).trim();
+  if (!secret) return false;
+
+  const hosts = new Set<string>();
+  const envHost = String(process.env.NEXLIFY_EDGE_PREWARM_HOST || "").trim();
+  if (envHost) hosts.add(envHost.replace(/^https?:\/\//, "").replace(/\/+$/, "").split(":")[0]);
+  hosts.add("209.237.141.15");
+  try {
+    const { prisma } = await import("@/lib/prisma");
+    const servers = await prisma.streamServer.findMany({
+      where: { isActive: true },
+      select: { host: true, name: true },
+      take: 20,
+    });
+    for (const s of servers) {
+      const h = String(s.host || "").trim();
+      if (h && (s.name?.toLowerCase().includes("10gbs") || h === "209.237.141.15")) {
+        hosts.add(h.replace(/^https?:\/\//, "").split(":")[0]);
+      }
+    }
+  } catch {
+    /* best-effort */
+  }
+
+  let ok = false;
+  for (const host of hosts) {
+    const url = `http://${host}:8080/edge/drop-stream?streamId=${encodeURIComponent(streamId)}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "x-panel-internal-secret": secret },
+      signal: AbortSignal.timeout(4000),
+    }).catch(() => null);
+    if (res?.ok || res?.status === 202) ok = true;
+  }
+  return ok;
 }
 
 export async function invalidateAllCache() {

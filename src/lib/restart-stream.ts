@@ -1,4 +1,4 @@
-/** Queue an agent restart for one live stream. Never kills nginx / :8080. */
+/** Restart a live stream. Relay streams drop edge fan + auth cache; transcode queues agent ffmpeg. */
 export async function restartStreamOnServer(
   serverId: string,
   streamId: string

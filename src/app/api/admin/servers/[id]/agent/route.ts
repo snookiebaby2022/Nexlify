@@ -127,8 +127,43 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     case "restart_stream": {
       const streamId = String(body.streamId ?? "");
       if (!streamId) return NextResponse.json({ error: "streamId required" }, { status: 400 });
-      await enqueueAgentCommand(id, "restart_stream", { streamId });
-      return NextResponse.json({ ok: true });
+      const stream = await prisma.stream.findUnique({
+        where: { id: streamId },
+        select: {
+          id: true,
+          streamUrl: true,
+          vodMode: true,
+          isOnDemand: true,
+          isCreatedChannel: true,
+          hostedExternally: true,
+          agentStartCmd: true,
+          autoRestart: true,
+        },
+      });
+      if (!stream) return NextResponse.json({ error: "Stream not found" }, { status: 404 });
+
+      const { streamNeedsAlwaysOnProcessPolicy } = await import("@/lib/stream-playback-policy");
+      const needsAgentFfmpeg = streamNeedsAlwaysOnProcessPolicy(stream);
+      const { refreshStreamPlayback } = await import("@/lib/cache-invalidate");
+      const refresh = await refreshStreamPlayback(streamId);
+
+      if (needsAgentFfmpeg) {
+        await enqueueAgentCommand(id, "restart_stream", { streamId });
+        return NextResponse.json({
+          ok: true,
+          mode: "ffmpeg",
+          ...refresh,
+          note: "Queued ffmpeg restart on agent; also dropped edge fan / live-auth cache",
+        });
+      }
+
+      // LIVE relay / direct / on-demand: no local ffmpeg process — restart = rebind upstream.
+      return NextResponse.json({
+        ok: true,
+        mode: "relay",
+        ...refresh,
+        note: "Dropped edge fan and live-auth cache so viewers pick up the current source URL",
+      });
     }
     case "stop_stream": {
       const streamId = String(body.streamId ?? "");

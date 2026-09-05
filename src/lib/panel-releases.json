@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.75",
+  "latestVersion": "2.0.76",
   "releases": [
+    {
+      "version": "2.0.76",
+      "date": "2026-09-05",
+      "channel": "stable",
+      "summary": "Restart and source-URL changes rebind LIVE relay streams on the edge.",
+      "changelog": [
+        "Restart on LIVE relay drops the edge fan and live-auth cache instead of failing ffmpeg agent restart",
+        "Saving a new Primary/Backup URL clears live-auth cache and asks the edge to drop the active fan"
+      ],
+      "fixes": [
+        "Restart Stream returned cmd failed for normal LIVE (relay) channels with no local ffmpeg process",
+        "Changing the source URL left viewers on the old upstream until the edge fan died"
+      ],
+      "notes": [
+        "Use Admin \u2192 Updates to install v2.0.76."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.76.tar.gz"
+    },
     {
       "version": "2.0.75",
       "date": "2026-09-05",
