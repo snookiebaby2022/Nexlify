@@ -32,6 +32,16 @@ export type MigrationStreamRow = {
   notes?: string;
   /** Xtream-ready movie/series plot, cast, rating (from XUI movie_properties). */
   agentStartCmd?: string;
+  /**
+   * XUI/XC `streams.added` (unix) → panel Stream.createdAt.
+   * Drives XCIPTV / SMETV Latest Movies via player_api `added`.
+   */
+  createdAt?: Date;
+  /**
+   * XUI `streams.updated` / series `last_modified` → Stream.updatedAt.
+   * Series list uses `last_modified` from the seed episode's updatedAt.
+   */
+  updatedAt?: Date;
 };
 
 export type MigrationBouquetRow = {

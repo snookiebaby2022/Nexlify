@@ -10,6 +10,10 @@ interface CertInfo {
   error: string | null;
 }
 
+/** Cap TLS probes per hourly run — unique hosts only (not every LIVE row). */
+const MAX_HOSTS_PER_RUN = 40;
+const CERT_TIMEOUT_MS = 5_000;
+
 async function checkCertExpiry(url: string): Promise<{ expiresAt: Date | null; error: string | null }> {
   try {
     const parsed = new URL(url);
@@ -19,55 +23,55 @@ async function checkCertExpiry(url: string): Promise<{ expiresAt: Date | null; e
     const { default: https } = await import("https");
 
     return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve({ expiresAt: null, error: "Connection timeout" }), 10000);
+      let settled = false;
+      const finish = (value: { expiresAt: Date | null; error: string | null }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+      const timer = setTimeout(() => finish({ expiresAt: null, error: "Connection timeout" }), CERT_TIMEOUT_MS);
 
       try {
-        const req = https.get(url, { timeout: 10000 }, (res) => {
-          clearTimeout(timer);
+        const req = https.get(url, { timeout: CERT_TIMEOUT_MS }, (res) => {
           const socket = res.socket as import("tls").TLSSocket;
           const cert = socket.getPeerCertificate();
+          res.resume();
           if (cert?.valid_to) {
-            const expiresAt = new Date(cert.valid_to);
-            res.resume();
-            resolve({ expiresAt, error: null });
+            finish({ expiresAt: new Date(cert.valid_to), error: null });
           } else {
-            res.resume();
-            resolve({ expiresAt: null, error: "No certificate info" });
+            finish({ expiresAt: null, error: "No certificate info" });
           }
         });
         req.on("error", (e) => {
-          clearTimeout(timer);
-          // For expired certs, we still want to get the cert info
-          // Try connecting with rejectUnauthorized=false
           const opts = {
             host: parsed.hostname,
             port: parseInt(parsed.port) || 443,
             servername: parsed.hostname,
             rejectUnauthorized: false,
-            timeout: 10000,
+            timeout: CERT_TIMEOUT_MS,
           };
           const socket = tls.connect(opts, () => {
             const cert = socket.getPeerCertificate();
             socket.destroy();
             if (cert?.valid_to) {
-              resolve({ expiresAt: new Date(cert.valid_to), error: null });
+              finish({ expiresAt: new Date(cert.valid_to), error: null });
             } else {
-              resolve({ expiresAt: null, error: e.message });
+              finish({ expiresAt: null, error: e.message });
             }
           });
-          socket.on("error", () => {
-            clearTimeout(timer);
-            resolve({ expiresAt: null, error: e.message });
+          socket.on("error", () => finish({ expiresAt: null, error: e.message }));
+          socket.setTimeout(CERT_TIMEOUT_MS, () => {
+            socket.destroy();
+            finish({ expiresAt: null, error: "Timeout" });
           });
         });
         req.on("timeout", () => {
-          clearTimeout(timer);
           req.destroy();
-          resolve({ expiresAt: null, error: "Timeout" });
+          finish({ expiresAt: null, error: "Timeout" });
         });
       } catch (e) {
-        clearTimeout(timer);
-        resolve({ expiresAt: null, error: String(e) });
+        finish({ expiresAt: null, error: String(e) });
       }
     });
   } catch {
@@ -75,54 +79,69 @@ async function checkCertExpiry(url: string): Promise<{ expiresAt: Date | null; e
   }
 }
 
-export async function jobCheckStreamCerts(): Promise<{ checked: number; alerts: CertInfo[] }> {
+type HostSample = { host: string; url: string; streamName: string; streamId: string };
+
+/**
+ * Probe a small sample of unique HTTPS hosts from active LIVE streams.
+ * Never walk every stream row — that blocked hourly cron (Plex, fleet heal) for hours.
+ */
+export async function jobCheckStreamCerts(): Promise<{ checked: number; alerts: CertInfo[]; hostsSampled: number }> {
   const streams = await prisma.stream.findMany({
-    where: { isActive: true, type: "LIVE" },
+    where: { isActive: true, type: "LIVE", streamUrl: { startsWith: "https://" } },
     select: { id: true, name: true, streamUrl: true, backupUrl: true },
+    take: 2_000,
+    orderBy: { updatedAt: "desc" },
   });
 
-  const alerts: CertInfo[] = [];
-  const checked = streams.length;
-
+  const byHost = new Map<string, HostSample>();
   for (const stream of streams) {
-    const urls = [stream.streamUrl];
-    if (stream.backupUrl?.trim()) urls.push(stream.backupUrl.trim());
-
-    for (const url of urls) {
+    const candidates = [stream.streamUrl, stream.backupUrl?.trim()].filter(Boolean) as string[];
+    for (const url of candidates) {
       if (!url.startsWith("https://")) continue;
-
-      const host = new URL(url).hostname;
-      const { expiresAt, error } = await checkCertExpiry(url);
-
-      if (error) {
-        alerts.push({
-          host,
-          streamName: stream.name,
-          streamId: stream.id,
-          expiresAt: null,
-          daysLeft: null,
-          error,
-        });
+      let host: string;
+      try {
+        host = new URL(url).hostname.toLowerCase();
+      } catch {
         continue;
       }
+      if (!host || byHost.has(host)) continue;
+      byHost.set(host, { host, url, streamName: stream.name, streamId: stream.id });
+      if (byHost.size >= MAX_HOSTS_PER_RUN) break;
+    }
+    if (byHost.size >= MAX_HOSTS_PER_RUN) break;
+  }
 
-      if (expiresAt) {
-        const daysLeft = Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-        if (daysLeft <= 30) {
-          alerts.push({
-            host,
-            streamName: stream.name,
-            streamId: stream.id,
-            expiresAt,
-            daysLeft,
-            error: null,
-          });
-        }
+  const samples = [...byHost.values()];
+  const alerts: CertInfo[] = [];
+
+  for (const sample of samples) {
+    const { expiresAt, error } = await checkCertExpiry(sample.url);
+    if (error) {
+      alerts.push({
+        host: sample.host,
+        streamName: sample.streamName,
+        streamId: sample.streamId,
+        expiresAt: null,
+        daysLeft: null,
+        error,
+      });
+      continue;
+    }
+    if (expiresAt) {
+      const daysLeft = Math.floor((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+      if (daysLeft <= 30) {
+        alerts.push({
+          host: sample.host,
+          streamName: sample.streamName,
+          streamId: sample.streamId,
+          expiresAt,
+          daysLeft,
+          error: null,
+        });
       }
     }
   }
 
-  // Log alerts
   if (alerts.length > 0) {
     const expired = alerts.filter((a) => a.daysLeft !== null && a.daysLeft <= 0);
     const expiringSoon = alerts.filter((a) => a.daysLeft !== null && a.daysLeft > 0);
@@ -137,7 +156,8 @@ export async function jobCheckStreamCerts(): Promise<{ checked: number; alerts: 
       entity: "stream",
       meta: {
         summary: summary.join(", "),
-        alerts: alerts.map((a) => ({
+        hostsSampled: samples.length,
+        alerts: alerts.slice(0, 50).map((a) => ({
           host: a.host,
           stream: a.streamName,
           daysLeft: a.daysLeft,
@@ -147,5 +167,5 @@ export async function jobCheckStreamCerts(): Promise<{ checked: number; alerts: 
     });
   }
 
-  return { checked, alerts };
+  return { checked: samples.length, alerts, hostsSampled: samples.length };
 }

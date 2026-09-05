@@ -1,7 +1,51 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.77",
+  "latestVersion": "2.0.79",
   "releases": [
+    {
+      "version": "2.0.79",
+      "date": "2026-09-05",
+      "channel": "stable",
+      "summary": "Synthetic EPG for PPV/MLS/24/7, Plex auto-sync safety, and live fleet hardening from the 2.0.78 line.",
+      "changelog": [
+        "Synthetic EPG builds guide rows from PPV, MLS, 24/7, and dated match stream titles when XMLTV has nothing",
+        "Hourly SSL cert check samples unique hosts (no longer probes every LIVE URL and blocks cron)",
+        "Plex auto-sync skips huge libraries (\u226580k rows) unless plexSyncForceLarge is enabled",
+        "Weekly live fleet heal + orphan reconnect + starved-origin failover",
+        "Edge fan coalescing for shared FHD/HD/SD upstreams; sync preserves coalesced LIVE URLs"
+      ],
+      "fixes": [
+        "PPV/MLS/24/7 channels showing blank/wrong EPG",
+        "Plex full-library sync stalling nexlify-cron and never completing hourly jobs",
+        "Match-day buffering from multiple concurrent pulls of the same provider feed"
+      ],
+      "notes": [
+        "Use Admin \u2192 Updates to install v2.0.79. Large Plex libraries: sync manually from Admin \u2192 Plex."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.79.tar.gz"
+    },
+    {
+      "version": "2.0.78",
+      "date": "2026-09-05",
+      "channel": "stable",
+      "summary": "XUI-style live: edge fan coalescing, weekly catalog heal, starved-origin failover, and sync that keeps FHD/HD/SD on one pull.",
+      "changelog": [
+        "iptv-edge-proxy coalesces FHD/HD/SD variants that share one upstream URL into a single CDN pull",
+        "Weekly live fleet heal remaps bad hosts, dedupes exact names, and collapses quality siblings onto one URL",
+        "Starved-origin auto-failover permanently swaps primary to a healthy backup after ~10 minutes below 2 Mbps",
+        "Provider/M3U sync no longer re-splits coalesced LIVE URLs",
+        "Boot no longer force-flips LIVE on-demand rows back to live-only"
+      ],
+      "fixes": [
+        "Match-day buffering from multiple concurrent auths to the same provider feed",
+        "Tinypanel/xplatinmedia starved sources left in the live catalog",
+        "Import/sync undoing Football-style FHD+HD+SD shared upstreams"
+      ],
+      "notes": [
+        "Use Admin \u2192 Updates to install v2.0.78. Edge nodes should pull the new iptv-edge-proxy from this release."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.78.tar.gz"
+    },
     {
       "version": "2.0.77",
       "date": "2026-09-05",

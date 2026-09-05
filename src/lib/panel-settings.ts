@@ -155,6 +155,9 @@ export function instantStreamingPanelDefaults(): Partial<Record<SettingGroup, Re
     },
     cron: {
       deadLinkProbeEnabled: false,
+      liveFleetHealEnabled: true,
+      liveStarvedFailoverEnabled: true,
+      epgSyntheticEventsEnabled: true,
     },
     "auto-fix": {
       autoFixEnabled: false,
@@ -413,9 +416,17 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     channelRefreshCron: "0 4 * * *",
     deadLinkProbeEnabled: false,
     deadLinkProbeCron: "*/15 * * * *",
+    /** Weekly XUI-style live heal: bad-host remap, exact-name dedupe, FHD/HD/SD URL collapse. */
+    liveFleetHealEnabled: true,
+    /** Probe watched live; if primary stays starved (<2 Mbps) ~10m, permanently swap to healthy backup. */
+    liveStarvedFailoverEnabled: true,
+    /** Build guide rows from PPV / MLS / 24/7 / dated-match stream titles when XMLTV has nothing. */
+    epgSyntheticEventsEnabled: true,
     subscriptionNotifyCron: "0 8 * * *",
     plexSyncEnabled: true,
     plexSyncSchedule: "6h",
+    /** When true, auto-sync even if the panel already has ≥80k Plex rows (can OOM cron). */
+    plexSyncForceLarge: false,
     notes: "Requires PM2 nexlify-cron. Hourly jobs use runHourlyCronJobs; others run each minute cycle when due.",
   },
   security: {

@@ -481,6 +481,28 @@ export async function jobEpgAutoMap() {
   }
 }
 
+/** Synthetic EPG from PPV / MLS / 24/7 / dated-match stream titles. */
+export async function jobEpgSyntheticEvents() {
+  const start = Date.now();
+  try {
+    const cron = await getSettingGroup("cron");
+    if (cron.epgSyntheticEventsEnabled === false) {
+      await logCron("epg_synthetic_events", "ok", "skipped (disabled)", Date.now() - start);
+      return;
+    }
+    const { syncSyntheticEventEpg } = await import("./epg-synthetic-events");
+    const result = await syncSyntheticEventEpg({ limit: 800 });
+    await logCron(
+      "epg_synthetic_events",
+      "ok",
+      `scanned ${result.scanned}, assigned ${result.assigned}, programs ${result.programs}, skipped ${result.skipped}`,
+      Date.now() - start
+    );
+  } catch (e) {
+    await logCron("epg_synthetic_events", "error", String(e), Date.now() - start);
+  }
+}
+
 /** XUI-style: rename LIVE streams from current EPG programme when enabled per stream. */
 async function jobStreamEpgNameSync() {
   const start = Date.now();
@@ -709,6 +731,81 @@ export async function jobDeadLinkProbe() {
   }
 }
 
+/** Probe hot LIVE; permanently swap primary→backup when origin stays starved (~10m). */
+export async function jobLiveStarvedFailover() {
+  const start = Date.now();
+  try {
+    const cron = await getSettingGroup("cron");
+    if (cron.liveStarvedFailoverEnabled === false) {
+      await logCron("live_starved_failover", "ok", "skipped (disabled)", Date.now() - start);
+      return;
+    }
+    const load = await getCronLoadSnapshot();
+    if (load.deferHeavy) {
+      await logCron(
+        "live_starved_failover",
+        "ok",
+        `skipped (load ${load.load1.toFixed(1)}/${load.cpuCount}, live ${load.liveConnections})`,
+        Date.now() - start
+      );
+      return;
+    }
+    if (!(await cronIntervalDue("live_starved_failover", 900))) {
+      await logCron("live_starved_failover", "ok", "skipped (interval)", Date.now() - start);
+      return;
+    }
+    const { runLiveStarvedFailover } = await import("./live-starved-failover");
+    const r = await runLiveStarvedFailover();
+    await logCron(
+      "live_starved_failover",
+      "ok",
+      `scanned ${r.scanned}, starved ${r.starvedSeen}, waiting ${r.waitingConfirm}, swapped ${r.swapped}`,
+      Date.now() - start
+    );
+  } catch (e) {
+    await logCron("live_starved_failover", "error", String(e), Date.now() - start);
+  }
+}
+
+/** Weekly catalog heal: bad hosts, exact-name dedupe, FHD/HD/SD URL coalesce. */
+export async function jobLiveFleetHeal() {
+  const start = Date.now();
+  try {
+    const cron = await getSettingGroup("cron");
+    if (cron.liveFleetHealEnabled === false) {
+      await logCron("live_fleet_heal", "ok", "skipped (disabled)", Date.now() - start);
+      return;
+    }
+    const load = await getCronLoadSnapshot();
+    if (load.deferHeavy) {
+      await logCron(
+        "live_fleet_heal",
+        "ok",
+        `skipped (load ${load.load1.toFixed(1)}/${load.cpuCount}, live ${load.liveConnections})`,
+        Date.now() - start
+      );
+      return;
+    }
+    // ~7 days; hourly tick only runs when due
+    if (!(await cronIntervalDue("live_fleet_heal", 7 * 24 * 3600))) {
+      await logCron("live_fleet_heal", "ok", "skipped (interval)", Date.now() - start);
+      return;
+    }
+    const { runLiveFleetHeal } = await import("./live-fleet-heal");
+    const r = await runLiveFleetHeal({ dryRun: false });
+    const { runReconnectLiveOrphans } = await import("./live-reconnect-orphans");
+    const orphans = await runReconnectLiveOrphans({ dryRun: false });
+    await logCron(
+      "live_fleet_heal",
+      "ok",
+      `remap ${r.tinypanelPrimaryRemapped}, dups ${r.exactDupDeactivated}, coalesce ${r.qualityRowsUpdated}, orphans+${orphans.reactivated}, badLeft ${r.after?.stillBadPrimary ?? "?"}`,
+      Date.now() - start
+    );
+  } catch (e) {
+    await logCron("live_fleet_heal", "error", String(e), Date.now() - start);
+  }
+}
+
 export async function jobSubscriptionNotify() {
   const start = Date.now();
   try {
@@ -808,6 +905,27 @@ async function jobPlexAutoSync() {
     });
     if (!rows.length) {
       await logCron("plex_auto_sync", "ok", "no hosted media integrations", Date.now() - start);
+      return;
+    }
+
+    // Huge Plex catalogs (100k+ panel rows) OOM/stall nexlify-cron on full re-walk.
+    // Auto-sync stays off until the operator runs Sync manually (or lowers the library).
+    const AUTO_PLEX_ROW_CAP = Number(process.env.NEXLIFY_PLEX_AUTO_SYNC_MAX_ROWS ?? "80000");
+    const plexRowCount = await prisma.stream.count({
+      where: { streamUrl: { startsWith: "nexlify://plex/" } },
+    });
+    if (plexRowCount >= AUTO_PLEX_ROW_CAP && cron.plexSyncForceLarge !== true) {
+      await prisma.panelSetting.upsert({
+        where: { key: "plex_auto_sync_last_run" },
+        create: { key: "plex_auto_sync_last_run", value: new Date().toISOString() },
+        update: { value: new Date().toISOString() },
+      });
+      await logCron(
+        "plex_auto_sync",
+        "ok",
+        `skipped large library (${plexRowCount} plex rows ≥ ${AUTO_PLEX_ROW_CAP}; use Admin → Plex Sync manually)`,
+        Date.now() - start
+      );
       return;
     }
 
@@ -1079,6 +1197,7 @@ export async function runAllCronJobs() {
   await jobLicenseRevalidate();
   await jobDeadLinkProbe();
   await jobPlaybackQuality();
+  await jobLiveStarvedFailover();
   await jobSubscriptionNotify();
   await jobTelegramMonitoring();
   await jobBackfillXtreamNum();
@@ -1191,6 +1310,7 @@ async function jobCloudBackup() {
 export async function runHourlyCronJobs() {
   await jobEpgSync();
   await jobEpgAutoMap();
+  await jobEpgSyntheticEvents();
   await jobStreamEpgNameSync();
   await jobVodEnrich();
   await jobPanelBackup();
@@ -1198,6 +1318,24 @@ export async function runHourlyCronJobs() {
   await jobPanelAutoUpdate();
   await jobDbBackup();
   await jobCloudBackup();
-  await jobCheckStreamCerts();
+  // Plex / fleet heal before cert sample — cert used to walk every LIVE HTTPS URL and
+  // blocked the rest of the hourly chain for hours on large panels.
   await jobPlexAutoSync();
+  await jobLiveFleetHeal();
+  await jobWrappedStreamCerts();
+}
+
+async function jobWrappedStreamCerts() {
+  const start = Date.now();
+  try {
+    const result = await jobCheckStreamCerts();
+    await logCron(
+      "check_stream_certs",
+      "ok",
+      `hosts ${result.hostsSampled}, alerts ${result.alerts.length}`,
+      Date.now() - start
+    );
+  } catch (e) {
+    await logCron("check_stream_certs", "error", String(e), Date.now() - start);
+  }
 }

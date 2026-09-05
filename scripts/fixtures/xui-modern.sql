@@ -71,13 +71,13 @@ INSERT INTO `users` (`id`,`username`,`password`,`email`,`member_group_id`,`credi
 (5,'reseller1','rpass','a@b.c',2,100,NULL,1,0),
 (1,'admin','apass','admin@x.com',1,0,NULL,1,0);
 
-INSERT INTO `streams` (`id`,`type`,`category_id`,`stream_display_name`,`stream_source`,`stream_icon`,`notes`,`target_container`,`epg_id`,`channel_id`,`order`) VALUES
-(1,1,'[10]','News HD','["http://user:secret@cdn.example.com/live/1","http://user:secret@cdn2.example.com/live/1","http://user:secret@cdn3.example.com/live/1"]',NULL,NULL,NULL,1,'ch1',1),
-(2,2,'[11]','Movie A','["http://vod.example.com/movie/a.mp4"]',NULL,NULL,'mp4',NULL,NULL,2),
-(3,1,'[10]','Empty Source Live','[]',NULL,NULL,NULL,NULL,'ch3',0),
-(50,5,'[12]','Pilot Ep File','["http://example.com/ep/1"]',NULL,NULL,'mp4',NULL,NULL,3);
+INSERT INTO `streams` (`id`,`type`,`category_id`,`stream_display_name`,`stream_source`,`stream_icon`,`notes`,`target_container`,`epg_id`,`channel_id`,`order`,`added`) VALUES
+(1,1,'[10]','News HD','["http://user:secret@cdn.example.com/live/1","http://user:secret@cdn2.example.com/live/1","http://user:secret@cdn3.example.com/live/1"]',NULL,NULL,NULL,1,'ch1',1,1609459200),
+(2,2,'[11]','Movie A','["http://vod.example.com/movie/a.mp4"]',NULL,NULL,'mp4',NULL,NULL,2,1612137600),
+(3,1,'[10]','Empty Source Live','[]',NULL,NULL,NULL,NULL,'ch3',0,1614556800),
+(50,5,'[12]','Pilot Ep File','["http://example.com/ep/1"]',NULL,NULL,'mp4',NULL,NULL,3,1617235200);
 
-INSERT INTO `streams_series` (`id`,`title`,`category_id`,`cover`) VALUES (7,'Cool Show','[12]',NULL);
+INSERT INTO `streams_series` (`id`,`title`,`category_id`,`cover`,`last_modified`) VALUES (7,'Cool Show','[12]',NULL,1620000000);
 INSERT INTO `streams_episodes` (`id`,`season_num`,`series_id`,`stream_id`,`episode_num`) VALUES (100,1,7,50,1);
 INSERT INTO `streams_servers` (`server_stream_id`,`stream_id`,`server_id`,`current_source`,`on_demand`) VALUES
 (1,1,9,'["http://user:secret@cdn.example.com/live/1"]',1),

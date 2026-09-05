@@ -233,7 +233,23 @@ type SeriesMeta = {
   categoryLegacyId?: string;
   icon?: string;
   agentStartCmd?: string;
+  /** XUI streams_series.last_modified → episode Stream.updatedAt / series list last_modified */
+  lastModified?: Date;
 };
+
+function optionalUnixDate(val: unknown): Date | undefined {
+  if (val == null || val === "" || val === 0 || val === "0") return undefined;
+  if (val instanceof Date && !Number.isNaN(val.getTime())) return val;
+  if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+    const d = new Date(val);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  }
+  const n = Number(val);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  const ms = n > 1e12 ? n : n * 1000;
+  if (ms > Date.now() + 730 * 86_400_000) return undefined;
+  return new Date(ms);
+}
 
 function loadSeriesMeta(allTables: Map<string, SqlTableData[]>): Map<string, SeriesMeta> {
   const seriesTable = findMerged(allTables, [
@@ -265,6 +281,7 @@ function loadSeriesMeta(allTables: Map<string, SqlTableData[]>): Map<string, Ser
         (r.plot || r.description
           ? encodeVodAgentCmd({ plot: String(r.plot ?? r.description ?? "") })
           : undefined),
+      lastModified: optionalUnixDate(r.last_modified ?? r.updated ?? r.modified ?? r.added),
     });
   }
   return out;
@@ -355,6 +372,12 @@ export function mapSeriesEpisodesFromSql(
       } else if (seriesName && !s.name.toLowerCase().includes(seriesName.toLowerCase())) {
         s.name = `${seriesName} — ${s.name}`;
       }
+      if (meta?.lastModified) {
+        // Series list last_modified comes from seed episode updatedAt
+        if (!s.updatedAt || meta.lastModified.getTime() > s.updatedAt.getTime()) {
+          s.updatedAt = meta.lastModified;
+        }
+      }
       enriched++;
       continue;
     }
@@ -405,6 +428,8 @@ export function mapSeriesEpisodesFromSql(
           ? String(r.server_id)
           : undefined,
       sortOrder: Number(r.sort_order ?? r.order ?? NaN) || undefined,
+      createdAt: optionalUnixDate(r.added ?? r.added_at) ?? meta?.lastModified,
+      updatedAt: meta?.lastModified ?? optionalUnixDate(r.added ?? r.added_at),
     });
     existingIds.add(legacyId);
   }

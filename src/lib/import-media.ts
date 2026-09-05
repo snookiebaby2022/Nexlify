@@ -18,6 +18,10 @@ import {
   normalizeStreamMatchKey,
   streamUrlHosts,
 } from "./stream-url-match";
+import {
+  buildLiveUrlShareCounts,
+  shouldPreserveCoalescedLiveUrl,
+} from "./live-coalesce-protect";
 
 const VIDEO_EXT = new Set([
   ".mp4",
@@ -496,6 +500,15 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
     );
   }
 
+  const liveUrlShareByType = new Map<StreamType, Map<string, number>>();
+  if (byType.has(StreamType.LIVE)) {
+    const allLiveUrls = await prisma.stream.findMany({
+      where: { type: StreamType.LIVE, isActive: true, isRadio: false },
+      select: { streamUrl: true },
+    });
+    liveUrlShareByType.set(StreamType.LIVE, buildLiveUrlShareCounts(allLiveUrls));
+  }
+
   for (const [type, rows] of byType) {
     const maps = existingMaps.get(type)!;
     for (const { entry, index } of rows) {
@@ -511,7 +524,16 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
         const nextEpg = wantNames
           ? entry.tvgId || entry.tvgName || entry.channelId || null
           : null;
-        const urlChanged = existing.streamUrl !== entry.url;
+        const urlChangedRaw = existing.streamUrl !== entry.url;
+        const urlChanged =
+          type === StreamType.LIVE
+            ? urlChangedRaw &&
+              !shouldPreserveCoalescedLiveUrl(
+                existing.streamUrl,
+                entry.url,
+                liveUrlShareByType.get(type) ?? new Map()
+              )
+            : urlChangedRaw;
         const nameChanged = Boolean(nextName && nextName !== existing.name);
         const iconChanged = Boolean(
           nextIcon && nextIcon !== (existing.streamIcon ?? null)

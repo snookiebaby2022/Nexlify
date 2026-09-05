@@ -649,6 +649,8 @@ async function applyMigrationBundleInner(
             vodMode,
             ...(bitrates ? { bitrates } : {}),
             agentStartCmd: s.agentStartCmd?.trim() || null,
+            ...(s.createdAt ? { createdAt: s.createdAt } : {}),
+            ...(s.updatedAt ? { updatedAt: s.updatedAt } : {}),
           },
         });
         streamIdByLegacy.set(s.legacyId, created.id);

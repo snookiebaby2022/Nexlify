@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   xtreamSafeText,
   xtreamUnix,
+  xtreamUnixFromXtreamAdded,
   xtreamAddedUnix,
   xtreamDeltaArray,
   xtreamOutputFormats,
@@ -20,6 +21,15 @@ import {
 describe("xtream-safe", () => {
   it("strips control characters that crash XCIPTV JSON parsers", () => {
     assert.equal(xtreamSafeText("Sky\u0000 Sport\u0007"), "Sky Sport");
+  });
+
+  it("parses provider Xtream added unix strings for XCIPTV Latest Movies", () => {
+    assert.equal(xtreamUnixFromXtreamAdded("1788230438"), 1788230438);
+    assert.equal(xtreamUnixFromXtreamAdded(1788230438), 1788230438);
+    assert.equal(
+      xtreamUnixFromXtreamAdded("2026-09-01T02:40:38.000Z"),
+      Math.floor(Date.parse("2026-09-01T02:40:38.000Z") / 1000)
+    );
   });
 
   it("uses createdAt for Xtream added so XCIPTV Latest Movies shows panel-added titles", () => {

@@ -31,7 +31,9 @@ export function iptvGzipFileResponse(
   opts?: { asGzipFile?: boolean; forceGzip?: boolean }
 ): NextResponse {
   const headers = new Headers();
-  headers.set("Cache-Control", "private, max-age=43200, must-revalidate");
+  // XCIPTV Update Content must see new VOD titles immediately. A 12h max-age made
+  // the app keep yesterday's get_vod_streams after playlist refresh.
+  headers.set("Cache-Control", "private, max-age=0, must-revalidate");
   const sendGzip = opts?.forceGzip !== false && clientAcceptsGzip(compressFor);
   let nodeStream: Readable;
   if (opts?.asGzipFile) {

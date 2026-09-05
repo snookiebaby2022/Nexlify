@@ -141,6 +141,15 @@ export async function syncEpgSource(
   const source = await prisma.epgSource.findUnique({ where: { id: sourceId } });
   if (!source?.url) throw new Error("EPG source not found");
 
+  // Panel-owned synthetic guides (PPV / MLS / 24/7) — never HTTP-fetch.
+  if (/^nexlify:\/\//i.test(source.url.trim())) {
+    await prisma.epgSource.update({
+      where: { id: sourceId },
+      data: { lastSync: new Date(), lastSyncError: null },
+    });
+    return 0;
+  }
+
   let proxy = source.country
     ? await prisma.streamProxy.findFirst({
         where: { isActive: true, country: source.country },

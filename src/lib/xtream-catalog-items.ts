@@ -3,6 +3,7 @@ import type { StreamForLine } from "@/lib/lines";
 import type { SeriesSeedRow } from "@/lib/xtream-stream-id";
 import type { CanonicalCategoryMaps } from "@/lib/xtream-category-canonical";
 import { canonicalNumericForCategory } from "@/lib/xtream-category-canonical";
+import { categoryMergeKey } from "@/lib/category-options";
 import { formatTimeshiftLabel } from "@/lib/stream-variants";
 import { resolveEpgId } from "@/lib/subscription-export";
 import {
@@ -20,14 +21,30 @@ import {
 import { cuidToNum } from "@/lib/xtream-stream-id";
 import { xtreamListingRating } from "@/lib/vod-meta";
 
+/** XCIPTV drops / ignores VOD rows with category_id "0" in Latest + folders. */
+function vodCategoryFallbackNumeric(canonical: CanonicalCategoryMaps): string {
+  for (const name of ["Recently Added", "Movies", "Movie", "Other"]) {
+    const hit = canonical.byMergeKey.get(categoryMergeKey(name));
+    if (hit?.numericId && hit.numericId !== "0") return hit.numericId;
+  }
+  for (const entry of canonical.byMergeKey.values()) {
+    if (entry.numericId && entry.numericId !== "0") return entry.numericId;
+  }
+  return "0";
+}
+
 function exportCategoryNumericId(
   stream: { type: StreamType; categoryId?: string | null; categoryType?: string | null },
   canonical: CanonicalCategoryMaps,
   expected: "LIVE" | "MOVIE" | "SERIES" | "RADIO"
 ): string {
-  if (!stream.categoryId) return "0";
+  if (!stream.categoryId) {
+    return expected === "MOVIE" || expected === "SERIES" ? vodCategoryFallbackNumeric(canonical) : "0";
+  }
   const folderType = stream.categoryType?.toUpperCase();
-  if (folderType && folderType !== expected) return "0";
+  if (folderType && folderType !== expected) {
+    return expected === "MOVIE" || expected === "SERIES" ? vodCategoryFallbackNumeric(canonical) : "0";
+  }
   if (expected === "LIVE") {
     if (stream.type !== StreamType.LIVE) return "0";
     if (folderType === "RADIO") return "0";
@@ -37,7 +54,11 @@ function exportCategoryNumericId(
   if (expected === "RADIO") {
     if (stream.type !== StreamType.LIVE || folderType !== "RADIO") return "0";
   }
-  return canonicalNumericForCategory(canonical, stream.categoryId);
+  const id = canonicalNumericForCategory(canonical, stream.categoryId);
+  if (id === "0" && (expected === "MOVIE" || expected === "SERIES")) {
+    return vodCategoryFallbackNumeric(canonical);
+  }
+  return id;
 }
 
 export function mapXtreamLiveItem(

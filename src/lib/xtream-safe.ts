@@ -22,6 +22,25 @@ export function xtreamUnix(date: Date | string | number | null | undefined): num
   return Math.floor(ms / 1000);
 }
 
+/**
+ * Parse Xtream `added` from provider catalogs (unix seconds as number/string, or ISO).
+ * Date.parse("1725500000") is NaN — digit strings must be handled explicitly.
+ */
+export function xtreamUnixFromXtreamAdded(value: unknown): number {
+  if (value == null || value === "") return 0;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value <= 0) return 0;
+    return value > 1e12 ? Math.floor(value / 1000) : Math.floor(value);
+  }
+  const s = String(value).trim();
+  if (/^\d{9,13}$/.test(s)) {
+    const n = Number(s);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
+  }
+  return xtreamUnix(s);
+}
+
 export function xtreamUnixString(date: Date | string | number | null | undefined): string {
   return String(xtreamUnix(date));
 }

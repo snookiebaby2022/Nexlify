@@ -6,6 +6,10 @@ import { encodeLiveStreamMeta } from "./stream-live-meta";
 import { maxStreamSortOrder } from "./stream-order";
 import { liveTitleExactKey, liveTitleQualityKey } from "./live-title-dedupe";
 import { normalizeStreamMatchKey, streamUrlHosts } from "./stream-url-match";
+import {
+  buildLiveUrlShareCounts,
+  shouldPreserveCoalescedLiveUrl,
+} from "./live-coalesce-protect";
 
 const CHUNK = 400;
 
@@ -198,6 +202,12 @@ export async function importLiveM3uEntriesFast(
     unique.map((u) => u.entry.url)
   );
 
+  const allLiveUrls = await prisma.stream.findMany({
+    where: { type: StreamType.LIVE, isActive: true, isRadio: false },
+    select: { streamUrl: true },
+  });
+  const liveUrlShare = buildLiveUrlShareCounts(allLiveUrls);
+
   const dead404 = await prisma.stream.findMany({
     where: {
       type: StreamType.LIVE,
@@ -281,7 +291,10 @@ export async function importLiveM3uEntriesFast(
       const nextEpg = wantNames
         ? entry.tvgId || entry.tvgName || entry.channelId || null
         : null;
-      const urlChanged = existing.streamUrl !== entry.url;
+      const urlChangedRaw = existing.streamUrl !== entry.url;
+      const urlChanged =
+        urlChangedRaw &&
+        !shouldPreserveCoalescedLiveUrl(existing.streamUrl, entry.url, liveUrlShare);
       const nameChanged = Boolean(nextName && nextName !== existing.name);
       const iconChanged = Boolean(
         nextIcon && nextIcon !== (existing.streamIcon ?? null)

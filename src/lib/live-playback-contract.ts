@@ -1,6 +1,4 @@
 import { existsSync } from "node:fs";
-import { StreamType, VodMode } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
 import { getSettingGroup, setSettingGroup } from "@/lib/panel-settings";
 import { persistPlaybackTopologyFiles } from "@/lib/playback-topology-persist";
 import { parsePlaybackTopology } from "@/lib/playback-topology";
@@ -17,13 +15,13 @@ export function playbackFailKind(
   return "viewer";
 }
 
-/** Imported XUI ON_DEMAND on LIVE forces HLS packager — flip to splice LIVE. */
+/**
+ * Historic XUI migration helper: forced LIVE+ON_DEMAND → LIVE on every boot.
+ * That kept undoing operator "on demand" settings after panel restarts.
+ * Disabled — vodMode / isOnDemand are operator-owned.
+ */
 export async function backfillLiveOnDemandToLive(): Promise<number> {
-  const result = await prisma.stream.updateMany({
-    where: { type: StreamType.LIVE, vodMode: VodMode.ON_DEMAND },
-    data: { vodMode: VodMode.LIVE, isOnDemand: false, autoRestart: false },
-  });
-  return result.count;
+  return 0;
 }
 
 /** Lock file / env means this host must not run local iptv-edge. */
@@ -60,7 +58,6 @@ export async function healPlaybackTopologyFromDisk(): Promise<void> {
 }
 
 export async function ensureLivePlaybackContract(): Promise<void> {
-  const n = await backfillLiveOnDemandToLive().catch(() => 0);
-  if (n > 0) console.log(`[live-contract] flipped ${n} LIVE ON_DEMAND row(s) to LIVE`);
+  // Intentionally does not rewrite stream on-demand flags (see backfillLiveOnDemandToLive).
   await healPlaybackTopologyFromDisk().catch(() => undefined);
 }

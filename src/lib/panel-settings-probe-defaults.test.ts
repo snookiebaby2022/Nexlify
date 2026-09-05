@@ -6,6 +6,9 @@ test("new installs keep stream probes off until an operator clicks a failing cha
   const d = instantStreamingPanelDefaults();
   assert.equal(d.streams?.autoFixDeadLinks, false);
   assert.equal(d.cron?.deadLinkProbeEnabled, false);
+  assert.equal(d.cron?.liveFleetHealEnabled, true);
+  assert.equal(d.cron?.liveStarvedFailoverEnabled, true);
+  assert.equal(d.cron?.epgSyntheticEventsEnabled, true);
   assert.equal(d["auto-fix"]?.autoFixEnabled, false);
   assert.equal(d["auto-fix"]?.autoFixSourceSwitch, false);
   assert.equal(d["source-swap"]?.sourceSwapEnabled, false);

@@ -63,6 +63,21 @@ function unixToDate(val: unknown): Date {
   return new Date(ms);
 }
 
+/** Optional catalog timestamps — never invent a date when XUI left the column empty. */
+function optionalUnixDate(val: unknown): Date | undefined {
+  if (val == null || val === "" || val === 0 || val === "0") return undefined;
+  if (val instanceof Date && !Number.isNaN(val.getTime())) return val;
+  if (typeof val === "string" && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+    const d = new Date(val);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  }
+  const n = Number(val);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  const ms = n > 1e12 ? n : n * 1000;
+  if (ms > Date.now() + 730 * 86_400_000) return undefined;
+  return new Date(ms);
+}
+
 function mapStreamType(val: unknown, source: MigrationSource): "LIVE" | "MOVIE" | "SERIES" {
   const n = Number(val);
   if (
@@ -239,6 +254,11 @@ function mapStreams(
         // Fall back to dump row position so LIVE list matches SQL INSERT order
         return Number.isFinite(n) ? n : rowIdx + 1;
       })(),
+      // XUI/XC streams.added → player_api `added` (via Stream.createdAt)
+      createdAt: optionalUnixDate(r.added ?? r.added_at ?? r.date_added ?? r.dateadded),
+      updatedAt: optionalUnixDate(
+        r.updated ?? r.modified ?? r.last_modified ?? r.added ?? r.added_at
+      ),
     });
   }
   return out;
@@ -933,6 +953,8 @@ export function bundleFromJson(
         containerExtension: row.containerExtension ? String(row.containerExtension) : undefined,
         isActive: row.isActive !== false,
         sortOrder: Number(row.sortOrder ?? 0) || undefined,
+        createdAt: optionalUnixDate(row.createdAt ?? row.added),
+        updatedAt: optionalUnixDate(row.updatedAt ?? row.last_modified ?? row.added),
       };
     }),
     lines: pick("lines").map((l) => {

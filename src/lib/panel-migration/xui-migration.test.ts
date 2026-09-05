@@ -42,6 +42,18 @@ test("modern XUI fixture maps lines, bouquets, packages, providers, mag", () => 
   assert.match(String(news!.backupUrl), /user:secret@cdn2\.example\.com/);
   assert.equal(news!.extraSourceUrls?.length, 1);
   assert.match(String(news!.extraSourceUrls?.[0]), /user:secret@cdn3\.example\.com/);
+  assert.equal(news!.createdAt?.getTime(), 1609459200 * 1000, "live streams.added → createdAt");
+  const movie = bundle.streams.find((s) => s.name === "Movie A");
+  assert.ok(movie, "Movie A");
+  assert.equal(movie!.createdAt?.getTime(), 1612137600 * 1000, "movie streams.added → createdAt");
+  const ep = bundle.streams.find((s) => s.legacyId === "50" || s.seriesName === "Cool Show");
+  assert.ok(ep, "series episode");
+  assert.equal(ep!.type, "SERIES");
+  assert.equal(
+    ep!.updatedAt?.getTime(),
+    1620000000 * 1000,
+    "streams_series.last_modified → episode updatedAt"
+  );
   const fixed = bundle.streams.find((s) => s.name === "Empty Source Live");
   assert.ok(fixed, "empty source live kept");
   assert.match(fixed!.streamUrl, /edge\.example\.com\/live\/empty-source-fixed/);
