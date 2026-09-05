@@ -1,7 +1,27 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.72",
+  "latestVersion": "2.0.73",
   "releases": [
+    {
+      "version": "2.0.73",
+      "date": "2026-09-05",
+      "channel": "stable",
+      "summary": "Sources probe uses the edited URL; auto-match provider M3U backups by channel name; Diagnostics included in the prebuilt.",
+      "changelog": [
+        "Sources → Check source / Full check probes the URL in the Primary field, not the previously saved stream URL",
+        "Auto-add backup from providers matches the channel name against provider Xtream/M3U catalogs and panel siblings (prefers a different host)",
+        "Admin Diagnostics is included in the Next build so /admin/diagnostics no longer 500s on prebuilt installs"
+      ],
+      "fixes": [
+        "Editing a stream source then probing still showed and tested the old URL",
+        "No one-click way to fill a failover backup from another provider M3U by channel name"
+      ],
+      "notes": [
+        "Use Admin → Updates to install v2.0.73.",
+        "On memory-heavy panels set NEXLIFY_MAX_MEMORY_RESTART=2400M (or higher) so PM2 does not recycle workers every few minutes."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.73.tar.gz"
+    },
     {
       "version": "2.0.72",
       "date": "2026-09-04",

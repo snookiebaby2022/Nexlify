@@ -147,6 +147,12 @@ export function StreamManageEditPage({
   const [streamIcon, setStreamIcon] = useState("");
   const [iconSearching, setIconSearching] = useState(false);
   const [editTab, setEditTab] = useState<StreamEditTab>("details");
+  const [backupMatching, setBackupMatching] = useState(false);
+  const [backupMatchMsg, setBackupMatchMsg] = useState("");
+  const [backupCandidates, setBackupCandidates] = useState<
+    { streamUrl: string; streamName: string; providerName: string; source: string }[]
+  >([]);
+
 
   useEffect(() => {
     setStream(null);
@@ -636,6 +642,46 @@ export function StreamManageEditPage({
     </>
   );
 
+
+  async function autoMatchBackupFromProviders() {
+    const name = form.name.trim();
+    if (name.length < 2) {
+      setBackupMatchMsg("Set the channel name first (Details tab), then try again.");
+      return;
+    }
+    setBackupMatching(true);
+    setBackupMatchMsg("");
+    setBackupCandidates([]);
+    try {
+      const params = new URLSearchParams({
+        name,
+        primaryUrl: form.streamUrl.trim(),
+        streamId,
+      });
+      if (form.providerId) params.set("excludeProviderId", form.providerId);
+      const res = await fetch(/api/admin/stream-providers/backup-match?);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBackupMatchMsg(data.error || "Backup match failed");
+        return;
+      }
+      const matches = Array.isArray(data.matches) ? data.matches : [];
+      setBackupCandidates(matches.slice(0, 5));
+      if (data.backupUrl) {
+        setForm((f) => ({ ...f, backupUrl: String(data.backupUrl) }));
+        setBackupMatchMsg(
+          Filled backup from  · 
+        );
+      } else {
+        setBackupMatchMsg("No matching backup found in provider catalogs or panel siblings.");
+      }
+    } catch {
+      setBackupMatchMsg("Network error while matching backups");
+    } finally {
+      setBackupMatching(false);
+    }
+  }
+
   return (
     <div className="space-y-5 max-w-6xl">
       <StreamLiveInfo streamId={streamId} />
@@ -712,13 +758,57 @@ export function StreamManageEditPage({
                 />
               </FormField>
               <FormField label="Backup source URL (failover)">
-                <input
-                  className={`${formInputClass} font-mono text-xs`}
-                  style={formInputStyle}
-                  value={form.backupUrl}
-                  onChange={(e) => setForm({ ...form, backupUrl: e.target.value })}
-                  placeholder="http://backup.example.com/stream.m3u8"
-                />
+                <div className="flex flex-col gap-2 w-full">
+                  <input
+                    className={${formInputClass} font-mono text-xs}
+                    style={formInputStyle}
+                    value={form.backupUrl}
+                    onChange={(e) => setForm({ ...form, backupUrl: e.target.value })}
+                    placeholder="http://backup.example.com/stream.m3u8"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={backupMatching || form.name.trim().length < 2}
+                      onClick={() => void autoMatchBackupFromProviders()}
+                      className="rounded px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                      style={{ background: "var(--accent)", color: "#fff" }}
+                    >
+                      {backupMatching ? "Matching…" : "Auto-add backup from providers"}
+                    </button>
+                    <span className="text-[11px]" style={{ color: "var(--muted)" }}>
+                      Matches this channel name in provider M3U / Xtream catalogs (prefers a different host).
+                    </span>
+                  </div>
+                  {backupMatchMsg ? (
+                    <p className="text-[11px]" style={{ color: "var(--muted)" }}>
+                      {backupMatchMsg}
+                    </p>
+                  ) : null}
+                  {backupCandidates.length > 1 ? (
+                    <ul className="text-[11px] space-y-1 max-h-28 overflow-y-auto">
+                      {backupCandidates.map((c) => (
+                        <li key={c.streamUrl} className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="rounded px-2 py-0.5 border"
+                            style={{ borderColor: "var(--border)" }}
+                            onClick={() => {
+                              setForm((f) => ({ ...f, backupUrl: c.streamUrl }));
+                              setBackupMatchMsg(Using  · );
+                            }}
+                          >
+                            Use
+                          </button>
+                          <span>
+                            {c.streamName} · {c.providerName}
+                            {c.source === "provider" ? " · provider M3U" : " · panel"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
               </FormField>
               {form.streamUrl.trim() ? (
                 <StreamProbePlayer

@@ -9,7 +9,8 @@ export async function resolveProbeTargetUrl(
   stream?: StreamWithProvider | null
 ): Promise<{ url: string; label: string }> {
   const trimmed = String(raw ?? "").trim();
-  const source = stream?.streamUrl?.trim() || trimmed;
+  // Prefer the URL the admin is editing/probing over the saved DB value.
+  const source = trimmed || stream?.streamUrl?.trim() || "";
   if (!source) return { url: "", label: "empty" };
 
   if (stream && (!trimmed || isIntegrationStreamUrl(trimmed) || trimmed === stream.streamUrl)) {

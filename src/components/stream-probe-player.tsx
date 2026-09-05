@@ -99,7 +99,6 @@ export function StreamProbePlayer({
         setProbe({ status: "offline", message: data.error ?? "Probe failed" });
         return;
       }
-      if (data.stream?.streamUrl) setResolvedUrl(String(data.stream.streamUrl));
       setProbe(data.probe);
     } catch {
       setProbe({ status: "offline", message: "Network error — could not reach probe endpoint" });
@@ -149,8 +148,8 @@ export function StreamProbePlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- probe once when in-browser play fails
   }, [playerError]);
 
-  const displayUrl = resolvedUrl || streamUrl;
-  const canPlay = canPlayInBrowser(displayUrl);
+  const displayUrl = streamUrl;
+  const canPlay = canPlayInBrowser(streamUrl) || canPlayInBrowser(resolvedUrl);
   const statusColor =
     probe?.status === "online"
       ? "var(--success)"
