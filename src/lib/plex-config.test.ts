@@ -3,9 +3,11 @@ import test from "node:test";
 import {
   buildPlexBaseUrl,
   extractPlexToken,
+  flipPlexBaseProtocol,
   normalizePlexConfig,
   parsePlexHostPort,
   plexImageRequestHeaders,
+  plexProtocolFromBase,
   plexRequestHeaders,
 } from "./plex-config";
 
@@ -49,6 +51,18 @@ test("buildPlexBaseUrl uses https for plex.direct hosts", () => {
     }),
     "https://95-217-58-49.abc.plex.direct:42400"
   );
+});
+
+test("flipPlexBaseProtocol switches http and https", () => {
+  assert.equal(
+    flipPlexBaseProtocol("https://95.217.58.49:42400"),
+    "http://95.217.58.49:42400"
+  );
+  assert.equal(
+    flipPlexBaseProtocol("http://95.217.58.49:42400"),
+    "https://95.217.58.49:42400"
+  );
+  assert.equal(plexProtocolFromBase("http://95.217.58.49:42400"), "http");
 });
 
 test("normalizePlexConfig cleans token and host", () => {

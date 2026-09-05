@@ -23,9 +23,11 @@ import { invalidateXtreamVodAndSeriesCatalogs } from "@/lib/cache-invalidate";
 import {
   buildPlexBaseUrl,
   extractPlexToken,
+  flipPlexBaseProtocol,
   normalizePlexConfig,
   plexClientIdentifier,
   plexLibraryKeys,
+  plexProtocolFromBase,
   plexTokenParam,
   signInPlexTv,
   type PlexIntegrationConfig,
@@ -130,11 +132,17 @@ async function plexSectionsOrThrow(base: string, cfg: PlexIntegrationConfig, cli
   );
 }
 
+function isPlexReachabilityError(msg: string): boolean {
+  return /TLS|certificate|CERT_|SSL|timed out|timeout|refused|Could not reach|resolve the Plex|fetch failed|ECONNREFUSED|ENOTFOUND|UNABLE_TO_VERIFY/i.test(
+    msg
+  );
+}
+
 export async function ensurePlexAccess(integrationId: string): Promise<PlexAccess> {
   const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
   if (!row || row.type !== "plex") throw new Error("Plex integration not found");
   const cfg = normalizePlexConfig((row.config ?? {}) as Record<string, unknown>);
-  const base = buildPlexBaseUrl(cfg);
+  let base = buildPlexBaseUrl(cfg);
   if (!base) throw new Error("Plex host and port are required");
 
   let clientIdentifier = plexClientIdentifier(cfg);
@@ -155,16 +163,28 @@ export async function ensurePlexAccess(integrationId: string): Promise<PlexAcces
   if (!token) throw new Error("Plex token required (or username and password to sign in)");
   cfg.token = token;
 
-  const trySections = async () => plexSectionsOrThrow(base, cfg, clientIdentifier);
+  const trySections = async (at: string) => plexSectionsOrThrow(at, cfg, clientIdentifier);
 
   try {
-    await trySections();
+    await trySections(base);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
     if (/401/.test(msg) && username && password) {
       token = await signInPlexTv(username, password, clientIdentifier);
       cfg.token = token;
-      await trySections();
+      await trySections(base);
+    } else if (isPlexReachabilityError(msg)) {
+      // Raw-IP Plex often listens HTTP-only on the custom port; https://…:42400 fails TLS.
+      const alt = flipPlexBaseProtocol(base);
+      if (!alt || alt === base) throw e;
+      try {
+        await trySections(alt);
+        base = alt;
+        const proto = plexProtocolFromBase(alt);
+        if (proto) cfg.protocol = proto;
+      } catch {
+        throw e;
+      }
     } else {
       throw e;
     }
@@ -202,9 +222,11 @@ async function fetchPlexSectionItems(
   tokenParam: string,
   sectionKey: string,
   clientIdentifier: string,
-  onPage?: (loaded: number, total: number) => Promise<void>
+  onPage?: (loaded: number, total: number) => Promise<void>,
+  maxItems?: number
 ) {
   const pageSize = 100;
+  const cap = Number.isFinite(maxItems) && (maxItems as number) > 0 ? Math.floor(maxItems as number) : 100_000;
   const all: PlexItemMeta[] = [];
   const seen = new Set<string>();
   let start = 0;
@@ -222,13 +244,15 @@ async function fetchPlexSectionItems(
       if (key) seen.add(key);
       all.push(item);
       added++;
+      if (all.length >= cap) break;
     }
     const total = items.MediaContainer?.totalSize ?? items.MediaContainer?.size ?? start + metadata.length;
     start += metadata.length || pageSize;
     emptyPages = added === 0 ? emptyPages + 1 : 0;
     await onPage?.(all.length, Math.max(total, all.length));
     await yieldEventLoop();
-    if (!metadata.length || emptyPages >= 2 || start >= total + pageSize || all.length >= 100_000) break;
+    if (all.length >= cap) break;
+    if (!metadata.length || emptyPages >= 2 || start >= total + pageSize) break;
   }
   return all;
 }
@@ -958,11 +982,22 @@ export async function syncPlexLibraryCategories(
   return { count, skipped: 0, names: names.map((n) => n.name) };
 }
 
+export type ImportPlexLibraryOptions = {
+  /** Only walk the newest titles per library (auto-sync for huge catalogs). */
+  recentOnly?: boolean;
+  /** Cap per library section when recentOnly (default 250). */
+  recentLimit?: number;
+};
+
 export async function importPlexLibrary(
   integrationId: string,
   serverId?: string | null,
-  reporter?: IntegrationSyncReporter
+  reporter?: IntegrationSyncReporter,
+  opts?: ImportPlexLibraryOptions
 ) {
+  const recentOnly = opts?.recentOnly === true;
+  const recentLimit = Math.max(50, Math.min(2_000, Number(opts?.recentLimit ?? 250) || 250));
+
   await reporter?.step("connect", "Connecting to Plex…");
   const access = await ensurePlexAccess(integrationId);
   const { cfg, base, clientIdentifier } = access;
@@ -974,7 +1009,12 @@ export async function importPlexLibrary(
     await persistPlexConfig(integrationId, cfg);
   }
 
-  await reporter?.step("libraries", "Loading Plex libraries…");
+  await reporter?.step(
+    "libraries",
+    recentOnly
+      ? `Loading Plex libraries (recent ≤${recentLimit} per library)…`
+      : "Loading Plex libraries…"
+  );
   const sections = await fetchPlexJson<PlexSectionResponse>(
     `${base}/library/sections?${tokenParam}`,
     clientIdentifier
@@ -1024,8 +1064,12 @@ export async function importPlexLibrary(
     }
     return id;
   };
-  await reporter?.step("artwork", "Updating poster URLs for titles already synced…");
-  await backfillPlexArtworkIcons(integrationId, reporter, artworkOrigin);
+  if (!recentOnly) {
+    await reporter?.step("artwork", "Updating poster URLs for titles already synced…");
+    await backfillPlexArtworkIcons(integrationId, reporter, artworkOrigin);
+  } else {
+    await reporter?.step("artwork", "Skipping full poster backfill (recent-only sync)…");
+  }
   const skipCatalog = cfg.skipExistingCatalog !== false;
   let skippedCatalog = 0;
 
@@ -1104,7 +1148,8 @@ export async function importPlexLibrary(
             episodes,
           }
         );
-      }
+      },
+      recentOnly ? recentLimit : undefined
     );
     await reporter?.step(
       "import",

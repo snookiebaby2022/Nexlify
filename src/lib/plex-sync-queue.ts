@@ -44,7 +44,8 @@ function queuedProgress(jobId: string): IntegrationSyncProgress {
 
 export async function enqueuePlexSync(
   integrationId: string,
-  serverId?: string | null
+  serverId?: string | null,
+  opts?: { recentOnly?: boolean; recentLimit?: number }
 ): Promise<{ alreadyRunning: boolean; jobId: string; progress: IntegrationSyncProgress | null }> {
   const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
   if (!row || row.type !== "plex") throw new Error("Plex integration not found");
@@ -65,6 +66,13 @@ export async function enqueuePlexSync(
   cfg.syncServerId = resolved;
   cfg.serverId = resolved;
   cfg.syncProgress = progress;
+  if (opts?.recentOnly) {
+    cfg.syncRecentOnly = true;
+    cfg.syncRecentLimit = Math.max(50, Math.min(2_000, Number(opts.recentLimit ?? 250) || 250));
+  } else {
+    delete cfg.syncRecentOnly;
+    delete cfg.syncRecentLimit;
+  }
   await prisma.mediaIntegration.update({
     where: { id: integrationId },
     data: { config: cfg as Prisma.InputJsonValue },
@@ -151,10 +159,31 @@ export async function pumpPlexSyncQueue(): Promise<void> {
   pumping = true;
   const reporter = createSyncReporter(claimed.id, claimed.jobId);
   try {
-    const result = await importPlexLibrary(claimed.id, claimed.serverId, reporter);
+    const row = await prisma.mediaIntegration.findUnique({ where: { id: claimed.id } });
+    const cfg = asConfig(row?.config);
+    const recentOnly = cfg.syncRecentOnly === true;
+    const recentLimit = Number(cfg.syncRecentLimit ?? 250) || 250;
+    const result = await importPlexLibrary(claimed.id, claimed.serverId, reporter, {
+      recentOnly,
+      recentLimit,
+    });
+    // Clear one-shot recent-only flags so the next manual Sync is full.
+    if (recentOnly) {
+      const fresh = await prisma.mediaIntegration.findUnique({ where: { id: claimed.id } });
+      if (fresh) {
+        const next = asConfig(fresh.config);
+        delete next.syncRecentOnly;
+        delete next.syncRecentLimit;
+        await prisma.mediaIntegration.update({
+          where: { id: claimed.id },
+          data: { config: next as Prisma.InputJsonValue },
+        });
+      }
+    }
     if (reporter.snapshot().status === "running") {
       await reporter.done(
-        `Sync complete: ${result.imported} new · ${result.skipped} skipped` +
+        (recentOnly ? "Recent sync complete: " : "Sync complete: ") +
+          `${result.imported} new · ${result.skipped} skipped` +
           (result.episodes ? ` · ${result.episodes} episodes` : ""),
         result
       );

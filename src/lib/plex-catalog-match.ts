@@ -138,8 +138,13 @@ export async function loadPlexCatalogIndex(integrationId: string): Promise<PlexC
   const seriesIdByKey = new Map<string, string>();
   let cursor: string | undefined;
   for (;;) {
+    // Only this integration's Plex rows — scanning all MOVIE/SERIES on huge panels
+    // (IPTV + Plex) made every sync sit on "Checking titles…" for minutes/hours.
     const rows = await prisma.stream.findMany({
-      where: { type: { in: [StreamType.MOVIE, StreamType.SERIES] } },
+      where: {
+        type: { in: [StreamType.MOVIE, StreamType.SERIES] },
+        streamUrl: { startsWith: prefix },
+      },
       select: { id: true, name: true, seriesName: true, streamUrl: true, type: true, streamIcon: true },
       take: 2000,
       orderBy: { id: "asc" },
@@ -147,14 +152,8 @@ export async function loadPlexCatalogIndex(integrationId: string): Promise<PlexC
     });
     if (!rows.length) break;
     for (const row of rows) {
-      const isPlexRow = row.streamUrl.startsWith(prefix);
-      if (isPlexRow) {
-        plexUrls.add(row.streamUrl);
-        plexByUrl.set(row.streamUrl, { id: row.id, type: row.type });
-      }
-      // Only treat existing *Plex* titles as already imported. Matching any IPTV
-      // movie by stripped title skipped new Plex additions (same name / remakes).
-      if (!isPlexRow) continue;
+      plexUrls.add(row.streamUrl);
+      plexByUrl.set(row.streamUrl, { id: row.id, type: row.type });
       const hasIcon = Boolean(String(row.streamIcon ?? "").trim());
       if (row.type === StreamType.MOVIE) {
         const key = plexCatalogTitleKey(row.name);

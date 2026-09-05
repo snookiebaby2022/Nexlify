@@ -1,7 +1,28 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.80",
+  "latestVersion": "2.0.81",
   "releases": [
+    {
+      "version": "2.0.81",
+      "date": "2026-09-06",
+      "channel": "stable",
+      "summary": "Plex sync reliability: HTTP fallback, faster catalog index, and recent-only auto-sync for huge libraries.",
+      "changelog": [
+        "Plex connection falls back http↔https and persists the working protocol (raw-IP HTTPS on custom ports often fails TLS)",
+        "Catalog index only scans this integration's nexlify://plex/ rows (no longer walks all IPTV movies/series)",
+        "Auto-sync on 80k+ Plex rows pulls newest titles per library instead of skipping or OOMing a full walk",
+        "Cron settings clarify Force full auto-sync for huge libraries"
+      ],
+      "fixes": [
+        "Plex Test/Sync failing when an integration was saved as https://IP:custom-port",
+        "Sync stuck on Checking titles already on this panel for large catalogs",
+        "Auto-sync disabled/stalled after full-library runs on 100k+ Plex rows"
+      ],
+      "notes": [
+        "Use Admin \u2192 Updates to install v2.0.81. Manual Sync remains a full library walk; auto-sync stays recent-only unless Force full is enabled."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.81.tar.gz"
+    },
     {
       "version": "2.0.80",
       "date": "2026-09-06",

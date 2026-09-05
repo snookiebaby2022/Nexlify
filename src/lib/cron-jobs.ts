@@ -908,26 +908,14 @@ async function jobPlexAutoSync() {
       return;
     }
 
-    // Huge Plex catalogs (100k+ panel rows) OOM/stall nexlify-cron on full re-walk.
-    // Auto-sync stays off until the operator runs Sync manually (or lowers the library).
+    // Huge Plex catalogs OOM/stall nexlify-cron on a full re-walk. Auto-sync then
+    // only pulls the newest titles per library (manual Sync stays full).
     const AUTO_PLEX_ROW_CAP = Number(process.env.NEXLIFY_PLEX_AUTO_SYNC_MAX_ROWS ?? "80000");
     const plexRowCount = await prisma.stream.count({
       where: { streamUrl: { startsWith: "nexlify://plex/" } },
     });
-    if (plexRowCount >= AUTO_PLEX_ROW_CAP && cron.plexSyncForceLarge !== true) {
-      await prisma.panelSetting.upsert({
-        where: { key: "plex_auto_sync_last_run" },
-        create: { key: "plex_auto_sync_last_run", value: new Date().toISOString() },
-        update: { value: new Date().toISOString() },
-      });
-      await logCron(
-        "plex_auto_sync",
-        "ok",
-        `skipped large library (${plexRowCount} plex rows ≥ ${AUTO_PLEX_ROW_CAP}; use Admin → Plex Sync manually)`,
-        Date.now() - start
-      );
-      return;
-    }
+    const recentOnly =
+      plexRowCount >= AUTO_PLEX_ROW_CAP && cron.plexSyncForceLarge !== true;
 
     const { enqueuePlexSync } = await import("./plex-sync-queue");
     const { importEmbyLibrary, importJellyfinLibrary } = await import("./emby-jellyfin-import");
@@ -937,7 +925,7 @@ async function jobPlexAutoSync() {
     let synced = 0;
     for (const row of rows) {
       if (row.type === "plex") {
-        const result = await enqueuePlexSync(row.id);
+        const result = await enqueuePlexSync(row.id, null, recentOnly ? { recentOnly: true, recentLimit: 250 } : undefined);
         if (result.alreadyRunning) already++;
         else queued++;
         continue;
@@ -955,10 +943,17 @@ async function jobPlexAutoSync() {
         await reporter.fail(e instanceof Error ? e.message : "Auto-sync failed");
       }
     }
+    await prisma.panelSetting.upsert({
+      where: { key: "plex_auto_sync_last_run" },
+      create: { key: "plex_auto_sync_last_run", value: new Date().toISOString() },
+      update: { value: new Date().toISOString() },
+    });
     await logCron(
       "plex_auto_sync",
       "ok",
-      `every ${intervalHours}h · plex queued ${queued} · hosted synced ${synced} · busy ${already}`,
+      `every ${intervalHours}h · plex queued ${queued}` +
+        (recentOnly ? ` (recent-only, ${plexRowCount} rows ≥ ${AUTO_PLEX_ROW_CAP})` : "") +
+        ` · hosted synced ${synced} · busy ${already}`,
       Date.now() - start
     );
   } catch (e) {

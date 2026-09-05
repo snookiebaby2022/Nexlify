@@ -96,6 +96,30 @@ export function buildPlexBaseUrl(cfg: PlexIntegrationConfig): string {
   return `${protocol}://${parsed.host}:${parsed.port}`;
 }
 
+/** Flip http↔https on a Plex base URL (raw IP often only speaks HTTP on the custom port). */
+export function flipPlexBaseProtocol(base: string): string | null {
+  try {
+    const u = new URL(base);
+    if (u.protocol === "https:") u.protocol = "http:";
+    else if (u.protocol === "http:") u.protocol = "https:";
+    else return null;
+    return u.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+export function plexProtocolFromBase(base: string): "http" | "https" | null {
+  try {
+    const u = new URL(base);
+    if (u.protocol === "https:") return "https";
+    if (u.protocol === "http:") return "http";
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function plexClientIdentifier(cfg: PlexIntegrationConfig): string {
   const existing = String(cfg.clientIdentifier ?? "").trim();
   if (existing) return existing;
