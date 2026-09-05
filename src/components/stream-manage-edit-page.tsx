@@ -659,7 +659,7 @@ export function StreamManageEditPage({
         streamId,
       });
       if (form.providerId) params.set("excludeProviderId", form.providerId);
-      const res = await fetch(/api/admin/stream-providers/backup-match?);
+      const res = await fetch("/api/admin/stream-providers/backup-match?" + params.toString());
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setBackupMatchMsg(data.error || "Backup match failed");
@@ -669,9 +669,9 @@ export function StreamManageEditPage({
       setBackupCandidates(matches.slice(0, 5));
       if (data.backupUrl) {
         setForm((f) => ({ ...f, backupUrl: String(data.backupUrl) }));
-        setBackupMatchMsg(
-          Filled backup from  · 
-        );
+        const from = matches[0]?.providerName || "provider";
+        const ch = matches[0]?.streamName || name;
+        setBackupMatchMsg("Filled backup from " + from + " · " + ch);
       } else {
         setBackupMatchMsg("No matching backup found in provider catalogs or panel siblings.");
       }
@@ -760,7 +760,7 @@ export function StreamManageEditPage({
               <FormField label="Backup source URL (failover)">
                 <div className="flex flex-col gap-2 w-full">
                   <input
-                    className={${formInputClass} font-mono text-xs}
+                    className={`${formInputClass} font-mono text-xs`}
                     style={formInputStyle}
                     value={form.backupUrl}
                     onChange={(e) => setForm({ ...form, backupUrl: e.target.value })}
@@ -774,7 +774,7 @@ export function StreamManageEditPage({
                       className="rounded px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                       style={{ background: "var(--accent)", color: "#fff" }}
                     >
-                      {backupMatching ? "Matching…" : "Auto-add backup from providers"}
+                      {backupMatching ? "Matching..." : "Auto-add backup from providers"}
                     </button>
                     <span className="text-[11px]" style={{ color: "var(--muted)" }}>
                       Matches this channel name in provider M3U / Xtream catalogs (prefers a different host).
@@ -795,7 +795,7 @@ export function StreamManageEditPage({
                             style={{ borderColor: "var(--border)" }}
                             onClick={() => {
                               setForm((f) => ({ ...f, backupUrl: c.streamUrl }));
-                              setBackupMatchMsg(Using  · );
+                              setBackupMatchMsg("Using " + c.providerName + " · " + c.streamName);
                             }}
                           >
                             Use
@@ -892,7 +892,7 @@ export function StreamManageEditPage({
                       className="rounded px-3 py-2 text-sm font-medium disabled:opacity-50 whitespace-nowrap"
                       style={{ background: "var(--accent)", color: "#fff" }}
                     >
-                      {epgBusy ? "Matching…" : "Auto EPG"}
+                      {epgBusy ? "Matching..." : "Auto EPG"}
                     </button>
                   </div>
                   <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
