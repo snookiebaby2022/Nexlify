@@ -1,4 +1,4 @@
-﻿import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { StreamType } from "@prisma/client";
 import {
   SKIP_LIVE_BACKUP_HOSTS,
@@ -14,9 +14,17 @@ export type ProviderBackupMatch = {
   streamName: string;
   providerId: string;
   providerName: string;
+  host: string;
   source: "provider" | "panel";
   score: "exact" | "stem";
 };
+
+function labelForPanelSibling(providerName: string | null | undefined, url: string): string {
+  const named = String(providerName ?? "").trim();
+  if (named) return named;
+  const host = streamPlaybackHost(url);
+  return host ? `Direct (${host})` : "Direct URL";
+}
 
 /**
  * Match a channel name against provider Xtream catalogs (same entries as the
@@ -47,7 +55,7 @@ export async function findProviderBackupMatches(opts: {
     if (!host || SKIP_LIVE_BACKUP_HOSTS.some((h) => host.includes(h))) return;
     if (seen.has(url)) return;
     seen.add(url);
-    out.push(m);
+    out.push({ ...m, host: m.host || host });
   };
 
   if (stem.length >= 4) {
@@ -69,11 +77,13 @@ export async function findProviderBackupMatches(opts: {
     for (const sib of siblings) {
       const sibKey = liveChannelBackupKey(sib.name);
       if (key.length >= 6 && sibKey !== key) continue;
+      const host = streamPlaybackHost(sib.streamUrl);
       push({
         streamUrl: sib.streamUrl,
         streamName: sib.name,
         providerId: sib.providerId ?? sib.provider?.id ?? "",
-        providerName: sib.provider?.name ?? "Panel",
+        providerName: labelForPanelSibling(sib.provider?.name, sib.streamUrl),
+        host,
         source: "panel",
         score: key.length >= 6 && sibKey === key ? "exact" : "stem",
       });
@@ -113,11 +123,13 @@ export async function findProviderBackupMatches(opts: {
     for (const m of matches) {
       const mKey = liveChannelBackupKey(m.streamName);
       if (key.length >= 6 && mKey !== key) continue;
+      const host = streamPlaybackHost(m.streamUrl);
       push({
         streamUrl: m.streamUrl,
         streamName: m.streamName,
         providerId: m.providerId,
-        providerName: m.providerName,
+        providerName: m.providerName || provider.name,
+        host,
         source: "provider",
         score: key.length >= 6 && mKey === key ? "exact" : "stem",
       });
@@ -136,4 +148,3 @@ export async function findProviderBackupMatches(opts: {
 
   return out.slice(0, limit);
 }
-

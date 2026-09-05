@@ -30,8 +30,14 @@ async function probeStreamRow(streamId: string, fast: boolean): Promise<ProbeRow
   const persist = decideProbePersist({ skipped, fast, probe });
   let effective = persist;
   let usedBackup = false;
+  let activeProbe = probe;
 
-  if (!skipped && persist.write && persist.lastProbeOk === false && stream.backupUrl?.trim()) {
+  const primaryOk =
+    !skipped && (probe.status === "online" || probe.status === "degraded");
+
+  // Always try failover when primary is not healthy — including fast HEAD fails
+  // that do not persist, so Offline / repair can clear via a working backup.
+  if (!primaryOk && stream.backupUrl?.trim()) {
     const backupResolved = await resolveProbeTargetUrl(stream.backupUrl.trim(), stream);
     const backupUrl = backupResolved.url || stream.backupUrl.trim();
     const backup = await probeStreamWithScheduler({ streamId: stream.id, url: backupUrl, fast: false });
@@ -44,15 +50,16 @@ async function probeStreamRow(streamId: string, fast: boolean): Promise<ProbeRow
         lastProbeError: null,
       };
       usedBackup = true;
+      activeProbe = backup.probe;
     }
   }
 
   const lastProbeError =
     effective.write && effective.lastProbeError !== undefined
       ? effective.lastProbeError
-      : probe.status === "online" || usedBackup
+      : primaryOk || usedBackup
         ? null
-        : probe.message ?? "Probe failed";
+        : activeProbe.message ?? "Probe failed";
   if (effective.write) {
     await prisma.stream.update({
       where: { id: stream.id },
@@ -68,13 +75,27 @@ async function probeStreamRow(streamId: string, fast: boolean): Promise<ProbeRow
     }
   }
 
+  const reportedOk = effective.write
+    ? Boolean(effective.lastProbeOk)
+    : primaryOk
+      ? true
+      : stream.lastProbeOk === true;
+
   return {
-    lastProbeOk: effective.write ? Boolean(effective.lastProbeOk) : stream.lastProbeOk !== false,
-    lastProbeError: effective.write ? effective.lastProbeError ?? lastProbeError : stream.lastProbeError,
+    lastProbeOk: reportedOk,
+    lastProbeError: effective.write
+      ? effective.lastProbeError ?? lastProbeError
+      : primaryOk
+        ? null
+        : stream.lastProbeError,
     probe: {
-      status: usedBackup ? "online" : probe.status,
-      message: usedBackup ? "Backup URL is online" : probe.message ?? "",
-      latencyMs: probe.latencyMs,
+      status: usedBackup ? "online" : activeProbe.status,
+      message: usedBackup
+        ? "Backup URL is online"
+        : skipped
+          ? activeProbe.message ?? "Probe deferred"
+          : activeProbe.message ?? "",
+      latencyMs: activeProbe.latencyMs,
     },
   };
 }

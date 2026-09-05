@@ -64,6 +64,7 @@ type Stream = {
   name: string;
   streamIcon?: string | null;
   streamUrl: string;
+  backupUrl?: string | null;
   type: string;
   sortOrder?: number;
   category?: { id: string; name: string } | null;
@@ -120,10 +121,21 @@ function serverLabel(s: Stream) {
 }
 
 function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
+  if (stream.lastProbeOk === false) {
+    return (
+      <span
+        className="xui-uptime-badge"
+        style={{ background: "rgba(239,68,68,0.18)", color: "var(--danger)" }}
+        title={stream.lastProbeError || "Last source probe failed"}
+      >
+        Source down
+      </span>
+    );
+  }
   const kind = streamListUptimeKind(stream, listType);
   const mode = streamUptimeDisplayLabel(kind);
   const uptime = formatUptime(stream.liveStats?.uptimeSeconds ?? null);
-  const label = stream.liveStats?.uptimeSeconds != null ? `${mode} · ${uptime}` : mode;
+  const label = stream.liveStats?.uptimeSeconds != null ? mode + " · " + uptime : mode;
   const cls =
     kind === "DIRECT"
       ? "xui-uptime-badge xui-uptime-badge--direct"
@@ -145,18 +157,24 @@ function StreamInfoCell({ stream, listType }: { stream: Stream; listType?: strin
   const mode = streamUptimeDisplayLabel(streamListUptimeKind(stream, listType));
   const kbps = st?.bitrateKbps ?? stream.maxSpeedKbps ?? stream.minSpeedKbps;
   const lines: string[] = [];
-  lines.push(`Mode: ${mode}`);
-  if (st?.displayStatus) lines.push(`Status: ${st.displayStatus}`);
-  if (kbps) lines.push(`Bitrate: ${Number(kbps).toLocaleString()} kbps`);
-  if (st?.uptimeSeconds != null) lines.push(`Uptime: ${formatUptime(st.uptimeSeconds)}`);
-  if (st && st.viewers > 0) lines.push(`Viewers: ${st.viewers}`);
-  if (st?.videoCodec) lines.push(`Video: ${st.videoCodec}`);
-  if (st?.audioCodec) lines.push(`Audio: ${st.audioCodec}`);
+  lines.push("Mode: " + mode);
+  const statusLabel =
+    stream.lastProbeOk === false
+      ? "Source down"
+      : stream.lastProbeOk === true && st?.displayStatus === "Source down"
+        ? "Source OK"
+        : st?.displayStatus;
+  if (statusLabel) lines.push("Status: " + statusLabel);
+  if (kbps) lines.push("Bitrate: " + Number(kbps).toLocaleString() + " kbps");
+  if (st?.uptimeSeconds != null) lines.push("Uptime: " + formatUptime(st.uptimeSeconds));
+  if (st && st.viewers > 0) lines.push("Viewers: " + st.viewers);
+  if (st?.videoCodec) lines.push("Video: " + st.videoCodec);
+  if (st?.audioCodec) lines.push("Audio: " + st.audioCodec);
   if (stream.lastProbeOk === false && stream.lastProbeError) {
-    lines.push(`Probe: ${stream.lastProbeError}`);
+    lines.push("Probe: " + stream.lastProbeError);
   }
   if (lines.length <= 1 && !st) {
-    return <span className="xui-stream-info-empty">Waiting for this channel’s probe / process stats</span>;
+    return <span className="xui-stream-info-empty">Waiting for this channel's probe / process stats</span>;
   }
   return (
     <div className="xui-stream-info text-xs leading-snug" style={{ color: "var(--text)" }}>
@@ -456,10 +474,30 @@ export function StreamsList({
           const next = prev.map((s) => {
             const row = data.results?.[s.id];
             if (!row || row.error) return s;
+            const ok = row.lastProbeOk ?? s.lastProbeOk;
+            const err = row.lastProbeError ?? null;
+            const liveStats = s.liveStats
+              ? {
+                  ...s.liveStats,
+                  displayStatus:
+                    ok === false
+                      ? "Source down"
+                      : ok === true && s.liveStats.displayStatus === "Source down"
+                        ? "Source OK"
+                        : s.liveStats.displayStatus,
+                  status:
+                    ok === false
+                      ? ("offline" as const)
+                      : ok === true && s.liveStats.status === "offline"
+                        ? ("ready" as const)
+                        : s.liveStats.status,
+                }
+              : s.liveStats;
             return {
               ...s,
-              lastProbeOk: row.lastProbeOk ?? s.lastProbeOk,
-              lastProbeError: row.lastProbeError ?? null,
+              lastProbeOk: ok,
+              lastProbeError: err,
+              liveStats,
             };
           });
           if (statusFilter === "offline" || sourceIssueFilter) {
@@ -1223,6 +1261,7 @@ export function StreamsList({
           streamId={previewModal.id}
           streamName={previewModal.name}
           streamUrl={hideAllUrls ? "" : previewModal.streamUrl}
+          backupUrl={hideAllUrls ? "" : previewModal.backupUrl}
           streamType={previewModal.type}
           onClose={() => {
             setPreviewModal(null);

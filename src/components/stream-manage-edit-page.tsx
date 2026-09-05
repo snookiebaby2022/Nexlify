@@ -150,7 +150,7 @@ export function StreamManageEditPage({
   const [backupMatching, setBackupMatching] = useState(false);
   const [backupMatchMsg, setBackupMatchMsg] = useState("");
   const [backupCandidates, setBackupCandidates] = useState<
-    { streamUrl: string; streamName: string; providerName: string; source: string }[]
+    { streamUrl: string; streamName: string; providerName: string; host?: string; source: string }[]
   >([]);
 
 
@@ -785,7 +785,7 @@ export function StreamManageEditPage({
                       {backupMatchMsg}
                     </p>
                   ) : null}
-                  {backupCandidates.length > 1 ? (
+                  {backupCandidates.length > 0 ? (
                     <ul className="text-[11px] space-y-1 max-h-28 overflow-y-auto">
                       {backupCandidates.map((c) => (
                         <li key={c.streamUrl} className="flex flex-wrap items-center gap-2">
@@ -801,8 +801,11 @@ export function StreamManageEditPage({
                             Use
                           </button>
                           <span>
-                            {c.streamName} · {c.providerName}
-                            {c.source === "provider" ? " · provider M3U" : " · panel"}
+                            {c.streamName}
+                            {" · "}
+                            <strong>{c.providerName}</strong>
+                            {c.host ? " · " + c.host : ""}
+                            {c.source === "provider" ? " · provider catalog" : " · panel stream"}
                           </span>
                         </li>
                       ))}
@@ -811,12 +814,31 @@ export function StreamManageEditPage({
                 </div>
               </FormField>
               {form.streamUrl.trim() ? (
-                <StreamProbePlayer
-                  compact
-                  streamId={streamId}
-                  streamUrl={form.streamUrl.trim()}
-                  name={form.name || undefined}
-                />
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+                      Probe primary
+                    </p>
+                    <StreamProbePlayer
+                      compact
+                      streamId={streamId}
+                      streamUrl={form.streamUrl.trim()}
+                      name={form.name || undefined}
+                    />
+                  </div>
+                  {form.backupUrl.trim() ? (
+                    <div className="space-y-1 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                      <p className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+                        Probe backup
+                      </p>
+                      <StreamProbePlayer
+                        compact
+                        streamUrl={form.backupUrl.trim()}
+                        name={(form.name || "Stream") + " (backup)"}
+                      />
+                    </div>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           )}

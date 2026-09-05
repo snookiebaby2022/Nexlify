@@ -1,7 +1,28 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.73",
+  "latestVersion": "2.0.74",
   "releases": [
+    {
+      "version": "2.0.74",
+      "date": "2026-09-05",
+      "channel": "stable",
+      "summary": "Probe primary and backup sources; clearer provider labels on auto-backup; Offline list clears and no longer shows Live when source is down.",
+      "changelog": [
+        "Sources tab probes Primary and Backup separately",
+        "Auto-add backup picks show the real provider name (or Direct host) instead of Panel · panel",
+        "Offline / Probe page tries the backup URL whenever primary fails, and clears recovered streams from the list",
+        "Uptime badge shows Source down when last probe failed instead of a false Live badge"
+      ],
+      "fixes": [
+        "Could only probe the primary URL on Sources / Preview",
+        "Backup match list did not show which provider the URL came from",
+        "Offline filter stayed stale and showed Live + Source down together after probing"
+      ],
+      "notes": [
+        "Use Admin → Updates to install v2.0.74."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.74.tar.gz"
+    },
     {
       "version": "2.0.73",
       "date": "2026-09-05",

@@ -306,6 +306,8 @@ export async function GET(req: NextRequest) {
           hostedExternally: true,
           agentStartCmd: true,
           lastProbeOk: true,
+          lastProbeError: true,
+          backupUrl: true,
           streamIcon: true,
           sortOrder: true,
           server: { select: { id: true, name: true } },
