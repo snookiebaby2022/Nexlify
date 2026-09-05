@@ -83,17 +83,19 @@ export async function markStreamSpliceFailed(streamId: string, detail: string): 
   }
 }
 
+/** True origin probe fails only — excludes stale Viewer: edge stamps in lastProbeError. */
+export function liveOriginProbeFailWhere() {
+  return {
+    lastProbeOk: false as const,
+    NOT: { lastProbeError: { startsWith: "Viewer:" } },
+  };
+}
+
 /** Origin + splice failures for dashboard Issues (excludes Viewer: stamps). */
 export function liveOriginOrSpliceFailWhere() {
   return {
     type: StreamType.LIVE,
     isActive: true,
-    OR: [
-      {
-        lastProbeOk: false,
-        NOT: { lastProbeError: { startsWith: "Viewer:" } },
-      },
-      { lastSpliceOk: false },
-    ],
+    OR: [liveOriginProbeFailWhere(), { lastSpliceOk: false }],
   };
 }

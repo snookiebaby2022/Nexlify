@@ -81,6 +81,63 @@ async function probeStreamRow(streamId: string, fast: boolean): Promise<ProbeRow
       ? true
       : stream.lastProbeOk === true;
 
+  // #region agent log
+  try {
+    const { appendFileSync } = await import("fs");
+    appendFileSync(
+      `${process.cwd()}/debug-8aa94a.log`,
+      `${JSON.stringify({
+        sessionId: "8aa94a",
+        hypothesisId: skipped ? "B" : usedBackup ? "D" : "A",
+        location: "probe-batch/route.ts:probeStreamRow",
+        message: "probe row decision",
+        data: {
+          streamId,
+          name: stream.name,
+          fast,
+          skipped,
+          primaryStatus: probe.status,
+          primaryMsg: probe.message?.slice?.(0, 120),
+          persistWrite: effective.write,
+          persistOk: effective.lastProbeOk,
+          usedBackup,
+          reportedOk,
+          priorOk: stream.lastProbeOk,
+          priorErr: String(stream.lastProbeError ?? "").slice(0, 80),
+          hasBackup: Boolean(stream.backupUrl?.trim()),
+        },
+        timestamp: Date.now(),
+        runId: "probe-batch",
+      })}\n`
+    );
+  } catch {
+    /* ignore */
+  }
+  fetch("http://127.0.0.1:7839/ingest/c301054c-be31-4f2e-af57-bcfeb5a9e0e7", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8aa94a" },
+    body: JSON.stringify({
+      sessionId: "8aa94a",
+      hypothesisId: skipped ? "B" : usedBackup ? "D" : "A",
+      location: "probe-batch/route.ts:probeStreamRow",
+      message: "probe row decision",
+      data: {
+        streamId,
+        fast,
+        skipped,
+        primaryStatus: probe.status,
+        persistWrite: effective.write,
+        persistOk: effective.lastProbeOk,
+        usedBackup,
+        reportedOk,
+        priorOk: stream.lastProbeOk,
+      },
+      timestamp: Date.now(),
+      runId: "probe-batch",
+    }),
+  }).catch(() => {});
+  // #endregion
+
   return {
     lastProbeOk: reportedOk,
     lastProbeError: effective.write

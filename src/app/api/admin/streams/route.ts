@@ -37,6 +37,7 @@ import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { streamListOrderBy } from "@/lib/stream-order";
 import { attachStreamEpgWorking } from "@/lib/epg-working-status";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { liveOriginProbeFailWhere } from "@/lib/stream-health-signals";
 
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
@@ -145,7 +146,7 @@ export async function GET(req: NextRequest) {
   if (statusParam === "inactive") where.isActive = false;
   if (statusParam === "offline") {
     where.isActive = true;
-    where.lastProbeOk = false;
+    Object.assign(where, liveOriginProbeFailWhere());
     if (!where.type) where.type = StreamType.LIVE;
   }
   if (statusParam === "online") {
@@ -158,7 +159,7 @@ export async function GET(req: NextRequest) {
   }
   if (sourceIssue === "dead" || sourceIssue === "unstable") {
     where.isActive = true;
-    where.lastProbeOk = false;
+    Object.assign(where, liveOriginProbeFailWhere());
     where.type = StreamType.LIVE;
     const backupCondition: Prisma.StreamWhereInput =
       sourceIssue === "dead"

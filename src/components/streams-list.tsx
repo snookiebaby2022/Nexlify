@@ -468,6 +468,44 @@ export function StreamsList({
           >;
         };
         if (!res.ok || !data.results) return;
+        // #region agent log
+        {
+          const sample = list.slice(0, 5).map((s) => {
+            const row = data.results?.[s.id];
+            return {
+              id: s.id,
+              name: s.name,
+              priorOk: s.lastProbeOk,
+              priorErr: String(s.lastProbeError ?? "").slice(0, 60),
+              resOk: row && !("error" in row) ? row.lastProbeOk : null,
+              resErr:
+                row && !("error" in row)
+                  ? String(row.lastProbeError ?? "").slice(0, 60)
+                  : row && "error" in row
+                    ? String(row.error).slice(0, 60)
+                    : null,
+            };
+          });
+          fetch("http://127.0.0.1:7839/ingest/c301054c-be31-4f2e-af57-bcfeb5a9e0e7", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8aa94a" },
+            body: JSON.stringify({
+              sessionId: "8aa94a",
+              hypothesisId: "C",
+              location: "streams-list.tsx:runPageProbe",
+              message: "offline page probe response",
+              data: {
+                statusFilter,
+                fast: statusFilter !== "offline" && !sourceIssueFilter,
+                count: list.length,
+                sample,
+              },
+              timestamp: Date.now(),
+              runId: "ui-probe",
+            }),
+          }).catch(() => {});
+        }
+        // #endregion
         const { notifyStreamHealthChanged } = await import("@/lib/stream-health-events");
         notifyStreamHealthChanged();
         setStreams((prev) => {
