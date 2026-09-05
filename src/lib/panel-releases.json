@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.76",
+  "latestVersion": "2.0.77",
   "releases": [
+    {
+      "version": "2.0.77",
+      "date": "2026-09-05",
+      "channel": "stable",
+      "summary": "Stop flooding the stream agent with impossible start/probe commands for movies and LIVE relay.",
+      "changelog": [
+        "Viewer playback no longer queues start_stream for movies/series or nexlify:// plex URLs",
+        "Dead-link monitoring no longer queues probe_stream/restart for LIVE relay channels",
+        "Admin start_stream on relay channels refreshes edge cache instead of failing ffmpeg"
+      ],
+      "fixes": [
+        "Tens of thousands of agent start_stream cmd failed entries from Plex movies hitting live-auth",
+        "Dead-link jobs spamming probe_stream cmd failed on normal LIVE relay channels"
+      ],
+      "notes": [
+        "Use Admin \u2192 Updates to install v2.0.77."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.77.tar.gz"
+    },
     {
       "version": "2.0.76",
       "date": "2026-09-05",

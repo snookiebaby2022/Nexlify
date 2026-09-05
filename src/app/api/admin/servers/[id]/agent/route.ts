@@ -174,8 +174,34 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     case "start_stream": {
       const streamId = String(body.streamId ?? "");
       if (!streamId) return NextResponse.json({ error: "streamId required" }, { status: 400 });
+      const stream = await prisma.stream.findUnique({
+        where: { id: streamId },
+        select: {
+          id: true,
+          type: true,
+          streamUrl: true,
+          vodMode: true,
+          isOnDemand: true,
+          isCreatedChannel: true,
+          hostedExternally: true,
+          agentStartCmd: true,
+          autoRestart: true,
+        },
+      });
+      if (!stream) return NextResponse.json({ error: "Stream not found" }, { status: 404 });
+      const { streamNeedsAlwaysOnProcessPolicy } = await import("@/lib/stream-playback-policy");
+      if (stream.type !== "LIVE" || !streamNeedsAlwaysOnProcessPolicy(stream)) {
+        const { refreshStreamPlayback } = await import("@/lib/cache-invalidate");
+        const refresh = await refreshStreamPlayback(streamId);
+        return NextResponse.json({
+          ok: true,
+          mode: "relay",
+          ...refresh,
+          note: "No local ffmpeg process for this stream — refreshed edge/live-auth instead of start_stream",
+        });
+      }
       await enqueueAgentCommand(id, "start_stream", { streamId });
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, mode: "ffmpeg" });
     }
     case "save_ssh": {
       await prisma.streamServer.update({

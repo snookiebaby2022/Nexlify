@@ -321,7 +321,13 @@ export async function runDeadLinkProbeJob() {
           await enqueueAgentCommand(stream.serverId, "restart_stream", { streamId: stream.id });
           restarted++;
         }
-        if (stream.serverId && stream.server?.agentToken) {
+        // Remote agent probe_stream only works for always-on ffmpeg entries in poll.json.
+        // Relay LIVE (almost all channels on 45) always returns cmd failed — skip it.
+        if (
+          stream.serverId &&
+          stream.server?.agentToken &&
+          !skipFfmpegRestart
+        ) {
           await enqueueAgentCommand(stream.serverId, "probe_stream", {
             streamId: stream.id,
             url: primaryUrl,
