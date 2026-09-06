@@ -3,7 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { liveOriginOrSpliceFailWhere } from "@/lib/stream-health-signals";
 import { isTestConnectionIp, liveViewerStats, listLiveConnections } from "@/lib/connections";
-import { sortServersMainFirst } from "@/lib/ensure-main-server-online";
+import {
+  buildServerRoleContext,
+  resolveServerRole,
+  sortServersMainFirst,
+} from "@/lib/ensure-main-server-online";
+import { getServerLoadScores } from "@/lib/server-load";
+import { cacheGetOrSet } from "@/lib/cache";
 import { isThisPanelMachine } from "@/lib/panel-local-server";
 import { isServerHealthOnline } from "@/lib/server-tree";
 import {
@@ -57,6 +63,12 @@ export type DashboardKpiExtended = {
   requestBreakdown: TicketContentBreakdown;
   networkInMbps: number;
   networkOutMbps: number;
+  /** Total LB NIC capacity (Mbps). */
+  lbCapMbps: number;
+  /** Panel NIC throughput — proxy hairpin, not viewer egress. */
+  panelProxyMbps: number;
+  /** True when LB egress comes from agent NIC samples, not connection estimates. */
+  bandwidthMeasured: boolean;
   inactiveStreams: number;
   inactiveLive: number;
   inactiveMovies: number;
@@ -242,6 +254,47 @@ export async function getDashboardServerMetrics(): Promise<ServerMetricsRow[]> {
 
 const TRIAL_MAX_DAYS = 2.5;
 
+export type DashboardPlaybackBandwidth = {
+  networkInMbps: number;
+  networkOutMbps: number;
+  lbCapMbps: number;
+  panelProxyMbps: number;
+  measured: boolean;
+};
+
+/** Live viewer egress on load balancers — not the panel proxy NIC. */
+export async function getDashboardPlaybackBandwidth(): Promise<DashboardPlaybackBandwidth> {
+  const [scores, panelNic] = await Promise.all([
+    getServerLoadScores(),
+    getDashboardNicBandwidthMbps(),
+  ]);
+  const ctx = buildServerRoleContext(scores.map((s) => s.server));
+  const lbs = scores.filter((s) => s.online && resolveServerRole(s.server, ctx) === "lb");
+
+  let measuredOut = 0;
+  let hasMeasured = false;
+  for (const lb of lbs) {
+    const host = readStoredHostMetrics(lb.server.panelSettings, true);
+    if (host && host.uploadMbps > 0) {
+      measuredOut += host.uploadMbps;
+      hasMeasured = true;
+    }
+  }
+
+  const estimatedOut = lbs.reduce((n, s) => n + s.bandwidthMbps, 0);
+  const out = hasMeasured ? measuredOut : estimatedOut;
+  const cap = lbs.reduce((n, s) => n + s.capMbps, 0);
+  const rounded = Math.round(out * 10) / 10;
+
+  return {
+    networkOutMbps: rounded,
+    networkInMbps: rounded,
+    lbCapMbps: cap,
+    panelProxyMbps: Math.round(Math.max(panelNic.networkInMbps, panelNic.networkOutMbps) * 10) / 10,
+    measured: hasMeasured,
+  };
+}
+
 export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
   const now = new Date();
   const trialMs = TRIAL_MAX_DAYS * 86400000;
@@ -251,6 +304,7 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     trialUsers,
     deadStreams,
     unstableStreams,
+    playbackBw,
     tickets,
     inactiveByType,
     openTicketCount,
@@ -267,19 +321,26 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
       WHERE status = 'ACTIVE' AND "expiresAt" > ${now}
         AND ("expiresAt" - "createdAt") <= (${trialMs} * interval '1 millisecond')
     `.then((r) => Number(r[0]?.count ?? 0)).catch(() => 0),
-    prisma.stream.count({
-      where: {
-        AND: [liveOriginOrSpliceFailWhere(), { OR: [{ backupUrl: null }, { backupUrl: "" }] }],
-      },
-    }),
-    prisma.stream.count({
-      where: {
-        AND: [
-          liveOriginOrSpliceFailWhere(),
-          { AND: [{ backupUrl: { not: null } }, { backupUrl: { not: "" } }] },
-        ],
-      },
-    }),
+    cacheGetOrSet("stats:probe-dead:v1", 300, () =>
+      prisma.stream.count({
+        where: {
+          AND: [liveOriginOrSpliceFailWhere(), { OR: [{ backupUrl: null }, { backupUrl: "" }] }],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      })
+    ),
+    cacheGetOrSet("stats:probe-unstable:v1", 300, () =>
+      prisma.stream.count({
+        where: {
+          AND: [
+            liveOriginOrSpliceFailWhere(),
+            { AND: [{ backupUrl: { not: null } }, { backupUrl: { not: "" } }] },
+          ],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      })
+    ),
+    getDashboardPlaybackBandwidth(),
     prisma.ticket.findMany({
       where: { status: { in: ["OPEN", "IN_PROGRESS"] } },
       select: { subject: true },
@@ -307,8 +368,6 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
   const reportedChannels = sumBreakdown(reportedBreakdown);
   const channelRequests = sumBreakdown(requestBreakdown);
 
-  const { networkInMbps, networkOutMbps } = await getDashboardNicBandwidthMbps();
-
   const inactiveMap = new Map(inactiveByType.map((r) => [r.type, r._count]));
   const inactiveLive = inactiveMap.get(StreamType.LIVE) ?? 0;
   const inactiveMovies = inactiveMap.get(StreamType.MOVIE) ?? 0;
@@ -323,8 +382,11 @@ export async function getDashboardKpiExtended(): Promise<DashboardKpiExtended> {
     channelRequests,
     reportedBreakdown,
     requestBreakdown,
-    networkInMbps: Math.round(networkInMbps * 10) / 10,
-    networkOutMbps: Math.round(networkOutMbps * 10) / 10,
+    networkInMbps: playbackBw.networkInMbps,
+    networkOutMbps: playbackBw.networkOutMbps,
+    lbCapMbps: playbackBw.lbCapMbps,
+    panelProxyMbps: playbackBw.panelProxyMbps,
+    bandwidthMeasured: playbackBw.measured,
     inactiveStreams: inactiveLive + inactiveMovies + inactiveSeries,
     inactiveLive,
     inactiveMovies,

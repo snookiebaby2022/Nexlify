@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { isTestConnectionIp, listLiveConnections } from "@/lib/connections";
-import { getDashboardNicBandwidthMbps } from "@/lib/host-metrics";
+import { getDashboardPlaybackBandwidth } from "@/lib/dashboard-server-metrics";
 import { getServerPollIntervals } from "@/lib/perf-polling";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
             live.filter((r) => r.stream?.type === "LIVE").map((r) => r.streamId).filter(Boolean)
           );
 
-          const { networkInMbps, networkOutMbps } = await getDashboardNicBandwidthMbps();
+          const playback = await getDashboardPlaybackBandwidth();
 
           send({
             timestamp: now.toISOString(),
@@ -46,8 +46,11 @@ export async function GET(req: NextRequest) {
             onlineUsers: users.size,
             onlineStreams: streams.size,
             totalActiveLines: activeLines,
-            networkInMbps,
-            networkOutMbps,
+            networkInMbps: playback.networkInMbps,
+            networkOutMbps: playback.networkOutMbps,
+            lbCapMbps: playback.lbCapMbps,
+            panelProxyMbps: playback.panelProxyMbps,
+            bandwidthMeasured: playback.measured,
             connections: live.slice(0, 10).map((c) => ({
               id: c.id,
               line: c.line?.username ?? "unknown",

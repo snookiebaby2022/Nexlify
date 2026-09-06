@@ -604,7 +604,7 @@ export async function repairPlexVodPlacement(
   await backfillPlexDisplayNames(integrationId, reporter);
   await backfillPlexCategories(integrationId, reporter);
   await reporter?.note("Moving Plex titles into the Movies and TV Series bouquets…");
-  const linked = await relinkPlexStreamsToVodBouquets(integrationId);
+  const linked = await relinkPlexStreamsToVodBouquets(integrationId, reporter);
   await invalidateXtreamVodAndSeriesCatalogs();
   return linked;
 }
@@ -631,6 +631,44 @@ export async function repairAllPlexVodPlacement(reporter?: IntegrationSyncReport
     results.push({ name: row.name, ...(await repairPlexVodPlacement(row.id, reporter)) });
   }
   return results;
+}
+
+/** Remove an integration and optionally every stream imported from it (`nexlify://{type}/{id}/…`). */
+export async function deleteMediaIntegration(
+  id: string,
+  opts?: {
+    deleteStreams?: boolean;
+    onProgress?: (deleted: number) => void | Promise<void>;
+  }
+): Promise<{ deletedStreams: number; name: string; type: string }> {
+  const row = await prisma.mediaIntegration.findUnique({ where: { id } });
+  if (!row) throw new Error("Integration not found");
+
+  let deletedStreams = 0;
+  if (opts?.deleteStreams !== false) {
+    const prefix = `nexlify://${row.type}/${id}/`;
+    // Chunked raw deletes — faster than per-row find+deleteMany and keeps locks short.
+    for (;;) {
+      const batch = await prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "Stream"
+        WHERE "streamUrl" LIKE ${`${prefix}%`}
+        LIMIT 5000
+      `;
+      if (!batch.length) break;
+      const result = await prisma.stream.deleteMany({
+        where: { id: { in: batch.map((b) => b.id) } },
+      });
+      deletedStreams += result.count;
+      await opts?.onProgress?.(deletedStreams);
+      await yieldEventLoop();
+    }
+    if (deletedStreams > 0) {
+      await invalidateXtreamVodAndSeriesCatalogs().catch(() => {});
+    }
+  }
+
+  await prisma.mediaIntegration.delete({ where: { id } });
+  return { deletedStreams, name: row.name, type: row.type };
 }
 
 /**
@@ -1306,8 +1344,22 @@ export async function importPlexLibrary(
   }
   await flushIcons();
 
-  await reporter?.step("categories", "Putting Plex titles into Movies and TV Series…");
-  await repairPlexVodPlacement(integrationId, reporter);
+  // New titles already link into Movies/TV Series bouquets during import.
+  // Full placement (genre backfill + relink of the whole library) is expensive on large
+  // panels (~350k+ streams) and was falsely marked "stalled" after recent-only syncs.
+  if (recentOnly) {
+    await reporter?.step("categories", "Attaching Movies and TV Series bouquets to lines…");
+    await attachVodBouquetsToAllLines();
+  } else {
+    await reporter?.step("categories", "Putting Plex titles into Movies and TV Series…");
+    await repairPlexVodPlacement(integrationId, reporter);
+  }
+
+  // Always bust VOD/series Xtream catalogs — otherwise IPTV apps keep a stale "NEW" list
+  // sorted by `added` and never see titles imported by recent-only sync.
+  await reporter?.step("cache", "Refreshing movie/series catalogs for apps…");
+  await invalidateXtreamVodAndSeriesCatalogs().catch(() => {});
+
   await reporter?.step("finish", "Saving last sync time…");
 
   await prisma.mediaIntegration.update({

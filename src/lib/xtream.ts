@@ -15,7 +15,11 @@ import {
 } from "./xtream-safe";
 import { seriesSeedsForBouquets, resolveCategoryIdParam } from "./xtream-stream-id";
 import { expandCategoryFilter } from "./category-tree";
-import { categoryMergeKey } from "./category-options";
+import {
+  categoryMergeKey,
+  isVirtualRecentlyAddedCategoryName,
+  VIRTUAL_RECENT_VOD_LIMIT,
+} from "./category-options";
 import {
   buildCanonicalCategoryMaps,
   canonicalNumericForCategory,
@@ -132,24 +136,37 @@ async function loadXtreamAccountShell(
       panelBaseUrl,
       process.env.NEXT_PUBLIC_WEBSITE_URL || process.env.NEXT_PUBLIC_SERVER_URL
     ).replace(/\/+$/, "");
+    const mediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
     let streamHost: string;
+    let mediaPort = "";
+    let mediaProtocol = "";
     try {
-      const u = new URL(panelOrigin.includes("://") ? panelOrigin : `http://${panelOrigin}`);
+      const u = new URL(
+        (mediaOrigin || panelOrigin).includes("://")
+          ? mediaOrigin || panelOrigin
+          : `http://${mediaOrigin || panelOrigin}`
+      );
       streamHost = u.hostname;
+      mediaPort = u.port;
+      mediaProtocol = u.protocol.replace(":", "");
     } catch {
-      streamHost = panelOrigin.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+      streamHost = (mediaOrigin || panelOrigin).replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
     }
     const standardPorts = userAgentUsesStandardIptvPorts(userAgent);
-    const useHttps = standardPorts ? false : panelOrigin.startsWith("https");
+    const useHttps = mediaOrigin ? mediaProtocol === "https" : standardPorts ? false : panelOrigin.startsWith("https");
     const publicPort = portFromPanelBaseUrl(panelOrigin);
     const serverSettings = await getPanelServerSettings();
     const streamHttpsPort = serverSettings.streamHttpsPort || resolveStreamHttpsPort();
-    const httpPort = standardPorts
+    const httpPort = mediaOrigin && !useHttps
+      ? mediaPort || "80"
+      : standardPorts
       ? "80"
       : useHttps
         ? String(streamHttpsPort)
         : String(resolveAdvertisedStreamHttpPort(publicPort));
-    const httpsPort = standardPorts ? "80" : String(streamHttpsPort);
+    const httpsPort = mediaOrigin && useHttps
+      ? mediaPort || String(streamHttpsPort)
+      : standardPorts ? "80" : String(streamHttpsPort);
     const formats = preferLiveOutputFormats(
       xtreamOutputFormats("ts,m3u8,hls,rtmp"),
       resolveClientPlaybackProfile(userAgent)
@@ -183,7 +200,8 @@ async function loadXtreamAccountShell(
 export async function xtreamUserInfo(
   line: LineWithBouquets,
   panelBaseUrl: string,
-  userAgent?: string | null
+  userAgent?: string | null,
+  websiteOriginOverride?: string | null
 ) {
   const playable = lineIsPlayable(line);
   const { countLineSessions } = await import("@/lib/connections");
@@ -191,7 +209,10 @@ export async function xtreamUserInfo(
   const atCapacity = playable && line.maxConnections > 0 && activeCons >= line.maxConnections;
   const shell = await loadXtreamAccountShell(panelBaseUrl, userAgent);
   const formats = preferLiveOutputFormats(xtreamOutputFormats(line.allowedOutput), resolveClientPlaybackProfile(userAgent));
-  const epgUrl = `${shell.websiteOrigin}/xmltv.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`;
+  const epgOrigin = websiteOriginOverride
+    ? pickPublicOrigin(websiteOriginOverride, process.env.NEXT_PUBLIC_WEBSITE_URL).replace(/\/+$/, "")
+    : shell.websiteOrigin;
+  const epgUrl = `${epgOrigin}/xmltv.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`;
   return {
     user_info: {
       username: line.username,
@@ -250,9 +271,13 @@ async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType,
       orderBy: { sortOrder: "asc" },
     });
     const seenMerge = new Set<string>();
-    const ordered = [...cats].sort(
-      (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
-    );
+    const ordered = [...cats].sort((a, b) => {
+      // Pin Recently Added / NEW first so SMETV and similar apps surface it as NEW.
+      const aRecent = isVirtualRecentlyAddedCategoryName(a.name) ? 0 : 1;
+      const bRecent = isVirtualRecentlyAddedCategoryName(b.name) ? 0 : 1;
+      if (aRecent !== bRecent) return aRecent - bRecent;
+      return a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
+    });
     for (const c of ordered) {
       const mergeKey = categoryMergeKey(c.name);
       if (mergeKey && seenMerge.has(mergeKey)) continue;
@@ -277,6 +302,30 @@ async function xtreamCategoriesForType(line: LineWithBouquets, type: StreamType,
       created_at: "0",
     });
   }
+  // Always expose Recently Added for XCIPTV/SMETV NEW even when the DB folder is
+  // empty — newest titles are dual-tagged onto it in the full VOD export only.
+  if (type === StreamType.MOVIE) {
+    const hasRecent = rows.some((r) =>
+      isVirtualRecentlyAddedCategoryName(String(r.category_name))
+    );
+    if (!hasRecent) {
+      const recent = await prisma.category.findFirst({
+        where: { name: "Recently Added", categoryType: "MOVIE" },
+      });
+      if (recent) {
+        const entry = canonicalMaps.byMergeKey.get(categoryMergeKey("Recently Added"));
+        rows.unshift({
+          category_id: xtreamExportCategoryIdValue(
+            entry?.numericId ?? canonicalNumericForCategory(canonicalMaps, recent.id),
+            numericCategoryId
+          ),
+          category_name: "Recently Added",
+          parent_id: 0,
+          created_at: xtreamUnixString(recent.createdAt),
+        });
+      }
+    }
+  }
   return rows;
 }
 
@@ -284,10 +333,19 @@ export async function xtreamLiveCategoriesForLine(line: LineWithBouquets, numeri
   return xtreamCategoriesForType(line, StreamType.LIVE, numericCategoryId);
 }
 
+async function categoriesAreVirtualRecent(categoryIds: string[]): Promise<boolean> {
+  if (!categoryIds.length) return false;
+  const cats = await prisma.category.findMany({
+    where: { id: { in: categoryIds } },
+    select: { name: true },
+  });
+  return cats.some((c) => isVirtualRecentlyAddedCategoryName(c.name));
+}
+
 async function categoryIdsForXtreamFilter(
   rawCategoryId: string,
   type: StreamType
-): Promise<string[] | "uncategorized" | "missing" | "all"> {
+): Promise<string[] | "uncategorized" | "missing" | "all" | "recent"> {
   const categoryId = String(rawCategoryId ?? "").trim();
   if (isXtreamAllCategoryParam(categoryId)) return "all";
   if (categoryId === "0") return "uncategorized";
@@ -298,6 +356,12 @@ async function categoryIdsForXtreamFilter(
     if (!cuids.length) return "missing";
     for (const cuid of cuids) {
       for (const id of await expandCategoryFilter(cuid)) ids.add(id);
+    }
+    if (
+      type === StreamType.MOVIE &&
+      (await categoriesAreVirtualRecent([...ids]))
+    ) {
+      return "recent";
     }
     return ids.size ? [...ids] : "missing";
   }
@@ -310,6 +374,9 @@ async function categoryIdsForXtreamFilter(
     where: { id: resolved },
     select: { name: true, categoryType: true },
   });
+  if (root?.name && isVirtualRecentlyAddedCategoryName(root.name) && type === StreamType.MOVIE) {
+    return "recent";
+  }
   if (root?.name) {
     const twins = await resolveCategoryCuidsForNumericId(
       canonicalNumericForCategory(await buildCanonicalCategoryMaps(type), resolved),
@@ -319,13 +386,16 @@ async function categoryIdsForXtreamFilter(
       for (const id of await expandCategoryFilter(twin)) ids.add(id);
     }
   }
+  if (type === StreamType.MOVIE && (await categoriesAreVirtualRecent([...ids]))) {
+    return "recent";
+  }
   return ids.size ? [...ids] : "missing";
 }
 
 export async function resolveXtreamCategoryFilter(
   categoryId: string,
   type: StreamType
-): Promise<string[] | "uncategorized" | "missing" | "all"> {
+): Promise<string[] | "uncategorized" | "missing" | "all" | "recent"> {
   return categoryIdsForXtreamFilter(categoryId, type);
 }
 
@@ -338,8 +408,9 @@ export async function xtreamLiveStreams(
   let live;
   if (!isXtreamAllCategoryParam(categoryId)) {
     const ids = await categoryIdsForXtreamFilter(categoryId!, StreamType.LIVE);
-    if (ids === "missing" || ids === "all") {
-      if (ids === "missing") return [];
+    if (ids === "missing") return [];
+    // "recent" is movie-only; treat as all live streams if it ever appears.
+    if (ids === "all" || ids === "recent") {
       live = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
     } else {
       live = await streamsForLineExport(line, {
@@ -360,11 +431,21 @@ export async function xtreamLiveStreams(
 
 export async function xtreamVodStreams(line: LineWithBouquets, _baseUrl: string, categoryId?: string | null) {
   let vod;
+  let forceRecentCategoryId: string | undefined;
+  let dualTagRecent = false;
   if (!isXtreamAllCategoryParam(categoryId)) {
     const ids = await categoryIdsForXtreamFilter(categoryId!, StreamType.MOVIE);
     if (ids === "missing") return [];
-    if (ids === "all") {
+    if (ids === "recent" || ids === "all") {
       vod = await streamsForLineExport(line, { type: StreamType.MOVIE, lean: true });
+      if (ids === "recent") {
+        vod = vod.slice(0, VIRTUAL_RECENT_VOD_LIMIT);
+        const canonicalMaps = await buildCanonicalCategoryMaps(StreamType.MOVIE);
+        forceRecentCategoryId =
+          canonicalMaps.byMergeKey.get(categoryMergeKey("Recently Added"))?.numericId;
+      } else {
+        dualTagRecent = true;
+      }
     } else {
       vod = await streamsForLineExport(line, {
         type: StreamType.MOVIE,
@@ -375,11 +456,40 @@ export async function xtreamVodStreams(line: LineWithBouquets, _baseUrl: string,
     }
   } else {
     vod = await streamsForLineExport(line, { type: StreamType.MOVIE, lean: true });
+    dualTagRecent = true;
   }
 
   const canonical = await buildCanonicalCategoryMaps(StreamType.MOVIE);
+  const recentCategoryId =
+    canonical.byMergeKey.get(categoryMergeKey("Recently Added"))?.numericId;
 
-  return vod.map((s, i) => mapXtreamVodItem(s, i, canonical));
+  if (forceRecentCategoryId) {
+    return vod.map((s, i) =>
+      mapXtreamVodItem(s, i, canonical, { forceCategoryNumericId: forceRecentCategoryId })
+    );
+  }
+
+  if (!dualTagRecent || !recentCategoryId) {
+    return vod.map((s, i) => mapXtreamVodItem(s, i, canonical));
+  }
+
+  const out: ReturnType<typeof mapXtreamVodItem>[] = [];
+  for (let i = 0; i < vod.length; i++) {
+    const s = vod[i]!;
+    const genreItem = mapXtreamVodItem(
+      s,
+      i,
+      canonical,
+      i < VIRTUAL_RECENT_VOD_LIMIT ? { alsoCategoryNumericIds: [recentCategoryId] } : undefined
+    );
+    out.push(genreItem);
+    if (i < VIRTUAL_RECENT_VOD_LIMIT && String(genreItem.category_id) !== String(recentCategoryId)) {
+      out.push(
+        mapXtreamVodItem(s, i, canonical, { forceCategoryNumericId: recentCategoryId })
+      );
+    }
+  }
+  return out;
 }
 
 export async function xtreamVodCategoriesForLine(line: LineWithBouquets) {
@@ -394,7 +504,8 @@ export async function xtreamSeriesForLine(line: LineWithBouquets, categoryId?: s
   if (!isXtreamAllCategoryParam(categoryId)) {
     const ids = await categoryIdsForXtreamFilter(categoryId!, StreamType.SERIES);
     if (ids === "missing") return [];
-    if (ids === "all") {
+    if (ids === "all" || ids === "recent") {
+      // "recent" is movie-only; series keeps full bouquet listing.
       seeds = await seriesSeedsForBouquets(bouquetIds);
     } else {
       seeds = await seriesSeedsForBouquets(bouquetIds, {

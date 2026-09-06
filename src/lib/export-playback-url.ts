@@ -19,6 +19,11 @@ function trimBase(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
 }
 
+function livePlaybackBase(baseUrl: string): string {
+  const configured = String(process.env.NEXLIFY_MEDIA_ORIGIN ?? "").trim();
+  return trimBase(configured || baseUrl);
+}
+
 /**
  * URL placed in M3U / Xtream exports.
  * @param output - "hls" forces .m3u8, "ts" forces .ts, "auto" matches the upstream format.
@@ -38,10 +43,11 @@ export function exportPlaybackUrl(
   const base = trimBase(baseUrl);
 
   if (stream.type === StreamType.LIVE) {
+    const liveBase = livePlaybackBase(baseUrl);
     if (output === "hls" && full && isHlsUpstream(resolved, seed)) {
-      return `${base}/live/${line.username}/${line.password}/${stream.id}.m3u8`;
+      return `${liveBase}/live/${line.username}/${line.password}/${stream.id}.m3u8`;
     }
-    return `${base}/live/${line.username}/${line.password}/${stream.id}.ts`;
+    return `${liveBase}/live/${line.username}/${line.password}/${stream.id}.ts`;
   }
 
   const ext =

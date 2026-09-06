@@ -34,3 +34,19 @@ test("publicOriginFromRequest echoes the Host the IPTV client dialed", () => {
     "http://panel.example.com"
   );
 });
+
+test("publicOriginFromRequest preserves the viewer HTTPS scheme behind Cloudflare", () => {
+  const headers = {
+    get(name: string) {
+      const key = name.toLowerCase();
+      if (key === "host") return "darkcdn.store";
+      if (key === "x-forwarded-proto") return "http";
+      if (key === "cf-visitor") return '{"scheme":"https"}';
+      return null;
+    },
+  };
+  assert.equal(
+    publicOriginFromRequest("http://127.0.0.1:13000/player_api.php", headers),
+    "https://darkcdn.store"
+  );
+});

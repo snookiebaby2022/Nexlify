@@ -405,18 +405,44 @@ export async function jobAgentAutoRestart() {
       restarted++;
     }
 
+    // Mark remote agents offline when heartbeats stop — never the local panel host.
+    // Under panel CPU load, agent POSTs time out and Main Server was falsely flipping
+    // offline every few minutes (UI lag + "Main Server offline" flap).
     const offlineBefore = new Date(Date.now() - 300_000);
-    await prisma.streamServer.updateMany({
+    const { isLocalPanelHost } = await import("./panel-local-server");
+    const staleAgents = await prisma.streamServer.findMany({
       where: {
         agentToken: { not: null },
         agentLastSeen: { lt: offlineBefore },
         healthStatus: "online",
       },
-      data: {
-        healthStatus: "offline",
-        healthMessage: "Agent not seen for 5+ minutes",
-      },
+      select: { id: true, host: true },
     });
+    const remoteStaleIds = staleAgents
+      .filter((s) => !isLocalPanelHost(s.host))
+      .map((s) => s.id);
+    if (remoteStaleIds.length) {
+      await prisma.streamServer.updateMany({
+        where: { id: { in: remoteStaleIds } },
+        data: {
+          healthStatus: "offline",
+          healthMessage: "Agent not seen for 5+ minutes",
+        },
+      });
+    }
+    const localStaleIds = staleAgents
+      .filter((s) => isLocalPanelHost(s.host))
+      .map((s) => s.id);
+    if (localStaleIds.length) {
+      await prisma.streamServer.updateMany({
+        where: { id: { in: localStaleIds } },
+        data: {
+          healthStatus: "online",
+          healthMessage: "Main server (panel) — agent heartbeat optional",
+          lastHealthAt: new Date(),
+        },
+      });
+    }
 
     await logCron(
       "agent_auto_restart",

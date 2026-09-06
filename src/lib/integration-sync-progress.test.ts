@@ -27,7 +27,7 @@ test("isSyncJobActive is true for a fresh running job", () => {
   assert.equal(isSyncJobActive(progress({})), true);
 });
 
-test("isSyncJobActive is false when running progress is older than 2 minutes", () => {
+test("isSyncJobActive is false when running progress is older than the stale window", () => {
   const old = progress({
     updatedAt: new Date(Date.now() - SYNC_STALE_MS - 1000).toISOString(),
   });

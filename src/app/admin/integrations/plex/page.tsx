@@ -29,6 +29,12 @@ type PlexItem = {
     transcodeProfile?: string;
     skipExistingCatalog?: boolean;
     excludeNonEnglish?: boolean;
+    deleteProgress?: {
+      status?: string;
+      message?: string;
+      deleted?: number;
+      updatedAt?: string;
+    };
   };
 };
 
@@ -93,6 +99,7 @@ export default function PlexIntegrationPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [syncing, setSyncing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingLibs, setLoadingLibs] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -108,6 +115,24 @@ export default function PlexIntegrationPage() {
       .then((d) => {
         const next = (d.items ?? []) as PlexItem[];
         setItems(next);
+        const deletingRow = next.find((i) => i.config?.deleteProgress?.status === "running");
+        if (deletingRow) {
+          setDeleting(deletingRow.id);
+          setMessage(deletingRow.config?.deleteProgress?.message || "Deleting…");
+        }
+        setDeleting((cur) => {
+          if (cur && !next.some((i) => i.id === cur)) {
+            setMessage((m) => (m && !m.startsWith("Delete started") ? m : "Delete finished."));
+            return null;
+          }
+          if (deletingRow) return deletingRow.id;
+          return cur;
+        });
+        const failedDelete = next.find((i) => i.config?.deleteProgress?.status === "error");
+        if (failedDelete?.config?.deleteProgress?.message) {
+          setError(failedDelete.config.deleteProgress.message);
+          setDeleting(null);
+        }
         const running = next.find((i) => i.syncProgress?.status === "running");
         if (running?.syncProgress) {
           setError("");
@@ -134,6 +159,12 @@ export default function PlexIntegrationPage() {
     if (!lbId) return;
     setForm((f) => (f.serverId ? f : { ...f, serverId: lbId }));
   }, [servers, editId]);
+
+  useEffect(() => {
+    if (!deleting) return;
+    const t = setInterval(() => load(), 1500);
+    return () => clearInterval(t);
+  }, [deleting]);
 
   useEffect(() => {
     if (!syncing) return;
@@ -380,6 +411,43 @@ export default function PlexIntegrationPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sync failed");
       setSyncing(null);
+    }
+  }
+
+  async function remove(id: string) {
+    const item = items.find((i) => i.id === id);
+    const label = item?.name ?? "this Plex connection";
+    if (
+      !confirm(
+        `Delete “${label}” and all movies/TV imported from this Plex connection?\n\nThis cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(id);
+    setError("");
+    setMessage("Delete started…");
+    try {
+      const res = await fetch(
+        `/api/admin/integrations?id=${encodeURIComponent(id)}&deleteStreams=1`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Delete failed");
+      if (editId === id) {
+        setEditId(null);
+        setForm(emptyForm);
+        setLibraries([]);
+      }
+      if (syncing === id) {
+        setSyncing(null);
+        setSyncProgress(null);
+      }
+      setMessage(data.message || `Deleting “${label}” in the background…`);
+      // Keep deleting=id; poll effect watches until the row disappears.
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+      setDeleting(null);
     }
   }
 
@@ -710,6 +778,11 @@ export default function PlexIntegrationPage() {
                   Last sync: {formatDateTime(i.lastSync)}
                 </p>
               )}
+              {i.config?.deleteProgress?.status === "running" && (
+                <p className="text-xs mt-0.5" style={{ color: "var(--danger)" }}>
+                  {i.config.deleteProgress.message || "Deleting…"}
+                </p>
+              )}
               {i.syncProgress?.status === "running" && (
                 <p className="text-xs mt-0.5" style={{ color: "var(--accent)" }}>
                   {i.syncProgress.message}
@@ -717,16 +790,29 @@ export default function PlexIntegrationPage() {
               )}
             </div>
             <div className="flex gap-2">
-              <button type="button" onClick={() => loadIntoForm(i)} style={{ color: "var(--muted)" }}>
+              <button
+                type="button"
+                disabled={Boolean(deleting) || syncing === i.id}
+                onClick={() => loadIntoForm(i)}
+                style={{ color: "var(--muted)" }}
+              >
                 Edit
               </button>
               <button
                 type="button"
-                disabled={syncing === i.id}
+                disabled={Boolean(deleting) || syncing === i.id}
                 onClick={() => void sync(i.id)}
                 style={{ color: "var(--accent)" }}
               >
                 {syncing === i.id ? "Syncing…" : "Sync"}
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(deleting) || syncing === i.id}
+                onClick={() => void remove(i.id)}
+                style={{ color: "var(--danger)" }}
+              >
+                {deleting === i.id ? "Deleting…" : "Delete"}
               </button>
             </div>
           </li>

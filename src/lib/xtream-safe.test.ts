@@ -72,8 +72,12 @@ describe("xtream-safe", () => {
   });
 
   it("exports numeric category_ids like XUI", () => {
-    assert.deepEqual(xtreamCategoryIds("162563989"), [162563989]);
-  });
+  assert.deepEqual(xtreamCategoryIds("162563989"), [162563989]);
+  assert.deepEqual(xtreamCategoryIds("162563989", ["1353223215", "162563989", "", undefined]), [
+    162563989,
+    1353223215,
+  ]);
+});
 
   it("exports string category_id for SQLite-friendly IPTV apps", () => {
     assert.equal(xtreamExportCategoryId("707056019"), "707056019");

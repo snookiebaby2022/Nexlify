@@ -38,7 +38,9 @@ export type ServerSslSettings = {
 };
 
 export const defaultNetworkSettings = (): ServerNetworkSettings => ({
-  interfaceName: "eth0",
+  // Placeholder only — Auto-detect / SSH detect must overwrite with the real uplink
+  // (e.g. enp45s0 on modern 10GbE hosts). Do not assume eth0 exists.
+  interfaceName: "",
   gateway: "",
   subnetMask: "255.255.255.0",
   dnsServers: "8.8.8.8\n8.8.4.4",

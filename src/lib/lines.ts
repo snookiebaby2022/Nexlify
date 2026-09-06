@@ -417,7 +417,7 @@ function listingFilterSql(line: LineWithBouquets, options?: StreamsForLineOption
 export async function forEachLeanListingBatch(
   line: LineWithBouquets,
   options: StreamsForLineOptions | undefined,
-  onBatch: (streams: StreamForLine[]) => void | Promise<void>
+  onBatch: (streams: StreamForLine[]) => void | boolean | Promise<void | boolean>
 ): Promise<void> {
   const filter = listingFilterSql(line, options);
   if (!filter.bouquetIds.length) return;
@@ -461,7 +461,8 @@ export async function forEachLeanListingBatch(
     `) as LeanListingRow[];
     if (!rows.length) return;
     const mapped = rows.map(({ ord: _ord, ...s }) => s as unknown as StreamForLine);
-    await onBatch(mapped);
+    const cont = await onBatch(mapped);
+    if (cont === false) return;
     const last = rows[rows.length - 1]!;
     cursor = newest
       ? { kind: "newest", at: last.createdAt, id: last.id }

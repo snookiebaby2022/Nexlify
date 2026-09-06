@@ -180,6 +180,10 @@ const MAX_EDGE_DISK_PACK = Number(process.env.IPTV_EDGE_MAX_DISK_PACK || 256);
 const MAX_LIVE_FANS = Number(process.env.IPTV_EDGE_MAX_LIVE_FANS || 8000);
 const LIVE_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_LIVE_FAN_LINGER_MS || 45000);
 const ON_DEMAND_FAN_LINGER_MS = Number(process.env.IPTV_EDGE_ON_DEMAND_FAN_LINGER_MS || 45000);
+const LIVE_FAN_PREFIX_BYTES = Math.max(
+  188 * 24,
+  Math.min(Number(process.env.IPTV_EDGE_FAN_PREFIX_BYTES || 1_048_576), 8_388_608)
+);
 /** Soft lag: skip-to-live instead of killing the socket (XUI-style).
  *  Hard drop only after extreme lag — disconnect+reconnect feels like buffering. */
 const MAX_CLIENT_LAG_BYTES = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_BYTES || 24_000_000);
@@ -1341,18 +1345,19 @@ function attachLiveFanClient(fan, clientReq, clientRes, pulseCtx) {
   fan.idleSince = 0;
   if (!clientRes.headersSent) {
     writeLiveTsHead(clientRes);
-    if (fan.prefix && fan.prefix.length) {
+    const prefix = liveFanPrefixBuffer(fan);
+    if (prefix.length) {
       try {
         // The fan keeps a rolling byte tail, which may begin mid-packet.
         // Start every newly joined client on an MPEG-TS sync byte.
-        let aligned = fan.prefix;
-        for (let i = 0; i < Math.min(188, fan.prefix.length); i++) {
+        let aligned = prefix;
+        for (let i = 0; i < Math.min(188, prefix.length); i++) {
           if (
-            fan.prefix[i] === 0x47 &&
-            fan.prefix[i + 188] === 0x47 &&
-            fan.prefix[i + 376] === 0x47
+            prefix[i] === 0x47 &&
+            prefix[i + 188] === 0x47 &&
+            prefix[i + 376] === 0x47
           ) {
-            aligned = fan.prefix.subarray(i);
+            aligned = prefix.subarray(i);
             break;
           }
         }
@@ -1375,6 +1380,37 @@ function attachLiveFanClient(fan, clientReq, clientRes, pulseCtx) {
   clientReq.once("close", drop);
   clientReq.once("aborted", drop);
   fan.clients.add(slot);
+}
+
+function appendLiveFanPrefix(fan, chunk, reset = false) {
+  if (!chunk?.length) return;
+  if (reset || !Array.isArray(fan.prefixChunks)) {
+    fan.prefixChunks = [];
+    fan.prefixBytes = 0;
+  }
+  fan.prefixChunks.push(chunk);
+  fan.prefixBytes += chunk.length;
+  while (fan.prefixBytes > LIVE_FAN_PREFIX_BYTES && fan.prefixChunks.length) {
+    const extra = fan.prefixBytes - LIVE_FAN_PREFIX_BYTES;
+    const first = fan.prefixChunks[0];
+    if (first.length <= extra) {
+      fan.prefixChunks.shift();
+      fan.prefixBytes -= first.length;
+    } else {
+      fan.prefixChunks[0] = first.subarray(extra);
+      fan.prefixBytes -= extra;
+    }
+  }
+  fan.prefix = fan.prefixChunks[fan.prefixChunks.length - 1] || Buffer.alloc(0);
+}
+
+function liveFanPrefixBuffer(fan) {
+  if (Array.isArray(fan?.prefixChunks) && fan.prefixChunks.length) {
+    return fan.prefixChunks.length === 1
+      ? fan.prefixChunks[0]
+      : Buffer.concat(fan.prefixChunks, fan.prefixBytes);
+  }
+  return fan?.prefix?.length ? fan.prefix : Buffer.alloc(0);
 }
 
 function resumeFanUpstream(fan) {
@@ -1447,13 +1483,7 @@ function writeFanChunkToSlot(fan, slot, chunk) {
 
 function broadcastFanChunk(fan, chunk) {
   if (!chunk || !chunk.length) return;
-  const keep = 188 * 24;
-  if (!fan.prefix || !fan.prefix.length) {
-    fan.prefix = chunk.length <= keep ? chunk : chunk.subarray(chunk.length - keep);
-  } else {
-    const next = Buffer.concat([fan.prefix, chunk]);
-    fan.prefix = next.length <= keep ? next : next.subarray(next.length - keep);
-  }
+  appendLiveFanPrefix(fan, chunk);
   // Live TV must stay realtime. Never pause the origin because one client is
   // slow — that starves every viewer on the fan. Slow sockets skip-to-live
   // (or hard-drop only after extreme lag).
@@ -1513,6 +1543,8 @@ function ensureLiveFan(streamId, upstreamUrl) {
     destroySrc: null,
     starterLock: false,
     prefix: Buffer.alloc(0),
+    prefixChunks: [],
+    prefixBytes: 0,
     linger: null,
     destroyed: false,
     createdAt: Date.now(),
@@ -2880,7 +2912,7 @@ function pipeLiveMpegTsShared(fan, upRes, clientReq, clientRes, pulseCtx, onUnpl
   };
 
   const goLive = (prefix) => {
-    fan.prefix = prefix && prefix.length ? prefix : fan.prefix;
+    if (prefix?.length) appendLiveFanPrefix(fan, prefix, true);
     armFanUpstream(fan, upRes);
     fanGoLive(fan, fan.destroySrc);
     if (!opts?.reconnect) {
@@ -3025,7 +3057,7 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, onUnplayable, fan
     }
     headersSent = true;
     if (fan) {
-      fan.prefix = prefix;
+      appendLiveFanPrefix(fan, prefix, true);
       feedLiveFanFromUpstream(fan, upRes, clientReq, clientRes, pulseCtx, opts);
       return;
     }
@@ -3552,8 +3584,20 @@ async function onRequest(clientReq, clientRes, ctx) {
       clientRes.end("streamId required");
       return;
     }
-    clientRes.writeHead(202, { "content-type": "application/json" });
-    clientRes.end(JSON.stringify({ ok: true, streamId, queued: true }));
+    const fan = liveFans.get(streamId);
+    if (!fan || fan.destroyed || !fan.broadcasting) {
+      clientRes.writeHead(404, { "content-type": "application/json", "cache-control": "no-store" });
+      clientRes.end(JSON.stringify({ ok: false, streamId, warmed: false }));
+      return;
+    }
+    if (fan.clients.size === 0 && fan.waiters.length === 0) {
+      fan.idleSince = Date.now();
+      if (fan.linger) clearTimeout(fan.linger);
+      const lingerMs = fan.onDemand ? ON_DEMAND_FAN_LINGER_MS : LIVE_FAN_LINGER_MS;
+      fan.linger = setTimeout(() => destroyLiveFan(fan), lingerMs);
+    }
+    clientRes.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    clientRes.end(JSON.stringify({ ok: true, streamId, warmed: true }));
     return;
   }
 
@@ -3686,6 +3730,22 @@ async function onRequest(clientReq, clientRes, ctx) {
         `[iptv-edge-auth] ${auth.status} live=${auth.live} upstream=${Boolean(auth.upstream)} passthrough=${auth.passthrough} stream=${auth.streamId || ""}`
       );
     }
+    // Deny statuses first — a 403 "Max connections" has no upstream and must not
+    // fall through to forward() → misleading "media must splice locally".
+    if (auth.status === 401 || auth.status === 403 || auth.status === 429 || auth.status === 404) {
+      reportViewerPlaybackDrop(clientReq, auth, `Live auth denied (HTTP ${auth.status})`, auth.status);
+      clientRes.writeHead(auth.status, { "content-type": "text/plain" });
+      clientRes.end(
+        auth.status === 401
+          ? "Unauthorized"
+          : auth.status === 404
+            ? "Not found"
+            : auth.status === 429
+              ? "Too many requests"
+              : "Forbidden"
+      );
+      return;
+    }
     if (auth.passthrough || !auth.upstream) {
       // HEAD / tiny Range probes from live-auth omit upstream. Do not forward
       // /live/ to the panel (502 "must splice locally") — Smart TVs always HEAD.
@@ -3701,12 +3761,6 @@ async function onRequest(clientReq, clientRes, ctx) {
         auth.status && auth.status !== 200 ? auth.status : 502
       );
       forward(clientReq, clientRes, ctx);
-      return;
-    }
-    if (auth.status === 401 || auth.status === 403 || auth.status === 429 || auth.status === 404) {
-      reportViewerPlaybackDrop(clientReq, auth, `Live auth denied (HTTP ${auth.status})`, auth.status);
-      clientRes.writeHead(auth.status, { "content-type": "text/plain" });
-      clientRes.end(auth.status === 401 ? "Unauthorized" : auth.status === 404 ? "Not found" : "Forbidden");
       return;
     }
     if (auth.status !== 200) {

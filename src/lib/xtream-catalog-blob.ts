@@ -6,6 +6,10 @@ import {
   lineBouquetCacheToken,
 } from "@/lib/lines";
 import {
+  categoryMergeKey,
+  VIRTUAL_RECENT_VOD_LIMIT,
+} from "@/lib/category-options";
+import {
   catalogBlobPath,
   catalogFileAgeMs,
   catalogFileIsFresh,
@@ -66,7 +70,7 @@ async function serveXtreamCatalogInline(
 
 export type XtreamCatalogKind = "live" | "vod" | "series";
 
-type CategoryFilter = string[] | "uncategorized" | "all" | "missing";
+type CategoryFilter = string[] | "uncategorized" | "all" | "missing" | "recent";
 
 async function resolveCategoryFilter(
   kind: XtreamCatalogKind,
@@ -85,6 +89,7 @@ function filterCachePart(filter: CategoryFilter): string {
   if (filter === "all") return "all";
   if (filter === "uncategorized") return "uncat";
   if (filter === "missing") return "missing";
+  if (filter === "recent") return `recent:${VIRTUAL_RECENT_VOD_LIMIT}`;
   return hashCatalogKey(filter.slice().sort());
 }
 
@@ -122,6 +127,7 @@ async function buildCatalogGzip(
     type: catalogStreamType(kind),
     lean: true as const,
     skipVodMeta: true,
+    // Virtual Recently Added = all movies newest-first (capped below).
     uncategorizedOnly: filter === "uncategorized",
     categoryIds: Array.isArray(filter) ? filter : undefined,
   };
@@ -151,20 +157,58 @@ async function buildCatalogGzip(
   const canonical = await buildCanonicalCategoryMaps(
     kind === "vod" ? StreamType.MOVIE : StreamType.LIVE,
   );
+  const recentCategoryId =
+    kind === "vod"
+      ? canonical.byMergeKey.get(categoryMergeKey("Recently Added"))?.numericId
+      : undefined;
+  const forceRecentCategoryId =
+    kind === "vod" && filter === "recent" ? recentCategoryId : undefined;
+  // XCIPTV/SMETV NEW filters the full get_vod_streams blob by category_id locally.
+  // Duplicate the newest titles under Recently Added so NEW fills without moving
+  // them out of Comedy/Horror/etc. in the database.
+  const dualTagRecentInFullVod =
+    kind === "vod" &&
+    Boolean(recentCategoryId) &&
+    filter !== "recent" &&
+    filter !== "uncategorized" &&
+    !Array.isArray(filter);
   let index = 0;
   const firstLiveIds: string[] = [];
   await writeGzipJsonArrayFile(destPath, async (writeItem) => {
     await forEachLeanListingBatch(line, listingOpts, async (batch) => {
       for (const stream of batch) {
-        const mapped =
-          kind === "vod"
-            ? mapXtreamVodItem(stream, index, canonical)
-            : mapXtreamLiveItem(stream, index, canonical);
-        await writeItem(mapped);
-        if (kind === "live" && firstLiveIds.length < 5)
-          firstLiveIds.push(stream.id);
+        if (filter === "recent" && index >= VIRTUAL_RECENT_VOD_LIMIT) return false;
+        if (kind === "vod") {
+          const genreItem = mapXtreamVodItem(
+            stream,
+            index,
+            canonical,
+            forceRecentCategoryId
+              ? { forceCategoryNumericId: forceRecentCategoryId }
+              : dualTagRecentInFullVod && index < VIRTUAL_RECENT_VOD_LIMIT && recentCategoryId
+                ? { alsoCategoryNumericIds: [recentCategoryId] }
+                : undefined
+          );
+          await writeItem(genreItem);
+          if (
+            dualTagRecentInFullVod &&
+            recentCategoryId &&
+            index < VIRTUAL_RECENT_VOD_LIMIT &&
+            String(genreItem.category_id) !== String(recentCategoryId)
+          ) {
+            await writeItem(
+              mapXtreamVodItem(stream, index, canonical, {
+                forceCategoryNumericId: recentCategoryId,
+              })
+            );
+          }
+        } else {
+          await writeItem(mapXtreamLiveItem(stream, index, canonical));
+          if (firstLiveIds.length < 5) firstLiveIds.push(stream.id);
+        }
         index += 1;
       }
+      if (filter === "recent" && index >= VIRTUAL_RECENT_VOD_LIMIT) return false;
     });
   });
   if (kind === "live" && firstLiveIds.length) onFirstLiveIds?.(firstLiveIds);

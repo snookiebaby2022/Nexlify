@@ -10,6 +10,9 @@ export type DashboardStreamData = {
   totalActiveLines: number;
   networkInMbps: number;
   networkOutMbps: number;
+  lbCapMbps?: number;
+  panelProxyMbps?: number;
+  bandwidthMeasured?: boolean;
   connections: {
     id: string;
     line: string;

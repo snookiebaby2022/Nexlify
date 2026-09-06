@@ -21,9 +21,10 @@ import {
 import { cuidToNum } from "@/lib/xtream-stream-id";
 import { xtreamListingRating } from "@/lib/vod-meta";
 
-/** XCIPTV drops / ignores VOD rows with category_id "0" in Latest + folders. */
+/** XCIPTV drops / ignores VOD rows with category_id "0" in Latest + folders.
+ *  Do not fall back to Recently Added — that folder is a virtual NEW overlay. */
 function vodCategoryFallbackNumeric(canonical: CanonicalCategoryMaps): string {
-  for (const name of ["Recently Added", "Movies", "Movie", "Other"]) {
+  for (const name of ["Movies", "Movie", "Other"]) {
     const hit = canonical.byMergeKey.get(categoryMergeKey(name));
     if (hit?.numericId && hit.numericId !== "0") return hit.numericId;
   }
@@ -101,13 +102,26 @@ export function mapXtreamLiveItem(
 export function mapXtreamVodItem(
   s: StreamForLine,
   index: number,
-  canonical: CanonicalCategoryMaps
+  canonical: CanonicalCategoryMaps,
+  opts?: {
+    forceCategoryNumericId?: string;
+    /** Extra folder ids (e.g. virtual Recently Added) for apps that read category_ids. */
+    alsoCategoryNumericIds?: string[];
+  }
 ) {
-  const numCategoryId = exportCategoryNumericId(s, canonical, "MOVIE");
+  const genreCategoryId = exportCategoryNumericId(s, canonical, "MOVIE");
+  const numCategoryId = opts?.forceCategoryNumericId || genreCategoryId;
   const stars = xtreamListingRating(s.vodRating);
   const icon = xtreamSafeText(s.streamIcon);
   const added = xtreamAddedUnix(s.createdAt, s.updatedAt);
   const modified = xtreamUnix(s.updatedAt);
+  const also = [
+    ...(opts?.alsoCategoryNumericIds ?? []),
+    // Keep genre visible in category_ids when we force Recently Added on a duplicate row.
+    opts?.forceCategoryNumericId && opts.forceCategoryNumericId !== genreCategoryId
+      ? genreCategoryId
+      : undefined,
+  ];
   return {
     num: index + 1,
     name: xtreamSafeText(s.name) || "Movie",
@@ -122,7 +136,7 @@ export function mapXtreamVodItem(
     last_modified: String(modified),
     is_adult: s.isAdult ? 1 : 0,
     category_id: xtreamExportCategoryId(numCategoryId),
-    category_ids: xtreamCategoryIds(numCategoryId),
+    category_ids: xtreamCategoryIds(numCategoryId, also),
     container_extension: xtreamListingExtension(
       s.containerExtension,
       "mp4",
@@ -136,13 +150,16 @@ export function mapXtreamVodItem(
 export function mapXtreamSeriesItem(
   s: SeriesSeedRow,
   index: number,
-  canonical: CanonicalCategoryMaps
+  canonical: CanonicalCategoryMaps,
+  opts?: { forceCategoryNumericId?: string }
 ) {
-  const numCategoryId = exportCategoryNumericId(
-    { type: StreamType.SERIES, categoryId: s.categoryId },
-    canonical,
-    "SERIES"
-  );
+  const numCategoryId =
+    opts?.forceCategoryNumericId ||
+    exportCategoryNumericId(
+      { type: StreamType.SERIES, categoryId: s.categoryId },
+      canonical,
+      "SERIES"
+    );
   const modified = xtreamUnix(s.updatedAt);
   const stars = xtreamListingRating(s.vodRating);
   const cover = xtreamSafeText(s.streamIcon);

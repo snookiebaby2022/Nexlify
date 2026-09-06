@@ -19,6 +19,28 @@ export function categoryMergeKey(name: string): string {
   return n.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * SMETV / XCIPTV "NEW" (and similar) map to a folder named Recently Added / New /
+ * Latest — not a real genre. Those folders must list newest titles by createdAt,
+ * even when Plex imports land in Comedy/Horror/etc.
+ */
+export function isVirtualRecentlyAddedCategoryName(name: string): boolean {
+  const n = normalizeCategoryName(name);
+  return (
+    n === "recently added" ||
+    n === "recently-added" ||
+    n === "new" ||
+    n === "new movies" ||
+    n === "new movie" ||
+    n === "latest" ||
+    n === "latest movies" ||
+    n === "latest movie"
+  );
+}
+
+/** Cap for virtual Recently Added / NEW VOD exports (newest-first). */
+export const VIRTUAL_RECENT_VOD_LIMIT = 1000;
+
 export type CategoryOptionInput = {
   id: string;
   name: string;

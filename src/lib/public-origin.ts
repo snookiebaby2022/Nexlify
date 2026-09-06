@@ -175,7 +175,17 @@ export function publicOriginFromRequest(
         ? hostPort
         : "";
 
+  let cloudflareProto = "";
+  try {
+    const visitor = JSON.parse(headers?.get("cf-visitor") ?? "{}") as { scheme?: unknown };
+    if (visitor.scheme === "http" || visitor.scheme === "https") cloudflareProto = visitor.scheme;
+  } catch {
+    /* ignore malformed proxy metadata */
+  }
+  // Cloudflare may connect to nginx over HTTP while the viewer used HTTPS.
+  // nginx then overwrites X-Forwarded-Proto with its origin-side scheme.
   let proto =
+    cloudflareProto ||
     headers?.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
     url.protocol.replace(":", "");
   // Scheme pasted into DNS is only a hint when the proxy did not set proto

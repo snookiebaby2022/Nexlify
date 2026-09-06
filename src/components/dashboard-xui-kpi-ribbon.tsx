@@ -132,7 +132,7 @@ export function DashboardXuiKpiRibbon({
           icon={<Users size={28} />}
         />
         <KpiTile
-          label="Bandwidth"
+          label="LB egress"
           value={`${(kpi?.networkOutMbps ?? 0).toFixed(1)} Mbps`}
           gradient="linear-gradient(135deg, #ff9f1a 0%, #f39c12 45%, #e67e22 100%)"
           href="/admin/servers"
@@ -141,12 +141,15 @@ export function DashboardXuiKpiRibbon({
             <div className="space-y-1 text-[13px] font-semibold tracking-wide">
               <div className="flex items-center gap-1.5">
                 <ArrowUp size={14} strokeWidth={2.5} />
-                Output { (kpi?.networkOutMbps ?? 0).toFixed(1) } Mbps
+                Live out {(kpi?.networkOutMbps ?? 0).toFixed(1)} Mbps
+                {(kpi?.lbCapMbps ?? 0) > 0 ? ` / ${kpi?.lbCapMbps}` : ""}
               </div>
-              <div className="flex items-center gap-1.5">
-                <ArrowDown size={14} strokeWidth={2.5} />
-                Input { (kpi?.networkInMbps ?? 0).toFixed(1) } Mbps
-              </div>
+              {(kpi?.panelProxyMbps ?? 0) > 0 ? (
+                <div className="flex items-center gap-1.5 opacity-90">
+                  <ArrowDown size={14} strokeWidth={2.5} />
+                  Panel proxy {kpi?.panelProxyMbps?.toFixed(1)} Mbps
+                </div>
+              ) : null}
             </div>
           }
         />

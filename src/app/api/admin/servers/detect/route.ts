@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     }
 
     const hw = await withSshClient({ host, port, username, password }, (client) =>
-      detectHardwareOverSsh(client)
+      detectHardwareOverSsh(client, { hintIp: host })
     );
     if (serverId) {
       await markDetected(serverId, hw);
@@ -138,7 +138,11 @@ async function markDetected(
       healthStatus: "online",
       healthMessage: `SSH auto-detect (${hw.primaryInterface})`,
       lastHealthAt: new Date(),
-      privateIp: hw.ipv4[0] || undefined,
+      // Only persist RFC1918 as privateIp — public NIC address is already StreamServer.host
+      privateIp: (() => {
+        const ip = hw.ipv4[0] || "";
+        return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)/.test(ip) ? ip : null;
+      })(),
       panelSettings,
     },
   });

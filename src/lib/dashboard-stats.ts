@@ -8,8 +8,8 @@ import {
   getDashboardServerMetrics,
   getDashboardSummary,
   getDashboardKpiExtended,
+  getDashboardPlaybackBandwidth,
 } from "@/lib/dashboard-server-metrics";
-import { getDashboardNicBandwidthMbps } from "@/lib/host-metrics";
 import { ensureMainServerOnline } from "@/lib/ensure-main-server-online";
 
 export async function loadHeaderStats() {
@@ -38,13 +38,14 @@ export async function loadHeaderStats() {
       }),
     ]);
 
-    const { networkInMbps, networkOutMbps } =
-      await getDashboardNicBandwidthMbps();
+    const { networkInMbps, networkOutMbps, panelProxyMbps } =
+      await getDashboardPlaybackBandwidth();
 
     return {
       ...counts,
       networkInMbps,
       networkOutMbps,
+      panelProxyMbps,
       networkInPerMin: networkInMbps,
       networkOutPerMin: networkOutMbps,
       networkBytesInTotal: totalIn?.value ?? "0",
@@ -83,7 +84,7 @@ export async function loadAdminDashboardStats() {
 
   try {
     const [counts, results] = await Promise.all([
-      cacheGetOrSet("stats:admin-primary-counts:v2", 15, async () => {
+      cacheGetOrSet("stats:admin-primary-counts:v2", 30, async () => {
         const [
           lineCount,
           activeLineCount,
@@ -139,8 +140,8 @@ export async function loadAdminDashboardStats() {
     console.error("[stats] loadStats primary query error:", e);
   }
 
-  const { networkInMbps, networkOutMbps } =
-    await getDashboardNicBandwidthMbps();
+  const { networkInMbps, networkOutMbps, panelProxyMbps } =
+    await getDashboardPlaybackBandwidth();
   const networkInPerMin = networkInMbps;
   const networkOutPerMin = networkOutMbps;
 
@@ -171,6 +172,9 @@ export async function loadAdminDashboardStats() {
     requestBreakdown: { channels: 0, movies: 0, series: 0 },
     networkInMbps: 0,
     networkOutMbps: 0,
+    lbCapMbps: 0,
+    panelProxyMbps: 0,
+    bandwidthMeasured: false,
     inactiveStreams: 0,
     inactiveLive: 0,
     inactiveMovies: 0,
@@ -201,7 +205,7 @@ export async function loadAdminDashboardStats() {
           return dashboard;
         },
       ),
-      cacheGetOrSet("stats:kpi", 120, () => getDashboardKpiExtended()).catch(
+      cacheGetOrSet("stats:kpi", 300, () => getDashboardKpiExtended()).catch(
         (e) => {
           console.error("[stats] getDashboardKpiExtended error:", e);
           return dashboardKpi;
@@ -238,6 +242,7 @@ export async function loadAdminDashboardStats() {
     magDevices,
     networkInMbps,
     networkOutMbps,
+    panelProxyMbps,
     networkInPerMin,
     networkOutPerMin,
     networkBytesInTotal: totalIn?.value ?? "0",

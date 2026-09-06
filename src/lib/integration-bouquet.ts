@@ -146,7 +146,10 @@ export async function attachVodBouquetsToAllLines() {
 
 const LINK_CHUNK = 400;
 
-export async function relinkPlexStreamsToVodBouquets(integrationId: string): Promise<{
+export async function relinkPlexStreamsToVodBouquets(
+  integrationId: string,
+  reporter?: { note: (message: string) => Promise<void> }
+): Promise<{
   movies: number;
   series: number;
 }> {
@@ -159,9 +162,42 @@ export async function relinkPlexStreamsToVodBouquets(integrationId: string): Pro
     select: { id: true },
   });
 
-  const movieIds: string[] = [];
-  const seriesIds: string[] = [];
+  const unlinkIds = [
+    pluginId,
+    legacyMovies && legacyMovies.id !== movieBq ? legacyMovies.id : null,
+  ].filter((id): id is string => Boolean(id));
+
+  const linkChunk = async (ids: string[], bouquetId: string) => {
+    if (!ids.length) return;
+    await prisma.bouquetStream.createMany({
+      data: ids.map((streamId) => ({ bouquetId, streamId, sortOrder: 0 })),
+      skipDuplicates: true,
+    });
+    for (const extraId of unlinkIds) {
+      if (extraId === bouquetId) continue;
+      await prisma.bouquetStream.deleteMany({
+        where: { bouquetId: extraId, streamId: { in: ids } },
+      });
+    }
+  };
+
+  let movies = 0;
+  let series = 0;
   let cursor: string | undefined;
+  let movieBuf: string[] = [];
+  let seriesBuf: string[] = [];
+
+  const flushBufs = async () => {
+    while (movieBuf.length >= LINK_CHUNK) {
+      const chunk = movieBuf.splice(0, LINK_CHUNK);
+      await linkChunk(chunk, movieBq);
+    }
+    while (seriesBuf.length >= LINK_CHUNK) {
+      const chunk = seriesBuf.splice(0, LINK_CHUNK);
+      await linkChunk(chunk, seriesBq);
+    }
+  };
+
   for (;;) {
     const rows = await prisma.stream.findMany({
       where: { streamUrl: { startsWith: prefix }, type: { in: [StreamType.MOVIE, StreamType.SERIES] } },
@@ -172,37 +208,28 @@ export async function relinkPlexStreamsToVodBouquets(integrationId: string): Pro
     });
     if (!rows.length) break;
     for (const row of rows) {
-      if (row.type === StreamType.MOVIE) movieIds.push(row.id);
-      else seriesIds.push(row.id);
+      if (row.type === StreamType.MOVIE) {
+        movieBuf.push(row.id);
+        movies += 1;
+      } else {
+        seriesBuf.push(row.id);
+        series += 1;
+      }
     }
+    await flushBufs();
     cursor = rows[rows.length - 1]!.id;
+    if ((movies + series) % 10_000 < rows.length) {
+      await reporter?.note(
+        `Bouquet link ${movies.toLocaleString()} movies · ${series.toLocaleString()} series…`
+      );
+    }
     if (rows.length < 2000) break;
   }
 
-  const unlinkIds = [
-    pluginId,
-    legacyMovies && legacyMovies.id !== movieBq ? legacyMovies.id : null,
-  ].filter((id): id is string => Boolean(id));
+  if (movieBuf.length) await linkChunk(movieBuf, movieBq);
+  if (seriesBuf.length) await linkChunk(seriesBuf, seriesBq);
 
-  const link = async (ids: string[], bouquetId: string) => {
-    for (let i = 0; i < ids.length; i += LINK_CHUNK) {
-      const chunk = ids.slice(i, i + LINK_CHUNK);
-      await prisma.bouquetStream.createMany({
-        data: chunk.map((streamId) => ({ bouquetId, streamId, sortOrder: 0 })),
-        skipDuplicates: true,
-      });
-      for (const extraId of unlinkIds) {
-        if (extraId === bouquetId) continue;
-        await prisma.bouquetStream.deleteMany({
-          where: { bouquetId: extraId, streamId: { in: chunk } },
-        });
-      }
-    }
-  };
-
-  await link(movieIds, movieBq);
-  await link(seriesIds, seriesBq);
-  return { movies: movieIds.length, series: seriesIds.length };
+  return { movies, series };
 }
 
 /**

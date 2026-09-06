@@ -44,6 +44,7 @@ import { warmLineXmltv } from "@/lib/xmltv-export";
 import { prisma } from "@/lib/prisma";
 import { resolvePlaybackUrlForLine } from "@/lib/line-playback";
 import { UPSTREAM_HLS_UA } from "@/lib/hls-playback";
+import { publicOriginFromRequest } from "@/lib/public-origin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -177,6 +178,7 @@ async function handlePlayerApiInner(
   const action = params.get("action");
   const userAgent = req.headers.get("user-agent");
   const panelBase = serverBaseUrl(req.url, req.headers);
+  const websiteOrigin = publicOriginFromRequest(req.url, req.headers);
 
   if (!username || !password) {
     // XUI/Smarters Pro (LG/webOS) probe player_api.php with no credentials.
@@ -212,7 +214,7 @@ async function handlePlayerApiInner(
     // warmed by cron; launching all three for every login caused DB storms.
     void warmXtreamLiveCatalogNow(line).catch(() => undefined);
     warmLineXmltv(line);
-    return j(await xtreamUserInfo(line, baseUrl, userAgent));
+    return j(await xtreamUserInfo(line, baseUrl, userAgent, websiteOrigin));
   }
 
   const bouquetToken = lineBouquetCacheToken(line);
@@ -265,7 +267,7 @@ async function handlePlayerApiInner(
     case "get_vod_categories": {
       const ttl = await getCacheTtls();
       const payload = await cacheGetOrSet(
-        `xtream:vod_categories:v5:${bouquetToken}`,
+        `xtream:vod_categories:v6:${bouquetToken}`,
         ttl.categories,
         () => xtreamVodCategoriesForLine(line),
       );
@@ -336,9 +338,9 @@ async function handlePlayerApiInner(
     }
     case "get_account_info":
     case "get_user_info":
-      return j(await xtreamUserInfo(line, baseUrl, userAgent));
+      return j(await xtreamUserInfo(line, baseUrl, userAgent, websiteOrigin));
     case "get_server_info": {
-      const payload = await xtreamUserInfo(line, baseUrl, userAgent);
+      const payload = await xtreamUserInfo(line, baseUrl, userAgent, websiteOrigin);
       return j(payload.server_info);
     }
     case "get_bouquets": {
@@ -356,6 +358,6 @@ async function handlePlayerApiInner(
       return j(rows);
     }
     default:
-      return j(await xtreamUserInfo(line, baseUrl, userAgent));
+      return j(await xtreamUserInfo(line, baseUrl, userAgent, websiteOrigin));
   }
 }

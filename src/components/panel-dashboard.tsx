@@ -343,6 +343,9 @@ export function PanelDashboard({
             requestBreakdown: { channels: 0, movies: 0, series: 0 },
             networkInMbps: 0,
             networkOutMbps: 0,
+            lbCapMbps: 0,
+            panelProxyMbps: 0,
+            bandwidthMeasured: false,
             inactiveStreams: 0,
             inactiveLive: 0,
             inactiveMovies: 0,
@@ -352,6 +355,9 @@ export function PanelDashboard({
           }),
           networkInMbps: liveStats.networkInMbps,
           networkOutMbps: liveStats.networkOutMbps,
+          lbCapMbps: liveStats.lbCapMbps ?? stats?.dashboardKpi?.lbCapMbps ?? 0,
+          panelProxyMbps: liveStats.panelProxyMbps ?? stats?.dashboardKpi?.panelProxyMbps ?? 0,
+          bandwidthMeasured: liveStats.bandwidthMeasured ?? stats?.dashboardKpi?.bandwidthMeasured ?? false,
         }
       : stats?.dashboardKpi;
 

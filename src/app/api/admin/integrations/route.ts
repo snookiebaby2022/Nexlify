@@ -10,6 +10,7 @@ import {
   syncPlexLibraryCategories,
   testPlexConnection,
   testYoutubeConnection,
+  deleteMediaIntegration,
 } from "@/lib/media-integrations";
 import {
   importEmbyLibrary,
@@ -407,9 +408,104 @@ export async function DELETE(req: NextRequest) {
     if (!session) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const id = req.nextUrl.searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-    await prisma.mediaIntegration.delete({ where: { id } });
-    return NextResponse.json({ ok: true });
+    const deleteStreamsParam = req.nextUrl.searchParams.get("deleteStreams");
+    const deleteStreams = deleteStreamsParam !== "0" && deleteStreamsParam !== "false";
+
+    const row = await prisma.mediaIntegration.findUnique({ where: { id } });
+    if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const cfg =
+      row.config && typeof row.config === "object" && !Array.isArray(row.config)
+        ? { ...(row.config as Record<string, unknown>) }
+        : {};
+    const existing = cfg.deleteProgress as
+      | { status?: string; updatedAt?: string; message?: string }
+      | undefined;
+    if (existing?.status === "running") {
+      const age = existing.updatedAt ? Date.now() - Date.parse(existing.updatedAt) : 0;
+      if (Number.isFinite(age) && age < 30 * 60_000) {
+        return NextResponse.json({
+          started: true,
+          alreadyRunning: true,
+          message: existing.message || "Delete already in progress…",
+        });
+      }
+    }
+
+    cfg.deleteProgress = {
+      status: "running",
+      message: deleteStreams
+        ? "Deleting imported titles… (this can take a few minutes)"
+        : "Removing connection…",
+      deleted: 0,
+      updatedAt: new Date().toISOString(),
+    };
+    await prisma.mediaIntegration.update({
+      where: { id },
+      data: { config: cfg as Prisma.InputJsonValue },
+    });
+
+    // Run off the request so nginx/browser don't 499 on large libraries.
+    after(async () => {
+      try {
+        let lastNote = 0;
+        await deleteMediaIntegration(id, {
+          deleteStreams,
+          onProgress: async (deleted) => {
+            if (Date.now() - lastNote < 2000) return;
+            lastNote = Date.now();
+            const fresh = await prisma.mediaIntegration.findUnique({ where: { id } });
+            if (!fresh) return;
+            const next =
+              fresh.config && typeof fresh.config === "object" && !Array.isArray(fresh.config)
+                ? { ...(fresh.config as Record<string, unknown>) }
+                : {};
+            next.deleteProgress = {
+              status: "running",
+              message: `Deleted ${deleted.toLocaleString()} titles…`,
+              deleted,
+              updatedAt: new Date().toISOString(),
+            };
+            await prisma.mediaIntegration.update({
+              where: { id },
+              data: { config: next as Prisma.InputJsonValue },
+            });
+          },
+        });
+      } catch (e) {
+        console.error(
+          "[integrations] delete failed",
+          id,
+          e instanceof Error ? e.message : e
+        );
+        try {
+          const fresh = await prisma.mediaIntegration.findUnique({ where: { id } });
+          if (!fresh) return;
+          const next =
+            fresh.config && typeof fresh.config === "object" && !Array.isArray(fresh.config)
+              ? { ...(fresh.config as Record<string, unknown>) }
+              : {};
+          next.deleteProgress = {
+            status: "error",
+            message: e instanceof Error ? e.message : "Delete failed",
+            updatedAt: new Date().toISOString(),
+          };
+          await prisma.mediaIntegration.update({
+            where: { id },
+            data: { config: next as Prisma.InputJsonValue },
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+
+    return NextResponse.json({
+      started: true,
+      id,
+      message: "Delete started — you can leave this page; refresh to see progress.",
+    });
   } catch (e) {
-    return apiMutationErrorResponse(e);
+    return apiMutationErrorResponse(e, { exposeMessage: true });
   }
 }

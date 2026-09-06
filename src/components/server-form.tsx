@@ -554,7 +554,7 @@ export function ServerForm({
       existingPanelSettings,
       {
         network: {
-          interfaceName: form.netInterface.trim() || "eth0",
+          interfaceName: form.netInterface.trim() || "",
           gateway: form.netGateway.trim(),
           subnetMask: form.netSubnetMask.trim() || "255.255.255.0",
           dnsServers: form.netDns,

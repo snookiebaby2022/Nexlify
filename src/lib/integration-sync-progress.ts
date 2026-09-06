@@ -4,7 +4,8 @@ import type { IntegrationSyncProgress } from "@/lib/integration-sync-types";
 
 export type { IntegrationSyncProgress } from "@/lib/integration-sync-types";
 
-export const SYNC_STALE_MS = 120_000;
+/** Progress older than this is treated as a dead worker. Keep well above write-queue lag. */
+export const SYNC_STALE_MS = 600_000;
 
 export type IntegrationSyncReporter = {
   jobId: string;
@@ -138,19 +139,28 @@ export function createSyncReporter(integrationId: string, jobId: string): Integr
     }
   };
 
+  /** Coalesce: only the latest snapshot is written; stamp updatedAt at write time. */
+  let writeQueued = false;
   const writeNow = () => {
     lastWrite = Date.now();
-    const snapshot = { ...state, steps: [...state.steps] };
+    writeQueued = true;
     writeChain = writeChain
       .then(async () => {
-        const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
-        if (!row) return;
-        const cfg = asConfig(row.config);
-        cfg.syncProgress = snapshot;
-        await prisma.mediaIntegration.update({
-          where: { id: integrationId },
-          data: { config: cfg as Prisma.InputJsonValue },
-        });
+        while (writeQueued) {
+          writeQueued = false;
+          if (state.status === "running") {
+            state.updatedAt = new Date().toISOString();
+          }
+          const snapshot = { ...state, steps: [...state.steps] };
+          const row = await prisma.mediaIntegration.findUnique({ where: { id: integrationId } });
+          if (!row) return;
+          const cfg = asConfig(row.config);
+          cfg.syncProgress = snapshot;
+          await prisma.mediaIntegration.update({
+            where: { id: integrationId },
+            data: { config: cfg as Prisma.InputJsonValue },
+          });
+        }
       })
       .catch((e) => {
         console.error("[integrations] progress persist", e instanceof Error ? e.message : e);

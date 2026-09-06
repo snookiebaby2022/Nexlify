@@ -77,9 +77,21 @@ export function xtreamOutputFormats(raw: string | null | undefined): string[] {
   return out.length ? out : ["ts", "m3u8"];
 }
 
-export function xtreamCategoryIds(numericId: string): number[] {
-  const n = Number(numericId);
-  return Number.isFinite(n) ? [n] : [0];
+export function xtreamCategoryIds(
+  numericId: string,
+  extraNumericIds?: Array<string | null | undefined>
+): number[] {
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const raw of [numericId, ...(extraNumericIds ?? [])]) {
+    const s = String(raw ?? "").trim();
+    if (!s) continue;
+    const n = Number(s);
+    if (!Number.isFinite(n) || seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+  }
+  return out.length ? out : [0];
 }
 
 /** XUI / Smarters use string category_id; Nexus expects JSON numbers. */
