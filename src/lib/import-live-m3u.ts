@@ -10,6 +10,8 @@ import {
   buildLiveUrlShareCounts,
   shouldPreserveCoalescedLiveUrl,
 } from "./live-coalesce-protect";
+import { entryMatchesGroupFilter } from "./import-scope";
+import { serverPoolAssignment } from "./server-pool";
 
 const CHUNK = 400;
 
@@ -140,6 +142,8 @@ export async function importLiveM3uEntriesFast(
   opts: {
     categoryId?: string | null;
     serverId?: string | null;
+    serverIds?: string[];
+    serverPoolIds?: unknown;
     defaultOnDemand?: boolean;
     selectedUrls?: string[];
     autoCategory?: boolean;
@@ -152,12 +156,17 @@ export async function importLiveM3uEntriesFast(
     updateNamesOnSync?: boolean;
     /** When true (default), move existing matches into the playlist group-title folder. */
     overwriteCategories?: boolean;
+    groupFilter?: string[];
+    createMissing?: boolean;
   }
 ) {
   const selectedSet = opts.selectedUrls?.length ? new Set(opts.selectedUrls) : null;
+  const groupFilter = opts.groupFilter ?? [];
+  const createMissing = opts.createMissing !== false;
   const filtered = entries.filter((e) => {
     if (!e.url) return false;
     if (selectedSet && !selectedSet.has(e.url)) return false;
+    if (!entryMatchesGroupFilter(e.group, groupFilter)) return false;
     return true;
   });
 
@@ -258,6 +267,7 @@ export async function importLiveM3uEntriesFast(
     sortOrder: number;
     categoryId: string | null;
     serverId: string | null;
+    serverPoolIds: string[];
     epgChannelId: string | null;
     agentStartCmd: string | null;
     isOnDemand: boolean;
@@ -343,6 +353,11 @@ export async function importLiveM3uEntriesFast(
       }
     }
 
+    if (!createMissing) {
+      skipped++;
+      continue;
+    }
+
     if (dead404Urls.has(entry.url)) {
       skipped++;
       errors.push(`${liveStreamDisplayName(entry)}: skipped (origin 404)`);
@@ -358,6 +373,7 @@ export async function importLiveM3uEntriesFast(
     }
     if (exactKey) seenExactName.add(exactKey);
 
+    const assigned = serverPoolAssignment(opts.serverIds ?? opts.serverPoolIds, opts.serverId);
     toCreate.push({
       name: displayName,
       streamUrl: entry.url,
@@ -365,7 +381,8 @@ export async function importLiveM3uEntriesFast(
       type: StreamType.LIVE,
       sortOrder,
       categoryId,
-      serverId: opts.serverId ?? null,
+      serverId: assigned.serverId,
+      serverPoolIds: assigned.serverPoolIds,
       epgChannelId: entry.tvgId || entry.tvgName || entry.channelId || null,
       agentStartCmd: liveAgentStartCmd,
       isOnDemand: onDemand,

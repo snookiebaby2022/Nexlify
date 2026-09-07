@@ -117,6 +117,8 @@ type ActivityLog = {
 
   label: string;
 
+  detail?: string | null;
+
   createdAt: string;
 
   fixHref: string | null;
@@ -455,13 +457,20 @@ export function PanelDashboard({
                     <ul className="divide-y rounded border max-h-48 overflow-auto" style={{ borderColor: "var(--border)" }}>
                       {(stats?.logs ?? []).map((log, i) => (
                         <li key={i} className="px-3 py-2 flex justify-between gap-2 text-xs">
-                          {log.fixHref ? (
-                            <Link href={log.fixHref} className="hover:underline truncate" style={{ color: "var(--accent)" }}>
-                              {log.label}
-                            </Link>
-                          ) : (
-                            <span className="truncate">{log.label}</span>
-                          )}
+                          <span className="min-w-0">
+                            {log.fixHref ? (
+                              <Link href={log.fixHref} className="hover:underline truncate block" style={{ color: "var(--accent)" }}>
+                                {log.label}
+                              </Link>
+                            ) : (
+                              <span className="truncate block">{log.label}</span>
+                            )}
+                            {log.detail ? (
+                              <span className="block truncate" style={{ color: "var(--muted)" }}>
+                                {log.detail}
+                              </span>
+                            ) : null}
+                          </span>
                           <span className="shrink-0" style={{ color: "var(--muted)" }}>
                             {formatDateTime(log.createdAt)}
                           </span>

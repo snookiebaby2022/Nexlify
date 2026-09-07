@@ -15,6 +15,7 @@ import { formatXuiCategoryName } from "./category-xui-name";
 import { normalizeStreamMatchKey } from "./stream-url-match";
 import { liveStreamDisplayName } from "./import-live-m3u";
 import { fileUrlForPath, resolveSafePath } from "./import-media";
+import { parseGroupFilter } from "./import-scope";
 
 export type WatchFolderM3uOpts = {
   id?: string;
@@ -23,6 +24,8 @@ export type WatchFolderM3uOpts = {
   type: string;
   categoryId?: string | null;
   serverId?: string | null;
+  serverIds?: string[];
+  serverPoolIds?: unknown;
   autoCategory?: boolean;
   updateNames?: boolean;
   overwriteCategories?: boolean;
@@ -31,6 +34,8 @@ export type WatchFolderM3uOpts = {
   isAdult?: boolean;
   autoBouquet?: boolean;
   bouquetIds?: string[] | string | null;
+  groupFilter?: string[] | string | null;
+  createMissing?: boolean;
 };
 
 export function parseWatchBouquetIds(raw: unknown): string[] {
@@ -288,7 +293,7 @@ export function planWatchFolderM3uReview(
   };
 }
 
-async function removeExactNameDupsForUrls(urls: string[]): Promise<number> {
+export async function removeExactNameDupsForUrls(urls: string[]): Promise<number> {
   const unique = [...new Set(urls.map((u) => u.trim()).filter(Boolean))];
   if (!unique.length) return 0;
   const rows = await prisma.stream.findMany({
@@ -364,6 +369,8 @@ export async function syncWatchFolderM3u(folder: WatchFolderM3uOpts) {
     defaultType,
     categoryId: folder.categoryId,
     serverId: folder.serverId,
+    serverIds: folder.serverIds,
+    serverPoolIds: folder.serverPoolIds ?? folder.serverIds,
     autoCategory: folder.autoCategory !== false,
     autoTmdb: true,
     defaultOnDemand: folder.onDemand !== false ? true : false,
@@ -371,6 +378,8 @@ export async function syncWatchFolderM3u(folder: WatchFolderM3uOpts) {
     overwriteCategories: folder.overwriteCategories !== false,
     autoBouquetFromGroup: folder.autoBouquet !== false,
     bouquetIds: parseWatchBouquetIds(folder.bouquetIds),
+    groupFilter: parseGroupFilter(folder.groupFilter),
+    createMissing: folder.createMissing !== false,
     importMeta: folder.isAdult ? { isAdult: true } : undefined,
   });
 

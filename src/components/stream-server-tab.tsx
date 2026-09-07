@@ -108,7 +108,7 @@ export function StreamServerTab({
     <div className="xui-vod-info-form xui-stream-server-tab">
       <XuiRow
         label="Streaming servers"
-        hint="Select one or more servers. The first selected server is the primary assignment."
+        hint="Tick every box that should take viewers. Order is priority: first is primary, the rest are overflow / failover. Capacity adds viewer headroom, not a faster single stream."
       >
         <ServerTreePicker
           embedded

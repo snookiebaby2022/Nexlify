@@ -44,7 +44,6 @@ import {
   useStoredColumnVisibility,
 } from "@/components/table-toolbar-menus";
 import { useResellerGroupFlags } from "@/components/reseller-group-flags-context";
-import { usePanelLayout } from "@/lib/use-panel-layout";
 
 const StreamVerifyPanel = dynamic(
   () => import("@/components/stream-verify-panel").then((m) => m.StreamVerifyPanel),
@@ -69,6 +68,7 @@ type Stream = {
   sortOrder?: number;
   category?: { id: string; name: string } | null;
   server?: { id: string; name: string; host?: string; domain?: string | null } | null;
+  serverIds?: string[];
   isActive: boolean;
   minSpeedKbps?: number | null;
   maxSpeedKbps?: number | null;
@@ -115,7 +115,8 @@ function streamPlayBtnClass(stream: Stream, probing?: boolean) {
 }
 
 function serverLabel(s: Stream) {
-  const name = s.server?.name ?? "Main Server";
+  const extra = Math.max(0, (s.serverIds?.length ?? 0) - 1);
+  const name = extra > 0 ? `${s.server?.name ?? "Main Server"} +${extra}` : s.server?.name ?? "Main Server";
   const host = s.server?.domain || s.server?.host || "";
   return { name, host };
 }
@@ -209,7 +210,6 @@ export function StreamsList({
   };
 }) {
   const router = useRouter();
-  const { isTablet } = usePanelLayout();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit")?.trim() || null;
@@ -632,8 +632,13 @@ export function StreamsList({
   }, [streams, audioFilter, videoFilter, qualityFilter]);
 
   async function remove(id: string) {
-    if (!confirm("Delete this stream?")) return;
-    await fetch(`/api/admin/streams?id=${id}`, { method: "DELETE" });
+    if (!confirm("Permanently delete this stream? It is removed from the database. A later M3U/provider import can recreate it if the URL is still in the source.")) return;
+    const res = await fetch(`/api/admin/streams?id=${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      alert(typeof j.error === "string" ? j.error : "Delete failed");
+      return;
+    }
     load();
   }
 
@@ -1309,12 +1314,9 @@ export function StreamsList({
       )}
 
       {editId && (
-        <div
-          className={`xui-modal-backdrop${isTablet ? " xui-modal-backdrop--split" : ""}`}
-          onClick={closeEdit}
-        >
+        <div className="xui-modal-backdrop" onClick={closeEdit}>
           <div
-            className={`xui-modal-panel xui-line-edit-modal${isTablet ? " xui-line-edit-modal--split" : ""}`}
+            className="xui-modal-panel xui-stream-edit-modal"
             role="dialog"
             aria-modal="true"
             aria-label="Edit stream"

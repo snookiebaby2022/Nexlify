@@ -100,6 +100,10 @@ for dir in $scan_dirs; do
     if [ "$base" = "nexlify-panel-https.conf" ]; then
       continue
     fi
+    # 45 remote-live: nginx owns :8080 and proxies /live/ to 10gbs. Never strip that listen.
+    if [ "$base" = "nexlify-live-remote-edge.conf" ]; then
+      continue
+    fi
     needs=0
     for p in $PORT_LIST; do
       if grep -EqE "listen[[:space:]]+(\[::\]:)?${p}([[:space:];]|$)" "$conf" 2>/dev/null; then

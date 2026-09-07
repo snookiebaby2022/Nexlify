@@ -1,6 +1,7 @@
 import { SettingsPanelForm } from "@/components/settings-panel-form";
 import { TmdbBackfillBanner } from "@/components/tmdb-backfill-banner";
 import { PlexAutoSyncStatus } from "@/components/plex-auto-sync-status";
+import { ChannelRefreshScope } from "@/components/channel-refresh-scope";
 
 export default function CronSettingsPage() {
   return (
@@ -12,6 +13,7 @@ export default function CronSettingsPage() {
         <div className="space-y-3">
           <TmdbBackfillBanner />
           <PlexAutoSyncStatus />
+          <ChannelRefreshScope />
         </div>
       }
       sections={[
@@ -21,8 +23,13 @@ export default function CronSettingsPage() {
           fields: [
             { key: "epgSyncEnabled", label: "EPG sync enabled", type: "yesno" },
             { key: "epgSyncCron", label: "EPG sync cron", placeholder: "0 * * * *" },
-            { key: "channelRefreshEnabled", label: "Channel metadata refresh", type: "yesno" },
-            { key: "channelRefreshCron", label: "Channel refresh cron", placeholder: "0 4 * * *" },
+            {
+              key: "channelRefreshEnabled",
+              label: "Channel metadata refresh",
+              type: "yesno",
+              hint: "Updates names/logos on existing live streams from provider Xtream catalogs (PPV titles). Never creates or restores deleted streams.",
+            },
+            { key: "channelRefreshCron", label: "Channel refresh cron", placeholder: "*/15 * * * *" },
           ],
         },
         {

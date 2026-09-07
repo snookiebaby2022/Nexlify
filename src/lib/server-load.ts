@@ -8,8 +8,28 @@ import {
   serverEgressHeadroom,
   viewerSlotsUsed,
 } from "@/lib/server-load-metrics";
+import {
+  normalizeServerPool,
+  parseStoredServerPool,
+  poolAllowsServer,
+  rotatePoolPrimary,
+} from "@/lib/server-pool";
 
 const STALE_MS = 5 * 60 * 1000;
+
+type ServerPoolMove = { streamId: string; toServerId: string; pool: string[] };
+
+async function applyServerPoolMoves(moves: ServerPoolMove[]) {
+  for (const move of moves) {
+    await prisma.stream.update({
+      where: { id: move.streamId },
+      data: {
+        serverId: move.toServerId,
+        serverPoolIds: move.pool.length ? rotatePoolPrimary(move.pool, move.toServerId) : move.pool,
+      },
+    });
+  }
+}
 
 export async function getServerLoadScores() {
   const staleBefore = new Date(Date.now() - STALE_MS);
@@ -117,8 +137,27 @@ function pickNamedOrLeastLb(
 }
 
 /** Prefer an explicit LB; if missing or Main, use the 10Gbps LB. */
-export async function resolvePlaybackLoadBalancerId(preferred?: string | null): Promise<string | null> {
+function pickIdFromOrderedPool(
+  scores: Awaited<ReturnType<typeof getServerLoadScores>>,
+  pool: string[]
+): string | null {
+  const byId = new Map(scores.map((x) => [x.server.id, x]));
+  const ordered = pool.map((id) => byId.get(id)).filter(Boolean);
+  const ready = ordered.find((x) => x!.online && x!.server.isActive && !x!.saturated);
+  if (ready) return ready.server.id;
+  const online = ordered.find((x) => x!.online && x!.server.isActive);
+  return online?.server.id ?? pool[0] ?? null;
+}
+
+export async function resolvePlaybackLoadBalancerId(
+  preferred?: string | null,
+  pool?: unknown
+): Promise<string | null> {
   const scores = await getServerLoadScores();
+  const ordered = normalizeServerPool(pool, preferred);
+  if (ordered.length > 1 || (ordered.length === 1 && pool != null)) {
+    return pickIdFromOrderedPool(scores, ordered);
+  }
   const roleCtx = roleCtxFromScores(scores);
   const id = preferred?.trim() || "";
   if (id) {
@@ -143,18 +182,33 @@ export async function reassignStreamsFromOfflineServers() {
     select: { id: true },
   });
   if (!offline.length) return 0;
+  const offlineIds = new Set(offline.map((s) => s.id));
 
-  const targetId = await pickLeastLoadedServerId();
-  if (!targetId) return 0;
-  if (offline.some((s) => s.id === targetId)) return 0;
+  const scores = await getServerLoadScores();
+  const fallback = await pickLeastLoadedServerId();
+  if (!fallback || offlineIds.has(fallback)) return 0;
 
-  const r = await prisma.stream.updateMany({
-    where: {
-      serverId: { in: offline.map((s) => s.id) },
-    },
-    data: { serverId: targetId },
+  const streams = await prisma.stream.findMany({
+    where: { serverId: { in: [...offlineIds] } },
+    select: { id: true, serverId: true, serverPoolIds: true },
   });
-  return r.count;
+  let moved = 0;
+  for (const stream of streams) {
+    const pool = parseStoredServerPool(stream.serverPoolIds, stream.serverId);
+    const fromPool = pickIdFromOrderedPool(
+      scores,
+      pool.filter((id) => !offlineIds.has(id))
+    );
+    const dest = fromPool && !offlineIds.has(fromPool) ? fromPool : fallback;
+    if (!dest || dest === stream.serverId) continue;
+    const nextPool = pool.length ? rotatePoolPrimary(pool, dest) : [dest];
+    await prisma.stream.update({
+      where: { id: stream.id },
+      data: { serverId: dest, serverPoolIds: nextPool },
+    });
+    moved += 1;
+  }
+  return moved;
 }
 
 /**
@@ -206,36 +260,31 @@ export async function rebalanceLiveStreamsAcrossServers(opts?: {
 
   // Drain live catalog off the panel/main host onto LB nodes.
   if (!includeMain && mainIds.size && online.length >= 1) {
-    const drainMoves: { streamId: string; toServerId: string }[] = [];
+    const drainMoves: ServerPoolMove[] = [];
     for (const mainId of mainIds) {
       if (drainMoves.length >= maxMoves) break;
       const take = Math.min(maxMoves - drainMoves.length, 400);
       const streams = await prisma.stream.findMany({
         where: { type: "LIVE", isActive: true, serverId: mainId },
-        select: { id: true },
+        select: { id: true, serverId: true, serverPoolIds: true },
         orderBy: { updatedAt: "asc" },
         take,
       });
       let i = 0;
       for (const stream of streams) {
-        const dest = online[i % online.length]!;
-        drainMoves.push({ streamId: stream.id, toServerId: dest.server.id });
+        const pool = parseStoredServerPool(stream.serverPoolIds, stream.serverId);
+        const dest =
+          online.find((row, idx) => {
+            const candidate = online[(i + idx) % online.length]!;
+            return poolAllowsServer(pool, candidate.server.id);
+          }) ?? null;
+        if (!dest) continue;
+        drainMoves.push({ streamId: stream.id, toServerId: dest.server.id, pool });
         i++;
       }
     }
     if (drainMoves.length) {
-      const byDest = new Map<string, string[]>();
-      for (const m of drainMoves) {
-        const list = byDest.get(m.toServerId) ?? [];
-        list.push(m.streamId);
-        byDest.set(m.toServerId, list);
-      }
-      for (const [serverId, ids] of byDest) {
-        await prisma.stream.updateMany({
-          where: { id: { in: ids } },
-          data: { serverId },
-        });
-      }
+      await applyServerPoolMoves(drainMoves);
       return { moved: drainMoves.length, servers: online.length };
     }
   }
@@ -254,8 +303,7 @@ export async function rebalanceLiveStreamsAcrossServers(opts?: {
     ])
   );
 
-  type Move = { streamId: string; toServerId: string };
-  const moves: Move[] = [];
+  const moves: ServerPoolMove[] = [];
 
   // Donors = over target; receivers = under target
   const donors = online
@@ -280,7 +328,7 @@ export async function rebalanceLiveStreamsAcrossServers(opts?: {
         isActive: true,
         serverId: donor.server.id,
       },
-      select: { id: true },
+      select: { id: true, serverId: true, serverPoolIds: true },
       orderBy: { updatedAt: "asc" },
       take,
     });
@@ -288,13 +336,15 @@ export async function rebalanceLiveStreamsAcrossServers(opts?: {
     let i = 0;
     for (const stream of streams) {
       if (moves.length >= maxMoves) break;
-      // Round-robin receivers that still need capacity
+      const pool = parseStoredServerPool(stream.serverPoolIds, stream.serverId);
       let placed = false;
       for (let r = 0; r < receivers.length; r++) {
         const recv = receivers[(i + r) % receivers.length]!;
         const want = targets.get(recv.server.id) ?? 0;
         const already = moves.filter((m) => m.toServerId === recv.server.id).length;
-        if (recv.catalogAssigned + already >= want) continue;        moves.push({ streamId: stream.id, toServerId: recv.server.id });
+        if (recv.catalogAssigned + already >= want) continue;
+        if (!poolAllowsServer(pool, recv.server.id)) continue;
+        moves.push({ streamId: stream.id, toServerId: recv.server.id, pool });
         placed = true;
         i++;
         break;
@@ -305,19 +355,7 @@ export async function rebalanceLiveStreamsAcrossServers(opts?: {
 
   if (!moves.length) return { moved: 0, servers: online.length };
 
-  // Group by destination for fewer queries
-  const byDest = new Map<string, string[]>();
-  for (const m of moves) {
-    const list = byDest.get(m.toServerId) ?? [];
-    list.push(m.streamId);
-    byDest.set(m.toServerId, list);
-  }
-  for (const [serverId, ids] of byDest) {
-    await prisma.stream.updateMany({
-      where: { id: { in: ids } },
-      data: { serverId },
-    });
-  }
+  await applyServerPoolMoves(moves);
 
   return { moved: moves.length, servers: online.length };
 }

@@ -413,7 +413,13 @@ const DEFAULTS: Record<SettingGroup, Record<string, unknown>> = {
     epgSyncEnabled: true,
     epgSyncCron: "0 * * * *",
     channelRefreshEnabled: true,
-    channelRefreshCron: "0 4 * * *",
+    channelRefreshCron: "*/15 * * * *",
+    /** Comma-separated provider IDs. Empty = all providers with Xtream login. */
+    channelRefreshProviderIds: "",
+    /** Comma-separated bouquet IDs. Empty = all live streams. */
+    channelRefreshBouquetIds: "",
+    /** Comma-separated category IDs. Empty = all folders. */
+    channelRefreshCategoryIds: "",
     deadLinkProbeEnabled: false,
     deadLinkProbeCron: "*/15 * * * *",
     /** Weekly XUI-style live heal: bad-host remap, exact-name dedupe, FHD/HD/SD URL collapse. */

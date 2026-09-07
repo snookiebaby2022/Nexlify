@@ -8,6 +8,7 @@ export type ServerTreeNode = {
   healthStatus?: string;
   _count?: { streams: number };
   port?: number;
+  bandwidthMbps?: number | null;
 };
 
 export type ServerTreeGroup = {

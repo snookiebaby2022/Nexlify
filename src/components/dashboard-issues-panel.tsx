@@ -247,9 +247,9 @@ export function DashboardIssuesPanel({
             <div className="flex flex-wrap items-center gap-3">
               <Power size={16} className="text-red-400 shrink-0" />
               <div className="flex-1 min-w-[160px]">
-                <p className="text-sm font-medium">{inactive.toLocaleString()} switched off in the panel</p>
+                <p className="text-sm font-medium">{inactive.toLocaleString()} disabled — still in the catalog</p>
                 <p className="text-xs" style={{ color: "var(--muted)" }}>
-                  Players cannot see them
+                  Not deleted. Players cannot see them until you enable them.
                   {inactiveLive ? ` · Live ${inactiveLive}` : ""}
                   {inactiveMovies ? ` · Movies ${inactiveMovies}` : ""}
                   {inactiveSeries ? ` · Series ${inactiveSeries}` : ""}

@@ -12,6 +12,7 @@ import { isLocalM3uPath } from "./watch-folder-m3u";
 import { runDueM3uSyncJobs, runWatchFolderM3uSync } from "./m3u-sync-jobs";
 import { getSettingGroup } from "./panel-settings";
 import { cronIntervalDue, getCronLoadSnapshot } from "./cron-load-gate";
+import { cronMatchesNow } from "./backup-schedule";
 
 const ESTIMATED_MBPS_PER_STREAM = Number(process.env.ESTIMATED_MBPS_PER_STREAM ?? "4");
 
@@ -164,6 +165,7 @@ export async function jobWatchFolders() {
 
     for (const folder of folders) {
       if (folder.autoScanMins <= 0) continue;
+      if (!isRemoteM3uUrl(folder.path) && !isLocalM3uPath(folder.path)) continue;
       const due =
         !folder.lastScan ||
         Date.now() - folder.lastScan.getTime() >= folder.autoScanMins * 60 * 1000;
@@ -1182,6 +1184,33 @@ async function jobProviderHealthCheck() {
   }
 }
 
+async function jobChannelRefresh() {
+  const start = Date.now();
+  try {
+    const cron = await getSettingGroup("cron");
+    if (cron.channelRefreshEnabled === false) {
+      await logCron("channel_refresh", "ok", "skipped (disabled)", Date.now() - start);
+      return;
+    }
+    // Old unused default never ran a job. Treat it as every 15 minutes so PPV names move.
+    let expr = String(cron.channelRefreshCron || "*/15 * * * *").trim();
+    if (expr === "0 4 * * *") expr = "*/15 * * * *";
+    if (!cronMatchesNow(expr)) {
+      return;
+    }
+    const { runChannelNameRefresh } = await import("./provider-xtream-sync");
+    const result = await runChannelNameRefresh(2);
+    await logCron(
+      "channel_refresh",
+      result.errors.length ? "warn" : "ok",
+      `providers ${result.processed}, ~${result.updated} names${result.errors.length ? `, err ${result.errors.length}` : ""}`,
+      Date.now() - start
+    );
+  } catch (e) {
+    await logCron("channel_refresh", "error", String(e), Date.now() - start);
+  }
+}
+
 async function jobProviderXtreamSync() {
   const start = Date.now();
   try {
@@ -1208,6 +1237,7 @@ export async function runAllCronJobs() {
   await jobWatchFolders();
   await jobImportQueue();
   await jobM3uSync();
+  await jobChannelRefresh();
   await jobProviderXtreamSync();
   await jobProviderHealthCheck();
   await jobAgentAutoRestart();

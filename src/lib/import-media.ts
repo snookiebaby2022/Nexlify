@@ -12,6 +12,7 @@ import {
 } from "./vod-category";
 import { clearTmdbImportCache, enrichVodFromTmdb } from "./vod-tmdb-enrich";
 import { encodeImportVodMeta, type VodImportMetaInput } from "./vod-import-meta";
+import { serverPoolAssignment } from "./server-pool";
 import { getSettingGroup } from "./panel-settings";
 import { maxStreamSortOrder } from "./stream-order";
 import {
@@ -22,6 +23,7 @@ import {
   buildLiveUrlShareCounts,
   shouldPreserveCoalescedLiveUrl,
 } from "./live-coalesce-protect";
+import { entryMatchesGroupFilter } from "./import-scope";
 
 const VIDEO_EXT = new Set([
   ".mp4",
@@ -236,6 +238,8 @@ type ImportM3uOpts = {
   defaultType?: "LIVE" | "MOVIE" | "SERIES";
   categoryId?: string | null;
   serverId?: string | null;
+  serverIds?: string[];
+  serverPoolIds?: unknown;
   /** When true, LIVE channels import as on-demand (default for panel imports). */
   defaultOnDemand?: boolean;
   selectedUrls?: string[];
@@ -253,6 +257,10 @@ type ImportM3uOpts = {
   updateNamesOnSync?: boolean;
   /** When true (default), move existing matches into the playlist group-title folder. */
   overwriteCategories?: boolean;
+  /** Playlist group-title allowlist. Empty = all groups. */
+  groupFilter?: string[];
+  /** When false, refresh existing matches only — do not create new streams. */
+  createMissing?: boolean;
 };
 
 type ExistingTyped = {
@@ -392,6 +400,7 @@ async function flushXtreamAfterImport<T extends { imported: number; updated?: nu
 export async function importM3uEntries(entries: M3uEntry[], opts: ImportM3uOpts) {
   clearTmdbImportCache();
   const explicitServer = opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null;
+  const importServerIds = opts.serverIds ?? opts.serverPoolIds ?? opts.importMeta?.serverIds;
   const { pickVodLoadBalancerId } = await import("@/lib/server-load");
   const vodServerId = explicitServer ?? (await pickVodLoadBalancerId());
 
@@ -401,7 +410,8 @@ export async function importM3uEntries(entries: M3uEntry[], opts: ImportM3uOpts)
     return flushXtreamAfterImport(
       await importLiveM3uEntriesFast(entries, {
         categoryId: opts.categoryId,
-        serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
+        serverId: explicitServer,
+        serverIds: Array.isArray(importServerIds) ? importServerIds.map(String) : undefined,
         defaultOnDemand: opts.defaultOnDemand,
         selectedUrls: opts.selectedUrls,
         autoCategory: opts.autoCategory,
@@ -411,6 +421,8 @@ export async function importM3uEntries(entries: M3uEntry[], opts: ImportM3uOpts)
         reorderExisting: opts.reorderExisting,
         updateNamesOnSync: opts.updateNamesOnSync,
         overwriteCategories: opts.overwriteCategories,
+        groupFilter: opts.groupFilter,
+        createMissing: opts.createMissing,
       })
     );
   }
@@ -433,10 +445,13 @@ export async function importM3uEntries(entries: M3uEntry[], opts: ImportM3uOpts)
       ? await importLiveM3uEntriesFast(liveEntries, {
           categoryId: opts.categoryId,
           serverId: opts.serverId ?? opts.importMeta?.serverIds?.[0] ?? null,
+          serverIds: opts.serverIds ?? opts.importMeta?.serverIds,
           defaultOnDemand: opts.defaultOnDemand ?? true,
           autoCategory: opts.autoCategory,
           bouquetIds: opts.bouquetIds ?? opts.importMeta?.bouquetIds,
           autoBouquetFromGroup: opts.autoBouquetFromGroup,
+          groupFilter: opts.groupFilter,
+          createMissing: opts.createMissing,
           sortOrderStart: opts.sortOrderStart,
           reorderExisting: opts.reorderExisting,
           updateNamesOnSync: opts.updateNamesOnSync,
@@ -471,9 +486,12 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
     opts.sortOrderStart ??
     (opts.reorderExisting === false ? (await maxStreamSortOrder()) + 1 : 0);
 
+  const groupFilter = opts.groupFilter ?? [];
+  const createMissing = opts.createMissing !== false;
   const filtered = entries.filter((entry) => {
     if (!entry.url) return false;
     if (selectedSet && !selectedSet.has(entry.url)) return false;
+    if (!entryMatchesGroupFilter(entry.group, groupFilter)) return false;
     return true;
   });
 
@@ -593,6 +611,11 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
         continue;
       }
 
+      if (!createMissing) {
+        skipped++;
+        continue;
+      }
+
       const meta =
         type === StreamType.MOVIE || type === StreamType.SERIES
           ? await resolveVodCategoryAndMeta({
@@ -634,6 +657,10 @@ async function importM3uEntriesTyped(entries: M3uEntry[], opts: ImportM3uOpts) {
             sortOrder: entrySortOrder,
             categoryId: meta.categoryId,
             serverId: type === "LIVE" ? explicitServer : vodServerId,
+            serverPoolIds: serverPoolAssignment(
+              opts.serverIds ?? opts.importMeta?.serverIds,
+              type === "LIVE" ? explicitServer : vodServerId
+            ).serverPoolIds,
             epgChannelId: entry.tvgId || entry.tvgName || entry.channelId || null,
             seriesName:
               seriesMeta?.seriesName ?? (type === StreamType.SERIES ? entry.name : null),
@@ -691,6 +718,7 @@ export async function importFromFolder(
     mode: "MOVIE" | "SERIES" | "MIXED";
     categoryId?: string | null;
     serverId?: string | null;
+    serverIds?: string[];
     allowedRoot?: string;
     isAdult?: boolean;
   }
@@ -701,7 +729,8 @@ export async function importFromFolder(
   let skipped = 0;
   const isAdult = opts.isAdult === true;
   const { pickVodLoadBalancerId } = await import("@/lib/server-load");
-  const folderServerId = opts.serverId ?? (await pickVodLoadBalancerId());
+  const folderAssign = serverPoolAssignment(opts.serverIds, opts.serverId);
+  const folderServerId = folderAssign.serverId ?? (await pickVodLoadBalancerId());
 
   const m3uFiles = collectM3uPlaylistFiles(safe);
   for (const m3uFile of m3uFiles) {
@@ -710,6 +739,7 @@ export async function importFromFolder(
       defaultType: opts.mode === "SERIES" ? "SERIES" : opts.mode === "MOVIE" ? "MOVIE" : undefined,
       categoryId: opts.categoryId,
       serverId: folderServerId,
+      serverIds: folderAssign.serverPoolIds.length ? folderAssign.serverPoolIds : undefined,
       importMeta: isAdult ? { isAdult: true } : undefined,
     });
     imported += r.imported;
@@ -755,6 +785,11 @@ export async function importFromFolder(
           type,
           categoryId: meta.categoryId,
           serverId: folderServerId,
+          serverPoolIds: folderAssign.serverPoolIds.length
+            ? folderAssign.serverPoolIds
+            : folderServerId
+              ? [folderServerId]
+              : [],
           seriesName: series?.seriesName,
           seasonNum: series?.seasonNum,
           episodeNum: series?.episodeNum,

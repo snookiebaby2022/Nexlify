@@ -115,6 +115,7 @@ export function ImportForm({
             streamType,
             categoryId: categoryId || null,
             serverId: serverIds[0] || serverId || null,
+            serverIds,
             defaultOnDemand: streamType === "LIVE" ? onDemandDefault : undefined,
             autoCategory: true,
             autoBouquetFromGroup: streamType === "LIVE" ? autoBouquetFromGroup : undefined,

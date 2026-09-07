@@ -53,8 +53,11 @@ type WatchFolderRow = {
   isAdult?: boolean;
   categoryId?: string | null;
   serverId?: string | null;
+  serverPoolIds?: unknown;
   autoBouquet?: boolean;
   bouquetIds?: string | null;
+  groupFilter?: string | null;
+  createMissing?: boolean;
 };
 
 const emptyForm = {
@@ -74,6 +77,8 @@ const emptyForm = {
   removeDuplicates: true,
   autoBouquet: true,
   bouquetIds: [] as string[],
+  groupFilter: "",
+  createMissing: true,
   xtreamOrigin: "",
   xtreamUser: "",
   xtreamPass: "",
@@ -178,6 +183,8 @@ export function AdminWatchFoldersClient({
       removeDuplicates: form.removeDuplicates,
       autoBouquet: form.autoBouquet,
       bouquetIds: form.bouquetIds,
+      groupFilter: form.groupFilter,
+      createMissing: form.createMissing,
     };
   }
 
@@ -195,8 +202,16 @@ export function AdminWatchFoldersClient({
       setError("M3U URL is required.");
       return;
     }
+    if (form.sourceKind === "m3u" && path && !/^https?:\/\//i.test(path)) {
+      setError("M3U URL must start with http:// or https://");
+      return;
+    }
     if (form.sourceKind === "local" && !path) {
       setError("Local folder or .m3u path is required.");
+      return;
+    }
+    if (form.sourceKind === "local" && path && !/\.m3u8?$/i.test(path) && path.length < 4) {
+      setError("Local path looks invalid. Use a real folder or a .m3u / .m3u8 file path.");
       return;
     }
     if (form.sourceKind === "file" && !m3uContent && !editingId) {
@@ -211,6 +226,7 @@ export function AdminWatchFoldersClient({
         sourceKind: form.sourceKind === "local" ? "local" : "m3u",
         categoryId: form.categoryId || null,
         serverId: form.serverIds[0] || null,
+        serverIds: form.serverIds,
         autoScanMins: form.autoScanMins,
         isAdult: form.isAdult,
         m3uContent: m3uContent || undefined,
@@ -346,7 +362,11 @@ export function AdminWatchFoldersClient({
       m3uUrl: remote ? f.path : "",
       type: f.type,
       categoryId: f.categoryId ?? "",
-      serverIds: f.serverId ? [f.serverId] : [],
+      serverIds: Array.isArray(f.serverPoolIds)
+        ? f.serverPoolIds.map(String)
+        : f.serverId
+          ? [f.serverId]
+          : [],
       autoScanMins: f.autoScanMins ?? 0,
       isAdult: f.isAdult === true,
       autoCategory: f.autoCategory !== false,
@@ -359,6 +379,8 @@ export function AdminWatchFoldersClient({
         .split(",")
         .map((id) => id.trim())
         .filter(Boolean),
+      groupFilter: f.groupFilter ?? "",
+      createMissing: f.createMissing !== false,
     });
     setOk(`Editing “${f.name}”. Save to apply, then Scan now.`);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -657,6 +679,20 @@ export function AdminWatchFoldersClient({
           </p>
         </div>
 
+        <label className="block space-y-1">
+          <span className="text-sm" style={{ color: "var(--muted)" }}>
+            Only these playlist groups / categories
+          </span>
+          <textarea
+            rows={3}
+            placeholder={"PPV\nUK Sports\n\nEmpty = every group-title in the playlist"}
+            className="w-full rounded border px-3 py-2 bg-transparent text-sm font-mono"
+            style={{ borderColor: "var(--border)" }}
+            value={form.groupFilter}
+            onChange={(e) => setForm({ ...form, groupFilter: e.target.value })}
+          />
+        </label>
+
         <div className="grid md:grid-cols-2 gap-2 text-sm">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -673,6 +709,14 @@ export function AdminWatchFoldersClient({
               onChange={(e) => setForm({ ...form, autoBouquet: e.target.checked })}
             />
             Create/sync bouquets from group-title
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.createMissing}
+              onChange={(e) => setForm({ ...form, createMissing: e.target.checked })}
+            />
+            Add new streams from the playlist
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input

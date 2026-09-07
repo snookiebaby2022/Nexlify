@@ -68,8 +68,8 @@ export default function StreamLogsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Stream logs</h1>
         <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-          Freezes, stutters, channel drops, agent ffmpeg, and HLS relay errors (last 24 hours). Direct-source
-          channels do not run ffmpeg — use Live viewers below.{" "}
+          Freezes, stutters, and upstream playback failures (not deletes), plus agent ffmpeg and HLS relay
+          errors (last 24 hours). Direct-source channels do not run ffmpeg — use Live viewers below.{" "}
           <Link href="/admin/content/streams?status=offline" style={{ color: "var(--accent)" }}>
             Failed probes
           </Link>
@@ -98,7 +98,7 @@ export default function StreamLogsPage() {
         <h2 className="text-lg font-medium mb-3">Playback quality</h2>
         {playbackEvents.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>
-            No freezes, stutters, or channel drops logged in the last 24 hours.
+            No freezes, stutters, or upstream playback failures logged in the last 24 hours.
           </p>
         ) : (
           <DataTable

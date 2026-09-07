@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logActivity } from "@/lib/lines";
-import { invalidateXtreamCategories } from "@/lib/cache-invalidate";
+import { invalidateDashboardStats, invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { PanelRole, StreamType, type Prisma } from "@prisma/client";
 import { expandCategoryFilter } from "@/lib/category-tree";
 
@@ -132,11 +132,17 @@ export async function POST(req: NextRequest) {
 
     if (action === "enable") {
       await counted(await prisma.stream.updateMany({ where, data: { isActive: true } }));
+      await invalidateXtreamCategories();
+      await invalidateDashboardStats();
     } else if (action === "disable") {
       await counted(await prisma.stream.updateMany({ where, data: { isActive: false } }));
+      await invalidateXtreamCategories();
+      await invalidateDashboardStats();
     } else if (action === "delete") {
       if (!ids.length) return NextResponse.json({ error: "ids required" }, { status: 400 });
       await counted(await prisma.stream.deleteMany({ where: { id: { in: ids } } }));
+      await invalidateXtreamCategories();
+      await invalidateDashboardStats();
     } else if (action === "setCategory" && body.categoryId !== undefined) {
       await counted(
         await prisma.stream.updateMany({
@@ -148,11 +154,13 @@ export async function POST(req: NextRequest) {
     } else if (action === "clearCategory") {
       await counted(await prisma.stream.updateMany({ where, data: { categoryId: null } }));
       await invalidateXtreamCategories();
-    } else if (action === "setServer" && body.serverId !== undefined) {
+    } else if (action === "setServer" && (body.serverIds !== undefined || body.serverId !== undefined)) {
+      const { assignmentFromBody } = await import("@/lib/server-pool");
+      const assigned = assignmentFromBody(body as Record<string, unknown>);
       await counted(
         await prisma.stream.updateMany({
           where,
-          data: { serverId: body.serverId ? String(body.serverId) : null },
+          data: { serverId: assigned.serverId, serverPoolIds: assigned.serverPoolIds },
         })
       );
     } else if (action === "setAdult" && body.isAdult !== undefined) {

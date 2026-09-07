@@ -205,6 +205,7 @@ export function VodMovieForm({
         streamIcon: form.streamIcon || null,
         playlistUrl: form.notes || null,
         serverId: meta.serverIds[0] || null,
+        serverIds: meta.serverIds,
         containerExtension: meta.outputFormats.split(",")[0]?.trim() || "mp4",
         isOnDemand: true,
         vodMode: "ON_DEMAND",

@@ -9,6 +9,7 @@ import { redactStream } from "@/lib/stream-redact";
 import { invalidatePlaybackUrlCache } from "@/lib/playback-url-cache";
 import { invalidateDashboardStats, invalidateXtreamCategories } from "@/lib/cache-invalidate";
 import { getStreamBouquetIds, syncStreamBouquets } from "@/lib/stream-bouquets";
+import { parseStoredServerPool } from "@/lib/server-pool";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -33,7 +34,14 @@ export async function GET(
   });
   if (!stream) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const bouquetIds = await getStreamBouquetIds(id);
-  return NextResponse.json({ stream: redactStream(stream, session.role), bouquetIds });
+  const safe = redactStream(stream, session.role);
+  return NextResponse.json({
+    stream: {
+      ...safe,
+      serverIds: parseStoredServerPool(stream.serverPoolIds, stream.serverId),
+    },
+    bouquetIds,
+  });
 }
 
 export async function PATCH(

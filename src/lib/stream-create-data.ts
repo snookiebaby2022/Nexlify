@@ -13,6 +13,7 @@ import { nextStreamSortOrder } from "./stream-order";
 import { parseIntegrationStreamUrl } from "./integration-stream-url";
 import { plexArtworkUrl } from "./plex-artwork";
 import { resolveServerUrls } from "./server-urls";
+import { serverPoolAssignment } from "./server-pool";
 
 export type StreamCreateInput = {
   name: string;
@@ -21,6 +22,8 @@ export type StreamCreateInput = {
   streamUrl?: string;
   streamIcon?: string | null;
   serverId?: string | null;
+  serverIds?: string[];
+  serverPoolIds?: unknown;
   categoryId?: string | null;
   epgChannelId?: string | null;
   channelId?: string | null;
@@ -106,14 +109,18 @@ export async function buildStreamCreateData(body: StreamCreateInput) {
       ? path.extname(streamUrl.replace(/^file:\/\//, "")).replace(".", "")
       : "mp4");
 
-  let serverId = body.serverId || null;
+  const assigned = serverPoolAssignment(body.serverIds ?? body.serverPoolIds, body.serverId);
+  let serverId = assigned.serverId;
+  let serverPoolIds = assigned.serverPoolIds;
   if (!serverId && type === "LIVE" && !hostedExternally) {
     const { pickLeastLoadedServerId } = await import("@/lib/server-load");
     serverId = await pickLeastLoadedServerId();
+    if (serverId) serverPoolIds = [serverId];
   }
   if (!serverId && (type === "MOVIE" || type === "SERIES")) {
     const { pickVodLoadBalancerId } = await import("@/lib/server-load");
     serverId = await pickVodLoadBalancerId();
+    if (serverId) serverPoolIds = [serverId];
   }
 
   let streamIcon = body.streamIcon?.trim() || null;
@@ -202,6 +209,7 @@ export async function buildStreamCreateData(body: StreamCreateInput) {
       type,
       sortOrder: await nextStreamSortOrder(),
       serverId,
+      serverPoolIds,
       agentStartCmd,
       categoryId,
       epgChannelId: body.epgChannelId || null,

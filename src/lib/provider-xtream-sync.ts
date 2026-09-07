@@ -316,7 +316,15 @@ export function defaultProviderSyncKind(providerType: string | null | undefined)
 export async function syncProviderXtreamCatalog(
   providerId: string,
   kind: RemoteKind = "LIVE",
-  opts: { categoryId?: string | null; serverId?: string | null; updateNames?: boolean } = {}
+  opts: {
+    categoryId?: string | null;
+    serverId?: string | null;
+    updateNames?: boolean;
+    /** Update name/icon on existing rows only — never create streams. */
+    namesOnly?: boolean;
+    allowedCategoryIds?: string[];
+    allowedStreamIds?: string[];
+  } = {}
 ): Promise<ProviderXtreamSyncResult> {
   const provider = await prisma.streamProvider.findUnique({ where: { id: providerId } });
   if (!provider?.isActive) {
@@ -328,9 +336,11 @@ export async function syncProviderXtreamCatalog(
   }
 
   const items = await fetchProviderCatalog(creds.origin, creds.username, creds.password, kind);
-  const serverId =
-    opts.serverId ??
-    (kind === "LIVE" ? await resolvePlaybackLoadBalancerId(null) : await pickVodLoadBalancerId());
+  const namesOnly = opts.namesOnly === true;
+  const serverId = namesOnly
+    ? null
+    : opts.serverId ??
+      (kind === "LIVE" ? await resolvePlaybackLoadBalancerId(null) : await pickVodLoadBalancerId());
   const streamType =
     kind === "MOVIE" ? StreamType.MOVIE : kind === "SERIES" ? StreamType.SERIES : StreamType.LIVE;
   const updateNames = opts.updateNames !== false;
@@ -380,13 +390,21 @@ export async function syncProviderXtreamCatalog(
     }
 
     if (existing) {
+      if (opts.allowedCategoryIds?.length && !opts.allowedCategoryIds.includes(existing.categoryId || "")) {
+        skipped++;
+        return;
+      }
+      if (opts.allowedStreamIds !== undefined && !opts.allowedStreamIds.includes(existing.id)) {
+        skipped++;
+        return;
+      }
       const createdUnix = Math.floor(existing.createdAt.getTime() / 1000);
       const recentProviderAdded =
         Boolean(providerAdded) &&
         item.addedUnix > 0 &&
         item.addedUnix > createdUnix &&
         item.addedUnix * 1000 >= Date.now() - 14 * 86_400_000;
-      const shouldBumpAdded = recentProviderAdded;
+      const shouldBumpAdded = !namesOnly && recentProviderAdded;
       const shouldRename =
         updateNames && (existing.name !== item.name || (item.icon && !existing.streamIcon));
       const urlDiffers = existing.streamUrl !== streamUrl;
@@ -394,8 +412,8 @@ export async function syncProviderXtreamCatalog(
         streamType === StreamType.LIVE &&
         urlDiffers &&
         shouldPreserveCoalescedLiveUrl(existing.streamUrl, streamUrl, liveUrlShare);
-      const shouldRetargetUrl = urlDiffers && !preserveCoalesce;
-      const shouldSetCategory = Boolean(resolvedCategoryId) && !existing.categoryId;
+      const shouldRetargetUrl = !namesOnly && urlDiffers && !preserveCoalesce;
+      const shouldSetCategory = !namesOnly && Boolean(resolvedCategoryId) && !existing.categoryId;
 
       if (shouldBumpAdded || shouldRename || shouldRetargetUrl || shouldSetCategory) {
         await prisma.stream.update({
@@ -420,6 +438,11 @@ export async function syncProviderXtreamCatalog(
       } else {
         skipped++;
       }
+      return;
+    }
+
+    if (namesOnly) {
+      skipped++;
       return;
     }
 
@@ -527,4 +550,78 @@ export async function runDueProviderXtreamSync(limit = 2): Promise<{
   }
 
   return { processed, imported, updated, errors };
+}
+
+/**
+ * Refresh names/logos on streams that already exist. Safe after deletes —
+ * unmatched provider rows are skipped, never re-created.
+ */
+export async function runChannelNameRefresh(limit = 2): Promise<{
+  processed: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}> {
+  const { getSettingGroup } = await import("./panel-settings");
+  const { parseIdList } = await import("./import-scope");
+  const cron = await getSettingGroup("cron");
+  const providerFilter = parseIdList(cron.channelRefreshProviderIds);
+  const bouquetFilter = parseIdList(cron.channelRefreshBouquetIds);
+  const categoryFilter = parseIdList(cron.channelRefreshCategoryIds);
+
+  let allowedStreamIds: string[] | undefined;
+  if (bouquetFilter.length) {
+    const links = await prisma.bouquetStream.findMany({
+      where: { bouquetId: { in: bouquetFilter } },
+      select: { streamId: true },
+    });
+    allowedStreamIds = [...new Set(links.map((r) => r.streamId))];
+  }
+
+  const providers = await prisma.streamProvider.findMany({
+    where: {
+      isActive: true,
+      ...(providerFilter.length ? { id: { in: providerFilter } } : {}),
+    },
+    select: {
+      id: true,
+      name: true,
+      baseUrl: true,
+      apiKey: true,
+      remoteUsername: true,
+      remotePassword: true,
+      providerType: true,
+    },
+    take: Math.max(1, Math.min(8, limit)),
+    orderBy: { updatedAt: "asc" },
+  });
+
+  let processed = 0;
+  let updated = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (const p of providers) {
+    const creds = resolveProviderXtreamCreds(p);
+    if (!creds.origin || !creds.username || !creds.password) continue;
+    try {
+      const result = await syncProviderXtreamCatalog(p.id, "LIVE", {
+        updateNames: true,
+        namesOnly: true,
+        allowedCategoryIds: categoryFilter.length ? categoryFilter : undefined,
+        allowedStreamIds,
+      });
+      updated += result.updated;
+      skipped += result.skipped;
+      processed++;
+      await prisma.streamProvider.update({
+        where: { id: p.id },
+        data: { updatedAt: new Date() },
+      });
+    } catch (e) {
+      errors.push(`${p.name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  return { processed, updated, skipped, errors };
 }

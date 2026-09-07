@@ -6,6 +6,7 @@ import { ProgressBar, useProgress } from "@/components/progress-bar";
 import { CategorySelect } from "@/components/category-select";
 import { categoryTypeForStream, type CategoryOptionInput } from "@/lib/category-options";
 import { ListPagination } from "@/components/list-pagination";
+import { ServerTreePicker } from "@/components/server-tree-picker";
 
 const PAGE_SIZES = [25, 50, 100, 250, 500] as const;
 
@@ -65,6 +66,7 @@ export function StreamsMassEdit({
   const [backupUrl, setBackupUrl] = useState("");
   const [bouquetId, setBouquetId] = useState("");
   const [serverId, setServerId] = useState("");
+  const [serverIds, setServerIds] = useState<string[]>([]);
   const [isAdult, setIsAdult] = useState(false);
   const [containerExtension, setContainerExtension] = useState("mp4");
   const [seriesName, setSeriesName] = useState("");
@@ -188,7 +190,8 @@ export function StreamsMassEdit({
       setMsg("Choose a content type before applying to a whole filter.");
       return;
     }
-    if (action === "delete" && !confirm(`Delete ${selected.size} items?`)) return;
+    if (action === "disable" && !confirm(`Disable ${selected.size} streams? They stay in the panel and can be re-enabled. Use Delete to remove them permanently.`)) return;
+    if (action === "delete" && !confirm(`Permanently delete ${selected.size} streams from the database? IPTV apps will lose them after cache refresh. A later import can recreate them if the source playlist still lists them.`)) return;
 
     if (action === "setCategory" && !categoryId) {
       setMsg("Choose a category");
@@ -243,7 +246,8 @@ export function StreamsMassEdit({
       action,
       categoryId: action === "setCategory" ? categoryId || null : undefined,
       bouquetIds: action === "addToBouquet" || action === "removeFromBouquet" ? [bouquetId] : undefined,
-      serverId: action === "setServer" ? serverId || null : undefined,
+      serverId: action === "setServer" ? serverIds[0] || serverId || null : undefined,
+      serverIds: action === "setServer" ? serverIds : undefined,
       isAdult: action === "setAdult" ? isAdult : undefined,
       containerExtension: action === "setContainerExtension" ? containerExtension : undefined,
       seriesName: action === "setSeriesName" ? seriesName.trim() : undefined,
@@ -428,16 +432,16 @@ export function StreamsMassEdit({
           value={action}
           onChange={(e) => setAction(e.target.value)}
         >
-          <option value="enable">Enable</option>
-          <option value="disable">Disable</option>
-          <option value="delete">Delete</option>
+          <option value="enable">Enable (show in apps)</option>
+          <option value="disable">Disable (hide in apps — stays in panel)</option>
+          <option value="delete">Delete permanently</option>
           <option value="setCategory">Set category</option>
           <option value="clearCategory">Clear category</option>
           <option value="addToBouquet">Add to bouquet</option>
           <option value="removeFromBouquet">Remove from bouquet</option>
           <option value="setSpeed">Set min/max speed (Kbps)</option>
           <option value="setAdult">Set adult flag</option>
-          {typeFilter === "LIVE" && <option value="setServer">Set streaming server</option>}
+          {typeFilter === "LIVE" && <option value="setServer">Set streaming server pool</option>}
           {typeFilter === "LIVE" && <option value="setVodMode">Set on-demand mode</option>}
           {typeFilter === "LIVE" && <option value="setBackupUrl">Set backup URL</option>}
           {typeFilter === "LIVE" && <option value="clearBackupUrl">Clear backup URL</option>}
@@ -477,17 +481,15 @@ export function StreamsMassEdit({
         )}
 
         {action === "setServer" && (
-          <select
-            className="rounded border px-3 py-2 bg-transparent min-w-[12rem]"
-            style={{ borderColor: "var(--border)" }}
-            value={serverId}
-            onChange={(e) => setServerId(e.target.value)}
-          >
-            <option value="">— no server —</option>
-            {servers.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+          <div className="w-full max-w-3xl">
+            <ServerTreePicker
+              selectedIds={serverIds}
+              onChange={(ids) => {
+                setServerIds(ids);
+                setServerId(ids[0] || "");
+              }}
+            />
+          </div>
         )}
 
         {action === "setAdult" && (

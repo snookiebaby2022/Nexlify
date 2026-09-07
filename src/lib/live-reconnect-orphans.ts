@@ -112,8 +112,13 @@ export async function runReconnectLiveOrphans(opts?: {
     const primaryBad = isBadLiveHostUrl(row.streamUrl);
     const hasBouquets = row._count.bouquets > 0;
 
-    // Target: bad-host orphans, or inactive rows still on bouquets needing a feed.
-    if (!primaryBad && !hasBouquets) {
+    // Only heal streams whose primary URL is bad. A healthy inactive row is an
+    // admin disable — do not turn it back on because a sibling is live.
+    if (!primaryBad) {
+      out.skippedDupNoise++;
+      continue;
+    }
+    if (!hasBouquets) {
       out.skippedDupNoise++;
       continue;
     }

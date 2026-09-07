@@ -21,6 +21,23 @@ is_ip_host() {
   [[ "${1:-}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
 }
 
+install_ip_nginx_vhost() {
+  is_ip_host "${1:-}" || return 0
+  [ "${SKIP_NGINX:-0}" = "0" ] || return 0
+  [ "${NEXLIFY_USE_NGINX:-1}" = "1" ] || return 0
+  [ -f nginx/panel.nexlify.live-http-only.conf ] || return 0
+  mkdir -p /etc/nginx/conf.d /etc/nginx/sites-available /etc/nginx/sites-enabled
+  cp -f nginx/nexlify-upstream.conf /etc/nginx/conf.d/nexlify-upstream.conf
+  local site="/etc/nginx/sites-available/nexlify-panel-${1}"
+  cp -f nginx/panel.nexlify.live-http-only.conf "$site"
+  sed -i "s/server_name panel.nexlify.live;/server_name ${1} default_server;/" "$site"
+  rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/default.conf 2>/dev/null || true
+  ln -sfn "$site" "/etc/nginx/sites-enabled/nexlify-panel-${1}"
+  nginx -t
+  systemctl enable nginx 2>/dev/null || true
+  systemctl start nginx 2>/dev/null || systemctl reload nginx 2>/dev/null || true
+}
+
 # Respect DOMAIN passed from fix-customer-panel.sh (do not overwrite with stale .env).
 DOMAIN="${DOMAIN:-$(read_env PANEL_PRIMARY_DOMAIN)}"
 if is_ip_host "$DOMAIN"; then
@@ -57,19 +74,16 @@ else
 fi
 
 if is_ip_host "${DOMAIN:-}"; then
-  set_kv PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
-  set_kv PANEL_PORT "${NEXLIFY_PANEL_LISTEN_PORT:-80}"
-  set_kv PANEL_BIND_HOST "${NEXLIFY_PANEL_BIND_HOST:-0.0.0.0}"
-  set_kv PANEL_BEHIND_NGINX "${NEXLIFY_PANEL_BEHIND_NGINX:-0}"
+  set_kv PORT "${NEXLIFY_PANEL_LISTEN_PORT:-13000}"
+  set_kv PANEL_PORT "${NEXLIFY_PANEL_LISTEN_PORT:-13000}"
+  set_kv PANEL_BIND_HOST "${NEXLIFY_PANEL_BIND_HOST:-127.0.0.1}"
+  set_kv PANEL_BEHIND_NGINX "${NEXLIFY_PANEL_BEHIND_NGINX:-1}"
   set_kv PANEL_PUBLIC_PORT 80
   set_kv PANEL_ASSUME_PROXY_SSL 0
   set_kv NEXT_PUBLIC_SERVER_URL "http://${DOMAIN}"
   set_kv NEXT_PUBLIC_WEBSITE_URL "http://${DOMAIN}"
-  if command -v systemctl >/dev/null 2>&1; then
-    echo "==> Stopping nginx so panel can use port 80"
-    systemctl stop nginx 2>/dev/null || true
-    systemctl disable nginx 2>/dev/null || true
-  fi
+  rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+  install_ip_nginx_vhost "$DOMAIN"
 fi
 
 CREDS="/root/nexlify/install-credentials"

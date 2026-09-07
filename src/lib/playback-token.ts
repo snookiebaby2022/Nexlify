@@ -2,6 +2,15 @@ import crypto from "crypto";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { secretsEqual } from "@/lib/secrets-equal";
 
+export async function getPlaybackTokenSecret(): Promise<string> {
+  return (
+    process.env.PLAYBACK_TOKEN_SECRET?.trim() ||
+    String((await getSettingGroup("fingerprint")).secret ?? "").trim() ||
+    process.env.JWT_SECRET?.trim() ||
+    ""
+  );
+}
+
 export async function appendPlaybackToken(
   url: string,
   ctx: { lineId: string; streamId?: string }
@@ -10,11 +19,7 @@ export async function appendPlaybackToken(
   const ttlSec = Number(streams.playbackTokenTtlSec ?? 0);
   if (!ttlSec || ttlSec <= 0) return url;
 
-  const secret =
-    process.env.PLAYBACK_TOKEN_SECRET?.trim() ||
-    String((await getSettingGroup("fingerprint")).secret ?? "").trim() ||
-    process.env.JWT_SECRET?.trim() ||
-    "";
+  const secret = await getPlaybackTokenSecret();
   if (!secret) return url;
 
   const exp = Math.floor(Date.now() / 1000) + ttlSec;

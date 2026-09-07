@@ -26,13 +26,14 @@ filter_manifest() {
 }
 
 rebuild_on_remote() {
-  ssh "$REMOTE" "cd '$REMOTE_DIR' && export NEXLIFY_ALLOW_PROTECTED_45=1 NEXLIFY_SKIP_GIT=1 && bash scripts/rebuild-panel-safe.sh"
+  ssh "$REMOTE" "cd '$REMOTE_DIR' && export NEXLIFY_ALLOW_PROTECTED_45=1 NEXLIFY_SKIP_GIT=1 NEXLIFY_SKIP_GIT_RESET=1 && bash scripts/rebuild-panel-safe.sh"
 }
 
 rebuild_local() {
   cd "$REMOTE_DIR"
   export NEXLIFY_ALLOW_PROTECTED_45=1
   export NEXLIFY_SKIP_GIT=1
+  export NEXLIFY_SKIP_GIT_RESET=1
   bash scripts/rebuild-panel-safe.sh
 }
 

@@ -53,10 +53,14 @@ export function drawtextFilter(text: string, position: OverlayPosition, fontSize
   return `drawtext=${drawtextFontPrefix()}text='${safe}':fontsize=${size}:fontcolor=white@0.85:x=${x}:y=${y}:box=1:boxcolor=black@0.45:boxborderw=8`;
 }
 
-export function resolveOverlayText(template: string, vars: { streamName?: string; panelName?: string }): string {
+export function resolveOverlayText(
+  template: string,
+  vars: { streamName?: string; panelName?: string; token?: string }
+): string {
   return template
     .replace(/\{stream\}/gi, vars.streamName ?? "")
-    .replace(/\{panel\}/gi, vars.panelName ?? "Nexlify");
+    .replace(/\{panel\}/gi, vars.panelName ?? "Nexlify")
+    .replace(/\{token\}/gi, vars.token ?? "");
 }
 
 /**
@@ -66,7 +70,7 @@ export function resolveOverlayText(template: string, vars: { streamName?: string
 export function applyVideoOverlayFilter(
   args: string[],
   overlay: OverlaySettings,
-  vars: { streamName?: string; panelName?: string }
+  vars: { streamName?: string; panelName?: string; token?: string }
 ): string[] {
   if (!overlay.enabled) return args;
   const text = resolveOverlayText(overlay.text || "{panel} {stream}", vars);

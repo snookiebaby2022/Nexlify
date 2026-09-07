@@ -200,6 +200,21 @@ export async function buildAgentConfigForServer(
   const panelName = String(
     (await getSettingGroup("general")).panelName ?? "Nexlify",
   );
+  const overlayTokens = new Map<string, string>();
+  if (overlay.enabled && alwaysOnStreams.length) {
+    const tokenRows = await prisma.streamFingerprint.findMany({
+      where: {
+        streamId: { in: alwaysOnStreams.map((s) => s.id) },
+        isActive: true,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      select: { streamId: true, token: true },
+      orderBy: { createdAt: "desc" },
+    });
+    for (const row of tokenRows) {
+      if (!overlayTokens.has(row.streamId)) overlayTokens.set(row.streamId, row.token);
+    }
+  }
 
   const streams: AgentStreamEntry[] = alwaysOnStreams.map((s) => {
     const liveMeta = parseLiveStreamMeta(s.agentStartCmd);
@@ -237,6 +252,7 @@ export async function buildAgentConfigForServer(
       spec.args = applyVideoOverlayFilter(spec.args, overlay, {
         streamName: s.name,
         panelName,
+        token: overlayTokens.get(s.id) ?? "",
       });
     }
     return {

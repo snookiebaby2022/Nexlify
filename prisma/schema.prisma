@@ -436,6 +436,8 @@ model Stream {
   type               StreamType      @default(LIVE)
   serverId           String?
   server             StreamServer?   @relation(fields: [serverId], references: [id])
+  /// Ordered overflow / failover pool. First id matches serverId (primary).
+  serverPoolIds      Json?
   categoryId         String?
   category           Category?       @relation(fields: [categoryId], references: [id])
   epgChannelId       String?
@@ -519,6 +521,8 @@ model WatchFolder {
   type          WatchFolderType @default(MIXED)
   categoryId    String?
   serverId      String?
+  /// Ordered server pool for imported streams (first = primary).
+  serverPoolIds Json?
   isActive      Boolean         @default(true)
   /// Tag imported content as adult (1-stream parity).
   isAdult       Boolean         @default(false)
@@ -539,6 +543,10 @@ model WatchFolder {
   autoBouquet   Boolean         @default(true)
   /// Comma-separated bouquet IDs to attach imported streams to.
   bouquetIds    String          @default("")
+  /// Playlist group-title allowlist (newline or comma). Empty = all groups.
+  groupFilter   String          @default("")
+  /// When false, rescan updates existing URLs only and does not create streams.
+  createMissing Boolean         @default(true)
   lastScan      DateTime?
   importedCount Int             @default(0)
   createdAt     DateTime        @default(now())
@@ -1323,10 +1331,21 @@ model M3uSyncJob {
   streamType       String          @default("MIXED")
   categoryId       String?
   serverId         String?
+  /// Ordered server pool for imported streams (first = primary).
+  serverPoolIds    Json?
   autoTmdb         Boolean         @default(true)
   autoCategory     Boolean         @default(true)
   categoryMap      Json? // auto-mapping rules
   autoAssignEpg    Boolean         @default(true)
+  updateNames      Boolean         @default(true)
+  overwriteCategories Boolean      @default(true)
+  autoBouquet      Boolean         @default(false)
+  bouquetIds       String          @default("")
+  onDemand         Boolean         @default(true)
+  removeDuplicates Boolean         @default(false)
+  isAdult          Boolean         @default(false)
+  groupFilter      String          @default("")
+  createMissing    Boolean         @default(true)
   lastSyncAt       DateTime?
   nextSyncAt       DateTime?
   syncIntervalMins Int             @default(60)

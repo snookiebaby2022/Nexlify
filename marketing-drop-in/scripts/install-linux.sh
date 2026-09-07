@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.58' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.82' | sudo bash
 #
 # Server IP/hostname is detected automatically. Then open the login URL, sign in
 # with the admin password shown at the end, and paste your license key under Admin → License.
@@ -36,7 +36,7 @@ usage() {
 Nexlify Panel — Linux installer
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.58' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.82' | sudo bash
 
 Options:
   --ip IP                Override auto-detected server IP or hostname
@@ -52,9 +52,9 @@ Options:
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.58' | sudo bash
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.58' | sudo bash -s -- --license NXLF1-XXXXX
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.58' | sudo bash -s -- --domain panel.example.com --email admin@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.82' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.82' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.82' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 
@@ -79,6 +79,12 @@ done
 
 log() { echo ""; echo "==> $*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
+
+validate_domain() {
+  [ -z "${1:-}" ] || [ "$1" = "localhost" ] || [[ "$1" =~ ^[A-Za-z0-9.-]+$ ]] ||
+    die "Invalid IP/DOMAIN: use a hostname or IPv4 address without shell characters"
+}
+validate_domain "$DOMAIN"
 
 # apt nginx ships a default site that 404s /login. IP and domain installs both
 # need nginx :80 → 127.0.0.1:13000. Never fuser/kill :8080 (live edge).

@@ -1,4 +1,5 @@
 import { cacheDel, cacheDelExact } from "@/lib/cache";
+import { normalizeUpstreamStreamUrl } from "@/lib/resolve-stream-url";
 
 export async function invalidateDashboardStats() {
   await Promise.all([
@@ -142,6 +143,45 @@ export async function invalidateLiveAuthForStream(streamId: string) {
   return cacheDel(`live-auth:v3:*:${id}:*`);
 }
 
+export type StreamPlaybackUpstreamSnapshot = {
+  streamUrl: string | null;
+  backupUrl?: string | null;
+  providerPath?: string | null;
+  hostedExternally?: boolean | null;
+};
+
+function playbackUpstreamFingerprint(row: StreamPlaybackUpstreamSnapshot): string {
+  const norm = (u: string | null | undefined) => {
+    const t = String(u ?? "").trim();
+    return t ? normalizeUpstreamStreamUrl(t) : "";
+  };
+  return JSON.stringify({
+    streamUrl: norm(row.streamUrl),
+    backupUrl: norm(row.backupUrl),
+    providerPath: String(row.providerPath ?? "").trim(),
+    hosted: Boolean(row.hostedExternally),
+  });
+}
+
+/** True when the resolved upstream target changed (URL/backup/provider path). */
+export function streamPlaybackUpstreamChanged(
+  before: StreamPlaybackUpstreamSnapshot,
+  after: StreamPlaybackUpstreamSnapshot
+): boolean {
+  return playbackUpstreamFingerprint(before) !== playbackUpstreamFingerprint(after);
+}
+
+/** Clear live-auth + playback URL cache without dropping the edge fan. */
+export async function invalidateStreamPlaybackCache(streamId: string): Promise<number> {
+  const id = streamId?.trim();
+  if (!id) return 0;
+  const [liveAuthDeleted] = await Promise.all([
+    invalidateLiveAuthForStream(id),
+    invalidatePlaybackUrls(id),
+  ]);
+  return liveAuthDeleted;
+}
+
 /**
  * After source URL change or Restart on LIVE relay: clear panel caches and ask
  * the edge to drop the active fan so viewers re-auth against the new upstream.
@@ -152,10 +192,7 @@ export async function refreshStreamPlayback(streamId: string): Promise<{
 }> {
   const id = streamId?.trim();
   if (!id) return { liveAuthDeleted: 0, edgeDropped: false };
-  const [liveAuthDeleted] = await Promise.all([
-    invalidateLiveAuthForStream(id),
-    invalidatePlaybackUrls(id),
-  ]);
+  const liveAuthDeleted = await invalidateStreamPlaybackCache(id);
   const edgeDropped = await requestEdgeDropStream(id).catch(() => false);
   return { liveAuthDeleted, edgeDropped };
 }

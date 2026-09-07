@@ -22,7 +22,7 @@ interface StreamFingerprint {
   streamName: string;
   lineUsername: string;
   token: string;
-  type: "VIDEO" | "AUDIO" | "FRAME" | "INVISIBLE";
+  type: string;
   createdAt: string;
   expiresAt: string;
   active: boolean;
@@ -36,10 +36,13 @@ interface FingerprintStats {
 }
 
 const TYPE_LABELS: Record<string, string> = {
-  VIDEO: "Video Watermark",
-  AUDIO: "Audio Watermark",
-  FRAME: "Frame Inject",
-  INVISIBLE: "Invisible",
+  INVISIBLE_WATERMARK: "Invisible watermark",
+  TOKEN_SIGNATURE: "Token signature",
+  SESSION_HASH: "Session hash",
+  INVISIBLE: "Invisible watermark",
+  VIDEO: "Invisible watermark",
+  AUDIO: "Session hash",
+  FRAME: "Token signature",
 };
 
 export default function StreamFingerprintPage() {
@@ -52,7 +55,7 @@ export default function StreamFingerprintPage() {
   const [generateForm, setGenerateForm] = useState({
     streamId: "",
     lineId: "",
-    type: "INVISIBLE" as StreamFingerprint["type"],
+    type: "INVISIBLE_WATERMARK",
     ttlHours: 24,
   });
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -62,13 +65,11 @@ export default function StreamFingerprintPage() {
   const load = useCallback(() => {
     setLoading(true);
     setError("");
-    Promise.all([
-      fetch("/api/admin/stream-fingerprint").then((r) => r.json()),
-      fetch("/api/admin/stream-fingerprint").then((r) => r.json()),
-    ])
-      .then(([data, s]) => {
+    fetch("/api/admin/stream-fingerprints")
+      .then((r) => r.json())
+      .then((data) => {
         setFingerprints(data.fingerprints ?? []);
-        setStats(s ?? null);
+        setStats(data.stats ?? null);
       })
       .catch(() => setError("Failed to load stream fingerprints."))
       .finally(() => setLoading(false));
@@ -138,7 +139,8 @@ export default function StreamFingerprintPage() {
   }
 
   const detail = detailId ? fingerprints.find((f) => f.id === detailId) : null;
-  const isExpired = (f: StreamFingerprint) => new Date(f.expiresAt) < new Date();
+  const isExpired = (f: StreamFingerprint) =>
+    Boolean(f.expiresAt) && !Number.isNaN(new Date(f.expiresAt).getTime()) && new Date(f.expiresAt) < new Date();
 
   return (
     <div className="space-y-6 pb-8">
@@ -237,11 +239,11 @@ export default function StreamFingerprintPage() {
                 className="mt-1 w-full rounded border px-3 py-2 bg-transparent text-sm"
                 style={{ borderColor: "var(--border)", color: "var(--text)" }}
                 value={generateForm.type}
-                onChange={(e) => setGenerateForm({ ...generateForm, type: e.target.value as StreamFingerprint["type"] })}
+                onChange={(e) => setGenerateForm({ ...generateForm, type: e.target.value })}
               >
-                {Object.entries(TYPE_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
+                <option value="INVISIBLE_WATERMARK">Invisible watermark</option>
+                <option value="TOKEN_SIGNATURE">Token signature</option>
+                <option value="SESSION_HASH">Session hash</option>
               </select>
             </label>
             <label className="block text-sm">

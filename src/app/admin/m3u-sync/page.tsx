@@ -5,6 +5,10 @@ import Link from "next/link";
 import { DataTable } from "@/components/data-table";
 import { formatDateTime } from "@/lib/format";
 import { ServerTreePicker } from "@/components/server-tree-picker";
+import {
+  ImportCustomizeFields,
+  type ImportCustomizeValue,
+} from "@/components/import-customize-fields";
 
 type SyncJob = {
   id: string;
@@ -23,6 +27,21 @@ export default function AdminM3uSyncPage() {
   const [jobs, setJobs] = useState<SyncJob[]>([]);
   const [providers, setProviders] = useState<{ id: string; name: string }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const emptyCustomize = (): ImportCustomizeValue => ({
+    bouquetIds: [],
+    groupFilter: "",
+    autoCategory: true,
+    autoBouquet: false,
+    updateNames: true,
+    overwriteCategories: true,
+    onDemand: true,
+    createMissing: true,
+    removeDuplicates: false,
+    isAdult: false,
+    autoTmdb: true,
+    autoAssignEpg: true,
+  });
+
   const [form, setForm] = useState({
     name: "",
     url: "",
@@ -31,7 +50,7 @@ export default function AdminM3uSyncPage() {
     categoryId: "",
     serverIds: [] as string[],
     syncIntervalMins: 60,
-    autoTmdb: true,
+    customize: emptyCustomize(),
   });
   const [syncing, setSyncing] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -98,8 +117,20 @@ export default function AdminM3uSyncPage() {
           providerId: form.providerId || null,
           categoryId: form.categoryId || null,
           serverId: form.serverIds[0] || null,
+          serverIds: form.serverIds,
           syncIntervalMins: form.syncIntervalMins,
-          autoTmdb: form.autoTmdb,
+          autoTmdb: form.customize.autoTmdb,
+          autoCategory: form.customize.autoCategory,
+          autoAssignEpg: form.customize.autoAssignEpg,
+          updateNames: form.customize.updateNames,
+          overwriteCategories: form.customize.overwriteCategories,
+          autoBouquet: form.customize.autoBouquet,
+          bouquetIds: form.customize.bouquetIds,
+          onDemand: form.customize.onDemand,
+          removeDuplicates: form.customize.removeDuplicates,
+          isAdult: form.customize.isAdult,
+          groupFilter: form.customize.groupFilter,
+          createMissing: form.customize.createMissing,
         }),
       });
       const data = await res.json();
@@ -115,7 +146,7 @@ export default function AdminM3uSyncPage() {
         categoryId: "",
         serverIds: [],
         syncIntervalMins: 60,
-        autoTmdb: true,
+        customize: emptyCustomize(),
       });
       load();
     } catch {
@@ -310,14 +341,12 @@ export default function AdminM3uSyncPage() {
           selectedIds={form.serverIds}
           onChange={(serverIds) => setForm({ ...form, serverIds })}
         />
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={form.autoTmdb}
-            onChange={(e) => setForm({ ...form, autoTmdb: e.target.checked })}
-          />
-          Auto-fetch TMDB metadata on import
-        </label>
+        <ImportCustomizeFields
+          value={form.customize}
+          onChange={(customize) => setForm({ ...form, customize })}
+          showTmdb
+          showEpg
+        />
         <button
           type="submit"
           className="rounded py-2.5 px-5 font-medium cursor-pointer"

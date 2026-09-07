@@ -25,6 +25,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   mass_users_setGroup: "Mass change user group",
   create_stream: "Stream created",
   edit_stream: "Stream updated",
+  delete_stream: "Stream deleted",
   remove_duplicates: "Duplicates removed",
   credit_add: "Credits added",
   credit_refund: "Credits refunded",
@@ -37,7 +38,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   vpn_auto_block: "VPN/hosting IP auto-blocked",
   playback_freeze: "Playback freeze",
   playback_stutter: "Playback stutter",
-  playback_drop: "Channel drop",
+  playback_drop: "Playback failed (upstream)",
   playback_origin_fail: "Playback origin failed",
   playback_failover: "Playback failover",
   stream_primary_failover: "Live primary failover",
@@ -45,6 +46,52 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
 
 export function formatAuditAction(action: string): string {
   return AUDIT_ACTION_LABELS[action] ?? action.replace(/_/g, " ");
+}
+
+/** One honest sentence for the dashboard — drop ≠ delete, disable ≠ deleted. */
+export function formatAuditHeadline(
+  action: string,
+  meta?: unknown
+): { label: string; detail: string | null } {
+  const m = meta && typeof meta === "object" ? (meta as Record<string, unknown>) : {};
+  const massAction = String(m.action ?? "");
+
+  if (
+    action === "playback_drop" ||
+    action === "playback_freeze" ||
+    action === "playback_stutter" ||
+    action === "playback_origin_fail"
+  ) {
+    return {
+      label: formatAuditAction(action),
+      detail: "Viewer playback issue — the channel was not deleted.",
+    };
+  }
+  if (action === "delete_stream" || (action === "mass_streams" && massAction === "delete")) {
+    return {
+      label: action === "delete_stream" ? "Stream permanently deleted" : "Streams permanently deleted",
+      detail: "Removed from the catalog. This is not a disable.",
+    };
+  }
+  if (action === "mass_streams" && massAction === "disable") {
+    return {
+      label: "Streams disabled",
+      detail: "Still in the catalog — players cannot see them until enabled.",
+    };
+  }
+  if (action === "mass_streams" && massAction === "enable") {
+    return {
+      label: "Streams enabled",
+      detail: "Visible to players again. They were not newly created.",
+    };
+  }
+  if (action === "edit_stream" && m.isActive === false) {
+    return {
+      label: "Stream disabled",
+      detail: "Still in the catalog — not deleted.",
+    };
+  }
+  return { label: formatAuditAction(action), detail: formatAuditMeta(meta) };
 }
 
 export function formatAuditMeta(meta: unknown): string | null {

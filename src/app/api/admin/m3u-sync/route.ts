@@ -7,7 +7,46 @@ import { PanelRole } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { parseGroupFilter, parseIdList, toCsv } from "@/lib/import-scope";
+import { assignmentFromBody, parseStoredServerPool } from "@/lib/server-pool";
 const VALID_TYPES = new Set(["LIVE", "MOVIE", "SERIES", "MIXED"]);
+
+function jobImportOpts(job: {
+  streamType: string;
+  categoryId: string | null;
+  serverId: string | null;
+  serverPoolIds?: unknown;
+  autoTmdb: boolean;
+  autoCategory: boolean;
+  updateNames?: boolean;
+  overwriteCategories?: boolean;
+  autoBouquet?: boolean;
+  bouquetIds?: string;
+  groupFilter?: string;
+  createMissing?: boolean;
+  onDemand?: boolean;
+  isAdult?: boolean;
+  removeDuplicates?: boolean;
+}) {
+  return {
+    contentType: job.streamType,
+    categoryId: job.categoryId,
+    serverId: job.serverId,
+    serverIds: parseStoredServerPool(job.serverPoolIds, job.serverId),
+    serverPoolIds: job.serverPoolIds,
+    autoTmdb: job.autoTmdb,
+    autoCategory: job.autoCategory,
+    updateNamesOnSync: job.updateNames !== false,
+    overwriteCategories: job.overwriteCategories !== false,
+    autoBouquetFromGroup: job.autoBouquet === true,
+    bouquetIds: parseIdList(job.bouquetIds),
+    groupFilter: parseGroupFilter(job.groupFilter),
+    createMissing: job.createMissing !== false,
+    defaultOnDemand: job.onDemand !== false,
+    isAdult: job.isAdult === true,
+    removeDuplicates: job.removeDuplicates === true,
+  };
+}
 
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
@@ -67,13 +106,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const result = await runM3uUrlSync(job.url, {
-        contentType: job.streamType,
-        categoryId: job.categoryId,
-        serverId: job.serverId,
-        autoTmdb: job.autoTmdb,
-        autoCategory: job.autoCategory,
-      });
+      const result = await runM3uUrlSync(job.url, jobImportOpts(job));
       if (job.autoAssignEpg !== false && result.imported > 0) {
         try {
           const { autoAssignMissingEpg } = await import("@/lib/epg-auto-match");
@@ -129,10 +162,22 @@ export async function POST(req: NextRequest) {
       providerId: body.providerId ? String(body.providerId) : null,
       streamType,
       categoryId: body.categoryId ? String(body.categoryId) : null,
-      serverId: body.serverId ? String(body.serverId) : null,
+      ...(() => {
+        const assigned = assignmentFromBody(body as Record<string, unknown>);
+        return { serverId: assigned.serverId, serverPoolIds: assigned.serverPoolIds };
+      })(),
       autoTmdb: body.autoTmdb !== false,
       autoCategory: body.autoCategory !== false,
       autoAssignEpg: body.autoAssignEpg !== false,
+      updateNames: body.updateNames !== false,
+      overwriteCategories: body.overwriteCategories !== false,
+      autoBouquet: body.autoBouquet === true,
+      bouquetIds: toCsv(parseIdList(body.bouquetIds)),
+      onDemand: body.onDemand !== false,
+      removeDuplicates: body.removeDuplicates === true,
+      isAdult: body.isAdult === true,
+      groupFilter: parseGroupFilter(body.groupFilter).join("\n"),
+      createMissing: body.createMissing !== false,
       categoryMap: body.categoryMap ?? null,
       syncIntervalMins,
       status: "active",
@@ -171,10 +216,23 @@ export async function PATCH(req: NextRequest) {
     data.streamType = String(body.streamType);
   }
   if (body.categoryId !== undefined) data.categoryId = body.categoryId ? String(body.categoryId) : null;
-  if (body.serverId !== undefined) data.serverId = body.serverId ? String(body.serverId) : null;
+  if (body.serverIds !== undefined || body.serverPoolIds !== undefined || body.serverId !== undefined) {
+    const assigned = assignmentFromBody(body as Record<string, unknown>);
+    data.serverId = assigned.serverId;
+    data.serverPoolIds = assigned.serverPoolIds;
+  }
   if (body.autoTmdb !== undefined) data.autoTmdb = Boolean(body.autoTmdb);
   if (body.autoCategory !== undefined) data.autoCategory = Boolean(body.autoCategory);
   if (body.autoAssignEpg !== undefined) data.autoAssignEpg = Boolean(body.autoAssignEpg);
+  if (body.updateNames !== undefined) data.updateNames = Boolean(body.updateNames);
+  if (body.overwriteCategories !== undefined) data.overwriteCategories = Boolean(body.overwriteCategories);
+  if (body.autoBouquet !== undefined) data.autoBouquet = Boolean(body.autoBouquet);
+  if (body.bouquetIds !== undefined) data.bouquetIds = toCsv(parseIdList(body.bouquetIds));
+  if (body.onDemand !== undefined) data.onDemand = Boolean(body.onDemand);
+  if (body.removeDuplicates !== undefined) data.removeDuplicates = Boolean(body.removeDuplicates);
+  if (body.isAdult !== undefined) data.isAdult = Boolean(body.isAdult);
+  if (body.groupFilter !== undefined) data.groupFilter = parseGroupFilter(body.groupFilter).join("\n");
+  if (body.createMissing !== undefined) data.createMissing = Boolean(body.createMissing);
   if (body.categoryMap !== undefined) data.categoryMap = body.categoryMap ?? null;
   if (body.syncIntervalMins !== undefined) data.syncIntervalMins = Math.max(5, Number(body.syncIntervalMins));
   if (body.status !== undefined) data.status = String(body.status);

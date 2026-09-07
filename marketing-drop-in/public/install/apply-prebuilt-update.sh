@@ -227,6 +227,13 @@ do_apply() {
     mkdir -p "$ROOT/scripts"
     cp -a "$STAGING_DIR/_nexlify_overlay/scripts/." "$ROOT/scripts/"
     chmod +x "$ROOT/scripts/"*.sh 2>/dev/null || true
+  fi
+  if [ -f "$STAGING_DIR/_nexlify_overlay/prisma/schema.prisma" ]; then
+    echo "Installing Prisma schema from this release ..."
+    mkdir -p "$ROOT/prisma"
+    cp -f "$STAGING_DIR/_nexlify_overlay/prisma/schema.prisma" "$ROOT/prisma/schema.prisma"
+  fi
+  if [ -d "$STAGING_DIR/_nexlify_overlay" ]; then
     rm -rf "$STAGING_DIR/_nexlify_overlay"
   fi
   rm -rf .next

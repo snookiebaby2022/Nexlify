@@ -81,6 +81,7 @@ export function VodSeriesForm({
         categoryId: form.categoryId || null,
         streamIcon: form.streamIcon || tmdb.tmdbPoster || null,
         serverId: form.serverIds[0] || null,
+        serverIds: form.serverIds,
         isOnDemand: true,
         vodMode: "ON_DEMAND",
         bouquetIds: form.bouquetIds,

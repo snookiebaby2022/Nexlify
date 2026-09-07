@@ -2,7 +2,7 @@ import { countActiveConnections } from "@/lib/connections";
 import { cacheGetOrSet } from "@/lib/cache";
 import { prisma } from "@/lib/prisma";
 import { PanelRole, StreamType } from "@prisma/client";
-import { formatAuditAction } from "@/lib/audit-log";
+import { formatAuditHeadline } from "@/lib/audit-log";
 import { activityFixHref, cronFixHref } from "@/lib/activity-fix-links";
 import {
   getDashboardServerMetrics,
@@ -255,17 +255,21 @@ export async function loadAdminDashboardStats() {
           ? log.createdAt.toISOString()
           : String(log.createdAt),
     })),
-    logs: logs.map((log) => ({
-      action: log.action,
-      label: formatAuditAction(log.action),
-      createdAt:
-        log.createdAt instanceof Date
-          ? log.createdAt.toISOString()
-          : String(log.createdAt),
-      entity: log.entity,
-      entityId: log.entityId,
-      fixHref: activityFixHref(log),
-    })),
+    logs: logs.map((log) => {
+      const headline = formatAuditHeadline(log.action, log.meta);
+      return {
+        action: log.action,
+        label: headline.label,
+        detail: headline.detail,
+        createdAt:
+          log.createdAt instanceof Date
+            ? log.createdAt.toISOString()
+            : String(log.createdAt),
+        entity: log.entity,
+        entityId: log.entityId,
+        fixHref: activityFixHref(log),
+      };
+    }),
     bouquets,
     resellers,
     dashboard,

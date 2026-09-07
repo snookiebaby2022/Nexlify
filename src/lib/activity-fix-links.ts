@@ -35,7 +35,10 @@ export function activityFixHref(log: {
     case "duplicate_bouquet":
       return log.entityId ? `/admin/bouquets` : "/admin/bouquets";
     case "mass_streams":
-      return "/admin/management/mass-edit/streams";
+    case "delete_stream":
+    case "create_stream":
+    case "edit_stream":
+      return log.entityId ? `/admin/servers/streams?edit=${log.entityId}` : "/admin/management/mass-edit/streams";
     case "credit_add":
     case "credit_refund":
     case "credit_deduct":

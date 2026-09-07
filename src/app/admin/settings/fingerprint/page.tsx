@@ -21,6 +21,7 @@ export default function FingerprintSettingsPage() {
                 options: [
                   { value: "sha256", label: "SHA-256" },
                   { value: "sha1", label: "SHA-1" },
+                  { value: "md5", label: "MD5" },
                 ],
               },
               { key: "includeUserAgent", label: "Include user agent", type: "yesno" },
@@ -30,13 +31,13 @@ export default function FingerprintSettingsPage() {
           },
           {
             title: "On-video overlay (1-Stream fingerprint)",
-            info: "Burns text onto restreamed channels that run through FFmpeg on the stream agent (transcode / capture / always-on). Direct proxy channels are not modified. Placeholders: {panel} {stream}.",
+            info: "Burns text onto restreamed channels that run through FFmpeg on the stream agent (transcode / capture / always-on). Direct proxy channels are not modified. Placeholders: {panel} {stream} {token} (active stream-fingerprint token).",
             fields: [
               { key: "overlayEnabled", label: "Burn overlay on FFmpeg restreams", type: "yesno" },
               {
                 key: "overlayText",
                 label: "Overlay text",
-                placeholder: "{panel} {stream}",
+                placeholder: "{panel} {stream} {token}",
                 colSpan: 2,
               },
               {

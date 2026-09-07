@@ -134,6 +134,16 @@ async function authorizeLivePlayback(
     streamId: cleanId,
     hotPath: true,
   });
+  const { rejectInvalidPlaybackMarks, playbackMarksFromRequest } = await import("@/lib/playback-marks");
+  const markDeny = await rejectInvalidPlaybackMarks(playbackMarksFromRequest(req), {
+    lineId: line.id,
+    streamId: cleanId,
+    clientIp: ip,
+    userAgent: ua,
+  });
+  if (markDeny) {
+    return { ok: false, response: withIptvCors(iptvText("Invalid playback token", { status: 403 })) };
+  }
   if (deny) {
     const status = deny === "ddos" ? 429 : 403;
     const msg =

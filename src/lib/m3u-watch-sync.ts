@@ -6,6 +6,8 @@ export type M3uSyncOptions = {
   defaultType?: M3uContentType;
   categoryId?: string | null;
   serverId?: string | null;
+  serverIds?: string[];
+  serverPoolIds?: unknown;
   autoCategory?: boolean;
   autoTmdb?: boolean;
   /** LIVE imports only — default on-demand for panel M3U imports */
@@ -14,6 +16,12 @@ export type M3uSyncOptions = {
   reorderExisting?: boolean;
   /** Refresh name/logo/epg when an existing stream URL matches */
   updateNamesOnSync?: boolean;
+  overwriteCategories?: boolean;
+  autoBouquetFromGroup?: boolean;
+  bouquetIds?: string[];
+  groupFilter?: string[];
+  createMissing?: boolean;
+  isAdult?: boolean;
 };
 
 export function isRemoteM3uUrl(source: string): boolean {
@@ -71,6 +79,8 @@ export async function syncM3uFromUrl(url: string, opts: M3uSyncOptions = {}) {
     defaultType: forced,
     categoryId: opts.categoryId,
     serverId: opts.serverId,
+    serverIds: opts.serverIds,
+    serverPoolIds: opts.serverPoolIds,
     autoCategory: opts.autoCategory !== false,
     autoTmdb: opts.autoTmdb !== false,
     // LIVE rows (including inside MIXED playlists) default to on-demand
@@ -78,5 +88,14 @@ export async function syncM3uFromUrl(url: string, opts: M3uSyncOptions = {}) {
     sortOrderStart: opts.sortOrderStart ?? 0,
     reorderExisting: opts.reorderExisting ?? true,
     updateNamesOnSync,
+    overwriteCategories: opts.overwriteCategories,
+    autoBouquetFromGroup: opts.autoBouquetFromGroup,
+    bouquetIds: opts.bouquetIds,
+    groupFilter: opts.groupFilter,
+    createMissing: opts.createMissing,
+    importMeta: {
+      ...(opts.isAdult ? { isAdult: true } : {}),
+      ...(opts.serverIds?.length ? { serverIds: opts.serverIds } : {}),
+    },
   });
 }

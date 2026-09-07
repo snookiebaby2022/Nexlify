@@ -7,6 +7,9 @@ import {
 } from "./m3u-watch-sync";
 import { syncWatchFolderM3u } from "./watch-folder-m3u";
 import { ImportKind } from "@prisma/client";
+import { parseGroupFilter, parseIdList } from "./import-scope";
+import { parseM3u } from "./m3u-parser";
+import { fetchM3uContent } from "./m3u-watch-sync";
 
 export type M3uSyncRunResult = {
   imported: number;
@@ -24,8 +27,19 @@ export async function runM3uUrlSync(
     contentType: string;
     categoryId?: string | null;
     serverId?: string | null;
+    serverIds?: string[];
+    serverPoolIds?: unknown;
     autoTmdb?: boolean;
     autoCategory?: boolean;
+    updateNamesOnSync?: boolean;
+    overwriteCategories?: boolean;
+    autoBouquetFromGroup?: boolean;
+    bouquetIds?: string[];
+    groupFilter?: string[];
+    createMissing?: boolean;
+    defaultOnDemand?: boolean;
+    isAdult?: boolean;
+    removeDuplicates?: boolean;
   }
 ): Promise<M3uSyncRunResult> {
   const forced = resolveM3uDefaultType(opts.contentType);
@@ -34,14 +48,34 @@ export async function runM3uUrlSync(
       ? "MIXED"
       : forced ?? "MIXED";
 
-  return syncM3uFromUrl(url, {
+  const result = await syncM3uFromUrl(url, {
     defaultType,
     categoryId: opts.categoryId,
     serverId: opts.serverId,
+    serverIds: opts.serverIds,
+    serverPoolIds: opts.serverPoolIds,
     autoTmdb: opts.autoTmdb,
     autoCategory: opts.autoCategory,
-    defaultOnDemand: defaultType === "LIVE" ? true : undefined,
+    defaultOnDemand:
+      opts.defaultOnDemand ?? (defaultType === "LIVE" ? true : undefined),
+    updateNamesOnSync: opts.updateNamesOnSync,
+    overwriteCategories: opts.overwriteCategories,
+    autoBouquetFromGroup: opts.autoBouquetFromGroup,
+    bouquetIds: opts.bouquetIds,
+    groupFilter: opts.groupFilter,
+    createMissing: opts.createMissing,
+    isAdult: opts.isAdult,
   });
+
+  let deduped = 0;
+  if (opts.removeDuplicates) {
+    const content = await fetchM3uContent(url);
+    const urls = parseM3u(content).map((e) => e.url).filter(Boolean);
+    const { removeExactNameDupsForUrls } = await import("./watch-folder-m3u");
+    deduped = await removeExactNameDupsForUrls(urls);
+  }
+
+  return { ...result, deduped };
 }
 
 /** Process due scheduled M3uSyncJob rows (live + VOD provider playlists). */
@@ -85,8 +119,19 @@ export async function runDueM3uSyncJobs(limit = 5): Promise<{
         contentType,
         categoryId: job.categoryId,
         serverId: job.serverId,
+        serverIds: Array.isArray(job.serverPoolIds) ? job.serverPoolIds.map(String) : undefined,
+        serverPoolIds: job.serverPoolIds,
         autoTmdb: job.autoTmdb,
         autoCategory: job.autoCategory,
+        updateNamesOnSync: job.updateNames !== false,
+        overwriteCategories: job.overwriteCategories !== false,
+        autoBouquetFromGroup: job.autoBouquet === true,
+        bouquetIds: parseIdList(job.bouquetIds),
+        groupFilter: parseGroupFilter(job.groupFilter),
+        createMissing: job.createMissing !== false,
+        defaultOnDemand: job.onDemand !== false,
+        isAdult: job.isAdult === true,
+        removeDuplicates: job.removeDuplicates === true,
       });
 
       imported += result.imported;
@@ -158,6 +203,7 @@ export async function runWatchFolderM3uSync(folder: {
   type: string;
   categoryId: string | null;
   serverId: string | null;
+  serverPoolIds?: unknown;
   autoCategory?: boolean;
   updateNames?: boolean;
   overwriteCategories?: boolean;

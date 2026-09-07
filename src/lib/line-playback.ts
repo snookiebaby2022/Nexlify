@@ -193,6 +193,7 @@ export async function resolvePlaybackUrlForLine(
   }
   url = await applyPlaybackFingerprint(url, {
     lineId,
+    streamId: effectiveStream.id,
     clientIp: ctx?.clientIp,
     userAgent: ctx?.userAgent,
   });
@@ -287,6 +288,7 @@ export async function resolvePlaybackUrlCandidatesForLine(
     signed.push(
       await applyPlaybackFingerprint(u, {
         lineId,
+        streamId: effectiveStream.id,
         clientIp: ctx?.clientIp,
         userAgent: ctx?.userAgent,
       })

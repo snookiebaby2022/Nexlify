@@ -45,6 +45,7 @@ type Stream = {
   type: string;
   isRadio?: boolean;
   serverId?: string | null;
+  serverIds?: string[];
   categoryId?: string | null;
   epgChannelId?: string | null;
   isActive?: boolean;
@@ -171,7 +172,12 @@ export function StreamManageEditPage({
           setTranscodeProfile(liveMeta.transcodeProfile || "none");
           setDirectSource(liveMeta.directSource);
         }
-        setServerIds(s.serverId ? [s.serverId] : []);
+        const pool = Array.isArray(s.serverIds)
+          ? s.serverIds
+          : s.serverId
+            ? [s.serverId]
+            : [];
+        setServerIds(pool);
         const loadedTmdb = readVodTmdbFields((s as Stream).agentStartCmd);
         setTmdb(loadedTmdb);
         setStreamIcon(
@@ -261,6 +267,7 @@ export function StreamManageEditPage({
           providerPath: form.useProvider ? form.providerPath || null : null,
           backupUrl: form.backupUrl.trim() || null,
           serverId: serverIds[0] || null,
+          serverIds,
           categoryId: form.categoryId.trim() || stream?.categoryId || null,
           epgChannelId: form.epgChannelId || null,
           isActive: form.isActive,
@@ -683,7 +690,7 @@ export function StreamManageEditPage({
   }
 
   return (
-    <div className="space-y-5 max-w-6xl">
+    <div className="space-y-5 max-w-6xl xui-stream-edit-inner">
       <StreamLiveInfo streamId={streamId} />
 
       <form id="stream-edit-form" onSubmit={save} className="pb-24 md:pb-0">

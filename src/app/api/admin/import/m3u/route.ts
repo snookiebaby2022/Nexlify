@@ -73,6 +73,7 @@ export async function POST(req: NextRequest) {
       defaultType: streamType,
       categoryId: body.categoryId ?? null,
       serverId: body.serverId ?? null,
+      serverIds: Array.isArray(body.serverIds) ? body.serverIds.map(String) : undefined,
       defaultOnDemand,
       selectedUrls: Array.isArray(body.selectedUrls) ? body.selectedUrls : undefined,
       autoCategory: body.autoCategory !== false,

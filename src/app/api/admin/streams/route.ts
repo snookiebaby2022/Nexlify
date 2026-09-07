@@ -23,18 +23,22 @@ import { cacheGetOrSet } from "@/lib/cache";
 import {
   invalidateDashboardStats,
   invalidatePlaybackUrls,
+  invalidateStreamPlaybackCache,
   invalidateXtreamCategories,
   refreshStreamPlayback,
+  streamPlaybackUpstreamChanged,
 } from "@/lib/cache-invalidate";
 import { syncStreamBouquets } from "@/lib/stream-bouquets";
 import { expandCategoryFilter } from "@/lib/category-tree";
 import { getResellerBouquetIds } from "@/lib/reseller-bouquet-scope";
 import { canAccessBouquet } from "@/lib/bouquet-access";
 import { listOnlineLiveStreamIds } from "@/lib/connections";
+import { parseStoredServerPool } from "@/lib/server-pool";
 
 
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { logActivity } from "@/lib/lines";
 import { streamListOrderBy } from "@/lib/stream-order";
 import { attachStreamEpgWorking } from "@/lib/epg-working-status";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -300,6 +304,7 @@ export async function GET(req: NextRequest) {
           isRadio: true,
           isCreatedChannel: true,
           serverId: true,
+          serverPoolIds: true,
           categoryId: true,
           epgChannelId: true,
           channelId: true,
@@ -352,9 +357,16 @@ export async function GET(req: NextRequest) {
 
 
 
-  const listed = skipEpg
+  const listed = (skipEpg
     ? streams.map((s) => ({ ...s, epgWorking: false }))
-    : await attachStreamEpgWorking(streams);
+    : await attachStreamEpgWorking(streams)
+  ).map((s) => ({
+    ...s,
+    serverIds: parseStoredServerPool(
+      "serverPoolIds" in s ? s.serverPoolIds : null,
+      s.serverId ?? null
+    ),
+  }));
 
   if (withStats && listed.length) {
     const statsInputs = listed.map((s) => ({
@@ -591,7 +603,17 @@ export async function PATCH(req: NextRequest) {
 
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-
+  const existingPlayback = await prisma.stream.findUnique({
+    where: { id },
+    select: {
+      streamUrl: true,
+      backupUrl: true,
+      providerPath: true,
+      hostedExternally: true,
+      agentStartCmd: true,
+    },
+  });
+  if (!existingPlayback) return NextResponse.json({ error: "Stream not found" }, { status: 404 });
 
   const advErr = validateStreamAdvancedFields(body);
 
@@ -663,7 +685,12 @@ export async function PATCH(req: NextRequest) {
     data.type = body.type;
   }
 
-  if (body.serverId !== undefined) data.serverId = body.serverId || null;
+  if (body.serverIds !== undefined || body.serverPoolIds !== undefined || body.serverId !== undefined) {
+    const { assignmentFromBody } = await import("@/lib/server-pool");
+    const assigned = assignmentFromBody(body as Record<string, unknown>);
+    data.serverId = assigned.serverId;
+    data.serverPoolIds = assigned.serverPoolIds;
+  }
 
   if (body.categoryId !== undefined) {
     const next = body.categoryId ? String(body.categoryId).trim() : "";
@@ -806,7 +833,7 @@ export async function PATCH(req: NextRequest) {
         select: { agentStartCmd: true },
       });
       const currentCmd =
-        typeof data.agentStartCmd === "string" ? data.agentStartCmd : existingLive?.agentStartCmd;
+        typeof data.agentStartCmd === "string" ? data.agentStartCmd : existingLive?.agentStartCmd ?? existingPlayback.agentStartCmd;
       const liveMeta = parseLiveStreamMeta(currentCmd);
       const keepDirect = body.directSource === true;
       data.agentStartCmd = encodeLiveStreamMeta({
@@ -882,16 +909,29 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Cache invalidation must never block the save response
-    const urlChanged =
-      body.source != null ||
-      body.streamUrl != null ||
-      body.backupUrl != null ||
-      body.providerPath != null;
+    const upstreamChanged = streamPlaybackUpstreamChanged(existingPlayback, {
+      streamUrl: stream.streamUrl,
+      backupUrl: stream.backupUrl,
+      providerPath: stream.providerPath,
+      hostedExternally: stream.hostedExternally,
+    });
+    const playbackPolicyChanged =
+      body.vodMode !== undefined ||
+      body.isOnDemand !== undefined ||
+      body.hostedExternally !== undefined ||
+      body.directSource !== undefined ||
+      body.transcodeProfile !== undefined;
     void Promise.allSettled([
-      invalidatePlaybackUrls(id),
+      upstreamChanged || playbackPolicyChanged
+        ? invalidatePlaybackUrls(id)
+        : Promise.resolve(),
       invalidateXtreamCategories(),
       invalidateDashboardStats(),
-      urlChanged ? refreshStreamPlayback(id) : Promise.resolve(),
+      upstreamChanged
+        ? refreshStreamPlayback(id)
+        : playbackPolicyChanged
+          ? invalidateStreamPlaybackCache(id)
+          : Promise.resolve(),
     ]);
 
     // Auto-map EPG when live and still empty (or when client asks). Cap at 3s so Save never hangs.
@@ -964,9 +1004,20 @@ export async function DELETE(req: NextRequest) {
 
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-
+  const existing = await prisma.stream.findUnique({
+    where: { id },
+    select: { id: true, name: true },
+  });
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await prisma.stream.delete({ where: { id } });
+
+  await logActivity("delete_stream", {
+    userId: session.id,
+    entity: "stream",
+    entityId: id,
+    meta: { name: existing.name },
+  });
 
   await invalidatePlaybackUrls(id);
   await invalidateXtreamCategories();

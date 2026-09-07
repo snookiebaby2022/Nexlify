@@ -1381,26 +1381,26 @@ function attachLiveFanClient(fan, clientReq, clientRes, pulseCtx) {
   fan.idleSince = 0;
   if (!clientRes.headersSent) {
     writeLiveTsHead(clientRes);
-    const prefix = liveFanPrefixBuffer(fan);
-    if (prefix.length) {
-      try {
-        // The fan keeps a rolling byte tail, which may begin mid-packet.
-        // Start every newly joined client on an MPEG-TS sync byte.
-        let aligned = prefix;
-        for (let i = 0; i < Math.min(188, prefix.length); i++) {
-          if (
-            prefix[i] === 0x47 &&
-            prefix[i + 188] === 0x47 &&
-            prefix[i + 376] === 0x47
-          ) {
-            aligned = prefix.subarray(i);
-            break;
-          }
+  }
+  const prefix = liveFanPrefixBuffer(fan);
+  if (prefix.length) {
+    try {
+      // The fan keeps a rolling byte tail, which may begin mid-packet.
+      // Start every newly joined client on an MPEG-TS sync byte.
+      let aligned = prefix;
+      for (let i = 0; i < Math.min(188, prefix.length); i++) {
+        if (
+          prefix[i] === 0x47 &&
+          prefix[i + 188] === 0x47 &&
+          prefix[i + 376] === 0x47
+        ) {
+          aligned = prefix.subarray(i);
+          break;
         }
-        clientRes.write(aligned);
-      } catch {
-        /* ignore */
       }
+      clientRes.write(aligned);
+    } catch {
+      /* ignore */
     }
   }
   const slot = {
@@ -1760,6 +1760,10 @@ function releaseLiveFanStarter(fan, ok) {
 }
 
 function queueLiveFanWaiter(fan, clientReq, clientRes, pulseCtx) {
+  // Live-only: return HTTP 200 immediately so players do not timeout while upstream connects.
+  if (!fan.onDemand && !clientRes.headersSent) {
+    writeLiveTsHead(clientRes);
+  }
   const entry = { clientReq, clientRes, pulseCtx };
   const drop = () => {
     const i = fan.waiters.indexOf(entry);
@@ -3856,7 +3860,10 @@ async function onRequest(clientReq, clientRes, ctx) {
       }
       if (acquired.mode === "start") {
         fan = acquired.fan;
-        if (auth.onDemand) fan.onDemand = true;
+        fan.onDemand = Boolean(auth.onDemand);
+        if (!auth.onDemand && !clientRes.headersSent) {
+          writeLiveTsHead(clientRes);
+        }
       }
     }
     const ordered = orderLiveUpstreamTargets(auth.streamId || "", auth.upstream, auth.alts || []);

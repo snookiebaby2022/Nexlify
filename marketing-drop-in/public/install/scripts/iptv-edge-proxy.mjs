@@ -226,6 +226,42 @@ function normalizeUpstreamFanKey(url) {
   }
 }
 
+function safeClientEnd(clientRes, body) {
+  if (!clientRes || clientRes.writableEnded || clientRes.destroyed) return;
+  try {
+    if (body == null) clientRes.end();
+    else clientRes.end(body);
+  } catch {
+    /* ignore write-after-end / closed sockets */
+  }
+}
+
+/** Orphan HLS ffmpeg left behind after edge crashes starve live fans on the same upstream. */
+function killOrphanHlsFfmpeg() {
+  const hlsRoot = String(process.env.NEXLIFY_HLS_DIR || "/var/lib/nexlify/hls");
+  try {
+    const out = spawnSync("ps", ["-eo", "pid=,args="], { encoding: "utf8" });
+    const known = new Set(
+      [...edgeDiskPackagers.values()].map((p) => p?.pid).filter((n) => Number.isFinite(n) && n > 1)
+    );
+    let killed = 0;
+    for (const line of String(out.stdout || "").split("\n")) {
+      if (!line.includes("ffmpeg") || !line.includes(hlsRoot)) continue;
+      const pid = Number(String(line).trim().split(/\s+/)[0]);
+      if (!Number.isFinite(pid) || pid <= 1 || known.has(pid)) continue;
+      try {
+        process.kill(pid, "SIGTERM");
+        killed += 1;
+      } catch {
+        /* ignore */
+      }
+    }
+    if (killed) console.warn(`[iptv-edge] killed ${killed} orphan HLS ffmpeg (left after prior crash)`);
+  } catch {
+    /* ignore */
+  }
+}
+
 function uniqueLiveFanCount() {
   const seen = new Set();
   for (const fan of liveFans.values()) seen.add(fan);
@@ -1345,26 +1381,26 @@ function attachLiveFanClient(fan, clientReq, clientRes, pulseCtx) {
   fan.idleSince = 0;
   if (!clientRes.headersSent) {
     writeLiveTsHead(clientRes);
-    const prefix = liveFanPrefixBuffer(fan);
-    if (prefix.length) {
-      try {
-        // The fan keeps a rolling byte tail, which may begin mid-packet.
-        // Start every newly joined client on an MPEG-TS sync byte.
-        let aligned = prefix;
-        for (let i = 0; i < Math.min(188, prefix.length); i++) {
-          if (
-            prefix[i] === 0x47 &&
-            prefix[i + 188] === 0x47 &&
-            prefix[i + 376] === 0x47
-          ) {
-            aligned = prefix.subarray(i);
-            break;
-          }
+  }
+  const prefix = liveFanPrefixBuffer(fan);
+  if (prefix.length) {
+    try {
+      // The fan keeps a rolling byte tail, which may begin mid-packet.
+      // Start every newly joined client on an MPEG-TS sync byte.
+      let aligned = prefix;
+      for (let i = 0; i < Math.min(188, prefix.length); i++) {
+        if (
+          prefix[i] === 0x47 &&
+          prefix[i + 188] === 0x47 &&
+          prefix[i + 376] === 0x47
+        ) {
+          aligned = prefix.subarray(i);
+          break;
         }
-        clientRes.write(aligned);
-      } catch {
-        /* ignore */
       }
+      clientRes.write(aligned);
+    } catch {
+      /* ignore */
     }
   }
   const slot = {
@@ -1401,6 +1437,8 @@ function appendLiveFanPrefix(fan, chunk, reset = false) {
       fan.prefixBytes -= extra;
     }
   }
+  // Retain this compatibility marker without concatenating the rolling buffer
+  // on every upstream chunk. It is materialized only when a viewer joins.
   fan.prefix = fan.prefixChunks[fan.prefixChunks.length - 1] || Buffer.alloc(0);
 }
 
@@ -1722,6 +1760,10 @@ function releaseLiveFanStarter(fan, ok) {
 }
 
 function queueLiveFanWaiter(fan, clientReq, clientRes, pulseCtx) {
+  // Live-only: return HTTP 200 immediately so players do not timeout while upstream connects.
+  if (!fan.onDemand && !clientRes.headersSent) {
+    writeLiveTsHead(clientRes);
+  }
   const entry = { clientReq, clientRes, pulseCtx };
   const drop = () => {
     const i = fan.waiters.indexOf(entry);
@@ -1917,6 +1959,7 @@ function touchDiskPackagerAccess(streamId) {
 }
 
 function sweepIdleDiskPackagers() {
+  killOrphanHlsFfmpeg();
   const now = Date.now();
   for (const [streamId, lastAt] of [...diskPackLastAccess.entries()]) {
     if (now - lastAt < DISK_PACK_IDLE_MS) continue;
@@ -3302,9 +3345,13 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
       }
       sendPlaybackEvent(pulseCtx, "playback_drop", `upstream ${status} and no backup left`, status);
       if (!clientRes.headersSent) {
-        clientRes.writeHead(status || 502, { "content-type": "text/plain" });
+        try {
+          clientRes.writeHead(status || 502, { "content-type": "text/plain" });
+        } catch {
+          /* ignore */
+        }
       }
-      clientRes.end("upstream error");
+      safeClientEnd(clientRes, "upstream error");
       return;
     }
     if (live) {
@@ -3401,9 +3448,13 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
     }
     if (!clientRes.headersSent) {
       if (tryNext(err.message)) return;
-      clientRes.writeHead(502, { "content-type": "text/plain" });
+      try {
+        clientRes.writeHead(502, { "content-type": "text/plain" });
+      } catch {
+        /* ignore */
+      }
     }
-    clientRes.end("upstream error");
+    safeClientEnd(clientRes, "upstream error");
   });
   // Fan owns the upstream socket. Do NOT destroy it when the starter client
   // closes — IPTV apps often abort the first .ts request and reopen, which
@@ -3809,7 +3860,10 @@ async function onRequest(clientReq, clientRes, ctx) {
       }
       if (acquired.mode === "start") {
         fan = acquired.fan;
-        if (auth.onDemand) fan.onDemand = true;
+        fan.onDemand = Boolean(auth.onDemand);
+        if (!auth.onDemand && !clientRes.headersSent) {
+          writeLiveTsHead(clientRes);
+        }
       }
     }
     const ordered = orderLiveUpstreamTargets(auth.streamId || "", auth.upstream, auth.alts || []);
@@ -3882,6 +3936,7 @@ const certPath = process.env.IPTV_EDGE_CERT || "/etc/nginx/ssl/nexlify-panel/ful
 const keyPath = process.env.IPTV_EDGE_KEY || "/etc/nginx/ssl/nexlify-panel/privkey.pem";
 
 async function startEdge() {
+  killOrphanHlsFfmpeg();
   await waitForBackendReady();
   setInterval(sweepIdleDiskPackagers, DISK_PACK_IDLE_SWEEP_MS);
   setInterval(sweepIdleLiveFans, 10_000);
@@ -3914,6 +3969,21 @@ async function startEdge() {
 startEdge().catch((err) => {
   console.error("[iptv-edge] startup failed:", err);
   process.exit(1);
+});
+
+// A single closed-socket race must not take down every live fan on the box.
+process.on("uncaughtException", (err) => {
+  const code = err?.code || "";
+  const msg = String(err?.message || err || "");
+  if (code === "ERR_STREAM_WRITE_AFTER_END" || /write after end/i.test(msg)) {
+    console.error("[iptv-edge] swallowed write-after-end (client closed early)");
+    return;
+  }
+  console.error("[iptv-edge] uncaughtException:", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (err) => {
+  console.error("[iptv-edge] unhandledRejection:", err);
 });
 
 process.on("SIGTERM", () => process.exit(0));

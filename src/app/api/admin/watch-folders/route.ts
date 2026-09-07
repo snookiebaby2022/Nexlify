@@ -9,6 +9,7 @@ import { ImportKind, PanelRole, WatchFolderType } from "@prisma/client";
 import { getSettingGroup } from "@/lib/panel-settings";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
+import { assignmentFromBody, parseStoredServerPool } from "@/lib/server-pool";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 
 function folderM3uFlags(body: Record<string, unknown>) {
@@ -20,6 +21,8 @@ function folderM3uFlags(body: Record<string, unknown>) {
     removeDuplicates: body.removeDuplicates === true,
     autoBouquet: body.autoBouquet !== false,
     bouquetIds: watchBouquetIdsCsv(body.bouquetIds),
+    groupFilter: String(body.groupFilter ?? "").trim(),
+    createMissing: body.createMissing !== false,
   };
 }
 export async function GET() {
@@ -78,6 +81,14 @@ export async function POST(req: NextRequest) {
         body.autoBouquet !== undefined ? body.autoBouquet !== false : existing?.autoBouquet !== false,
       bouquetIds:
         body.bouquetIds !== undefined ? watchBouquetIdsCsv(body.bouquetIds) : existing?.bouquetIds ?? "",
+      groupFilter:
+        body.groupFilter !== undefined
+          ? String(body.groupFilter ?? "")
+          : existing?.groupFilter ?? "",
+      createMissing:
+        body.createMissing !== undefined
+          ? body.createMissing !== false
+          : existing?.createMissing !== false,
     };
     const folderPath = String(body.path ?? existing?.path ?? "").trim();
     const type = String(body.type ?? existing?.type ?? "LIVE");
@@ -182,6 +193,7 @@ export async function POST(req: NextRequest) {
         mode,
         categoryId: folder.categoryId,
         serverId: folder.serverId,
+        serverIds: parseStoredServerPool(folder.serverPoolIds, folder.serverId),
         allowedRoot: process.env.MEDIA_IMPORT_ROOT,
         isAdult: folder.isAdult === true,
       });
@@ -264,7 +276,10 @@ export async function POST(req: NextRequest) {
       path: folderPath,
       type,
       categoryId: body.categoryId || null,
-      serverId: body.serverId || null,
+      ...(() => {
+        const assigned = assignmentFromBody(body as Record<string, unknown>);
+        return { serverId: assigned.serverId, serverPoolIds: assigned.serverPoolIds };
+      })(),
       autoScanMins: Math.max(0, Number(body.autoScanMins ?? 0)),
       isAdult: body.isAdult === true,
       ...flags,
@@ -307,7 +322,11 @@ export async function PATCH(req: NextRequest) {
     if (typeof body.isActive === "boolean") data.isActive = body.isActive;
     if (body.autoScanMins !== undefined) data.autoScanMins = Math.max(0, Number(body.autoScanMins) || 0);
     if (body.categoryId !== undefined) data.categoryId = body.categoryId || null;
-    if (body.serverId !== undefined) data.serverId = body.serverId || null;
+    if (body.serverIds !== undefined || body.serverPoolIds !== undefined || body.serverId !== undefined) {
+      const assigned = assignmentFromBody(body as Record<string, unknown>);
+      data.serverId = assigned.serverId;
+      data.serverPoolIds = assigned.serverPoolIds;
+    }
     if (body.isAdult !== undefined) data.isAdult = body.isAdult === true;
     if (body.autoCategory !== undefined) data.autoCategory = body.autoCategory !== false;
     if (body.updateNames !== undefined) data.updateNames = body.updateNames !== false;
@@ -316,6 +335,8 @@ export async function PATCH(req: NextRequest) {
     if (body.removeDuplicates !== undefined) data.removeDuplicates = body.removeDuplicates === true;
     if (body.autoBouquet !== undefined) data.autoBouquet = body.autoBouquet !== false;
     if (body.bouquetIds !== undefined) data.bouquetIds = watchBouquetIdsCsv(body.bouquetIds);
+    if (body.groupFilter !== undefined) data.groupFilter = String(body.groupFilter ?? "");
+    if (body.createMissing !== undefined) data.createMissing = body.createMissing !== false;
     if (body.type && Object.values(WatchFolderType).includes(body.type)) data.type = body.type;
 
     const m3uContent = typeof body.m3uContent === "string" ? body.m3uContent : "";

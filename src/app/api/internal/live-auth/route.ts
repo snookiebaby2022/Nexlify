@@ -179,6 +179,19 @@ export async function GET(req: NextRequest) {
   if (!checkLineUserAgent(line, ua)) {
     return new NextResponse("User-Agent not allowed for this line", { status: 403 });
   }
+  const { rejectInvalidPlaybackMarks, playbackMarksFromRequest, playbackMarksFromUri } = await import(
+    "@/lib/playback-marks"
+  );
+  const markDeny = await rejectInvalidPlaybackMarks(
+    {
+      ...playbackMarksFromUri(originalPath(req)),
+      ...playbackMarksFromRequest(req),
+    },
+    { lineId: line.id, streamId: cleanId, clientIp: ip, userAgent: ua }
+  );
+  if (markDeny) {
+    return new NextResponse("Invalid playback token", { status: 403 });
+  }
   if (await isSessionKicked(line.id, ip)) {
     return new NextResponse("Session kicked", { status: 403 });
   }
