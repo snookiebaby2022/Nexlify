@@ -654,33 +654,29 @@ CREDS
 
 print_install_complete() {
   resolve_panel_urls
-  local stream_port iptv_hint
-  stream_port="$(grep '^STREAM_HTTP_PORT=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r' || echo 8080)"
-  [ -z "$stream_port" ] && stream_port=8080
-  if [ "$stream_port" = "80" ]; then
-    iptv_hint="IPTV / Smarters: ${PANEL_BASE_URL}  (port 80 — use your line username/password)"
-  elif [ "$PANEL_PUBLIC_PORT" = "443" ]; then
-    iptv_hint="IPTV HTTPS: https://${DOMAIN}:443  ·  IPTV HTTP edge: http://${DOMAIN}:${stream_port}  (or http://SERVER_IP:${stream_port})"
+  local license_step
+  if [ -n "${LICENSE_KEY:-}" ]; then
+    license_step="License was applied during install. If the panel asks, open Admin → License."
   else
-    iptv_hint="IPTV / Smarters: http://${DOMAIN}:${stream_port}  (line username/password; domain installs also use https on :443 when SSL is enabled)"
+    license_step="Open Admin → License and paste your NXLF1 key (from nexlify.live → My licenses)."
   fi
   echo ""
   echo "================================================================"
-  echo " DONE — Nexlify Panel is ready"
+  echo " DONE — do these 3 things now"
   echo "================================================================"
   echo ""
-  echo "  Open in browser"
-  echo "    $LOGIN_URL"
+  echo "  1. Open this URL in your browser"
+  echo "       $LOGIN_URL"
   echo ""
-  echo "  Admin login"
-  echo "    username:  admin"
-  echo "    password:  $ADMIN_PASS"
+  echo "  2. Sign in with"
+  echo "       Username:  admin"
+  echo "       Password:  $ADMIN_PASS"
   echo ""
-  echo "  Next: Admin → License → paste your NXLF1 key"
+  echo "  3. $license_step"
   echo ""
-  echo "  $iptv_hint"
-  echo "  Credentials file: $CREDS_FILE"
-  echo "  Database: nexlify @ localhost:5432"
+  echo " After that: Admin → Servers (add your stream server) then Admin → Streams."
+  echo " These details are also saved on the server:"
+  echo "   cat $CREDS_FILE"
   echo "================================================================"
   echo ""
 }
@@ -1052,6 +1048,3 @@ save_install_credentials "complete"
 cp "$PANEL_DIR/.env" "$PANEL_DIR/.env.original" 2>/dev/null || true
 progress_step "Install complete"
 print_install_complete
-if [ -z "$LICENSE_KEY" ]; then
-  echo "Tip: activate your license after login at ${LOGIN_URL%/login}/admin/license/add"
-fi

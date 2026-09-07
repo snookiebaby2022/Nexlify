@@ -109,15 +109,14 @@ export function PanelInstaller() {
           </label>
         </div>
 
-        <ol className="list-decimal list-inside space-y-1 text-sm text-[var(--muted)]">
-          <li>Paste the command in an SSH session as root and wait for the green DONE banner</li>
+        <ol className="list-decimal list-inside space-y-1.5 text-sm text-[var(--muted)]">
+          <li>Paste the command in SSH as root and wait for <strong className="text-slate-200">DONE — do these 3 things now</strong></li>
+          <li>Open the login URL it prints, then sign in as <code className="text-emerald-400">admin</code> with the printed password</li>
           <li>
-            Open the printed login URL (also saved in{" "}
-            <code className="text-emerald-400">{credentialsHelp.file}</code>)
-          </li>
-          <li>
-            Sign in as <code className="text-emerald-400">admin</code> with the printed password, then add your
-            license under Admin → License
+            Go to <strong className="text-slate-200">Admin → License</strong> and paste your NXLF1 key from{" "}
+            <a href="/dashboard" className="text-violet-400 underline hover:text-violet-300">
+              My licenses
+            </a>
           </li>
         </ol>
 

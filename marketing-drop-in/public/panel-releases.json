@@ -16,13 +16,13 @@
       ],
       "fixes": [
         "Saving a stream no longer drops viewers unless the source URL actually changed",
-        "Live-only cold start can send TS headers immediately (edge file; deploy on 10gbs separately)",
+        "Live-only cold start can send TS headers immediately so players get video sooner",
         "Delete/disable/mass-edit labels and dashboard activity no longer look like silent deletes",
         "Playback fingerprint no longer appends ?fp= to provider URLs; SHA-1 setting was ignored; generate token API was a stub",
         "Stream edit modal and server picker were too small to use"
       ],
       "notes": [
-        "Apply on server 45 runs prisma migrate (import scope + serverPoolIds) and restarts the panel + nexlify-cron. Do not start iptv-edge on :8080 on the panel. Edge cold-start still needs a 10gbs edge redeploy if you want that part live."
+        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
       ],
       "downloadUrl": "https://nexlify.live/downloads/next-2.0.82.tar.gz"
     },
