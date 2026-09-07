@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Check,
   Copy,
@@ -13,12 +13,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useLiveInstallCommand } from "@/hooks/useLiveInstallCommand";
-import {
-  cleanReinstallWithFreshFlag,
-  credentialsHelp,
-  PANEL_INSTALL_DIR,
-  wgetInstallExample,
-} from "@/lib/panel-install";
+import { cleanReinstallWithFreshFlag, credentialsHelp, wgetInstallExample } from "@/lib/panel-install";
 
 function CopyBlock({
   text,
@@ -56,32 +51,26 @@ function CopyBlock({
 
 export function PanelInstaller() {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [license, setLicense] = useState("");
+  const [ip, setIp] = useState("");
   const live = useLiveInstallCommand();
-  const oneLine = live.command;
+  const oneLine = useMemo(() => {
+    const flags: string[] = [];
+    if (ip.trim()) flags.push(`--ip ${ip.trim()}`);
+    if (license.trim()) flags.push(`--license ${license.trim()}`);
+    if (flags.length === 0) return live.command;
+    return `${live.command} -s -- ${flags.join(" ")}`;
+  }, [license, ip, live.command]);
 
   return (
     <section className="py-12 space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-white">One-click installer</h2>
+        <h2 className="text-2xl font-bold text-white">Install the IPTV panel</h2>
         <p className="mt-2 text-[var(--muted)] leading-relaxed">
-          Paste one command as <strong className="text-slate-300">root</strong>. Wait 5–15 minutes. The installer
-          detects your server IP automatically — sign in at the login URL printed at the end (port 80).
-          Add your license in the panel after login.
+          One command as <strong className="text-slate-300">root</strong> on a fresh Ubuntu/Debian VPS.
+          The installer checks RAM and disk, installs everything, then prints the login URL and admin password.
         </p>
-        <p className="mt-1 text-xs text-slate-500">Installer {live.label}</p>
-      </div>
-
-      <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-6 space-y-4">
-        <div className="flex items-start gap-3">
-          <RefreshCw className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-          <div className="space-y-3">
-            <h3 className="text-lg font-semibold text-amber-100">Failed install? Start fresh</h3>
-            <p className="text-sm text-amber-200/80 leading-relaxed">
-              Removes <code className="text-amber-100">{PANEL_INSTALL_DIR}</code> and downloads a clean copy:
-            </p>
-            <CopyBlock text={cleanReinstallWithFreshFlag} label="bash · clean reinstall" display={`$ ${cleanReinstallWithFreshFlag}`} />
-          </div>
-        </div>
+        <p className="mt-1 text-xs text-slate-500">Installer {live.label} · usually 5–15 minutes</p>
       </div>
 
       <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-br from-violet-950/30 to-[#12101f] p-6 md:p-8 space-y-6">
@@ -90,47 +79,47 @@ export function PanelInstaller() {
             <Terminal className="h-5 w-5 text-violet-400" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white">Copy &amp; run</h3>
-            <p className="text-xs text-[var(--muted)]">No flags required — server IP is auto-detected</p>
+            <h3 className="text-lg font-semibold text-white">Copy and run</h3>
+            <p className="text-xs text-[var(--muted)]">Server IP is detected automatically — no flags required</p>
           </div>
         </div>
 
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm space-y-2">
-          <p className="font-semibold text-emerald-100">One command — paste and run</p>
-          <CopyBlock text={oneLine} label={`bash · ${live.label}`} display={`$ ${oneLine}`} />
+        <CopyBlock text={oneLine} label={`bash · ${live.label}`} display={`$ ${oneLine}`} />
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm">
+            <span className="text-slate-400">License key (optional)</span>
+            <input
+              value={license}
+              onChange={(e) => setLicense(e.target.value)}
+              placeholder="NXLF1-…"
+              className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-white placeholder:text-slate-600"
+              autoComplete="off"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-slate-400">Public IP override (optional)</span>
+            <input
+              value={ip}
+              onChange={(e) => setIp(e.target.value)}
+              placeholder="auto-detect"
+              className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-white placeholder:text-slate-600"
+              autoComplete="off"
+            />
+          </label>
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-300 space-y-2">
-          <p className="font-semibold text-white">After install</p>
-          <ol className="list-decimal list-inside space-y-1 text-[var(--muted)]">
-            <li>
-              Open <code className="text-emerald-400">login_url</code> from the terminal (or{" "}
-              <code className="text-emerald-400">cat /root/nexlify/install-credentials</code>)
-            </li>
-            <li>
-              Login: <code className="text-emerald-400">admin</code> + password shown at end of install
-            </li>
-            <li>
-              Paste license under <strong>Admin → License</strong> (
-              <a href="/dashboard" className="text-violet-400 underline hover:text-violet-300">
-                My licenses
-              </a>
-              )
-            </li>
-          </ol>
-        </div>
-
-        <details className="rounded-xl border border-white/10 bg-black/10">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-violet-300 hover:text-violet-200">
-            Optional flags (--license, --domain, --fresh)
-          </summary>
-          <div className="px-4 pb-4 space-y-3">
-            <CopyBlock text={oneLine} label="bash · default" display={`$ ${oneLine}`} />
-            <p className="text-xs text-slate-500">
-              Override auto-detected IP: add <code className="text-violet-300">-s -- --ip 203.0.113.10</code>
-            </p>
-          </div>
-        </details>
+        <ol className="list-decimal list-inside space-y-1 text-sm text-[var(--muted)]">
+          <li>Paste the command in an SSH session as root and wait for the green DONE banner</li>
+          <li>
+            Open the printed login URL (also saved in{" "}
+            <code className="text-emerald-400">{credentialsHelp.file}</code>)
+          </li>
+          <li>
+            Sign in as <code className="text-emerald-400">admin</code> with the printed password, then add your
+            license under Admin → License
+          </li>
+        </ol>
 
         <div className="flex flex-wrap items-center gap-3">
           <a
@@ -152,24 +141,28 @@ export function PanelInstaller() {
         </div>
       </div>
 
+      <div className="rounded-xl border border-white/10 bg-[#12101f] p-5 flex items-start gap-4">
+        <Info className="h-5 w-5 text-violet-400 shrink-0 mt-0.5" />
+        <div>
+          <h4 className="text-sm font-semibold text-white">What you need</h4>
+          <ul className="mt-2 text-sm text-[var(--muted)] space-y-1 list-disc list-inside">
+            <li>Ubuntu 22.04/24.04 or Debian 12 — a new VPS is easiest</li>
+            <li>Root SSH, 2 vCPU, 4 GB RAM (2 GB minimum), 8 GB free disk</li>
+            <li>Ports 80, 443, and 8080 free for the panel and IPTV apps</li>
+          </ul>
+        </div>
+      </div>
+
       <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-6 space-y-4">
         <div className="flex items-start gap-3">
           <KeyRound className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
           <div className="space-y-3 w-full">
-            <h3 className="text-lg font-semibold text-emerald-100">Saved credentials</h3>
+            <h3 className="text-lg font-semibold text-emerald-100">Where credentials are saved</h3>
             <p className="text-sm text-emerald-200/80 leading-relaxed">
-              Everything you need is printed when install completes and saved to{" "}
+              Login URL, admin password, and database password are printed at the end and written to{" "}
               <code className="text-emerald-100">{credentialsHelp.file}</code>.
             </p>
             <CopyBlock text={credentialsHelp.viewCommand} label="bash · view credentials" />
-            <ul className="grid gap-2 sm:grid-cols-2 text-sm text-emerald-100/90">
-              {credentialsHelp.fields.map((f) => (
-                <li key={f.key} className="rounded-lg border border-emerald-500/15 bg-black/20 px-3 py-2">
-                  <span className="font-mono text-xs text-emerald-300">{f.key}</span>
-                  <div className="text-xs text-emerald-200/70 mt-0.5">{f.label}</div>
-                </li>
-              ))}
-            </ul>
           </div>
         </div>
       </div>
@@ -181,33 +174,34 @@ export function PanelInstaller() {
           className="flex items-center gap-2 text-sm font-semibold text-violet-400 hover:text-violet-300 transition-colors"
         >
           <Wrench className="h-4 w-4" />
-          {showAdvanced ? "Hide" : "Show"} alternative methods
+          {showAdvanced ? "Hide" : "Show"} advanced / recovery
         </button>
 
         {showAdvanced && (
           <div className="space-y-4">
             <div className="rounded-xl border border-white/10 bg-[#12101f] p-5">
-              <h4 className="text-sm font-semibold text-white mb-2">wget (if curl is unavailable)</h4>
+              <h4 className="text-sm font-semibold text-white mb-2">wget (if curl is missing)</h4>
               <CopyBlock text={wgetInstallExample} label="bash · wget" display={`$ ${wgetInstallExample}`} />
+            </div>
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-6 space-y-3">
+              <div className="flex items-start gap-3">
+                <RefreshCw className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-3 w-full">
+                  <h3 className="text-lg font-semibold text-amber-100">Clean reinstall</h3>
+                  <p className="text-sm text-amber-200/80 leading-relaxed">
+                    Re-run the same command first — it continues an incomplete install. Use this only to wipe{" "}
+                    <code className="text-amber-100">/home/nexlify</code> and start over.
+                  </p>
+                  <CopyBlock
+                    text={cleanReinstallWithFreshFlag}
+                    label="bash · --fresh"
+                    display={`$ ${cleanReinstallWithFreshFlag}`}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}
-      </div>
-
-      <div className="rounded-xl border border-white/10 bg-[#12101f] p-5 flex items-start gap-4">
-        <Info className="h-5 w-5 text-violet-400 shrink-0 mt-0.5" />
-        <div>
-          <h4 className="text-sm font-semibold text-white">Before you run</h4>
-          <ul className="mt-2 text-sm text-[var(--muted)] space-y-1 list-disc list-inside">
-            <li>Ubuntu 22.04/24.04 or Debian 12 — fresh server recommended</li>
-            <li>Root or sudo over SSH</li>
-            <li>
-              <strong className="text-slate-300">IP install:</strong> panel runs on port 80 — login URL is printed
-              at the end of install
-            </li>
-            <li>Minimum 2 vCPU / 4 GB RAM</li>
-          </ul>
-        </div>
       </div>
     </section>
   );

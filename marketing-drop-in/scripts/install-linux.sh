@@ -78,7 +78,14 @@ while [ $# -gt 0 ]; do
 done
 
 log() { echo ""; echo "==> $*"; }
-die() { echo "ERROR: $*" >&2; exit 1; }
+die() {
+  echo "" >&2
+  echo "ERROR: $*" >&2
+  echo "Log: ${INSTALL_LOG:-/tmp/nexlify-install.log}" >&2
+  echo "Re-run the same install command to continue (it reuses ${PANEL_DIR:-/home/nexlify})." >&2
+  echo "Use --fresh only if you want a clean wipe." >&2
+  exit 1
+}
 
 validate_domain() {
   [ -z "${1:-}" ] || [ "$1" = "localhost" ] || [[ "$1" =~ ^[A-Za-z0-9.-]+$ ]] ||
@@ -262,21 +269,24 @@ esac
 
 INSTALL_LOG="/tmp/nexlify-install-$$.log"
 : > "$INSTALL_LOG"
-INSTALL_TOTAL=10
+INSTALL_TOTAL=14
 INSTALL_STEP=0
+INSTALL_START="$(date +%s)"
 
 progress_step() {
   INSTALL_STEP=$((INSTALL_STEP + 1))
   local label="$*"
   local pct=$((INSTALL_STEP * 100 / INSTALL_TOTAL))
+  [ "$pct" -gt 100 ] && pct=100
   local width=36
   local n=$((pct * width / 100))
   [ "$n" -gt "$width" ] && n=$width
-  local bar pad
+  local bar pad elapsed
   bar="$(printf '%*s' "$n" '' | tr ' ' '#')"
   pad="$(printf '%*s' "$((width - n))" '' | tr ' ' '-')"
+  elapsed=$(( $(date +%s) - INSTALL_START ))
   echo ""
-  echo "[$bar$pad] ${pct}%  $label"
+  echo "[$bar$pad] ${pct}%  step ${INSTALL_STEP}/${INSTALL_TOTAL}  $label  (${elapsed}s)"
 }
 
 quiet_step() {
@@ -336,8 +346,42 @@ if [ "$(id -u)" -ne 0 ]; then
   die "Run as root: sudo bash install-linux.sh ..."
 fi
 
+preflight_host() {
+  echo ""
+  echo "================================================================"
+  echo " Nexlify Panel installer"
+  echo " 5–15 minutes. Keep this SSH session open."
+  echo " Log: $INSTALL_LOG"
+  echo "================================================================"
+  local mem_kb mem_gb disk_gb arch
+  mem_kb="$(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+  mem_gb=$((mem_kb / 1024 / 1024))
+  disk_gb="$(df -BG / | awk 'NR==2{gsub(/G/,"",$4); print $4}' 2>/dev/null || echo 0)"
+  arch="$(uname -m 2>/dev/null || echo unknown)"
+  echo " Host: ${DOMAIN:-unknown}  RAM ~${mem_gb} GB  free disk ~${disk_gb} GB  arch ${arch}"
+  if [ "$mem_gb" -gt 0 ] && [ "$mem_gb" -lt 2 ]; then
+    die "Need at least 2 GB RAM (this host has ~${mem_gb} GB)"
+  fi
+  if [ "$mem_gb" -ge 2 ] && [ "$mem_gb" -lt 4 ]; then
+    echo " WARN: 4 GB RAM recommended — install may be slow or the build may swap"
+  fi
+  if [ "${disk_gb:-0}" -gt 0 ] && [ "$disk_gb" -lt 8 ]; then
+    die "Need at least 8 GB free disk (this host has ~${disk_gb} GB)"
+  fi
+  case "$arch" in
+    x86_64|amd64) ;;
+    *) echo " WARN: installer is tested on x86_64 (this host is ${arch})" ;;
+  esac
+  if command -v ss >/dev/null 2>&1 && ss -lnt 2>/dev/null | awk '{print $4}' | grep -qE ':80$'; then
+    if ! systemctl is-active --quiet nginx 2>/dev/null; then
+      echo " WARN: something already listens on :80 — nginx will try to take over the panel site"
+    fi
+  fi
+}
+
 mkdir -p "$CREDS_ROOT"
 chmod 700 "$CREDS_ROOT"
+preflight_host
 
 if [ -f /etc/os-release ]; then
   . /etc/os-release
@@ -622,18 +666,21 @@ print_install_complete() {
   fi
   echo ""
   echo "================================================================"
-  echo " Nexlify Panel — installation complete"
+  echo " DONE — Nexlify Panel is ready"
   echo "================================================================"
   echo ""
-  echo " 1. Open:   $LOGIN_URL"
-  echo " 2. Login:  admin / $ADMIN_PASS"
-  echo " 3. License: Admin → License → paste your NXLF1 key"
+  echo "  Open in browser"
+  echo "    $LOGIN_URL"
   echo ""
-  echo " IPTV:      $iptv_hint"
-  echo " Firewall: ports 22, 80, 443, ${stream_port}, 1935, 554 opened (UFW)"
+  echo "  Admin login"
+  echo "    username:  admin"
+  echo "    password:  $ADMIN_PASS"
   echo ""
-  echo " Database:  nexlify / $PG_PASS  (localhost:5432)"
-  echo " Saved to:  $CREDS_FILE"
+  echo "  Next: Admin → License → paste your NXLF1 key"
+  echo ""
+  echo "  $iptv_hint"
+  echo "  Credentials file: $CREDS_FILE"
+  echo "  Database: nexlify @ localhost:5432"
   echo "================================================================"
   echo ""
 }
