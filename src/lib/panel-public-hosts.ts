@@ -20,13 +20,20 @@ function addPublicHostname(out: Set<string>, raw: string | null | undefined) {
   const host = playlistHostnameFromDomain(raw ?? "");
   if (!host || isIpHost(host)) return;
   if (host === "localhost") return;
+  // Reject accidental comma leftovers inside a single "hostname".
+  if (host.includes(",")) return;
   out.add(host);
 }
 
 /** Domain + DNS rotator hostnames from one stream server (IPs skipped). */
 export function collectStreamServerPublicHosts(server: StreamServerHostFields): string[] {
   const out = new Set<string>();
-  addPublicHostname(out, server.domain);
+  for (const part of String(server.domain || "")
+    .split(/[,;\s|]+/)
+    .map((p) => p.trim())
+    .filter(Boolean)) {
+    addPublicHostname(out, part);
+  }
   const rotator = parseDnsRotator(server.dnsRotator);
   if (rotator) {
     for (const h of rotator.hosts) addPublicHostname(out, h);

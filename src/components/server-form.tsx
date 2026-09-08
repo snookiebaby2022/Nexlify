@@ -48,6 +48,13 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "ssl", label: "SSL Certificate", icon: <Lock size={16} /> },
 ];
 
+function tabLabel(id: TabId, role: "main" | "lb" | "standard"): string {
+  if (id === "domains") {
+    return role === "main" ? "Domains · multi" : "Domains";
+  }
+  return TABS.find((t) => t.id === id)?.label ?? id;
+}
+
 function parseList(text: string): string[] {
   return text
     .split(/[\n,]+/)
@@ -761,7 +768,7 @@ export function ServerForm({
               }}
             >
               {t.icon}
-              {t.label}
+              {tabLabel(t.id, form.advServerRole)}
             </button>
           ))}
         </div>
@@ -968,36 +975,109 @@ export function ServerForm({
 
           {tab === "domains" && (
             <div className="space-y-4 max-w-2xl">
-              <FormField label="Domain Name">
+              {form.advServerRole === "main" ? (
+                <div
+                  className="rounded-md border px-3 py-2.5 text-sm"
+                  style={{
+                    borderColor: "var(--border)",
+                    background: "var(--bg)",
+                    color: "var(--muted)",
+                  }}
+                >
+                  <strong style={{ color: "var(--text)" }}>Multiple stream domains</strong>
+                  {" — "}
+                  set a primary Domain Name below, then add more under{" "}
+                  <strong style={{ color: "var(--text)" }}>Additional domains</strong> (one per
+                  line). Point each DNS-only A record at an LB — video splices on the LB, not this
+                  panel. Role is under Advanced → Server role (Main).
+                </div>
+              ) : (
+                <div
+                  className="rounded-md border px-3 py-2.5 text-sm"
+                  style={{
+                    borderColor: "var(--border)",
+                    background: "var(--bg)",
+                    color: "var(--muted)",
+                  }}
+                >
+                  <strong style={{ color: "var(--text)" }}>LB direct media hostname</strong>
+                  {" — "}
+                  one Domain Name only. For multiple customer DNS names, edit the{" "}
+                  <strong style={{ color: "var(--text)" }}>main</strong> server Domains tab
+                  instead.
+                </div>
+              )}
+              <FormField
+                label={
+                  form.advServerRole === "main"
+                    ? "Primary domain"
+                    : "Domain Name (direct media)"
+                }
+              >
                 <input
                   className={formInputClass}
                   style={formInputStyle}
                   value={form.domain}
                   onChange={(e) => setForm({ ...form, domain: e.target.value })}
-                  placeholder="stream.example.com"
+                  placeholder={
+                    form.advServerRole === "main"
+                      ? "stream.example.com (or comma-separated list)"
+                      : "lb1.stream.example.com"
+                  }
                 />
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-                  Exactly one hostname (no commas). On a load balancer this is the direct media
-                  endpoint — point a DNS-only A record at this LB. The main panel domain stays for
-                  login/playlists; clients pick up LB domain changes on the next Xtream or playlist
-                  refresh.
+                  {form.advServerRole === "main" ? (
+                    <>
+                      Primary stream DNS name for this panel. You may also paste several
+                      comma-separated names here. Prefer{" "}
+                      <strong>Additional domains</strong> below for a clean one-per-line list.
+                      Each A record must target an LB IP (DNS-only), not the panel.
+                    </>
+                  ) : (
+                    <>
+                      Exactly one hostname (no commas). Point a DNS-only A record at this LB.
+                      Extra stream DNS names go on the main server’s Domains tab.
+                    </>
+                  )}
                 </p>
               </FormField>
-              <FormField label="DNS rotator hosts (one per line)">
+              <FormField
+                label={
+                  form.advServerRole === "main"
+                    ? "Additional domains (one per line)"
+                    : "DNS rotator hosts (one per line)"
+                }
+              >
                 <textarea
                   className={`${formInputClass} font-mono text-sm`}
                   style={formInputStyle}
-                  rows={4}
+                  rows={form.advServerRole === "main" ? 6 : 4}
                   value={form.dnsRotatorHosts}
                   onChange={(e) => setForm({ ...form, dnsRotatorHosts: e.target.value })}
-                  placeholder={"cdn1.example.com\ncdn2.example.com"}
+                  placeholder={
+                    form.advServerRole === "main"
+                      ? "cdn1.example.com\ncdn2.example.com\nlb-alias.example.com"
+                      : "cdn1.example.com\ncdn2.example.com"
+                  }
                 />
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-                  One hostname per line. Live sources rotate across these hosts; the names are also
-                  accepted as panel domains for apps and Download line.
+                  {form.advServerRole === "main" ? (
+                    <>
+                      Add every extra stream hostname here — this is the multi-domain list.
+                      Together with Primary domain they form the media DNS pool advertised for
+                      LB playback. Clients refresh Xtream/M3U to pick up changes.
+                    </>
+                  ) : (
+                    <>
+                      Optional rotator / alias hosts for this LB. Prefer putting shared
+                      multi-domain names on the main server so all LBs can advertise them.
+                    </>
+                  )}
                 </p>
               </FormField>
-              <FormField label="Rotator mode">
+              <FormField
+                label={form.advServerRole === "main" ? "Domain pick mode" : "Rotator mode"}
+              >
                 <select
                   className={formSelectClass}
                   style={formInputStyle}
@@ -1281,6 +1361,10 @@ export function ServerForm({
                       <option value="lb">Load balancer (LB)</option>
                       <option value="standard">Standard</option>
                     </select>
+                    <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
+                      Main: multi-domain list lives under the Domains tab. LB: one direct media
+                      hostname only.
+                    </p>
                   </FormField>
                 </div>
               </details>

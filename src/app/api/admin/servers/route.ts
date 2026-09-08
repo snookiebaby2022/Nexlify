@@ -15,10 +15,45 @@ import { applyLocalServerPortProfile } from "@/lib/panel-port-sync";
 import { syncStreamServerPublicHosts } from "@/lib/panel-public-hosts";
 import { publicStreamServer } from "@/lib/server-public";
 import { encodeSshPasswordOrThrow, serverGeoFields } from "@/lib/server-save-fields";
-import { parseStreamServerDomain } from "@/lib/stream-server-domain";
+import { parseStreamServerDomain, type StreamServerDomainRole } from "@/lib/stream-server-domain";
+import { buildServerRoleContext, resolveServerRole } from "@/lib/ensure-main-server-online";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+
+async function resolveDomainSaveRole(
+  serverId: string | null | undefined,
+  bodyPanelSettings: unknown
+): Promise<StreamServerDomainRole> {
+  const explicit =
+    bodyPanelSettings &&
+    typeof bodyPanelSettings === "object" &&
+    !Array.isArray(bodyPanelSettings) &&
+    (bodyPanelSettings as { serverRole?: string }).serverRole;
+  if (explicit === "main") return "main";
+  if (explicit === "lb") return "lb";
+
+  const servers = await prisma.streamServer.findMany({
+    select: {
+      id: true,
+      host: true,
+      sortOrder: true,
+      panelSettings: true,
+      geoLbCountries: true,
+      geoLbIsps: true,
+      name: true,
+    },
+  });
+  if (serverId) {
+    const hit = servers.find((s) => s.id === serverId);
+    if (hit) {
+      const ctx = buildServerRoleContext(servers);
+      return resolveServerRole(hit, ctx) === "main" ? "main" : "lb";
+    }
+  }
+  // New server without explicit role: treat as LB (strict single domain).
+  return "lb";
+}
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
   if (rateLimited) return rateLimited;
@@ -62,7 +97,8 @@ export async function POST(req: NextRequest) {
     const err = validateDnsRotator(body.dnsRotator);
     if (err) return NextResponse.json({ error: err }, { status: 400 });
   }
-  const domainParsed = parseStreamServerDomain(body.domain);
+  const domainRole = await resolveDomainSaveRole(null, body.panelSettings);
+  const domainParsed = parseStreamServerDomain(body.domain, domainRole);
   if (!domainParsed.ok) return NextResponse.json({ error: domainParsed.error }, { status: 400 });
   const limitErr = await assertCanCreateMainServer();
   if (limitErr) return NextResponse.json({ error: limitErr }, { status: 403 });
@@ -173,7 +209,8 @@ export async function PATCH(req: NextRequest) {
   }
   let normalizedDomain: string | null | undefined;
   if (body.domain !== undefined) {
-    const domainParsed = parseStreamServerDomain(body.domain);
+    const domainRole = await resolveDomainSaveRole(id, body.panelSettings);
+    const domainParsed = parseStreamServerDomain(body.domain, domainRole);
     if (!domainParsed.ok) return NextResponse.json({ error: domainParsed.error }, { status: 400 });
     normalizedDomain = domainParsed.domain;
   }

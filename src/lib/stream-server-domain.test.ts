@@ -2,35 +2,44 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { shouldKeepStickyLineLb } from "./server-load";
 import {
+  collectMainMediaHostPool,
   directMediaHostnameForServer,
   directMediaOriginForServerSync,
   parseStreamServerDomain,
+  pickAdvertisedMediaHostnameSync,
 } from "./stream-server-domain";
 import { exportPlaybackUrl, magHttpPlaybackOrigin } from "./export-playback-url";
 import { StreamType } from "@prisma/client";
 
 describe("stream server domain validation", () => {
-  it("accepts and normalizes one hostname", () => {
-    assert.deepEqual(parseStreamServerDomain("lb2.stream.example.com"), {
+  it("accepts and normalizes one LB hostname", () => {
+    assert.deepEqual(parseStreamServerDomain("lb2.stream.example.com", "lb"), {
       ok: true,
       domain: "lb2.stream.example.com",
     });
-    assert.deepEqual(parseStreamServerDomain("https://DarkCDN.site/path"), {
+    assert.deepEqual(parseStreamServerDomain("https://DarkCDN.site/path", "lb"), {
       ok: true,
       domain: "darkcdn.site",
     });
-    assert.deepEqual(parseStreamServerDomain(""), { ok: true, domain: null });
+    assert.deepEqual(parseStreamServerDomain("", "lb"), { ok: true, domain: null });
   });
 
-  it("rejects comma-separated or multi-host domains", () => {
-    const multi = parseStreamServerDomain("a.example.com,b.example.com");
+  it("rejects comma-separated domains on LB role", () => {
+    const multi = parseStreamServerDomain("a.example.com,b.example.com", "lb");
     assert.equal(multi.ok, false);
-    const spaced = parseStreamServerDomain("a.example.com b.example.com");
+    const spaced = parseStreamServerDomain("a.example.com b.example.com", "lb");
     assert.equal(spaced.ok, false);
   });
 
+  it("allows multiple domains on main role", () => {
+    assert.deepEqual(parseStreamServerDomain("a.example.com, b.example.com", "main"), {
+      ok: true,
+      domain: "a.example.com,b.example.com",
+    });
+  });
+
   it("rejects invalid hostnames", () => {
-    const bad = parseStreamServerDomain("not a domain!!");
+    const bad = parseStreamServerDomain("not a domain!!", "lb");
     assert.equal(bad.ok, false);
   });
 });
@@ -68,11 +77,37 @@ describe("direct media hostname selection", () => {
     );
   });
 
-  it("never treats a main panel domain as the LB media host without LB fields", () => {
-    // Origin builders only receive LB rows from sticky assignment; without domain/host → null.
-    assert.equal(directMediaHostnameForServer({ host: "", domain: "darkcdn.store" }), "darkcdn.store");
-    // Empty LB row yields no media origin — caller must fall back.
-    assert.equal(directMediaHostnameForServer({ host: "", domain: null }), null);
+  it("uses main multi-domain pool when LB has no domain", () => {
+    assert.equal(
+      pickAdvertisedMediaHostnameSync({
+        lbHost: "209.237.141.15",
+        lbDomain: null,
+        mainPoolHosts: ["cdn1.example.com", "cdn2.example.com"],
+        lineId: "line-a",
+        panelHost: "45.88.138.18",
+      }),
+      "cdn1.example.com"
+    );
+    assert.equal(
+      collectMainMediaHostPool({
+        host: "45.88.138.18",
+        domain: "darkcdn.store,stream.darkcdn.store",
+        dnsRotator: { mode: "round_robin", hosts: ["cdn1.example.com"] },
+      }).sort().join(","),
+      "cdn1.example.com,darkcdn.store,stream.darkcdn.store"
+    );
+  });
+
+  it("never advertises the panel IP when an LB host exists", () => {
+    assert.equal(
+      pickAdvertisedMediaHostnameSync({
+        lbHost: "209.237.141.15",
+        lbDomain: null,
+        mainPoolHosts: ["45.88.138.18"],
+        panelHost: "45.88.138.18",
+      }),
+      "209.237.141.15"
+    );
   });
 });
 
@@ -150,8 +185,7 @@ describe("Xtream / M3U / Stalker share the same direct LB origin", () => {
     const live = exportPlaybackUrl(origin, line, stream, undefined, undefined, "ts", false, true);
     assert.equal(live, "http://darkcdn.site/live/u/p/ch1.ts");
 
-    // M3U and Stalker create_link use the same export helper + origin.
     assert.match(live, /^http:\/\/darkcdn\.site\//);
-    assert.doesNotMatch(live, /darkcdn\.store|45\.88\.138\.18/);
+    assert.doesNotMatch(live, /45\.88\.138\.18/);
   });
 });

@@ -1,6 +1,10 @@
 import { prisma } from "./prisma";
+import { buildServerRoleContext, resolveServerRole } from "./ensure-main-server-online";
 import { resolveStickyLineLoadBalancerId } from "./server-load";
-import { directMediaOriginForServer } from "./stream-server-domain";
+import {
+  collectMainMediaHostPool,
+  directMediaOriginForServer,
+} from "./stream-server-domain";
 
 const SESSION_KEY_PREFIX = "line-playback-origin:";
 
@@ -10,9 +14,12 @@ const SESSION_KEY_PREFIX = "line-playback-origin:";
  * keep every channel on that account on the same LB without relaying video
  * through the panel.
  *
- * Domain is re-read from the StreamServer row on every call so admin domain
- * edits appear on the next player_api / playlist refresh without disconnects.
- * Main-role servers are never selected while an LB is available.
+ * Advertised hostname preference (XUI-friendly direct-edge):
+ * 1) assigned LB Domain Name when DNS points at that LB
+ * 2) else a hostname from the main server Domain Name / DNS rotator pool that
+ *    DNS-points at the assigned LB (capacity stays on the LB)
+ * 3) else the LB IP
+ * Never advertise the main panel IP while a healthy LB exists.
  */
 export async function resolveLinePlaybackOrigin(lineId: string, fallbackOrigin: string): Promise<string> {
   const sessionKey = `${SESSION_KEY_PREFIX}${lineId}`;
@@ -23,12 +30,39 @@ export async function resolveLinePlaybackOrigin(lineId: string, fallbackOrigin: 
   const serverId = await resolveStickyLineLoadBalancerId(prior?.serverId);
   if (!serverId) return fallbackOrigin;
 
-  const server = await prisma.streamServer.findUnique({
-    where: { id: serverId },
-    select: { id: true, host: true, domain: true, protocol: true },
+  const servers = await prisma.streamServer.findMany({
+    select: {
+      id: true,
+      host: true,
+      domain: true,
+      protocol: true,
+      dnsRotator: true,
+      panelSettings: true,
+      geoLbCountries: true,
+      geoLbIsps: true,
+      sortOrder: true,
+      name: true,
+    },
   });
-  const origin = server ? await directMediaOriginForServer(server) : null;
-  if (!origin) return fallbackOrigin;
+  const roleCtx = buildServerRoleContext(servers);
+  const lb = servers.find((s) => s.id === serverId);
+  if (!lb) return fallbackOrigin;
+
+  const main = servers.find((s) => resolveServerRole(s, roleCtx) === "main") ?? null;
+  const mainPoolHosts = collectMainMediaHostPool(main);
+  const panelHost = main?.host ?? null;
+
+  const origin = await directMediaOriginForServer(lb, {
+    mainPoolHosts,
+    lineId,
+    panelHost,
+  });
+  // Healthy LB exists — never fall back to panel/media hairpin origin.
+  if (!origin) {
+    const proto =
+      String(lb.protocol || "http").toLowerCase() === "https" ? "https" : "http";
+    return `${proto}://${lb.host}`;
+  }
 
   await prisma.loadBalancerSession.upsert({
     where: { sessionKey },
