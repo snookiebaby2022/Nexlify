@@ -2456,7 +2456,11 @@ function authCacheKey(clientReq) {
 
 function authLive(clientReq) {
   return new Promise((resolve, reject) => {
-    const useAgentAuth = Boolean(IPTV_EDGE_AGENT_TOKEN && IPTV_EDGE_SERVER_ID);
+    // A direct playback LB can serve any authorized stream for the line. Use
+    // the shared panel secret when available; agent tokens intentionally scope
+    // a node to streams assigned to that server and would reject a line routed
+    // here for a channel assigned elsewhere.
+    const useAgentAuth = !INTERNAL_SECRET && Boolean(IPTV_EDGE_AGENT_TOKEN && IPTV_EDGE_SERVER_ID);
     const headers = {
       "x-original-uri": clientReq.url || "/",
       "x-original-method": clientReq.method || "GET",
