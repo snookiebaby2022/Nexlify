@@ -147,7 +147,7 @@ async function main() {
 
       const restart = await sshExec(
         c,
-        "cd /opt/nexlify-panel && pm2 restart nexlify-iptv-edge --update-env && sleep 3 && pm2 env 0 2>/dev/null | grep '^IPTV_EDGE_BACKEND:' || true"
+        "cd /opt/nexlify-panel && set -a && . ./.env && set +a && pm2 restart nexlify-iptv-edge --update-env && sleep 3 && pm2 env 0 2>/dev/null | grep '^IPTV_EDGE_BACKEND:' || true"
       );
       process.stdout.write(restart.stdout || "");
       if (restart.code !== 0) throw new Error(restart.stderr || "10gbs edge restart failed");
