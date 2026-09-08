@@ -94,7 +94,7 @@ async function main() {
     // install-iptv-edge-proxy.sh restores immutability after starting PM2.
     await sshExec(
       client,
-      `chattr -i ${REMOTE_DIR}/scripts/iptv-edge-proxy.mjs 2>/dev/null || true`
+      `chattr -i ${REMOTE_DIR}/scripts/iptv-edge-proxy.mjs 2>/dev/null || true; rm -f ${REMOTE_DIR}/scripts/iptv-edge-proxy.mjs`
     );
 
     const upload = await sshExec(client, `cd ${REMOTE_DIR} && tar xzf -`, {
