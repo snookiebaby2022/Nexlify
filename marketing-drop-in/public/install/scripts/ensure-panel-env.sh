@@ -213,6 +213,22 @@ if [ -z "$jwt_now" ] || [ "$jwt_now" = "dev-secret-change-me" ] || [ "${#jwt_now
   echo "Panel env: generated JWT_SECRET (${#jwt_now} chars) — existing sessions will be signed out"
 fi
 
+# Internal edge heartbeats and live-auth must use a stable per-install secret.
+# Keep all three legacy names aligned because older edge installers read the
+# API aliases. Never leave this unset: missing pulses make Live Connections
+# appear to disappear even while playback is still active.
+panel_internal_now="$(read_env PANEL_INTERNAL_SECRET)"
+if [ -z "$panel_internal_now" ] || [ "$panel_internal_now" = "change-me-panel-internal-secret" ]; then
+  panel_internal_now="$(read_env PANEL_API_SECRET)"
+fi
+if [ -z "$panel_internal_now" ] || [ "$panel_internal_now" = "change-me-panel-internal-secret" ]; then
+  panel_internal_now="$(openssl rand -hex 32)"
+  echo "Panel env: generated PANEL_INTERNAL_SECRET"
+fi
+set_kv PANEL_INTERNAL_SECRET "$panel_internal_now"
+set_kv PANEL_API_SECRET "$panel_internal_now"
+set_kv NEXLIFY_PANEL_API_SECRET "$panel_internal_now"
+
 # Disk-backed DVR / catch-up recordings (created on every install + panel restart env sync).
 if [ -f scripts/setup-dvr-storage.sh ]; then
   bash scripts/setup-dvr-storage.sh

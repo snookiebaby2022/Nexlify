@@ -783,11 +783,9 @@ export async function removeConnection(lineId: string, streamId: string, ip: str
   const deleted = await prisma.liveConnection.deleteMany({
     where: { lineId, streamId, ...connectionIpPrismaFilter(ip) },
   });
-  if (deleted.count === 0) {
-    await prisma.liveConnection.deleteMany({
-      where: { lineId, streamId },
-    });
-  }
+  // Never fall back to deleting every viewer on this stream. Edge disconnects
+  // can arrive without the original client IP, and one viewer must not erase
+  // the other viewers' rows.
   void clearLiveSession(lineId, streamId, ip);
   void clearConnectionQuality(lineId, streamId, ip);
   void clearConnectionPlaybackOutput(lineId, streamId, ip);
