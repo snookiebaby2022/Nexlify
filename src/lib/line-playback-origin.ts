@@ -3,8 +3,17 @@ import { resolvePlaybackLoadBalancerId } from "./server-load";
 
 const SESSION_KEY_PREFIX = "line-playback-origin:";
 
-function originForEdge(server: { host: string; protocol: string | null }): string | null {
-  const host = String(server.host || "").trim().replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+function hostname(value: string | null | undefined): string {
+  return String(value || "")
+    .trim()
+    .split(",")[0]
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/.*$/, "");
+}
+
+function originForEdge(server: { host: string; domain: string | null; protocol: string | null }): string | null {
+  const host = hostname(server.domain) || hostname(server.host);
   if (!host) return null;
   // Remote-edge installs own public HTTP :80. Do not use a StreamServer's
   // control/agent port here: the client must reach the media edge directly.
@@ -28,7 +37,7 @@ export async function resolveLinePlaybackOrigin(lineId: string, fallbackOrigin: 
 
   const server = await prisma.streamServer.findUnique({
     where: { id: serverId },
-    select: { id: true, host: true, protocol: true },
+    select: { id: true, host: true, domain: true, protocol: true },
   });
   const origin = server ? originForEdge(server) : null;
   if (!origin) return fallbackOrigin;
