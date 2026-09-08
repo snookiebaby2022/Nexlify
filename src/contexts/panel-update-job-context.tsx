@@ -88,7 +88,7 @@ function mergeIncomingJob(
     return next ?? keepRecentRunningJob(prev) ?? prev;
   }
   if (!next) {
-    if (prev?.status === "done" || prev?.status === "failed") return prev;
+    if (prev?.status === "failed") return prev;
     return null;
   }
   return next;
