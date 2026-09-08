@@ -37,6 +37,8 @@ export const oneClickInstallExample = buildOneClickInstallCommand();
 
 export const cleanReinstallWithFreshFlag = `curl -fsSL '${installerPanelShUrl}' | sudo bash -s -- --fresh`;
 
+export const uninstallPanelCommand = `curl -fsSL '${installerPanelShUrl}' | sudo bash -s -- --uninstall`;
+
 export const wgetInstallExample = `wget -qO- '${installerPanelShUrl}' | sudo bash`;
 
 export const credentialsHelp = {

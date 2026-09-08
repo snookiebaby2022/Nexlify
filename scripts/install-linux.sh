@@ -27,13 +27,14 @@ SKIP_NGINX=0
 SKIP_SSL=0
 SKIP_FIREWALL=0
 FORCE_FRESH=0
+DO_UNINSTALL=0
 MONOLITHIC=0
 LIVE_EDGE_MODE="${NEXLIFY_LIVE_EDGE_MODE:-local}"
 REMOTE_EDGE=""
 
 usage() {
   cat <<'EOF'
-Nexlify Panel — Linux installe
+Nexlify Panel — Linux installer
 
 Usage:
   curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.83' | sudo bash
@@ -45,6 +46,7 @@ Options:
   --license KEY          Optional — activate during install (default: enter in panel after login)
   --dir PATH             Install directory (default: /home/nexlify)
   --fresh                Wipe the install directory before install (keeps /home/nexlify/bin)
+  --uninstall            Remove the panel completely (PM2 apps, files, nexlify DB, nginx vhost)
   --skip-firewall        Do not open ufw ports
   --monolithic           Panel + stream engine on this host (main server + local agent)
   --live-edge-mode MODE  local (default) or remote split-edge routing
@@ -69,6 +71,7 @@ while [ $# -gt 0 ]; do
     --skip-ssl) SKIP_SSL=1; shift ;;
     --skip-firewall) SKIP_FIREWALL=1; shift ;;
     --fresh) FORCE_FRESH=1; shift ;;
+    --uninstall) DO_UNINSTALL=1; shift ;;
     --monolithic) MONOLITHIC=1; shift ;;
     --live-edge-mode) LIVE_EDGE_MODE="${2:-local}"; shift 2 ;;
     --remote-edge) REMOTE_EDGE="${2:-}"; shift 2 ;;
@@ -140,6 +143,39 @@ wipe_panel_tree() {
   else
     rm -rf "$d"
   fi
+}
+
+uninstall_complete_panel() {
+  echo ""
+  echo "==> Uninstalling Nexlify IPTV panel from this server"
+  if command -v pm2 >/dev/null 2>&1; then
+    for app in nexlify nexlify-cron nexlify-hls nexlify-iptv-edge nexlify-license; do
+      pm2 delete "$app" 2>/dev/null || true
+    done
+    pm2 save 2>/dev/null || true
+  fi
+  crontab -l 2>/dev/null | grep -v nexlify-watchdog | crontab - 2>/dev/null || true
+  rm -f /etc/nginx/sites-enabled/nexlify-panel-* /etc/nginx/sites-available/nexlify-panel-* \
+    /etc/nginx/conf.d/nexlify-upstream.conf 2>/dev/null || true
+  if command -v nginx >/dev/null 2>&1; then
+    nginx -t >/dev/null 2>&1 && nginx -s reload 2>/dev/null || true
+  fi
+  if command -v sudo >/dev/null 2>&1 && id postgres >/dev/null 2>&1; then
+    pg_exec_on_port 5432 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='nexlify';" || true
+    pg_exec_on_port 5432 "DROP DATABASE IF EXISTS nexlify WITH (FORCE);" || \
+      pg_exec_on_port 5432 "DROP DATABASE IF EXISTS nexlify;" || true
+    pg_exec_on_port 5432 "DROP ROLE IF EXISTS nexlify;" || true
+  fi
+  local d
+  for d in /home/nexlify /home/nexlify-panel /opt/nexlify-panel ${PANEL_DIR:+"$PANEL_DIR"}; do
+    [ -n "$d" ] && [ -e "$d" ] || continue
+    echo "    removing $d"
+    rm -rf "$d"
+  done
+  rm -rf /root/nexlify /var/nexlify /var/lib/nexlify 2>/dev/null || true
+  echo ""
+  echo "DONE — panel removed. Postgres/Redis/nginx packages were left installed."
+  echo "Reinstall: curl -fsSL 'https://nexlify.live/install/panel.sh' | sudo bash"
 }
 
 if [ -z "$PANEL_DIR" ]; then
@@ -297,7 +333,7 @@ quiet_step() {
     echo "" >&2
     echo "ERROR: $label failed. Last output:" >&2
     tail -40 "$INSTALL_LOG" >&2
-    return 1
+    die "$label failed (see log above)"
   fi
   return 0
 }
@@ -484,6 +520,11 @@ download_panel_archive() {
 }
 
 refuse_vendor_vps_reinstall
+
+if [ "$DO_UNINSTALL" -eq 1 ]; then
+  uninstall_complete_panel
+  exit 0
+fi
 
 if [ "$FORCE_FRESH" -eq 1 ] && [ -e "$PANEL_DIR" ]; then
   wipe_panel_tree "$PANEL_DIR"
@@ -765,14 +806,29 @@ if [ -n "$LICENSE_KEY" ]; then
   node scripts/sync-license-env.mjs >>"$INSTALL_LOG" 2>&1 || true
 fi
 
-export NPM_CONFIG_LOGLEVEL=erro
+export NPM_CONFIG_LOGLEVEL=error
 export PRISMA_HIDE_UPDATE_MESSAGE=1
 export NO_UPDATE_NOTIFIER=1
 export CI=1
 
 export NEXT_TELEMETRY_DISABLED=1
 
-quiet_step "Installing npm dependencies" npm ci --no-audit --no-fund --loglevel=erro
+ensure_build_memory() {
+  local mem_kb
+  mem_kb="$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+  if [ "${mem_kb:-0}" -lt 2500000 ] && ! swapon --show 2>/dev/null | grep -q .; then
+    log "Low RAM — adding 2G swap for npm/build"
+    if [ ! -f /swapfile ]; then
+      fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+      chmod 600 /swapfile
+      mkswap /swapfile >/dev/null
+    fi
+    swapon /swapfile 2>/dev/null || true
+  fi
+}
+ensure_build_memory
+
+quiet_step "Installing npm dependencies" npm ci --no-audit --no-fund --loglevel=error
 
 # Generate Ed25519 license signing keypair if missing (needed for trial/license issuance)
 if [ ! -f .license-keys/private.pem ]; then
@@ -800,20 +856,6 @@ fi
 # Save credentials immediately so the admin password is preserved even if the
 # rest of the install is interrupted (SSH timeout, long PM2 startup, etc.).
 save_install_credentials "in_progress"
-
-ensure_build_memory() {
-  local mem_kb
-  mem_kb="$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
-  if [ "${mem_kb:-0}" -lt 2500000 ] && ! swapon --show 2>/dev/null | grep -q .; then
-    log "Low RAM — adding 2G swap for build"
-    if [ ! -f /swapfile ]; then
-      fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
-      chmod 600 /swapfile
-      mkswap /swapfile >/dev/null
-    fi
-    swapon /swapfile 2>/dev/null || true
-  fi
-}
 
 panel_version() {
   node -p "require('./package.json').version" 2>/dev/null || echo ""
