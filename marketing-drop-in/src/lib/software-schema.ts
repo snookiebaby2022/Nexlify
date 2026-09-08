@@ -35,7 +35,7 @@ export function buildSoftwareApplicationSchema(options?: {
     name: options?.name ?? "Nexlify IPTV Panel",
     applicationCategory: "BusinessApplication",
     applicationSubCategory: "IPTV management software",
-    operatingSystem: "Linux (Ubuntu, Debian)",
+    operatingSystem: "Linux (Ubuntu 20.04, 22.04, 24.04, Debian 11/12)",
     url,
     description:
       options?.description ??

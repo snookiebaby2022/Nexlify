@@ -43,7 +43,6 @@ rsync -a --delete \
   --include='scripts/fix-panel-license-sync.sh' \
   --include='scripts/fix-panel-auto-update.sh' \
   --include='scripts/sync-license-env.mjs' \
-  --include='scripts/verify-install-smoke.sh' \
   --include='scripts/panel-releases.json' \
   --include='public/' \
   --include='public/**' \

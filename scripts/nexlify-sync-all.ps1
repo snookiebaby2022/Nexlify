@@ -51,7 +51,7 @@ $scriptCopies = @(
     "install-nginx-https-extra-ports.sh", "install-monolithic-profile.sh",
     "install-local-stream-agent.sh", "fix-stream-edge-now.sh", "verify-panel-ports.sh",
     "has-valid-next-build.sh", "load-env.cjs", "panel-port-config.sh",
-    "set-admin-password.cjs", "verify-install-smoke.sh", "verify-install-login.sh",
+    "set-admin-password.cjs", "verify-install-login.sh",
     "verify-panel-admin-login.cjs", "reset-panel-admin.sh"
 )
 foreach ($f in $scriptCopies) {

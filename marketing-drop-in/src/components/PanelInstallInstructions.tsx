@@ -89,8 +89,10 @@ export function PanelInstallInstructions() {
       <div>
         <Step number={1} title="Get a server">
           <p>
-            Any fresh Ubuntu 22.04/24.04 or Debian 12 server. Minimum{" "}
-            <strong className="text-white">2 vCPU / 4 GB RAM</strong> recommended. Hetzner, OVH,
+            Any fresh Ubuntu 20.04, 22.04, or 24.04 LTS (or Debian 11/12) server. Panel needs at
+            least{" "}
+            <strong className="text-white">32 GB RAM</strong> (64–256 GB recommended). Stream
+            servers: <strong className="text-white">32 GB+</strong>. Hetzner, OVH,
             DigitalOcean, Vultr, and others all work.
           </p>
           <p>

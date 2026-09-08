@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nexlify IPTV Panel — one-command install
 #
-#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.82' | sudo bash
+#   curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.83' | sudo bash
 #
 # Server IP/hostname is detected automatically. Then open the login URL, sign in
 # with the admin password shown at the end, and paste your license key under Admin → License.
@@ -33,10 +33,10 @@ REMOTE_EDGE=""
 
 usage() {
   cat <<'EOF'
-Nexlify Panel — Linux installer
+Nexlify Panel — Linux installe
 
 Usage:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.82' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.83' | sudo bash
 
 Options:
   --ip IP                Override auto-detected server IP or hostname
@@ -52,9 +52,9 @@ Options:
   -h, --help             Show this help
 
 Examples:
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.82' | sudo bash
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.82' | sudo bash -s -- --license NXLF1-XXXXX
-  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.82' | sudo bash -s -- --domain panel.example.com --email admin@example.com
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.83' | sudo bash
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.83' | sudo bash -s -- --license NXLF1-XXXXX
+  curl -fsSL 'https://nexlify.live/install/panel.sh?v=2.0.83' | sudo bash -s -- --domain panel.example.com --email admin@example.com
 EOF
 }
 
@@ -434,7 +434,6 @@ panel_install_complete() {
     "$PANEL_DIR/scripts/set-admin-password.cjs" \
     "$PANEL_DIR/scripts/sync-license-env.mjs" \
     "$PANEL_DIR/scripts/ensure-panel-env.sh" \
-    "$PANEL_DIR/scripts/verify-install-smoke.sh" \
     "$PANEL_DIR/src/lib/lines.ts" \
     "$PANEL_DIR/src/lib/panel-releases.json" \
     "$PANEL_DIR/nginx/panel.nexlify.live-http-only.conf"
@@ -455,7 +454,6 @@ panel_missing_files() {
     "$PANEL_DIR/scripts/set-admin-password.cjs" \
     "$PANEL_DIR/scripts/sync-license-env.mjs" \
     "$PANEL_DIR/scripts/ensure-panel-env.sh" \
-    "$PANEL_DIR/scripts/verify-install-smoke.sh" \
     "$PANEL_DIR/src/lib/lines.ts" \
     "$PANEL_DIR/src/lib/panel-releases.json" \
     "$PANEL_DIR/nginx/panel.nexlify.live-http-only.conf"
@@ -736,6 +734,7 @@ fi
 bash scripts/ensure-panel-env.sh >>"$INSTALL_LOG" 2>&1
 set_kv REDIS_URL "redis://localhost:6379"
 set_kv NEXLIFY_LICENSE_API_URL "https://nexlify.live"
+set_kv NEXLIFY_LICENSE_REQUIRE 1
 set_kv NEXLIFY_LICENSE_REQUIRE_ONLINE 1
 set_kv NEXLIFY_VENDOR_URL "https://nexlify.live"
 set_kv INSTALL_ADMIN_PASSWORD "$ADMIN_PASS"
@@ -766,14 +765,14 @@ if [ -n "$LICENSE_KEY" ]; then
   node scripts/sync-license-env.mjs >>"$INSTALL_LOG" 2>&1 || true
 fi
 
-export NPM_CONFIG_LOGLEVEL=error
+export NPM_CONFIG_LOGLEVEL=erro
 export PRISMA_HIDE_UPDATE_MESSAGE=1
 export NO_UPDATE_NOTIFIER=1
 export CI=1
 
 export NEXT_TELEMETRY_DISABLED=1
 
-quiet_step "Installing npm dependencies" npm ci --no-audit --no-fund --loglevel=error
+quiet_step "Installing npm dependencies" npm ci --no-audit --no-fund --loglevel=erro
 
 # Generate Ed25519 license signing keypair if missing (needed for trial/license issuance)
 if [ ! -f .license-keys/private.pem ]; then
@@ -1016,12 +1015,6 @@ for i in $(seq 1 15); do
   fi
   sleep 2
 done
-
-if ! bash scripts/verify-install-smoke.sh >>"$INSTALL_LOG" 2>&1; then
-  echo "" >&2
-  echo "WARN: Post-install smoke check failed (panel may still work). Last log:" >&2
-  tail -20 "$INSTALL_LOG" >&2
-fi
 
 progress_step "Verifying admin login"
 chmod +x scripts/verify-install-login.sh 2>/dev/null || true

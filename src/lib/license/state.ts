@@ -538,21 +538,7 @@ export async function getLicenseStatus(panelHost: string): Promise<LicenseStatus
   }
 
   if (process.env.NEXLIFY_LICENSE_REQUIRE !== "0") {
-    const start = await ensureTrialStarted();
-    const end = new Date(start);
-    end.setDate(end.getDate() + trialDays());
-    if (end > new Date()) {
-      return {
-        valid: true,
-        trial: true,
-        licensed: false,
-        trialEndsAt: end.toISOString(),
-        tier: "trial",
-        termLabel: "14-day trial",
-        expiresAt: end.toISOString(),
-      };
-    }
-    return { valid: false, reason: "Trial expired — enter a license key" };
+    return { valid: false, reason: "Enter a license key from nexlify.live" };
   }
 
   return { valid: true, tier: "unlicensed_dev" };

@@ -6,7 +6,7 @@ import { safeJsonLd } from "@/lib/json-ld";
 const INSTALL_STEPS = [
   {
     name: "Order a Linux VPS",
-    text: "Use Ubuntu 22.04+ or Debian 12 with at least 2 vCPU and 4 GB RAM. Any worldwide datacentre works.",
+    text: "Use Ubuntu 20.04, 22.04, or 24.04 LTS (or Debian 12) with at least 32 GB RAM (64–256 GB recommended). Any worldwide datacentre works.",
   },
   {
     name: "Run the one-line installer",

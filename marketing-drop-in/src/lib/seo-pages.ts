@@ -49,7 +49,7 @@ export const SEO_PAGES = {
   "/install": {
     title: "Install IPTV Reseller Panel — IPTV Management Software",
     description:
-      "One-command install for Nexlify IPTV reseller panel on Ubuntu/Debian. IPTV management software with Stripe & PayPal checkout support. Node, PostgreSQL, PM2, nginx.",
+      "One-command install for Nexlify IPTV reseller panel on Ubuntu 20.04, 22.04, or 24.04 LTS (or Debian). Needs 32 GB RAM minimum, 64–256 GB recommended.",
     keywords: withCoreKeywords(["Xtream panel", "IPTV panel installer", "VPS install"]),
   },
   "/help": {
@@ -79,7 +79,7 @@ export const SEO_PAGES = {
   "/requirements": {
     title: "IPTV Reseller Panel VPS Requirements — Nexlify",
     description:
-      "Server requirements for Nexlify IPTV management software and IPTV reseller panel on VPS — Ubuntu, Node.js, PostgreSQL, Redis, nginx, PM2.",
+      "Server requirements for Nexlify IPTV panel: 32 GB RAM minimum (64–256 GB recommended), stream servers 32 GB+. Ubuntu 20.04, 22.04, 24.04 LTS, Debian, Node.js, PostgreSQL, Redis, nginx, PM2.",
     keywords: withCoreKeywords(["VPS requirements", "streaming server"]),
   },
   "/compare/xtream-panel": {

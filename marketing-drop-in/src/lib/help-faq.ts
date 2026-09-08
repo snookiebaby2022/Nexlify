@@ -81,7 +81,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: "server-requirements",
         question: "What do I need to run the panel?",
         answer:
-          "A Linux VPS (Ubuntu 22.04+ recommended) with Node.js, PM2, nginx, PostgreSQL, and Redis. Use our one-line installer on a fresh Ubuntu/Debian server — it installs dependencies, builds the panel, configures PM2 and nginx, and optionally issues Let's Encrypt SSL.",
+          "A Linux VPS with at least 32 GB RAM (64–256 GB recommended). Ubuntu 24.04 LTS is recommended; Ubuntu 22.04 and 20.04 LTS also run the panel, as do Debian 11 and 12. Stream servers need 32 GB RAM or more. Use our one-line installer on a fresh Ubuntu/Debian server — it installs Node.js, PostgreSQL, Redis, PM2, and nginx.",
         links: [
           { label: "One-click installer", href: "/install" },
           {

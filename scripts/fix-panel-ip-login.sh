@@ -119,10 +119,6 @@ bash scripts/pm2-start.sh
 
 PORT_NOW="$(read_env PORT)"
 PORT_NOW="${PORT_NOW:-80}"
-if [ -f scripts/verify-install-smoke.sh ]; then
-  bash scripts/verify-install-smoke.sh || echo "WARN: smoke check failed — see output above"
-fi
-
 if [ -n "$CREDS_PASS" ] && [ -f scripts/verify-install-login.sh ]; then
   echo "==> Verifying admin login"
   chmod +x scripts/verify-install-login.sh

@@ -173,7 +173,6 @@ for s in \
   ensure-panel-env.sh \
   panel-port-config.sh \
   pm2-start.sh \
-  verify-install-smoke.sh \
   verify-install-login.sh \
   set-admin-password.cjs \
   load-env.cjs; do

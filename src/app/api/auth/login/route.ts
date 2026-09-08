@@ -29,10 +29,10 @@ import { licenseCheckHost } from "@/lib/domains-host";
 
 import { parseJsonBody } from "@/lib/parse-json-body";
 /**
- * If the panel is licensed (or in an active trial), build the license-session
- * (or trial) cookie descriptor so the caller can drop it on the response. This
- * lets an admin land directly on the dashboard after login instead of being
- * bounced to /admin/license/add by the middleware license gate.
+ * If the panel is licensed, build the license-session cookie descriptor so the
+ * caller can drop it on the response. This lets an admin land directly on the
+ * dashboard after login instead of being bounced to /admin/license/add by the
+ * middleware license gate.
  * Mirrors the logic in /api/license/enter-panel.
  */
 async function buildLicenseCookie(

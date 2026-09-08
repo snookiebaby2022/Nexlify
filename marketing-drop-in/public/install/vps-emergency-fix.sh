@@ -77,7 +77,7 @@ tar -czf "$OUT" \
   -C "$ROOT" .
 echo "Built $OUT ($(du -h "$OUT" | cut -f1))"
 missing=""
-for f in .env.example package.json package-lock.json prisma/schema.prisma scripts/pm2-start.sh scripts/set-admin-password.cjs scripts/sync-license-env.mjs scripts/ensure-panel-env.sh scripts/verify-install-smoke.sh src/lib/lines.ts src/lib/panel-releases.json nginx/panel.nexlify.live-http-only.conf; do
+for f in .env.example package.json package-lock.json prisma/schema.prisma scripts/pm2-start.sh scripts/set-admin-password.cjs scripts/sync-license-env.mjs scripts/ensure-panel-env.sh src/lib/lines.ts src/lib/panel-releases.json nginx/panel.nexlify.live-http-only.conf; do
   if ! grep -qF "$f" < <(tar -tzf "$OUT"); then
     missing="${missing}\n  - ${f}"
   fi

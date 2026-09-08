@@ -19,7 +19,7 @@ export function SystemRequirementsSection({
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-6">
         <h2 className="text-lg font-semibold text-white">Minimum requirements</h2>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Ubuntu 22.04+ or Debian 12+. Panel: 4 GB RAM, 2 CPU, 20 GB SSD. Stream server: 8 GB+ for FFmpeg 8 transcode.
+          Ubuntu 20.04, 22.04, or 24.04 LTS (Debian 11/12 also). Panel: at least 32 GB RAM, recommended 64–256 GB. Stream server: 32 GB+ RAM.
         </p>
         <ul className="mt-4 grid sm:grid-cols-2 gap-2 text-xs text-[var(--muted)]">
           {items.map((i) => (
@@ -36,8 +36,9 @@ export function SystemRequirementsSection({
     <section className="py-12">
       <h2 className="text-2xl font-bold text-white">System requirements</h2>
       <p className="mt-4 text-[var(--muted)] max-w-2xl">
-        Panel: Ubuntu 22.04+ or Debian 12+, 4 GB RAM, 2 CPU cores, 20 GB SSD.
-        Stream servers: 8 GB+ RAM recommended for FFmpeg 8 transcoding; NVIDIA GPU optional for NVENC.
+        Panel: Ubuntu 20.04, 22.04, or 24.04 LTS (or Debian 11/12), at least 32 GB RAM
+        (64–256 GB recommended), 2 CPU cores, 20 GB SSD.
+        Stream servers: 32 GB+ RAM; NVIDIA GPU optional for NVENC.
       </p>
       <ul className="mt-6 grid sm:grid-cols-2 gap-3 text-sm text-[var(--muted)]">
         {items.map((i) => (

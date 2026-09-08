@@ -60,7 +60,7 @@ fi
 
 echo "[4] panel.sh syntax + key hooks"
 if bash -n "$sh_tmp"; then pass "bash -n panel.sh"; else fail "panel.sh syntax error"; fi
-for needle in panel_install_complete download_panel_archive 'db push --accept-data-loss' panel-releases.json progress_step save_install_credentials verify-install-smoke ensure-panel-env sync-license-env; do
+for needle in panel_install_complete download_panel_archive 'db push --accept-data-loss' panel-releases.json progress_step save_install_credentials ensure-panel-env sync-license-env; do
   if grep -q "$needle" "$sh_tmp"; then pass "panel.sh contains: $needle"; else fail "panel.sh missing: $needle"; fi
 done
 

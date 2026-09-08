@@ -31,7 +31,7 @@ const COMPARE_ROWS = [
   },
   {
     feature: "OS",
-    panel: "Ubuntu 20.04+ / Debian 11+",
+    panel: "Ubuntu 20.04 / 22.04 / 24.04 or Debian 11+",
     stream: "Any Linux with agent script",
   },
   {
@@ -94,6 +94,15 @@ export default function RequirementsPage() {
                   </tr>
                 ))}
                 <tr className="border-t border-white/10 bg-white/[0.02]">
+                  <td className="px-4 py-3 font-medium text-slate-200">RAM (minimum)</td>
+                  <td className="px-4 py-3 text-slate-300">
+                    {HARDWARE_ROLES[0].minimum.ram}
+                  </td>
+                  <td className="px-4 py-3 text-slate-300">
+                    {HARDWARE_ROLES[1].minimum.ram}
+                  </td>
+                </tr>
+                <tr className="bg-white/[0.02]">
                   <td className="px-4 py-3 font-medium text-slate-200">RAM (recommended)</td>
                   <td className="px-4 py-3 text-slate-300">
                     {HARDWARE_ROLES[0].recommended.ram}

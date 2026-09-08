@@ -30,7 +30,7 @@ fetch_script() {
   chmod +x "$dest" 2>/dev/null || true
 }
 
-for s in fix-panel-ip-login.sh panel-port-config.sh ensure-panel-env.sh verify-install-smoke.sh verify-install-login.sh pm2-start.sh; do
+for s in fix-panel-ip-login.sh panel-port-config.sh ensure-panel-env.sh verify-install-login.sh pm2-start.sh; do
   fetch_script "$s"
 done
 for s in set-admin-password.cjs load-env.cjs; do

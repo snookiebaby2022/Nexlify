@@ -145,8 +145,8 @@ export function PanelInstaller() {
         <div>
           <h4 className="text-sm font-semibold text-white">What you need</h4>
           <ul className="mt-2 text-sm text-[var(--muted)] space-y-1 list-disc list-inside">
-            <li>Ubuntu 22.04/24.04 or Debian 12 — a new VPS is easiest</li>
-            <li>Root SSH, 2 vCPU, 4 GB RAM (2 GB minimum), 8 GB free disk</li>
+            <li>Ubuntu 20.04, 22.04, or 24.04 LTS (or Debian 11/12) — a new VPS is easiest</li>
+            <li>Root SSH, 32 GB RAM minimum (64–256 GB recommended), 8 GB free disk</li>
             <li>Ports 80, 443, and 8080 free for the panel and IPTV apps</li>
           </ul>
         </div>
