@@ -1,4 +1,5 @@
 import { pulseLiveConnection } from "@/lib/connection-pulse";
+import { notifyLiveConnectionsChanged } from "@/lib/connection-live-bus";
 
 export type PulseBatchEntry = {
   lineId: string;
@@ -26,5 +27,6 @@ export async function pulseLiveConnectionBatch(entries: PulseBatchEntry[]): Prom
       })
     )
   );
+  if (slice.length) notifyLiveConnectionsChanged();
   return slice.length;
 }

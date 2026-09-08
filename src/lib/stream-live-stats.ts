@@ -6,7 +6,7 @@ import {
 } from "@/lib/stream-playback-policy";
 
 /** Match LIVE_STALE_MS in connections.ts — do not import that file (client bundle / ioredis). */
-const STALE_MS = 3 * 60 * 1000;
+const STALE_MS = 10 * 60 * 1000;
 
 export type StreamLiveStat = {
   viewers: number;

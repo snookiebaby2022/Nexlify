@@ -1,7 +1,25 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.87",
+  "latestVersion": "2.0.88",
   "releases": [
+    {
+      "version": "2.0.88",
+      "date": "2026-09-08",
+      "channel": "stable",
+      "summary": "Live Connections lists every viewer from 10gbs heartbeats again.",
+      "changelog": [
+        "Open Connections uses lastSeen pulse rows (not Redis/UTC id filters that hid watchers)",
+        "MPEG-TS sessions stay listed for 10 minutes between edge pulses",
+        "Rematch 10gbs PANEL_INTERNAL_SECRET so connection-pulse-batch reaches the panel"
+      ],
+      "fixes": [
+        "Live Connections / online users dropped after 2.0.87 Redis-as-source-of-truth counting"
+      ],
+      "notes": [
+        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.88.tar.gz"
+    },
     {
       "version": "2.0.87",
       "date": "2026-09-08",
