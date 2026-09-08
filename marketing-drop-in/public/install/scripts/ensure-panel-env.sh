@@ -199,6 +199,20 @@ if [ "$(read_env NEXLIFY_USE_IPTV_EDGE)" = "1" ]; then
   set_kv UV_THREADPOOL_SIZE "${UV_THREADPOOL_SIZE:-32}"
 fi
 
+# Recover JWT_SECRET / DATABASE_URL from PM2 if .env lost them during a rebuild.
+if [ -f scripts/restore-panel-runtime-secrets.sh ]; then
+  bash scripts/restore-panel-runtime-secrets.sh "$(pwd)" || true
+elif [ -f "$(dirname "$0")/restore-panel-runtime-secrets.sh" ]; then
+  bash "$(dirname "$0")/restore-panel-runtime-secrets.sh" "$(pwd)" || true
+fi
+
+jwt_now="$(read_env JWT_SECRET)"
+if [ -z "$jwt_now" ] || [ "$jwt_now" = "dev-secret-change-me" ] || [ "${#jwt_now}" -lt 32 ]; then
+  jwt_now="$(openssl rand -hex 32)"
+  set_kv JWT_SECRET "$jwt_now"
+  echo "Panel env: generated JWT_SECRET (${#jwt_now} chars) — existing sessions will be signed out"
+fi
+
 # Disk-backed DVR / catch-up recordings (created on every install + panel restart env sync).
 if [ -f scripts/setup-dvr-storage.sh ]; then
   bash scripts/setup-dvr-storage.sh

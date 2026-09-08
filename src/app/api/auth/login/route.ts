@@ -80,6 +80,13 @@ async function buildLicenseCookie(
   }
 }
 
+export async function GET() {
+  return NextResponse.json(
+    { error: "Method not allowed. Use POST." },
+    { status: 405 }
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
     const rateLimited = await guardAdminApiRequest(req);

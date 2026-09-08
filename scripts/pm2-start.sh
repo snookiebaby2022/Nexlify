@@ -206,6 +206,21 @@ needs_reregister() {
       return 0
     fi
   fi
+  if [ "$name" = "nexlify" ]; then
+    local jwt_env jwt_pm2
+    jwt_env="$(grep -E '^JWT_SECRET=' "$ROOT/.env" 2>/dev/null | tail -1 | cut -d= -f2- | sed -e 's/^["'\'']*//' -e 's/["'\'']*$//' | tr -d '\r')"
+    jwt_pm2="$(pm2 jlist 2>/dev/null | node -e "
+      try {
+        const list = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+        const app = list.find((x) => x.name === 'nexlify');
+        process.stdout.write(String(app?.pm2_env?.JWT_SECRET || '').trim());
+      } catch { process.stdout.write(''); }
+    " 2>/dev/null || true)"
+    if [ -n "$jwt_env" ] && [ "${#jwt_env}" -ge 32 ] && [ "${#jwt_pm2}" -ne "${#jwt_env}" ]; then
+      echo "$name: JWT_SECRET not loaded into PM2 workers (${#jwt_pm2} vs ${#jwt_env} chars) — re-registering"
+      return 0
+    fi
+  fi
   return 1
 }
 

@@ -98,7 +98,11 @@ if [ -d .git ] && [ "${NEXLIFY_SKIP_GIT_RESET:-}" != "1" ]; then
     PANEL_REF="$(git rev-parse origin/main)"
   fi
   echo "==> git reset --hard ${PANEL_REF} (panel paths; skip marketing-only HEAD)"
-  git reset --hard "$PANEL_REF"
+  if [ -x "$ROOT/scripts/nexlify-git-checkout.sh" ]; then
+    bash "$ROOT/scripts/nexlify-git-checkout.sh" "$ROOT" "$PANEL_REF"
+  else
+    git reset --hard "$PANEL_REF"
+  fi
   bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" || true
   chmod +x scripts/*.sh 2>/dev/null || true
 fi

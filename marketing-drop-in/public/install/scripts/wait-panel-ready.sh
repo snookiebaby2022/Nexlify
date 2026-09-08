@@ -31,6 +31,12 @@ while [ "$SECONDS" -lt "$pm2_deadline" ]; do
   " 2>/dev/null || echo "0 0")"
   read -r online_count launching_count <<< "$online"
   if [ "${online_count:-0}" -ge 1 ]; then
+    expected="$(grep -E '^PANEL_INSTANCES=' .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r\"' || true)"
+    if [ -n "$expected" ] && [ "$expected" -gt 1 ] 2>/dev/null && [ "${online_count}" -lt "$expected" ]; then
+      echo "PM2: ${online_count}/${expected} online — waiting for full cluster"
+      sleep 2
+      continue
+    fi
     echo "PM2: ${online_count} online, ${launching_count:-0} launching"
     break
   fi
@@ -62,6 +68,34 @@ if [ "$ready" != "1" ]; then
   exit 1
 fi
 rm -f "$tmp_health"
+
+# Login must return JSON (not Next HTML 405). Empty 405 is what the UI shows as "Login failed (405)".
+echo "Checking POST /api/auth/login returns JSON ..."
+login_ok=0
+login_tmp="$(mktemp)"
+for try_url in \
+  "http://${HOST}:${PORT}/api/auth/login" \
+  "http://127.0.0.1:${PORT}/api/auth/login" \
+  "http://127.0.0.1/api/auth/login"
+do
+  code="$(curl -sS -o "$login_tmp" -w '%{http_code}' -m 8 -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"username":"__nexlify_ready__","password":"x"}' \
+    "$try_url" 2>/dev/null || echo 000)"
+  ctype="$(file -b --mime-type "$login_tmp" 2>/dev/null || true)"
+  if grep -q '"error"' "$login_tmp" 2>/dev/null || grep -q '"redirect"' "$login_tmp" 2>/dev/null; then
+    echo "OK: login API JSON (HTTP $code) via $try_url"
+    login_ok=1
+    break
+  fi
+  echo "WARN: $try_url login HTTP $code mime=${ctype:-?} body=$(head -c 80 "$login_tmp" | tr '\n' ' ')" >&2
+done
+rm -f "$login_tmp"
+if [ "$login_ok" != "1" ]; then
+  echo "ERROR: POST /api/auth/login did not return JSON — panel login will show 405 in the browser" >&2
+  pm2 logs nexlify --lines 20 --nostream 2>/dev/null | grep -E "auth/login|JWT_SECRET" || true
+  exit 1
+fi
 
 # Guard against staging distDir mismatch (static 404 → client-side Application error)
 chunk="$(find .next/static/chunks -maxdepth 1 -name 'webpack-*.js' 2>/dev/null | head -1 || true)"

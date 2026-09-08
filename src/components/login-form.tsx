@@ -107,7 +107,11 @@ export function LoginForm({ showDemoLogins = false }: { showDemoLogins?: boolean
       data = await res.json();
     } catch {
       setLoading(false);
-      setError(res.ok ? "Invalid server response." : `Login failed (${res.status}).`);
+      setError(
+        res.ok
+          ? "Invalid server response."
+          : `Login failed (${res.status}). Hard-refresh the page and try again.`
+      );
       return;
     }
     setLoading(false);

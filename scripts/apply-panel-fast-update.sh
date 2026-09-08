@@ -226,6 +226,12 @@ bootstrap_patch_scripts() {
   fetch_one "${base}/scripts/vps-git-auth.sh?${cache}" "$ROOT/scripts/vps-git-auth.sh"
   fetch_one "${base}/scripts/install-fleet-deploy-key.sh?${cache}" "$ROOT/scripts/install-fleet-deploy-key.sh"
   fetch_one "${base}/scripts/has-valid-next-build.sh?${cache}" "$ROOT/scripts/has-valid-next-build.sh"
+  fetch_one "${base}/scripts/panel-git-ref.sh?${cache}" "$ROOT/scripts/panel-git-ref.sh"
+  fetch_one "${base}/scripts/nexlify-git-checkout.sh?${cache}" "$ROOT/scripts/nexlify-git-checkout.sh"
+  fetch_one "${base}/scripts/restore-panel-runtime-secrets.sh?${cache}" "$ROOT/scripts/restore-panel-runtime-secrets.sh"
+  fetch_one "${base}/scripts/ensure-panel-env.sh?${cache}" "$ROOT/scripts/ensure-panel-env.sh"
+  fetch_one "${base}/scripts/wait-panel-ready.sh?${cache}" "$ROOT/scripts/wait-panel-ready.sh"
+  fetch_one "${base}/scripts/pm2-start.sh?${cache}" "$ROOT/scripts/pm2-start.sh"
   normalize_scripts
   # Auto-install tsx if not available (needed for background update worker)
   if ! command -v npx >/dev/null 2>&1 || ! npx tsx --version >/dev/null 2>&1; then
@@ -238,6 +244,17 @@ bootstrap_patch_scripts() {
 }
 
 normalize_scripts
+
+# Re-exec so this update uses the scripts we just bootstrapped (bash does not reload $0).
+if [ "${NEXLIFY_UPDATE_BOOTSTRAPPED:-}" != "1" ]; then
+  bootstrap_patch_scripts
+  export NEXLIFY_UPDATE_BOOTSTRAPPED=1
+  if [ "$#" -eq 0 ]; then
+    exec bash "$ROOT/scripts/apply-panel-fast-update.sh" all
+  else
+    exec bash "$ROOT/scripts/apply-panel-fast-update.sh" "$@"
+  fi
+fi
 
 case "$PANEL_ARCHIVE_URL" in
   *\?*) ;;
@@ -345,12 +362,16 @@ cmd_sync_git() {
     panel_ref="origin/main"
   fi
   echo "Git checkout — syncing ${panel_ref} (panel paths; skip marketing-only HEAD)"
-  local force="${PANEL_UPDATE_FORCE:-}"
-  force="$(printf '%s' "$force" | tr '[:upper:]' '[:lower:]')"
-  if [ "$force" = "1" ] || [ "$force" = "true" ] || [ "$force" = "yes" ]; then
-    git -C "$ROOT" reset --hard "$panel_ref" || return 1
+  if [ -x "$ROOT/scripts/nexlify-git-checkout.sh" ]; then
+    bash "$ROOT/scripts/nexlify-git-checkout.sh" "$ROOT" "$panel_ref" || return 1
   else
-    git -C "$ROOT" merge --ff-only "$panel_ref" || git -C "$ROOT" reset --hard "$panel_ref" || return 1
+    local force="${PANEL_UPDATE_FORCE:-}"
+    force="$(printf '%s' "$force" | tr '[:upper:]' '[:lower:]')"
+    if [ "$force" = "1" ] || [ "$force" = "true" ] || [ "$force" = "yes" ]; then
+      git -C "$ROOT" reset --hard "$panel_ref" || return 1
+    else
+      git -C "$ROOT" merge --ff-only "$panel_ref" || git -C "$ROOT" reset --hard "$panel_ref" || return 1
+    fi
   fi
   bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" 2>/dev/null || true
   normalize_scripts
@@ -383,6 +404,9 @@ cmd_sync_tarball() {
     rm -rf "$tmp"
     exit 1
   }
+  if [ -f "$ROOT/scripts/iptv-edge-proxy.mjs" ]; then
+    chattr -i "$ROOT/scripts/iptv-edge-proxy.mjs" 2>/dev/null || true
+  fi
   if command -v rsync >/dev/null 2>&1; then
     rsync -a --delete \
       --exclude='.git/' --exclude='.env' --exclude='.env.*' \
@@ -396,6 +420,9 @@ cmd_sync_tarball() {
       -exec cp -a {} "$ROOT/" \;
   fi
   bash "$ROOT/scripts/strip-non-panel-tree.sh" "$ROOT" 2>/dev/null || true
+  if [ -f /etc/nexlify/live-routing.lock ] && [ -f "$ROOT/scripts/iptv-edge-proxy.mjs" ]; then
+    chattr +i "$ROOT/scripts/iptv-edge-proxy.mjs" 2>/dev/null || true
+  fi
   normalize_scripts
   rm -rf "$tmp"
   local synced_ver
@@ -656,7 +683,10 @@ cmd_restart() {
     bash "$ROOT/scripts/verify-standalone.sh" 2>/dev/null || true
   fi
   if [ -x "$ROOT/scripts/wait-panel-ready.sh" ]; then
-    bash "$ROOT/scripts/wait-panel-ready.sh" || echo "WARN: panel slow to respond after restart" >&2
+    bash "$ROOT/scripts/wait-panel-ready.sh" || {
+      echo "ERROR: panel not ready after restart (health/login JSON check failed)" >&2
+      return 1
+    }
   else
     sleep 5
   fi

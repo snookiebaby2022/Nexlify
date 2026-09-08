@@ -63,7 +63,30 @@ nexlify_online_count() {
   " 2>/dev/null || echo 0
 }
 
+start_nexlify_with_env() {
+  log "Re-registering nexlify from ecosystem.config.cjs (env/JWT must be injected at spawn)"
+  pm2 delete nexlify >>"$LOG_FILE" 2>&1 || true
+  pm2 start ecosystem.config.cjs --only nexlify --update-env >>"$LOG_FILE" 2>&1
+}
+
+nexlify_jwt_needs_reregister() {
+  local env_len pm2_len
+  env_len="$(grep -E '^JWT_SECRET=' .env 2>/dev/null | tail -1 | cut -d= -f2- | sed -e 's/^["'\'']*//' -e 's/["'\'']*$//' | tr -d '\r' | awk '{print length}')"
+  pm2_len="$(pm2 jlist 2>/dev/null | node -e "
+    try {
+      const list = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+      const app = list.find((x) => x.name === 'nexlify');
+      process.stdout.write(String(String(app?.pm2_env?.JWT_SECRET || '').trim().length));
+    } catch { process.stdout.write('0'); }
+  " 2>/dev/null || echo 0)"
+  [ -n "$env_len" ] && [ "$env_len" -ge 32 ] 2>/dev/null && [ "${pm2_len:-0}" != "$env_len" ]
+}
+
 start_nexlify_without_delete() {
+  if nexlify_jwt_needs_reregister; then
+    start_nexlify_with_env
+    return $?
+  fi
   if [ "$(nexlify_online_count)" != "0" ]; then
     log "Reloading nexlify in place (no delete) ..."
     if pm2 reload nexlify --update-env >>"$LOG_FILE" 2>&1; then
@@ -139,7 +162,7 @@ nexlify_only_restart() {
     bash scripts/ensure-nginx-panel-hold.sh >>"$LOG_FILE" 2>&1 || true
   fi
 
-  log "Restarting nexlify only (preserving nexlify-cron, no pm2 delete) ..."
+  log "Restarting nexlify only (preserving nexlify-cron) ..."
   start_nexlify_without_delete
   pm2 save >>"$LOG_FILE" 2>&1 || true
 

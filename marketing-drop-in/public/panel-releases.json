@@ -1,7 +1,30 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.84",
+  "latestVersion": "2.0.85",
   "releases": [
+    {
+      "version": "2.0.85",
+      "date": "2026-09-08",
+      "channel": "stable",
+      "summary": "Keep panel login working across rebuilds: restore JWT/.env, ignore stale git pins, and wait until login returns JSON.",
+      "changelog": [
+        "Recover JWT_SECRET and DATABASE_URL from PM2 into .env before restart so login is not 503 after a rebuild",
+        "Re-register nexlify workers when JWT is in .env but missing from PM2 (reload was not enough)",
+        "Ignore a stale /etc/nexlify/panel-git-ref unless panel-git-ref.lock exists",
+        "git/tarball updates temporarily clear chattr +i on iptv-edge-proxy.mjs so server 45 can sync",
+        "Update ready-check requires POST /api/auth/login to return JSON instead of HTML 405",
+        "GET /api/auth/login returns JSON 405 so the login form never shows a blank Method Not Allowed page"
+      ],
+      "fixes": [
+        "Login failed (405) after a panel rebuild on darkcdn.store",
+        "Updates pinned to an old git SHA and skipped later panel commits",
+        "git reset blocked by immutable scripts/iptv-edge-proxy.mjs"
+      ],
+      "notes": [
+        "To freeze git on a specific SHA, write the SHA to /etc/nexlify/panel-git-ref and touch /etc/nexlify/panel-git-ref.lock."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.85.tar.gz"
+    },
     {
       "version": "2.0.84",
       "date": "2026-09-08",
