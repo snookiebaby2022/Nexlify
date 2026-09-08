@@ -13,7 +13,7 @@ import {
   stopDvrRecording,
 } from "./dvr-service";
 import { resolveStreamPlaybackUrl } from "./resolve-stream-url";
-import { exportPlaybackUrl } from "./export-playback-url";
+import { exportPlaybackUrl, magHttpPlaybackOrigin } from "./export-playback-url";
 import { resolveLinePlaybackOrigin } from "./line-playback-origin";
 import {
   archiveRetentionDays,
@@ -274,12 +274,12 @@ export async function handleStalkerExtendedAction(
     case "get_week":
     case "get_epg_info": {
       const streams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
-      return stalkerShortEpg(streams, extra, baseUrl, line);
+      return stalkerShortEpg(streams, extra, playbackBaseUrl, line);
     }
 
     case "get_simple_data_table": {
       const epgStreams = await streamsForLineExport(line, { type: StreamType.LIVE, lean: true });
-      const rows = await stalkerShortEpg(epgStreams, extra, baseUrl, line);
+      const rows = await stalkerShortEpg(epgStreams, extra, playbackBaseUrl, line);
       return rows.map((r) => ({
         name: r.name,
         descr: r.descr,
@@ -370,7 +370,7 @@ export async function handleStalkerExtendedAction(
         if (!streamHasArchive(stream)) return { error: "Archive not available" };
         return {
           cmd: panelTimeshiftUrl(
-            baseUrl,
+            magHttpPlaybackOrigin(playbackBaseUrl),
             line.username,
             line.password,
             stream.id,
@@ -403,7 +403,7 @@ export async function handleStalkerExtendedAction(
       const streamId = extra.ch_id ?? extra.id ?? "";
       const dayUnix = parseInt(extra.day ?? extra.date ?? "0", 10);
       if (streamId && dayUnix > 0) {
-        const epgRows = await stalkerArchiveDayFromEpg(line, baseUrl, streamId, dayUnix);
+        const epgRows = await stalkerArchiveDayFromEpg(line, playbackBaseUrl, streamId, dayUnix);
         if (epgRows.length) return epgRows;
       }
       const recs = await listDvrRecordings({ streamId: streamId || undefined, take: 50 });
@@ -426,7 +426,7 @@ export async function handleStalkerExtendedAction(
       if (streamId) {
         const epgRows = await stalkerArchiveDayFromEpg(
           line,
-          baseUrl,
+          playbackBaseUrl,
           streamId,
           Math.floor(Date.now() / 1000) - 86400
         );

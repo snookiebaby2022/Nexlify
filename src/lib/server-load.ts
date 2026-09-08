@@ -169,6 +169,59 @@ export async function resolvePlaybackLoadBalancerId(
   return pickNamedOrLeastLb(scores);
 }
 
+function lbHasDirectMediaEndpoint(server: { host?: string | null; domain?: string | null }): boolean {
+  return Boolean(String(server.host || "").trim() || String(server.domain || "").trim());
+}
+
+function lbHealthUnavailable(healthStatus?: string | null): boolean {
+  const s = String(healthStatus ?? "").toLowerCase();
+  return s === "offline" || s === "degraded" || s === "down";
+}
+
+/** Pure sticky-keep predicate for tests and resolveStickyLineLoadBalancerId. */
+export function shouldKeepStickyLineLb(opts: {
+  preferredActive: boolean;
+  healthStatus?: string | null;
+  role: "main" | "lb";
+  hasMediaEndpoint: boolean;
+}): boolean {
+  return (
+    opts.preferredActive &&
+    !lbHealthUnavailable(opts.healthStatus) &&
+    opts.role !== "main" &&
+    opts.hasMediaEndpoint
+  );
+}
+
+/**
+ * Sticky line→LB assignment for playlist / Xtream origins.
+ * Keep the preferred LB unless it is inactive, explicitly unhealthy, main-role,
+ * or missing a direct media host. Saturation alone does not move existing lines;
+ * new lines still land on headroom via pickNamedOrLeastLb.
+ */
+export async function resolveStickyLineLoadBalancerId(
+  preferred?: string | null
+): Promise<string | null> {
+  const scores = await getServerLoadScores();
+  const roleCtx = roleCtxFromScores(scores);
+  const id = preferred?.trim() || "";
+  if (id) {
+    const hit = scores.find((x) => x.server.id === id);
+    if (
+      hit &&
+      shouldKeepStickyLineLb({
+        preferredActive: hit.server.isActive,
+        healthStatus: hit.server.healthStatus,
+        role: resolveServerRole(hit.server, roleCtx) === "main" ? "main" : "lb",
+        hasMediaEndpoint: lbHasDirectMediaEndpoint(hit.server),
+      })
+    ) {
+      return id;
+    }
+  }
+  return pickNamedOrLeastLb(scores);
+}
+
 /** Movies/series go to the 10Gbps LB when present; never default onto Main. */
 export async function pickVodLoadBalancerId(): Promise<string | null> {
   return resolvePlaybackLoadBalancerId(null);

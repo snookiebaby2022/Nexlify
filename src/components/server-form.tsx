@@ -977,8 +977,10 @@ export function ServerForm({
                   placeholder="stream.example.com"
                 />
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
-                  Shown under the server IP on Manage Servers. Apps, Download line, and Xtream
-                  URLs use this name (and any extra rotator hosts) instead of the IP.
+                  Exactly one hostname (no commas). On a load balancer this is the direct media
+                  endpoint — point a DNS-only A record at this LB. The main panel domain stays for
+                  login/playlists; clients pick up LB domain changes on the next Xtream or playlist
+                  refresh.
                 </p>
               </FormField>
               <FormField label="DNS rotator hosts (one per line)">

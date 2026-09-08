@@ -15,6 +15,7 @@ import { applyLocalServerPortProfile } from "@/lib/panel-port-sync";
 import { syncStreamServerPublicHosts } from "@/lib/panel-public-hosts";
 import { publicStreamServer } from "@/lib/server-public";
 import { encodeSshPasswordOrThrow, serverGeoFields } from "@/lib/server-save-fields";
+import { parseStreamServerDomain } from "@/lib/stream-server-domain";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
@@ -61,6 +62,8 @@ export async function POST(req: NextRequest) {
     const err = validateDnsRotator(body.dnsRotator);
     if (err) return NextResponse.json({ error: err }, { status: 400 });
   }
+  const domainParsed = parseStreamServerDomain(body.domain);
+  if (!domainParsed.ok) return NextResponse.json({ error: domainParsed.error }, { status: 400 });
   const limitErr = await assertCanCreateMainServer();
   if (limitErr) return NextResponse.json({ error: limitErr }, { status: 403 });
 
@@ -91,7 +94,7 @@ export async function POST(req: NextRequest) {
       proxyId: body.proxyId || null,
       description: body.description || null,
       privateIp: body.privateIp || null,
-      domain: body.domain || null,
+      domain: domainParsed.domain,
       panelPort: Number(body.panelPort ?? PANEL_HTTP_PORT),
       timeshiftOnly: body.timeshiftOnly === true,
       region: geo.region,
@@ -168,6 +171,12 @@ export async function PATCH(req: NextRequest) {
     const err = validateDnsRotator(body.dnsRotator);
     if (err) return NextResponse.json({ error: err }, { status: 400 });
   }
+  let normalizedDomain: string | null | undefined;
+  if (body.domain !== undefined) {
+    const domainParsed = parseStreamServerDomain(body.domain);
+    if (!domainParsed.ok) return NextResponse.json({ error: domainParsed.error }, { status: 400 });
+    normalizedDomain = domainParsed.domain;
+  }
 
   const geo =
     body.host != null
@@ -196,7 +205,7 @@ export async function PATCH(req: NextRequest) {
       proxyId: body.proxyId === undefined ? undefined : body.proxyId || null,
       description: body.description,
       privateIp: body.privateIp !== undefined ? body.privateIp || null : undefined,
-      domain: body.domain !== undefined ? body.domain || null : undefined,
+      domain: normalizedDomain,
       panelPort: body.panelPort != null ? Number(body.panelPort) : undefined,
       timeshiftOnly: body.timeshiftOnly !== undefined ? Boolean(body.timeshiftOnly) : undefined,
       rtmpPort: body.rtmpPort != null ? Number(body.rtmpPort) : body.rtmpPort === null ? null : undefined,

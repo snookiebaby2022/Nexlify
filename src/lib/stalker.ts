@@ -383,7 +383,11 @@ export async function handleStalkerAction(
         status: 1,
       });
 
-    case "get_main_info":
+    case "get_main_info": {
+      const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
+      const playOrigin = magHttpPlaybackOrigin(
+        await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl)
+      );
       return stalkerJsResponse({
         mac: extra.mac ?? "",
         phone: "",
@@ -393,10 +397,11 @@ export async function handleStalkerAction(
         storage_name: "",
         hd: 1,
         main_notify: 1,
-        playserver: baseUrl.replace(/^https?:\/\//, ""),
+        playserver: playOrigin.replace(/^https?:\/\//, ""),
         playback_limit: line.maxConnections,
         screensaver: "",
       });
+    }
 
     case "get_categories":
       return stalkerJsResponse(await stalkerCategories(line, portalType));
@@ -423,8 +428,12 @@ export async function handleStalkerAction(
         if (!streamHasArchive(stream)) {
           return stalkerJsResponse({ error: "Archive not available for this channel" });
         }
+        const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
+        const origin = magHttpPlaybackOrigin(
+          await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl)
+        );
         const url = panelTimeshiftUrl(
-          magHttpPlaybackOrigin(baseUrl),
+          origin,
           line.username,
           line.password,
           stream.id,
