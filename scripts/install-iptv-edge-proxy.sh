@@ -44,12 +44,14 @@ if [ ! -f "$CERT" ] || [ ! -f "$KEY" ]; then
   exit 1
 fi
 
-# Public remote edges also own :80, so standard-port IPTV clients can play
-# directly without relaying their media through the panel.
-DIRECT_PUBLIC_EDGE="${IPTV_EDGE_DIRECT_PUBLIC:-0}"
 # Extra HTTP IPTV ports from env (same defaults as stream-edge).
 HTTP_PORTS="$(env_val STREAM_HTTP_EXTRA_PORTS)"
 [ -z "$HTTP_PORTS" ] && HTTP_PORTS="$(env_val PANEL_HTTP_EXTRA_PORTS)"
+# Public remote edges also own :80, so standard-port IPTV clients can play
+# directly without relaying their media through the panel. Read the persisted
+# edge setting too: this installer intentionally does not source .env globally.
+DIRECT_PUBLIC_EDGE="${IPTV_EDGE_DIRECT_PUBLIC:-$(env_val IPTV_EDGE_DIRECT_PUBLIC)}"
+[ -z "$DIRECT_PUBLIC_EDGE" ] && DIRECT_PUBLIC_EDGE="0"
 [ -z "$HTTP_PORTS" ] && {
   if [ "$DIRECT_PUBLIC_EDGE" = "1" ]; then
     HTTP_PORTS="80,8080,25461"
