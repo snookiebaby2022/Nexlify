@@ -5,19 +5,16 @@ import { serverBaseUrl } from "@/lib/xtream";
 import {
   handleStalkerPortalRequest,
   isStalkerPortalRequest,
-  isPortalDocumentNavigation,
 } from "@/lib/stalker-portal-handle";
 
 async function handle(req: NextRequest) {
+  // Document GET /c/ is always the HTML portal. StbEmu/MAG send Cookie: mac=… on
+  // that first navigation; that must not be treated as handshake JSON.
   if (req.method === "GET" && !isStalkerPortalRequest(req)) {
     if (req.nextUrl.searchParams.get("help") === "1") {
       return magPortalHelpPage(req);
     }
     return magPortalPage();
-  }
-
-  if (req.method === "GET" && isPortalDocumentNavigation(req)) {
-    return NextResponse.redirect(new URL("/c/", req.url), 302);
   }
 
   return handleStalkerPortalRequest(req);

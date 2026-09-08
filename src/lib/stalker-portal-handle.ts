@@ -45,7 +45,8 @@ export function isStalkerPortalRequest(req: NextRequest): boolean {
   if (type === "stb" || type === "itv" || type === "vod" || type === "series") return true;
   if (params.get("action")) return true;
   if (params.get("JsHttpRequest")) return true;
-  if (resolveMacFromRequest(req.headers, params)) return true;
+  // Cookie MAC / STB UA must not count: StbEmu loads GET /c/ with those on the
+  // document request. Treating that as the Stalker API returns JSON and a black screen.
   return req.method === "POST";
 }
 
