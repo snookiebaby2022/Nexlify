@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Point NEXLIFY_MEDIA_ORIGIN at the direct 10G edge IP so playlist live URLs
- * do not hairpin through Cloudflare orange-cloud DNS (bladesmedia*.darkcdn.win).
+ * do not hairpin through the panel relay.
  */
 const fs = require("fs");
 const path = require("path");
@@ -9,7 +9,7 @@ const { PrismaClient } = require("@prisma/client");
 require("./load-env.cjs").loadEnv();
 
 const ROOT = path.resolve(__dirname, "..");
-const DIRECT = process.env.NEXLIFY_MEDIA_ORIGIN_FIX || "http://209.237.141.15:8080";
+const DIRECT = process.env.NEXLIFY_MEDIA_ORIGIN_FIX || "http://209.237.141.15";
 
 function patchEnvFile(file) {
   if (!fs.existsSync(file)) return false;

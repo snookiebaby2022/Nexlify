@@ -11,7 +11,7 @@ PANEL_DIR="${PANEL_DIR:-/opt/nexlify-panel}"
 [ -f "$PANEL_DIR/package.json" ] || PANEL_DIR="/home/nexlify-panel"
 cd "$PANEL_DIR"
 
-# Never bind/kill :8080 or start local edge on the customer panel (502 live loop).
+# Never start a local edge on the customer panel (502 live loop).
 # shellcheck disable=SC1091
 if [ -f "$PANEL_DIR/scripts/panel-no-local-iptv-edge.sh" ]; then
   . "$PANEL_DIR/scripts/panel-no-local-iptv-edge.sh"
@@ -44,10 +44,19 @@ if [ ! -f "$CERT" ] || [ ! -f "$KEY" ]; then
   exit 1
 fi
 
+# Public remote edges also own :80, so standard-port IPTV clients can play
+# directly without relaying their media through the panel.
+DIRECT_PUBLIC_EDGE="${IPTV_EDGE_DIRECT_PUBLIC:-0}"
 # Extra HTTP IPTV ports from env (same defaults as stream-edge).
 HTTP_PORTS="$(env_val STREAM_HTTP_EXTRA_PORTS)"
 [ -z "$HTTP_PORTS" ] && HTTP_PORTS="$(env_val PANEL_HTTP_EXTRA_PORTS)"
-[ -z "$HTTP_PORTS" ] && HTTP_PORTS="8080,25461"
+[ -z "$HTTP_PORTS" ] && {
+  if [ "$DIRECT_PUBLIC_EDGE" = "1" ]; then
+    HTTP_PORTS="80,8080,25461"
+  else
+    HTTP_PORTS="8080,25461"
+  fi
+}
 
 nginx_owns_public_web() {
   [ -d /var/www/nexlify ] \
@@ -59,10 +68,12 @@ nginx_owns_public_web() {
     || [ -d /etc/letsencrypt/live/snookiebaby.xyz ]
 }
 
-# Never bind IPTV-edge on :80. Next is on 13000; nginx must keep :80 for /admin and /login.
-HTTP_PORTS="$(echo "$HTTP_PORTS" | tr ',' '\n' | grep -v '^80$' | grep -v '^$' | paste -sd, -)"
+# The panel keeps :80; only an explicitly direct remote edge may own it.
+if [ "$DIRECT_PUBLIC_EDGE" != "1" ]; then
+  HTTP_PORTS="$(echo "$HTTP_PORTS" | tr ',' '\n' | grep -v '^80$' | grep -v '^$' | paste -sd, -)"
+fi
 [ -z "$HTTP_PORTS" ] && HTTP_PORTS="8080,25461"
-if [ "$PANEL_LISTEN" != "80" ]; then
+if [ "$DIRECT_PUBLIC_EDGE" != "1" ] && [ "$PANEL_LISTEN" != "80" ]; then
   echo "[iptv-edge] Panel UI stays on nginx :80 (backend 127.0.0.1:${PANEL_LISTEN}); edge will not bind :80"
 fi
 
@@ -131,7 +142,7 @@ sleep 1
 # Only free ports we will bind. Never kill :80 (panel UI / MovieFlix).
 for p in $(echo "$HTTP_PORTS" | tr ',' ' '); do
   [ -z "$p" ] && continue
-  [ "$p" = "80" ] && continue
+  [ "$p" = "80" ] && [ "$DIRECT_PUBLIC_EDGE" != "1" ] && continue
   [ "$p" = "8080" ] && continue
   fuser -k "${p}/tcp" 2>/dev/null || true
 done

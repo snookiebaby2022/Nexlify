@@ -33,9 +33,12 @@ set_kv() {
 set_kv NEXLIFY_USE_IPTV_EDGE 1
 set_kv IPTV_EDGE_BACKEND "$PANEL_BACKEND"
 set_kv IPTV_EDGE_REMOTE_NODE 1
-set_kv STREAM_EDGE_PORT 8080
-set_kv STREAM_HTTP_EXTRA_PORTS "8080,25461"
-set_kv IPTV_EDGE_HTTP_PORTS "8080,25461"
+# Remote edges are the public media plane. Bind :80 for standard-port IPTV
+# clients as well as the legacy ports, so playback never hairpins via panel.
+set_kv IPTV_EDGE_DIRECT_PUBLIC "${IPTV_EDGE_DIRECT_PUBLIC:-1}"
+set_kv STREAM_EDGE_PORT 80
+set_kv STREAM_HTTP_EXTRA_PORTS "80,8080,25461"
+set_kv IPTV_EDGE_HTTP_PORTS "80,8080,25461"
 set_kv STREAM_HTTPS_PORT ""
 set_kv IPTV_EDGE_HTTPS_PORTS ""
 set_kv IPTV_EDGE_UPSTREAM_SOCKETS "${IPTV_EDGE_UPSTREAM_SOCKETS:-8192}"
