@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import type { Prisma } from "@prisma/client";
 import { cacheGetOrSet, cacheDelExact, cacheGet, cacheSet } from "./cache";
 import { clearConnectionQuality, recordConnectionMediaBytes } from "./connection-quality-live";
 import {
@@ -855,6 +856,8 @@ const connectionInclude = {
   },
 } as const;
 
+type ListedLiveConnection = Prisma.LiveConnectionGetPayload<{ include: typeof connectionInclude }>;
+
 function lineOwnerWhere(ownerId?: string | string[] | null) {
   if (ownerId == null) return {};
   const ids = Array.isArray(ownerId) ? ownerId : [ownerId];
@@ -875,7 +878,7 @@ async function loadLiveConnectionRows(ownerId?: string | string[]) {
   ]);
   const redis = redisSessions.filter((s) => !isTestConnectionIp(s.ip));
 
-  const byId = new Map<string, Awaited<ReturnType<typeof prisma.liveConnection.findMany>>[number]>();
+  const byId = new Map<string, ListedLiveConnection>();
 
   if (utcIds.length) {
     const fresh = await prisma.liveConnection.findMany({
