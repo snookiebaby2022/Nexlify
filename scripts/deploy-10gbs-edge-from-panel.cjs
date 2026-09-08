@@ -89,6 +89,13 @@ async function main() {
 
   await withSshClient({ host, port, username: user, password }, async (client) => {
     await sshExec(client, `mkdir -p ${REMOTE_DIR}/scripts ${REMOTE_DIR}/.next 2>/dev/null; true`);
+    // The remote edge script is immutable in production to prevent accidental
+    // live-path edits. Allow this controlled deployment to replace it, then
+    // install-iptv-edge-proxy.sh restores immutability after starting PM2.
+    await sshExec(
+      client,
+      `chattr -i ${REMOTE_DIR}/scripts/iptv-edge-proxy.mjs 2>/dev/null || true`
+    );
 
     const upload = await sshExec(client, `cd ${REMOTE_DIR} && tar xzf -`, {
       stdin: bundle,
@@ -122,6 +129,7 @@ async function main() {
         "if [ ! -d node_modules ]; then npm ci --omit=dev 2>/dev/null || npm install --omit=dev 2>/dev/null || true; fi",
         `PANEL_BACKEND='${PANEL_BACKEND}' INTERNAL_API_SECRET='${secret.replace(/'/g, "'\\''")}' AGENT_TOKEN='${server.agentToken}' PANEL_URL='${panelUrl}' bash scripts/install-remote-edge-node.sh`,
         "sleep 3",
+        "chattr +i scripts/iptv-edge-proxy.mjs 2>/dev/null || true",
         "curl -s -m 15 -A 'VLC/3.0.20' -o /tmp/up.bin -w 'direct_upstream=%{http_code} bytes=%{size_download}\\n' 'https://junki3monk3y.com/Blade2nd/PaaJhvNbqX/5' || true",
         "head -c 4 /tmp/up.bin | xxd | head -1 || true",
         "pm2 list 2>/dev/null | head -10 || true",
