@@ -30,6 +30,12 @@ describe("isTinyLiveRangeProbe", () => {
     assert.equal(userAgentUsesStandardIptvPorts("Lavf/58.29.100"), true);
     assert.equal(userAgentUsesStandardIptvPorts("okhttp/4.12.0"), true);
     assert.equal(userAgentUsesStandardIptvPorts("IPTV Smarters Pro"), true);
+    assert.equal(
+      userAgentUsesStandardIptvPorts(
+        "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 MAG200 stbapp ver: 2 Safari/533.3"
+      ),
+      true
+    );
     assert.equal(userAgentUsesStandardIptvPorts("Mozilla/5.0 Chrome/120"), false);
   });
 });

@@ -67,11 +67,14 @@ function mergeIncomingJob(
   next: PanelUpdateJob | null,
   updateRunning: boolean
 ): PanelUpdateJob | null {
-  if (next?.status === "idle" && !next.startedAt) {
-    return keepRecentRunningJob(prev);
-  }
-  if (next?.status === "done") return next;
   if (next?.status === "running") return next;
+  if (next?.status === "done") return next;
+  if (prev?.status === "done") return prev;
+  if (next?.status === "failed" && !updateRunning) return next;
+  if (next?.status === "idle" && !next.startedAt) {
+    if (updateRunning) return keepRecentRunningJob(prev);
+    return null;
+  }
   if (updateRunning) {
     if (next && next.status === "failed") {
       return {
@@ -84,7 +87,10 @@ function mergeIncomingJob(
     }
     return next ?? keepRecentRunningJob(prev) ?? prev;
   }
-  if (!next) return keepRecentRunningJob(prev);
+  if (!next) {
+    if (prev?.status === "done" || prev?.status === "failed") return prev;
+    return null;
+  }
   return next;
 }
 
@@ -105,8 +111,8 @@ export function PanelUpdateJobProvider({ children }: { children: React.ReactNode
     setJob((prev) => {
       const merged = mergeIncomingJob(prev, next, runningFlag);
       if (merged?.status === "running") writeStoredJob(merged);
-      else if (merged?.status === "done" || merged?.status === "failed") writeStoredJob(null);
-      setUpdateRunning(Boolean(runningFlag || merged?.status === "running"));
+      else writeStoredJob(null);
+      setUpdateRunning(merged?.status === "running");
       return merged;
     });
   }, []);
@@ -126,18 +132,28 @@ export function PanelUpdateJobProvider({ children }: { children: React.ReactNode
       .then((d: { job?: PanelUpdateJob | null; updateRunning?: boolean } | null) => {
         if (!d) {
           setJob((prev) => {
+            if (prev?.status === "done" || prev?.status === "failed") {
+              setUpdateRunning(false);
+              writeStoredJob(null);
+              return prev;
+            }
             const kept = keepRecentRunningJob(prev) ?? readStoredJob();
-            setUpdateRunning(kept != null);
+            setUpdateRunning(kept?.status === "running");
             return kept;
           });
           return;
         }
-        applyJob(d.job ?? null, Boolean(d.updateRunning || d.job?.status === "running"));
+        applyJob(d.job ?? null, Boolean(d.updateRunning && d.job?.status === "running"));
       })
       .catch(() => {
         setJob((prev) => {
+          if (prev?.status === "done" || prev?.status === "failed") {
+            setUpdateRunning(false);
+            writeStoredJob(null);
+            return prev;
+          }
           const kept = keepRecentRunningJob(prev) ?? readStoredJob();
-          setUpdateRunning(kept != null);
+          setUpdateRunning(kept?.status === "running");
           return kept;
         });
       })

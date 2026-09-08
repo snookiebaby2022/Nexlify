@@ -45,6 +45,41 @@ restore_next_backup() {
   return 1
 }
 
+# Close the Updates UI before PM2 kills the update worker (otherwise the bar
+# stays at 88% "apply update" after the new build is already live).
+close_update_job_success() {
+  local ver="${1:-}"
+  printf '%s\n' "$ver" > "$ROOT/.update-applied-version" || true
+  node -e '
+    const fs = require("fs");
+    const p = process.argv[1];
+    const ver = process.argv[2] || "";
+    let j;
+    try { j = JSON.parse(fs.readFileSync(p, "utf8")); } catch { process.exit(0); }
+    if (!j || typeof j !== "object") process.exit(0);
+    j.status = "done";
+    j.progress = 100;
+    j.currentStep = null;
+    j.stepDetail = null;
+    j.finishedAt = new Date().toISOString();
+    if (ver) j.toVersion = ver;
+    j.message = ver
+      ? ("Updated to v" + ver + ". Panel is restarting on the new build.")
+      : "Update applied. Panel is restarting on the new build.";
+    if (Array.isArray(j.steps)) {
+      j.steps = j.steps.map((s) => {
+        if (!s) return s;
+        if (s.status === "running" || s.status === "pending" || s.name === "apply update") {
+          return Object.assign({}, s, { ok: true, status: "done" });
+        }
+        return s;
+      });
+    }
+    fs.writeFileSync(p, JSON.stringify(j));
+  ' "$ROOT/.update-progress.json" "$ver" 2>/dev/null || true
+  rm -f "$ROOT/.update-in-progress" "$ROOT/.update-progress.pid" || true
+}
+
 after_panel_healthy() {
   if [ -x "$ROOT/scripts/verify-live-no-redirect.sh" ]; then
     bash "$ROOT/scripts/verify-live-no-redirect.sh" 8080 || {
@@ -220,6 +255,7 @@ do_extract() {
 
 do_apply() {
   backup_next_if_valid
+  local archive_version=""
 
   echo "Swapping .next directories (panel stays registered — no pm2 stop/delete) ..."
   if [ -d "$STAGING_DIR/_nexlify_overlay/scripts" ]; then
@@ -275,6 +311,7 @@ do_apply() {
   fi
 
   echo "Reloading panel on the new build ..."
+  close_update_job_success "${archive_version:-}"
   if [ -x "$ROOT/scripts/panel-restart-safe.sh" ]; then
     NEXLIFY_FORCE_RESTART=1 bash "$ROOT/scripts/panel-restart-safe.sh" --nexlify-only || true
   else

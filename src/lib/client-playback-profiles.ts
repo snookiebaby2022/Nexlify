@@ -101,7 +101,15 @@ export function detectClientProfile(userAgent?: string | null): ClientProfileId 
   if (ua.includes("lavf/") || ua.includes("vlc") || ua.includes("libvlc") || ua.includes("exoplayer")) {
     return ua.includes("exoplayer") ? "vlc" : "nexus";
   }
-  if (ua.includes("mag") || ua.includes("stalker") || ua.includes("infomir")) return "mag";
+  if (
+    ua.includes("mag") ||
+    ua.includes("stalker") ||
+    ua.includes("infomir") ||
+    ua.includes("stbapp") ||
+    ua.includes("stbemu")
+  ) {
+    return "mag";
+  }
   return "auto";
 }
 

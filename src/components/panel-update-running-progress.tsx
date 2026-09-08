@@ -15,6 +15,16 @@ export function PanelUpdateRunningProgress({
   const stepHint = job.currentStep ? STEP_DURATION_HINTS[job.currentStep] : null;
   const doneSteps = job.steps.filter((s) => s.status === "done");
   const progress = Math.min(100, job.progress);
+  const applying =
+    job.currentStep === "apply update" ||
+    job.currentStep === "pm2 restart nexlify" ||
+    job.currentStep === "pm2 restart all";
+  const compiling = job.currentStep === "npm run build" || job.currentStep === "prepare build";
+  const waitHint = applying
+    ? "The new build is on disk. The panel is restarting now (~15–90s). This is the last step — not a compile freeze."
+    : compiling
+      ? "Compile can take several minutes with little bar movement — that is webpack, not a freeze. Typical total: 5–15 minutes."
+      : "The live panel stays online until the final swap (~15–60s). Typical total: 5–15 minutes.";
 
   if (variant === "card") {
     return (
@@ -61,8 +71,7 @@ export function PanelUpdateRunningProgress({
           </ul>
         )}
         <p className="text-xs" style={{ color: "var(--muted)" }}>
-          The compile step can sit for several minutes while webpack runs — that is normal, not stuck.
-          The live panel stays online until the final swap (~15–60s). Typical total: 5–15 minutes.
+          {waitHint}
         </p>
       </div>
     );
@@ -96,11 +105,24 @@ export function PanelUpdateRunningProgress({
         </ul>
       )}
       <p className="panel-update-progress-hint">
-        Compile often takes <strong>5–15 minutes</strong> with little visible movement around 55–70% —
-        that is normal (webpack), not a freeze. If the panel already restarted on the new version, the
-        bar clears automatically. The live panel stays up until the final swap/PM2 restart (~15–60s brief
-        outage). Only use Clear stuck update if there is no change for more than 20 minutes or the panel
-        returns 502.
+        {applying ? (
+          <>
+            Apply/restart usually takes <strong>15–90 seconds</strong>. The overlay should close on its
+            own when the new panel process comes up. Only use Clear stuck update if there is no change
+            for more than 20 minutes or the panel returns 502.
+          </>
+        ) : compiling ? (
+          <>
+            Compile often takes <strong>5–15 minutes</strong> with little visible movement around 55–70% —
+            that is normal (webpack), not a freeze. Only use Clear stuck update if there is no change
+            for more than 20 minutes or the panel returns 502.
+          </>
+        ) : (
+          <>
+            The live panel stays up until the final swap/PM2 restart (~15–60s). Only use Clear stuck
+            update if there is no change for more than 20 minutes or the panel returns 502.
+          </>
+        )}
       </p>
     </>
   );

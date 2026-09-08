@@ -72,10 +72,12 @@ update_in_progress() {
           j.finishedAt=new Date().toISOString();
           j.currentStep=null;
           if (nearEnd) {
-            // Build already swapped; worker died during PM2 restart — this is success, not failure.
             j.status="done";
             j.progress=100;
-            j.message="Update completed. Panel restarted on the new build (watchdog recovered after PM2 swap — that is normal).";
+            j.message="Update completed. Panel restarted on the new build (watchdog recovered after PM2 swap).";
+            if (Array.isArray(j.steps)) {
+              j.steps=j.steps.map(s => !s ? s : (s.status==="running"||s.status==="pending"||s.name==="apply update") ? Object.assign({},s,{ok:true,status:"done"}) : s);
+            }
           } else {
             j.status="failed";
             j.message="Update worker died — cleared by watchdog. Panel will be restarted. Retry from Settings → Updates if needed.";

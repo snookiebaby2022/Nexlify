@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import {
+  computeClientUpdateRunning,
   installedVersionImpliesUpdateSuccess,
   looksLikeSuccessfulUpdateDespiteWorkerExit,
+  promoteJobToDone,
   type PanelUpdateJob,
 } from "@/lib/panel-update-job";
 
@@ -39,9 +41,36 @@ assert.equal(
   true
 );
 assert.equal(
+  looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 88, currentStep: "apply update" })),
+  true
+);
+assert.equal(
   looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 88, currentStep: "npm run build" })),
   false
 );
+
+assert.equal(
+  computeClientUpdateRunning(
+    { ...base({ status: "done", progress: 100, currentStep: null }), status: "done" },
+    true
+  ),
+  false
+);
+
+{
+  const promoted = promoteJobToDone(
+    base({
+      progress: 88,
+      currentStep: "apply update",
+      steps: [{ name: "apply update", ok: false, status: "running" }],
+    }),
+    "ok"
+  );
+  assert.equal(promoted.status, "done");
+  assert.equal(promoted.progress, 100);
+  assert.equal(promoted.steps[0]?.status, "done");
+  assert.equal(promoted.steps[0]?.ok, true);
+}
 assert.equal(
   looksLikeSuccessfulUpdateDespiteWorkerExit(base({ progress: 90, currentStep: "prepare standalone" })),
   true

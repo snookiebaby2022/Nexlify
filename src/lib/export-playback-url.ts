@@ -19,9 +19,27 @@ function trimBase(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
 }
 
-function livePlaybackBase(baseUrl: string): string {
-  const configured = String(process.env.NEXLIFY_MEDIA_ORIGIN ?? "").trim();
-  return trimBase(configured || baseUrl);
+function livePlaybackBase(baseUrl: string, ignoreMediaOrigin = false): string {
+  if (!ignoreMediaOrigin) {
+    const configured = String(process.env.NEXLIFY_MEDIA_ORIGIN ?? "").trim();
+    if (configured) return trimBase(configured);
+  }
+  return trimBase(baseUrl);
+}
+
+/** MAG/Ministra cannot play modern TLS or random :8080 media IPs — use panel :80. */
+export function magHttpPlaybackOrigin(baseUrl: string): string {
+  try {
+    const u = new URL(baseUrl.includes("://") ? baseUrl : `http://${baseUrl}`);
+    u.protocol = "http:";
+    if (u.port === "443" || u.port === "80") u.port = "";
+    return u.origin;
+  } catch {
+    return String(baseUrl || "")
+      .replace(/^https:/i, "http:")
+      .replace(/:443(?=\/|$)/, "")
+      .replace(/\/+$/, "");
+  }
 }
 
 /**
@@ -37,13 +55,14 @@ export function exportPlaybackUrl(
   full?: StreamWithProvider | StreamForLine,
   seed?: string,
   output: "hls" | "ts" | "auto" = "auto",
-  directPlay: boolean = true
+  directPlay: boolean = true,
+  ignoreMediaOrigin = false
 ): string {
   const resolved = (full ?? stream) as StreamWithProvider;
   const base = trimBase(baseUrl);
 
   if (stream.type === StreamType.LIVE) {
-    const liveBase = livePlaybackBase(baseUrl);
+    const liveBase = livePlaybackBase(baseUrl, ignoreMediaOrigin);
     if (output === "hls" && full && isHlsUpstream(resolved, seed)) {
       return `${liveBase}/live/${line.username}/${line.password}/${stream.id}.m3u8`;
     }

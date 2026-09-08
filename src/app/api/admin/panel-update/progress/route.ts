@@ -3,7 +3,11 @@ import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { jwtSecretBytes } from "@/lib/jwt-secret";
 import { resolvePanelRepoPathSync } from "@/lib/panel-repo-path";
-import { isJobRunning, isPanelUpdateWorkAlive, readUpdateJob } from "@/lib/panel-update-job";
+import {
+  computeClientUpdateRunning,
+  isPanelUpdateWorkAlive,
+  reconcileStaleUpdateJob,
+} from "@/lib/panel-update-job";
 import { readInstalledVersion } from "@/lib/panel-version";
 
 /** JWT-only poll so the progress bar survives Prisma / DB outages during an update. */
@@ -28,9 +32,9 @@ export async function GET() {
   }
 
   const repoPath = resolvePanelRepoPathSync(process.env.PANEL_REPO_PATH);
-  const job = await readUpdateJob(repoPath);
+  const job = await reconcileStaleUpdateJob(repoPath);
   const { version: installedVersion } = await readInstalledVersion(repoPath);
-  const updateRunning = isJobRunning(job) || (await isPanelUpdateWorkAlive(repoPath));
+  const updateRunning = computeClientUpdateRunning(job, await isPanelUpdateWorkAlive(repoPath));
 
   return NextResponse.json(
     {

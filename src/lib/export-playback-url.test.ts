@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { exportPlaybackUrl } from "./export-playback-url";
+import { exportPlaybackUrl, magHttpPlaybackOrigin } from "./export-playback-url";
 
 describe("exportPlaybackUrl", () => {
   const baseUrl = "http://45.88.138.18";
@@ -141,6 +141,34 @@ describe("exportPlaybackUrl", () => {
       "ts"
     );
     assert.equal(url, "http://45.88.138.18/live/demo/pass/live123.ts");
+  });
+
+  it("MAG live URLs stay on the panel HTTP origin, not the media IP", () => {
+    const previous = process.env.NEXLIFY_MEDIA_ORIGIN;
+    process.env.NEXLIFY_MEDIA_ORIGIN = "http://209.237.141.15:8080";
+    try {
+      const origin = magHttpPlaybackOrigin("https://darkcdn.store");
+      assert.equal(origin, "http://darkcdn.store");
+      const url = exportPlaybackUrl(
+        origin,
+        line,
+        {
+          id: "live123",
+          type: "LIVE",
+          streamUrl: "http://upstream/live.ts",
+          containerExtension: null,
+        },
+        undefined,
+        undefined,
+        "ts",
+        false,
+        true
+      );
+      assert.equal(url, "http://darkcdn.store/live/demo/pass/live123.ts");
+    } finally {
+      if (previous == null) delete process.env.NEXLIFY_MEDIA_ORIGIN;
+      else process.env.NEXLIFY_MEDIA_ORIGIN = previous;
+    }
   });
 
   it("routes series through the panel series path when direct play is off", () => {

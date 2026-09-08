@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizeMac } from "@/lib/mag";
 import { normalizeEnigmaMac } from "@/lib/enigma";
 import { getLineByCredentials, lineAuthInclude, type LineWithBouquets } from "@/lib/lines";
-import { handleStalkerAction, resolveMacFromRequest, stalkerJsResponse } from "@/lib/stalker";
+import { handleStalkerAction, resolveMacFromRequest, stalkerCreateLinkStreamId, stalkerJsResponse } from "@/lib/stalker";
 import { logStbEvent } from "@/lib/stb-events";
 import { serverBaseUrl } from "@/lib/xtream";
 import { getClientIp } from "@/lib/client-ip";
@@ -67,7 +67,9 @@ export function isStbClient(req: NextRequest): boolean {
 /** Browser navigated to JSON API URL in a WebView tab — never redirect real Stalker API calls. */
 export function isPortalDocumentNavigation(req: NextRequest): boolean {
   if (req.method !== "GET") return false;
-  if (req.nextUrl.searchParams.get("JsHttpRequest")) return false;
+  const params = req.nextUrl.searchParams;
+  if (params.get("JsHttpRequest")) return false;
+  if (params.get("type") || params.get("action")) return false;
   if (req.headers.get("x-requested-with") === "XMLHttpRequest") return false;
   const dest = req.headers.get("sec-fetch-dest");
   return dest === "document" || dest === "iframe";
@@ -130,7 +132,7 @@ export async function handleStalkerPortalRequest(req: NextRequest): Promise<Next
     const cmdRaw = params.get("cmd") ?? "";
     const createLinkStreamId =
       action === "create_link"
-        ? cmdRaw.replace(/^ffmpeg\s+/i, "").replace(/^series:/i, "").trim()
+        ? stalkerCreateLinkStreamId(cmdRaw)
         : "";
     const deny = await assertPlaybackAllowed(asPlaybackGuardLine(line), clientIp, userAgent, {
       listingOnly,
@@ -180,5 +182,13 @@ export async function handleStalkerPortalRequest(req: NextRequest): Promise<Next
     });
   }
 
-  return NextResponse.json(body);
+  const jsHttp = params.get("JsHttpRequest");
+  return new NextResponse(JSON.stringify(body), {
+    headers: {
+      "Content-Type": jsHttp
+        ? "text/javascript; charset=utf-8"
+        : "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
 }

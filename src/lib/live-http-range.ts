@@ -37,7 +37,12 @@ export function userAgentUsesStandardIptvPorts(userAgent?: string | null): boole
     s.includes("perfect player") ||
     s.includes("lavf/") ||
     s.includes("libvlc") ||
-    s.includes("vlc/")
+    s.includes("vlc/") ||
+    s.includes("mag") ||
+    s.includes("infomir") ||
+    s.includes("stalker") ||
+    s.includes("stbapp") ||
+    s.includes("stbemu")
   );
 }
 

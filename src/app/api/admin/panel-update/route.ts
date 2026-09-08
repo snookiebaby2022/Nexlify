@@ -12,7 +12,7 @@ import { PANEL_RELEASES_FEED } from "@/lib/panel-releases-data";
 import { getPanelVersionInfoWithRelease, readInstalledVersion } from "@/lib/panel-version";
 import {
   clearUpdateJob,
-  isJobRunning,
+  computeClientUpdateRunning,
   isPanelUpdateWorkAlive,
   readUpdateJob,
   reconcileStaleUpdateJob,
@@ -40,8 +40,10 @@ export async function GET(req: NextRequest) {
     const repoPath = getResolvedRepoPath(server);
 
     const job = await reconcileStaleUpdateJob(repoPath);
-    const updateRunning =
-      isJobRunning(job) || (await isPanelUpdateWorkAlive(repoPath));
+    const updateRunning = computeClientUpdateRunning(
+      job,
+      await isPanelUpdateWorkAlive(repoPath)
+    );
 
     if (light) {
       const { version: installedVersion } = await readInstalledVersion(repoPath);

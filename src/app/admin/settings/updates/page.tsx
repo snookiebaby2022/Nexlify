@@ -393,17 +393,12 @@ export default function PanelUpdatesPage() {
     }
   }
 
-  if (loading && !liveUpdateRunning && liveJob?.status !== "running") {
+  if (loading && liveJob?.status !== "running") {
     return <p className="text-sm" style={{ color: "var(--muted)" }}>Loading updates…</p>;
   }
 
-  if ((loadError || !data) && (liveUpdateRunning || liveJob?.status === "running")) {
-    const reconnectJob =
-      liveJob?.status === "running"
-        ? liveJob
-        : liveJob
-          ? { ...liveJob, status: "running" as const, finishedAt: null }
-          : null;
+  if ((loadError || !data) && liveJob?.status === "running") {
+    const reconnectJob = liveJob;
     return (
       <div className="space-y-4 max-w-2xl">
         <h1 className="text-2xl font-semibold" style={{ color: "#00c0ef" }}>
@@ -427,7 +422,7 @@ export default function PanelUpdatesPage() {
     );
   }
 
-  if ((loadError || !data) && !liveUpdateRunning && liveJob?.status !== "running") {
+  if ((loadError || !data) && liveJob?.status !== "running") {
     return (
       <div className="space-y-4 max-w-2xl">
         <h1 className="text-2xl font-semibold" style={{ color: "#00c0ef" }}>
@@ -479,13 +474,8 @@ export default function PanelUpdatesPage() {
   const releases = data.releasesFeed?.releases ?? [];
   const showBanner =
     data.version.updateAvailable && isVersionNewer(latest, installed);
-  const jobRunning = liveUpdateRunning || liveJob?.status === "running";
-  const progressJob =
-    liveJob?.status === "running"
-      ? liveJob
-      : jobRunning && liveJob
-        ? { ...liveJob, status: "running" as const, finishedAt: null }
-        : null;
+  const jobRunning = liveJob?.status === "running";
+  const progressJob = jobRunning ? liveJob : null;
   const failedJob = liveJob?.status === "failed" ? liveJob : null;
 
   return (

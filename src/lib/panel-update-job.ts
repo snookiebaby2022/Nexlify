@@ -246,6 +246,37 @@ export function installedVersionImpliesUpdateSuccess(
  * The new build is usually already on disk and the panel comes back via
  * panel-restart-safe / watchdog — UI used to show "Last update failed" anyway.
  */
+function isMidCompileUpdateStep(step: string): boolean {
+  return (
+    step === "npm run build" ||
+    step === "prepare build" ||
+    step === "git pull" ||
+    step === "git fetch origin main" ||
+    step === "npm install" ||
+    step === "download update" ||
+    step === "extract update" ||
+    step === "sync panel files"
+  );
+}
+
+function markRunningStepsDone(job: PanelUpdateJob): PanelUpdateJobStep[] {
+  return (job.steps ?? []).map((s) => {
+    if (s.status === "running" || s.status === "pending" || (s.name === "apply update" && !s.ok)) {
+      return { ...s, ok: true, status: "done" as const };
+    }
+    return s;
+  });
+}
+
+/** Progress polls must not keep a finished job in the Updating overlay. */
+export function computeClientUpdateRunning(
+  job: PanelUpdateJob | null | undefined,
+  workAlive: boolean
+): boolean {
+  if (job?.status === "done" || job?.status === "failed") return false;
+  return isJobRunning(job) || workAlive;
+}
+
 export function looksLikeSuccessfulUpdateDespiteWorkerExit(job: PanelUpdateJob): boolean {
   const step = (job.currentStep ?? "").trim();
   const progress = Number(job.progress) || 0;
@@ -257,18 +288,7 @@ export function looksLikeSuccessfulUpdateDespiteWorkerExit(job: PanelUpdateJob):
   if (buildFailed) return false;
   // Mid-compile is not success. A failed Next build used to be promoted to "done"
   // and then the restart deleted nexlify, leaving nginx on 502.
-  if (
-    step === "npm run build" ||
-    step === "prepare build" ||
-    step === "git pull" ||
-    step === "git fetch origin main" ||
-    step === "npm install" ||
-    step === "download update" ||
-    step === "extract update" ||
-    step === "sync panel files"
-  ) {
-    return false;
-  }
+  if (isMidCompileUpdateStep(step)) return false;
   const restartDone = job.steps?.some(
     (s) =>
       (s.name === "pm2 restart nexlify" || s.name === "pm2 restart all") &&
@@ -282,15 +302,16 @@ export function looksLikeSuccessfulUpdateDespiteWorkerExit(job: PanelUpdateJob):
   return false;
 }
 
-function promoteJobToDone(job: PanelUpdateJob, message: string): PanelUpdateJob {
+export function promoteJobToDone(job: PanelUpdateJob, message: string): PanelUpdateJob {
   return {
     ...job,
     status: "done",
     progress: 100,
     currentStep: null,
     stepDetail: null,
-    finishedAt: new Date().toISOString(),
+    finishedAt: job.finishedAt ?? new Date().toISOString(),
     message,
+    steps: markRunningStepsDone(job),
   };
 }
 
@@ -298,16 +319,20 @@ async function promoteIfInstalledVersionSucceeded(
   repoPath: string,
   job: PanelUpdateJob
 ): Promise<PanelUpdateJob | null> {
-  if (await isPanelUpdateWorkAlive(repoPath)) return null;
-  if (findUpdateWorkerPid(repoPath) != null) return null;
+  const step = (job.currentStep ?? "").trim();
+  const compiling = isMidCompileUpdateStep(step) && isPanelUpdateChildWorkAlive(repoPath);
+  if (compiling) return null;
 
   const installed = await readInstalledPackageVersion(repoPath);
   const versionBumped = installedVersionImpliesUpdateSuccess(job, installed);
   const buildNow = await readNextBuildId(repoPath);
   const buildChanged = Boolean(job.fromBuildId && buildNow && job.fromBuildId !== buildNow);
   const late = looksLikeSuccessfulUpdateDespiteWorkerExit(job);
+  const workerStillCompiling =
+    !versionBumped && (findUpdateWorkerPid(repoPath) != null || (await isPanelUpdateWorkAlive(repoPath)));
+  if (workerStillCompiling) return null;
 
-  if (!((versionBumped && (late || buildChanged)) || (buildChanged && late))) {
+  if (!((versionBumped && (late || buildChanged || !isMidCompileUpdateStep(step))) || (buildChanged && late))) {
     return null;
   }
 

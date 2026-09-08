@@ -11,7 +11,7 @@ import { getBinPaths } from "./bin-paths";
 import { prisma } from "./prisma";
 import { expandCategoryFilter } from "./category-tree";
 import { isXtreamAllCategoryParam } from "@/lib/xtream-category-canonical";
-import { exportPlaybackUrl } from "./export-playback-url";
+import { exportPlaybackUrl, magHttpPlaybackOrigin } from "./export-playback-url";
 import { parseBitrates } from "./stream-variants";
 import {
   handleStalkerExtendedAction,
@@ -53,6 +53,16 @@ async function stalkerCmdPrefix(): Promise<string> {
 
 function stalkerCmd(streamId: string, prefix: string): string {
   return `${prefix}${streamId}`;
+}
+
+/** MAG may send `ffmpeg <id>` or a previous create_link URL back to create_link. */
+export function stalkerCreateLinkStreamId(cmd: string): string {
+  const raw = cmd.replace(/^(ffmpeg|auto|ffrt)\s+/i, "").replace(/^series:/i, "").trim();
+  const pathMatch = raw.match(
+    /\/(?:live|movie|series|timeshift)\/[^/]+\/[^/]+\/(?:\d+\/[^/]+\/)?([^/?#]+)/i
+  );
+  const id = pathMatch?.[1] ?? raw;
+  return id.replace(/\.(ts|m3u8|mp4|mkv|avi)$/i, "").trim();
 }
 
 function parsePage(extra: Record<string, string>): number {
@@ -413,34 +423,39 @@ export async function handleStalkerAction(
           return stalkerJsResponse({ error: "Archive not available for this channel" });
         }
         const url = panelTimeshiftUrl(
-          baseUrl,
+          magHttpPlaybackOrigin(baseUrl),
           line.username,
           line.password,
           stream.id,
           archive.startUnix,
           archive.durationSec
         );
-        return stalkerJsResponse({ cmd: url, id: stream.id });
+        const prefix = await stalkerCmdPrefix();
+        return stalkerJsResponse({ cmd: `${prefix}${url}`, id: stream.id });
       }
-      const streamId = cmd.replace(/^ffmpeg\s+/i, "").replace(/^series:/i, "").trim();
+      const streamId = stalkerCreateLinkStreamId(cmd);
       const stream = await findStreamForLine(line, streamId);
       if (!stream) {
         return stalkerJsResponse({ error: "Stream not found" });
       }
+      const origin = magHttpPlaybackOrigin(baseUrl);
       const url = exportPlaybackUrl(
-        baseUrl,
+        origin,
         { username: line.username, password: line.password },
         stream,
         stream,
         undefined,
-        "ts"
+        "ts",
+        false,
+        true
       );
-      return stalkerJsResponse({ cmd: url, id: stream.id });
+      const prefix = await stalkerCmdPrefix();
+      return stalkerJsResponse({ cmd: `${prefix}${url}`, id: stream.id });
     }
 
     case "stop_link": {
       const cmd = extra.cmd ?? extra.id ?? extra.stream_id ?? "";
-      const streamId = cmd.replace(/^ffmpeg\s+/i, "").replace(/^series:/i, "").trim();
+      const streamId = stalkerCreateLinkStreamId(cmd);
       if (!streamId) {
         return stalkerJsResponse({ error: "Missing stream" });
       }

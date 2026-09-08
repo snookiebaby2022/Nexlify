@@ -13,7 +13,7 @@ export const STEP_DURATION_HINTS: Record<string, string> = {
   "git pull": "~30s (fails after ~90s if hung)",
   "download update": "~15s",
   "extract update": "~10s",
-  "apply update": "~30s",
+  "apply update": "~30–90s (swap build + restart)",
 };
 
 export function formatUpdateElapsed(startedAt: string | null): string {

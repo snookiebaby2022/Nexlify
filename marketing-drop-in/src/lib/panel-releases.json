@@ -1,7 +1,28 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.83",
+  "latestVersion": "2.0.84",
   "releases": [
+    {
+      "version": "2.0.84",
+      "date": "2026-09-08",
+      "channel": "stable",
+      "summary": "MAG black-screen playback fix and Updates UI that closes after a successful swap.",
+      "changelog": [
+        "MAG create_link returns ffmpeg HTTP MPEG-TS on the panel hostname (not the media IP or HTTPS)",
+        "MAG VOD/series play through the panel proxy instead of raw provider URLs",
+        "MAG User-Agents use port 80 HTTP; Stalker handshake is no longer redirected to the HTML portal",
+        "HTML MAG player strips ffmpeg for stb.player.play and still sends ffmpeg <url> to MAG254 stb.Play",
+        "Admin Updates marks the job done before PM2 restart so the bar does not stick at 88 percent"
+      ],
+      "fixes": [
+        "MAG/Ministra boxes showing a black screen after selecting a channel",
+        "Updates overlay staying on apply update after the new build was already live"
+      ],
+      "notes": [
+        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.84.tar.gz"
+    },
     {
       "version": "2.0.83",
       "date": "2026-09-08",

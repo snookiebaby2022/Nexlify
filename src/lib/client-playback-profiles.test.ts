@@ -27,6 +27,12 @@ describe("client playback profiles", () => {
     assert.equal(detectClientProfile("okhttp/4.12.0"), "smarters");
     assert.equal(
       detectClientProfile(
+        "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 MAG200 stbapp ver: 2 Safari/533.3"
+      ),
+      "mag"
+    );
+    assert.equal(
+      detectClientProfile(
         "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 Chrome/87.0.4280.88 Safari/537.36 WebAppManager"
       ),
       "auto"

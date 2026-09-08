@@ -842,11 +842,14 @@ body.mag-playing #playback-ui{pointer-events:auto}
     restoreBrowseAfterPlayback(snapshot);
   }
 
-  function playUrl(url, title, snapshot) {
+  function playUrl(rawCmd, title, snapshot) {
+    if (!rawCmd) { showError("No playback URL"); return; }
+    var url = playableUrl(rawCmd);
     if (!url) { showError("No playback URL"); return; }
     playbackTitle = title || (snapshot && snapshot.itemName) || "";
     bindPlayerCallbacks();
     var solution = playerSolution(url);
+    var mag254Cmd = /^https?:\/\//i.test(url) ? ("ffmpeg " + url) : rawCmd;
     try {
       if (!playing) enterPlayback(title, snapshot);
       else updatePlaybackBar(playbackTitle, playbackCategory);
@@ -859,7 +862,7 @@ body.mag-playing #playback-ui{pointer-events:auto}
           return;
         }
         if (stb.Play) {
-          stb.Play(url);
+          stb.Play(mag254Cmd);
           setTimeout(keepRemoteInPortal, 50);
           setTimeout(keepRemoteInPortal, 400);
           return;
@@ -880,6 +883,10 @@ body.mag-playing #playback-ui{pointer-events:auto}
     showError("Native player not available");
   }
 
+  function playableUrl(cmd) {
+    return String(cmd || "").replace(/^(ffmpeg|auto|ffrt)\s+/i, "").trim();
+  }
+
   function playCmd(cmd) {
     if (!cmd) return;
     var seq = ++playSeq;
@@ -894,9 +901,10 @@ body.mag-playing #playback-ui{pointer-events:auto}
     api("create_link", (module && module.apiType) || "stb", { cmd: cmd }).then(function (r) {
       if (seq !== playSeq) return;
       loading = false;
-      if (r.js && r.js.cmd) {
+      var raw = r.js && r.js.cmd;
+      if (raw) {
         activeStreamId = streamId;
-        playUrl(r.js.cmd, title, snapshot);
+        playUrl(raw, title, snapshot);
       } else showError((r.js && r.js.error) || "Playback failed");
     }).catch(function () {
       if (seq !== playSeq) return;
