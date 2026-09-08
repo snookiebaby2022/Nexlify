@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useDeferredValue, useEffect, useRef, useState } from "react";
 import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import {
@@ -240,22 +240,34 @@ function persistCollapsed(collapsed: boolean) {
   }
 }
 
+function prefetchHref(router: { prefetch: (href: string) => void }, href: string) {
+  const path = href.split("?")[0];
+  if (!path.startsWith("/")) return;
+  void router.prefetch(path);
+}
+
 function SidebarGroup({
   group,
   pathname,
   search,
   open,
   collapsed,
+  pendingHref,
   onToggle,
   onNavigate,
+  onPrefetch,
+  onPending,
 }: {
   group: SidebarNavGroup;
   pathname: string;
   search: string;
   open: boolean;
   collapsed: boolean;
+  pendingHref: string | null;
   onToggle: () => void;
   onNavigate: () => void;
+  onPrefetch: () => void;
+  onPending: (href: string) => void;
 }) {
   const active = groupActive(pathname, group, search);
   const sections = groupItemsBySection(group.items);
@@ -270,13 +282,20 @@ function SidebarGroup({
           <div className="panel-nav-section-items">
             {section.items.map((item) => {
               const itemActive = pathActive(pathname, item.href, search);
+              const pending = pendingHref === item.href && !itemActive;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={onNavigate}
+                  prefetch
+                  onClick={() => {
+                    onPending(item.href);
+                    onNavigate();
+                  }}
                   title={item.label}
-                  className={`panel-nav-sub-link ${itemActive ? "panel-nav-sub-link--active" : ""}`}
+                  className={`panel-nav-sub-link ${itemActive ? "panel-nav-sub-link--active" : ""} ${
+                    pending ? "panel-nav-sub-link--pending" : ""
+                  }`}
                 >
                   {item.icon && <span className="panel-nav-sub-icon shrink-0">{item.icon}</span>}
                   <span className="panel-nav-sub-text truncate">{item.label}</span>
@@ -294,6 +313,8 @@ function SidebarGroup({
       <button
         type="button"
         onClick={onToggle}
+        onMouseEnter={onPrefetch}
+        onFocus={onPrefetch}
         title={group.label}
         aria-expanded={open}
         className={`panel-nav-group-btn ${active ? "panel-nav-group-btn--active" : ""} ${
@@ -343,6 +364,7 @@ export function PanelSidebar({
   forceCollapsed?: boolean;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const search = searchParams?.toString() ? `?${searchParams.toString()}` : "";
   const navRef = useRef<HTMLElement | null>(null);
@@ -351,12 +373,25 @@ export function PanelSidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
   const [navFilter, setNavFilter] = useState("");
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const deferredFilter = useDeferredValue(navFilter);
   const isFiltering = deferredFilter.trim().length > 0;
   const visibleEntries = filterNavEntries(entries, deferredFilter);
   /** Mobile drawer: never use the desktop collapsed (72px) rail. */
   const isMobileDrawer = Boolean(onNavigate);
   const effectiveCollapsed = isMobileDrawer ? false : (forceCollapsed ?? collapsed);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname, search]);
+
+  useEffect(() => {
+    for (const entry of entries) {
+      if (entry.kind === "link" && !entry.link.openInNewTab) {
+        prefetchHref(router, entry.link.href);
+      }
+    }
+  }, [entries, router]);
 
   useEffect(() => {
     if (!isMobileDrawer) {
@@ -414,9 +449,12 @@ export function PanelSidebar({
       if (next.has(id)) {
         next.delete(id);
       } else {
-        // Collapse other groups when opening a new one
         next.clear();
         next.add(id);
+        const opened = entries.find((e) => e.kind === "group" && e.group.id === id);
+        if (opened && opened.kind === "group") {
+          for (const item of opened.group.items) prefetchHref(router, item.href);
+        }
       }
       persistOpenIds(next);
       return next;
@@ -466,15 +504,22 @@ export function PanelSidebar({
         {visibleEntries.map((entry) => {
           if (entry.kind === "link") {
             const active = pathActive(pathname, entry.link.href, search);
+            const pending = pendingHref === entry.link.href && !active;
             return (
               <Link
                 key={entry.link.href}
                 href={entry.link.href}
+                prefetch={!entry.link.openInNewTab}
                 target={entry.link.openInNewTab ? "_blank" : undefined}
                 rel={entry.link.openInNewTab ? "noopener noreferrer" : undefined}
-                onClick={onChildNavigate}
+                onClick={() => {
+                  if (!entry.link.openInNewTab) setPendingHref(entry.link.href);
+                  onChildNavigate();
+                }}
                 title={entry.link.label}
-                className={`panel-nav-link ${active ? "panel-nav-link--active" : ""}`}
+                className={`panel-nav-link ${active ? "panel-nav-link--active" : ""} ${
+                  pending ? "panel-nav-link--pending" : ""
+                }`}
               >
                 <span className="panel-nav-link-icon shrink-0">{entry.link.icon}</span>
                 {!effectiveCollapsed && <span className="panel-nav-link-label truncate">{entry.link.label}</span>}
@@ -488,10 +533,15 @@ export function PanelSidebar({
               group={entry.group}
               pathname={pathname}
               search={search}
+              pendingHref={pendingHref}
               open={displayOpenIds.has(entry.group.id)}
               collapsed={effectiveCollapsed}
               onToggle={() => toggle(entry.group.id)}
               onNavigate={onChildNavigate}
+              onPrefetch={() => {
+                for (const item of entry.group.items) prefetchHref(router, item.href);
+              }}
+              onPending={setPendingHref}
             />
           );
         })}

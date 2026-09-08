@@ -6,7 +6,8 @@ import {
   resolvePlaybackOutputLabel,
   setConnectionPlaybackOutput,
 } from "./connection-playback-output";
-import { clearLiveSession, isLiveSessionActive, setViewerActiveStream, touchLiveSession } from "./live-session";
+import { clearLiveSession, isLiveSessionActive, listRedisLiveSessions, setViewerActiveStream, touchLiveSession } from "./live-session";
+import { listUtcFreshLiveConnectionIds } from "./live-connection-fresh";
 import { connectionViewerSessionKey, normalizeConnectionIp } from "./connection-address";
 import { LIVE_GEN_KEY, notifyLiveConnectionsChanged } from "./connection-live-bus";
 
@@ -121,10 +122,18 @@ async function markSessionKicked(lineId: string, ip?: string | null) {
 }
 
 export async function countActiveConnectionsForLine(lineId: string) {
-  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
-  return prisma.liveConnection.count({
-    where: { lineId, lastSeenAt: { gte: staleBefore } },
-  });
+  const [utcIds, redis] = await Promise.all([
+    listUtcFreshLiveConnectionIds(PLAYBACK_STALE_MS, 4000),
+    listRedisLiveSessions(),
+  ]);
+  const redisForLine = redis.filter((s) => s.lineId === lineId && !isTestConnectionIp(s.ip));
+  if (!utcIds.length && !redisForLine.length) return 0;
+  const dbCount = utcIds.length
+    ? await prisma.liveConnection.count({
+        where: { lineId, id: { in: utcIds } },
+      })
+    : 0;
+  return Math.max(dbCount, redisForLine.length);
 }
 
 /** Count distinct viewer sessions (line + stream + IP), not duplicate DB rows. */
@@ -188,13 +197,25 @@ export async function listOnlineLiveStreamIds(ownerId?: string): Promise<string[
 export async function countLineSessions(lineId: string) {
   const { cacheGetOrSet } = await import("./cache");
   return cacheGetOrSet(`conn:line_sessions:${lineId}`, 5, async () => {
-    const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
+    const [utcIds, redis] = await Promise.all([
+      listUtcFreshLiveConnectionIds(PLAYBACK_STALE_MS, 4000),
+      listRedisLiveSessions(),
+    ]);
+    const redisKeys = new Set(
+      redis
+        .filter((s) => s.lineId === lineId && !isTestConnectionIp(s.ip) && !isAnonymousConnectionIp(s.ip))
+        .map((s) => `${s.ip ?? ""}|${s.streamId}`)
+    );
+    if (!utcIds.length) return redisKeys.size;
     const result = await prisma.liveConnection.groupBy({
       by: ["ip", "streamId"],
-      where: { lineId, lastSeenAt: { gte: staleBefore }, NOT: anonymousIpNotFilter() },
+      where: { lineId, id: { in: utcIds }, NOT: anonymousIpNotFilter() },
       _count: true,
     });
-    return result.length;
+    for (const row of result) {
+      redisKeys.add(`${row.ip ?? ""}|${row.streamId ?? ""}`);
+    }
+    return redisKeys.size;
   });
 }
 
@@ -387,16 +408,27 @@ async function pruneLineStaleConnections(lineId: string, thresholdMs: number = P
 
 /** Distinct active streams for max-connection enforcement (never counts anonymous/loopback rows). */
 async function countCapacitySessions(lineId: string) {
-  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
-  const result = await prisma.liveConnection.groupBy({
-    by: ["streamId"],
-    where: {
-      lineId,
-      lastSeenAt: { gte: staleBefore },
-      NOT: anonymousIpNotFilter(),
-    },
-  });
-  return result.length;
+  const [utcIds, redis] = await Promise.all([
+    listUtcFreshLiveConnectionIds(PLAYBACK_STALE_MS, 4000),
+    listRedisLiveSessions(),
+  ]);
+  const streams = new Set(
+    redis.filter((s) => s.lineId === lineId && !isAnonymousConnectionIp(s.ip) && !isTestConnectionIp(s.ip)).map((s) => s.streamId)
+  );
+  if (utcIds.length) {
+    const result = await prisma.liveConnection.groupBy({
+      by: ["streamId"],
+      where: {
+        lineId,
+        id: { in: utcIds },
+        NOT: anonymousIpNotFilter(),
+      },
+    });
+    for (const row of result) {
+      if (row.streamId) streams.add(row.streamId);
+    }
+  }
+  return streams.size;
 }
 
 export async function lineHasConnectionCapacity(
@@ -440,7 +472,14 @@ async function lineHasConnectionCapacityDb(
   opts?: { streamId?: string; clientIp?: string }
 ) {
   const clientIp = normalizeConnectionIp(opts?.clientIp);
-  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
+
+  // Redis heartbeats (10gbs edge) are fresher than LiveConnection.lastSeenAt.
+  if (opts?.streamId && clientIp && (await isLiveSessionActive(lineId, opts.streamId, clientIp))) {
+    return true;
+  }
+
+  const utcIds = await listUtcFreshLiveConnectionIds(PLAYBACK_STALE_MS, 4000);
+  const freshIdFilter = utcIds.length ? { id: { in: utcIds } } : { id: { in: ["__none__"] } };
 
   // Same stream refresh / HLS segment from an existing viewer — always allow.
   if (opts?.streamId && clientIp) {
@@ -449,7 +488,7 @@ async function lineHasConnectionCapacityDb(
         lineId,
         streamId: opts.streamId,
         ...connectionIpPrismaFilter(clientIp),
-        lastSeenAt: { gte: staleBefore },
+        ...freshIdFilter,
       },
       select: { id: true },
     });
@@ -463,7 +502,7 @@ async function lineHasConnectionCapacityDb(
       where: {
         lineId,
         ...connectionIpPrismaFilter(clientIp),
-        lastSeenAt: { gte: staleBefore },
+        ...freshIdFilter,
       },
     });
     if (clientSessions.length > 0) {
@@ -829,21 +868,93 @@ function ownerCacheSuffix(ownerId?: string | string[] | null) {
   return ids.join(",");
 }
 
+async function loadLiveConnectionRows(ownerId?: string | string[]) {
+  const [utcIds, redisSessions] = await Promise.all([
+    listUtcFreshLiveConnectionIds(LIVE_LIST_STALE_MS),
+    listRedisLiveSessions(),
+  ]);
+  const redis = redisSessions.filter((s) => !isTestConnectionIp(s.ip));
+
+  const byId = new Map<string, Awaited<ReturnType<typeof prisma.liveConnection.findMany>>[number]>();
+
+  if (utcIds.length) {
+    const fresh = await prisma.liveConnection.findMany({
+      where: { id: { in: utcIds }, ...lineOwnerWhere(ownerId) },
+      include: connectionInclude,
+      take: 5000,
+    });
+    for (const row of fresh) byId.set(row.id, row);
+  }
+
+  if (redis.length) {
+    for (let i = 0; i < redis.length; i += 40) {
+      const slice = redis.slice(i, i + 40);
+      const extra = await prisma.liveConnection.findMany({
+        where: {
+          ...lineOwnerWhere(ownerId),
+          OR: slice.map((s) => ({
+            lineId: s.lineId,
+            streamId: s.streamId,
+            ...(s.ip ? { ip: s.ip } : {}),
+          })),
+        },
+        include: connectionInclude,
+        take: 2000,
+      });
+      for (const row of extra) byId.set(row.id, row);
+    }
+  }
+
+  const haveSession = new Set(
+    [...byId.values()].map((row) => `${row.lineId}|${row.streamId ?? ""}|${normalizeConnectionIp(row.ip) ?? ""}`)
+  );
+  const missing = redis.filter((s) => {
+    const key = `${s.lineId}|${s.streamId}|${normalizeConnectionIp(s.ip) ?? ""}`;
+    return !haveSession.has(key);
+  });
+
+  if (missing.length) {
+    const { pulseLiveConnection } = await import("./connection-pulse");
+    await Promise.all(
+      missing.slice(0, 200).map((s) =>
+        pulseLiveConnection({ lineId: s.lineId, streamId: s.streamId, ip: s.ip }).catch(() => undefined)
+      )
+    );
+    const healed = await prisma.liveConnection.findMany({
+      where: {
+        ...lineOwnerWhere(ownerId),
+        OR: missing.slice(0, 80).map((s) => ({
+          lineId: s.lineId,
+          streamId: s.streamId,
+          ...(s.ip ? { ip: s.ip } : {}),
+        })),
+      },
+      include: connectionInclude,
+      take: 500,
+    });
+    for (const row of healed) byId.set(row.id, row);
+    invalidateConnectionCaches();
+    notifyLiveConnectionsChanged();
+  }
+
+  const live = [...byId.values()].filter((row) => row.streamId && !isTestConnectionIp(row.ip));
+  return pickCanonicalLiveConnectionRows(live).slice(0, 5000);
+}
+
+/** List connections with a recent lastSeenAt. Redis session keys used to be 45s —
+ *  requiring them AND lastSeen made Open Connections drop between HLS segments. */
+export async function listLiveConnections(ownerId?: string | string[], take = 5000) {
+  const cap = Math.min(Math.max(1, take), 5000);
+  const gen = (await cacheGet<number>(LIVE_GEN_KEY)) ?? 0;
+  const cacheKey = `conn:live:${ownerCacheSuffix(ownerId)}:${gen}`;
+  const rows = await cacheGetOrSet(cacheKey, 1, () => loadLiveConnectionRows(ownerId));
+  return rows.slice(0, cap);
+}
+
 export async function listActiveConnections(ownerId?: string | string[]) {
   const gen = (await cacheGet<number>(LIVE_GEN_KEY)) ?? 0;
   const cacheKey = `conn:list:${ownerCacheSuffix(ownerId)}:${gen}`;
-  return cacheGetOrSet(cacheKey, CONNECTIONS_CACHE_TTL, async () => {
-    const staleBefore = new Date(Date.now() - LIVE_STALE_MS);
-    return prisma.liveConnection.findMany({
-      where: {
-        lastSeenAt: { gte: staleBefore },
-        ...lineOwnerWhere(ownerId),
-      },
-      include: connectionInclude,
-      orderBy: { lastSeenAt: "desc" },
-      take: 5000, // Safety limit — dashboard should use countActiveConnections() for totals
-    });
-  });
+  return cacheGetOrSet(cacheKey, CONNECTIONS_CACHE_TTL, () => loadLiveConnectionRows(ownerId));
 }
 
 /** Delete rows with no heartbeat within `thresholdMs` and no active session key. */
@@ -870,29 +981,6 @@ export async function pruneStaleConnections(thresholdMs: number = STALE_MS) {
 
 export async function deleteStaleConnections() {
   return pruneStaleConnections(STALE_MS);
-}
-
-/** List connections with a recent lastSeenAt. Redis session keys used to be 45s —
- *  requiring them AND lastSeen made Open Connections drop between HLS segments. */
-export async function listLiveConnections(ownerId?: string | string[], take = 5000) {
-  const cap = Math.min(Math.max(1, take), 5000);
-  const gen = (await cacheGet<number>(LIVE_GEN_KEY)) ?? 0;
-  const cacheKey = `conn:live:${ownerCacheSuffix(ownerId)}:${gen}`;
-  const rows = await cacheGetOrSet(cacheKey, 1, async () => {
-    const staleBefore = new Date(Date.now() - LIVE_LIST_STALE_MS);
-    const found = await prisma.liveConnection.findMany({
-      where: {
-        ...lineOwnerWhere(ownerId),
-        lastSeenAt: { gte: staleBefore },
-      },
-      include: connectionInclude,
-      orderBy: [{ startedAt: "asc" }, { lastSeenAt: "desc" }],
-      take: 5000,
-    });
-    const live = found.filter((row) => row.streamId && !isTestConnectionIp(row.ip));
-    return pickCanonicalLiveConnectionRows(live).slice(0, 5000);
-  });
-  return rows.slice(0, cap);
 }
 
 export async function deleteActiveConnection(id: string, ownerId?: string) {

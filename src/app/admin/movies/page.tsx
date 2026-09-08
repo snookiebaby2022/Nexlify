@@ -1,5 +1,12 @@
-import { redirect } from "next/navigation";
+import { StreamsList } from "@/components/streams-list";
 
 export default function Page() {
-  redirect("/admin/content/movies");
+  return (
+    <StreamsList
+      type="MOVIE"
+      title="Manage Movies"
+      addHref="/admin/content/movies/add"
+      importHref="/admin/import/movies"
+    />
+  );
 }

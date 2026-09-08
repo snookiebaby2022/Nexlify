@@ -65,22 +65,24 @@ export async function createSession(user: SessionUser, opts?: SessionCookieOptio
 
 export async function destroySession() {
   const jar = await cookies();
+  const token = jar.get(COOKIE)?.value;
+  if (token) sessionByToken.delete(token);
   jar.delete(COOKIE);
 }
 
-const SESSION_USER_TTL_MS = 5_000;
-const sessionUserCache = new Map<string, { at: number; user: SessionUser | null }>();
+const SESSION_USER_TTL_MS = 60_000;
+const sessionByToken = new Map<string, { at: number; user: SessionUser | null }>();
 
 export async function getSession(): Promise<SessionUser | null> {
   const jar = await cookies();
   const token = jar.get(COOKIE)?.value;
   if (!token) return null;
+  const cached = sessionByToken.get(token);
+  if (cached && Date.now() - cached.at < SESSION_USER_TTL_MS) return cached.user;
   try {
     const { payload } = await jwtVerify(token, secret());
     const id = String(payload.id ?? "");
     if (!id) return null;
-    const cached = sessionUserCache.get(id);
-    if (cached && Date.now() - cached.at < SESSION_USER_TTL_MS) return cached.user;
 
     const row = await prisma.panelUser.findUnique({
       where: { id },
@@ -103,8 +105,8 @@ export async function getSession(): Promise<SessionUser | null> {
             permissions: row.permissions ?? [],
           }
         : null;
-    sessionUserCache.set(id, { at: Date.now(), user });
-    if (sessionUserCache.size > 2000) sessionUserCache.clear();
+    sessionByToken.set(token, { at: Date.now(), user });
+    if (sessionByToken.size > 2000) sessionByToken.clear();
     return user;
   } catch {
     return null;

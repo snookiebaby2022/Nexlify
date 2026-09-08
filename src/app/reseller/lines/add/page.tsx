@@ -3,6 +3,7 @@
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { LineAddForm } from "@/components/line-add-form";
+import { PanelRouteFallback } from "@/components/panel-route-fallback";
 
 function ResellerLinesAddContent() {
   const searchParams = useSearchParams();
@@ -19,7 +20,7 @@ function ResellerLinesAddContent() {
 
 export default function ResellerAddLinePage() {
   return (
-    <Suspense fallback={<p className="text-sm p-6">Loading…</p>}>
+    <Suspense fallback={<PanelRouteFallback />}>
       <ResellerLinesAddContent />
     </Suspense>
   );

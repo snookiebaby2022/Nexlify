@@ -756,6 +756,10 @@ button {
     inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
 }
 
+.panel-nav-link--pending:not(.panel-nav-link--active) {
+  background: rgba(34, 211, 238, 0.18) !important;
+}
+
 .panel-nav-group {
   position: relative;
   margin-bottom: 0.125rem;
@@ -851,6 +855,10 @@ button {
   color: #fff !important;
   background: rgba(180, 70, 50, 0.38) !important;
   box-shadow: none !important;
+}
+
+.panel-nav-sub-link--pending:not(.panel-nav-sub-link--active) {
+  background: rgba(34, 211, 238, 0.16) !important;
 }
 
 .panel-sidebar-flyout {

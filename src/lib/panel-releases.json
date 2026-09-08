@@ -1,7 +1,26 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.86",
+  "latestVersion": "2.0.87",
   "releases": [
+    {
+      "version": "2.0.87",
+      "date": "2026-09-08",
+      "channel": "stable",
+      "summary": "Snappy admin navigation and Live Connections that match who is actually watching.",
+      "changelog": [
+        "Sidebar and settings clicks show immediately, prefetch the next page, and keep recently visited admin pages warm",
+        "Manage Lines paints first then loads the list; Manage Movies no longer extra-redirects",
+        "Live Connections / dashboard counts Redis playback sessions and UTC last-seen, then backfills missing DB rows"
+      ],
+      "fixes": [
+        "Admin Dashboard / Add Line / Movies / Settings felt delayed on every click",
+        "Open Connections showed 0 while viewers were still watching via the 10gbs edge"
+      ],
+      "notes": [
+        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.87.tar.gz"
+    },
     {
       "version": "2.0.86",
       "date": "2026-09-08",

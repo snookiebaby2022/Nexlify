@@ -43,6 +43,7 @@ export function PanelMobileBottomNav({
           <Link
             key={item.id}
             href={item.href!}
+            prefetch
             className={`panel-mobile-bottom-nav-item${active ? " panel-mobile-bottom-nav-item--active" : ""}`}
           >
             <Icon size={22} strokeWidth={active ? 2.25 : 1.75} />

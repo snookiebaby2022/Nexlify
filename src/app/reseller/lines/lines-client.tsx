@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ManageLinesTable, type ManageLineRow } from "@/components/manage-lines-table";
+import { DEFAULT_LIST_PAGE_SIZE } from "@/lib/list-page-sizes";
 import type { ManageLinesPageResult } from "@/lib/manage-lines-list";
 
 type LineSortKey = "username" | "expiresAt" | "owner" | "createdAt";
@@ -9,26 +10,26 @@ type StatusFilter = "all" | "ACTIVE" | "DISABLED" | "BANNED";
 type TrialFilter = "all" | "yes" | "no";
 
 export function ResellerLinesClient({
-  initial,
-  initialBouquets,
+  initial = null,
+  initialBouquets = [],
   editId,
 }: {
-  initial: ManageLinesPageResult;
-  initialBouquets: { id: string; name: string }[];
+  initial?: ManageLinesPageResult | null;
+  initialBouquets?: { id: string; name: string }[];
   editId?: string | null;
 }) {
-  const [lines, setLines] = useState<ManageLineRow[]>(initial.lines);
+  const [lines, setLines] = useState<ManageLineRow[]>(initial?.lines ?? []);
   const [bouquets] = useState(initialBouquets);
   const [error, setError] = useState("");
-  const [total, setTotal] = useState(initial.pagination.total);
-  const [page, setPage] = useState(initial.pagination.page);
-  const [pageSize, setPageSize] = useState(initial.pagination.pageSize);
+  const [total, setTotal] = useState(initial?.pagination.total ?? 0);
+  const [page, setPage] = useState(initial?.pagination.page ?? 1);
+  const [pageSize, setPageSize] = useState(initial?.pagination.pageSize ?? DEFAULT_LIST_PAGE_SIZE);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<LineSortKey>("createdAt");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [trialFilter, setTrialFilter] = useState<TrialFilter>("all");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!initial);
   const loadGen = useRef(0);
 
   const load = useCallback(
@@ -68,6 +69,7 @@ export function ResellerLinesClient({
 
   useEffect(() => {
     if (
+      initial &&
       page === initial.pagination.page &&
       pageSize === initial.pagination.pageSize &&
       !search.trim() &&
@@ -88,8 +90,7 @@ export function ResellerLinesClient({
     sortDir,
     statusFilter,
     trialFilter,
-    initial.pagination.page,
-    initial.pagination.pageSize,
+    initial,
   ]);
 
   return (
@@ -113,7 +114,7 @@ export function ResellerLinesClient({
         bouquets={bouquets}
         editLineId={editId}
         onRefresh={() => load({ soft: true })}
-        loading={false}
+        loading={loading}
         serverTotal={total}
         serverPage={page}
         serverPageSize={pageSize}

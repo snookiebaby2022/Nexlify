@@ -80,24 +80,26 @@ async function ensureRedisReady(redis: NonNullable<ReturnType<typeof getRedis>>)
   }
 }
 
-async function scanDeleteOnNode(redis: Redis, match: string): Promise<number> {
+async function scanKeysOnNode(redis: Redis, match: string): Promise<string[]> {
   let cursor = "0";
-  let deleted = 0;
-
+  const out: string[] = [];
   do {
     const [next, keys] = await redis.scan(cursor, "MATCH", match, "COUNT", SCAN_COUNT);
     cursor = next;
-    if (!keys.length) continue;
-
-    deleted += keys.length;
-    const pipeline = redis.pipeline();
-    for (const key of keys) {
-      pipeline.unlink(key);
-    }
-    await pipeline.exec();
+    if (keys.length) out.push(...keys);
   } while (cursor !== "0");
+  return out;
+}
 
-  return deleted;
+async function scanDeleteOnNode(redis: Redis, match: string): Promise<number> {
+  const keys = await scanKeysOnNode(redis, match);
+  if (!keys.length) return 0;
+  const pipeline = redis.pipeline();
+  for (const key of keys) {
+    pipeline.unlink(key);
+  }
+  await pipeline.exec();
+  return keys.length;
 }
 
 async function redisDeleteByPattern(match: string): Promise<number> {
@@ -222,6 +224,50 @@ export async function cacheDelExact(key: string) {
     }
   }
   memory.delete(key);
+}
+
+function stripCachePrefix(key: string): string {
+  return key.startsWith(KEY_PREFIX) ? key.slice(KEY_PREFIX.length) : key;
+}
+
+/** SCAN keys by glob (`live:session:*`). Returns keys without the `nexlify:` prefix. */
+export async function cacheScanKeys(pattern: string, limit = 5000): Promise<string[]> {
+  const cap = Math.min(Math.max(1, limit), 20_000);
+  const redis = getRedis();
+  if (redis) {
+    try {
+      await ensureRedisReady(redis);
+      const match = redisMatchPattern(pattern);
+      let prefixed: string[] = [];
+      if (redis instanceof (await import("ioredis")).Cluster) {
+        const chunks = await Promise.all(
+          redis.nodes("master").map((node) => scanKeysOnNode(node, match))
+        );
+        prefixed = chunks.flat();
+      } else {
+        prefixed = await scanKeysOnNode(redis, match);
+      }
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const key of prefixed) {
+        const bare = stripCachePrefix(key);
+        if (seen.has(bare)) continue;
+        seen.add(bare);
+        out.push(bare);
+        if (out.length >= cap) break;
+      }
+      return out;
+    } catch {
+      /* fallback to memory */
+    }
+  }
+  const out: string[] = [];
+  for (const key of memory.keys()) {
+    if (!memoryKeyMatches(key, pattern)) continue;
+    out.push(key);
+    if (out.length >= cap) break;
+  }
+  return out;
 }
 
 /** Delete keys by prefix/glob (`*` wildcard). Uses SCAN — safe for production Redis. */

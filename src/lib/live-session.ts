@@ -1,4 +1,4 @@
-import { cacheDel, cacheGet, cacheMget, cacheSet } from "./cache";
+import { cacheDel, cacheGet, cacheMget, cacheScanKeys, cacheSet } from "./cache";
 
 /** Active playback session TTL — match LIVE_STALE_MS so zap/prune stay aligned with the UI. */
 export const LIVE_SESSION_TTL_SEC = 180;
@@ -35,6 +35,56 @@ export async function getViewerActiveStream(
   if (!lineId) return null;
   const id = await cacheGet<string>(viewerActiveStreamKey(lineId, ip));
   return id?.trim() || null;
+}
+
+export type RedisLiveSession = {
+  lineId: string;
+  streamId: string;
+  ip: string | null;
+};
+
+/** `live:session:{lineId}:{streamId}:{ip|*}` — IPv6 lives in the remainder after two CUID segments. */
+export function parseLiveSessionCacheKey(key: string): RedisLiveSession | null {
+  const prefix = "live:session:";
+  if (!key.startsWith(prefix)) return null;
+  const rest = key.slice(prefix.length);
+  const i1 = rest.indexOf(":");
+  if (i1 <= 0) return null;
+  const lineId = rest.slice(0, i1);
+  const rest2 = rest.slice(i1 + 1);
+  const i2 = rest2.indexOf(":");
+  if (i2 <= 0) return null;
+  const streamId = rest2.slice(0, i2);
+  const ipRaw = rest2.slice(i2 + 1);
+  const ip = !ipRaw || ipRaw === "*" ? null : ipRaw;
+  if (!lineId || !streamId) return null;
+  return { lineId, streamId, ip };
+}
+
+export function dedupeRedisLiveSessions(sessions: RedisLiveSession[]): RedisLiveSession[] {
+  const specific = new Map<string, RedisLiveSession>();
+  const wild = new Map<string, RedisLiveSession>();
+  for (const s of sessions) {
+    const pair = `${s.lineId}:${s.streamId}`;
+    if (s.ip) specific.set(`${pair}:${s.ip}`, s);
+    else wild.set(pair, s);
+  }
+  const out = [...specific.values()];
+  const specificPairs = new Set([...specific.values()].map((s) => `${s.lineId}:${s.streamId}`));
+  for (const [pair, s] of wild) {
+    if (!specificPairs.has(pair)) out.push(s);
+  }
+  return out;
+}
+
+export async function listRedisLiveSessions(): Promise<RedisLiveSession[]> {
+  const keys = await cacheScanKeys("live:session:*", 8000);
+  const parsed: RedisLiveSession[] = [];
+  for (const key of keys) {
+    const row = parseLiveSessionCacheKey(key);
+    if (row) parsed.push(row);
+  }
+  return dedupeRedisLiveSessions(parsed);
 }
 
 export async function touchLiveSession(

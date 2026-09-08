@@ -92,6 +92,12 @@ const nextConfig: NextConfig = {
     // The license-session middleware clones the request body before it reaches
     // Route Handlers. Default 10MB truncates migration uploads. Cap below 2GB.
     middlewareClientMaxBodySize: "512mb",
+    // Next 15 defaults dynamic RSC cache to 0s, so every sidebar click waits
+    // for a full server round-trip. Keep recently visited admin pages warm.
+    staleTimes: {
+      dynamic: 30,
+      static: 180,
+    },
   },
 };
 
