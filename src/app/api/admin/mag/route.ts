@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizeMac } from "@/lib/mag";
-import { createLineForDevice } from "@/lib/device-line-create";
+import { createLineForDevice, parseDeviceBouquetIds } from "@/lib/device-line-create";
 import { logActivity } from "@/lib/lines";
 import { assertMagDeviceAccess, assertOwnedLine } from "@/lib/device-access";
 import { PanelRole } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { DEVICE_LINE_LIST_INCLUDE } from "@/lib/device-line-summary";
+
 const ROLES = [PanelRole.ADMIN, PanelRole.RESELLER, PanelRole.SUB_RESELLER] as const;
 
 export async function GET() {
@@ -23,7 +25,7 @@ export async function GET() {
   const devices = await prisma.magDevice.findMany({
     where: lineFilter,
     include: {
-      line: { select: { username: true, id: true, status: true, expiresAt: true } },
+      line: { select: DEVICE_LINE_LIST_INCLUDE },
     },
     orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
   });
@@ -56,6 +58,7 @@ export async function POST(req: NextRequest) {
 
   let lineId = String(body.lineId ?? "").trim();
   const packageId = body.packageId ? String(body.packageId) : "";
+  const bouquetIds = parseDeviceBouquetIds(body.bouquetIds);
 
   if (lineId) {
     try {
@@ -74,6 +77,7 @@ export async function POST(req: NextRequest) {
         deviceKind: "mag",
         packageId: packageId || undefined,
         ownerId: body.ownerId ? String(body.ownerId) : undefined,
+        bouquetIds,
       });
       lineId = line.id;
     } catch (e) {

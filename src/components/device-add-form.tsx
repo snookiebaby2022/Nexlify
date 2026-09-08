@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { normalizeMac } from "@/lib/mag";
 import { normalizeEnigmaMac } from "@/lib/enigma";
 import { FormField, formInputClass, formInputStyle, formSelectClass } from "@/components/form-page-shell";
+import { BouquetPickerTable, type BouquetPickerRow } from "@/components/bouquet-picker-table";
+import { bouquetsApiRoot, packagesApiRoot } from "@/lib/panel-api";
 
-type PackageRow = { id: string; name: string; days: number; creditCost: number };
+type PackageRow = { id: string; name: string; days: number; creditCost: number; bouquetIds: string[] };
 
 export function DeviceAddForm({
   deviceKind,
@@ -25,10 +28,15 @@ export function DeviceAddForm({
   title: string;
   settingsHref?: string | null;
 }) {
+  const pathname = usePathname();
+  const panel = pathname.startsWith("/reseller") ? "reseller" : "admin";
   const [mac, setMac] = useState("");
   const [model, setModel] = useState("");
   const [packageId, setPackageId] = useState("");
   const [packages, setPackages] = useState<PackageRow[]>([]);
+  const [bouquets, setBouquets] = useState<BouquetPickerRow[]>([]);
+  const [bouquetIds, setBouquetIds] = useState<string[]>([]);
+  const [bouquetsTouched, setBouquetsTouched] = useState(false);
   const [portalUrl, setPortalUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -47,15 +55,44 @@ export function DeviceAddForm({
       .then((r) => r.json())
       .then((d) => setPortalUrl(d[portalKey] || d.magServerUrl || "—"))
       .catch(() => {});
+    fetch(bouquetsApiRoot(panel))
+      .then((r) => r.json())
+      .then((d) => setBouquets((d.bouquets ?? []) as BouquetPickerRow[]))
+      .catch(() => {});
     if (withPackage) {
-      fetch("/api/admin/packages")
+      fetch(packagesApiRoot(panel))
         .then((r) => r.json())
-        .then((d) => setPackages(d.packages ?? []))
+        .then((d) =>
+          setPackages(
+            ((d.packages ?? []) as PackageRow[]).map((p) => ({
+              ...p,
+              bouquetIds: Array.isArray(p.bouquetIds) ? p.bouquetIds : [],
+            }))
+          )
+        )
         .catch(() => {});
     }
-  }, [withPackage, portalKey]);
+  }, [withPackage, portalKey, panel]);
+
+  useEffect(() => {
+    if (!packageId || bouquetsTouched || !bouquets.length) return;
+    const pkg = packages.find((p) => p.id === packageId);
+    if (!pkg) return;
+    const allowed = new Set(bouquets.map((b) => b.id));
+    const fromPkg = pkg.bouquetIds.filter((id) => allowed.has(id));
+    setBouquetIds(fromPkg.length ? fromPkg : bouquets.map((b) => b.id));
+  }, [packageId, packages, bouquets, bouquetsTouched]);
 
   const formattedMac = normalize(mac.trim());
+
+  function applyPackage(id: string) {
+    setPackageId(id);
+    const pkg = packages.find((p) => p.id === id);
+    if (!pkg) return;
+    const allowed = new Set(bouquets.map((b) => b.id));
+    const fromPkg = pkg.bouquetIds.filter((bouquetId) => allowed.has(bouquetId));
+    setBouquetIds(fromPkg.length ? fromPkg : bouquets.map((b) => b.id));
+  }
 
   async function copyPortal() {
     if (!portalUrl || portalUrl === "—") return;
@@ -76,9 +113,10 @@ export function DeviceAddForm({
       setBusy(false);
       return;
     }
-    const body: Record<string, string> = { mac: formattedMac };
+    const body: Record<string, unknown> = { mac: formattedMac };
     if (withPackage && packageId) body.packageId = packageId;
     if (model.trim()) body.model = model.trim();
+    if (bouquetIds.length > 0 || bouquetsTouched) body.bouquetIds = bouquetIds;
 
     const res = await fetch(apiPath, {
       method: "POST",
@@ -102,13 +140,15 @@ export function DeviceAddForm({
       setMac("");
       setModel("");
       setPackageId("");
+      setBouquetIds([]);
+      setBouquetsTouched(false);
       return;
     }
     window.location.href = backHref;
   }
 
   return (
-    <div className="space-y-6 max-w-xl">
+    <div className="space-y-6 max-w-4xl">
       <div
         className="rounded-lg border p-4 text-sm space-y-3"
         style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}
@@ -119,7 +159,7 @@ export function DeviceAddForm({
         <div className="space-y-2 text-[var(--muted)]">
           <p>
             <strong>1.</strong> Register the MAC below (creates a line automatically
-            {withPackage ? " from the selected package" : ""}).
+            {withPackage ? " from the selected package" : ""}). Pick bouquets the same way as Add Line.
           </p>
           <p>
             <strong>2.</strong> On the box, open <em>Portals</em> and enter the portal URL below (short form <code>/c/</code>).
@@ -198,7 +238,7 @@ export function DeviceAddForm({
               className={formSelectClass}
               style={formInputStyle}
               value={packageId}
-              onChange={(e) => setPackageId(e.target.value)}
+              onChange={(e) => applyPackage(e.target.value)}
               required
             >
               <option value="">Select package…</option>
@@ -243,6 +283,15 @@ export function DeviceAddForm({
             onChange={(e) => setModel(e.target.value)}
           />
         </FormField>
+
+        <BouquetPickerTable
+          bouquets={bouquets}
+          selectedIds={bouquetIds}
+          onChange={(ids) => {
+            setBouquetsTouched(true);
+            setBouquetIds(ids);
+          }}
+        />
 
         {error && (
           <p className="text-sm rounded border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--danger)" }}>

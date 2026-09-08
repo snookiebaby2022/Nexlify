@@ -8,6 +8,11 @@ import type { Prisma } from "@prisma/client";
 
 export type DeviceKind = "mag" | "enigma";
 
+export function parseDeviceBouquetIds(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw.map((x) => String(x).trim()).filter(Boolean);
+}
+
 function macHex(mac: string): string {
   return mac.replace(/[^a-fA-F0-9]/g, "").toLowerCase();
 }
@@ -33,12 +38,14 @@ export async function createLineForDevice(opts: {
   deviceKind: DeviceKind;
   packageId?: string;
   ownerId?: string;
+  bouquetIds?: string[];
 }) {
   const resolved = await resolveLineCreateFromPackage(
     {
       packageId: opts.packageId,
       days: opts.packageId ? undefined : 30,
       maxConnections: 1,
+      bouquetIds: opts.bouquetIds,
     },
     { sellerId: opts.session.role === PanelRole.ADMIN ? null : opts.session.id }
   );

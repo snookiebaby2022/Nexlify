@@ -24,11 +24,11 @@ export function subscriptionPaths(pathname: string): SubscriptionPaths {
       magAdd: "/reseller/mags/add",
       magBulk: "/reseller/mags/bulk",
       magConvert: "/reseller/mags/convert-to-line",
-      magEdit: () => null,
+      magEdit: (id) => `/reseller/mags/${id}/edit`,
       enigmaList: "/reseller/enigmas",
       enigmaAdd: "/reseller/enigmas/add",
       enigmaBulk: null,
-      enigmaEdit: () => null,
+      enigmaEdit: (id) => `/reseller/enigmas/${id}/edit`,
       streamEdit: () => null,
     };
   }

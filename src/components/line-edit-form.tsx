@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { RefreshCw, X } from "lucide-react";
 import { AccessOutputCheckboxes } from "@/components/access-output-checkboxes";
 import {
@@ -49,6 +50,8 @@ type LineDetail = {
   packageId?: string | null;
   package?: { id: string; name: string; days: number; creditCost: number; maxLines: number; isActive: boolean } | null;
   bouquets: { bouquet: { id: string; name: string } }[];
+  magDevices?: { id: string; mac: string; model: string | null; isActive: boolean }[];
+  enigmaDevices?: { id: string; mac: string; model: string | null; isActive: boolean }[];
 };
 
 type PackageRow = {
@@ -502,6 +505,42 @@ export function LineEditForm({
         className="rounded-b-lg border border-t-0 p-5 md:p-6 space-y-5"
         style={{ borderColor: "var(--border)", background: "var(--bg-card)" }}
       >
+        {((line.magDevices?.length ?? 0) > 0 || (line.enigmaDevices?.length ?? 0) > 0) && (
+          <div
+            className="rounded-lg border px-4 py-3 text-sm space-y-1.5"
+            style={{ borderColor: "var(--border)", background: "rgba(0,192,239,0.06)" }}
+          >
+            <p className="font-medium">Devices on this line</p>
+            {(line.magDevices ?? []).map((d) => (
+              <p key={d.id} style={{ color: "var(--muted)" }}>
+                MAG {d.mac}
+                {d.model ? ` · ${d.model}` : ""}
+                {d.isActive ? "" : " · off"}{" "}
+                <Link
+                  href={panel === "reseller" ? `/reseller/mags/${d.id}/edit` : `/admin/mag/${d.id}/edit`}
+                  className="underline"
+                  style={{ color: "var(--accent)" }}
+                >
+                  Edit box
+                </Link>
+              </p>
+            ))}
+            {(line.enigmaDevices ?? []).map((d) => (
+              <p key={d.id} style={{ color: "var(--muted)" }}>
+                Enigma {d.mac}
+                {d.model ? ` · ${d.model}` : ""}
+                {d.isActive ? "" : " · off"}{" "}
+                <Link
+                  href={panel === "reseller" ? `/reseller/enigmas/${d.id}/edit` : `/admin/enigmas/${d.id}/edit`}
+                  className="underline"
+                  style={{ color: "var(--accent)" }}
+                >
+                  Edit box
+                </Link>
+              </p>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           {lineDurationPresetsForPanel(panel, { allowTrials }).map((p) => (
             <button

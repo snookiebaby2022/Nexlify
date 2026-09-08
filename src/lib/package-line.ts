@@ -2,6 +2,22 @@ import { prisma } from "@/lib/prisma";
 import { inferPackageDaysFromName } from "@/lib/package-days";
 import { creditCostForDays, effectiveCreditCost, markedUpCreditCost } from "@/lib/package-credits";
 
+/** Drop bouquet IDs that are no longer in the catalog (deleted bouquets leave stale Package.bouquetIds). */
+export function keepExistingBouquetIds(requested: string[], existingIds: Iterable<string>): string[] {
+  const keep = new Set(existingIds);
+  return [...new Set(requested.map(String).filter(Boolean))].filter((id) => keep.has(id));
+}
+
+export async function filterExistingBouquetIds(ids: string[]): Promise<string[]> {
+  const unique = [...new Set(ids.map(String).filter(Boolean))];
+  if (!unique.length) return [];
+  const rows = await prisma.bouquet.findMany({
+    where: { id: { in: unique } },
+    select: { id: true },
+  });
+  return keepExistingBouquetIds(unique, rows.map((r) => r.id));
+}
+
 export async function resolveLineCreateFromPackage(
   body: {
     packageId?: string;
@@ -25,7 +41,8 @@ export async function resolveLineCreateFromPackage(
     Number.isFinite(Number(body.maxConnections));
   const explicitMax = hasExplicitMax ? Math.max(0, Math.floor(Number(body.maxConnections))) : null;
   let maxConnections = explicitMax ?? 1;
-  let bouquetIds: string[] = body.bouquetIds ?? [];
+  const explicitBouquetIds = Array.isArray(body.bouquetIds) ? [...body.bouquetIds] : null;
+  let bouquetIds: string[] = explicitBouquetIds ?? [];
   // Duration-based default so renew/create without a package still charges correctly.
   let creditCost = creditCostForDays(explicitDays ?? days);
 
@@ -70,6 +87,9 @@ export async function resolveLineCreateFromPackage(
     creditCost = effectiveCreditCost(days, pkg.creditCost, isTrial);
   }
 
+  // Picker / MAG-Enigma create: package fills defaults, then operator-selected IDs win.
+  if (explicitBouquetIds) bouquetIds = [...explicitBouquetIds];
+
   // Renew/create by days alone (no package): never leave paid months at 0 for resellers.
   if (!body.packageId && !body.accessCode && !isTrial && days > 7) {
     creditCost = effectiveCreditCost(days, creditCost, false);
@@ -92,6 +112,14 @@ export async function resolveLineCreateFromPackage(
   }
 
   creditCost = markedUpCreditCost(creditCost, packageProfit, sellerProfit);
+
+  const requestedBouquets = bouquetIds;
+  bouquetIds = await filterExistingBouquetIds(bouquetIds);
+  if (requestedBouquets.length > 0 && bouquetIds.length === 0) {
+    throw new Error(
+      "This package still lists bouquets that were deleted. Open Packages, pick current bouquets, and save — then register the device again."
+    );
+  }
 
   return { days, maxConnections, bouquetIds, creditCost, accessCodeId: body.accessCode, isTrial };
 }

@@ -4,6 +4,7 @@ import { validateLineCredential } from "@/lib/credential-generate";
 import { resolveLineCredentialMinLength } from "@/lib/line-credential-policy";
 import { generatePassword } from "@/lib/xui-api-utils";
 import { createWebplayerLinkToken } from "@/lib/webplayer-link";
+import { filterExistingBouquetIds } from "@/lib/package-line";
 
 export type ShopLineResult = {
   id: string;
@@ -61,6 +62,13 @@ export async function createLineFromShopPackage(opts: {
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + Math.max(1, pkg.days));
 
+  const bouquetIds = await filterExistingBouquetIds(pkg.bouquetIds);
+  if (pkg.bouquetIds.length > 0 && bouquetIds.length === 0) {
+    throw new Error(
+      "This package still lists bouquets that were deleted. Open Packages, pick current bouquets, and save."
+    );
+  }
+
   const line = await prisma.line.create({
     data: {
       username,
@@ -70,7 +78,7 @@ export async function createLineFromShopPackage(opts: {
       isTrial,
       packageId: pkg.id,
       bouquets: {
-        create: pkg.bouquetIds.map((bouquetId) => ({ bouquetId })),
+        create: bouquetIds.map((bouquetId) => ({ bouquetId })),
       },
     },
   });

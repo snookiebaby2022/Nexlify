@@ -41,6 +41,8 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       owner: { select: { id: true, username: true } },
       forcedServer: { select: { id: true, name: true } },
       package: { select: { id: true, name: true, days: true, creditCost: true, maxLines: true, isActive: true } },
+      magDevices: { select: { id: true, mac: true, model: true, isActive: true } },
+      enigmaDevices: { select: { id: true, mac: true, model: true, isActive: true } },
     },
   });
   if (!line) return NextResponse.json({ error: "Not found" }, { status: 404 });

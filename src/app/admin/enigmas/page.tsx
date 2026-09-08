@@ -8,13 +8,14 @@ import { DevicePortalBanner } from "@/components/device-portal-banner";
 import { DeviceRenewModal } from "@/components/device-renew-modal";
 import { formatDateTime } from "@/lib/format";
 import { subscriptionPaths } from "@/lib/panel-paths";
+import { bouquetNames, lineDeviceSummary, type DeviceLineSummary } from "@/lib/device-line-summary";
 
 type DeviceRow = {
   id: string;
   mac: string;
   model: string | null;
   isActive: boolean;
-  line: { id: string; username: string; status: string; expiresAt: string };
+  line: DeviceLineSummary;
 };
 
 export default function AdminEnigmasPage() {
@@ -56,7 +57,7 @@ export default function AdminEnigmasPage() {
         <div>
           <h1 className="text-2xl font-semibold">Enigma2 devices</h1>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            Registered by MAC address. Renew extends the linked line subscription.
+            Registered by MAC address. Edit the box to change bouquets and the linked line. Renew extends the subscription.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -79,10 +80,12 @@ export default function AdminEnigmasPage() {
       <DevicePortalBanner deviceKind="enigma" settingsHref={paths.isReseller ? null : "/admin/settings/server"} />
 
       <DataTable
-        headers={["MAC", "Line", "Expires", "Status", ""]}
+        headers={["MAC", "Line", "Bouquets", "Devices", "Expires", "Status", ""]}
         rows={devices.map((d) => [
           d.mac,
           d.line.username,
+          bouquetNames(d.line),
+          lineDeviceSummary(d.line),
           formatDateTime(d.line.expiresAt),
           [d.isActive ? "Device on" : "Device off", d.line.status].join(" · "),
           <span key={d.id} className="flex flex-wrap gap-2">
