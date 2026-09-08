@@ -166,6 +166,19 @@ export function PanelInstaller() {
         </div>
       </div>
 
+      <div className="rounded-2xl border border-red-500/25 bg-red-500/5 p-6 space-y-3">
+        <h3 className="text-lg font-semibold text-red-100">Uninstall panel</h3>
+        <p className="text-sm text-red-200/80 leading-relaxed">
+          Removes the IPTV panel from the server (PM2 apps, files, Nexlify database, nginx vhost). Does not
+          remove Ubuntu packages (Node, Postgres, nginx).
+        </p>
+        <CopyBlock
+          text={uninstallPanelCommand}
+          label="bash · --uninstall"
+          display={`$ ${uninstallPanelCommand}`}
+        />
+      </div>
+
       <div className="space-y-4">
         <button
           type="button"
@@ -196,26 +209,6 @@ export function PanelInstaller() {
                     label="bash · --fresh"
                     display={`$ ${cleanReinstallWithFreshFlag}`}
                   />
-                </div>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-red-500/25 bg-red-500/5 p-6 space-y-3">
-              <div className="flex items-start gap-3">
-                <RefreshCw className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
-                <div className="space-y-3 w-full">
-                  <h3 className="text-lg font-semibold text-red-100">Uninstall panel</h3>
-                  <p className="text-sm text-red-200/80 leading-relaxed">
-                    Stops PM2 apps and deletes the panel files, Nexlify database, and nginx vhost. Does not
-                    remove Ubuntu packages (Node, Postgres, nginx).
-                  </p>
-                  <CopyBlock
-                    text={uninstallPanelCommand}
-                    label="bash · --uninstall"
-                    display={`$ ${uninstallPanelCommand}`}
-                  />
-                </div>
-              </div>
-            </div>
                 </div>
               </div>
             </div>

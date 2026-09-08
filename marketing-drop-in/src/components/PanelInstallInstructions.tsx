@@ -7,6 +7,7 @@ import {
   cleanReinstallWithFreshFlag,
   credentialsHelp,
   INSTALLER_CACHE_QUERY,
+  uninstallPanelCommand,
 } from "@/lib/panel-install";
 
 function CopyButton({ text, label }: { text: string; label: string }) {
@@ -164,6 +165,16 @@ export function PanelInstallInstructions() {
             <span className="text-slate-500">$</span> {cleanReinstallWithFreshFlag}
           </CodeBlock>
         </Step>
+
+        <Step number={6} title="Uninstall panel">
+          <p>
+            Removes the IPTV panel (PM2 apps, files, Nexlify database, nginx vhost). Does not remove
+            Ubuntu packages (Node, Postgres, nginx).
+          </p>
+          <CodeBlock command={uninstallPanelCommand}>
+            <span className="text-slate-500">$</span> {uninstallPanelCommand}
+          </CodeBlock>
+        </Step>
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-[#12101f] p-6">
@@ -182,6 +193,7 @@ export function PanelInstallInstructions() {
                 ["--ip / --domain", "Override auto-detected server IP or hostname", "No"],
                 ["--license", "Activate during install instead of in the panel UI", "No"],
                 ["--fresh", "Remove old /home/nexlify before install (keeps bin/)", "No"],
+                ["--uninstall", "Remove panel, database, and nginx vhost (not OS packages)", "No"],
                 ["--dir PATH", "Install folder (default /home/nexlify)", "No"],
                 ["--skip-firewall", "Do not open ufw ports", "No"],
                 ["--monolithic", "Panel + stream engine on this host", "No"],
