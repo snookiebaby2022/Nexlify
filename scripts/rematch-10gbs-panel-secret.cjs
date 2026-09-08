@@ -8,6 +8,7 @@
  * Dry check: NEXLIFY_DRY_RUN=1 node scripts/rematch-10gbs-panel-secret.cjs
  */
 const crypto = require("crypto");
+const { execSync } = require("child_process");
 const path = require("path");
 
 process.chdir(path.join(__dirname, ".."));
@@ -24,11 +25,23 @@ function fingerprint(value) {
   return crypto.createHash("sha256").update(String(value || "")).digest("hex").slice(0, 12);
 }
 
+function pm2PanelSecret() {
+  try {
+    const list = JSON.parse(execSync("pm2 jlist", { encoding: "utf8" }));
+    const p = list.find((x) => x.name === "nexlify");
+    const e = p?.pm2_env?.env || {};
+    return String(e.PANEL_INTERNAL_SECRET || e.PANEL_API_SECRET || e.NEXLIFY_PANEL_API_SECRET || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 function panelSecret() {
   return (
     process.env.PANEL_INTERNAL_SECRET ||
     process.env.PANEL_API_SECRET ||
     process.env.NEXLIFY_PANEL_API_SECRET ||
+    pm2PanelSecret() ||
     ""
   );
 }
