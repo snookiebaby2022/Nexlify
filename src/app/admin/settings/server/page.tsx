@@ -130,7 +130,8 @@ export default function ServerSettingsPage() {
               onChange={(e) => setData({ ...data, magServerUrl: e.target.value })}
             />
             <span className="mt-1 block text-xs" style={{ color: "var(--muted)" }}>
-              MAG boxes use MAC address only — operators enter this portal URL on the STB.
+              MAG boxes use MAC only. Use this host with /c/ (example: https://darkcdn.store/c/).
+              The site root https://host is the panel login page and shows a black screen on MAG/StbEmu.
             </span>
           </label>
           <label className="block text-sm">

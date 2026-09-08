@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeMac } from "@/lib/mag";
+import { isStbUserAgent } from "@/lib/stb-client";
 import { normalizeEnigmaMac } from "@/lib/enigma";
 import { getLineByCredentials, lineAuthInclude, type LineWithBouquets } from "@/lib/lines";
 import { handleStalkerAction, resolveMacFromRequest, stalkerCreateLinkStreamId, stalkerJsResponse } from "@/lib/stalker";
@@ -52,14 +53,7 @@ export function isStalkerPortalRequest(req: NextRequest): boolean {
 
 /** MAG / StbEmu / Enigma middleware clients (not a desktop browser opening /c/ for docs). */
 export function isStbClient(req: NextRequest): boolean {
-  const ua = (req.headers.get("user-agent") ?? "").toLowerCase();
-  if (
-    /stbemu|stbapp|mag\d{3}|infomir|stalker|dvb|android.?tv|portalclient|tvip/i.test(
-      ua
-    )
-  ) {
-    return true;
-  }
+  if (isStbUserAgent(req.headers.get("user-agent"))) return true;
   if (req.headers.get("x-user-agent")) return true;
   if (resolveMacFromRequest(req.headers, req.nextUrl.searchParams)) return true;
   return false;

@@ -31,6 +31,7 @@ import {
   isDemoMutationAllowed,
   demoModeBlockedResponse,
 } from "@/lib/panel-demo-mode";
+import { isStbPortalDocumentRequest } from "@/lib/stb-client";
 import { middlewareAdminApiRateLimit } from "@/lib/middleware-api-rate-limit";
 import { applySecurityHeaders } from "@/lib/security-headers";
 function isPlaybackPath(pathname: string): boolean {
@@ -178,6 +179,19 @@ export async function middleware(req: NextRequest) {
 
   const host = hostName(req);
   const allowed = resolveAllowedHosts();
+
+  // MAG/StbEmu often set Portal URL to https://host (no /c/). `/` 307s to the
+  // React /login page which the WebView cannot run → black screen.
+  // Rewrite in place — boxes do not follow redirects for the portal document.
+  if (
+    isStbPortalDocumentRequest(req) &&
+    (pathname === "/" || pathname === "/login")
+  ) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/c/";
+    url.search = "";
+    return applyStealthHeaders(NextResponse.rewrite(url));
+  }
   // Loopback probes (audit/smoke/curl on :13000) must see real pages; public scanners still get a stealth 404.
   // Allow /login on known panel hosts (including reseller portals) so DNS smoke tests work.
   if (

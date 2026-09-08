@@ -1,7 +1,24 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.85",
+  "latestVersion": "2.0.86",
   "releases": [
+    {
+      "version": "2.0.86",
+      "date": "2026-09-08",
+      "channel": "stable",
+      "summary": "MAG/StbEmu portal URL https://host (no /c/) now loads the IPTV portal instead of a black login page.",
+      "changelog": [
+        "STB user-agents hitting / or /login are rewritten to /c/ with no redirect (MAG does not follow 307)",
+        "Nginx internal rewrite for MAG/STBEmu/Infomir user-agents on the panel HTTP vhost"
+      ],
+      "fixes": [
+        "Black screen when StbEmu/MAG portal is set to https://darkcdn.store instead of https://darkcdn.store/c/"
+      ],
+      "notes": [
+        "Preferred portal URL is still https://your-panel/c/. The site root is accepted for MAG boxes only."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.86.tar.gz"
+    },
     {
       "version": "2.0.85",
       "date": "2026-09-08",
