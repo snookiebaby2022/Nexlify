@@ -1,7 +1,7 @@
 import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSettingGroup } from "@/lib/panel-settings";
-import { liveOriginOrSpliceFailWhere } from "@/lib/stream-health-signals";
+import { liveOriginOrSpliceFailWhere } from "@/lib/stream-health-fail";
 import { isTestConnectionIp, liveViewerStats, listLiveConnections } from "@/lib/connections";
 import {
   buildServerRoleContext,

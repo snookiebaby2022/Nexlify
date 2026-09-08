@@ -184,6 +184,19 @@ const LIVE_FAN_PREFIX_BYTES = Math.max(
   188 * 24,
   Math.min(Number(process.env.IPTV_EDGE_FAN_PREFIX_BYTES || 1_048_576), 8_388_608)
 );
+/**
+ * Silent underrun: provider TCP stays open after dumping a prefix, then 0 growth.
+ * Reconnect (and mark primary bad so failover rotates) when no upstream bytes for N ms.
+ * Tunable — keep above normal GOP/keyframe gaps; 12s is safe for continuous MPEG-TS live.
+ */
+const LIVE_FAN_STALL_MS = Math.max(
+  3_000,
+  Math.min(Number(process.env.IPTV_EDGE_FAN_STALL_MS || 12_000), 120_000)
+);
+const LIVE_FAN_STALL_SWEEP_MS = Math.max(
+  1_000,
+  Math.min(Number(process.env.IPTV_EDGE_FAN_STALL_SWEEP_MS || 3_000), LIVE_FAN_STALL_MS)
+);
 /** Soft lag: skip-to-live instead of killing the socket (XUI-style).
  *  Hard drop only after extreme lag — disconnect+reconnect feels like buffering. */
 const MAX_CLIENT_LAG_BYTES = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_BYTES || 24_000_000);
@@ -207,6 +220,7 @@ const edgeMetrics = {
   fanCapacityRejections: 0,
   diskPackIdleStops: 0,
   hlsSegCoalesced: 0,
+  fanStallClears: 0,
   eventLoopDelayMs: 0,
 };
 /** streamId -> shared MPEG-TS restream */
@@ -1314,6 +1328,47 @@ function sweepIdleLiveFans() {
   }
 }
 
+/**
+ * Prefix-then-stall / silent underrun: origin socket never ends, but bytes stop.
+ * Destroy the hung pull so handleFanUpstreamGone reconnects (failover-aware).
+ */
+function forceFanUpstreamReconnect(fan, reason) {
+  if (!fan || fan.destroyed) return false;
+  if (fan.reconnecting || fan.reconnectTimer) return false;
+  const url = String(fan.primaryUpstream || "").trim();
+  if (url) markUpstreamFailed(fan.streamId, url);
+  edgeMetrics.fanStallClears += 1;
+  const idleMs = Math.max(0, Date.now() - (fan.lastUpstreamByteAt || 0));
+  console.error(
+    `[iptv-edge] fan ${fan.streamId} stall clear (${reason}; idle=${idleMs}ms) → reconnect`
+  );
+  const gen = fan.upstreamGen || 0;
+  try {
+    fan.destroySrc?.();
+  } catch {
+    /* ignore */
+  }
+  // Hung sockets may not emit close/end — force the reconnect path if still armed.
+  if (!fan.destroyed && fan.upstreamGen === gen && !fan.reconnecting && !fan.reconnectTimer) {
+    handleFanUpstreamGone(fan);
+  }
+  return true;
+}
+
+function sweepStalledLiveFans() {
+  const now = Date.now();
+  for (const fan of uniqueLiveFans()) {
+    if (fan.destroyed || fan.reconnecting || fan.reconnectTimer) continue;
+    if (!fan.upstreamRes && !fan.destroySrc) continue;
+    if (fan.clients.size === 0 && fan.waiters.length === 0) continue;
+    const last = fan.lastUpstreamByteAt || 0;
+    if (!last) continue;
+    const idleMs = now - last;
+    if (idleMs < LIVE_FAN_STALL_MS) continue;
+    forceFanUpstreamReconnect(fan, `no upstream bytes for ${idleMs}ms`);
+  }
+}
+
 function destroyLiveFan(fan) {
   if (!fan || fan.destroyed) return;
   fan.destroyed = true;
@@ -1521,6 +1576,8 @@ function writeFanChunkToSlot(fan, slot, chunk) {
 
 function broadcastFanChunk(fan, chunk) {
   if (!chunk || !chunk.length) return;
+  fan.lastUpstreamByteAt = Date.now();
+  fan.upstreamBytesTotal = (fan.upstreamBytesTotal || 0) + chunk.length;
   appendLiveFanPrefix(fan, chunk);
   // Live TV must stay realtime. Never pause the origin because one client is
   // slow — that starves every viewer on the fan. Slow sockets skip-to-live
@@ -1594,6 +1651,8 @@ function ensureLiveFan(streamId, upstreamUrl) {
     reconnectAttempts: 0,
     reconnectTimer: null,
     reconnecting: false,
+    lastUpstreamByteAt: 0,
+    upstreamBytesTotal: 0,
   };
   liveFans.set(streamId, fan);
   if (ukey) liveFansByUpstream.set(ukey, fan);
@@ -1643,6 +1702,8 @@ function armFanUpstream(fan, upRes) {
   fan.upstreamPaused = false;
   fan.reconnecting = false;
   fan.reconnectAttempts = 0;
+  // Grace from arm time so stall sweep does not fire before the first chunk.
+  fan.lastUpstreamByteAt = Date.now();
   if (fan.reconnectTimer) {
     clearTimeout(fan.reconnectTimer);
     fan.reconnectTimer = null;
@@ -3690,6 +3751,7 @@ async function onRequest(clientReq, clientRes, ctx) {
     for (const fan of uniqueLiveFans()) {
       const n = fan.clients.size;
       clients += n;
+      const lastByteAt = fan.lastUpstreamByteAt || 0;
       channels.push({
         streamId: fan.streamId,
         streamIds: fan.streamIds instanceof Set ? [...fan.streamIds] : [fan.streamId],
@@ -3697,6 +3759,9 @@ async function onRequest(clientReq, clientRes, ctx) {
         clients: n,
         broadcasting: !!fan.broadcasting,
         upstreamPaused: !!fan.upstreamPaused,
+        reconnecting: !!fan.reconnecting,
+        lastByteAgeMs: lastByteAt ? Math.max(0, Date.now() - lastByteAt) : null,
+        upstreamBytesTotal: fan.upstreamBytesTotal || 0,
       });
     }
     const payload = {
@@ -3944,6 +4009,7 @@ async function startEdge() {
   await waitForBackendReady();
   setInterval(sweepIdleDiskPackagers, DISK_PACK_IDLE_SWEEP_MS);
   setInterval(sweepIdleLiveFans, 10_000);
+  setInterval(sweepStalledLiveFans, LIVE_FAN_STALL_SWEEP_MS);
   ensurePulseBatchTimer();
   // If the event loop stalls (saturated upstream / hung work), exit so PM2 restarts a fresh edge
   // instead of accepting TCP forever while /live/ never responds.

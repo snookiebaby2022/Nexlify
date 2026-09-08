@@ -1,6 +1,12 @@
-import { StreamType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { cacheGet, cacheSet, cacheDelExact } from "@/lib/cache";
+
+export {
+  liveOriginProbeFailWhere,
+  liveOriginOrSpliceFailWhere,
+  isLiveOriginOrSpliceFailed,
+  liveOriginOrSpliceError,
+} from "@/lib/stream-health-fail";
 
 const STREAK_NEEDED = 3;
 const STREAK_TTL_SEC = 600;
@@ -81,21 +87,4 @@ export async function markStreamSpliceFailed(streamId: string, detail: string): 
   } catch (err) {
     console.warn("[stream-health] splice fail stamp skipped", err instanceof Error ? err.message : err);
   }
-}
-
-/** True origin probe fails only — excludes stale Viewer: edge stamps in lastProbeError. */
-export function liveOriginProbeFailWhere() {
-  return {
-    lastProbeOk: false as const,
-    NOT: { lastProbeError: { startsWith: "Viewer:" } },
-  };
-}
-
-/** Origin + splice failures for dashboard Issues (excludes Viewer: stamps). */
-export function liveOriginOrSpliceFailWhere() {
-  return {
-    type: StreamType.LIVE,
-    isActive: true,
-    OR: [liveOriginProbeFailWhere(), { lastSpliceOk: false }],
-  };
 }

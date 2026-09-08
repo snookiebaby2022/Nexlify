@@ -12,6 +12,9 @@ const TUNING = {
   IPTV_EDGE_LIVE_FAN_LINGER_MS: "120000",
   IPTV_EDGE_ON_DEMAND_FAN_LINGER_MS: "120000",
   IPTV_EDGE_FAN_PREFIX_BYTES: "1048576",
+  /** Clear hung fans that dump prefix then silent-underrun (provider 5xx / junki stalls). */
+  IPTV_EDGE_FAN_STALL_MS: "12000",
+  IPTV_EDGE_FAN_STALL_SWEEP_MS: "3000",
   IPTV_EDGE_AUTH_CACHE_MS: "120000",
   IPTV_EDGE_CATALOG_CACHE_MS: "180000",
 };

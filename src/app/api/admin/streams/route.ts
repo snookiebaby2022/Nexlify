@@ -42,7 +42,7 @@ import { logActivity } from "@/lib/lines";
 import { streamListOrderBy } from "@/lib/stream-order";
 import { attachStreamEpgWorking } from "@/lib/epg-working-status";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
-import { liveOriginProbeFailWhere } from "@/lib/stream-health-signals";
+import { liveOriginOrSpliceFailWhere } from "@/lib/stream-health-fail";
 
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
@@ -150,9 +150,14 @@ export async function GET(req: NextRequest) {
   if (statusParam === "active") where.isActive = true;
   if (statusParam === "inactive") where.isActive = false;
   if (statusParam === "offline") {
-    where.isActive = true;
-    Object.assign(where, liveOriginProbeFailWhere());
-    if (!where.type) where.type = StreamType.LIVE;
+    // Match dashboard Issues / Probe Failed: origin probe fail OR edge splice fail.
+    const fail = liveOriginOrSpliceFailWhere();
+    where.type = fail.type;
+    where.isActive = fail.isActive;
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      { OR: fail.OR },
+    ];
   }
   if (statusParam === "online") {
     const onlineIds = await listOnlineLiveStreamIds(
@@ -163,15 +168,17 @@ export async function GET(req: NextRequest) {
     where.id = { in: onlineIds.length ? onlineIds : ["__none__"] };
   }
   if (sourceIssue === "dead" || sourceIssue === "unstable") {
-    where.isActive = true;
-    Object.assign(where, liveOriginProbeFailWhere());
-    where.type = StreamType.LIVE;
+    // Same universe as dashboard dead/unstable KPI counts.
+    const fail = liveOriginOrSpliceFailWhere();
+    where.type = fail.type;
+    where.isActive = fail.isActive;
     const backupCondition: Prisma.StreamWhereInput =
       sourceIssue === "dead"
         ? { OR: [{ backupUrl: null }, { backupUrl: "" }] }
         : { AND: [{ backupUrl: { not: null } }, { backupUrl: { not: "" } }] };
     where.AND = [
       ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+      { OR: fail.OR },
       backupCondition,
     ];
   }
@@ -314,6 +321,8 @@ export async function GET(req: NextRequest) {
           agentStartCmd: true,
           lastProbeOk: true,
           lastProbeError: true,
+          lastSpliceOk: true,
+          lastSpliceError: true,
           backupUrl: true,
           streamIcon: true,
           sortOrder: true,

@@ -166,7 +166,7 @@ export function DashboardXuiKpiRibbon({
             <Play size={24} fill="white" strokeWidth={0} />
           </Link>
           <Link
-            href="/admin/stream_errors"
+            href="/admin/content/streams?status=offline"
             className="px-4 py-2 text-white text-sm flex items-center justify-between"
             style={{ background: "linear-gradient(135deg, #dd4b39 0%, #c23321 100%)" }}
           >
@@ -184,14 +184,14 @@ export function DashboardXuiKpiRibbon({
           value={kpi?.unstableStreams ?? 0}
           pct={unstablePct}
           barColor="#f39c12"
-          href="/admin/stream_errors?kind=unstable"
+          href="/admin/content/streams?sourceIssue=unstable"
         />
         <MiniStat
           label="Dead Stream"
           value={kpi?.deadStreams ?? 0}
           pct={deadPct}
           barColor="#dd4b39"
-          href="/admin/stream_errors?kind=dead"
+          href="/admin/content/streams?sourceIssue=dead"
         />
       </div>
 

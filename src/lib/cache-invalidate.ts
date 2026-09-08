@@ -7,6 +7,8 @@ export async function invalidateDashboardStats() {
     cacheDelExact("stats:kpi"),
     cacheDelExact("stats:summary"),
     cacheDelExact("stats:server-metrics"),
+    cacheDelExact("stats:probe-dead:v1"),
+    cacheDelExact("stats:probe-unstable:v1"),
     cacheDelExact("stream-errors:list"),
     cacheDelExact("dashboard:admin-widgets"),
   ]);

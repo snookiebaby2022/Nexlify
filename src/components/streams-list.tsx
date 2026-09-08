@@ -44,6 +44,10 @@ import {
   useStoredColumnVisibility,
 } from "@/components/table-toolbar-menus";
 import { useResellerGroupFlags } from "@/components/reseller-group-flags-context";
+import {
+  isLiveOriginOrSpliceFailed,
+  liveOriginOrSpliceError,
+} from "@/lib/stream-health-fail";
 
 const StreamVerifyPanel = dynamic(
   () => import("@/components/stream-verify-panel").then((m) => m.StreamVerifyPanel),
@@ -76,6 +80,8 @@ type Stream = {
   epgWorking?: boolean;
   lastProbeOk?: boolean | null;
   lastProbeError?: string | null;
+  lastSpliceOk?: boolean | null;
+  lastSpliceError?: string | null;
   liveStats?: StreamLiveStat | null;
   isOnDemand?: boolean;
   vodMode?: string;
@@ -109,8 +115,10 @@ const STREAM_COLUMN_DEFAULTS: Record<string, boolean> = {
 
 function streamPlayBtnClass(stream: Stream, probing?: boolean) {
   if (probing) return "xui-stream-play-btn xui-stream-play-btn--pending";
-  if (stream.lastProbeOk === true) return "xui-stream-play-btn xui-stream-play-btn--ok";
-  if (stream.lastProbeOk === false) return "xui-stream-play-btn xui-stream-play-btn--fail";
+  if (isLiveOriginOrSpliceFailed(stream)) return "xui-stream-play-btn xui-stream-play-btn--fail";
+  if (stream.lastProbeOk === true && stream.lastSpliceOk !== false) {
+    return "xui-stream-play-btn xui-stream-play-btn--ok";
+  }
   return "xui-stream-play-btn";
 }
 
@@ -122,12 +130,12 @@ function serverLabel(s: Stream) {
 }
 
 function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
-  if (stream.lastProbeOk === false) {
+  if (isLiveOriginOrSpliceFailed(stream)) {
     return (
       <span
         className="xui-uptime-badge"
         style={{ background: "rgba(239,68,68,0.18)", color: "var(--danger)" }}
-        title={stream.lastProbeError || "Last source probe failed"}
+        title={liveOriginOrSpliceError(stream) || "Last source probe or splice failed"}
       >
         Source down
       </span>
@@ -159,20 +167,20 @@ function StreamInfoCell({ stream, listType }: { stream: Stream; listType?: strin
   const kbps = st?.bitrateKbps ?? stream.maxSpeedKbps ?? stream.minSpeedKbps;
   const lines: string[] = [];
   lines.push("Mode: " + mode);
-  const statusLabel =
-    stream.lastProbeOk === false
-      ? "Source down"
-      : stream.lastProbeOk === true && st?.displayStatus === "Source down"
-        ? "Source OK"
-        : st?.displayStatus;
+  const statusLabel = isLiveOriginOrSpliceFailed(stream)
+    ? "Source down"
+    : stream.lastProbeOk === true && st?.displayStatus === "Source down"
+      ? "Source OK"
+      : st?.displayStatus;
   if (statusLabel) lines.push("Status: " + statusLabel);
   if (kbps) lines.push("Bitrate: " + Number(kbps).toLocaleString() + " kbps");
   if (st?.uptimeSeconds != null) lines.push("Uptime: " + formatUptime(st.uptimeSeconds));
   if (st && st.viewers > 0) lines.push("Viewers: " + st.viewers);
   if (st?.videoCodec) lines.push("Video: " + st.videoCodec);
   if (st?.audioCodec) lines.push("Audio: " + st.audioCodec);
-  if (stream.lastProbeOk === false && stream.lastProbeError) {
-    lines.push("Probe: " + stream.lastProbeError);
+  const failErr = liveOriginOrSpliceError(stream);
+  if (isLiveOriginOrSpliceFailed(stream) && failErr) {
+    lines.push("Probe: " + failErr);
   }
   if (lines.length <= 1 && !st) {
     return <span className="xui-stream-info-empty">Waiting for this channel's probe / process stats</span>;
@@ -468,44 +476,6 @@ export function StreamsList({
           >;
         };
         if (!res.ok || !data.results) return;
-        // #region agent log
-        {
-          const sample = list.slice(0, 5).map((s) => {
-            const row = data.results?.[s.id];
-            return {
-              id: s.id,
-              name: s.name,
-              priorOk: s.lastProbeOk,
-              priorErr: String(s.lastProbeError ?? "").slice(0, 60),
-              resOk: row && !("error" in row) ? row.lastProbeOk : null,
-              resErr:
-                row && !("error" in row)
-                  ? String(row.lastProbeError ?? "").slice(0, 60)
-                  : row && "error" in row
-                    ? String(row.error).slice(0, 60)
-                    : null,
-            };
-          });
-          fetch("http://127.0.0.1:7839/ingest/c301054c-be31-4f2e-af57-bcfeb5a9e0e7", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "8aa94a" },
-            body: JSON.stringify({
-              sessionId: "8aa94a",
-              hypothesisId: "C",
-              location: "streams-list.tsx:runPageProbe",
-              message: "offline page probe response",
-              data: {
-                statusFilter,
-                fast: statusFilter !== "offline" && !sourceIssueFilter,
-                count: list.length,
-                sample,
-              },
-              timestamp: Date.now(),
-              runId: "ui-probe",
-            }),
-          }).catch(() => {});
-        }
-        // #endregion
         const { notifyStreamHealthChanged } = await import("@/lib/stream-health-events");
         notifyStreamHealthChanged();
         setStreams((prev) => {
@@ -518,13 +488,13 @@ export function StreamsList({
               ? {
                   ...s.liveStats,
                   displayStatus:
-                    ok === false
+                    ok === false || s.lastSpliceOk === false
                       ? "Source down"
                       : ok === true && s.liveStats.displayStatus === "Source down"
                         ? "Source OK"
                         : s.liveStats.displayStatus,
                   status:
-                    ok === false
+                    ok === false || s.lastSpliceOk === false
                       ? ("offline" as const)
                       : ok === true && s.liveStats.status === "offline"
                         ? ("ready" as const)
@@ -539,7 +509,8 @@ export function StreamsList({
             };
           });
           if (statusFilter === "offline" || sourceIssueFilter) {
-            return next.filter((s) => s.lastProbeOk === false);
+            // Keep splice-failed rows even when a re-probe of the origin URL succeeds.
+            return next.filter((s) => isLiveOriginOrSpliceFailed(s));
           }
           return next;
         });
@@ -876,14 +847,15 @@ export function StreamsList({
       {sourceIssueFilter ? (
         <p className="text-sm rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
           {sourceIssueFilter === "dead"
-            ? "Showing active live streams whose last source probe failed and have no backup URL. Open a stream to repair its primary source and add an independent backup."
-            : "Showing active live streams whose last source probe failed but already have a backup URL. Open a stream to test or replace both sources."}
+            ? "Showing active live streams whose last origin probe or edge splice failed and have no backup URL. Open a stream to repair its primary source and add an independent backup."
+            : "Showing active live streams whose last origin probe or edge splice failed but already have a backup URL. Open a stream to test or replace both sources."}
         </p>
       ) : statusFilter === "offline" ? (
         <p className="text-sm rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
-          Live streams whose last source probe failed. Use Probe page (full check) to retest — streams
-          that come back online drop off this list. Direct and on-demand channels without a running
-          ffmpeg process are not listed here unless the probe itself failed.
+          Live streams whose last origin probe failed or whose edge splice is failing — same set as dashboard
+          Probe Failed / Issues to fix. Use Probe page (full check) to retest origin URLs; splice clears when
+          playback pulls successfully again. Direct and on-demand channels without a running ffmpeg process are
+          not listed here unless the probe or splice itself failed.
         </p>
       ) : null}
 
@@ -1093,7 +1065,7 @@ export function StreamsList({
         {filtered.length === 0 && (
           <p className="xui-streams-empty p-4">
             {statusFilter === "offline"
-              ? "No live streams with a failed source probe."
+              ? "No live streams with a failed origin probe or edge splice."
               : "No streams match your filters."}
           </p>
         )}
@@ -1235,8 +1207,8 @@ export function StreamsList({
                         type="button"
                         className={streamPlayBtnClass(s, probingIds.has(s.id))}
                         title={
-                          s.lastProbeOk === false && s.lastProbeError
-                            ? s.lastProbeError
+                          isLiveOriginOrSpliceFailed(s) && liveOriginOrSpliceError(s)
+                            ? liveOriginOrSpliceError(s)!
                             : probingIds.has(s.id)
                               ? "Probing source…"
                               : "Preview and probe source"
@@ -1284,7 +1256,7 @@ export function StreamsList({
         {filtered.length === 0 && (
           <p className="xui-streams-empty">
             {statusFilter === "offline"
-              ? "No live streams with a failed source probe."
+              ? "No live streams with a failed origin probe or edge splice."
               : "No streams match your filters."}
           </p>
         )}

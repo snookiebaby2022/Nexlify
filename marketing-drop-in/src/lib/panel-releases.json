@@ -1,7 +1,30 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.88",
+  "latestVersion": "2.0.89",
   "releases": [
+    {
+      "version": "2.0.89",
+      "date": "2026-09-08",
+      "channel": "stable",
+      "summary": "Direct LB multi-domain routing, stuck-fan auto-clear, faster categories, and Offline lists matching dashboard Issues.",
+      "changelog": [
+        "Main server Domains tab supports Primary + Additional domains for LB stream hosts; LB keeps a single direct media domain",
+        "Sticky line-to-LB assignment advertises LB/main pool hostnames (DNS-only to the LB) across Xtream, M3U, and Stalker",
+        "Edge stall sweep force-reconnects hung live fans after ~12s of silence and rotates failover",
+        "Admin categories use cached lite rows and noCounts for snappy folder/dropdown navigation",
+        "Live Streams Offline / dead / unstable filters match dashboard Probe Failed (probe OR splice failures)"
+      ],
+      "fixes": [
+        "Offline filter was empty while dashboard showed dead/unstable splice failures (upstream 522)",
+        "Live fans could dump ~1MB then freeze forever when upstream stayed open but silent",
+        "Category browsing recounted ~859k streams on every lite load"
+      ],
+      "notes": [
+        "Point every stream media hostname DNS-only at the LB IP, not the panel. Clients pick up domain changes on the next Xtream/playlist refresh.",
+        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.89.tar.gz"
+    },
     {
       "version": "2.0.88",
       "date": "2026-09-08",

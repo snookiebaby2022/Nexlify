@@ -53,10 +53,20 @@ describe("edge proxy installer parity", () => {
     assert.match(guard, /live\|timeshift\|movie\|series/);
   });
 
-  it("canonical destroys a live fan when its provider socket closes", () => {
+  it("canonical reconnects live fans when provider socket closes (not hard-drop only)", () => {
     const canonical = readEdgeSource(canonicalPath);
-    assert.match(canonical, /upRes\.once\("close", \(\) => destroyLiveFan\(fan\)\)/);
+    assert.match(canonical, /upRes\.once\("close", gone\)/);
+    assert.match(canonical, /function handleFanUpstreamGone\(fan\)/);
     assert.match(canonical, /if \(!fan \|\| fan\.destroyed\) return/);
+  });
+
+  it("canonical clears silent upstream underruns (prefix-then-stall)", () => {
+    const canonical = readEdgeSource(canonicalPath);
+    assert.match(canonical, /function sweepStalledLiveFans\(/);
+    assert.match(canonical, /function forceFanUpstreamReconnect\(/);
+    assert.match(canonical, /IPTV_EDGE_FAN_STALL_MS/);
+    assert.match(canonical, /fanStallClears/);
+    assert.match(canonical, /lastUpstreamByteAt/);
   });
 
   it("canonical drops lagging fan clients without pausing the shared origin", () => {

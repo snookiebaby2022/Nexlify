@@ -66,7 +66,7 @@ export default function RemoveDuplicatesPage() {
     let cancelled = false;
     setCategoriesError("");
     const type = categoryTypeForKind(kind);
-    fetch(`/api/admin/categories?type=${type}&lite=1`, { credentials: "same-origin" })
+    fetch(`/api/admin/categories?type=${type}&lite=1&noCounts=1`, { credentials: "same-origin" })
       .then(async (r) => {
         const d = await r.json();
         if (!r.ok) throw new Error(d.error ?? `Categories HTTP ${r.status}`);

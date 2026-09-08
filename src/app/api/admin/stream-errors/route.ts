@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PanelRole } from "@prisma/client";
 import { cacheGetOrSet } from "@/lib/cache";
-import { liveOriginOrSpliceFailWhere } from "@/lib/stream-health-signals";
+import { liveOriginOrSpliceFailWhere } from "@/lib/stream-health-fail";
 import { streamProbeFixHint } from "@/lib/stream-probe-fix-hints";
 import { invalidateDashboardStats } from "@/lib/cache-invalidate";
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
@@ -105,8 +105,18 @@ export async function POST(req: NextRequest) {
         data: { isActive: true },
       }),
       prisma.stream.updateMany({
-        where: { type: "LIVE", lastProbeOk: false },
-        data: { lastProbeOk: true, lastProbeError: null, lastProbeAt: new Date() },
+        where: {
+          type: "LIVE",
+          OR: [{ lastProbeOk: false }, { lastSpliceOk: false }],
+        },
+        data: {
+          lastProbeOk: true,
+          lastProbeError: null,
+          lastProbeAt: new Date(),
+          lastSpliceOk: true,
+          lastSpliceError: null,
+          lastSpliceAt: new Date(),
+        },
       }),
     ]);
 
