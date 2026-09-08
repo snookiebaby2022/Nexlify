@@ -12,6 +12,7 @@ import { prisma } from "./prisma";
 import { expandCategoryFilter } from "./category-tree";
 import { isXtreamAllCategoryParam } from "@/lib/xtream-category-canonical";
 import { exportPlaybackUrl, magHttpPlaybackOrigin } from "./export-playback-url";
+import { resolveLinePlaybackOrigin } from "./line-playback-origin";
 import { parseBitrates } from "./stream-variants";
 import {
   handleStalkerExtendedAction,
@@ -438,7 +439,10 @@ export async function handleStalkerAction(
       if (!stream) {
         return stalkerJsResponse({ error: "Stream not found" });
       }
-      const origin = magHttpPlaybackOrigin(baseUrl);
+      const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
+      const origin = magHttpPlaybackOrigin(
+        await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl)
+      );
       const url = exportPlaybackUrl(
         origin,
         { username: line.username, password: line.password },

@@ -14,6 +14,7 @@ import {
 } from "./dvr-service";
 import { resolveStreamPlaybackUrl } from "./resolve-stream-url";
 import { exportPlaybackUrl } from "./export-playback-url";
+import { resolveLinePlaybackOrigin } from "./line-playback-origin";
 import {
   archiveRetentionDays,
   panelTimeshiftUrl,
@@ -221,6 +222,8 @@ export async function handleStalkerExtendedAction(
   extra: StalkerExtra
 ): Promise<unknown | null> {
   const page = parseInt(extra.page ?? extra.p ?? "0", 10) || 0;
+  const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
+  const playbackBaseUrl = await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl);
 
   switch (action) {
     case "get_modules":
@@ -263,7 +266,7 @@ export async function handleStalkerExtendedAction(
       return {
         total_items: total,
         max_page_items: STALKER_PAGE_SIZE,
-        data: await stalkerChannelRows(streams, baseUrl, line, page),
+        data: await stalkerChannelRows(streams, playbackBaseUrl, line, page),
       };
     }
 
@@ -383,10 +386,14 @@ export async function handleStalkerExtendedAction(
       if (!stream) return { error: "Stream not found" };
       return {
         cmd: exportPlaybackUrl(
-          baseUrl,
+          playbackBaseUrl,
           { username: line.username, password: line.password },
           stream,
-          stream
+          stream,
+          undefined,
+          "auto",
+          true,
+          true
         ),
         id: stream.id,
       };

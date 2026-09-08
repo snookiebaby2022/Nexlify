@@ -2,6 +2,7 @@ import type { LineWithBouquets } from "./lines";
 import { streamsForLineExport, lineIsPlayable, categoryIdsForLine, activeBouquetIds } from "./lines";
 import { resolveChannelId, resolveEpgId } from "./subscription-export";
 import { exportPlaybackUrl } from "./export-playback-url";
+import { resolveLinePlaybackOrigin } from "./line-playback-origin";
 import { StreamType } from "@prisma/client";
 import { prisma } from "./prisma";
 import { parseBitrates } from "./stream-variants";
@@ -123,10 +124,11 @@ type XtreamAccountShell = {
 
 async function loadXtreamAccountShell(
   panelBaseUrl: string,
+  lineId: string,
   userAgent?: string | null
 ): Promise<XtreamAccountShell> {
   const uaKey = (userAgent ?? "").slice(0, 64);
-  return cacheGetOrSet(`xtream:acct:shell:${panelBaseUrl}:${uaKey}`, 60, async () => {
+  return cacheGetOrSet(`xtream:acct:shell:${lineId}:${panelBaseUrl}:${uaKey}`, 60, async () => {
     const streams = await getSettingGroup("streams");
     const general = await getSettingGroup("general");
     const panelTimezone = String(general.timezone || "Europe/London");
@@ -136,7 +138,8 @@ async function loadXtreamAccountShell(
       panelBaseUrl,
       process.env.NEXT_PUBLIC_WEBSITE_URL || process.env.NEXT_PUBLIC_SERVER_URL
     ).replace(/\/+$/, "");
-    const mediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
+    const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
+    const mediaOrigin = await resolveLinePlaybackOrigin(lineId, configuredMediaOrigin || panelOrigin);
     let streamHost: string;
     let mediaPort = "";
     let mediaProtocol = "";
@@ -207,7 +210,7 @@ export async function xtreamUserInfo(
   const { countLineSessions } = await import("@/lib/connections");
   const activeCons = playable ? await countLineSessions(line.id) : 0;
   const atCapacity = playable && line.maxConnections > 0 && activeCons >= line.maxConnections;
-  const shell = await loadXtreamAccountShell(panelBaseUrl, userAgent);
+  const shell = await loadXtreamAccountShell(panelBaseUrl, line.id, userAgent);
   const formats = preferLiveOutputFormats(xtreamOutputFormats(line.allowedOutput), resolveClientPlaybackProfile(userAgent));
   const epgOrigin = websiteOriginOverride
     ? pickPublicOrigin(websiteOriginOverride, process.env.NEXT_PUBLIC_WEBSITE_URL).replace(/\/+$/, "")
@@ -565,6 +568,8 @@ export function buildM3uStream(
         const streamSettings = await getSettingGroup("streams");
         const directPlay = streamSettings.vodDirectPlay !== false;
         const excludeDisabled = streamSettings.excludeDisabledFromExport === true;
+        const configuredMediaOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
+        const liveOrigin = await resolveLinePlaybackOrigin(line.id, configuredMediaOrigin || baseUrl);
 
         const { streamsForLineExport } = await import("./lines");
         await streamsForLineExport(line, {
@@ -583,7 +588,7 @@ export function buildM3uStream(
                   );
                   const variantFull = { ...full, streamUrl: v.path } as typeof full;
                   batchLines.push(
-                    exportPlaybackUrl(baseUrl, line, full, variantFull, undefined, output, directPlay)
+                    exportPlaybackUrl(liveOrigin, line, full, variantFull, undefined, output, directPlay, true)
                   );
                 }
                 continue;
@@ -600,7 +605,16 @@ export function buildM3uStream(
                       ? "Movies"
                       : "Series")
               );
-              const playUrl = exportPlaybackUrl(baseUrl, line, full, full, undefined, output, directPlay);
+              const playUrl = exportPlaybackUrl(
+                full.type === StreamType.LIVE ? liveOrigin : baseUrl,
+                line,
+                full,
+                full,
+                undefined,
+                output,
+                directPlay,
+                full.type === StreamType.LIVE
+              );
               const displayName = xtreamM3uAttr(full.name) || "Channel";
 
               if (isExtended) {
