@@ -282,13 +282,16 @@ const TreeRow = memo(function TreeRow({
         ? `/admin/content/series?categoryId=${node.id}`
         : `/admin/content/streams?categoryId=${node.id}`;
 
+  // Only build the parent <select> options while editing — otherwise every visible
+  // row sorts/labels the full category list on each expand/search re-render.
   const parentOptions = useMemo(() => {
+    if (!editing) return [] as { id: string; label: string }[];
     const blocked = collectDescendantIdsLocal(node.id, allCategories);
     blocked.add(node.id);
     return labeledCategoryOptions(
       allCategories.filter((c) => !blocked.has(c.id))
     );
-  }, [allCategories, node.id]);
+  }, [editing, allCategories, node.id]);
 
   function save() {
     if (editName.trim() && editName !== node.name) onRename(node.id, editName.trim());

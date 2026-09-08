@@ -16,6 +16,36 @@ import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
 const VALID_TYPES = new Set<string>(Object.values(CategoryType));
 
+/** Per-category stream tallies — expensive on large catalogs; shared by lite + full admin UI. */
+async function getCachedCategoryStreamCounts(): Promise<{
+  active: Record<string, number>;
+  inactive: Record<string, number>;
+}> {
+  return cacheGetOrSet("categories:stream-counts", 600, async () => {
+    const [activeGroups, inactiveGroups] = await Promise.all([
+      prisma.stream.groupBy({
+        by: ["categoryId"],
+        where: { isActive: true, categoryId: { not: null } },
+        _count: true,
+      }),
+      prisma.stream.groupBy({
+        by: ["categoryId"],
+        where: { isActive: false, categoryId: { not: null } },
+        _count: true,
+      }),
+    ]);
+    const active: Record<string, number> = {};
+    const inactive: Record<string, number> = {};
+    for (const g of activeGroups) {
+      if (g.categoryId) active[g.categoryId] = g._count;
+    }
+    for (const g of inactiveGroups) {
+      if (g.categoryId) inactive[g.categoryId] = g._count;
+    }
+    return { active, inactive };
+  });
+}
+
 export async function GET(req: NextRequest) {
   const rateLimited = await guardAdminApiRequest(req);
   if (rateLimited) return rateLimited;
@@ -26,6 +56,7 @@ export async function GET(req: NextRequest) {
   const typeFilter = req.nextUrl.searchParams.get("type")?.toUpperCase();
   const lite = req.nextUrl.searchParams.get("lite") === "1";
   const countsOnly = req.nextUrl.searchParams.get("countsOnly") === "1";
+  const skipStreamCounts = req.nextUrl.searchParams.get("noCounts") === "1";
   const where =
     typeFilter && VALID_TYPES.has(typeFilter) ? { categoryType: typeFilter as CategoryType } : undefined;
   try {
@@ -42,20 +73,50 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ counts });
     }
     if (lite) {
-      const categories = await prisma.category.findMany({
-        where,
-        include: {
-          parent: { select: { id: true, name: true } },
-          _count: { select: { streams: true, children: true } },
-        },
-        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-      });
+      // Avoid Prisma `_count.streams` on every row — that scans Stream (~900k on prod) per request.
+      // Category meta is cheap; stream tallies come from the shared 10m cache (or are skipped).
+      const cacheKey = `admin:categories:rows:${typeFilter && VALID_TYPES.has(typeFilter) ? typeFilter : "ALL"}`;
+      const categories = await cacheGetOrSet(cacheKey, 60, async () =>
+        prisma.category.findMany({
+          where,
+          select: {
+            id: true,
+            name: true,
+            sortOrder: true,
+            parentId: true,
+            categoryType: true,
+            isAdult: true,
+            parent: { select: { id: true, name: true } },
+            _count: { select: { children: true } },
+          },
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        })
+      );
+      if (skipStreamCounts) {
+        return NextResponse.json({
+          categories: categories.map((c) => ({
+            ...c,
+            activeCount: 0,
+            inactiveCount: 0,
+            _count: { children: c._count.children, streams: 0 },
+          })),
+        });
+      }
+      const counts = await getCachedCategoryStreamCounts();
       return NextResponse.json({
-        categories: categories.map((c) => ({
-          ...c,
-          activeCount: c._count.streams,
-          inactiveCount: 0,
-        })),
+        categories: categories.map((c) => {
+          const activeCount = counts.active[c.id] ?? 0;
+          const inactiveCount = counts.inactive[c.id] ?? 0;
+          return {
+            ...c,
+            activeCount,
+            inactiveCount,
+            _count: {
+              children: c._count.children,
+              streams: activeCount + inactiveCount,
+            },
+          };
+        }),
       });
     }
 
@@ -66,7 +127,6 @@ export async function GET(req: NextRequest) {
         children: { select: { id: true, name: true, sortOrder: true, categoryType: true, isAdult: true } },
         _count: {
           select: {
-            streams: true,
             children: true,
           },
         },
@@ -74,44 +134,24 @@ export async function GET(req: NextRequest) {
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     });
 
-    // Active / inactive counts per category (cached — heavy on large catalogs).
-    const counts = await cacheGetOrSet("categories:stream-counts", 600, async () => {
-      const [activeGroups, inactiveGroups] = await Promise.all([
-        prisma.stream.groupBy({
-          by: ["categoryId"],
-          where: { isActive: true, categoryId: { not: null } },
-          _count: true,
-        }),
-        prisma.stream.groupBy({
-          by: ["categoryId"],
-          where: { isActive: false, categoryId: { not: null } },
-          _count: true,
-        }),
-      ]);
-      const active: Record<string, number> = {};
-      const inactive: Record<string, number> = {};
-      for (const g of activeGroups) {
-        if (g.categoryId) active[g.categoryId] = g._count;
-      }
-      for (const g of inactiveGroups) {
-        if (g.categoryId) inactive[g.categoryId] = g._count;
-      }
-      return { active, inactive };
-    });
+    const counts = await getCachedCategoryStreamCounts();
     const activeMap = new Map(Object.entries(counts.active));
     const inactiveMap = new Map(Object.entries(counts.inactive));
 
     return NextResponse.json({
-      categories: categories.map((c) => ({
-        ...c,
-        activeCount: activeMap.get(c.id) ?? 0,
-        inactiveCount: inactiveMap.get(c.id) ?? 0,
-        _count: {
-          ...c._count,
-          // Keep streams as total so existing UI still works; prefer activeCount for “online”.
-          streams: c._count.streams,
-        },
-      })),
+      categories: categories.map((c) => {
+        const activeCount = activeMap.get(c.id) ?? 0;
+        const inactiveCount = inactiveMap.get(c.id) ?? 0;
+        return {
+          ...c,
+          activeCount,
+          inactiveCount,
+          _count: {
+            ...c._count,
+            streams: activeCount + inactiveCount,
+          },
+        };
+      }),
     });
   } catch (e) {
     return NextResponse.json(

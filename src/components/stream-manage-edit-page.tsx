@@ -211,7 +211,7 @@ export function StreamManageEditPage({
         });
         setAdvanced(advancedFromStream(s));
       });
-    fetch("/api/admin/categories?lite=1")
+    fetch("/api/admin/categories?lite=1&noCounts=1")
       .then((r) => r.json())
       .then((d) => setCategories(d.categories ?? []));
     fetch("/api/admin/streams?type=LIVE&lite=1&picker=1&pageSize=200&skipTotal=1")

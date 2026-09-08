@@ -148,7 +148,7 @@ export function VodMovieForm({
   });
 
   useEffect(() => {
-    fetch("/api/admin/categories?lite=1").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+    fetch("/api/admin/categories?lite=1&noCounts=1").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
     fetch("/api/admin/bouquets")
       .then((r) => r.json())
       .then((d) => {

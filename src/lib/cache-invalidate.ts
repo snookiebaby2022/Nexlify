@@ -93,6 +93,9 @@ export async function invalidateXtreamCategories() {
     cacheDel("xtream:live_streams:"),
     cacheDel("xtream:vod_streams:"),
     cacheDel("xtream:series:"),
+    // Admin category tree / dropdowns (lite list + stream tallies)
+    cacheDel("admin:categories:rows:"),
+    cacheDelExact("categories:stream-counts"),
   ]);
   await bustXtreamAppCatalog("all");
 }

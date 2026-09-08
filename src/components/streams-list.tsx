@@ -600,7 +600,8 @@ export function StreamsList({
 
   useEffect(() => {
     if (initialBootstrap?.categories?.length) return;
-    fetch(`/api/admin/categories?lite=1${type ? `&type=${type}` : ""}`)
+    // noCounts=1: dropdown only needs names/ids — skip Stream groupBy tallies.
+    fetch(`/api/admin/categories?lite=1&noCounts=1${type ? `&type=${type}` : ""}`)
       .then((r) => r.json())
       .then((d) => setCategories(d.categories ?? []));
     if (initialBootstrap?.servers?.length) return;

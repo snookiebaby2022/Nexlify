@@ -196,7 +196,7 @@ function LiveStreamForm({
   }, [initial]);
 
   useEffect(() => {
-    fetch("/api/admin/categories?lite=1").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+    fetch("/api/admin/categories?lite=1&noCounts=1").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
     fetch("/api/admin/epg?lite=1")
       .then((r) => r.json())
       .then((d) => setEpgSources((d.sources ?? []).map((s: { id: string; name: string }) => ({ id: s.id, name: s.name }))));
@@ -1010,7 +1010,7 @@ function CompactStreamForm({
   });
 
   useEffect(() => {
-    fetch("/api/admin/categories?lite=1").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
+    fetch("/api/admin/categories?lite=1&noCounts=1").then((r) => r.json()).then((d) => setCategories(d.categories ?? []));
     if (initial?.name) setForm((f) => ({ ...f, name: initial.name! }));
     if (initial?.streamUrl) setForm((f) => ({ ...f, streamUrl: initial.streamUrl! }));
   }, [initial]);
