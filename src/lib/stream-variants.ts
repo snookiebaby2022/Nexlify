@@ -1,4 +1,4 @@
-import { resolveRotatorUrl } from "./dns-rotator";
+import { resolveRotatorUrl, parseDnsRotator } from "./dns-rotator";
 
 export type BitrateVariant = {
   id: string;
@@ -86,5 +86,18 @@ export function resolveStreamPlayUrl(stream: StreamLike, seed?: string): string 
     url = resolveBitratePlayUrl(url, variants);
   }
   const rotator = stream.dnsRotator ?? stream.server?.dnsRotator;
+  // DNS rotator is for client-facing panel hostnames only. Never rewrite an
+  // already-external provider CDN host (e.g. nowtvgo → darkcdn.store) — that
+  // made the edge pull /live/ from the panel and 502 after media-proxy refuse.
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    const cfg = parseDnsRotator(rotator);
+    const cfgHosts = new Set((cfg?.hosts || []).map((h) => h.toLowerCase()));
+    if (cfgHosts.size && !cfgHosts.has(host)) {
+      return url;
+    }
+  } catch {
+    /* fall through */
+  }
   return resolveRotatorUrl(url, rotator, seed);
 }

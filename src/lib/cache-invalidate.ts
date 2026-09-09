@@ -190,6 +190,7 @@ export async function invalidateStreamPlaybackCache(streamId: string): Promise<n
 /**
  * After source URL change or Restart on LIVE relay: clear panel caches and ask
  * the edge to drop the active fan so viewers re-auth against the new upstream.
+ * Retries the edge drop once — a missed drop leaves clients on the old upstream.
  */
 export async function refreshStreamPlayback(streamId: string): Promise<{
   liveAuthDeleted: number;
@@ -198,7 +199,11 @@ export async function refreshStreamPlayback(streamId: string): Promise<{
   const id = streamId?.trim();
   if (!id) return { liveAuthDeleted: 0, edgeDropped: false };
   const liveAuthDeleted = await invalidateStreamPlaybackCache(id);
-  const edgeDropped = await requestEdgeDropStream(id).catch(() => false);
+  let edgeDropped = await requestEdgeDropStream(id).catch(() => false);
+  if (!edgeDropped) {
+    await new Promise((r) => setTimeout(r, 250));
+    edgeDropped = await requestEdgeDropStream(id).catch(() => false);
+  }
   return { liveAuthDeleted, edgeDropped };
 }
 

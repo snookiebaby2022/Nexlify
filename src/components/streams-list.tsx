@@ -13,7 +13,6 @@ import {
   Square,
 } from "lucide-react";
 import { StreamRowActionsMenu } from "@/components/stream-row-actions-menu";
-import { normalizeCategoryName } from "@/lib/category-options";
 import { parseLiveStreamMeta } from "@/lib/stream-live-meta";
 import {
   streamListUptimeKind,
@@ -21,6 +20,7 @@ import {
 } from "@/lib/stream-playback-policy";
 import { formatUptime } from "@/lib/stream-live-stats";
 import { resolveClientPollIntervals, startVisibleInterval } from "@/lib/perf-polling";
+import { adminToast } from "@/lib/admin-toast";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
 import { StreamTranscodeQuickActions } from "@/components/stream-transcode-quick-actions";
@@ -129,7 +129,26 @@ function serverLabel(s: Stream) {
   return { name, host };
 }
 
-function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: string }) {
+function StreamUptimeBadge({
+  stream,
+  listType,
+  probing,
+}: {
+  stream: Stream;
+  listType?: string;
+  probing?: boolean;
+}) {
+  if (probing) {
+    const uptime = formatUptime(stream.liveStats?.uptimeSeconds ?? null);
+    return (
+      <span
+        className="xui-uptime-badge xui-uptime-badge--idle"
+        title="Source probe in progress"
+      >
+        {uptime ? `Probing · ${uptime}` : "Probing…"}
+      </span>
+    );
+  }
   if (isLiveOriginOrSpliceFailed(stream)) {
     return (
       <span
@@ -161,17 +180,27 @@ function StreamUptimeBadge({ stream, listType }: { stream: Stream; listType?: st
   );
 }
 
-function StreamInfoCell({ stream, listType }: { stream: Stream; listType?: string }) {
+function StreamInfoCell({
+  stream,
+  listType,
+  probing,
+}: {
+  stream: Stream;
+  listType?: string;
+  probing?: boolean;
+}) {
   const st = stream.liveStats;
   const mode = streamUptimeDisplayLabel(streamListUptimeKind(stream, listType));
   const kbps = st?.bitrateKbps ?? stream.maxSpeedKbps ?? stream.minSpeedKbps;
   const lines: string[] = [];
   lines.push("Mode: " + mode);
-  const statusLabel = isLiveOriginOrSpliceFailed(stream)
-    ? "Source down"
-    : stream.lastProbeOk === true && st?.displayStatus === "Source down"
-      ? "Source OK"
-      : st?.displayStatus;
+  const statusLabel = probing
+    ? "Probing…"
+    : isLiveOriginOrSpliceFailed(stream)
+      ? "Source down"
+      : stream.lastProbeOk === true && st?.displayStatus === "Source down"
+        ? "Source OK"
+        : st?.displayStatus;
   if (statusLabel) lines.push("Status: " + statusLabel);
   if (kbps) lines.push("Bitrate: " + Number(kbps).toLocaleString() + " kbps");
   if (st?.uptimeSeconds != null) lines.push("Uptime: " + formatUptime(st.uptimeSeconds));
@@ -179,10 +208,10 @@ function StreamInfoCell({ stream, listType }: { stream: Stream; listType?: strin
   if (st?.videoCodec) lines.push("Video: " + st.videoCodec);
   if (st?.audioCodec) lines.push("Audio: " + st.audioCodec);
   const failErr = liveOriginOrSpliceError(stream);
-  if (isLiveOriginOrSpliceFailed(stream) && failErr) {
+  if (!probing && isLiveOriginOrSpliceFailed(stream) && failErr) {
     lines.push("Probe: " + failErr);
   }
-  if (lines.length <= 1 && !st) {
+  if (lines.length <= 1 && !st && !probing) {
     return <span className="xui-stream-info-empty">Waiting for this channel's probe / process stats</span>;
   }
   return (
@@ -275,6 +304,7 @@ export function StreamsList({
   const [previewModal, setPreviewModal] = useState<Stream | null>(null);
   const [probingPage, setProbingPage] = useState(false);
   const [probingIds, setProbingIds] = useState<Set<string>>(() => new Set());
+  const [listLoading, setListLoading] = useState(hasUrlListFilter);
   const probedPageKeyRef = useRef("");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [showFilters, setShowFilters] = useState(true);
@@ -297,7 +327,6 @@ export function StreamsList({
   ];
   const countedKeyRef = useRef("");
   const urlInitRef = useRef(false);
-  const liveDefaultCatRef = useRef(Boolean(searchParams.get("categoryId")));
 
   const listReturnHref = useMemo(() => {
     const params = new URLSearchParams();
@@ -354,25 +383,10 @@ export function StreamsList({
     urlInitRef.current = true;
     const sp = new URLSearchParams(window.location.search);
     const cat = sp.get("categoryId");
-    if (cat) {
-      setCategoryId(cat);
-      liveDefaultCatRef.current = true;
-    }
+    if (cat) setCategoryId(cat);
     const q = sp.get("search");
     if (q) setSearch(q);
   }, []);
-
-  useEffect(() => {
-    if (type !== "LIVE" || liveDefaultCatRef.current || categoryId) return;
-    const ukEnt = categories.find((c) => {
-      const n = normalizeCategoryName(c.name);
-      return n === "uk entertainment" || n.endsWith(" uk entertainment");
-    });
-    if (!ukEnt) return;
-    liveDefaultCatRef.current = true;
-    setCategoryId(ukEnt.id);
-    setPage(1);
-  }, [type, categories, categoryId]);
 
   useEffect(() => {
     if (
@@ -478,23 +492,33 @@ export function StreamsList({
         if (!res.ok || !data.results) return;
         const { notifyStreamHealthChanged } = await import("@/lib/stream-health-events");
         notifyStreamHealthChanged();
+        let recovered = 0;
+        let stillFailed = 0;
+        for (const id of list.map((s) => s.id)) {
+          const row = data.results?.[id];
+          if (!row || row.error) continue;
+          if (row.lastProbeOk === true) recovered += 1;
+          else if (row.lastProbeOk === false) stillFailed += 1;
+        }
         setStreams((prev) => {
           const next = prev.map((s) => {
             const row = data.results?.[s.id];
             if (!row || row.error) return s;
             const ok = row.lastProbeOk ?? s.lastProbeOk;
             const err = row.lastProbeError ?? null;
+            const clearedSplice = ok === true;
+            const nextSpliceOk = clearedSplice ? true : s.lastSpliceOk;
             const liveStats = s.liveStats
               ? {
                   ...s.liveStats,
                   displayStatus:
-                    ok === false || s.lastSpliceOk === false
+                    ok === false || nextSpliceOk === false
                       ? "Source down"
                       : ok === true && s.liveStats.displayStatus === "Source down"
                         ? "Source OK"
                         : s.liveStats.displayStatus,
                   status:
-                    ok === false || s.lastSpliceOk === false
+                    ok === false || nextSpliceOk === false
                       ? ("offline" as const)
                       : ok === true && s.liveStats.status === "offline"
                         ? ("ready" as const)
@@ -505,16 +529,36 @@ export function StreamsList({
               ...s,
               lastProbeOk: ok,
               lastProbeError: err,
+              ...(clearedSplice
+                ? { lastSpliceOk: true as const, lastSpliceError: null }
+                : {}),
               liveStats,
             };
           });
           if (statusFilter === "offline" || sourceIssueFilter) {
-            // Keep splice-failed rows even when a re-probe of the origin URL succeeds.
             return next.filter((s) => isLiveOriginOrSpliceFailed(s));
           }
           return next;
         });
-      } finally {
+        if (statusFilter === "offline" || sourceIssueFilter) {
+          if (recovered) {
+            adminToast(
+              `Cleared ${recovered} stream${recovered === 1 ? "" : "s"} from Offline${
+                stillFailed ? ` · ${stillFailed} still failing` : ""
+              }.`,
+              "success"
+            );
+          } else if (stillFailed) {
+            adminToast(`${stillFailed} still failing after probe.`, "error");
+          }
+        } else if (recovered || stillFailed) {
+          adminToast(
+            recovered
+              ? `Probe done · ${recovered} OK${stillFailed ? ` · ${stillFailed} failed` : ""}`
+              : `Probe done · ${stillFailed} failed`,
+            stillFailed && !recovered ? "error" : "success"
+          );
+        }      } finally {
         setProbingPage(false);
         setProbingIds(new Set());
       }
@@ -548,6 +592,7 @@ export function StreamsList({
       params.set("skipTotal", "1");
       params.set("skipEpg", "1");
     }
+    if (!params.has("skipTotal")) setListLoading(true);
     fetch(`/api/admin/streams?${params}`)
       .then((r) => r.json())
       .then((d) => {
@@ -564,7 +609,8 @@ export function StreamsList({
         if (type === "LIVE" && next.length && opts?.forceProbe) {
           void runPageProbe(next, true);
         }
-      });
+      })
+      .finally(() => setListLoading(false));
     },
     [type, categoryId, serverId, search, page, pageSize, statusFilter, sourceIssueFilter, modeFilter, runPageProbe]
   );
@@ -851,12 +897,37 @@ export function StreamsList({
             : "Showing active live streams whose last origin probe or edge splice failed but already have a backup URL. Open a stream to test or replace both sources."}
         </p>
       ) : statusFilter === "offline" ? (
-        <p className="text-sm rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)", color: "var(--muted)" }}>
-          Live streams whose last origin probe failed or whose edge splice is failing — same set as dashboard
-          Probe Failed / Issues to fix. Use Probe page (full check) to retest origin URLs; splice clears when
-          playback pulls successfully again. Direct and on-demand channels without a running ffmpeg process are
-          not listed here unless the probe or splice itself failed.
-        </p>
+        <div
+          className="text-sm rounded-lg border px-3 py-3 space-y-2"
+          style={{ borderColor: "rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.06)" }}
+        >
+          <p style={{ color: "var(--text)" }}>
+            Offline: live streams whose last origin probe failed or whose edge splice is failing —
+            same set as dashboard Issues.
+          </p>
+          <p style={{ color: "var(--muted)" }}>
+            Use <strong>Probe page</strong> for a full origin check. A successful probe clears both
+            probe and splice fail flags so the channel leaves this list immediately.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="text-xs px-3 py-1.5 rounded text-white disabled:opacity-50"
+              style={{ background: "var(--accent)" }}
+              disabled={probingPage || streams.length === 0}
+              onClick={() => load({ forceProbe: true })}
+            >
+              {probingPage ? "Probing…" : `Full-probe ${streams.length || "listed"}`}
+            </button>
+            <Link
+              href="/admin/stream_errors"
+              className="text-xs px-3 py-1.5 rounded border"
+              style={{ borderColor: "var(--border)" }}
+            >
+              Open Stream errors
+            </Link>
+          </div>
+        </div>
       ) : null}
 
       <div
@@ -1037,7 +1108,7 @@ export function StreamsList({
                 </div>
                 <div>
                   <p className="panel-mobile-card-label">Uptime</p>
-                  <StreamUptimeBadge stream={s} listType={type} />
+                  <StreamUptimeBadge stream={s} listType={type} probing={probingIds.has(s.id)} />
                 </div>
               </div>
               <div className="panel-mobile-card-actions flex items-center gap-2">
@@ -1052,6 +1123,8 @@ export function StreamsList({
                 <StreamRowActionsMenu
                   streamId={s.id}
                   streamType={type}
+                  streamName={s.name}
+                  streamUrl={s.streamUrl}
                   isActive={s.isActive}
                   serverId={s.server?.id}
                   onRefresh={load}
@@ -1064,9 +1137,13 @@ export function StreamsList({
         })}
         {filtered.length === 0 && (
           <p className="xui-streams-empty p-4">
-            {statusFilter === "offline"
-              ? "No live streams with a failed origin probe or edge splice."
-              : "No streams match your filters."}
+            {listLoading
+              ? "Loading streams…"
+              : probingPage
+                ? "Probing offline sources…"
+                : statusFilter === "offline"
+                  ? "All clear — no live streams with a failed origin probe or edge splice."
+                  : "No streams match your filters."}
           </p>
         )}
       </div>
@@ -1176,7 +1253,7 @@ export function StreamsList({
                   ) : null}
                   {streamCols.show("uptime") ? (
                     <td>
-                      <StreamUptimeBadge stream={s} listType={type} />
+                      <StreamUptimeBadge stream={s} listType={type} probing={probingIds.has(s.id)} />
                     </td>
                   ) : null}
                   {streamCols.show("actions") ? (
@@ -1193,6 +1270,8 @@ export function StreamsList({
                       <StreamRowActionsMenu
                         streamId={s.id}
                         streamType={type}
+                        streamName={s.name}
+                        streamUrl={s.streamUrl}
                         isActive={s.isActive}
                         serverId={s.server?.id}
                         onRefresh={load}
@@ -1245,7 +1324,7 @@ export function StreamsList({
                   ) : null}
                   {streamCols.show("streamInfo") ? (
                     <td>
-                      <StreamInfoCell stream={s} listType={type} />
+                      <StreamInfoCell stream={s} listType={type} probing={probingIds.has(s.id)} />
                     </td>
                   ) : null}
                 </tr>
@@ -1255,9 +1334,13 @@ export function StreamsList({
         </table>
         {filtered.length === 0 && (
           <p className="xui-streams-empty">
-            {statusFilter === "offline"
-              ? "No live streams with a failed origin probe or edge splice."
-              : "No streams match your filters."}
+            {listLoading
+              ? "Loading streams…"
+              : probingPage
+                ? "Probing offline sources…"
+                : statusFilter === "offline"
+                  ? "All clear — no live streams with a failed origin probe or edge splice."
+                  : "No streams match your filters."}
           </p>
         )}
       </div>

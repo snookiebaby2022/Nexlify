@@ -8,6 +8,7 @@ export function magPortalClientHtml(): string {
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;overflow:hidden;touch-action:manipulation}
+html{background:#071222}
 body{font-family:Segoe UI,Arial,sans-serif;background:#071222;color:#e8eef9;-webkit-tap-highlight-color:transparent}
 #app{display:flex;flex-direction:column;height:100vh}
 header{background:linear-gradient(180deg,#1a4a8a,#12325c);padding:.7rem 1rem;border-bottom:1px solid #2a5a9a}
@@ -40,7 +41,7 @@ main{flex:1;min-height:0;position:relative}
 .hint{padding:.45rem .75rem;font-size:.68rem;color:#6a8ab5;background:#071222;border-top:1px solid #152a45}
 .status{padding:2rem;text-align:center;color:#9fb6d9}
 .err{color:#ff8a8a;padding:1.2rem}
-#playback-ui{display:none;position:fixed;left:0;right:0;bottom:0;z-index:10000;padding:.85rem 1rem;background:linear-gradient(180deg,rgba(7,18,34,.78),rgba(7,18,34,.96));border-top:3px solid #5eb3ff;align-items:center;gap:1rem;box-shadow:0 -8px 28px rgba(0,0,0,.55)}
+#playback-ui{display:none;position:fixed;left:0;right:0;bottom:0;z-index:2147483647;padding:.85rem 1rem;background:linear-gradient(180deg,rgba(7,18,34,.78),rgba(7,18,34,.96));border-top:3px solid #5eb3ff;align-items:center;gap:1rem;box-shadow:0 -8px 28px rgba(0,0,0,.55)}
 #playback-ui.active{display:flex}
 .pb-btn{padding:.65rem 1.1rem;border:2px solid #fff;border-radius:8px;background:#1a4a8a;color:#fff;font-size:.95rem;font-weight:600;cursor:pointer;flex-shrink:0}
 .pb-btn.focused{box-shadow:0 0 0 3px rgba(94,179,255,.65);background:#2563b8}
@@ -48,11 +49,17 @@ main{flex:1;min-height:0;position:relative}
 .pb-category{font-size:.78rem;font-weight:700;color:#ffd27a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.15rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pb-stream{font-size:1.15rem;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 4px rgba(0,0,0,.6)}
 .pb-hint{font-size:.68rem;color:#9ec7ff;margin-top:.2rem;opacity:.9}
-#volume-hud{display:none;position:fixed;top:1rem;right:1rem;z-index:10001;padding:.55rem .85rem;border-radius:10px;background:rgba(7,18,34,.92);border:2px solid #5eb3ff;color:#fff;font-size:1rem;font-weight:700;min-width:5rem;text-align:center}
+#volume-hud{display:none;position:fixed;top:1rem;right:1rem;z-index:2147483647;padding:.55rem .85rem;border-radius:10px;background:rgba(7,18,34,.92);border:2px solid #5eb3ff;color:#fff;font-size:1rem;font-weight:700;min-width:5rem;text-align:center}
 #volume-hud.active{display:block}
-body.mag-playing{background:transparent!important}
+html.mag-playing,body.mag-playing{background:transparent!important}
+html.mag-playing.html5-play,body.mag-playing.html5-play{background:#000!important}
 body.mag-playing #app{opacity:0;pointer-events:none}
-body.mag-playing #playback-ui{pointer-events:auto}
+body.mag-playing #playback-ui{pointer-events:auto;opacity:1!important}
+#html5player{display:none;position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#000;z-index:1}
+body.mag-playing #html5player{display:block}
+#html5player::-webkit-media-controls,
+#html5player::-webkit-media-controls-start-playback-button,
+#html5player::-webkit-media-controls-overlay-play-button{display:none!important;opacity:0;pointer-events:none}
 </style>
 </head>
 <body>
@@ -100,7 +107,7 @@ body.mag-playing #playback-ui{pointer-events:auto}
 <div id="volume-hud">Vol 50</div>
 <script type="text/javascript">
 (function () {
-  var API = "/c";
+  var API = "/c/";
   var PAGE = 14;
   var mac = "", token = "", profile = null;
   var screen = "menu", pane = "menu";
@@ -108,14 +115,20 @@ body.mag-playing #playback-ui{pointer-events:auto}
   var curPage = 0, totalItems = 0;
   var module = null, moduleLabel = "";
   var categories = [], items = [], seriesPick = null;
-  var loading = false, lastKey = 0, lastKeyAt = 0;
+  var loading = false, lastKey = 0, lastKeyAt = 0, navigationSeq = 0;
   var playing = false, playbackTitle = "", playbackCategory = "";
+  var nativePlayerActive = false;
   var resumeBrowse = null;
   var activeStreamId = null;
   var suppressPlayerStop = false;
   var volumeHudTimer = null;
   var portalVolume = 50;
   var playSeq = 0;
+  var lastDiagnostic = "";
+  var lastDiagnosticAt = 0;
+  var html5Playback = false;
+  var html5TsPlayer = null;
+  var html5Hls = null;
 
   var MODULES = [
     { id: "tv", label: "Live TV", icon: "📺", apiType: "stb" },
@@ -135,10 +148,40 @@ body.mag-playing #playback-ui{pointer-events:auto}
   }
 
   function deviceMac() {
-    try { if (typeof stb !== "undefined" && stb.GetDeviceMacAddress) return normalizeMac(stb.GetDeviceMacAddress()); } catch (e) {}
-    try { if (typeof gSTB !== "undefined" && gSTB.GetDeviceMacAddress) return normalizeMac(gSTB.GetDeviceMacAddress()); } catch (e) {}
+    var fromUrl = new URLSearchParams(window.location.search).get("mac");
+    if (fromUrl) return normalizeMac(fromUrl);
     var m = document.cookie.match(/(?:^|;\\s*)mac=([^;]+)/i);
     return m ? normalizeMac(decodeURIComponent(m[1])) : "";
+  }
+
+  // StbEmu Pro does not consistently expose its configured MAC as a cookie or
+  // request header. These getters are deliberately isolated from all native
+  // player/window APIs: calling those during boot can replace the WebView with
+  // a transparent/black native surface.
+  function nativeDeviceMac() {
+    var roots = [];
+    try { if (window.stb) roots.push(window.stb); } catch (_) {}
+    try { if (window.gSTB) roots.push(window.gSTB); } catch (_) {}
+    try { if (window.STB) roots.push(window.STB); } catch (_) {}
+    var getters = [
+      "GetDeviceMacAddress", "GetMacAddress", "GetMACAddress", "GetMac",
+      "getDeviceMacAddress", "getMacAddress", "getMac"
+    ];
+    for (var i = 0; i < roots.length; i++) {
+      var root = roots[i];
+      if (!root) continue;
+      for (var j = 0; j < getters.length; j++) {
+        try {
+          var getter = root[getters[j]];
+          if (typeof getter !== "function") continue;
+          var value = normalizeMac(getter.call(root));
+          if (/^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$/.test(value)) return value;
+        } catch (_) {
+          // A missing or restricted native getter must not prevent portal UI.
+        }
+      }
+    }
+    return "";
   }
 
   function apiUrl(action, apiType, extra) {
@@ -166,6 +209,18 @@ body.mag-playing #playback-ui{pointer-events:auto}
     });
   }
 
+  // This is deliberately a normal Stalker request (and contains no credentials).
+  // It lets the panel distinguish an absent remote event from a portal/API failure.
+  function reportDeviceEvent(event, code) {
+    if (!mac) return;
+    var signature = String(event || "") + ":" + String(code || "");
+    var now = Date.now();
+    if (signature === lastDiagnostic && now - lastDiagnosticAt < 750) return;
+    lastDiagnostic = signature;
+    lastDiagnosticAt = now;
+    api("client_event", "stb", { event: event, code: code || "" }).catch(function () {});
+  }
+
   function setScreen(name) {
     screen = name;
     var nodes = document.querySelectorAll(".screen");
@@ -177,6 +232,23 @@ body.mag-playing #playback-ui{pointer-events:auto}
   function setCrumb(text) { document.getElementById("crumb").textContent = text; }
 
   function showError(msg) {
+    navigationSeq++;
+    playSeq++;
+    loading = false;
+    // Force opaque portal UI — never leave mag-playing / SetTransparent(true) stuck.
+    if (playing) {
+      var closingStream = activeStreamId;
+      playing = false;
+      loading = false;
+      resumeBrowse = null;
+      activeStreamId = null;
+      suppressPlayerStop = true;
+      stopNativePlayer();
+      suppressPlayerStop = false;
+      if (closingStream) notifyDisconnect(closingStream);
+      document.getElementById("playback-ui").classList.remove("active");
+    }
+    showPortalUi();
     document.getElementById("error-msg").textContent = msg;
     setScreen("error");
   }
@@ -278,6 +350,9 @@ body.mag-playing #playback-ui{pointer-events:auto}
   }
 
   function renderMainMenu() {
+    navigationSeq++;
+    playSeq++;
+    loading = false;
     pane = "menu";
     idxMenu = 0;
     module = null;
@@ -292,7 +367,7 @@ body.mag-playing #playback-ui{pointer-events:auto}
     var nodes = rowsIn(box);
     for (var i = 0; i < nodes.length; i++) {
       (function (el, n) {
-        el.onclick = function () { idxMenu = n; openModule(); };
+        bindActivate(el, function () { idxMenu = n; openModule(); });
       })(nodes[i], i);
     }
     setScreen("menu");
@@ -308,14 +383,14 @@ body.mag-playing #playback-ui{pointer-events:auto}
     var nodes = rowsIn(box);
     for (var i = 0; i < nodes.length; i++) {
       (function (el, n) {
-        el.onclick = function () {
+        bindActivate(el, function () {
           idxCat = n;
           pane = "cats";
           curPage = 0;
           idxItem = 0;
           setCrumb(browseCrumb());
           loadItems(el.getAttribute("data-id"));
-        };
+        });
       })(nodes[i], i);
     }
     focusRows(box, idxCat);
@@ -337,7 +412,7 @@ body.mag-playing #playback-ui{pointer-events:auto}
     var nodes = rowsIn(box);
     for (var i = 0; i < nodes.length; i++) {
       (function (el, n) {
-        el.onclick = function () { idxItem = n; pane = "items"; activateItem(el); };
+        bindActivate(el, function () { idxItem = n; pane = "items"; activateItem(el); });
       })(nodes[i], i);
     }
     if (idxItem >= nodes.length) idxItem = Math.max(0, nodes.length - 1);
@@ -364,15 +439,19 @@ body.mag-playing #playback-ui{pointer-events:auto}
   function loadItems(catId, page) {
     if (loading) return;
     loading = true;
+    var seq = ++navigationSeq;
     loadItemsForced(catId, page).then(function () {
+      if (seq !== navigationSeq) return;
       loading = false;
     }).catch(function (e) {
+      if (seq !== navigationSeq) return;
       loading = false;
       showError(e.message || "Failed to load list");
     });
   }
 
   function openBrowse() {
+    var seq = ++navigationSeq;
     pane = "cats";
     idxCat = 0;
     idxItem = 0;
@@ -380,6 +459,7 @@ body.mag-playing #playback-ui{pointer-events:auto}
     setScreen("loading");
     document.getElementById("loading-msg").textContent = "Loading " + moduleLabel + "…";
     api("get_categories", module.apiType).then(function (r) {
+      if (seq !== navigationSeq) return;
       categories = Array.isArray(r.js) ? r.js : [];
       if (!categories.length) categories = [{ id: "0", title: moduleLabel }];
       renderCats();
@@ -388,7 +468,9 @@ body.mag-playing #playback-ui{pointer-events:auto}
       focusRows(document.getElementById("cats"), idxCat);
       updateBrowseContextBar();
       loadItems(categories[0].id, 0);
-    }).catch(function (e) { showError(e.message || "Failed to load categories"); });
+    }).catch(function (e) {
+      if (seq === navigationSeq) showError(e.message || "Failed to load categories");
+    });
   }
 
   function openModule() {
@@ -397,6 +479,19 @@ body.mag-playing #playback-ui{pointer-events:auto}
     seriesPick = null;
     document.getElementById("title").textContent = moduleLabel;
     openBrowse();
+  }
+
+  function bindActivate(el, action) {
+    el.onclick = function () {
+      reportDeviceEvent("pointer_activate");
+      action();
+    };
+    el.ontouchend = function (ev) {
+      if (ev) ev.preventDefault();
+      reportDeviceEvent("touch_activate");
+      action();
+      return false;
+    };
   }
 
   function streamIdFromCmd(cmd) {
@@ -411,6 +506,12 @@ body.mag-playing #playback-ui{pointer-events:auto}
       code === 36 || code === 18 || code === 123 || code === 61448 ||
       key === "Backspace" || key === "Escape" || key === "Back" || key === "BrowserBack" ||
       key === "Exit" || key === "GoBack";
+  }
+
+  function isEnterKey(code, key) {
+    code = parseInt(code, 10) || 0;
+    return code === 13 || code === 23 || code === 66 || code === 160 ||
+      key === "Enter" || key === "Select" || key === "OK" || key === "DpadCenter";
   }
 
   function isChUp(code) {
@@ -445,6 +546,7 @@ body.mag-playing #playback-ui{pointer-events:auto}
   }
 
   function readVolumeLevel() {
+    if (!nativePlayerActive) return portalVolume;
     return stbCall(function () {
       if (typeof stb !== "undefined" && stb.player && typeof stb.player.GetVolume === "function") {
         return stb.player.GetVolume();
@@ -456,6 +558,7 @@ body.mag-playing #playback-ui{pointer-events:auto}
   }
 
   function nativeVolumeStep(up) {
+    if (!nativePlayerActive) return false;
     return stbCall(function () {
       if (typeof window.AndroidInterface !== "undefined") {
         if (up && typeof window.AndroidInterface.volumeUp === "function") {
@@ -501,6 +604,8 @@ body.mag-playing #playback-ui{pointer-events:auto}
   function writeVolumeLevel(level) {
     portalVolume = level;
     showVolumeHud(level);
+    applyHtml5Volume();
+    if (!nativePlayerActive) return false;
     return stbCall(function () {
       if (typeof stb !== "undefined" && stb.player && typeof stb.player.SetVolume === "function") {
         stb.player.SetVolume(level);
@@ -537,34 +642,53 @@ body.mag-playing #playback-ui{pointer-events:auto}
     return true;
   }
 
+  // These APIs are unsafe in StbEmu Pro unless a user has explicitly started
+  // playback. Keep this function out of boot and all DOM-only restore paths.
   function keepRemoteInPortal() {
+    // Browser window stays on top so Back/volume remain visible; video shows
+    // through the transparent WebView (SetTransparent + mag-playing CSS).
+    setTopWindow(0);
+  }
+
+  function setTopWindow(winNum) {
     stbCall(function () {
       if (typeof stb !== "undefined") {
-        if (stb.SetTopWin) stb.SetTopWin(1);
+        if (stb.SetTopWin) stb.SetTopWin(winNum);
         if (stb.EnableAppButton) stb.EnableAppButton(true);
         if (stb.EnableServiceButton) stb.EnableServiceButton(true);
-        if (stb.SetTransparent) stb.SetTransparent(true);
       }
       if (typeof gSTB !== "undefined") {
-        if (gSTB.SetTopWin) gSTB.SetTopWin(1);
+        if (gSTB.SetTopWin) gSTB.SetTopWin(winNum);
         if (gSTB.EnableAppButton) gSTB.EnableAppButton(true);
         if (gSTB.EnableServiceButton) gSTB.EnableServiceButton(true);
-        if (gSTB.SetTransparent) gSTB.SetTransparent(true);
       }
+    });
+  }
+
+  function setPlayerLayerTransparent(on) {
+    stbCall(function () {
+      if (typeof stb !== "undefined" && stb.SetTransparent) stb.SetTransparent(!!on);
+      if (typeof gSTB !== "undefined" && gSTB.SetTransparent) gSTB.SetTransparent(!!on);
     });
   }
 
   function hidePortalUi() {
+    document.documentElement.classList.add("mag-playing");
     document.body.classList.add("mag-playing");
+    if (html5Playback) {
+      document.documentElement.classList.add("html5-play");
+      document.body.classList.add("html5-play");
+      return;
+    }
+    setPlayerLayerTransparent(true);
     keepRemoteInPortal();
   }
 
   function showPortalUi() {
-    document.body.classList.remove("mag-playing");
-    stbCall(function () {
-      if (typeof stb !== "undefined" && stb.SetTransparent) stb.SetTransparent(false);
-      if (typeof gSTB !== "undefined" && gSTB.SetTransparent) gSTB.SetTransparent(false);
-    });
+    document.documentElement.classList.remove("mag-playing", "html5-play");
+    document.body.classList.remove("mag-playing", "html5-play");
+    document.body.style.background = "";
+    document.documentElement.style.background = "";
   }
 
   function notifyDisconnect(streamId) {
@@ -575,7 +699,8 @@ body.mag-playing #playback-ui{pointer-events:auto}
   function playerSolution(url) {
     var u = String(url || "").toLowerCase();
     if (u.indexOf(".m3u8") >= 0 || u.indexOf("/hls/") >= 0) return "auto";
-    if (u.indexOf(".mp4") >= 0 || u.indexOf(".mkv") >= 0 || u.indexOf(".avi") >= 0) return "auto";
+    if (u.indexOf(".mp4") >= 0 || u.indexOf(".mkv") >= 0 || u.indexOf(".avi") >= 0) return "ffmpeg";
+    // MAG/StbEmu HTTP MPEG-TS uses the ffmpeg solution, matching create_link.
     return "ffmpeg";
   }
 
@@ -583,16 +708,9 @@ body.mag-playing #playback-ui{pointer-events:auto}
     try { return fn(); } catch (e) { return null; }
   }
 
-  function showPortalChrome() {
-    stbCall(function () {
-      if (typeof stbWindowMgr !== "undefined" && stbWindowMgr.showPortalWindow) {
-        stbWindowMgr.showPortalWindow();
-      }
-      if (typeof stb !== "undefined" && stb.SetTopWin) stb.SetTopWin(1);
-    });
-  }
-
   function stopNativePlayer() {
+    stopHtml5();
+    if (!nativePlayerActive) return;
     stbCall(function () {
       if (typeof stb !== "undefined") {
         if (stb.player && stb.player.stop) stb.player.stop();
@@ -600,6 +718,7 @@ body.mag-playing #playback-ui{pointer-events:auto}
       }
       if (typeof gSTB !== "undefined" && gSTB.Stop) gSTB.Stop();
     });
+    nativePlayerActive = false;
   }
 
   function zapChannel(delta) {
@@ -662,7 +781,12 @@ body.mag-playing #playback-ui{pointer-events:auto}
       zapChannel(1);
       return true;
     }
-    if (code === 13) {
+    if (code === 13 || isEnterKey(code, keyStr)) {
+      var hv = document.getElementById("html5player");
+      if (html5Playback && hv && hv.paused) {
+        kickHtml5Play();
+        return true;
+      }
       exitPlayback(true);
       return true;
     }
@@ -694,16 +818,68 @@ body.mag-playing #playback-ui{pointer-events:auto}
             if (handlePlaybackRemote(keyCode, String(info || ""))) return false;
           }
         }
+        if (evLower.indexOf("key") >= 0 || evLower === "keyboard" || (!isNaN(keyCode) && keyCode > 0)) {
+          if (routeRemoteKey(keyCode, String(info || event || ""))) return false;
+        }
       } catch (e) {}
       if (typeof prev === "function") return prev(event, info);
     };
     window.stbEvent.onBroadcastMessage = window.stbEvent.onBroadcastMessage || function () {};
-    window.stbEvent.onPress = window.stbEvent.onPress || function (code) {
-      if (playing) handlePlaybackRemote(code, "");
+    window.stbEvent.onPress = function (code) {
+      return routeRemoteKey(code, "");
     };
-    window.stbEvent.onKeyPress = window.stbEvent.onKeyPress || function (code) {
-      if (playing) handlePlaybackRemote(code, "");
+    window.stbEvent.onKeyPress = function (code) {
+      return routeRemoteKey(code, "");
     };
+
+    // Some remotes send key codes via window keydown, but on mobile/emulators
+    // document or window might need explicit listener on both.
+    document.addEventListener("keydown", function(ev) {
+      if (playing) {
+        var c = ev.keyCode || ev.which || 0;
+        var k = ev.key || "";
+        if (isBackKey(c, k) || c === 13) {
+          ev.preventDefault();
+          exitPlayback(true);
+        }
+      }
+    }, true);
+    // StbEmu variants expose either a JavaScript bridge event object or the
+    // legacy global callback. Register only input callbacks at boot: player,
+    // window, and transparency APIs remain explicit-playback-only.
+    stbCall(function () {
+      var roots = [];
+      if (typeof stb !== "undefined") roots.push(stb);
+      if (typeof gSTB !== "undefined") roots.push(gSTB);
+      for (var i = 0; i < roots.length; i++) {
+        var events = roots[i] && (roots[i].event || roots[i].Event);
+        if (!events) continue;
+        var prior = events.onEvent;
+        events.onEvent = function (event, info) {
+          var keyCode = parseInt(info, 10);
+          if (isNaN(keyCode)) keyCode = parseInt(event, 10) || 0;
+          if (routeRemoteKey(keyCode, String(info || event || ""))) return false;
+          if (typeof prior === "function") return prior(event, info);
+        };
+        events.onKeyPress = function (code) { return routeRemoteKey(code, ""); };
+      }
+    });
+  }
+
+  function routeRemoteKey(code, key) {
+    code = parseInt(code, 10) || 0;
+    if (!code && !key) return false;
+    reportDeviceEvent("bridge_key", code);
+    if (playing) return handlePlaybackRemote(code, key);
+    onKey({
+      keyCode: code,
+      which: code,
+      key: key || "",
+      preventDefault: function () {},
+      stopPropagation: function () {},
+      stopImmediatePropagation: function () {}
+    });
+    return true;
   }
 
   function bindPlayerCallbacks() {
@@ -713,27 +889,37 @@ body.mag-playing #playback-ui{pointer-events:auto}
       stb.player.onPlayCallBack = function () {};
       stb.player.onStop = function () {
         if (suppressPlayerStop || !playing) return;
-        exitPlayback(false);
+        exitPlayback(true);
       };
       stb.player.onStopCallBack = function () {
         if (suppressPlayerStop || !playing) return;
-        exitPlayback(false);
+        exitPlayback(true);
       };
       stb.player.onPlayEnd = function () {
         if (suppressPlayerStop || !playing) return;
-        exitPlayback(false);
+        exitPlayback(true);
       };
       stb.player.onError = function () {
         if (suppressPlayerStop || !playing) return;
-        exitPlayback(false);
-        showError("Playback error");
+        exitPlayback(true);
+        showError("Native player rejected the stream");
       };
     });
   }
 
   function bindPlaybackUi() {
     var back = document.getElementById("btn-playback-back");
-    if (back) back.onclick = function () { exitPlayback(true); };
+    if (back) {
+      bindActivate(back, function () { exitPlayback(true); });
+      back.addEventListener("click", function(e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        exitPlayback(true);
+      });
+      back.addEventListener("touchend", function(e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        exitPlayback(true);
+      });
+    }
     var volUp = document.getElementById("btn-vol-up");
     var volDown = document.getElementById("btn-vol-down");
     function bindVol(btn, up) {
@@ -811,6 +997,7 @@ body.mag-playing #playback-ui{pointer-events:auto}
     resumeBrowse = snapshot || captureBrowseState();
     playbackCategory = resumeBrowse.catName || moduleLabel || "Live TV";
     playing = true;
+    nativePlayerActive = true;
     playbackTitle = title || resumeBrowse.itemName || "";
     hidePortalUi();
     document.getElementById("playback-ui").classList.add("active");
@@ -820,6 +1007,10 @@ body.mag-playing #playback-ui{pointer-events:auto}
     document.documentElement.style.background = "transparent";
     portalVolume = readVolumeLevel();
     if (typeof portalVolume !== "number" || isNaN(portalVolume)) portalVolume = 50;
+    if (!html5Playback) {
+      var nativeRoot = typeof stb !== "undefined" ? stb : (typeof gSTB !== "undefined" ? gSTB : null);
+      if (nativeRoot) prepareVideoLayer(nativeRoot);
+    }
   }
 
   function exitPlayback(stopPlayer) {
@@ -832,63 +1023,280 @@ body.mag-playing #playback-ui{pointer-events:auto}
     activeStreamId = null;
     suppressPlayerStop = true;
     if (stopPlayer !== false) stopNativePlayer();
+    else nativePlayerActive = false;
     suppressPlayerStop = false;
     if (closingStream) notifyDisconnect(closingStream);
     document.getElementById("playback-ui").classList.remove("active");
     document.body.style.background = "";
     document.documentElement.style.background = "";
     showPortalUi();
-    showPortalChrome();
     restoreBrowseAfterPlayback(snapshot);
+  }
+
+  function html5Capable() {
+    return typeof MediaSource !== "undefined";
+  }
+
+  function hlsMediaUrl(url) {
+    var s = String(url || "");
+    var q = s.indexOf("?");
+    var h = s.indexOf("#");
+    var cut = s.length;
+    if (q >= 0 && q < cut) cut = q;
+    if (h >= 0 && h < cut) cut = h;
+    var base = s.slice(0, cut);
+    var rest = s.slice(cut);
+    if (base.length >= 3 && base.slice(base.length - 3).toLowerCase() === ".ts") {
+      return base.slice(0, base.length - 3) + ".m3u8" + rest;
+    }
+    return s;
+  }
+
+  function ensureHtml5Video() {
+    var v = document.getElementById("html5player");
+    if (v) return v;
+    v = document.createElement("video");
+    v.id = "html5player";
+    v.setAttribute("playsinline", "playsinline");
+    v.setAttribute("webkit-playsinline", "true");
+    v.setAttribute("autoplay", "autoplay");
+    v.muted = true;
+    v.controls = false;
+    v.preload = "auto";
+    v.onclick = function () { kickHtml5Play(); };
+    v.ontouchend = function () { kickHtml5Play(); };
+    document.body.appendChild(v);
+    return v;
+  }
+
+  function kickHtml5Play() {
+    var v = document.getElementById("html5player");
+    if (!v) return;
+    try { v.muted = true; } catch (e) {}
+    var p = v.play();
+    function unmute() {
+      try { v.muted = false; } catch (e) {}
+      applyHtml5Volume();
+    }
+    if (p && p.then) {
+      p.then(function () { unmute(); }).catch(function () {
+        reportDeviceEvent("html5_blocked");
+      });
+    } else unmute();
+  }
+
+  function applyHtml5Volume() {
+    var v = document.getElementById("html5player");
+    if (v) v.volume = Math.max(0, Math.min(1, (typeof portalVolume === "number" ? portalVolume : 100) / 100));
+  }
+
+  function stopHtml5() {
+    html5Playback = false;
+    document.documentElement.classList.remove("html5-play");
+    document.body.classList.remove("html5-play");
+    try { if (html5Hls) html5Hls.destroy(); } catch (e) {}
+    html5Hls = null;
+    try { if (html5TsPlayer) html5TsPlayer.destroy(); } catch (e) {}
+    html5TsPlayer = null;
+    var v = document.getElementById("html5player");
+    if (v) {
+      try { v.pause(); } catch (e) {}
+      try { v.removeAttribute("src"); v.load(); } catch (e) {}
+    }
+  }
+
+  function loadScript(src, done) {
+    var existing = document.querySelector('script[src="' + src + '"]');
+    if (existing) {
+      if (src.indexOf("mpegts") >= 0 && window.mpegts) return done();
+      if (src.indexOf("hls") >= 0 && window.Hls) return done();
+      existing.addEventListener("load", function () { done(); });
+      existing.addEventListener("error", function () { done(); });
+      return;
+    }
+    var s = document.createElement("script");
+    s.src = src;
+    s.onload = function () { done(); };
+    s.onerror = function () { done(); };
+    document.head.appendChild(s);
+  }
+
+  function startHtml5(url, title, snapshot) {
+    html5Playback = true;
+    if (!playing) enterPlayback(title, snapshot);
+    else {
+      updatePlaybackBar(playbackTitle, playbackCategory);
+      hidePortalUi();
+    }
+    var v = ensureHtml5Video();
+    applyHtml5Volume();
+    var tsUrl = sameOriginMediaUrl(url);
+    var hlsUrl = hlsMediaUrl(tsUrl);
+    function playNativeHls() {
+      v.src = hlsUrl;
+      kickHtml5Play();
+      reportDeviceEvent("html5_tag");
+    }
+    function attachHls() {
+      if (window.Hls && window.Hls.isSupported()) {
+        try { if (html5Hls) html5Hls.destroy(); } catch (e) {}
+        html5Hls = new window.Hls({
+          enableWorker: false,
+          lowLatencyMode: true,
+          maxBufferLength: 12,
+          liveDurationInfinity: true,
+          liveSyncDurationCount: 3
+        });
+        html5Hls.loadSource(hlsUrl);
+        html5Hls.attachMedia(v);
+        html5Hls.on(window.Hls.Events.MANIFEST_PARSED, function () {
+          kickHtml5Play();
+        });
+        html5Hls.on(window.Hls.Events.ERROR, function (_ev, data) {
+          if (!data || !data.fatal) return;
+          reportDeviceEvent("html5_hlserr");
+          try { html5Hls.destroy(); } catch (e) {}
+          html5Hls = null;
+          if (!attachMpegTs()) playNativeHls();
+        });
+        reportDeviceEvent("html5_hls");
+        return true;
+      }
+      return false;
+    }
+    function attachMpegTs() {
+      if (window.mpegts && window.mpegts.isSupported && window.mpegts.isSupported()) {
+        try { if (html5TsPlayer) html5TsPlayer.destroy(); } catch (e) {}
+        html5TsPlayer = window.mpegts.createPlayer(
+          { type: "mpegts", isLive: true, url: tsUrl, cors: true },
+          { enableStashBuffer: true, stashInitialSize: 131072, liveBufferLatencyChasing: true }
+        );
+        html5TsPlayer.attachMediaElement(v);
+        html5TsPlayer.load();
+        kickHtml5Play();
+        reportDeviceEvent("html5_ts");
+        return true;
+      }
+      return false;
+    }
+    loadScript("/hls.min.js", function () {
+      if (attachHls()) return;
+      loadScript("/mpegts.min.js", function () {
+        if (!attachMpegTs()) playNativeHls();
+      });
+    });
+    return true;
+  }
+
+  function ensurePlayerInited() {
+    stbCall(function () {
+      if (typeof stb !== "undefined" && stb.InitPlayer) stb.InitPlayer();
+      if (typeof gSTB !== "undefined" && gSTB.InitPlayer) gSTB.InitPlayer();
+    });
+  }
+
+  function sameOriginMediaUrl(url) {
+    try {
+      var here = window.location;
+      if (!here || !here.host || String(here.protocol || "").indexOf("http") !== 0) return url;
+      var u = new URL(url, here.href);
+      if (!/^https?:$/i.test(u.protocol)) return url;
+      u.protocol = here.protocol;
+      u.host = here.host;
+      return u.toString();
+    } catch (e) {
+      return url;
+    }
+  }
+
+  function prepareVideoLayer(nativeRoot) {
+    stbCall(function () {
+      var w = window.innerWidth || 1280;
+      var h = window.innerHeight || 720;
+      if (nativeRoot.SetViewport) nativeRoot.SetViewport(0, 0, w, h);
+      if (nativeRoot.SetPosX) nativeRoot.SetPosX(0);
+      if (nativeRoot.SetPosY) nativeRoot.SetPosY(0);
+      if (nativeRoot.SetWidth) nativeRoot.SetWidth(w);
+      if (nativeRoot.SetHeight) nativeRoot.SetHeight(h);
+      // MAG: 0 = fullscreen. SetPIG(1, 0, …) is a zero-size PIG window on StbEmu.
+      if (nativeRoot.SetPIG) nativeRoot.SetPIG(0, 0, 0, 0);
+      if (nativeRoot.SetTransparent) nativeRoot.SetTransparent(true);
+      if (nativeRoot.SetVolume) nativeRoot.SetVolume(typeof portalVolume === "number" ? portalVolume : 100);
+    });
+    setTopWindow(0);
   }
 
   function playUrl(rawCmd, title, snapshot) {
     if (!rawCmd) { showError("No playback URL"); return; }
-    var url = playableUrl(rawCmd);
+    var url = sameOriginMediaUrl(playableUrl(rawCmd));
     if (!url) { showError("No playback URL"); return; }
     playbackTitle = title || (snapshot && snapshot.itemName) || "";
     bindPlayerCallbacks();
+    ensurePlayerInited();
+    if (html5Capable()) {
+      startHtml5(url, title, snapshot);
+      return;
+    }
     var solution = playerSolution(url);
-    var mag254Cmd = /^https?:\/\//i.test(url) ? ("ffmpeg " + url) : rawCmd;
+    var magCmd = /^https?:\/\//i.test(url) ? (solution + " " + url) : rawCmd;
+    var started = false;
+    var nativeRoot = typeof stb !== "undefined" ? stb : (typeof gSTB !== "undefined" ? gSTB : null);
     try {
+      if (!nativeRoot) {
+        showError("Native player not available");
+        return;
+      }
       if (!playing) enterPlayback(title, snapshot);
       else updatePlaybackBar(playbackTitle, playbackCategory);
-      keepRemoteInPortal();
-      if (typeof stb !== "undefined") {
-        if (stb.player && stb.player.play) {
-          stb.player.play({ url: url, solution: solution, name: title || "" });
-          setTimeout(keepRemoteInPortal, 50);
-          setTimeout(keepRemoteInPortal, 400);
-          return;
-        }
-        if (stb.Play) {
-          stb.Play(mag254Cmd);
-          setTimeout(keepRemoteInPortal, 50);
-          setTimeout(keepRemoteInPortal, 400);
-          return;
+      prepareVideoLayer(nativeRoot);
+      if (nativeRoot.Play) {
+        try {
+          nativeRoot.Play(magCmd);
+          reportDeviceEvent("native_play", (window.location && window.location.host) || "");
+          started = true;
+        } catch (e) {
+          started = false;
         }
       }
-      if (typeof gSTB !== "undefined" && gSTB.Play) {
-        gSTB.Play(url);
-        setTimeout(keepRemoteInPortal, 50);
-        setTimeout(keepRemoteInPortal, 400);
+      if (!started && nativeRoot.player && nativeRoot.player.play) {
+        try {
+          nativeRoot.player.play({ uri: url, solution: solution, playStr: magCmd, name: title || "" });
+          reportDeviceEvent("native_play_player");
+          started = true;
+        } catch (e) {
+          started = false;
+        }
+      }
+      if (!started && nativeRoot.PlaySolution) {
+        try {
+          nativeRoot.PlaySolution(solution, url);
+          reportDeviceEvent("native_play_solution");
+          started = true;
+        } catch (e) {
+          started = false;
+        }
+      }
+      if (started) {
+        setTimeout(function () { keepRemoteInPortal(); }, 50);
+        setTimeout(function () { keepRemoteInPortal(); }, 400);
         return;
       }
     } catch (e) {
-      exitPlayback(false);
+      exitPlayback(true);
       showError("Player error");
       return;
     }
-    if (playing) exitPlayback(false);
+    exitPlayback(true);
     showError("Native player not available");
   }
 
   function playableUrl(cmd) {
-    return String(cmd || "").replace(/^(ffmpeg|auto|ffrt)\s+/i, "").trim();
+    return String(cmd || "").replace(/^(ffmpeg|auto|ffrt|mpegts|mpegps|mp4)\s+/i, "").trim();
   }
 
   function playCmd(cmd) {
     if (!cmd) return;
+    reportDeviceEvent("play_requested");
     var seq = ++playSeq;
     var prevStream = activeStreamId;
     var snapshot = captureBrowseState();
@@ -898,6 +1306,7 @@ body.mag-playing #playback-ui{pointer-events:auto}
       notifyDisconnect(prevStream);
     }
     loading = true;
+    document.getElementById("items").innerHTML = '<div class="status">Starting playback…</div>';
     api("create_link", (module && module.apiType) || "stb", { cmd: cmd }).then(function (r) {
       if (seq !== playSeq) return;
       loading = false;
@@ -906,10 +1315,10 @@ body.mag-playing #playback-ui{pointer-events:auto}
         activeStreamId = streamId;
         playUrl(raw, title, snapshot);
       } else showError((r.js && r.js.error) || "Playback failed");
-    }).catch(function () {
+    }).catch(function (e) {
       if (seq !== playSeq) return;
       loading = false;
-      showError("Playback request failed");
+      showError((e && e.message) || "Playback request failed");
     });
   }
 
@@ -942,16 +1351,17 @@ body.mag-playing #playback-ui{pointer-events:auto}
   function onKey(ev) {
     var code = keyCode(ev);
     var key = ev.key || "";
+    reportDeviceEvent("dom_key", code);
     var now = Date.now();
     if (code === lastKey && now - lastKeyAt < (playing ? 90 : 140)) return;
     lastKey = code;
     lastKeyAt = now;
 
-    var left = code === 37 || key === "ArrowLeft";
-    var up = code === 38 || key === "ArrowUp";
-    var right = code === 39 || key === "ArrowRight";
-    var down = code === 40 || key === "ArrowDown";
-    var enter = code === 13 || key === "Enter";
+    var left = code === 37 || code === 21 || key === "ArrowLeft";
+    var up = code === 38 || code === 19 || key === "ArrowUp";
+    var right = code === 39 || code === 22 || key === "ArrowRight";
+    var down = code === 40 || code === 20 || key === "ArrowDown";
+    var enter = isEnterKey(code, key);
     var back = isBackKey(code, key);
     var chUp = code === 427 || code === 33;
     var chDown = code === 428 || code === 34;
@@ -980,7 +1390,11 @@ body.mag-playing #playback-ui{pointer-events:auto}
       return;
     }
 
-    if (screen === "error" && (enter || back)) { renderMainMenu(); ev.preventDefault(); return; }
+    if ((screen === "error" || screen === "loading") && (enter || back)) {
+      renderMainMenu();
+      ev.preventDefault();
+      return;
+    }
 
     if (screen === "browse") {
       if (back) {
@@ -1031,19 +1445,25 @@ body.mag-playing #playback-ui{pointer-events:auto}
   document.addEventListener("keydown", onKey, true);
   window.addEventListener("keydown", onKey, true);
 
-  function boot() {
-    mac = deviceMac();
+  function startPortal(nextMac) {
+    mac = normalizeMac(nextMac);
     document.getElementById("mac-line").textContent = mac ? ("MAC " + mac) : "MAC unknown";
     if (!mac) {
-      showError("Device MAC not available. Set MAC in StbEmu and register it in the panel.");
+      showError("Waiting for device MAC. StbEmu must send the registered MAC to the portal; no per-device URL is used.");
       return;
     }
+    reportDeviceEvent("boot");
     api("handshake", "stb").then(function (r) {
       if (!r.js || r.js.authorized !== 1) {
         showError((r.js && r.js.error) || "Authorization failed");
         return;
       }
       token = r.js.token || "";
+      // Set a session cookie with the authorized MAC so all subsequent
+      // media / sub-requests inherit the MAC automatically
+      try {
+        document.cookie = "mac=" + encodeURIComponent(mac) + "; path=/; max-age=86400";
+      } catch (e) {}
       return api("get_profile", "stb");
     }).then(function (r) {
       if (!r || !r.js) return;
@@ -1055,28 +1475,25 @@ body.mag-playing #playback-ui{pointer-events:auto}
     }).catch(function () { showError("Could not connect to portal"); });
   }
 
-  try {
-    if (typeof stb !== "undefined") {
-      if (stb.EnableVKButton) stb.EnableVKButton(false);
-      if (stb.EnableAppButton) stb.EnableAppButton(true);
-      if (stb.EnableServiceButton) stb.EnableServiceButton(true);
-      if (stb.SetVolumeMode) stb.SetVolumeMode(1);
-      if (stb.InitPlayer) stb.InitPlayer();
-    }
-    if (typeof gSTB !== "undefined") {
-      if (gSTB.EnableAppButton) gSTB.EnableAppButton(true);
-      if (gSTB.EnableServiceButton) gSTB.EnableServiceButton(true);
-    }
-    keepRemoteInPortal();
-  } catch (e) {}
+  // Boot is DOM/network-only. In particular, do not touch stb/gSTB, player,
+  // window focus, or transparency APIs: StbEmu Pro can replace this WebView.
+  showPortalUi();
 
   bindStbEvents();
-  bindPlayerCallbacks();
   bindPlaybackUi();
   window.addEventListener("pagehide", function () {
     if (activeStreamId) notifyDisconnect(activeStreamId);
   });
-  boot();
+  // Query MAC and cookie are synchronous. Delay the optional native getter
+  // until the DOM can paint; do not add player/window/transparency calls here.
+  var bootMac = deviceMac();
+  if (bootMac) {
+    startPortal(bootMac);
+  } else {
+    setTimeout(function () {
+      startPortal(nativeDeviceMac());
+    }, 250);
+  }
 })();
 </script>
 </body></html>`;

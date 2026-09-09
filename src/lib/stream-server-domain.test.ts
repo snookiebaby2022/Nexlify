@@ -88,6 +88,17 @@ describe("direct media hostname selection", () => {
       }),
       "cdn1.example.com"
     );
+    // Sync helper still prefers LB domain; async path requires DNS→LB (else IP)
+    assert.equal(
+      pickAdvertisedMediaHostnameSync({
+        lbHost: "209.237.141.15",
+        lbDomain: "bladesmedia2.darkcdn.win",
+        mainPoolHosts: ["cdn1.example.com"],
+        lineId: "line-a",
+        panelHost: "45.88.138.18",
+      }),
+      "bladesmedia2.darkcdn.win"
+    );
     assert.equal(
       collectMainMediaHostPool({
         host: "45.88.138.18",

@@ -50,6 +50,20 @@ server {
     large_client_header_buffers 8 64k;
     client_header_buffer_size 32k;
 
+    # MAG/StbEmu often omit the trailing slash; nginx 301 /c → /c/ = black screen.
+    location = /c {
+        proxy_pass http://nexlify_panel/c;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_read_timeout 300s;
+    }
+
     location = /c/ {
         proxy_pass http://nexlify_panel/c;
         proxy_http_version 1.1;

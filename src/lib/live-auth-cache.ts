@@ -16,6 +16,8 @@ export type LiveAuthCacheEntry = {
   outputMode: LiveAuthOutputMode;
   serverId?: string | null;
   outboundProxy?: string | null;
+  /** Line maxConnections — edge uses this to avoid killing sibling same-IP sessions. */
+  maxConnections?: number;
 };
 
 const LIVE_AUTH_CACHE_SEC = Number(process.env.NEXLIFY_LIVE_AUTH_CACHE_SEC || 90);

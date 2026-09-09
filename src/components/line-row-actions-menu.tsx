@@ -71,8 +71,9 @@ export function LineRowActionsMenu({
 
   const linesApi = linesApiRoot(panel);
   const base = panelBasePath(panel);
-  const { showM3uDownload } = useResellerGroupFlags();
+  const { showM3uDownload, canDeleteLines } = useResellerGroupFlags();
   const allowPlaylistDownload = panel !== "reseller" || showM3uDownload;
+  const allowDelete = panel !== "reseller" || canDeleteLines;
 
   async function apiCall(url: string, options?: RequestInit) {
     const res = await fetch(url, options);
@@ -197,7 +198,9 @@ export function LineRowActionsMenu({
         onClose();
       },
     },
-    { label: "Delete", icon: <Trash2 size={15} />, onClick: () => void remove(), danger: true },
+    ...(allowDelete
+      ? [{ label: "Delete", icon: <Trash2 size={15} />, onClick: () => void remove(), danger: true }]
+      : []),
   ];
 
   const updatePosition = useCallback(() => {

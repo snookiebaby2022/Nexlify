@@ -160,7 +160,8 @@ export function buildLineEpgUrl(host: string, proto: string, username: string, p
 }
 
 export function buildStalkerPortalUrl(host: string, proto: string): string {
-  return `${proto}//${host}/stalker_portal/c/`;
+  // Same short MAG portal path the panel serves (StbEmu / MAG boxes).
+  return `${proto}//${host}/c/`;
 }
 
 export function buildStalkerMacUrl(host: string, proto: string, mac: string): string {

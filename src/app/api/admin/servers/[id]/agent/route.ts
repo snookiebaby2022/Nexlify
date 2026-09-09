@@ -142,9 +142,38 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       });
       if (!stream) return NextResponse.json({ error: "Stream not found" }, { status: 404 });
 
+      // Optional: persist a new source URL before dropping the edge fan.
+      let sourceUpdated = false;
+      const rawNewSource = String(body.source ?? body.streamUrl ?? "").trim();
+      if (rawNewSource) {
+        const { normalizeStreamSource } = await import("@/lib/stream-source");
+        const { resolveSourceToStreamUrl, getMediaImportRoot } = await import("@/lib/import-media");
+        const normalized = normalizeStreamSource(rawNewSource);
+        if (!normalized) {
+          return NextResponse.json({ error: "Invalid source URL" }, { status: 400 });
+        }
+        const { streamUrl } = resolveSourceToStreamUrl(normalized, getMediaImportRoot());
+        if (streamUrl && streamUrl !== stream.streamUrl) {
+          await prisma.stream.update({
+            where: { id: streamId },
+            data: {
+              streamUrl,
+              providerId: null,
+              providerPath: null,
+              hostedExternally: false,
+            },
+          });
+          sourceUpdated = true;
+          stream.streamUrl = streamUrl;
+        } else if (streamUrl === stream.streamUrl) {
+          sourceUpdated = false;
+        }
+      }
+
       const { streamNeedsAlwaysOnProcessPolicy } = await import("@/lib/stream-playback-policy");
       const needsAgentFfmpeg = streamNeedsAlwaysOnProcessPolicy(stream);
       const { refreshStreamPlayback } = await import("@/lib/cache-invalidate");
+      // Await a real fan drop so the next viewer pull cannot rejoin the old upstream.
       const refresh = await refreshStreamPlayback(streamId);
 
       if (needsAgentFfmpeg) {
@@ -152,8 +181,12 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         return NextResponse.json({
           ok: true,
           mode: "ffmpeg",
+          sourceUpdated,
+          streamUrl: stream.streamUrl,
           ...refresh,
-          note: "Queued ffmpeg restart on agent; also dropped edge fan / live-auth cache",
+          note: sourceUpdated
+            ? "Saved new source URL; queued ffmpeg restart; dropped edge fan / live-auth cache"
+            : "Queued ffmpeg restart on agent; also dropped edge fan / live-auth cache",
         });
       }
 
@@ -161,8 +194,12 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       return NextResponse.json({
         ok: true,
         mode: "relay",
+        sourceUpdated,
+        streamUrl: stream.streamUrl,
         ...refresh,
-        note: "Dropped edge fan and live-auth cache so viewers pick up the current source URL",
+        note: sourceUpdated
+          ? "Saved new source URL; dropped edge fan and live-auth cache so viewers pull the new upstream"
+          : "Dropped edge fan and live-auth cache so viewers pick up the current source URL",
       });
     }
     case "stop_stream": {

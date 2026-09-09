@@ -69,6 +69,20 @@ describe("edge proxy installer parity", () => {
     assert.match(canonical, /lastUpstreamByteAt/);
   });
 
+  it("isolates auth-redirect catalogs; optional refresh; keyframe-gates reconnect", () => {
+    const canonical = readEdgeSource(canonicalPath);
+    assert.match(canonical, /function upstreamIsolatesFan\(/);
+    assert.match(canonical, /junki3monk3y|mybmcdn/);
+    assert.match(canonical, /IPTV_EDGE_FAN_AUTH_REFRESH_MS/);
+    assert.match(canonical, /fanAuthRefresh/);
+    assert.match(canonical, /authRedirectAt/);
+    assert.match(canonical, /authRefresh:\s*true/);
+    assert.match(canonical, /function findMpegTsKeyframeOffset\(/);
+    assert.match(canonical, /holdUntilKeyframe/);
+    assert.match(canonical, /armFanKeyframeHold/);
+    assert.match(canonical, /LIVE_FAN_AUTH_REFRESH_MS > 0/);
+  });
+
   it("canonical drops lagging fan clients without pausing the shared origin", () => {
     const canonical = readEdgeSource(canonicalPath);
     assert.match(canonical, /MAX_CLIENT_LAG_BYTES/);

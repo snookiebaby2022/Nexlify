@@ -45,8 +45,8 @@ fi
 mkdir -p /etc/nexlify
 cat > "$LOCK_FLAG" <<EOF
 locked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-rule=proxy /live/ to 209.237.141.15:8080
-forbidden=return 302 on live/timeshift/movie/series
+rule=panel refuses /live/ (502) — media only on 209.237.141.15:8080
+forbidden=return 302 on live/timeshift/movie/series; panel must not proxy media bitrate
 edge=splice locally, never forward /live/ to panel :8080
 unlock=bash /opt/nexlify-panel/scripts/lock-live-routing-45.sh unlock
 EOF

@@ -187,10 +187,10 @@ function stickyPickIndex(seed: string, len: number): number {
 }
 
 /**
- * Advertised media hostname for a sticky LB assignment:
- * 1) LB's own Domain Name when DNS points at that LB
- * 2) else a main-server multi-domain / rotator hostname that DNS-points at the LB
- * 3) else the LB IP
+ * Advertised media hostname for a sticky LB assignment (XUI-style direct edge):
+ * Only advertise a hostname when its A/AAAA records include the LB IP.
+ * Otherwise advertise the LB IP so players never hairpin through the panel
+ * (panel proxy NIC ≈1G wall). Multi-domain still works when DNS points at the LB.
  * Never returns the main panel IP while an LB host exists.
  */
 export async function resolveAdvertisedMediaHostname(opts: {
@@ -202,6 +202,33 @@ export async function resolveAdvertisedMediaHostname(opts: {
 }): Promise<string | null> {
   const lbIp = rawServerHost(opts.lb);
   if (!lbIp) return null;
+
+  // Nuclear: always publish LB IP (zero panel proxy from new player_api sessions).
+  // Checked before MEDIA_ORIGIN hostname so operators can force IP even when a
+  // domain is configured / DNS-matches the LB.
+  if (/^(1|true|yes)$/i.test(String(process.env.NEXLIFY_MEDIA_FORCE_LB_IP || "").trim())) {
+    return lbIp;
+  }
+
+  // Prefer configured media origin hostname when DNS points at this LB (e.g. darkcdn.site).
+  const configuredOrigin = String(process.env.NEXLIFY_MEDIA_ORIGIN || "").trim();
+  if (configuredOrigin) {
+    try {
+      const configuredHost = new URL(
+        configuredOrigin.includes("://") ? configuredOrigin : `http://${configuredOrigin}`
+      ).hostname.toLowerCase();
+      if (
+        configuredHost &&
+        configuredHost !== lbIp &&
+        (await hostnameResolvesToTarget(configuredHost, lbIp))
+      ) {
+        return configuredHost;
+      }
+    } catch {
+      /* ignore bad origin */
+    }
+  }
+
   const panelHost = String(opts.panelHost || "")
     .trim()
     .replace(/^https?:\/\//i, "")
@@ -217,8 +244,8 @@ export async function resolveAdvertisedMediaHostname(opts: {
   };
 
   const lbDomain = mediaHostnameFromServerDomain(opts.lb.domain);
-  if (lbDomain && (await hostnameResolvesToTarget(lbDomain, lbIp))) {
-    return rejectIfPanel(lbDomain) ?? lbIp;
+  if (lbDomain && rejectIfPanel(lbDomain) && (await hostnameResolvesToTarget(lbDomain, lbIp))) {
+    return lbDomain;
   }
 
   const pool = (opts.mainPoolHosts || []).filter(Boolean);
@@ -230,13 +257,16 @@ export async function resolveAdvertisedMediaHostname(opts: {
         if (candidate === lbIp) return lbIp;
         continue;
       }
+      if (!rejectIfPanel(candidate)) continue;
+      // Skip hostnames that resolve to the panel (hairpin / ~1G wall).
+      if (panelHost && (await hostnameResolvesToTarget(candidate, panelHost))) continue;
       if (await hostnameResolvesToTarget(candidate, lbIp)) {
-        return rejectIfPanel(candidate) ?? lbIp;
+        return candidate;
       }
     }
   }
 
-  return rejectIfPanel(lbIp) ?? lbIp;
+  return lbIp;
 }
 
 export async function resolveDirectMediaHostname(

@@ -14,12 +14,11 @@ const SESSION_KEY_PREFIX = "line-playback-origin:";
  * keep every channel on that account on the same LB without relaying video
  * through the panel.
  *
- * Advertised hostname preference (XUI-friendly direct-edge):
- * 1) assigned LB Domain Name when DNS points at that LB
- * 2) else a hostname from the main server Domain Name / DNS rotator pool that
- *    DNS-points at the assigned LB (capacity stays on the LB)
+ * Advertised hostname preference (direct-edge, no panel hairpin):
+ * 1) LB Domain Name only when DNS A/AAAA includes that LB IP
+ * 2) else a main Domain Name / rotator hostname that DNS-points at the LB
  * 3) else the LB IP
- * Never advertise the main panel IP while a healthy LB exists.
+ * Never advertise the main panel IP (or hosts that resolve to it) while a healthy LB exists.
  */
 export async function resolveLinePlaybackOrigin(lineId: string, fallbackOrigin: string): Promise<string> {
   const sessionKey = `${SESSION_KEY_PREFIX}${lineId}`;

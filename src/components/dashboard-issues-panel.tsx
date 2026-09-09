@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Power, RefreshCw, Wrench } from "lucide-react";
 import { notifyStreamHealthChanged, STREAM_HEALTH_CHANGED } from "@/lib/stream-health-events";
+import { adminToast } from "@/lib/admin-toast";
 
 type IssueStats = {
   inactiveStreams?: number;
@@ -157,6 +158,12 @@ export function DashboardIssuesPanel({
         recovered
           ? `Cleared ${recovered} from the dashboard${still ? ` · ${still} still failing` : ""}.`
           : `${still} still failing after full probe.`
+      );
+      adminToast(
+        recovered
+          ? `Cleared ${recovered} from Issues${still ? ` · ${still} still failing` : ""}`
+          : `${still} still failing after full probe`,
+        recovered ? "success" : "error"
       );
       notifyStreamHealthChanged();
       refresh();

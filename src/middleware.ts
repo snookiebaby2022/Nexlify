@@ -183,6 +183,7 @@ export async function middleware(req: NextRequest) {
   // MAG/StbEmu often set Portal URL to https://host (no /c/). `/` 307s to the
   // React /login page which the WebView cannot run → black screen.
   // Rewrite in place — boxes do not follow redirects for the portal document.
+  // Do NOT rewrite /c → /c/ here: trailingSlash normalization re-enters middleware and hangs.
   if (
     isStbPortalDocumentRequest(req) &&
     (pathname === "/" || pathname === "/login")

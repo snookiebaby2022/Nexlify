@@ -209,7 +209,10 @@ export async function xtreamUserInfo(
   const playable = lineIsPlayable(line);
   const { countLineSessions } = await import("@/lib/connections");
   const activeCons = playable ? await countLineSessions(line.id) : 0;
-  const atCapacity = playable && line.maxConnections > 0 && activeCons >= line.maxConnections;
+  // Do not put "Max connections reached" in catalog/auth user_info.message when
+  // auth=1 — many IPTV apps treat any non-empty message as login failure and show
+  // an empty playlist. Capacity is still enforced at playback/guard time; keep
+  // active_cons/max_connections accurate so UIs can show usage.
   const shell = await loadXtreamAccountShell(panelBaseUrl, line.id, userAgent);
   const formats = preferLiveOutputFormats(xtreamOutputFormats(line.allowedOutput), resolveClientPlaybackProfile(userAgent));
   const epgOrigin = websiteOriginOverride
@@ -222,11 +225,7 @@ export async function xtreamUserInfo(
       password: line.password,
       epg_url: epgUrl,
       offline_image_url: shell.offlineImageUrl,
-      message: !playable
-        ? "Account inactive or expired"
-        : atCapacity
-          ? "Max connections reached — you are using all allowed streams. Stop playback on other devices or increase your connection limit in the panel."
-          : "",
+      message: playable ? "" : "Account inactive or expired",
       auth: playable ? 1 : 0,
       status: playable ? "Active" : "Disabled",
       exp_date: String(Math.floor(lineDateMs(line.expiresAt) / 1000)),

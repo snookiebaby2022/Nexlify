@@ -125,13 +125,13 @@ export default function ServerSettingsPage() {
             <input
               className="mt-1 w-full rounded border px-3 py-2 bg-transparent font-mono text-sm"
               style={{ borderColor: "var(--border)" }}
-              placeholder="https://panel.example.com/c/"
+              placeholder="http://panel.example.com/c/"
               value={String(data.magServerUrl ?? "")}
               onChange={(e) => setData({ ...data, magServerUrl: e.target.value })}
             />
             <span className="mt-1 block text-xs" style={{ color: "var(--muted)" }}>
-              MAG boxes use MAC only. Use this host with /c/ (example: https://darkcdn.store/c/).
-              The site root https://host is the panel login page and shows a black screen on MAG/StbEmu.
+              MAG/StbEmu: prefer HTTP with trailing slash — http://darkcdn.store/c/ (HTTPS/Cloudflare
+              often blanks the WebView). MAC only; never use the site root alone.
             </span>
           </label>
           <label className="block text-sm">

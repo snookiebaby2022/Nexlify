@@ -65,7 +65,7 @@ export type DashboardKpiExtended = {
   networkOutMbps: number;
   /** Total LB NIC capacity (Mbps). */
   lbCapMbps: number;
-  /** Panel NIC throughput — proxy hairpin, not viewer egress. */
+  /** Panel NIC throughput (any traffic). UI labels this "Panel NIC" and only shows when high. */
   panelProxyMbps: number;
   /** True when LB egress comes from agent NIC samples, not connection estimates. */
   bandwidthMeasured: boolean;
@@ -258,17 +258,19 @@ export type DashboardPlaybackBandwidth = {
   networkInMbps: number;
   networkOutMbps: number;
   lbCapMbps: number;
+  /** Panel host NIC Mbps (API/admin/etc). Not LB viewer egress. */
   panelProxyMbps: number;
   measured: boolean;
 };
 
-/** Live viewer egress on load balancers — not the panel proxy NIC. */
+/** Live viewer egress on online load balancers only (never panel NIC / hairpin). */
 export async function getDashboardPlaybackBandwidth(): Promise<DashboardPlaybackBandwidth> {
   const [scores, panelNic] = await Promise.all([
     getServerLoadScores(),
     getDashboardNicBandwidthMbps(),
   ]);
   const ctx = buildServerRoleContext(scores.map((s) => s.server));
+  // Stream boxes only — main/panel is never counted toward LB egress.
   const lbs = scores.filter((s) => s.online && resolveServerRole(s.server, ctx) === "lb");
 
   let measuredOut = 0;
@@ -290,6 +292,7 @@ export async function getDashboardPlaybackBandwidth(): Promise<DashboardPlayback
     networkOutMbps: rounded,
     networkInMbps: rounded,
     lbCapMbps: cap,
+    // Kept for API compatibility / ops elsewhere — not shown on LB egress KPI.
     panelProxyMbps: Math.round(Math.max(panelNic.networkInMbps, panelNic.networkOutMbps) * 10) / 10,
     measured: hasMeasured,
   };

@@ -4,14 +4,18 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { MoreVertical } from "lucide-react";
-import { restartStreamOnServer } from "@/lib/restart-stream";
 import { computePortalMenuPosition } from "@/lib/portal-menu-position";
+import { adminToast } from "@/lib/admin-toast";
+import { notifyStreamHealthChanged } from "@/lib/stream-health-events";
+import { RestartStreamModal } from "@/components/restart-stream-modal";
 
 type StreamType = "LIVE" | "MOVIE" | "SERIES";
 
 export function StreamRowActionsMenu({
   streamId,
   streamType,
+  streamName,
+  streamUrl,
   isActive,
   serverId,
   onRefresh,
@@ -21,6 +25,8 @@ export function StreamRowActionsMenu({
 }: {
   streamId: string;
   streamType?: StreamType;
+  streamName?: string;
+  streamUrl?: string | null;
   isActive: boolean;
   serverId?: string | null;
   onRefresh: () => void;
@@ -29,6 +35,7 @@ export function StreamRowActionsMenu({
   onEdit?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [restartOpen, setRestartOpen] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
   const [flipped, setFlipped] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -36,39 +43,61 @@ export function StreamRowActionsMenu({
 
   async function killViewers() {
     if (!confirm("Kick all viewers watching this stream?")) return;
-    const res = await fetch(`/api/admin/streams/${streamId}/connections`, { method: "DELETE" });
-    const data = await res.json();
-    alert(res.ok ? `Kicked ${data.killed ?? 0} connection(s)` : (data.error ?? "Failed"));
+    try {
+      const res = await fetch(`/api/admin/streams/${streamId}/connections`, { method: "DELETE" });
+      const data = await res.json();
+      if (res.ok) adminToast(`Kicked ${data.killed ?? 0} connection(s)`, "success");
+      else adminToast(data.error ?? "Failed to kick viewers", "error");
+    } catch {
+      adminToast("Network error while kicking viewers", "error");
+    }
   }
 
   async function toggleActive() {
-    await fetch("/api/admin/streams", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: streamId, isActive: !isActive }),
-    });
-    onRefresh();
+    try {
+      const res = await fetch("/api/admin/streams", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: streamId, isActive: !isActive }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        adminToast(data.error ?? "Failed to update stream", "error");
+        return;
+      }
+      adminToast(isActive ? "Stream disabled" : "Stream enabled", "success");
+      onRefresh();
+    } catch {
+      adminToast("Network error while updating stream", "error");
+    }
   }
 
   async function probeStream() {
     setOpen(false);
-    const res = await fetch("/api/admin/streams/probe", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ streamId, fast: false }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      alert(data.error ?? "Probe failed");
-      return;
+    adminToast("Probing source…", "info", 2500);
+    try {
+      const res = await fetch("/api/admin/streams/probe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamId, fast: false }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        adminToast(data.error ?? "Probe failed", "error");
+        return;
+      }
+      const ok = data.probe?.status === "online" || data.probe?.status === "degraded";
+      adminToast(
+        ok
+          ? `Source online${data.probe?.latencyMs != null ? ` (${data.probe.latencyMs} ms)` : ""}`
+          : data.probe?.message ?? "Source offline",
+        ok ? "success" : "error"
+      );
+      notifyStreamHealthChanged();
+      onRefresh();
+    } catch {
+      adminToast("Network error while probing", "error");
     }
-    const ok = data.probe?.status === "online" || data.probe?.status === "degraded";
-    alert(
-      ok
-        ? `Source online${data.probe?.latencyMs != null ? ` (${data.probe.latencyMs} ms)` : ""}`
-        : data.probe?.message ?? "Source offline"
-    );
-    onRefresh();
   }
 
   const updatePosition = useCallback(() => {
@@ -99,16 +128,13 @@ export function StreamRowActionsMenu({
     };
   }, [open, updatePosition]);
 
-  async function restartStream() {
+  function openRestart() {
     setOpen(false);
     if (!serverId) {
-      alert("No streaming server assigned to this channel.");
+      adminToast("No streaming server assigned to this channel.", "error");
       return;
     }
-    if (!confirm("Restart this stream on the assigned server? Viewers will reconnect.")) return;
-    const err = await restartStreamOnServer(serverId, streamId);
-    if (err) alert(err);
-    else onRefresh();
+    setRestartOpen(true);
   }
 
   const episodesHref =
@@ -165,7 +191,7 @@ export function StreamRowActionsMenu({
               type="button"
               className="xui-lines-action-menu-item"
               role="menuitem"
-              onClick={() => void restartStream()}
+              onClick={openRestart}
             >
               Restart stream
             </button>
@@ -231,6 +257,17 @@ export function StreamRowActionsMenu({
         <MoreVertical size={16} />
       </button>
       {menu}
+      {serverId ? (
+        <RestartStreamModal
+          open={restartOpen}
+          streamId={streamId}
+          serverId={serverId}
+          streamName={streamName}
+          currentUrl={streamUrl}
+          onClose={() => setRestartOpen(false)}
+          onDone={onRefresh}
+        />
+      ) : null}
     </div>
   );
 }

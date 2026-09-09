@@ -91,6 +91,29 @@ async function portalSearchParams(req: NextRequest): Promise<URLSearchParams> {
   return params;
 }
 
+function stalkerRequestMeta(req: NextRequest, type: string | null, action: string) {
+  const userAgent = req.headers.get("user-agent") ?? "";
+  return {
+    action,
+    type: type ?? "",
+    path: req.nextUrl.pathname,
+    method: req.method,
+    headers: {
+      mac: Boolean(req.headers.get("mac")),
+      cookieMac: /(?:^|;\s*)mac=/i.test(req.headers.get("cookie") ?? ""),
+      xMac: Boolean(
+        req.headers.get("x-mac") ??
+          req.headers.get("x-mac-address") ??
+          req.headers.get("x-device-mac") ??
+          req.headers.get("stb-mac")
+      ),
+      xUserAgent: Boolean(req.headers.get("x-user-agent")),
+    },
+    userAgent:
+      /stbemu/i.test(userAgent) ? "stbemu" : /mag\d+|stbapp/i.test(userAgent) ? "mag" : "other",
+  };
+}
+
 /** Handle MAG / Enigma2 Stalker portal API (load.php and /c/). */
 export async function handleStalkerPortalRequest(req: NextRequest): Promise<NextResponse> {
   const demoBlock = rejectDemoIptvPlayback(req);
@@ -121,6 +144,24 @@ export async function handleStalkerPortalRequest(req: NextRequest): Promise<Next
 
   const clientIp = getClientIp(req);
   const userAgent = req.headers.get("user-agent") ?? undefined;
+  const requestMeta = stalkerRequestMeta(req, type, action);
+
+  // A bounded, explicitly named client event is safe to retain for physical-device
+  // diagnosis. It intentionally records header presence, not header values/tokens.
+  if (action === "client_event") {
+    const name = (params.get("event") ?? "").replace(/[^a-z0-9_-]/gi, "").slice(0, 40);
+    const code = (params.get("code") ?? "").replace(/[^0-9]/g, "").slice(0, 6);
+    void logStbEvent({
+      deviceType: "stalker",
+      mac: mac ?? undefined,
+      lineId: line?.id,
+      event: `portal_${name || "unknown"}`,
+      meta: { ...requestMeta, ...(code ? { code } : {}) },
+    });
+    return NextResponse.json(stalkerJsResponse({ ok: 1 }), {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
 
   if (line && STALKER_GUARDED_ACTIONS.has(action)) {
     const listingOnly = action !== "create_link";
@@ -173,7 +214,7 @@ export async function handleStalkerPortalRequest(req: NextRequest): Promise<Next
       mac: mac ?? undefined,
       lineId: line.id,
       event: action,
-      meta: { portalType: type ?? "" },
+      meta: requestMeta,
     });
   }
 

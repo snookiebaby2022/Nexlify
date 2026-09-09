@@ -12,6 +12,7 @@ import { PanelUpdateProgress } from "@/components/panel-update-progress";
 import { PanelUpdateJobProvider } from "@/contexts/panel-update-job-context";
 import { PanelReleaseNotesModal } from "@/components/panel-release-notes-modal";
 import { PanelDemoBanner } from "@/components/panel-demo-banner";
+import { AdminToastHost } from "@/components/admin-toast-host";
 import { withSidebarItemIcons } from "@/lib/panel-nav-bridge";
 import { getResellerSidebarNav } from "@/lib/reseller-sidebar-nav";
 import { getAdminSidebarNav } from "@/lib/admin-sidebar-nav";
@@ -161,6 +162,7 @@ export function PanelShell({
         </div>
       </div>
       <PanelMobileBottomNav role={role} onMore={() => setMobileNav(true)} hidden={!isCompact} />
+      <AdminToastHost />
     </div>
     </DashboardLiveMetricsProvider>
     </PanelUpdateJobProvider>

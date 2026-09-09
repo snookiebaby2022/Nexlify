@@ -11,6 +11,7 @@ import { LineStatus, PanelRole } from "@prisma/client";
 
 import { parseJsonBody, apiMutationErrorResponse } from "@/lib/parse-json-body";
 import { guardAdminApiRequest } from "@/lib/admin-route-guard";
+import { denyUnlessResellerPermission, RESELLER_PERMS } from "@/lib/reseller-permissions";
 function applyMassEditPatch(patch: MassEditPatch) {
   const data: {
     password?: string;
@@ -88,6 +89,11 @@ export async function POST(req: NextRequest) {
 
   if (!lineIds.length) {
     return NextResponse.json({ error: "lineIds required" }, { status: 400 });
+  }
+
+  if (action === "delete") {
+    const deleteDenied = await denyUnlessResellerPermission(session, RESELLER_PERMS.LINES_DELETE);
+    if (deleteDenied) return deleteDenied;
   }
 
   const where =

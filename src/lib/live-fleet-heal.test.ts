@@ -19,6 +19,9 @@ describe("live-fleet-heal keys", () => {
   it("scores preferred hosts and flags bad ones", () => {
     assert.equal(isBadLiveHostUrl("http://tinypanel.info:8080/a/b/1"), true);
     assert.equal(isBadLiveHostUrl("http://xplatinmedia.com/x"), true);
+    assert.equal(isBadLiveHostUrl("http://bestrestream.com:8080/a/b/1"), true);
+    assert.equal(isBadLiveHostUrl("http://chicotv.top/live/a/b/1"), true);
+    assert.equal(isBadLiveHostUrl("http://a2ziptv.online:2095/live/a/b/1"), true);
     assert.equal(isBadLiveHostUrl("http://junki3monk3y.com/Blade2nd/x/753"), false);
     assert.ok(liveHostScore("http://junki3monk3y.com/a") > liveHostScore("http://other.example/a"));
     assert.equal(

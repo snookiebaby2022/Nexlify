@@ -197,6 +197,23 @@ const LIVE_FAN_STALL_SWEEP_MS = Math.max(
   1_000,
   Math.min(Number(process.env.IPTV_EDGE_FAN_STALL_SWEEP_MS || 3_000), LIVE_FAN_STALL_MS)
 );
+/**
+ * Optional proactive refresh of signed CDN redirects (junki→mybmcdn/auth/…).
+ * Default OFF (0): VLC holds one signed URL until the origin dies; killing a
+ * healthy pull mid-GOP freezes video while audio continues. Stall sweep still
+ * reconnects when bytes stop. Set IPTV_EDGE_FAN_AUTH_REFRESH_MS>0 only if the
+ * CDN keeps a dead socket "alive" past LIVE_FAN_STALL_MS.
+ */
+const LIVE_FAN_AUTH_REFRESH_MS = (() => {
+  const raw = Number(process.env.IPTV_EDGE_FAN_AUTH_REFRESH_MS ?? 0);
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  return Math.max(60_000, Math.min(raw, 900_000));
+})();
+/** Max bytes to buffer after reconnect while waiting for a video keyframe. */
+const LIVE_FAN_KEYFRAME_HOLD_BYTES = Math.max(
+  188 * 64,
+  Math.min(Number(process.env.IPTV_EDGE_FAN_KEYFRAME_HOLD_BYTES || 2_500_000), 8_388_608)
+);
 /** Soft lag: skip-to-live instead of killing the socket (XUI-style).
  *  Hard drop only after extreme lag — disconnect+reconnect feels like buffering. */
 const MAX_CLIENT_LAG_BYTES = Number(process.env.IPTV_EDGE_MAX_CLIENT_LAG_BYTES || 24_000_000);
@@ -221,6 +238,9 @@ const edgeMetrics = {
   diskPackIdleStops: 0,
   hlsSegCoalesced: 0,
   fanStallClears: 0,
+  fanAuthRefresh: 0,
+  fanKeyframeHolds: 0,
+  fanKeyframeHoldTimeouts: 0,
   eventLoopDelayMs: 0,
 };
 /** streamId -> shared MPEG-TS restream */
@@ -238,6 +258,32 @@ function normalizeUpstreamFanKey(url) {
   } catch {
     return "";
   }
+}
+
+/**
+ * Auth-redirect catalogs should NOT coalesce FHD/HD/SD/aliases onto one fan.
+ * Duplicate rows sharing one junki URL (e.g. F1 SD+FHD+UHD → same path) otherwise
+ * share one signed CDN token — one stall glitches every “channel”.
+ * Viewers of the *same* streamId still share via liveFans.get(streamId).
+ */
+function upstreamIsolatesFan(url) {
+  if (process.env.IPTV_EDGE_COALESCE_SAME_URL === "1") return false;
+  if (process.env.IPTV_EDGE_COALESCE_SAME_URL === "0") return true;
+  try {
+    const u = new URL(String(url || "").trim());
+    const host = u.hostname.toLowerCase();
+    const path = u.pathname.toLowerCase();
+    if (/junki3monk3y|mybmcdn|\.bmcdn\.|cdn\.auth/i.test(host)) return true;
+    if (/\/auth\//i.test(path)) return true;
+    const extra = String(process.env.IPTV_EDGE_ISOLATE_FAN_HOSTS || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (extra.some((h) => host === h || host.endsWith(`.${h}`))) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
 }
 
 function safeClientEnd(clientRes, body) {
@@ -556,6 +602,9 @@ function reportViewerPlaybackDrop(clientReq, auth, detail, status) {
 function pulseConnection(ctx, bytes, idleMs) {
   touchPlaybackSession(ctx, { hls: Boolean(ctx?.hls) });
   sendConnectionPulse(ctx, bytes, idleMs);
+  // Open / meaningful media: flush immediately so Live Connections updates without
+  // waiting for the keepalive interval (often 45s).
+  if ((bytes ?? 0) >= 32_000) flushConnectionPulseBatch();
 }
 
 function querySessionKicked(lineId, ip) {
@@ -635,6 +684,7 @@ function clearPlaybackSession(ctx) {
 function endPlaybackSession(ctx) {
   if (!INTERNAL_SECRET || !ctx?.lineId || !ctx?.streamId) return;
   clearPlaybackSession(ctx);
+  pendingPulseBatch.delete(playbackSessionKey(ctx));
   const body = JSON.stringify({
     lineId: ctx.lineId,
     streamId: ctx.streamId,
@@ -687,7 +737,17 @@ function playbackSessionKey(ctx) {
   return `${ctx.lineId}|${ctx.ip ?? ""}|${ctx.streamId}`;
 }
 
+/**
+ * Single-connection lines only: when the same IP zaps to another stream, drop the
+ * previous pipe + panel row. Multi-connection lines (maxConnections > 1) must NOT
+ * tear down siblings — household NAT / second device shares one public IP and
+ * killing the first stream looks like "buffering on 1 connection".
+ * If maxConnections is unknown (0/missing), do not tear down — client close already
+ * ends the old pipe; probes must never kill a live viewer.
+ */
 function stopOtherPlaybackSessions(ctx) {
+  const maxConn = Number(ctx?.maxConnections);
+  if (!(Number.isFinite(maxConn) && maxConn === 1)) return;
   const prefix = `${ctx.lineId}|${ctx.ip ?? ""}|`;
   const myKey = playbackSessionKey(ctx);
   for (const [key, session] of [...playbackSessions.entries()]) {
@@ -1004,17 +1064,136 @@ async function authTimeshiftViaLive(clientReq) {
 function sanitizeAuthUpstream(data) {
   if (!data?.upstream) return data;
   const upstream = normalizeUpstreamUrl(data.upstream);
+  const rejectSelf = (u) => {
+    try {
+      const p = new URL(u);
+      const host = p.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+      // Never pull media from panel/edge IPs — that is the 10gbs↔panel live loop.
+      if (EDGE_INFRA_IPS.has(host) || host === String(backendHost || "").toLowerCase()) {
+        return true;
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  };
+  if (rejectSelf(upstream)) {
+    return { ...data, upstream: "", alts: [], passthrough: true };
+  }
   const alts = (data.alts || [])
     .map((u) => normalizeUpstreamUrl(u))
     .filter((u) => {
       try {
         const p = new URL(u);
-        return p.protocol === "http:" || p.protocol === "https:";
+        if (p.protocol !== "http:" && p.protocol !== "https:") return false;
+        return !rejectSelf(u);
       } catch {
         return false;
       }
     });
   return { ...data, upstream, alts };
+}
+
+/** True if an elementary payload contains an H.264 IDR or HEVC IRAP NAL. */
+function mpegTsPayloadHasVideoKeyframe(payload) {
+  if (!payload?.length) return false;
+  for (let i = 0; i + 4 < payload.length; i++) {
+    let nal = -1;
+    if (payload[i] === 0 && payload[i + 1] === 0 && payload[i + 2] === 1) {
+      nal = i + 3;
+    } else if (
+      payload[i] === 0 &&
+      payload[i + 1] === 0 &&
+      payload[i + 2] === 0 &&
+      payload[i + 3] === 1
+    ) {
+      nal = i + 4;
+    }
+    if (nal < 0 || nal >= payload.length) continue;
+    const b = payload[nal];
+    const h264Type = b & 0x1f;
+    if (h264Type === 5) return true; // IDR
+    const hevcType = (b >> 1) & 0x3f;
+    // IDR_W_RADL / IDR_N_LP / CRA_NUT — clean random-access points
+    if (hevcType === 19 || hevcType === 20 || hevcType === 21) return true;
+  }
+  return false;
+}
+
+/**
+ * Scan MPEG-TS for a video keyframe. Returns byte offset of the TS packet that
+ * contains it, or -1. Used after reconnect so clients are not fed mid-GOP.
+ */
+function findMpegTsKeyframeOffset(buf) {
+  if (!buf?.length || buf.length < 188) return -1;
+  let start = 0;
+  for (let i = 0; i < Math.min(188, buf.length - 376); i++) {
+    if (buf[i] === 0x47 && buf[i + 188] === 0x47 && buf[i + 376] === 0x47) {
+      start = i;
+      break;
+    }
+  }
+  for (let i = start; i + 188 <= buf.length; i += 188) {
+    if (buf[i] !== 0x47) {
+      let resync = -1;
+      for (let j = i + 1; j + 376 <= buf.length && j < i + 188; j++) {
+        if (buf[j] === 0x47 && buf[j + 188] === 0x47 && buf[j + 376] === 0x47) {
+          resync = j;
+          break;
+        }
+      }
+      if (resync < 0) break;
+      i = resync;
+    }
+    const afc = (buf[i + 3] >> 4) & 0x3;
+    if (afc !== 1 && afc !== 3) continue;
+    let p = i + 4;
+    if (afc === 3) {
+      if (p >= i + 188) continue;
+      p = i + 5 + buf[i + 4];
+    }
+    if (p >= i + 188) continue;
+    if (mpegTsPayloadHasVideoKeyframe(buf.subarray(p, i + 188))) return i;
+  }
+  return -1;
+}
+
+function armFanKeyframeHold(fan) {
+  if (!fan || fan.clients.size === 0) return;
+  fan.holdUntilKeyframe = true;
+  fan.holdChunks = [];
+  fan.holdBytes = 0;
+  // Drop the pre-reconnect rolling tail so late joiners are not fed a torn GOP.
+  fan.prefixChunks = [];
+  fan.prefixBytes = 0;
+  fan.prefix = Buffer.alloc(0);
+  edgeMetrics.fanKeyframeHolds = (edgeMetrics.fanKeyframeHolds || 0) + 1;
+}
+
+/** Try to release buffered reconnect bytes starting at the first video keyframe. */
+function releaseFanKeyframeHold(fan, force = false) {
+  if (!fan?.holdUntilKeyframe) return null;
+  const held =
+    fan.holdBytes > 0 && Array.isArray(fan.holdChunks) && fan.holdChunks.length
+      ? Buffer.concat(fan.holdChunks, fan.holdBytes)
+      : Buffer.alloc(0);
+  const kfAt = held.length ? findMpegTsKeyframeOffset(held) : -1;
+  if (kfAt < 0 && !force) return null;
+  fan.holdUntilKeyframe = false;
+  fan.holdChunks = [];
+  fan.holdBytes = 0;
+  if (!held.length) return null;
+  if (kfAt < 0 && force) {
+    edgeMetrics.fanKeyframeHoldTimeouts = (edgeMetrics.fanKeyframeHoldTimeouts || 0) + 1;
+    console.error(
+      `[iptv-edge] fan ${fan.streamId} keyframe hold timeout (${held.length}B) → release`
+    );
+    appendLiveFanPrefix(fan, held, true);
+    return held;
+  }
+  const release = held.subarray(Math.max(0, kfAt));
+  appendLiveFanPrefix(fan, release, true);
+  return release;
 }
 
 function looksLikeMpegTs(buf) {
@@ -1332,16 +1511,19 @@ function sweepIdleLiveFans() {
  * Prefix-then-stall / silent underrun: origin socket never ends, but bytes stop.
  * Destroy the hung pull so handleFanUpstreamGone reconnects (failover-aware).
  */
-function forceFanUpstreamReconnect(fan, reason) {
+function forceFanUpstreamReconnect(fan, reason, opts = {}) {
   if (!fan || fan.destroyed) return false;
   if (fan.reconnecting || fan.reconnectTimer) return false;
   const url = String(fan.primaryUpstream || "").trim();
-  if (url) markUpstreamFailed(fan.streamId, url);
-  edgeMetrics.fanStallClears += 1;
+  // Auth refresh must re-hit the catalog URL — do not mark it bad.
+  if (url && !opts.authRefresh) markUpstreamFailed(fan.streamId, url);
+  if (opts.authRefresh) edgeMetrics.fanAuthRefresh = (edgeMetrics.fanAuthRefresh || 0) + 1;
+  else edgeMetrics.fanStallClears += 1;
   const idleMs = Math.max(0, Date.now() - (fan.lastUpstreamByteAt || 0));
   console.error(
-    `[iptv-edge] fan ${fan.streamId} stall clear (${reason}; idle=${idleMs}ms) → reconnect`
+    `[iptv-edge] fan ${fan.streamId} ${opts.authRefresh ? "auth refresh" : "stall clear"} (${reason}; idle=${idleMs}ms) → reconnect`
   );
+  fan.authRedirectAt = 0;
   const gen = fan.upstreamGen || 0;
   try {
     fan.destroySrc?.();
@@ -1361,6 +1543,28 @@ function sweepStalledLiveFans() {
     if (fan.destroyed || fan.reconnecting || fan.reconnectTimer) continue;
     if (!fan.upstreamRes && !fan.destroySrc) continue;
     if (fan.clients.size === 0 && fan.waiters.length === 0) continue;
+
+    // Holding for a post-reconnect keyframe still receives upstream bytes —
+    // do not stall-clear or auth-refresh mid-hold.
+    if (fan.holdUntilKeyframe) continue;
+
+    if (
+      LIVE_FAN_AUTH_REFRESH_MS > 0 &&
+      fan.authRedirectAt &&
+      now - fan.authRedirectAt >= LIVE_FAN_AUTH_REFRESH_MS
+    ) {
+      const idleMs = now - (fan.lastUpstreamByteAt || 0);
+      // Never cut a healthy signed pull — only refresh when the socket is already quiet.
+      if (idleMs >= Math.min(LIVE_FAN_STALL_MS, 5_000)) {
+        forceFanUpstreamReconnect(
+          fan,
+          `signed CDN session age ${now - fan.authRedirectAt}ms (idle=${idleMs}ms)`,
+          { authRefresh: true }
+        );
+      }
+      continue;
+    }
+
     const last = fan.lastUpstreamByteAt || 0;
     if (!last) continue;
     const idleMs = now - last;
@@ -1578,7 +1782,21 @@ function broadcastFanChunk(fan, chunk) {
   if (!chunk || !chunk.length) return;
   fan.lastUpstreamByteAt = Date.now();
   fan.upstreamBytesTotal = (fan.upstreamBytesTotal || 0) + chunk.length;
-  appendLiveFanPrefix(fan, chunk);
+
+  // After reconnect, suppress mid-GOP bytes until a video keyframe so clients
+  // do not freeze on a torn video PES while audio keeps decoding.
+  if (fan.holdUntilKeyframe) {
+    if (!Array.isArray(fan.holdChunks)) fan.holdChunks = [];
+    fan.holdChunks.push(chunk);
+    fan.holdBytes = (fan.holdBytes || 0) + chunk.length;
+    const force = fan.holdBytes >= LIVE_FAN_KEYFRAME_HOLD_BYTES;
+    const release = releaseFanKeyframeHold(fan, force);
+    if (!release) return;
+    chunk = release;
+  } else {
+    appendLiveFanPrefix(fan, chunk);
+  }
+
   // Live TV must stay realtime. Never pause the origin because one client is
   // slow — that starves every viewer on the fan. Slow sockets skip-to-live
   // (or hard-drop only after extreme lag).
@@ -1591,10 +1809,15 @@ function broadcastFanChunk(fan, chunk) {
   }
 }
 
-function tryJoinLiveFan(streamId, clientReq, clientRes, pulseCtx) {
+function tryJoinLiveFan(streamId, clientReq, clientRes, pulseCtx, upstreamUrl) {
   if (!streamId) return false;
   const fan = liveFans.get(streamId);
   if (!fan?.broadcasting) return false;
+  if (upstreamUrl && !liveFanMatchesUpstream(fan, upstreamUrl)) {
+    // Source URL changed while fan still alive — detach this stream and force a new pull.
+    unbindStreamFromLiveFan(fan, streamId);
+    return false;
+  }
   if (!fan.destroySrc && !fan.prefix?.length && fan.clients.size === 0 && fan.waiters.length === 0) {
     destroyLiveFan(fan);
     return false;
@@ -1604,16 +1827,74 @@ function tryJoinLiveFan(streamId, clientReq, clientRes, pulseCtx) {
 }
 
 /**
- * One upstream pull per provider catalog URL.
- * Extra viewers — and FHD/HD/SD rows that share the same streamUrl — attach to the same fan.
- * Provider CDNs throttle concurrent auths from one edge IP; coalescing prevents that.
+ * One upstream pull per streamId (always). Optionally also coalesce distinct
+ * streamIds that share the same catalog URL — disabled for auth-redirect CDNs
+ * so duplicate F1/etc aliases do not share one expiring token.
  */
+function liveFanMatchesUpstream(fan, upstreamUrl) {
+  if (!fan || !upstreamUrl) return true;
+  const wantKey = normalizeUpstreamFanKey(upstreamUrl);
+  const wantRaw = String(upstreamUrl || "").trim();
+  if (!wantKey && !wantRaw) return true;
+  const haveKey = String(fan.upstreamKey || "").trim() || normalizeUpstreamFanKey(fan.primaryUpstream);
+  const haveRaw = String(fan.primaryUpstream || "").trim();
+  if (!haveKey && !haveRaw) return true; // fan not bound yet
+  if (haveKey && wantKey) return haveKey === wantKey;
+  if (haveRaw && wantRaw) {
+    const a = normalizeUpstreamFanKey(haveRaw) || haveRaw;
+    const b = wantKey || wantRaw;
+    return a === b;
+  }
+  return true;
+}
+
+/** Remove one streamId from a (possibly shared) fan; destroy when no aliases remain. */
+function unbindStreamFromLiveFan(fan, streamId) {
+  if (!fan || fan.destroyed || !streamId) return;
+  liveFans.delete(streamId);
+  if (fan.streamIds instanceof Set) {
+    fan.streamIds.delete(streamId);
+  }
+  // Kick only this stream's clients/waiters off a shared fan.
+  for (const slot of [...fan.clients]) {
+    if (slot?.pulseCtx?.streamId === streamId) {
+      detachLiveFanClient(fan, slot, { closingFan: false });
+    }
+  }
+  for (let i = fan.waiters.length - 1; i >= 0; i--) {
+    const w = fan.waiters[i];
+    if (w?.pulseCtx?.streamId !== streamId) continue;
+    fan.waiters.splice(i, 1);
+    try {
+      if (!w.clientRes.headersSent) {
+        w.clientRes.writeHead(502, { "content-type": "text/plain" });
+      }
+      if (!w.clientRes.writableEnded) w.clientRes.end();
+    } catch {
+      /* ignore */
+    }
+  }
+  const left = fan.streamIds instanceof Set ? fan.streamIds.size : 0;
+  if (left === 0) {
+    destroyLiveFan(fan);
+    return;
+  }
+  if (fan.streamId === streamId) {
+    fan.streamId = [...fan.streamIds][0];
+  }
+}
+
 function ensureLiveFan(streamId, upstreamUrl) {
   if (!streamId) return null;
   let fan = liveFans.get(streamId);
-  if (fan && !fan.destroyed) return fan;
+  if (fan && !fan.destroyed) {
+    if (liveFanMatchesUpstream(fan, upstreamUrl)) return fan;
+    unbindStreamFromLiveFan(fan, streamId);
+    fan = null;
+  }
 
-  const ukey = normalizeUpstreamFanKey(upstreamUrl);
+  const isolate = upstreamIsolatesFan(upstreamUrl);
+  const ukey = isolate ? "" : normalizeUpstreamFanKey(upstreamUrl);
   if (ukey) {
     const shared = liveFansByUpstream.get(ukey);
     if (shared && !shared.destroyed) {
@@ -1632,6 +1913,7 @@ function ensureLiveFan(streamId, upstreamUrl) {
     streamId,
     streamIds: new Set([streamId]),
     upstreamKey: ukey || "",
+    isolateUpstream: isolate,
     broadcasting: false,
     waiters: [],
     clients: new Set(),
@@ -1653,6 +1935,10 @@ function ensureLiveFan(streamId, upstreamUrl) {
     reconnecting: false,
     lastUpstreamByteAt: 0,
     upstreamBytesTotal: 0,
+    authRedirectAt: 0,
+    holdUntilKeyframe: false,
+    holdChunks: [],
+    holdBytes: 0,
   };
   liveFans.set(streamId, fan);
   if (ukey) liveFansByUpstream.set(ukey, fan);
@@ -2574,6 +2860,7 @@ function authLive(clientReq) {
             passthrough: String(res.headers["x-nexlify-passthrough"] || "") === "1" || res.statusCode === 204,
             streamId: String(res.headers["x-nexlify-stream-id"] || ""),
             lineId: String(res.headers["x-nexlify-line-id"] || ""),
+            maxConnections: Number(res.headers["x-nexlify-max-connections"] || 0) || 0,
             outboundProxy: parseOutboundProxyHeader(res.headers["x-nexlify-outbound-proxy"]),
           });
         }
@@ -3020,7 +3307,27 @@ function pipeLiveMpegTsShared(fan, upRes, clientReq, clientRes, pulseCtx, onUnpl
   };
 
   const goLive = (prefix) => {
-    if (prefix?.length) appendLiveFanPrefix(fan, prefix, true);
+    if (opts?.reconnect && fan.clients.size > 0) armFanKeyframeHold(fan);
+    if (prefix?.length) {
+      if (fan.holdUntilKeyframe) {
+        // Peek bytes count toward the keyframe hold — do not leak mid-GOP to clients yet.
+        if (!Array.isArray(fan.holdChunks)) fan.holdChunks = [];
+        fan.holdChunks.push(prefix);
+        fan.holdBytes = (fan.holdBytes || 0) + prefix.length;
+        const early = releaseFanKeyframeHold(fan, false);
+        if (early) {
+          for (const slot of [...fan.clients]) {
+            try {
+              writeFanChunkToSlot(fan, slot, early);
+            } catch {
+              detachLiveFanClient(fan, slot);
+            }
+          }
+        }
+      } else {
+        appendLiveFanPrefix(fan, prefix, true);
+      }
+    }
     armFanUpstream(fan, upRes);
     fanGoLive(fan, fan.destroySrc);
     if (!opts?.reconnect) {
@@ -3076,8 +3383,30 @@ function pipeLiveMpegTsShared(fan, upRes, clientReq, clientRes, pulseCtx, onUnpl
 }
 
 function feedLiveFanFromUpstream(fan, upRes, clientReq, clientRes, pulseCtx, opts = {}) {
+  const peek = opts.peekPrefix;
+  let earlyRelease = null;
+  if (opts?.reconnect && fan.clients.size > 0) {
+    armFanKeyframeHold(fan);
+    if (peek?.length) {
+      if (!Array.isArray(fan.holdChunks)) fan.holdChunks = [];
+      fan.holdChunks.push(peek);
+      fan.holdBytes = (fan.holdBytes || 0) + peek.length;
+      earlyRelease = releaseFanKeyframeHold(fan, false);
+    }
+  } else if (peek?.length) {
+    appendLiveFanPrefix(fan, peek, true);
+  }
   armFanUpstream(fan, upRes);
   fanGoLive(fan, fan.destroySrc);
+  if (earlyRelease) {
+    for (const slot of [...fan.clients]) {
+      try {
+        writeFanChunkToSlot(fan, slot, earlyRelease);
+      } catch {
+        detachLiveFanClient(fan, slot);
+      }
+    }
+  }
   if (!opts.reconnect) {
     attachLiveFanClient(fan, clientReq, clientRes, pulseCtx);
   } else {
@@ -3165,8 +3494,10 @@ function pipeLiveMpegTs(upRes, clientReq, clientRes, pulseCtx, onUnplayable, fan
     }
     headersSent = true;
     if (fan) {
-      appendLiveFanPrefix(fan, prefix, true);
-      feedLiveFanFromUpstream(fan, upRes, clientReq, clientRes, pulseCtx, opts);
+      feedLiveFanFromUpstream(fan, upRes, clientReq, clientRes, pulseCtx, {
+        ...opts,
+        peekPrefix: prefix,
+      });
       return;
     }
     writeLiveTsHead(clientRes);
@@ -3333,6 +3664,16 @@ function pipeUpstream(targetUrl, clientReq, clientRes, { live, redirectsLeft, li
         clientRes.writeHead(502, { "content-type": "text/plain" });
         clientRes.end("Bad upstream redirect");
         return;
+      }
+      if (fan && live) {
+        try {
+          const to = new URL(next);
+          if (to.hostname.toLowerCase() !== parsed.hostname.toLowerCase() || /\/auth\//i.test(to.pathname)) {
+            fan.authRedirectAt = Date.now();
+          }
+        } catch {
+          /* ignore */
+        }
       }
       pipeUpstream(next, clientReq, clientRes, {
         live,
@@ -3562,9 +3903,16 @@ async function handleDiskHls(clientReq, clientRes, ctx, kind, segName) {
   }
   const pulseCtx =
     auth.lineId && auth.streamId
-      ? { lineId: auth.lineId, streamId: auth.streamId, ip: clientIp(clientReq), hls: true }
+      ? {
+          lineId: auth.lineId,
+          streamId: auth.streamId,
+          ip: clientIp(clientReq),
+          hls: true,
+          maxConnections: Number(auth.maxConnections) || 0,
+        }
       : null;
   const isHead = String(clientReq.method || "GET").toUpperCase() === "HEAD";
+  // HEAD must not stopOtherPlaybackSessions (same-IP multi-conn / in-play probes).
   if (pulseCtx && !isHead) touchPlaybackSession(pulseCtx, { hls: true });
   if (auth.passthrough || auth.status !== 200 || !auth.streamId) {
     if (!isHead) {
@@ -3880,11 +4228,20 @@ async function onRequest(clientReq, clientRes, ctx) {
         auth.passthrough ? "Live auth returned no upstream" : "Live auth missing upstream URL",
         auth.status && auth.status !== 200 ? auth.status : 502
       );
+      // Never forward /live/ to IPTV_EDGE_BACKEND — serve offline splash (or 502 text).
+      if (auth.live || /^\/(live|timeshift)\//i.test(pathOnly)) {
+        serveOfflineLiveSplash(clientReq, clientRes, null);
+        return;
+      }
       forward(clientReq, clientRes, ctx);
       return;
     }
     if (auth.status !== 200) {
       reportViewerPlaybackDrop(clientReq, auth, `Live auth failed (HTTP ${auth.status})`, auth.status);
+      if (auth.live || /^\/(live|timeshift)\//i.test(pathOnly)) {
+        serveOfflineLiveSplash(clientReq, clientRes, null);
+        return;
+      }
       forward(clientReq, clientRes, ctx);
       return;
     }
@@ -3895,6 +4252,7 @@ async function onRequest(clientReq, clientRes, ctx) {
             streamId: auth.streamId,
             ip: clientIp(clientReq),
             onDemand: Boolean(auth.onDemand),
+            maxConnections: Number(auth.maxConnections) || 0,
           }
         : null;
     const isLiveRangeProbe = Boolean(
@@ -3902,19 +4260,21 @@ async function onRequest(clientReq, clientRes, ctx) {
         clientReq.method !== "HEAD" &&
         isTinyLiveRangeProbe(clientReq.headers.range, clientReq.headers["user-agent"])
     );
-    if (pulseCtx && clientReq.method !== "HEAD" && !isLiveRangeProbe) touchPlaybackSession(pulseCtx);
+    // Never touch sessions on HEAD / tiny Range probes — apps probe while playing and
+    // stopOtherPlaybackSessions would kill the real viewer (same public IP).
     if (isLiveRangeProbe || (clientReq.method === "HEAD" && auth.live)) {
       writeLiveTsHead(clientRes);
       clientRes.end();
       return;
     }
-    if (auth.live && auth.streamId && tryJoinLiveFan(auth.streamId, clientReq, clientRes, pulseCtx)) {
+    if (pulseCtx) touchPlaybackSession(pulseCtx);
+    if (auth.live && auth.streamId && tryJoinLiveFan(auth.streamId, clientReq, clientRes, pulseCtx, auth.upstream)) {
       return;
     }
     let fan = null;
     if (auth.live && auth.streamId) {
       const acquired = acquireLiveFanStarter(auth.streamId, auth.upstream);
-      if (acquired.mode === "join" && tryJoinLiveFan(auth.streamId, clientReq, clientRes, pulseCtx)) {
+      if (acquired.mode === "join" && tryJoinLiveFan(auth.streamId, clientReq, clientRes, pulseCtx, auth.upstream)) {
         return;
       }
       if (acquired.mode === "wait") {

@@ -1,4 +1,4 @@
-import { magPortalUrl, stalkerPortalUrl } from "@/lib/mag";
+import { ensureMagPortalUrl, magPortalUrl, stalkerPortalUrl } from "@/lib/mag";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { listPanelPublicHostnames } from "@/lib/panel-public-hosts";
 import { pickPublicOrigin } from "@/lib/public-origin";
@@ -31,11 +31,13 @@ export async function resolveServerUrls(requestOrigin?: string): Promise<Resolve
   const serverUrl = fromReq
     ? pickPublicOrigin(fromReq, fromSettings || process.env.NEXT_PUBLIC_SERVER_URL)
     : fromSettings || trimUrl(process.env.NEXT_PUBLIC_SERVER_URL ?? "");
-  const magExplicit = trimUrl(String(server.magServerUrl ?? ""));
-  const enigmaExplicit = trimUrl(String(server.enigmaServerUrl ?? ""));
+  const magExplicit = String(server.magServerUrl ?? "").trim();
+  const enigmaExplicit = String(server.enigmaServerUrl ?? "").trim();
 
-  const magServerUrl = magExplicit || (serverUrl ? magPortalUrl(serverUrl) : "");
-  const enigmaServerUrl = enigmaExplicit || magServerUrl || (serverUrl ? magPortalUrl(serverUrl) : "");
+  // Bare host in settings must still resolve to …/c/ (StbEmu black-screens on root).
+  const magServerUrl = ensureMagPortalUrl(magExplicit) || (serverUrl ? magPortalUrl(serverUrl) : "");
+  const enigmaServerUrl =
+    ensureMagPortalUrl(enigmaExplicit) || magServerUrl || (serverUrl ? magPortalUrl(serverUrl) : "");
 
   const { playlistOrigin, playlistOrigins } = await resolveCustomerPlaylistOrigins(fromReq || serverUrl);
 

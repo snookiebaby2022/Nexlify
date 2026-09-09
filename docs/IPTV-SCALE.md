@@ -9,30 +9,41 @@ This doc maps enterprise IPTV advice to **what this repo already ships** and **e
 ## Target architecture
 
 ```text
-                         ┌─────────────────────────────────────┐
-  Smarters / XCIPTV      │  DNS (grey-cloud or stream-only)    │
-  MAG / VLC / Web        │  darkcdn.store → edge pool          │
-         │               └─────────────────┬───────────────────┘
-         │                                 │
-         ▼                                 ▼
-┌─────────────────┐              ┌─────────────────┐
-│ nginx :80/:443  │              │ nginx LB (opt.) │
-│ panel UI + TLS  │              │ least_conn      │
-└────────┬────────┘              └────────┬────────┘
-         │                                │
-         │ admin / login                  │ live / vod / player_api
-         ▼                                ▼
-┌─────────────────┐     auth only   ┌─────────────────────────┐
-│ panel :13000    │◄───────────────│ nexlify-iptv-edge :8080  │
-│ 4–6 PM2 workers │                 │ catalog cache, TS splice │
-│ Postgres+Redis  │                 │ disk HLS, upstream pipe  │
-└─────────────────┘                 └───────────┬─────────────┘
-                                                │
+  Smarters / XCIPTV / MAG
+           │
+           ├─ login / player_api / xmltv ──► panel DNS (e.g. darkcdn.store)
+           │                                      │
+           │                                      ▼
+           │                            ┌─────────────────────┐
+           │                            │ Main panel :80/:443 │
+           │                            │ nginx → :13000      │
+           │                            │ Postgres + Redis    │
+           │                            └──────────┬──────────┘
+           │                                       │ auth / map only
+           │                                       ▼
+           └─ /live /movie /series ────► stream DNS (e.g. darkcdn.site)
+                                              │  grey-cloud A → LB IP
+                                              ▼
+                                    ┌─────────────────────────┐
+                                    │ LB / edge :80/:8080     │
+                                    │ nexlify-iptv-edge splice│
+                                    │ (never hairpin panel)   │
+                                    └───────────┬─────────────┘
                                                 ▼
                                     provider CDN / HLS / TS URLs
 ```
 
-**Rule:** Video bytes never touch `nexlify` PM2 cluster. Panel = auth, admin, credits, connections DB.
+**Rule:** Video bytes never touch `nexlify` PM2 / panel NIC. Panel = auth, admin, catalog, connections DB.  
+**Advertise:** `player_api` `server_info.url` must be a stream hostname whose DNS A record is the LB IP (not the panel).  
+**Multi domains:** put customer stream hostnames on **Main → Domains / Additional domains**; LB Domain Name is **one** primary media host.
+
+Verify stream DNS (LB-only A records):
+
+```bash
+STREAM_HOSTS='darkcdn.site' bash scripts/verify-stream-dns.sh
+# After Cloudflare grey-cloud flips:
+STREAM_HOSTS='darkcdn.site bladesmedia.darkcdn.win bladesmedia2.darkcdn.win' bash scripts/verify-stream-dns.sh
+```
 
 ---
 
@@ -162,7 +173,7 @@ INTERNAL_API_SECRET=... \
 bash scripts/sync-edge-fleet.sh
 ```
 
-DNS: **grey-cloud** A record `darkcdn.store` → LB IP.
+DNS: **grey-cloud** A record for each **stream** hostname (e.g. `darkcdn.site`) → LB IP. Keep panel host (`darkcdn.store`) on the panel origin.
 
 Windows: `windows/scripts/deploy-multi-edge-stack.ps1 -Host LB_IP -EdgeIps "45.88.138.18,75.119.137.174"`
 
@@ -225,16 +236,23 @@ Windows: `windows/scripts/deploy-20k-stack-45.ps1 -Force`
 
 | Record | Proxy | Notes |
 |--------|-------|-------|
-| `panel.example.com` | Orange OK | Admin UI; short cache |
-| `darkcdn.store` (IPTV) | **Grey cloud** recommended | Live TS/HLS breaks on CF cache; 521 if origin wrong |
-| `player_api` / `live` | Never orange-cache | Dynamic auth |
+| Panel host (`darkcdn.store`) | Orange OK | Admin UI + `player_api` / playlist only — **not** `/live` bitrate |
+| Stream hosts (`darkcdn.site`, `bladesmedia*.darkcdn.win`, …) | **Grey cloud (DNS only)** A → LB IP (`209.237.141.15`) | Required; orange-cloud stream DNS hairpins to panel and gets `/live` 502 |
+| `player_api` / catalog | Panel origin | Dynamic auth |
+| `/live` `/movie` `/series` | LB only | Panel nginx returns 502 for media on purpose |
 
-**521 fix checklist:**
+**Operator DNS for stream hostnames (Cloudflare zone):**
+
+1. A record → LB IP (e.g. `209.237.141.15`)
+2. Proxy status: **DNS only** (grey cloud)
+3. Confirm with `scripts/verify-stream-dns.sh` before adding the hostname to Main Additional domains
+
+**521 / panel checklist:**
 
 1. `curl -I https://darkcdn.store/player_api.php` from outside — expect 200/401, not 521.
 2. On origin: `ss -tlnp | grep -E ':443|:80|:8080'`
-3. nginx :443 must `proxy_pass http://127.0.0.1:8080` for Xtream locations OR grey-cloud to :8080.
-4. Do **not** run IPTV edge on :443 when nginx owns Let's Encrypt for the same host.
+3. Panel nginx serves API to local panel (`:13000`); media locations return 502 (clients must use LB stream DNS).
+4. Do **not** run IPTV edge on the panel when nginx owns `:8080`.
 
 ---
 

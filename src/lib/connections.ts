@@ -17,6 +17,11 @@ export const STALE_MS = 10 * 60 * 1000; // cron — MPEG-TS pipes often go minut
 export const LIVE_STALE_MS = 10 * 60 * 1000;
 export const PLAYBACK_STALE_MS = LIVE_STALE_MS;
 export const LIVE_LIST_STALE_MS = LIVE_STALE_MS;
+/**
+ * Capacity enforcement window — shorter than the UI list TTL so abandoned
+ * live-auth / prefetch rows do not block a second device for 10 minutes.
+ */
+export const CAPACITY_STALE_MS = 120_000;
 /** Abort a spliced live body only after a long silence — not a normal GOP/ad gap. */
 export const LIVE_PIPE_IDLE_ABORT_MS = 8 * 60 * 1000;
 const CONNECTIONS_CACHE_TTL = 1; // seconds — dashboard SSE should reflect disconnects quickly
@@ -202,20 +207,24 @@ export async function countLineSessions(lineId: string) {
  * Whether a new playback session is allowed given current counts.
  * Exported for unit tests — keep in sync with lineHasConnectionCapacity.
  *
- * @param sameIpDistinctSessions distinct (stream) sessions from clientIp
+ * @param activeSessionCount distinct viewer sessions (ip+stream) on the line
+ * @param sameIpDistinctSessions distinct streams already held by clientIp
+ * @param sameStreamReconnect true when this IP already has this stream (refresh)
  */
 export function connectionCapacityAllows(
   activeSessionCount: number,
   maxConnections: number,
   sameIpDistinctSessions: number,
-  clientIp?: string | null
+  clientIp?: string | null,
+  sameStreamReconnect: boolean = false
 ): boolean {
   if (maxConnections <= 0) return true;
+  if (sameStreamReconnect) return true;
   if (activeSessionCount < maxConnections) return true;
   if (!clientIp) return false;
-  if (sameIpDistinctSessions === 0) return false;
-  // Same IP may refresh or zap channels while within their slot count — not open extra streams.
-  return sameIpDistinctSessions <= maxConnections;
+  // At capacity: only an existing viewer may continue (refresh / zap). A brand-new
+  // IP must wait. Zap reclaim is handled by pruneViewerStreamsToCap on track.
+  return sameIpDistinctSessions > 0;
 }
 
 function anonymousIpNotFilter() {
@@ -385,11 +394,11 @@ async function pruneLineStaleConnections(lineId: string, thresholdMs: number = P
   return result.count;
 }
 
-/** Distinct active streams for max-connection enforcement (never counts anonymous/loopback rows). */
-async function countCapacitySessions(lineId: string) {
-  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
+/** Distinct active viewer sessions (ip+stream) for max-connection enforcement. */
+async function countCapacitySessions(lineId: string, staleMs: number = CAPACITY_STALE_MS) {
+  const staleBefore = new Date(Date.now() - staleMs);
   const result = await prisma.liveConnection.groupBy({
-    by: ["streamId"],
+    by: ["ip", "streamId"],
     where: {
       lineId,
       lastSeenAt: { gte: staleBefore },
@@ -407,16 +416,17 @@ export async function lineHasConnectionCapacity(
   if (maxConnections <= 0) return true;
   const clientIp = normalizeConnectionIp(opts?.clientIp);
   if (isTestConnectionIp(clientIp)) return true;
-  // Never block live-auth / zap on housekeeping (XUI-style instant auth).
+  // Never block live-auth / zap on housekeeping.
   void pruneTestConnectionRows(lineId).catch(() => {});
-  void pruneLineStaleConnections(lineId).catch(() => {});
+  void pruneLineStaleConnections(lineId, CAPACITY_STALE_MS).catch(() => {});
   try {
     return await Promise.race([
       lineHasConnectionCapacityInner(lineId, maxConnections, opts),
-      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 800)),
+      // Fail-open: a slow capacity DB must not 403 live playback (reconnect thrash).
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 800)),
     ]);
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -429,9 +439,14 @@ async function lineHasConnectionCapacityInner(
   const clientIp = normalizeConnectionIp(opts?.clientIp);
   if (isTestConnectionIp(clientIp)) return true;
 
-  const { cacheGetOrSet } = await import("@/lib/cache");
+  const { cacheGet, cacheSet } = await import("@/lib/cache");
   const cacheKey = `conn:cap:${lineId}:${clientIp ?? ""}:${opts?.streamId ?? ""}`;
-  return cacheGetOrSet(cacheKey, 3, async () => lineHasConnectionCapacityDb(lineId, maxConnections, opts));
+  // Only cache allows — caching denies leaves a freed slot blocked for the TTL.
+  const cached = await cacheGet<boolean>(cacheKey);
+  if (cached === true) return true;
+  const allowed = await lineHasConnectionCapacityDb(lineId, maxConnections, opts);
+  if (allowed) await cacheSet(cacheKey, true, 1);
+  return allowed;
 }
 
 async function lineHasConnectionCapacityDb(
@@ -440,70 +455,93 @@ async function lineHasConnectionCapacityDb(
   opts?: { streamId?: string; clientIp?: string }
 ) {
   const clientIp = normalizeConnectionIp(opts?.clientIp);
-  const staleBefore = new Date(Date.now() - PLAYBACK_STALE_MS);
+  const staleBefore = new Date(Date.now() - CAPACITY_STALE_MS);
 
-  // Same stream refresh / HLS segment from an existing viewer — always allow.
-  if (opts?.streamId && clientIp) {
-    const sameStream = await prisma.liveConnection.findFirst({
-      where: {
-        lineId,
-        streamId: opts.streamId,
-        ...connectionIpPrismaFilter(clientIp),
-        lastSeenAt: { gte: staleBefore },
-      },
-      select: { id: true },
-    });
-    if (sameStream) return true;
-  }
+  let sameStreamReconnect = false;
+  let sameIpDistinctSessions = 0;
 
-  // Existing viewer (channel zap / reconnect) — allow while within their slot count.
   if (clientIp) {
-    const clientSessions = await prisma.liveConnection.groupBy({
-      by: ["streamId"],
+    const clientRows = await prisma.liveConnection.findMany({
       where: {
         lineId,
         ...connectionIpPrismaFilter(clientIp),
         lastSeenAt: { gte: staleBefore },
+        NOT: anonymousIpNotFilter(),
       },
+      select: { streamId: true },
+      take: 50,
     });
-    if (clientSessions.length > 0) {
-      return clientSessions.length <= maxConnections;
-    }
+    const streams = new Set(clientRows.map((r) => r.streamId).filter(Boolean) as string[]);
+    sameIpDistinctSessions = streams.size;
+    if (opts?.streamId && streams.has(opts.streamId)) sameStreamReconnect = true;
   }
 
-  const active = await countCapacitySessions(lineId);
-  return active < maxConnections;
+  const active = await countCapacitySessions(lineId, CAPACITY_STALE_MS);
+  return connectionCapacityAllows(
+    active,
+    maxConnections,
+    sameIpDistinctSessions,
+    clientIp,
+    sameStreamReconnect
+  );
+}
+
+/**
+ * Drop surplus streams for one viewer IP so a line stays within maxConnections.
+ * maxConnections<=1: classic zap — only the new stream remains.
+ * maxConnections>1: keep the new stream plus the newest (max-1) others (NAT multi-device).
+ */
+export async function pruneViewerStreamsToCap(
+  lineId: string,
+  streamId: string,
+  clientIp?: string | null,
+  maxConnections: number = 1
+): Promise<void> {
+  const normalized = normalizeConnectionIp(clientIp);
+  if (!normalized || !streamId) return;
+  const cap = maxConnections <= 0 ? 0 : Math.max(1, Math.floor(maxConnections));
+
+  const others = await prisma.liveConnection.findMany({
+    where: {
+      lineId,
+      ...connectionIpPrismaFilter(normalized),
+      streamId: { not: streamId },
+    },
+    orderBy: { lastSeenAt: "desc" },
+    select: { id: true, streamId: true },
+    take: 50,
+  });
+  if (!others.length) {
+    void setViewerActiveStream(lineId, streamId, normalized);
+    return;
+  }
+
+  const keepExtra = cap <= 1 ? 0 : cap - 1;
+  const keepIds = new Set(others.slice(0, keepExtra).map((r) => r.id));
+  const drop = others.filter((r) => !keepIds.has(r.id));
+  if (!drop.length) {
+    void setViewerActiveStream(lineId, streamId, normalized);
+    return;
+  }
+
+  await prisma.liveConnection.deleteMany({
+    where: { id: { in: drop.map((r) => r.id) } },
+  });
+  for (const row of drop) {
+    if (row.streamId) void clearLiveSession(lineId, row.streamId, normalized);
+  }
+  void setViewerActiveStream(lineId, streamId, normalized);
+  invalidateConnectionCaches({ lineId });
 }
 
 /** Remove other active streams for the same viewer (channel zap / failover cleanup). */
 export async function pruneOtherViewerStreams(
   lineId: string,
   streamId: string,
-  clientIp?: string | null
+  clientIp?: string | null,
+  maxConnections: number = 1
 ): Promise<void> {
-  const normalized = normalizeConnectionIp(clientIp);
-  if (!normalized || !streamId) return;
-  const stale = await prisma.liveConnection.findMany({
-    where: {
-      lineId,
-      ...connectionIpPrismaFilter(normalized),
-      streamId: { not: streamId },
-    },
-    select: { streamId: true },
-  });
-  if (!stale.length) return;
-  await prisma.liveConnection.deleteMany({
-    where: {
-      lineId,
-      ...connectionIpPrismaFilter(normalized),
-      streamId: { not: streamId },
-    },
-  });
-  for (const row of stale) {
-    if (row.streamId) void clearLiveSession(lineId, row.streamId, normalized);
-  }
-  void setViewerActiveStream(lineId, streamId, normalized);
-  invalidateConnectionCaches();
+  await pruneViewerStreamsToCap(lineId, streamId, clientIp, maxConnections);
 }
 
 export async function trackConnection(opts: {
@@ -544,49 +582,50 @@ export async function trackConnection(opts: {
     }
   }
 
+  let lineMaxConnections = 1;
   if (streamId && clientIp && opts.pruneOthers) {
     const lineCap = await prisma.line.findUnique({
       where: { id: opts.lineId },
       select: { maxConnections: true },
     });
-    const maxConn = lineCap?.maxConnections ?? 1;
-    if (maxConn > 0 && maxConn <= 1) {
-    const byIp = await prisma.liveConnection.findFirst({
-      where: { lineId: opts.lineId, ip: clientIp },
-      orderBy: { lastSeenAt: "desc" },
-      select: { id: true, streamId: true },
-    });
-    if (byIp) {
-      const switchedStream = Boolean(byIp.streamId && byIp.streamId !== streamId);
-      try {
-        await prisma.liveConnection.update({
-          where: { id: byIp.id },
-          data: {
-            streamId,
-            ...(switchedStream ? { startedAt: new Date() } : {}),
-            lastSeenAt: new Date(),
-            ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
-          },
-        });
-      } catch (err) {
-        const code = (err as { code?: string })?.code;
-        if (code !== "P2025") throw err;
+    lineMaxConnections = lineCap?.maxConnections ?? 1;
+    if (lineMaxConnections > 0 && lineMaxConnections <= 1) {
+      const byIp = await prisma.liveConnection.findFirst({
+        where: { lineId: opts.lineId, ip: clientIp },
+        orderBy: { lastSeenAt: "desc" },
+        select: { id: true, streamId: true },
+      });
+      if (byIp) {
+        const switchedStream = Boolean(byIp.streamId && byIp.streamId !== streamId);
+        try {
+          await prisma.liveConnection.update({
+            where: { id: byIp.id },
+            data: {
+              streamId,
+              ...(switchedStream ? { startedAt: new Date() } : {}),
+              lastSeenAt: new Date(),
+              ...(opts.userAgent ? { userAgent: opts.userAgent } : {}),
+            },
+          });
+        } catch (err) {
+          const code = (err as { code?: string })?.code;
+          if (code !== "P2025") throw err;
+        }
+        if (byIp.streamId && byIp.streamId !== streamId) {
+          await prisma.liveConnection.deleteMany({
+            where: {
+              lineId: opts.lineId,
+              ip: clientIp,
+              id: { not: byIp.id },
+            },
+          });
+          notifyLiveConnectionsChanged();
+        }
+        invalidateConnectionCaches({ lineId: opts.lineId });
+        void touchLiveSession(opts.lineId, streamId, clientIp);
+        void setViewerActiveStream(opts.lineId, streamId, clientIp);
+        return byIp.id;
       }
-      if (byIp.streamId && byIp.streamId !== streamId) {
-        await prisma.liveConnection.deleteMany({
-          where: {
-            lineId: opts.lineId,
-            ip: clientIp,
-            id: { not: byIp.id },
-          },
-        });
-        notifyLiveConnectionsChanged();
-      }
-      invalidateConnectionCaches();
-      void touchLiveSession(opts.lineId, streamId, clientIp);
-      void setViewerActiveStream(opts.lineId, streamId, clientIp);
-      return byIp.id;
-    }
     }
   }
 
@@ -608,9 +647,9 @@ export async function trackConnection(opts: {
     });
   }
 
-  // Channel zap: only on explicit session start (live-auth / first GET), never on heartbeats.
+  // Session start only — reclaim surplus streams for this IP up to maxConnections.
   if (opts.pruneOthers && clientIp && streamId) {
-    await pruneOtherViewerStreams(opts.lineId, streamId, clientIp);
+    await pruneViewerStreamsToCap(opts.lineId, streamId, clientIp, lineMaxConnections);
   } else if (!clientIp && streamId) {
     await prisma.liveConnection.deleteMany({
       where: {

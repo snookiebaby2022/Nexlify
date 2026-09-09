@@ -4,7 +4,8 @@ import { Info } from "lucide-react";
 import { useState } from "react";
 import { ServerTreePicker } from "@/components/server-tree-picker";
 import { formInputStyle, formSelectClass } from "@/components/form-page-shell";
-import { restartStreamOnServer } from "@/lib/restart-stream";
+import { adminToast } from "@/lib/admin-toast";
+import { RestartStreamModal } from "@/components/restart-stream-modal";
 
 function XuiYesNo({
   value,
@@ -56,6 +57,8 @@ function XuiRow({
 export type StreamServerTabProps = {
   streamType: string;
   streamId?: string;
+  streamName?: string;
+  streamUrl?: string | null;
   serverIds: string[];
   onServerIdsChange: (ids: string[]) => void;
   vodMode?: string;
@@ -72,6 +75,8 @@ export type StreamServerTabProps = {
 export function StreamServerTab({
   streamType,
   streamId,
+  streamName,
+  streamUrl,
   serverIds,
   onServerIdsChange,
   vodMode = "LIVE",
@@ -85,23 +90,16 @@ export function StreamServerTab({
   useProvider = false,
 }: StreamServerTabProps) {
   const isLive = streamType === "LIVE";
-  const [restartBusy, setRestartBusy] = useState(false);
+  const [restartOpen, setRestartOpen] = useState(false);
 
-  async function restartNow() {
+  function restartNow() {
     const serverId = serverIds[0];
     if (!streamId) return;
     if (!serverId) {
-      alert("Select a streaming server first.");
+      adminToast("Select a streaming server first.", "error");
       return;
     }
-    if (!confirm("Restart this stream on the assigned server? Viewers will reconnect.")) return;
-    setRestartBusy(true);
-    try {
-      const err = await restartStreamOnServer(serverId, streamId);
-      if (err) alert(err);
-    } finally {
-      setRestartBusy(false);
-    }
+    setRestartOpen(true);
   }
 
   return (
@@ -170,15 +168,14 @@ export function StreamServerTab({
       ) : null}
 
       {isLive && streamId ? (
-        <XuiRow label="Restart now" hint="Queues restart_stream on the first selected server. Does not kill nginx.">
+        <XuiRow label="Restart now" hint="Opens a large restart dialog. Optionally paste a new source URL — saves it, drops the edge fan, and pulls the new upstream.">
           <button
             type="button"
-            className="rounded border px-3 py-1.5 text-sm"
+            className="rounded-xl border px-5 py-2.5 text-base font-medium"
             style={{ borderColor: "var(--border)" }}
-            disabled={restartBusy}
-            onClick={() => void restartNow()}
+            onClick={() => restartNow()}
           >
-            {restartBusy ? "Restarting…" : "Restart stream"}
+            Restart stream
           </button>
         </XuiRow>
       ) : null}
@@ -187,6 +184,17 @@ export function StreamServerTab({
         <p className="text-xs rounded-lg px-3 py-2" style={{ background: "rgba(0,192,239,0.1)", color: "#7dd3fc" }}>
           No server selected — load balancing will pick an online server with headroom when viewers connect.
         </p>
+      ) : null}
+
+      {isLive && streamId && serverIds[0] ? (
+        <RestartStreamModal
+          open={restartOpen}
+          streamId={streamId}
+          serverId={serverIds[0]}
+          streamName={streamName}
+          currentUrl={streamUrl}
+          onClose={() => setRestartOpen(false)}
+        />
       ) : null}
     </div>
   );

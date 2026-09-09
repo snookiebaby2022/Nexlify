@@ -8,10 +8,10 @@ alwaysApply: true
 
 Working path (do not "improve" this):
 
-- nginx `:80` / `:443` / `:8080` **proxy** `/live/` to **10gbs** `209.237.141.15:8080`
-- Return **200 + MPEG-TS/HLS bytes** — **never** `return 302` for `/live/`, `/timeshift/`, `/movie/`, `/series/`
-- Xtream apps do not follow redirects for `.ts` / `.m3u8`
-- Edge must **splice locally**; never `forward()` `/live/` to `IPTV_EDGE_BACKEND` (panel nginx sends it back → 502 loop)
+- Panel nginx `:80` / `:443` / `:8080` **must not proxy media bitrate** — `/live/`, `/timeshift/`, `/movie/`, `/series/` return **502** (not 302)
+- Clients play on **10gbs** `209.237.141.15:8080` (or LB IP from `server_info.url`) — **200 + MPEG-TS/HLS**
+- **Never** `return 302` for `/live/`, `/timeshift/`, `/movie/`, `/series/` (Xtream apps ignore redirects)
+- Edge must **splice locally**; never `forward()` `/live/` to `IPTV_EDGE_BACKEND`
 - Do not `fuser -k 8080` (kills nginx)
 - Do not start `nexlify-iptv-edge` on the panel (nginx owns `:8080`)
 

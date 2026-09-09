@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Radio, RefreshCw, Wrench } from "lucide-react";
 import { notifyStreamHealthChanged } from "@/lib/stream-health-events";
+import { adminToast } from "@/lib/admin-toast";
 
 type Kind = "all" | "dead" | "unstable" | "process";
 
@@ -42,7 +43,7 @@ function formatWhen(iso: string | null | undefined) {
 
 async function fullProbe(ids: string[]) {
   const unique = [...new Set(ids)].slice(0, 50);
-  if (!unique.length) return { recovered: 0, stillFailed: unique.length };
+  if (!unique.length) return { recovered: 0, stillFailed: unique.length, recoveredIds: [] as string[] };
   const res = await fetch("/api/admin/streams/probe-batch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -52,15 +53,15 @@ async function fullProbe(ids: string[]) {
     results?: Record<string, { lastProbeOk?: boolean; error?: string }>;
   };
   if (!res.ok || !data.results) throw new Error("Probe failed");
-  let recovered = 0;
+  const recoveredIds: string[] = [];
   let stillFailed = 0;
   for (const id of unique) {
     const row = data.results[id];
-    if (row && !row.error && row.lastProbeOk) recovered += 1;
+    if (row && !row.error && row.lastProbeOk) recoveredIds.push(id);
     else stillFailed += 1;
   }
   notifyStreamHealthChanged();
-  return { recovered, stillFailed };
+  return { recovered: recoveredIds.length, stillFailed, recoveredIds };
 }
 
 export function StreamErrorsClient() {
@@ -97,18 +98,28 @@ export function StreamErrorsClient() {
   async function probeIds(ids: string[], label: string) {
     setBusy(label);
     setMsg("");
+    adminToast(
+      ids.length === 1 ? "Full-probing stream…" : `Full-probing ${ids.length} streams…`,
+      "info",
+      2500
+    );
     try {
-      const { recovered, stillFailed } = await fullProbe(ids);
-      setMsg(
-        recovered
-          ? `Recovered ${recovered} stream${recovered === 1 ? "" : "s"}${stillFailed ? ` · ${stillFailed} still failing` : ""}.`
-          : stillFailed
-            ? `${stillFailed} still failing after full probe.`
-            : "Nothing to probe."
-      );
+      const { recovered, stillFailed, recoveredIds } = await fullProbe(ids);
+      if (recoveredIds.length) {
+        const cleared = new Set(recoveredIds);
+        setStreams((prev) => prev.filter((s) => !cleared.has(s.id)));
+      }
+      const text = recovered
+        ? `Recovered ${recovered} stream${recovered === 1 ? "" : "s"}${stillFailed ? ` · ${stillFailed} still failing` : ""}.`
+        : stillFailed
+          ? `${stillFailed} still failing after full probe.`
+          : "Nothing to probe.";
+      setMsg(text);
+      adminToast(text, recovered ? "success" : stillFailed ? "error" : "info");
       load();
     } catch {
       setMsg("Network error while probing");
+      adminToast("Network error while probing", "error");
     } finally {
       setBusy(null);
     }
@@ -168,7 +179,14 @@ export function StreamErrorsClient() {
         </div>
       </div>
 
-      {streams.length === 0 && processes.length === 0 && !loading ? (
+      {loading ? (
+        <div
+          className="rounded-xl border p-6 text-sm"
+          style={{ borderColor: "var(--border)", color: "var(--muted)" }}
+        >
+          Loading stream errors…
+        </div>
+      ) : streams.length === 0 && processes.length === 0 ? (
         <div
           className="rounded-xl border p-6 flex items-center gap-3"
           style={{ borderColor: "rgba(34,197,94,0.35)", background: "rgba(34,197,94,0.08)" }}
@@ -177,7 +195,8 @@ export function StreamErrorsClient() {
           <div>
             <p className="font-semibold">No failed live sources</p>
             <p className="text-sm" style={{ color: "var(--muted)" }}>
-              Dashboard dead / unstable / probe-failed counts should now be zero.
+              Dashboard dead / unstable / probe-failed counts should now be zero. Successful full probes clear
+              both origin and splice fail flags.
             </p>
           </div>
         </div>

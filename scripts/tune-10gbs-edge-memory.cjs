@@ -15,6 +15,8 @@ const TUNING = {
   /** Clear hung fans that dump prefix then silent-underrun (provider 5xx / junki stalls). */
   IPTV_EDGE_FAN_STALL_MS: "12000",
   IPTV_EDGE_FAN_STALL_SWEEP_MS: "3000",
+  /** 0 = hold signed CDN URL like VLC until stall/death (avoids mid-GOP video freeze). */
+  IPTV_EDGE_FAN_AUTH_REFRESH_MS: "0",
   IPTV_EDGE_AUTH_CACHE_MS: "120000",
   IPTV_EDGE_CATALOG_CACHE_MS: "180000",
 };
@@ -42,7 +44,24 @@ function patchEnv(content, key, val) {
 
     const restart = await sshExec(
       c,
-      "cd /opt/nexlify-panel && pm2 restart nexlify-iptv-edge --update-env 2>/dev/null; sleep 2; free -h; echo '---'; pm2 status nexlify-iptv-edge 2>/dev/null || pm2 list | head -8"
+      [
+        "set -euo pipefail",
+        "cd /opt/nexlify-panel",
+        "set -a",
+        "[ -f .env ] && . ./.env",
+        "set +a",
+        // Force VLC-like signed-URL hold even if dump had 180000.
+        "export IPTV_EDGE_FAN_AUTH_REFRESH_MS=0",
+        "pm2 restart nexlify-iptv-edge --update-env",
+        "sleep 2",
+        "free -h",
+        "echo '---'",
+        "pm2 status nexlify-iptv-edge 2>/dev/null || pm2 list | head -8",
+        "echo '--- AUTH_REFRESH ---'",
+        "pm2 env 0 2>/dev/null | grep IPTV_EDGE_FAN_AUTH_REFRESH_MS || true",
+        "PID=$(pm2 pid nexlify-iptv-edge 2>/dev/null || true)",
+        'if [ -n "${PID:-}" ] && [ -r "/proc/$PID/environ" ]; then tr "\\0" "\\n" < "/proc/$PID/environ" | grep IPTV_EDGE_FAN_AUTH_REFRESH_MS || true; fi',
+      ].join("\n")
     );
     console.log(restart.stdout);
   });

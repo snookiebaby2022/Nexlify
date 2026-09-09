@@ -372,6 +372,7 @@ export function ServerForm({
   } | null>(null);
   const [loading, setLoading] = useState(mode === "edit");
   const [saving, setSaving] = useState(false);
+  const [domainError, setDomainError] = useState("");
   const [existingPanelSettings, setExistingPanelSettings] = useState<unknown>(null);
   const [certbotMsg, setCertbotMsg] = useState("");
   const [certbotBusy, setCertbotBusy] = useState(false);
@@ -545,6 +546,19 @@ export function ServerForm({
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    setDomainError("");
+    // Client-side guard: LB Domain Name must be a single hostname (matches API parseStreamServerDomain).
+    if (form.advServerRole === "lb") {
+      const raw = form.domain.trim();
+      if (raw && /[,;|\s]/.test(raw.replace(/^https?:\/\//i, "").split("/")[0] ?? raw)) {
+        const msg =
+          "LB Domain Name must be exactly one hostname (e.g. lb2.stream.example.com). Put multiple stream DNS names on the main server Domain Name / Additional domains instead.";
+        setDomainError(msg);
+        setTab("domains");
+        alert(msg);
+        return;
+      }
+    }
     setSaving(true);
     const snapshot =
       form.attachPanelSettings && panelSummary
@@ -651,7 +665,12 @@ export function ServerForm({
       setSaving(false);
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error ?? "Failed to create server");
+        const err = String(data.error ?? "Failed to create server");
+        if (/domain name|hostname/i.test(err)) {
+          setDomainError(err);
+          setTab("domains");
+        }
+        alert(err);
         return;
       }
       const data = await res.json();
@@ -670,7 +689,12 @@ export function ServerForm({
     const data = await res.json().catch(() => ({}));
     setSaving(false);
     if (!res.ok) {
-      alert(data.error ?? "Failed to save");
+      const err = String(data.error ?? "Failed to save");
+      if (/domain name|hostname/i.test(err)) {
+        setDomainError(err);
+        setTab("domains");
+      }
+      alert(err);
       return;
     }
     if (
@@ -1016,15 +1040,29 @@ export function ServerForm({
               >
                 <input
                   className={formInputClass}
-                  style={formInputStyle}
+                  style={{
+                    ...formInputStyle,
+                    ...(domainError
+                      ? { borderColor: "var(--danger, #dc2626)", outlineColor: "var(--danger, #dc2626)" }
+                      : {}),
+                  }}
                   value={form.domain}
-                  onChange={(e) => setForm({ ...form, domain: e.target.value })}
+                  onChange={(e) => {
+                    setDomainError("");
+                    setForm({ ...form, domain: e.target.value });
+                  }}
                   placeholder={
                     form.advServerRole === "main"
                       ? "stream.example.com (or comma-separated list)"
                       : "lb1.stream.example.com"
                   }
+                  aria-invalid={Boolean(domainError)}
                 />
+                {domainError ? (
+                  <p className="text-xs mt-1 font-medium" style={{ color: "var(--danger, #dc2626)" }} role="alert">
+                    {domainError}
+                  </p>
+                ) : null}
                 <p className="text-xs mt-1" style={{ color: "var(--muted)" }}>
                   {form.advServerRole === "main" ? (
                     <>

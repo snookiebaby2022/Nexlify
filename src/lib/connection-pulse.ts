@@ -7,6 +7,7 @@ import {
 import { touchLiveSession } from "@/lib/live-session";
 import { markStreamSpliceOk } from "@/lib/viewer-playback-probe";
 import { lineIsPlayable } from "@/lib/lines";
+import { notifyLiveConnectionsChanged } from "@/lib/connection-live-bus";
 
 /** Edge / proxy heartbeat: refresh lastSeenAt and optional throughput samples. */
 export async function pulseLiveConnection(opts: {
@@ -83,4 +84,5 @@ export async function pulseLiveConnection(opts: {
   await prisma.liveConnection.create({
     data: { lineId, streamId, ip: clientIp || null },
   }).catch(() => undefined);
+  notifyLiveConnectionsChanged();
 }

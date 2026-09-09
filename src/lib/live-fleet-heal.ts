@@ -7,7 +7,9 @@
 import { prisma } from "@/lib/prisma";
 import { StreamType } from "@prisma/client";
 
-const BAD_HOST_RE = /tinypanel\.info|xplatinmedia\.com/i;
+/** Hosts that NX cannot pull (NX DNS dead, CF HTML debug, expired panels). */
+const BAD_HOST_RE =
+  /tinypanel\.info|xplatinmedia\.com|bestrestream\.com|chicotv\.top|a2ziptv\.online/i;
 const MIN_KEY_LEN = 8;
 
 export type LiveFleetHealStats = {

@@ -1,12 +1,18 @@
 /** Restart a live stream. Relay streams drop edge fan + auth cache; transcode queues agent ffmpeg. */
 export async function restartStreamOnServer(
   serverId: string,
-  streamId: string
+  streamId: string,
+  opts?: { sourceUrl?: string | null }
 ): Promise<string | null> {
+  const sourceUrl = String(opts?.sourceUrl ?? "").trim();
   const res = await fetch(`/api/admin/servers/${encodeURIComponent(serverId)}/agent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "restart_stream", streamId }),
+    body: JSON.stringify({
+      action: "restart_stream",
+      streamId,
+      ...(sourceUrl ? { source: sourceUrl, streamUrl: sourceUrl } : {}),
+    }),
   });
   if (res.ok) return null;
   const data = (await res.json().catch(() => ({}))) as { error?: string };

@@ -346,17 +346,39 @@ export function ManageLinesTable({
     if (!bulk || selected.size === 0) return;
     const ids = [...selected];
     if (bulk === "disable") {
+      let failed = 0;
       for (const id of ids) {
-        await fetch(`${linesApi}/${id}/status`, {
+        const res = await fetch(`${linesApi}/${id}/status`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ status: "DISABLED" }),
         });
+        if (!res.ok) failed++;
+      }
+      if (failed > 0) {
+        alert(`Could not disable ${failed} line(s). Refresh and try again.`);
+        return;
       }
     } else if (bulk === "delete") {
       if (!confirm(`Delete ${ids.length} line(s)?`)) return;
+      let failed = 0;
+      let lastError = "";
       for (const id of ids) {
-        await fetch(`${linesApi}/${id}`, { method: "DELETE" });
+        const res = await fetch(`${linesApi}/${id}`, { method: "DELETE" });
+        if (!res.ok) {
+          failed++;
+          const body = await res.json().catch(() => ({}));
+          lastError = typeof body.error === "string" ? body.error : `HTTP ${res.status}`;
+        }
+      }
+      if (failed > 0) {
+        alert(
+          failed === ids.length
+            ? (lastError || "Could not delete selected line(s).")
+            : `Deleted ${ids.length - failed} line(s); ${failed} failed${lastError ? `: ${lastError}` : "."}`
+        );
+        onRefresh();
+        return;
       }
     }
     setBulk("");

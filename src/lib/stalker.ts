@@ -492,25 +492,42 @@ export function resolveMacFromRequest(
   const fromParams =
     params.get("mac") ??
     params.get("Mac") ??
+    params.get("MAC") ??
     params.get("device_id") ??
-    params.get("device_mac");
+    params.get("device_mac") ??
+    params.get("deviceMac") ??
+    params.get("stb_mac") ??
+    params.get("stbMac");
   if (fromParams) return fromParams;
 
   const headerMac =
     headers.get("x-mac") ??
+    headers.get("x-mac-address") ??
     headers.get("x-device-mac") ??
-    headers.get("device-mac");
+    headers.get("device-mac") ??
+    headers.get("mac") ??
+    headers.get("stb-mac") ??
+    headers.get("x-stb-mac");
   if (headerMac) return headerMac;
 
   const cookie = headers.get("cookie") ?? "";
-  const cookieMac = cookie.match(/(?:^|;\s*)mac=([0-9A-Fa-f:]+)/i)?.[1];
+  const cookieMac =
+    cookie.match(/(?:^|;\s*)(?:mac|device_mac|deviceMac|stb_mac)=([^;]+)/i)?.[1];
   if (cookieMac) return cookieMac;
 
-  const xua = headers.get("x-user-agent") ?? headers.get("user-agent") ?? "";
-  const xuaMac =
-    xua.match(/\bmac[=:\s]+([0-9A-Fa-f:]{12,17})/i)?.[1] ??
-    xua.match(/\b([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})\b/)?.[1];
-  if (xuaMac) return xuaMac;
+  const agentHeaders = [
+    headers.get("x-user-agent"),
+    headers.get("user-agent"),
+    headers.get("x-stb-user-agent"),
+    headers.get("stb-user-agent"),
+  ];
+  for (const value of agentHeaders) {
+    if (!value) continue;
+    const mac =
+      value.match(/\b(?:mac|device[_ -]?mac|stb[_ -]?mac)[=:\s]+([0-9A-Fa-f:.-]{12,17})/i)?.[1] ??
+      value.match(/\b([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})\b/)?.[1];
+    if (mac) return mac;
+  }
 
   return null;
 }

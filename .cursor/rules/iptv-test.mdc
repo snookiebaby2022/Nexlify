@@ -1,0 +1,29 @@
+---
+description: IPTV comprehensive validation protocol
+globs: ["**/*.m3u", "**/*.m3u8", "**/darkcdn.store", "scripts/iptv-*.cjs"]
+---
+
+When validating IPTV files, ALWAYS:
+
+1. Check structural integrity (#EXTM3U header, #EXTINF tags, valid URLs)
+2. Perform HTTP health checks on all stream URLs (expect 200–299)
+3. Validate HLS manifests (segment URIs reachable)
+4. Test darkcdn.store endpoints for CDN availability and response time
+5. Run ffprobe on a sample of streams for H.264/AAC codec support
+6. Flag geo-restrictions (403, suspicious redirects)
+7. Detect duplicate channel names across playlists
+8. Verify EPG URL references (url-tvg, xmltv.php)
+9. Generate a Markdown report under `reports/iptv-audit/`
+10. Append timestamps to `.cursor/iptv-test.log`
+
+Run the full suite with:
+
+```bash
+node scripts/iptv-comprehensive-audit.cjs
+```
+
+For playlist-only scheduled checks:
+
+```bash
+node scripts/iptv-playlist-health-check.cjs --playlist "$IPTV_HEALTH_PLAYLIST"
+```

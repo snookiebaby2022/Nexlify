@@ -47,7 +47,19 @@ export async function PATCH(req: NextRequest) {
   if (!group || !SETTING_GROUPS.includes(group)) {
     return NextResponse.json({ error: "Invalid group" }, { status: 400 });
   }
-  const settings = await setSettingGroup(group, body.settings ?? {});
+  let toSave = body.settings ?? {};
+  if (group === "server" && toSave && typeof toSave === "object") {
+    const { ensureMagPortalUrl } = await import("@/lib/mag");
+    const patch = { ...toSave } as Record<string, unknown>;
+    if (typeof patch.magServerUrl === "string" && patch.magServerUrl.trim()) {
+      patch.magServerUrl = ensureMagPortalUrl(patch.magServerUrl);
+    }
+    if (typeof patch.enigmaServerUrl === "string" && patch.enigmaServerUrl.trim()) {
+      patch.enigmaServerUrl = ensureMagPortalUrl(patch.enigmaServerUrl);
+    }
+    toSave = patch;
+  }
+  const settings = await setSettingGroup(group, toSave);
   if (group === "domains") {
     const { savePanelDomainsSettings, parsePanelDomainsSettings } = await import("@/lib/domains");
     await savePanelDomainsSettings(parsePanelDomainsSettings(settings));

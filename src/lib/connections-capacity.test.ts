@@ -2,11 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { connectionCapacityAllows } from "./connections";
 
-test("connectionCapacityAllows rejects a second simultaneous stream from the same IP on a 1-conn line", () => {
-  // activeSessionCount=2: same IP on stream A + stream B (distinct ip|streamId groups)
-  assert.equal(connectionCapacityAllows(2, 1, 2, "192.0.2.10"), false);
-});
-
 test("connectionCapacityAllows allows first session on a 1-conn line", () => {
   assert.equal(connectionCapacityAllows(0, 1, 0, "192.0.2.10"), true);
 });
@@ -15,8 +10,21 @@ test("connectionCapacityAllows rejects a different IP when line is at capacity",
   assert.equal(connectionCapacityAllows(1, 1, 0, "198.51.100.5"), false);
 });
 
-test("connectionCapacityAllows allows same IP channel switch on a 1-conn line at capacity", () => {
-  assert.equal(connectionCapacityAllows(1, 1, 1, "192.0.2.10"), true);
+test("connectionCapacityAllows allows same-stream reconnect at capacity", () => {
+  assert.equal(connectionCapacityAllows(1, 1, 1, "192.0.2.10", true), true);
+});
+
+test("connectionCapacityAllows allows existing IP to zap when at capacity", () => {
+  // active=1 max=1, same IP already holds 1 session — zap/replace, not a new device
+  assert.equal(connectionCapacityAllows(1, 1, 1, "192.0.2.10", false), true);
+});
+
+test("connectionCapacityAllows rejects brand-new IP at capacity even if sameIpDistinctSessions miscounted", () => {
+  assert.equal(connectionCapacityAllows(2, 2, 0, "198.51.100.9", false), false);
+});
+
+test("connectionCapacityAllows allows second device when under maxConnections=2", () => {
+  assert.equal(connectionCapacityAllows(1, 2, 0, "198.51.100.5"), true);
 });
 
 test("connectionCapacityAllows treats maxConnections 0 as unlimited", () => {

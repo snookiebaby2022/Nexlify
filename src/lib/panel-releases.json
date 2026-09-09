@@ -1,7 +1,39 @@
 {
   "source": "nexlify-panel",
-  "latestVersion": "2.0.89",
+  "latestVersion": "2.0.90",
   "releases": [
+    {
+      "version": "2.0.90",
+      "date": "2026-09-09",
+      "channel": "stable",
+      "summary": "LB-only live egress, instant Live Connections open/close with correct uptime, offline splash, and a cleaner dashboard bandwidth card.",
+      "changelog": [
+        "Panel nginx refuses /live /timeshift /movie /series with 502 so bitrate never hairpins the panel NIC",
+        "player_api / M3U / Stalker advertise the load-balancer IP when NEXLIFY_MEDIA_FORCE_LB_IP is set",
+        "Edge serves offline MPEG-TS splash when upstream is missing instead of plain-text errors",
+        "Live-auth always returns backup upstreams so the edge can fail over without must-splice forwards",
+        "Live Connections opens and closes promptly (edge connection-end + immediate pulse flush + SSE notify)",
+        "Stream / connection uptime stays continuous — multi-connection lines no longer tear down the first viewer on the same IP",
+        "Capacity counts distinct IP+stream sessions, prunes ghost LiveConnection rows (120s stale), and fail-opens on auth timeout",
+        "Dashboard orange card shows LB egress (Live out / NIC cap) only — panel NIC line removed",
+        "Main Domains field holds the stream-host pool; LB Domain Name stays a single host or IP"
+      ],
+      "fixes": [
+        "Media still flowing through the panel ~1G path caused buffering under load",
+        "Dead origins could return upstream unavailable / must splice instead of a playable offline splash",
+        "Opening a second connection on maxConnections≥2 (same household IP) buffered/killed the first stream",
+        "Ghost LiveConnection rows inflated capacity and blocked multi-connection lines until prune/reclaim",
+        "HEAD / tiny Range probes while playing could reset Live Connections uptime and disrupt playback",
+        "Dashboard Panel proxy line confused operators after media proxy was already disabled",
+        "Browser cache kept showing the old KPI ribbon after hotpatches (immutable chunk filenames)"
+      ],
+      "notes": [
+        "Point stream media hostnames DNS-only at the LB IP. Keep the panel hostname for API/login only.",
+        "Clients pick up the new advertise host on the next playlist / Xtream refresh (re-open the app if needed).",
+        "Install or update from Admin → Updates, or with the one-line installer on nexlify.live/install."
+      ],
+      "downloadUrl": "https://nexlify.live/downloads/next-2.0.90.tar.gz"
+    },
     {
       "version": "2.0.89",
       "date": "2026-09-08",

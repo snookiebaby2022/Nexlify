@@ -56,8 +56,9 @@ export async function POST(req: NextRequest) {
         },
       });
       if (persist.lastProbeOk) {
-        const { markStreamViewerPlaybackOk } = await import("@/lib/viewer-playback-probe");
-        await markStreamViewerPlaybackOk(stream.id).catch(() => {});
+        // Origin healthy → clear Offline / Issues (probe + splice fail flags).
+        const { markStreamSpliceOk } = await import("@/lib/viewer-playback-probe");
+        await markStreamSpliceOk(stream.id).catch(() => {});
       }
       const { invalidateDashboardStats } = await import("@/lib/cache-invalidate");
       await invalidateDashboardStats().catch(() => {});

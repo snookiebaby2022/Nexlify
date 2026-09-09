@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getSettingGroup } from "@/lib/panel-settings";
+import { resolveServerUrls } from "@/lib/server-urls";
 import { PanelRole } from "@prisma/client";
 
 export async function GET() {
@@ -10,7 +10,7 @@ export async function GET() {
 
   const lineFilter = session.role === PanelRole.ADMIN ? {} : { line: { ownerId: session.id } };
 
-  const [magTotal, magActive, enigmaTotal, enigmaActive, recentMag, recentEnigma, serverSettings] =
+  const [magTotal, magActive, enigmaTotal, enigmaActive, recentMag, recentEnigma, urls] =
     await Promise.all([
       prisma.magDevice.count({ where: lineFilter }),
       prisma.magDevice.count({ where: { ...lineFilter, isActive: true } }),
@@ -28,7 +28,7 @@ export async function GET() {
         orderBy: { updatedAt: "desc" },
         include: { line: { select: { username: true, expiresAt: true, status: true } } },
       }),
-      getSettingGroup("server"),
+      resolveServerUrls(),
     ]);
 
   const stbEvents = await prisma.stbEvent.findMany({
@@ -44,9 +44,9 @@ export async function GET() {
     recentEnigma,
     stbEvents,
     portalUrls: {
-      magServerUrl: serverSettings.magServerUrl || serverSettings.serverUrl || "",
-      enigmaServerUrl: serverSettings.enigmaServerUrl || serverSettings.serverUrl || "",
-      stalkerPortal: "/stalker_portal/c/",
+      magServerUrl: urls.magServerUrl,
+      enigmaServerUrl: urls.enigmaServerUrl,
+      stalkerPortal: urls.stalkerPortalUrl || urls.magServerUrl,
     },
   });
 }

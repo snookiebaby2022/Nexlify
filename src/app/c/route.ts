@@ -45,7 +45,9 @@ function magPortalHelpPage(req: NextRequest) {
 <html><head><meta charset="utf-8"><title>Nexlify MAG Portal</title></head>
 <body style="font-family:sans-serif;background:#0b1220;color:#e8eef9;padding:2rem">
 <h1>Nexlify MAG / Stalker Portal</h1>
-<p>Set your MAG box portal URL to:</p>
+<p>Set StbEmu / MAG portal URL to (prefer HTTP):</p>
+<pre style="background:#111b2e;padding:1rem;border-radius:8px">${magUrl.replace(/^https:/i, "http:")}</pre>
+<p>HTTPS also works for browsers; StbEmu Pro is more reliable on HTTP.</p>
 <pre style="background:#111b2e;padding:1rem;border-radius:8px">${magUrl}</pre>
 <p>Alternate full path (same API):</p>
 <pre style="background:#111b2e;padding:1rem;border-radius:8px">${stalkerUrl}</pre>

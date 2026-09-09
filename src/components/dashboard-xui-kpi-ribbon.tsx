@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Activity, ArrowDown, ArrowUp, Play, Users, Zap } from "lucide-react";
+import { Activity, ArrowUp, Play, Users, Zap } from "lucide-react";
 import type { DashboardKpiExtended } from "@/lib/dashboard-server-metrics";
 
 type Summary = {
@@ -144,12 +144,6 @@ export function DashboardXuiKpiRibbon({
                 Live out {(kpi?.networkOutMbps ?? 0).toFixed(1)} Mbps
                 {(kpi?.lbCapMbps ?? 0) > 0 ? ` / ${kpi?.lbCapMbps}` : ""}
               </div>
-              {(kpi?.panelProxyMbps ?? 0) > 0 ? (
-                <div className="flex items-center gap-1.5 opacity-90">
-                  <ArrowDown size={14} strokeWidth={2.5} />
-                  Panel proxy {kpi?.panelProxyMbps?.toFixed(1)} Mbps
-                </div>
-              ) : null}
             </div>
           }
         />

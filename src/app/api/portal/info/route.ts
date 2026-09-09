@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPortalSession } from "@/lib/portal-session";
 import { lineIsPlayable } from "@/lib/lines";
+import { magPortalUrl, stalkerPortalUrl } from "@/lib/mag";
 import { serverBaseUrl } from "@/lib/xtream";
 import { getSettingGroup } from "@/lib/panel-settings";
 import { createWebplayerLinkToken } from "@/lib/webplayer-link";
@@ -42,8 +43,8 @@ export async function GET(req: Request) {
       m3uDownload: `${m3uUrl}&download=1`,
       xtream: xtreamUrl,
       epg: `${base}/xmltv.php?username=${encodeURIComponent(line.username)}&password=${encodeURIComponent(line.password)}`,
-      stalker: `${base}/stalker_portal/c/`,
-      magPortal: `${base}/portal.php`,
+      stalker: stalkerPortalUrl(base),
+      magPortal: magPortalUrl(base),
       webplayer: `${base}/webplayer?t=${encodeURIComponent(webplayerToken)}`,
       portal: `${base}/portal`,
     },

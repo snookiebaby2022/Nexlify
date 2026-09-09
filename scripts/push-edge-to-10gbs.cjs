@@ -27,6 +27,11 @@ async function main() {
   const s = await get10gbsServer(p);
 
   await withSshClient({ host: s.host, port: s.port, username: s.user, password: s.password }, async (c) => {
+    // Remote edge is often chattr +i; unlock for this controlled push, then restore.
+    await sshExec(
+      c,
+      "chattr -i /opt/nexlify-panel/scripts/iptv-edge-proxy.mjs 2>/dev/null || true"
+    );
     const w = await sshExec(c, "cat > /opt/nexlify-panel/scripts/iptv-edge-proxy.mjs", {
       stdin: body,
       timeoutMs: 120_000,
@@ -34,7 +39,7 @@ async function main() {
     if (w.code !== 0) throw new Error(w.stderr || "upload failed");
     const r = await sshExec(
       c,
-      "cd /opt/nexlify-panel && pm2 restart nexlify-iptv-edge --update-env && sleep 8 && ss -tlnp | grep 8080 && curl -sS -m 3 -o /dev/null -w 'local:%{http_code}\\n' http://127.0.0.1:8080/player_api.php || true"
+      "cd /opt/nexlify-panel && pm2 restart nexlify-iptv-edge --update-env && sleep 8 && chattr +i scripts/iptv-edge-proxy.mjs 2>/dev/null || true; ss -tlnp | grep 8080; curl -sS -m 3 -o /dev/null -w 'local:%{http_code}\\n' http://127.0.0.1:8080/player_api.php || true; grep -n liveFanMatchesUpstream scripts/iptv-edge-proxy.mjs | head -n 3 || true"
     );
     process.stdout.write(r.stdout);
     if (r.code !== 0) process.stderr.write(r.stderr);

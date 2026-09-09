@@ -24,6 +24,7 @@ import {
   Shield,
   ArrowUpDown,
 } from "lucide-react";
+import { adminToast } from "@/lib/admin-toast";
 
 const ADMIN_POLLS = resolveClientPollIntervals();
 
@@ -205,6 +206,17 @@ export function AdminServersClient({ initialServers = [] }: { initialServers?: S
 
   async function serverAction(serverId: string, action: string) {
     setActionMsg((m) => ({ ...m, [serverId]: "…" }));
+    adminToast(
+      action === "reboot_server"
+        ? "Rebooting server…"
+        : action === "nginx_reload"
+          ? "Reloading nginx…"
+          : action.startsWith("generate") || action.startsWith("rotate") || action.startsWith("revoke")
+            ? "Updating agent token…"
+            : `Running ${action.replace(/_/g, " ")}…`,
+      "info",
+      2500
+    );
     if (action === "enable_server" || action === "disable_server") {
       const res = await fetch("/api/admin/servers", {
         method: "PATCH",
@@ -212,7 +224,9 @@ export function AdminServersClient({ initialServers = [] }: { initialServers?: S
         body: JSON.stringify({ id: serverId, isActive: action === "enable_server" }),
       });
       const data = await res.json();
-      setActionMsg((m) => ({ ...m, [serverId]: res.ok ? "Updated" : (data.error ?? "Failed") }));
+      const msg = res.ok ? "Updated" : (data.error ?? "Failed");
+      setActionMsg((m) => ({ ...m, [serverId]: msg }));
+      adminToast(msg, res.ok ? "success" : "error");
       load();
       return;
     }
@@ -227,6 +241,11 @@ export function AdminServersClient({ initialServers = [] }: { initialServers?: S
       msg = `Token: ${data.agentToken}`;
     }
     setActionMsg((m) => ({ ...m, [serverId]: msg }));
+    adminToast(
+      res.ok && data.agentToken ? "Agent token generated — copy from the server card." : msg,
+      res.ok ? "success" : "error",
+      data.agentToken ? 7000 : 4200
+    );
     load();
   }
 

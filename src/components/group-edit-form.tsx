@@ -214,10 +214,29 @@ export function GroupEditForm({
 
   function togglePermission(p: string) {
     const perms = form.config.permissions;
-    setConfig(
-      "permissions",
-      perms.includes(p) ? perms.filter((x) => x !== p) : [...perms, p]
-    );
+    const next = perms.includes(p) ? perms.filter((x) => x !== p) : [...perms, p];
+    setForm((f) => ({
+      ...f,
+      config: {
+        ...f.config,
+        permissions: next,
+        ...(p === "lines.delete" ? { canDeleteUsers: next.includes("lines.delete") } : {}),
+      },
+    }));
+  }
+
+  function setCanDeleteUsers(enabled: boolean) {
+    const perms = new Set(form.config.permissions);
+    if (enabled) perms.add("lines.delete");
+    else perms.delete("lines.delete");
+    setForm((f) => ({
+      ...f,
+      config: {
+        ...f.config,
+        canDeleteUsers: enabled,
+        permissions: [...perms],
+      },
+    }));
   }
 
   function applyRecommendedPermissions(preset: "reseller" | "sub") {
@@ -673,7 +692,7 @@ export function GroupEditForm({
                 <Toggle
                   label="Can delete users"
                   checked={form.config.canDeleteUsers}
-                  onChange={(v) => setConfig("canDeleteUsers", v)}
+                  onChange={setCanDeleteUsers}
                 />
                 <Toggle
                   label="Show M3U download"

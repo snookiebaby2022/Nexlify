@@ -10,7 +10,6 @@ import { checkLineUserAgent } from "@/lib/line-restrictions";
 import { isSessionKicked, trackConnection, isTestConnectionIp } from "@/lib/connections";
 import { outboundProxyHeaderValue, resolveOutboundProxyForStream } from "@/lib/outbound-proxy";
 import { isTinyLiveRangeProbe } from "@/lib/live-http-range";
-import { isAutoSourceSwapEnabled } from "@/lib/source-failover";
 import { getServerByAgentToken } from "@/lib/stream-agent";
 import { prisma } from "@/lib/prisma";
 import { streamUsesOnDemandWarmup } from "@/lib/stream-playback-policy";
@@ -98,6 +97,11 @@ function onDemandAuthHeaders(onDemand: boolean): Record<string, string> {
   return onDemand ? { "X-Nexlify-On-Demand": "1" } : {};
 }
 
+function maxConnectionsAuthHeaders(maxConnections: number | null | undefined): Record<string, string> {
+  const n = Math.max(0, Number(maxConnections) || 0);
+  return { "X-Nexlify-Max-Connections": String(n) };
+}
+
 function liveAuthResponseFromCache(entry: LiveAuthCacheEntry): NextResponse {
   return new NextResponse(null, {
     status: 200,
@@ -109,6 +113,7 @@ function liveAuthResponseFromCache(entry: LiveAuthCacheEntry): NextResponse {
         ? { "X-Nexlify-Alts": entry.alts.map((u) => encodeURIComponent(u)).join(",") }
         : {}),
       "X-Nexlify-Live": entry.live ? "1" : "0",
+      ...maxConnectionsAuthHeaders(entry.maxConnections),
       ...onDemandAuthHeaders(Boolean(entry.onDemand)),
       ...(entry.wantsHls ? { "X-Nexlify-Hls": "1" } : {}),
       ...(entry.hlsNative ? { "X-Nexlify-Hls-Native": "1" } : {}),
@@ -262,7 +267,7 @@ export async function GET(req: NextRequest) {
         userAgent: ua,
         playbackPath: originalPath(req),
         mediaBytes: parsed.wantsHls ? 48_000 : 220_000,
-        pruneOthers: false,
+        pruneOthers: true,
       });
       return liveAuthResponseFromCache(cached);
     }
@@ -317,15 +322,18 @@ export async function GET(req: NextRequest) {
           userAgent: ua,
           playbackPath: path,
           mediaBytes: parsed.wantsHls ? 48_000 : 180_000,
-          pruneOthers: false,
+          pruneOthers: true,
         });
       }
     }
     const hlsUpstream = tsUrl ?? hlsNative;
+    const hlsAlts = candidates
+      .filter((u) => u !== hlsUpstream && !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u))
+      .slice(0, 3);
     if (hlsUpstream) {
       void setLiveAuthCache(line.id, cleanId, ip, {
         upstream: hlsUpstream,
-        alts: [],
+        alts: hlsAlts,
         live: true,
         onDemand,
         hlsNative: Boolean(hlsNative && !tsUrl),
@@ -335,6 +343,7 @@ export async function GET(req: NextRequest) {
         outputMode: "hls",
         serverId: agentServerScope,
         outboundProxy: outboundProxyHeaderValue(outboundProxy) ?? null,
+        maxConnections: Math.max(0, Number(line.maxConnections) || 0),
       });
     }
     return new NextResponse(null, {
@@ -344,6 +353,7 @@ export async function GET(req: NextRequest) {
         "X-Nexlify-Stream-Id": cleanId,
         "X-Nexlify-Live": "1",
         "X-Nexlify-Hls": "1",
+        ...maxConnectionsAuthHeaders(line.maxConnections),
         ...onDemandAuthHeaders(onDemand),
         ...(hlsNative && !tsUrl ? { "X-Nexlify-Hls-Native": "1" } : {}),
         ...((tsUrl ?? hlsNative) ? { "X-Nexlify-Upstream": tsUrl ?? hlsNative! } : {}),
@@ -369,7 +379,10 @@ export async function GET(req: NextRequest) {
     const tsList = candidates.filter((u) => !isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
     if (tsList.length) {
       upstream = tsList[0]!;
-      altUpstreams = (await isAutoSourceSwapEnabled()) ? tsList.slice(1, 4) : [];
+      // Always give the edge backup/failover URLs for request-time splice retries.
+      // Auto source-swap only controls durable primary promotion in the panel DB —
+      // without alts, DNS-dead primaries 502 even when backupUrl is healthy.
+      altUpstreams = tsList.slice(1, 4);
     } else {
       const hlsUrl = candidates.find((u) => isHlsPlaybackUrl(u) && isSafeUpstreamUrl(u));
       if (hlsUrl) upstream = hlsUrl;
@@ -397,7 +410,7 @@ export async function GET(req: NextRequest) {
       userAgent: ua,
       playbackPath: originalPath(req),
       mediaBytes: 220_000,
-      pruneOthers: false,
+      pruneOthers: true,
     });
   }
 
@@ -411,6 +424,7 @@ export async function GET(req: NextRequest) {
     outputMode: authOutputMode,
     serverId: agentServerScope,
     outboundProxy: outboundProxyHeaderValue(outboundProxy) ?? null,
+    maxConnections: Math.max(0, Number(line.maxConnections) || 0),
   });
   void markStreamSpliceOk(cleanId);
 
@@ -424,6 +438,7 @@ export async function GET(req: NextRequest) {
         ? { "X-Nexlify-Alts": altUpstreams.map((u) => encodeURIComponent(u)).join(",") }
         : {}),
       "X-Nexlify-Live": parsed.spliceLiveTs ? "1" : "0",
+      ...maxConnectionsAuthHeaders(line.maxConnections),
       ...onDemandAuthHeaders(onDemand),
       "Cache-Control": "no-store",
       ...proxyAuthHeaders(outboundProxy),

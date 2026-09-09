@@ -18,10 +18,10 @@ function postgresUrlWithUtcTimezone(url: string | undefined): string | undefined
       parsed.searchParams.set("options", `${current} -c TimeZone=UTC`.trim());
     }
     if (!parsed.searchParams.has("connection_limit")) {
-      parsed.searchParams.set("connection_limit", process.env.PRISMA_CONNECTION_LIMIT || "5");
+      parsed.searchParams.set("connection_limit", process.env.PRISMA_CONNECTION_LIMIT || "40");
     }
     if (!parsed.searchParams.has("pool_timeout")) {
-      parsed.searchParams.set("pool_timeout", "15");
+      parsed.searchParams.set("pool_timeout", process.env.PRISMA_POOL_TIMEOUT || "30");
     }
     return parsed.toString().replace(/^http:\/\//, `${scheme}://`);
   } catch {
